@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
+import { isPlainObject } from '$lib/utils/security';
 import { renderTyped } from '../../../../../test/render-helpers';
 import FilterResponseGraph from './FilterResponseGraph.svelte';
 import { EQUALIZER_RESPONSE_DEBOUNCE_MS, EQUALIZER_RESPONSE_URL } from '$lib/api/equalizer';
@@ -18,10 +19,10 @@ type ApiPost = (
   options?: { signal?: AbortSignal }
 ) => Promise<unknown>;
 
-const { apiPost, realPost } = vi.hoisted(() => ({
-  apiPost: vi.fn<ApiPost>(),
-  realPost: { current: undefined as ApiPost | undefined },
-}));
+const { apiPost, realPost } = vi.hoisted(() => {
+  const holder: { current?: ApiPost } = {};
+  return { apiPost: vi.fn<ApiPost>(), realPost: holder };
+});
 
 vi.mock('$lib/utils/api', async importOriginal => {
   const actual = await importOriginal<typeof import('$lib/utils/api')>();
@@ -53,13 +54,18 @@ async function waitForRequest(count = 1): Promise<void> {
   });
 }
 
+function isRequestBody(value: unknown): value is EqualizerResponseRequest {
+  return (
+    isPlainObject(value) &&
+    isPlainObject(value.equalizer) &&
+    typeof value.equalizer.enabled === 'boolean' &&
+    Array.isArray(value.equalizer.filters)
+  );
+}
+
 function lastBody(): EqualizerResponseRequest | undefined {
-  const call = apiPost.mock.calls.at(-1);
-  const body = call?.[1];
-  return body !== undefined && typeof body === 'object' && body !== null && 'equalizer' in body
-    ? // Test-only narrowing of a recorded mock argument
-      (body as EqualizerResponseRequest)
-    : undefined;
+  const body = apiPost.mock.calls.at(-1)?.[1];
+  return isRequestBody(body) ? body : undefined;
 }
 
 describe('FilterResponseGraph', () => {

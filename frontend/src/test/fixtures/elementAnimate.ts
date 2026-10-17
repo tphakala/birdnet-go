@@ -9,8 +9,13 @@ import { vi } from 'vitest';
 /** Install a finishing Element.prototype.animate stub. */
 export function stubElementAnimate(): void {
   Element.prototype.animate = vi.fn(() => {
-    const animation = {
-      onfinish: null as null | (() => void),
+    const animation: {
+      onfinish: null | (() => void);
+      cancel: () => void;
+      playState: string;
+      currentTime: number;
+    } = {
+      onfinish: null,
       cancel: vi.fn(),
       playState: 'finished',
       currentTime: 0,
