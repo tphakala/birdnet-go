@@ -290,17 +290,21 @@ func (c *Handler) registerHealthChecks() {
 		// Config checks
 		checks.NewToolAvailabilityCheck(func() []checks.ToolInfo {
 			s := c.CurrentSettings()
-			return []checks.ToolInfo{
+			tools := []checks.ToolInfo{
 				{
 					Name:    "FFmpeg",
 					Path:    s.Realtime.Audio.FfmpegPath,
 					Version: s.Realtime.Audio.FfmpegVersion,
 				},
-				{
+			}
+			// The native spectrogram renderer is the only user of Sox here.
+			if !conf.NativeSpectrogramEnabled() {
+				tools = append(tools, checks.ToolInfo{
 					Name: "Sox",
 					Path: s.Realtime.Audio.SoxPath,
-				},
+				})
 			}
+			return tools
 		}),
 		checks.NewPathAccessCheck(map[string]string{
 			"data": filepath.Dir(c.CurrentSettings().Output.SQLite.Path),

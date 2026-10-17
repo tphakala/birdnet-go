@@ -16,7 +16,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
+	"github.com/tphakala/birdnet-go/internal/audiocore/mp3"
+	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/audiocore/wav"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -29,6 +32,10 @@ import (
 const (
 	// nativeTestWidth is the raster width used by the gate tests (the sm size).
 	nativeTestWidth = 258
+	// nativeTestSize is the size name that maps to nativeTestWidth.
+	nativeTestSize = "sm"
+	// nativeCodecRate is a sample rate every clip encoder accepts.
+	nativeCodecRate = 48000
 	// nativeTestRows is fftFriendlyHeight(nativeTestWidth).
 	nativeTestRows = 129
 	// nativeTestSeconds is the length of the synthetic clip.
@@ -199,22 +206,49 @@ func TestNativeGate_PrerenderSubmitLeavesExistingFile(t *testing.T) {
 
 func TestNativeGate_NoSoxNeeded(t *testing.T) {
 	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	t.Setenv("PATH", "")
 	gen, env := newNativeGenerator(t)
 	env.Settings.Realtime.Audio.SoxPath = filepath.Join(env.TempDir, "missing-sox")
 	samples := nativeTestSamples(24000)
+	pcm48 := samplesToPCM(nativeTestSamples(nativeCodecRate))
 
 	wavPath := writeNativeWAV(t, env.TempDir, "in.wav", samples, 24000)
 	flacPath := filepath.Join(env.TempDir, "in.flac")
 	require.NoError(t, flac.EncodePCM(t.Context(), &flac.Options{PCMData: samplesToPCM(samples), OutputPath: flacPath, SampleRate: 24000, Channels: 1, BitDepth: 16}))
+	mp3Path := filepath.Join(env.TempDir, "in.mp3")
+	require.NoError(t, mp3.EncodePCM(t.Context(), &mp3.Options{PCMData: pcm48, OutputPath: mp3Path, SampleRate: nativeCodecRate, Channels: 1, BitDepth: 16}))
+	m4aPath := filepath.Join(env.TempDir, "in.m4a")
+	require.NoError(t, aac.EncodePCM(t.Context(), &aac.Options{PCMData: pcm48, OutputPath: m4aPath, SampleRate: nativeCodecRate, Channels: 1, BitDepth: 16}))
+	opusPath := filepath.Join(env.TempDir, "in.opus")
+	require.NoError(t, opus.EncodePCM(t.Context(), &opus.Options{PCMData: pcm48, OutputPath: opusPath, SampleRate: nativeCodecRate, Channels: 1, BitDepth: 16}))
 
-	for _, in := range []string{wavPath, flacPath} {
+	for _, in := range []string{wavPath, flacPath, mp3Path, m4aPath, opusPath} {
 		out := filepath.Join(env.TempDir, filepath.Base(in)+".png")
-		require.NoError(t, gen.GenerateFromFile(t.Context(), in, out, nativeTestWidth, false))
+		require.NoError(t, gen.GenerateFromFile(t.Context(), in, out, nativeTestWidth, false), in)
 		requireNativePNG(t, out)
 	}
 	out := filepath.Join(env.TempDir, "pcm.png")
 	require.NoError(t, gen.GenerateFromPCM(t.Context(), samplesToPCM(samples), out, nativeTestWidth, false, 24000))
 	requireNativePNG(t, out)
+}
+
+// TestNativeGate_PrerenderRendersWithoutBinaries renders a prerender job through
+// processJob with no sox configured and no binary on PATH.
+func TestNativeGate_PrerenderRendersWithoutBinaries(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	t.Setenv("PATH", "")
+	pr, env := createTestPreRenderer(t, &PreRendererTestOptions{SoxPath: "", SpectrogramSize: nativeTestSize})
+	clip := filepath.Join(env.TempDir, "clip.wav")
+	spec, err := BuildSpectrogramPath(clip)
+	require.NoError(t, err)
+
+	job := createTestJob(clip, 1)
+	job.PCMData = samplesToPCM(nativeTestSamples(24000))
+	job.SampleRate = 24000
+	pr.processJob(job, 0)
+
+	requireNativePNG(t, spec)
+	assert.Zero(t, pr.GetStats().Failed)
 }
 
 func TestNativeGate_FailureNoFallback(t *testing.T) {
