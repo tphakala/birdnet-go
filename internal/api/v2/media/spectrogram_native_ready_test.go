@@ -107,18 +107,21 @@ func TestValidateNativeSpectrogramInput_ReadyClip(t *testing.T) {
 }
 
 // A clip that has not been modified for longer than nativeSettledAge cannot be
-// mid-write, so readiness skips the stability wait. This runs on the real clock
-// because the file's modification time is real.
+// mid-write, so readiness skips the stability wait. The bubble's fake clock
+// makes the elapsed time exact: any wait would show as a non-zero duration.
 func TestValidateNativeSpectrogramInput_SettledClipSkipsStabilityWait(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "clip.wav")
 	writeToneWAV(t, path, nativeReadyRate, nativeReadySeconds, fixtureToneHz)
-	old := time.Now().Add(-2 * nativeSettledAge)
-	require.NoError(t, os.Chtimes(path, old, old))
 
-	elapsed, err := callNative(t.Context(), path)
+	synctest.Test(t, func(t *testing.T) {
+		old := time.Now().Add(-2 * nativeSettledAge)
+		require.NoError(t, os.Chtimes(path, old, old))
 
-	require.NoError(t, err)
-	assert.Less(t, elapsed, ffmpeg.FileStabilityCheckDuration, "an old clip must not wait out the stability check")
+		elapsed, err := callNative(t.Context(), path)
+
+		require.NoError(t, err)
+		assert.Zero(t, elapsed, "an old clip must not wait out the stability check")
+	})
 }
 
 func TestValidateNativeSpectrogramInput_EmptyFileExhausts(t *testing.T) {
@@ -301,7 +304,7 @@ func TestValidateNativeSpectrogramInput_TransitionsAreJudgedOnCurrentBytes(t *te
 	const (
 		stepTiny    step = "tiny"
 		stepValid   step = "valid"
-		stepCorrupt step = "corrupt-same-size-old-mtime"
+		stepCorrupt step = "corrupt-same-size-and-mtime"
 		stepDeleted step = "deleted"
 	)
 	sequences := map[string][]step{
