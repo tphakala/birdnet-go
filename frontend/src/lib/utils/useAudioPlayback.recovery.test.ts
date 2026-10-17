@@ -40,6 +40,7 @@ vi.mock('$lib/utils/audioNodes', () => ({
 }));
 
 const PLAY_ERROR_KEY = 'media.audio.playError';
+const OTHER_AUDIO_URL = '/audio/other.mp3';
 
 describe('useAudioPlayback recovery', () => {
   let ctl: FakeMediaController;
@@ -211,6 +212,36 @@ describe('useAudioPlayback recovery', () => {
     expect(getState().isPlaying).toBe(false);
     expect(onPlayEnd).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(PLAY_END_DELAY_MS);
+    expect(onPlayEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('ends playback once and keeps the error when the load retries run out', async () => {
+    const onPlayEnd = vi.fn();
+    await renderAndWait({ onPlayEnd });
+    await toggle();
+    expect(getState().isPlaying).toBe(true);
+
+    ctl.failLoad(MEDIA_ERR_NETWORK);
+    await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+    await exhaustLoadRetries(ctl);
+    await vi.advanceTimersByTimeAsync(PLAY_END_DELAY_MS);
+
+    expect(getState().error).not.toBeNull();
+    expect(getState().isPlaying).toBe(false);
+    expect(onPlayEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('signals play end when the audio URL changes during playback', async () => {
+    const onPlayEnd = vi.fn();
+    await renderAndWait({ onPlayEnd });
+    await toggle();
+    expect(getState().isPlaying).toBe(true);
+
+    getState().setAudioUrl(OTHER_AUDIO_URL);
+    await settle();
+    expect(getState().isPlaying).toBe(false);
+    await vi.advanceTimersByTimeAsync(PLAY_END_DELAY_MS);
+
     expect(onPlayEnd).toHaveBeenCalledTimes(1);
   });
 
