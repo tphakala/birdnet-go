@@ -31,6 +31,10 @@ const (
 	// nativeRendererName tags telemetry and logs from this path.
 	nativeRendererName = "native"
 
+	// soxRendererName tags the completion logs of the sox and FFmpeg path, so
+	// the two renderers' timings can be compared.
+	soxRendererName = "sox"
+
 	// Operation names of the two native entry points.
 	nativeOperationFile = "generate_native_file"
 	nativeOperationPCM  = "generate_native_pcm"
@@ -41,6 +45,16 @@ const (
 	nativeRangeStandardDB     = 100
 	nativeRangeExtendedDB     = 120
 )
+
+// selectedRenderer reads the renderer gate once and returns the name to log
+// with whether the native path is selected, so the branch taken and the logged
+// name cannot differ.
+func selectedRenderer() (name string, native bool) {
+	if conf.NativeSpectrogramEnabled() {
+		return nativeRendererName, true
+	}
+	return soxRendererName, false
+}
 
 // nativeRangeDB maps the dynamic range preset strings getDynamicRange returns to
 // dB; an unknown preset gives 0, which render rejects as invalid options.
@@ -67,28 +81,32 @@ func pcmSourceRate(rate int) int {
 
 // generateNativeFromFile renders the spectrogram of an audio file into tempPath.
 func (g *Generator) generateNativeFromFile(ctx context.Context, settings *conf.Settings, audioPath, tempPath string, width int, raw bool, profile FrequencyProfile) error {
+	start := time.Now()
 	src, err := transcode.DecodeMono(ctx, audioPath, profile.ResampleRate)
 	if err != nil {
 		return g.nativeError(ctx, err, nativeOperationFile)
 	}
-	return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationFile)
+	return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationFile, time.Since(start))
 }
 
 // generateNativeFromPCM renders the spectrogram of s16le mono PCM into tempPath.
 func (g *Generator) generateNativeFromPCM(ctx context.Context, settings *conf.Settings, pcmData []byte, tempPath string, width int, raw bool, sampleRate int, profile FrequencyProfile) error {
+	start := time.Now()
 	src, err := transcode.MonoFromPCM16(pcmData, pcmSourceRate(sampleRate), profile.ResampleRate)
 	if err != nil {
 		return g.nativeError(ctx, err, nativeOperationPCM)
 	}
-	return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationPCM)
+	return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationPCM, time.Since(start))
 }
 
 // renderNative draws src and writes the PNG to tempPath. A file already at
 // tempPath is a stale temp from a crashed run (the name carries the pid and a
 // per-process sequence) and is removed first; the file is then created
 // exclusively, so a symlink or a file that appears in between still fails.
-func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, tempPath string, width int, raw bool, operation string) error {
-	start := time.Now()
+// decodeElapsed is the time the caller spent reading and resampling src; it is
+// only logged, with the render and write times, so the renderers can be compared.
+func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, tempPath string, width int, raw bool, operation string, decodeElapsed time.Duration) error {
+	renderStart := time.Now()
 	opt := render.Options{
 		Width:   width,
 		Rows:    fftFriendlyHeight(width),
@@ -101,6 +119,8 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 		return g.nativeError(ctx, err, operation)
 	}
 
+	writeStart := time.Now()
+	renderElapsed := writeStart.Sub(renderStart)
 	if err := g.sfs.Remove(tempPath); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return g.nativeFileError(err, operation, "remove")
 	}
@@ -122,7 +142,10 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 		logger.Int("width", width),
 		logger.Int("columns", cols),
 		logger.Int("sample_rate", src.SampleRate()),
-		logger.Int64("elapsed_ms", time.Since(start).Milliseconds()))
+		logger.Int64("decode_ms", decodeElapsed.Milliseconds()),
+		logger.Int64("render_ms", renderElapsed.Milliseconds()),
+		logger.Int64("write_ms", time.Since(writeStart).Milliseconds()),
+		logger.Int64("total_ms", (decodeElapsed+time.Since(renderStart)).Milliseconds()))
 	return nil
 }
 

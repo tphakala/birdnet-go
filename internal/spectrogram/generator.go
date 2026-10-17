@@ -361,7 +361,8 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 
 	// With the native renderer selected, a failure is returned as is: there is no
 	// sox or FFmpeg fallback. soxCtx bounds both paths.
-	if conf.NativeSpectrogramEnabled() {
+	renderer, native := selectedRenderer()
+	if native {
 		if err := g.generateNativeFromFile(soxCtx, settings, audioPath, tempPath, width, raw, profile); err != nil {
 			return err
 		}
@@ -413,6 +414,7 @@ func (g *Generator) GenerateFromFile(ctx context.Context, audioPath, outputPath 
 	}
 
 	g.log().Info("Spectrogram generation from file completed",
+		logger.String("renderer", renderer),
 		logger.String("audio_path", g.relPath(audioPath)),
 		logger.Int("width", width),
 		logger.Int64("total_ms", time.Since(start).Milliseconds()))
@@ -512,7 +514,8 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 
 	// With the native renderer selected, a failure is returned as is: there is no
 	// sox fallback.
-	if conf.NativeSpectrogramEnabled() {
+	renderer, native := selectedRenderer()
+	if native {
 		if err := g.generateNativeFromPCM(ctx, settings, pcmData, tempPath, width, raw, sampleRate, profile); err != nil {
 			return err
 		}
@@ -532,6 +535,7 @@ func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputP
 	}
 
 	g.log().Info("Spectrogram generation from PCM completed",
+		logger.String("renderer", renderer),
 		logger.String("output_path", g.relPath(outputPath)),
 		logger.Int("width", width),
 		logger.Int("pcm_bytes", len(pcmData)),
