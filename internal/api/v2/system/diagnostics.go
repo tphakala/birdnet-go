@@ -297,7 +297,7 @@ func (c *Handler) registerHealthChecks() {
 					Version: s.Realtime.Audio.FfmpegVersion,
 				},
 			}
-			// The native spectrogram renderer is the only user of Sox here.
+			// Only the sox renderer uses Sox; the native renderer needs no binary.
 			if !conf.NativeSpectrogramEnabled() {
 				tools = append(tools, checks.ToolInfo{
 					Name: "Sox",
