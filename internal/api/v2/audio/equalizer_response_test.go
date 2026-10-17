@@ -317,6 +317,15 @@ func TestEqualizerResponse_InsertsFilterCenters(t *testing.T) {
 	assert.Len(t, dup.Points, defaultEQResponsePoints)
 }
 
+func TestEqualizerResponse_DisabledAddsNoCenters(t *testing.T) {
+	t.Parallel()
+	_, h := setupSystemTestEnvironment(t)
+
+	// 100 Hz is not a sweep point, so a stray center would add a 513th point.
+	out := decodeEQResponse(t, postEQResponse(t, h, eqBody(false, hp100Filter, "")))
+	assert.Len(t, out.Points, defaultEQResponsePoints)
+}
+
 func TestEqualizerResponse_Deterministic(t *testing.T) {
 	t.Parallel()
 	_, h := setupSystemTestEnvironment(t)

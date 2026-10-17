@@ -90,8 +90,9 @@ type eqResponseRange struct {
 // ComputeEqualizerResponse handles POST /api/v2/system/audio/equalizer/response.
 // It builds the equalizer chain for the posted (possibly unsaved) configuration
 // with the builder the audio routes use, and returns the chain's magnitude at
-// log-spaced frequencies plus the center of every applied filter. Nothing is
-// read from or written to the saved settings.
+// log-spaced frequencies plus the center of every applied filter (none when
+// the equalizer is disabled). Nothing is read from or written to the saved
+// settings.
 func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 	var req equalizerResponseRequest
 	if err := ctx.Bind(&req); err != nil {
@@ -126,7 +127,9 @@ func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 	if err != nil {
 		return c.HandleError(ctx, err, "Invalid frequency range", http.StatusBadRequest)
 	}
-	freqs = withFilterCenters(freqs, req.Equalizer.Filters, skipped, sweep)
+	if req.Equalizer.Enabled {
+		freqs = withFilterCenters(freqs, req.Equalizer.Filters, skipped, sweep)
+	}
 
 	body := equalizerResponseBody{
 		SampleRate: rate,
