@@ -36,13 +36,21 @@ const (
 	pngSignature = "\x89PNG\r\n\x1a\n"
 )
 
+// restoreFFprobePath clears the configured ffprobe path for the test and puts
+// back the value found on entry when the test ends.
+func restoreFFprobePath(t *testing.T) {
+	t.Helper()
+	prior := ffmpeg.GetFFprobePath()
+	ffmpeg.SetFFprobePath("")
+	t.Cleanup(func() { ffmpeg.SetFFprobePath(prior) })
+}
+
 // clearBinaryEnvironment makes sox, ffmpeg and ffprobe unresolvable by name or
 // by configured path.
 func clearBinaryEnvironment(t *testing.T, settings *conf.Settings) {
 	t.Helper()
 	t.Setenv("PATH", "")
-	ffmpeg.SetFFprobePath("")
-	t.Cleanup(func() { ffmpeg.SetFFprobePath("") })
+	restoreFFprobePath(t)
 	settings.Realtime.Audio.SoxPath = ""
 	settings.Realtime.Audio.FfmpegPath = ""
 }
@@ -74,8 +82,7 @@ var nativeClipWriters = map[string]func(t *testing.T, path string, pcm []byte){
 func TestValidateSpectrogramInputs_GateOffStillUsesFFprobe(t *testing.T) {
 	t.Setenv(conf.EnvNativeSpectrogramRenderer, "")
 	t.Setenv("PATH", "")
-	ffmpeg.SetFFprobePath("")
-	t.Cleanup(func() { ffmpeg.SetFFprobePath("") })
+	restoreFFprobePath(t)
 
 	path := filepath.Join(t.TempDir(), "clip.wav")
 	writeToneWAV(t, path, nativeReadyRate, nativeReadySeconds, fixtureToneHz)

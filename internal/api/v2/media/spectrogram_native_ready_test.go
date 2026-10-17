@@ -28,6 +28,9 @@ const (
 	nativeReadyUndecodableBytes = 2000
 	// nativeReadyAppendInterval is the writer period of the never-stable file.
 	nativeReadyAppendInterval = 100 * time.Millisecond
+	// nativeReadyOversizeBytes is one byte past the decoder's source file bound
+	// (256 MiB, transcode limits.go maxSourceFileBytes).
+	nativeReadyOversizeBytes = 256<<20 + 1
 	// nativeReadyUnsupportedBytes sizes the .aac fixture above the minimum size.
 	nativeReadyUnsupportedBytes = 2048
 )
@@ -225,6 +228,43 @@ func TestValidateNativeSpectrogramInput_CanceledDuringStabilityWait(t *testing.T
 		wg.Wait()
 
 		require.ErrorIs(t, err, context.Canceled)
+		_, isNotReady := errors.AsType[*AudioNotReadyError](err)
+		assert.False(t, isNotReady)
+	})
+}
+
+func TestValidateNativeSpectrogramInput_CanceledDuringBackoff(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tiny.wav")
+	require.NoError(t, os.WriteFile(path, make([]byte, ffmpeg.MinValidAudioSize-1), 0o600))
+
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			time.Sleep(ffmpeg.ValidationRetryDelay / 2)
+			cancel()
+		})
+
+		elapsed, err := callNative(ctx, path)
+		wg.Wait()
+
+		require.ErrorIs(t, err, context.Canceled)
+		_, isNotReady := errors.AsType[*AudioNotReadyError](err)
+		assert.False(t, isNotReady)
+		assert.Equal(t, ffmpeg.ValidationRetryDelay/2, elapsed)
+	})
+}
+
+func TestValidateNativeSpectrogramInput_TooLongIsPermanent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "huge.wav")
+	f, err := os.Create(path)
+	require.NoError(t, err)
+	require.NoError(t, f.Truncate(nativeReadyOversizeBytes))
+	require.NoError(t, f.Close())
+
+	synctest.Test(t, func(t *testing.T) {
+		_, err := callNative(t.Context(), path)
+		require.ErrorIs(t, err, transcode.ErrAudioTooLong)
 		_, isNotReady := errors.AsType[*AudioNotReadyError](err)
 		assert.False(t, isNotReady)
 	})
