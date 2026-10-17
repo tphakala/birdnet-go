@@ -7,7 +7,7 @@
         "Type": "number",
         "Unit": "Hz",
         "Min": 20,
-        "Max": 20000,
+        "Max": 24000,
         "Default": 1000,
         "Tooltip": "Center frequency of the reject band (notch)"
       },
@@ -42,7 +42,7 @@
         "Type": "number",
         "Unit": "Hz",
         "Min": 20,
-        "Max": 20000,
+        "Max": 24000,
         "Default": 100,
         "Tooltip": "Cutoff frequency below which the signal is attenuated"
       },
@@ -52,7 +52,7 @@
         "Type": "number",
         "Unit": "",
         "Min": 0.1,
-        "Max": 10,
+        "Max": 100,
         "Default": 0.707,
         "Tooltip": "Quality factor that determines the sharpness of the filter's response"
       },
@@ -77,7 +77,7 @@
         "Type": "number",
         "Unit": "Hz",
         "Min": 20,
-        "Max": 20000,
+        "Max": 24000,
         "Default": 15000,
         "Tooltip": "Cutoff frequency above which the signal is attenuated"
       },
@@ -87,7 +87,7 @@
         "Type": "number",
         "Unit": "",
         "Min": 0.1,
-        "Max": 10,
+        "Max": 100,
         "Default": 0.707,
         "Tooltip": "Quality factor that determines the sharpness of the filter's response"
       },

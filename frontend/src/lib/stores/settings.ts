@@ -313,13 +313,12 @@ export interface EqualizerSettings {
 export type EqualizerFilterType = 'HighPass' | 'LowPass' | 'BandReject';
 
 export interface EqualizerFilter {
-  id: string;
   type: EqualizerFilterType;
   frequency: number;
   q?: number;
   width?: number; // Bandwidth in Hz (for BandReject)
   gain?: number;
-  passes?: number; // Number of filter passes (0=off, 1=12dB, 2=24dB, 3=36dB, 4=48dB)
+  passes?: number; // Number of filter passes: 0 = off; 1 or more applies it that many times (the editor offers 0 to 4)
 }
 
 export interface ExportSettings {

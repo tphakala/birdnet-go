@@ -25,6 +25,34 @@ export const EQ_PASSES_OFF = 0;
 /** Highest passes value the editor offers (the Passes maximum of the filter table). */
 export const EQ_OFFERED_MAX_PASSES = 4;
 
+/** Attenuation in dB that one filter pass adds, for labelling a passes value. */
+export const EQ_DB_PER_PASS = 12;
+
+/** Default frequency in Hz of a LowPass filter. */
+export const EQ_LOWPASS_FREQUENCY_HZ = 15000;
+
+/** Default frequency in Hz of a HighPass filter. */
+export const EQ_HIGHPASS_FREQUENCY_HZ = 100;
+
+/** Default frequency in Hz of BandReject and BandPass filters and of an unknown type. */
+export const EQ_GENERIC_FREQUENCY_HZ = 1000;
+
+/**
+ * Default frequency in Hz for a filter type, the Frequency default of the filter table
+ * (LowPass 15000, HighPass 100, BandReject and BandPass 1000). Used for a stored filter
+ * that has no frequency; equalizer.test.ts pins it to the table.
+ */
+export function defaultEqFrequencyHz(type: string): number {
+  switch (type) {
+    case 'LowPass':
+      return EQ_LOWPASS_FREQUENCY_HZ;
+    case 'HighPass':
+      return EQ_HIGHPASS_FREQUENCY_HZ;
+    default:
+      return EQ_GENERIC_FREQUENCY_HZ;
+  }
+}
+
 /** Numeric equalizer parameters that the editor shows as number inputs. */
 export type EqNumericParameter = 'Frequency' | 'Q' | 'Width' | 'Gain';
 

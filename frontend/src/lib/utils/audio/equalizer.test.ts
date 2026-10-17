@@ -3,6 +3,9 @@ import fallbackEqFilterConfig from '$lib/desktop/features/settings/components/eq
 import {
   DEFAULT_EQ_Q,
   DEFAULT_EQ_WIDTH_HZ,
+  defaultEqFrequencyHz,
+  EQ_DB_PER_PASS,
+  EQ_GENERIC_FREQUENCY_HZ,
   EQ_Q_INPUT_STEP,
   eqInputStep,
   EQ_OFFERED_MAX_PASSES,
@@ -55,6 +58,29 @@ describe('equalizer constants', () => {
     expect(eqInputStep('Q')).toBe(EQ_Q_INPUT_STEP);
     for (const name of ['Frequency', 'Width', 'Gain'] as const) {
       expect(eqInputStep(name)).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('defaultEqFrequencyHz', () => {
+  it("matches the fallback table's Frequency default for every type in it", () => {
+    for (const { type, param } of paramsNamed('Frequency')) {
+      expect(defaultEqFrequencyHz(type)).toBe(param.Default);
+    }
+  });
+
+  it('gives BandPass the BandReject default and an unknown type the generic default', () => {
+    expect(defaultEqFrequencyHz('BandPass')).toBe(defaultEqFrequencyHz('BandReject'));
+    expect(defaultEqFrequencyHz('Peaking')).toBe(EQ_GENERIC_FREQUENCY_HZ);
+    expect(defaultEqFrequencyHz('')).toBe(EQ_GENERIC_FREQUENCY_HZ);
+  });
+});
+
+describe('EQ_DB_PER_PASS', () => {
+  it('matches the attenuation steps the table tooltip names (1 pass = 12 dB)', () => {
+    expect(EQ_DB_PER_PASS).toBe(12);
+    for (const { param } of paramsNamed('Passes')) {
+      expect(param.Tooltip).toContain(`1=${EQ_DB_PER_PASS}dB`);
     }
   });
 });

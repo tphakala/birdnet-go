@@ -3751,7 +3751,8 @@
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Pievienojiet vairākus filtrus, lai veidotu frekvenču raksturlīkni optimālai putnu noteikšanai jūsu vidē.",
         "emptyEntryRestored": "Ievadiet skaitli. Iepriekšējā vērtība tika saglabāta.",

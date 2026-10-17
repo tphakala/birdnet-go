@@ -2739,6 +2739,7 @@ export type TranslationKey =
   | 'settings.audio.audioFilters.attenuationLevels.24db'
   | 'settings.audio.audioFilters.attenuationLevels.36db'
   | 'settings.audio.audioFilters.attenuationLevels.48db'
+  | 'settings.audio.audioFilters.attenuationLevels.custom' // params: db
   | 'settings.audio.audioFilters.filterHelp'
   | 'settings.audio.audioFilters.emptyEntryRestored'
   | 'settings.audio.audioFilters.graph.flatResponse'
@@ -4749,6 +4750,7 @@ export type TranslationParams = {
     rate: string | number;
     channels: string | number;
   };
+  'settings.audio.audioFilters.attenuationLevels.custom': { db: string | number };
   'settings.audio.audioFilters.graph.sampleRate': { rate: string | number };
   'settings.audio.audioFilters.graph.clipped': { peak: string | number };
   'settings.audio.audioFilters.graph.skippedHeading': { count: string | number };

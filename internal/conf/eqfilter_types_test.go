@@ -127,3 +127,21 @@ func TestEqFilterConfigMatchesFrontendFallback(t *testing.T) {
 
 	assert.JSONEq(t, string(want), string(got), "update %s to match conf.EqFilterConfig", eqFallbackConfigPath)
 }
+
+// TestEqFilterConfigMaxMatchesValidation checks that the editor table accepts
+// every frequency and Q the config validation accepts, so the editor never
+// pulls a valid stored value down to a smaller maximum.
+func TestEqFilterConfigMaxMatchesValidation(t *testing.T) {
+	t.Parallel()
+
+	for name, cfg := range EqFilterConfig {
+		for _, p := range cfg.Parameters {
+			switch p.Name {
+			case "Frequency":
+				assert.InDelta(t, MaxEQFrequency, p.Max, 0, "%s.Frequency max", name)
+			case "Q":
+				assert.InDelta(t, MaxEQQ, p.Max, 0, "%s.Q max", name)
+			}
+		}
+	}
+}

@@ -18,7 +18,6 @@
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { generateId } from '$lib/utils/uuid';
   import {
     fetchDeviceCapabilities as fetchCapabilities,
     coerceSupportedRate,
@@ -61,7 +60,6 @@
   interface LocalEqualizerSettings {
     enabled: boolean;
     filters: Array<{
-      id?: string;
       type: EqualizerFilterType;
       frequency: number;
       q?: number;
@@ -209,15 +207,12 @@
       newModels = getDefaultModels();
     }
 
-    // Transform equalizer filters to ensure all have an id (required by store type)
+    // A disabled equalizer without filters is stored as undefined
     const transformedEqualizer =
       newEqualizer.enabled || newEqualizer.filters.length > 0
         ? {
             enabled: newEqualizer.enabled,
-            filters: newEqualizer.filters.map(f => ({
-              ...f,
-              id: f.id || generateId(),
-            })),
+            filters: newEqualizer.filters,
           }
         : undefined;
 
