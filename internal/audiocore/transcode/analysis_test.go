@@ -23,9 +23,6 @@ const (
 	// impulse and its ideal position after a resample.
 	alignmentToleranceSamples = 1
 
-	// resamplerAlignmentSkip is why the alignment test is skipped.
-	resamplerAlignmentSkip = "go-audio-resampler output-alignment fix, bump pending"
-
 	// wavFmtChunkBytes is the size of the PCM fmt chunk body.
 	wavFmtChunkBytes = 16
 	// wavFormatPCM is the WAV format tag for integer PCM.
@@ -219,7 +216,6 @@ func TestMonoSource_ResampleAlignment(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Skip(resamplerAlignmentSkip)
 			m, err := MonoFromPCM16(pcmBytes16(impulseClip(tt.frames, tt.frames/2)), tt.from, tt.to)
 			require.NoError(t, err)
 			got := collectStream(t, m)

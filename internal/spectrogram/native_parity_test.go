@@ -40,8 +40,10 @@ const (
 	parityClipName    = "clip.wav"
 	parityRegenEnv    = "SOX_REGEN"
 
-	// resamplerSkipReason is why resampled live parity cases are skipped.
-	resamplerSkipReason = "go-audio-resampler output-alignment fix, bump pending"
+	// resamplerSkipReason is why resampled live parity cases are skipped: sox
+	// and go-audio-resampler are different resamplers, and their outputs differ
+	// near the noise floor by more than the strict raster bounds allow.
+	resamplerSkipReason = "resampled sox parity exceeds the strict raster bounds, under investigation"
 )
 
 // parityCase is one sox reference render of the committed clip.
@@ -445,8 +447,6 @@ func TestSoxParityLive(t *testing.T) {
 	for _, lc := range liveParityCases() {
 		t.Run(lc.c.name, func(t *testing.T) {
 			if lc.in.rate != lc.in.profile.ResampleRate {
-				// The resampled forms differ from sox by the library's output
-				// alignment, so they run at the same strict tolerance once fixed.
 				t.Skip(resamplerSkipReason)
 			}
 			dir := t.TempDir()

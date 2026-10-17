@@ -298,7 +298,8 @@ func TestResampleTo_HighRatio(t *testing.T) {
 }
 
 // TestResampleFloat32Into_Downsamples verifies the float32-native path produces
-// a plausible downsampled length with all samples in the normalised [-1,1] range.
+// a plausible downsampled length with all samples within the normalised range
+// plus filter overshoot.
 func TestResampleFloat32Into_Downsamples(t *testing.T) {
 	const fromRate = 48000
 	const toRate = 16000
@@ -322,9 +323,12 @@ func TestResampleFloat32Into_Downsamples(t *testing.T) {
 	assert.LessOrEqual(t, len(out), ideal, "output must not exceed the ideal ratio length")
 	assert.Greater(t, len(out), ideal*3/4, "output should be within warmup latency of the ideal length")
 
+	// The ramp starts at full scale, so the anti-alias filter overshoots at the
+	// onset (Gibbs ringing); allow that, but nothing near a gain error.
+	const maxOvershoot = 1.25
 	for i, f := range out {
-		require.GreaterOrEqual(t, f, float32(-1.0), "sample %d below -1.0", i)
-		require.LessOrEqual(t, f, float32(1.0), "sample %d above 1.0", i)
+		require.GreaterOrEqual(t, f, float32(-maxOvershoot), "sample %d below -%v", i, maxOvershoot)
+		require.LessOrEqual(t, f, float32(maxOvershoot), "sample %d above %v", i, maxOvershoot)
 	}
 }
 
