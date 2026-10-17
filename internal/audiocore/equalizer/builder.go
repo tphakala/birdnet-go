@@ -11,7 +11,12 @@ import (
 
 var eqLog = logger.Global().Module("audio").Module("equalizer")
 
-// SkipReason says why buildFilterChain left a configured filter out of a chain.
+// bypassPasses is the passes value that turns a filter off: buildFilterChain
+// leaves it out of the chain and does not report it as skipped.
+const bypassPasses = 0
+
+// SkipReason says why buildFilterChain rejected a configured filter. A filter
+// with passes 0 is bypassed, not skipped, and has no SkipReason.
 type SkipReason string
 
 const (
@@ -19,7 +24,7 @@ const (
 	SkipUnknownType SkipReason = "unknown_type"
 	// SkipInvalidParameters means the library rejected the filter's parameters
 	// for the sample rate, for example a corner at or above Nyquist, a
-	// non-positive Q or width, or more than dspeq.MaxPasses passes.
+	// non-positive Q or width, negative passes, or more than dspeq.MaxPasses passes.
 	SkipInvalidParameters SkipReason = "invalid_parameters"
 	// SkipAddFailed means the library built the filter but refused to add it to
 	// the chain.
@@ -43,16 +48,19 @@ type SkippedFilter struct {
 
 // BuildFilterChain creates a library FilterChain from the given equalizer
 // settings. Returns nil when the equalizer is disabled, has no filters
-// configured, or every filter was skipped. Unknown filter types and filters the
-// library rejects for the given sample rate (for example a corner at or above
-// Nyquist) are logged with the reason and skipped without aborting the chain.
+// configured, or no filter was applied. A filter with passes 0 is off: it is
+// left out of the chain without a log line above Debug. Unknown filter types and
+// filters the library rejects for the given sample rate (for example a corner at
+// or above Nyquist) are logged with the reason and skipped without aborting the
+// chain.
 // Every call returns a new chain, since chains hold per-route filter state.
 func BuildFilterChain(settings conf.EqualizerSettings, sampleRate int) *dspeq.FilterChain {
 	return buildFilterChain(settings, sampleRate, func(s *SkippedFilter) { warnSkippedFilter(s, sampleRate) })
 }
 
 // BuildFilterChainReport builds the same chain as BuildFilterChain, with the
-// same nil returns, and also returns the filters it left out. It does not log a
+// same nil returns, and also returns the filters it left out. A filter with
+// passes 0 is bypassed and is not in skipped. It does not log a
 // Warn for a skipped filter, since a caller that reports skips to its own
 // client (the equalizer response preview) runs on every edit of a half-typed
 // value. The skipped slice is nil when nothing was skipped.
@@ -102,6 +110,7 @@ func buildFilterChain(settings conf.EqualizerSettings, sampleRate int, onSkip fu
 		logger.Int("sample_rate", sampleRate))
 
 	chain := dspeq.NewFilterChain()
+	bypassed := 0
 
 	for i := range settings.Filters {
 		f := &settings.Filters[i]
@@ -112,13 +121,22 @@ func buildFilterChain(settings conf.EqualizerSettings, sampleRate int, onSkip fu
 			continue
 		}
 
+		if f.Passes == bypassPasses {
+			bypassed++
+			eqLog.Debug("EQ filter bypassed, passes is 0",
+				logger.Int("index", i),
+				logger.String("type", f.Type),
+				logger.Float64("frequency", f.Frequency))
+			continue
+		}
+
 		band := dspeq.Band{
 			Type:      filterType,
 			Frequency: f.Frequency,
 			Q:         f.Q,
 			WidthHz:   f.Width,
 			GainDB:    f.Gain,
-			Passes:    max(f.Passes, 1),
+			Passes:    f.Passes,
 		}
 		filter, err := dspeq.NewFilter(band, sampleRate)
 		if err != nil {
@@ -136,11 +154,14 @@ func buildFilterChain(settings conf.EqualizerSettings, sampleRate int, onSkip fu
 	}
 
 	if chain.Len() == 0 {
-		eqLog.Debug("EQ filter chain empty after building, all filters failed")
+		eqLog.Debug("EQ filter chain empty after building, no filter applied",
+			logger.Int("bypassed", bypassed),
+			logger.Int("skipped", len(settings.Filters)-bypassed))
 		return nil
 	}
 	eqLog.Debug("EQ filter chain built",
-		logger.Int("active_filters", chain.Len()))
+		logger.Int("active_filters", chain.Len()),
+		logger.Int("bypassed", bypassed))
 	return chain
 }
 

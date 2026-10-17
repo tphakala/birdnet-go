@@ -24,6 +24,7 @@ func TestBuildFilterChainReport_ReportsSkips(t *testing.T) {
 		{"corner above Nyquist", conf.EqualizerFilter{Type: "HighPass", Frequency: 30000, Q: butterworthQ, Passes: 1}, equalizer.SkipInvalidParameters, true},
 		{"zero Q on LowPass", conf.EqualizerFilter{Type: "LowPass", Frequency: 1000, Q: 0, Passes: 1}, equalizer.SkipInvalidParameters, true},
 		{"too many passes", conf.EqualizerFilter{Type: "LowPass", Frequency: 1000, Q: butterworthQ, Passes: dspeq.MaxPasses + 1}, equalizer.SkipInvalidParameters, true},
+		{"negative passes", conf.EqualizerFilter{Type: "LowPass", Frequency: 1000, Q: butterworthQ, Passes: -1}, equalizer.SkipInvalidParameters, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -49,7 +50,8 @@ func TestBuildFilterChainReport_ReportsSkips(t *testing.T) {
 func TestBuildFilterChainReport_MatchesBuildFilterChain(t *testing.T) {
 	t.Parallel()
 	good := conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 2}
-	peak := conf.EqualizerFilter{Type: "Peaking", Frequency: 3000, Width: 1000, Gain: 4, Passes: 0}
+	peak := conf.EqualizerFilter{Type: "Peaking", Frequency: 3000, Width: 1000, Gain: 4, Passes: 1}
+	off := conf.EqualizerFilter{Type: "Peaking", Frequency: 3000, Width: 1000, Gain: 4, Passes: 0}
 	unknown := conf.EqualizerFilter{Type: "NoSuchType", Frequency: 100, Q: 1, Passes: 1}
 	tooHigh := conf.EqualizerFilter{Type: "LowPass", Frequency: 24000, Q: butterworthQ, Passes: 1}
 	tests := []struct {
@@ -60,6 +62,8 @@ func TestBuildFilterChainReport_MatchesBuildFilterChain(t *testing.T) {
 		{"empty", enabled()},
 		{"all skipped", enabled(unknown, tooHigh)},
 		{"mixed", enabled(good, unknown, peak, tooHigh)},
+		{"all bypassed", enabled(off)},
+		{"mixed with bypassed", enabled(good, off, unknown, peak, tooHigh)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -86,4 +90,23 @@ func TestBuildFilterChainReport_NoSkipsIsEmpty(t *testing.T) {
 	assert.Empty(t, skipped)
 	_, skipped = equalizer.BuildFilterChainReport(conf.EqualizerSettings{Filters: []conf.EqualizerFilter{good}}, testRate)
 	assert.Empty(t, skipped, "a disabled equalizer reports no skips")
+}
+
+func TestBuildFilterChainReport_BypassedFilterIsNotReported(t *testing.T) {
+	t.Parallel()
+	settings := enabled(
+		conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 0},
+		conf.EqualizerFilter{Type: "HighPass", Frequency: 100, Q: butterworthQ, Passes: 1},
+		conf.EqualizerFilter{Type: "LowPass", Frequency: 24000, Q: butterworthQ, Passes: 1},
+		conf.EqualizerFilter{Type: "NoSuchType", Frequency: 100, Q: 1, Passes: 0},
+	)
+	chain, skipped := equalizer.BuildFilterChainReport(settings, testRate)
+	require.NotNil(t, chain)
+	assert.Equal(t, 1, chain.Len())
+	require.Len(t, skipped, 2)
+	// Indexes are positions in the settings, not among the applied filters.
+	assert.Equal(t, 2, skipped[0].Index)
+	assert.Equal(t, equalizer.SkipInvalidParameters, skipped[0].Reason)
+	assert.Equal(t, 3, skipped[1].Index)
+	assert.Equal(t, equalizer.SkipUnknownType, skipped[1].Reason, "an unknown type is reported even at passes 0")
 }
