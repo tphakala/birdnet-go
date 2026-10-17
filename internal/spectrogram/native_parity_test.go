@@ -21,11 +21,15 @@ import (
 // Parity thresholds against sox renders. Record measured numbers in the PR;
 // tighten, never loosen silently.
 const (
-	// minRasterEqual is the fraction of raster pixels with equal palette index.
-	// The plan's starting value was 0.995. Two live cases measure 0.9901 (3 s tone
-	// clip at width 258 with a Dolph window at 120 dB, every difference one palette
-	// step); the committed references measure 0.9999 or better.
-	minRasterEqual     = 0.985
+	// minRasterEqualReference is the fraction of raster pixels with equal palette
+	// index against the committed sox references, which measure 0.9999 or better.
+	// This is the only parity test that runs without a sox binary, so it keeps the
+	// tight bound.
+	minRasterEqualReference = 0.995
+	// minRasterEqualLive is the same bound for the live sox cases. Two measure
+	// 0.9901 (3 s tone clip at width 258 with a Dolph window at 120 dB, every
+	// difference one palette step), so the plan's 0.995 is relaxed for them only.
+	minRasterEqualLive = 0.985
 	maxRasterIndexDiff = 2    // largest allowed index difference in the raster
 	minGridEqual       = 0.98 // fraction of grid pixels away from text that match
 	minNativeTextInSox = 0.95 // native text pixels inside sox's dilated text mask
@@ -40,10 +44,15 @@ const (
 	parityClipName    = "clip.wav"
 	parityRegenEnv    = "SOX_REGEN"
 
-	// resamplerSkipReason is why resampled live parity cases are skipped: sox
-	// and go-audio-resampler are different resamplers, and their outputs differ
-	// near the noise floor by more than the strict raster bounds allow.
-	resamplerSkipReason = "resampled sox parity exceeds the strict raster bounds, under investigation"
+	// resamplerSkipReason is why the live cases whose source rate differs from the
+	// profile rate are skipped. go-audio-resampler has no working anti-alias
+	// lowpass for non-integer downsampling ratios (384 kHz to 256 kHz, 48 kHz to
+	// 44.1 kHz and similar), which lifts the noise floor and shows at a 120 dB
+	// range. The 48 kHz to 24 kHz cases are an integer ratio and carry a smaller
+	// difference whose cause is not yet established; it is re-measured after that
+	// fix. Enable all of these cases, at the same bounds, once the fixed library
+	// release is bumped and the integer-ratio difference is explained.
+	resamplerSkipReason = "resampled sox parity waits on a go-audio-resampler fix for non-integer downsampling ratios; the 48 kHz to 24 kHz difference is re-measured after it"
 )
 
 // parityCase is one sox reference render of the committed clip.
@@ -145,7 +154,7 @@ func (m parityMetrics) String() string {
 
 // assertParity compares a native render with a sox render of the same clip and
 // returns the measured numbers.
-func assertParity(t *testing.T, native, sox *image.Paletted, raw bool, rangeDB int) parityMetrics {
+func assertParity(t *testing.T, native, sox *image.Paletted, raw bool, rangeDB int, minRasterEqual float64) parityMetrics {
 	t.Helper()
 	require.Equal(t, sox.Bounds(), native.Bounds(), "dimensions")
 	require.Equal(t, sox.Palette, native.Palette, "PLTE")
@@ -345,7 +354,7 @@ func TestSoxReferenceParity(t *testing.T) {
 				require.NoError(t, os.WriteFile(ref, data, 0o600))
 			}
 			out := nativeRender(t, clip, c, BirdProfile())
-			m := assertParity(t, decodePNG(t, out), decodePNG(t, ref), c.raw, rangeOf(t, c.dr))
+			m := assertParity(t, decodePNG(t, out), decodePNG(t, ref), c.raw, rangeOf(t, c.dr), minRasterEqualReference)
 			t.Logf("%s: %s", c.name, m)
 		})
 	}
@@ -454,7 +463,7 @@ func TestSoxParityLive(t *testing.T) {
 			writeLiveWAV(t, audio, lc.in, secs)
 			soxOut := soxRender(t, soxPath, audio, lc.c, lc.in.profile, secs)
 			natOut := nativeRender(t, audio, lc.c, lc.in.profile)
-			m := assertParity(t, decodePNG(t, natOut), decodePNG(t, soxOut), lc.c.raw, rangeOf(t, lc.c.dr))
+			m := assertParity(t, decodePNG(t, natOut), decodePNG(t, soxOut), lc.c.raw, rangeOf(t, lc.c.dr), minRasterEqualLive)
 			t.Logf("%s", m)
 		})
 	}
