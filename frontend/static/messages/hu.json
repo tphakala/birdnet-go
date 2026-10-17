@@ -3760,6 +3760,7 @@
           "updating": "A frekvenciaválasz frissítése...",
           "error": "A frekvenciaválasz nem számítható ki. Frissül, amikor módosít egy szűrőt, vagy az Újra lehetőséget választja.",
           "sampleRate": "{rate} Hz mintavételi frekvenciára számítva.",
+          "clipped": "A válasz csúcsa {peak} dB, ami a grafikon teteje felett van.",
           "skippedHeading": "{count, plural, one {# szűrő nem lesz alkalmazva a hangra} other {# szűrő nem lesz alkalmazva a hangra}}",
           "skippedReasons": {
             "unknown_type": "A(z) {number}. szűrő ({type}, {frequency} Hz) kihagyva: ez a szűrőtípus nem támogatott.",

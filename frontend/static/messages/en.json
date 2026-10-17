@@ -3760,6 +3760,7 @@
           "updating": "Updating the frequency response...",
           "error": "Could not calculate the frequency response. It updates when you change a filter, or select Retry.",
           "sampleRate": "Calculated for a sample rate of {rate} Hz.",
+          "clipped": "The response peaks at {peak} dB, above the top of the graph.",
           "skippedHeading": "{count, plural, one {# filter is not applied to the audio} other {# filters are not applied to the audio}}",
           "skippedReasons": {
             "unknown_type": "Filter {number} ({type}, {frequency} Hz) is skipped: this filter type is not supported.",

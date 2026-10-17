@@ -3760,6 +3760,7 @@
           "updating": "Mise à jour de la réponse en fréquence...",
           "error": "Impossible de calculer la réponse en fréquence. Elle se met à jour lorsque vous modifiez un filtre ou sélectionnez Réessayer.",
           "sampleRate": "Calculée pour une fréquence d'échantillonnage de {rate} Hz.",
+          "clipped": "La réponse culmine à {peak} dB, au-dessus du haut du graphique.",
           "skippedHeading": "{count, plural, one {# filtre n'est pas appliqué à l'audio} other {# filtres ne sont pas appliqués à l'audio}}",
           "skippedReasons": {
             "unknown_type": "Le filtre {number} ({type}, {frequency} Hz) est ignoré : ce type de filtre n'est pas pris en charge.",

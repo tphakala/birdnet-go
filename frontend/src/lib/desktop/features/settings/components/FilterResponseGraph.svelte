@@ -27,13 +27,57 @@
   @component
 -->
 <script module lang="ts">
-  // Gain range mapped onto the plot height: MIN_DB is the plot bottom. The grid
-  // and labels only go down to -48 dB, so gains between -48 and -96 dB are
-  // drawn below the lowest labelled line, and lower gains sit on the bottom edge.
+  // Gain range mapped onto the plot height. The bottom is fixed at MIN_DB. The
+  // top starts at BASE_MAX_DB and rises in DB_GRID_STEP steps to hold the drawn
+  // peak, up to MAX_TOP_DB; a higher peak is clamped to the top edge.
   /** Gain at the bottom edge of the plot, in dB. */
   export const MIN_DB = -96;
-  /** Gain at the top edge of the plot, in dB. */
-  export const MAX_DB = 12;
+  /** Gain at the top edge of the plot when no drawn point is higher, in dB. */
+  export const BASE_MAX_DB = 12;
+  /** Highest gain the top edge of the plot can reach, in dB. */
+  export const MAX_TOP_DB = 48;
+  /** Distance between horizontal grid lines and labels, and the steps of the top edge, in dB. */
+  export const DB_GRID_STEP = 12;
+  /** Peak gains are rounded to 1 / this many dB, so float noise does not move the axis. */
+  const PEAK_STEPS_PER_DB = 10;
+
+  /** The y axis chosen for one response. */
+  export interface GainAxis {
+    /** Gain at the top edge of the plot, in dB. */
+    maxDb: number;
+    /** Highest gain among the drawn points, rounded to 0.1 dB; undefined without drawn points. */
+    peakDb: number | undefined;
+    /** True when the peak is above the highest axis the plot can reach. */
+    clipped: boolean;
+  }
+
+  /** Chooses the y axis for the points inside the drawn frequency range. */
+  export function gainAxis(
+    points: ReadonlyArray<{ hz: number; gainDb: number }>,
+    minHz: number,
+    maxHz: number
+  ): GainAxis {
+    let peak: number | undefined;
+    for (const point of points) {
+      if (point.hz < minHz || point.hz > maxHz) continue;
+      if (peak === undefined || point.gainDb > peak) peak = point.gainDb;
+    }
+    if (peak === undefined) return { maxDb: BASE_MAX_DB, peakDb: undefined, clipped: false };
+    const peakDb = Math.round(peak * PEAK_STEPS_PER_DB) / PEAK_STEPS_PER_DB;
+    const stepped = Math.ceil(peakDb / DB_GRID_STEP) * DB_GRID_STEP;
+    return {
+      maxDb: Math.min(MAX_TOP_DB, Math.max(BASE_MAX_DB, stepped)),
+      peakDb,
+      clipped: peakDb > MAX_TOP_DB,
+    };
+  }
+
+  /** Gains of the horizontal grid lines, from the plot bottom up to maxDb. */
+  export function gainGridLines(maxDb: number): number[] {
+    const lines: number[] = [];
+    for (let db = MIN_DB; db <= maxDb; db += DB_GRID_STEP) lines.push(db);
+    return lines;
+  }
 </script>
 
 <script lang="ts">
@@ -94,6 +138,13 @@
         ? graphState.previous
         : undefined
   );
+
+  // Frequency range - standard audio range up to 20kHz (human hearing limit)
+  const MIN_FREQ = 20;
+  const MAX_FREQ = 20000;
+
+  /** The y axis for the response being drawn; it follows the drawn peak. */
+  const axis = $derived(gainAxis(drawable?.response.points ?? [], MIN_FREQ, MAX_FREQ));
 
   /**
    * Disabled, empty, all-skipped and all-bypassed (passes 0) configurations give
@@ -186,15 +237,10 @@
   let plotWidth = $derived(canvasWidth - margins.left - margins.right);
   let plotHeight = $derived(canvasHeight - margins.top - margins.bottom);
 
-  // Frequency range - standard audio range up to 20kHz (human hearing limit)
-  const MIN_FREQ = 20;
-  const MAX_FREQ = 20000;
-
   // Grid lines optimized for audio engineering work - more detail in bird frequency range
   const freqGridLines = [
     20, 50, 100, 200, 500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000, 15000, 20000,
   ];
-  const dbGridLines = [-48, -36, -24, -12, 0, 12];
 
   // Color scheme - reactive state for proper Svelte 5 updates
   let colors = $state({
@@ -271,7 +317,7 @@
 
   // Convert dB to y position within plot area
   function dbToY(db: number): number {
-    return margins.top + plotHeight - ((db - MIN_DB) / (MAX_DB - MIN_DB)) * plotHeight;
+    return margins.top + plotHeight - ((db - MIN_DB) / (axis.maxDb - MIN_DB)) * plotHeight;
   }
 
   // Update canvas dimensions based on container
@@ -354,7 +400,7 @@
     }
 
     // Horizontal dB grid lines
-    for (const db of dbGridLines) {
+    for (const db of gainGridLines(axis.maxDb)) {
       const y = dbToY(db);
       ctx.beginPath();
       ctx.moveTo(margins.left, y);
@@ -440,7 +486,7 @@
     // dB labels (positioned to the left of plot area)
     ctx.textAlign = 'right';
     ctx.textBaseline = 'middle';
-    for (const db of dbGridLines) {
+    for (const db of gainGridLines(axis.maxDb)) {
       const y = dbToY(db);
       ctx.fillText(`${db}dB`, margins.left - 10, y);
     }
@@ -538,7 +584,8 @@
     };
   });
 
-  // Redraw when the response or the dimensions change. Every dependency is read
+  // Redraw when the response or the dimensions change. The y axis is derived
+  // from the response, so it needs no read of its own. Every dependency is read
   // here, before drawGraph can return early (an incomplete test canvas, say),
   // so the effect always tracks them.
   $effect(() => {
@@ -621,6 +668,12 @@
         </span>
       {/if}
     </p>
+
+    {#if drawable && axis.clipped && axis.peakDb !== undefined}
+      <p class="text-xs text-[var(--color-base-content)]/70" data-testid="eq-graph-clipped">
+        {t('settings.audio.audioFilters.graph.clipped', { peak: axis.peakDb })}
+      </p>
+    {/if}
 
     {#if graphState.status === 'ready' && graphState.response.skipped.length > 0}
       {@const ready = { request: graphState.request, response: graphState.response }}

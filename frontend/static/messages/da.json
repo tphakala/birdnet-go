@@ -3760,6 +3760,7 @@
           "updating": "Opdaterer frekvensresponsen...",
           "error": "Frekvensresponsen kunne ikke beregnes. Den opdateres, når du ændrer et filter, eller når du vælger Prøv igen.",
           "sampleRate": "Beregnet for en samplingsfrekvens på {rate} Hz.",
+          "clipped": "Responsen topper ved {peak} dB, over grafens øvre kant.",
           "skippedHeading": "{count, plural, one {# filter anvendes ikke på lyden} other {# filtre anvendes ikke på lyden}}",
           "skippedReasons": {
             "unknown_type": "Filter {number} ({type}, {frequency} Hz) springes over: denne filtertype understøttes ikke.",

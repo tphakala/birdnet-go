@@ -10,7 +10,14 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/sve
 import { t } from '$lib/i18n';
 import { isPlainObject } from '$lib/utils/security';
 import { renderTyped } from '../../../../../test/render-helpers';
-import FilterResponseGraph, { MAX_DB, MIN_DB } from './FilterResponseGraph.svelte';
+import FilterResponseGraph, {
+  BASE_MAX_DB,
+  DB_GRID_STEP,
+  MAX_TOP_DB,
+  MIN_DB,
+  gainAxis,
+  gainGridLines,
+} from './FilterResponseGraph.svelte';
 import { EQUALIZER_RESPONSE_DEBOUNCE_MS, EQUALIZER_RESPONSE_URL } from '$lib/api/equalizer';
 import type { EqualizerResponseRequest } from '$lib/api/equalizer';
 
@@ -99,9 +106,9 @@ function axisLabelFont(ctx: ReturnType<typeof createContextMock>): string | unde
   return ctx.textFonts.filter(entry => entry.text === '1k').at(-1)?.font;
 }
 
-/** The graph draws 16 frequency grid lines, 6 dB grid lines and one 0 dB reference line. */
+/** The graph draws 16 frequency grid lines, the dB grid lines for its axis top and one 0 dB reference line. */
 const FREQUENCY_GRID_LINES = 16;
-const DB_GRID_LINES = 6;
+const DB_GRID_LINES = gainGridLines(BASE_MAX_DB).length;
 const REFERENCE_LINES = 1;
 const PLOT_BORDER_STROKES = 1;
 
@@ -111,9 +118,9 @@ const PLOT_RIGHT = 540;
 const PLOT_BOTTOM = 300;
 const PLOT_HEIGHT = 260;
 
-/** The y position the graph maps a gain to. */
-function gainToY(gainDb: number): number {
-  return PLOT_BOTTOM - ((gainDb - MIN_DB) / (MAX_DB - MIN_DB)) * PLOT_HEIGHT;
+/** The y position the graph maps a gain to when the axis tops out at maxDb. */
+function gainToY(gainDb: number, maxDb: number): number {
+  return PLOT_BOTTOM - ((gainDb - MIN_DB) / (maxDb - MIN_DB)) * PLOT_HEIGHT;
 }
 
 const GRID_LINE_COUNT = FREQUENCY_GRID_LINES + DB_GRID_LINES + REFERENCE_LINES;
@@ -147,6 +154,77 @@ function labelsInLastDraw(ctx: ReturnType<typeof createContextMock>): unknown[] 
 }
 
 const FLAT_LABEL = 'settings.audio.audioFilters.graph.flatResponse';
+const CLIPPED_KEY = 'settings.audio.audioFilters.graph.clipped';
+
+/** A response whose only drawn points are the given gains, spread over the audible range. */
+function peakBody(...gains: number[]): Record<string, unknown> {
+  return responseBody({
+    points: gains.map((gainDb, i) => ({ hz: 100 * (i + 1), gainDb })),
+  });
+}
+
+/** dB tick labels drawn by the most recent draw. */
+function dbLabelsInLastDraw(ctx: ReturnType<typeof createContextMock>): string[] {
+  return labelsInLastDraw(ctx).filter(
+    (label): label is string => typeof label === 'string' && label.endsWith('dB')
+  );
+}
+
+/** The y of the highest curve vertex (smallest y) in the most recent draw. */
+function curveTopY(ctx: ReturnType<typeof createContextMock>): number | undefined {
+  const ys = [...callsInLastDraw(ctx, 'moveTo'), ...callsInLastDraw(ctx, 'lineTo')]
+    .map(call => call[1])
+    .filter((y): y is number => typeof y === 'number');
+  return ys.length > 0 ? Math.min(...ys.slice(-3)) : undefined;
+}
+
+describe('gainAxis', () => {
+  const MIN_HZ = 20;
+  const MAX_HZ = 20000;
+  const at = (gainDb: number, hz = 1000) => [{ hz, gainDb }];
+
+  it.each([
+    ['no points', [], BASE_MAX_DB, false],
+    ['a flat 0 dB response', at(0), BASE_MAX_DB, false],
+    ['a 11.9 dB peak', at(11.9), BASE_MAX_DB, false],
+    ['a 12 dB peak', at(12), BASE_MAX_DB, false],
+    ['a 12.000000000000002 dB peak (float noise)', at(12.000000000000002), BASE_MAX_DB, false],
+    ['a 12.1 dB peak', at(12.1), 24, false],
+    ['a 40 dB peak', at(40), 48, false],
+    ['a 48 dB peak', at(48), MAX_TOP_DB, false],
+    ['a 48.00000000000001 dB peak (float noise)', at(48.00000000000001), MAX_TOP_DB, false],
+    ['a 48.1 dB peak', at(48.1), MAX_TOP_DB, true],
+    ['a 200 dB peak', at(200), MAX_TOP_DB, true],
+    ['a 30 dB point outside the drawn range', at(30, 22000), BASE_MAX_DB, false],
+  ])('gives the axis for %s', (_name, points, maxDb, clipped) => {
+    const axis = gainAxis(points, MIN_HZ, MAX_HZ);
+    expect(axis.maxDb).toBe(maxDb);
+    expect(axis.clipped).toBe(clipped);
+  });
+
+  it('reports the rounded peak of the drawn points only', () => {
+    expect(gainAxis([...at(30, 22000), ...at(7.26)], MIN_HZ, MAX_HZ).peakDb).toBe(7.3);
+    expect(gainAxis([], MIN_HZ, MAX_HZ).peakDb).toBeUndefined();
+  });
+});
+
+describe('gainGridLines', () => {
+  it.each([BASE_MAX_DB, 24, 36, MAX_TOP_DB])(
+    'gives ascending multiples of the step from the bottom to %s dB',
+    maxDb => {
+      const lines = gainGridLines(maxDb);
+      expect(lines[0]).toBe(MIN_DB);
+      expect(lines.at(-1)).toBe(maxDb);
+      expect(lines.every((db, i) => i === 0 || db - (lines.at(i - 1) ?? 0) === DB_GRID_STEP)).toBe(
+        true
+      );
+    }
+  );
+
+  it('has ten lines for the default axis', () => {
+    expect(gainGridLines(BASE_MAX_DB)).toHaveLength(10);
+  });
+});
 
 describe('FilterResponseGraph', () => {
   const originalGetContext = vi
@@ -226,9 +304,9 @@ describe('FilterResponseGraph', () => {
     const start = callsInLastDraw(ctx, 'moveTo').at(-1);
     const end = callsInLastDraw(ctx, 'lineTo').at(-1);
     expect(start?.[0]).toBeCloseTo(PLOT_LEFT);
-    expect(start?.[1]).toBeCloseTo(gainToY(-12));
+    expect(start?.[1]).toBeCloseTo(gainToY(-12, BASE_MAX_DB));
     expect(end?.[0]).toBeCloseTo(PLOT_RIGHT);
-    expect(end?.[1]).toBeCloseTo(gainToY(-6));
+    expect(end?.[1]).toBeCloseTo(gainToY(-6, BASE_MAX_DB));
     expect(labelsInLastDraw(ctx)).not.toContain(FLAT_LABEL);
   });
 
@@ -494,6 +572,62 @@ describe('FilterResponseGraph', () => {
     await settle();
     expect(apiPost).toHaveBeenCalledTimes(2);
     expect(lastBody()).not.toHaveProperty('sampleRate');
+  });
+
+  it('scales the axis to a +40 dB peak and back to +12 for the next flat response', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValueOnce(peakBody(0, 40, 0));
+    const view = render(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
+    });
+    await settle();
+    expect(dbLabelsInLastDraw(ctx)).toContain('48dB');
+    expect(dbLabelsInLastDraw(ctx)).not.toContain('60dB');
+    expect(curveTopY(ctx)).toBeCloseTo(gainToY(40, 48));
+    expect(screen.queryByTestId('eq-graph-clipped')).not.toBeInTheDocument();
+
+    apiPost.mockResolvedValueOnce(responseBody());
+    await view.rerender({ equalizer: { enabled: true, filters: [HIGH_PASS] } });
+    await settle();
+    expect(dbLabelsInLastDraw(ctx)).toContain('12dB');
+    expect(dbLabelsInLastDraw(ctx)).not.toContain('48dB');
+    expect(screen.queryByTestId('eq-graph-clipped')).not.toBeInTheDocument();
+  });
+
+  it('keeps the previous response axis and caption while a new request is pending', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValueOnce(peakBody(0, 80, 0));
+    const view = render(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
+    });
+    await settle();
+    expect(screen.getByTestId('eq-graph-clipped')).toBeInTheDocument();
+
+    apiPost.mockImplementation(() => new Promise(() => {}));
+    await view.rerender({ equalizer: { enabled: true, filters: [HIGH_PASS] } });
+    await settle();
+    expect(screen.getByTestId('eq-graph-updating')).toBeInTheDocument();
+    expect(screen.getByTestId('eq-graph-clipped')).toBeInTheDocument();
+    expect(dbLabelsInLastDraw(ctx)).toContain('48dB');
+  });
+
+  it('clamps a peak above the cap to the top edge and shows the caption with the peak', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValueOnce(peakBody(0, 80.04, 0));
+    const view = render(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] } },
+    });
+    await settle();
+    expect(curveTopY(ctx)).toBeCloseTo(PLOT_BOTTOM - PLOT_HEIGHT);
+    expect(dbLabelsInLastDraw(ctx).at(-1)).toBe(`${MAX_TOP_DB}dB`);
+    expect(screen.getByTestId('eq-graph-clipped')).toHaveTextContent(CLIPPED_KEY);
+    expect(t).toHaveBeenCalledWith(CLIPPED_KEY, { peak: 80 });
+
+    // The caption goes on a later response below the cap.
+    apiPost.mockResolvedValueOnce(peakBody(0, 20, 0));
+    await view.rerender({ equalizer: { enabled: true, filters: [HIGH_PASS] } });
+    await settle();
+    expect(screen.queryByTestId('eq-graph-clipped')).not.toBeInTheDocument();
   });
 
   it('stops requesting after unmount', async () => {

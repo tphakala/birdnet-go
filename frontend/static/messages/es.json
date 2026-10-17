@@ -3760,6 +3760,7 @@
           "updating": "Actualizando la respuesta de frecuencia...",
           "error": "No se pudo calcular la respuesta de frecuencia. Se actualiza cuando cambias un filtro o seleccionas Reintentar.",
           "sampleRate": "Calculado para una frecuencia de muestreo de {rate} Hz.",
+          "clipped": "La respuesta alcanza un máximo de {peak} dB, por encima del borde superior del gráfico.",
           "skippedHeading": "{count, plural, one {# filtro no se aplica al audio} other {# filtros no se aplican al audio}}",
           "skippedReasons": {
             "unknown_type": "El filtro {number} ({type}, {frequency} Hz) se omite: este tipo de filtro no es compatible.",

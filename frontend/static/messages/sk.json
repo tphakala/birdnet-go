@@ -3760,6 +3760,7 @@
           "updating": "Aktualizácia frekvenčnej odozvy...",
           "error": "Frekvenčnú odozvu sa nepodarilo vypočítať. Aktualizuje sa pri zmene filtra alebo po výbere možnosti Skúsiť znova.",
           "sampleRate": "Vypočítané pre vzorkovaciu frekvenciu {rate} Hz.",
+          "clipped": "Odozva dosahuje maximum {peak} dB, čo je nad horným okrajom grafu.",
           "skippedHeading": "{count, plural, one {# filter sa na zvuk nepoužije} few {# filtre sa na zvuk nepoužijú} many {# filtra sa na zvuk nepoužije} other {# filtrov sa na zvuk nepoužije}}",
           "skippedReasons": {
             "unknown_type": "Filter {number} ({type}, {frequency} Hz) sa preskočí: tento typ filtra nie je podporovaný.",
