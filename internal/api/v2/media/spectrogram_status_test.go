@@ -21,6 +21,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/spectrogram/render"
 )
 
@@ -277,6 +279,27 @@ func TestProcessedSpectrogramByID_TooShortClipIs422(t *testing.T) {
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
 }
 
+// requireLogLevel asserts that the captured output holds msg on a line of the given level.
+func requireLogLevel(t *testing.T, output, msg, level string) {
+	t.Helper()
+	for line := range strings.SplitSeq(output, "\n") {
+		if strings.Contains(line, msg) {
+			assert.Contains(t, line, "level="+level)
+			return
+		}
+	}
+	t.Errorf("log line %q not found in %q", msg, output)
+}
+
+func TestServeSpectrogramByID_RetainedRenderRejectsOutOfRangeWidth(t *testing.T) {
+	h, e, _ := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
+	h.DS = noClipDS(t, retainedClipName, false)
+
+	rec := serveSpectrogram(t, h, e, "?width="+fmt.Sprint(statusTestTinyWidth))
+
+	assert.Equal(t, http.StatusBadRequest, rec.Code, rec.Body.String())
+}
+
 func TestServeSpectrogramByID_UnsupportedSourceIs422(t *testing.T) {
 	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	e, h, tempDir := setupMediaTestEnvironment(t)
@@ -289,10 +312,15 @@ func TestServeSpectrogramByID_UnsupportedSourceIs422(t *testing.T) {
 	mockDS.On("GetNoteModelType", "32").Return("bird", nil).Maybe()
 	h.DS = mockDS
 
+	logs := logtest.CaptureBuffer(t)
+	h.APILogger = logger.Global().Module("api")
+
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/spectrogram/32", http.NoBody)
 	rec := httptest.NewRecorder()
 	e.ServeHTTP(rec, req)
 
 	assert.Equal(t, http.StatusUnprocessableEntity, rec.Code, rec.Body.String())
+	requireLogLevel(t, logs.String(), "Spectrogram generation skipped: source audio cannot be rendered", "WARN")
+	assert.NotContains(t, logs.String(), `level=ERROR msg="Spectrogram generation failed"`, "a source failure is not logged as an error")
 	assert.Equal(t, before, dirNames(t, tempDir), "a rejected clip leaves no PNG behind")
 }

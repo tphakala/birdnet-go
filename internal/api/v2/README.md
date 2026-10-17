@@ -202,7 +202,9 @@ ignored). The endpoints that render in the request (`/media/spectrogram/:filenam
 `/spectrogram/:id` and `/spectrogram/:id/process`) answer **422** for a clip that cannot be
 rendered: an unsupported format or a sample rate below 8 kHz, a damaged file, a file above
 the size limits, or a clip too short for one spectrogram column. The first two also answer
-**503** with `Retry-After` while the clip is still being written.
+**503** with `Retry-After` while the clip is still being written, and also when the header probe
+cannot read the clip, since a half-written file looks the same; only damage found while decoding
+answers 422.
 
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve
