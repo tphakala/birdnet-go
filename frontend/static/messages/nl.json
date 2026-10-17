@@ -3745,7 +3745,7 @@
         "attenuation": "Verzwakking",
         "attenuationHelp": "Filter rolloff snelheid. Hogere waarden geven steilere verzwakking van gefilterde frequenties.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Uit",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",

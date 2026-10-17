@@ -3745,7 +3745,7 @@
         "attenuation": "Atenuação",
         "attenuationHelp": "Taxa de atenuação do filtro. Valores mais altos fornecem atenuação mais acentuada de frequências filtradas.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Desativado",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",

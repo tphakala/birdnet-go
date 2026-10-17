@@ -3745,7 +3745,7 @@
         "attenuation": "Slāpēšana",
         "attenuationHelp": "Filtra krituma ātrums. Augstākas vērtības nodrošina stāvāku filtrēto frekvenču slāpēšanu.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Izslēgts",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",

@@ -3745,7 +3745,7 @@
         "attenuation": "Csillapítás",
         "attenuationHelp": "A szűrő lecsengetési rátája. A magasabb értékek meredekebb csillapítást biztosítanak a szűrt frekvenciáknál.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Ki",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",

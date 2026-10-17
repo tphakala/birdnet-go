@@ -3745,7 +3745,7 @@
         "attenuation": "Dämpning",
         "attenuationHelp": "Filtrets avklingningshastighet. Högre värden ger brantare dämpning av filtrerade frekvenser.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Av",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",

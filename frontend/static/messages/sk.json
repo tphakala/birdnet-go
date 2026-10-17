@@ -3745,7 +3745,7 @@
         "attenuation": "Útlm",
         "attenuationHelp": "Rýchlosť poklesu filtra. Vyššie hodnoty poskytujú strmšie tlmenie filtrovaných frekvencií.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Vypnutý",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
