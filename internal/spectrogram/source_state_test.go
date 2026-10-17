@@ -1,6 +1,7 @@
 package spectrogram
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -140,4 +142,47 @@ func TestGenerateFromFile_ChangedSourceOutranksDecodeError(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrSourceChanged)
 	assert.NoFileExists(t, out)
+}
+
+func TestCheckSourceUnchanged(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "clip.wav")
+	require.NoError(t, os.WriteFile(path, make([]byte, 64), 0o600))
+	state := statSourceState(t, path)
+	require.NoError(t, os.WriteFile(path, make([]byte, 128), 0o600)) // the clip grew
+
+	live := t.Context()
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	renderFailure := errors.NewStd("render failed")
+
+	tests := []struct {
+		name      string
+		ctx       context.Context
+		source    *SourceState
+		renderErr error
+		want      error
+		wantNil   bool
+	}{
+		{name: "no state supplied", ctx: live, wantNil: true},
+		{name: "changed file, render succeeded", ctx: live, source: &state, want: ErrSourceChanged},
+		{name: "changed file outranks the render error", ctx: live, source: &state, renderErr: renderFailure, want: renderFailure},
+		{name: "interrupted render passes through", ctx: canceled, source: &state, renderErr: context.Canceled, wantNil: true},
+		{name: "changed file after a finished render is not excused by a done context", ctx: canceled, source: &state, want: ErrSourceChanged},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := checkSourceUnchanged(tt.ctx, tt.source, path, tt.renderErr)
+			if tt.wantNil {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorIs(t, err, tt.want)
+			if tt.renderErr != nil {
+				require.ErrorIs(t, err, ErrSourceChanged)
+			}
+		})
+	}
 }

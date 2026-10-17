@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	wavpcm "github.com/tphakala/go-wav/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 )
@@ -180,4 +181,53 @@ func TestProbeFile_DecodedBytesBound(t *testing.T) {
 	require.NoError(t, err)
 	assert.Positive(t, info.DecodedBytes)
 	assert.LessOrEqual(t, info.DecodedBytes, int64(maxDecodedPCMBytes+info.Channels*bytesPerSample))
+}
+
+const (
+	// wav24BitDepth is the bit depth of the 24-bit fixtures.
+	wav24BitDepth = 24
+)
+
+// wav24Bytes returns a mono 24-bit WAV of n zero frames at testRate.
+func wav24Bytes(t *testing.T, frames int) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	require.NoError(t, wavpcm.EncodeInterleaved(&buf, wavpcm.Config{SampleRate: testRate, BitDepth: wav24BitDepth, Channels: 1}, make([]byte, frames*wav24BitDepth/8)))
+	return buf.Bytes()
+}
+
+func TestDecodeMono_TruncationCheckAcrossWAVLayouts(t *testing.T) {
+	t.Parallel()
+
+	const frames = truncatedWAVFrames
+	whole24 := wav24Bytes(t, frames)
+	stereo := wavBytes(t, testRate, 2, frames)
+	streaming := wavBytes(t, testRate, 1, frames)
+	for _, off := range []int{wavRIFFSizeOffset, wavDataSizeOffset} {
+		copy(streaming[off:off+4], []byte{0, 0, 0, 0}) // a zero size field marks a streamed WAV
+	}
+	tests := []struct {
+		name      string
+		data      []byte
+		wantTrunc bool
+	}{
+		{name: "complete 24-bit", data: whole24},
+		{name: "truncated 24-bit", data: whole24[:wavFixtureHeaderBytes+frames/2*wav24BitDepth/8], wantTrunc: true},
+		{name: "truncated stereo", data: stereo[:wavFixtureHeaderBytes+frames/2*2*bytesPerSample], wantTrunc: true},
+		{name: "streamed WAV has no declared length to compare", data: streaming[:wavFixtureHeaderBytes+frames/2*bytesPerSample]},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "layout.wav")
+			require.NoError(t, os.WriteFile(path, tt.data, 0o600))
+
+			_, err := DecodeMono(t.Context(), path, 0)
+			if tt.wantTrunc {
+				require.ErrorIs(t, err, ErrTruncatedSource)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }
