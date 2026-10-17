@@ -297,6 +297,12 @@
     }
   }
 
+  // Number of filter rows. Part of the parameter cell keys: rows are keyed by position, so
+  // after a row is removed a cell would otherwise show the next filter and keep that
+  // field's notice. Any change in the count remounts every cell, which also drops the
+  // notices of rows that did not move.
+  const filterCount = $derived((equalizerSettings.filters || []).length);
+
   // Id prefix of this editor instance, for the <label for> of each attenuation dropdown
   // (the editor mounts several times on a page)
   const editorId = generateId('eq-editor');
@@ -533,8 +539,9 @@
             </button>
           </div>
 
-          <!-- Dynamic parameters based on filter type -->
-          {#each filterParams as param (param.Name)}
+          <!-- Dynamic parameters based on filter type, remounted when the filter count or
+               this row's type changes (see filterCount) -->
+          {#each filterParams as param (`${filterCount}-${filter.type}-${param.Name}`)}
             {@render parameterCell(
               filter.type,
               param,

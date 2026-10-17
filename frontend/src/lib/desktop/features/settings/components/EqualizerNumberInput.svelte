@@ -12,7 +12,9 @@
     was not a number.
   - A notice under the input says why the shown value differs from the entry. It is
     linked with aria-describedby while it shows, and clears on the next edit or when
-    the stored value changes from outside (a type switch, a removed row above).
+    the value prop changes to anything other than what this input just committed.
+    A parent that reuses an input for another filter (a removed row above, a type
+    switch) remounts it through its each key, which drops the notice as well.
 
   Props:
   - label: Translated parameter name
@@ -70,14 +72,16 @@
 
   let notice = $state<{ kind: NumericEntryNotice; value: number } | null>(null);
 
-  // The value this input last committed. A plain variable, not state: the effect below
-  // must rerun only when the value prop changes, not when a commit records its value.
-  let lastCommitted: number | undefined;
+  // The value prop this input expects next: the value it last received, or the one it
+  // just committed. A plain variable, not state: the effect below must rerun only when
+  // the value prop changes, not when a commit records its value.
+  let expectedValue: number | undefined;
 
   // A value that arrives from outside (not the one this input just committed) makes
   // any notice stale.
   $effect(() => {
-    if (value !== lastCommitted) notice = null;
+    if (value !== expectedValue) notice = null;
+    expectedValue = value;
   });
 
   const noticeText = $derived.by(() => {
@@ -100,7 +104,7 @@
     input.value = String(result.value);
     notice = result.notice ? { kind: result.notice, value: result.value } : null;
     if (result.notice === 'empty') return;
-    lastCommitted = result.value;
+    expectedValue = result.value;
     onCommit(result.value);
   }
 </script>

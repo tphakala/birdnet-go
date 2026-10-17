@@ -687,6 +687,59 @@ describe('AudioEqualizerSettings', () => {
       expect(shownNotices()).toEqual([]);
     });
 
+    it('clears a notice when the row above is removed and the next filter has the same value', async () => {
+      const user = userEvent.setup();
+      const filters: EqualizerFilters = [
+        { type: 'LowPass', frequency: 12000, q: DEFAULT_EQ_Q, passes: 1 },
+        { type: 'LowPass', frequency: 15000, q: DEFAULT_EQ_Q, passes: 1 },
+      ];
+      const { rerender } = renderWithFilters(filters);
+
+      const [first] = await screen.findAllByRole<HTMLInputElement>('spinbutton', {
+        name: NAME.q,
+      });
+      await user.clear(first);
+      await user.tab();
+      expect(shownNotices()).toHaveLength(1);
+
+      // The parent applies the removal of the first row; a filter of the same type and Q moves up
+      await rerender({ equalizerSettings: { enabled: true, filters: [filters[1]] } });
+
+      const [q] = screen.getAllByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
+      expect(q.value).toBe(String(DEFAULT_EQ_Q));
+      expect(q).not.toHaveAttribute('aria-describedby');
+      expect(shownNotices()).toEqual([]);
+    });
+
+    it('clears a notice when an outside update returns the value to an earlier commit', async () => {
+      const user = userEvent.setup();
+      const withQ = (q: number) => ({
+        equalizerSettings: {
+          enabled: true,
+          filters: [{ type: 'LowPass' as const, frequency: 15000, q, passes: 1 }],
+        },
+      });
+      const { rerender } = renderWithFilters(withQ(2).equalizerSettings.filters);
+
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
+      await user.clear(q);
+      await user.type(q, '5');
+      await user.tab();
+      // The parent stores the commit, then another update changes it to 8
+      await rerender(withQ(5));
+      await rerender(withQ(8));
+
+      await user.clear(q);
+      await user.tab();
+      expect(shownNotices()).toHaveLength(1);
+
+      // An outside update brings back 5, the value this input committed earlier
+      await rerender(withQ(5));
+      expect(q.value).toBe('5');
+      expect(q).not.toHaveAttribute('aria-describedby');
+      expect(shownNotices()).toEqual([]);
+    });
+
     it('disables every parameter input and the attenuation dropdown when disabled', async () => {
       render(AudioEqualizerSettings, {
         props: {
