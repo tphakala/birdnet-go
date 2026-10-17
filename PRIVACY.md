@@ -15,7 +15,7 @@ BirdNET-Go is committed to protecting your privacy while providing reliable bird
 - ✅ **No Hidden Collection** - Nothing is transmitted without your knowledge
 - ✅ **User Controlled** - Enable or disable anytime with immediate effect
 
-BirdNET-Go also switches off the Microsoft telemetry built into ONNX Runtime before loading it, unless you set `ORT_DISABLE_TELEMETRY` yourself.
+BirdNET-Go also switches off the Microsoft telemetry built into ONNX Runtime before loading it, unless you set `ORT_DISABLE_TELEMETRY` yourself. On Windows, ONNX Runtime reports through Windows event tracing, which that variable does not control; BirdNET-Go calls the ONNX Runtime API to turn those events off there instead.
 
 **By default, BirdNET-Go operates locally with minimal external data transmission.** The only default external connections are:
 
