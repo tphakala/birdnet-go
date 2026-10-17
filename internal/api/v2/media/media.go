@@ -2752,11 +2752,19 @@ type durationCacheEntry struct {
 
 // validateSpectrogramInputs validates that the audio file is complete and ready for spectrogram generation.
 // It returns the validation result and any error encountered during validation.
+// With the native renderer selected it checks readiness in Go
+// (validateNativeSpectrogramInput) and returns a nil result; the ffprobe path
+// below serves the sox renderer.
 func (c *Handler) validateSpectrogramInputs(ctx context.Context, absAudioPath, audioPath, queueKey string) (*ffmpeg.ValidationResult, error) {
 	// Check cache first
 	fileInfo, err := os.Stat(absAudioPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat audio file: %w", err)
+	}
+
+	// The native renderer needs no duration and no ffprobe; see spectrogram_native_ready.go.
+	if conf.NativeSpectrogramEnabled() {
+		return nil, validateNativeSpectrogramInput(ctx, absAudioPath, audioPath, queueKey)
 	}
 
 	cacheKey := fmt.Sprintf("%s:%d:%s", absAudioPath, fileInfo.Size(), fileInfo.ModTime().Format(time.RFC3339Nano))
@@ -3614,7 +3622,8 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 			return nil, err
 		}
 
-		// Step 5: Validate audio file with FFprobe (expensive ~300ms subprocess).
+		// Step 5: Validate audio file with FFprobe (expensive ~300ms subprocess), or
+		// with the pure-Go check when the native renderer is selected.
 		// Running inside singleflight ensures only one FFprobe call per unique spectrogram key.
 		validationResult, err := c.validateSpectrogramInputs(sharedCtx, absAudioPath, audioPath, queueKey)
 		if err != nil {
