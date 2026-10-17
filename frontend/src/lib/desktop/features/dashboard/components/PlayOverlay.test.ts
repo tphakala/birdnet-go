@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/svelte';
+import { render, screen, cleanup, fireEvent } from '@testing-library/svelte';
 import { loggers } from '$lib/utils/logger';
 import { DASHBOARD_AUDIO_RETRY_DELAYS_MS, PLAY_END_DELAY_MS } from '$lib/utils/audio';
 import {
@@ -275,6 +275,28 @@ describe('PlayOverlay', () => {
       expect(onFreezeStart).toHaveBeenCalledTimes(1);
       expect(onFreezeEnd).toHaveBeenCalledTimes(1);
     });
+  });
+
+  it('recovers a failed card from a spectrogram click after it has played', async () => {
+    mount();
+    ctl.completeLoad();
+    await click();
+    expect(ctl.paused).toBe(false);
+
+    ctl.failLoad(MEDIA_ERR_NETWORK);
+    await exhaustRetries(1);
+    expect(alertShown()).toBe(true);
+    // The badge must not take clicks, so they reach the spectrogram area.
+    expect(screen.getByRole('alert').className).not.toContain('pointer-events-auto');
+
+    const loadsBefore = ctl.load.mock.calls.length;
+    const playsBefore = ctl.play.mock.calls.length;
+    await fireEvent.mouseDown(screen.getByRole('slider'));
+    await settle();
+
+    expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+    expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
+    expect(alertShown()).toBe(false);
   });
 
   it('does not read Pause while a click waits for a failed clip to reload', async () => {

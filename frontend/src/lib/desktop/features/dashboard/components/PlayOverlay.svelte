@@ -466,7 +466,9 @@
     // On first interaction, treat any tap as play request instead of seek
     // This prevents accidental repositioning when user is trying to start playback
     // (especially important on iOS where first tap satisfies user gesture requirement)
-    if (!hasEverPlayed) {
+    // A failed element or a pending retry also needs a play request: a seek on
+    // it would do nothing.
+    if (!hasEverPlayed || audioElement?.error || audioRetryTimer !== undefined) {
       handlePlayPause(event);
       return;
     }
@@ -717,7 +719,7 @@
 
   <!-- Error indicator -->
   {#if error}
-    <span class="error-indicator pointer-events-auto" aria-live="polite" role="alert" title={error}>
+    <span class="error-indicator" aria-live="polite" role="alert" title={error}>
       {t('media.audio.errorShort')}
     </span>
   {/if}
@@ -872,7 +874,7 @@
     border-radius: 0.25rem;
     white-space: nowrap;
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
-    pointer-events: auto;
+    pointer-events: none;
   }
 
   :global([data-theme='dark']) .error-indicator {
