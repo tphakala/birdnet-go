@@ -1,5 +1,5 @@
 /**
- * useSpectrogramAnalyser — Web Audio composable for live spectrogram
+ * useSpectrogramAnalyser - Web Audio composable for live spectrogram
  *
  * Connects to an HTMLMediaElement (HLS.js attached), creates an AnalyserNode,
  * and exposes the frequency data buffer for rendering by SpectrogramCanvas.
@@ -8,13 +8,13 @@
  *   source → highpass → gainNode (visualization) → analyserNode → outputGainNode → destination
  *
  * The visualization gain (gainNode) controls the FFT input for the spectrogram.
- * The output gain (outputGainNode) controls audio to speakers — mute sets it to 0.
+ * The output gain (outputGainNode) controls audio to speakers - mute sets it to 0.
  * This separation means muting audio does not affect the spectrogram visualization.
  *
  * Key constraints:
  * - createMediaElementSource() can only be called once per element (shared source cache in audioNodes)
  * - Uses the shared audioContextManager singleton
- * - Does NOT use onMount — exposes connect()/disconnect() for parent control
+ * - Does NOT use onMount - exposes connect()/disconnect() for parent control
  */
 
 import {
@@ -29,7 +29,7 @@ import { loggers } from './logger';
 const logger = loggers.audio;
 
 export interface SpectrogramAnalyserOptions {
-  /** FFT size — must be power of 2 (default: 1024) */
+  /** FFT size - must be power of 2 (default: 1024) */
   fftSize?: number;
   /** Whether to route audio to speakers (default: false) */
   audioOutput?: boolean;
@@ -168,7 +168,7 @@ export function useSpectrogramAnalyser(options?: SpectrogramAnalyserOptions) {
     }
   }
 
-  /** Full cleanup — disconnects graph and releases AudioContext */
+  /** Full cleanup - disconnects graph and releases AudioContext */
   function destroy(): void {
     disconnect();
     releaseAudioContext();
