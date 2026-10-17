@@ -1,8 +1,9 @@
 package processor
 
 import (
+	"cmp"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -400,7 +401,7 @@ type privacyCheck struct {
 	verdict coverageVerdict
 	// contributions lists who produced the counted hits that reach the saved clip
 	// (see hitContributionsLocked). Filled only with privacyfilter.debug on and a
-	// hit present, for the discard log.
+	// latest hit that reaches the clip, for the discard log.
 	contributions []hitContribution
 }
 
@@ -418,8 +419,8 @@ type privacyCheck struct {
 // end by privacyCoverageMaxWait. A detection by a model that cannot carry speech
 // (the bat model) or an unregistered one keeps at once only when no detector has
 // recently scored its source; otherwise it waits for coverage like any other.
-// With privacyfilter.debug on and a hit present, the check also lists who
-// produced the counted hits that reach the clip, for the discard log.
+// With privacyfilter.debug on and a latest hit that reaches the clip, the check
+// also lists who produced the counted hits that reach it, for the discard log.
 func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection, now time.Time) privacyCheck {
 	clip := clipSpan(settings, item)
 	if !settings.Realtime.PrivacyFilter.Enabled {
@@ -430,8 +431,11 @@ func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection
 	defer p.detectionMutex.RUnlock()
 	hit, hasHit := p.LastHumanDetection[item.Source]
 	check := privacyCheck{clip: clip, hit: hit, hasHit: hasHit, verdict: p.coverageVerdictLocked(settings, item.Source, item.BestModelID, clip, now)}
-	if hasHit && settings.Realtime.PrivacyFilter.Debug {
-		check.contributions = p.hitContributionsLocked(item.Source, clip.from.Add(-privacyClipGuard))
+	// Only a hit that reaches the clip leads to a discard, so only then is the
+	// contributor list of any use.
+	reachFrom := clip.from.Add(-privacyClipGuard)
+	if hasHit && settings.Realtime.PrivacyFilter.Debug && !hit.Time.Before(reachFrom) {
+		check.contributions = p.hitContributionsLocked(item.Source, reachFrom)
 	}
 	return check
 }
@@ -567,15 +571,10 @@ func (p *Processor) appendHumanHitLocked(source string, hit humanHit) {
 		p.humanHits = make(map[string][]humanHit)
 	}
 	cutoff := hit.at.Add(-humanHitRetention)
-	kept := p.humanHits[source][:0]
-	for _, h := range p.humanHits[source] {
-		if !h.at.Before(cutoff) {
-			kept = append(kept, h)
-		}
-	}
+	kept := slices.DeleteFunc(p.humanHits[source], func(h humanHit) bool { return h.at.Before(cutoff) })
 	kept = append(kept, hit)
-	if len(kept) > humanHitMaxPerSource {
-		kept = append(kept[:0], kept[len(kept)-humanHitMaxPerSource:]...)
+	if over := len(kept) - humanHitMaxPerSource; over > 0 {
+		kept = slices.Delete(kept, 0, over)
 	}
 	p.humanHits[source] = kept
 }
@@ -610,7 +609,7 @@ func (p *Processor) hitContributionsLocked(source string, since time.Time) []hit
 			out = append(out, hitContribution{trigger: h.trigger, modelID: h.modelID, count: 1, maxScore: h.score})
 		}
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].count > out[j].count })
+	slices.SortStableFunc(out, func(a, b hitContribution) int { return cmp.Compare(b.count, a.count) })
 	return out
 }
 

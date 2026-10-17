@@ -1438,8 +1438,9 @@ func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.
 // the hit in LastHumanDetection, stamped with the end of the chunk's audio (the
 // processing time when the producer gave none) and never moving the stored time
 // backward. The hit carries the model that scored it (item.ModelID) and its
-// confidence, so logs and the discard summary can name it. When the effective base overlap is above labelConfirmMinBaseOverlap
-// a hit counts only once a second hit confirms it, see recordLabelHit.
+// confidence, so logs and the discard summary can name it. When the effective
+// base overlap is above labelConfirmMinBaseOverlap a hit counts only once a
+// second hit confirms it, see recordLabelHit.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifier.Results, result datastore.Results) {

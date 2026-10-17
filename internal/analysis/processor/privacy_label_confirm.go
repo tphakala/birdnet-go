@@ -139,14 +139,14 @@ func (p *Processor) logLabelHitDecision(settings *conf.Settings, source string, 
 	threshold := float32(settings.Realtime.PrivacyFilter.Confidence)
 	display := p.getDisplayNameForSource(source)
 	logCounted := func(h *heldLabelHit, confirmedBy string) {
-		fields := []logger.Field{
+		// Six fixed fields plus confirmed_by.
+		fields := append(make([]logger.Field, 0, 7),
 			logger.Float32("confidence", h.confidence),
 			logger.Float32("threshold", threshold),
 			logger.String("model_id", h.modelID),
 			logger.Time("hit_time", h.at),
 			logger.String("source", display),
-			logger.String("operation", privacyFilterOperation),
-		}
+			logger.String("operation", privacyFilterOperation))
 		if confirmedBy != "" {
 			fields = append(fields, logger.String("confirmed_by", confirmedBy))
 		}
