@@ -659,6 +659,7 @@ export interface Dashboard {
   logoStyle?: string; // Logo display style: "gradient" or "solid"
   layout?: DashboardLayout; // Configurable dashboard element layout
   defaultAudioGain?: number; // Default playback gain in dB (0-24)
+  showAudioLevel?: boolean; // Show live audio level indicator in header
 }
 
 // Dashboard layout configuration
@@ -935,7 +936,7 @@ export interface TestResult {
 }
 
 // Initialize empty settings data
-function createEmptySettings(): SettingsFormData & { security: SecuritySettings } {
+export function createEmptySettings(): SettingsFormData & { security: SecuritySettings } {
   return {
     main: {
       name: '',
@@ -1105,6 +1106,7 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
         summaryLimit: 30,
         spectrogram: DEFAULT_SPECTROGRAM_SETTINGS,
         temperatureUnit: 'celsius',
+        showAudioLevel: true,
         layout: {
           elements: [
             {

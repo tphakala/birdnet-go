@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS } from './settings';
+import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS, createEmptySettings } from './settings';
 import type { BirdNetSettings, RealtimeSettings, SettingsFormData } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
@@ -1495,4 +1495,35 @@ describe('Settings Store - restart status refresh after a save', () => {
       }
     }
   );
+});
+
+describe('Settings Store - Dashboard showAudioLevel', () => {
+  it('defaults showAudioLevel to true in initial store state', () => {
+    const empty = createEmptySettings();
+    expect(empty.realtime?.dashboard?.showAudioLevel).toBe(true);
+  });
+
+  it('updates showAudioLevel via updateSection', () => {
+    settingsStore.set({
+      formData: createEmptySettings(),
+      originalData: createEmptySettings(),
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    const currentDashboard = get(settingsStore).formData.realtime?.dashboard;
+    expect(currentDashboard).toBeDefined();
+    if (currentDashboard) {
+      settingsActions.updateSection('realtime', {
+        dashboard: {
+          ...currentDashboard,
+          showAudioLevel: false,
+        },
+      });
+    }
+    const store = get(settingsStore);
+    expect(store.formData.realtime?.dashboard?.showAudioLevel).toBe(false);
+  });
 });

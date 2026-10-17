@@ -11,6 +11,8 @@
   import OfflineBanner from '$lib/desktop/components/ui/OfflineBanner.svelte';
   import RestartBanner from '$lib/desktop/components/ui/RestartBanner.svelte';
   import { fetchRestartStatus } from '$lib/stores/restart.svelte';
+  import { appState } from '$lib/stores/appState.svelte';
+  import { dashboardSettings } from '$lib/stores/settings';
 
   interface Props {
     title?: string;
@@ -125,6 +127,7 @@
           {accessAllowed}
           showSidebarToggle={true}
           showSearch={currentPage === 'dashboard' || currentPage === 'detections'}
+          showAudioLevel={$dashboardSettings?.showAudioLevel ?? appState.showAudioLevel}
           onSidebarToggle={handleSidebarToggle}
           onSearch={handleSearch}
           onNavigate={handleNavigate}
