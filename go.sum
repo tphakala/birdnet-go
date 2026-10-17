@@ -284,8 +284,8 @@ github.com/tphakala/go-aac v0.7.1 h1:/aspCjUIl+7i+Xs6K43Xm7P+yucn3V6WSvEbdzOyebU
 github.com/tphakala/go-aac v0.7.1/go.mod h1:5BL5jIIhw7Q1R6Tl7mUOHSoEQeKG7EUVNAGYRIQ7xbg=
 github.com/tphakala/go-audio-dsp v0.9.0 h1:FZ0kHwbitXLhEq4S8iz0FFiEE99N0sGhXhHi/9yiaeU=
 github.com/tphakala/go-audio-dsp v0.9.0/go.mod h1:JybMnlesX8sHXkjrsyBrtbyGl/XyFKbxbJ5/O2S/5G0=
-github.com/tphakala/go-audio-resampler v1.7.0 h1:Nqr1zNRlow28EjlQKS/SSmhqSa6qHRZRydrPXNkiKTo=
-github.com/tphakala/go-audio-resampler v1.7.0/go.mod h1:h/j0tsie+Jv7qVEytRZ4KrxfO//zxO3RAbesX+1ZEo4=
+github.com/tphakala/go-audio-resampler v1.8.0 h1:u3J5UITd3vxKRuh57GRbGiRXM1ZYvlmxnMQZj+5LS08=
+github.com/tphakala/go-audio-resampler v1.8.0/go.mod h1:nTtlqspE2grKQB3wA/E5R0BWsEtIJDbRoUxMwBHv7VQ=
 github.com/tphakala/go-audio-stream v0.6.0 h1:aVMV95cgqpn3fOELIBVDSs9nKuYPLYts1ouQh7ooCfU=
 github.com/tphakala/go-audio-stream v0.6.0/go.mod h1:W9be1o1XSqEkSAG81yHOV6+G9odYbpWJlmL5DBEhfgM=
 github.com/tphakala/go-flac v1.3.0 h1:3Qb60b+exTtXNFvOqtDj5ZLVxlVATk76VzzeO4pC2J4=
@@ -306,8 +306,8 @@ github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a h1:BBvsu7Mes8McH6iky
 github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a/go.mod h1:fht+y3WzLavlVj4eN6u+/lmoQ4lOcsL6blDhBckFLPE=
 github.com/tphakala/malgo v0.11.25-birdnet.1 h1:QwqenAMHWxLPcWDVEfRyqbYHPvMpr0IoNLHFcTG9YO0=
 github.com/tphakala/malgo v0.11.25-birdnet.1/go.mod h1:f9TtuN7DVrXMiV/yIceMeWpvanyVzJQMlBecJFVMxww=
-github.com/tphakala/simd v1.12.0 h1:qjCO4f/ega4+2znt8bp+lb6R8a7bSri+/KpH+cGHOrA=
-github.com/tphakala/simd v1.12.0/go.mod h1:eO53GkWg40mRbr2tzs0Xb1IMZQ5U8cMR+Aa1RlXUinE=
+github.com/tphakala/simd v1.13.0 h1:toN0PH/OIyPlaSaaQQ9Z/IwjVFrrAq2iJsi0Lbtlm2Q=
+github.com/tphakala/simd v1.13.0/go.mod h1:eO53GkWg40mRbr2tzs0Xb1IMZQ5U8cMR+Aa1RlXUinE=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQD0Loo=
