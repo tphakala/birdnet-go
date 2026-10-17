@@ -297,6 +297,8 @@ describe('FilterResponseGraph', () => {
     expect(notice).toHaveTextContent('settings.audio.audioFilters.graph.skippedHeading');
     // The backend's specific reason is shown with the filter it belongs to.
     expect(within(notice).getByText(reason)).toBeInTheDocument();
+    // The list is block content, so no inline element may contain it.
+    expect(notice.querySelector('span ul')).toBeNull();
     expect(t).toHaveBeenCalledWith(
       'settings.audio.audioFilters.graph.skippedReasons.invalid_parameters',
       expect.objectContaining({ number: 2, type: 'LowPass', frequency: 15000, rate: 48000 })
@@ -397,6 +399,7 @@ describe('FilterResponseGraph', () => {
     await settle();
     const alert = screen.getByTestId('eq-graph-error');
     expect(alert).toHaveTextContent('settings.audio.audioFilters.graph.error');
+    expect(alert.querySelector('span button')).toBeNull();
     expect(lineToInLastDraw(ctx)).toBe(GRID_LINE_COUNT);
     // The always-rendered alert region announces the error; the visible box
     // is not a second live region.
