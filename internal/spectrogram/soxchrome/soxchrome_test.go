@@ -5,7 +5,6 @@ import (
 	"math"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -227,17 +226,74 @@ func TestAxisScaleZeroLength(t *testing.T) {
 	assert.Empty(t, prefix)
 }
 
-// A non-positive level range must not hang the legend loop.
-func TestDrawChromeZeroRangeTerminates(t *testing.T) {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		var r recorder
-		DrawChrome(&r, ChromeParams{Cols: 258, Rows: 129, SampleRate: 24000, Seconds: 2, RangeDB: 0})
+// callBudget is how many drawing calls a bounded surface allows before it
+// aborts; a real chrome draw makes a few hundred.
+const callBudget = 100000
+
+// errBudget is the panic value of a bounded surface that ran out of calls.
+type errBudget struct{}
+
+// boundedSurface counts drawing calls and panics with errBudget past callBudget,
+// so a drawing loop that never ends fails a test instead of hanging it.
+type boundedSurface struct{ calls int }
+
+func (b *boundedSurface) spend() {
+	b.calls++
+	if b.calls > callBudget {
+		panic(errBudget{})
+	}
+}
+func (b *boundedSurface) Set(int, int, uint8)             { b.spend() }
+func (b *boundedSurface) PrintAt(int, int, uint8, string) { b.spend() }
+func (b *boundedSurface) PrintUp(int, int, uint8, string) { b.spend() }
+
+// drawsWithinBudget reports whether DrawChrome returns for p within callBudget calls.
+func drawsWithinBudget(p ChromeParams) (ok bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			if _, isBudget := r.(errBudget); !isBudget {
+				panic(r)
+			}
+			ok = false
+		}
 	}()
-	select {
-	case <-done:
-	case <-time.After(5 * time.Second):
-		t.Fatal("DrawChrome did not return for RangeDB 0")
+	DrawChrome(&boundedSurface{}, p)
+	return true
+}
+
+// Level ranges, axis lengths and sizes that are zero, negative, NaN, infinite or
+// too large for int arithmetic must not hang a drawing loop. Converting an
+// infinite float to int saturates on some architectures and wraps on others, so
+// several of these cases only fail where it saturates (arm64).
+func TestDrawChromeNonFiniteInputsTerminate(t *testing.T) {
+	base := ChromeParams{Cols: 258, Rows: 129, SampleRate: 24000, Seconds: 2, RangeDB: 100}
+	cases := map[string]func(p *ChromeParams){
+		"zero range":       func(p *ChromeParams) { p.RangeDB = 0 },
+		"negative range":   func(p *ChromeParams) { p.RangeDB = -10 },
+		"NaN range":        func(p *ChromeParams) { p.RangeDB = math.NaN() },
+		"infinite range":   func(p *ChromeParams) { p.RangeDB = math.Inf(1) },
+		"infinite time":    func(p *ChromeParams) { p.Seconds = math.Inf(1) },
+		"NaN time":         func(p *ChromeParams) { p.Seconds = math.NaN() },
+		"zero time":        func(p *ChromeParams) { p.Seconds = 0 },
+		"zero sample rate": func(p *ChromeParams) { p.SampleRate = 0 },
+		"negative columns": func(p *ChromeParams) { p.Cols = -100 },
+		"negative rows":    func(p *ChromeParams) { p.Rows = -100 },
+		"huge range":       func(p *ChromeParams) { p.RangeDB = 1e300 },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			p := base
+			mutate(&p)
+			assert.True(t, drawsWithinBudget(p), "DrawChrome made more than %d calls", callBudget)
+		})
+	}
+}
+
+func TestAxisScaleNonFiniteLength(t *testing.T) {
+	for _, to := range []float64{math.Inf(1), math.Inf(-1), math.NaN(), math.MaxFloat64} {
+		step, limit, prefix := axisScale(to, 10)
+		assert.Equal(t, 1, step)
+		assert.InDelta(t, 0, limit, 0)
+		assert.Empty(t, prefix)
 	}
 }

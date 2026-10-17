@@ -78,10 +78,15 @@ func Dims(cols, rows int, raw bool) (w, h int) {
 // at most maxSteps ticks. Step and limit are in tenths of the displayed unit,
 // after the SI prefix is applied; prefix is empty or one of p n u m k M G T P E.
 func axisScale(to float64, maxSteps int) (step int, limit float64, prefix string) {
+	// A length that is not finite, or whose tenths overflow, has no ticks to scale;
+	// treat it as zero so the limit stays finite and the callers' tick loops end.
+	if scaled := to * tenthsPerUnit; math.IsInf(scaled, 0) || math.IsNaN(scaled) {
+		to = 0
+	}
 	scale := 1.0
 	fstep := math.Max(1, tenthsPerUnit*to)
 	prefixNum := 0
-	if maxSteps != 0 && to > 0 {
+	if maxSteps > 0 && to > 0 {
 		log10v := math.Inf(1)
 		to *= tenthsPerUnit
 		minStep := to / float64(maxSteps)

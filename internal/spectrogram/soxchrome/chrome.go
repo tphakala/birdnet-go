@@ -128,8 +128,14 @@ func drawLegend(s Surface, p ChromeParams, width int) {
 			s.Set(width-MarginRight-1-i, base+j, idx)
 		}
 	}
+	if !(p.RangeDB > 0) || math.IsInf(p.RangeDB, 0) {
+		return // only a positive, finite range has level labels
+	}
 	rangeDB := int(math.Round(p.RangeDB))
 	step := tenthsPerUnit * int(math.Ceil(p.RangeDB/tenthsPerUnit*(CellH+2)/float64(k-1)))
+	if step <= 0 {
+		return // a range too large for int arithmetic wraps the step, and the loop would never end
+	}
 	if step <= 0 {
 		return // a non-positive range has no level labels, and the loop below would never end
 	}
