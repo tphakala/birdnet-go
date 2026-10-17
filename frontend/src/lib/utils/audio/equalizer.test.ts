@@ -82,6 +82,10 @@ describe('resolveNumericEntry', () => {
     { name: 'not a number', raw: 'abc', value: CURRENT, notice: 'empty' },
     { name: 'Infinity', raw: 'Infinity', value: CURRENT, notice: 'empty' },
     { name: 'minus Infinity', raw: '-Infinity', value: CURRENT, notice: 'empty' },
+    { name: 'number followed by text', raw: '5abc', value: CURRENT, notice: 'empty' },
+    { name: 'decimal comma', raw: '1,5', value: CURRENT, notice: 'empty' },
+    { name: 'surrounding spaces', raw: ' 5 ', value: 5, notice: null },
+    { name: 'hex literal read by Number', raw: '0x5', value: 5, notice: null },
   ];
 
   it.each(CASES)('$name', ({ raw, value, notice }) => {

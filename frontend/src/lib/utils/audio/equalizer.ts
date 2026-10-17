@@ -10,7 +10,10 @@
 /** Default Q factor of LowPass and HighPass filters (mirror of conf.DefaultEQQFactor). */
 export const DEFAULT_EQ_Q = 0.707;
 
-/** Default bandwidth in Hz of width-based filters (the BandReject Width default). */
+/**
+ * Default bandwidth in Hz: the BandReject Width default, also the width the new-filter
+ * form and settings coercion fall back to.
+ */
 export const DEFAULT_EQ_WIDTH_HZ = 100;
 
 /** Default gain in dB of filters that take a gain. */
@@ -66,8 +69,10 @@ export interface NumericEntryResult {
 }
 
 /**
- * Resolve the text of a numeric input against [min, max]. An entry that is not a
- * finite number (empty, NaN, Infinity) keeps `current`; an entry outside the range is
+ * Resolve the text of a numeric input against [min, max]. The text counts as a number
+ * only when Number() reads all of it as a finite number (surrounding spaces and hex,
+ * binary or octal literals included); blank text, text with other characters such as
+ * a decimal comma, NaN and Infinity keep `current`. An entry outside the range is
  * clamped to the nearest bound; -0 becomes 0.
  */
 export function resolveNumericEntry(
@@ -76,7 +81,8 @@ export function resolveNumericEntry(
   max: number,
   current: number
 ): NumericEntryResult {
-  const parsed = parseFloat(raw);
+  // Number() reads blank text as 0, so blank text is rejected first
+  const parsed = raw.trim() === '' ? NaN : Number(raw);
   if (!Number.isFinite(parsed)) {
     return { value: current, notice: 'empty' };
   }
