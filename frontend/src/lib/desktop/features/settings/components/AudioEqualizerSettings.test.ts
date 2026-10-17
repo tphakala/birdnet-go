@@ -447,6 +447,25 @@ describe('AudioEqualizerSettings', () => {
       });
     });
 
+    it('restores the clamped Q, not the default, when a new filter row gets an empty entry', async () => {
+      const user = userEvent.setup();
+      renderEmpty();
+      await pickType(user, 'LowPass');
+
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: 'Q Factor' });
+      await user.clear(q);
+      await user.type(q, '50');
+      await user.tab();
+      expect(q.value).toBe('10');
+
+      await user.clear(q);
+      await user.tab();
+      expect(q.value).toBe('10');
+
+      await user.click(screen.getByText('settings.audio.audioFilters.addFilter'));
+      expect(lastPayload().filters[0].q).toBe(10);
+    });
+
     it('names the frequency, Q and bandwidth inputs of existing and new filters', async () => {
       const user = userEvent.setup();
       renderWithFilters([
