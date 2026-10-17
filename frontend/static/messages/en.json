@@ -3755,7 +3755,18 @@
         "graph": {
           "flatResponse": "Flat Response (No Filters Applied)",
           "frequency": "Frequency (Hz)",
-          "gain": "Gain (dB)"
+          "gain": "Gain (dB)",
+          "loading": "Calculating the frequency response...",
+          "updating": "Updating the frequency response...",
+          "error": "Could not calculate the frequency response. It updates when you change a filter, or select Retry.",
+          "sampleRate": "Calculated for a sample rate of {rate} Hz.",
+          "skippedHeading": "{count, plural, one {# filter is not applied to the audio} other {# filters are not applied to the audio}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) is skipped: this filter type is not supported.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) is skipped: its settings are not valid at {rate} Hz, for example a frequency at or above half the sample rate.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) is skipped: it could not be added to the filter chain.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) is skipped."
+          }
         }
       },
       "soundLevelMonitoring": {

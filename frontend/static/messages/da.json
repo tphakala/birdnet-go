@@ -3755,7 +3755,18 @@
         "graph": {
           "flatResponse": "Flad respons (ingen filtre anvendt)",
           "frequency": "Frekvens (Hz)",
-          "gain": "Forstærkning (dB)"
+          "gain": "Forstærkning (dB)",
+          "loading": "Beregner frekvensresponsen...",
+          "updating": "Opdaterer frekvensresponsen...",
+          "error": "Frekvensresponsen kunne ikke beregnes. Den opdateres, når du ændrer et filter, eller når du vælger Prøv igen.",
+          "sampleRate": "Beregnet for en samplingsfrekvens på {rate} Hz.",
+          "skippedHeading": "{count, plural, one {# filter anvendes ikke på lyden} other {# filtre anvendes ikke på lyden}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) springes over: denne filtertype understøttes ikke.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) springes over: dets indstillinger er ikke gyldige ved {rate} Hz, for eksempel en frekvens på eller over halvdelen af samplingsfrekvensen.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) springes over: det kunne ikke føjes til filterkæden.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) springes over."
+          }
         }
       },
       "soundLevelMonitoring": {

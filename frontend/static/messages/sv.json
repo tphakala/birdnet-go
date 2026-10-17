@@ -3755,7 +3755,18 @@
         "graph": {
           "flatResponse": "Plant svar (inga filter tillämpade)",
           "frequency": "Frekvens (Hz)",
-          "gain": "Förstärkning (dB)"
+          "gain": "Förstärkning (dB)",
+          "loading": "Beräknar frekvenssvaret...",
+          "updating": "Uppdaterar frekvenssvaret...",
+          "error": "Frekvenssvaret kunde inte beräknas. Det uppdateras när du ändrar ett filter eller väljer Försök igen.",
+          "sampleRate": "Beräknat för en samplingsfrekvens på {rate} Hz.",
+          "skippedHeading": "{count, plural, one {# filter tillämpas inte på ljudet} other {# filter tillämpas inte på ljudet}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) hoppas över: den här filtertypen stöds inte.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) hoppas över: dess inställningar är inte giltiga vid {rate} Hz, till exempel en frekvens på eller över halva samplingsfrekvensen.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) hoppas över: det kunde inte läggas till i filterkedjan.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) hoppas över."
+          }
         }
       },
       "soundLevelMonitoring": {

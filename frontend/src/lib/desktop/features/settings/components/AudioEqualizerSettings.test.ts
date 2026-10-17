@@ -33,16 +33,11 @@ vi.mock('$lib/stores/appState.svelte', () => ({
   initApp: vi.fn().mockResolvedValue(true),
 }));
 
-// Mock FilterResponseGraph to avoid canvas issues
-vi.mock('./FilterResponseGraph.svelte', () => {
-  return {
-    default: vi.fn(() => ({
-      $set: vi.fn(),
-      $destroy: vi.fn(),
-      $on: vi.fn(),
-    })),
-  };
-});
+// Replace FilterResponseGraph with a fixture that renders its props, so the
+// wiring can be asserted without a canvas or a response request
+vi.mock('./FilterResponseGraph.svelte', async () => ({
+  default: (await import('../../../../../test/fixtures/MockFilterResponseGraph.svelte')).default,
+}));
 
 // Mock the icon components to avoid SVG import issues in tests
 vi.mock('$lib/desktop/components/ui/LowPassIcon.svelte', () => ({
@@ -176,6 +171,25 @@ describe('AudioEqualizerSettings', () => {
     // Add Filter button should be disabled when component is disabled
     const addButton = screen.getByText('settings.audio.audioFilters.addFilter');
     expect(addButton).toBeDisabled();
+  });
+
+  it('forwards sampleRate and the enabled flag to the graph', async () => {
+    const filter = { type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: 1 };
+    const { rerender } = render(AudioEqualizerSettings, {
+      props: {
+        equalizerSettings: { enabled: true, filters: [filter] },
+        onUpdate: mockUpdateCallback,
+        sampleRate: 96000,
+      },
+    });
+
+    const graph = await screen.findByTestId('filter-response-graph');
+    expect(graph).toHaveTextContent('enabled=true;filters=1;sampleRate=96000');
+
+    await rerender({ sampleRate: undefined });
+    expect(screen.getByTestId('filter-response-graph')).toHaveTextContent(
+      'enabled=true;filters=1;sampleRate=none'
+    );
   });
 
   describe('attenuation dropdown names', () => {

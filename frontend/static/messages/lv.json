@@ -3755,7 +3755,18 @@
         "graph": {
           "flatResponse": "Plakana raksturlīkne (filtri nav lietoti)",
           "frequency": "Frekvence (Hz)",
-          "gain": "Pastiprināšana (dB)"
+          "gain": "Pastiprināšana (dB)",
+          "loading": "Aprēķina frekvenču raksturlīkni...",
+          "updating": "Atjaunina frekvenču raksturlīkni...",
+          "error": "Neizdevās aprēķināt frekvenču raksturlīkni. Tā tiek atjaunināta, kad maināt filtru vai izvēlaties Mēģināt vēlreiz.",
+          "sampleRate": "Aprēķināts {rate} Hz iztveršanas frekvencei.",
+          "skippedHeading": "{count, plural, zero {# filtri netiek lietoti audio} one {# filtrs netiek lietots audio} other {# filtri netiek lietoti audio}}",
+          "skippedReasons": {
+            "unknown_type": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: šis filtra tips netiek atbalstīts.",
+            "invalid_parameters": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: tā iestatījumi nav derīgi pie {rate} Hz, piemēram, frekvence ir vienāda ar pusi no iztveršanas frekvences vai lielāka.",
+            "add_failed": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: to neizdevās pievienot filtru ķēdei.",
+            "unknown": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists."
+          }
         }
       },
       "soundLevelMonitoring": {

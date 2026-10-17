@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, cleanup } from '@testing-library/svelte';
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
+import { screen, cleanup, fireEvent } from '@testing-library/svelte';
 import { renderTyped } from '../../../../test/render-helpers';
+import {
+  restoreElementAnimate,
+  stubElementAnimate,
+} from '../../../../test/fixtures/elementAnimate';
 import type { AudioSourceConfig } from '$lib/stores/settings';
 import type { AcousticModelAvailability } from '$lib/types/models';
 
@@ -14,8 +18,8 @@ vi.mock('./InlineSlider.svelte', () => ({
 vi.mock('./QuietHoursEditor.svelte', () => ({
   default: vi.fn(() => ({ $set: vi.fn(), $destroy: vi.fn(), $on: vi.fn() })),
 }));
-vi.mock('$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte', () => ({
-  default: vi.fn(() => ({ $set: vi.fn(), $destroy: vi.fn(), $on: vi.fn() })),
+vi.mock('$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte', async () => ({
+  default: (await import('../../../../test/fixtures/MockAudioEqualizerSettings.svelte')).default,
 }));
 
 // The classifier verdict decides how an empty model list is described in view
@@ -130,5 +134,31 @@ describe('SoundCardCard defensive model guards', () => {
 
     expect(screen.getByText('Perch v2')).toBeInTheDocument();
     expect(screen.queryByText(NONE_BADGE_KEY)).toBeNull();
+  });
+
+  it('passes the selected sample rate to the equalizer preview', async () => {
+    stubElementAnimate();
+    onTestFinished(restoreElementAnimate);
+    const source = { ...baseSource, sampleRate: 96000, models: ['birdnet'] };
+    renderTyped(SoundCardCard, {
+      props: {
+        source,
+        index: 0,
+        sources: [source],
+        audioDevices,
+        modelOptions,
+        availableModels,
+        disabled: false,
+        onUpdate: vi.fn(() => true),
+        onDelete: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: 'common.edit' }));
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'settings.audio.audioFilters.title' })
+    );
+
+    expect(screen.getByTestId('audio-equalizer-settings')).toHaveTextContent('96000');
   });
 });

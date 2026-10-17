@@ -1,20 +1,24 @@
 <!--
   Filter Response Graph Component
 
-  Purpose: Visualizes frequency response curves for audio filters
+  Purpose: Plots the frequency response of an equalizer configuration as the
+  backend computes it, so the preview matches the filter chain audio uses.
 
   Features:
-  - Real-time frequency response visualization
+  - Curve points come from POST /api/v2/system/audio/equalizer/response
+    (debounced; a newer edit always wins over an older response)
   - Modified logarithmic frequency scale optimized for high frequencies (20Hz - 20kHz)
-  - Gain display (-48dB to +12dB)
-  - Interactive tooltips on hover
-  - Combined response curve (single line representing filter chain)
-  - Shows flat 0dB response when no filters are applied
-  - Responsive width with professional margins
-  - Supports BandReject (notch) filters with width parameter
+  - Interactive tooltip showing the nearest computed point
+  - Flat 0dB curve and label when the equalizer is disabled, empty, or every
+    filter is skipped
+  - Loading, updating, error (with Retry) and skipped-filter states, each with
+    visible text and a polite screen reader announcement
+  - Caption with the sample rate the curve was calculated for
 
   Props:
-  - filters: Array of filter configurations (can be empty)
+  - equalizer: Equalizer configuration ({ enabled, filters }) to preview
+  - sampleRate: Sample rate to calculate at (optional; omit to use the
+    server's configured rate)
   - height: Canvas height (optional, defaults to 400px)
 
   Width is auto-calculated based on container size for responsive behavior.
@@ -24,37 +28,119 @@
 <script lang="ts">
   /* global ResizeObserver */
   import { onMount } from 'svelte';
-  import {
-    calculateCombinedResponse,
-    type FilterConfig,
-    MIN_DB,
-    MAX_DB,
-  } from '$lib/utils/audio/dsp';
-  import type { EqualizerFilterType } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
-
-  interface Filter {
-    type: EqualizerFilterType;
-    frequency: number;
-    q?: number;
-    width?: number;
-    passes?: number;
-  }
+  import Button from '$lib/desktop/components/ui/Button.svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import LoadingSpinner from '$lib/desktop/components/ui/LoadingSpinner.svelte';
+  import {
+    buildEqualizerResponseRequest,
+    createEqualizerResponseLoader,
+    findNearestPoint,
+    type EqualizerResponseFilterInput,
+    type EqualizerResponseReady,
+    type EqualizerResponseState,
+    type EqualizerSkippedFilter,
+  } from '$lib/api/equalizer';
 
   interface Props {
-    filters: Filter[];
+    /** Equalizer configuration to preview. */
+    equalizer: { enabled: boolean; filters: EqualizerResponseFilterInput[] };
+    /** Sample rate the preview is calculated at; omit to use the server's configured rate. */
+    sampleRate?: number;
     height?: number;
   }
 
   // Make responsive to container width, default to reasonable size
-  let { filters = [], height = 400 }: Props = $props();
+  let { equalizer, sampleRate, height = 400 }: Props = $props();
+
+  // Gain range mapped onto the plot height. The grid and labels only go down
+  // to -48 dB, so deep notches below that are clamped to the plot bottom.
+  const MIN_DB = -96;
+  const MAX_DB = 12;
+
+  let graphState = $state<EqualizerResponseState>({ status: 'loading' });
+  let tooltip = $state({ visible: false, x: 0, y: 0, freq: 0, gain: 0 });
+
+  const loader = createEqualizerResponseLoader(next => {
+    graphState = next;
+    // A stationary cursor would otherwise keep showing a stale gain.
+    tooltip.visible = false;
+  });
+
+  const requestBody = $derived(buildEqualizerResponseRequest(equalizer, sampleRate));
+
+  $effect(() => {
+    loader.request(requestBody);
+  });
+
+  /** The response to draw: the current one, or the previous one while updating. */
+  const drawable = $derived<EqualizerResponseReady | undefined>(
+    graphState.status === 'ready'
+      ? { request: graphState.request, response: graphState.response }
+      : graphState.status === 'loading'
+        ? graphState.previous
+        : undefined
+  );
+
+  /** Disabled, empty and all-skipped configurations give a flat 0 dB curve. */
+  const isFlat = $derived(
+    drawable !== undefined &&
+      (!drawable.response.enabled ||
+        drawable.response.skipped.length === drawable.request.equalizer.filters.length)
+  );
+
+  const statusText = $derived.by(() => {
+    switch (graphState.status) {
+      case 'loading':
+        return graphState.previous
+          ? t('settings.audio.audioFilters.graph.updating')
+          : t('settings.audio.audioFilters.graph.loading');
+      case 'ready':
+        return graphState.response.skipped.length > 0
+          ? t('settings.audio.audioFilters.graph.skippedHeading', {
+              count: graphState.response.skipped.length,
+            })
+          : '';
+      case 'error':
+        return '';
+    }
+  });
+
+  /** Translated line for one skipped filter, named from the request it was computed for. */
+  function skippedMessage(entry: EqualizerSkippedFilter, ready: EqualizerResponseReady): string {
+    const filter = ready.request.equalizer.filters.at(entry.index);
+    const params = {
+      number: entry.index + 1,
+      type: filter?.type ?? entry.type,
+      frequency: filter?.frequency ?? 0,
+      rate: ready.response.sampleRate,
+    };
+    switch (entry.reason) {
+      case 'unknown_type':
+        return t('settings.audio.audioFilters.graph.skippedReasons.unknown_type', params);
+      case 'invalid_parameters':
+        return t('settings.audio.audioFilters.graph.skippedReasons.invalid_parameters', params);
+      case 'add_failed':
+        return t('settings.audio.audioFilters.graph.skippedReasons.add_failed', params);
+      case 'unknown':
+        return t('settings.audio.audioFilters.graph.skippedReasons.unknown', params);
+    }
+  }
 
   // Container element for measuring width
   let containerElement: HTMLDivElement;
 
   // Canvas element reference
   let canvas: HTMLCanvasElement;
-  let tooltip = $state({ visible: false, x: 0, y: 0, freq: 0, gain: 0 });
+
+  // Wrapper that takes focus when Retry removes the error alert, so focus
+  // does not fall back to the page body.
+  let graphRegion: HTMLDivElement | undefined = $state();
+
+  function handleRetry() {
+    loader.retry();
+    graphRegion?.focus();
+  }
 
   // Professional margins for proper label spacing
   const margins = {
@@ -75,7 +161,6 @@
   // Frequency range - standard audio range up to 20kHz (human hearing limit)
   const MIN_FREQ = 20;
   const MAX_FREQ = 20000;
-  // MIN_DB and MAX_DB imported from DSP utilities
 
   // Grid lines optimized for audio engineering work - more detail in bird frequency range
   const freqGridLines = [
@@ -96,31 +181,6 @@
   function updateColors() {
     // Colors are already set in $state above and don't change based on theme
     // This function kept for compatibility with existing effect calls
-  }
-
-  // Convert local Filter type to FilterConfig for DSP utilities
-  function toFilterConfig(filter: Filter): FilterConfig {
-    return {
-      type: filter.type as FilterConfig['type'],
-      frequency: filter.frequency,
-      q: filter.q,
-      width: filter.width,
-      passes: filter.passes,
-    };
-  }
-
-  // Calculate combined response of all filters using DSP utilities
-  function getCombinedResponse(frequency: number): number {
-    if (filters.length === 0) {
-      return 0; // Flat response when no filters
-    }
-    try {
-      const filterConfigs = filters.map(toFilterConfig);
-      return calculateCombinedResponse(filterConfigs, frequency);
-    } catch {
-      // Fallback to flat response on calculation error
-      return 0;
-    }
   }
 
   // Convert frequency to x position using modified log scale optimized for audio work
@@ -195,8 +255,13 @@
     }
   }
 
-  // Draw the frequency response graph
-  function drawGraph() {
+  // Clamp a y position to the plot area
+  function clampY(y: number): number {
+    return Math.max(margins.top, Math.min(margins.top + plotHeight, y));
+  }
+
+  // Draw the axes, grid and labels, plus the curve of `toDraw` when given
+  function drawGraph(toDraw: EqualizerResponseReady | undefined, flat: boolean) {
     if (!canvas) return;
 
     const ctx = canvas.getContext('2d');
@@ -291,34 +356,27 @@
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
 
-    // Draw with higher resolution for smooth curve, using alpha fade for extreme values
-    const steps = plotWidth * 2; // Higher resolution
-
-    // Draw curve in segments to handle alpha transparency changes
-    let lastCanvasX = margins.left;
-    let lastY = dbToY(getCombinedResponse(xToFreq(margins.left)));
-
-    for (let step = 1; step <= steps; step++) {
-      const plotX = (step / steps) * plotWidth;
-      const canvasX = margins.left + plotX;
-      const freq = xToFreq(canvasX);
-      const gain = getCombinedResponse(freq);
-
-      // Clamp Y to plot bounds - this ensures continuous line even for deep notches
-      const y = Math.max(margins.top, Math.min(margins.top + plotHeight, dbToY(gain)));
-
-      // Draw line segment (always draw for continuous curve)
+    if (toDraw) {
+      // A fresh path: the reference line above left its path open, and a bare
+      // stroke would redraw it in curve style.
       ctx.beginPath();
-      ctx.moveTo(lastCanvasX, lastY);
-      ctx.lineTo(canvasX, y);
+      let started = false;
+      for (const point of toDraw.response.points) {
+        if (point.hz < MIN_FREQ || point.hz > MAX_FREQ) continue;
+        const x = freqToX(point.hz);
+        const y = clampY(dbToY(point.gainDb));
+        if (started) {
+          ctx.lineTo(x, y);
+        } else {
+          ctx.moveTo(x, y);
+          started = true;
+        }
+      }
       ctx.stroke();
-
-      lastCanvasX = canvasX;
-      lastY = y;
     }
 
-    // Add subtle text when no filters are present - professional styling
-    if (filters.length === 0) {
+    // Subtle label when the curve is flat
+    if (flat) {
       ctx.fillStyle = colors.text;
       ctx.font = '13px system-ui, -apple-system, sans-serif';
       ctx.textAlign = 'center';
@@ -386,21 +444,22 @@
     const y = event.clientY - rect.top;
 
     // Only show tooltip when mouse is within plot area
-    if (
+    const nearest =
+      drawable &&
       x >= margins.left &&
       x <= margins.left + plotWidth &&
       y >= margins.top &&
       y <= margins.top + plotHeight
-    ) {
-      const freq = Math.round(xToFreq(x));
-      const gain = getCombinedResponse(freq);
+        ? findNearestPoint(drawable.response.points, xToFreq(x))
+        : undefined;
 
+    if (nearest) {
       tooltip = {
         visible: true,
         x: x, // Use canvas-relative coordinates
         y: y, // Use canvas-relative coordinates
-        freq,
-        gain: Math.round(gain * 10) / 10,
+        freq: Math.round(nearest.hz),
+        gain: Math.round(nearest.gainDb * 10) / 10,
       };
     } else {
       tooltip.visible = false;
@@ -420,7 +479,7 @@
     // Listen for theme changes
     const observer = new MutationObserver(() => {
       updateColors();
-      drawGraph();
+      drawGraph(drawable, isFlat);
     });
 
     observer.observe(document.documentElement, {
@@ -434,7 +493,7 @@
       const RO = globalThis.ResizeObserver as typeof ResizeObserver;
       resizeObserver = new RO(() => {
         updateCanvasDimensions();
-        drawGraph();
+        drawGraph(drawable, isFlat);
       });
       resizeObserver.observe(containerElement);
     }
@@ -442,58 +501,118 @@
     return () => {
       observer.disconnect();
       resizeObserver?.disconnect();
+      loader.dispose();
     };
   });
 
-  // Redraw graph when filters change or dimensions update
+  // Redraw when the response or the dimensions change. Every dependency is read
+  // here, before drawGraph can return early (an incomplete test canvas, say),
+  // so the effect always tracks them.
   $effect(() => {
-    if (canvas) {
+    const toDraw = drawable;
+    const flat = isFlat;
+    const width = canvasWidth;
+    const heightPx = canvasHeight;
+    if (canvas && width > 0 && heightPx > 0) {
       updateColors();
-      drawGraph();
-    }
-  });
-
-  // Update dimensions when container size changes
-  $effect(() => {
-    // This effect will run when canvasWidth changes
-    if (canvas && canvasWidth) {
-      drawGraph();
+      drawGraph(toDraw, flat);
     }
   });
 </script>
 
 <!-- Centered container with proper spacing -->
 <div class="w-full flex justify-center py-4" bind:this={containerElement}>
-  <div class="relative">
-    <canvas
-      bind:this={canvas}
-      width={canvasWidth}
-      height={canvasHeight}
-      class="border border-[var(--color-base-300)] rounded-lg cursor-crosshair shadow-lg"
-      style:background-color={colors.background}
-      onmousemove={handleMouseMove}
-      onmouseleave={handleMouseLeave}
-    ></canvas>
+  <div
+    class="flex flex-col gap-3 focus:outline-none"
+    style:width="{canvasWidth}px"
+    tabindex="-1"
+    bind:this={graphRegion}
+  >
+    <div class="relative">
+      <canvas
+        bind:this={canvas}
+        width={canvasWidth}
+        height={canvasHeight}
+        class="block border border-[var(--color-base-300)] rounded-lg cursor-crosshair shadow-lg"
+        style:background-color={colors.background}
+        onmousemove={handleMouseMove}
+        onmouseleave={handleMouseLeave}
+      ></canvas>
 
-    {#if tooltip && tooltip.visible && tooltip.x != null && tooltip.y != null}
-      <div
-        class="absolute z-10 px-3 py-2 text-xs bg-[var(--color-base-300)] border border-[var(--color-base-content)]/20 rounded-lg shadow-lg pointer-events-none"
-        style:left="{(tooltip.x ?? 0) + 10}px"
-        style:top="{(tooltip.y ?? 0) - 10}px"
-        style:transform="translateY(-100%)"
-      >
-        <div class="font-semibold">{tooltip.freq} Hz</div>
+      {#if graphState.status === 'loading' && !graphState.previous}
         <div
-          class={tooltip.gain > 0
-            ? 'text-[var(--color-success)]'
-            : tooltip.gain < -12
-              ? 'text-[var(--color-error)]'
-              : ''}
+          class="absolute inset-0 flex items-center justify-center pointer-events-none"
+          data-testid="eq-graph-loading"
+          aria-hidden="true"
         >
-          {tooltip.gain > 0 ? '+' : ''}{tooltip.gain} dB
+          <div
+            class="flex items-center gap-2 px-3 py-2 text-sm rounded-lg bg-[var(--color-base-100)] text-[var(--color-base-content)] shadow"
+          >
+            <LoadingSpinner size="sm" aria-hidden="true" />
+            <span>{t('settings.audio.audioFilters.graph.loading')}</span>
+          </div>
         </div>
-      </div>
+      {/if}
+
+      {#if tooltip && tooltip.visible && tooltip.x != null && tooltip.y != null}
+        <div
+          class="absolute z-10 px-3 py-2 text-xs bg-[var(--color-base-300)] border border-[var(--color-base-content)]/20 rounded-lg shadow-lg pointer-events-none"
+          style:left="{(tooltip.x ?? 0) + 10}px"
+          style:top="{(tooltip.y ?? 0) - 10}px"
+          style:transform="translateY(-100%)"
+        >
+          <div class="font-semibold">{tooltip.freq} Hz</div>
+          <div
+            class={tooltip.gain > 0
+              ? 'text-[var(--color-success)]'
+              : tooltip.gain < -12
+                ? 'text-[var(--color-error)]'
+                : ''}
+          >
+            {tooltip.gain > 0 ? '+' : ''}{tooltip.gain} dB
+          </div>
+        </div>
+      {/if}
+    </div>
+
+    <p class="min-h-5 text-xs text-[var(--color-base-content)]/70">
+      {#if graphState.status === 'loading' && graphState.previous}
+        <span data-testid="eq-graph-updating" aria-hidden="true">
+          {t('settings.audio.audioFilters.graph.updating')}
+        </span>
+      {:else if graphState.status === 'ready'}
+        <span data-testid="eq-graph-sample-rate">
+          {t('settings.audio.audioFilters.graph.sampleRate', {
+            rate: graphState.response.sampleRate,
+          })}
+        </span>
+      {/if}
+    </p>
+
+    {#if graphState.status === 'ready' && graphState.response.skipped.length > 0}
+      {@const ready = { request: graphState.request, response: graphState.response }}
+      <ErrorAlert type="warning" role="note" data-testid="eq-graph-skipped">
+        <span class="block font-medium">
+          {t('settings.audio.audioFilters.graph.skippedHeading', {
+            count: graphState.response.skipped.length,
+          })}
+        </span>
+        <ul class="mt-1 list-disc ps-5 space-y-1">
+          {#each graphState.response.skipped as entry (entry.index)}
+            <li>{skippedMessage(entry, ready)}</li>
+          {/each}
+        </ul>
+      </ErrorAlert>
+    {:else if graphState.status === 'error'}
+      <ErrorAlert type="error" data-testid="eq-graph-error">
+        <span class="block">{t('settings.audio.audioFilters.graph.error')}</span>
+        <Button className="mt-2" onclick={handleRetry}>
+          {t('common.retry')}
+        </Button>
+      </ErrorAlert>
     {/if}
+
+    <div class="sr-only" role="status" aria-atomic="true">{statusText}</div>
   </div>
 </div>
 
