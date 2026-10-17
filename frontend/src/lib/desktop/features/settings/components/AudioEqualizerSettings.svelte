@@ -439,8 +439,15 @@
                 <!-- Q factor input -->
                 <input
                   value={filter.q ?? param.Default}
-                  onchange={e =>
-                    updateFilterParameter(index, param.Name, parseFloat(e.currentTarget.value))}
+                  onchange={e => {
+                    const value = parseFloat(e.currentTarget.value);
+                    // Show the value that is stored: the clamped entry, or the previous
+                    // value when the entry is not a number
+                    e.currentTarget.value = String(
+                      isNaN(value) ? (filter.q ?? param.Default) : clampToParameter(value, param)
+                    );
+                    updateFilterParameter(index, param.Name, value);
+                  }}
                   aria-label={param.Label}
                   type="number"
                   min={param.Min}

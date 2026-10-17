@@ -377,5 +377,31 @@ describe('AudioEqualizerSettings', () => {
         expect(filters[1]).not.toHaveProperty('passes');
       }
     });
+
+    it('resets an edited Q field to the stored value when the entry is clamped or empty', async () => {
+      const user = userEvent.setup();
+      render(AudioEqualizerSettings, {
+        props: {
+          equalizerSettings: {
+            enabled: true,
+            filters: [{ type: 'LowPass' as const, frequency: 15000, q: 10, passes: 1 }],
+          },
+          onUpdate: mockUpdateCallback,
+        },
+      });
+
+      const q = await screen.findByRole<HTMLInputElement>('spinbutton', { name: 'Q Factor' });
+      await user.clear(q);
+      await user.type(q, '50');
+      await user.tab();
+      expect(q.value).toBe('10');
+      expect(lastPayload().filters[0]).toMatchObject({ q: 10 });
+
+      mockUpdateCallback.mockClear();
+      await user.clear(q);
+      await user.tab();
+      expect(q.value).toBe('10');
+      expect(mockUpdateCallback).not.toHaveBeenCalled();
+    });
   });
 });
