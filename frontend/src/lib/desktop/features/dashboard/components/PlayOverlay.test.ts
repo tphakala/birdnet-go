@@ -342,6 +342,62 @@ describe('PlayOverlay', () => {
     expect(ctl.play).toHaveBeenCalledTimes(1);
   });
 
+  describe('audible-bats source swap', () => {
+    function swapToBats(
+      rerender: (props: { detectionId: number; audibleBatsSrc: string }) => Promise<void>
+    ) {
+      return rerender({ detectionId: DETECTION_ID, audibleBatsSrc: BATS_SRC });
+    }
+
+    it('shows Play after the swap and resumes with one freeze while playing', async () => {
+      const onFreezeStart = vi.fn();
+      const onFreezeEnd = vi.fn();
+      const { rerender } = mount({ onFreezeStart, onFreezeEnd });
+      ctl.completeLoad();
+      await click();
+      expect(button().getAttribute('aria-label')).toBe(PAUSE_LABEL);
+      const playsBefore = ctl.play.mock.calls.length;
+
+      await swapToBats(rerender);
+      await settle();
+      expect(button().getAttribute('aria-label')).toBe(PLAY_LABEL);
+
+      ctl.completeLoad();
+      await settle();
+      expect(ctl.play.mock.calls.length).toBe(playsBefore + 1);
+      expect(button().getAttribute('aria-label')).toBe(PAUSE_LABEL);
+
+      await vi.advanceTimersByTimeAsync(PLAY_END_DELAY_MS);
+      expect(onFreezeStart).toHaveBeenCalledTimes(1);
+      expect(onFreezeEnd).not.toHaveBeenCalled();
+    });
+
+    it('does not autoplay on an idle card', async () => {
+      const { rerender } = mount();
+      ctl.completeLoad();
+
+      await swapToBats(rerender);
+      await settle();
+      ctl.completeLoad();
+      await settle();
+
+      expect(ctl.play).not.toHaveBeenCalled();
+      expect(button().getAttribute('aria-label')).toBe(PLAY_LABEL);
+    });
+
+    it('does not autoplay when swapped during a background retry', async () => {
+      const { rerender } = mount();
+      ctl.failLoad();
+
+      await swapToBats(rerender);
+      await settle();
+      ctl.completeLoad();
+      await settle();
+
+      expect(ctl.play).not.toHaveBeenCalled();
+    });
+  });
+
   it('keeps a queued play across an audible-bats swap during a retry delay', async () => {
     const { rerender } = mount();
     ctl.failLoad();
