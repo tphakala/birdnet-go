@@ -104,15 +104,13 @@
   let eqFilterConfig = $state<Record<string, FilterTypeConfig>>({});
   let loadingConfig = $state(true);
 
+  // Blank form for a new filter; new filters start Off (0 passes)
+  function createEmptyFilter(): NewFilterForm {
+    return { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 0 };
+  }
+
   // New filter state for adding filters (uses NewFilterForm to allow empty type)
-  let newFilter = $state<NewFilterForm>({
-    type: '',
-    frequency: 0,
-    q: 0.707,
-    width: 100,
-    gain: 0,
-    passes: 0, // New filters start Off
-  });
+  let newFilter = $state<NewFilterForm>(createEmptyFilter());
 
   // Map filter types to their icon components
   const filterIconMap = {
@@ -209,6 +207,24 @@
     return Math.max(param.Min, Math.min(param.Max, value));
   }
 
+  // Commit a Q entry: clamp it to the parameter range and show the stored value in the
+  // input. An entry that is not a number restores the current value and commits nothing.
+  function commitQ(
+    input: HTMLInputElement,
+    param: FilterParameter,
+    current: number | undefined,
+    commit: (_q: number) => void
+  ) {
+    const value = parseFloat(input.value);
+    if (isNaN(value)) {
+      input.value = String(current ?? param.Default);
+      return;
+    }
+    const clamped = clampToParameter(value, param);
+    input.value = String(clamped);
+    commit(clamped);
+  }
+
   // Add a new filter
   function addNewFilter() {
     if (!newFilter.type) return;
@@ -227,7 +243,7 @@
     onUpdate({ ...equalizerSettings, filters });
 
     // Reset new filter form
-    newFilter = { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 0 };
+    newFilter = createEmptyFilter();
   }
 
   // Remove a filter by index
@@ -308,19 +324,12 @@
   // Set default values when filter type is selected
   function getFilterDefaults(filterType: EqualizerFilterType | '') {
     if (!filterType) {
-      newFilter = { type: '', frequency: 0, q: 0.707, width: 100, gain: 0, passes: 0 };
+      newFilter = createEmptyFilter();
       return;
     }
 
     const parameters = getEqFilterParameters(filterType);
-    const updatedFilter: NewFilterForm = {
-      type: filterType,
-      frequency: 0,
-      q: 0.707,
-      width: 100,
-      gain: 0,
-      passes: 0, // New filters start Off
-    };
+    const updatedFilter: NewFilterForm = { ...createEmptyFilter(), type: filterType };
 
     // Apply parameter defaults with explicit property assignments
     parameters.forEach(param => {
@@ -439,15 +448,10 @@
                 <!-- Q factor input -->
                 <input
                   value={filter.q ?? param.Default}
-                  onchange={e => {
-                    const value = parseFloat(e.currentTarget.value);
-                    // Show the value that is stored: the clamped entry, or the previous
-                    // value when the entry is not a number
-                    e.currentTarget.value = String(
-                      isNaN(value) ? (filter.q ?? param.Default) : clampToParameter(value, param)
-                    );
-                    updateFilterParameter(index, param.Name, value);
-                  }}
+                  onchange={e =>
+                    commitQ(e.currentTarget, param, filter.q, q =>
+                      updateFilterParameter(index, param.Name, q)
+                    )}
                   aria-label={param.Label}
                   type="number"
                   min={param.Min}
@@ -532,7 +536,7 @@
               {#if param.Name.toLowerCase() === 'passes'}
                 <!-- Select for Passes/Attenuation -->
                 <SelectDropdown
-                  value={String(newFilter.passes ?? 0)}
+                  value={String(newFilter.passes)}
                   options={attenuationOptions}
                   aria-label={param.Label}
                   onChange={value => {
@@ -562,17 +566,10 @@
                 <!-- Q factor input -->
                 <input
                   value={newFilter.q ?? 0.707}
-                  onchange={e => {
-                    const value = parseFloat(e.currentTarget.value);
-                    if (isNaN(value)) {
-                      // Not a number: restore the field to the stored value
-                      e.currentTarget.value = String(newFilter.q ?? param.Default);
-                      return;
-                    }
-                    const clamped = clampToParameter(value, param);
-                    e.currentTarget.value = String(clamped);
-                    newFilter = { ...newFilter, q: clamped };
-                  }}
+                  onchange={e =>
+                    commitQ(e.currentTarget, param, newFilter.q, q => {
+                      newFilter = { ...newFilter, q };
+                    })}
                   aria-label={param.Label}
                   type="number"
                   step="0.1"

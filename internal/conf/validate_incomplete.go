@@ -354,8 +354,8 @@ func eqFilterUsesQ(filterType string) bool {
 // StreamConfig.Validate and AudioSourceConfig.Validate now skip a disabled one.
 // validateEQFilters demands a positive Q from every filter type, so leaving a
 // stored zero in place would mean the user's later "enable" is rejected over a
-// field the settings UI does not offer for the width-based types (BandPass,
-// BandReject, Peaking). Nothing is warned about for a disabled
+// field the settings UI does not offer for the types that do not use Q (see
+// eqFilterUsesQ). Nothing is warned about for a disabled
 // set, though: a notification about a switched-off feature is noise.
 //
 // Every other invalid Q, and every invalid frequency, stays fatal. A frequency of
