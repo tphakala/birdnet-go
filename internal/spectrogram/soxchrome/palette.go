@@ -159,13 +159,22 @@ func defaultColour(x float64) [3]float64 {
 // highColourPhases is the number of phases of the high colour palette.
 const highColourPhases = 7
 
-// highColourStates gives, per colour channel and phase, the curve used
-// (spectrogram.c:621-625): 0 is zero, 1 is one, 2 rises as sin, 3 falls as cos,
-// 4 rises linearly and 5 falls linearly.
+// Curve shapes of one channel in one phase of the high colour palette
+// (spectrogram.c:621-625).
+const (
+	curveZero    = iota // constant 0
+	curveOne            // constant 1
+	curveSinRise        // rises as sin
+	curveCosFall        // falls as cos
+	curveRise           // rises linearly
+	curveFall           // falls linearly
+)
+
+// highColourStates gives, per colour channel and phase, the curve used.
 var highColourStates = [3][highColourPhases]int{
-	{4, 5, 0, 0, 2, 1, 1},
-	{0, 0, 2, 1, 1, 3, 2},
-	{4, 1, 1, 3, 0, 0, 2},
+	{curveRise, curveFall, curveZero, curveZero, curveSinRise, curveOne, curveOne},
+	{curveZero, curveZero, curveSinRise, curveOne, curveOne, curveCosFall, curveSinRise},
+	{curveRise, curveOne, curveOne, curveCosFall, curveZero, curveZero, curveSinRise},
 }
 
 // highColour is the SoX -h spectrum at position x in [0, 1].
@@ -175,17 +184,17 @@ func highColour(x float64) [3]float64 {
 	var c [3]float64
 	for j := range c {
 		switch highColourStates[j][phase] {
-		case 0:
+		case curveZero:
 			c[j] = 0
-		case 1:
+		case curveOne:
 			c[j] = 1
-		case 2:
+		case curveSinRise:
 			c[j] = math.Sin(frac * math.Pi / 2)
-		case 3:
+		case curveCosFall:
 			c[j] = math.Cos(frac * math.Pi / 2)
-		case 4:
+		case curveRise:
 			c[j] = frac
-		case 5:
+		case curveFall:
 			c[j] = 1 - frac
 		}
 	}

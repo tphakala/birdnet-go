@@ -39,7 +39,7 @@ const (
 // decimal point, the SI prefixes k and m, "DC" and the exponent letter. The other
 // SI prefixes cannot occur on these axes; if one did, it would draw clipped to
 // the cell.
-const chromeRunes = " 0123456789+-.()DCTimeFrquncykHzdBS"
+const chromeRunes = " 0123456789+-.()DCTimesFrquncykHzdBS"
 
 // glyphBits is one character as a bitmap of CellH rows; bit CellW-1-c of a row is
 // column c.

@@ -22,6 +22,12 @@ const (
 
 	// minRows is the smallest raster height Fit can analyse.
 	minRows = 2
+
+	// maxWidth and maxRows bound the raster, and with it the canvas and analysis
+	// frame allocations. The largest preset is 2050 columns by 1025 rows; 4097 is
+	// the height the generator derives for maxWidth.
+	maxWidth = 8192
+	maxRows  = 4097
 )
 
 // Sentinel errors. Render wraps them; test with errors.Is.
@@ -46,10 +52,10 @@ type Source interface {
 
 // Options configures one render.
 type Options struct {
-	// Width is the column limit of the raster, at least soxchrome.MinWidth.
+	// Width is the column limit of the raster, from soxchrome.MinWidth to 8192.
 	Width int
-	// Rows is the raster height; the analysis frame is 2*(Rows-1), so Rows-1 must
-	// be a power of two.
+	// Rows is the raster height, 2 to 4097; the analysis frame is 2*(Rows-1), so
+	// Rows-1 must be a power of two.
 	Rows int
 	// Raw draws the raster alone, without axes and legend.
 	Raw bool
@@ -126,6 +132,10 @@ func validate(opt Options) error {
 	switch {
 	case opt.Width < soxchrome.MinWidth:
 		return fmt.Errorf("%w: width %d is below %d", ErrInvalidOptions, opt.Width, soxchrome.MinWidth)
+	case opt.Width > maxWidth:
+		return fmt.Errorf("%w: width %d is above %d", ErrInvalidOptions, opt.Width, maxWidth)
+	case opt.Rows > maxRows:
+		return fmt.Errorf("%w: rows %d is above %d", ErrInvalidOptions, opt.Rows, maxRows)
 	case opt.Rows < minRows:
 		return fmt.Errorf("%w: rows %d is below %d", ErrInvalidOptions, opt.Rows, minRows)
 	case opt.RangeDB < minRangeDB || opt.RangeDB > maxRangeDB:

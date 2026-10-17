@@ -56,6 +56,13 @@ const (
 	tenthsPerUnit   = 10 // axis steps are counted in tenths
 	axisStepFive    = 5  // a step of 5 labels only multiples of 10
 	axisStepDivisor = 2  // divisor in the frequency tick density
+
+	// log10SnapEpsilon is how close a log10 must be to an integer to snap to it.
+	log10SnapEpsilon = 1e-9
+	// tenthStep converts a step in tenths of a unit to the unit.
+	tenthStep = 0.1
+	// freqLabelChars is the width, in characters, of a left frequency label.
+	freqLabelChars = 5
 )
 
 // Dims returns the image size for a raster of cols by rows pixels. A raw image is
@@ -82,7 +89,7 @@ func axisScale(to float64, maxSteps int) (step int, limit float64, prefix string
 			// Snap near-integer log10 values to the integer before ceil, as the C
 			// library does (log10(0.1) is exactly -1 there but a hair above in Go).
 			l := math.Log10(minStep * float64(i))
-			if r := math.Round(l); math.Abs(l-r) < 1e-9 {
+			if r := math.Round(l); math.Abs(l-r) < log10SnapEpsilon {
 				l = r
 			}
 			if try := math.Ceil(l); try <= log10v {

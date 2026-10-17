@@ -78,7 +78,7 @@ func drawTimeAxis(s Surface, p ChromeParams) {
 		if step == axisStepFive && i%tenthsPerUnit != 0 {
 			continue
 		}
-		text := fmt.Sprintf("%.6g", 0.1*float64(i))
+		text := fmt.Sprintf("%.6g", tenthStep*float64(i))
 		lx := MarginLeft + x - timeLabelHalfW*len(text)
 		s.PrintAt(lx, MarginBelow-timeLabelBelow, IndexLabels, text)
 		s.PrintAt(lx, MarginBelow+p.Rows+timeLabelAbove, IndexLabels, text)
@@ -104,12 +104,12 @@ func drawFrequencyAxis(s Surface, p ChromeParams) {
 		if step == axisStepFive && i%tenthsPerUnit != 0 {
 			continue
 		}
-		left, right := "   DC", "DC"
+		left, right := fmt.Sprintf("%*s", freqLabelChars, "DC"), "DC"
 		if i != 0 {
-			left = fmt.Sprintf("%5.6g", 0.1*float64(i))
-			right = fmt.Sprintf("%.6g", 0.1*float64(i))
+			left = fmt.Sprintf("%*.6g", freqLabelChars, tenthStep*float64(i))
+			right = fmt.Sprintf("%.6g", tenthStep*float64(i))
 		}
-		s.PrintAt(MarginLeft-freqLabelGap-CellW*5, MarginBelow+y+labelRowOffset, IndexLabels, left)
+		s.PrintAt(MarginLeft-freqLabelGap-CellW*freqLabelChars, MarginBelow+y+labelRowOffset, IndexLabels, left)
 		s.PrintAt(MarginLeft+p.Cols+freqLabelRight, MarginBelow+y+labelRowOffset, IndexLabels, right)
 	}
 }

@@ -22,6 +22,11 @@ const (
 	testStreamChunk = 4096
 	testRangeDB     = 100
 
+	// aboveMaxWidth is a width past the renderer's upper bound (8192).
+	aboveMaxWidth = 8193
+	// aboveMaxRows is a power of two plus one past the upper bound (4097).
+	aboveMaxRows = 8193
+
 	// burstEdgeTolerance is the allowed error, in columns, of a burst edge.
 	burstEdgeTolerance = 3
 )
@@ -293,6 +298,8 @@ func TestRenderValidation(t *testing.T) {
 		want error
 	}{
 		{"width below minimum", src, func(o *Options) { o.Width = 99 }, ErrInvalidOptions},
+		{"width above maximum", src, func(o *Options) { o.Width = aboveMaxWidth }, ErrInvalidOptions},
+		{"rows above maximum", src, func(o *Options) { o.Rows = aboveMaxRows }, ErrInvalidOptions},
 		{"range too small", src, func(o *Options) { o.RangeDB = 0 }, ErrInvalidOptions},
 		{"range too large", src, func(o *Options) { o.RangeDB = 200 }, ErrInvalidOptions},
 		{"rows not a power of two plus one", src, func(o *Options) { o.Rows = 130 }, ErrInvalidOptions},
