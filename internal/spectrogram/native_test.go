@@ -609,6 +609,8 @@ func TestRenderNative_OpenFailureIsFileIO(t *testing.T) {
 	require.Error(t, err)
 	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
 	require.True(t, ok)
+	// Removing a path that does not exist is ignored, so the failure is the open.
+	require.Equal(t, "open", enhanced.GetContext()["step"])
 	assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
 	assert.Equal(t, "spectrogram", enhanced.GetComponent())
 }
