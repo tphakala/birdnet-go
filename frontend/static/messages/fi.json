@@ -3760,6 +3760,7 @@
           "updating": "Päivitetään taajuusvastetta...",
           "error": "Taajuusvastetta ei voitu laskea. Se päivittyy, kun muutat suodatinta tai valitset Yritä uudelleen.",
           "sampleRate": "Laskettu {rate} Hz:n näytteenottotaajuudelle.",
+          "clipped": "Vaste yltää huippuun {peak} dB, joka on kaavion yläreunan yläpuolella.",
           "skippedHeading": "{count, plural, one {# suodatin ei ole käytössä äänessä} other {# suodatinta ei käytetä ääneen}}",
           "skippedReasons": {
             "unknown_type": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: tätä suodatintyyppiä ei tueta.",

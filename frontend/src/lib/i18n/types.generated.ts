@@ -2745,6 +2745,7 @@ export type TranslationKey =
   | 'settings.audio.audioFilters.graph.updating'
   | 'settings.audio.audioFilters.graph.error'
   | 'settings.audio.audioFilters.graph.sampleRate' // params: rate
+  | 'settings.audio.audioFilters.graph.clipped' // params: peak
   | 'settings.audio.audioFilters.graph.skippedHeading' // params: count
   | 'settings.audio.audioFilters.graph.skippedReasons.unknown_type' // params: number, type, frequency
   | 'settings.audio.audioFilters.graph.skippedReasons.invalid_parameters' // params: number, type, frequency, rate
@@ -4746,6 +4747,7 @@ export type TranslationParams = {
     channels: string | number;
   };
   'settings.audio.audioFilters.graph.sampleRate': { rate: string | number };
+  'settings.audio.audioFilters.graph.clipped': { peak: string | number };
   'settings.audio.audioFilters.graph.skippedHeading': { count: string | number };
   'settings.audio.audioFilters.graph.skippedReasons.unknown_type': {
     number: string | number;

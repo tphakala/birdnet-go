@@ -3760,6 +3760,7 @@
           "updating": "Atjaunina frekvenču raksturlīkni...",
           "error": "Neizdevās aprēķināt frekvenču raksturlīkni. Tā tiek atjaunināta, kad maināt filtru vai izvēlaties Mēģināt vēlreiz.",
           "sampleRate": "Aprēķināts {rate} Hz iztveršanas frekvencei.",
+          "clipped": "Atbildes maksimums ir {peak} dB, virs grafika augšējās malas.",
           "skippedHeading": "{count, plural, zero {# filtri netiek lietoti audio} one {# filtrs netiek lietots audio} other {# filtri netiek lietoti audio}}",
           "skippedReasons": {
             "unknown_type": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: šis filtra tips netiek atbalstīts.",
