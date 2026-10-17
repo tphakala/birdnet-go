@@ -185,6 +185,7 @@ describe('FilterResponseGraph', () => {
     expect(region.textContent).toBe('');
     await settle(0);
     expect(region).toHaveTextContent('settings.audio.audioFilters.graph.loading');
+    expect(screen.getByRole('alert').textContent).toBe('');
   });
 
   it('shows the sample rate caption from the response', async () => {
@@ -317,6 +318,7 @@ describe('FilterResponseGraph', () => {
     expect(screen.getByTestId('eq-graph-sample-rate')).toBeInTheDocument();
     expect(screen.queryByTestId('eq-graph-skipped')).not.toBeInTheDocument();
     expect(screen.getByRole('status').textContent).toBe('');
+    expect(screen.getByRole('alert').textContent).toBe('');
   });
 
   it('shows the nearest returned point in the tooltip and hides it on a new state', async () => {
@@ -382,6 +384,7 @@ describe('FilterResponseGraph', () => {
     await settle(0);
     expect(screen.getByTestId('eq-graph-sample-rate')).toBeInTheDocument();
     expect(screen.queryByTestId('eq-graph-error')).not.toBeInTheDocument();
+    expect(screen.getByRole('alert').textContent).toBe('');
   });
 
   it('shows the error state, not a curve, for the default {data: []} response', async () => {
