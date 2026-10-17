@@ -116,7 +116,7 @@ func TestGlyphAtlasFitsSoxCell(t *testing.T) {
 	assert.Equal(t, a.glyph('?'), a.glyph(0x01), "unknown runes draw the fallback glyph")
 }
 
-func TestStyleForMatchesGetStyleArgs(t *testing.T) {
+func TestStyleForPresets(t *testing.T) {
 	tests := []struct {
 		name string
 		want Style
@@ -384,4 +384,101 @@ func TestRenderRangeChangesWindowAndLegend(t *testing.T) {
 		}
 	}
 	assert.True(t, differs, "legend labels must change with the range")
+}
+
+func TestRenderTimeAxisUsesColumnsProduced(t *testing.T) {
+	// A short clip yields fewer columns than the width, so the seconds the axis
+	// spans must come from the columns produced, not from the width.
+	const width, rows = 1026, 513
+	src := noiseSource(24000, 0.1, 3)
+	opt := Options{Width: width, Rows: rows, RangeDB: testRangeDB}
+	img, cols, err := Render(t.Context(), src, opt)
+	require.NoError(t, err)
+	require.Less(t, cols, width)
+
+	fit, err := newFit(src.rate, src.SpanSamples(), opt)
+	require.NoError(t, err)
+	gl, err := atlas()
+	require.NoError(t, err)
+	w, h := soxchrome.Dims(cols, rows, false)
+	want := image.NewPaletted(image.Rect(0, 0, w, h), soxchrome.Palette(opt.Style.Palette))
+	soxchrome.DrawChrome(&canvas{img: want, atlas: gl}, soxchrome.ChromeParams{
+		Cols: cols, Rows: rows, SampleRate: src.rate, Seconds: fit.SecondsSpanned(cols), RangeDB: testRangeDB,
+	})
+
+	got := img.(*image.Paletted)
+	for y := range h {
+		for x := range w {
+			inRaster := x >= soxchrome.MarginLeft && x < soxchrome.MarginLeft+cols &&
+				y >= soxchrome.MarginAbove && y < soxchrome.MarginAbove+rows
+			if !inRaster {
+				require.Equalf(t, want.ColorIndexAt(x, y), got.ColorIndexAt(x, y), "chrome pixel %d,%d", x, y)
+			}
+		}
+	}
+}
+
+func TestCanvasTextOrientation(t *testing.T) {
+	a, err := atlas()
+	require.NoError(t, err)
+	const size = 40
+	newCanvas := func() (*canvas, *image.Paletted) {
+		img := image.NewPaletted(image.Rect(0, 0, size, size), soxchrome.Palette(soxchrome.PaletteSpec{}))
+		return &canvas{img: img, atlas: a}, img
+	}
+	g := a.glyph('L')
+	ink := 0
+	for _, bits := range g {
+		for ; bits != 0; bits &= bits - 1 {
+			ink++
+		}
+	}
+	require.Positive(t, ink)
+	set := func(bits uint8, k int) bool { return bits&(1<<(soxchrome.CellW-1-k)) != 0 }
+
+	t.Run("PrintAt reads left to right, top row first, y up", func(t *testing.T) {
+		cv, img := newCanvas()
+		const x, y = 5, 20
+		cv.PrintAt(x, y, soxchrome.IndexText, "L")
+		for r, bits := range g {
+			for k := range soxchrome.CellW {
+				got := img.ColorIndexAt(x+k, size-1-(y-r)) == soxchrome.IndexText
+				require.Equalf(t, set(bits, k), got, "cell row %d column %d", r, k)
+			}
+		}
+	})
+	t.Run("PrintUp reads upward with the cell top on the left", func(t *testing.T) {
+		cv, img := newCanvas()
+		const x, y = 10, 5
+		cv.PrintUp(x, y, soxchrome.IndexText, "L")
+		for r, bits := range g {
+			for k := range soxchrome.CellW {
+				got := img.ColorIndexAt(x+r, size-1-(y+k)) == soxchrome.IndexText
+				require.Equalf(t, set(bits, k), got, "cell row %d column %d", r, k)
+			}
+		}
+	})
+}
+
+// cancelAfterStream cancels its context once the samples are delivered, then
+// reports success, as a source that does not watch the context would.
+type cancelAfterStream struct {
+	sliceSource
+	cancel context.CancelFunc
+}
+
+func (s *cancelAfterStream) Stream(ctx context.Context, fn func([]float32) error) error {
+	err := s.sliceSource.Stream(ctx, fn)
+	s.cancel()
+	return err
+}
+
+func TestRenderCancelDuringLastChunk(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	src := &cancelAfterStream{sliceSource: *toneSource(24000, 2, 1000, 0.5), cancel: cancel}
+
+	_, _, err := Render(ctx, src, Options{Width: 258, Rows: 129, RangeDB: testRangeDB})
+
+	require.ErrorIs(t, err, context.Canceled)
 }
