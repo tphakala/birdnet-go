@@ -19,6 +19,10 @@ const (
 	sourceStateOldAge = time.Hour
 	// sourceStateTouch is how far a "touched" clip's mtime moves.
 	sourceStateTouch = time.Minute
+	// sourceStateClipBytes is the size of the clip when its state is captured, and
+	// sourceStateGrownBytes its size after it grows.
+	sourceStateClipBytes  = 64
+	sourceStateGrownBytes = 128
 )
 
 // withBeforePublish runs fn after the render and before the source is compared
@@ -148,9 +152,9 @@ func TestCheckSourceUnchanged(t *testing.T) {
 	t.Parallel()
 
 	path := filepath.Join(t.TempDir(), "clip.wav")
-	require.NoError(t, os.WriteFile(path, make([]byte, 64), 0o600))
+	require.NoError(t, os.WriteFile(path, make([]byte, sourceStateClipBytes), 0o600))
 	state := statSourceState(t, path)
-	require.NoError(t, os.WriteFile(path, make([]byte, 128), 0o600)) // the clip grew
+	require.NoError(t, os.WriteFile(path, make([]byte, sourceStateGrownBytes), 0o600)) // the clip grew
 
 	live := t.Context()
 	canceled, cancel := context.WithCancel(t.Context())

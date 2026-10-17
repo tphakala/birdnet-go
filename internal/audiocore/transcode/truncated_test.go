@@ -186,13 +186,19 @@ func TestProbeFile_DecodedBytesBound(t *testing.T) {
 const (
 	// wav24BitDepth is the bit depth of the 24-bit fixtures.
 	wav24BitDepth = 24
+	// bitsPerByte converts a bit depth to bytes per sample.
+	bitsPerByte = 8
+	// wavSizeFieldBytes is the width of a WAV header size field.
+	wavSizeFieldBytes = 4
+	// stereoChannels is the channel count of the stereo fixture.
+	stereoChannels = 2
 )
 
 // wav24Bytes returns a mono 24-bit WAV of n zero frames at testRate.
 func wav24Bytes(t *testing.T, frames int) []byte {
 	t.Helper()
 	var buf bytes.Buffer
-	require.NoError(t, wavpcm.EncodeInterleaved(&buf, wavpcm.Config{SampleRate: testRate, BitDepth: wav24BitDepth, Channels: 1}, make([]byte, frames*wav24BitDepth/8)))
+	require.NoError(t, wavpcm.EncodeInterleaved(&buf, wavpcm.Config{SampleRate: testRate, BitDepth: wav24BitDepth, Channels: 1}, make([]byte, frames*wav24BitDepth/bitsPerByte)))
 	return buf.Bytes()
 }
 
@@ -201,10 +207,10 @@ func TestDecodeMono_TruncationCheckAcrossWAVLayouts(t *testing.T) {
 
 	const frames = truncatedWAVFrames
 	whole24 := wav24Bytes(t, frames)
-	stereo := wavBytes(t, testRate, 2, frames)
+	stereo := wavBytes(t, testRate, stereoChannels, frames)
 	streaming := wavBytes(t, testRate, 1, frames)
 	for _, off := range []int{wavRIFFSizeOffset, wavDataSizeOffset} {
-		copy(streaming[off:off+4], []byte{0, 0, 0, 0}) // a zero size field marks a streamed WAV
+		copy(streaming[off:off+wavSizeFieldBytes], make([]byte, wavSizeFieldBytes)) // a zero size field marks a streamed WAV
 	}
 	tests := []struct {
 		name      string
@@ -212,8 +218,8 @@ func TestDecodeMono_TruncationCheckAcrossWAVLayouts(t *testing.T) {
 		wantTrunc bool
 	}{
 		{name: "complete 24-bit", data: whole24},
-		{name: "truncated 24-bit", data: whole24[:wavFixtureHeaderBytes+frames/2*wav24BitDepth/8], wantTrunc: true},
-		{name: "truncated stereo", data: stereo[:wavFixtureHeaderBytes+frames/2*2*bytesPerSample], wantTrunc: true},
+		{name: "truncated 24-bit", data: whole24[:wavFixtureHeaderBytes+frames/2*wav24BitDepth/bitsPerByte], wantTrunc: true},
+		{name: "truncated stereo", data: stereo[:wavFixtureHeaderBytes+frames/2*stereoChannels*bytesPerSample], wantTrunc: true},
 		{name: "streamed WAV has no declared length to compare", data: streaming[:wavFixtureHeaderBytes+frames/2*bytesPerSample]},
 	}
 	for _, tt := range tests {
