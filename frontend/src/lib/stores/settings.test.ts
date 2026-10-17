@@ -1582,7 +1582,8 @@ describe('Settings Store - equalizer values the backend accepts', () => {
     await loadWith(withEqualizers());
     expect(get(hasUnsavedChanges)).toBe(false);
 
-    const audio = lookup(get(settingsStore).formData, ['realtime', 'audio']) as AudioSettings;
+    const audio = get(settingsStore).formData.realtime?.audio;
+    if (!audio) throw new Error('audio settings not loaded');
     // The editor hands back its own copy of the equalizer, with a stray id as older
     // editor versions added; coercion must remove it, not keep it as a change
     const sameEqualizer = {

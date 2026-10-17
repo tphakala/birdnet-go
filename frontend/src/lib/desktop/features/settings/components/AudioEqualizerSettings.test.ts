@@ -492,6 +492,22 @@ describe('AudioEqualizerSettings', () => {
       expect(lastPayload().filters[0]).toMatchObject({ q: 1.5, passes: storedPasses });
     });
 
+    it('commits the stored passes when its custom option is picked, without clamping it', async () => {
+      const user = userEvent.setup();
+      const storedPasses = 8;
+      renderWithFilters([
+        { type: 'LowPass' as const, frequency: 15000, q: 0.707, passes: storedPasses },
+      ]);
+
+      await user.click(await screen.findByRole('combobox', { name: NAME.attenuation }));
+      await user.click(await screen.findByRole('option', { name: `${LEVEL_PREFIX}24db` }));
+      expect(lastPayload().filters[0]).toMatchObject({ passes: 2 });
+
+      await user.click(await screen.findByRole('combobox', { name: NAME.attenuation }));
+      await user.click(await screen.findByRole('option', { name: `${LEVEL_PREFIX}custom` }));
+      expect(lastPayload().filters[0]).toMatchObject({ passes: storedPasses });
+    });
+
     it('does not offer a custom attenuation option for a stored passes the list has', async () => {
       renderWithFilters([STORED.LowPass]);
 
@@ -522,7 +538,13 @@ describe('AudioEqualizerSettings', () => {
     });
 
     it('keeps a filter of an unknown type as stored and offers no parameters for it', async () => {
-      renderWithFilters([{ type: 'Notch' as never, frequency: 1000, passes: 1 }]);
+      // 'Notch' is a type the backend stores but the component's filter type does not name
+      const notch = {
+        type: 'Notch',
+        frequency: 1000,
+        passes: 1,
+      } as unknown as EqualizerFilters[number];
+      renderWithFilters([notch]);
 
       expect(await screen.findByText('Notch')).toBeInTheDocument();
       expect(screen.queryAllByRole('spinbutton')).toHaveLength(0);

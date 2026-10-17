@@ -504,7 +504,8 @@ type Filters = Array<Record<string, unknown>>;
 
 function filtersOf(path: EqPath, input: unknown): Filters {
   const equalizer = path.read(coerceSettings('realtime', path.wrap(input)));
-  return (equalizer?.filters ?? []) as Filters;
+  const filters = equalizer?.filters;
+  return Array.isArray(filters) ? filters : [];
 }
 
 describe.each(EQ_PATHS)('settingsCoercion equalizer on $name', path => {
@@ -597,7 +598,7 @@ describe.each(EQ_PATHS)('settingsCoercion equalizer on $name', path => {
         const once = coerceSettings('realtime', input);
         const again = coerceSettings('realtime', input);
         expect(again).toEqual(once);
-        expect(coerceSettings('realtime', once as Record<string, unknown>)).toEqual(once);
+        expect(coerceSettings('realtime', once)).toEqual(once);
         for (const filter of filtersOf(path, equalizerOf(filters))) {
           expect(filter).not.toHaveProperty('id');
         }
