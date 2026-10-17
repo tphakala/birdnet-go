@@ -26,6 +26,16 @@
 
   @component
 -->
+<script module lang="ts">
+  // Gain range mapped onto the plot height: MIN_DB is the plot bottom. The grid
+  // and labels only go down to -48 dB, so gains between -48 and -96 dB are
+  // drawn below the lowest labelled line, and lower gains sit on the bottom edge.
+  /** Gain at the bottom edge of the plot, in dB. */
+  export const MIN_DB = -96;
+  /** Gain at the top edge of the plot, in dB. */
+  export const MAX_DB = 12;
+</script>
+
 <script lang="ts">
   /* global ResizeObserver */
   import { onMount } from 'svelte';
@@ -54,14 +64,12 @@
   // Make responsive to container width, default to reasonable size
   let { equalizer, sampleRate, height = 400 }: Props = $props();
 
-  // Gain range mapped onto the plot height: MIN_DB is the plot bottom. The grid
-  // and labels only go down to -48 dB, so gains between -48 and -96 dB are
-  // drawn below the lowest labelled line, and lower gains sit on the bottom edge.
-  const MIN_DB = -96;
-
   /** Font of the frequency and gain tick labels. */
   const AXIS_LABEL_FONT = '11px system-ui, -apple-system, sans-serif';
-  const MAX_DB = 12;
+  /** Font of the axis titles. */
+  const AXIS_TITLE_FONT = '12px system-ui, -apple-system, sans-serif';
+  /** Font of the label drawn over a flat curve. */
+  const FLAT_LABEL_FONT = '13px system-ui, -apple-system, sans-serif';
 
   let graphState = $state<EqualizerResponseState>({ status: 'loading' });
   let tooltip = $state({ visible: false, x: 0, y: 0, freq: 0, gain: 0 });
@@ -392,7 +400,7 @@
     // Subtle label when the curve is flat
     if (flat) {
       ctx.fillStyle = colors.text;
-      ctx.font = '13px system-ui, -apple-system, sans-serif';
+      ctx.font = FLAT_LABEL_FONT;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       ctx.globalAlpha = colors.background === '#0d1117' ? 0.4 : 0.5; // Lower opacity in dark mode
@@ -433,7 +441,7 @@
 
     // Axes labels with proper positioning
     ctx.fillStyle = colors.text;
-    ctx.font = '12px system-ui, -apple-system, sans-serif';
+    ctx.font = AXIS_TITLE_FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'bottom';
     ctx.fillText(
