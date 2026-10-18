@@ -84,6 +84,8 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
   let probeSignals: (AbortSignal | undefined)[];
   // Body of the spectrogram /status answer; undefined leaves it to the shared mock.
   let statusBody: Record<string, unknown> | undefined;
+  // When set, the spectrogram /status request fails on the network.
+  let statusFails: boolean;
 
   const fetchMock = () => vi.mocked(globalThis.fetch);
 
@@ -129,7 +131,15 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
     // rejects with an AbortError when its signal aborts, as fetch does.
     probeResponder = undefined;
     statusBody = undefined;
+    statusFails = false;
     fetchMock().mockImplementation((url, init) => {
+      if (
+        statusFails &&
+        String(url).includes(SPECTROGRAM_ENDPOINT) &&
+        String(url).includes('/status')
+      ) {
+        return Promise.reject(new TypeError('Failed to fetch'));
+      }
       if (
         statusBody &&
         String(url).includes(SPECTROGRAM_ENDPOINT) &&
@@ -303,6 +313,30 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
 
       expect(probeCalls).toHaveLength(1);
       expect(imageSrc()).toContain(`sr=${RATE_384K}`);
+    });
+
+    it('keeps the rate when the generation has just finished', async () => {
+      probeResponder = notFound;
+      statusBody = { status: 'generated', queuePosition: 0, message: '' };
+      mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+
+      expect(imageSrc()).toContain(`sr=${RATE_384K}`);
+    });
+
+    it('falls back on a 404 even when the generation status cannot be read', async () => {
+      probeResponder = notFound;
+      statusFails = true;
+      mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+
+      expect(imageSrc()).not.toContain('sr=');
     });
 
     it('keeps retrying with sr when the status check answers 503', async () => {
