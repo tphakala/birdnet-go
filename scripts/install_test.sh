@@ -599,7 +599,7 @@ load_fn cleanup_hls_mount
 hls_cleanup() { # layers mode -> "<layers left>|<outcome message>"
     (
         CONFIG_DIR="${WORK}/hls-cleanup"
-        HLS_LAYERS="$1"; HLS_MODE="$2"; HLS_VIA_SUDO=0; HLS_OUTCOME=""
+        HLS_LAYERS="$1"; HLS_MODE="$2"; HLS_VIA_SUDO=0; HLS_OUTCOME=""; HLS_CALLS=0
         print_message() {
             case "$1" in
                 *"Successfully unmounted"* | *"Failed to unmount"* | *"No tmpfs mount found"*) HLS_OUTCOME="$1" ;;
@@ -611,6 +611,7 @@ hls_cleanup() { # layers mode -> "<layers left>|<outcome message>"
         # HLS_MODE says which variant can remove a layer: plain umount, only sudo umount
         # without -l, only the lazy umount -l, or none of them.
         umount() {
+            HLS_CALLS=$((HLS_CALLS + 1))
             case "$HLS_MODE" in
                 plain) ;;
                 sudo) { [ "$HLS_VIA_SUDO" -eq 1 ] && [ "${1:-}" != "-l" ]; } || return 1 ;;
@@ -621,6 +622,7 @@ hls_cleanup() { # layers mode -> "<layers left>|<outcome message>"
         }
         sudo() { local rc; HLS_VIA_SUDO=1; "$@"; rc=$?; HLS_VIA_SUDO=0; return $rc; }
         cleanup_hls_mount
+        printf '%s' "$HLS_CALLS" > "${WORK}/hls-umount-calls"
         printf '%s|%s' "$HLS_LAYERS" "$HLS_OUTCOME"
     )
 }
@@ -632,6 +634,8 @@ assert_eq "219 stacked layers are all unmounted" "0|✅ Successfully unmounted $
 assert_eq "layers only sudo umount can remove are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 sudo)"
 assert_eq "layers only umount -l can remove are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 lazy)"
 assert_eq "an unmount that always fails stops the loop and reports it" "3|❌ Failed to unmount ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 none)"
+hls_cleanup 3 none >/dev/null
+assert_eq "a failing unmount tries plain, sudo and sudo -l once, then gives up" "3" "$(cat "${WORK}/hls-umount-calls")"
 assert_eq "the loop stops at its layer cap" "500|❌ Failed to unmount ${WORK}/hls-cleanup/hls" "$(hls_cleanup 2500 plain)"
 
 # ===========================================================================
