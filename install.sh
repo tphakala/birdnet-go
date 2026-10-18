@@ -5234,6 +5234,7 @@ ExecStartPre=/bin/bash -c 'for interface in /sys/class/net/wlan* /sys/class/net/
 Description=BirdNET-Go
 After=docker.service
 Requires=docker.service
+RequiresMountsFor=${CONFIG_DIR}
 
 [Service]
 Restart=always

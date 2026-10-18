@@ -564,6 +564,19 @@ assert_eq "Intel GPU: web port still published" "1" "$(grep -c -- '-p 9000:8080'
 has_intel_gpu() { return 1; }   # restore the deterministic default for subsequent tests
 
 # ===========================================================================
+# generate_systemd_service_content: the unit orders itself after the filesystem that holds
+# CONFIG_DIR, because docker run bind-mounts it as /config. Without that line a config
+# directory on a separate mount can be bound while still empty at boot.
+# ===========================================================================
+it "generate_systemd_service_content unit section"
+
+CONFIG_DIR="/home/pi/birdnet-go-app/config"
+DATA_DIR="/home/pi/birdnet-go-app/data"
+unit_section="${WORK}/unit-section.service"
+generate_systemd_service_content > "$unit_section"
+assert_eq "unit waits for the config directory mount" "1" "$(sed -n '/^\[Unit\]/,/^\[Service\]/p' "$unit_section" | grep -c -x -- "RequiresMountsFor=${CONFIG_DIR}")"
+
+# ===========================================================================
 # generate_systemd_service_content: the read-only Avahi and system D-Bus directory
 # mounts (for .local resolution and DNS-SD discovery) are gated per socket on
 # host_socket_mount, independently of each other.
