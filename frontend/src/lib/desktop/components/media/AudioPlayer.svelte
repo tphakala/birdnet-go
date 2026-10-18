@@ -67,7 +67,13 @@
     CLIP_CONTAINER_EXTENSION,
     extensionFromContentDisposition,
   } from '$lib/utils/audioDownload';
-  import { api, getCsrfToken } from '$lib/utils/api';
+  import { getCsrfToken } from '$lib/utils/api';
+  import { isKnownSampleRate, lookupClipSampleRate } from '$lib/utils/clipSampleRateLookup';
+  import {
+    fetchSpectrogramStatus,
+    parseSpectrogramStatus,
+    type SpectrogramGenerationStatus,
+  } from '$lib/utils/spectrogramStatus';
   import { batFrequencyAxis } from '$lib/utils/spectrogramAxis';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
@@ -205,11 +211,7 @@
   let playRequestedAfterRetry = false;
 
   // Spectrogram generation status
-  let spectrogramStatus = $state<{
-    status: string;
-    queuePosition: number;
-    message: string;
-  } | null>(null);
+  let spectrogramStatus = $state<SpectrogramGenerationStatus | null>(null);
   let statusPollTimer: ReturnType<typeof setTimeout> | undefined;
   let statusPollStartTime: number | undefined;
   let statusPollAbortController: AbortController | undefined;
@@ -321,9 +323,6 @@
   // Query parameter that tells the server the rate the axis is drawn from; the
   // server then serves only the exact render for that rate (404 otherwise).
   const SPECTROGRAM_RATE_PARAM = 'sr';
-  // Longest wait for the detection endpoint when a bat rate has to be resolved
-  // before the spectrogram is requested.
-  const RATE_RESOLVE_TIMEOUT_MS = 1500;
   // Longest wait for the status check of a failed image URL that carries the
   // rate. It is longer than the server's 5 s wait for a missing audio file, so a
   // 404 from that path still arrives in time.
@@ -339,9 +338,6 @@
     'exists',
   ]);
 
-  const isKnownRate = (rate: unknown): rate is number =>
-    typeof rate === 'number' && Number.isInteger(rate) && rate > 0;
-
   let isBatSpectrogram = $derived(modelType === MODEL_TYPE_BAT);
 
   // Rate learned from GET /api/v2/detections/:id, keyed by the detection it was
@@ -353,11 +349,11 @@
   let overlayFallbackDetectionId = $state<string | null>(null);
 
   let needsRateResolve = $derived(
-    isBatSpectrogram && showSpectrogram && !isKnownRate(clipSampleRate) && detectionId !== ''
+    isBatSpectrogram && showSpectrogram && !isKnownSampleRate(clipSampleRate) && detectionId !== ''
   );
   let rateResolvePending = $derived(needsRateResolve && rateResolve?.detectionId !== detectionId);
   let effectiveClipSampleRate = $derived(
-    isKnownRate(clipSampleRate)
+    isKnownSampleRate(clipSampleRate)
       ? clipSampleRate
       : rateResolve?.detectionId === detectionId
         ? rateResolve.rate
@@ -394,6 +390,16 @@
       (spectrogramBaseUrl
         ? `${spectrogramBaseUrl}&cache=${spectrogramCacheKey}${spectrogramRetryCount > 0 ? `&retry=${spectrogramRetryCount}` : ''}`
         : null)
+  );
+
+  // The frequency axis overlay: drawn over a spectrogram that has not failed,
+  // with a known range; a bat axis only once its image has loaded.
+  const showFreqAxis = $derived(
+    showSpectrogram &&
+      spectrogramUrl !== null &&
+      !spectrogramLoader.error &&
+      freqNyquistKHz > 0 &&
+      !(isBatSpectrogram && spectrogramLoader.loading)
   );
 
   const playPauseId = $derived(`playPause-${detectionId}`);
@@ -1373,6 +1379,12 @@
   };
 
   // Poll spectrogram generation status
+  // URL of this detection's spectrogram generation status.
+  const spectrogramStatusUrl = () =>
+    buildAppUrl(
+      `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+    );
+
   const pollSpectrogramStatus = async () => {
     if (!showSpectrogram || !detectionId) {
       debugLog('pollSpectrogramStatus: skipped', {
@@ -1399,9 +1411,7 @@
     // Create new AbortController for this poll request
     statusPollAbortController = new AbortController();
 
-    const statusUrl = buildAppUrl(
-      `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
-    );
+    const statusUrl = spectrogramStatusUrl();
     debugLog('pollSpectrogramStatus: fetching', { url: statusUrl });
 
     try {
@@ -1413,10 +1423,9 @@
       });
 
       if (response.ok) {
-        const responseData = await response.json();
-        // Extract status from v2 envelope format
-        const status = responseData.data ?? responseData;
-        spectrogramStatus = status;
+        const status = parseSpectrogramStatus(await response.json());
+        spectrogramStatus = status ?? null;
+        if (!status) return;
 
         debugLog('pollSpectrogramStatus: status data', {
           status: status.status,
@@ -1515,36 +1524,10 @@
       // Ask for the generation status here rather than reading the status
       // poll's state, which may not have answered yet. If it cannot be read
       // (network error, the timeout), the 404 decides on its own.
-      let generationStatus: unknown;
-      try {
-        const statusResponse = await fetch(
-          buildAppUrl(
-            `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
-          ),
-          { signal: controller.signal }
-        );
-        if (statusResponse.ok) {
-          const statusData: unknown = await statusResponse.json();
-          const generation =
-            typeof statusData === 'object' && statusData !== null && 'data' in statusData
-              ? statusData.data
-              : statusData;
-          generationStatus =
-            typeof generation === 'object' && generation !== null && 'status' in generation
-              ? generation.status
-              : undefined;
-        }
-      } catch {
-        generationStatus = undefined;
-      }
+      const generation = await fetchSpectrogramStatus(spectrogramStatusUrl(), controller.signal);
       // Cancelled by an image load, a URL change or unmount: nothing to do.
       if (spectrogramProbeAbortController !== controller || !stillCurrent()) return;
-      if (
-        typeof generationStatus === 'string' &&
-        RENDER_PENDING_OR_READY_STATUSES.has(generationStatus)
-      ) {
-        return;
-      }
+      if (generation && RENDER_PENDING_OR_READY_STATUSES.has(generation.status)) return;
       debugLog('probeExactRateRender: 404, dropping the rate and the axis');
       fallBackToImageWithoutRate();
     } catch {
@@ -1778,45 +1761,26 @@
   };
   /* eslint-enable no-unused-vars */
 
-  // Reads clipSampleRate from a GET /api/v2/detections/:id response body.
-  const readClipSampleRate = (data: unknown): number | undefined => {
-    if (typeof data !== 'object' || data === null || !('clipSampleRate' in data)) {
-      return undefined;
-    }
-    return isKnownRate(data.clipSampleRate) ? data.clipSampleRate : undefined;
-  };
-
   // Resolve a missing bat clip sample rate once per detection. The detection
   // endpoint reads it from the clip for older detections; list and search
   // responses never carry it for those. The spectrogram request waits for the
-  // answer, at most RATE_RESOLVE_TIMEOUT_MS, and goes out without a rate (and
-  // without an axis) when none comes back.
+  // answer, at most CLIP_RATE_LOOKUP_TIMEOUT_MS, and goes out without a rate
+  // (and without an axis) when none comes back. Players for the same detection
+  // share one lookup (lookupClipSampleRate).
   $effect(() => {
     if (!rateResolvePending) return;
 
     const resolvingId = detectionId;
     const controller = new AbortController();
     let active = true;
-    const timeoutId = setTimeout(() => controller.abort(), RATE_RESOLVE_TIMEOUT_MS);
     spectrogramLoader.setLoading(true);
 
-    api
-      .get<unknown>(`/api/v2/detections/${encodeURIComponent(resolvingId)}`, {
-        signal: controller.signal,
-      })
-      .then(readClipSampleRate)
-      .catch((err: unknown) => {
-        logger.debug('Clip sample rate not resolved', { detectionId: resolvingId, error: err });
-        return undefined;
-      })
-      .then(rate => {
-        if (active) rateResolve = { detectionId: resolvingId, rate };
-      })
-      .finally(() => clearTimeout(timeoutId));
+    void lookupClipSampleRate(resolvingId, controller.signal).then(rate => {
+      if (active) rateResolve = { detectionId: resolvingId, rate };
+    });
 
     return () => {
       active = false;
-      clearTimeout(timeoutId);
       controller.abort();
     };
   });
@@ -2230,8 +2194,6 @@
       >
         <div
           class="loading loading-spinner loading-sm md:loading-md text-[var(--color-primary)]"
-          role="status"
-          aria-label={t('components.audio.spectrogramLoadingAria')}
           aria-hidden="true"
         ></div>
       </div>
@@ -2327,7 +2289,7 @@
   <!-- Frequency scale overlay (linear; range follows the model type and, for bats,
        the clip sample rate; a bat axis without a known rate has no ticks, and a
        bat axis is drawn only once its image has loaded) -->
-  {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error && freqNyquistKHz > 0 && !(isBatSpectrogram && spectrogramLoader.loading)}
+  {#if showFreqAxis}
     {#each freqTicksKHz as freq (freq)}
       <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true"
         >{freq}k</span

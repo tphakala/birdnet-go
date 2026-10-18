@@ -15,6 +15,7 @@ import {
   settle,
   type FakeMediaController,
 } from '../../../../test/fakeMediaElement';
+import { clearClipSampleRateCache } from '$lib/utils/clipSampleRateLookup';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -38,7 +39,7 @@ const PROBE_TIMEOUT_MS = 8000;
 const SERVER_MISSING_AUDIO_WAIT_MS = 5000;
 // First spectrogram retry delay in AudioPlayer.svelte
 const FIRST_RETRY_DELAY_MS = 500;
-// RATE_RESOLVE_TIMEOUT_MS in AudioPlayer.svelte
+// CLIP_RATE_LOOKUP_TIMEOUT_MS in $lib/utils/clipSampleRateLookup
 const RATE_RESOLVE_TIMEOUT_MS = 1500;
 // Longer than every spectrogram retry delay in AudioPlayer.svelte (500 to 4000 ms)
 const PAST_RETRY_DELAY_MS = 5000;
@@ -124,6 +125,8 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    // The rate lookup is shared across players: start every test without it.
+    clearClipSampleRateCache();
     ctl = installFakeMediaElement();
     detailRequests = [];
     probeCalls = [];
@@ -654,6 +657,48 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       expect(imageSrc()).toContain('/api/v2/spectrogram/43');
       expect(imageSrc()).toContain(`sr=${RATE_192K}`);
       expect((await loadedLabels(container))[0]).toBe('80k');
+    });
+
+    it('shares one detail request between two players of the same detection', async () => {
+      const first = mount({ modelType: 'bat' });
+      const second = mount({ modelType: 'bat' });
+      await settle();
+
+      expect(detailCalls()).toHaveLength(1);
+      detailRequests[0].resolve({ id: 42, clipSampleRate: RATE_384K });
+      await settle();
+
+      for (const { container } of [first, second]) {
+        const img = container.querySelector('img');
+        expect(img?.getAttribute('src')).toContain(`sr=${RATE_384K}`);
+      }
+    });
+
+    it('keeps the shared request when one of two players unmounts', async () => {
+      const leaving = mount({ modelType: 'bat' });
+      const staying = mount({ modelType: 'bat' });
+      await settle();
+
+      leaving.unmount();
+      expect(detailRequests[0]?.signal?.aborted).toBe(false);
+
+      detailRequests[0].resolve({ id: 42, clipSampleRate: RATE_384K });
+      await settle();
+      expect(staying.container.querySelector('img')?.getAttribute('src')).toContain(
+        `sr=${RATE_384K}`
+      );
+    });
+
+    it('asks again after the only player unmounted before the answer', async () => {
+      const { unmount } = mount({ modelType: 'bat' });
+      await settle();
+      unmount();
+
+      mount({ modelType: 'bat' });
+      await settle();
+
+      expect(detailCalls()).toHaveLength(2);
+      expect(detailRequests[0]?.signal?.aborted).toBe(true);
     });
 
     it('aborts the request on unmount', async () => {

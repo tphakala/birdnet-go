@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { clearClipSampleRateCache } from '$lib/utils/clipSampleRateLookup';
 import Search from './Search.svelte';
 
 const SEARCH_ENDPOINT = '/api/v2/search';
@@ -100,6 +101,11 @@ async function expectSpectrogramSrc(fragment: string) {
 }
 
 describe('Search bat clip sample rate', () => {
+  beforeEach(() => {
+    // The rate lookup is shared across players: start every test without it.
+    clearClipSampleRateCache();
+  });
+
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
