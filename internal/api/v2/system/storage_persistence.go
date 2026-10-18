@@ -61,11 +61,18 @@ func storagePaths(s *conf.Settings, configFile, configDir string) []diagnostics.
 	return paths
 }
 
+// Markers of an in-memory SQLite database path.
+const (
+	sqliteMemoryPath       = ":memory:"
+	sqliteMemoryURIPrefix  = "file::memory:"
+	sqliteMemoryModeMarker = "mode=memory"
+)
+
 // isInMemorySQLite reports whether a SQLite path names an in-memory database,
 // which has no file to lose (see the data-dir rule in
 // internal/analysis/database_service.go).
 func isInMemorySQLite(p string) bool {
-	return p == ":memory:" || strings.HasPrefix(p, "file::memory:") || strings.Contains(p, "mode=memory")
+	return p == sqliteMemoryPath || strings.HasPrefix(p, sqliteMemoryURIPrefix) || strings.Contains(p, sqliteMemoryModeMarker)
 }
 
 // storagePersistenceReport evaluates the key paths against the mount table. The
