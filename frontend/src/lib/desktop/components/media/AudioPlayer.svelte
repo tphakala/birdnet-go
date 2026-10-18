@@ -2119,7 +2119,8 @@
   </div>
 
   {#if spectrogramUrl || rateResolvePending}
-    <!-- Loading spinner overlay -->
+    <!-- Loading spinner overlay (hidden from screen readers: the status region above
+         already announces the loading state) -->
     {#if spectrogramLoader.showSpinner}
       <div
         class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-200)]/75 rounded-md border border-[var(--color-base-300)]"
@@ -2128,6 +2129,7 @@
           class="loading loading-spinner loading-sm md:loading-md text-[var(--color-primary)]"
           role="status"
           aria-label={t('components.audio.spectrogramLoadingAria')}
+          aria-hidden="true"
         ></div>
       </div>
     {/if}

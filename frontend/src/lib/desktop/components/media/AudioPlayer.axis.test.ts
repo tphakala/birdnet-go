@@ -241,9 +241,10 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       );
       // The spinner follows the loader's delay, as for any spectrogram load.
       await vi.advanceTimersByTimeAsync(SPINNER_DELAY_MS);
-      expect(
-        screen.getByRole('status', { name: 'components.audio.spectrogramLoadingAria' })
-      ).toBeInTheDocument();
+      const spinner = container.querySelector('.loading-spinner');
+      expect(spinner).not.toBeNull();
+      // Only the status region announces the state; the spinner is visual.
+      expect(spinner?.getAttribute('aria-hidden')).toBe('true');
     });
 
     it('fetches the detection once and waits for it before requesting the image', async () => {
