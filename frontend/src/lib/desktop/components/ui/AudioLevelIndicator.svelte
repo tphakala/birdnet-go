@@ -9,9 +9,10 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { generateSessionId } from '$lib/utils/session';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
-  import Hls from 'hls.js';
+  import type Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, EXPECTED_STALL_ERRORS } from './hls-config';
+  import { tryLoadHls } from './hls-loader';
 
   const logger = loggers.audio;
 
@@ -28,8 +29,6 @@
   interface Props {
     className?: string;
   }
-
-  const hlsSupported = typeof window !== 'undefined' && Hls.isSupported();
 
   let { className = '' }: Props = $props();
 
@@ -317,13 +316,21 @@
     }
   }
 
-  // Setup HLS streaming
-  async function setupHLSStream(hlsUrl: string) {
+  // isStaleStart reports whether the startPlayback request requestId was
+  // superseded: a newer start bumps startRequestId, and stopPlayback clears
+  // playingSource.
+  function isStaleStart(requestId: number): boolean {
+    return requestId !== startRequestId || playingSource === null;
+  }
+
+  // Setup HLS streaming. HlsClass is null when HLS.js could not be loaded,
+  // which leaves native HLS as the only option.
+  async function setupHLSStream(hlsUrl: string, HlsClass: typeof Hls | null) {
     const audio = getAudioElement();
     if (!audio) return;
 
     // Check if HLS.js is supported
-    if (hlsSupported) {
+    if (HlsClass?.isSupported()) {
       // Clean up existing instance
       if (hlsInstance) {
         hlsInstance.destroy();
@@ -331,14 +338,14 @@
       }
 
       // Create new HLS instance with audio-optimized configuration
-      hlsInstance = new Hls(HLS_AUDIO_CONFIG);
+      hlsInstance = new HlsClass(HLS_AUDIO_CONFIG);
 
       // Track if we've attempted to play
       let playbackAttempted = false;
       let fragmentsBuffered = 0;
 
       // Setup error handling with proper types
-      hlsInstance.on(Hls.Events.ERROR, (_event: string, data: ErrorData) => {
+      hlsInstance.on(HlsClass.Events.ERROR, (_event: string, data: ErrorData) => {
         logger.error('HLS error:', {
           type: data.type,
           details: data.details,
@@ -350,7 +357,7 @@
           // Handle fatal HLS error
           showStatusMessage(t('media.audio.playbackError', { details: data.details }));
           stopPlayback();
-        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+        } else if (data.type === HlsClass.ErrorTypes.MEDIA_ERROR) {
           // Handle non-fatal media errors with improved categorization
           if (EXPECTED_STALL_ERRORS.has(data.details)) {
             // Buffer stalls are expected in low-latency audio streaming
@@ -370,17 +377,17 @@
       });
 
       // Wait for media to be attached
-      hlsInstance.on(Hls.Events.MEDIA_ATTACHED, () => {
+      hlsInstance.on(HlsClass.Events.MEDIA_ATTACHED, () => {
         logger.debug('HLS.js media attached');
       });
 
       // Wait for manifest to be parsed
-      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+      hlsInstance.on(HlsClass.Events.MANIFEST_PARSED, () => {
         logger.debug('HLS.js manifest parsed');
       });
 
       // Wait for first fragment to be buffered before playing
-      hlsInstance.on(Hls.Events.FRAG_BUFFERED, () => {
+      hlsInstance.on(HlsClass.Events.FRAG_BUFFERED, () => {
         logger.debug('HLS fragment buffered');
         fragmentsBuffered++;
 
@@ -436,6 +443,11 @@
     const encodedSourceId = encodeURIComponent(sourceId);
 
     try {
+      // Load HLS.js before starting the server stream, so a failed load
+      // cannot leave a started stream without a player.
+      const HlsClass = await tryLoadHls();
+      if (isStaleStart(requestId)) return;
+
       // Use fetchWithCSRF for authenticated HLS endpoint
       const data = await fetchWithCSRF<{
         status: string;
@@ -447,15 +459,15 @@
         body: { session_id: sessionId },
       });
 
-      // Discard stale response if user switched sources during fetch
-      if (requestId !== startRequestId) return;
+      // Discard stale response if user switched sources or stopped during fetch
+      if (isStaleStart(requestId)) return;
 
       activeStreamToken = data.stream_token;
       const hlsUrl = buildAppUrl(data.playlist_url);
-      await setupHLSStream(hlsUrl);
+      await setupHLSStream(hlsUrl, HlsClass);
 
       // Re-check after second await
-      if (requestId !== startRequestId) return;
+      if (isStaleStart(requestId)) return;
 
       startHeartbeat();
     } catch (error) {

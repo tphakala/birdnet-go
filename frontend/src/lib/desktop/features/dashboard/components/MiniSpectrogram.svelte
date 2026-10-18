@@ -13,7 +13,7 @@
    * - Respects appState.liveSpectrogram for auto-start
    */
 
-  import Hls from 'hls.js';
+  import type Hls from 'hls.js';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { onMount } from 'svelte';
 
@@ -21,6 +21,7 @@
   import { t } from '$lib/i18n';
   import { appState, hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { HLS_AUDIO_CONFIG } from '$lib/desktop/components/ui/hls-config';
+  import { tryLoadHls } from '$lib/desktop/components/ui/hls-loader';
   import { useSpectrogramAnalyser } from '$lib/utils/useSpectrogramAnalyser.svelte';
   import SpectrogramCanvas from '$lib/desktop/components/media/SpectrogramCanvas.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
@@ -195,6 +196,11 @@
         return;
       }
 
+      // Load HLS.js before starting the server stream, so a failed load
+      // cannot leave a started stream without a player.
+      const HlsClass = await tryLoadHls();
+      if (signal.aborted) return;
+
       const encodedSourceId = encodeURIComponent(sourceId);
 
       // Capture source before await so stop() can clean up if the request
@@ -221,12 +227,12 @@
       audioElement = new globalThis.Audio();
       audioElement.crossOrigin = 'anonymous';
 
-      if (Hls.isSupported()) {
-        hls = new Hls(HLS_AUDIO_CONFIG);
+      if (HlsClass?.isSupported()) {
+        hls = new HlsClass(HLS_AUDIO_CONFIG);
         hls.loadSource(hlsUrl);
         hls.attachMedia(audioElement);
 
-        hls.on(Hls.Events.MANIFEST_PARSED, async () => {
+        hls.on(HlsClass.Events.MANIFEST_PARSED, async () => {
           if (signal.aborted) return;
           try {
             await audioElement?.play();
@@ -252,7 +258,7 @@
           }
         });
 
-        hls.on(Hls.Events.ERROR, (_event, data) => {
+        hls.on(HlsClass.Events.ERROR, (_event, data) => {
           if (signal.aborted) return;
           if (data.fatal) {
             logger.error('MiniSpectrogram: fatal HLS error', {
