@@ -1206,12 +1206,12 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 	return gainDB, nil
 }
 
-// resolveExportFormat is the single source of truth for the container/codec a
-// clip is stored in. A bat/ultrasonic capture above the analysis rate is stored
+// resolveExportFormat is the naming rule for the container/codec a clip is
+// stored in. A bat/ultrasonic capture above the analysis rate is stored
 // losslessly in Export.UltrasonicType (WAV/FLAC, default FLAC) at full source
 // rate; every other case (including a non-bat capture above the analysis rate,
 // which resolveExportParams downsamples to conf.SampleRate) uses the configured
-// Export.Type. It is the naming rule (applyExportFormatExtension) and the
+// Export.Type. applyExportFormatExtension names clips by it, and it is the
 // encoder's fallback for a ClipName with no known extension (resolveExportParams);
 // otherwise the encoder follows the stored name. Pass the ORIGINAL source rate
 // (pre-downsample).

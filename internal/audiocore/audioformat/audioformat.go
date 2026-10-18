@@ -28,8 +28,8 @@ func FileExtension(format string) string {
 }
 
 // exportFormats lists every format clip export can write, in the order
-// FormatForExtension tries them. It is derived from FileExtension so the two
-// stay in step.
+// FormatForExtension tries them. FormatForExtension compares each against FileExtension, but the list itself
+// is kept by hand: a format added to FileExtension must be added here too.
 //
 //nolint:gochecknoglobals // immutable lookup table, never modified
 var exportFormats = [...]string{WAV, FLAC, MP3, AAC, Opus}

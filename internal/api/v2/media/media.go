@@ -643,8 +643,9 @@ var audioServeExtensions = []string{".flac", ".wav", ".opus", ".m4a", ".mp3", ".
 // name but carries a different known audio extension. The DB clip_name and the
 // file on disk normally agree, because the exporter writes the stored name. A
 // row written by an older version, or a manual rename, can still point at a
-// container the file was not written in; serving the actual file beats a 404. It probes the fixed candidate names directly (no directory
-// listing), so it is O(1) per extension and deterministic on the ordered set.
+// container the file was not written in; serving the actual file beats a 404.
+// It probes the fixed candidate names directly (no directory listing), so it is
+// O(1) per extension and deterministic on the ordered set.
 // Temp files are handled separately (findEncodingTempPath) and the original,
 // already-missing extension is skipped.
 func (c *Handler) findAlternateAudioPath(relClipPath string) (string, bool) {

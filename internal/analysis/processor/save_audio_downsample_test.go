@@ -199,8 +199,8 @@ func TestSaveAudioAction_BirdAt48kHzNoResample(t *testing.T) {
 	assert.Equal(t, sourceRate, rate, "bird audio at 48kHz should not be resampled")
 }
 
-// TestResolveExportFormat verifies the single source of truth shared by the
-// encoder and the DB clip-name path: a bat/ultrasonic capture above the analysis
+// TestResolveExportFormat verifies the naming rule shared by the DB clip-name
+// path and the encoder's fallback for a name with no known extension: a bat/ultrasonic capture above the analysis
 // rate resolves to Export.UltrasonicType; every other case (including a non-bat
 // capture above the analysis rate, which resolveExportParams downsamples) resolves
 // to Export.Type.
