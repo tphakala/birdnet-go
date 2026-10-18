@@ -12,11 +12,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/notification/mocks"
+	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
 // storageNoticeRecorder wraps the generated NoticeService mock and records the
@@ -148,7 +151,7 @@ func TestStorageNotice_Transitions(t *testing.T) {
 	step(applicable(verdict("models", classLayer)), 4, 3)
 }
 
-func TestStorageNotice_DeletedByUserNotReraisedForSameSignature(t *testing.T) {
+func TestStorageNotice_SameSignatureRaisedOnce(t *testing.T) {
 	rec := newStorageNoticeRecorder(t, 1, 0)
 	nh := newNoticeHarness(rec)
 	nh.set(applicable(verdict("models", classLayer)))
@@ -291,4 +294,71 @@ func TestStorageNotice_UnknownVerdictKeepsLatch(t *testing.T) {
 
 	_, deleted = rec.counts()
 	assert.Equal(t, 1, deleted)
+}
+
+func TestStorageNotice_ScheduleRunsAfterStartAndDebounces(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		nh := newNoticeHarness(newStorageNoticeRecorder(t, 0, 0))
+
+		nh.h.StartStorageNoticeSync()
+		time.Sleep(storageNoticeDebounce + time.Second)
+		synctest.Wait()
+		require.Equal(t, int32(1), nh.calls.Load(), "the startup evaluation")
+
+		// Two schedules inside the window run one evaluation, after the second.
+		nh.h.ScheduleStorageNoticeSync()
+		time.Sleep(time.Second)
+		nh.h.ScheduleStorageNoticeSync()
+		time.Sleep(storageNoticeDebounce - time.Second)
+		synctest.Wait()
+		assert.Equal(t, int32(1), nh.calls.Load(), "the second schedule restarted the debounce")
+
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		assert.Equal(t, int32(2), nh.calls.Load(), "the coalesced evaluation ran once")
+
+		nh.h.StopStorageNoticeSync()
+		nh.h.Wait()
+	})
+}
+
+func TestStorageNotice_FailedCreateIsRetried(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		svc := mocks.NewMockNoticeService(t)
+		var attempts atomic.Int32
+		svc.EXPECT().CreateWithMetadata(mock.Anything).RunAndReturn(func(*notification.Notification) error {
+			if attempts.Add(1) == 1 {
+				return errors.NewStd("rate limited")
+			}
+			return nil
+		}).Times(2)
+		nh := newNoticeHarness(svc)
+		nh.set(applicable(verdict("models", classLayer)))
+
+		nh.h.StartStorageNoticeSync()
+		time.Sleep(2 * time.Minute)
+		synctest.Wait()
+
+		assert.Equal(t, int32(2), attempts.Load(), "the failed raise is retried through the latch")
+		nh.h.StopStorageNoticeSync()
+		nh.h.Wait()
+	})
+}
+
+func TestRegisterHealthChecks_IncludesStoragePersistence(t *testing.T) {
+	h := &Handler{Core: apitest.NewCore(t)}
+	h.healthRegistry = health.NewRegistry()
+	h.storageDeps = storageDeps{envType: func() string { return sysinfo.EnvLXC }}
+	h.registerHealthChecks()
+
+	var found *health.Result
+	results := h.healthRegistry.RunCategory(t.Context(), health.CategoryConfig)
+	for i := range results {
+		if results[i].Name == "storage_persistence" {
+			found = &results[i]
+		}
+	}
+
+	require.NotNil(t, found, "the check is registered in the config category")
+	assert.Equal(t, health.StatusSkipped, found.Status, "outside Docker and Podman the check is skipped")
 }

@@ -203,15 +203,16 @@ func TestResolveRealPath(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("dangling link loop errors", func(t *testing.T) {
-		mustMkdir(filepath.Join(base, "dloop"))
-		// The target of each link is missing, and the second link points
-		// back through the first, so only the hop cap can stop the walk.
-		mustLink(filepath.Join(base, "dloop", "p", "q"), filepath.Join(base, "dloop", "r"))
-		mustMkdir(filepath.Join(base, "dloop", "p"))
-		mustLink(filepath.Join(base, "dloop", "r"), filepath.Join(base, "dloop", "p", "q"))
+	t.Run("chain of dangling links beyond the hop cap errors", func(t *testing.T) {
+		const chainLen = 45 // above maxSymlinkHops, below EvalSymlinks' own limit
+		dir := filepath.Join(base, "chain45")
+		mustMkdir(dir)
+		linkPath := func(i int) string { return filepath.Join(dir, fmt.Sprintf("l%d", i)) }
+		for i := range chainLen {
+			mustLink(linkPath(i+1), linkPath(i))
+		}
 
-		_, err := ResolveRealPath(filepath.Join(base, "dloop", "r", "x"))
+		_, err := ResolveRealPath(linkPath(0))
 
 		require.Error(t, err)
 	})
