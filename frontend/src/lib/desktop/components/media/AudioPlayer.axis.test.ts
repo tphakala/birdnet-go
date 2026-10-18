@@ -7,8 +7,9 @@
  * mock for the detection endpoint.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { screen, fireEvent, cleanup, render } from '@testing-library/svelte';
+import type { ComponentProps } from 'svelte';
 import {
   installFakeMediaElement,
   settle,
@@ -41,8 +42,8 @@ const RATE_192K = 192_000;
 const BIRD_RATE = 48_000;
 const BIRD_LABELS = ['12k', '10k', '8k', '6k', '5k', '4k', '3k', '2k', '1k'];
 
-type FetchImpl = (url: string, init?: RequestInit) => unknown;
-type FetchMock = Mock<FetchImpl>;
+type FetchImpl = typeof globalThis.fetch;
+type AudioPlayerProps = ComponentProps<typeof AudioPlayer>;
 
 interface PendingDetailRequest {
   url: string;
@@ -51,7 +52,8 @@ interface PendingDetailRequest {
   reject: (error: Error) => void;
 }
 
-function jsonResponse(body: unknown, status = 200) {
+function jsonResponse(body: unknown, status = 200): Response {
+  // A partial Response: the api client reads only these members.
   return {
     ok: status >= 200 && status < 300,
     status,
@@ -59,7 +61,7 @@ function jsonResponse(body: unknown, status = 200) {
     headers: new Headers({ 'content-type': 'application/json' }),
     json: () => Promise.resolve(body),
     text: () => Promise.resolve(JSON.stringify(body)),
-  };
+  } as unknown as Response;
 }
 
 describe('AudioPlayer frequency axis and clip sample rate', () => {
@@ -67,9 +69,11 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
   let originalFetch: FetchImpl | undefined;
   let detailRequests: PendingDetailRequest[];
 
-  const fetchMock = () => vi.mocked(globalThis.fetch) as unknown as FetchMock;
+  const fetchMock = () => vi.mocked(globalThis.fetch);
 
-  function mount(props: Record<string, unknown> = {}) {
+  // render infers the props type from the component, so every prop stays type
+  // checked; renderTyped is not used because its result types rerender as never.
+  function mount(props: Partial<AudioPlayerProps> = {}) {
     return render(AudioPlayer, {
       props: { audioUrl: '/audio/test.mp3', detectionId: '42', ...props },
     });
@@ -96,9 +100,9 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
     originalFetch = fetchMock().getMockImplementation();
     // Detail requests stay pending until the test answers them; the request
     // rejects with an AbortError when its signal aborts, as fetch does.
-    fetchMock().mockImplementation((url: string, init?: RequestInit) => {
+    fetchMock().mockImplementation((url, init) => {
       if (String(url).includes(DETECTION_ENDPOINT)) {
-        return new Promise((resolve, reject) => {
+        return new Promise<Response>((resolve, reject) => {
           const signal = init?.signal ?? undefined;
           signal?.addEventListener('abort', () =>
             reject(new DOMException('The operation was aborted.', 'AbortError'))
@@ -111,7 +115,9 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
           });
         });
       }
-      return originalFetch?.(url, init);
+      return originalFetch
+        ? originalFetch(url, init)
+        : Promise.reject(new Error(`Unmocked fetch call to: ${String(url)}`));
     });
   });
 
