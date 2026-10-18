@@ -2287,8 +2287,7 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 		StartTime: startTime,
 		EndTime:   endTime,
 	}
-	_, count, err := ds.detection.Search(ctx, filters)
-	return count, err
+	return ds.detection.CountSearch(ctx, filters)
 }
 
 // CountHourlyDetections counts detections for a specific hour.
@@ -2310,8 +2309,7 @@ func (ds *Datastore) CountHourlyDetections(date, hour string, duration int) (int
 		StartTime: &startTime,
 		EndTime:   &endTime,
 	}
-	_, count, err := ds.detection.Search(ctx, filters)
-	return count, err
+	return ds.detection.CountSearch(ctx, filters)
 }
 
 // SearchDetections performs a detection search with filters.
