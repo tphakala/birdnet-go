@@ -158,7 +158,7 @@ birdnet:
 
 ### How do I do bat detection?
 
-Bats need an **ultrasonic-capable mic** (e.g. an AudioMoth) capturing at **192 kHz or higher**, and it is **Linux only** (high-rate exclusive sound-card mode). Install a regional BattyBirdNET model and assign it to that source. Bats only run at night by default, and clips that lack ultrasonic energy are flagged **"Unlikely"**. BirdNET-Go's spectrograms top out around 12 kHz, so to verify a bat call, download the clip and open it in a tool like Audacity (bat clips keep their full sample rate).
+Bats need an **ultrasonic-capable mic** (e.g. an AudioMoth) capturing at **192 kHz or higher**, and it is **Linux only** (high-rate exclusive sound-card mode). Install a regional BattyBirdNET model and assign it to that source. Bats only run at night by default, and clips that lack ultrasonic energy are flagged **"Unlikely"**. Bat spectrograms render at the clip's own sample rate and show up to half of it (a 192 kHz clip shows 0 to 96 kHz, a 384 kHz clip 0 to 192 kHz), so you can check a call in the detection view. Bat clips also keep their full sample rate, so you can download one and open it in a tool like Audacity.
 
 ### Where did the Sensitivity and Overlap settings go?
 
