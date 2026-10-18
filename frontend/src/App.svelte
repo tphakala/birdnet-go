@@ -23,13 +23,11 @@
   import { navigation } from './lib/stores/navigation.svelte';
   import { buildAppUrl } from './lib/utils/urlHelpers';
   import { resolveLoginRedirect, DEFAULT_LOGIN_TARGET } from './lib/utils/loginRedirect';
-  import {
-    resolveAnalyticsRedirect,
-    stripTrailingSlash,
-  } from './lib/desktop/features/analytics/registry/analyticsRouting';
+  import { resolveAnalyticsRedirect } from './lib/desktop/features/analytics/registry/analyticsRouting';
   // Type-only import (erased at build time, so GenericErrorPage stays lazily loaded via
   // dynamic import below) used to type the dynamic component precisely instead of `any`.
   import type GenericErrorPageComponent from './lib/desktop/views/GenericErrorPage.svelte';
+  import { resolveSettingsAlias } from './lib/utils/settingsAlias';
   import { settingsActions } from './lib/stores/settings.js';
   import { activateWatchdog } from './lib/stores/connectionState.svelte';
   import WizardDialog from './lib/desktop/features/wizard/WizardDialog.svelte';
@@ -537,12 +535,8 @@
   }
 
   function handleRouting(path: string): void {
-    // Canonicalize a trailing slash up front so the analytics redirect check, the
-    // detection-detail split, the system/settings subpage matching, and the normal
-    // pathToRouteMap lookup all operate on the same slashless path. The map keys are
-    // slashless, so /ui/analytics/nocturnal/ (a manually typed or bookmarked URL)
-    // would otherwise miss the map and 404. stripTrailingSlash preserves the root.
-    path = stripTrailingSlash(path);
+    // The title must match the section Settings.svelte renders for bare settings.
+    path = resolveSettingsAlias(path);
 
     // Analytics routes: redirect the bare hub, the retired /advanced path, and
     // legacy ?tab= deep links onto the per-view routes (single hop), preserving
@@ -572,7 +566,6 @@
 
     // Handle system and settings subpages
     if (UI_SYSTEM_PREFIX_RE.test(path)) {
-      // path is already trailing-slash-normalized at the top of handleRouting.
       const exactMatch = pathToRouteMap.get(path);
       if (exactMatch) {
         currentRoute = exactMatch.route;

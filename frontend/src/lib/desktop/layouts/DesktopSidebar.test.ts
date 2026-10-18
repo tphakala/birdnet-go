@@ -8,6 +8,7 @@ import {
 import DesktopSidebar from './DesktopSidebar.svelte';
 import { sidebar } from '$lib/stores/sidebar';
 import { analyticsControls } from '$lib/desktop/features/analytics/registry/analyticsControls.svelte';
+import { SETTINGS_BASE_PATH, SETTINGS_DEFAULT_PATH } from '$lib/utils/settingsAlias';
 
 // Translation mock: return the key so aria-labels are stable and queryable.
 vi.mock('$lib/i18n', () => ({
@@ -340,5 +341,26 @@ describe('DesktopSidebar - collapsed footer auth button focus tooltips (#1282)',
 
     await fireEvent.blur(loginButton);
     expect(container.querySelector('.sidebar-tooltip')).toBeNull();
+  });
+});
+
+describe('DesktopSidebar - bare settings path', () => {
+  const sidebarTest = createComponentTestFactory(DesktopSidebar);
+  const BARE = SETTINGS_BASE_PATH;
+  const MAIN = SETTINGS_DEFAULT_PATH;
+  const GENERAL_LABEL = 'settings.sections.node';
+
+  function currentItems(container: HTMLElement): string[] {
+    return Array.from(container.querySelectorAll('[aria-current="page"]')).map(el =>
+      el.textContent.trim()
+    );
+  }
+
+  it.each([
+    ['the main section', MAIN],
+    ['the bare path', BARE],
+  ])('marks the General item current for %s', (_label, route) => {
+    const { container } = sidebarTest.render({ currentRoute: route });
+    expect(currentItems(container)).toEqual([GENERAL_LABEL]);
   });
 });
