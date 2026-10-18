@@ -550,6 +550,22 @@ func TestOpenRegularRel(t *testing.T) {
 			notErr:     fs.ErrNotExist,
 		},
 		{
+			// Only an implementation that trusts the cached stat (still a regular
+			// file) can get this wrong; the root's own confinement does not apply.
+			name: "directory swapped in after a cached StatRel",
+			setup: func(t *testing.T, sfs *SecureFS, base string) string {
+				t.Helper()
+				clip := filepath.Join(base, "swapdir.wav")
+				require.NoError(t, os.WriteFile(clip, []byte(content), 0o600))
+				_, err := sfs.StatRel("swapdir.wav")
+				require.NoError(t, err)
+				require.NoError(t, os.Remove(clip))
+				require.NoError(t, os.Mkdir(clip, 0o750))
+				return "swapdir.wav"
+			},
+			wantErr: ErrNotRegularFile,
+		},
+		{
 			name: "directory",
 			setup: func(t *testing.T, _ *SecureFS, base string) string {
 				t.Helper()
