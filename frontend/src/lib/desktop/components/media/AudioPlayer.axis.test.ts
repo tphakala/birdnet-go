@@ -37,6 +37,8 @@ const RATE_RESOLVE_TIMEOUT_MS = 1500;
 const PAST_RETRY_DELAY_MS = 5000;
 // One initial load plus MAX_SPECTROGRAM_RETRIES (4) in AudioPlayer.svelte
 const SPECTROGRAM_LOAD_ATTEMPTS = 5;
+// Longer than the spinner delay of the spectrogram loader in AudioPlayer.svelte (150 ms)
+const SPINNER_DELAY_MS = 200;
 const RATE_384K = 384_000;
 const RATE_192K = 192_000;
 const BIRD_RATE = 48_000;
@@ -190,9 +192,60 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       expect(labels(container)).toEqual([]);
       expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE)).toBeNull();
     });
+
+    it('shows the error placeholder when the image without the rate fails too', async () => {
+      const { container } = mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      // Exhaust the retries with the rate, then with the fallback URL without it.
+      for (let i = 0; i < SPECTROGRAM_LOAD_ATTEMPTS * 2; i++) {
+        const img = screen.queryByAltText(SPECTROGRAM_ALT);
+        if (!img) break;
+        await fireEvent.error(img);
+        await vi.advanceTimersByTimeAsync(PAST_RETRY_DELAY_MS);
+      }
+
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE)).toBeInTheDocument();
+      expect(imageSrc()).not.toContain('sr=');
+      expect(labels(container)).toEqual([]);
+    });
   });
 
   describe('rate resolve', () => {
+    it.each([0, -RATE_384K, Number.NaN, RATE_384K + 0.5])(
+      'treats a clipSampleRate prop of %s as unknown and resolves the rate',
+      async rate => {
+        const { container } = mount({ modelType: 'bat', clipSampleRate: rate });
+        await settle();
+
+        expect(detailCalls()).toHaveLength(1);
+        expect(imageSrc()).toBeNull();
+
+        detailRequests[0].resolve({ id: 42, clipSampleRate: RATE_192K });
+        await settle();
+
+        expect(imageSrc()).toContain(`sr=${RATE_192K}`);
+        expect(imageSrc()).not.toContain(`sr=${String(rate)}`);
+        expect(labels(container)[0]).toBe('80k');
+      }
+    );
+
+    it('shows the loading state while the rate is resolved', async () => {
+      const { container } = mount({ modelType: 'bat', responsive: true });
+      await settle();
+
+      const player = container.firstElementChild;
+      expect(player?.classList.contains('spectrogram-skeleton')).toBe(true);
+      expect(container.querySelector('.sr-only[role="status"]')?.textContent.trim()).toBe(
+        'components.audio.spectrogramLoading'
+      );
+      // The spinner follows the loader's delay, as for any spectrogram load.
+      await vi.advanceTimersByTimeAsync(SPINNER_DELAY_MS);
+      expect(
+        screen.getByRole('status', { name: 'components.audio.spectrogramLoadingAria' })
+      ).toBeInTheDocument();
+    });
+
     it('fetches the detection once and waits for it before requesting the image', async () => {
       const { container } = mount({ modelType: 'bat' });
       await settle();
