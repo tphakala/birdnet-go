@@ -74,9 +74,10 @@ func wantsClipRateFill(note *datastore.Note) bool {
 // clipRateResponseBudget. On a miss note.ClipSampleRate stays 0 and the work
 // finishes in the background. A failed probe writes nothing, so the next request
 // tries again, and so does a panic in the shared work, which is contained and
-// treated as a failed probe. The write changes a NULL value only (DetectionRepository.FillClipSampleRate).
+// treated as a failed probe. The write changes a NULL value only (DetectionRepository.FillClipSampleRate)
+// and runs under the work context. It does nothing without a repository.
 func (c *Handler) fillClipSampleRate(note *datastore.Note) {
-	if !wantsClipRateFill(note) {
+	if c.Repo == nil || !wantsClipRateFill(note) {
 		return
 	}
 	absPath, ok := c.clipProbePath(note.ClipName)
@@ -139,7 +140,8 @@ func (c *Handler) clipProbePath(clipName string) (string, bool) {
 
 // probeAndStoreClipRate probes the clip header and stores the rate while the row
 // is still NULL. It returns the probed rate even when the write fails or changes
-// no row, because the rate belongs to the clip the response names.
+// no row, because the rate belongs to the clip the response names. The write runs
+// under ctx, so one that outlives the work timeout is cancelled and logged at debug.
 func (c *Handler) probeAndStoreClipRate(ctx context.Context, noteID uint, clipName, absPath string) (int, error) {
 	rate, err := c.probeClipRate(ctx, absPath)
 	if err != nil {
@@ -155,10 +157,10 @@ func (c *Handler) probeAndStoreClipRate(ctx context.Context, noteID uint, clipNa
 	// ctx is the work context, so a write that outlives clipRateWorkTimeout is
 	// cancelled and releases the singleflight key instead of pinning it.
 	if _, err := c.Repo.FillClipSampleRate(ctx, noteID, clipName, rate); err != nil {
-		// A write that ran out the work timeout is a slow disk, not something the
+		// A write cancelled by the work timeout or a shutdown is not something the
 		// operator can act on; the next request retries.
-		if errors.Is(err, context.DeadlineExceeded) {
-			c.LogDebugIfEnabled("Clip sample rate write timed out; it stays unset",
+		if errors.IsContextCancellation(err) {
+			c.LogDebugIfEnabled("Clip sample rate write was cancelled; it stays unset",
 				logger.Uint64("note_id", uint64(noteID)))
 		} else {
 			c.LogWarnIfEnabled("Failed to store the clip sample rate; it stays unset",

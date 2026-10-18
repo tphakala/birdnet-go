@@ -393,7 +393,6 @@ func TestGetDetection_LazyFill_Skips(t *testing.T) {
 			assert.Zero(t, store.fills())
 		})
 	}
-
 }
 
 // TestGetDetection_LazyFill_ClipNotARegularFile verifies a clip that is missing or

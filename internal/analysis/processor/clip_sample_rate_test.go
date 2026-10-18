@@ -321,8 +321,8 @@ func TestBuildSaveAudioAction_CarriesClipSampleRateWiring(t *testing.T) {
 	assert.Same(t, rec, action.clipRates, "the action records through the processor's repository")
 }
 
-// TestSaveAudioAction_NilClipRatesSkipsCorrection verifies a store without clip
-// rate support (nil recorder) makes the correction a no-op even when the planned
+// TestSaveAudioAction_NilClipRatesSkipsCorrection verifies a processor without
+// a repository (nil recorder) makes the correction a no-op even when the planned
 // and written rates differ.
 func TestSaveAudioAction_NilClipRatesSkipsCorrection(t *testing.T) {
 	t.Parallel()
