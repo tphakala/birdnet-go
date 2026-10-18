@@ -9,8 +9,8 @@ import (
 )
 
 // TestInitialize_AddsClipSampleRateColumn verifies that AutoMigrate adds the
-// nullable clip_sample_rate column to a detections table created without it, that
-// old rows read NULL, and that the legacy notes table gets no such column.
+// nullable clip_sample_rate column to a detections table created without it,
+// and that old rows read NULL.
 func TestInitialize_AddsClipSampleRateColumn(t *testing.T) {
 	tmpDir := t.TempDir()
 

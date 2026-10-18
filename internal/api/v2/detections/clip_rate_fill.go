@@ -66,7 +66,7 @@ func wantsClipRateFill(note *datastore.Note) bool {
 
 // fillClipSampleRate learns the clip sample rate of an old bat detection that has
 // none and stores it, so GetDetection can return it. Only GetDetection calls it;
-// list, search, SSE and media paths never read a clip.
+// list, search and SSE paths never probe a clip for the rate.
 //
 // It reads one clip header (never the audio), shares the probe and the guarded
 // write between concurrent requests for the same row, and waits at most
