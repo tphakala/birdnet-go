@@ -11,12 +11,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
-	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/notification/mocks"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
@@ -70,58 +69,40 @@ func (r *storageNoticeRecorder) last() *notification.Notification {
 	return r.created[len(r.created)-1]
 }
 
-// noticeHarness is a handler whose storage report is injected.
-type noticeHarness struct {
-	h      *Handler
-	report atomic.Pointer[checks.StoragePersistenceReport]
-	calls  atomic.Int32
-}
-
-func newNoticeHarness(svc notification.NoticeService) *noticeHarness {
-	nh := &noticeHarness{h: &Handler{Core: &apicore.Core{}}}
-	nh.h.storage.service = func() notification.NoticeService { return svc }
-	nh.h.storage.report = func() checks.StoragePersistenceReport {
-		nh.calls.Add(1)
-		return *nh.report.Load()
-	}
-	nh.set(checks.StoragePersistenceReport{Applicable: true})
-	return nh
-}
-
-func (nh *noticeHarness) set(r checks.StoragePersistenceReport) { nh.report.Store(&r) }
-
-// verdict builds a verdict whose resolved path is /<label>.
-func verdict(label string, class diagnostics.PersistenceClass) diagnostics.StorageVerdict {
-	return diagnostics.StorageVerdict{Label: label, Path: "/" + label, ResolvedPath: "/" + label, Class: class}
-}
-
-func applicable(vs ...diagnostics.StorageVerdict) checks.StoragePersistenceReport {
-	return checks.StoragePersistenceReport{Applicable: true, Verdicts: vs}
-}
-
 const (
 	classLayer = diagnostics.PersistenceContainerLayer
 	classOK    = diagnostics.PersistencePersistent
 	classAnon  = diagnostics.PersistenceAnonymousVolume
+	classUnk   = diagnostics.PersistenceUnknown
 )
+
+// newNoticeFixture returns a storage fixture whose notices go to svc.
+func newNoticeFixture(svc notification.NoticeService) *storageFixture {
+	f := newStorageFixture()
+	f.h.notices = svc
+	return f
+}
+
+// sync runs one evaluation.
+func (f *storageFixture) sync() { f.h.syncStorageNotices() }
 
 func TestStorageNotice_Transitions(t *testing.T) {
 	rec := newStorageNoticeRecorder(t, 4, 3)
-	nh := newNoticeHarness(rec)
-	step := func(r checks.StoragePersistenceReport, wantCreated, wantDeleted int) {
+	f := newNoticeFixture(rec)
+	step := func(wantCreated, wantDeleted int) {
 		t.Helper()
-		nh.set(r)
-		nh.h.syncStorageNotices()
+		f.sync()
 		created, deleted := rec.counts()
 		assert.Equal(t, wantCreated, created, "created")
 		assert.Equal(t, wantDeleted, deleted, "deleted")
 	}
 
 	// 1. everything persistent
-	step(applicable(verdict("config", classOK), verdict("models", classOK)), 0, 0)
+	step(0, 0)
 
 	// 2. models lost: a medium priority notice
-	step(applicable(verdict("config", classOK), verdict("models", classLayer)), 1, 0)
+	f.set("models", classLayer)
+	step(1, 0)
 	n := rec.last()
 	require.NotNil(t, n)
 	assert.Equal(t, notification.PriorityMedium, n.Priority)
@@ -132,49 +113,63 @@ func TestStorageNotice_Transitions(t *testing.T) {
 	assert.Equal(t, notification.DeliveryTargetBell, n.DeliveryTarget)
 
 	// 3. the same again: nothing happens
-	step(applicable(verdict("config", classOK), verdict("models", classLayer)), 1, 0)
+	step(1, 0)
 
 	// 4. database joins: replaced, high priority
-	step(applicable(verdict("database", classLayer), verdict("models", classLayer)), 2, 1)
+	f.set("database", classLayer)
+	step(2, 1)
 	n = rec.last()
 	assert.Equal(t, notification.PriorityHigh, n.Priority)
-	assert.Equal(t, "/database, /models", n.MessageParams["paths"])
+	assert.Equal(t, "/data/birdnet.db, /models", n.MessageParams["paths"])
 
 	// 5. models only again: replaced
-	step(applicable(verdict("database", classOK), verdict("models", classLayer)), 3, 2)
+	f.set("database", classOK)
+	step(3, 2)
 	assert.Equal(t, notification.PriorityMedium, rec.last().Priority)
 
 	// 6. all persistent: deleted
-	step(applicable(verdict("database", classOK), verdict("models", classOK)), 3, 3)
+	f.set("models", classOK)
+	step(3, 3)
 
 	// 7. models lost again: raised again
-	step(applicable(verdict("models", classLayer)), 4, 3)
+	f.set("models", classLayer)
+	step(4, 3)
 }
 
 func TestStorageNotice_SameSignatureRaisedOnce(t *testing.T) {
 	rec := newStorageNoticeRecorder(t, 1, 0)
-	nh := newNoticeHarness(rec)
-	nh.set(applicable(verdict("models", classLayer)))
+	f := newNoticeFixture(rec)
+	f.set("models", classLayer)
 
-	nh.h.syncStorageNotices()
-	nh.h.syncStorageNotices()
+	f.sync()
+	f.sync()
 
 	created, _ := rec.counts()
 	assert.Equal(t, 1, created)
 }
 
+func TestStorageNotice_MemoryBackedPathIsLost(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 1, 0)
+	f := newNoticeFixture(rec)
+	f.set("models", diagnostics.PersistenceMemory)
+
+	f.sync()
+
+	require.NotNil(t, rec.last())
+	assert.Equal(t, notification.MsgStorageNotPersistentTitle, rec.last().TitleKey)
+}
+
 func TestStorageNotice_ReadErrorKeepsLatch(t *testing.T) {
 	rec := newStorageNoticeRecorder(t, 1, 0)
-	nh := newNoticeHarness(rec)
-	lost := applicable(verdict("models", classLayer))
-	nh.set(lost)
-	nh.h.syncStorageNotices() // raise; the user may now delete it
+	f := newNoticeFixture(rec)
+	f.set("models", classLayer)
+	f.sync() // raise; the user may now delete it
 
-	nh.set(checks.StoragePersistenceReport{Applicable: true, Err: errors.NewStd("mountinfo unreadable")})
-	nh.h.syncStorageNotices() // no Delete, no Create
+	f.setReadErr(errors.NewStd("mountinfo unreadable"))
+	f.sync() // no Delete, no Create
 
-	nh.set(lost)
-	nh.h.syncStorageNotices() // same signature as before: no Create
+	f.setReadErr(nil)
+	f.sync() // same signature as before: no Create
 
 	created, deleted := rec.counts()
 	assert.Equal(t, 1, created)
@@ -183,9 +178,10 @@ func TestStorageNotice_ReadErrorKeepsLatch(t *testing.T) {
 
 func TestStorageNotice_LatchesIndependent(t *testing.T) {
 	rec := newStorageNoticeRecorder(t, 2, 1)
-	nh := newNoticeHarness(rec)
-	nh.set(applicable(verdict("models", classLayer), verdict("config", classAnon)))
-	nh.h.syncStorageNotices()
+	f := newNoticeFixture(rec)
+	f.set("models", classLayer)
+	f.set("config", classAnon)
+	f.sync()
 
 	created, deleted := rec.counts()
 	require.Equal(t, 2, created)
@@ -202,11 +198,11 @@ func TestStorageNotice_LatchesIndependent(t *testing.T) {
 	require.NotNil(t, anonNotice)
 	assert.Equal(t, notification.PriorityLow, anonNotice.Priority)
 	assert.Equal(t, notification.MsgStorageAnonymousVolumeMessage, anonNotice.MessageKey)
-	assert.Equal(t, "/config", anonNotice.MessageParams["paths"])
+	assert.Equal(t, "/config/config.yaml", anonNotice.MessageParams["paths"])
 
 	// The anonymous set resolves: only the anonymous notice goes.
-	nh.set(applicable(verdict("models", classLayer), verdict("config", classOK)))
-	nh.h.syncStorageNotices()
+	f.set("config", classOK)
+	f.sync()
 
 	_, deleted = rec.counts()
 	assert.Equal(t, 1, deleted)
@@ -217,8 +213,11 @@ func TestStorageNotice_LatchesIndependent(t *testing.T) {
 
 func TestStorageNotice_SignatureOrderIndependent(t *testing.T) {
 	t.Parallel()
-	a := []diagnostics.StorageVerdict{verdict("models", classLayer), verdict("database", classLayer)}
-	b := []diagnostics.StorageVerdict{verdict("database", classLayer), verdict("models", classLayer)}
+	mk := func(label string) diagnostics.StorageVerdict {
+		return diagnostics.StorageVerdict{Label: label, ResolvedPath: "/" + label, Class: classLayer}
+	}
+	a := []diagnostics.StorageVerdict{mk("models"), mk("database")}
+	b := []diagnostics.StorageVerdict{mk("database"), mk("models")}
 	assert.Equal(t, storageSignature(a), storageSignature(b))
 	assert.Empty(t, storageSignature(nil))
 	assert.NotEqual(t, storageSignature(a), storageSignature(a[:1]))
@@ -226,99 +225,201 @@ func TestStorageNotice_SignatureOrderIndependent(t *testing.T) {
 
 func TestStorageNotice_NotApplicableClearsAndRaisesNothing(t *testing.T) {
 	rec := newStorageNoticeRecorder(t, 0, 0)
-	nh := newNoticeHarness(rec)
-	nh.set(checks.StoragePersistenceReport{})
+	f := newNoticeFixture(rec)
+	f.set("models", classLayer)
+	f.setEnv(sysinfo.EnvLXC)
 
-	nh.h.syncStorageNotices()
+	f.sync()
 
 	created, deleted := rec.counts()
 	assert.Zero(t, created)
 	assert.Zero(t, deleted)
 }
 
-func TestStorageNotice_StartFiresOnceAndStopPreventsLaterSync(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rec := newStorageNoticeRecorder(t, 0, 0)
-		nh := newNoticeHarness(rec)
+func TestStorageNotice_NotApplicableClearsLiveNotice(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 1, 1)
+	f := newNoticeFixture(rec)
+	f.set("models", classLayer)
+	f.sync()
 
-		nh.h.StartStorageNoticeSync()
-		time.Sleep(storageNoticeDebounce + time.Second)
-		synctest.Wait()
-		nh.h.Wait()
-		assert.Equal(t, int32(1), nh.calls.Load(), "the startup evaluation runs once")
+	f.setEnv(sysinfo.EnvLXC)
+	f.sync()
 
-		nh.h.ScheduleStorageNoticeSync()
-		nh.h.StopStorageNoticeSync()
-		time.Sleep(storageNoticeDebounce + time.Second)
-		synctest.Wait()
-		assert.Equal(t, int32(1), nh.calls.Load(), "Stop cancels the pending evaluation")
-
-		nh.h.ScheduleStorageNoticeSync()
-		time.Sleep(storageNoticeDebounce + time.Second)
-		synctest.Wait()
-		assert.Equal(t, int32(1), nh.calls.Load(), "a schedule after Stop arms nothing")
-	})
-}
-
-func TestStorageNotice_ScheduleBeforeStartIsNoop(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		rec := newStorageNoticeRecorder(t, 0, 0)
-		nh := newNoticeHarness(rec)
-
-		nh.h.ScheduleStorageNoticeSync()
-		time.Sleep(storageNoticeDebounce + time.Second)
-		synctest.Wait()
-
-		assert.Zero(t, nh.calls.Load())
-	})
+	_, deleted := rec.counts()
+	assert.Equal(t, 1, deleted)
 }
 
 func TestStorageNotice_UnknownVerdictKeepsLatch(t *testing.T) {
 	rec := newStorageNoticeRecorder(t, 1, 1)
-	nh := newNoticeHarness(rec)
-	nh.set(applicable(verdict("models", classLayer)))
-	nh.h.syncStorageNotices()
+	f := newNoticeFixture(rec)
+	f.set("models", classLayer)
+	f.sync()
 
 	// The path can no longer be judged (a resolve error): the live notice stays.
-	unknown := diagnostics.StorageVerdict{Label: "models", Path: "/models", Class: diagnostics.PersistenceUnknown}
-	nh.set(applicable(unknown, verdict("config", classOK)))
-	nh.h.syncStorageNotices()
+	f.set("models", classUnk)
+	f.sync()
 
 	created, deleted := rec.counts()
 	assert.Equal(t, 1, created)
 	assert.Equal(t, 0, deleted, "an unknown verdict is not proof that the problem went away")
 
 	// Judged persistent again: now the notice goes.
-	nh.set(applicable(verdict("models", classOK), verdict("config", classOK)))
-	nh.h.syncStorageNotices()
+	f.set("models", classOK)
+	f.sync()
 
 	_, deleted = rec.counts()
 	assert.Equal(t, 1, deleted)
 }
 
-func TestStorageNotice_ScheduleRunsAfterStartAndDebounces(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		nh := newNoticeHarness(newStorageNoticeRecorder(t, 0, 0))
+func TestStorageNotice_UnknownVerdictKeepsSeveralPathsNotice(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 2, 1)
+	f := newNoticeFixture(rec)
+	f.set("models", classLayer)
+	f.set("clips", classLayer)
+	f.sync()
+	require.Equal(t, "/models, /clips", rec.last().MessageParams["paths"])
 
-		nh.h.StartStorageNoticeSync()
+	// One of the two paths cannot be judged: the notice keeps naming both and
+	// is not replaced, so a notice the user deleted does not come back.
+	f.set("clips", classUnk)
+	f.sync()
+
+	created, deleted := rec.counts()
+	assert.Equal(t, 1, created)
+	assert.Equal(t, 0, deleted)
+
+	// Once clips is judged persistent the notice names only models.
+	f.set("clips", classOK)
+	f.sync()
+
+	created, deleted = rec.counts()
+	assert.Equal(t, 2, created)
+	assert.Equal(t, 1, deleted)
+	assert.Equal(t, "/models", rec.last().MessageParams["paths"])
+}
+
+func TestStorageNotice_UnrelatedUnknownVerdictDoesNotKeepNotice(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 1, 1)
+	f := newNoticeFixture(rec)
+	f.set("config", classLayer)
+	f.sync()
+
+	// The config is fixed while the clips path stays unjudged.
+	f.set("config", classOK)
+	f.set("clips", classUnk)
+	f.sync()
+
+	_, deleted := rec.counts()
+	assert.Equal(t, 1, deleted, "an unrelated unjudged path does not hold a notice")
+}
+
+func TestStorageNotice_UnknownVerdictWithoutHistoryRaisesNothing(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 0, 0)
+	f := newNoticeFixture(rec)
+	f.set("models", classUnk)
+
+	f.sync()
+
+	created, deleted := rec.counts()
+	assert.Zero(t, created)
+	assert.Zero(t, deleted)
+}
+
+func TestStorageNotice_ChangedPathIsNotCarried(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 1, 1)
+	f := newNoticeFixture(rec)
+	f.set("models", classLayer)
+	f.sync()
+
+	// The models directory is reconfigured and the new one cannot be judged: the
+	// old verdict belonged to another path and is dropped.
+	f.update(func(s *conf.Settings) { s.Models.Directory = "/other-models" })
+	f.set("models", classUnk)
+	f.sync()
+
+	_, deleted := rec.counts()
+	assert.Equal(t, 1, deleted)
+}
+
+func TestStorageNotice_UnknownVerdictDoesNotBlockOtherPaths(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 2, 0)
+	f := newNoticeFixture(rec)
+	f.set("clips", classUnk)
+	f.set("models", classLayer)
+	f.set("config", classAnon)
+
+	f.sync()
+
+	created, deleted := rec.counts()
+	assert.Equal(t, 2, created, "a lost path and an anonymous path are still raised beside an unjudged one")
+	assert.Zero(t, deleted)
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	titles := []string{rec.created[0].TitleKey, rec.created[1].TitleKey}
+	assert.ElementsMatch(t, []string{
+		notification.MsgStorageNotPersistentTitle,
+		notification.MsgStorageAnonymousVolumeTitle,
+	}, titles)
+}
+
+func TestStorageNotice_StartFiresOnceAndStopPreventsLaterSync(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newNoticeFixture(newStorageNoticeRecorder(t, 0, 0))
+
+		f.h.StartStorageNoticeSync()
 		time.Sleep(storageNoticeDebounce + time.Second)
 		synctest.Wait()
-		require.Equal(t, int32(1), nh.calls.Load(), "the startup evaluation")
+		f.h.Wait()
+		assert.Equal(t, int32(1), f.reports.Load(), "the startup evaluation runs once")
+
+		f.h.ScheduleStorageNoticeSync()
+		f.h.StopStorageNoticeSync()
+		time.Sleep(storageNoticeDebounce + time.Second)
+		synctest.Wait()
+		assert.Equal(t, int32(1), f.reports.Load(), "Stop cancels the pending evaluation")
+
+		f.h.ScheduleStorageNoticeSync()
+		time.Sleep(storageNoticeDebounce + time.Second)
+		synctest.Wait()
+		assert.Equal(t, int32(1), f.reports.Load(), "a schedule after Stop arms nothing")
+	})
+}
+
+func TestStorageNotice_ScheduleBeforeStartIsNoop(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newNoticeFixture(newStorageNoticeRecorder(t, 0, 0))
+
+		f.h.ScheduleStorageNoticeSync()
+		time.Sleep(storageNoticeDebounce + time.Second)
+		synctest.Wait()
+
+		assert.Zero(t, f.reports.Load())
+	})
+}
+
+func TestStorageNotice_ScheduleRunsAfterStartAndDebounces(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newNoticeFixture(newStorageNoticeRecorder(t, 0, 0))
+
+		f.h.StartStorageNoticeSync()
+		time.Sleep(storageNoticeDebounce + time.Second)
+		synctest.Wait()
+		require.Equal(t, int32(1), f.reports.Load(), "the startup evaluation")
 
 		// Two schedules inside the window run one evaluation, after the second.
-		nh.h.ScheduleStorageNoticeSync()
+		f.h.ScheduleStorageNoticeSync()
 		time.Sleep(time.Second)
-		nh.h.ScheduleStorageNoticeSync()
+		f.h.ScheduleStorageNoticeSync()
 		time.Sleep(storageNoticeDebounce - time.Second)
 		synctest.Wait()
-		assert.Equal(t, int32(1), nh.calls.Load(), "the second schedule restarted the debounce")
+		assert.Equal(t, int32(1), f.reports.Load(), "the second schedule restarted the debounce")
 
 		time.Sleep(2 * time.Second)
 		synctest.Wait()
-		assert.Equal(t, int32(2), nh.calls.Load(), "the coalesced evaluation ran once")
+		assert.Equal(t, int32(2), f.reports.Load(), "the coalesced evaluation ran once")
 
-		nh.h.StopStorageNoticeSync()
-		nh.h.Wait()
+		f.h.StopStorageNoticeSync()
+		f.h.Wait()
 	})
 }
 
@@ -332,16 +433,16 @@ func TestStorageNotice_FailedCreateIsRetried(t *testing.T) {
 			}
 			return nil
 		}).Times(2)
-		nh := newNoticeHarness(svc)
-		nh.set(applicable(verdict("models", classLayer)))
+		f := newNoticeFixture(svc)
+		f.set("models", classLayer)
 
-		nh.h.StartStorageNoticeSync()
+		f.h.StartStorageNoticeSync()
 		time.Sleep(2 * time.Minute)
 		synctest.Wait()
 
 		assert.Equal(t, int32(2), attempts.Load(), "the failed raise is retried through the latch")
-		nh.h.StopStorageNoticeSync()
-		nh.h.Wait()
+		f.h.StopStorageNoticeSync()
+		f.h.Wait()
 	})
 }
 
@@ -363,22 +464,19 @@ func TestRegisterHealthChecks_IncludesStoragePersistence(t *testing.T) {
 	assert.Equal(t, health.StatusSkipped, found.Status, "outside Docker and Podman the check is skipped")
 }
 
-func TestStorageNotice_UnknownVerdictDoesNotBlockOtherPaths(t *testing.T) {
-	rec := newStorageNoticeRecorder(t, 2, 0)
-	nh := newNoticeHarness(rec)
-	unknown := diagnostics.StorageVerdict{Label: "clips", Path: "/clips", Class: diagnostics.PersistenceUnknown}
-	nh.set(applicable(unknown, verdict("models", classLayer), verdict("config", classAnon)))
+func TestStorageNotice_StatusCountsArmsAndStop(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := newNoticeFixture(newStorageNoticeRecorder(t, 0, 0))
+		assert.Equal(t, StorageNoticeSyncStatus{}, f.h.StorageNoticeSyncStatus())
 
-	nh.h.syncStorageNotices()
+		f.h.StartStorageNoticeSync()
+		assert.Equal(t, StorageNoticeSyncStatus{Arms: 1}, f.h.StorageNoticeSyncStatus())
 
-	created, deleted := rec.counts()
-	assert.Equal(t, 2, created, "a lost path and an anonymous path are still raised beside an unjudged one")
-	assert.Zero(t, deleted)
-	rec.mu.Lock()
-	defer rec.mu.Unlock()
-	titles := []string{rec.created[0].TitleKey, rec.created[1].TitleKey}
-	assert.ElementsMatch(t, []string{
-		notification.MsgStorageNotPersistentTitle,
-		notification.MsgStorageAnonymousVolumeTitle,
-	}, titles)
+		f.h.ScheduleStorageNoticeSync()
+		assert.Equal(t, StorageNoticeSyncStatus{Arms: 2}, f.h.StorageNoticeSyncStatus())
+
+		f.h.StopStorageNoticeSync()
+		assert.Equal(t, StorageNoticeSyncStatus{Arms: 2, Stopped: true}, f.h.StorageNoticeSyncStatus())
+		f.h.Wait()
+	})
 }

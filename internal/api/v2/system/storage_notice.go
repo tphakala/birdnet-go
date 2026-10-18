@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
-	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -23,34 +22,87 @@ import (
 // storageNoticeDebounce coalesces a burst of triggers into one evaluation.
 const storageNoticeDebounce = 3 * time.Second
 
-// Separators of the notice signature and of the path list in the notice text.
+// Separators of the notice signature and of the path list in the notice text,
+// and the placeholder the English fallback text uses for the path list.
 const (
 	storageSignatureSeparator = "|"
 	storagePathSeparator      = ", "
+	storagePathsPlaceholder   = "{paths}"
 )
 
+// storageNoticeKind describes one of the two storage notices: which verdicts it
+// names, its priority and its text.
+type storageNoticeKind struct {
+	// include selects the verdicts the notice names.
+	include func(*diagnostics.StorageVerdict) bool
+	// priority is the notice priority, raised to high when escalate is set and a
+	// named verdict is critical.
+	priority notification.Priority
+	escalate bool
+	// title and message are the English fallback text; message holds the path
+	// list placeholder. The keys let the UI translate them.
+	title, message       string
+	titleKey, messageKey string
+}
+
+// storageNoticeKinds are the lost notice and the anonymous volume notice. Their
+// latches are storageNotice.latches at the same index.
+var storageNoticeKinds = [...]storageNoticeKind{
+	{
+		include:  func(v *diagnostics.StorageVerdict) bool { return v.Lost() },
+		priority: notification.PriorityMedium,
+		escalate: true,
+		title:    "Data will be lost when the container is recreated",
+		message:  "These paths are on storage that is deleted when the container is recreated, for example on an image update: " + storagePathsPlaceholder + ". Map a volume or a host directory to them in your container configuration.",
+		titleKey: notification.MsgStorageNotPersistentTitle, messageKey: notification.MsgStorageNotPersistentMessage,
+	},
+	{
+		include:  func(v *diagnostics.StorageVerdict) bool { return v.Class == diagnostics.PersistenceAnonymousVolume },
+		priority: notification.PriorityLow,
+		title:    "Data is stored in an anonymous container volume",
+		message:  "These paths are in anonymous volumes that the container runtime created because no volume was mapped: " + storagePathsPlaceholder + ". A container started fresh, for example with docker run after an image update, gets new empty volumes, so the data seems lost. Map a named volume or a host directory to them.",
+		titleKey: notification.MsgStorageAnonymousVolumeTitle, messageKey: notification.MsgStorageAnonymousVolumeMessage,
+	},
+}
+
 // storageNotice holds the storage notice state of a Handler: one latch per
-// notice kind, keyed by a signature of the paths involved, and the debounce
-// timer. The zero value is ready to use.
+// notice kind, keyed by a signature of the paths involved, the last known
+// verdict per label, and the debounce timer. The zero value is ready to use.
 type storageNotice struct {
 	// mu serializes whole evaluations (compute and apply), so two overlapping
-	// syncs cannot apply their results out of order.
+	// syncs cannot apply their results out of order. It guards known.
 	mu sync.Mutex
-	// lost is the notice for paths lost when the container is recreated, and
-	// anonymous the one for paths in anonymous volumes.
-	lost      notification.PersistentNotice
-	anonymous notification.PersistentNotice
+	// latches holds one latch per storageNoticeKinds entry.
+	latches [len(storageNoticeKinds)]notification.PersistentNotice
+	// known is the last judged verdict per label. A path that cannot be judged
+	// in a later round keeps its last verdict, so it neither shrinks a live
+	// notice nor brings back one the user deleted.
+	known map[string]diagnostics.StorageVerdict
 
-	// timerMu guards the debounce timer and the started and stopped flags.
+	// timerMu guards the debounce timer, the arm count and the started and
+	// stopped flags.
 	timerMu sync.Mutex
 	timer   *time.Timer
+	arms    int
 	started bool
 	stopped bool
+}
 
-	// service and report are test seams; nil means the notification service
-	// resolved by noticeSvc and Handler.storagePersistenceReport.
-	service func() notification.NoticeService
-	report  func() checks.StoragePersistenceReport
+// StorageNoticeSyncStatus is a snapshot of the debounce timer, for the facade's
+// wiring tests.
+type StorageNoticeSyncStatus struct {
+	// Arms counts how often the debounce timer was (re)started.
+	Arms int
+	// Stopped reports that StopStorageNoticeSync has run.
+	Stopped bool
+}
+
+// StorageNoticeSyncStatus returns the debounce timer snapshot.
+func (c *Handler) StorageNoticeSyncStatus() StorageNoticeSyncStatus {
+	n := &c.storage
+	n.timerMu.Lock()
+	defer n.timerMu.Unlock()
+	return StorageNoticeSyncStatus{Arms: n.arms, Stopped: n.stopped}
 }
 
 // SetNotificationService routes the storage notices to svc, the notification
@@ -63,12 +115,9 @@ func (c *Handler) SetNotificationService(svc *notification.Service) {
 	c.notices = svc
 }
 
-// noticeSvc resolves the notification service: a test fake, the injected one, or
-// else the process-wide service. It returns nil when none exists yet.
+// noticeSvc resolves the notification service: the injected one, else the
+// process-wide service. It returns nil when none exists yet.
 func (c *Handler) noticeSvc() notification.NoticeService {
-	if c.storage.service != nil {
-		return c.storage.service()
-	}
 	if c.notices != nil {
 		return c.notices
 	}
@@ -97,59 +146,60 @@ func storagePathList(vs []diagnostics.StorageVerdict) string {
 	return strings.Join(paths, storagePathSeparator)
 }
 
-// newStorageLostNotification builds the bell notice for paths lost when the
-// container is recreated. It is high priority when the config or database is
-// among them and medium otherwise.
-func newStorageLostNotification(vs []diagnostics.StorageVerdict) *notification.Notification {
-	priority := notification.PriorityMedium
-	for i := range vs {
-		if vs[i].Severity() == diagnostics.StorageSeverityCritical {
-			priority = notification.PriorityHigh
-			break
+// newNotification builds the bell notice of this kind for a non-empty verdict
+// set.
+func (k *storageNoticeKind) newNotification(vs []diagnostics.StorageVerdict) *notification.Notification {
+	priority := k.priority
+	if k.escalate {
+		for i := range vs {
+			if vs[i].Severity() == diagnostics.StorageSeverityCritical {
+				priority = notification.PriorityHigh
+				break
+			}
 		}
 	}
 	paths := storagePathList(vs)
 	return notification.NewNotification(
 		notification.TypeWarning,
 		priority,
-		"Data will be lost when the container is recreated",
-		"These paths are not on a mounted volume, so their files are deleted when the container is recreated, for example on an image update: "+paths+". Map a volume or a host directory to them in your container configuration.",
+		k.title,
+		strings.ReplaceAll(k.message, storagePathsPlaceholder, paths),
 	).
 		WithComponent(notification.ComponentStorage).
-		WithTitleKey(notification.MsgStorageNotPersistentTitle, nil).
-		WithMessageKey(notification.MsgStorageNotPersistentMessage, map[string]any{"paths": paths}).
+		WithTitleKey(k.titleKey, nil).
+		WithMessageKey(k.messageKey, map[string]any{"paths": paths}).
 		WithDeliveryTarget(notification.DeliveryTargetBell)
 }
 
-// newStorageAnonymousNotification builds the low priority bell notice for paths
-// in anonymous volumes.
-func newStorageAnonymousNotification(vs []diagnostics.StorageVerdict) *notification.Notification {
-	paths := storagePathList(vs)
-	return notification.NewNotification(
-		notification.TypeWarning,
-		notification.PriorityLow,
-		"Data is stored in an anonymous container volume",
-		"These paths are in anonymous volumes that the container runtime created because no volume was mapped: "+paths+". A container started fresh, for example with docker run after an image update, gets new empty volumes, so the data seems lost. Map a named volume or a host directory to them.",
-	).
-		WithComponent(notification.ComponentStorage).
-		WithTitleKey(notification.MsgStorageAnonymousVolumeTitle, nil).
-		WithMessageKey(notification.MsgStorageAnonymousVolumeMessage, map[string]any{"paths": paths}).
-		WithDeliveryTarget(notification.DeliveryTargetBell)
-}
-
-// storageReport returns the current persistence report.
-func (c *Handler) storageReport() checks.StoragePersistenceReport {
-	if c.storage.report != nil {
-		return c.storage.report()
+// effectiveVerdicts returns the verdicts the notices are computed from and
+// updates the last known verdict per label. A path that cannot be judged keeps
+// its last verdict when its configured path is unchanged, and is left out when
+// it has none. A label the report no longer lists is forgotten. The caller holds
+// n.mu.
+func (n *storageNotice) effectiveVerdicts(report []diagnostics.StorageVerdict) []diagnostics.StorageVerdict {
+	next := make(map[string]diagnostics.StorageVerdict, len(report))
+	effective := make([]diagnostics.StorageVerdict, 0, len(report))
+	for i := range report {
+		v := report[i]
+		if v.Class == diagnostics.PersistenceUnknown {
+			prior, ok := n.known[v.Label]
+			if !ok || prior.Path != v.Path {
+				continue
+			}
+			v = prior
+		}
+		next[v.Label] = v
+		effective = append(effective, v)
 	}
-	return c.storagePersistenceReport()
+	n.known = next
+	return effective
 }
 
 // syncStorageNotices evaluates the key paths and raises, replaces or clears the
 // two persistent bell notices to match. It is idempotent and safe to call
-// concurrently. An unreadable mount table, or a path that cannot be judged while a
-// notice has nothing else to name, leaves that notice as it is: an unknown
-// result is neither an alarm nor proof that the problem went away.
+// concurrently. An unreadable mount table leaves both notices as they are, and a
+// path that cannot be judged keeps its last known verdict: an unknown result is
+// neither an alarm nor proof that the problem went away.
 func (c *Handler) syncStorageNotices() {
 	svc := c.noticeSvc()
 	if svc == nil {
@@ -159,58 +209,44 @@ func (c *Handler) syncStorageNotices() {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 
-	report := c.storageReport()
+	report := c.storagePersistenceReport()
 	if report.Applicable && report.Err != nil {
 		c.LogWarnIfEnabled("storage notice skipped: mount table unreadable", logger.Error(report.Err))
 		return
 	}
 
-	var lost, anonymous []diagnostics.StorageVerdict
-	unjudged := false
+	var effective []diagnostics.StorageVerdict
 	if report.Applicable {
-		for i := range report.Verdicts {
-			switch v := report.Verdicts[i]; {
-			case v.Class == diagnostics.PersistenceUnknown:
-				unjudged = true
-			case v.Lost():
-				lost = append(lost, v)
-			case v.Class == diagnostics.PersistenceAnonymousVolume:
-				anonymous = append(anonymous, v)
+		effective = n.effectiveVerdicts(report.Verdicts)
+	} else {
+		n.known = nil
+	}
+
+	for i := range storageNoticeKinds {
+		kind := &storageNoticeKinds[i]
+		var named []diagnostics.StorageVerdict
+		for j := range effective {
+			if kind.include(&effective[j]) {
+				named = append(named, effective[j])
 			}
 		}
-	}
-
-	// A path that could not be judged may be one of the paths a notice names, so
-	// an empty set is not proof that the problem went away: leave that notice as
-	// it is until every path is judged.
-	if len(lost) > 0 || !unjudged {
-		c.reconcileStorageNotice(svc, &n.lost, lost, newStorageLostNotification)
-	}
-	if len(anonymous) > 0 || !unjudged {
-		c.reconcileStorageNotice(svc, &n.anonymous, anonymous, newStorageAnonymousNotification)
-	}
-}
-
-// reconcileStorageNotice applies one verdict set to its latch. A failure is
-// logged and re-arms a bounded retry through the latch; it never blocks the
-// other notice.
-func (c *Handler) reconcileStorageNotice(svc notification.NoticeService, latch *notification.PersistentNotice, vs []diagnostics.StorageVerdict, build func([]diagnostics.StorageVerdict) *notification.Notification) {
-	latch.SetRetry(c.ScheduleStorageNoticeSync)
-	err := latch.Reconcile(svc, func() (string, func() *notification.Notification) {
-		sig := storageSignature(vs)
-		if sig == "" {
-			return "", nil
+		err := n.latches[i].Reconcile(svc, func() (string, func() *notification.Notification) {
+			sig := storageSignature(named)
+			if sig == "" {
+				return "", nil
+			}
+			return sig, func() *notification.Notification { return kind.newNotification(named) }
+		})
+		if err != nil {
+			c.LogWarnIfEnabled("failed to update storage notification",
+				logger.Int("path_count", len(named)), logger.Error(err))
 		}
-		return sig, func() *notification.Notification { return build(vs) }
-	})
-	if err != nil {
-		c.LogWarnIfEnabled("failed to update storage notification",
-			logger.Int("path_count", len(vs)), logger.Error(err))
 	}
 }
 
-// StartStorageNoticeSync enables storage notice evaluations and schedules the
-// first one (the startup evaluation). Until it is called,
+// StartStorageNoticeSync enables storage notice evaluations, lets the notice
+// latches retry a failed update through ScheduleStorageNoticeSync, and schedules
+// the first evaluation (the startup evaluation). Until it is called,
 // ScheduleStorageNoticeSync is a no-op, so a handler that is not serving never
 // arms a timer. It is a no-op after StopStorageNoticeSync.
 func (c *Handler) StartStorageNoticeSync() {
@@ -224,6 +260,9 @@ func (c *Handler) StartStorageNoticeSync() {
 		return
 	}
 	n.started = true
+	for i := range n.latches {
+		n.latches[i].SetRetry(c.ScheduleStorageNoticeSync)
+	}
 	c.armStorageNoticeTimerLocked()
 }
 
@@ -250,6 +289,7 @@ func (c *Handler) armStorageNoticeTimerLocked() {
 	if n.timer != nil {
 		n.timer.Stop()
 	}
+	n.arms++
 	n.timer = time.AfterFunc(storageNoticeDebounce, c.fireStorageNoticeSync)
 }
 
@@ -283,6 +323,7 @@ func (c *Handler) StopStorageNoticeSync() {
 		n.timer.Stop()
 		n.timer = nil
 	}
-	n.lost.Stop()
-	n.anonymous.Stop()
+	for i := range n.latches {
+		n.latches[i].Stop()
+	}
 }

@@ -82,7 +82,7 @@ type Handler struct {
 
 	// notices is the injected notification service for the storage notices (nil
 	// means the process-wide service). See SetNotificationService.
-	notices *notification.Service
+	notices notification.NoticeService
 
 	// storage owns the persistent storage bell notices and their debounce timer.
 	storage storageNotice

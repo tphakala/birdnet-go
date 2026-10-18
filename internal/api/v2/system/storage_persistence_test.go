@@ -13,16 +13,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
-// storageSettings returns settings with SQLite and clip export configured.
-func storageSettings() *conf.Settings {
-	s := &conf.Settings{}
-	s.Output.SQLite.Path = "/data/birdnet.db"
-	s.Models.Directory = "/models"
-	s.Realtime.Audio.Export.Enabled = true
-	s.Realtime.Audio.Export.Path = "clips"
-	return s
-}
-
 func labelsOf(paths []diagnostics.StoragePath) []string {
 	labels := make([]string, len(paths))
 	for i := range paths {
@@ -45,7 +35,7 @@ func TestStoragePaths(t *testing.T) {
 		assert.Equal(t, diagnostics.StoragePath{Label: diagnostics.StorageLabelDatabase, Path: "/data/birdnet.db", IsFile: true}, paths[1])
 		assert.Equal(t, "/models", paths[2].Path)
 		assert.False(t, paths[2].IsFile)
-		assert.Equal(t, "clips", paths[3].Path)
+		assert.Equal(t, "/clips", paths[3].Path)
 	})
 
 	t.Run("config dir used without a config file", func(t *testing.T) {

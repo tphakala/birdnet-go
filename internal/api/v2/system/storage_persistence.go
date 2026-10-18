@@ -9,17 +9,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
-// Markers of an in-memory SQLite database path (see the data-dir rule in
-// internal/analysis/database_service.go).
-const (
-	sqliteMemoryPath       = ":memory:"
-	sqliteMemoryURIPrefix  = "file::memory:"
-	sqliteMemoryModeMarker = "mode=memory"
-)
-
-// maxStoragePaths is the number of key paths storagePaths can return.
-const maxStoragePaths = 4
-
 // storageDeps are the environment reads behind the storage persistence report.
 // A nil field means the real implementation; tests replace them so they never
 // touch the runner's mount table, home directory or settings.
@@ -42,7 +31,7 @@ type storageDeps struct {
 // writes to, taken verbatim from the settings, so the verdict describes the
 // storage the application really uses.
 func storagePaths(s *conf.Settings, configFile, configDir string) []diagnostics.StoragePath {
-	paths := make([]diagnostics.StoragePath, 0, maxStoragePaths)
+	var paths []diagnostics.StoragePath
 
 	// The config file is judged as itself, so a file bind mounted on its own is
 	// found; it has no sidecar files. The database is judged by its directory
@@ -71,11 +60,10 @@ func storagePaths(s *conf.Settings, configFile, configDir string) []diagnostics.
 }
 
 // isInMemorySQLite reports whether a SQLite path names an in-memory database,
-// which has no file to lose.
+// which has no file to lose (see the data-dir rule in
+// internal/analysis/database_service.go).
 func isInMemorySQLite(p string) bool {
-	return p == sqliteMemoryPath ||
-		strings.HasPrefix(p, sqliteMemoryURIPrefix) ||
-		strings.Contains(p, sqliteMemoryModeMarker)
+	return p == ":memory:" || strings.HasPrefix(p, "file::memory:") || strings.Contains(p, "mode=memory")
 }
 
 // storagePersistenceReport evaluates the key paths against the mount table. The
