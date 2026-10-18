@@ -82,27 +82,29 @@ func (c *StoragePersistenceCheck) Run(_ context.Context) health.Result {
 	case len(report.Verdicts) == 0:
 		return result(health.StatusSkipped, msgStorageNoPaths, nil)
 	}
+	status, message, details := summarizeStorage(report.Verdicts)
+	return result(status, message, details)
+}
 
+// summarizeStorage turns a non-empty verdict list into the check status, its
+// short message (labels only) and the per-path details.
+func summarizeStorage(verdicts []diagnostics.StorageVerdict) (health.Status, string, map[string]any) {
 	var lost, anonymous []string
+	unknown := 0
 	worst := diagnostics.StorageSeverityNone
-	judged := false
-	unjudged := false
-	details := make([]map[string]any, 0, len(report.Verdicts))
-	for i := range report.Verdicts {
-		v := &report.Verdicts[i]
-		if v.Class == diagnostics.PersistenceUnknown {
-			unjudged = true
-		} else {
-			judged = true
-		}
+	paths := make([]map[string]any, 0, len(verdicts))
+	for i := range verdicts {
+		v := &verdicts[i]
 		switch {
+		case v.Class == diagnostics.PersistenceUnknown:
+			unknown++
 		case v.Lost():
 			lost = append(lost, v.Label)
 		case v.Class == diagnostics.PersistenceAnonymousVolume:
 			anonymous = append(anonymous, v.Label)
 		}
 		worst = max(worst, v.Severity())
-		details = append(details, map[string]any{
+		paths = append(paths, map[string]any{
 			"label":         v.Label,
 			"path":          v.Path,
 			"resolved_path": v.ResolvedPath,
@@ -111,10 +113,15 @@ func (c *StoragePersistenceCheck) Run(_ context.Context) health.Result {
 			"class":         string(v.Class),
 		})
 	}
-	detailMap := map[string]any{"paths": details}
+	details := map[string]any{"paths": paths}
 
-	if !judged {
-		return result(health.StatusUnknown, msgStorageUnjudged, detailMap)
+	switch {
+	case unknown == len(verdicts):
+		return health.StatusUnknown, msgStorageUnjudged, details
+	case worst == diagnostics.StorageSeverityNone && unknown > 0:
+		return health.StatusHealthy, msgStorageSomeUnjudged, details
+	case worst == diagnostics.StorageSeverityNone:
+		return health.StatusHealthy, msgStorageAllPersistent, details
 	}
 
 	var parts []string
@@ -124,18 +131,9 @@ func (c *StoragePersistenceCheck) Run(_ context.Context) health.Result {
 	if len(anonymous) > 0 {
 		parts = append(parts, msgStorageAnonPrefix+strings.Join(anonymous, labelJoiner))
 	}
-
-	switch worst {
-	case diagnostics.StorageSeverityCritical:
-		return result(health.StatusCritical, strings.Join(parts, msgStorageJoiner), detailMap)
-	case diagnostics.StorageSeverityWarning:
-		return result(health.StatusWarning, strings.Join(parts, msgStorageJoiner), detailMap)
-	case diagnostics.StorageSeverityNone:
-		if unjudged {
-			return result(health.StatusHealthy, msgStorageSomeUnjudged, detailMap)
-		}
-		return result(health.StatusHealthy, msgStorageAllPersistent, detailMap)
-	default:
-		return result(health.StatusHealthy, msgStorageAllPersistent, detailMap)
+	status := health.StatusWarning
+	if worst == diagnostics.StorageSeverityCritical {
+		status = health.StatusCritical
 	}
+	return status, strings.Join(parts, msgStorageJoiner), details
 }
