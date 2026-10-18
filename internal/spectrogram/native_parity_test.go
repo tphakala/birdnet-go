@@ -6,8 +6,10 @@ import (
 	"image"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/spectrogram/render"
 	"github.com/tphakala/birdnet-go/internal/spectrogram/soxchrome"
 )
 
@@ -29,20 +32,26 @@ const (
 	// minRasterEqualLive is the same bound for the live sox cases. Two measure
 	// 0.9901 (3 s tone clip at width 258 with a Dolph window at 120 dB, every
 	// difference one palette step), so the reference bound of 0.995 is relaxed for the
-	// live cases only.
+	// live cases only. The 2050 px 48 kHz cases, which compare two different
+	// analyses of one clip, measure 0.9917 to 0.9972.
 	minRasterEqualLive = 0.985
 	maxRasterIndexDiff = 2 // largest allowed index difference in the raster
 	// maxOutlierFractionLive is the fraction of raster pixels the live cases may
-	// have beyond maxRasterIndexDiff. The resampled cases compare two different
-	// resamplers, so a few isolated pixels differ by more than the reference
-	// renders allow; the committed references keep the strict maximum. The
-	// worst measured case is 0.0014 (9 pixels of a 100 column raster).
+	// have beyond maxRasterIndexDiff. The 2050 px 48 kHz cases compare the native
+	// analysis at 48 kHz with sox's resampled one, so a few isolated pixels differ
+	// by more than the reference renders allow; the committed references keep the
+	// strict maximum. The worst measured case is 0.00033 (698 pixels of the 2050
+	// px raster).
 	maxOutlierFractionLive = 0.002
-	minGridEqual           = 0.98 // fraction of grid pixels away from text that match
-	minNativeTextInSox     = 0.95 // native text pixels inside sox's dilated text mask
-	minSoxTextInNative     = 0.90 // sox text pixels inside native's dilated text mask
-	textDilation           = 2    // pixels
-	soxFooterRows          = 14   // image rows at the bottom holding sox's footer comment
+	// soxMaxRows is the largest -y sox 14.4.2 accepts. A 48 kHz bird clip is
+	// analysed at its own rate with a frame twice as long, so sox can draw that
+	// reference only up to 1026 px wide (2049 rows at 2050 px).
+	soxMaxRows         = 1200
+	minGridEqual       = 0.98 // fraction of grid pixels away from text that match
+	minNativeTextInSox = 0.95 // native text pixels inside sox's dilated text mask
+	minSoxTextInNative = 0.90 // sox text pixels inside native's dilated text mask
+	textDilation       = 2    // pixels
+	soxFooterRows      = 14   // image rows at the bottom holding sox's footer comment
 
 	// The committed reference clip.
 	parityClipRate    = 24000
@@ -366,6 +375,146 @@ func TestSoxReferenceParity(t *testing.T) {
 	}
 }
 
+// soxNativeRaster renders the clip with sox at its own rate, with no rate effect,
+// as a raw raster of the given height. The channels effect mirrors the
+// generator's file path, which mixes to mono before the spectrogram.
+func soxNativeRaster(t *testing.T, soxPath, audio string, c parityCase, height, secs int) *image.Paletted {
+	t.Helper()
+	out := filepath.Join(t.TempDir(), "sox-native.png")
+	styleArgs := getStyleArgs(c.style)
+	args := make([]string, 0, 16+len(styleArgs))
+	args = append(args, audio, "-n", "channels", strconv.Itoa(conf.NumChannels), "spectrogram",
+		"-x", strconv.Itoa(c.width), "-y", strconv.Itoa(height), "-d", strconv.Itoa(secs), "-z", c.dr, "-o", out, "-r")
+	args = append(args, styleArgs...)
+	cmd := exec.CommandContext(t.Context(), soxPath, args...) // #nosec G204 - sox path from LookPath, arguments built by the test
+	if combined, err := cmd.CombinedOutput(); err != nil {
+		require.NoError(t, err, "sox: %s", combined)
+	}
+	return decodePNG(t, out)
+}
+
+// withNativeRateRaster returns sox with its raster replaced by the bottom rows
+// rows of nativeRate, the same clip drawn at its own rate with a taller frame:
+// those rows cover the same 0 to 12 kHz as sox's resampled render.
+func withNativeRateRaster(t *testing.T, sox, nativeRate *image.Paletted, raw bool, rows int) *image.Paletted {
+	t.Helper()
+	b := sox.Bounds()
+	x0, y0, cols := 0, 0, b.Dx()
+	if !raw {
+		x0, y0 = soxchrome.MarginLeft, soxchrome.MarginAbove
+		cols = b.Dx() - (soxchrome.MarginLeft + soxchrome.GapBetween + soxchrome.LegendWidth + soxchrome.MarginRight)
+	}
+	require.Equal(t, cols, nativeRate.Bounds().Dx(), "the two sox renders must have the same column count")
+	require.Equal(t, sox.Palette, nativeRate.Palette, "PLTE")
+	top := nativeRate.Bounds().Dy() - rows
+	for y := range rows {
+		for x := range cols {
+			sox.SetColorIndex(x0+x, y0+y, nativeRate.ColorIndexAt(x, top+y))
+		}
+	}
+	return sox
+}
+
+// Bounds for TestNativeRateMatchesResampledBelowRollOff.
+const (
+	// rateClipRate and rateClipSeconds describe the 48 kHz clip compared.
+	rateClipRate    = 48000
+	rateClipSeconds = 15
+	// resamplerPassbandHz is the top of the band the resampler passes without
+	// attenuation; the roll-off starts near 11.4 kHz and rows above it differ.
+	resamplerPassbandHz = 11000.0
+	// edgeColumnFraction is the share of columns skipped at each side, where the
+	// two analyses frame the clip edges differently.
+	edgeColumnFraction = 0.05
+	// maxRowMeanIndexDiff is the largest allowed difference of a row's mean
+	// palette index between the two renders. Measured worst case 0.77.
+	maxRowMeanIndexDiff = 1.0
+	// rateClipDisplayHz is the display rate of the compared renders.
+	rateClipDisplayHz = 24000
+)
+
+// rateClipSamples is a 15 s 48 kHz clip of noise, two tones, a chirp below 9 kHz
+// and a wideband burst, with the events placed by fractions of the clip length so
+// they lie inside the compared columns.
+func rateClipSamples() []int16 {
+	const (
+		noiseAmp   = 0.01
+		toneAHz    = 2300.0
+		toneBHz    = 5100.0
+		toneAmp    = 0.15
+		chirpLoHz  = 3000.0
+		chirpHiHz  = 9000.0
+		chirpAmp   = 0.2
+		chirpStart = 0.2
+		chirpEnd   = 0.4
+		burstStart = 0.8
+		burstEnd   = 0.85
+		burstAmp   = 0.3
+	)
+	n := rateClipRate * rateClipSeconds
+	out := make([]int16, n)
+	rng := xorshift(0x9e3779b9)
+	for i := range out {
+		frac := float64(i) / float64(n)
+		t := float64(i) / rateClipRate
+		noise := (float64(rng.next()>>8)/float64(1<<24) - 0.5) * 2
+		v := noiseAmp*noise + toneAmp*math.Sin(2*math.Pi*toneAHz*t) + toneAmp*math.Sin(2*math.Pi*toneBHz*t)
+		if frac >= chirpStart && frac < chirpEnd {
+			dur := (chirpEnd - chirpStart) * rateClipSeconds
+			tc := t - chirpStart*rateClipSeconds
+			v += chirpAmp * math.Sin(2*math.Pi*(chirpLoHz*tc+(chirpHiHz-chirpLoHz)*tc*tc/(2*dur)))
+		}
+		if frac >= burstStart && frac < burstEnd {
+			v += burstAmp * noise
+		}
+		out[i] = int16(math.Round(v * math.MaxInt16))
+	}
+	return out
+}
+
+// A 48 kHz clip analysed at its own rate must look like the same clip resampled
+// to 24 kHz where the resampler passes the signal. Pixel by pixel comparison does
+// not apply: the resampler advances its output by half its latency, which
+// decorrelates the noise texture, so the mean palette index of each row over the
+// interior columns is compared instead. This needs no sox binary. Time alignment
+// is pinned by the render package tests and the live sox parity test.
+func TestNativeRateMatchesResampledBelowRollOff(t *testing.T) {
+	native, err := transcode.MonoFromPCM16(samplesToPCM(rateClipSamples()), rateClipRate, 0)
+	require.NoError(t, err)
+	resampled, err := native.WithRate(rateClipDisplayHz)
+	require.NoError(t, err)
+
+	for _, width := range []int{258, 2050} {
+		for _, window := range []render.WindowKind{render.WindowHann, render.WindowDolph} {
+			t.Run(fmt.Sprintf("w%d_window%d", width, window), func(t *testing.T) {
+				rows := fftFriendlyHeight(width)
+				opt := render.Options{Width: width, Rows: rows, Raw: true, RangeDB: nativeRangeExtendedDB, Style: render.Style{Window: window}, DisplayRate: rateClipDisplayHz}
+				wantImg, wantCols, err := render.Render(t.Context(), resampled, opt)
+				require.NoError(t, err)
+				gotImg, gotCols, err := render.Render(t.Context(), native, opt)
+				require.NoError(t, err)
+				require.Equal(t, wantCols, gotCols)
+
+				want, got := wantImg.(*image.Paletted), gotImg.(*image.Paletted)
+				skip := int(edgeColumnFraction * float64(gotCols))
+				interior := gotCols - 2*skip
+				for y := range rows {
+					hz := float64(rows-1-y) / float64(rows-1) * rateClipDisplayHz / 2
+					if hz > resamplerPassbandHz {
+						continue
+					}
+					var wantSum, gotSum int
+					for x := skip; x < gotCols-skip; x++ {
+						wantSum += int(want.ColorIndexAt(x, y))
+						gotSum += int(got.ColorIndexAt(x, y))
+					}
+					assert.InDelta(t, float64(wantSum)/float64(interior), float64(gotSum)/float64(interior), maxRowMeanIndexDiff, "row %d (%.0f Hz)", y, hz)
+				}
+			})
+		}
+	}
+}
+
 // liveInput is one input signal form for TestSoxParityLive.
 type liveInput struct {
 	name     string
@@ -466,7 +615,14 @@ func TestSoxParityLive(t *testing.T) {
 			writeLiveWAV(t, audio, lc.in, secs)
 			soxOut := soxRender(t, soxPath, audio, lc.c, lc.in.profile, secs)
 			natOut := nativeRender(t, audio, lc.c, lc.in.profile)
-			m := assertParity(t, decodePNG(t, natOut), decodePNG(t, soxOut), lc.c.raw, rangeOf(t, lc.c.dr), minRasterEqualLive, maxOutlierFractionLive)
+			soxImg := decodePNG(t, soxOut)
+			// A clip analysed at its own rate is compared with sox analysing it at
+			// that rate too, where sox can draw the longer frame.
+			mult, ok := render.FrameMultiple(lc.in.rate, lc.in.profile.ResampleRate)
+			if rows := fftFriendlyHeight(lc.c.width); ok && mult > 1 && mult*(rows-1) < soxMaxRows {
+				soxImg = withNativeRateRaster(t, soxImg, soxNativeRaster(t, soxPath, audio, lc.c, mult*(rows-1)+1, secs), lc.c.raw, rows)
+			}
+			m := assertParity(t, decodePNG(t, natOut), soxImg, lc.c.raw, rangeOf(t, lc.c.dr), minRasterEqualLive, maxOutlierFractionLive)
 			t.Logf("%s", m)
 		})
 	}

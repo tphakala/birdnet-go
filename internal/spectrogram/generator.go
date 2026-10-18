@@ -140,7 +140,7 @@ func WithDuration(seconds float64) GenerateOption {
 
 // WithFrequencyProfile sets the frequency profile for spectrogram generation.
 // BatProfile() keeps the clip's native rate (axis 0 to half the capture rate);
-// BirdProfile() resamples to 24 kHz (0-12 kHz axis). When not set, defaults to BirdProfile().
+// BirdProfile() draws 0-12 kHz. When not set, defaults to BirdProfile().
 func WithFrequencyProfile(fp FrequencyProfile) GenerateOption {
 	return func(o *generateOptions) {
 		o.freqProfile = &fp

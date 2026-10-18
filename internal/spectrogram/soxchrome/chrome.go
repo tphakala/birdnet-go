@@ -28,8 +28,8 @@ type Surface interface {
 type ChromeParams struct {
 	// Cols and Rows are the raster size in pixels.
 	Cols, Rows int
-	// SampleRate is the rate in Hz of the analysed signal; the frequency axis
-	// runs from DC to half of it.
+	// SampleRate is the rate in Hz the frequency axis is drawn for: it runs from
+	// DC to half of it. It can be lower than the rate of the analysed signal.
 	SampleRate int
 	// Seconds is the time the raster spans.
 	Seconds float64
