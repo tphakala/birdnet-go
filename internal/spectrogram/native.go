@@ -201,6 +201,7 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 		logger.Int("width", width),
 		logger.Int("columns", cols),
 		logger.Int("sample_rate", src.SampleRate()),
+		logger.Int("display_rate", displayRate),
 		logger.Int64("budget_weight_bytes", budgetWeight),
 		logger.Int64("decode_ms", decodeElapsed.Milliseconds()),
 		logger.Int64("render_ms", renderElapsed.Milliseconds()),
