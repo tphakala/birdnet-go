@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -150,6 +152,47 @@ func TestServeSpectrogramByID_BatTokenTransition(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, rec.Code)
 		assert.NotEqual(t, "bat-v2 render", rec.Body.String())
 		assert.Empty(t, rec.Header().Get("Cache-Control"))
+	})
+}
+
+// TestServeSpectrogramByID_OverlayRateRefusesBirdFallback verifies that a request
+// carrying sr never gets a bird-profile render when the model type lookup fails:
+// it answers 503 with Retry-After and generates and serves nothing. A request
+// without sr keeps the bird fallback.
+func TestServeSpectrogramByID_OverlayRateRefusesBirdFallback(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+
+	newHandler := func(t *testing.T) (*Handler, *echo.Echo, string) {
+		t.Helper()
+		h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
+		require.NoError(t, os.MkdirAll(filepath.Join(root, "2026", "01"), 0o750))
+		writeToneWAV(t, filepath.Join(root, "2026", "01", "a.wav"), batClipRate, batClipSeconds, batToneHz)
+		ds := mocks.NewMockInterface(t)
+		ds.EXPECT().GetNoteClipPath(retainedNoteID).Return(retainedClipName, nil)
+		ds.EXPECT().Get(retainedNoteID).Return(datastore.Note{ClipName: retainedClipName}, nil).Maybe()
+		ds.EXPECT().GetNoteModelType(retainedNoteID).Return("", errors.NewStd("model lookup failed"))
+		h.DS = ds
+		return h, e, root
+	}
+
+	t.Run("sr request answers 503 and generates nothing", func(t *testing.T) {
+		h, e, root := newHandler(t)
+
+		rec := serveSpectrogram(t, h, e, batQueryWithSR)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code, rec.Body.String())
+		assert.NotEmpty(t, rec.Header().Get("Retry-After"))
+		assert.False(t, fileExists(root, batBird514), "no bird-profile render written")
+		assert.False(t, fileExists(root, batV3File), "no bat render written")
+	})
+
+	t.Run("request without sr falls back to the bird profile", func(t *testing.T) {
+		h, e, root := newHandler(t)
+
+		rec := serveSpectrogram(t, h, e, batQuery)
+
+		assert.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.True(t, fileExists(root, batBird514), "bird-profile render written")
 	})
 }
 

@@ -2097,6 +2097,8 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 //     integer makes the endpoint serve only the exact current render of the clip:
 //     where only a substitute (for example an older render at another frequency
 //     range) exists, it answers 404 instead. Invalid or absent values are ignored.
+//     If the detection's model type cannot be looked up, an sr request answers 503
+//     with Retry-After rather than rendering with a guessed profile.
 //
 // Response Format:
 // The response format varies based on the spectrogram generation mode setting and availability.
@@ -2160,8 +2162,22 @@ func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 	// Resolve frequency profile from detection's model type. The same profile drives
 	// both the generation effects (profileOpt) and the cache filename token
 	// (freqSuffix) so a bat render never collides with a bird-profile PNG. The helper
-	// logs a warning and falls back to the bird profile when the lookup fails.
-	profile := c.resolveDetectionFrequencyProfile(noteID)
+	// logs a warning and falls back to the bird profile when the lookup fails. A
+	// request that carries sr is the exception: its client labels the axis from the
+	// clip rate, so a guessed bird render would be cached under the wrong token and
+	// mislabelled. It gets a retryable 503 instead.
+	var profile spectrogram.FrequencyProfile
+	if params.overlayRate > 0 {
+		var lookupErr error
+		if profile, lookupErr = c.lookupFrequencyProfile(noteID); lookupErr != nil {
+			c.LogDebugIfEnabled("Model type lookup failed for an sr request, not rendering",
+				logger.String("note_id", noteID),
+				logger.Error(lookupErr))
+			return c.writeAudioNotReady(ctx, lookupErr, "Spectrogram profile is not available yet, please retry", minRetryAfterSeconds)
+		}
+	} else {
+		profile = c.resolveDetectionFrequencyProfile(noteID)
+	}
 	profileOpt := spectrogram.WithFrequencyProfile(profile)
 	freqSuffix := spectrogram.ProfileSuffix(profile)
 
@@ -2726,13 +2742,21 @@ func getSpectrogramLogger() logger.Logger {
 // profile from its model type, defaulting to the bird profile when the model
 // type cannot be looked up.
 func (c *Handler) resolveDetectionFrequencyProfile(noteID string) spectrogram.FrequencyProfile {
-	modelType, err := c.DS.GetNoteModelType(noteID)
+	profile, err := c.lookupFrequencyProfile(noteID)
 	if err != nil {
 		c.LogWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
 			logger.String("note_id", noteID),
 			logger.Error(err))
 	}
-	return spectrogram.ProfileForModelType(modelType)
+	return profile
+}
+
+// lookupFrequencyProfile returns the frequency profile for a detection's model type.
+// On a failed lookup it returns the bird profile together with the error, so a
+// caller that must not render with a guessed profile can refuse.
+func (c *Handler) lookupFrequencyProfile(noteID string) (spectrogram.FrequencyProfile, error) {
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	return spectrogram.ProfileForModelType(modelType), err
 }
 
 // spectrogramProfileSuffix resolves the frequency-profile cache token for a
