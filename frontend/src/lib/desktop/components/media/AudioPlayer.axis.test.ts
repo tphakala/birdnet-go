@@ -528,6 +528,44 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
     });
   });
 
+  describe('state kept per detection', () => {
+    it('does not reuse the resolved rate of the previous detection', async () => {
+      const { rerender } = mount({ modelType: 'bat', detectionId: '42' });
+      await settle();
+      detailRequests[0].resolve({ id: 42, clipSampleRate: RATE_384K });
+      await settle();
+      expect(imageSrc()).toContain(`sr=${RATE_384K}`);
+
+      await rerender({ modelType: 'bat', detectionId: '43' });
+      await settle();
+
+      // Detection 43 waits for its own lookup instead of using 42's rate.
+      expect(detailCalls()).toHaveLength(2);
+      expect(detailRequests[1]?.url).toContain(`${DETECTION_ENDPOINT}43`);
+      expect(imageSrc() ?? '').not.toContain(`sr=${RATE_384K}`);
+    });
+
+    it('uses the rate and the axis again after the previous detection fell back', async () => {
+      probeResponder = () => Promise.resolve(jsonResponse({ error: 'no render' }, 404));
+      const { container, rerender } = mount({
+        modelType: 'bat',
+        clipSampleRate: RATE_384K,
+        detectionId: '42',
+      });
+      await settle();
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+      expect(imageSrc()).not.toContain('sr=');
+
+      await rerender({ modelType: 'bat', clipSampleRate: RATE_192K, detectionId: '43' });
+      await settle();
+
+      expect(imageSrc()).toContain('/api/v2/spectrogram/43');
+      expect(imageSrc()).toContain(`sr=${RATE_192K}`);
+      expect((await loadedLabels(container))[0]).toBe('80k');
+    });
+  });
+
   describe('rate resolve', () => {
     it.each([0, -RATE_384K, Number.NaN, RATE_384K + 0.5])(
       'treats a clipSampleRate prop of %s as unknown and resolves the rate',

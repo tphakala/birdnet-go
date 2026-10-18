@@ -131,19 +131,29 @@ describe('lookupClipSampleRate', () => {
     expect(gets).toHaveLength(0);
   });
 
-  it('keeps the cache bounded, dropping the oldest entry', async () => {
-    for (let id = 0; id <= CLIP_RATE_CACHE_MAX_ENTRIES; id++) {
+  it('keeps the 200 newest detections and drops only the oldest', async () => {
+    expect(CLIP_RATE_CACHE_MAX_ENTRIES).toBe(200);
+
+    // Detections 0 to 200: one more than the bound.
+    for (let id = 0; id <= 200; id++) {
       const lookup = lookupClipSampleRate(String(id), new AbortController().signal);
       gets.at(-1)?.resolve({ clipSampleRate: RATE_384K });
       await lookup;
     }
-    expect(gets).toHaveLength(CLIP_RATE_CACHE_MAX_ENTRIES + 1);
+    expect(gets).toHaveLength(201);
 
-    // The newest entry is cached, the oldest was dropped.
-    void lookupClipSampleRate(String(CLIP_RATE_CACHE_MAX_ENTRIES), new AbortController().signal);
-    expect(gets).toHaveLength(CLIP_RATE_CACHE_MAX_ENTRIES + 1);
+    // Detections 1 to 200 are answered from the cache.
+    for (let id = 1; id <= 200; id++) {
+      await expect(lookupClipSampleRate(String(id), new AbortController().signal)).resolves.toBe(
+        RATE_384K
+      );
+    }
+    expect(gets).toHaveLength(201);
+
+    // Only detection 0, the oldest, is asked again.
     void lookupClipSampleRate('0', new AbortController().signal);
-    expect(gets).toHaveLength(CLIP_RATE_CACHE_MAX_ENTRIES + 2);
+    expect(gets).toHaveLength(202);
+    expect(gets[201]?.url).toBe('/api/v2/detections/0');
   });
 });
 
