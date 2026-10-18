@@ -166,6 +166,38 @@ describe('DetectionDetail audio download', () => {
     expect(downloadLink).toHaveAttribute('download', '');
   });
 
+  it('passes the clip sample rate from the detail response to the player', async () => {
+    const detection = makeDetection({
+      id: 1242,
+      clipName: 'bat_1242.wav',
+      modelType: 'bat',
+      clipSampleRate: 384_000,
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1242')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    detailTest.render({ detectionId: '1242' });
+
+    await waitFor(() => {
+      expect(vi.mocked(AudioPlayer)).toHaveBeenCalled();
+    });
+    // A Svelte 5 component is called as (internals, props); the legacy typings
+    // describe a one-argument constructor, so read the call as a plain list.
+    const lastCall: unknown[] | undefined = vi.mocked(AudioPlayer).mock.calls.at(-1);
+    expect(lastCall?.[1]).toMatchObject({
+      modelType: 'bat',
+      clipSampleRate: 384_000,
+    });
+  });
+
   it('labels the media region as an audio recording when the detection has a clip', async () => {
     const detection = makeDetection({
       id: 1241,

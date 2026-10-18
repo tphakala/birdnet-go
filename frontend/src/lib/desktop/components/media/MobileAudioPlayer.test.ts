@@ -3,6 +3,7 @@ import { cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory, screen } from '../../../../test/render-helpers';
 import userEvent from '@testing-library/user-event';
 import MobileAudioPlayer from './MobileAudioPlayer.svelte';
+import AudioPlayer from './AudioPlayer.svelte';
 
 // Mock the i18n module
 vi.mock('$lib/i18n', () => ({
@@ -86,5 +87,24 @@ describe('MobileAudioPlayer', () => {
     await user.keyboard('{Escape}');
 
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the model type and clip sample rate to the player', () => {
+    mobilePlayerTest.render({
+      props: {
+        audioUrl: '/api/v2/audio/123',
+        detectionId: 123,
+        modelType: 'bat',
+        clipSampleRate: 384_000,
+      },
+    });
+
+    // A Svelte 5 component is called as (internals, props); read the call as a plain list.
+    const lastCall: unknown[] | undefined = vi.mocked(AudioPlayer).mock.calls.at(-1);
+    expect(lastCall?.[1]).toMatchObject({
+      detectionId: '123',
+      modelType: 'bat',
+      clipSampleRate: 384_000,
+    });
   });
 });

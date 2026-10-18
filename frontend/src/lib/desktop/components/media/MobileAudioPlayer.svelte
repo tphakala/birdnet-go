@@ -11,6 +11,8 @@
     showSpectrogram?: boolean;
     /** AI model type (e.g. 'bat'); selects the spectrogram frequency axis */
     modelType?: string;
+    /** Clip sample rate in Hz; sets the bat spectrogram frequency axis */
+    clipSampleRate?: number;
     onClose?: () => void;
   }
 
@@ -21,6 +23,7 @@
     detectionId = undefined,
     showSpectrogram = true,
     modelType = '',
+    clipSampleRate = undefined,
     onClose,
   }: Props = $props();
 
@@ -79,6 +82,7 @@
         spectrogramSize="md"
         className="w-full"
         {modelType}
+        {clipSampleRate}
       />
     </div>
   </div>
