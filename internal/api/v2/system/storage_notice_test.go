@@ -591,3 +591,39 @@ func TestSyncStorageNotices_RetriesWhenServiceMissing(t *testing.T) {
 		notification.ResetForTest()
 	})
 }
+
+// TestSyncStorageNotices_RetryDelaysDouble pins that each retry waits twice as
+// long as the one before it. A service that appears right after the second
+// evaluation must not be found by a retry at the plain debounce delay.
+func TestSyncStorageNotices_RetryDelaysDouble(t *testing.T) {
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+
+	synctest.Test(t, func(t *testing.T) {
+		f := newStorageFixture()
+		f.set("models", classLayer)
+
+		f.h.StartStorageNoticeSync()
+		// Evaluations run at 3 s and 6 s without a service; the third is due at 12 s.
+		time.Sleep(storageNoticeDebounce*2 + time.Second)
+		synctest.Wait()
+		notification.Initialize(notification.DefaultServiceConfig())
+		defer notification.GetService().Stop()
+
+		raised := func() int {
+			list, err := notification.GetService().List(nil)
+			require.NoError(t, err)
+			return len(list)
+		}
+		time.Sleep(storageNoticeDebounce) // 10 s: a constant delay would have retried at 9 s
+		synctest.Wait()
+		assert.Zero(t, raised(), "the third evaluation is not due before the doubled delay")
+
+		time.Sleep(storageNoticeDebounce) // 13 s
+		synctest.Wait()
+		assert.Equal(t, 1, raised(), "the doubled retry found the service")
+		f.h.StopStorageNoticeSync()
+		f.h.Wait()
+	})
+	notification.ResetForTest()
+}
