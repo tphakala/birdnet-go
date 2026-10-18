@@ -67,9 +67,10 @@ var mountInfoUnescaper = strings.NewReplacer(`\040`, " ", `\011`, "\t", `\012`, 
 // subpath of any of them.
 var anonymousVolumeRootRE = regexp.MustCompile(`(?:^|/volumes)/[0-9a-f]{64}/_data(?:/|$)`)
 
-// MountTableEntry is one line of a mountinfo table.
+// MountTableEntry is one line of a mountinfo table. Destination is clean when
+// the entry comes from ParseMountTable.
 type MountTableEntry struct {
-	// Destination is the mount point inside the container.
+	// Destination is the mount point inside the container, clean.
 	Destination string
 	// Root is the mountinfo root field: the subtree of the source filesystem
 	// that is mounted. For a bind mount it is a host directory, so it is used
@@ -80,8 +81,8 @@ type MountTableEntry struct {
 }
 
 // ParseMountTable parses mountinfo content and keeps every entry, including the
-// root mount and the system mounts that ParseMountInfo drops. Malformed lines
-// are skipped.
+// root mount and the system mounts that ParseMountInfo drops. Absolute
+// destinations are cleaned. Malformed lines are skipped.
 func ParseMountTable(content string) []MountTableEntry {
 	var table []MountTableEntry
 	for line := range strings.SplitSeq(content, "\n") {
@@ -98,12 +99,22 @@ func ParseMountTable(content string) []MountTableEntry {
 			continue
 		}
 		table = append(table, MountTableEntry{
-			Destination: mountInfoUnescaper.Replace(fields[mountTableDestIdx]),
+			Destination: cleanDestination(mountInfoUnescaper.Replace(fields[mountTableDestIdx])),
 			Root:        mountInfoUnescaper.Replace(fields[mountTableRootIdx]),
 			FSType:      fields[sep+1],
 		})
 	}
 	return table
+}
+
+// cleanDestination cleans an absolute mount point so that ClassifyPath can
+// compare destinations without cleaning them again; a relative one is kept as
+// is and never matches.
+func cleanDestination(dest string) string {
+	if !strings.HasPrefix(dest, "/") {
+		return dest
+	}
+	return path.Clean(dest)
 }
 
 // PersistenceClass says whether files at a path outlive the container.
@@ -128,7 +139,8 @@ const (
 // ClassifyPath finds the mount covering realPath and classifies it. realPath
 // must be absolute with symlinks already resolved. The covering mount is the one
 // with the longest destination that equals the cleaned path or is a whole-path
-// segment prefix of it; among equal destinations the later table line wins,
+// segment prefix of it (destinations must be clean, as ParseMountTable makes
+// them); among equal destinations the later table line wins,
 // because it is mounted over the earlier one. A relative path, or a path no
 // entry covers, is unknown.
 func ClassifyPath(table []MountTableEntry, realPath string) (MountTableEntry, PersistenceClass) {
@@ -140,14 +152,10 @@ func ClassifyPath(table []MountTableEntry, realPath string) (MountTableEntry, Pe
 	found := false
 	for i := range table {
 		dest := table[i].Destination
-		if !strings.HasPrefix(dest, "/") {
+		if !strings.HasPrefix(dest, "/") || !coversPath(dest, p) {
 			continue
 		}
-		dest = path.Clean(dest)
-		if !coversPath(dest, p) {
-			continue
-		}
-		if !found || len(dest) >= len(path.Clean(best.Destination)) {
+		if !found || len(dest) >= len(best.Destination) {
 			best = table[i]
 			found = true
 		}
@@ -176,7 +184,7 @@ func classifyMount(m MountTableEntry) PersistenceClass {
 	}
 	// The container root is deleted with the container whatever its filesystem
 	// type (the btrfs, zfs and devicemapper storage drivers).
-	if path.Clean(m.Destination) == rootDestination {
+	if m.Destination == rootDestination {
 		return PersistenceContainerLayer
 	}
 	if anonymousVolumeRootRE.MatchString(m.Root) {
@@ -233,19 +241,16 @@ const (
 // models or clips path and any anonymous volume is a warning, and a persistent
 // or unknown path needs nothing.
 func (v *StorageVerdict) Severity() StorageSeverity {
-	switch v.Class {
-	case PersistenceContainerLayer, PersistenceMemory:
+	switch {
+	case v.Lost():
 		if v.Label == StorageLabelConfig || v.Label == StorageLabelDatabase {
 			return StorageSeverityCritical
 		}
 		return StorageSeverityWarning
-	case PersistenceAnonymousVolume:
+	case v.Class == PersistenceAnonymousVolume:
 		return StorageSeverityWarning
-	case PersistencePersistent, PersistenceUnknown:
-		return StorageSeverityNone
-	default:
-		return StorageSeverityNone
 	}
+	return StorageSeverityNone
 }
 
 // Lost reports whether the path is lost when the container is recreated.

@@ -56,6 +56,18 @@ func TestParseMountTable_UnescapesOctal(t *testing.T) {
 	assert.Equal(t, `/mnt/lit\040`, table[1].Destination)
 }
 
+func TestParseMountTable_CleansDestinations(t *testing.T) {
+	t.Parallel()
+	table := ParseMountTable(mountLine(1, "/", "/config//hls/", "tmpfs") + "\n" +
+		mountLine(2, "/", "relative/dir", "ext4") + "\n")
+
+	require.Len(t, table, 2)
+	assert.Equal(t, "/config/hls", table[0].Destination)
+	assert.Equal(t, "relative/dir", table[1].Destination, "a relative destination is kept and never matches")
+	_, class := ClassifyPath(table, "/config/hls/x")
+	assert.Equal(t, PersistenceMemory, class)
+}
+
 func TestParseMountTable_OptionalFieldsAndMalformedLines(t *testing.T) {
 	t.Parallel()
 	content := "10 1 8:1 / /a rw shared:1 master:2 - ext4 /dev/sda1 rw\n" +
