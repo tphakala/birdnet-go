@@ -23,6 +23,8 @@
     Use for flexible layouts like cards and tables. When false, uses fixed dimensions.
   - spectrogramSize: Spectrogram display size - md/lg/xl (default: lg)
   - spectrogramRaw: Display raw spectrogram without axes (default: false)
+  - modelType: AI model type ('bird', 'bat'); selects the frequency axis
+  - clipSampleRate: Clip sample rate in Hz; sets the bat frequency axis range
   - onPlayStart: Callback when audio starts playing (freezes SSE updates)
   - onPlayEnd: Callback when audio stops playing after 3s delay (resumes SSE updates)
 -->
@@ -65,7 +67,8 @@
     CLIP_CONTAINER_EXTENSION,
     extensionFromContentDisposition,
   } from '$lib/utils/audioDownload';
-  import { getCsrfToken } from '$lib/utils/api';
+  import { api, getCsrfToken } from '$lib/utils/api';
+  import { batFrequencyAxis } from '$lib/utils/spectrogramAxis';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
 
@@ -120,6 +123,11 @@
     clipLabel?: string;
     /** AI model type (e.g. 'bird', 'bat'); selects the spectrogram frequency axis range */
     modelType?: string;
+    /**
+     * Sample rate of the clip in Hz. Bat spectrograms span 0 to half this rate;
+     * when it is missing the player asks the detection endpoint for it once.
+     */
+    clipSampleRate?: number;
   }
 
   let {
@@ -139,6 +147,7 @@
     enableClipExtraction = false,
     clipLabel = '',
     modelType = '',
+    clipSampleRate,
   }: Props = $props();
 
   // Audio and UI elements
@@ -302,27 +311,64 @@
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 10000;
 
-  // Frequency scale overlay constants. Bird spectrograms are resampled to 24kHz
-  // (Nyquist = 12kHz); bat spectrograms keep the native capture rate and are always
-  // labelled on a fixed 0-128 kHz axis regardless of the clip's actual sample rate.
-  // The axis range follows the detection's model type.
+  // Frequency scale overlay. Bird spectrograms are resampled to 24 kHz, so their
+  // axis is a fixed 0-12 kHz. Bat spectrograms are rendered at the clip's own
+  // sample rate, so their axis runs from 0 to half the clip sample rate. Without a
+  // known rate the bat axis is hidden rather than guessed.
   const BIRD_NYQUIST_KHZ = 12;
   const BIRD_TICKS_KHZ = [12, 10, 8, 6, 5, 4, 3, 2, 1];
-  const BAT_NYQUIST_KHZ = 128;
-  const BAT_TICKS_KHZ = [120, 100, 80, 60, 40, 20];
   const MODEL_TYPE_BAT = 'bat';
+  // Query parameter that tells the server the rate the axis is drawn from; the
+  // server then serves only the exact render for that rate (404 otherwise).
+  const SPECTROGRAM_RATE_PARAM = 'sr';
+  // Longest wait for the detection endpoint when a bat rate has to be resolved
+  // before the spectrogram is requested.
+  const RATE_RESOLVE_TIMEOUT_MS = 1500;
+
+  const isKnownRate = (rate: unknown): rate is number =>
+    typeof rate === 'number' && Number.isInteger(rate) && rate > 0;
+
   let isBatSpectrogram = $derived(modelType === MODEL_TYPE_BAT);
-  let freqNyquistKHz = $derived(isBatSpectrogram ? BAT_NYQUIST_KHZ : BIRD_NYQUIST_KHZ);
-  let freqTicksKHz = $derived(isBatSpectrogram ? BAT_TICKS_KHZ : BIRD_TICKS_KHZ);
+
+  // Rate learned from GET /api/v2/detections/:id, keyed by the detection it was
+  // resolved for so a new detection never reuses an old rate. rate is undefined
+  // when the resolve finished without one (error, timeout, field omitted).
+  let rateResolve = $state<{ detectionId: string; rate: number | undefined } | null>(null);
+  // Detection whose exact-rate spectrogram failed to load; it is shown without sr
+  // and without an axis instead.
+  let overlayFallbackDetectionId = $state<string | null>(null);
+
+  let needsRateResolve = $derived(
+    isBatSpectrogram && showSpectrogram && !isKnownRate(clipSampleRate) && detectionId !== ''
+  );
+  let rateResolvePending = $derived(needsRateResolve && rateResolve?.detectionId !== detectionId);
+  let effectiveClipSampleRate = $derived(
+    isKnownRate(clipSampleRate)
+      ? clipSampleRate
+      : rateResolve?.detectionId === detectionId
+        ? rateResolve.rate
+        : undefined
+  );
+  // Rate the spectrogram URL carries and the bat axis is drawn from.
+  let overlayRate = $derived(
+    isBatSpectrogram && overlayFallbackDetectionId !== detectionId
+      ? effectiveClipSampleRate
+      : undefined
+  );
+  let batAxis = $derived(isBatSpectrogram ? batFrequencyAxis(overlayRate) : null);
+  let freqNyquistKHz = $derived(isBatSpectrogram ? (batAxis?.nyquistKHz ?? 0) : BIRD_NYQUIST_KHZ);
+  let freqTicksKHz = $derived(isBatSpectrogram ? (batAxis?.ticksKHz ?? []) : BIRD_TICKS_KHZ);
   // PLAY_END_DELAY_MS imported from $lib/utils/audio
   // Spinner delay is now handled by useDelayedLoading utility
 
   // Computed values
-  // Base URL without cache-busting parameters
+  // Base URL without cache-busting parameters. It stays null while a bat rate
+  // is being resolved, so an image cached under a URL without the rate is never
+  // shown first under an axis it does not match.
   const spectrogramBaseUrl = $derived(
-    showSpectrogram
+    showSpectrogram && !rateResolvePending
       ? buildAppUrl(
-          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}${overlayRate !== undefined ? `&${SPECTROGRAM_RATE_PARAM}=${overlayRate}` : ''}`
         )
       : null
   );
@@ -1499,6 +1545,17 @@
       return;
     }
 
+    // The exact render for the clip rate is not available (for example only an
+    // older render of the clip was kept): load whatever render the server has,
+    // without the rate and without an axis, instead of showing an error.
+    if (overlayRate !== undefined && !processedSpectrogramUrl) {
+      debugLog('handleSpectrogramError: exact-rate render unavailable, dropping the axis');
+      overlayFallbackDetectionId = detectionId;
+      clearSpectrogramRetryTimer();
+      clearStatusPollTimer();
+      return;
+    }
+
     // Really failed - stop everything
     debugLog('handleSpectrogramError: giving up after max retries');
     spectrogramLoader.setError();
@@ -1615,6 +1672,49 @@
     }
   };
   /* eslint-enable no-unused-vars */
+
+  // Reads clipSampleRate from a GET /api/v2/detections/:id response body.
+  const readClipSampleRate = (data: unknown): number | undefined => {
+    if (typeof data !== 'object' || data === null || !('clipSampleRate' in data)) {
+      return undefined;
+    }
+    return isKnownRate(data.clipSampleRate) ? data.clipSampleRate : undefined;
+  };
+
+  // Resolve a missing bat clip sample rate once per detection. The detection
+  // endpoint reads it from the clip for older detections; list and search
+  // responses never carry it for those. The spectrogram request waits for the
+  // answer, at most RATE_RESOLVE_TIMEOUT_MS, and goes out without a rate (and
+  // without an axis) when none comes back.
+  $effect(() => {
+    if (!rateResolvePending) return;
+
+    const resolvingId = detectionId;
+    const controller = new AbortController();
+    let active = true;
+    const timeoutId = setTimeout(() => controller.abort(), RATE_RESOLVE_TIMEOUT_MS);
+    spectrogramLoader.setLoading(true);
+
+    api
+      .get<unknown>(`/api/v2/detections/${encodeURIComponent(resolvingId)}`, {
+        signal: controller.signal,
+      })
+      .then(readClipSampleRate)
+      .catch((err: unknown) => {
+        logger.debug('Clip sample rate not resolved', { detectionId: resolvingId, error: err });
+        return undefined;
+      })
+      .then(rate => {
+        if (active) rateResolve = { detectionId: resolvingId, rate };
+      })
+      .finally(() => clearTimeout(timeoutId));
+
+    return () => {
+      active = false;
+      clearTimeout(timeoutId);
+      controller.abort();
+    };
+  });
 
   // Track previous base URL to detect when detection changes (not just cache key updates)
   let previousSpectrogramBaseUrl = $state<string | null>(null);
@@ -1992,8 +2092,8 @@
   class:cursor-crosshair={enableClipExtraction}
   class:spectrogram-skeleton={responsive &&
     showSpectrogram &&
-    spectrogramUrl !== null &&
-    (spectrogramLoader.loading || spectrogramLoader.error)}
+    ((spectrogramUrl !== null && (spectrogramLoader.loading || spectrogramLoader.error)) ||
+      rateResolvePending)}
   style={responsive
     ? showSpectrogram
       ? 'aspect-ratio: 2 / 1;'
@@ -2004,10 +2104,10 @@
   ontouchmove={enableClipExtraction ? handleSelectionTouchMove : undefined}
   ontouchend={enableClipExtraction ? handleSelectionTouchEnd : undefined}
 >
-  {#if spectrogramUrl}
-    <!-- Screen reader announcement for loading state -->
+  {#if spectrogramUrl || rateResolvePending}
+    <!-- Screen reader announcement for loading state (the rate resolve counts as loading) -->
     <div class="sr-only" role="status">
-      {spectrogramLoader.loading
+      {spectrogramLoader.loading || rateResolvePending
         ? t('components.audio.spectrogramLoading')
         : t('components.audio.spectrogramLoaded')}
     </div>
@@ -2024,7 +2124,9 @@
         ></div>
       </div>
     {/if}
+  {/if}
 
+  {#if spectrogramUrl}
     <!-- Always render the img so the browser cache works across state transitions -->
     <img
       bind:this={spectrogramImage}
@@ -2110,8 +2212,9 @@
     </div>
   {/if}
 
-  <!-- Frequency scale overlay (linear; range follows the detection's model type) -->
-  {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error}
+  <!-- Frequency scale overlay (linear; range follows the model type and, for bats,
+       the clip sample rate; a bat axis without a known rate has no ticks) -->
+  {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error && freqNyquistKHz > 0}
     {#each freqTicksKHz as freq (freq)}
       <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true"
         >{freq}k</span
