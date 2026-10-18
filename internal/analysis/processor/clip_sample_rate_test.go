@@ -216,7 +216,10 @@ type recordingRateRecorder struct {
 	mu     sync.Mutex
 	calls  []rateCall
 	ctxVal []any
-	err    error
+	// remaining is the time left to each call's context deadline; 0 means the
+	// context had none.
+	remaining []time.Duration
+	err       error
 }
 
 type rateCall struct {
@@ -233,6 +236,11 @@ func (r *recordingRateRecorder) RecordClipSampleRate(ctx context.Context, noteID
 	defer r.mu.Unlock()
 	r.calls = append(r.calls, rateCall{noteID, clipName, rate})
 	r.ctxVal = append(r.ctxVal, ctx.Value(rateCtxKey{}))
+	var left time.Duration
+	if deadline, ok := ctx.Deadline(); ok {
+		left = time.Until(deadline)
+	}
+	r.remaining = append(r.remaining, left)
 	return r.err
 }
 
@@ -288,6 +296,10 @@ func TestSaveAudioAction_CorrectsClipSampleRate(t *testing.T) {
 			assert.Equal(t, tt.wantCalls, rec.calls)
 			for _, v := range rec.ctxVal {
 				assert.Equal(t, jobMarker, v, "the write runs under the job context")
+			}
+			for _, left := range rec.remaining {
+				assert.NotZero(t, left, "the write carries its own deadline")
+				assert.LessOrEqual(t, left, clipRateCorrectionTimeout, "the deadline is the correction bound")
 			}
 		})
 	}
