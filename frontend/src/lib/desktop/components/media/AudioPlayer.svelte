@@ -1484,28 +1484,48 @@
   // An <img> cannot read the response status, so the failed URL is requested
   // once more with fetch. A 404 means the exact-rate render does not exist
   // (sr requests are answered from the exact render only), so the player falls
-  // back at once instead of spending its retries on it. Any other outcome
-  // (503 while a clip is written, a network error, the timeout) leaves the
-  // retries to run as before.
+  // back at once instead of spending its retries on it, unless the detection's
+  // spectrogram status reports a queued or running generation, which the
+  // status poll then waits for as before. Any other outcome (503 while a clip
+  // is written, a network error, the timeout) leaves the retries to run as
+  // before.
   const probeExactRateRender = async (url: string) => {
     clearSpectrogramProbe();
     const controller = new AbortController();
     spectrogramProbeAbortController = controller;
     const probedBaseUrl = spectrogramBaseUrl;
     const timeoutId = setTimeout(() => controller.abort(), SPECTROGRAM_PROBE_TIMEOUT_MS);
+    const stillCurrent = () =>
+      spectrogramBaseUrl === probedBaseUrl && overlayRate !== undefined && !processedSpectrogramUrl;
     try {
       const response = await fetch(url, { signal: controller.signal });
       // Only the status is needed; drop the body.
-      controller.abort();
-      if (
-        response.status === HTTP_STATUS_NOT_FOUND &&
-        spectrogramBaseUrl === probedBaseUrl &&
-        overlayRate !== undefined &&
-        !processedSpectrogramUrl
-      ) {
-        debugLog('probeExactRateRender: 404, dropping the rate and the axis');
-        fallBackToImageWithoutRate();
+      void response.body?.cancel();
+      if (response.status !== HTTP_STATUS_NOT_FOUND || !stillCurrent()) return;
+
+      // Ask for the generation status here rather than reading the status
+      // poll's state, which may not have answered yet.
+      const statusResponse = await fetch(
+        buildAppUrl(
+          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+        ),
+        { signal: controller.signal }
+      );
+      if (statusResponse.ok) {
+        const statusData: unknown = await statusResponse.json();
+        const generation =
+          typeof statusData === 'object' && statusData !== null && 'data' in statusData
+            ? statusData.data
+            : statusData;
+        const generationStatus =
+          typeof generation === 'object' && generation !== null && 'status' in generation
+            ? generation.status
+            : undefined;
+        if (generationStatus === 'queued' || generationStatus === 'generating') return;
       }
+      if (!stillCurrent()) return;
+      debugLog('probeExactRateRender: 404, dropping the rate and the axis');
+      fallBackToImageWithoutRate();
     } catch {
       // Aborted, timed out or failed: the retries carry on unchanged.
     } finally {

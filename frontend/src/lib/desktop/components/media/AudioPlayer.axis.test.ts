@@ -81,6 +81,8 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
   // it to the shared fetch mock (200).
   let probeResponder: ((signal: AbortSignal | undefined) => Promise<Response>) | undefined;
   let probeCalls: string[];
+  // Body of the spectrogram /status answer; undefined leaves it to the shared mock.
+  let statusBody: Record<string, unknown> | undefined;
 
   const fetchMock = () => vi.mocked(globalThis.fetch);
 
@@ -124,7 +126,15 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
     // Detail requests stay pending until the test answers them; the request
     // rejects with an AbortError when its signal aborts, as fetch does.
     probeResponder = undefined;
+    statusBody = undefined;
     fetchMock().mockImplementation((url, init) => {
+      if (
+        statusBody &&
+        String(url).includes(SPECTROGRAM_ENDPOINT) &&
+        String(url).includes('/status')
+      ) {
+        return Promise.resolve(jsonResponse({ data: statusBody }));
+      }
       if (
         probeResponder &&
         String(url).includes(SPECTROGRAM_ENDPOINT) &&
@@ -264,6 +274,21 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       expect(imageSrc()).not.toContain('retry=');
       expect(labels(container)).toEqual([]);
       expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE)).toBeNull();
+    });
+
+    it('keeps the rate while the status poll reports a queued generation', async () => {
+      // The 404 arrives at once, before the component's own status poll has
+      // answered, so the decision cannot rely on that poll's state.
+      probeResponder = notFound;
+      statusBody = { status: 'queued', queuePosition: 2, message: '' };
+      mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+
+      expect(probeCalls).toHaveLength(1);
+      expect(imageSrc()).toContain(`sr=${RATE_384K}`);
     });
 
     it('keeps retrying with sr when the status check answers 503', async () => {
