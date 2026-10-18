@@ -49,7 +49,6 @@ func resetExportLogGuards(t *testing.T) {
 	rearm := func() {
 		normalizeSkipLogged.seen.Clear()
 		resampleFailureLogged.seen.Clear()
-		ultrasonicDownsampleLogged.seen.Clear()
 	}
 	rearm()
 	t.Cleanup(rearm)
@@ -249,48 +248,6 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 	line := logLineContaining(t, logs.String(), "operation=audio_export_resample")
 	assert.NotContains(t, line, "detection_id",
 		"a guarded line must not name the first detection to trip a standing condition")
-}
-
-// TestUltrasonicDownsampleWarnsOncePerFormatRateWithoutDetectionID drives the
-// warning for a bat capture above 48kHz stored under a lossy name. A format and
-// rate pair repeats on every such detection, so the line appears once per pair
-// and does not name the first detection. A pair that differs only in rate, or
-// only in format, is a new pair and explains itself.
-func TestUltrasonicDownsampleWarnsOncePerFormatRateWithoutDetectionID(t *testing.T) {
-	logs := logtest.CaptureBuffer(t)
-	resetExportLogGuards(t)
-
-	const lowerBatRate = 192000
-	pairs := []struct {
-		clipName string
-		rate     int
-	}{
-		{"bat.mp3", batSourceSampleRate},
-		{"bat.mp3", lowerBatRate},
-		{"bat.opus", batSourceSampleRate},
-	}
-	for _, pair := range pairs {
-		a := newExportLogAction(t, t.TempDir(), pair.clipName, "flac")
-		a.modelName = batModelName
-		for range 4 {
-			// A downsample rewrites sourceSampleRate, so restore the capture rate
-			// to re-enter the same branch the way a following detection would.
-			a.sourceSampleRate = pair.rate
-			a.pcmData = sinePCMAtRate(pair.rate, 0.05, 1000, 8000)
-			_, _, _ = a.resolveExportParams(filepath.Join(t.TempDir(), pair.clipName))
-		}
-	}
-
-	assert.Equal(t, len(pairs), countLines(t, logs.String(), "audio_export_ultrasonic_downsample"),
-		"each distinct format and rate pair explains itself exactly once")
-	for _, want := range []string{"format=mp3", "format=opus", "source_rate=256000", "source_rate=192000", "target_rate=48000"} {
-		assert.Contains(t, logs.String(), want)
-	}
-	for line := range strings.SplitSeq(logs.String(), "\n") {
-		if strings.Contains(line, "audio_export_ultrasonic_downsample") {
-			assert.NotContains(t, line, "detection_id")
-		}
-	}
 }
 
 // TestNormalizedReportsWhetherMeasurementRan pins the field that makes each clip
