@@ -108,7 +108,7 @@ type fakeProber struct {
 	gate  chan struct{}
 }
 
-func (p *fakeProber) probe(context.Context, string) (int, error) {
+func (p *fakeProber) probe(context.Context, *os.File, string) (int, error) {
 	p.calls.Add(1)
 	if p.gate != nil {
 		<-p.gate
@@ -319,7 +319,7 @@ func TestGetDetection_LazyFill_TruncatedDataStillFills(t *testing.T) {
 }
 
 // panickingProbe stands in for a decoder that panics on a malformed clip header.
-func panickingProbe(context.Context, string) (int, error) {
+func panickingProbe(context.Context, *os.File, string) (int, error) {
 	panic("malformed header")
 }
 
@@ -343,7 +343,7 @@ func TestGetDetection_LazyFill_ProbePanicIsContained(t *testing.T) {
 
 	// The panic left no flight behind: the next request runs the probe again.
 	var probes atomic.Int32
-	h.probeClipRate = func(context.Context, string) (int, error) {
+	h.probeClipRate = func(context.Context, *os.File, string) (int, error) {
 		probes.Add(1)
 		return rateTestBatRate, nil
 	}
@@ -428,22 +428,42 @@ func TestGetDetection_LazyFill_ClipNotARegularFile(t *testing.T) {
 }
 
 // TestGetDetection_LazyFill_SymlinkOutsideClipDirIsNotProbed verifies a clip that
-// is a symlink to a real file outside the clip directory is not probed.
+// is a symlink to a real WAV outside the clip directory is never read. It uses
+// the production probe, so a probe that follows the link would store the outside
+// file's rate.
 func TestGetDetection_LazyFill_SymlinkOutsideClipDirIsNotProbed(t *testing.T) {
-	prober := &fakeProber{rate: rateTestBatRate}
-	e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
-	abs := filepath.Join(h.SFS.BaseDir(), filepath.FromSlash(rateTestClipName))
-	outside := filepath.Join(t.TempDir(), "outside.flac")
-	require.NoError(t, os.WriteFile(outside, []byte("clip"), 0o600))
-	require.NoError(t, os.Remove(abs))
-	if err := os.Symlink(outside, abs); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+	const clip = "2026/01/bat.wav"
+	tests := []struct {
+		name string
+		// warmStatCache stats the regular clip through SecureFS before it is
+		// replaced by the symlink. Any earlier StatRel of the clip, such as from the
+		// spectrogram status endpoint, warms that cache, and a cached entry would
+		// still describe the regular file after the swap.
+		warmStatCache bool
+	}{
+		{"symlink in place", false},
+		{"symlink swapped in after a cached check", true},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, h, store := newRateHandler(t, batNote(clip, 0), nil)
+			abs := filepath.Join(h.SFS.BaseDir(), filepath.FromSlash(clip))
+			outside := filepath.Join(t.TempDir(), "outside.wav")
+			writeTruncatedWAV(t, outside, rateTestBatRate)
+			if tt.warmStatCache {
+				_, err := h.SFS.StatRel(clip)
+				require.NoError(t, err)
+			}
+			require.NoError(t, os.Remove(abs))
+			if err := os.Symlink(outside, abs); err != nil {
+				t.Skipf("symlinks unavailable: %v", err)
+			}
 
-	_, rate := getDetectionRate(t, e, h)
-	assert.Zero(t, rate)
-	assert.Zero(t, prober.calls.Load(), "a clip that resolves outside the clip directory is not probed")
-	assert.Zero(t, store.fills())
+			_, rate := getDetectionRate(t, e, h)
+			assert.Zero(t, rate, "a clip that resolves outside the clip directory is not probed")
+			assert.Zero(t, store.fills())
+		})
+	}
 }
 
 func TestListAndSearch_NeverProbe(t *testing.T) {
@@ -498,7 +518,7 @@ func TestGetDetection_LazyFill_WorkTimeoutAndDetach(t *testing.T) {
 	t.Run("a hung probe is cancelled at the work timeout", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			var probeErr error
-			prober := func(ctx context.Context, _ string) (int, error) {
+			prober := func(ctx context.Context, _ *os.File, _ string) (int, error) {
 				<-ctx.Done()
 				probeErr = ctx.Err()
 				return 0, probeErr
@@ -550,7 +570,7 @@ func TestGetDetection_LazyFill_WorkTimeoutAndDetach(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			gate := make(chan struct{})
 			var ctxErr error
-			prober := func(ctx context.Context, _ string) (int, error) {
+			prober := func(ctx context.Context, _ *os.File, _ string) (int, error) {
 				<-gate
 				ctxErr = ctx.Err()
 				return rateTestBatRate, nil
