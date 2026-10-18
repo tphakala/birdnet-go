@@ -400,10 +400,11 @@ regenerate every mock:
 go generate ./internal/datastore   # runs mockery over the whole .mockery.yaml
 ```
 
-Use mockery v2 (`.mockery.yaml` is in the v2 format), v2.53.7 or a later v2
-release: `go install github.com/vektra/mockery/v2@v2.53.7`. mockery is not a
+Use mockery v2 (`.mockery.yaml` is in the v2 format), v2.53.8 or a later v2
+release: `go install github.com/vektra/mockery/v2@v2.53.8`. mockery is not a
 `go.mod` tool. Older v2 releases such as v2.53.6 were built against an older
-`golang.org/x/tools` and fail to load this module's packages on Go 1.27.
+`golang.org/x/tools` and fail to load this module's packages on Go 1.27; v2.53.7
+fails on 1.27.2 with an export data version error.
 Regenerating with a newer version rewrites the version line in every mock
 header; commit that with your change. See
 `internal/datastore/mocks/README.md` for mock usage patterns.
