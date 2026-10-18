@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"time"
@@ -207,17 +208,15 @@ func TestNormalizeDetectionTimes_ExtendedCapture_RecomputesClipSampleRate(t *tes
 	assert.Equal(t, rateTest384k, item.Detection.Result.ClipSampleRate)
 }
 
-// recordingRateRecorder captures RecordClipSampleRate calls.
+// recordingRateRecorder captures RecordClipSampleRate calls. It embeds the
+// repository interface (nil) so it can stand in as Processor.Repo; only
+// RecordClipSampleRate is implemented.
 type recordingRateRecorder struct {
-	mu    sync.Mutex
-	calls []rateCall
-	err   error
-}
-
-// FillClipSampleRate completes datastore.ClipSampleRateStore; the save action
-// never calls it.
-func (r *recordingRateRecorder) FillClipSampleRate(uint, string, int) (bool, error) {
-	return false, nil
+	datastore.DetectionRepository
+	mu     sync.Mutex
+	calls  []rateCall
+	ctxVal []any
+	err    error
 }
 
 type rateCall struct {
@@ -226,10 +225,14 @@ type rateCall struct {
 	rate   int
 }
 
-func (r *recordingRateRecorder) RecordClipSampleRate(noteID uint, clipName string, rate int) error {
+// rateCtxKey keys the marker the correction test puts on the job context.
+type rateCtxKey struct{}
+
+func (r *recordingRateRecorder) RecordClipSampleRate(ctx context.Context, noteID uint, clipName string, rate int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.calls = append(r.calls, rateCall{noteID, clipName, rate})
+	r.ctxVal = append(r.ctxVal, ctx.Value(rateCtxKey{}))
 	return r.err
 }
 
@@ -279,22 +282,20 @@ func TestSaveAudioAction_CorrectsClipSampleRate(t *testing.T) {
 				action.modelName = rateBatModel
 			}
 
-			require.NoError(t, action.Execute(t.Context(), nil))
+			const jobMarker = "job-ctx"
+			ctx := context.WithValue(t.Context(), rateCtxKey{}, jobMarker)
+			require.NoError(t, action.Execute(ctx, nil))
 			assert.Equal(t, tt.wantCalls, rec.calls)
+			for _, v := range rec.ctxVal {
+				assert.Equal(t, jobMarker, v, "the write runs under the job context")
+			}
 		})
 	}
 }
 
-// rateRecorderDatastore is a datastore double that also records clip sample rate
-// corrections.
-type rateRecorderDatastore struct {
-	*ActionMockDatastore
-	datastore.ClipSampleRateStore
-}
-
 // TestBuildSaveAudioAction_CarriesClipSampleRateWiring verifies the save action
-// gets the planned rate from the result and the recorder from a datastore that
-// supports it, and no recorder from one that does not.
+// gets the planned rate from the result and the processor's repository as its
+// clip sample rate recorder.
 func TestBuildSaveAudioAction_CarriesClipSampleRateWiring(t *testing.T) {
 	t.Parallel()
 
@@ -302,17 +303,10 @@ func TestBuildSaveAudioAction_CarriesClipSampleRateWiring(t *testing.T) {
 	det := &Detections{Result: detection.Result{ClipName: testRateClipName, ClipSampleRate: rateTest384k}}
 
 	rec := &recordingRateRecorder{}
-	p := &Processor{Ds: &rateRecorderDatastore{ActionMockDatastore: NewActionMockDatastore(), ClipSampleRateStore: rec}}
+	p := &Processor{Repo: rec}
 	action := p.buildSaveAudioAction(det, nil, settings)
 	assert.Equal(t, rateTest384k, action.plannedRate)
-	require.NotNil(t, action.clipRates)
-	require.NoError(t, action.clipRates.RecordClipSampleRate(testRateNoteID, testRateClipName, rateTest384k))
-	assert.Len(t, rec.calls, 1, "the action records through the datastore's recorder")
-
-	p = &Processor{Ds: NewActionMockDatastore()}
-	action = p.buildSaveAudioAction(det, nil, settings)
-	assert.Equal(t, rateTest384k, action.plannedRate)
-	assert.Nil(t, action.clipRates)
+	assert.Same(t, rec, action.clipRates, "the action records through the processor's repository")
 }
 
 // TestSaveAudioAction_NilClipRatesSkipsCorrection verifies a store without clip

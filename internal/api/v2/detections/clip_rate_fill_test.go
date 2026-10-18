@@ -50,6 +50,10 @@ type rateStore struct {
 	note      datastore.Note
 	fillCalls int
 	fillErr   error
+	// stallNext makes the next FillClipSampleRate block until its context ends
+	// and fail with the context's error; stallErr records that error.
+	stallNext bool
+	stallErr  error
 }
 
 func (s *rateStore) Get(string) (datastore.Note, error) {
@@ -58,10 +62,21 @@ func (s *rateStore) Get(string) (datastore.Note, error) {
 	return s.note, nil
 }
 
-func (s *rateStore) FillClipSampleRate(_ uint, clipName string, rate int) (bool, error) {
+func (s *rateStore) FillClipSampleRate(ctx context.Context, _ uint, clipName string, rate int) (bool, error) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.fillCalls++
+	if s.stallNext {
+		s.stallNext = false
+		// Wait without holding the lock so a write that never ends fails the
+		// test instead of deadlocking the readers of stored().
+		s.mu.Unlock()
+		<-ctx.Done()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.stallErr = ctx.Err()
+		return false, ctx.Err()
+	}
+	defer s.mu.Unlock()
 	if s.fillErr != nil {
 		return false, s.fillErr
 	}
@@ -71,10 +86,6 @@ func (s *rateStore) FillClipSampleRate(_ uint, clipName string, rate int) (bool,
 	s.note.ClipSampleRate = rate
 	return true, nil
 }
-
-// RecordClipSampleRate completes datastore.ClipSampleRateStore; the lazy fill
-// never calls it.
-func (s *rateStore) RecordClipSampleRate(uint, string, int) error { return nil }
 
 func (s *rateStore) stored() int {
 	s.mu.Lock()
@@ -383,24 +394,6 @@ func TestGetDetection_LazyFill_Skips(t *testing.T) {
 		})
 	}
 
-	t.Run("legacy store without the interface", func(t *testing.T) {
-		prober := &fakeProber{rate: rateTestBatRate}
-		e := echo.New()
-		mockDS := mocks.NewMockInterface(t)
-		note := batNote(rateTestClipName, 0)
-		mockDS.On("Get", strconv.Itoa(int(rateTestNoteID))).Return(*note, nil)
-		core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(mockDS))
-		h := buildTestHandler(t, core, map[string]string{}, map[string]string{})
-		h.probeClipRate = prober.probe
-		// The clip exists, so only the missing filler interface can skip the probe.
-		abs := filepath.Join(h.SFS.BaseDir(), filepath.FromSlash(rateTestClipName))
-		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o750))
-		require.NoError(t, os.WriteFile(abs, []byte("clip"), 0o600))
-
-		_, rate := getDetectionRate(t, e, h)
-		assert.Zero(t, rate)
-		assert.Zero(t, prober.calls.Load())
-	})
 }
 
 // TestGetDetection_LazyFill_ClipNotARegularFile verifies a clip that is missing or
@@ -522,6 +515,35 @@ func TestGetDetection_LazyFill_WorkTimeoutAndDetach(t *testing.T) {
 			assert.Less(t, elapsed, clipRateWorkTimeout+rateTestMargin)
 			require.ErrorIs(t, probeErr, context.DeadlineExceeded)
 			assert.Zero(t, store.fills())
+		})
+	})
+
+	t.Run("a stalled write is cancelled at the work timeout and the next request refills", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			prober := &fakeProber{rate: rateTestBatRate}
+			e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
+			store.stallNext = true
+
+			// Request 1: the write blocks, so the shared work ends at the timeout.
+			start := time.Now()
+			_, rate := getDetectionRate(t, e, h)
+			elapsed := time.Since(start)
+			assert.GreaterOrEqual(t, elapsed, clipRateWorkTimeout)
+			assert.Less(t, elapsed, clipRateWorkTimeout+rateTestMargin)
+			assert.Equal(t, rateTestBatRate, rate, "the probed rate is returned even when the write fails")
+			store.mu.Lock()
+			stallErr := store.stallErr
+			store.mu.Unlock()
+			require.ErrorIs(t, stallErr, context.DeadlineExceeded)
+			assert.Zero(t, store.stored())
+
+			// Request 2: the cancelled write released the key, so this is a new
+			// flight that probes again and fills the still-NULL row.
+			_, rate = getDetectionRate(t, e, h)
+			assert.Equal(t, rateTestBatRate, rate)
+			assert.EqualValues(t, 2, prober.calls.Load())
+			assert.Equal(t, rateTestBatRate, store.stored())
+			assert.Equal(t, 2, store.fills())
 		})
 	})
 

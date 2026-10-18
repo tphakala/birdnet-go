@@ -189,6 +189,23 @@ func (r *detectionRepository) GetHourly(ctx context.Context, date, hour string, 
 	return results, total, nil
 }
 
+// RecordClipSampleRate forwards to the store, passing ctx so the write is bounded by it.
+func (r *detectionRepository) RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error {
+	if err := r.store.RecordClipSampleRate(ctx, id, clipName, rate); err != nil {
+		return fmt.Errorf("failed to record clip sample rate for detection %d: %w", id, err)
+	}
+	return nil
+}
+
+// FillClipSampleRate forwards to the store, passing ctx so the write is bounded by it.
+func (r *detectionRepository) FillClipSampleRate(ctx context.Context, id uint, clipName string, rate int) (bool, error) {
+	changed, err := r.store.FillClipSampleRate(ctx, id, clipName, rate)
+	if err != nil {
+		return false, fmt.Errorf("failed to fill clip sample rate for detection %d: %w", id, err)
+	}
+	return changed, nil
+}
+
 // Lock sets a lock on a detection.
 func (r *detectionRepository) Lock(ctx context.Context, id string) error {
 	if err := r.store.LockNote(id); err != nil {

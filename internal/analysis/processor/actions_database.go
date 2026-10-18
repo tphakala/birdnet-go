@@ -369,6 +369,11 @@ func (a *DatabaseAction) recordNotificationSent(notificationTime time.Time) {
 // rather than putting the whole Database -> SSE -> MQTT chain at risk.
 const newSpeciesImageWait = 3 * time.Second
 
+// clipRateCorrectionTimeout bounds the post-encode clip sample rate write. A stalled
+// write must give up while the job's execution context is still live, otherwise the
+// job would be recorded as failed (and possibly retried) for a clip already written.
+const clipRateCorrectionTimeout = 5 * time.Second
+
 // warmSpeciesImage resolves this detection's species image, waiting at most
 // newSpeciesImageWait, so that the caller's subsequent GetCached lookup can succeed.
 //
@@ -554,7 +559,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		a.logExportFailure(&enc, exportFormat, exportRate, outputPath, err)
 		return err
 	}
-	a.correctClipSampleRate(exportRate)
+	a.correctClipSampleRate(ctx, exportRate)
 
 	// Get file size for logging
 	fileInfo, err := os.Stat(outputPath)
@@ -1359,13 +1364,17 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 // correctClipSampleRate rewrites the sample rate stored with the detection when
 // the clip was written at a different rate than the one planned at save time
 // (a resample failure keeps the source rate, and a name with no known extension
-// takes its format from the settings at encode time). It does nothing without a recorder
-// or a saved note, and a recorder error is logged without failing the export.
-func (a *SaveAudioAction) correctClipSampleRate(exportRate int) {
+// takes its format from the settings at encode time). It does nothing without a repository
+// or a saved note, and a write error is logged without failing the export. The write
+// has its own clipRateCorrectionTimeout bound derived from ctx, so a stalled write
+// cannot run out the job's execution context after the clip is already on disk.
+func (a *SaveAudioAction) correctClipSampleRate(ctx context.Context, exportRate int) {
 	if a.clipRates == nil || a.NoteID == 0 || exportRate == a.plannedRate {
 		return
 	}
-	if err := a.clipRates.RecordClipSampleRate(a.NoteID, a.ClipName, exportRate); err != nil {
+	writeCtx, cancel := context.WithTimeout(ctx, clipRateCorrectionTimeout)
+	defer cancel()
+	if err := a.clipRates.RecordClipSampleRate(writeCtx, a.NoteID, a.ClipName, exportRate); err != nil {
 		GetLogger().Warn("Failed to correct the stored clip sample rate",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),

@@ -294,6 +294,52 @@ func (r *detectionRepository) Update(ctx context.Context, id uint, updates map[s
 	return nil
 }
 
+// columnClipSampleRate is the detections column holding the clip's sample rate (Hz).
+const columnClipSampleRate = "clip_sample_rate"
+
+// RecordClipSampleRate sets the clip sample rate of a detection whose clip_name
+// still equals clipName, overwriting any stored value. A single-row UPDATE with a
+// WHERE guard is atomic on SQLite and MySQL, so it needs no transaction or lock.
+// Unlike Update it does not check detection locks: the rate is clip metadata.
+func (r *detectionRepository) RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error {
+	if clipName == "" || rate <= 0 {
+		return nil
+	}
+	return datastore.RetryOnLock(ctx, "v2_record_clip_sample_rate", func() error {
+		return r.clipRows(ctx, id, clipName).Update(columnClipSampleRate, rate).Error
+	}, r.metrics)
+}
+
+// FillClipSampleRate sets the clip sample rate only while it is NULL and clip_name
+// still equals clipName. It reports whether a row changed.
+func (r *detectionRepository) FillClipSampleRate(ctx context.Context, id uint, clipName string, rate int) (bool, error) {
+	if clipName == "" || rate <= 0 {
+		return false, nil
+	}
+	var rowsAffected int64
+	err := datastore.RetryOnLock(ctx, "v2_fill_clip_sample_rate", func() error {
+		res := r.clipRows(ctx, id, clipName).
+			Where(columnClipSampleRate+" IS NULL").
+			Update(columnClipSampleRate, rate)
+		if res.Error != nil {
+			return res.Error
+		}
+		rowsAffected = res.RowsAffected
+		return nil
+	}, r.metrics)
+	if err != nil {
+		return false, err
+	}
+	return rowsAffected > 0, nil
+}
+
+// clipRows selects the detection row with the given ID whose clip_name still
+// equals clipName, for the guarded clip sample rate updates.
+func (r *detectionRepository) clipRows(ctx context.Context, id uint, clipName string) *gorm.DB {
+	return r.db.WithContext(ctx).Table(r.tableName()).
+		Where("id = ? AND clip_name = ?", id, clipName)
+}
+
 // Delete removes a detection by ID.
 // Uses atomic operation to prevent TOCTOU race with lock checks.
 func (r *detectionRepository) Delete(ctx context.Context, id uint) error {
@@ -1512,7 +1558,7 @@ func (r *detectionRepository) Lock(ctx context.Context, detectionID uint) error 
 }
 
 // Unlock removes the lock from a detection.
-// This operation is idempotent — unlocking an already-unlocked detection succeeds silently.
+// This operation is idempotent: unlocking an already-unlocked detection succeeds silently.
 // Uses RetryOnLock for transient SQLite lock contention.
 func (r *detectionRepository) Unlock(ctx context.Context, detectionID uint) error {
 	return datastore.RetryOnLock(ctx, "v2_unlock_detection", func() error {
