@@ -65,6 +65,13 @@ func resolveSQLitePath(configured string) string {
 	return configured
 }
 
+// ResolveSQLitePath returns the database file the datastore opens for a
+// configured SQLite path: the path itself, or the default database file when it
+// is blank.
+func ResolveSQLitePath(configured string) string {
+	return resolveSQLitePath(configured)
+}
+
 // getDiskSpace returns available disk space for the given path using diskmanager
 func getDiskSpace(path string) (uint64, error) {
 	// Get directory containing the database file

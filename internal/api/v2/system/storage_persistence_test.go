@@ -56,7 +56,7 @@ func TestStoragePaths(t *testing.T) {
 		assert.NotContains(t, labelsOf(storagePaths(s, "", "/config")), diagnostics.StorageLabelDatabase)
 	})
 
-	for _, dbPath := range []string{"", ":memory:", "file::memory:?cache=shared", "file:x?mode=memory"} {
+	for _, dbPath := range []string{":memory:", "file::memory:?cache=shared", "file:x?mode=memory"} {
 		t.Run("database path "+dbPath+" is dropped", func(t *testing.T) {
 			t.Parallel()
 			s := storageSettings()
@@ -79,6 +79,26 @@ func TestStoragePaths(t *testing.T) {
 		paths := storagePaths(s, "", "/config")
 		assert.Contains(t, labelsOf(paths), diagnostics.StorageLabelClips)
 	})
+}
+
+func TestStoragePaths_BlankSQLitePathJudgesDefault(t *testing.T) {
+	t.Parallel()
+	for _, blank := range []string{"", "   "} {
+		s := storageSettings()
+		s.Output.SQLite.Path = blank
+
+		paths := storagePaths(s, "", "/config")
+
+		var db *diagnostics.StoragePath
+		for i := range paths {
+			if paths[i].Label == diagnostics.StorageLabelDatabase {
+				db = &paths[i]
+			}
+		}
+		require.NotNil(t, db, "a blank path opens the default database, so it is judged: %q", blank)
+		assert.Equal(t, "birdnet.db", db.Path, "the datastore default database file")
+		assert.True(t, db.IsFile)
+	}
 }
 
 func TestStoragePersistenceReport(t *testing.T) {

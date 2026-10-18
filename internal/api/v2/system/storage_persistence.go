@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
@@ -43,7 +44,8 @@ func storagePaths(s *conf.Settings, configFile, configDir string) []diagnostics.
 		paths = append(paths, diagnostics.StoragePath{Label: diagnostics.StorageLabelConfig, Path: configDir})
 	}
 
-	if db := s.Output.SQLite.Path; !s.Output.MySQL.Enabled && db != "" && !isInMemorySQLite(db) {
+	// A blank SQLite path opens the datastore's default database, so it is judged.
+	if db := datastore.ResolveSQLitePath(s.Output.SQLite.Path); !s.Output.MySQL.Enabled && !isInMemorySQLite(db) {
 		paths = append(paths, diagnostics.StoragePath{Label: diagnostics.StorageLabelDatabase, Path: db, IsFile: true})
 	}
 
