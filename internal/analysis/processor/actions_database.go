@@ -553,6 +553,7 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 		a.logExportFailure(&enc, exportFormat, exportRate, outputPath, err)
 		return err
 	}
+	a.correctClipSampleRate(exportRate)
 
 	// Get file size for logging
 	fileInfo, err := os.Stat(outputPath)
@@ -1228,6 +1229,42 @@ func exportFormatForModel(modelName, modelVersion string, sourceRate int, export
 	return resolveExportFormat(isBat, sourceRate, export)
 }
 
+// exportClipRate returns the sample rate a clip is written at, given whether it
+// is a bat capture, its ORIGINAL source rate and the resolved export format. It is
+// the single rule behind both the encoder (resolveExportParams) and the rate stored
+// with the detection (plannedClipSampleRate), so the two cannot drift. Bat audio
+// above the analysis rate keeps its full rate; other audio above it is downsampled
+// to conf.SampleRate; audio below it is raised to conf.SampleRate only when the
+// native encoder for format cannot carry the source rate.
+func exportClipRate(isBat bool, sourceRate int, format string) int {
+	switch {
+	case sourceRate > conf.SampleRate && !isBat:
+		return conf.SampleRate
+	case sourceRate < conf.SampleRate && nativeEncoderNeedsUpsample(sourceRate, format):
+		return conf.SampleRate
+	default:
+		return sourceRate
+	}
+}
+
+// plannedClipSampleRate returns the sample rate the exporter is expected to write
+// the detection's clip at, or 0 when the result has no clip. It applies the same
+// rule as resolveExportParams to the result's source rate (defaulting to
+// conf.SampleRate like the exporter) and the given export settings. The stored
+// value is corrected after the encode when the written rate differs (a resample
+// failure, or Export.Type reloaded while the detection was pending).
+func plannedClipSampleRate(result *detection.Result, export *conf.ExportSettings) int {
+	if result.ClipName == "" {
+		return 0
+	}
+	rate := result.AudioSource.SampleRate
+	if rate <= 0 {
+		rate = conf.SampleRate
+	}
+	isBat := detection.ResolveModelType(result.Model.Name, result.Model.Version) == entities.ModelTypeBat
+	return exportClipRate(isBat, rate, resolveExportFormat(isBat, rate, export))
+}
+
 // resolveExportParams determines the export sample rate, format, and output
 // path. The format comes from resolveExportFormat, the single source of truth
 // shared with the DB clip-name path so the file and the stored name cannot drift.
@@ -1243,7 +1280,8 @@ func exportFormatForModel(modelName, modelVersion string, sourceRate int, export
 // stored clip name and the file on disk cannot disagree. If a resample cannot run
 // (an unusable source rate), the clip stays at that rate and the encoder rejects
 // it, failing the export through the normal failure path. A trailing partial
-// sample is trimmed from the PCM first for every format, resample or not.
+// sample is trimmed from the PCM first for every format, resample or not. The
+// target rate comes from exportClipRate, the rule shared with the rate stored at save time.
 func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, format, path string) {
 	rate = a.sourceSampleRate
 	if rate <= 0 {
@@ -1269,18 +1307,14 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	// is inaudible.
 	a.pcmData = trimPartialSample(a.pcmData)
 
-	switch {
-	case rate > conf.SampleRate && !isBat:
-		// Non-bat audio above the analysis rate is downsampled to it so it can be
-		// stored in the configured (possibly lossy) Export.Type. Bat/ultrasonic
-		// audio above the analysis rate is kept at full source rate (format is
-		// UltrasonicType, decided above) and never resampled.
-		rate = a.resampleExportTo(rate, conf.SampleRate, format)
-	case rate < conf.SampleRate && nativeEncoderNeedsUpsample(rate, format):
-		// The configured lossy native encoder cannot carry this sub-48k rate.
-		// Resample up to conf.SampleRate (accepted by every native lossy encoder).
-		// On a resample failure the rate is unchanged and the encoder rejects it.
-		rate = a.resampleExportTo(rate, conf.SampleRate, format)
+	// exportClipRate decides the target: non-bat audio above the analysis rate is
+	// downsampled to it so it can be stored in the configured (possibly lossy)
+	// Export.Type, bat/ultrasonic audio above it keeps its full source rate (format
+	// is UltrasonicType, decided above), and sub-48k audio is resampled up to
+	// conf.SampleRate when the configured lossy native encoder cannot carry it. On
+	// a resample failure the rate is unchanged and the encoder rejects it.
+	if target := exportClipRate(isBat, rate, format); target != rate {
+		rate = a.resampleExportTo(rate, target, format)
 	}
 
 	// Keep the on-disk extension in lockstep with the resolved format: the
@@ -1293,6 +1327,27 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	}
 
 	return rate, format, path
+}
+
+// correctClipSampleRate rewrites the sample rate stored with the detection when
+// the clip was written at a different rate than the one planned at save time
+// (a resample failure keeps the source rate, and Export.Type may have been
+// reloaded while the detection was pending). It does nothing without a recorder
+// or a saved note, and a recorder error is logged without failing the export.
+func (a *SaveAudioAction) correctClipSampleRate(exportRate int) {
+	if a.clipRates == nil || a.NoteID == 0 || exportRate == a.plannedRate {
+		return
+	}
+	if err := a.clipRates.RecordClipSampleRate(a.NoteID, a.ClipName, exportRate); err != nil {
+		GetLogger().Warn("Failed to correct the stored clip sample rate",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.Any("note_id", a.NoteID),
+			logger.Int("planned_rate", a.plannedRate),
+			logger.Int("export_rate", exportRate),
+			logger.Error(err),
+			logger.String("operation", "clip_sample_rate_correct"))
+	}
 }
 
 // resampleExportTo converts the captured PCM from srcRate to dstRate for export,

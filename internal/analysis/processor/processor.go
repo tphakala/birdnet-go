@@ -1269,6 +1269,7 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 // createDetectionResult creates a detection.Result from the given parameters.
 // detectionTime should be pre-computed by the caller to ensure timestamp consistency
 // with other detection artifacts (e.g., Note) created from the same analysis.
+// The result's ClipSampleRate is the planned export rate (plannedClipSampleRate), 0 without a clip.
 func (p *Processor) createDetectionResult(settings *conf.Settings,
 	detectionTime time.Time,
 	beginTime, endTime time.Time,
@@ -1282,7 +1283,7 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 	// Resolve audio source info from registry
 	audioSource := p.resolveAudioSource(source)
 
-	return detection.Result{
+	result := detection.Result{
 		Timestamp:   detectionTime,
 		SourceNode:  settings.Main.Name,
 		AudioSource: audioSource,
@@ -1305,6 +1306,8 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 		Model:          classifier.DetectionModelInfoForID(modelID),
 		RawLabel:       rawLabel,
 	}
+	result.ClipSampleRate = plannedClipSampleRate(&result, &settings.Realtime.Audio.Export)
+	return result
 }
 
 // resolveAudioSource resolves the audio source details from the registry.
@@ -2436,7 +2439,8 @@ func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
 // It reads PCM data from the capture buffer eagerly (while the data is still
 // available) and returns an action that will encode and write the audio file
 // when executed by the job queue. This decouples the slower clip encoding
-// from the fast Database -> SSE -> MQTT pipeline.
+// from the fast Database -> SSE -> MQTT pipeline. The action carries the planned
+// clip sample rate and, when the datastore can store one, a recorder to correct it.
 func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext, settings *conf.Settings) *SaveAudioAction {
 	// Derive the capture length and readiness time from the shared conf helper so this
 	// scheduler and the media API (which decides whether a not-yet-written clip is still
@@ -2473,8 +2477,11 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	// is obtained, so the shared fields are built once. Restating them per branch
 	// means every newly added field has to be repeated in all three, and a field
 	// missed on one branch is invisible until that branch is exercised.
+	clipRates, _ := p.Ds.(datastore.ClipSampleRateRecorder)
 	base := func() *SaveAudioAction {
 		return &SaveAudioAction{
+			clipRates:        clipRates,
+			plannedRate:      det.Result.ClipSampleRate,
 			Settings:         settings,
 			ClipName:         det.Result.ClipName,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
