@@ -155,6 +155,23 @@ func TestServeSpectrogramByID_BatTokenTransition(t *testing.T) {
 	})
 }
 
+// newModelLookupFailsHandler builds a handler for the retained bat clip whose
+// model type lookup always fails. GetNoteClipPath and Get are incidental (the
+// serve and generate paths call the first, status the second); the failing
+// GetNoteModelType call is mandatory.
+func newModelLookupFailsHandler(t *testing.T, mode string) (*Handler, *echo.Echo, string) {
+	t.Helper()
+	h, e, root := newRetainedTestHandler(t, mode)
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "2026", "01"), 0o750))
+	writeToneWAV(t, filepath.Join(root, "2026", "01", "a.wav"), batClipRate, batClipSeconds, batToneHz)
+	ds := mocks.NewMockInterface(t)
+	ds.EXPECT().GetNoteClipPath(retainedNoteID).Return(retainedClipName, nil).Maybe()
+	ds.EXPECT().Get(retainedNoteID).Return(datastore.Note{ClipName: retainedClipName}, nil).Maybe()
+	ds.EXPECT().GetNoteModelType(retainedNoteID).Return("", errors.NewStd("model lookup failed"))
+	h.DS = ds
+	return h, e, root
+}
+
 // TestServeSpectrogramByID_OverlayRateRefusesBirdFallback verifies that a request
 // carrying sr never gets a bird-profile render when the model type lookup fails:
 // it answers 503 with Retry-After and generates and serves nothing. A request
@@ -162,21 +179,8 @@ func TestServeSpectrogramByID_BatTokenTransition(t *testing.T) {
 func TestServeSpectrogramByID_OverlayRateRefusesBirdFallback(t *testing.T) {
 	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 
-	newHandler := func(t *testing.T) (*Handler, *echo.Echo, string) {
-		t.Helper()
-		h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
-		require.NoError(t, os.MkdirAll(filepath.Join(root, "2026", "01"), 0o750))
-		writeToneWAV(t, filepath.Join(root, "2026", "01", "a.wav"), batClipRate, batClipSeconds, batToneHz)
-		ds := mocks.NewMockInterface(t)
-		ds.EXPECT().GetNoteClipPath(retainedNoteID).Return(retainedClipName, nil)
-		ds.EXPECT().Get(retainedNoteID).Return(datastore.Note{ClipName: retainedClipName}, nil).Maybe()
-		ds.EXPECT().GetNoteModelType(retainedNoteID).Return("", errors.NewStd("model lookup failed"))
-		h.DS = ds
-		return h, e, root
-	}
-
 	t.Run("sr request answers 503 and generates nothing", func(t *testing.T) {
-		h, e, root := newHandler(t)
+		h, e, root := newModelLookupFailsHandler(t, conf.SpectrogramModeAuto)
 
 		rec := serveSpectrogram(t, h, e, batQueryWithSR)
 
@@ -187,12 +191,85 @@ func TestServeSpectrogramByID_OverlayRateRefusesBirdFallback(t *testing.T) {
 	})
 
 	t.Run("request without sr falls back to the bird profile", func(t *testing.T) {
-		h, e, root := newHandler(t)
+		h, e, root := newModelLookupFailsHandler(t, conf.SpectrogramModeAuto)
 
 		rec := serveSpectrogram(t, h, e, batQuery)
 
 		assert.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 		assert.True(t, fileExists(root, batBird514), "bird-profile render written")
+	})
+}
+
+// TestSpectrogramByID_ModelTypeLookupFailureIs503 verifies that generate and
+// status answer a retryable 503 instead of acting on a guessed bird profile when
+// the model type lookup fails, and that nothing is queued or written.
+func TestSpectrogramByID_ModelTypeLookupFailureIs503(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+
+	// queueKey returns the queue key the handlers derive for batQuery, cleared
+	// before the test and again on cleanup (the queue is package-global).
+	queueKey := func(t *testing.T, h *Handler) string {
+		t.Helper()
+		spec := h.CurrentSettings().Realtime.Dashboard.Spectrogram
+		key := buildSpectrogramQueueKey(retainedNoteID, SpectrogramSizeMd, true, spec.Style, spec.DynamicRange)
+		spectrogramQueue.Delete(key)
+		t.Cleanup(func() { spectrogramQueue.Delete(key) })
+		return key
+	}
+
+	t.Run("generate answers 503 and queues and writes nothing", func(t *testing.T) {
+		h, e, root := newModelLookupFailsHandler(t, conf.SpectrogramModeUserRequested)
+		key := queueKey(t, h)
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/spectrogram/"+retainedNoteID+"/generate"+batQuery, http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues(retainedNoteID)
+		_ = h.GenerateSpectrogramByID(c)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code, rec.Body.String())
+		assert.NotEmpty(t, rec.Header().Get("Retry-After"))
+		_, queued := spectrogramQueue.Load(key)
+		assert.False(t, queued, "no queue entry")
+		// The queue entry is written synchronously before any worker is spawned, so
+		// its absence shows no worker started. The file checks are best effort.
+		assert.False(t, fileExists(root, batBird514), "no bird-profile render written")
+		assert.False(t, fileExists(root, batV3File), "no bat render written")
+	})
+
+	t.Run("status answers 503 instead of reporting a file under a guessed profile", func(t *testing.T) {
+		h, e, root := newModelLookupFailsHandler(t, conf.SpectrogramModeUserRequested)
+		writeRetainedFile(t, root, batBird514, "bird")
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/spectrogram/"+retainedNoteID+"/status"+batQuery, http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues(retainedNoteID)
+		_ = h.GetSpectrogramStatus(c)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code, rec.Body.String())
+		assert.NotEmpty(t, rec.Header().Get("Retry-After"))
+	})
+
+	t.Run("status reports the file under the resolved profile token", func(t *testing.T) {
+		h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeUserRequested)
+		ds := mocks.NewMockInterface(t)
+		ds.EXPECT().Get(retainedNoteID).Return(datastore.Note{ClipName: retainedClipName}, nil)
+		ds.EXPECT().GetNoteModelType(retainedNoteID).Return("bat", nil)
+		h.DS = ds
+		writeRetainedFile(t, root, batV3File, "marker")
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/spectrogram/"+retainedNoteID+"/status"+batQuery, http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetParamNames("id")
+		c.SetParamValues(retainedNoteID)
+		_ = h.GetSpectrogramStatus(c)
+
+		assert.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		assert.Contains(t, rec.Body.String(), "exists")
 	})
 }
 

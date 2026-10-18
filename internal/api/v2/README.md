@@ -262,6 +262,9 @@ fresh render removes the older `-bat-v2` and `-bat` files next to it.
 - `sr=<Hz>` on `GET /spectrogram/:id` means the client draws its axis from that clip rate, so the
   endpoint serves only the exact current render of the clip and answers `404` where it would otherwise
   fall back to a nearest render. An invalid or absent `sr` is ignored.
+- `POST /spectrogram/:id/generate` and `GET /spectrogram/:id/status` answer `503` with `Retry-After` when
+  the detection's model type cannot be looked up (a database error), and so does `GET /spectrogram/:id`
+  with `sr`. Nothing is queued or written, and the request can be retried.
 
 ### Notifications (`notifications/notifications.go`)
 
