@@ -21,13 +21,17 @@ export const CLIP_RATE_CACHE_MAX_ENTRIES = 200;
  */
 const SERVER_CLIP_RATE_FILL_TIMEOUT_MS = 5_000;
 
+/** Extra time added to the server's work timeout before a lookup asks again. */
+const CLIP_RATE_FILL_MARGIN_MS = 1_000;
+
 /**
  * How long an answer without a rate is reused. When the detail request returns
  * before the server's background fill has finished, the fill stores the rate
- * within its work timeout; one more second covers the round trip, so a lookup
+ * within its work timeout; the margin on top covers the round trip, so a lookup
  * after that gets the stored rate.
  */
-export const UNKNOWN_CLIP_RATE_RETRY_MS = SERVER_CLIP_RATE_FILL_TIMEOUT_MS + 1_000;
+export const UNKNOWN_CLIP_RATE_RETRY_MS =
+  SERVER_CLIP_RATE_FILL_TIMEOUT_MS + CLIP_RATE_FILL_MARGIN_MS;
 
 /** True for a usable sample rate in Hz: a positive integer. */
 export const isKnownSampleRate = (rate: unknown): rate is number =>
