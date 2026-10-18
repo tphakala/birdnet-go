@@ -109,6 +109,17 @@ while `IsLocal("")` is false.
   (a database transaction, a migration, a config write, a backup restore)
   aborts and rolls back on the first error instead.
 
+## Database access (HARD RULE)
+
+The legacy database is deprecated and is going away; never expand it. New
+persistence is written for the v2 schema only and goes through the repository
+interfaces (`datastore.DetectionRepository` and the v2 repositories), not
+through `datastore.Interface` or the `c.DS` accessor in API code. Do not add
+columns, models, methods, optional interfaces, dual-write paths, shims or
+fallbacks to the legacy store. The full rule, what is still allowed, and how to
+add v2 persistence are in `internal/datastore/AGENTS.md`; read it before
+touching anything under `internal/datastore/` or adding a database write.
+
 ## Security
 
 - Validate all user input at the boundary (see path validation above)
