@@ -17,7 +17,8 @@ const (
 	msgStorageUnjudged      = "Storage paths could not be judged"
 	msgStorageAllPersistent = "All data paths are on persistent volumes"
 	msgStorageLostPrefix    = "Lost when the container is recreated: "
-	msgStorageAnonPrefix    = "In an anonymous volume: "
+	msgStorageAnonPrefix    = "In an anonymous volume (can seem lost after a fresh container start): "
+	msgStorageSomeUnjudged  = "No data path is lost, but some paths could not be judged"
 	msgStorageJoiner        = "; "
 	labelJoiner             = ", "
 )
@@ -85,10 +86,13 @@ func (c *StoragePersistenceCheck) Run(_ context.Context) health.Result {
 	var lost, anonymous []string
 	worst := diagnostics.StorageSeverityNone
 	judged := false
+	unjudged := false
 	details := make([]map[string]any, 0, len(report.Verdicts))
 	for i := range report.Verdicts {
 		v := &report.Verdicts[i]
-		if v.Class != diagnostics.PersistenceUnknown {
+		if v.Class == diagnostics.PersistenceUnknown {
+			unjudged = true
+		} else {
 			judged = true
 		}
 		switch {
@@ -127,6 +131,9 @@ func (c *StoragePersistenceCheck) Run(_ context.Context) health.Result {
 	case diagnostics.StorageSeverityWarning:
 		return result(health.StatusWarning, strings.Join(parts, msgStorageJoiner), detailMap)
 	case diagnostics.StorageSeverityNone:
+		if unjudged {
+			return result(health.StatusHealthy, msgStorageSomeUnjudged, detailMap)
+		}
 		return result(health.StatusHealthy, msgStorageAllPersistent, detailMap)
 	default:
 		return result(health.StatusHealthy, msgStorageAllPersistent, detailMap)

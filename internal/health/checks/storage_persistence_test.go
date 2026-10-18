@@ -124,7 +124,7 @@ func TestStoragePersistenceCheck_SeverityMapping(t *testing.T) {
 				diagnostics.StorageLabelConfig, persistent,
 				diagnostics.StorageLabelModels, unknown),
 			status:  health.StatusHealthy,
-			message: msgStorageAllPersistent,
+			message: "No data path is lost, but some paths could not be judged",
 		},
 		{
 			name: "models on the container layer",
@@ -146,7 +146,7 @@ func TestStoragePersistenceCheck_SeverityMapping(t *testing.T) {
 			name:    "anonymous volume only",
 			report:  storageReport(diagnostics.StorageLabelConfig, anon),
 			status:  health.StatusWarning,
-			message: "In an anonymous volume: config",
+			message: "In an anonymous volume (can seem lost after a fresh container start): config",
 		},
 		{
 			name: "both kinds",
@@ -154,7 +154,7 @@ func TestStoragePersistenceCheck_SeverityMapping(t *testing.T) {
 				diagnostics.StorageLabelConfig, anon,
 				diagnostics.StorageLabelClips, layer),
 			status:  health.StatusWarning,
-			message: "Lost when the container is recreated: clips; In an anonymous volume: config",
+			message: "Lost when the container is recreated: clips; In an anonymous volume (can seem lost after a fresh container start): config",
 		},
 	}
 	for _, tt := range tests {
