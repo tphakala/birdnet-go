@@ -154,6 +154,16 @@ func openForProbe(t *testing.T, path string) *os.File {
 	return f
 }
 
+// requireStatError asserts err is an enhanced error from the decode_stat step
+// with the given category.
+func requireStatError(t *testing.T, err error, category errors.ErrorCategory) {
+	t.Helper()
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok)
+	assert.Equal(t, category, enhanced.Category)
+	assert.Equal(t, "decode_stat", enhanced.GetContext()["operation"])
+}
+
 func TestProbeOpenFile_MatchesProbeFile(t *testing.T) {
 	for _, fx := range fixtures() {
 		t.Run(fx.name, func(t *testing.T) {
@@ -208,6 +218,7 @@ func TestProbeOpenFile_RejectsNonRegularHandle(t *testing.T) {
 	_, err := ProbeOpenFile(t.Context(), f, "clip.wav")
 
 	require.ErrorIs(t, err, ErrUnsupportedSource)
+	requireStatError(t, err, errors.CategoryValidation)
 }
 
 func TestProbeOpenFile_RejectsOversizedHandle(t *testing.T) {
@@ -220,6 +231,7 @@ func TestProbeOpenFile_RejectsOversizedHandle(t *testing.T) {
 	_, err = ProbeOpenFile(t.Context(), openForProbe(t, path), path)
 
 	require.ErrorIs(t, err, ErrAudioTooLong)
+	requireStatError(t, err, errors.CategoryLimit)
 }
 
 func TestProbeOpenFile_ClosedHandleAndCanceled(t *testing.T) {
@@ -234,4 +246,5 @@ func TestProbeOpenFile_ClosedHandleAndCanceled(t *testing.T) {
 	_, err = ProbeOpenFile(t.Context(), f, path)
 	require.ErrorIs(t, err, os.ErrClosed)
 	require.NotErrorIs(t, err, ErrUnsupportedSource)
+	requireStatError(t, err, errors.CategoryFileIO)
 }
