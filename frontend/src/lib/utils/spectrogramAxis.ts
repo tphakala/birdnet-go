@@ -14,7 +14,7 @@ export const HZ_PER_KHZ = 1000;
 export const NYQUIST_DIVISOR = 2;
 
 /** Tick spacings (kHz) tried in order, from the finest to the coarsest. */
-export const BAT_TICK_STEPS_KHZ = [10, 20, 40, 50, 100] as const;
+const BAT_TICK_STEPS_KHZ = [10, 20, 40, 50, 100] as const;
 
 /** Most tick labels drawn on one axis. */
 export const BAT_MAX_TICKS = 6;
