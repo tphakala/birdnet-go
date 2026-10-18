@@ -192,10 +192,6 @@ type Controller struct {
 	// reading the plain c.models field there would race.
 	optimizeNotices atomic.Pointer[optimizeNoticeHook]
 
-	// storageNotices holds the scheduler that keeps the storage persistence bell
-	// notices in sync (the system handler), published when routes are initialized.
-	storageNotices atomic.Pointer[storageNoticeHook]
-
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -676,7 +672,6 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 		// Evaluate the storage persistence notices once at startup, then after a
 		// settings save changes one of the paths. Skipped when routes are not
 		// initialized (tests), like every other background activity here.
-		c.storageNotices.Store(&storageNoticeHook{scheduler: c.system})
 		c.system.StartStorageNoticeSync()
 
 		// Initialize synchronization channel for testing
@@ -902,9 +897,7 @@ func (c *Controller) Shutdown() {
 	}
 
 	// Stop the pending storage notice evaluation, and ignore later ones.
-	if h := c.storageNotices.Load(); h != nil {
-		h.scheduler.StopStorageNoticeSync()
-	}
+	c.system.StopStorageNoticeSync()
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
 	c.Cancel()

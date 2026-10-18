@@ -2620,7 +2620,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	// The config, database, models and clips locations feed the storage
 	// persistence notices. The evaluation is debounced and runs off this goroutine.
 	if storageNoticeInputsChanged(oldSettings, currentSettings) {
-		c.scheduleStorageNoticeSync()
+		c.system.ScheduleStorageNoticeSync()
 	}
 
 	// Trigger reconfigurations asynchronously.
@@ -2830,38 +2830,15 @@ func (c *Controller) scheduleOptimizeNoticeSync() {
 }
 
 // storageNoticeInputsChanged reports whether a settings change alters an input
-// of the storage persistence notices: the models directory, the database choice
-// and path, or the clip export switch and path.
+// of the storage persistence notices: the models directory, the SQLite path, the
+// MySQL switch (which drops the database path), or the clip export switch and
+// path.
 func storageNoticeInputsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.Models.Directory != currentSettings.Models.Directory ||
-		oldSettings.Output.SQLite.Enabled != currentSettings.Output.SQLite.Enabled ||
 		oldSettings.Output.SQLite.Path != currentSettings.Output.SQLite.Path ||
 		oldSettings.Output.MySQL.Enabled != currentSettings.Output.MySQL.Enabled ||
 		oldSettings.Realtime.Audio.Export.Enabled != currentSettings.Realtime.Audio.Export.Enabled ||
 		oldSettings.Realtime.Audio.Export.Path != currentSettings.Realtime.Audio.Export.Path
-}
-
-// storageNoticeScheduler is the part of the system handler the facade drives to
-// keep the storage persistence bell notices in sync. It is an interface so the
-// wiring tests can observe the facade's calls.
-type storageNoticeScheduler interface {
-	ScheduleStorageNoticeSync()
-	StopStorageNoticeSync()
-}
-
-// storageNoticeHook boxes the scheduler for Controller.storageNotices, since an
-// atomic.Pointer needs a concrete type.
-type storageNoticeHook struct {
-	scheduler storageNoticeScheduler
-}
-
-// scheduleStorageNoticeSync asks the system handler to re-evaluate the storage
-// persistence notices. It is a no-op until NewWithOptions publishes the handler,
-// which it does only when routes are initialized.
-func (c *Controller) scheduleStorageNoticeSync() {
-	if h := c.storageNotices.Load(); h != nil {
-		h.scheduler.ScheduleStorageNoticeSync()
-	}
 }
 
 // notifyRegionStaleness runs the recommend-only region staleness detector after

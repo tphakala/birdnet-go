@@ -1,7 +1,6 @@
 package api
 
 import (
-	"sync"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -26,7 +25,6 @@ func TestStorageNoticeInputsChanged(t *testing.T) {
 		want   bool
 	}{
 		{"models directory", func(s *conf.Settings) { s.Models.Directory = "/models" }, true},
-		{"sqlite enabled", func(s *conf.Settings) { s.Output.SQLite.Enabled = !s.Output.SQLite.Enabled }, true},
 		{"sqlite path", func(s *conf.Settings) { s.Output.SQLite.Path = "/data/other.db" }, true},
 		{"mysql enabled", func(s *conf.Settings) { s.Output.MySQL.Enabled = !s.Output.MySQL.Enabled }, true},
 		{"export enabled", func(s *conf.Settings) { s.Realtime.Audio.Export.Enabled = !s.Realtime.Audio.Export.Enabled }, true},
@@ -61,67 +59,32 @@ func newStorageWiringController(t *testing.T, initializeRoutes bool) *Controller
 	return c
 }
 
-// storageRecorder counts the facade's storage notice calls.
-type storageRecorder struct {
-	mu        sync.Mutex
-	schedules int
-	stops     int
-}
-
-func (r *storageRecorder) ScheduleStorageNoticeSync() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.schedules++
-}
-
-func (r *storageRecorder) StopStorageNoticeSync() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.stops++
-}
-
-func (r *storageRecorder) counts() (schedules, stops int) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.schedules, r.stops
-}
-
-// TestStorageNoticeWiring verifies the facade publishes the system handler for
-// the storage notices only on a routed controller, that a path change in a
-// settings save schedules a re-evaluation, and that Shutdown stops it.
+// TestStorageNoticeWiring drives the real system handler: a routed controller
+// starts the storage notices, a settings save that changes a path schedules a
+// re-evaluation, and Shutdown stops them.
 func TestStorageNoticeWiring(t *testing.T) {
 	testutil.VerifyNoLeaks(t)
 
 	unrouted := newStorageWiringController(t, false)
-	assert.Nil(t, unrouted.storageNotices.Load(), "no background evaluation without routes (tests)")
+	assert.Zero(t, unrouted.system.StorageNoticeSyncStatus().Arms, "no background evaluation without routes (tests)")
 	unrouted.Shutdown()
+	assert.True(t, unrouted.system.StorageNoticeSyncStatus().Stopped, "Shutdown stops even an unrouted controller")
 
 	routed := newStorageWiringController(t, true)
 	if routed.goroutinesStarted != nil {
 		<-routed.goroutinesStarted
 	}
-	hook := routed.storageNotices.Load()
-	require.NotNil(t, hook, "a routed controller publishes the system handler")
-	require.Same(t, routed.system, hook.scheduler)
-	// The real handler armed its startup evaluation; stop it so only the
-	// recorder sees the calls below.
-	routed.system.StopStorageNoticeSync()
-
-	rec := &storageRecorder{}
-	routed.storageNotices.Store(&storageNoticeHook{scheduler: rec})
+	assert.Equal(t, 1, routed.system.StorageNoticeSyncStatus().Arms, "a routed controller arms the startup evaluation")
 
 	base := routed.CurrentSettings()
 	moved := *base
 	moved.Realtime.Audio.Export.Path = base.Realtime.Audio.Export.Path + "-moved"
 	require.NoError(t, routed.handleSettingsChanges(base, &moved))
-	schedules, _ := rec.counts()
-	assert.Equal(t, 1, schedules, "an export path change schedules a re-evaluation")
+	assert.Equal(t, 2, routed.system.StorageNoticeSyncStatus().Arms, "an export path change schedules a re-evaluation")
 
 	require.NoError(t, routed.handleSettingsChanges(base, base))
-	schedules, _ = rec.counts()
-	assert.Equal(t, 1, schedules, "a save that changes no storage path schedules nothing")
+	assert.Equal(t, 2, routed.system.StorageNoticeSyncStatus().Arms, "a save that changes no storage path schedules nothing")
 
 	routed.Shutdown()
-	_, stops := rec.counts()
-	assert.Equal(t, 1, stops, "Shutdown stops the storage notice scheduler")
+	assert.True(t, routed.system.StorageNoticeSyncStatus().Stopped, "Shutdown stops the storage notices")
 }
