@@ -3,9 +3,13 @@ import { render, waitFor } from '@testing-library/svelte';
 
 // Only the routing is under test: RootLayout is replaced by a stub that records the props
 // App passes it (title and the path handed to the sidebar).
-const layout = vi.hoisted(() => ({ props: null as null | { title: string; currentPath: string } }));
+interface StubLayoutProps {
+  title: string;
+  currentPath: string;
+}
+const layout: { props: StubLayoutProps | null } = vi.hoisted(() => ({ props: null }));
 vi.mock('./lib/desktop/layouts/RootLayout.svelte', () => ({
-  default: (_anchor: unknown, props: { title: string; currentPath: string }) => {
+  default: (_anchor: unknown, props: StubLayoutProps) => {
     layout.props = props;
   },
 }));
