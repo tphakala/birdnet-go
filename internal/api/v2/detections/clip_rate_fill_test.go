@@ -36,6 +36,9 @@ const (
 	rateTestModelBat = "bat"
 	rateTestConcur   = 16
 	rateTestMargin   = 50 * time.Millisecond
+	// rateTestWait is the response wait tests use unless they exercise the budget,
+	// so a slow machine cannot make a response miss the probe.
+	rateTestWait = time.Minute
 )
 
 // rateStore is a datastore double for the lazy fill: it keeps one detection row
@@ -115,10 +118,11 @@ func newRateHandler(t *testing.T, note *datastore.Note, prober *fakeProber) (*ec
 	store := &rateStore{MockInterface: mocks.NewMockInterface(t), note: *note}
 	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(store))
 	h := buildTestHandler(t, core, map[string]string{}, map[string]string{})
+	h.clipRateWait = rateTestWait
 	if prober != nil {
 		h.probeClipRate = prober.probe
 	}
-	if note.ClipName != "" {
+	if note.ClipName != "" && filepath.IsLocal(note.ClipName) {
 		abs := filepath.Join(h.SFS.BaseDir(), filepath.FromSlash(note.ClipName))
 		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o750))
 		require.NoError(t, os.WriteFile(abs, []byte("clip"), 0o600))
@@ -126,22 +130,35 @@ func newRateHandler(t *testing.T, note *datastore.Note, prober *fakeProber) (*ec
 	return e, h, store
 }
 
-// getDetectionRate requests GET /detections/:id and returns the status and the
-// clipSampleRate in the body (0 when omitted).
-func getDetectionRate(t *testing.T, e *echo.Echo, h *Handler) (status, rate int) {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/"+strconv.Itoa(int(rateTestNoteID)), http.NoBody)
+// fetchDetectionRate requests GET /detections/:id with ctx as the request
+// context and returns the status and the clipSampleRate in the body (0 when
+// omitted). It makes no assertions, so goroutines may call it.
+func fetchDetectionRate(ctx context.Context, e *echo.Echo, h *Handler) (status, rate int, err error) {
+	id := strconv.Itoa(int(rateTestNoteID))
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/api/v2/detections/"+id, http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
-	c.SetParamValues(strconv.Itoa(int(rateTestNoteID)))
-	require.NoError(t, h.GetDetection(c))
+	c.SetParamValues(id)
+	if err := h.GetDetection(c); err != nil {
+		return 0, 0, err
+	}
 	var body map[string]any
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		return 0, 0, err
+	}
 	if v, ok := body["clipSampleRate"].(float64); ok {
 		rate = int(v)
 	}
-	return rec.Code, rate
+	return rec.Code, rate, nil
+}
+
+// getDetectionRate is fetchDetectionRate for the test goroutine.
+func getDetectionRate(t *testing.T, e *echo.Echo, h *Handler) (status, rate int) {
+	t.Helper()
+	status, rate, err := fetchDetectionRate(t.Context(), e, h)
+	require.NoError(t, err)
+	return status, rate
 }
 
 func TestGetDetection_LazyFillsBatClipSampleRate(t *testing.T) {
@@ -168,9 +185,10 @@ func TestGetDetection_LazyFill_ConcurrentSameRow(t *testing.T) {
 		prober := &fakeProber{rate: rateTestBatRate, gate: make(chan struct{})}
 		e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
 		rates := make([]int, rateTestConcur)
+		errs := make([]error, rateTestConcur)
 		var wg sync.WaitGroup
 		for i := range rateTestConcur {
-			wg.Go(func() { _, rates[i] = getDetectionRate(t, e, h) })
+			wg.Go(func() { _, rates[i], errs[i] = fetchDetectionRate(t.Context(), e, h) })
 		}
 		synctest.Wait() // every request is waiting on the one shared probe
 		close(prober.gate)
@@ -180,6 +198,7 @@ func TestGetDetection_LazyFill_ConcurrentSameRow(t *testing.T) {
 		assert.Equal(t, int32(1), prober.calls.Load(), "one probe for the row")
 		assert.Equal(t, 1, store.fills(), "one write for the row")
 		for i, r := range rates {
+			require.NoError(t, errs[i], "request %d", i)
 			assert.Equal(t, rateTestBatRate, r, "request %d", i)
 		}
 	})
@@ -191,6 +210,7 @@ func TestGetDetection_LazyFill_Budget(t *testing.T) {
 		// handler derives are bubble-owned.
 		prober := &fakeProber{rate: rateTestBatRate, gate: make(chan struct{})}
 		e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
+		h.clipRateWait = 0 // the production budget
 		start := time.Now()
 		status, rate := getDetectionRate(t, e, h)
 		elapsed := time.Since(start)
@@ -409,4 +429,57 @@ func TestNoteToDetectionResponse_ClipSampleRate(t *testing.T) {
 	body, err = json.Marshal(resp)
 	require.NoError(t, err)
 	assert.NotContains(t, string(body), "clipSampleRate", "an unknown rate is omitted")
+}
+
+// TestGetDetection_LazyFill_WorkTimeoutAndDetach verifies the shared work is
+// bounded by clipRateWorkTimeout and does not follow the request context.
+func TestGetDetection_LazyFill_WorkTimeoutAndDetach(t *testing.T) {
+	t.Run("a hung probe is cancelled at the work timeout", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			var probeErr error
+			prober := func(ctx context.Context, _ string) (int, error) {
+				<-ctx.Done()
+				probeErr = ctx.Err()
+				return 0, probeErr
+			}
+			e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), nil)
+			h.probeClipRate = prober
+
+			start := time.Now()
+			_, rate := getDetectionRate(t, e, h)
+			assert.Zero(t, rate)
+			assert.GreaterOrEqual(t, time.Since(start), clipRateWorkTimeout)
+			require.ErrorIs(t, probeErr, context.DeadlineExceeded)
+			assert.Zero(t, store.fills())
+		})
+	})
+
+	t.Run("a cancelled request does not cancel the work", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			gate := make(chan struct{})
+			var ctxErr error
+			prober := func(ctx context.Context, _ string) (int, error) {
+				<-gate
+				ctxErr = ctx.Err()
+				return rateTestBatRate, nil
+			}
+			e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), nil)
+			h.probeClipRate = prober
+
+			reqCtx, cancel := context.WithCancel(t.Context())
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, _, _ = fetchDetectionRate(reqCtx, e, h)
+			}()
+			synctest.Wait() // the request waits on the shared probe
+			cancel()
+			close(gate)
+			<-done
+			synctest.Wait()
+
+			require.NoError(t, ctxErr, "the probe's context is not the request's")
+			assert.Equal(t, rateTestBatRate, store.stored())
+		})
+	})
 }
