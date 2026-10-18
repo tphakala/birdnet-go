@@ -480,3 +480,55 @@ func TestStorageNotice_StatusCountsArmsAndStop(t *testing.T) {
 		f.h.Wait()
 	})
 }
+
+func TestStorageNotice_FixedPathIsForgottenNotCarried(t *testing.T) {
+	t.Run("judged persistent then unknown", func(t *testing.T) {
+		rec := newStorageNoticeRecorder(t, 1, 1)
+		f := newNoticeFixture(rec)
+		f.set("models", classLayer)
+		f.sync()
+		f.set("models", classOK)
+		f.sync()
+
+		f.set("models", classUnk)
+		f.sync()
+
+		created, deleted := rec.counts()
+		assert.Equal(t, 1, created, "the old lost verdict is not carried over a persistent one")
+		assert.Equal(t, 1, deleted)
+	})
+
+	t.Run("not applicable then applicable and unknown", func(t *testing.T) {
+		rec := newStorageNoticeRecorder(t, 1, 1)
+		f := newNoticeFixture(rec)
+		f.set("models", classLayer)
+		f.sync()
+		f.setEnv(sysinfo.EnvLXC)
+		f.sync()
+
+		f.setEnv(sysinfo.EnvDocker)
+		f.set("models", classUnk)
+		f.sync()
+
+		created, deleted := rec.counts()
+		assert.Equal(t, 1, created, "leaving the container context forgets the verdict")
+		assert.Equal(t, 1, deleted)
+	})
+
+	t.Run("label disappears then returns unknown", func(t *testing.T) {
+		rec := newStorageNoticeRecorder(t, 1, 1)
+		f := newNoticeFixture(rec)
+		f.set("clips", classLayer)
+		f.sync()
+		f.update(func(s *conf.Settings) { s.Realtime.Audio.Export.Enabled = false })
+		f.sync()
+
+		f.update(func(s *conf.Settings) { s.Realtime.Audio.Export.Enabled = true })
+		f.set("clips", classUnk)
+		f.sync()
+
+		created, deleted := rec.counts()
+		assert.Equal(t, 1, created, "a label the report stopped listing is forgotten")
+		assert.Equal(t, 1, deleted)
+	})
+}
