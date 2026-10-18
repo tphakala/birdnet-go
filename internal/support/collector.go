@@ -964,7 +964,7 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 
 	if isSensitive {
 		if isAddressListKey(lowerKey) {
-			return c.redactAddressList(value, sensitiveKeys)
+			return redactAddressList(value)
 		}
 		return c.redactSensitiveValue(value, sensitiveKeys)
 	}

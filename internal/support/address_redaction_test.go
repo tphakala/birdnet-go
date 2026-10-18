@@ -32,7 +32,14 @@ func TestClassifyAddressEntry(t *testing.T) {
 		{"mapped private", "::ffff:10.1.2.3", "[redacted private address]"},
 		{"link-local v4", "169.254.1.1", "[redacted link-local address]"},
 		{"link-local v6 zone", "fe80::1%eth0", "[redacted link-local address]"},
-		{"unspecified range", "0.0.0.0/0", "[redacted unspecified range]"},
+		{"unspecified single prefix", "0.0.0.0/32", "[redacted unspecified address]"},
+		{"trust-all v4", "0.0.0.0/0", "[redacted public range]"},
+		{"trust-all v6", "::/0", "[redacted public range]"},
+		{"range straddling private and public", "10.0.0.0/7", "[redacted public range]"},
+		{"range ending outside loopback", "127.0.0.0/4", "[redacted public range]"},
+		{"private v6 range", "fd00::/8", "[redacted private range]"},
+		{"cgnat address", "100.64.0.1", "[redacted public address]"},
+		{"cgnat range", "100.64.0.0/10", "[redacted public range]"},
 		{"unspecified address", "::", "[redacted unspecified address]"},
 		{"public address", "203.0.113.7", "[redacted public address]"},
 		{"public single prefix", "203.0.113.7/32", "[redacted public address]"},
@@ -87,4 +94,31 @@ func FuzzClassifyAddressEntry(f *testing.F) {
 			assert.True(t, allowed[out], "unexpected output %q for %q", out, in)
 		}
 	})
+}
+
+func TestRedactAddressList(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		value any
+		want  any
+	}{
+		{"nil", nil, nil},
+		{"empty string", "", ""},
+		{"scalar address", "198.51.100.20", "[redacted public address]"},
+		{"scalar preset", "cloudflare", "cloudflare"},
+		{"map item is blanked whole", []any{map[string]any{"ip": "203.0.113.7"}}, []any{"[redacted]"}},
+		{"number and nil items", []any{42, nil}, []any{"[redacted]", "[redacted]"}},
+		{"nested list item", []any{[]any{"203.0.113.7"}}, []any{"[redacted]"}},
+		{"map as the value", map[string]any{"203.0.113.7": true}, "[redacted]"},
+		{"mixed keeps order", []any{"10.0.0.1", 7, "cloudflare"}, []any{"[redacted private address]", "[redacted]", "cloudflare"}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, redactAddressList(tt.value))
+		})
+	}
 }

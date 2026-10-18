@@ -42,8 +42,10 @@ func formatRedactedAddress(scope, kind string) string {
 // replaces each entry with its address class. Support needs the topology (is
 // the proxy private or public, is it a single host or a range), not the
 // addresses themselves. A scalar string is handled too, because the dump reads
-// raw YAML rather than the typed struct.
-func (c *Collector) redactAddressList(value any, sensitiveKeys []string) any {
+// raw YAML rather than the typed struct. Any other shape (a map, a number, a
+// map or nested list as an item) is blanked whole, since recursing into it
+// would keep values under keys that are not sensitive.
+func redactAddressList(value any) any {
 	if isDefaultValue(value) {
 		return value
 	}
@@ -57,12 +59,12 @@ func (c *Collector) redactAddressList(value any, sensitiveKeys []string) any {
 			if s, ok := item.(string); ok {
 				out[i] = classifyAddressEntry(s)
 			} else {
-				out[i] = c.redactSensitiveValue(item, sensitiveKeys)
+				out[i] = redactedPlaceholder
 			}
 		}
 		return out
 	default:
-		return c.redactSensitiveValue(value, sensitiveKeys)
+		return redactedPlaceholder
 	}
 }
 
@@ -84,7 +86,7 @@ func classifyAddressEntry(entry string) string {
 		if prefix.IsSingleIP() {
 			kind = addressKindAddress
 		}
-		return formatRedactedAddress(addressScope(prefix.Masked().Addr()), kind)
+		return formatRedactedAddress(rangeScope(prefix), kind)
 	}
 	if addr, err := netip.ParseAddr(trimmed); err == nil {
 		return formatRedactedAddress(addressScope(addr), addressKindAddress)
@@ -108,4 +110,32 @@ func addressScope(addr netip.Addr) string {
 	default:
 		return addressScopePublic
 	}
+}
+
+// rangeScope classifies a prefix by its first and last address. A range whose
+// ends fall in different scopes reaches beyond the lower scope into public
+// space, so it is reported as public rather than by its base address.
+func rangeScope(prefix netip.Prefix) string {
+	first := prefix.Masked().Addr()
+	scope := addressScope(first)
+	if prefix.IsSingleIP() {
+		return scope
+	}
+	if lastScope := addressScope(lastAddr(prefix)); lastScope != scope {
+		return addressScopePublic
+	}
+	return scope
+}
+
+// lastAddr returns the highest address of a masked prefix.
+func lastAddr(prefix netip.Prefix) netip.Addr {
+	addr := prefix.Masked().Addr()
+	raw := addr.AsSlice()
+	bits := prefix.Bits()
+	for i := range raw {
+		hostBits := min(max(8*(i+1)-bits, 0), 8)
+		raw[i] |= byte(1<<hostBits - 1)
+	}
+	last, _ := netip.AddrFromSlice(raw)
+	return last
 }
