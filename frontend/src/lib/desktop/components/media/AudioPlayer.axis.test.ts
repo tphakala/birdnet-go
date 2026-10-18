@@ -240,8 +240,8 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       // any render it has; no axis is drawn over it and no error is shown.
       expect(imageSrc()).not.toBeNull();
       expect(imageSrc()).not.toContain('sr=');
-      expect(labels(container)).toEqual([]);
       expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE)).toBeNull();
+      expect(await loadedLabels(container)).toEqual([]);
     });
 
     it('shows the error placeholder when the image without the rate fails too', async () => {
@@ -386,7 +386,41 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       // The retries alone would need 500 + 1000 + 2000 + 4000 ms before falling back.
       expect(imageSrc()).not.toContain('sr=');
       expect(probeCalls).toHaveLength(1);
-      expect(labels(container)).toEqual([]);
+      expect(await loadedLabels(container)).toEqual([]);
+    });
+
+    it('drops a pending status check when the detection changes', async () => {
+      probeResponder = slowNotFound;
+      const { container, rerender } = mount({
+        modelType: 'bat',
+        clipSampleRate: RATE_384K,
+        detectionId: '42',
+      });
+      await settle();
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+
+      await rerender({ modelType: 'bat', clipSampleRate: RATE_192K, detectionId: '43' });
+      await settle();
+      expect(probeSignals[0]?.aborted).toBe(true);
+      await vi.advanceTimersByTimeAsync(SERVER_MISSING_AUDIO_WAIT_MS);
+
+      // The new detection keeps its own rate and axis.
+      expect(imageSrc()).toContain('/api/v2/spectrogram/43');
+      expect(imageSrc()).toContain(`sr=${RATE_192K}`);
+      expect((await loadedLabels(container))[0]).toBe('80k');
+    });
+
+    it('drops a pending status check on unmount', async () => {
+      probeResponder = slowNotFound;
+      const { unmount } = mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+
+      unmount();
+
+      expect(probeSignals[0]?.aborted).toBe(true);
     });
 
     it('draws no bat axis while the image is still loading', async () => {
