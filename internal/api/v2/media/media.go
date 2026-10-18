@@ -2170,10 +2170,7 @@ func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 	if params.overlayRate > 0 {
 		var lookupErr error
 		if profile, lookupErr = c.lookupFrequencyProfile(noteID); lookupErr != nil {
-			c.LogDebugIfEnabled("Model type lookup failed for an sr request, not rendering",
-				logger.String("note_id", noteID),
-				logger.Error(lookupErr))
-			return c.writeAudioNotReady(ctx, lookupErr, "Spectrogram profile is not available yet, please retry", minRetryAfterSeconds)
+			return c.writeProfileUnavailable(ctx, noteID, lookupErr)
 		}
 	} else {
 		profile = c.resolveDetectionFrequencyProfile(noteID)
@@ -2283,7 +2280,9 @@ func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 //   - "failed": Generation failed
 //   - "exists": Already exists on disk
 //
-// A legacy width query value outside 100..2000 answers 400.
+// A legacy width query value outside 100..2000 answers 400. It answers 503 with
+// Retry-After when the detection's model type cannot be looked up, rather than
+// checking for a file under a guessed profile.
 func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 	// Defense in depth: initMediaRoutes already skips registering this handler when the
 	// datastore is disabled, but guard the c.DS dereferences below anyway.
@@ -2359,7 +2358,12 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 
 	// Resolve the profile token only after the queue miss (this path is about to stat
 	// the disk anyway), so queue-hit polls stay free of a model-type lookup.
-	freqSuffix := c.spectrogramProfileSuffix(noteID)
+	// A failed lookup answers 503 rather than checking for a file under a guessed profile.
+	profile, lookupErr := c.lookupFrequencyProfile(noteID)
+	if lookupErr != nil {
+		return c.writeProfileUnavailable(ctx, noteID, lookupErr)
+	}
+	freqSuffix := spectrogram.ProfileSuffix(profile)
 	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 
 	// Check if file exists and is non-empty
@@ -2387,38 +2391,6 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 	})
 }
 
-// GenerateSpectrogramByID triggers spectrogram generation for a specific detection
-//
-// Route: POST /api/v2/spectrogram/:id/generate
-//
-// This endpoint is designed for "user-requested" mode where spectrograms are only
-// generated when explicitly requested by the user clicking a button in the UI.
-//
-// Query Parameters:
-//   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
-//     Default: "lg"
-//   - raw: Whether to generate raw spectrogram without axes/legends
-//     Default: true (for backward compatibility)
-//
-// Response Format (API v2 envelope):
-//
-//	{
-//	  "data": {
-//	    "status": "generated",
-//	    "path": "/api/v2/spectrogram/:id?raw=true"
-//	  },
-//	  "error": "",
-//	  "message": "Spectrogram generated successfully"
-//	}
-//
-// HTTP Status Codes:
-//   - 200 OK: Spectrogram generated successfully
-//   - 400 Bad Request: legacy width outside 100..2000
-//   - 503 Service Unavailable: Audio file not ready (includes Retry-After header)
-//   - 404 Not Found: Audio file not found
-//   - 408 Request Timeout: Generation timed out
-//   - 500 Internal Server Error: Generation failed
-//
 // runAsyncSpectrogramGeneration is the background worker spawned by
 // GenerateSpectrogramByID. It waits out any pending Extended Capture clip export before
 // generating, then records the outcome in the queue status and logs it: a clip that is
@@ -2507,6 +2479,40 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 		logger.String("spectrogram_path", spectrogramPath))
 }
 
+// GenerateSpectrogramByID triggers spectrogram generation for a specific detection
+//
+// Route: POST /api/v2/spectrogram/:id/generate
+//
+// This endpoint is designed for "user-requested" mode where spectrograms are only
+// generated when explicitly requested by the user clicking a button in the UI.
+//
+// Query Parameters:
+//   - size: Spectrogram size - "md" (514px), "lg" (1026px), "xl" (2050px)
+//     Default: "lg"
+//   - raw: Whether to generate raw spectrogram without axes/legends
+//     Default: true (for backward compatibility)
+//
+// Response Format (API v2 envelope), for 200 when the spectrogram already exists:
+//
+//	{
+//	  "data": {
+//	    "status": "exists",
+//	    "path": "/api/v2/spectrogram/:id?raw=true"
+//	  },
+//	  "error": "",
+//	  "message": "Spectrogram already exists"
+//	}
+//
+// A 202 carries the queue status in "data"; poll the status endpoint for progress.
+// A generation failure is reported through the status endpoint, not by this handler.
+//
+// HTTP Status Codes:
+//   - 200 OK: spectrogram already exists
+//   - 202 Accepted: generation queued or already in progress
+//   - 400 Bad Request: legacy width outside 100..2000
+//   - 404 Not Found: Audio file not found
+//   - 503 Service Unavailable: Audio file not ready, or the detection's model type
+//     could not be looked up (includes Retry-After header); nothing is queued or written
 func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Validate note ID and get clip path using shared helper
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
@@ -2550,8 +2556,13 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 
 	// Resolve the detection's frequency profile up front: it feeds both the cache
 	// filename/queue-key token (so a bat render does not collide with a bird PNG)
-	// and the generation options threaded into the async worker below.
-	profile := c.resolveDetectionFrequencyProfile(noteID)
+	// and the generation options threaded into the async worker below. A failed
+	// lookup answers 503 instead of guessing: nothing is queued or written under a
+	// wrong profile.
+	profile, lookupErr := c.lookupFrequencyProfile(noteID)
+	if lookupErr != nil {
+		return c.writeProfileUnavailable(ctx, noteID, lookupErr)
+	}
 	freqSuffix := spectrogram.ProfileSuffix(profile)
 
 	// Build the spectrogram path (for the on-disk existence check) and the immutable
@@ -2740,7 +2751,8 @@ func getSpectrogramLogger() logger.Logger {
 
 // resolveDetectionFrequencyProfile resolves a detection's spectrogram frequency
 // profile from its model type, defaulting to the bird profile when the model
-// type cannot be looked up.
+// type cannot be looked up. Do not use it where a wrong profile would be persisted
+// or reported; use lookupFrequencyProfile there.
 func (c *Handler) resolveDetectionFrequencyProfile(noteID string) spectrogram.FrequencyProfile {
 	profile, err := c.lookupFrequencyProfile(noteID)
 	if err != nil {
@@ -2759,12 +2771,20 @@ func (c *Handler) lookupFrequencyProfile(noteID string) (spectrogram.FrequencyPr
 	return spectrogram.ProfileForModelType(modelType), err
 }
 
-// spectrogramProfileSuffix resolves the frequency-profile cache token for a
-// detection so by-ID spectrogram paths and queue keys do not collide with the
-// default bird-profile render. Returns "" (bird) when the model type cannot be
-// resolved.
-func (c *Handler) spectrogramProfileSuffix(noteID string) string {
-	return spectrogram.ProfileSuffix(c.resolveDetectionFrequencyProfile(noteID))
+// msgSpectrogramProfileUnavailable is the 503 message returned when a detection's
+// model type cannot be looked up and the request must not guess a profile.
+const msgSpectrogramProfileUnavailable = "Spectrogram profile is not available yet, please retry"
+
+// writeProfileUnavailable answers a retryable 503 with Retry-After when the model
+// type lookup failed and the caller must not render or report under a guessed
+// profile. It logs at Debug only, so a transient database error does not reach the
+// error log, Sentry or the notification bell. Used by the by-ID serve (sr requests),
+// generate and status handlers.
+func (c *Handler) writeProfileUnavailable(ctx echo.Context, noteID string, err error) error {
+	c.LogDebugIfEnabled("Model type lookup failed, not guessing the spectrogram profile",
+		logger.String("note_id", noteID),
+		logger.Error(err))
+	return c.writeAudioNotReady(ctx, err, msgSpectrogramProfileUnavailable, minRetryAfterSeconds)
 }
 
 // buildSpectrogramPaths constructs the spectrogram file paths from the audio path and parameters.
