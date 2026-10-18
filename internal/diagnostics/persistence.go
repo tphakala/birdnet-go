@@ -221,8 +221,8 @@ type StorageSeverity int
 const (
 	// StorageSeverityNone needs no attention.
 	StorageSeverityNone StorageSeverity = iota
-	// StorageSeverityWarning is data that is lost or can seem lost, in models
-	// or clips.
+	// StorageSeverityWarning is data that is lost (models or clips) or can seem
+	// lost (any anonymous volume).
 	StorageSeverityWarning
 	// StorageSeverityCritical is the configuration or the database on a path
 	// lost when the container is recreated.
