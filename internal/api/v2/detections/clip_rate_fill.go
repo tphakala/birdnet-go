@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	// clipRateWorkTimeout bounds the shared probe-and-store work for one row. It
-	// runs detached from the request, so a client disconnect does not cancel it.
+	// clipRateWorkTimeout bounds the shared probe-and-store work for one row, the
+	// guarded write included. It runs detached from the request, so a client
+	// disconnect does not cancel it.
 	clipRateWorkTimeout = 5 * time.Second
 
 	// clipRateResponseBudget is the longest GetDetection waits for the lazy fill.
@@ -73,13 +74,10 @@ func wantsClipRateFill(note *datastore.Note) bool {
 // clipRateResponseBudget. On a miss note.ClipSampleRate stays 0 and the work
 // finishes in the background. A failed probe writes nothing, so the next request
 // tries again, and so does a panic in the shared work, which is contained and
-// treated as a failed probe. The write changes a NULL value only (FillClipSampleRate).
+// treated as a failed probe. The write changes a NULL value only (DetectionRepository.FillClipSampleRate)
+// and runs under the work context. It does nothing without a repository.
 func (c *Handler) fillClipSampleRate(note *datastore.Note) {
-	if !wantsClipRateFill(note) {
-		return
-	}
-	filler, ok := c.DS.(datastore.ClipSampleRateStore)
-	if !ok {
+	if c.Repo == nil || !wantsClipRateFill(note) {
 		return
 	}
 	absPath, ok := c.clipProbePath(note.ClipName)
@@ -104,7 +102,7 @@ func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 		// waiter, so one client disconnecting must not fail the others.
 		workCtx, cancel := context.WithTimeout(c.Context(), clipRateWorkTimeout)
 		defer cancel()
-		return c.probeAndStoreClipRate(workCtx, filler, noteID, clipName, absPath)
+		return c.probeAndStoreClipRate(workCtx, noteID, clipName, absPath)
 	})
 
 	timer := time.NewTimer(c.clipRateWait)
@@ -142,8 +140,9 @@ func (c *Handler) clipProbePath(clipName string) (string, bool) {
 
 // probeAndStoreClipRate probes the clip header and stores the rate while the row
 // is still NULL. It returns the probed rate even when the write fails or changes
-// no row, because the rate belongs to the clip the response names.
-func (c *Handler) probeAndStoreClipRate(ctx context.Context, filler datastore.ClipSampleRateStore, noteID uint, clipName, absPath string) (int, error) {
+// no row, because the rate belongs to the clip the response names. The write runs
+// under ctx, so one that outlives the work timeout is cancelled and logged at debug.
+func (c *Handler) probeAndStoreClipRate(ctx context.Context, noteID uint, clipName, absPath string) (int, error) {
 	rate, err := c.probeClipRate(ctx, absPath)
 	if err != nil {
 		c.LogDebugIfEnabled("Clip sample rate probe failed",
@@ -155,10 +154,19 @@ func (c *Handler) probeAndStoreClipRate(ctx context.Context, filler datastore.Cl
 	if rate <= 0 {
 		return 0, errClipRateInvalid
 	}
-	if _, err := filler.FillClipSampleRate(noteID, clipName, rate); err != nil {
-		c.LogWarnIfEnabled("Failed to store the clip sample rate; it stays unset",
-			logger.Uint64("note_id", uint64(noteID)),
-			logger.Error(err))
+	// ctx is the work context, so a write that outlives clipRateWorkTimeout is
+	// cancelled and releases the singleflight key instead of pinning it.
+	if _, err := c.Repo.FillClipSampleRate(ctx, noteID, clipName, rate); err != nil {
+		// A write cancelled by the work timeout or a shutdown is not something the
+		// operator can act on; the next request retries.
+		if errors.IsContextCancellation(err) {
+			c.LogDebugIfEnabled("Clip sample rate write was cancelled; it stays unset",
+				logger.Uint64("note_id", uint64(noteID)))
+		} else {
+			c.LogWarnIfEnabled("Failed to store the clip sample rate; it stays unset",
+				logger.Uint64("note_id", uint64(noteID)),
+				logger.Error(err))
+		}
 	}
 	return rate, nil
 }

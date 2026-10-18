@@ -117,6 +117,16 @@ type Interface interface {
 	GetNoteClipPath(noteID string) (string, error)
 	GetNoteModelType(noteID string) (string, error)
 	GetNoteKeptSpectrogram(noteID string) (clipName, modelType string, err error)
+	// RecordClipSampleRate sets the stored clip sample rate (Hz) of the detection
+	// when its clip_name still equals clipName, overwriting any existing value. It
+	// is authoritative and used to correct a rate planned before the clip was written.
+	// Only the v2-only store persists it; the legacy store has no such column.
+	RecordClipSampleRate(ctx context.Context, noteID uint, clipName string, rate int) error
+	// FillClipSampleRate stores rate (Hz) only while the detection's clip_sample_rate
+	// is NULL and its clip_name still equals clipName. It reports whether a row
+	// changed, so concurrent or repeated fills converge and never overwrite a value
+	// written by the exporter. Only the v2-only store persists it.
+	FillClipSampleRate(ctx context.Context, noteID uint, clipName string, rate int) (bool, error)
 	DeleteNoteClipPath(noteID string) error
 	GetNoteReview(noteID string) (*NoteReview, error)
 	SaveNoteReview(review *NoteReview) error
@@ -637,6 +647,19 @@ func (ds *DataStore) GetNoteModelType(_ string) (string, error) {
 // persist the link, so the clip name is always empty and the model type is "bird".
 func (ds *DataStore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
 	return "", "bird", nil
+}
+
+// RecordClipSampleRate is a no-op on the legacy store: its notes table has no
+// clip_sample_rate column (Note.ClipSampleRate is gorm:"-"). This stub exists only
+// because the legacy store still implements Interface and goes away with it.
+func (ds *DataStore) RecordClipSampleRate(_ context.Context, _ uint, _ string, _ int) error {
+	return nil
+}
+
+// FillClipSampleRate is a no-op on the legacy store, see RecordClipSampleRate. It
+// reports that no row changed. Removed together with the legacy store.
+func (ds *DataStore) FillClipSampleRate(_ context.Context, _ uint, _ string, _ int) (bool, error) {
+	return false, nil
 }
 
 // DeleteNoteClipPath deletes the field representing the path to the audio clip associated with a note.
@@ -2133,21 +2156,6 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 	}
 
 	return count, nil
-}
-
-// ClipSampleRateStore is implemented by stores that persist the sample rate of a
-// detection's saved clip file. It is separate from Interface so Interface and its
-// many test doubles do not grow; callers reach it by type assertion.
-type ClipSampleRateStore interface {
-	// RecordClipSampleRate sets the stored clip sample rate (Hz) of the detection
-	// when its clip_name still equals clipName, overwriting any existing value. It
-	// is authoritative and used to correct a rate planned before the clip was written.
-	RecordClipSampleRate(noteID uint, clipName string, rate int) error
-	// FillClipSampleRate stores rate (Hz) only while the detection's clip_sample_rate
-	// is NULL and its clip_name still equals clipName. It reports whether a row
-	// changed, so concurrent or repeated fills converge and never overwrite a value
-	// written by the exporter.
-	FillClipSampleRate(noteID uint, clipName string, rate int) (bool, error)
 }
 
 // SearchFilters defines parameters for filtering detection records

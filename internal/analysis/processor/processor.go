@@ -2485,10 +2485,9 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	// is obtained, so the shared fields are built once. Restating them per branch
 	// means every newly added field has to be repeated in all three, and a field
 	// missed on one branch is invisible until that branch is exercised.
-	clipRates, _ := p.Ds.(datastore.ClipSampleRateStore)
 	base := func() *SaveAudioAction {
 		return &SaveAudioAction{
-			clipRates:        clipRates,
+			clipRates:        p.Repo,
 			plannedRate:      det.Result.ClipSampleRate,
 			Settings:         settings,
 			ClipName:         det.Result.ClipName,

@@ -1826,34 +1826,15 @@ func (ds *Datastore) GetNoteKeptSpectrogram(noteID string) (clipName, modelType 
 	return clipName, modelType, nil
 }
 
-// Compile-time check that the v2-only store supports clip sample rate storage.
-var _ datastore.ClipSampleRateStore = (*Datastore)(nil)
-
-// RecordClipSampleRate sets the clip sample rate of a detection whose clip_name
-// still equals clipName, overwriting any stored value. A single-row UPDATE with a
-// WHERE guard is atomic on SQLite and MySQL, so it needs no transaction or lock.
-func (ds *Datastore) RecordClipSampleRate(noteID uint, clipName string, rate int) error {
-	if clipName == "" || rate <= 0 {
-		return nil
-	}
-	return ds.clipRows(noteID, clipName).Update("clip_sample_rate", rate).Error
+// RecordClipSampleRate forwards to the v2 detection repository, which holds the
+// guarded UPDATE and runs it under ctx.
+func (ds *Datastore) RecordClipSampleRate(ctx context.Context, noteID uint, clipName string, rate int) error {
+	return ds.detection.RecordClipSampleRate(ctx, noteID, clipName, rate)
 }
 
-// FillClipSampleRate sets the clip sample rate only while it is NULL and clip_name
-// still equals clipName. It reports whether a row changed.
-func (ds *Datastore) FillClipSampleRate(noteID uint, clipName string, rate int) (bool, error) {
-	if clipName == "" || rate <= 0 {
-		return false, nil
-	}
-	res := ds.clipRows(noteID, clipName).Where("clip_sample_rate IS NULL").Update("clip_sample_rate", rate)
-	return res.RowsAffected > 0, res.Error
-}
-
-// clipRows selects the detection row with the given ID whose clip_name still
-// equals clipName, for the guarded clip sample rate updates.
-func (ds *Datastore) clipRows(noteID uint, clipName string) *gorm.DB {
-	return ds.manager.DB().WithContext(context.Background()).Table(ds.manager.TablePrefix()+"detections").
-		Where("id = ? AND clip_name = ?", noteID, clipName)
+// FillClipSampleRate forwards to the v2 detection repository, see RecordClipSampleRate.
+func (ds *Datastore) FillClipSampleRate(ctx context.Context, noteID uint, clipName string, rate int) (bool, error) {
+	return ds.detection.FillClipSampleRate(ctx, noteID, clipName, rate)
 }
 
 // DeleteNoteClipPath deletes the clip path for a note.
