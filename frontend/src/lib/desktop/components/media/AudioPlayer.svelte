@@ -324,6 +324,11 @@
   // Longest wait for the detection endpoint when a bat rate has to be resolved
   // before the spectrogram is requested.
   const RATE_RESOLVE_TIMEOUT_MS = 1500;
+  // Longest wait for the status check of a failed image URL that carries the
+  // rate. It is longer than the server's 5 s wait for a missing audio file, so a
+  // 404 from that path still arrives in time.
+  const SPECTROGRAM_PROBE_TIMEOUT_MS = 8000;
+  const HTTP_STATUS_NOT_FOUND = 404;
 
   const isKnownRate = (rate: unknown): rate is number =>
     typeof rate === 'number' && Number.isInteger(rate) && rate > 0;
@@ -1459,6 +1464,58 @@
     statusPollStartTime = undefined;
   };
 
+  // Status check of a failed spectrogram image that carries the clip rate.
+  let spectrogramProbeAbortController: AbortController | undefined;
+
+  const clearSpectrogramProbe = () => {
+    spectrogramProbeAbortController?.abort();
+    spectrogramProbeAbortController = undefined;
+  };
+
+  // Loads the render the server has for this detection without the rate, and
+  // without an axis, instead of the exact-rate render.
+  const fallBackToImageWithoutRate = () => {
+    overlayFallbackDetectionId = detectionId;
+    clearSpectrogramRetryTimer();
+    clearStatusPollTimer();
+    clearSpectrogramProbe();
+  };
+
+  // An <img> cannot read the response status, so the failed URL is requested
+  // once more with fetch. A 404 means the exact-rate render does not exist
+  // (sr requests are answered from the exact render only), so the player falls
+  // back at once instead of spending its retries on it. Any other outcome
+  // (503 while a clip is written, a network error, the timeout) leaves the
+  // retries to run as before.
+  const probeExactRateRender = async (url: string) => {
+    clearSpectrogramProbe();
+    const controller = new AbortController();
+    spectrogramProbeAbortController = controller;
+    const probedBaseUrl = spectrogramBaseUrl;
+    const timeoutId = setTimeout(() => controller.abort(), SPECTROGRAM_PROBE_TIMEOUT_MS);
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      // Only the status is needed; drop the body.
+      controller.abort();
+      if (
+        response.status === HTTP_STATUS_NOT_FOUND &&
+        spectrogramBaseUrl === probedBaseUrl &&
+        overlayRate !== undefined &&
+        !processedSpectrogramUrl
+      ) {
+        debugLog('probeExactRateRender: 404, dropping the rate and the axis');
+        fallBackToImageWithoutRate();
+      }
+    } catch {
+      // Aborted, timed out or failed: the retries carry on unchanged.
+    } finally {
+      clearTimeout(timeoutId);
+      if (spectrogramProbeAbortController === controller) {
+        spectrogramProbeAbortController = undefined;
+      }
+    }
+  };
+
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
     debugLog('handleSpectrogramLoad: success');
@@ -1466,6 +1523,7 @@
     spectrogramRetryCount = 0; // Reset retry count on successful load
     clearSpectrogramRetryTimer();
     clearStatusPollTimer(); // Also clear status polling
+    clearSpectrogramProbe();
   };
 
   const handleSpectrogramError = async (event: Event) => {
@@ -1496,6 +1554,10 @@
       debugLog('handleSpectrogramError: first error, starting status polling');
       statusPollStartTime = Date.now();
       pollSpectrogramStatus();
+      // An image requested with the clip rate: ask the server why it failed.
+      if (overlayRate !== undefined && !processedSpectrogramUrl && spectrogramUrl) {
+        void probeExactRateRender(spectrogramUrl);
+      }
     }
 
     // Retry on any error (likely 503 or temporary failure) up to max retries
@@ -1545,18 +1607,15 @@
       return;
     }
 
-    // The image requested with the clip rate still fails after the retries. The
-    // usual cause is a 404 because the exact render is missing (for example only
-    // an older render of the clip was kept), but an <img> cannot tell a 404 from
-    // other failures, so any persistent failure lands here unless the status poll
-    // reports a queued or running generation (handled above): load whatever
-    // render the server has, without the rate and without an axis, before giving
-    // up.
+    // The image requested with the clip rate still fails after the retries and
+    // the status check on the first failure did not answer 404 (it timed out,
+    // or the failure was not a missing render). Any persistent failure lands
+    // here unless the status poll reports a queued or running generation
+    // (handled above): load whatever render the server has, without the rate
+    // and without an axis, before giving up.
     if (overlayRate !== undefined && !processedSpectrogramUrl) {
       debugLog('handleSpectrogramError: exact-rate render unavailable, dropping the axis');
-      overlayFallbackDetectionId = detectionId;
-      clearSpectrogramRetryTimer();
-      clearStatusPollTimer();
+      fallBackToImageWithoutRate();
       return;
     }
 
@@ -1745,8 +1804,9 @@
       spectrogramRetryCount = 0;
       spectrogramCacheKey = 0;
       clearSpectrogramRetryTimer();
-      // Abort any in-flight status polling when URL changes
+      // Abort any in-flight status polling and status check when URL changes
       clearStatusPollTimer();
+      clearSpectrogramProbe();
       // Revoke stale processed spectrogram from previous detection
       if (processedSpectrogramUrl) {
         URL.revokeObjectURL(processedSpectrogramUrl);
@@ -2003,6 +2063,7 @@
       clearPlayEndTimeout();
       clearSpectrogramRetryTimer();
       clearStatusPollTimer();
+      clearSpectrogramProbe();
       spectrogramLoader.cleanup();
       if (audioRetryTimer) {
         clearTimeout(audioRetryTimer);
@@ -2222,8 +2283,9 @@
   {/if}
 
   <!-- Frequency scale overlay (linear; range follows the model type and, for bats,
-       the clip sample rate; a bat axis without a known rate has no ticks) -->
-  {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error && freqNyquistKHz > 0}
+       the clip sample rate; a bat axis without a known rate has no ticks, and a
+       bat axis is drawn only once its image has loaded) -->
+  {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error && freqNyquistKHz > 0 && !(isBatSpectrogram && spectrogramLoader.loading)}
     {#each freqTicksKHz as freq (freq)}
       <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true"
         >{freq}k</span

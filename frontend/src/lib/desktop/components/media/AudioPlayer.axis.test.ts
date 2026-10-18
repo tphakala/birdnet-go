@@ -31,6 +31,13 @@ vi.mock('$lib/utils/audioNodes', () => ({
 const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
 const SPECTROGRAM_UNAVAILABLE = 'components.audio.spectrogramUnavailable';
 const DETECTION_ENDPOINT = '/api/v2/detections/';
+const SPECTROGRAM_ENDPOINT = '/api/v2/spectrogram/';
+// SPECTROGRAM_PROBE_TIMEOUT_MS in AudioPlayer.svelte
+const PROBE_TIMEOUT_MS = 8000;
+// The server waits this long for missing audio before it answers 404 (media.go audioWaitTimeout)
+const SERVER_MISSING_AUDIO_WAIT_MS = 5000;
+// First spectrogram retry delay in AudioPlayer.svelte
+const FIRST_RETRY_DELAY_MS = 500;
 // RATE_RESOLVE_TIMEOUT_MS in AudioPlayer.svelte
 const RATE_RESOLVE_TIMEOUT_MS = 1500;
 // Longer than every spectrogram retry delay in AudioPlayer.svelte (500 to 4000 ms)
@@ -70,6 +77,10 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
   let ctl: FakeMediaController;
   let originalFetch: FetchImpl | undefined;
   let detailRequests: PendingDetailRequest[];
+  // Answers the status check of an image URL that carries sr; undefined leaves
+  // it to the shared fetch mock (200).
+  let probeResponder: ((signal: AbortSignal | undefined) => Promise<Response>) | undefined;
+  let probeCalls: string[];
 
   const fetchMock = () => vi.mocked(globalThis.fetch);
 
@@ -83,6 +94,15 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
 
   function labels(container: HTMLElement): string[] {
     return Array.from(container.querySelectorAll('.freq-label')).map(el => el.textContent.trim());
+  }
+
+  // Fires the image load event, then reads the axis labels: the bat axis is
+  // drawn only over a loaded image.
+  async function loadedLabels(container: HTMLElement): Promise<string[]> {
+    const img = screen.queryByAltText(SPECTROGRAM_ALT);
+    if (img) await fireEvent.load(img);
+    await settle();
+    return labels(container);
   }
 
   function imageSrc(): string | null {
@@ -99,10 +119,20 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
     vi.useFakeTimers();
     ctl = installFakeMediaElement();
     detailRequests = [];
+    probeCalls = [];
     originalFetch = fetchMock().getMockImplementation();
     // Detail requests stay pending until the test answers them; the request
     // rejects with an AbortError when its signal aborts, as fetch does.
+    probeResponder = undefined;
     fetchMock().mockImplementation((url, init) => {
+      if (
+        probeResponder &&
+        String(url).includes(SPECTROGRAM_ENDPOINT) &&
+        String(url).includes('sr=')
+      ) {
+        probeCalls.push(String(url));
+        return probeResponder(init?.signal ?? undefined);
+      }
       if (String(url).includes(DETECTION_ENDPOINT)) {
         return new Promise<Response>((resolve, reject) => {
           const signal = init?.signal ?? undefined;
@@ -137,8 +167,8 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       const { container } = mount({ modelType: 'bat', clipSampleRate: RATE_384K });
       await settle();
 
-      expect(labels(container)).toEqual(['160k', '120k', '80k', '40k']);
-      expect(labels(container)).not.toContain('128k');
+      expect(await loadedLabels(container)).toEqual(['160k', '120k', '80k', '40k']);
+      expect(await loadedLabels(container)).not.toContain('128k');
       const top = container.querySelector<HTMLElement>('.freq-label');
       expect(parseFloat(top?.style.bottom ?? '')).toBeCloseTo((160 / 192) * 100, 2);
       expect(imageSrc()).toContain(`sr=${RATE_384K}`);
@@ -149,7 +179,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       const { container } = mount({ modelType: 'bat', clipSampleRate: RATE_192K });
       await settle();
 
-      expect(labels(container)[0]).toBe('80k');
+      expect((await loadedLabels(container))[0]).toBe('80k');
       expect(imageSrc()).toContain(`sr=${RATE_192K}`);
     });
 
@@ -165,12 +195,12 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
     it('updates the axis and URL when the rate prop changes', async () => {
       const { container, rerender } = mount({ modelType: 'bat', clipSampleRate: RATE_192K });
       await settle();
-      expect(labels(container)[0]).toBe('80k');
+      expect((await loadedLabels(container))[0]).toBe('80k');
 
       await rerender({ modelType: 'bat', clipSampleRate: RATE_384K });
       await settle();
 
-      expect(labels(container)[0]).toBe('160k');
+      expect((await loadedLabels(container))[0]).toBe('160k');
       expect(imageSrc()).toContain(`sr=${RATE_384K}`);
     });
 
@@ -211,6 +241,98 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
     });
   });
 
+  describe('exact render status check', () => {
+    const notFound = () => Promise.resolve(jsonResponse({ error: 'no render' }, 404));
+    const neverAnswers = (signal: AbortSignal | undefined) =>
+      new Promise<Response>((_resolve, reject) => {
+        signal?.addEventListener('abort', () =>
+          reject(new DOMException('The operation was aborted.', 'AbortError'))
+        );
+      });
+
+    it('falls back to the image without sr after one failed attempt when the server says 404', async () => {
+      probeResponder = notFound;
+      const { container } = mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+
+      expect(probeCalls).toHaveLength(1);
+      expect(probeCalls[0]).toContain(`sr=${RATE_384K}`);
+      expect(imageSrc()).not.toContain('sr=');
+      expect(imageSrc()).not.toContain('retry=');
+      expect(labels(container)).toEqual([]);
+      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE)).toBeNull();
+    });
+
+    it('keeps retrying with sr when the status check answers 503', async () => {
+      probeResponder = () => Promise.resolve(jsonResponse({ error: 'busy' }, 503));
+      mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await vi.advanceTimersByTimeAsync(FIRST_RETRY_DELAY_MS);
+
+      expect(imageSrc()).toContain(`sr=${RATE_384K}`);
+      expect(imageSrc()).toContain('retry=1');
+    });
+
+    it('keeps retrying with sr when the status check times out', async () => {
+      probeResponder = neverAnswers;
+      mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await vi.advanceTimersByTimeAsync(PROBE_TIMEOUT_MS + FIRST_RETRY_DELAY_MS);
+
+      expect(imageSrc()).toContain(`sr=${RATE_384K}`);
+      expect(imageSrc()).toContain('retry=');
+    });
+
+    it('falls back as soon as a slow 404 arrives, well before the retries run out', async () => {
+      probeResponder = () =>
+        new Promise<Response>(resolve => {
+          setTimeout(
+            () => resolve(jsonResponse({ error: 'no render' }, 404)),
+            SERVER_MISSING_AUDIO_WAIT_MS
+          );
+        });
+      const { container } = mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      const img = screen.getByAltText(SPECTROGRAM_ALT);
+      await fireEvent.error(img);
+      await vi.advanceTimersByTimeAsync(SERVER_MISSING_AUDIO_WAIT_MS);
+      await settle();
+
+      // The retries alone would need 500 + 1000 + 2000 + 4000 ms before falling back.
+      expect(imageSrc()).not.toContain('sr=');
+      expect(probeCalls).toHaveLength(1);
+      expect(labels(container)).toEqual([]);
+    });
+
+    it('draws no bat axis while the image is still loading', async () => {
+      const { container } = mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      expect(imageSrc()).toContain(`sr=${RATE_384K}`);
+      expect(labels(container)).toEqual([]);
+      expect(await loadedLabels(container)).toEqual(['160k', '120k', '80k', '40k']);
+    });
+
+    it('makes no status check for a bird image or a bat image without a rate', async () => {
+      probeResponder = notFound;
+      mount({ modelType: 'bird', clipSampleRate: BIRD_RATE });
+      await settle();
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await vi.advanceTimersByTimeAsync(FIRST_RETRY_DELAY_MS);
+
+      expect(probeCalls).toHaveLength(0);
+      expect(imageSrc()).toContain('retry=1');
+    });
+  });
+
   describe('rate resolve', () => {
     it.each([0, -RATE_384K, Number.NaN, RATE_384K + 0.5])(
       'treats a clipSampleRate prop of %s as unknown and resolves the rate',
@@ -226,7 +348,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
 
         expect(imageSrc()).toContain(`sr=${RATE_192K}`);
         expect(imageSrc()).not.toContain(`sr=${String(rate)}`);
-        expect(labels(container)[0]).toBe('80k');
+        expect((await loadedLabels(container))[0]).toBe('80k');
       }
     );
 
@@ -259,7 +381,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       await settle();
 
       expect(imageSrc()).toContain(`sr=${RATE_384K}`);
-      expect(labels(container)).toEqual(['160k', '120k', '80k', '40k']);
+      expect(await loadedLabels(container)).toEqual(['160k', '120k', '80k', '40k']);
       expect(detailCalls()).toHaveLength(1);
     });
 
@@ -339,7 +461,7 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
 
       expect(imageSrc()).toContain('/api/v2/spectrogram/43');
       expect(imageSrc()).toContain(`sr=${RATE_192K}`);
-      expect(labels(container)[0]).toBe('80k');
+      expect((await loadedLabels(container))[0]).toBe('80k');
     });
 
     it('aborts the request on unmount', async () => {
