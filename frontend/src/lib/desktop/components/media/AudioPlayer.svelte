@@ -1495,10 +1495,9 @@
   // (sr requests are answered from the exact render only), so the player falls
   // back at once instead of spending its retries on it, unless the detection's
   // spectrogram status reports a generation that is queued, running or just
-  // finished; the retries with the rate then carry on (and load a finished
-  // render), and the fallback after them still applies. Any other outcome
-  // (503 while a clip is written, a network error, the timeout) leaves the
-  // retries to run as before.
+  // finished, which the status poll then waits for or reloads as before. Any other outcome (503 while a clip
+  // is written, a network error, the timeout) leaves the retries to run as
+  // before.
   const probeExactRateRender = async (url: string) => {
     clearSpectrogramProbe();
     const controller = new AbortController();
