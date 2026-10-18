@@ -627,3 +627,39 @@ func TestSyncStorageNotices_RetryDelaysDouble(t *testing.T) {
 	})
 	notification.ResetForTest()
 }
+
+// TestSyncStorageNotices_RetryBudgetRestarts pins that an external schedule and a
+// found service both start the retry budget over.
+func TestSyncStorageNotices_RetryBudgetRestarts(t *testing.T) {
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+
+	synctest.Test(t, func(t *testing.T) {
+		f := newStorageFixture()
+		f.set("models", classLayer)
+
+		f.h.StartStorageNoticeSync()
+		time.Sleep(time.Hour) // the budget is spent
+		synctest.Wait()
+
+		f.h.ScheduleStorageNoticeSync() // starts the budget over
+		time.Sleep(storageNoticeDebounce + time.Second)
+		synctest.Wait() // evaluation without a service arms a fresh retry
+		notification.Initialize(notification.DefaultServiceConfig())
+		defer notification.GetService().Stop()
+		time.Sleep(storageNoticeDebounce)
+		synctest.Wait()
+
+		list, err := notification.GetService().List(nil)
+		require.NoError(t, err)
+		assert.Len(t, list, 1, "a schedule after the spent budget still retries")
+
+		f.h.storage.timerMu.Lock()
+		retries := f.h.storage.noServiceRetries
+		f.h.storage.timerMu.Unlock()
+		assert.Zero(t, retries, "finding the service starts the budget over")
+		f.h.StopStorageNoticeSync()
+		f.h.Wait()
+	})
+	notification.ResetForTest()
+}
