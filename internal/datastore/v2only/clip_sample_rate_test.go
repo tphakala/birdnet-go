@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
 
 const (
@@ -135,4 +136,38 @@ func loadRate(t *testing.T, ds *Datastore, id uint) int {
 	t.Helper()
 	det := loadDetection(t, ds, id)
 	return clipSampleRateValue(det.ClipSampleRate)
+}
+
+// TestFillClipSampleRate_IgnoresZeroRateAndEmptyClipName verifies the fill guards:
+// a non-positive rate is never stored, and an empty clip name does not match a row
+// whose stored clip_name is the empty string.
+func TestFillClipSampleRate_IgnoresZeroRateAndEmptyClipName(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	withClip := saveRateNote(t, ds, testClipName, 0)
+	changed, err := ds.FillClipSampleRate(withClip, testClipName, 0)
+	require.NoError(t, err)
+	assert.False(t, changed)
+	assert.Nil(t, loadDetection(t, ds, withClip).ClipSampleRate, "a zero rate must leave the row NULL")
+
+	emptyName := saveRateNote(t, ds, testClipName, 0)
+	require.NoError(t, ds.manager.DB().Model(&entities.Detection{}).Where("id = ?", emptyName).Update("clip_name", "").Error)
+	changed, err = ds.FillClipSampleRate(emptyName, "", testBatClipRate)
+	require.NoError(t, err)
+	assert.False(t, changed)
+	assert.Nil(t, loadDetection(t, ds, emptyName).ClipSampleRate, "an empty clip name must not match a row")
+}
+
+// TestRecordClipSampleRate_EmptyClipNameIsNoOp verifies an empty clip name does not
+// match a row whose stored clip_name is the empty string.
+func TestRecordClipSampleRate_EmptyClipNameIsNoOp(t *testing.T) {
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	id := saveRateNote(t, ds, testClipName, 0)
+	require.NoError(t, ds.manager.DB().Model(&entities.Detection{}).Where("id = ?", id).Update("clip_name", "").Error)
+
+	require.NoError(t, ds.RecordClipSampleRate(id, "", testBatClipRate))
+	assert.Nil(t, loadDetection(t, ds, id).ClipSampleRate)
 }

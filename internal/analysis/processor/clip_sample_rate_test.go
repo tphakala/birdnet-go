@@ -275,3 +275,24 @@ func TestBuildSaveAudioAction_CarriesClipSampleRateWiring(t *testing.T) {
 	assert.Equal(t, rateTest384k, action.plannedRate)
 	assert.Nil(t, action.clipRates)
 }
+
+// TestSaveAudioAction_NilClipRatesSkipsCorrection verifies a store without clip
+// rate support (nil recorder) makes the correction a no-op even when the planned
+// and written rates differ.
+func TestSaveAudioAction_NilClipRatesSkipsCorrection(t *testing.T) {
+	t.Parallel()
+
+	settings := conftest.NewTestSettings().WithAudioExport(t.TempDir(), "opus", "128k").Build()
+	action := &SaveAudioAction{
+		Settings:         settings,
+		ClipName:         "clip.wav",
+		pcmData:          make([]byte, rateTest32k/10*2),
+		sourceSampleRate: rateTest32k,
+		modelName:        rateBirdModel,
+		NoteID:           testRateNoteID,
+		plannedRate:      rateTest32k, // differs from the 48 kHz the opus encoder needs
+		CorrelationID:    "nil-recorder",
+	}
+
+	require.NotPanics(t, func() { require.NoError(t, action.Execute(t.Context(), nil)) })
+}

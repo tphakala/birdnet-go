@@ -392,11 +392,66 @@ func TestGetDetection_LazyFill_Skips(t *testing.T) {
 		core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(mockDS))
 		h := buildTestHandler(t, core, map[string]string{}, map[string]string{})
 		h.probeClipRate = prober.probe
+		// The clip exists, so only the missing filler interface can skip the probe.
+		abs := filepath.Join(h.SFS.BaseDir(), filepath.FromSlash(rateTestClipName))
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o750))
+		require.NoError(t, os.WriteFile(abs, []byte("clip"), 0o600))
 
 		_, rate := getDetectionRate(t, e, h)
 		assert.Zero(t, rate)
 		assert.Zero(t, prober.calls.Load())
 	})
+}
+
+// TestGetDetection_LazyFill_ClipNotARegularFile verifies a clip that is missing or
+// is a directory is never probed and the field is omitted.
+func TestGetDetection_LazyFill_ClipNotARegularFile(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, abs string)
+	}{
+		{"missing file", func(t *testing.T, abs string) {
+			t.Helper()
+			require.NoError(t, os.Remove(abs))
+		}},
+		{"directory", func(t *testing.T, abs string) {
+			t.Helper()
+			require.NoError(t, os.Remove(abs))
+			require.NoError(t, os.MkdirAll(abs, 0o750))
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prober := &fakeProber{rate: rateTestBatRate}
+			e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
+			tt.setup(t, filepath.Join(h.SFS.BaseDir(), filepath.FromSlash(rateTestClipName)))
+
+			status, rate := getDetectionRate(t, e, h)
+			assert.Equal(t, http.StatusOK, status)
+			assert.Zero(t, rate)
+			assert.Zero(t, prober.calls.Load())
+			assert.Zero(t, store.fills())
+		})
+	}
+}
+
+// TestGetDetection_LazyFill_SymlinkOutsideClipDirIsNotProbed verifies a clip that
+// is a symlink to a real file outside the clip directory is not probed.
+func TestGetDetection_LazyFill_SymlinkOutsideClipDirIsNotProbed(t *testing.T) {
+	prober := &fakeProber{rate: rateTestBatRate}
+	e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
+	abs := filepath.Join(h.SFS.BaseDir(), filepath.FromSlash(rateTestClipName))
+	outside := filepath.Join(t.TempDir(), "outside.flac")
+	require.NoError(t, os.WriteFile(outside, []byte("clip"), 0o600))
+	require.NoError(t, os.Remove(abs))
+	if err := os.Symlink(outside, abs); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	_, rate := getDetectionRate(t, e, h)
+	assert.Zero(t, rate)
+	assert.Zero(t, prober.calls.Load(), "a clip that resolves outside the clip directory is not probed")
+	assert.Zero(t, store.fills())
 }
 
 func TestListAndSearch_NeverProbe(t *testing.T) {
