@@ -2,6 +2,7 @@ package transcode
 
 import (
 	"context"
+	"os"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -32,9 +33,10 @@ func decodedBytesBound(totalFrames int64, frameBytes int) int64 {
 }
 
 // ProbeFile reports whether DecodeMono can open path and read audio from it. It
-// runs the same file checks (regular file, size bound) and opens the same
-// decoder with the same sample-rate and channel bounds, returning the same
-// errors except those only a full decode can find (the decoded-size bound). It
+// stats path, runs the file checks ProbeOpenFile runs (regular file, size
+// bound) before the open, then opens the same decoder as DecodeMono with the
+// same sample-rate and channel bounds, returning the same errors except those
+// only a full decode can find (the decoded-size bound). It
 // decodes one frame, so a clip whose headers parse but holds no audio wraps
 // ErrUndecodableSource. A nil error does not mean the clip is complete: a
 // truncated data section is found only by decoding it all. The open itself does
@@ -48,8 +50,32 @@ func ProbeFile(ctx context.Context, path string) (ProbeInfo, error) {
 		return ProbeInfo{}, err
 	}
 	defer func() { _ = f.Close() }()
+	return probeSource(ctx, f, path)
+}
 
-	src, err := openSourceChannels(f, path, maxAnalysisChannels)
+// ProbeOpenFile is ProbeFile on a file the caller already opened: the same
+// checks (regular file, size bound) run on f itself, so no path is resolved
+// again, and the same decoder bounds and errors apply. name selects the decoder
+// by its extension only. It reads f from its current offset, so pass a freshly
+// opened file, and it does not close f.
+func ProbeOpenFile(ctx context.Context, f *os.File, name string) (ProbeInfo, error) {
+	if err := ctx.Err(); err != nil {
+		return ProbeInfo{}, err
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return ProbeInfo{}, wrapError(err, errors.CategoryFileIO, "decode_stat")
+	}
+	if err := checkSourceInfo(info); err != nil {
+		return ProbeInfo{}, err
+	}
+	return probeSource(ctx, f, name)
+}
+
+// probeSource opens the decoder for f by the extension of name and decodes one
+// frame.
+func probeSource(ctx context.Context, f *os.File, name string) (ProbeInfo, error) {
+	src, err := openSourceChannels(f, name, maxAnalysisChannels)
 	if err != nil {
 		return ProbeInfo{}, err
 	}

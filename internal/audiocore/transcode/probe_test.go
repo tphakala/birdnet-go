@@ -144,3 +144,94 @@ func TestProbeFile_MissingAndCanceled(t *testing.T) {
 	_, err = ProbeFile(ctx, path)
 	require.ErrorIs(t, err, context.Canceled)
 }
+
+// openForProbe opens path read-only and closes it when the test ends.
+func openForProbe(t *testing.T, path string) *os.File {
+	t.Helper()
+	f, err := os.Open(path) //nolint:gosec // G304: test fixture path
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = f.Close() })
+	return f
+}
+
+func TestProbeOpenFile_MatchesProbeFile(t *testing.T) {
+	for _, fx := range fixtures() {
+		t.Run(fx.name, func(t *testing.T) {
+			path, _ := writeFixture(t, fx, probeTestRate, probeTestSeconds)
+			want, err := ProbeFile(t.Context(), path)
+			require.NoError(t, err)
+
+			f := openForProbe(t, path)
+			got, err := ProbeOpenFile(t.Context(), f, path)
+			require.NoError(t, err)
+			assert.Equal(t, want, got)
+
+			// The caller keeps ownership: the handle is still open.
+			_, err = f.Stat()
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestProbeOpenFile_ProbesTheOpenedInodeNotThePath(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "clip.wav")
+	writeWAVChannels(t, path, make([]int16, 2*testRate), testRate, 2)
+	f := openForProbe(t, path)
+
+	// Replace the path with a different clip after the open.
+	require.NoError(t, os.Remove(path))
+	writeWAVChannels(t, path, make([]int16, testRate), testRate, 1)
+
+	info, err := ProbeOpenFile(t.Context(), f, path)
+	require.NoError(t, err)
+	assert.Equal(t, 2, info.Channels)
+}
+
+func TestProbeOpenFile_NameSelectsDecoderByExtension(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "stored.bin")
+	writeWAVChannels(t, path, make([]int16, testRate), testRate, 1)
+	f := openForProbe(t, path)
+
+	_, err := ProbeOpenFile(t.Context(), f, path)
+	require.ErrorIs(t, err, ErrUnsupportedSource)
+
+	_, err = f.Seek(0, 0)
+	require.NoError(t, err)
+	info, err := ProbeOpenFile(t.Context(), f, "clip.wav")
+	require.NoError(t, err)
+	assert.Equal(t, testRate, info.SampleRate)
+}
+
+func TestProbeOpenFile_RejectsNonRegularHandle(t *testing.T) {
+	f := openForProbe(t, t.TempDir())
+
+	_, err := ProbeOpenFile(t.Context(), f, "clip.wav")
+
+	require.ErrorIs(t, err, ErrUnsupportedSource)
+}
+
+func TestProbeOpenFile_RejectsOversizedHandle(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "huge.wav")
+	f, err := os.Create(path) //nolint:gosec // G304: test fixture path
+	require.NoError(t, err)
+	require.NoError(t, f.Truncate(maxSourceFileBytes+1))
+	require.NoError(t, f.Close())
+
+	_, err = ProbeOpenFile(t.Context(), openForProbe(t, path), path)
+
+	require.ErrorIs(t, err, ErrAudioTooLong)
+}
+
+func TestProbeOpenFile_ClosedHandleAndCanceled(t *testing.T) {
+	path, _ := writeFixture(t, fixtureNamed(t, "wav"), probeTestRate, probeTestSeconds)
+	f := openForProbe(t, path)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err := ProbeOpenFile(ctx, f, path)
+	require.ErrorIs(t, err, context.Canceled)
+
+	require.NoError(t, f.Close())
+	_, err = ProbeOpenFile(t.Context(), f, path)
+	require.ErrorIs(t, err, os.ErrClosed)
+	require.NotErrorIs(t, err, ErrUnsupportedSource)
+}
