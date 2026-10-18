@@ -313,7 +313,7 @@
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 10000;
 
-  // Frequency scale overlay. Bird spectrograms are resampled to 24 kHz, so their
+  // Frequency scale overlay. Bird spectrograms are drawn for 24 kHz, so their
   // axis is a fixed 0-12 kHz. Bat spectrograms are rendered at the clip's own
   // sample rate, so their axis runs from 0 to half the clip sample rate. Without a
   // known rate the bat axis is hidden rather than guessed.
