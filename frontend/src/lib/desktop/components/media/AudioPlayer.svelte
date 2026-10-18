@@ -1548,8 +1548,10 @@
     // The image requested with the clip rate still fails after the retries. The
     // usual cause is a 404 because the exact render is missing (for example only
     // an older render of the clip was kept), but an <img> cannot tell a 404 from
-    // other failures, so any persistent failure lands here: load whatever render
-    // the server has, without the rate and without an axis, before giving up.
+    // other failures, so any persistent failure lands here unless the status poll
+    // reports a queued or running generation (handled above): load whatever
+    // render the server has, without the rate and without an axis, before giving
+    // up.
     if (overlayRate !== undefined && !processedSpectrogramUrl) {
       debugLog('handleSpectrogramError: exact-rate render unavailable, dropping the axis');
       overlayFallbackDetectionId = detectionId;
