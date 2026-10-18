@@ -445,6 +445,22 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       expect((await loadedLabels(container))[0]).toBe('80k');
     });
 
+    it('ignores a 404 that arrives while the spectrogram is hidden', async () => {
+      probeResponder = slowNotFound;
+      const { rerender } = mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await settle();
+
+      // Hiding the spectrogram drops its URL without the reset effect running.
+      await rerender({ modelType: 'bat', clipSampleRate: RATE_384K, showSpectrogram: false });
+      await vi.advanceTimersByTimeAsync(SERVER_MISSING_AUDIO_WAIT_MS);
+      await rerender({ modelType: 'bat', clipSampleRate: RATE_384K, showSpectrogram: true });
+      await settle();
+
+      expect(imageSrc()).toContain(`sr=${RATE_384K}`);
+    });
+
     it('drops a pending status check on unmount', async () => {
       probeResponder = slowNotFound;
       const { unmount } = mount({ modelType: 'bat', clipSampleRate: RATE_384K });
