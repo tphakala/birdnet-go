@@ -281,6 +281,32 @@ func TestGetDetection_LazyFill_TruncatedDataStillFills(t *testing.T) {
 	require.Eventually(t, func() bool { return store.stored() == rateTestBatRate }, time.Second, time.Millisecond)
 }
 
+// panickingProbe stands in for a decoder that panics on a malformed clip header.
+func panickingProbe(context.Context, string) (int, error) {
+	panic("malformed header")
+}
+
+func TestGetDetection_LazyFill_ProbePanicIsContained(t *testing.T) {
+	e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), nil)
+	h.probeClipRate = panickingProbe
+	h.clipRateWait = time.Minute // the flight ends by itself, so a long wait does not slow the test
+
+	status, rate := getDetectionRate(t, e, h)
+	assert.Equal(t, http.StatusOK, status, "the request still answers")
+	assert.Zero(t, rate, "the field is omitted")
+	assert.Zero(t, store.fills(), "nothing is written")
+
+	// The panic left no flight behind: the next request runs the probe again.
+	var probes atomic.Int32
+	h.probeClipRate = func(context.Context, string) (int, error) {
+		probes.Add(1)
+		return rateTestBatRate, nil
+	}
+	_, rate = getDetectionRate(t, e, h)
+	assert.Equal(t, rateTestBatRate, rate)
+	assert.Equal(t, int32(1), probes.Load())
+}
+
 func TestGetDetection_LazyFill_WriteFails(t *testing.T) {
 	prober := &fakeProber{rate: rateTestBatRate}
 	e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)

@@ -45,6 +45,9 @@ const (
 	clipRateErrOther       = "other"
 )
 
+// errClipRateWorkPanicked marks a lazy-fill probe that panicked and was contained.
+var errClipRateWorkPanicked = errors.NewStd("clip sample rate work panicked")
+
 // clipRateProbe reads a clip's sample rate from its header without decoding it.
 type clipRateProbe func(ctx context.Context, path string) (int, error)
 
@@ -77,7 +80,8 @@ func wantsClipRateFill(note *datastore.Note) bool {
 // write between concurrent requests for the same row, and waits at most
 // clipRateResponseBudget. On a miss note.ClipSampleRate stays 0 and the work
 // finishes in the background. A failed probe writes nothing, so the next request
-// tries again. The write changes a NULL value only (FillClipSampleRate).
+// tries again, and so does a panic in the shared work, which is contained and
+// treated as a failed probe. The write changes a NULL value only (FillClipSampleRate).
 func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 	if !wantsClipRateFill(note) {
 		return
@@ -93,7 +97,17 @@ func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 
 	noteID, clipName := note.ID, note.ClipName
 	key := clipRateFlightKeyPrefix + strconv.FormatUint(uint64(noteID), 10)
-	resultCh := c.clipRateGroup.DoChan(key, func() (any, error) {
+	resultCh := c.clipRateGroup.DoChan(key, func() (res any, err error) {
+		// DoChan runs this on its own goroutine, which the HTTP recover middleware
+		// does not cover, and a panic that escapes it ends the process. A decoder
+		// panic on a malformed clip header is turned into an error instead.
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				c.LogWarnIfEnabled("Clip sample rate probe panicked; the rate stays unset",
+					logger.Uint64("note_id", uint64(noteID)))
+				res, err = nil, errClipRateWorkPanicked
+			}
+		}()
 		// Detached from the request: singleflight shares this result with every
 		// waiter, so one client disconnecting must not fail the others.
 		workCtx, cancel := context.WithTimeout(c.Context(), clipRateWorkTimeout)
