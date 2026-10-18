@@ -139,8 +139,8 @@ func WithDuration(seconds float64) GenerateOption {
 }
 
 // WithFrequencyProfile sets the frequency profile for spectrogram generation.
-// BatProfile() resamples to 256 kHz (0-128 kHz axis); BirdProfile() resamples to
-// 24 kHz (0-12 kHz axis). When not set, defaults to BirdProfile().
+// BatProfile() keeps the clip's native rate (axis 0 to half the capture rate);
+// BirdProfile() resamples to 24 kHz (0-12 kHz axis). When not set, defaults to BirdProfile().
 func WithFrequencyProfile(fp FrequencyProfile) GenerateOption {
 	return func(o *generateOptions) {
 		o.freqProfile = &fp
@@ -956,8 +956,8 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 		"-n", // No audio output (null output)
 	}
 
-	// Frequency-dependent effects: resample to the profile's rate (bird 24 kHz,
-	// bat 256 kHz) so the spectrogram's frequency axis matches the fixed UI overlay.
+	// Frequency-dependent effects: resample to the profile's rate (bird 24 kHz;
+	// bat has none and keeps the clip's rate).
 	if profile.ResampleRate > 0 {
 		args = append(args, "rate", strconv.Itoa(profile.ResampleRate))
 	}
@@ -1028,11 +1028,8 @@ func (g *Generator) generateWithSoxPCM(ctx context.Context, settings *conf.Setti
 // visually matches the Sox primary path (without it the fallback always renders the
 // default colorful style, causing intermittent mismatches when Sox fails under load).
 // When the frequency profile sets a resample rate, an aresample stage is prepended so
-// the rendered frequency axis matches the Sox paths (which apply the same rate) and the
-// fixed UI overlay: bird clips resample to 24 kHz (0-12 kHz axis) and bat clips to
-// 256 kHz (0-128 kHz axis) regardless of capture rate. Without it the fallback renders
-// to the native Nyquist and that axis-mismatched image gets cached under the profile
-// filename.
+// the rendered frequency axis matches the Sox paths (which apply the same rate): bird clips resample to 24 kHz (0-12 kHz axis), while the bat
+// profile has no resample rate and renders to the clip's native Nyquist.
 func buildFFmpegSpectrogramFilter(width int, raw bool, style string, profile FrequencyProfile) string {
 	height := fftFriendlyHeight(width)
 	colorMode := getFFmpegColorMode(style)
@@ -1143,8 +1140,8 @@ func (g *Generator) getSoxSpectrogramArgs(ctx context.Context, settings *conf.Se
 	heightStr := strconv.Itoa(fftFriendlyHeight(width))
 	widthStr := strconv.Itoa(width)
 
-	// Build base args: resample to the profile's rate (bird 24 kHz, bat 256 kHz) so
-	// the spectrogram's frequency axis matches the fixed UI overlay.
+	// Build base args: resample to the profile's rate (bird 24 kHz); a profile
+	// without one (bat) keeps the clip's native rate.
 	var args []string
 	if profile.ResampleRate > 0 {
 		args = []string{"-n", "rate", strconv.Itoa(profile.ResampleRate), "spectrogram", "-x", widthStr, "-y", heightStr}
