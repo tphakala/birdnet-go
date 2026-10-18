@@ -49,6 +49,7 @@ func resetExportLogGuards(t *testing.T) {
 	rearm := func() {
 		normalizeSkipLogged.seen.Clear()
 		resampleFailureLogged.seen.Clear()
+		ultrasonicDownsampleLogged.seen.Clear()
 	}
 	rearm()
 	t.Cleanup(rearm)
@@ -248,6 +249,31 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 	line := logLineContaining(t, logs.String(), "operation=audio_export_resample")
 	assert.NotContains(t, line, "detection_id",
 		"a guarded line must not name the first detection to trip a standing condition")
+}
+
+// TestUltrasonicDownsampleWarnsOncePerFormatRateWithoutDetectionID drives the
+// warning for a bat capture above 48kHz stored under a lossy name. The same
+// format and rate repeat on every such detection, so the line appears once and
+// does not name the first detection.
+func TestUltrasonicDownsampleWarnsOncePerFormatRateWithoutDetectionID(t *testing.T) {
+	logs := logtest.CaptureBuffer(t)
+	resetExportLogGuards(t)
+
+	a := newExportLogAction(t, t.TempDir(), "bat.mp3", "flac")
+	a.modelName = batModelName
+
+	for range 4 {
+		// A downsample rewrites sourceSampleRate, so restore the capture rate to
+		// re-enter the same branch the way a following detection would.
+		a.sourceSampleRate = batSourceSampleRate
+		a.pcmData = sinePCMAtRate(batSourceSampleRate, 0.05, 1000, 8000)
+		_, _, _ = a.resolveExportParams(filepath.Join(t.TempDir(), "bat.mp3"))
+	}
+
+	assert.Equal(t, 1, countLines(t, logs.String(), "audio_export_ultrasonic_downsample"),
+		"the same format and rate explain themselves once")
+	line := logLineContaining(t, logs.String(), "operation=audio_export_ultrasonic_downsample")
+	assert.NotContains(t, line, "detection_id")
 }
 
 // TestNormalizedReportsWhetherMeasurementRan pins the field that makes each clip

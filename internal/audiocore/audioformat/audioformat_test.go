@@ -50,3 +50,35 @@ func TestFileExtension(t *testing.T) {
 	assert.Equal(t, "flac", FileExtension(FLAC))
 	assert.Equal(t, "opus", FileExtension(Opus))
 }
+
+func TestFormatForExtension(t *testing.T) {
+	t.Parallel()
+
+	for _, f := range []string{WAV, FLAC, MP3, AAC, Opus} {
+		got, ok := FormatForExtension(FileExtension(f))
+		assert.True(t, ok, "format %q should round-trip", f)
+		assert.Equal(t, f, got)
+	}
+
+	tests := []struct {
+		name   string
+		ext    string
+		want   string
+		wantOK bool
+	}{
+		{name: "uppercase m4a maps to aac", ext: "M4A", want: AAC, wantOK: true},
+		{name: "mixed case flac maps", ext: "Flac", want: FLAC, wantOK: true},
+		{name: "empty does not map", ext: "", wantOK: false},
+		{name: "aac is a format name, not an extension", ext: "aac", wantOK: false},
+		{name: "ogg does not map", ext: "ogg", wantOK: false},
+		{name: "mp4 does not map", ext: "mp4", wantOK: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := FormatForExtension(tt.ext)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

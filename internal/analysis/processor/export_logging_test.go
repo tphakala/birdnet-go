@@ -626,15 +626,16 @@ func TestExecute_TimedOutExportStaysAtWarn(t *testing.T) {
 // A bat/ultrasonic capture above the analysis rate is stored losslessly in the
 // dedicated UltrasonicType (default FLAC) at its full source rate, not downgraded
 // to WAV. This is intended behavior, so unlike the old forced-WAV path it emits no
-// downgrade warning and never strands.
+// downgrade warning and never strands. The stored name is already in the
+// ultrasonic format, as production naming writes it.
 func TestResolveExportParams_BatUltrasonicUsesUltrasonicType(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
-	a := newExportLogAction(t, t.TempDir(), "clip.mp3", audioformat.MP3)
+	a := newExportLogAction(t, t.TempDir(), "clip.flac", audioformat.MP3)
 	a.Settings.Realtime.Audio.Export.UltrasonicType = conf.AudioExportTypeFLAC
 	a.modelName = batModelName
 	a.sourceSampleRate = batSourceSampleRate
 
-	rate, format, path := a.resolveExportParams("/clips/clip.mp3")
+	rate, format, path := a.resolveExportParams("/clips/clip.flac")
 
 	assert.Equal(t, conf.AudioExportTypeFLAC, format,
 		"a bat capture above the analysis rate must use the ultrasonic format, not a WAV downgrade")
