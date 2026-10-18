@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter falošne pozitívnych výsledkov preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia; pozrite Nastavenia > Analýza.",
         "cadenceOverloadedTitle": "Toto zariadenie nestíha analýzu zvuku",
         "cadenceOverloadedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia, preto môže analýza zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov, alebo zvoľte rýchlejší variant modelu."
+      },
+      "storage": {
+        "notPersistentTitle": "Dáta sa stratia pri opätovnom vytvorení kontajnera",
+        "notPersistentMessage": "Tieto cesty sú v úložisku, ktoré sa pri opätovnom vytvorení kontajnera odstráni, napríklad pri aktualizácii obrazu: {paths}. Namapujte na ne zväzok alebo adresár hostiteľa v konfigurácii kontajnera.",
+        "anonymousVolumeTitle": "Dáta sú uložené v anonymnom zväzku kontajnera",
+        "anonymousVolumeMessage": "Tieto cesty sú v anonymných zväzkoch, ktoré vytvorilo prostredie kontajnera, pretože nebol namapovaný žiadny zväzok: {paths}. Kontajner spustený odznova, napríklad príkazom docker run po aktualizácii obrazu, dostane nové prázdne zväzky, takže dáta vyzerajú stratené. Namapujte na ne pomenovaný zväzok alebo adresár hostiteľa."
       }
     },
     "loading": "Načítavam upozornenia..."

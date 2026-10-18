@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Falskpositivfiltret kan därför kräva färre bekräftelser. Dina sparade inställningar är oförändrade; se Inställningar > Analys.",
         "cadenceOverloadedTitle": "Den här enheten hinner inte med ljudanalysen",
         "cadenceOverloadedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning, så analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor, eller välj en snabbare modellvariant."
+      },
+      "storage": {
+        "notPersistentTitle": "Data går förlorad när containern återskapas",
+        "notPersistentMessage": "Dessa sökvägar ligger på lagring som raderas när containern återskapas, till exempel vid en uppdatering av avbilden: {paths}. Koppla en volym eller en värdkatalog till dem i din containerkonfiguration.",
+        "anonymousVolumeTitle": "Data lagras i en anonym containervolym",
+        "anonymousVolumeMessage": "Dessa sökvägar ligger i anonyma volymer som containerns körmiljö skapade eftersom ingen volym var kopplad: {paths}. En container som startas om från början, till exempel med docker run efter en uppdatering av avbilden, får nya tomma volymer, så data ser ut att ha försvunnit. Koppla en namngiven volym eller en värdkatalog till dem."
       }
     },
     "loading": "Laddar aviseringar..."

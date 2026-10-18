@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc viltus pozitīvo filtrs var prasīt mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās; skatiet Iestatījumi > Analīze.",
         "cadenceOverloadedTitle": "Šī ierīce netiek līdzi audio analīzei",
         "cadenceOverloadedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās, tāpēc analīze var atpalikt un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu vai izvēlieties ātrāku modeļa variantu."
+      },
+      "storage": {
+        "notPersistentTitle": "Dati tiks zaudēti, kad konteiners tiks izveidots no jauna",
+        "notPersistentMessage": "Šie ceļi atrodas krātuvē, kas tiek dzēsta, kad konteiners tiek izveidots no jauna, piemēram, atjauninot attēlu: {paths}. Piesaistiet tiem sējumu vai resursdatora direktoriju sava konteinera konfigurācijā.",
+        "anonymousVolumeTitle": "Dati tiek glabāti anonīmā konteinera sējumā",
+        "anonymousVolumeMessage": "Šie ceļi atrodas anonīmos sējumos, ko konteinera izpildlaiks izveidoja, jo neviens sējums nebija piesaistīts: {paths}. No jauna startēts konteiners, piemēram, ar docker run pēc attēla atjaunināšanas, saņem jaunus tukšus sējumus, tāpēc dati šķiet zaudēti. Piesaistiet tiem nosauktu sējumu vai resursdatora direktoriju."
       }
     },
     "loading": "Ielādē paziņojumus..."

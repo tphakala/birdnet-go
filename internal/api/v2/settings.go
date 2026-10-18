@@ -2617,6 +2617,12 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 		c.scheduleOptimizeNoticeSync()
 	}
 
+	// The config, database, models and clips locations feed the storage
+	// persistence notices. The evaluation is debounced and runs off this goroutine.
+	if storageNoticeInputsChanged(oldSettings, currentSettings) {
+		c.system.ScheduleStorageNoticeSync()
+	}
+
 	// Trigger reconfigurations asynchronously.
 	// Capture debug flag from the settings snapshot so the goroutine never
 	// reloads settings (which may be republished by a concurrent update).
@@ -2821,6 +2827,18 @@ func (c *Controller) scheduleOptimizeNoticeSync() {
 	if h := c.optimizeNotices.Load(); h != nil {
 		h.scheduler.ScheduleOptimizeNoticeSync()
 	}
+}
+
+// storageNoticeInputsChanged reports whether a settings change alters an input
+// of the storage persistence notices: the models directory, the SQLite path, the
+// MySQL switch (which drops the database path), or the clip export switch and
+// path.
+func storageNoticeInputsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.Models.Directory != currentSettings.Models.Directory ||
+		oldSettings.Output.SQLite.Path != currentSettings.Output.SQLite.Path ||
+		oldSettings.Output.MySQL.Enabled != currentSettings.Output.MySQL.Enabled ||
+		oldSettings.Realtime.Audio.Export.Enabled != currentSettings.Realtime.Audio.Export.Enabled ||
+		oldSettings.Realtime.Audio.Export.Path != currentSettings.Realtime.Audio.Export.Path
 }
 
 // notifyRegionStaleness runs the recommend-only region staleness detector after

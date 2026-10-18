@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} con la superposición configurada de {configured} s supera la capacidad medida de este dispositivo, por lo que el audio se analiza con {effective} s de superposición. Por ello, el filtro de falsos positivos puede requerir menos confirmaciones. Sus ajustes guardados no cambian; consulte Configuración > Análisis.",
         "cadenceOverloadedTitle": "Este dispositivo no puede seguir el ritmo del análisis de audio",
         "cadenceOverloadedMessage": "Ejecutar {models, plural, one {# modelo} other {# modelos}} en {sources, plural, one {# fuente de audio} other {# fuentes de audio}} supera la capacidad medida de este dispositivo incluso sin superposición, por lo que el análisis puede retrasarse y pueden perderse detecciones. Active menos modelos o fuentes de audio, o elija una variante de modelo más rápida."
+      },
+      "storage": {
+        "notPersistentTitle": "Los datos se perderán cuando se vuelva a crear el contenedor",
+        "notPersistentMessage": "Estas rutas están en un almacenamiento que se elimina cuando se vuelve a crear el contenedor, por ejemplo al actualizar la imagen: {paths}. Asigne un volumen o un directorio del host a estas rutas en la configuración de su contenedor.",
+        "anonymousVolumeTitle": "Los datos se guardan en un volumen anónimo del contenedor",
+        "anonymousVolumeMessage": "Estas rutas están en volúmenes anónimos que el entorno de ejecución del contenedor creó porque no se asignó ningún volumen: {paths}. Un contenedor iniciado de nuevo, por ejemplo con docker run tras actualizar la imagen, recibe volúmenes nuevos y vacíos, así que los datos parecen perdidos. Asigne a estas rutas un volumen con nombre o un directorio del host."
       }
     },
     "loading": "Cargando notificaciones..."

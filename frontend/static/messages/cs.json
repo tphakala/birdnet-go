@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} při nastaveném překryvu {configured} s překračuje změřenou kapacitu tohoto zařízení, proto se zvuk analyzuje s překryvem {effective} s. Filtr falešně pozitivních detekcí proto může vyžadovat méně potvrzení. Vaše uložená nastavení se nemění; viz Nastavení > Analýza.",
         "cadenceOverloadedTitle": "Toto zařízení nestíhá analýzu zvuku",
         "cadenceOverloadedMessage": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} překračuje změřenou kapacitu tohoto zařízení i bez překryvu, proto se analýza může zpožďovat a detekce mohou být vynechány. Povolte méně modelů nebo zvukových zdrojů, nebo zvolte rychlejší variantu modelu."
+      },
+      "storage": {
+        "notPersistentTitle": "Data budou ztracena při opětovném vytvoření kontejneru",
+        "notPersistentMessage": "Tyto cesty jsou na úložišti, které se při opětovném vytvoření kontejneru smaže, například při aktualizaci image: {paths}. Namapujte na ně svazek nebo adresář hostitele v konfiguraci kontejneru.",
+        "anonymousVolumeTitle": "Data jsou uložena v anonymním svazku kontejneru",
+        "anonymousVolumeMessage": "Tyto cesty jsou v anonymních svazcích, které běhové prostředí kontejneru vytvořilo, protože nebyl namapován žádný svazek: {paths}. Kontejner spuštěný znovu, například příkazem docker run po aktualizaci image, dostane nové prázdné svazky, takže data vypadají ztracená. Namapujte na ně pojmenovaný svazek nebo adresář hostitele."
       }
     },
     "loading": "Načítání oznámení…"

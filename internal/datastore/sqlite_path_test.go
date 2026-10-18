@@ -56,3 +56,10 @@ func TestResolveSQLitePathNeverProducesBareDSN(t *testing.T) {
 		})
 	}
 }
+
+func TestResolveSQLitePath_ExportedMatchesInternal(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, defaultSQLitePath, ResolveSQLitePath(""))
+	assert.Equal(t, defaultSQLitePath, ResolveSQLitePath("  "))
+	assert.Equal(t, "/data/x.db", ResolveSQLitePath("/data/x.db"))
+}
