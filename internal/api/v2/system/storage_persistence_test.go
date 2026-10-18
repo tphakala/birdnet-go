@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -86,16 +85,12 @@ func TestStoragePersistenceReport(t *testing.T) {
 	t.Parallel()
 
 	newHandler := func(env string, reader func() ([]diagnostics.MountTableEntry, error)) *Handler {
-		return &Handler{
-			Core: &apicore.Core{},
-			storageDeps: storageDeps{
-				envType:        func() string { return env },
-				settings:       storageSettings,
-				configLocation: func() (string, string) { return "/config/config.yaml", "/config" },
-				mountTable:     reader,
-				resolve:        func(p string) (string, error) { return p, nil },
-			},
+		f := newStorageFixture()
+		f.setEnv(env)
+		if reader != nil {
+			f.h.storageDeps.mountTable = reader
 		}
+		return f.h
 	}
 
 	t.Run("outside Docker and Podman is not applicable and reads nothing", func(t *testing.T) {
