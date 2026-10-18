@@ -52,8 +52,10 @@ the job:
 
 - **Files** named by untrusted input: go through SecureFS (`internal/securefs`,
   `c.SFS` in API handlers). Its relative-path methods (`StatRel`,
-  `ReadDirRel`, `ServeRelativeFile`) give containment: they resolve inside an
-  `os.Root`, so neither `..` nor a symlink can escape. `ValidateRelativePath`
+  `ReadDirRel`, `ServeRelativeFile`, `OpenRegularRel`) give containment: they
+  resolve inside an `os.Root`, so neither `..` nor a symlink can escape. To read
+  a file, open it with `OpenRegularRel` (it never blocks on a FIFO and checks the
+  opened handle, not the path) and use the handle. `ValidateRelativePath`
   is only a lexical check (it cleans the path and rejects absolute and upward
   paths) and does not stop a symlink, so pass its result to those methods and
   never join it onto a directory for an `os.*` call. Some existing handlers in
