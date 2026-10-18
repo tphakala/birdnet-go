@@ -30,7 +30,10 @@ describe('batFrequencyAxis', () => {
     expect(batFrequencyAxis(32_000)).toEqual({ nyquistKHz: 16, ticksKHz: [10] });
     // Below the smallest step nothing fits: the axis has no ticks and draws nothing.
     expect(batFrequencyAxis(16_000)).toEqual({ nyquistKHz: 8, ticksKHz: [] });
-    expect(batFrequencyAxis(1)).toEqual({ nyquistKHz: 1 / (HZ_PER_KHZ * NYQUIST_DIVISOR), ticksKHz: [] });
+    expect(batFrequencyAxis(1)).toEqual({
+      nyquistKHz: 1 / (HZ_PER_KHZ * NYQUIST_DIVISOR),
+      ticksKHz: [],
+    });
   });
 
   it('keeps every tick positive, descending, inside the cap and at most the tick limit', () => {
