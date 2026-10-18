@@ -22,6 +22,12 @@ import (
 // storageNoticeDebounce coalesces a burst of triggers into one evaluation.
 const storageNoticeDebounce = 3 * time.Second
 
+// storageNoticeNoServiceMaxRetries bounds how often an evaluation that found no
+// notification service re-arms itself. The retries wait storageNoticeDebounce,
+// then double each time, so a process without notifications stops after a few
+// timers and a late service is still found by a later settings save.
+const storageNoticeNoServiceMaxRetries = 4
+
 // Separators of the notice signature and of the path list in the notice text,
 // and the placeholder the English fallback text uses for the path list.
 const (
@@ -84,8 +90,11 @@ type storageNotice struct {
 	timerMu sync.Mutex
 	timer   *time.Timer
 	arms    int
-	started bool
-	stopped bool
+	// noServiceRetries counts the retries armed since the last evaluation that
+	// found a notification service or the last external schedule.
+	noServiceRetries int
+	started          bool
+	stopped          bool
 }
 
 // StorageNoticeSyncStatus is a snapshot of the debounce timer, for the facade's
@@ -197,15 +206,19 @@ func (n *storageNotice) effectiveVerdicts(report []diagnostics.StorageVerdict) [
 
 // syncStorageNotices evaluates the key paths and raises, replaces or clears the
 // two persistent bell notices to match. It is idempotent and safe to call
-// concurrently. An unreadable mount table or a missing settings snapshot leaves both
-// notices as they are, and a
-// path that cannot be judged keeps its last known verdict: an unknown result is
-// neither an alarm nor proof that the problem went away.
+// concurrently. An unreadable mount table or a missing settings snapshot leaves
+// both notices as they are, and a path that cannot be judged keeps its last
+// known verdict: an unknown result is neither an alarm nor proof that the
+// problem went away.
+// Without a notification service it re-arms itself a bounded number of times
+// (retryStorageNoticeWithoutService).
 func (c *Handler) syncStorageNotices() {
 	svc := c.noticeSvc()
 	if svc == nil {
+		c.retryStorageNoticeWithoutService()
 		return
 	}
+	c.resetStorageNoticeRetries()
 	n := &c.storage
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -245,6 +258,33 @@ func (c *Handler) syncStorageNotices() {
 	}
 }
 
+// retryStorageNoticeWithoutService re-arms the evaluation after the debounce,
+// doubled for each earlier retry, because no notification service exists yet. It
+// arms nothing before Start, after Stop, or once storageNoticeNoServiceMaxRetries
+// retries were armed.
+func (c *Handler) retryStorageNoticeWithoutService() {
+	n := &c.storage
+	n.timerMu.Lock()
+	defer n.timerMu.Unlock()
+	if !n.started || n.stopped || n.noServiceRetries >= storageNoticeNoServiceMaxRetries {
+		return
+	}
+	delay := storageNoticeDebounce << n.noServiceRetries
+	n.noServiceRetries++
+	if n.timer != nil {
+		n.timer.Stop()
+	}
+	n.timer = time.AfterFunc(delay, c.fireStorageNoticeSync)
+}
+
+// resetStorageNoticeRetries starts the retry budget over.
+func (c *Handler) resetStorageNoticeRetries() {
+	n := &c.storage
+	n.timerMu.Lock()
+	defer n.timerMu.Unlock()
+	n.noServiceRetries = 0
+}
+
 // StartStorageNoticeSync enables storage notice evaluations, lets the notice
 // latches retry a failed update through ScheduleStorageNoticeSync, and schedules
 // the first evaluation (the startup evaluation). Until it is called,
@@ -268,8 +308,8 @@ func (c *Handler) StartStorageNoticeSync() {
 }
 
 // ScheduleStorageNoticeSync re-evaluates the storage notices after a short
-// debounce. It is a no-op before StartStorageNoticeSync and after
-// StopStorageNoticeSync.
+// debounce, and starts the retry budget for a missing notification service over.
+// It is a no-op before StartStorageNoticeSync and after StopStorageNoticeSync.
 func (c *Handler) ScheduleStorageNoticeSync() {
 	if c == nil {
 		return
@@ -280,6 +320,7 @@ func (c *Handler) ScheduleStorageNoticeSync() {
 	if !n.started || n.stopped {
 		return
 	}
+	n.noServiceRetries = 0
 	c.armStorageNoticeTimerLocked()
 }
 

@@ -532,3 +532,62 @@ func TestStorageNotice_FixedPathIsForgottenNotCarried(t *testing.T) {
 		assert.Equal(t, 1, deleted)
 	})
 }
+
+func TestSyncStorageNotices_RetriesWhenServiceMissing(t *testing.T) {
+	notification.ResetForTest()
+	t.Cleanup(notification.ResetForTest)
+
+	// raised counts the notices in the process-wide service.
+	raised := func() int {
+		svc := notification.GetService()
+		require.NotNil(t, svc)
+		list, err := svc.List(nil)
+		require.NoError(t, err)
+		return len(list)
+	}
+
+	t.Run("a service that appears is found by a retry", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			f := newStorageFixture()
+			f.set("models", classLayer)
+
+			f.h.StartStorageNoticeSync()
+			time.Sleep(storageNoticeDebounce + time.Second) // first evaluation: no service
+			synctest.Wait()
+			notification.Initialize(notification.DefaultServiceConfig())
+			defer notification.GetService().Stop()
+			time.Sleep(storageNoticeDebounce) // the retry
+			synctest.Wait()
+
+			assert.Equal(t, 1, raised(), "the retry raised the notice once the service existed")
+			f.h.StopStorageNoticeSync()
+			f.h.Wait()
+		})
+		notification.ResetForTest()
+	})
+
+	t.Run("retries stop when no service ever appears", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			f := newStorageFixture()
+			f.set("models", classLayer)
+
+			f.h.StartStorageNoticeSync()
+			time.Sleep(time.Hour) // far beyond every bounded retry
+			synctest.Wait()
+			notification.Initialize(notification.DefaultServiceConfig())
+			defer notification.GetService().Stop()
+			time.Sleep(time.Hour)
+			synctest.Wait()
+
+			assert.Zero(t, raised(), "the retries are bounded")
+
+			f.h.ScheduleStorageNoticeSync() // an external trigger starts over
+			time.Sleep(storageNoticeDebounce + time.Second)
+			synctest.Wait()
+			assert.Equal(t, 1, raised(), "an external schedule finds the service")
+			f.h.StopStorageNoticeSync()
+			f.h.Wait()
+		})
+		notification.ResetForTest()
+	})
+}

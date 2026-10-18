@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/testutil"
 )
@@ -54,7 +55,13 @@ func newStorageWiringController(t *testing.T, initializeRoutes bool) *Controller
 	metrics, err := observability.NewMetrics()
 	require.NoError(t, err)
 
-	c, err := NewWithOptions(echo.New(), mockDS, settings, nil, nil, make(chan string, 10), metrics, initializeRoutes)
+	// An injected notification service keeps the startup evaluation from arming
+	// retries, so the arm count only reflects the facade's own calls.
+	notifService := notification.NewService(notification.DefaultServiceConfig())
+	t.Cleanup(notifService.Stop)
+
+	c, err := NewWithOptions(echo.New(), mockDS, settings, nil, nil, make(chan string, 10), metrics, initializeRoutes,
+		WithNotificationService(notifService))
 	require.NoError(t, err)
 	return c
 }
