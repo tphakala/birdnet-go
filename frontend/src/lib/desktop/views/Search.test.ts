@@ -4,6 +4,11 @@ import Search from './Search.svelte';
 
 const SEARCH_ENDPOINT = '/api/v2/search';
 const DETECTION_ENDPOINT = '/api/v2/detections/';
+const SPECTROGRAM_ENDPOINT = '/api/v2/spectrogram/';
+// Rate the stubbed detail endpoint resolves, and the rate one search row carries.
+const RESOLVED_RATE = 384_000;
+const ROW_RATE = 192_000;
+const srParam = (rate: number) => `sr=${rate}`;
 const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
 const OVERLAY_PLAY_SELECTOR = 'button.btn-primary.btn-sm';
 const BAT_ROW_ID = '77';
@@ -46,10 +51,10 @@ const ratedRow = {
   id: RATED_ROW_ID,
   commonName: "Daubenton's Bat",
   scientificName: 'Myotis daubentonii',
-  clipSampleRate: 192_000,
+  clipSampleRate: ROW_RATE,
 };
 
-/** Stubs fetch: the search answers with `rows`, the detail endpoint with a 384 kHz rate. */
+/** Stubs fetch: the search answers with `rows`, the detail endpoint with RESOLVED_RATE. */
 function stubFetch(rows: unknown[]) {
   const fetchMock = vi.fn((input: RequestInfo | URL) => {
     const url = String(input);
@@ -58,7 +63,7 @@ function stubFetch(rows: unknown[]) {
     }
     if (url.includes(DETECTION_ENDPOINT)) {
       const id = Number(url.split(DETECTION_ENDPOINT)[1]);
-      return Promise.resolve(jsonResponse({ id, clipSampleRate: 384_000 }));
+      return Promise.resolve(jsonResponse({ id, clipSampleRate: RESOLVED_RATE }));
     }
     return Promise.resolve(jsonResponse({ data: [] }));
   });
@@ -117,7 +122,7 @@ describe('Search bat clip sample rate', () => {
 
       await fireEvent.click(expand);
 
-      await expectSpectrogramSrc('sr=384000');
+      await expectSpectrogramSrc(srParam(RESOLVED_RATE));
       expect(detailCalls()).toEqual([
         expect.stringContaining(`${DETECTION_ENDPOINT}${BAT_ROW_ID}`),
       ]);
@@ -128,7 +133,7 @@ describe('Search bat clip sample rate', () => {
   it(
     'passes a known rate from the search row to the player without a detail request',
     async () => {
-      const { detailCalls } = stubFetch([{ ...batRow, clipSampleRate: 192_000 }]);
+      const { detailCalls } = stubFetch([{ ...batRow, clipSampleRate: ROW_RATE }]);
 
       const { container } = render(Search);
       await submitSearch(container);
@@ -139,7 +144,7 @@ describe('Search bat clip sample rate', () => {
       );
       await fireEvent.click(expand);
 
-      await expectSpectrogramSrc('sr=192000');
+      await expectSpectrogramSrc(srParam(ROW_RATE));
       expect(detailCalls()).toHaveLength(0);
     },
     TEST_TIMEOUT_MS
@@ -160,8 +165,8 @@ describe('Search bat clip sample rate', () => {
       const playButtons = () =>
         container.querySelectorAll<HTMLButtonElement>(OVERLAY_PLAY_SELECTOR);
       await fireEvent.click(playButtons()[0]);
-      await expectSpectrogramSrc(`/api/v2/spectrogram/${RATED_ROW_ID}`);
-      await expectSpectrogramSrc('sr=192000');
+      await expectSpectrogramSrc(`${SPECTROGRAM_ENDPOINT}${RATED_ROW_ID}`);
+      await expectSpectrogramSrc(srParam(ROW_RATE));
       expect(detailCalls()).toHaveLength(0);
 
       // Close it and open the row without a rate: the previous rate is not reused.
@@ -170,8 +175,8 @@ describe('Search bat clip sample rate', () => {
         timeout: WAIT_TIMEOUT_MS,
       });
       await fireEvent.click(playButtons()[1]);
-      await expectSpectrogramSrc(`/api/v2/spectrogram/${BAT_ROW_ID}`);
-      await expectSpectrogramSrc('sr=384000');
+      await expectSpectrogramSrc(`${SPECTROGRAM_ENDPOINT}${BAT_ROW_ID}`);
+      await expectSpectrogramSrc(srParam(RESOLVED_RATE));
       expect(detailCalls()).toEqual([
         expect.stringContaining(`${DETECTION_ENDPOINT}${BAT_ROW_ID}`),
       ]);
