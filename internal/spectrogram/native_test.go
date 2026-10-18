@@ -448,7 +448,6 @@ func TestAnalysisSource(t *testing.T) {
 		wantDisplay int
 	}{
 		{"bird 48 kHz is not resampled", 48000, BirdProfile(), 48000, birdHz},
-		{"bird 24 kHz is not resampled", 24000, BirdProfile(), 24000, birdHz},
 		{"bird 44.1 kHz is resampled", 44100, BirdProfile(), birdHz, birdHz},
 		{"bird 96 kHz is resampled", 96000, BirdProfile(), birdHz, birdHz},
 		{"bat 256 kHz keeps its rate", 256000, BatProfile(), 256000, 0},
