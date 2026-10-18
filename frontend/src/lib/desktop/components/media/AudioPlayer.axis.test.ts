@@ -315,17 +315,20 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       expect(imageSrc()).toContain(`sr=${RATE_384K}`);
     });
 
-    it('keeps the rate when the generation has just finished', async () => {
-      probeResponder = notFound;
-      statusBody = { status: 'generated', queuePosition: 0, message: '' };
-      mount({ modelType: 'bat', clipSampleRate: RATE_384K });
-      await settle();
+    it.each(['generating', 'generated', 'completed', 'exists'])(
+      'keeps the rate when the generation status is %s',
+      async generationStatus => {
+        probeResponder = notFound;
+        statusBody = { status: generationStatus, queuePosition: 0, message: '' };
+        mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+        await settle();
 
-      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
-      await settle();
+        await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+        await settle();
 
-      expect(imageSrc()).toContain(`sr=${RATE_384K}`);
-    });
+        expect(imageSrc()).toContain(`sr=${RATE_384K}`);
+      }
+    );
 
     it('falls back on a 404 even when the generation status cannot be read', async () => {
       probeResponder = notFound;
