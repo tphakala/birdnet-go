@@ -88,7 +88,7 @@ func (c *StoragePersistenceCheck) Run(_ context.Context) health.Result {
 
 // summarizeStorage turns a non-empty verdict list into the check status, its
 // short message (labels only) and the per-path details.
-func summarizeStorage(verdicts []diagnostics.StorageVerdict) (health.Status, string, map[string]any) {
+func summarizeStorage(verdicts []diagnostics.StorageVerdict) (status health.Status, message string, details map[string]any) {
 	var lost, anonymous []string
 	unknown := 0
 	worst := diagnostics.StorageSeverityNone
@@ -113,7 +113,7 @@ func summarizeStorage(verdicts []diagnostics.StorageVerdict) (health.Status, str
 			"class":         string(v.Class),
 		})
 	}
-	details := map[string]any{"paths": paths}
+	details = map[string]any{"paths": paths}
 
 	switch {
 	case unknown == len(verdicts):
@@ -131,7 +131,7 @@ func summarizeStorage(verdicts []diagnostics.StorageVerdict) (health.Status, str
 	if len(anonymous) > 0 {
 		parts = append(parts, msgStorageAnonPrefix+strings.Join(anonymous, labelJoiner))
 	}
-	status := health.StatusWarning
+	status = health.StatusWarning
 	if worst == diagnostics.StorageSeverityCritical {
 		status = health.StatusCritical
 	}
