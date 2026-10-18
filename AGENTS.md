@@ -73,6 +73,10 @@ yourself before touching code in that area.
   standard `errors.New`, which is `errors.NewStd` there (its `errors.New` wraps
   an existing error; see `internal/errors/AGENTS.md`). `depguard` rejects the
   standard import.
+- **Ultrasonic (bat) captures are always lossless.** Captures above 48 kHz are
+  exported only as WAV or FLAC (`Export.UltrasonicType`, default FLAC), never as
+  AAC, MP3 or Opus: lossy encoders cannot carry ultrasonic content. Do not add
+  lossy handling, fallbacks or defensive branches for it.
 - **Never log secrets or PII.** Use the typed sensitive-field helpers in
   `internal/logger` (a `forbidigo` lint rule enforces this for credential and
   token field names).
