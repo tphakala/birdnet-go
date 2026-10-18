@@ -86,6 +86,8 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
   let statusBody: Record<string, unknown> | undefined;
   // When set, the spectrogram /status request fails on the network.
   let statusFails: boolean;
+  // When set, the spectrogram /status request never answers until aborted.
+  let statusHangs: boolean;
 
   const fetchMock = () => vi.mocked(globalThis.fetch);
 
@@ -132,7 +134,19 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
     probeResponder = undefined;
     statusBody = undefined;
     statusFails = false;
+    statusHangs = false;
     fetchMock().mockImplementation((url, init) => {
+      if (
+        statusHangs &&
+        String(url).includes(SPECTROGRAM_ENDPOINT) &&
+        String(url).includes('/status')
+      ) {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          );
+        });
+      }
       if (
         statusFails &&
         String(url).includes(SPECTROGRAM_ENDPOINT) &&
@@ -339,6 +353,23 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
       await settle();
 
+      expect(imageSrc()).not.toContain('sr=');
+    });
+
+    it('falls back at the timeout when the generation status read hangs', async () => {
+      probeResponder = notFound;
+      statusHangs = true;
+      mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+      await settle();
+
+      await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+      await vi.advanceTimersByTimeAsync(PROBE_TIMEOUT_MS - 1);
+      expect(probeSignals[0]?.aborted).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await settle();
+
+      expect(probeSignals[0]?.aborted).toBe(true);
       expect(imageSrc()).not.toContain('sr=');
     });
 
