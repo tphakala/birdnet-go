@@ -3851,31 +3851,29 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 	// old bird-profile image (e.g. one cached while the bat gate was disabled) is not
 	// left orphaned alongside the new one. Best-effort: a missing file is fine.
 	if freqSuffix != "" {
-		if _, _, _, birdRelPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange, ""); birdRelPath != relSpectrogramPath {
-			absBirdPath := filepath.Join(c.SFS.BaseDir(), birdRelPath)
-			if rmErr := c.SFS.Remove(absBirdPath); rmErr != nil && !os.IsNotExist(rmErr) {
-				getSpectrogramLogger().Debug("Failed to remove stale default-profile spectrogram",
-					logger.String("path", birdRelPath),
-					logger.Error(rmErr))
-			}
-		}
+		c.removeStaleRender(relAudioPath, width, raw, style, dynamicRange, "")
 	}
 
 	// A superseded profile token (e.g. bat-v2 and bat for bat-v3) left renders with
-	// a different frequency range next to the new one. Remove them the same
-	// best-effort way; a missing file is fine.
+	// a different frequency range next to the new one. Remove them the same way.
 	for _, oldSuffix := range spectrogram.SupersededSuffixesForToken(freqSuffix) {
-		if _, _, _, oldRelPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange, oldSuffix); oldRelPath != relSpectrogramPath {
-			if rmErr := c.SFS.Remove(filepath.Join(c.SFS.BaseDir(), oldRelPath)); rmErr != nil && !os.IsNotExist(rmErr) {
-				getSpectrogramLogger().Debug("Failed to remove superseded profile spectrogram",
-					logger.String("path", oldRelPath),
-					logger.Error(rmErr))
-			}
-		}
+		c.removeStaleRender(relAudioPath, width, raw, style, dynamicRange, oldSuffix)
 	}
 
 	// Return the relative path of the newly created spectrogram
 	return relSpectrogramPath, nil
+}
+
+// removeStaleRender removes, best-effort, the render of the clip that carries
+// staleSuffix instead of the current profile token (callers pass a suffix that
+// differs from the one just written). A missing file is fine.
+func (c *Handler) removeStaleRender(relAudioPath string, width int, raw bool, style, dynamicRange, staleSuffix string) {
+	_, _, _, staleRel := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange, staleSuffix)
+	if rmErr := c.SFS.Remove(filepath.Join(c.SFS.BaseDir(), staleRel)); rmErr != nil && !os.IsNotExist(rmErr) {
+		getSpectrogramLogger().Debug("Failed to remove stale spectrogram render",
+			logger.String("path", staleRel),
+			logger.Error(rmErr))
+	}
 }
 
 // Note: createSpectrogramWithSoX, getSoxSpectrogramArgs, createSpectrogramWithFFmpeg,

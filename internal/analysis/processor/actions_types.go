@@ -163,7 +163,7 @@ type SaveAudioAction struct {
 	clipTags clipTagMeta
 	// clipRates persists a corrected clip sample rate after the encode; nil when the
 	// datastore cannot store one (legacy mode) or in tests that do not need it.
-	clipRates datastore.ClipSampleRateRecorder
+	clipRates datastore.ClipSampleRateStore
 	// plannedRate is the clip sample rate stored with the detection at save time
 	// (plannedClipSampleRate); the action corrects it when the encode wrote another.
 	plannedRate   int

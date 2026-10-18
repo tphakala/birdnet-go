@@ -184,6 +184,12 @@ type recordingRateRecorder struct {
 	err   error
 }
 
+// FillClipSampleRate completes datastore.ClipSampleRateStore; the save action
+// never calls it.
+func (r *recordingRateRecorder) FillClipSampleRate(uint, string, int) (bool, error) {
+	return false, nil
+}
+
 type rateCall struct {
 	noteID uint
 	clip   string
@@ -244,7 +250,7 @@ func TestSaveAudioAction_CorrectsClipSampleRate(t *testing.T) {
 // corrections.
 type rateRecorderDatastore struct {
 	*ActionMockDatastore
-	datastore.ClipSampleRateRecorder
+	datastore.ClipSampleRateStore
 }
 
 // TestBuildSaveAudioAction_CarriesClipSampleRateWiring verifies the save action
@@ -257,7 +263,7 @@ func TestBuildSaveAudioAction_CarriesClipSampleRateWiring(t *testing.T) {
 	det := &Detections{Result: detection.Result{ClipName: testRateClipName, ClipSampleRate: rateTest384k}}
 
 	rec := &recordingRateRecorder{}
-	p := &Processor{Ds: &rateRecorderDatastore{ActionMockDatastore: NewActionMockDatastore(), ClipSampleRateRecorder: rec}}
+	p := &Processor{Ds: &rateRecorderDatastore{ActionMockDatastore: NewActionMockDatastore(), ClipSampleRateStore: rec}}
 	action := p.buildSaveAudioAction(det, nil, settings)
 	assert.Equal(t, rateTest384k, action.plannedRate)
 	require.NotNil(t, action.clipRates)

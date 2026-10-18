@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -73,12 +74,14 @@ type Handler struct {
 	loadCommonToScientificMap func() map[string]string
 
 	// probeClipRate reads a clip's sample rate from its header for the lazy fill
-	// (clip_rate_fill.go); nil means the production probe. Tests replace it.
+	// (clip_rate_fill.go). New sets the production probe; tests replace it.
 	probeClipRate clipRateProbe
-	// clipRateWait overrides clipRateResponseBudget when positive. Tests only.
+	// clipRateWait is how long GetDetection waits for the lazy fill. New sets
+	// clipRateResponseBudget; tests replace it.
 	clipRateWait time.Duration
-	// clipRateGroup de-duplicates the lazy fill per row while it is in flight.
-	clipRateGroup clipRateFlight
+	// clipRateGroup de-duplicates the lazy fill per row while it is in flight. It
+	// holds no result afterwards, so the fill is stateless.
+	clipRateGroup singleflight.Group
 }
 
 // New constructs the detections domain handler around the shared core and the
@@ -109,6 +112,8 @@ func New(
 		loadCommonNameMap:         loadCommonNameMap,
 		loadFoldedCommonNameMap:   loadFoldedCommonNameMap,
 		loadCommonToScientificMap: loadCommonToScientificMap,
+		probeClipRate:             probeClipFileRate,
+		clipRateWait:              clipRateResponseBudget,
 	}
 }
 

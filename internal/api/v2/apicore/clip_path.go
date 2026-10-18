@@ -9,7 +9,14 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/securefs"
 )
+
+// ErrClipNameNotRelative is returned by ResolveClipRel when a stored clip name does
+// not normalize to a relative path inside the clips directory.
+var ErrClipNameNotRelative = errors.NewStd("clip name is not a valid relative path")
 
 // NormalizeClipPathStrict normalizes the audio clip path by removing the clips prefix if present.
 // This is the strict variant that returns a boolean to distinguish between invalid paths and
@@ -171,4 +178,17 @@ func isUnsafePath(p string) bool {
 func NormalizeClipPath(p, clipsPrefix string) string {
 	normalized, _ := NormalizeClipPathStrict(p, clipsPrefix)
 	return normalized
+}
+
+// ResolveClipRel turns a stored clip name into a SecureFS-relative path: it strips
+// clipsPrefix (NormalizeClipPath) and validates the result with sfs. A name that
+// normalizes to nothing (traversal, absolute) would resolve to the root directory,
+// so it returns ErrClipNameNotRelative instead. The path is lexically validated
+// only; use SecureFS's relative-path methods to touch the file.
+func ResolveClipRel(sfs *securefs.SecureFS, clipName, clipsPrefix string) (string, error) {
+	normalized := NormalizeClipPath(clipName, clipsPrefix)
+	if normalized == "" {
+		return "", ErrClipNameNotRelative
+	}
+	return sfs.ValidateRelativePath(normalized)
 }

@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"time"
 
-	"golang.org/x/sync/singleflight"
-
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -31,11 +29,6 @@ const (
 	// one probe and one write per row run at a time.
 	clipRateFlightKeyPrefix = "clip-rate:"
 
-	// maxClipSampleRateHz is the highest clip sample rate the lazy fill stores.
-	// The decoder's header probe enforces the same bound; this is a defensive
-	// check so a bad value is never written.
-	maxClipSampleRateHz = 1_000_000
-
 	// Error classes for the debug log of a failed probe (no path or error text,
 	// since the endpoint is public).
 	clipRateErrMissing     = "missing"
@@ -47,6 +40,9 @@ const (
 
 // errClipRateWorkPanicked marks a lazy-fill probe that panicked and was contained.
 var errClipRateWorkPanicked = errors.NewStd("clip sample rate work panicked")
+
+// errClipRateInvalid marks a probe that returned a non-positive rate.
+var errClipRateInvalid = errors.NewStd("clip sample rate is not positive")
 
 // clipRateProbe reads a clip's sample rate from its header without decoding it.
 type clipRateProbe func(ctx context.Context, path string) (int, error)
@@ -60,10 +56,6 @@ func probeClipFileRate(ctx context.Context, path string) (int, error) {
 	}
 	return info.SampleRate, nil
 }
-
-// clipRateFlight de-duplicates the fill work per row while it is in flight. It
-// holds no result afterwards, so the fill is stateless.
-type clipRateFlight = singleflight.Group
 
 // wantsClipRateFill reports whether note is a bat detection with a clip file and
 // no stored clip sample rate. Spectrogram-only rows have no clip name and are
@@ -86,7 +78,7 @@ func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 	if !wantsClipRateFill(note) {
 		return
 	}
-	filler, ok := c.DS.(datastore.ClipSampleRateFiller)
+	filler, ok := c.DS.(datastore.ClipSampleRateStore)
 	if !ok {
 		return
 	}
@@ -115,16 +107,12 @@ func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 		return c.probeAndStoreClipRate(workCtx, filler, noteID, clipName, absPath)
 	})
 
-	wait := c.clipRateWait
-	if wait <= 0 {
-		wait = clipRateResponseBudget
-	}
-	timer := time.NewTimer(wait)
+	timer := time.NewTimer(c.clipRateWait)
 	defer timer.Stop()
 	select {
 	case res := <-resultCh:
-		if rate, isRate := res.Val.(int); isRate && res.Err == nil {
-			note.ClipSampleRate = rate
+		if res.Err == nil {
+			note.ClipSampleRate, _ = res.Val.(int)
 		}
 	case <-timer.C:
 		c.LogDebugIfEnabled("Clip sample rate fill exceeded the response budget",
@@ -139,11 +127,7 @@ func (c *Handler) clipProbePath(clipName string) (string, bool) {
 	if c.SFS == nil {
 		return "", false
 	}
-	normalized := apicore.NormalizeClipPath(clipName, c.CurrentSettings().Realtime.Audio.Export.Path)
-	if normalized == "" {
-		return "", false
-	}
-	rel, err := c.SFS.ValidateRelativePath(normalized)
+	rel, err := apicore.ResolveClipRel(c.SFS, clipName, c.CurrentSettings().Realtime.Audio.Export.Path)
 	if err != nil {
 		return "", false
 	}
@@ -159,20 +143,17 @@ func (c *Handler) clipProbePath(clipName string) (string, bool) {
 // probeAndStoreClipRate probes the clip header and stores the rate while the row
 // is still NULL. It returns the probed rate even when the write fails or changes
 // no row, because the rate belongs to the clip the response names.
-func (c *Handler) probeAndStoreClipRate(ctx context.Context, filler datastore.ClipSampleRateFiller, noteID uint, clipName, absPath string) (any, error) {
-	probe := c.probeClipRate
-	if probe == nil {
-		probe = probeClipFileRate
-	}
-	rate, err := probe(ctx, absPath)
+func (c *Handler) probeAndStoreClipRate(ctx context.Context, filler datastore.ClipSampleRateStore, noteID uint, clipName, absPath string) (int, error) {
+	rate, err := c.probeClipRate(ctx, absPath)
 	if err != nil {
 		c.LogDebugIfEnabled("Clip sample rate probe failed",
 			logger.Uint64("note_id", uint64(noteID)),
 			logger.String("error_class", clipRateErrorClass(err)))
-		return nil, err
+		return 0, err
 	}
-	if rate <= 0 || rate > maxClipSampleRateHz {
-		return nil, errors.NewStd("clip sample rate out of range")
+	// ProbeFile rejects out-of-range rates; this keeps a non-positive value from ever being stored.
+	if rate <= 0 {
+		return 0, errClipRateInvalid
 	}
 	if _, err := filler.FillClipSampleRate(noteID, clipName, rate); err != nil {
 		c.LogWarnIfEnabled("Failed to store the clip sample rate; it stays unset",

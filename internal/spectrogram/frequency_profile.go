@@ -1,7 +1,5 @@
 package spectrogram
 
-import "slices"
-
 // FrequencyProfile controls spectrogram frequency range and resampling per
 // detection. The gate is the detection's model type: bat models keep the clip's
 // native capture rate, so the image spans 0 to half of that rate (a 384 kHz clip
@@ -37,21 +35,14 @@ const (
 	batCacheSuffixLegacy = "bat"
 )
 
-// supersededSuffixes maps a cache token to the older tokens whose renders it
-// replaces, newest first.
-var supersededSuffixes = map[string][]string{
-	batCacheSuffix: {batCacheSuffixV2, batCacheSuffixLegacy},
-}
-
 // SupersededSuffixesForToken returns the older cache tokens that the given
-// token replaces, or nil when it replaces none. The caller may delete files
-// carrying those tokens once a render with the current token exists.
+// token replaces, newest first, or nil when it replaces none. The caller may
+// delete files carrying those tokens once a render with the current token exists.
 func SupersededSuffixesForToken(token string) []string {
-	old := supersededSuffixes[token]
-	if old == nil {
-		return nil
+	if token == batCacheSuffix {
+		return []string{batCacheSuffixV2, batCacheSuffixLegacy}
 	}
-	return slices.Clone(old)
+	return nil
 }
 
 // BirdProfile returns the default frequency profile for bird detections.

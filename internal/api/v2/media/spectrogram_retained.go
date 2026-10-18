@@ -34,10 +34,6 @@ const (
 	msgRetainedSpectrogramMissing = "Spectrogram not available: the audio clip was removed and no spectrogram image was kept"
 )
 
-// errClipNameNotRelative is returned when a stored clip name does not normalize to a
-// relative path inside the clips directory.
-var errClipNameNotRelative = errors.NewStd("clip name is not a valid relative path")
-
 // errNoClipForNote marks "the note exists but has no audio clip". The clip lookup
 // returns it without writing a response so the caller can decide what to do.
 var errNoClipForNote = errors.NewStd("note has no audio clip")
@@ -172,15 +168,10 @@ func (c *Handler) serveSpectrogramFile(ctx echo.Context, relPath string) error {
 	return err
 }
 
-// resolveClipRel turns a stored clip name into a SecureFS-relative path. A name that
-// normalizes to nothing (traversal, absolute) would resolve to the root directory,
-// so it is an error.
+// resolveClipRel turns a stored clip name into a SecureFS-relative path using the
+// live export path (see apicore.ResolveClipRel).
 func (c *Handler) resolveClipRel(clipName string) (string, error) {
-	normalized := apicore.NormalizeClipPath(clipName, c.CurrentSettings().Realtime.Audio.Export.Path)
-	if normalized == "" {
-		return "", errClipNameNotRelative
-	}
-	return c.SFS.ValidateRelativePath(normalized)
+	return apicore.ResolveClipRel(c.SFS, clipName, c.CurrentSettings().Realtime.Audio.Export.Path)
 }
 
 // nearestRender lists the clip's directory and returns the relative path of the

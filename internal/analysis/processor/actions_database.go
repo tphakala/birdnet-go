@@ -1220,12 +1220,19 @@ func resolveExportFormat(isBat bool, sourceRate int, export *conf.ExportSettings
 	return export.Type
 }
 
+// isBatModel reports whether the model name and version identify a bat model. The
+// export format, the planned clip rate and the encoder all use it, always with the
+// name paired with its version, so they cannot disagree.
+func isBatModel(name, version string) bool {
+	return detection.ResolveModelType(name, version) == entities.ModelTypeBat
+}
+
 // exportFormatForModel resolves the export container for a clip from its model
 // identity and source rate, encapsulating the bat/ultrasonic model-type check so
 // the DB clip-name path (applyExportFormatExtension) picks the same format as the
 // encoder without duplicating the ResolveModelType call.
 func exportFormatForModel(modelName, modelVersion string, sourceRate int, export *conf.ExportSettings) string {
-	isBat := detection.ResolveModelType(modelName, modelVersion) == entities.ModelTypeBat
+	isBat := isBatModel(modelName, modelVersion)
 	return resolveExportFormat(isBat, sourceRate, export)
 }
 
@@ -1261,7 +1268,7 @@ func plannedClipSampleRate(result *detection.Result, export *conf.ExportSettings
 	if rate <= 0 {
 		rate = conf.SampleRate
 	}
-	isBat := detection.ResolveModelType(result.Model.Name, result.Model.Version) == entities.ModelTypeBat
+	isBat := isBatModel(result.Model.Name, result.Model.Version)
 	return exportClipRate(isBat, rate, resolveExportFormat(isBat, rate, export))
 }
 
@@ -1294,7 +1301,7 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	// Pair modelName with modelVersion (matching the naming path's
 	// applyExportFormatExtension) so the encode-side isBat check cannot skew from
 	// the clip-name side for a future version-specific model type.
-	isBat := detection.ResolveModelType(a.modelName, a.modelVersion) == entities.ModelTypeBat
+	isBat := isBatModel(a.modelName, a.modelVersion)
 
 	// Decide the format from the ORIGINAL source rate, before the resample below
 	// can mutate it. Shared with applyExportFormatExtension on the naming path.
@@ -1307,12 +1314,7 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	// is inaudible.
 	a.pcmData = trimPartialSample(a.pcmData)
 
-	// exportClipRate decides the target: non-bat audio above the analysis rate is
-	// downsampled to it so it can be stored in the configured (possibly lossy)
-	// Export.Type, bat/ultrasonic audio above it keeps its full source rate (format
-	// is UltrasonicType, decided above), and sub-48k audio is resampled up to
-	// conf.SampleRate when the configured lossy native encoder cannot carry it. On
-	// a resample failure the rate is unchanged and the encoder rejects it.
+	// The target rate is exportClipRate, shared with the rate stored at save time.
 	if target := exportClipRate(isBat, rate, format); target != rate {
 		rate = a.resampleExportTo(rate, target, format)
 	}

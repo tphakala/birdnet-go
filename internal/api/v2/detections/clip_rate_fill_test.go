@@ -72,6 +72,10 @@ func (s *rateStore) FillClipSampleRate(_ uint, clipName string, rate int) (bool,
 	return true, nil
 }
 
+// RecordClipSampleRate completes datastore.ClipSampleRateStore; the lazy fill
+// never calls it.
+func (s *rateStore) RecordClipSampleRate(uint, string, int) error { return nil }
+
 func (s *rateStore) stored() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -212,7 +216,7 @@ func TestGetDetection_LazyFill_Budget(t *testing.T) {
 		// handler derives are bubble-owned.
 		prober := &fakeProber{rate: rateTestBatRate, gate: make(chan struct{})}
 		e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
-		h.clipRateWait = 0 // the production budget
+		h.clipRateWait = clipRateResponseBudget
 		start := time.Now()
 		status, rate := getDetectionRate(t, e, h)
 		elapsed := time.Since(start)
@@ -306,6 +310,15 @@ func TestGetDetection_LazyFill_TruncatedDataStillFills(t *testing.T) {
 // panickingProbe stands in for a decoder that panics on a malformed clip header.
 func panickingProbe(context.Context, string) (int, error) {
 	panic("malformed header")
+}
+
+func TestGetDetection_LazyFill_NonPositiveRateIsNotStored(t *testing.T) {
+	prober := &fakeProber{rate: 0}
+	e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
+
+	_, rate := getDetectionRate(t, e, h)
+	assert.Zero(t, rate)
+	assert.Zero(t, store.fills(), "a non-positive rate is never written")
 }
 
 func TestGetDetection_LazyFill_ProbePanicIsContained(t *testing.T) {
