@@ -650,12 +650,16 @@ func TestExecute_UnrecoverableResampleFailsLossyWithoutWAV(t *testing.T) {
 
 // AAC, MP3 and Opus resolve identically with and without FFmpeg, never strand to WAV,
 // follow the format the stored name records, and always end on a rate their native
-// encoder carries (a bat capture above 48kHz under a lossy name is downsampled).
+// encoder carries. A bat capture above 48kHz is never named lossy (its name records
+// UltrasonicType, WAV or FLAC), so those combinations are skipped.
 func TestResolveExportParams_LossyNativeIndependentOfFFmpeg(t *testing.T) {
 	rates := []int{8000, 11025, 16000, 22050, 24000, 32000, 44100, 48000, 96000, 192000}
 	for _, lf := range lossyNativeFormats {
 		for _, rate := range rates {
 			for _, isBat := range []bool{false, true} {
+				if isBat && rate > conf.SampleRate {
+					continue
+				}
 				t.Run(fmt.Sprintf("%s_%dHz_bat=%t", lf.format, rate, isBat), func(t *testing.T) {
 					type result struct {
 						rate         int

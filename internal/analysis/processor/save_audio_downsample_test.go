@@ -129,46 +129,6 @@ func TestSaveAudioAction_BatUltrasonicStoredAsWAV(t *testing.T) {
 	assert.Equal(t, sourceRate, rate, "ultrasonic WAV should preserve the native 256kHz rate")
 }
 
-// TestSaveAudioAction_BatUltrasonicWithLossyStoredName_DownsamplesAndKeepsName
-// pins what happens to a bat capture above 48kHz whose stored name records a
-// lossy format (naming and encoding read the same Result fields, so production
-// does not write such a name, but it is reachable by direct construction): the
-// clip is downsampled to 48kHz and written under the stored name, rather than
-// handed to an encoder that rejects the rate or written under another name.
-func TestSaveAudioAction_BatUltrasonicWithLossyStoredName_DownsamplesAndKeepsName(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	settings := conftest.NewTestSettings().
-		WithAudioExport(tmpDir, "flac", "128k").
-		Build()
-
-	const sourceRate = 256000
-	action := &SaveAudioAction{
-		Settings:         settings,
-		ClipName:         "bat-256k.mp3",
-		pcmData:          makeSilentPCM16(t, sourceRate),
-		sourceSampleRate: sourceRate,
-		modelName:        "BattyBirdNET",
-		CorrelationID:    "test-bat-lossy-name",
-	}
-
-	rate, format, path := action.resolveExportParams(filepath.Join(tmpDir, "bat-256k.mp3"))
-	assert.Equal(t, conf.SampleRate, rate)
-	assert.Equal(t, "mp3", format)
-	assert.Equal(t, filepath.Join(tmpDir, "bat-256k.mp3"), path)
-
-	// resolveExportParams resampled the buffer in place; restore the capture.
-	action.pcmData = makeSilentPCM16(t, sourceRate)
-	action.sourceSampleRate = sourceRate
-	require.NoError(t, action.Execute(t.Context(), nil))
-
-	entries, err := os.ReadDir(tmpDir)
-	require.NoError(t, err)
-	require.Len(t, entries, 1)
-	assert.Equal(t, "bat-256k.mp3", entries[0].Name())
-}
-
 // TestSaveAudioAction_BirdAt48kHzNoResample verifies that bird audio already
 // at 48kHz is not resampled (no unnecessary work).
 func TestSaveAudioAction_BirdAt48kHzNoResample(t *testing.T) {

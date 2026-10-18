@@ -1048,10 +1048,9 @@ const (
 //
 //nolint:gochecknoglobals // process-lifetime log-flood guards
 var (
-	normalizeSkipLogged        onceByKey
-	resampleFailureLogged      onceByKey
-	clipPathExtFallbackLogged  onceByKey
-	ultrasonicDownsampleLogged onceByKey
+	normalizeSkipLogged       onceByKey
+	resampleFailureLogged     onceByKey
+	clipPathExtFallbackLogged onceByKey
 )
 
 // resolveExportGainDB returns the gain in dB to apply to this clip. Every export
@@ -1241,10 +1240,9 @@ func exportFormatForModel(modelName, modelVersion string, sourceRate int, export
 // with no known extension falls back to resolveExportFormat and gets its
 // extension rewritten to match.
 //
-// Bat/ultrasonic audio above the analysis rate keeps its full source rate when
-// the format's encoder accepts it (the lossless WAV or FLAC that
-// UltrasonicType names); a lossy name downsamples it to the analysis rate (see
-// keepsSourceRate). Non-bat audio above the analysis rate is downsampled to it.
+// Bat/ultrasonic audio above the analysis rate keeps its full source rate: its
+// name records UltrasonicType (WAV or FLAC), and the lossy formats never carry
+// ultrasonic content. Non-bat audio above the analysis rate is downsampled to it.
 //
 // Audio below the analysis rate whose native lossy encoder (AAC, MP3 or Opus)
 // cannot carry the source rate is resampled UP to the analysis rate, which every
@@ -1284,20 +1282,11 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	a.pcmData = trimPartialSample(a.pcmData)
 
 	switch {
-	case rate > conf.SampleRate && !keepsSourceRate(isBat, fromName, rate, format):
-		// Audio above the analysis rate is downsampled to it so it can be stored in
-		// the named (possibly lossy) format. Bat/ultrasonic audio is kept at full
-		// source rate when its format carries it.
-		if isBat && fromName {
-			ultrasonicDownsampleLogged.do(formatRateKey(format, rate), func() {
-				GetLogger().Warn("Ultrasonic capture stored under a format that cannot carry its rate, downsampling to the analysis rate",
-					logger.String("component", "analysis.processor.actions"),
-					logger.String("format", format),
-					logger.Int("source_rate", rate),
-					logger.Int("target_rate", conf.SampleRate),
-					logger.String("operation", "audio_export_ultrasonic_downsample"))
-			})
-		}
+	case rate > conf.SampleRate && !isBat:
+		// Non-bat audio above the analysis rate is downsampled to it so it can be
+		// stored in the named (possibly lossy) format. Bat/ultrasonic audio above
+		// the analysis rate is kept at full source rate (its name records
+		// UltrasonicType, WAV or FLAC) and never resampled.
 		rate = a.resampleExportTo(rate, conf.SampleRate, format)
 	case rate < conf.SampleRate && nativeEncoderNeedsUpsample(rate, format):
 		// The native lossy encoder for the format cannot carry this sub-48k rate.
@@ -1317,23 +1306,6 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	}
 
 	return rate, format, path
-}
-
-// keepsSourceRate reports whether audio above the analysis rate is exported at
-// its source rate. Only bat/ultrasonic audio is. For a name with no known
-// extension that is always so, the rule from before the name decided the format,
-// which keeps a retried export of such a clip identical. When the stored name
-// decides the format, the source rate is kept only if that format's native
-// encoder accepts it, so a lossy name never reaches an encoder that rejects the
-// rate.
-func keepsSourceRate(isBat, fromName bool, rate int, format string) bool {
-	if !isBat {
-		return false
-	}
-	if !fromName {
-		return true
-	}
-	return transcode.EncoderAcceptsRate(format, rate, conf.BitDepth, conf.NumChannels)
 }
 
 // resampleExportTo converts the captured PCM from srcRate to dstRate for export,
@@ -1380,8 +1352,7 @@ func trimPartialSample(pcm []byte) []byte {
 // native lossy encoder) does. FfmpegPath and the bat model type are ignored on
 // purpose: the lossy formats never use FFmpeg, and a bat-model clip below the
 // analysis rate is upsampled like any other (one above it never reaches here: it
-// is kept at full rate in a lossless named format or downsampled, see
-// keepsSourceRate).
+// is kept at full rate in its lossless named format).
 //
 // In this pipeline bit depth and channels are fixed (conf.BitDepth,
 // conf.NumChannels), so the only thing Supports rejects here is the sample rate.
