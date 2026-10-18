@@ -269,3 +269,26 @@ func TestStorageNotice_ScheduleBeforeStartIsNoop(t *testing.T) {
 		assert.Zero(t, nh.calls.Load())
 	})
 }
+
+func TestStorageNotice_UnknownVerdictKeepsLatch(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 1, 1)
+	nh := newNoticeHarness(rec)
+	nh.set(applicable(verdict("models", classLayer)))
+	nh.h.syncStorageNotices()
+
+	// The path can no longer be judged (a resolve error): the live notice stays.
+	unknown := diagnostics.StorageVerdict{Label: "models", Path: "/models", Class: diagnostics.PersistenceUnknown}
+	nh.set(applicable(unknown, verdict("config", classOK)))
+	nh.h.syncStorageNotices()
+
+	created, deleted := rec.counts()
+	assert.Equal(t, 1, created)
+	assert.Equal(t, 0, deleted, "an unknown verdict is not proof that the problem went away")
+
+	// Judged persistent again: now the notice goes.
+	nh.set(applicable(verdict("models", classOK), verdict("config", classOK)))
+	nh.h.syncStorageNotices()
+
+	_, deleted = rec.counts()
+	assert.Equal(t, 1, deleted)
+}

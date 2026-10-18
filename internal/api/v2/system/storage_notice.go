@@ -147,8 +147,9 @@ func (c *Handler) storageReport() checks.StoragePersistenceReport {
 
 // syncStorageNotices evaluates the key paths and raises, replaces or clears the
 // two persistent bell notices to match. It is idempotent and safe to call
-// concurrently. An unreadable mount table leaves both notices as they are: an
-// unknown result is neither an alarm nor proof that the problem went away.
+// concurrently. An unreadable mount table, or a path that cannot be judged while a
+// notice has nothing else to name, leaves that notice as it is: an unknown
+// result is neither an alarm nor proof that the problem went away.
 func (c *Handler) syncStorageNotices() {
 	svc := c.noticeSvc()
 	if svc == nil {
@@ -165,9 +166,12 @@ func (c *Handler) syncStorageNotices() {
 	}
 
 	var lost, anonymous []diagnostics.StorageVerdict
+	unjudged := false
 	if report.Applicable {
 		for i := range report.Verdicts {
 			switch v := report.Verdicts[i]; {
+			case v.Class == diagnostics.PersistenceUnknown:
+				unjudged = true
 			case v.Lost():
 				lost = append(lost, v)
 			case v.Class == diagnostics.PersistenceAnonymousVolume:
@@ -176,8 +180,15 @@ func (c *Handler) syncStorageNotices() {
 		}
 	}
 
-	c.reconcileStorageNotice(svc, &n.lost, lost, newStorageLostNotification)
-	c.reconcileStorageNotice(svc, &n.anonymous, anonymous, newStorageAnonymousNotification)
+	// A path that could not be judged may be one of the paths a notice names, so
+	// an empty set is not proof that the problem went away: leave that notice as
+	// it is until every path is judged.
+	if len(lost) > 0 || !unjudged {
+		c.reconcileStorageNotice(svc, &n.lost, lost, newStorageLostNotification)
+	}
+	if len(anonymous) > 0 || !unjudged {
+		c.reconcileStorageNotice(svc, &n.anonymous, anonymous, newStorageAnonymousNotification)
+	}
 }
 
 // reconcileStorageNotice applies one verdict set to its latch. A failure is
