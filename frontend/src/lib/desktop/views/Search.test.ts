@@ -4,7 +4,15 @@ import Search from './Search.svelte';
 
 const SEARCH_ENDPOINT = '/api/v2/search';
 const DETECTION_ENDPOINT = '/api/v2/detections/';
+const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
+const OVERLAY_PLAY_SELECTOR = 'button.btn-primary.btn-sm';
 const BAT_ROW_ID = '77';
+const RATED_ROW_ID = '78';
+// Bound for each waitFor: it polls, and the mocked responses resolve at once.
+const WAIT_TIMEOUT_MS = 5000;
+// Per-test budget, above the sum of the waits in the longest case (six), so a
+// slow run fails on the waitFor that stalled rather than on the test timeout.
+const TEST_TIMEOUT_MS = 40_000;
 
 /** Minimal fetch Response stub carrying a JSON body. */
 function jsonResponse(body: unknown): Response {
@@ -33,82 +41,141 @@ const batRow = {
   modelType: 'bat',
 };
 
+const ratedRow = {
+  ...batRow,
+  id: RATED_ROW_ID,
+  commonName: "Daubenton's Bat",
+  scientificName: 'Myotis daubentonii',
+  clipSampleRate: 192_000,
+};
+
+/** Stubs fetch: the search answers with `rows`, the detail endpoint with a 384 kHz rate. */
+function stubFetch(rows: unknown[]) {
+  const fetchMock = vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes(SEARCH_ENDPOINT)) {
+      return Promise.resolve(jsonResponse({ results: rows, total: rows.length, pages: 1 }));
+    }
+    if (url.includes(DETECTION_ENDPOINT)) {
+      const id = Number(url.split(DETECTION_ENDPOINT)[1]);
+      return Promise.resolve(jsonResponse({ id, clipSampleRate: 384_000 }));
+    }
+    return Promise.resolve(jsonResponse({ data: [] }));
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  const detailCalls = () =>
+    fetchMock.mock.calls.map(call => String(call[0])).filter(u => u.includes(DETECTION_ENDPOINT));
+  return { detailCalls };
+}
+
+async function submitSearch(container: HTMLElement) {
+  const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]');
+  expect(submit).not.toBeNull();
+  if (submit) await fireEvent.click(submit);
+}
+
+async function waitForElement<T extends Element>(find: () => T | null): Promise<T> {
+  return waitFor(
+    () => {
+      const el = find();
+      if (!el) throw new Error('element not rendered yet');
+      return el;
+    },
+    { timeout: WAIT_TIMEOUT_MS }
+  );
+}
+
+async function expectSpectrogramSrc(fragment: string) {
+  await waitFor(
+    () => {
+      expect(screen.getByAltText(SPECTROGRAM_ALT).getAttribute('src')).toContain(fragment);
+    },
+    { timeout: WAIT_TIMEOUT_MS }
+  );
+}
+
 describe('Search bat clip sample rate', () => {
   afterEach(() => {
     cleanup();
     vi.unstubAllGlobals();
   });
 
-  it('resolves the rate once when an old bat row is expanded, never while it is only listed', async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes(SEARCH_ENDPOINT)) {
-        return Promise.resolve(jsonResponse({ results: [batRow], total: 1, pages: 1 }));
-      }
-      if (url.includes(DETECTION_ENDPOINT)) {
-        return Promise.resolve(jsonResponse({ id: 77, clipSampleRate: 384_000 }));
-      }
-      return Promise.resolve(jsonResponse({ data: [] }));
-    });
-    vi.stubGlobal('fetch', fetchMock);
-    const detailCalls = () =>
-      fetchMock.mock.calls.map(call => String(call[0])).filter(u => u.includes(DETECTION_ENDPOINT));
+  it(
+    'resolves the rate once when an old bat row is expanded, never while it is only listed',
+    async () => {
+      const { detailCalls } = stubFetch([batRow]);
 
-    const { container } = render(Search);
-    const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]');
-    expect(submit).not.toBeNull();
-    if (submit) await fireEvent.click(submit);
+      const { container } = render(Search);
+      await submitSearch(container);
 
-    const expand = await waitFor(() => {
-      const button = container.querySelector<HTMLButtonElement>(
-        `button[aria-controls="expanded-row-${BAT_ROW_ID}"]`
+      const expand = await waitForElement(() =>
+        container.querySelector<HTMLButtonElement>(
+          `button[aria-controls="expanded-row-${BAT_ROW_ID}"]`
+        )
       );
-      expect(button).not.toBeNull();
-      return button;
-    });
-    expect(detailCalls()).toHaveLength(0);
+      expect(detailCalls()).toHaveLength(0);
 
-    if (expand) await fireEvent.click(expand);
+      await fireEvent.click(expand);
 
-    await waitFor(() => {
-      expect(screen.getByAltText('components.audio.spectrogramAlt').getAttribute('src')).toContain(
-        'sr=384000'
+      await expectSpectrogramSrc('sr=384000');
+      expect(detailCalls()).toEqual([
+        expect.stringContaining(`${DETECTION_ENDPOINT}${BAT_ROW_ID}`),
+      ]);
+    },
+    TEST_TIMEOUT_MS
+  );
+
+  it(
+    'passes a known rate from the search row to the player without a detail request',
+    async () => {
+      const { detailCalls } = stubFetch([{ ...batRow, clipSampleRate: 192_000 }]);
+
+      const { container } = render(Search);
+      await submitSearch(container);
+      const expand = await waitForElement(() =>
+        container.querySelector<HTMLButtonElement>(
+          `button[aria-controls="expanded-row-${BAT_ROW_ID}"]`
+        )
       );
-    });
-    expect(detailCalls()).toEqual([expect.stringContaining(`${DETECTION_ENDPOINT}${BAT_ROW_ID}`)]);
-  });
+      await fireEvent.click(expand);
 
-  it('passes a known rate from the search row to the player without a detail request', async () => {
-    const fetchMock = vi.fn((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url.includes(SEARCH_ENDPOINT)) {
-        return Promise.resolve(
-          jsonResponse({ results: [{ ...batRow, clipSampleRate: 192_000 }], total: 1, pages: 1 })
-        );
-      }
-      return Promise.resolve(jsonResponse({ data: [] }));
-    });
-    vi.stubGlobal('fetch', fetchMock);
+      await expectSpectrogramSrc('sr=192000');
+      expect(detailCalls()).toHaveLength(0);
+    },
+    TEST_TIMEOUT_MS
+  );
 
-    const { container } = render(Search);
-    const submit = container.querySelector<HTMLButtonElement>('button[type="submit"]');
-    if (submit) await fireEvent.click(submit);
-    const expand = await waitFor(() => {
-      const button = container.querySelector<HTMLButtonElement>(
-        `button[aria-controls="expanded-row-${BAT_ROW_ID}"]`
+  it(
+    'passes the row rate to the overlay player and resets it for the next row',
+    async () => {
+      const { detailCalls } = stubFetch([ratedRow, batRow]);
+
+      const { container } = render(Search);
+      await submitSearch(container);
+      await waitForElement(() =>
+        container.querySelectorAll<HTMLButtonElement>(OVERLAY_PLAY_SELECTOR).item(1)
       );
-      expect(button).not.toBeNull();
-      return button;
-    });
-    if (expand) await fireEvent.click(expand);
 
-    await waitFor(() => {
-      expect(screen.getByAltText('components.audio.spectrogramAlt').getAttribute('src')).toContain(
-        'sr=192000'
-      );
-    });
-    expect(
-      fetchMock.mock.calls.map(call => String(call[0])).filter(u => u.includes(DETECTION_ENDPOINT))
-    ).toHaveLength(0);
-  });
+      // Row with a known rate: the overlay player uses it, no detail request.
+      const playButtons = () =>
+        container.querySelectorAll<HTMLButtonElement>(OVERLAY_PLAY_SELECTOR);
+      await fireEvent.click(playButtons()[0]);
+      await expectSpectrogramSrc(`/api/v2/spectrogram/${RATED_ROW_ID}`);
+      await expectSpectrogramSrc('sr=192000');
+      expect(detailCalls()).toHaveLength(0);
+
+      // Close it and open the row without a rate: the previous rate is not reused.
+      await fireEvent.keyDown(document, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull(), {
+        timeout: WAIT_TIMEOUT_MS,
+      });
+      await fireEvent.click(playButtons()[1]);
+      await expectSpectrogramSrc(`/api/v2/spectrogram/${BAT_ROW_ID}`);
+      await expectSpectrogramSrc('sr=384000');
+      expect(detailCalls()).toEqual([
+        expect.stringContaining(`${DETECTION_ENDPOINT}${BAT_ROW_ID}`),
+      ]);
+    },
+    TEST_TIMEOUT_MS
+  );
 });
