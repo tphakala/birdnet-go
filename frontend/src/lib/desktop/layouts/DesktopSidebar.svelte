@@ -94,6 +94,7 @@ Performance Optimizations:
   import { scheme } from '$lib/stores/scheme';
   import { logoStyle } from '$lib/stores/logoStyle';
   import { SCHEME_GRADIENT_MAP, type LogoVariant } from '$lib/stores/logoVariant';
+  import { resolveSettingsAlias } from '$lib/utils/settingsAlias';
 
   interface Props {
     securityEnabled?: boolean;
@@ -173,7 +174,7 @@ Performance Optimizations:
 
   // Use the currentRoute prop for reactive highlighting
   // This receives the full URL path (e.g., /ui/settings/main) from RootLayout
-  let actualRoute = $derived(currentRoute);
+  let actualRoute = $derived(resolveSettingsAlias(currentRoute));
 
   // PERFORMANCE OPTIMIZATION: Cache route calculations with $derived.by
   // Typed as Record<string, boolean> so dynamic lookups (routeCache[item.routeKey])
