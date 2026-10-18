@@ -255,8 +255,10 @@ fresh render removes the older `-bat-v2` and `-bat` files next to it.
   original clip's rate, which kept images made before the `-bat-v3` change do not match.
 - `GET /detections/:id` fills a missing rate for an older bat detection by reading that clip's header
   once (a few KB, never the whole clip), waiting at most 250 ms, and storing the value. If the clip is
-  unreadable or the wait runs out, the field is omitted and the next request tries again. Lists and
-  search never read a clip, so they can lag a stored value by their 5 minute cache.
+  unreadable, nothing is stored and the next request tries again. If the wait runs out, the field is left
+  out of that response and the read finishes in the background; once it has stored the rate, the next
+  request returns it. Lists and search never read a clip. A page from `GET /detections`, searches
+  included, can lag a stored value by its 5 minute cache; `POST /search` is not cached.
 - `sr=<Hz>` on `GET /spectrogram/:id` means the client draws its axis from that clip rate, so the
   endpoint serves only the exact current render of the clip and answers `404` where it would otherwise
   fall back to a nearest render. An invalid or absent `sr` is ignored.
