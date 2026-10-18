@@ -1247,6 +1247,9 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 		item.ModelID,
 		result.Species)
 	detectionResult.ClipName = p.resolveClipName(settings, &detectionResult, scientificName, result.Confidence)
+	// The planned rate depends on the container the clip name carries, so it is
+	// planned only now (0 when export is off and the name is empty).
+	detectionResult.ClipSampleRate = plannedClipSampleRate(&detectionResult, &settings.Realtime.Audio.Export)
 
 	// Convert additional results from datastore.Results to detection.AdditionalResult.
 	// Exclude the primary species since it's already stored as Detection.LabelID.
@@ -1273,7 +1276,8 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 // createDetectionResult creates a detection.Result from the given parameters.
 // detectionTime should be pre-computed by the caller to ensure timestamp consistency
 // with other detection artifacts (e.g., Note) created from the same analysis.
-// The result's ClipSampleRate is the planned export rate (plannedClipSampleRate), 0 without a clip.
+// The result carries no clip name or ClipSampleRate; createDetection sets both once the
+// clip name is resolved, because the planned rate depends on the name.
 func (p *Processor) createDetectionResult(settings *conf.Settings,
 	detectionTime time.Time,
 	beginTime, endTime time.Time,
@@ -1310,7 +1314,6 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 		Model:          classifier.DetectionModelInfoForID(modelID),
 		RawLabel:       rawLabel,
 	}
-	result.ClipSampleRate = plannedClipSampleRate(&result, &settings.Realtime.Audio.Export)
 	return result
 }
 

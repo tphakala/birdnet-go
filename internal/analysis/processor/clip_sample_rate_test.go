@@ -138,21 +138,45 @@ func TestPlannedClipSampleRate_MatchesExportParams(t *testing.T) {
 	})
 }
 
-func TestCreateDetectionResult_SetsClipSampleRate(t *testing.T) {
+// TestCreateDetection_PlansClipSampleRate drives the real createDetection path,
+// where the clip name is resolved after the result is built, and checks the
+// result carries the planned export rate: the full rate for a bat capture, 48 kHz
+// for a bird capture, and none when export is disabled.
+func TestCreateDetection_PlansClipSampleRate(t *testing.T) {
 	t.Parallel()
 
-	build := func(modelID, clip string, sampleRate int) detection.Result {
-		p := &Processor{Settings: &conf.Settings{}}
-		p.Settings.Realtime.Audio.Export = conf.ExportSettings{Enabled: true, Type: "wav", UltrasonicType: "flac"}
-		p.SetRegistry(newRateRegistry(t, sampleRate))
-		return p.createDetectionResult(p.Settings, time.Now(), time.Now(), time.Now().Add(3*time.Second),
-			"Myotis daubentonii", "Daubenton's bat", "", "", 0.9,
-			datastore.AudioSource{ID: rateTestConnection}, clip, time.Millisecond, 0.5, modelID, "")
+	tests := []struct {
+		name          string
+		modelID       string
+		sourceRate    int
+		exportEnabled bool
+		want          int
+	}{
+		{"bat 384 kHz keeps its rate", classifier.RegistryIDBat, rateTest384k, true, rateTest384k},
+		{"bird 48 kHz wav", classifier.RegistryIDBirdNETV3, conf.SampleRate, true, conf.SampleRate},
+		{"bird 192 kHz is stored at 48 kHz", classifier.RegistryIDBirdNETV3, rateTest192k, true, conf.SampleRate},
+		{"export disabled has no clip and no rate", classifier.RegistryIDBat, rateTest384k, false, 0},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := conftest.NewTestSettings().WithAudioExport(t.TempDir(), "wav", "128k").Build()
+			settings.Realtime.Audio.Export.Enabled = tt.exportEnabled
+			p := &Processor{Settings: settings, Bn: &classifier.Orchestrator{}}
+			p.SetRegistry(newRateRegistry(t, tt.sourceRate))
 
-	assert.Equal(t, rateTest384k, build(classifier.RegistryIDBat, testRateClipName, rateTest384k).ClipSampleRate)
-	assert.Equal(t, conf.SampleRate, build("", testRateClipName, rateTest192k).ClipSampleRate, "bird audio is stored at 48 kHz")
-	assert.Zero(t, build(classifier.RegistryIDBat, "", rateTest384k).ClipSampleRate, "no clip, no rate")
+			item := classifier.Results{
+				StartTime: time.Now(),
+				Source:    datastore.AudioSource{ID: rateTestConnection},
+				ModelID:   tt.modelID,
+			}
+			res := datastore.Results{Species: "Myotis daubentonii_Daubenton's bat", Confidence: 0.9}
+			det := p.createDetection(settings, item, res, "Myotis daubentonii", "Daubenton's bat", "", "")
+
+			assert.Equal(t, tt.exportEnabled, det.Result.ClipName != "")
+			assert.Equal(t, tt.want, det.Result.ClipSampleRate)
+		})
+	}
 }
 
 func TestNormalizeDetectionTimes_ExtendedCapture_RecomputesClipSampleRate(t *testing.T) {
