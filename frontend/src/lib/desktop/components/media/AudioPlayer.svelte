@@ -2106,14 +2106,17 @@
   ontouchmove={enableClipExtraction ? handleSelectionTouchMove : undefined}
   ontouchend={enableClipExtraction ? handleSelectionTouchEnd : undefined}
 >
-  {#if spectrogramUrl || rateResolvePending}
-    <!-- Screen reader announcement for loading state (the rate resolve counts as loading) -->
-    <div class="sr-only" role="status">
+  <!-- Screen reader announcement for the spectrogram state (the rate resolve counts
+       as loading). Always rendered, so screen readers hear each change of its text. -->
+  <div class="sr-only" role="status">
+    {#if spectrogramUrl || rateResolvePending}
       {spectrogramLoader.loading || rateResolvePending
         ? t('components.audio.spectrogramLoading')
         : t('components.audio.spectrogramLoaded')}
-    </div>
+    {/if}
+  </div>
 
+  {#if spectrogramUrl || rateResolvePending}
     <!-- Loading spinner overlay -->
     {#if spectrogramLoader.showSpinner}
       <div

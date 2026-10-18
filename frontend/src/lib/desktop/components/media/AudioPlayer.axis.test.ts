@@ -247,6 +247,15 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       expect(detailCalls()).toHaveLength(0);
     });
 
+    it('renders the spectrogram status region before any spectrogram is requested', async () => {
+      const { container } = mount({ modelType: 'bat', showSpectrogram: false });
+      await settle();
+
+      const region = container.querySelector('.sr-only[role="status"]');
+      expect(region).not.toBeNull();
+      expect(region?.textContent.trim()).toBe('');
+    });
+
     it('makes no request when the spectrogram is hidden', async () => {
       mount({ modelType: 'bat', showSpectrogram: false });
       await settle();
