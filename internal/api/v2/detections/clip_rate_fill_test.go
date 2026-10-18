@@ -309,7 +309,6 @@ func panickingProbe(context.Context, string) (int, error) {
 func TestGetDetection_LazyFill_ProbePanicIsContained(t *testing.T) {
 	e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), nil)
 	h.probeClipRate = panickingProbe
-	h.clipRateWait = time.Minute // the flight ends by itself, so a long wait does not slow the test
 
 	status, rate := getDetectionRate(t, e, h)
 	assert.Equal(t, http.StatusOK, status, "the request still answers")
