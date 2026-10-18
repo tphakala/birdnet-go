@@ -157,12 +157,12 @@ func analysisSource(src *transcode.MonoSource, profile FrequencyProfile) (render
 // tempPath is a stale temp from a crashed run (the name carries the pid and a
 // per-process sequence) and is removed first; the file is then created
 // exclusively, so a symlink or a file that appears in between still fails.
-// displayRate is the rate the picture is drawn for (render.Options.DisplayRate);
-// zero draws at the rate of src. decodeElapsed is the time the caller spent
-// decoding src (resampling, when any, runs inside Render's stream and is part of
-// the render time); it is only logged, with the render and write times, so the
-// renderers can be compared, and so is budgetWeight, the render budget bytes the caller holds (zero when it
-// holds none).
+// displayRate is the rate the picture is drawn for (see
+// render.Options.DisplayRate); zero draws at the rate of src. decodeElapsed is the
+// time the caller spent decoding src; resampling, when any, runs inside Render's
+// stream and counts as render time. It is only logged, with the render and write
+// times, so the renderers can be compared. budgetWeight is the render budget
+// bytes the caller holds (zero when it holds none), also only logged.
 func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, displayRate int, tempPath string, width int, raw bool, operation string, decodeElapsed time.Duration, budgetWeight int64) error {
 	renderStart := time.Now()
 	opt := render.Options{

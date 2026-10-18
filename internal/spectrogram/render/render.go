@@ -79,15 +79,14 @@ type Options struct {
 
 // FrameMultiple returns the ratio of sourceRate to displayRate when a source at
 // sourceRate can be drawn at displayRate without resampling: both rates are
-// positive, sourceRate is an exact multiple of displayRate, and the ratio is a
-// power of two no larger than the cap. Otherwise ok is false and the caller
-// resamples the source to displayRate.
+// positive, sourceRate is an exact multiple of displayRate, and the ratio is at
+// most maxFrameMultiple (1 or 2, so the analysis frame stays a power of two).
+// Otherwise ok is false and the caller resamples the source to displayRate.
 func FrameMultiple(sourceRate, displayRate int) (multiple int, ok bool) {
 	if sourceRate <= 0 || displayRate <= 0 || sourceRate%displayRate != 0 {
 		return 0, false
 	}
-	multiple = sourceRate / displayRate
-	if multiple > maxFrameMultiple || multiple&(multiple-1) != 0 {
+	if multiple = sourceRate / displayRate; multiple > maxFrameMultiple {
 		return 0, false
 	}
 	return multiple, true
@@ -95,7 +94,9 @@ func FrameMultiple(sourceRate, displayRate int) (multiple int, ok bool) {
 
 // Render draws the spectrogram of src. It returns the image, cropped to the
 // columns the analysis produced, and that column count (at most Options.Width).
-// Context errors are returned unchanged. Render is safe for concurrent use.
+// A DisplayRate that FrameMultiple rejects for the rate of src wraps
+// ErrInvalidOptions. Context errors are returned unchanged. Render is safe for
+// concurrent use.
 func Render(ctx context.Context, src Source, opt Options) (img image.Image, cols int, err error) {
 	if err := validate(opt); err != nil {
 		return nil, 0, err
@@ -104,13 +105,12 @@ func Render(ctx context.Context, src Source, opt Options) (img image.Image, cols
 	if rate <= 0 || span <= 0 {
 		return nil, 0, ErrEmptyClip
 	}
-	displayRate, mult := rate, 1
-	if opt.DisplayRate > 0 {
-		var ok bool
-		if mult, ok = FrameMultiple(rate, opt.DisplayRate); !ok {
-			return nil, 0, fmt.Errorf("%w: source rate %d Hz cannot be drawn at %d Hz without resampling", ErrInvalidOptions, rate, opt.DisplayRate)
-		}
-		displayRate = opt.DisplayRate
+	if opt.DisplayRate == 0 {
+		opt.DisplayRate = rate
+	}
+	mult, ok := FrameMultiple(rate, opt.DisplayRate)
+	if !ok {
+		return nil, 0, fmt.Errorf("%w: source rate %d Hz cannot be drawn at %d Hz without resampling", ErrInvalidOptions, rate, opt.DisplayRate)
 	}
 	gl, err := atlas()
 	if err != nil {
@@ -157,7 +157,7 @@ func Render(ctx context.Context, src Source, opt Options) (img image.Image, cols
 
 	if !opt.Raw {
 		soxchrome.DrawChrome(cv, soxchrome.ChromeParams{
-			Cols: cols, Rows: opt.Rows, SampleRate: displayRate,
+			Cols: cols, Rows: opt.Rows, SampleRate: opt.DisplayRate,
 			Seconds: fit.SecondsSpanned(cols), RangeDB: rangeDB,
 		})
 	}
