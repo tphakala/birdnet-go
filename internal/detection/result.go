@@ -42,6 +42,7 @@ type Result struct {
 
 	// Output
 	ClipName       string        // Saved audio clip filename
+	ClipSampleRate int           // Sample rate in Hz of the saved clip file; 0 when unknown or without a clip
 	ProcessingTime time.Duration // How long analysis took
 
 	// Validation flags

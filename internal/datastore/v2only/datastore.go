@@ -881,6 +881,11 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	}
 	if note.ClipName != "" {
 		det.ClipName = &note.ClipName
+		// The rate describes the clip file, so it is stored only with a clip;
+		// an unknown rate stays NULL rather than 0.
+		if note.ClipSampleRate > 0 {
+			det.ClipSampleRate = &note.ClipSampleRate
+		}
 	}
 	if !note.BeginTime.IsZero() {
 		bt := note.BeginTime.UnixMilli()
@@ -1009,6 +1014,14 @@ func (ds *Datastore) Get(id string) (datastore.Note, error) {
 	return ds.detectionToNote(det), nil
 }
 
+// clipSampleRateValue returns the stored clip sample rate, or 0 when it is NULL.
+func clipSampleRateValue(rate *int) int {
+	if rate == nil {
+		return 0
+	}
+	return *rate
+}
+
 // detectionToNote converts a v2 Detection to a legacy Note, including the runtime-only
 // SpectrogramClipName of a detection whose audio was removed but whose spectrogram was kept.
 // Common name is looked up from the name maps which are built at startup.
@@ -1123,6 +1136,7 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		Longitude:           lon,
 		ClipName:            clipName,
 		SpectrogramClipName: spectrogramClipName,
+		ClipSampleRate:      clipSampleRateValue(det.ClipSampleRate),
 		BeginTime:           beginTime,
 		EndTime:             endTime,
 		ProcessingTime:      processingTime,
@@ -1267,6 +1281,7 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 		Unlikely:        det.Unlikely,
 		HasAudio:        hasAudio,
 		SpectrogramOnly: spectrogramOnly,
+		ClipSampleRate:  clipSampleRateValue(det.ClipSampleRate),
 		Device:          device,
 		Source:          source,
 		TimeOfDay:       timeOfDay,
@@ -1809,6 +1824,44 @@ func (ds *Datastore) GetNoteKeptSpectrogram(noteID string) (clipName, modelType 
 		clipName = *row.SpectrogramClipName
 	}
 	return clipName, modelType, nil
+}
+
+// Compile-time checks that the v2-only store supports the clip sample rate interfaces.
+var (
+	_ datastore.ClipSampleRateRecorder = (*Datastore)(nil)
+	_ datastore.ClipSampleRateFiller   = (*Datastore)(nil)
+)
+
+// updateClipSampleRate runs the guarded single-row UPDATE behind
+// RecordClipSampleRate and FillClipSampleRate and returns the rows changed.
+// onlyIfNull adds the "clip_sample_rate IS NULL" guard. Each statement is atomic
+// on SQLite and MySQL, so it needs no transaction or row lock.
+func (ds *Datastore) updateClipSampleRate(noteID uint, clipName string, rate int, onlyIfNull bool) (int64, error) {
+	if clipName == "" || rate <= 0 {
+		return 0, nil
+	}
+	table := ds.manager.TablePrefix() + "detections"
+	tx := ds.manager.DB().WithContext(context.Background()).Table(table).
+		Where("id = ? AND clip_name = ?", noteID, clipName)
+	if onlyIfNull {
+		tx = tx.Where("clip_sample_rate IS NULL")
+	}
+	res := tx.Update("clip_sample_rate", rate)
+	return res.RowsAffected, res.Error
+}
+
+// RecordClipSampleRate sets the clip sample rate of a detection whose clip_name
+// still equals clipName, overwriting any stored value.
+func (ds *Datastore) RecordClipSampleRate(noteID uint, clipName string, rate int) error {
+	_, err := ds.updateClipSampleRate(noteID, clipName, rate, false)
+	return err
+}
+
+// FillClipSampleRate sets the clip sample rate only while it is NULL and clip_name
+// still equals clipName. It reports whether a row changed.
+func (ds *Datastore) FillClipSampleRate(noteID uint, clipName string, rate int) (bool, error) {
+	n, err := ds.updateClipSampleRate(noteID, clipName, rate, true)
+	return n > 0, err
 }
 
 // DeleteNoteClipPath deletes the clip path for a note.
