@@ -239,3 +239,33 @@ func TestSaveAudioAction_CorrectsClipSampleRate(t *testing.T) {
 		})
 	}
 }
+
+// rateRecorderDatastore is a datastore double that also records clip sample rate
+// corrections.
+type rateRecorderDatastore struct {
+	*ActionMockDatastore
+	datastore.ClipSampleRateRecorder
+}
+
+// TestBuildSaveAudioAction_CarriesClipSampleRateWiring verifies the save action
+// gets the planned rate from the result and the recorder from a datastore that
+// supports it, and no recorder from one that does not.
+func TestBuildSaveAudioAction_CarriesClipSampleRateWiring(t *testing.T) {
+	t.Parallel()
+
+	settings := conftest.NewTestSettings().WithAudioExport(t.TempDir(), "wav", "128k").Build()
+	det := &Detections{Result: detection.Result{ClipName: testRateClipName, ClipSampleRate: rateTest384k}}
+
+	rec := &recordingRateRecorder{}
+	p := &Processor{Ds: &rateRecorderDatastore{ActionMockDatastore: NewActionMockDatastore(), ClipSampleRateRecorder: rec}}
+	action := p.buildSaveAudioAction(det, nil, settings)
+	assert.Equal(t, rateTest384k, action.plannedRate)
+	require.NotNil(t, action.clipRates)
+	require.NoError(t, action.clipRates.RecordClipSampleRate(testRateNoteID, testRateClipName, rateTest384k))
+	assert.Len(t, rec.calls, 1, "the action records through the datastore's recorder")
+
+	p = &Processor{Ds: NewActionMockDatastore()}
+	action = p.buildSaveAudioAction(det, nil, settings)
+	assert.Equal(t, rateTest384k, action.plannedRate)
+	assert.Nil(t, action.clipRates)
+}
