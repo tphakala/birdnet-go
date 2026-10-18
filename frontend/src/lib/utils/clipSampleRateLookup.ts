@@ -16,10 +16,18 @@ export const CLIP_RATE_LOOKUP_TIMEOUT_MS = 1500;
 export const CLIP_RATE_CACHE_MAX_ENTRIES = 200;
 
 /**
- * How long an answer without a rate is reused. The server stores the rate on
- * its first read, so a later lookup usually gets it.
+ * The server's work timeout for filling a missing clip rate in the background
+ * (clipRateWorkTimeout in internal/api/v2/detections).
  */
-export const UNKNOWN_CLIP_RATE_RETRY_MS = 60_000;
+const SERVER_CLIP_RATE_FILL_TIMEOUT_MS = 5_000;
+
+/**
+ * How long an answer without a rate is reused. When the detail request returns
+ * before the server's background fill has finished, the fill stores the rate
+ * within its work timeout; one more second covers the round trip, so a lookup
+ * after that gets the stored rate.
+ */
+export const UNKNOWN_CLIP_RATE_RETRY_MS = SERVER_CLIP_RATE_FILL_TIMEOUT_MS + 1_000;
 
 /** True for a usable sample rate in Hz: a positive integer. */
 export const isKnownSampleRate = (rate: unknown): rate is number =>

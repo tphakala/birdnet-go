@@ -6,7 +6,6 @@ import {
   lookupClipSampleRate,
   CLIP_RATE_CACHE_MAX_ENTRIES,
   CLIP_RATE_LOOKUP_TIMEOUT_MS,
-  UNKNOWN_CLIP_RATE_RETRY_MS,
 } from './clipSampleRateLookup';
 
 vi.mock('$lib/utils/api', () => ({ api: { get: vi.fn() } }));
@@ -98,15 +97,17 @@ describe('lookupClipSampleRate', () => {
     expect(gets).toHaveLength(2);
   });
 
-  it('caches an unknown rate for a while, then asks again', async () => {
+  it('caches an unknown rate for 6 s, then asks again', async () => {
     const lookup = lookupClipSampleRate('42', new AbortController().signal);
     gets[0]?.resolve({ id: 42 });
     await expect(lookup).resolves.toBeUndefined();
 
+    // Still cached just before 6 s (the server's 5 s fill work timeout plus 1 s).
+    await vi.advanceTimersByTimeAsync(5_999);
     await expect(lookupClipSampleRate('42', new AbortController().signal)).resolves.toBeUndefined();
     expect(gets).toHaveLength(1);
 
-    await vi.advanceTimersByTimeAsync(UNKNOWN_CLIP_RATE_RETRY_MS);
+    await vi.advanceTimersByTimeAsync(1);
     void lookupClipSampleRate('42', new AbortController().signal);
     expect(gets).toHaveLength(2);
   });
