@@ -55,8 +55,8 @@ func newStorageWiringController(t *testing.T, initializeRoutes bool) *Controller
 	metrics, err := observability.NewMetrics()
 	require.NoError(t, err)
 
-	// An injected notification service keeps the startup evaluation from arming
-	// retries, so the arm count only reflects the facade's own calls.
+	// An injected notification service stands in for the process-wide one. The arm
+	// count only reflects the facade's own start and schedule calls.
 	notifService := notification.NewService(notification.DefaultServiceConfig())
 	t.Cleanup(notifService.Stop)
 
