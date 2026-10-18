@@ -436,6 +436,37 @@ func TestNativeGate_ProfileRateSetsNyquist(t *testing.T) {
 	}
 }
 
+// analysisSource keeps a clip at an accepted multiple of the profile rate at its
+// own rate and resamples every other clip to the profile rate.
+func TestAnalysisSource(t *testing.T) {
+	const birdHz = 24000
+	tests := []struct {
+		name        string
+		rate        int
+		profile     FrequencyProfile
+		wantRate    int
+		wantDisplay int
+	}{
+		{"bird 48 kHz is not resampled", 48000, BirdProfile(), 48000, birdHz},
+		{"bird 24 kHz is not resampled", 24000, BirdProfile(), 24000, birdHz},
+		{"bird 44.1 kHz is resampled", 44100, BirdProfile(), birdHz, birdHz},
+		{"bird 96 kHz is resampled", 96000, BirdProfile(), birdHz, birdHz},
+		{"bat 256 kHz keeps its rate", 256000, BatProfile(), 256000, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			decoded, err := transcode.MonoFromPCM16(samplesToPCM(toneSamples(tt.rate, 0.1, 1000)), tt.rate, 0)
+			require.NoError(t, err)
+
+			src, displayRate, err := analysisSource(decoded, tt.profile)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantRate, src.SampleRate())
+			assert.Equal(t, tt.wantDisplay, displayRate)
+		})
+	}
+}
+
 func TestNativeGate_BatProfileKeepsNativeRate(t *testing.T) {
 	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
