@@ -32,11 +32,6 @@ services:
       # - /run/avahi-daemon:/run/avahi-daemon:ro
       # - /run/dbus:/run/dbus:ro
       - ./certs:/certs # For Let's Encrypt certificates
-    # Mount HLS stream segment files directory as tmpfs (RAM disk). mode=1777 (a
-    # sticky world-writable dir like /tmp) keeps it writable whatever UID the app
-    # runs as, including under the rootless-audio opt-in below.
-    tmpfs:
-      - /config/hls:exec,size=50M,mode=1777
     # For ALSA audio input (sound card)
     devices:
       - /dev/snd:/dev/snd

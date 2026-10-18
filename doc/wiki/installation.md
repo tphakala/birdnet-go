@@ -167,7 +167,6 @@ Two premade files are available in the repository:
 - The BirdNET-Go container configuration with the latest nightly image
 - Environment variables for customization (timezone, user permissions, etc.)
 - Volume mounts for persistent configuration and data storage
-- RAM disk (tmpfs) for HLS streaming segments to improve performance
 - Device mounts for sound card access
 - An optional Cloudflared service (commented out) for secure internet access
 
