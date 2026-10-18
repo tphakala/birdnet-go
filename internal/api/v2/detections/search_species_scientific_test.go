@@ -147,3 +147,18 @@ func TestBuildSearchFilters_ThreadsSpeciesScientific(t *testing.T) {
 	assert.Equal(t, "Corvus", filters.Species)
 	require.Equal(t, []string{"Barbastella barbastellus", "Myotis daubentonii"}, filters.SpeciesScientific)
 }
+
+func TestBuildSearchFilters_NotFalsePositive(t *testing.T) {
+	t.Parallel()
+
+	c := &Handler{Core: &apicore.Core{}}
+	req := &SearchRequest{VerifiedStatus: VerificationStatusNotFalsePositive}
+	require.NoError(t, c.validateSearchStatusEnums("/api/v2/search", "127.0.0.1", req))
+
+	filters := c.buildSearchFilters(req, context.Background())
+
+	assert.True(t, filters.ExcludeFalsePositive)
+	assert.False(t, filters.VerifiedOnly)
+	assert.False(t, filters.UnverifiedOnly)
+	assert.False(t, filters.FalsePositiveOnly)
+}

@@ -717,6 +717,8 @@ func ConvertSearchFilters(
 	case filters.FalsePositiveOnly:
 		verified := VerificationFilter(entities.VerificationFalsePositive)
 		sf.Verified = &verified
+	case filters.ExcludeFalsePositive:
+		sf.ExcludeFalsePositive = true
 	}
 
 	// Lock status
