@@ -100,7 +100,8 @@ type storageNotice struct {
 // StorageNoticeSyncStatus is a snapshot of the debounce timer, for the facade's
 // wiring tests.
 type StorageNoticeSyncStatus struct {
-	// Arms counts how often the debounce timer was (re)started.
+	// Arms counts how often a start or a schedule armed the debounce timer.
+	// The retries made while no notification service exists are not counted.
 	Arms int
 	// Stopped reports that StopStorageNoticeSync has run.
 	Stopped bool
