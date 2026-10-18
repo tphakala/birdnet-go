@@ -1662,11 +1662,15 @@ type Security struct {
 	// configured. Only exact addresses are accepted, not ranges. The match uses
 	// the connection's peer address, never forwarded headers, and applies only to
 	// requests that arrive without TLS and without reverse-proxy headers. Never
-	// list the address a reverse proxy connects from (including a container
-	// network gateway when the proxy runs on the host), and give listed clients a
-	// fixed address so it cannot be reassigned: browser sessions through a proxy
-	// that terminates TLS without sending forwarding headers would otherwise lose
-	// Secure. Not shown in the web UI. Empty by default. Hot-reloadable.
+	// list the address a reverse proxy or tunnel (such as cloudflared) connects
+	// from. With host networking or a native install, a proxy on the same host
+	// connects from loopback (127.0.0.1, ::1) or the host's own address, so do
+	// not list those when one runs there; with bridge networking and the proxy
+	// on the host, do not list the container network gateway. Give listed
+	// clients a fixed address so it cannot be reassigned: browser sessions
+	// through a proxy that terminates TLS without sending forwarding headers
+	// would otherwise lose Secure. Not shown in the web UI. Empty by default.
+	// Hot-reloadable.
 	PlainHTTPSessionClients []string `yaml:"plainhttpsessionclients" json:"plainHttpSessionClients"`
 
 	// PrivateMode, when true, requires the user to authenticate before any

@@ -3,7 +3,10 @@ package security
 import (
 	"crypto/tls"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gorilla/sessions"
@@ -23,6 +26,12 @@ const (
 	testInternalClientAddr = "172.18.0.5"
 	testExternalAddr       = "203.0.113.9"
 	testRemotePort         = ":40000"
+)
+
+// Proxy header names the tests send that have no exported constant.
+const (
+	testHeaderForwarded    = "Forwarded"
+	testHeaderTrueClientIP = "True-Client-IP"
 )
 
 // useSessionTestSettings initializes the session store with secureCookies and
@@ -163,13 +172,37 @@ func TestSessionCookieSecure_PlainHTTPSessionClients(t *testing.T) {
 		{
 			name:          "forwarded with Forwarded from a listed address",
 			secureCookies: true, clients: []string{testProxyAddr}, remoteAddr: testProxyAddr + testRemotePort,
-			header: headerForwarded, headerValue: "for=" + testExternalAddr + ";proto=https",
+			header: testHeaderForwarded, headerValue: "for=" + testExternalAddr + ";proto=https",
 			wantSecure: true,
 		},
 		{
 			name:          "forwarded with True-Client-IP only from a listed address",
 			secureCookies: true, clients: []string{testProxyAddr}, remoteAddr: testProxyAddr + testRemotePort,
-			header: headerTrueClientIP, headerValue: testExternalAddr,
+			header: testHeaderTrueClientIP, headerValue: testExternalAddr,
+			wantSecure: true,
+		},
+		{
+			name:          "forwarded with an empty X-Forwarded-For from a listed address",
+			secureCookies: true, clients: []string{testProxyAddr}, remoteAddr: testProxyAddr + testRemotePort,
+			header: echo.HeaderXForwardedFor, headerValue: "",
+			wantSecure: true,
+		},
+		{
+			name:          "forwarded with X-Forwarded-Host only from a listed address",
+			secureCookies: true, clients: []string{testProxyAddr}, remoteAddr: testProxyAddr + testRemotePort,
+			header: headerXForwardedHost, headerValue: "birdnet.example.com",
+			wantSecure: true,
+		},
+		{
+			name:          "forwarded with Via only from a listed address",
+			secureCookies: true, clients: []string{testProxyAddr}, remoteAddr: testProxyAddr + testRemotePort,
+			header: headerVia, headerValue: "1.1 proxy",
+			wantSecure: true,
+		},
+		{
+			name:          "forwarded with an empty X-Forwarded-Host from a listed address",
+			secureCookies: true, clients: []string{testProxyAddr}, remoteAddr: testProxyAddr + testRemotePort,
+			header: headerXForwardedHost, headerValue: "",
 			wantSecure: true,
 		},
 		{
@@ -207,6 +240,7 @@ func TestSessionCookieSecure_PlainHTTPSessionClients(t *testing.T) {
 					req.TLS = &tls.ConnectionState{}
 				}
 				if tt.header != "" {
+					// Set, not a check on the value, so an empty header is sent too.
 					req.Header.Set(tt.header, tt.headerValue)
 				}
 				return req
@@ -240,6 +274,136 @@ func TestSessionCookieSecure_PlainHTTPSessionClientsHotReload(t *testing.T) {
 
 	conftest.SetTestSettings(settings)
 	assert.True(t, loginCookieSecure(t, newRequest()), "Secure again once the client is removed")
+}
+
+// TestHasProxyHeader_EmptyFirstValue verifies that a proxy header counts as
+// present whatever its values are, so an empty first line followed by a real
+// one is not mistaken for a direct request.
+func TestHasProxyHeader_EmptyFirstValue(t *testing.T) {
+	t.Parallel()
+	h := http.Header{}
+	h.Add(echo.HeaderXForwardedFor, "")
+	h.Add(echo.HeaderXForwardedFor, testExternalAddr)
+	assert.True(t, hasProxyHeader(h))
+	assert.False(t, hasProxyHeader(http.Header{}))
+}
+
+// TestSessionCookieSecure_PlainHTTPClientCookieJar runs the issue #4540
+// scenario over a real HTTP connection: a client with a cookie jar logs in over
+// plain HTTP (session regenerated with Logout then StoreInSession on one
+// request, as EstablishSession does) and then makes an authenticated request.
+// The session cookie the login sets last must omit Secure only for a listed
+// client. That attribute is the assertion that matters: Go's cookie jar treats
+// loopback, where httptest listens, as a secure origin and sends a Secure
+// cookie over plain HTTP anyway, so the follow-up request only shows that the
+// regenerated session is the one the client sends back and can be read.
+func TestSessionCookieSecure_PlainHTTPClientCookieJar(t *testing.T) {
+	// Not parallel: mutates gothic.Store, the published settings and the test
+	// config path.
+	const (
+		loginPath   = "/login"
+		checkPath   = "/check"
+		tokenValue  = "token"
+		loopbackIP4 = "127.0.0.1"
+	)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(loginPath, func(w http.ResponseWriter, r *http.Request) {
+		_ = gothic.Logout(w, r)
+		if err := gothic.StoreInSession("access_token", tokenValue, r, w); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	})
+	mux.HandleFunc(checkPath, func(w http.ResponseWriter, r *http.Request) {
+		if v, err := gothic.GetFromSession("access_token", r); err != nil || v != tokenValue {
+			w.WriteHeader(http.StatusUnauthorized)
+		}
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	tests := []struct {
+		name       string
+		clients    []string
+		wantSecure bool
+	}{
+		{name: "listed client", clients: []string{loopbackIP4, "::1"}, wantSecure: false},
+		{name: "unlisted client", clients: nil, wantSecure: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			useSessionTestSettings(t, true, tt.clients)
+
+			jar, err := cookiejar.New(nil)
+			require.NoError(t, err)
+			client := &http.Client{Jar: jar}
+
+			loginResp, err := client.Post(server.URL+loginPath, "text/plain", http.NoBody)
+			require.NoError(t, err)
+			require.NoError(t, loginResp.Body.Close())
+			require.Equal(t, http.StatusOK, loginResp.StatusCode)
+
+			// Logout's expiring cookie comes first; the new session is the last.
+			var session *http.Cookie
+			for _, cookie := range loginResp.Cookies() {
+				if cookie.Name == gothic.SessionName {
+					session = cookie
+				}
+			}
+			require.NotNil(t, session, "session cookie not set")
+			assert.Positive(t, session.MaxAge, "last session cookie should be the new session")
+			assert.Equal(t, tt.wantSecure, session.Secure)
+			if tt.wantSecure {
+				return
+			}
+
+			checkResp, err := client.Get(server.URL + checkPath)
+			require.NoError(t, err)
+			require.NoError(t, checkResp.Body.Close())
+			assert.Equal(t, http.StatusOK, checkResp.StatusCode, "session should round-trip")
+		})
+	}
+}
+
+// TestSetupSessionStore_CookieStoreFallbackWrapped verifies that the in-memory
+// fallback store, used when the session directory cannot be created, is
+// wrapped too, so listed plain-HTTP clients still get cookies without Secure.
+func TestSetupSessionStore_CookieStoreFallbackWrapped(t *testing.T) {
+	// Not parallel: mutates gothic.Store, the published settings and the test
+	// config path.
+	prevStore := gothic.Store
+	prevSettings := conf.GetSettings()
+	t.Cleanup(func() {
+		gothic.Store = prevStore
+		conftest.SetTestSettings(prevSettings)
+		SetTestConfigPath("")
+	})
+
+	// A regular file where the config directory should be makes MkdirAll of
+	// the sessions directory fail.
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	SetTestConfigPath(blocker)
+
+	settings := &conf.Settings{Security: conf.Security{
+		SessionSecret:           "test-secret",
+		PlainHTTPSessionClients: []string{testInternalClientAddr},
+	}}
+	conftest.SetTestSettings(settings)
+	InitializeGoth(settings, true)
+
+	wrapped, ok := gothic.Store.(plainHTTPClientSessionStore)
+	require.True(t, ok, "gothic store should be wrapped")
+	_, ok = wrapped.Store.(*sessions.CookieStore)
+	require.True(t, ok, "fallback store should be a CookieStore")
+
+	newRequest := func(remoteAddr string) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "http://birdnet-go:8080/api/v2/auth/login", http.NoBody)
+		req.RemoteAddr = remoteAddr
+		return req
+	}
+	assert.False(t, loginCookieSecure(t, newRequest(testInternalClientAddr+testRemotePort)), "listed client")
+	assert.True(t, loginCookieSecure(t, newRequest(testExternalAddr+testRemotePort)), "unlisted client")
 }
 
 // TestConfigureLocalNetworkCookieStore_WrappedStore verifies that the local

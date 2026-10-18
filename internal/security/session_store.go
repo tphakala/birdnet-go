@@ -10,28 +10,48 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
-// Proxy request headers not defined by Echo.
+// Proxy request headers that carry no client IP, so proxytrust does not list
+// them, and that Echo does not define.
 const (
-	headerForwarded      = "Forwarded" // RFC 7239
-	headerCFConnectingIP = "CF-Connecting-IP"
-	headerTrueClientIP   = "True-Client-IP" // Akamai, Cloudflare Enterprise
+	headerXForwardedHost   = "X-Forwarded-Host"
+	headerXForwardedPort   = "X-Forwarded-Port"
+	headerXForwardedPrefix = "X-Forwarded-Prefix"
+	headerXIngressPath     = "X-Ingress-Path" // Home Assistant ingress
+	headerVia              = "Via"            // RFC 9110
 )
 
-// proxyHeaders are request headers set by reverse proxies, in canonical form so
-// they can be looked up in http.Header directly. A request carrying any of them
-// did not come straight from the client.
-var proxyHeaders = []string{
-	http.CanonicalHeaderKey(headerForwarded),
-	http.CanonicalHeaderKey(echo.HeaderXForwardedFor),
+// proxyOnlyHeaders are request headers set by reverse proxies on top of the
+// client-IP headers that proxytrust.HasClientIPHeader checks, in canonical form
+// so they can be looked up in http.Header directly.
+var proxyOnlyHeaders = []string{
 	http.CanonicalHeaderKey(echo.HeaderXForwardedProto),
 	http.CanonicalHeaderKey(echo.HeaderXForwardedProtocol),
 	http.CanonicalHeaderKey(echo.HeaderXForwardedSsl),
 	http.CanonicalHeaderKey(echo.HeaderXUrlScheme),
-	http.CanonicalHeaderKey(echo.HeaderXRealIP),
-	http.CanonicalHeaderKey(headerCFConnectingIP),
-	http.CanonicalHeaderKey(headerTrueClientIP),
+	http.CanonicalHeaderKey(headerXForwardedHost),
+	http.CanonicalHeaderKey(headerXForwardedPort),
+	http.CanonicalHeaderKey(headerXForwardedPrefix),
+	http.CanonicalHeaderKey(headerXIngressPath),
+	http.CanonicalHeaderKey(headerVia),
+}
+
+// hasProxyHeader reports whether h carries any reverse-proxy header, even with
+// an empty value: a request carrying one did not come straight from the client.
+// Client-IP headers are checked by proxytrust so the auth path and the cookie
+// path agree on what counts as proxied.
+func hasProxyHeader(h http.Header) bool {
+	if proxytrust.HasClientIPHeader(h) {
+		return true
+	}
+	for _, key := range proxyOnlyHeaders {
+		if len(h[key]) > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // plainHTTPClientSessionStore wraps the session store so that a session loaded
@@ -89,10 +109,8 @@ func isPlainHTTPSessionClient(r *http.Request, clients []string) bool {
 	if len(clients) == 0 || r == nil || r.TLS != nil {
 		return false
 	}
-	for _, header := range proxyHeaders {
-		if values := r.Header[header]; len(values) > 0 && values[0] != "" {
-			return false
-		}
+	if hasProxyHeader(r.Header) {
+		return false
 	}
 	peer, ok := connectionPeerAddr(r)
 	if !ok {
@@ -118,9 +136,11 @@ func connectionPeerAddr(r *http.Request) (netip.Addr, bool) {
 }
 
 // parseClientAddr parses s as an IP address with any zone dropped and
-// IPv4-mapped IPv6 unmapped, so the same host compares equal however it is
-// written. It reports false for anything else, including ranges, which config
-// validation rejects at load time.
+// IPv4-mapped IPv6 unmapped, so a peer and a list entry for the same host
+// compare equal whether or not either is written in IPv4-mapped form. Peer
+// addresses may carry a zone; list entries cannot, since config validation
+// (net.ParseIP) rejects zoned entries, as it rejects ranges. It reports false
+// for anything that is not a single IP address.
 func parseClientAddr(s string) (netip.Addr, bool) {
 	addr, err := netip.ParseAddr(s)
 	if err != nil {

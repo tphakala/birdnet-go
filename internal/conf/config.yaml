@@ -438,8 +438,10 @@ security:
   # (for example another container calling http://birdnet-go:8080) and therefore
   # need session cookies without the Secure attribute. Matched by connection
   # address only; ranges are not accepted. Never list the address your reverse
-  # proxy connects from (including the container network gateway), and give the
-  # listed clients fixed addresses.
+  # proxy or tunnel (such as cloudflared) connects from: with host networking or
+  # a native install a proxy on the same host connects from 127.0.0.1, ::1 or
+  # the host's own address, and with bridge networking from the container
+  # network gateway. Give the listed clients fixed addresses.
   plainhttpsessionclients: [] # e.g. ["172.18.0.5"]
   basicauth:
     enabled: false           # true to enable basic auth
