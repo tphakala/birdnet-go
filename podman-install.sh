@@ -1854,7 +1854,6 @@ AddDevice=-/dev/snd:/dev/snd
 #UserNS=keep-id
 #GroupAdd=keep-groups
 Network=birdnet-bridge
-Tmpfs=/config/hls:exec,size=50M,mode=1777
 
 [Service]
 Restart=always
