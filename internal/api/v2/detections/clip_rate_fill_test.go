@@ -110,8 +110,10 @@ func batNote(clip string, rate int) *datastore.Note {
 	}
 }
 
-// newRateHandler builds a handler over a rateStore holding note, with an (empty)
-// clip file on disk when the note has a clip name.
+// newRateHandler builds a handler over a rateStore holding note, with a clip file
+// on disk when the note has a clip name. A name that escapes the export directory
+// gets its file in the test's own temporary parent directory, so only the path
+// check keeps the probe away from it.
 func newRateHandler(t *testing.T, note *datastore.Note, prober *fakeProber) (*echo.Echo, *Handler, *rateStore) {
 	t.Helper()
 	e := echo.New()
@@ -122,7 +124,7 @@ func newRateHandler(t *testing.T, note *datastore.Note, prober *fakeProber) (*ec
 	if prober != nil {
 		h.probeClipRate = prober.probe
 	}
-	if note.ClipName != "" && filepath.IsLocal(note.ClipName) {
+	if note.ClipName != "" {
 		abs := filepath.Join(h.SFS.BaseDir(), filepath.FromSlash(note.ClipName))
 		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o750))
 		require.NoError(t, os.WriteFile(abs, []byte("clip"), 0o600))
@@ -354,7 +356,7 @@ func TestGetDetection_LazyFill_Skips(t *testing.T) {
 			n.SpectrogramClipName = rateTestClipName
 			return n
 		}()},
-		{"traversal clip name", batNote("../../etc/passwd", 0)},
+		{"traversal clip name", batNote("../escape.flac", 0)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
