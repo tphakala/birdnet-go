@@ -1,7 +1,6 @@
 // Derived from SoX src/spectrogram.c, (c) 2008-9 robs@users.sourceforge.net,
 // licensed under the GNU Lesser General Public License version 2.1 or later.
-// Ported via github.com/tphakala/go-spectrogram ebf0c64 sox/chrome.go and
-// sox/geometry.go. Changes made in October 2026: constants are named and
+// Changes made in October 2026: constants are named and
 // exported, and only the single channel, untitled, non-raw layout is kept.
 
 package soxchrome

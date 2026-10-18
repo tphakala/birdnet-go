@@ -3,8 +3,7 @@
 // the axes, ticks, tick labels and dBFS legend drawn around the raster.
 //
 // The code is derived from SoX src/spectrogram.c, (c) 2008-9
-// robs@users.sourceforge.net, through github.com/tphakala/go-spectrogram (sox
-// package, commit ebf0c64). This package alone is licensed under the GNU Lesser
+// robs@users.sourceforge.net. This package alone is licensed under the GNU Lesser
 // General Public License version 2.1 or later (see LICENSE in this directory),
 // regardless of the license of the rest of BirdNET-Go.
 //
