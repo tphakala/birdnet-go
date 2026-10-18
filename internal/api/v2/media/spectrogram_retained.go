@@ -119,7 +119,8 @@ func (c *Handler) serveRetainedSpectrogram(ctx echo.Context, noteID string, noCl
 // relClipPath (the clip's SecureFS-relative audio path, which need not exist). It
 // prefers the exact file the request parameters name and otherwise picks the
 // nearest render of the same clip when the exact one is missing, empty or not a
-// regular file. served is false, with no response written, when the clip has no
+// regular file, except when the request carries an overlay rate (sr), which
+// accepts the exact file only. served is false, with no response written, when the clip has no
 // usable render; served is true when a response was written, including the error
 // response for an unexpected stat or serve failure. It never generates a
 // spectrogram.
@@ -133,6 +134,12 @@ func (c *Handler) serveExistingRender(ctx echo.Context, noteID, relClipPath stri
 		return true, c.translateSecureFSError(ctx, statErr, msgServeSpectrogramFailed)
 	}
 	if statErr != nil || !info.Mode().IsRegular() || info.Size() == 0 {
+		if params.overlayRate > 0 {
+			// The client draws its axis from the clip rate, so a substitute render
+			// (for example a pre-upgrade bat image at another frequency range)
+			// would mislabel it. Serve only the exact file.
+			return false, nil
+		}
 		target = c.nearestRender(relClipPath, params)
 		if target == "" {
 			return false, nil
