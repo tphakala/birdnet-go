@@ -2492,26 +2492,27 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 //   - raw: Whether to generate raw spectrogram without axes/legends
 //     Default: true (for backward compatibility)
 //
-// Response Format (API v2 envelope):
+// Response Format (API v2 envelope), for 200 when the spectrogram already exists:
 //
 //	{
 //	  "data": {
-//	    "status": "generated",
+//	    "status": "exists",
 //	    "path": "/api/v2/spectrogram/:id?raw=true"
 //	  },
 //	  "error": "",
-//	  "message": "Spectrogram generated successfully"
+//	  "message": "Spectrogram already exists"
 //	}
+//
+// A 202 carries the queue status in "data"; poll the status endpoint for progress.
+// A generation failure is reported through the status endpoint, not by this handler.
 //
 // HTTP Status Codes:
 //   - 200 OK: spectrogram already exists
-//   - 202 Accepted: generation queued
+//   - 202 Accepted: generation queued or already in progress
 //   - 400 Bad Request: legacy width outside 100..2000
+//   - 404 Not Found: Audio file not found
 //   - 503 Service Unavailable: Audio file not ready, or the detection's model type
 //     could not be looked up (includes Retry-After header); nothing is queued or written
-//   - 404 Not Found: Audio file not found
-//   - 408 Request Timeout: Generation timed out
-//   - 500 Internal Server Error: Generation failed
 func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Validate note ID and get clip path using shared helper
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
