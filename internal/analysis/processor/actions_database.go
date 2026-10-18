@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -644,10 +645,10 @@ func (a *SaveAudioAction) Execute(ctx context.Context, _ any) error {
 // relativeClipPath is the clip's name relative to the export directory, which is
 // how the rest of the system identifies a clip: it is normally the value stored
 // on the detection, and the shape the media endpoint resolves
-// (/api/v2/media/audio/{name}). "Normally" because resolveExportParams can
-// rewrite the extension for a bat/ultrasonic capture; applyExportFormatExtension
-// mirrors that into the stored ClipName, so the logged name and the database row
-// agree.
+// (/api/v2/media/audio/{name}). "Normally" because a name with no known
+// extension gets its extension rewritten by resolveExportParams; for every other
+// name the file is written at the stored name, so the logged name and the
+// database row agree.
 //
 // The export directory is deliberately stripped. Support logs and uploaded
 // support dumps are read by someone other than the operator, and the absolute
@@ -1205,14 +1206,15 @@ func (a *SaveAudioAction) planNativeNormalizationGain(ctx context.Context, sampl
 	return gainDB, nil
 }
 
-// resolveExportFormat is the single source of truth for the container/codec a
-// clip is stored in. A bat/ultrasonic capture above the analysis rate is stored
+// resolveExportFormat is the naming rule for the container/codec a clip is
+// stored in. A bat/ultrasonic capture above the analysis rate is stored
 // losslessly in Export.UltrasonicType (WAV/FLAC, default FLAC) at full source
 // rate; every other case (including a non-bat capture above the analysis rate,
 // which resolveExportParams downsamples to conf.SampleRate) uses the configured
-// Export.Type. Both the on-disk file (resolveExportParams) and the persisted clip
-// name (applyExportFormatExtension) call it, so they cannot drift. Pass the
-// ORIGINAL source rate (pre-downsample).
+// Export.Type. applyExportFormatExtension names clips by it, and it is the
+// encoder's fallback for a ClipName with no known extension (resolveExportParams);
+// otherwise the encoder follows the stored name. Pass the ORIGINAL source rate
+// (pre-downsample).
 func resolveExportFormat(isBat bool, sourceRate int, export *conf.ExportSettings) string {
 	if isBat && sourceRate > conf.SampleRate {
 		return export.UltrasonicType
@@ -1229,8 +1231,9 @@ func isBatModel(name, version string) bool {
 
 // exportFormatForModel resolves the export container for a clip from its model
 // identity and source rate, encapsulating the bat/ultrasonic model-type check so
-// the DB clip-name path (applyExportFormatExtension) picks the same format as the
-// encoder without duplicating the ResolveModelType call.
+// the clip-name path (applyExportFormatExtension) picks the format the name
+// records without duplicating the ResolveModelType call. The encoder follows the
+// stored name (resolveExportParams).
 func exportFormatForModel(modelName, modelVersion string, sourceRate int, export *conf.ExportSettings) string {
 	isBat := isBatModel(modelName, modelVersion)
 	return resolveExportFormat(isBat, sourceRate, export)
@@ -1254,12 +1257,26 @@ func exportClipRate(isBat bool, sourceRate int, format string) int {
 	}
 }
 
+// exportContainer returns the container a clip is written in. The stored name
+// decides: when its extension names a known export format, that format is used
+// (fromName is true). Only a name with no known extension falls back to the
+// settings through resolveExportFormat. The planner and the encoder both use it,
+// so a settings reload between naming and encoding cannot split them.
+func exportContainer(clipName string, isBat bool, sourceRate int, export *conf.ExportSettings) (format string, fromName bool) {
+	format, fromName = audioformat.FormatForExtension(strings.TrimPrefix(filepath.Ext(clipName), "."))
+	if !fromName {
+		format = resolveExportFormat(isBat, sourceRate, export)
+	}
+	return format, fromName
+}
+
 // plannedClipSampleRate returns the sample rate the exporter is expected to write
 // the detection's clip at, or 0 when the result has no clip. It applies the same
 // rule as resolveExportParams to the result's source rate (defaulting to
-// conf.SampleRate like the exporter) and the given export settings. The stored
-// value is corrected after the encode when the written rate differs (a resample
-// failure, or Export.Type reloaded while the detection was pending).
+// conf.SampleRate like the exporter), taking the container from the clip name
+// (exportContainer). The stored value is corrected after the encode when the
+// written rate differs (a resample failure, or a name with no known extension
+// whose settings-derived format changed since planning).
 func plannedClipSampleRate(result *detection.Result, export *conf.ExportSettings) int {
 	if result.ClipName == "" {
 		return 0
@@ -1269,26 +1286,32 @@ func plannedClipSampleRate(result *detection.Result, export *conf.ExportSettings
 		rate = conf.SampleRate
 	}
 	isBat := isBatModel(result.Model.Name, result.Model.Version)
-	return exportClipRate(isBat, rate, resolveExportFormat(isBat, rate, export))
+	format, _ := exportContainer(result.ClipName, isBat, rate, export)
+	return exportClipRate(isBat, rate, format)
 }
 
 // resolveExportParams determines the export sample rate, format, and output
-// path. The format comes from resolveExportFormat, the single source of truth
-// shared with the DB clip-name path so the file and the stored name cannot drift.
-// Bat/ultrasonic audio above the analysis rate keeps its full source rate and is
-// stored losslessly in Export.UltrasonicType; it is never resampled. Non-bat audio
-// above the analysis rate is downsampled to it and stored in Export.Type.
+// path. The stored ClipName decides the container: when outputPath's extension
+// names a known export format, that format is used and the path is returned
+// unchanged, so the file lands exactly where the DB row, SSE and MQTT say it is.
+// Settings can be hot-reloaded between naming and flush, so re-deriving the
+// format from them here would split the file from its stored name. Only a name
+// with no known extension falls back to resolveExportFormat and gets its
+// extension rewritten to match.
 //
-// Audio below the analysis rate whose configured lossy native encoder (AAC, MP3
-// or Opus) cannot carry the source rate is resampled UP to the analysis rate,
-// which every native lossy encoder accepts. That holds for every clip, bat-model
-// clips below the analysis rate included, and whether or not FFmpeg is installed:
-// the lossy formats never use FFmpeg and are never downgraded to WAV, so the
-// stored clip name and the file on disk cannot disagree. If a resample cannot run
-// (an unusable source rate), the clip stays at that rate and the encoder rejects
-// it, failing the export through the normal failure path. A trailing partial
-// sample is trimmed from the PCM first for every format, resample or not. The
-// target rate comes from exportClipRate, the rule shared with the rate stored at save time.
+// Bat/ultrasonic audio above the analysis rate keeps its full source rate: its
+// name records UltrasonicType (WAV or FLAC), and the lossy formats never carry
+// ultrasonic content. Non-bat audio above the analysis rate is downsampled to it.
+//
+// Audio below the analysis rate whose native lossy encoder (AAC, MP3 or Opus)
+// cannot carry the source rate is resampled UP to the analysis rate, which every
+// native lossy encoder accepts. That holds for every clip, bat-model clips below
+// the analysis rate included, and whether or not FFmpeg is installed: the lossy
+// formats never use FFmpeg and are never downgraded to WAV. If a resample cannot
+// run (an unusable source rate), the clip stays at that rate and the encoder
+// rejects it, failing the export through the normal failure path. A trailing
+// partial sample is trimmed from the PCM first for every format, resample or not.
+// The target rate comes from exportClipRate, the rule shared with the rate stored at save time.
 func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, format, path string) {
 	rate = a.sourceSampleRate
 	if rate <= 0 {
@@ -1303,9 +1326,10 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 	// the clip-name side for a future version-specific model type.
 	isBat := isBatModel(a.modelName, a.modelVersion)
 
-	// Decide the format from the ORIGINAL source rate, before the resample below
-	// can mutate it. Shared with applyExportFormatExtension on the naming path.
-	format = resolveExportFormat(isBat, rate, export)
+	// The stored name decides the container. Settings decide only for a name with
+	// no known extension (an older row or a manual rename), from the ORIGINAL
+	// source rate, before the resample below can mutate it.
+	format, fromName := exportContainer(outputPath, isBat, rate, export)
 
 	// A trailing partial sample is trimmed for every format before anything else,
 	// whether or not a resample follows: the resampler, the WAV writer, go-flac and
@@ -1319,13 +1343,14 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 		rate = a.resampleExportTo(rate, target, format)
 	}
 
-	// Keep the on-disk extension in lockstep with the resolved format: the
-	// ultrasonic case built outputPath from Export.Type. Guard against an empty
-	// extension (only reachable with an unvalidated empty format) so the path
-	// keeps buildClipPath's own extension rather than being clobbered to a
-	// trailing dot (GitHub #2810/#2814).
-	if ext := audioformat.FileExtension(format); ext != "" {
-		path = replaceExtension(path, "."+ext)
+	// Only a name with no known extension takes the format's extension. Guard
+	// against an empty extension (only reachable with an unvalidated empty format)
+	// so the path keeps buildClipPath's own extension rather than being clobbered
+	// to a trailing dot (GitHub #2810/#2814).
+	if !fromName {
+		if ext := audioformat.FileExtension(format); ext != "" {
+			path = replaceExtension(path, "."+ext)
+		}
 	}
 
 	return rate, format, path
@@ -1333,8 +1358,8 @@ func (a *SaveAudioAction) resolveExportParams(outputPath string) (rate int, form
 
 // correctClipSampleRate rewrites the sample rate stored with the detection when
 // the clip was written at a different rate than the one planned at save time
-// (a resample failure keeps the source rate, and Export.Type may have been
-// reloaded while the detection was pending). It does nothing without a recorder
+// (a resample failure keeps the source rate, and a name with no known extension
+// takes its format from the settings at encode time). It does nothing without a recorder
 // or a saved note, and a recorder error is logged without failing the export.
 func (a *SaveAudioAction) correctClipSampleRate(exportRate int) {
 	if a.clipRates == nil || a.NoteID == 0 || exportRate == a.plannedRate {
@@ -1395,8 +1420,8 @@ func trimPartialSample(pcm []byte) []byte {
 // native encoder does not accept the source rate, and 48kHz (accepted by every
 // native lossy encoder) does. FfmpegPath and the bat model type are ignored on
 // purpose: the lossy formats never use FFmpeg, and a bat-model clip below the
-// analysis rate is upsampled like any other (one above it never reaches here, as
-// it is stored in the ultrasonic format).
+// analysis rate is upsampled like any other (one above it never reaches here: it
+// is kept at full rate in its lossless named format).
 //
 // In this pipeline bit depth and channels are fixed (conf.BitDepth,
 // conf.NumChannels), so the only thing Supports rejects here is the sample rate.

@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med det indstillede overlap på {configured} s overstiger denne enheds målte kapacitet, så lyden analyseres med {effective} s overlap. Falsk positiv-filteret kan derfor kræve færre bekræftelser. Dine gemte indstillinger er uændrede; se Indstillinger > Analyse.",
         "cadenceOverloadedTitle": "Denne enhed kan ikke følge med lydanalysen",
         "cadenceOverloadedMessage": "At køre {models, plural, one {# model} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger denne enheds målte kapacitet selv uden overlap, så analysen kan komme bagud, og detektioner kan gå tabt. Aktivér færre modeller eller lydkilder, eller vælg en hurtigere modelvariant."
+      },
+      "storage": {
+        "notPersistentTitle": "Data går tabt, når containeren genoprettes",
+        "notPersistentMessage": "Disse stier ligger på lagerplads, der slettes, når containeren genoprettes, for eksempel ved en opdatering af image: {paths}. Tilknyt et volumen eller en værtsmappe til dem i din containerkonfiguration.",
+        "anonymousVolumeTitle": "Data er gemt i et anonymt containervolumen",
+        "anonymousVolumeMessage": "Disse stier ligger i anonyme volumener, som container-runtimen oprettede, fordi intet volumen var tilknyttet: {paths}. En container, der startes forfra, for eksempel med docker run efter en opdatering af image, får nye tomme volumener, så dataene ser ud til at være tabt. Tilknyt et navngivet volumen eller en værtsmappe til dem."
       }
     },
     "loading": "Indlæser notifikationer..."

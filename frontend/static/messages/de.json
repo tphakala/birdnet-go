@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt bei der eingestellten Überlappung von {configured} s die gemessene Kapazität dieses Geräts, daher wird mit {effective} s Überlappung analysiert. Der Falsch-Positiv-Filter kann dadurch weniger Bestätigungen verlangen. Ihre gespeicherten Einstellungen bleiben unverändert; siehe Einstellungen > Analyse.",
         "cadenceOverloadedTitle": "Dieses Gerät kommt mit der Audioanalyse nicht hinterher",
         "cadenceOverloadedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt die gemessene Kapazität dieses Geräts selbst ohne Überlappung, daher kann die Analyse in Verzug geraten und Erkennungen können verloren gehen. Aktivieren Sie weniger Modelle oder Audioquellen, oder wählen Sie eine schnellere Modellvariante."
+      },
+      "storage": {
+        "notPersistentTitle": "Daten gehen verloren, wenn der Container neu erstellt wird",
+        "notPersistentMessage": "Diese Pfade liegen auf Speicher, der gelöscht wird, wenn der Container neu erstellt wird, zum Beispiel bei einem Image-Update: {paths}. Ordnen Sie ihnen in Ihrer Container-Konfiguration ein Volume oder ein Host-Verzeichnis zu.",
+        "anonymousVolumeTitle": "Daten liegen in einem anonymen Container-Volume",
+        "anonymousVolumeMessage": "Diese Pfade liegen in anonymen Volumes, die die Container-Laufzeit angelegt hat, weil kein Volume zugeordnet war: {paths}. Ein frisch gestarteter Container, zum Beispiel mit docker run nach einem Image-Update, erhält neue leere Volumes, sodass die Daten verloren scheinen. Ordnen Sie ihnen ein benanntes Volume oder ein Host-Verzeichnis zu."
       }
     },
     "loading": "Benachrichtigungen werden geladen..."

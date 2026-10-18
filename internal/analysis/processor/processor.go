@@ -1210,7 +1210,9 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 	return false
 }
 
-// createDetection creates a detection object with all necessary information
+// createDetection creates a detection object with all necessary information.
+// Its ClipName is chosen from the Result's own model and sample rate, the fields
+// the audio exporter reads.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) createDetection(settings *conf.Settings, item classifier.Results, result datastore.Results, scientificName, commonName, speciesCode, rawScientificName string) Detections {
@@ -1219,7 +1221,8 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	// is or will be written, so nothing must reference one. The media API and
 	// the UI gate on a non-empty ClipName, and no SaveAudioAction is scheduled
 	// when export is off, so there is no async-export race to preserve here.
-	clipName := p.resolveClipName(settings, &item, scientificName, result.Confidence)
+	// The name is set below, once the Result exists, so it is chosen from the
+	// Result's own model and sample rate.
 
 	// Get capture length and pre-capture length for detection end time calculation
 	// Set begin and end time for note
@@ -1239,10 +1242,11 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 		beginTime, endTime,
 		scientificName, commonName, speciesCode, rawScientificName,
 		float64(result.Confidence),
-		item.Source, clipName,
+		item.Source, "",
 		item.ElapsedTime, occurrence,
 		item.ModelID,
 		result.Species)
+	detectionResult.ClipName = p.resolveClipName(settings, &detectionResult, scientificName, result.Confidence)
 
 	// Convert additional results from datastore.Results to detection.AdditionalResult.
 	// Exclude the primary species since it's already stored as Detection.LabelID.
@@ -1512,29 +1516,30 @@ func modelGlobalConfidenceThreshold(settings *conf.Settings, modelID string) flo
 // export is off makes it a truthful per-detection signal (no clip exists or is
 // being encoded), which the media endpoint and the frontend rely on to gate
 // audio playback per detection under runtime toggling of the export setting.
-func (p *Processor) resolveClipName(settings *conf.Settings, item *classifier.Results, scientificName string, confidence float32) string {
+// res supplies the model and sample rate the name's container is chosen from.
+func (p *Processor) resolveClipName(settings *conf.Settings, res *detection.Result, scientificName string, confidence float32) string {
 	if !settings.Realtime.Audio.Export.Enabled {
 		return ""
 	}
 
 	clipName := p.generateClipName(settings, scientificName, confidence)
-	return p.applyExportFormatExtension(settings, clipName, item.ModelID, item.Source)
+	return p.applyExportFormatExtension(settings, clipName, res)
 }
 
-// applyExportFormatExtension overrides a clip name's extension to match the
-// container the exporter will actually write, keeping the persisted ClipName in
-// lockstep with the on-disk file. buildClipPath derives the extension from
-// Export.Type; a bat/ultrasonic capture above the analysis rate is stored in the
-// dedicated Export.UltrasonicType instead (resolveExportFormat), so its extension
-// must be rewritten here. Shared by the createDetection and extended-capture paths
-// so both persist the same extension. An empty clip name is returned unchanged.
-func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
+// applyExportFormatExtension sets a clip name's extension to the container the
+// detection is stored in. buildClipPath derives the extension from Export.Type; a
+// bat/ultrasonic capture above the analysis rate is named in the dedicated
+// Export.UltrasonicType instead (resolveExportFormat), so its extension is
+// rewritten here. The model and sample rate are read from res, the same
+// detection.Result fields buildSaveAudioAction hands the encoder, so naming and
+// encoding decide from the same inputs. The exporter then writes the stored name
+// as it is (resolveExportParams). Shared by the createDetection and
+// extended-capture paths. An empty clip name is returned unchanged.
+func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName string, res *detection.Result) string {
 	if clipName == "" {
 		return clipName
 	}
-	mInfo := classifier.DetectionModelInfoForID(modelID)
-	sourceRate := p.resolveAudioSource(source).SampleRate
-	format := exportFormatForModel(mInfo.Name, mInfo.Version, sourceRate, &settings.Realtime.Audio.Export)
+	format := exportFormatForModel(res.Model.Name, res.Model.Version, res.AudioSource.SampleRate, &settings.Realtime.Audio.Export)
 	// audioformat.FileExtension returns the extension WITHOUT a leading dot; replaceExtension
 	// expects the dot. Guard against an empty extension (only reachable with an
 	// unvalidated empty format) so buildClipPath's own extension is preserved rather

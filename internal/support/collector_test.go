@@ -317,6 +317,36 @@ func TestCollector_scrubConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "classify security address lists",
+			config: map[string]any{
+				"security": map[string]any{
+					"trustedProxies":          []any{"cloudflare", "198.51.100.20", "10.0.0.0/8"},
+					"plainhttpsessionclients": []any{"172.18.0.5", "127.0.0.1"},
+				},
+			},
+			want: map[string]any{
+				"security": map[string]any{
+					"trustedProxies":          []any{"cloudflare", "[redacted public address]", "[redacted private range]"},
+					"plainhttpsessionclients": []any{"[redacted private address]", "[redacted loopback address]"},
+				},
+			},
+		},
+		{
+			name: "empty security address lists stay empty",
+			config: map[string]any{
+				"security": map[string]any{
+					"trustedProxies":          []any{},
+					"plainhttpsessionclients": []any{},
+				},
+			},
+			want: map[string]any{
+				"security": map[string]any{
+					"trustedProxies":          []any{},
+					"plainhttpsessionclients": []any{},
+				},
+			},
+		},
+		{
 			name: "redact subnet",
 			config: map[string]any{
 				"security": map[string]any{

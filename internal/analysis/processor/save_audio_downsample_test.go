@@ -53,8 +53,9 @@ func TestSaveAudioAction_BirdDownsampledTo48kHz(t *testing.T) {
 
 // TestSaveAudioAction_BatUltrasonicStoredAsFLAC verifies that a bat detection
 // above 48kHz configured with a lossy Export.Type is stored losslessly in the
-// dedicated ultrasonic format (FLAC by default) at its full source rate, replacing
-// the previous forced-WAV downgrade.
+// dedicated ultrasonic format (FLAC by default) at its full source rate. The
+// stored ClipName carries that format, as production naming writes it, and the
+// lossy file is never created.
 func TestSaveAudioAction_BatUltrasonicStoredAsFLAC(t *testing.T) {
 	t.Parallel()
 
@@ -69,7 +70,7 @@ func TestSaveAudioAction_BatUltrasonicStoredAsFLAC(t *testing.T) {
 
 	action := &SaveAudioAction{
 		Settings:         settings,
-		ClipName:         "bat-256k.mp3",
+		ClipName:         "bat-256k.flac",
 		pcmData:          pcm,
 		sourceSampleRate: sourceRate,
 		modelName:        "BattyBirdNET",
@@ -91,8 +92,8 @@ func TestSaveAudioAction_BatUltrasonicStoredAsFLAC(t *testing.T) {
 
 // TestSaveAudioAction_BatUltrasonicStoredAsWAV verifies that the ultrasonic export
 // format is configurable: with UltrasonicType set to WAV, a bat detection above
-// 48kHz is stored as WAV at its full source rate regardless of the lossy
-// Export.Type.
+// 48kHz is named and stored as WAV at its full source rate regardless of the
+// lossy Export.Type.
 func TestSaveAudioAction_BatUltrasonicStoredAsWAV(t *testing.T) {
 	t.Parallel()
 
@@ -108,7 +109,7 @@ func TestSaveAudioAction_BatUltrasonicStoredAsWAV(t *testing.T) {
 
 	action := &SaveAudioAction{
 		Settings:         settings,
-		ClipName:         "bat-256k.opus",
+		ClipName:         "bat-256k.wav",
 		pcmData:          pcm,
 		sourceSampleRate: sourceRate,
 		modelName:        "BattyBirdNET",
@@ -158,8 +159,8 @@ func TestSaveAudioAction_BirdAt48kHzNoResample(t *testing.T) {
 	assert.Equal(t, sourceRate, rate, "bird audio at 48kHz should not be resampled")
 }
 
-// TestResolveExportFormat verifies the single source of truth shared by the
-// encoder and the DB clip-name path: a bat/ultrasonic capture above the analysis
+// TestResolveExportFormat verifies the naming rule shared by the DB clip-name
+// path and the encoder's fallback for a name with no known extension: a bat/ultrasonic capture above the analysis
 // rate resolves to Export.UltrasonicType; every other case (including a non-bat
 // capture above the analysis rate, which resolveExportParams downsamples) resolves
 // to Export.Type.

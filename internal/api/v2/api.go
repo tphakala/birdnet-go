@@ -663,9 +663,17 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// owns the diagnostics health infrastructure; its routes are registered in
 	// initRoutes below.
 	c.system = system.New(c.Core, c.startTime, c.healthErrorBuf, audioapi.LatestAudioLevels)
+	// The storage notices go to the injected notification service (nil keeps the
+	// process-wide one).
+	c.system.SetNotificationService(c.notificationService)
 
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
 	if initializeRoutes {
+		// Evaluate the storage persistence notices once at startup, then after a
+		// settings save changes one of the paths. Skipped when routes are not
+		// initialized (tests), like every other background activity here.
+		c.system.StartStorageNoticeSync()
+
 		// Initialize synchronization channel for testing
 		c.goroutinesStarted = make(chan struct{})
 		c.initRoutes()
@@ -887,6 +895,9 @@ func (c *Controller) Shutdown() {
 	if h := c.optimizeNotices.Load(); h != nil {
 		h.scheduler.StopOptimizeNoticeSync()
 	}
+
+	// Stop the pending storage notice evaluation, and ignore later ones.
+	c.system.StopStorageNoticeSync()
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
 	c.Cancel()

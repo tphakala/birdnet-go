@@ -242,4 +242,12 @@ const (
 	MsgCadenceCappedMessage     = "notifications.content.analysis.cadenceCappedMessage"
 	MsgCadenceOverloadedTitle   = "notifications.content.analysis.cadenceOverloadedTitle"
 	MsgCadenceOverloadedMessage = "notifications.content.analysis.cadenceOverloadedMessage"
+
+	// Storage notices: key paths sit on a container's own layer or a memory
+	// filesystem (lost when the container is recreated), or in an anonymous volume
+	// (data that can seem lost after a fresh container start).
+	MsgStorageNotPersistentTitle     = "notifications.content.storage.notPersistentTitle"
+	MsgStorageNotPersistentMessage   = "notifications.content.storage.notPersistentMessage"
+	MsgStorageAnonymousVolumeTitle   = "notifications.content.storage.anonymousVolumeTitle"
+	MsgStorageAnonymousVolumeMessage = "notifications.content.storage.anonymousVolumeMessage"
 )

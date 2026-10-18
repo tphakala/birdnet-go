@@ -3341,14 +3341,24 @@ func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Conte
 
 	prefix := ds.manager.TablePrefix()
 	labelIDsClause, labelIDsArgs := labelIDsForScientificName(prefix, scientificName)
+	priorDetections := func(aggregate string) *gorm.DB {
+		return ds.manager.DB().
+			Table(prefix+"detections d").
+			Select(aggregate).
+			Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
+			Where("d.detected_at < ?", before.Unix()).
+			// See labelIDsForScientificName for the matching rule.
+			Where(labelIDsClause, labelIDsArgs...).
+			Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
+	}
+
+	// Each bound gets its own scalar subquery. SQLite answers a lone MIN() or
+	// MAX() by seeking to one end of the (label_id, detected_at) index, but
+	// with both in one SELECT it scans every matching row, which takes over a
+	// second for a species with hundreds of thousands of detections.
 	query := ds.manager.DB().WithContext(ctx).
-		Table(prefix+"detections d").
-		Select("MIN(d.detected_at) as first_detected_at, MAX(d.detected_at) as last_detected_at").
-		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
-		Where("d.detected_at < ?", before.Unix()).
-		// See labelIDsForScientificName for the matching rule.
-		Where(labelIDsClause, labelIDsArgs...).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
+		Raw("SELECT (?) AS first_detected_at, (?) AS last_detected_at",
+			priorDetections("MIN(d.detected_at)"), priorDetections("MAX(d.detected_at)"))
 
 	if err := query.Scan(&result).Error; err != nil {
 		return nil, nil, errors.New(err).

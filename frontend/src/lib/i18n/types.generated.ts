@@ -437,6 +437,10 @@ export type TranslationKey =
   | 'notifications.content.analysis.cadenceCappedMessage' // params: models, sources, configured, effective
   | 'notifications.content.analysis.cadenceOverloadedTitle'
   | 'notifications.content.analysis.cadenceOverloadedMessage' // params: models, sources
+  | 'notifications.content.storage.notPersistentTitle'
+  | 'notifications.content.storage.notPersistentMessage' // params: paths
+  | 'notifications.content.storage.anonymousVolumeTitle'
+  | 'notifications.content.storage.anonymousVolumeMessage' // params: paths
   | 'notifications.loading'
   | 'search.title'
   | 'search.results'
@@ -4485,6 +4489,8 @@ export type TranslationParams = {
     models: string | number;
     sources: string | number;
   };
+  'notifications.content.storage.notPersistentMessage': { paths: string | number };
+  'notifications.content.storage.anonymousVolumeMessage': { paths: string | number };
   'search.resultsCountOther': { count: string | number };
   'search.review.reviewDetection': { species: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };

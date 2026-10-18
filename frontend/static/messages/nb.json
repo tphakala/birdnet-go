@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med den innstilte overlappen på {configured} s overstiger den målte kapasiteten til denne enheten, så lyden analyseres med {effective} s overlapp. Falsk positiv-filteret kan derfor kreve færre bekreftelser. De lagrede innstillingene dine er uendret; se Innstillinger > Analyse.",
         "cadenceOverloadedTitle": "Denne enheten klarer ikke å holde tritt med lydanalysen",
         "cadenceOverloadedMessage": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger den målte kapasiteten til denne enheten selv uten overlapp, så analysen kan komme på etterskudd, og deteksjoner kan gå tapt. Aktiver færre modeller eller lydkilder, eller velg en raskere modellvariant."
+      },
+      "storage": {
+        "notPersistentTitle": "Data går tapt når containeren gjenopprettes",
+        "notPersistentMessage": "Disse banene ligger på lagring som slettes når containeren gjenopprettes, for eksempel ved en oppdatering av imaget: {paths}. Knytt et volum eller en vertsmappe til dem i containerkonfigurasjonen din.",
+        "anonymousVolumeTitle": "Data lagres i et anonymt containervolum",
+        "anonymousVolumeMessage": "Disse banene ligger i anonyme volumer som container-kjøretiden opprettet fordi ingen volum var knyttet til dem: {paths}. En container som startes på nytt, for eksempel med docker run etter en oppdatering av imaget, får nye tomme volumer, så dataene ser ut til å være tapt. Knytt et navngitt volum eller en vertsmappe til dem."
       }
     },
     "loading": "Laster varsler..."

@@ -342,6 +342,32 @@ func TestV2OnlyDatastore_GetSpeciesFirstAndLastDetectionTimeBefore(t *testing.T)
 		assert.Nil(t, last)
 	})
 
+	t.Run("each bound skips false positives but keeps reviewed-correct detections", func(t *testing.T) {
+		// Both ends of the range are false positives, so each bound must skip
+		// its own end. The newest genuine detection carries a "correct" review,
+		// which must not be excluded along with the false positives.
+		review := func(ts time.Time, status entities.VerificationStatus) {
+			t.Helper()
+			det := seedDetection(t, ds, "Sylvia atricapilla", ts)
+			require.NoError(t, ds.manager.DB().Create(&entities.DetectionReview{
+				DetectionID: det.ID,
+				Verified:    status,
+			}).Error)
+		}
+		review(day(9, 8), entities.VerificationFalsePositive)
+		seedDetection(t, ds, "Sylvia atricapilla", day(10, 8))
+		seedDetection(t, ds, "Sylvia atricapilla", day(12, 8))
+		review(day(13, 8), entities.VerificationCorrect)
+		review(day(14, 8), entities.VerificationFalsePositive)
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Sylvia atricapilla", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(10, 8), *first)
+		assert.Equal(t, day(13, 8), *last)
+	})
+
 	t.Run("sound class name does not prefix-match a longer class", func(t *testing.T) {
 		seedDetection(t, ds, "Car", day(9, 7))
 		seedDetection(t, ds, "Car_passing_by", day(12, 7))

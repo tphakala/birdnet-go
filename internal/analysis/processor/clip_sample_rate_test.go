@@ -78,19 +78,25 @@ func TestExportClipRate(t *testing.T) {
 func TestPlannedClipSampleRate_MatchesExportParams(t *testing.T) {
 	t.Parallel()
 
+	// The stored name decides the container when its extension is a known export
+	// format; settings decide only for a name with no known extension.
 	tests := []struct {
 		name       string
+		clipName   string
 		model      string
 		sourceRate int
 		exportType string
 		ultraType  string
 	}{
-		{"bat 384k flac", rateBatModel, rateTest384k, "mp3", "flac"},
-		{"bat 256k wav", rateBatModel, rateTest256k, "opus", "wav"},
-		{"bird 192k wav", rateBirdModel, rateTest192k, "wav", "flac"},
-		{"bird 48k mp3", rateBirdModel, conf.SampleRate, "mp3", "flac"},
-		{"bird 32k wav", rateBirdModel, rateTest32k, "wav", "flac"},
-		{"bird 32k opus", rateBirdModel, rateTest32k, "opus", "flac"},
+		{"bat 384k flac name", "clip.flac", rateBatModel, rateTest384k, "mp3", "flac"},
+		{"bat 256k wav name under opus settings", "clip.wav", rateBatModel, rateTest256k, "opus", "wav"},
+		{"bird 192k wav name", "clip.wav", rateBirdModel, rateTest192k, "wav", "flac"},
+		{"bird 48k mp3 name", "clip.mp3", rateBirdModel, conf.SampleRate, "mp3", "flac"},
+		{"bird 32k wav name under opus settings", "clip.wav", rateBirdModel, rateTest32k, "opus", "flac"},
+		{"bird 32k opus name under wav settings", "clip.opus", rateBirdModel, rateTest32k, "wav", "flac"},
+		{"bird 32k extensionless name, opus settings", "clip", rateBirdModel, rateTest32k, "opus", "flac"},
+		{"bird 32k extensionless name, wav settings", "clip", rateBirdModel, rateTest32k, "wav", "flac"},
+		{"bird 32k unknown extension, opus settings", "clip.xyz", rateBirdModel, rateTest32k, "opus", "flac"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -102,7 +108,7 @@ func TestPlannedClipSampleRate_MatchesExportParams(t *testing.T) {
 			export := &settings.Realtime.Audio.Export
 
 			result := &detection.Result{
-				ClipName:    testRateClipName,
+				ClipName:    tt.clipName,
 				AudioSource: detection.AudioSource{SampleRate: tt.sourceRate},
 				Model:       detection.ModelInfo{Name: tt.model},
 			}
@@ -114,7 +120,7 @@ func TestPlannedClipSampleRate_MatchesExportParams(t *testing.T) {
 				sourceSampleRate: tt.sourceRate,
 				modelName:        tt.model,
 			}
-			actual, _, _ := action.resolveExportParams("clip.wav")
+			actual, _, _ := action.resolveExportParams(tt.clipName)
 			assert.Equal(t, actual, planned)
 		})
 	}
@@ -206,9 +212,10 @@ func (r *recordingRateRecorder) RecordClipSampleRate(noteID uint, clipName strin
 func TestSaveAudioAction_CorrectsClipSampleRate(t *testing.T) {
 	t.Parallel()
 
+	const wantOpusRate = conf.SampleRate
 	tests := []struct {
 		name        string
-		model       string
+		clipName    string
 		sourceRate  int
 		exportType  string
 		plannedRate int
@@ -216,12 +223,17 @@ func TestSaveAudioAction_CorrectsClipSampleRate(t *testing.T) {
 		recordErr   error
 		wantCalls   []rateCall
 	}{
-		{"equal rates make no call", rateBatModel, rateTest256k, "wav", rateTest256k, testRateNoteID, nil, nil},
-		{"export type changed after planning corrects the rate", rateBirdModel, rateTest32k, "opus", rateTest32k, testRateNoteID, nil,
-			[]rateCall{{testRateNoteID, "clip.wav", conf.SampleRate}}},
-		{"note id 0 makes no call", rateBirdModel, rateTest32k, "opus", rateTest32k, 0, nil, nil},
-		{"recorder error does not fail the action", rateBirdModel, rateTest32k, "opus", rateTest32k, testRateNoteID, errors.NewStd("db read-only"),
-			[]rateCall{{testRateNoteID, "clip.wav", conf.SampleRate}}},
+		{"equal rates make no call", "clip.wav", rateTest256k, "wav", rateTest256k, testRateNoteID, nil, nil},
+		// A resample that failed at planning time or an older plan leaves the stored
+		// rate different from what the encoder writes for the named container.
+		{"written rate differs from the plan", "clip.wav", rateTest32k, "opus", wantOpusRate, testRateNoteID, nil,
+			[]rateCall{{testRateNoteID, "clip.wav", rateTest32k}}},
+		// A name with no known extension takes its format from the settings at encode time.
+		{"extensionless name follows the settings format", "clip", rateTest32k, "opus", rateTest32k, testRateNoteID, nil,
+			[]rateCall{{testRateNoteID, "clip", wantOpusRate}}},
+		{"note id 0 makes no call", "clip.wav", rateTest32k, "opus", wantOpusRate, 0, nil, nil},
+		{"recorder error does not fail the action", "clip.wav", rateTest32k, "opus", wantOpusRate, testRateNoteID, errors.NewStd("db read-only"),
+			[]rateCall{{testRateNoteID, "clip.wav", rateTest32k}}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -230,14 +242,17 @@ func TestSaveAudioAction_CorrectsClipSampleRate(t *testing.T) {
 			rec := &recordingRateRecorder{err: tt.recordErr}
 			action := &SaveAudioAction{
 				Settings:         settings,
-				ClipName:         "clip.wav",
+				ClipName:         tt.clipName,
 				pcmData:          make([]byte, tt.sourceRate/10*2),
 				sourceSampleRate: tt.sourceRate,
-				modelName:        tt.model,
+				modelName:        rateBirdModel,
 				NoteID:           tt.noteID,
 				clipRates:        rec,
 				plannedRate:      tt.plannedRate,
 				CorrelationID:    "rate-correction",
+			}
+			if tt.sourceRate == rateTest256k {
+				action.modelName = rateBatModel
 			}
 
 			require.NoError(t, action.Execute(t.Context(), nil))
@@ -290,7 +305,7 @@ func TestSaveAudioAction_NilClipRatesSkipsCorrection(t *testing.T) {
 		sourceSampleRate: rateTest32k,
 		modelName:        rateBirdModel,
 		NoteID:           testRateNoteID,
-		plannedRate:      rateTest32k, // differs from the 48 kHz the opus encoder needs
+		plannedRate:      conf.SampleRate, // differs from the 32 kHz the wav name writes
 		CorrelationID:    "nil-recorder",
 	}
 

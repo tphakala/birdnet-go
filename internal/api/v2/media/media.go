@@ -641,11 +641,11 @@ var audioServeExtensions = []string{".flac", ".wav", ".opus", ".m4a", ".mp3", ".
 
 // findAlternateAudioPath looks for a completed clip that shares relClipPath's base
 // name but carries a different known audio extension. The DB clip_name and the
-// file on disk are normally kept in lockstep by resolveExportFormat, but a rare
-// resample-failure strand (or a manual rename) can still leave the stored name
-// pointing at a container the file was not written in; serving the actual file
-// beats a 404. It probes the fixed candidate names directly (no directory
-// listing), so it is O(1) per extension and deterministic on the ordered set.
+// file on disk normally agree, because the exporter writes the stored name. A
+// row written by an older version, or a manual rename, can still point at a
+// container the file was not written in; serving the actual file beats a 404.
+// It probes the fixed candidate names directly (no directory listing), so it is
+// O(1) per extension and deterministic on the ordered set.
 // Temp files are handled separately (findEncodingTempPath) and the original,
 // already-missing extension is skipped.
 func (c *Handler) findAlternateAudioPath(relClipPath string) (string, bool) {
@@ -846,10 +846,10 @@ func (c *Handler) noteCaptureTimes(noteID string) (begin, end time.Time) {
 // created the temp file yet or already renamed it. Returns nil if the file was
 // successfully served, or the original/translated error otherwise.
 func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, detectionBeginTime, detectionEndTime time.Time, logFields ...logger.Field) error {
-	// A completed clip whose stored name drifted from the file on disk (a rare
-	// resample-failure strand, or a manual rename) is served from its actual path
-	// rather than 404'd. resolveExportFormat keeps the deterministic cases in
-	// lockstep; this is the safety net for the rest. The Content-Type and
+	// A completed clip whose stored name drifted from the file on disk (a row from
+	// an older version, or a manual rename) is served from its actual path rather
+	// than 404'd. The exporter writes the stored name, so this is the safety net
+	// for such rows only. The Content-Type and
 	// Content-Disposition the caller set from the stored extension are rewritten to
 	// match the file actually served; the 404 above did not commit the response, so
 	// these still take effect.

@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. This can lower the number of confirmations the false positive filter requires. Your saved settings are unchanged; see Settings > Analysis.",
         "cadenceOverloadedTitle": "This device cannot keep up with audio analysis",
         "cadenceOverloadedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant."
+      },
+      "storage": {
+        "notPersistentTitle": "Data will be lost when the container is recreated",
+        "notPersistentMessage": "These paths are on storage that is deleted when the container is recreated, for example on an image update: {paths}. Map a volume or a host directory to them in your container configuration.",
+        "anonymousVolumeTitle": "Data is stored in an anonymous container volume",
+        "anonymousVolumeMessage": "These paths are in anonymous volumes that the container runtime created because no volume was mapped: {paths}. A container started fresh, for example with docker run after an image update, gets new empty volumes, so the data seems lost. Map a named volume or a host directory to them."
       }
     },
     "loading": "Loading notifications..."

@@ -242,7 +242,7 @@ func DefaultSensitiveKeys() []string {
 		"url", "urls", "endpoint", "webhook_url",
 
 		// Network topology
-		"subnet",
+		"subnet", trustedProxiesKey, plainHTTPSessionClientsKey,
 
 		// Secret file paths
 		"privatekeypath", "sshkeypath", "credentialspath",
@@ -946,6 +946,8 @@ func (c *Collector) scrubConfig(config map[string]any) map[string]any {
 //   - Default/empty values are left unchanged
 //   - URL values get structural redaction (preserving scheme and port)
 //   - Other values get replaced with [redacted]
+//   - IP address lists (trustedproxies, plainhttpsessionclients) keep their
+//     length, each entry replaced by its address class; the cloudflare preset is kept
 //
 // For non-sensitive keys, it recursively processes nested structures
 // and sanitizes RTSP URLs in string values.
@@ -961,6 +963,9 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 	}
 
 	if isSensitive {
+		if isAddressListKey(lowerKey) {
+			return redactAddressList(value)
+		}
 		return c.redactSensitiveValue(value, sensitiveKeys)
 	}
 

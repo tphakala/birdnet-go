@@ -434,6 +434,15 @@ security:
   # X-Forwarded-For or overwrite X-Real-IP, all client-IP headers it forwards (including True-Client-IP)
   # must name the same client, and a Forwarded header is not accepted.
   trustedproxies: []         # e.g. ["cloudflare"], ["203.0.113.0/24"] or a bare IP ["203.0.113.5"]
+  # Exact IP addresses of clients that reach BirdNET-Go directly over plain HTTP
+  # (for example another container calling http://birdnet-go:8080) and therefore
+  # need session cookies without the Secure attribute. Matched by connection
+  # address only; ranges are not accepted. Never list the address your reverse
+  # proxy or tunnel (such as cloudflared) connects from: with host networking or
+  # a native install a proxy on the same host connects from 127.0.0.1, ::1 or
+  # the host's own address, and with bridge networking from the container
+  # network gateway. Give the listed clients fixed addresses.
+  plainhttpsessionclients: [] # e.g. ["172.18.0.5"]
   basicauth:
     enabled: false           # true to enable basic auth
     password: ""             # password hash for the settings interface

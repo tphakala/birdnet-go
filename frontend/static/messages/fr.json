@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre de faux positifs peut donc exiger moins de confirmations. Vos paramètres enregistrés restent inchangés ; voir Paramètres > Analyse.",
         "cadenceOverloadedTitle": "Cet appareil ne peut pas suivre l'analyse audio",
         "cadenceOverloadedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement, l'analyse peut donc prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio, ou choisissez une variante de modèle plus rapide."
+      },
+      "storage": {
+        "notPersistentTitle": "Les données seront perdues lorsque le conteneur sera recréé",
+        "notPersistentMessage": "Ces chemins se trouvent sur un stockage supprimé lorsque le conteneur est recréé, par exemple lors d'une mise à jour de l'image : {paths}. Associez-leur un volume ou un répertoire de l'hôte dans la configuration de votre conteneur.",
+        "anonymousVolumeTitle": "Les données sont stockées dans un volume anonyme du conteneur",
+        "anonymousVolumeMessage": "Ces chemins se trouvent dans des volumes anonymes que l'environnement d'exécution du conteneur a créés parce qu'aucun volume n'était associé : {paths}. Un conteneur démarré à neuf, par exemple avec docker run après une mise à jour de l'image, reçoit de nouveaux volumes vides, si bien que les données semblent perdues. Associez-leur un volume nommé ou un répertoire de l'hôte."
       }
     },
     "loading": "Chargement des notifications..."
