@@ -14,7 +14,7 @@ import (
 )
 
 // TestStorageNoticeInputsChanged covers the settings gate that re-evaluates the
-// storage persistence notices: each of the six path inputs flips it, and an
+// storage persistence notices: each of the five path inputs flips it, and an
 // unrelated field does not.
 func TestStorageNoticeInputsChanged(t *testing.T) {
 	t.Parallel()
