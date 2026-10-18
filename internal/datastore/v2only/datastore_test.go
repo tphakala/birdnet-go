@@ -2140,7 +2140,7 @@ func TestV2OnlyDatastore_NewSpeciesWindowAfterMidnightReload(t *testing.T) {
 // GetSpeciesDiversityData buckets by the configured timezone, not UTC or the OS-local zone. A
 // detection at a fixed UTC instant 30 minutes before midnight must group on the NEXT calendar day
 // when the configured zone is UTC+5. The negative assertion (the UTC date does not match) proves
-// the bucketing is genuinely offset-aware, and exercises the BETWEEN date filter end-to-end.
+// the bucketing is genuinely offset-aware, and exercises the date range filter end-to-end.
 func TestV2OnlyDatastore_GetSpeciesDiversityData_TimezoneBucketing(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()

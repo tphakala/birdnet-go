@@ -3365,16 +3365,22 @@ func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Conte
 
 // GetSpeciesDiversityData returns unique species count per day.
 func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]datastore.DailyAnalyticsData, error) {
-	// Validate date formats before using in SQL
+	// Validate date formats before using in SQL. The parsed values are UTC midnights of the
+	// requested calendar days, used below to derive detected_at bounds.
+	var startDay, endDay time.Time
 	if startDate != "" {
-		if _, err := time.Parse(time.DateOnly, startDate); err != nil {
+		t, err := time.Parse(time.DateOnly, startDate)
+		if err != nil {
 			return nil, fmt.Errorf("invalid start date format (expected YYYY-MM-DD): %w", err)
 		}
+		startDay = t
 	}
 	if endDate != "" {
-		if _, err := time.Parse(time.DateOnly, endDate); err != nil {
+		t, err := time.Parse(time.DateOnly, endDate)
+		if err != nil {
 			return nil, fmt.Errorf("invalid end date format (expected YYYY-MM-DD): %w", err)
 		}
+		endDay = t
 	}
 
 	var results []datastore.DailyAnalyticsData
@@ -3382,9 +3388,8 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	// Bucket dates by the configured timezone, anchored to a query boundary: the start of the
 	// window, falling back to the end for a left-open range (and only then to the current offset
 	// for a fully open range), so an end-only historical query buckets stably regardless of run
-	// time. The SELECT, GROUP BY, and BETWEEN filter all reuse this single expression so they stay
-	// internally consistent; the user's date strings are interpreted in the same zone the dates
-	// are bucketed in.
+	// time. The SELECT and GROUP BY share this single expression, and the range filter below is
+	// derived from the same offset, so a row is in range exactly when its bucketed date is.
 	var refEpoch int64
 	if startDate != "" {
 		if t, perr := time.ParseInLocation(time.DateOnly, startDate, ds.timezone); perr == nil {
@@ -3396,7 +3401,8 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 			refEpoch = t.Unix()
 		}
 	}
-	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(refEpoch))
+	offset := ds.zoneOffsetSeconds(refEpoch)
+	dateExpr := ds.detectionDateExpr(offset)
 
 	// Build query to count distinct species per day, excluding false positives
 	prefix := ds.manager.TablePrefix()
@@ -3409,14 +3415,17 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 		Group(dateExpr).
 		Order("date")
 
-	// Apply date range filters
-	switch {
-	case startDate != "" && endDate != "":
-		query = query.Where(fmt.Sprintf("%s BETWEEN ? AND ?", dateExpr), startDate, endDate)
-	case startDate != "":
-		query = query.Where(fmt.Sprintf("%s >= ?", dateExpr), startDate)
-	case endDate != "":
-		query = query.Where(fmt.Sprintf("%s <= ?", dateExpr), endDate)
+	// Apply the date range as bounds on the raw detected_at column so the detected_at index
+	// can narrow the scan; a filter on the date expression could not use any index.
+	// dateExpr is the UTC calendar date of detected_at+offset, so a detection's bucketed date
+	// is on or after startDay exactly when detected_at >= startDay-offset, and on or before
+	// endDay exactly when detected_at < (endDay+1 day)-offset. Using the same fixed offset as
+	// dateExpr keeps the filter and the buckets in agreement, including across DST changes.
+	if startDate != "" {
+		query = query.Where("d.detected_at >= ?", startDay.Unix()-int64(offset))
+	}
+	if endDate != "" {
+		query = query.Where("d.detected_at < ?", endDay.AddDate(0, 0, 1).Unix()-int64(offset))
 	}
 
 	// Execute query
