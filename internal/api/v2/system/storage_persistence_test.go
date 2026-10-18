@@ -41,7 +41,7 @@ func TestStoragePaths(t *testing.T) {
 			diagnostics.StorageLabelConfig, diagnostics.StorageLabelDatabase,
 			diagnostics.StorageLabelModels, diagnostics.StorageLabelClips,
 		}, labelsOf(paths))
-		assert.Equal(t, diagnostics.StoragePath{Label: diagnostics.StorageLabelConfig, Path: "/config/config.yaml", IsFile: true}, paths[0])
+		assert.Equal(t, diagnostics.StoragePath{Label: diagnostics.StorageLabelConfig, Path: "/config/config.yaml"}, paths[0])
 		assert.Equal(t, diagnostics.StoragePath{Label: diagnostics.StorageLabelDatabase, Path: "/data/birdnet.db", IsFile: true}, paths[1])
 		assert.Equal(t, "/models", paths[2].Path)
 		assert.False(t, paths[2].IsFile)
@@ -142,6 +142,24 @@ func TestStoragePersistenceReport(t *testing.T) {
 		require.Len(t, report.Verdicts, 4)
 		assert.Equal(t, diagnostics.PersistencePersistent, report.Verdicts[0].Class)
 		assert.Equal(t, diagnostics.PersistenceContainerLayer, report.Verdicts[1].Class)
+	})
+
+	t.Run("config file bind mounted alone is persistent, database file beside overlay is not", func(t *testing.T) {
+		t.Parallel()
+		h := newHandler(sysinfo.EnvDocker, func() ([]diagnostics.MountTableEntry, error) {
+			return []diagnostics.MountTableEntry{
+				{Destination: "/", Root: "/", FSType: "overlay"},
+				{Destination: "/config/config.yaml", Root: "/h/config.yaml", FSType: "ext4"},
+				{Destination: "/data/birdnet.db", Root: "/h/birdnet.db", FSType: "ext4"},
+			}, nil
+		})
+		report := h.storagePersistenceReport()
+		require.NoError(t, report.Err)
+		require.Len(t, report.Verdicts, 4)
+		assert.Equal(t, diagnostics.StorageLabelConfig, report.Verdicts[0].Label)
+		assert.Equal(t, diagnostics.PersistencePersistent, report.Verdicts[0].Class, "the config file has its own mount")
+		assert.Equal(t, diagnostics.StorageLabelDatabase, report.Verdicts[1].Label)
+		assert.Equal(t, diagnostics.PersistenceContainerLayer, report.Verdicts[1].Class, "SQLite sidecar files sit beside the database in the directory")
 	})
 
 	t.Run("missing settings is not applicable", func(t *testing.T) {

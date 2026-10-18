@@ -44,9 +44,12 @@ type storageDeps struct {
 func storagePaths(s *conf.Settings, configFile, configDir string) []diagnostics.StoragePath {
 	paths := make([]diagnostics.StoragePath, 0, maxStoragePaths)
 
+	// The config file is judged as itself, so a file bind mounted on its own is
+	// found; it has no sidecar files. The database is judged by its directory
+	// because SQLite writes its -wal, -shm and -journal files beside it.
 	switch {
 	case configFile != "":
-		paths = append(paths, diagnostics.StoragePath{Label: diagnostics.StorageLabelConfig, Path: configFile, IsFile: true})
+		paths = append(paths, diagnostics.StoragePath{Label: diagnostics.StorageLabelConfig, Path: configFile})
 	case configDir != "":
 		paths = append(paths, diagnostics.StoragePath{Label: diagnostics.StorageLabelConfig, Path: configDir})
 	}
