@@ -2,9 +2,11 @@ package transcode
 
 import (
 	"context"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -184,6 +186,9 @@ func TestProbeOpenFile_MatchesProbeFile(t *testing.T) {
 }
 
 func TestProbeOpenFile_ProbesTheOpenedInodeNotThePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("an open file cannot be removed on Windows")
+	}
 	path := filepath.Join(t.TempDir(), "clip.wav")
 	writeWAVChannels(t, path, make([]int16, 2*testRate), testRate, 2)
 	f := openForProbe(t, path)
@@ -205,7 +210,7 @@ func TestProbeOpenFile_NameSelectsDecoderByExtension(t *testing.T) {
 	_, err := ProbeOpenFile(t.Context(), f, path)
 	require.ErrorIs(t, err, ErrUnsupportedSource)
 
-	_, err = f.Seek(0, 0)
+	_, err = f.Seek(0, io.SeekStart)
 	require.NoError(t, err)
 	info, err := ProbeOpenFile(t.Context(), f, "clip.wav")
 	require.NoError(t, err)
