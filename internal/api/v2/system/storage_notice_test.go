@@ -362,3 +362,23 @@ func TestRegisterHealthChecks_IncludesStoragePersistence(t *testing.T) {
 	require.NotNil(t, found, "the check is registered in the config category")
 	assert.Equal(t, health.StatusSkipped, found.Status, "outside Docker and Podman the check is skipped")
 }
+
+func TestStorageNotice_UnknownVerdictDoesNotBlockOtherPaths(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 2, 0)
+	nh := newNoticeHarness(rec)
+	unknown := diagnostics.StorageVerdict{Label: "clips", Path: "/clips", Class: diagnostics.PersistenceUnknown}
+	nh.set(applicable(unknown, verdict("models", classLayer), verdict("config", classAnon)))
+
+	nh.h.syncStorageNotices()
+
+	created, deleted := rec.counts()
+	assert.Equal(t, 2, created, "a lost path and an anonymous path are still raised beside an unjudged one")
+	assert.Zero(t, deleted)
+	rec.mu.Lock()
+	defer rec.mu.Unlock()
+	titles := []string{rec.created[0].TitleKey, rec.created[1].TitleKey}
+	assert.ElementsMatch(t, []string{
+		notification.MsgStorageNotPersistentTitle,
+		notification.MsgStorageAnonymousVolumeTitle,
+	}, titles)
+}
