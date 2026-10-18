@@ -473,8 +473,9 @@ func (sfs *SecureFS) StatRel(relPath string) (fs.FileInfo, error) {
 // the base directory. The open happens inside the os.Root, so neither ".." nor
 // a symlink pointing outside the base directory can escape it, and the stat
 // cache is not consulted: the regular-file decision is made on the opened
-// handle. The open never blocks on a FIFO or device node; those are closed
-// again and reported as ErrNotRegularFile.
+// handle. On unix the open does not block on a FIFO; a FIFO, device node or
+// other non-regular file is closed again and reported as ErrNotRegularFile.
+// Opening a slow block device can still block in the kernel before that check.
 //
 // Errors from validation and from the os.Root are returned unwrapped, so
 // callers can match fs.ErrNotExist and fs.ErrPermission. The caller owns the
