@@ -4,9 +4,13 @@ package spectrogram
 // detection. The gate is the detection's model type: bat models keep the clip's
 // native capture rate, so the image spans 0 to half of that rate (a 384 kHz clip
 // shows 0-192 kHz, a 192 kHz clip 0-96 kHz); everything else gets bird defaults
-// (resample to birdResampleHz).
+// (drawn for birdResampleHz, an axis of 0 to 12 kHz).
 type FrequencyProfile struct {
-	ResampleRate int    // Target sample rate in Hz; 0 means keep native rate
+	// ResampleRate is the rate in Hz the image is drawn for: the axis spans 0 to
+	// half of it. 0 keeps the clip's native rate. The sox and FFmpeg paths resample
+	// to it; the native path analyses a clip at an accepted multiple of it without
+	// resampling (see analysisSource) and resamples any other clip.
+	ResampleRate int
 	suffix       string // Cache-filename token identifying the profile; "" for the default bird render
 }
 

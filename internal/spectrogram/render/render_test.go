@@ -28,6 +28,11 @@ const (
 	// aboveMaxRows is a power of two plus one past the upper bound (4097).
 	aboveMaxRows = 8193
 
+	// sourceRate48k and displayRate24k are the bird clip rate and the rate the
+	// bird picture is drawn for.
+	sourceRate48k  = 48000
+	displayRate24k = 24000
+
 	// burstEdgeTolerance is the allowed error, in columns, of a burst edge.
 	burstEdgeTolerance = 3
 )
@@ -306,6 +311,8 @@ func TestRenderValidation(t *testing.T) {
 		{"rows not a power of two plus one", src, func(o *Options) { o.Rows = 130 }, ErrInvalidOptions},
 		{"span zero", &sliceSource{rate: 24000, samples: src.samples, span: -1}, func(*Options) {}, ErrEmptyClip},
 		{"no samples", &sliceSource{rate: 24000}, func(*Options) {}, ErrEmptyClip},
+		{"negative display rate", src, func(o *Options) { o.DisplayRate = -1 }, ErrInvalidOptions},
+		{"source rate that cannot be drawn at the display rate", &sliceSource{rate: 44100, samples: src.samples}, func(o *Options) { o.DisplayRate = displayRate24k }, ErrInvalidOptions},
 		{"one sample at lg", &sliceSource{rate: 24000, samples: []float32{0.5}}, func(o *Options) { o.Width, o.Rows = 1026, 513 }, ErrNoColumns},
 	}
 	for _, tt := range tests {
@@ -398,6 +405,30 @@ func TestRenderRangeChangesWindowAndLegend(t *testing.T) {
 	assert.True(t, differs, "legend labels must change with the range")
 }
 
+// assertChromeMatches checks that every pixel of img outside the raster equals
+// the chrome DrawChrome draws for the given axis rate and time span.
+func assertChromeMatches(t *testing.T, img image.Image, cols int, opt Options, axisRate int, seconds float64) {
+	t.Helper()
+	gl, err := atlas()
+	require.NoError(t, err)
+	w, h := soxchrome.Dims(cols, opt.Rows, false)
+	want := image.NewPaletted(image.Rect(0, 0, w, h), soxchrome.Palette(opt.Style.Palette))
+	soxchrome.DrawChrome(&canvas{img: want, atlas: gl}, soxchrome.ChromeParams{
+		Cols: cols, Rows: opt.Rows, SampleRate: axisRate, Seconds: seconds, RangeDB: float64(opt.RangeDB),
+	})
+
+	got := img.(*image.Paletted)
+	for y := range h {
+		for x := range w {
+			inRaster := x >= soxchrome.MarginLeft && x < soxchrome.MarginLeft+cols &&
+				y >= soxchrome.MarginAbove && y < soxchrome.MarginAbove+opt.Rows
+			if !inRaster {
+				require.Equalf(t, want.ColorIndexAt(x, y), got.ColorIndexAt(x, y), "chrome pixel %d,%d", x, y)
+			}
+		}
+	}
+}
+
 func TestRenderTimeAxisUsesColumnsProduced(t *testing.T) {
 	// A short clip yields fewer columns than the width, so the seconds the axis
 	// spans must come from the columns produced, not from the width.
@@ -408,25 +439,79 @@ func TestRenderTimeAxisUsesColumnsProduced(t *testing.T) {
 	require.NoError(t, err)
 	require.Less(t, cols, width)
 
-	fit, err := newFit(src.rate, src.SpanSamples(), opt)
+	fit, err := newFit(src.rate, src.SpanSamples(), opt, 1)
 	require.NoError(t, err)
-	gl, err := atlas()
-	require.NoError(t, err)
-	w, h := soxchrome.Dims(cols, rows, false)
-	want := image.NewPaletted(image.Rect(0, 0, w, h), soxchrome.Palette(opt.Style.Palette))
-	soxchrome.DrawChrome(&canvas{img: want, atlas: gl}, soxchrome.ChromeParams{
-		Cols: cols, Rows: rows, SampleRate: src.rate, Seconds: fit.SecondsSpanned(cols), RangeDB: testRangeDB,
-	})
+	assertChromeMatches(t, img, cols, opt, src.rate, fit.SecondsSpanned(cols))
+}
 
-	got := img.(*image.Paletted)
-	for y := range h {
-		for x := range w {
-			inRaster := x >= soxchrome.MarginLeft && x < soxchrome.MarginLeft+cols &&
-				y >= soxchrome.MarginAbove && y < soxchrome.MarginAbove+rows
-			if !inRaster {
-				require.Equalf(t, want.ColorIndexAt(x, y), got.ColorIndexAt(x, y), "chrome pixel %d,%d", x, y)
+// A source at twice the display rate is drawn with the axis of the display
+// rate, and the time axis comes from the analysis at the source rate.
+func TestRenderDisplayRateLabelsAxis(t *testing.T) {
+	const width, rows = 258, 129
+	src := noiseSource(sourceRate48k, 2, 5)
+	opt := Options{Width: width, Rows: rows, RangeDB: testRangeDB, DisplayRate: displayRate24k}
+	img, cols, err := Render(t.Context(), src, opt)
+	require.NoError(t, err)
+
+	fit, err := newFit(src.rate, src.SpanSamples(), opt, 2)
+	require.NoError(t, err)
+	assertChromeMatches(t, img, cols, opt, displayRate24k, fit.SecondsSpanned(cols))
+}
+
+// The rows of a source at twice the display rate are the first bins of the
+// analysis at the source rate with a frame twice as long.
+func TestRenderDisplayRateDrawsFirstBins(t *testing.T) {
+	for _, width := range []int{258, 2050} {
+		for _, window := range []WindowKind{WindowHann, WindowDolph} {
+			src := noiseSource(sourceRate48k, 2, 11)
+			rows := rowsFor(width)
+			opt := Options{Width: width, Rows: rows, Raw: true, RangeDB: testRangeDB, Style: Style{Window: window}, DisplayRate: displayRate24k}
+			img, cols, err := Render(t.Context(), src, opt)
+			require.NoError(t, err)
+
+			shape := stft.WindowShape{}
+			if window == WindowDolph {
+				shape = stft.WindowShape{Family: stft.ShapeDolphChebyshev, AttenuationDB: spectrogram.DolphAttenuationDB(testRangeDB, 0, 0)}
+			}
+			fit, err := spectrogram.NewFit(spectrogram.FitConfig{SampleRate: sourceRate48k, FrameSize: 4 * (rows - 1), Columns: width, Window: shape})
+			require.NoError(t, err)
+			m, err := fit.Compute(src.samples, src.SpanSamples())
+			require.NoError(t, err)
+			require.Equal(t, m.Frames, cols, "width %d window %v", width, window)
+
+			for i := range cols {
+				for j := range rows {
+					want := soxchrome.ColourIndex(m.Data[i*m.Bins+j], testRangeDB)
+					require.Equalf(t, want, pix(img, i, rows-1-j), "width %d window %v column %d bin %d", width, window, i, j)
+				}
 			}
 		}
+	}
+}
+
+func TestFrameMultiple(t *testing.T) {
+	tests := []struct {
+		name         string
+		source, disp int
+		wantMultiple int
+		wantOK       bool
+	}{
+		{"equal rates", 24000, 24000, 1, true},
+		{"twice the display rate", 48000, 24000, 2, true},
+		{"four times is past the cap", 96000, 24000, 0, false},
+		{"integer ratio that is not a power of two", 72000, 24000, 0, false},
+		{"not an exact multiple", 44100, 24000, 0, false},
+		{"source below the display rate", 12000, 24000, 0, false},
+		{"display rate zero", 24000, 0, 0, false},
+		{"display rate negative", 48000, -24000, 0, false},
+		{"source rate zero", 0, 24000, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			multiple, ok := FrameMultiple(tt.source, tt.disp)
+			assert.Equal(t, tt.wantOK, ok)
+			assert.Equal(t, tt.wantMultiple, multiple)
+		})
 	}
 }
 

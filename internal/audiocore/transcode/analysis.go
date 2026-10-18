@@ -72,6 +72,14 @@ func newMonoSource(data []byte, srcRate, channels, toRate int) (*MonoSource, err
 	return &MonoSource{data: data, srcRate: srcRate, channels: channels, dstRate: toRate}, nil
 }
 
+// WithRate returns a source over the same decoded samples that delivers toRate,
+// resampling while streaming as DecodeMono does; zero or less keeps the source
+// rate. The samples are shared, not copied, and m is unchanged. A rate outside
+// the supported bounds wraps ErrUnsupportedSource.
+func (m *MonoSource) WithRate(toRate int) (*MonoSource, error) {
+	return newMonoSource(m.data, m.srcRate, m.channels, toRate)
+}
+
 // SampleRate returns the rate, in Hz, of the samples Stream delivers.
 func (m *MonoSource) SampleRate() int { return m.dstRate }
 

@@ -245,7 +245,7 @@ responses carry `spectrogramOnly: true` for these detections (the field is omitt
 otherwise); `clipName` / `hasAudio` stay empty / false, so clients show the image but no
 player or download.
 
-**Spectrogram frequency range.** Bird spectrograms render at 24 kHz, so they span 0 to 12 kHz. Bat
+**Spectrogram frequency range.** Bird spectrograms span 0 to 12 kHz. Bat
 spectrograms render at the clip's own sample rate and span 0 to half of it (a 384 kHz clip shows 0 to
 192 kHz, a 192 kHz clip 0 to 96 kHz). Bat renders carry the `-bat-v3` token in their file name, and a
 fresh render removes the older `-bat-v2` and `-bat` files next to it.

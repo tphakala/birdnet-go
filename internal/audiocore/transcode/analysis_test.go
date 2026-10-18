@@ -351,6 +351,34 @@ func TestDecodeMono_StereoResampleMatchesMono(t *testing.T) {
 	}
 }
 
+// WithRate must build the source DecodeMono builds for the same target rate,
+// stereo included, and leave the receiver at the rate it was decoded at.
+func TestMonoSource_WithRateMatchesDecodeRate(t *testing.T) {
+	const (
+		srcRate = 48000
+		dstRate = 24000
+		seconds = 1.5
+	)
+	path := filepath.Join(t.TempDir(), "stereo.wav")
+	writeWAVChannels(t, path, tone(srcRate, 2, seconds, testToneHz, testAmp), srcRate, 2)
+
+	native, err := DecodeMono(t.Context(), path, 0)
+	require.NoError(t, err)
+	want, err := DecodeMono(t.Context(), path, dstRate)
+	require.NoError(t, err)
+
+	got, err := native.WithRate(dstRate)
+	require.NoError(t, err)
+
+	assert.Equal(t, want.SampleRate(), got.SampleRate())
+	assert.Equal(t, want.SpanSamples(), got.SpanSamples())
+	assert.Equal(t, collectStream(t, want), collectStream(t, got))
+	assert.Equal(t, srcRate, native.SampleRate(), "the receiver keeps its rate")
+
+	_, err = native.WithRate(minSourceSampleRate - 1)
+	require.ErrorIs(t, err, ErrUnsupportedSource)
+}
+
 // Cancelling while the last resampled chunk is delivered must still return the
 // context error, not flush the resampler tail and report success.
 func TestMonoSource_CanceledOnLastChunkWhileResampling(t *testing.T) {

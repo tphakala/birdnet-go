@@ -103,11 +103,15 @@ func (g *Generator) generateNativeFromFile(ctx context.Context, settings *conf.S
 
 	return runAtLowPriority(func() error {
 		start := time.Now()
-		src, err := transcode.DecodeMono(ctx, audioPath, profile.ResampleRate)
+		decoded, err := transcode.DecodeMono(ctx, audioPath, 0)
 		if err != nil {
 			return g.nativeError(ctx, err, nativeOperationFile)
 		}
-		return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationFile, time.Since(start), weight)
+		src, displayRate, err := analysisSource(decoded, profile)
+		if err != nil {
+			return g.nativeError(ctx, err, nativeOperationFile)
+		}
+		return g.renderNative(ctx, settings, src, displayRate, tempPath, width, raw, nativeOperationFile, time.Since(start), weight)
 	})
 }
 
@@ -117,30 +121,57 @@ func (g *Generator) generateNativeFromFile(ctx context.Context, settings *conf.S
 func (g *Generator) generateNativeFromPCM(ctx context.Context, settings *conf.Settings, pcmData []byte, tempPath string, width int, raw bool, sampleRate int, profile FrequencyProfile) error {
 	return runAtLowPriority(func() error {
 		start := time.Now()
-		src, err := transcode.MonoFromPCM16(pcmData, pcmSourceRate(sampleRate), profile.ResampleRate)
+		decoded, err := transcode.MonoFromPCM16(pcmData, pcmSourceRate(sampleRate), 0)
 		if err != nil {
 			return g.nativeError(ctx, err, nativeOperationPCM)
 		}
-		return g.renderNative(ctx, settings, src, tempPath, width, raw, nativeOperationPCM, time.Since(start), 0)
+		src, displayRate, err := analysisSource(decoded, profile)
+		if err != nil {
+			return g.nativeError(ctx, err, nativeOperationPCM)
+		}
+		return g.renderNative(ctx, settings, src, displayRate, tempPath, width, raw, nativeOperationPCM, time.Since(start), 0)
 	})
+}
+
+// analysisSource picks what to analyse for a decoded clip and the display rate
+// to render it at. A profile with a ResampleRate of zero or less (bat) keeps the
+// clip rate, as newMonoSource does for such a target. A clip whose rate is an
+// accepted multiple of the profile rate (render.FrameMultiple) is analysed at its
+// own rate and drawn for the profile rate. Any other clip is resampled to the
+// profile rate while streaming, which Render then draws without a multiple.
+func analysisSource(src *transcode.MonoSource, profile FrequencyProfile) (render.Source, int, error) {
+	if profile.ResampleRate <= 0 {
+		return src, 0, nil
+	}
+	if _, ok := render.FrameMultiple(src.SampleRate(), profile.ResampleRate); ok {
+		return src, profile.ResampleRate, nil
+	}
+	resampled, err := src.WithRate(profile.ResampleRate)
+	if err != nil {
+		return nil, 0, err
+	}
+	return resampled, profile.ResampleRate, nil
 }
 
 // renderNative draws src and writes the PNG to tempPath. A file already at
 // tempPath is a stale temp from a crashed run (the name carries the pid and a
 // per-process sequence) and is removed first; the file is then created
 // exclusively, so a symlink or a file that appears in between still fails.
-// decodeElapsed is the time the caller spent reading and resampling src; it is
-// only logged, with the render and write times, so the renderers can be compared,
-// and so is budgetWeight, the render budget bytes the caller holds (zero when it
-// holds none).
-func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, tempPath string, width int, raw bool, operation string, decodeElapsed time.Duration, budgetWeight int64) error {
+// displayRate is the rate the picture is drawn for (see
+// render.Options.DisplayRate); zero draws at the rate of src. decodeElapsed is the
+// time the caller spent decoding src; resampling, when any, runs inside Render's
+// stream and counts as render time. It is only logged, with the render and write
+// times, so the renderers can be compared. budgetWeight is the render budget
+// bytes the caller holds (zero when it holds none), also only logged.
+func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, displayRate int, tempPath string, width int, raw bool, operation string, decodeElapsed time.Duration, budgetWeight int64) error {
 	renderStart := time.Now()
 	opt := render.Options{
-		Width:   width,
-		Rows:    fftFriendlyHeight(width),
-		Raw:     raw,
-		RangeDB: nativeRangeDB(g.getDynamicRange(settings)),
-		Style:   render.StyleFor(settings.Realtime.Dashboard.Spectrogram.Style),
+		Width:       width,
+		Rows:        fftFriendlyHeight(width),
+		Raw:         raw,
+		RangeDB:     nativeRangeDB(g.getDynamicRange(settings)),
+		Style:       render.StyleFor(settings.Realtime.Dashboard.Spectrogram.Style),
+		DisplayRate: displayRate,
 	}
 	img, cols, err := render.Render(ctx, src, opt)
 	if err != nil {
@@ -170,6 +201,7 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 		logger.Int("width", width),
 		logger.Int("columns", cols),
 		logger.Int("sample_rate", src.SampleRate()),
+		logger.Int("display_rate", displayRate),
 		logger.Int64("budget_weight_bytes", budgetWeight),
 		logger.Int64("decode_ms", decodeElapsed.Milliseconds()),
 		logger.Int64("render_ms", renderElapsed.Milliseconds()),

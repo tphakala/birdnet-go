@@ -28,6 +28,11 @@ const (
 	// the height the generator derives for maxWidth.
 	maxWidth = 8192
 	maxRows  = 4097
+
+	// maxFrameMultiple is the largest ratio of source rate to display rate that
+	// is analysed without resampling. Larger ratios measured slower than
+	// resampling at the widest size.
+	maxFrameMultiple = 2
 )
 
 // Sentinel errors. Render wraps them; test with errors.Is.
@@ -54,9 +59,16 @@ type Source interface {
 type Options struct {
 	// Width is the column limit of the raster, from soxchrome.MinWidth to 8192.
 	Width int
-	// Rows is the raster height, 2 to 4097; the analysis frame is 2*(Rows-1), so
-	// Rows-1 must be a power of two.
+	// Rows is the raster height, 2 to 4097; the analysis frame is 2*(Rows-1)
+	// times the frame multiple (1 without DisplayRate), so Rows-1 must be a power
+	// of two.
 	Rows int
+	// DisplayRate is the sample rate in Hz the picture is drawn for: the rows span
+	// DC to DisplayRate/2 and the frequency axis is labelled for it. Zero draws at
+	// the source rate. Otherwise the source rate must be FrameMultiple times
+	// DisplayRate, and the source is analysed at its own rate with a frame that
+	// many times longer, of which the first Rows bins are drawn.
+	DisplayRate int
 	// Raw draws the raster alone, without axes and legend.
 	Raw bool
 	// RangeDB is the display dynamic range in dB, 20 to 180.
@@ -65,9 +77,26 @@ type Options struct {
 	Style Style
 }
 
+// FrameMultiple returns the ratio of sourceRate to displayRate when a source at
+// sourceRate can be drawn at displayRate without resampling: both rates are
+// positive, sourceRate is an exact multiple of displayRate, and the ratio is at
+// most maxFrameMultiple (1 or 2, so the analysis frame stays a power of two).
+// Otherwise ok is false and the caller resamples the source to displayRate.
+func FrameMultiple(sourceRate, displayRate int) (multiple int, ok bool) {
+	if sourceRate <= 0 || displayRate <= 0 || sourceRate%displayRate != 0 {
+		return 0, false
+	}
+	if multiple = sourceRate / displayRate; multiple > maxFrameMultiple {
+		return 0, false
+	}
+	return multiple, true
+}
+
 // Render draws the spectrogram of src. It returns the image, cropped to the
 // columns the analysis produced, and that column count (at most Options.Width).
-// Context errors are returned unchanged. Render is safe for concurrent use.
+// A DisplayRate that FrameMultiple rejects for the rate of src wraps
+// ErrInvalidOptions. Context errors are returned unchanged. Render is safe for
+// concurrent use.
 func Render(ctx context.Context, src Source, opt Options) (img image.Image, cols int, err error) {
 	if err := validate(opt); err != nil {
 		return nil, 0, err
@@ -76,12 +105,19 @@ func Render(ctx context.Context, src Source, opt Options) (img image.Image, cols
 	if rate <= 0 || span <= 0 {
 		return nil, 0, ErrEmptyClip
 	}
+	if opt.DisplayRate == 0 {
+		opt.DisplayRate = rate
+	}
+	mult, ok := FrameMultiple(rate, opt.DisplayRate)
+	if !ok {
+		return nil, 0, fmt.Errorf("%w: source rate %d Hz cannot be drawn at %d Hz without resampling", ErrInvalidOptions, rate, opt.DisplayRate)
+	}
 	gl, err := atlas()
 	if err != nil {
 		return nil, 0, err
 	}
 
-	fit, err := newFit(rate, span, opt)
+	fit, err := newFit(rate, span, opt, mult)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -96,7 +132,9 @@ func Render(ctx context.Context, src Source, opt Options) (img image.Image, cols
 	}
 	rangeDB := float64(opt.RangeDB)
 	onColumn := func(col []float32, i int) {
-		for j, v := range col {
+		// Fit returns FrameSize/2+1 bins; with a multiple above one only the first
+		// Rows lie in 0..DisplayRate/2.
+		for j, v := range col[:opt.Rows] {
 			cv.Set(x0+i, y0+j, soxchrome.ColourIndex(v, rangeDB))
 		}
 		cols = i + 1
@@ -119,7 +157,7 @@ func Render(ctx context.Context, src Source, opt Options) (img image.Image, cols
 
 	if !opt.Raw {
 		soxchrome.DrawChrome(cv, soxchrome.ChromeParams{
-			Cols: cols, Rows: opt.Rows, SampleRate: rate,
+			Cols: cols, Rows: opt.Rows, SampleRate: opt.DisplayRate,
 			Seconds: fit.SecondsSpanned(cols), RangeDB: rangeDB,
 		})
 	}
@@ -138,6 +176,8 @@ func validate(opt Options) error {
 		return fmt.Errorf("%w: rows %d is above %d", ErrInvalidOptions, opt.Rows, maxRows)
 	case opt.Rows < minRows:
 		return fmt.Errorf("%w: rows %d is below %d", ErrInvalidOptions, opt.Rows, minRows)
+	case opt.DisplayRate < 0:
+		return fmt.Errorf("%w: display rate %d is negative", ErrInvalidOptions, opt.DisplayRate)
 	case opt.RangeDB < minRangeDB || opt.RangeDB > maxRangeDB:
 		return fmt.Errorf("%w: range %d dB is outside %d..%d", ErrInvalidOptions, opt.RangeDB, minRangeDB, maxRangeDB)
 	}
@@ -145,15 +185,16 @@ func validate(opt Options) error {
 }
 
 // newFit builds and resets the analyser for one render. A configuration Fit
-// rejects is reported as ErrInvalidOptions with the cause kept.
-func newFit(rate int, span int64, opt Options) (*spectrogram.Fit, error) {
+// rejects is reported as ErrInvalidOptions with the cause kept. multiple is the
+// frame multiple of the source rate over the display rate.
+func newFit(rate int, span int64, opt Options, multiple int) (*spectrogram.Fit, error) {
 	window := stft.WindowShape{}
 	if opt.Style.Window == WindowDolph {
 		window = stft.WindowShape{Family: stft.ShapeDolphChebyshev, AttenuationDB: spectrogram.DolphAttenuationDB(float64(opt.RangeDB), 0, 0)}
 	}
 	fit, err := spectrogram.NewFit(spectrogram.FitConfig{
 		SampleRate: rate,
-		FrameSize:  2 * (opt.Rows - 1),
+		FrameSize:  multiple * 2 * (opt.Rows - 1),
 		Columns:    opt.Width,
 		Window:     window,
 	})
