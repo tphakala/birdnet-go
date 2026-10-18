@@ -157,8 +157,10 @@ type DetectionResponse struct {
 	Confidence     float64     `json:"confidence"`
 	ClipName       string      `json:"clipName,omitempty"` // Audio clip filename (basename only, no path); empty when no clip exists
 	// SpectrogramOnly is true when the audio clip was removed by retention but a spectrogram image was kept; the frontend shows the image without playback
-	SpectrogramOnly    bool              `json:"spectrogramOnly,omitempty"`
-	ModelType          string            `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
+	SpectrogramOnly bool   `json:"spectrogramOnly,omitempty"`
+	ModelType       string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
+	// ClipSampleRate is the sample rate in Hz of the detection's original audio clip, omitted when unknown. Bat spectrograms span 0 to half of it. A spectrogram-only detection reports the original clip's rate.
+	ClipSampleRate     int               `json:"clipSampleRate,omitempty"`
 	Verified           string            `json:"verified"`
 	Locked             bool              `json:"locked"`
 	Unlikely           bool              `json:"unlikely,omitempty"`
@@ -791,6 +793,7 @@ func (c *Handler) noteToDetectionResponse(note *datastore.Note, includeWeather b
 		ClipName: apicore.SafeBaseName(note.ClipName),
 		// SpectrogramOnly never exposes the kept clip name, only that an image exists.
 		SpectrogramOnly: note.IsSpectrogramOnly(),
+		ClipSampleRate:  note.ClipSampleRate,
 		Locked:          note.Locked,
 		Unlikely:        note.Unlikely,
 	}
@@ -1244,13 +1247,20 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 	})
 }
 
-// GetDetection returns a single detection by ID
+// GetDetection returns a single detection by ID. For a bat detection with a clip
+// but no stored clip sample rate it reads that clip's header once, waiting at most
+// clipRateResponseBudget, stores the rate, and returns it as clipSampleRate; when
+// the wait is exceeded or the clip cannot be read the field is omitted.
 func (c *Handler) GetDetection(ctx echo.Context) error {
 	id := ctx.Param("id")
 	note, err := c.DS.Get(id)
 	if err != nil {
 		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
+
+	// An old bat row may have no clip sample rate yet; learn it from the clip
+	// header (bounded wait). No list or search path does this.
+	c.fillClipSampleRate(&note)
 
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
@@ -1365,7 +1375,7 @@ func (c *Handler) removeDetectionFiles(clipName string) {
 
 	// Remove all associated spectrogram files. buildSpectrogramPaths names them
 	// <basename>_<width>px<suffix>.png, where <suffix> encodes the visual style,
-	// dynamic range, frequency profile (e.g. "-bat-v2") and legend/raw variant - and a
+	// dynamic range, frequency profile (e.g. "-bat-v3") and legend/raw variant - and a
 	// single clip can accumulate several of these as those settings change over time;
 	// the prerenderer writes <basename>.png. Rather than enumerate every combination
 	// (and miss renders from styles no longer configured), scan the directory and

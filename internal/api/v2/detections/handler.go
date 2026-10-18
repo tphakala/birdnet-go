@@ -71,6 +71,14 @@ type Handler struct {
 	loadCommonNameMap         func() map[string]string
 	loadFoldedCommonNameMap   func() map[string]string
 	loadCommonToScientificMap func() map[string]string
+
+	// probeClipRate reads a clip's sample rate from its header for the lazy fill
+	// (clip_rate_fill.go); nil means the production probe. Tests replace it.
+	probeClipRate clipRateProbe
+	// clipRateWait overrides clipRateResponseBudget when positive. Tests only.
+	clipRateWait time.Duration
+	// clipRateGroup de-duplicates the lazy fill per row while it is in flight.
+	clipRateGroup clipRateFlight
 }
 
 // New constructs the detections domain handler around the shared core and the
