@@ -9,6 +9,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
@@ -166,11 +168,24 @@ func TestStoragePersistenceReport(t *testing.T) {
 		assert.Equal(t, diagnostics.StorageLabelDatabase, report.Verdicts[1].Label)
 		assert.Equal(t, diagnostics.PersistenceContainerLayer, report.Verdicts[1].Class, "SQLite sidecar files sit beside the database in the directory")
 	})
+}
 
-	t.Run("missing settings is not applicable", func(t *testing.T) {
-		t.Parallel()
-		h := newHandler(sysinfo.EnvDocker, nil)
-		h.storageDeps.settings = func() *conf.Settings { return nil }
-		assert.False(t, h.storagePersistenceReport().Applicable)
-	})
+func TestStoragePersistenceReport_NilSettingsKeepsState(t *testing.T) {
+	rec := newStorageNoticeRecorder(t, 1, 0)
+	f := newNoticeFixture(rec)
+	f.set("models", classLayer)
+	f.sync()
+	f.h.storageDeps.settings = func() *conf.Settings { return nil }
+
+	report := f.h.storagePersistenceReport()
+
+	assert.True(t, report.Applicable, "a missing settings snapshot does not make the check not applicable")
+	require.Error(t, report.Err)
+	f.sync()
+	created, deleted := rec.counts()
+	assert.Equal(t, 1, created)
+	assert.Zero(t, deleted, "the live notice is kept while the settings are unavailable")
+	res := checks.NewStoragePersistenceCheck(f.h.storagePersistenceReport).Run(t.Context())
+	assert.Equal(t, health.StatusUnknown, res.Status)
+	assert.Equal(t, "Storage state could not be read", res.Message)
 }

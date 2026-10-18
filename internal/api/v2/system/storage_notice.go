@@ -197,7 +197,8 @@ func (n *storageNotice) effectiveVerdicts(report []diagnostics.StorageVerdict) [
 
 // syncStorageNotices evaluates the key paths and raises, replaces or clears the
 // two persistent bell notices to match. It is idempotent and safe to call
-// concurrently. An unreadable mount table leaves both notices as they are, and a
+// concurrently. An unreadable mount table or a missing settings snapshot leaves both
+// notices as they are, and a
 // path that cannot be judged keeps its last known verdict: an unknown result is
 // neither an alarm nor proof that the problem went away.
 func (c *Handler) syncStorageNotices() {
@@ -211,7 +212,7 @@ func (c *Handler) syncStorageNotices() {
 
 	report := c.storagePersistenceReport()
 	if report.Applicable && report.Err != nil {
-		c.LogWarnIfEnabled("storage notice skipped: mount table unreadable", logger.Error(report.Err))
+		c.LogWarnIfEnabled("storage notice skipped: storage state unreadable", logger.Error(report.Err))
 		return
 	}
 

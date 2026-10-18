@@ -6,9 +6,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
+
+// errStorageSettingsUnavailable is the report error while no settings snapshot
+// exists yet; the notices keep their state and the health check is unknown.
+var errStorageSettingsUnavailable = errors.NewStd("settings snapshot unavailable")
 
 // storageDeps are the environment reads behind the storage persistence report.
 // A nil field means the real implementation; tests replace them so they never
@@ -77,7 +82,9 @@ func isInMemorySQLite(p string) bool {
 
 // storagePersistenceReport evaluates the key paths against the mount table. The
 // settings, the config location and the mount table are read on every call, so
-// setting changes apply without a restart.
+// setting changes apply without a restart. Outside Docker and Podman the report
+// is not applicable; a missing settings snapshot or an unreadable mount table
+// gives an applicable report carrying an error.
 func (c *Handler) storagePersistenceReport() checks.StoragePersistenceReport {
 	d := c.storageDeps
 	envType := func() string {
@@ -97,7 +104,7 @@ func (c *Handler) storagePersistenceReport() checks.StoragePersistenceReport {
 	}
 	s := settings()
 	if s == nil {
-		return checks.StoragePersistenceReport{}
+		return checks.StoragePersistenceReport{Applicable: true, Err: errStorageSettingsUnavailable}
 	}
 
 	location := defaultConfigLocation

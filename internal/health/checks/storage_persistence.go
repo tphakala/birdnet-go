@@ -13,7 +13,7 @@ import (
 const (
 	msgStorageNotContainer  = "Not running in a Docker or Podman container"
 	msgStorageNoPaths       = "No storage paths to check"
-	msgStorageReadFailed    = "Mount table could not be read"
+	msgStorageReadFailed    = "Storage state could not be read"
 	msgStorageUnjudged      = "Storage paths could not be judged"
 	msgStorageAllPersistent = "All data paths are on persistent volumes"
 	msgStorageLostPrefix    = "Lost when the container is recreated: "
@@ -29,7 +29,8 @@ const (
 type StoragePersistenceReport struct {
 	// Applicable is false outside Docker and Podman containers.
 	Applicable bool
-	// Err is set when the mount table could not be read.
+	// Err is set when the storage state could not be read (the mount table or
+	// the settings).
 	Err error
 	// Verdicts holds one verdict per key path, in label order.
 	Verdicts []diagnostics.StorageVerdict
