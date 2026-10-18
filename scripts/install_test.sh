@@ -577,6 +577,64 @@ generate_systemd_service_content > "$unit_section"
 assert_eq "unit waits for the config directory mount" "1" "$(sed -n '/^\[Unit\]/,/^\[Service\]/p' "$unit_section" | grep -c -x -- "RequiresMountsFor=${CONFIG_DIR}")"
 
 # ===========================================================================
+# generate_systemd_service_content: native HLS needs no directory, so the unit must not
+# create or mount anything under <config>/hls (older units mounted a tmpfs there at every
+# start and could leave many stacked).
+# ===========================================================================
+it "generate_systemd_service_content writes no HLS mount"
+
+assert_eq "unit has no hls path" "0" "$(grep -c 'hls' "$unit_section")"
+assert_eq "unit mounts no tmpfs" "0" "$(grep -c 'tmpfs' "$unit_section")"
+assert_eq "unit has no umount step" "0" "$(grep -c 'umount' "$unit_section")"
+
+# ===========================================================================
+# cleanup_hls_mount: an older unit mounted a new tmpfs on <config>/hls at every start, so a
+# host can carry many stacked layers and one umount removes only the top one. The stubs
+# below model N layers: mount lists the path while any remain, mountpoint tests for one, and
+# umount removes the top layer when its mode allows.
+# ===========================================================================
+it "cleanup_hls_mount"
+load_fn cleanup_hls_mount
+
+hls_cleanup() { # layers mode -> "<layers left>|<outcome message>"
+    (
+        CONFIG_DIR="${WORK}/hls-cleanup"
+        HLS_LAYERS="$1"; HLS_MODE="$2"; HLS_VIA_SUDO=0; HLS_OUTCOME=""
+        print_message() {
+            case "$1" in
+                *"Successfully unmounted"* | *"Failed to unmount"* | *"No tmpfs mount found"*) HLS_OUTCOME="$1" ;;
+            esac
+        }
+        systemctl() { return 1; }
+        mount() { [ "$HLS_LAYERS" -gt 0 ] && printf 'tmpfs on %s/hls type tmpfs (rw)\n' "$CONFIG_DIR"; return 0; }
+        mountpoint() { [ "$HLS_LAYERS" -gt 0 ]; }
+        # HLS_MODE says which variant can remove a layer: plain umount, only sudo umount
+        # without -l, only the lazy umount -l, or none of them.
+        umount() {
+            case "$HLS_MODE" in
+                plain) ;;
+                sudo) { [ "$HLS_VIA_SUDO" -eq 1 ] && [ "${1:-}" != "-l" ]; } || return 1 ;;
+                lazy) [ "${1:-}" = "-l" ] || return 1 ;;
+                *) return 1 ;;
+            esac
+            HLS_LAYERS=$((HLS_LAYERS - 1))
+        }
+        sudo() { local rc; HLS_VIA_SUDO=1; "$@"; rc=$?; HLS_VIA_SUDO=0; return $rc; }
+        cleanup_hls_mount
+        printf '%s|%s' "$HLS_LAYERS" "$HLS_OUTCOME"
+    )
+}
+
+assert_eq "no layers: nothing to unmount" "0|No tmpfs mount found at ${WORK}/hls-cleanup/hls" "$(hls_cleanup 0 plain)"
+assert_eq "one layer is unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 1 plain)"
+assert_eq "two stacked layers are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 2 plain)"
+assert_eq "219 stacked layers are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 219 plain)"
+assert_eq "layers only sudo umount can remove are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 sudo)"
+assert_eq "layers only umount -l can remove are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 lazy)"
+assert_eq "an unmount that always fails stops the loop and reports it" "3|❌ Failed to unmount ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 none)"
+assert_eq "the loop stops at its layer cap" "500|❌ Failed to unmount ${WORK}/hls-cleanup/hls" "$(hls_cleanup 2500 plain)"
+
+# ===========================================================================
 # generate_systemd_service_content: the read-only Avahi and system D-Bus directory
 # mounts (for .local resolution and DNS-SD discovery) are gated per socket on
 # host_socket_mount, independently of each other.
