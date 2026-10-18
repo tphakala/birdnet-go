@@ -54,6 +54,8 @@ type rateStore struct {
 	// and fail with the context's error; stallErr records that error.
 	stallNext bool
 	stallErr  error
+	// onFill, when set, runs at the start of FillClipSampleRate, before the lock.
+	onFill func()
 }
 
 func (s *rateStore) Get(string) (datastore.Note, error) {
@@ -63,6 +65,9 @@ func (s *rateStore) Get(string) (datastore.Note, error) {
 }
 
 func (s *rateStore) FillClipSampleRate(ctx context.Context, _ uint, clipName string, rate int) (bool, error) {
+	if s.onFill != nil {
+		s.onFill()
+	}
 	s.mu.Lock()
 	s.fillCalls++
 	if s.stallNext {
@@ -350,6 +355,43 @@ func TestGetDetection_LazyFill_ProbePanicIsContained(t *testing.T) {
 	_, rate = getDetectionRate(t, e, h)
 	assert.Equal(t, rateTestBatRate, rate)
 	assert.Equal(t, int32(1), probes.Load())
+}
+
+func TestGetDetection_LazyFill_ClosesTheClipHandle(t *testing.T) {
+	tests := []struct {
+		name   string
+		probe  func(*os.File) (int, error)
+		writes bool
+	}{
+		{"probe succeeds", func(*os.File) (int, error) { return rateTestBatRate, nil }, true},
+		{"probe fails", func(*os.File) (int, error) { return 0, errors.NewStd("probe failed") }, false},
+		{"probe panics", func(*os.File) (int, error) { panic("malformed header") }, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), nil)
+			var handle *os.File
+			probes := 0
+			h.probeClipRate = func(_ context.Context, f *os.File, _ string) (int, error) {
+				probes++
+				handle = f
+				return tt.probe(f)
+			}
+			store.onFill = func() {
+				_, err := handle.Stat()
+				assert.ErrorIs(t, err, os.ErrClosed, "the handle is closed before the write")
+			}
+
+			getDetectionRate(t, e, h)
+
+			require.Equal(t, 1, probes, "the probe ran once")
+			_, err := handle.Stat()
+			require.ErrorIs(t, err, os.ErrClosed, "the handle is closed once the request has answered")
+			if tt.writes {
+				assert.Equal(t, 1, store.fills(), "the write ran, so the before-write check ran")
+			}
+		})
+	}
 }
 
 func TestGetDetection_LazyFill_WriteFails(t *testing.T) {
