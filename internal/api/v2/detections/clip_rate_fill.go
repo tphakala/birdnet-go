@@ -3,7 +3,6 @@ package detections
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"strconv"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/securefs"
 )
 
 const (
@@ -46,12 +46,15 @@ var errClipRateWorkPanicked = errors.NewStd("clip sample rate work panicked")
 var errClipRateInvalid = errors.NewStd("clip sample rate is not positive")
 
 // clipRateProbe reads a clip's sample rate from its header without decoding it.
-type clipRateProbe func(ctx context.Context, path string) (int, error)
+// f is the clip, already opened inside the SecureFS root and positioned at its
+// start; name only selects the decoder by its extension. The probe does not
+// close f.
+type clipRateProbe func(ctx context.Context, f *os.File, name string) (int, error)
 
-// probeClipFileRate is the production clipRateProbe: the decoder's header probe,
-// the same one the native spectrogram renderer opens clips with.
-func probeClipFileRate(ctx context.Context, path string) (int, error) {
-	info, err := transcode.ProbeFile(ctx, path)
+// probeClipFileRate is the production clipRateProbe: the decoder's header probe on
+// the opened clip, so no path is resolved again after the open.
+func probeClipFileRate(ctx context.Context, f *os.File, name string) (int, error) {
+	info, err := transcode.ProbeOpenFile(ctx, f, name)
 	if err != nil {
 		return 0, err
 	}
@@ -69,18 +72,20 @@ func wantsClipRateFill(note *datastore.Note) bool {
 // none and stores it, so GetDetection can return it. Only GetDetection calls it;
 // list, search and SSE paths never probe a clip for the rate.
 //
-// It reads one clip header (never the audio), shares the probe and the guarded
-// write between concurrent requests for the same row, and waits at most
-// clipRateResponseBudget. On a miss note.ClipSampleRate stays 0 and the work
-// finishes in the background. A failed probe writes nothing, so the next request
-// tries again, and so does a panic in the shared work, which is contained and
-// treated as a failed probe. The write changes a NULL value only (DetectionRepository.FillClipSampleRate)
-// and runs under the work context. It does nothing without a repository.
+// It opens the clip through SecureFS inside the shared work and probes the opened
+// file, so no path is re-resolved after the open. It reads one clip header (never
+// the audio), shares the probe and the guarded write between concurrent requests
+// for the same row, and waits at most clipRateResponseBudget. On a miss
+// note.ClipSampleRate stays 0 and the work finishes in the background. A failed
+// probe writes nothing, so the next request tries again, and so does a panic in
+// the shared work, which is contained and treated as a failed probe. The write
+// changes a NULL value only (DetectionRepository.FillClipSampleRate) and runs
+// under the work context. It does nothing without a repository.
 func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 	if c.Repo == nil || !wantsClipRateFill(note) {
 		return
 	}
-	absPath, ok := c.clipProbePath(note.ClipName)
+	rel, ok := c.resolveClipRel(note.ClipName)
 	if !ok {
 		return
 	}
@@ -102,7 +107,7 @@ func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 		// waiter, so one client disconnecting must not fail the others.
 		workCtx, cancel := context.WithTimeout(c.Context(), clipRateWorkTimeout)
 		defer cancel()
-		return c.probeAndStoreClipRate(workCtx, noteID, clipName, absPath)
+		return c.probeAndStoreClipRate(workCtx, noteID, clipName, rel)
 	})
 
 	timer := time.NewTimer(c.clipRateWait)
@@ -118,10 +123,10 @@ func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 	}
 }
 
-// clipProbePath resolves a stored clip name to the absolute path to probe, using
+// resolveClipRel resolves a stored clip name to its SecureFS-relative path, using
 // the same helpers as the spectrogram status endpoint. ok is false when the name
-// does not resolve inside the export directory or the clip is not a regular file.
-func (c *Handler) clipProbePath(clipName string) (string, bool) {
+// does not resolve inside the export directory. The name is checked lexically only.
+func (c *Handler) resolveClipRel(clipName string) (string, bool) {
 	if c.SFS == nil {
 		return "", false
 	}
@@ -129,28 +134,33 @@ func (c *Handler) clipProbePath(clipName string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	// StatRel resolves inside the SecureFS root, so a symlink cannot lead the probe
-	// outside it.
-	info, err := c.SFS.StatRel(rel)
-	if err != nil || !info.Mode().IsRegular() {
-		return "", false
+	return rel, true
+}
+
+// openAndProbeClip opens the clip at rel inside the SecureFS root and probes the
+// opened file. The handle is closed before the database write.
+func (c *Handler) openAndProbeClip(ctx context.Context, rel string) (int, error) {
+	f, err := c.SFS.OpenRegularRel(rel)
+	if err != nil {
+		return 0, err
 	}
-	return filepath.Join(c.SFS.BaseDir(), rel), true
+	defer func() { _ = f.Close() }()
+	return c.probeClipRate(ctx, f, rel)
 }
 
 // probeAndStoreClipRate probes the clip header and stores the rate while the row
 // is still NULL. It returns the probed rate even when the write fails or changes
 // no row, because the rate belongs to the clip the response names. The write runs
 // under ctx, so one that outlives the work timeout is cancelled and logged at debug.
-func (c *Handler) probeAndStoreClipRate(ctx context.Context, noteID uint, clipName, absPath string) (int, error) {
-	rate, err := c.probeClipRate(ctx, absPath)
+func (c *Handler) probeAndStoreClipRate(ctx context.Context, noteID uint, clipName, rel string) (int, error) {
+	rate, err := c.openAndProbeClip(ctx, rel)
 	if err != nil {
 		c.LogDebugIfEnabled("Clip sample rate probe failed",
 			logger.Uint64("note_id", uint64(noteID)),
 			logger.String("error_class", clipRateErrorClass(err)))
 		return 0, err
 	}
-	// ProbeFile rejects out-of-range rates; this keeps a non-positive value from ever being stored.
+	// The probe rejects out-of-range rates; this keeps a non-positive value from ever being stored.
 	if rate <= 0 {
 		return 0, errClipRateInvalid
 	}
@@ -178,7 +188,7 @@ func clipRateErrorClass(err error) string {
 		return clipRateErrMissing
 	case errors.Is(err, os.ErrPermission):
 		return clipRateErrPermission
-	case errors.Is(err, transcode.ErrUnsupportedSource):
+	case errors.Is(err, transcode.ErrUnsupportedSource), errors.Is(err, securefs.ErrNotRegularFile):
 		return clipRateErrUnsupported
 	case errors.Is(err, transcode.ErrUndecodableSource):
 		return clipRateErrNoAudio
