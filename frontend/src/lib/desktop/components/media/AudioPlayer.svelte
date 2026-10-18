@@ -23,6 +23,8 @@
     Use for flexible layouts like cards and tables. When false, uses fixed dimensions.
   - spectrogramSize: Spectrogram display size - md/lg/xl (default: lg)
   - spectrogramRaw: Display raw spectrogram without axes (default: false)
+  - modelType: AI model type ('bird', 'bat'); selects the frequency axis
+  - clipSampleRate: Clip sample rate in Hz; sets the bat frequency axis range
   - onPlayStart: Callback when audio starts playing (freezes SSE updates)
   - onPlayEnd: Callback when audio stops playing after 3s delay (resumes SSE updates)
 -->
@@ -66,6 +68,13 @@
     extensionFromContentDisposition,
   } from '$lib/utils/audioDownload';
   import { getCsrfToken } from '$lib/utils/api';
+  import { isKnownSampleRate, lookupClipSampleRate } from '$lib/utils/clipSampleRateLookup';
+  import {
+    fetchSpectrogramStatus,
+    parseSpectrogramStatus,
+    type SpectrogramGenerationStatus,
+  } from '$lib/utils/spectrogramStatus';
+  import { batFrequencyAxis } from '$lib/utils/spectrogramAxis';
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
 
@@ -120,6 +129,11 @@
     clipLabel?: string;
     /** AI model type (e.g. 'bird', 'bat'); selects the spectrogram frequency axis range */
     modelType?: string;
+    /**
+     * Sample rate of the clip in Hz. Bat spectrograms span 0 to half this rate;
+     * when it is missing the player asks the detection endpoint for it once.
+     */
+    clipSampleRate?: number;
   }
 
   let {
@@ -139,6 +153,7 @@
     enableClipExtraction = false,
     clipLabel = '',
     modelType = '',
+    clipSampleRate,
   }: Props = $props();
 
   // Audio and UI elements
@@ -196,11 +211,7 @@
   let playRequestedAfterRetry = false;
 
   // Spectrogram generation status
-  let spectrogramStatus = $state<{
-    status: string;
-    queuePosition: number;
-    message: string;
-  } | null>(null);
+  let spectrogramStatus = $state<SpectrogramGenerationStatus | null>(null);
   let statusPollTimer: ReturnType<typeof setTimeout> | undefined;
   let statusPollStartTime: number | undefined;
   let statusPollAbortController: AbortController | undefined;
@@ -302,27 +313,72 @@
   const FILTER_HP_MIN_FREQ = 20;
   const FILTER_HP_MAX_FREQ = 10000;
 
-  // Frequency scale overlay constants. Bird spectrograms are resampled to 24kHz
-  // (Nyquist = 12kHz); bat spectrograms keep the native capture rate and are always
-  // labelled on a fixed 0-128 kHz axis regardless of the clip's actual sample rate.
-  // The axis range follows the detection's model type.
+  // Frequency scale overlay. Bird spectrograms are resampled to 24 kHz, so their
+  // axis is a fixed 0-12 kHz. Bat spectrograms are rendered at the clip's own
+  // sample rate, so their axis runs from 0 to half the clip sample rate. Without a
+  // known rate the bat axis is hidden rather than guessed.
   const BIRD_NYQUIST_KHZ = 12;
   const BIRD_TICKS_KHZ = [12, 10, 8, 6, 5, 4, 3, 2, 1];
-  const BAT_NYQUIST_KHZ = 128;
-  const BAT_TICKS_KHZ = [120, 100, 80, 60, 40, 20];
   const MODEL_TYPE_BAT = 'bat';
+  // Query parameter that tells the server the rate the axis is drawn from; the
+  // server then serves only the exact render for that rate (404 otherwise).
+  const SPECTROGRAM_RATE_PARAM = 'sr';
+  // Longest wait for the status check of a failed image URL that carries the
+  // rate. It is longer than the server's 5 s wait for a missing audio file, so a
+  // 404 from that path still arrives in time.
+  const SPECTROGRAM_PROBE_TIMEOUT_MS = 8000;
+  const HTTP_STATUS_NOT_FOUND = 404;
+  // Generation statuses that mean the exact-rate render is coming or already
+  // there, so a 404 for it is not a missing render.
+  const RENDER_PENDING_OR_READY_STATUSES = new Set([
+    'queued',
+    'generating',
+    'generated',
+    'completed',
+    'exists',
+  ]);
+
   let isBatSpectrogram = $derived(modelType === MODEL_TYPE_BAT);
-  let freqNyquistKHz = $derived(isBatSpectrogram ? BAT_NYQUIST_KHZ : BIRD_NYQUIST_KHZ);
-  let freqTicksKHz = $derived(isBatSpectrogram ? BAT_TICKS_KHZ : BIRD_TICKS_KHZ);
+
+  // Rate learned from GET /api/v2/detections/:id, keyed by the detection it was
+  // resolved for so a new detection never reuses an old rate. rate is undefined
+  // when the resolve finished without one (error, timeout, field omitted).
+  let rateResolve = $state<{ detectionId: string; rate: number | undefined } | null>(null);
+  // Detection whose exact-rate spectrogram failed to load; it is shown without sr
+  // and without an axis instead.
+  let overlayFallbackDetectionId = $state<string | null>(null);
+
+  let needsRateResolve = $derived(
+    isBatSpectrogram && showSpectrogram && !isKnownSampleRate(clipSampleRate) && detectionId !== ''
+  );
+  let rateResolvePending = $derived(needsRateResolve && rateResolve?.detectionId !== detectionId);
+  let effectiveClipSampleRate = $derived(
+    isKnownSampleRate(clipSampleRate)
+      ? clipSampleRate
+      : rateResolve?.detectionId === detectionId
+        ? rateResolve.rate
+        : undefined
+  );
+  // Rate the spectrogram URL carries and the bat axis is drawn from.
+  let overlayRate = $derived(
+    isBatSpectrogram && overlayFallbackDetectionId !== detectionId
+      ? effectiveClipSampleRate
+      : undefined
+  );
+  let batAxis = $derived(isBatSpectrogram ? batFrequencyAxis(overlayRate) : null);
+  let freqNyquistKHz = $derived(isBatSpectrogram ? (batAxis?.nyquistKHz ?? 0) : BIRD_NYQUIST_KHZ);
+  let freqTicksKHz = $derived(isBatSpectrogram ? (batAxis?.ticksKHz ?? []) : BIRD_TICKS_KHZ);
   // PLAY_END_DELAY_MS imported from $lib/utils/audio
   // Spinner delay is now handled by useDelayedLoading utility
 
   // Computed values
-  // Base URL without cache-busting parameters
+  // Base URL without cache-busting parameters. It stays null while a bat rate
+  // is being resolved, so an image cached under a URL without the rate is never
+  // shown first under an axis it does not match.
   const spectrogramBaseUrl = $derived(
-    showSpectrogram
+    showSpectrogram && !rateResolvePending
       ? buildAppUrl(
-          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+          `/api/v2/spectrogram/${encodeURIComponent(detectionId)}?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}${overlayRate !== undefined ? `&${SPECTROGRAM_RATE_PARAM}=${overlayRate}` : ''}`
         )
       : null
   );
@@ -334,6 +390,16 @@
       (spectrogramBaseUrl
         ? `${spectrogramBaseUrl}&cache=${spectrogramCacheKey}${spectrogramRetryCount > 0 ? `&retry=${spectrogramRetryCount}` : ''}`
         : null)
+  );
+
+  // The frequency axis overlay: drawn over a spectrogram that has not failed,
+  // with a known range; a bat axis only once its image has loaded.
+  const showFreqAxis = $derived(
+    showSpectrogram &&
+      spectrogramUrl !== null &&
+      !spectrogramLoader.error &&
+      freqNyquistKHz > 0 &&
+      !(isBatSpectrogram && spectrogramLoader.loading)
   );
 
   const playPauseId = $derived(`playPause-${detectionId}`);
@@ -1313,6 +1379,12 @@
   };
 
   // Poll spectrogram generation status
+  // URL of this detection's spectrogram generation status.
+  const spectrogramStatusUrl = () =>
+    buildAppUrl(
+      `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
+    );
+
   const pollSpectrogramStatus = async () => {
     if (!showSpectrogram || !detectionId) {
       debugLog('pollSpectrogramStatus: skipped', {
@@ -1339,9 +1411,7 @@
     // Create new AbortController for this poll request
     statusPollAbortController = new AbortController();
 
-    const statusUrl = buildAppUrl(
-      `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
-    );
+    const statusUrl = spectrogramStatusUrl();
     debugLog('pollSpectrogramStatus: fetching', { url: statusUrl });
 
     try {
@@ -1353,10 +1423,9 @@
       });
 
       if (response.ok) {
-        const responseData = await response.json();
-        // Extract status from v2 envelope format
-        const status = responseData.data ?? responseData;
-        spectrogramStatus = status;
+        const status = parseSpectrogramStatus(await response.json());
+        spectrogramStatus = status ?? null;
+        if (!status) return;
 
         debugLog('pollSpectrogramStatus: status data', {
           status: status.status,
@@ -1413,6 +1482,64 @@
     statusPollStartTime = undefined;
   };
 
+  // Status check of a failed spectrogram image that carries the clip rate.
+  let spectrogramProbeAbortController: AbortController | undefined;
+
+  const clearSpectrogramProbe = () => {
+    spectrogramProbeAbortController?.abort();
+    spectrogramProbeAbortController = undefined;
+  };
+
+  // Loads the render the server has for this detection without the rate, and
+  // without an axis, instead of the exact-rate render.
+  const fallBackToImageWithoutRate = () => {
+    overlayFallbackDetectionId = detectionId;
+    clearSpectrogramRetryTimer();
+    clearStatusPollTimer();
+    clearSpectrogramProbe();
+  };
+
+  // An <img> cannot read the response status, so the failed URL is requested
+  // once more with fetch. A 404 means the exact-rate render does not exist
+  // (sr requests are answered from the exact render only), so the player falls
+  // back at once instead of spending its retries on it, unless the detection's
+  // spectrogram status reports a generation that is queued, running or just
+  // finished, which the status poll then waits for or reloads as before. Any other outcome (503 while a clip
+  // is written, a network error, the timeout) leaves the retries to run as
+  // before.
+  const probeExactRateRender = async (url: string) => {
+    clearSpectrogramProbe();
+    const controller = new AbortController();
+    spectrogramProbeAbortController = controller;
+    const probedBaseUrl = spectrogramBaseUrl;
+    const timeoutId = setTimeout(() => controller.abort(), SPECTROGRAM_PROBE_TIMEOUT_MS);
+    const stillCurrent = () =>
+      spectrogramBaseUrl === probedBaseUrl && overlayRate !== undefined && !processedSpectrogramUrl;
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      // Only the status is needed; drop the body.
+      void response.body?.cancel();
+      if (response.status !== HTTP_STATUS_NOT_FOUND || !stillCurrent()) return;
+
+      // Ask for the generation status here rather than reading the status
+      // poll's state, which may not have answered yet. If it cannot be read
+      // (network error, the timeout), the 404 decides on its own.
+      const generation = await fetchSpectrogramStatus(spectrogramStatusUrl(), controller.signal);
+      // Cancelled by an image load, a URL change or unmount: nothing to do.
+      if (spectrogramProbeAbortController !== controller || !stillCurrent()) return;
+      if (generation && RENDER_PENDING_OR_READY_STATUSES.has(generation.status)) return;
+      debugLog('probeExactRateRender: 404, dropping the rate and the axis');
+      fallBackToImageWithoutRate();
+    } catch {
+      // Aborted, timed out or failed: the retries carry on unchanged.
+    } finally {
+      clearTimeout(timeoutId);
+      if (spectrogramProbeAbortController === controller) {
+        spectrogramProbeAbortController = undefined;
+      }
+    }
+  };
+
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
     debugLog('handleSpectrogramLoad: success');
@@ -1420,6 +1547,7 @@
     spectrogramRetryCount = 0; // Reset retry count on successful load
     clearSpectrogramRetryTimer();
     clearStatusPollTimer(); // Also clear status polling
+    clearSpectrogramProbe();
   };
 
   const handleSpectrogramError = async (event: Event) => {
@@ -1450,6 +1578,10 @@
       debugLog('handleSpectrogramError: first error, starting status polling');
       statusPollStartTime = Date.now();
       pollSpectrogramStatus();
+      // An image requested with the clip rate: ask the server why it failed.
+      if (overlayRate !== undefined && !processedSpectrogramUrl && spectrogramUrl) {
+        void probeExactRateRender(spectrogramUrl);
+      }
     }
 
     // Retry on any error (likely 503 or temporary failure) up to max retries
@@ -1496,6 +1628,19 @@
         queuePosition: spectrogramStatus.queuePosition,
       });
       // Don't set error, keep polling
+      return;
+    }
+
+    // The image requested with the clip rate still fails after the retries and
+    // the status check on the first failure did not fall back (it timed out,
+    // the failure was not a missing render, or a 404 came with a pending or
+    // finished generation). Any persistent failure lands
+    // here unless the status poll reports a queued or running generation
+    // (handled above): load whatever render the server has, without the rate
+    // and without an axis, before giving up.
+    if (overlayRate !== undefined && !processedSpectrogramUrl) {
+      debugLog('handleSpectrogramError: exact-rate render unavailable, dropping the axis');
+      fallBackToImageWithoutRate();
       return;
     }
 
@@ -1616,6 +1761,30 @@
   };
   /* eslint-enable no-unused-vars */
 
+  // Resolve a missing bat clip sample rate once per detection. The detection
+  // endpoint reads it from the clip for older detections; list and search
+  // responses never carry it for those. The spectrogram request waits for the
+  // answer, at most CLIP_RATE_LOOKUP_TIMEOUT_MS, and goes out without a rate
+  // (and without an axis) when none comes back. Players for the same detection
+  // share one lookup (lookupClipSampleRate).
+  $effect(() => {
+    if (!rateResolvePending) return;
+
+    const resolvingId = detectionId;
+    const controller = new AbortController();
+    let active = true;
+    spectrogramLoader.setLoading(true);
+
+    void lookupClipSampleRate(resolvingId, controller.signal).then(rate => {
+      if (active) rateResolve = { detectionId: resolvingId, rate };
+    });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  });
+
   // Track previous base URL to detect when detection changes (not just cache key updates)
   let previousSpectrogramBaseUrl = $state<string | null>(null);
 
@@ -1641,8 +1810,9 @@
       spectrogramRetryCount = 0;
       spectrogramCacheKey = 0;
       clearSpectrogramRetryTimer();
-      // Abort any in-flight status polling when URL changes
+      // Abort any in-flight status polling and status check when URL changes
       clearStatusPollTimer();
+      clearSpectrogramProbe();
       // Revoke stale processed spectrogram from previous detection
       if (processedSpectrogramUrl) {
         URL.revokeObjectURL(processedSpectrogramUrl);
@@ -1899,6 +2069,7 @@
       clearPlayEndTimeout();
       clearSpectrogramRetryTimer();
       clearStatusPollTimer();
+      clearSpectrogramProbe();
       spectrogramLoader.cleanup();
       if (audioRetryTimer) {
         clearTimeout(audioRetryTimer);
@@ -1992,8 +2163,8 @@
   class:cursor-crosshair={enableClipExtraction}
   class:spectrogram-skeleton={responsive &&
     showSpectrogram &&
-    spectrogramUrl !== null &&
-    (spectrogramLoader.loading || spectrogramLoader.error)}
+    ((spectrogramUrl !== null && (spectrogramLoader.loading || spectrogramLoader.error)) ||
+      rateResolvePending)}
   style={responsive
     ? showSpectrogram
       ? 'aspect-ratio: 2 / 1;'
@@ -2004,27 +2175,32 @@
   ontouchmove={enableClipExtraction ? handleSelectionTouchMove : undefined}
   ontouchend={enableClipExtraction ? handleSelectionTouchEnd : undefined}
 >
-  {#if spectrogramUrl}
-    <!-- Screen reader announcement for loading state -->
-    <div class="sr-only" role="status">
-      {spectrogramLoader.loading
+  <!-- Screen reader announcement for the spectrogram state (the rate resolve counts
+       as loading). Always rendered, so screen readers hear each change of its text. -->
+  <div class="sr-only" role="status">
+    {#if spectrogramUrl || rateResolvePending}
+      {spectrogramLoader.loading || rateResolvePending
         ? t('components.audio.spectrogramLoading')
         : t('components.audio.spectrogramLoaded')}
-    </div>
+    {/if}
+  </div>
 
-    <!-- Loading spinner overlay -->
+  {#if spectrogramUrl || rateResolvePending}
+    <!-- Loading spinner overlay (hidden from screen readers: the status region above
+         already announces the loading state) -->
     {#if spectrogramLoader.showSpinner}
       <div
         class="absolute inset-0 flex items-center justify-center bg-[var(--color-base-200)]/75 rounded-md border border-[var(--color-base-300)]"
       >
         <div
           class="loading loading-spinner loading-sm md:loading-md text-[var(--color-primary)]"
-          role="status"
-          aria-label={t('components.audio.spectrogramLoadingAria')}
+          aria-hidden="true"
         ></div>
       </div>
     {/if}
+  {/if}
 
+  {#if spectrogramUrl}
     <!-- Always render the img so the browser cache works across state transitions -->
     <img
       bind:this={spectrogramImage}
@@ -2110,8 +2286,10 @@
     </div>
   {/if}
 
-  <!-- Frequency scale overlay (linear; range follows the detection's model type) -->
-  {#if showSpectrogram && spectrogramUrl && !spectrogramLoader.error}
+  <!-- Frequency scale overlay (linear; range follows the model type and, for bats,
+       the clip sample rate; a bat axis without a known rate has no ticks, and a
+       bat axis is drawn only once its image has loaded) -->
+  {#if showFreqAxis}
     {#each freqTicksKHz as freq (freq)}
       <span class="freq-label" style:bottom="{(freq / freqNyquistKHz) * 100}%" aria-hidden="true"
         >{freq}k</span

@@ -1782,6 +1782,10 @@ var msgInvalidSpectrogramWidth = fmt.Sprintf("Spectrogram width must be between 
 // errInvalidSpectrogramWidth marks a legacy width parameter outside the supported bounds.
 var errInvalidSpectrogramWidth = errors.NewStd("spectrogram width out of range")
 
+// spectrogramRateParam is the query parameter carrying the clip sample rate (Hz)
+// the client labels its frequency axis with.
+const spectrogramRateParam = "sr"
+
 // spectrogramParameters holds parsed query parameters for spectrogram requests.
 // This struct is reusable across multiple endpoints.
 type spectrogramParameters struct {
@@ -1790,6 +1794,7 @@ type spectrogramParameters struct {
 	raw          bool   // Whether to generate raw spectrogram without axes
 	style        string // Visual style preset (from settings, used in filename to prevent stale cache)
 	dynamicRange string // Dynamic range in dB (from settings, used in filename to prevent stale cache)
+	overlayRate  int    // Clip sample rate (Hz) the client labels its axis with; > 0 selects exact-render-only serving, 0 when absent or invalid
 }
 
 // parseSpectrogramParameters extracts and validates spectrogram parameters from the request.
@@ -1803,6 +1808,9 @@ type spectrogramParameters struct {
 //   - width: Legacy parameter for custom width (100-2000px). Ignored if 'size' is present.
 //     A value that is not an integer is ignored like an unknown size.
 //   - raw: Whether to generate raw spectrogram without axes/legends
+//   - sr: Clip sample rate in Hz that the client draws its frequency axis from. A
+//     positive integer makes the endpoint serve only the exact current render of the
+//     clip and never a substitute; anything else is ignored.
 //
 // Style and dynamic range are read from settings (not query params) because they are
 // global settings that affect the visual appearance of all spectrograms. Including them
@@ -1815,6 +1823,9 @@ func (c *Handler) parseSpectrogramParameters(ctx echo.Context) (spectrogramParam
 		raw:          parseRawParameter(ctx.QueryParam("raw")),
 		style:        spec.Style,
 		dynamicRange: spec.DynamicRange,
+	}
+	if rate, err := strconv.Atoi(ctx.QueryParam(spectrogramRateParam)); err == nil && rate > 0 {
+		params.overlayRate = rate
 	}
 
 	// Parse size parameter
@@ -2082,6 +2093,12 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 //   - raw: Whether to generate raw spectrogram without axes/legends
 //     Default: true (for backward compatibility with cached spectrograms)
 //     Accepts: "true", "false", "1", "0", "t", "f", "yes", "no", "on", "off"
+//   - sr: Clip sample rate in Hz the client draws its frequency axis from. A positive
+//     integer makes the endpoint serve only the exact current render of the clip:
+//     where only a substitute (for example an older render at another frequency
+//     range) exists, it answers 404 instead. Invalid or absent values are ignored.
+//     If the detection's model type cannot be looked up, an sr request answers 503
+//     with Retry-After rather than rendering with a guessed profile.
 //
 // Response Format:
 // The response format varies based on the spectrogram generation mode setting and availability.
@@ -2145,8 +2162,22 @@ func (c *Handler) ServeSpectrogramByID(ctx echo.Context) error {
 	// Resolve frequency profile from detection's model type. The same profile drives
 	// both the generation effects (profileOpt) and the cache filename token
 	// (freqSuffix) so a bat render never collides with a bird-profile PNG. The helper
-	// logs a warning and falls back to the bird profile when the lookup fails.
-	profile := c.resolveDetectionFrequencyProfile(noteID)
+	// logs a warning and falls back to the bird profile when the lookup fails. A
+	// request that carries sr is the exception: its client labels the axis from the
+	// clip rate, so a guessed bird render would be cached under the wrong token and
+	// mislabelled. It gets a retryable 503 instead.
+	var profile spectrogram.FrequencyProfile
+	if params.overlayRate > 0 {
+		var lookupErr error
+		if profile, lookupErr = c.lookupFrequencyProfile(noteID); lookupErr != nil {
+			c.LogDebugIfEnabled("Model type lookup failed for an sr request, not rendering",
+				logger.String("note_id", noteID),
+				logger.Error(lookupErr))
+			return c.writeAudioNotReady(ctx, lookupErr, "Spectrogram profile is not available yet, please retry", minRetryAfterSeconds)
+		}
+	} else {
+		profile = c.resolveDetectionFrequencyProfile(noteID)
+	}
 	profileOpt := spectrogram.WithFrequencyProfile(profile)
 	freqSuffix := spectrogram.ProfileSuffix(profile)
 
@@ -2711,13 +2742,21 @@ func getSpectrogramLogger() logger.Logger {
 // profile from its model type, defaulting to the bird profile when the model
 // type cannot be looked up.
 func (c *Handler) resolveDetectionFrequencyProfile(noteID string) spectrogram.FrequencyProfile {
-	modelType, err := c.DS.GetNoteModelType(noteID)
+	profile, err := c.lookupFrequencyProfile(noteID)
 	if err != nil {
 		c.LogWarnIfEnabled("GetNoteModelType failed, defaulting to bird profile",
 			logger.String("note_id", noteID),
 			logger.Error(err))
 	}
-	return spectrogram.ProfileForModelType(modelType)
+	return profile
+}
+
+// lookupFrequencyProfile returns the frequency profile for a detection's model type.
+// On a failed lookup it returns the bird profile together with the error, so a
+// caller that must not render with a guessed profile can refuse.
+func (c *Handler) lookupFrequencyProfile(noteID string) (spectrogram.FrequencyProfile, error) {
+	modelType, err := c.DS.GetNoteModelType(noteID)
+	return spectrogram.ProfileForModelType(modelType), err
 }
 
 // spectrogramProfileSuffix resolves the frequency-profile cache token for a
@@ -2745,7 +2784,7 @@ func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dyna
 	// produce no suffix for backward compatibility with existing cached spectrograms.
 	styleSuffix := buildStyleSuffix(style, dynamicRange)
 
-	// Append the frequency-profile token (e.g. "bat-v2") so renders made with a
+	// Append the frequency-profile token (e.g. "bat-v3") so renders made with a
 	// non-default profile get a distinct filename and do not collide with an
 	// existing bird-profile PNG. Bird (empty token) keeps the legacy filename.
 	if freqSuffix != "" {
@@ -3649,7 +3688,9 @@ func (c *Handler) generateSpectrogram(ctx context.Context, audioPath string, wid
 // Export.Path changes mid-flight. An empty queueKey falls back to the path-based
 // buildSpectrogramKey, which is also used as the singleflight coalescing key so that
 // concurrent requests for the same on-disk file still share one generation pass.
-// audioPath is retained only for log and error context.
+// audioPath is retained only for log and error context. After a fresh render with a
+// non-empty freqSuffix it also removes, best-effort, the default-profile file and the
+// files of any token that suffix supersedes (spectrogram.SupersededSuffixesForToken).
 func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, audioPath, queueKey string, width int, raw bool, style, dynamicRange, freqSuffix string, extraOpts ...spectrogram.GenerateOption) (string, error) {
 	start := time.Now()
 	getSpectrogramLogger().Debug("Spectrogram generation requested",
@@ -3834,18 +3875,29 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 	// old bird-profile image (e.g. one cached while the bat gate was disabled) is not
 	// left orphaned alongside the new one. Best-effort: a missing file is fine.
 	if freqSuffix != "" {
-		if _, _, _, birdRelPath := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange, ""); birdRelPath != relSpectrogramPath {
-			absBirdPath := filepath.Join(c.SFS.BaseDir(), birdRelPath)
-			if rmErr := c.SFS.Remove(absBirdPath); rmErr != nil && !os.IsNotExist(rmErr) {
-				getSpectrogramLogger().Debug("Failed to remove stale default-profile spectrogram",
-					logger.String("path", birdRelPath),
-					logger.Error(rmErr))
-			}
-		}
+		c.removeStaleRender(relAudioPath, width, raw, style, dynamicRange, "")
+	}
+
+	// A superseded profile token (e.g. bat-v2 and bat for bat-v3) left renders with
+	// a different frequency range next to the new one. Remove them the same way.
+	for _, oldSuffix := range spectrogram.SupersededSuffixesForToken(freqSuffix) {
+		c.removeStaleRender(relAudioPath, width, raw, style, dynamicRange, oldSuffix)
 	}
 
 	// Return the relative path of the newly created spectrogram
 	return relSpectrogramPath, nil
+}
+
+// removeStaleRender removes, best-effort, the render of the clip that carries
+// staleSuffix instead of the current profile token (callers pass a suffix that
+// differs from the one just written). A missing file is fine.
+func (c *Handler) removeStaleRender(relAudioPath string, width int, raw bool, style, dynamicRange, staleSuffix string) {
+	_, _, _, staleRel := buildSpectrogramPaths(relAudioPath, width, raw, style, dynamicRange, staleSuffix)
+	if rmErr := c.SFS.Remove(filepath.Join(c.SFS.BaseDir(), staleRel)); rmErr != nil && !os.IsNotExist(rmErr) {
+		getSpectrogramLogger().Debug("Failed to remove stale spectrogram render",
+			logger.String("path", staleRel),
+			logger.Error(rmErr))
+	}
 }
 
 // Note: createSpectrogramWithSoX, getSoxSpectrogramArgs, createSpectrogramWithFFmpeg,

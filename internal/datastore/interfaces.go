@@ -2135,6 +2135,21 @@ func (ds *DataStore) CountHourlyDetections(date, hour string, duration int) (int
 	return count, nil
 }
 
+// ClipSampleRateStore is implemented by stores that persist the sample rate of a
+// detection's saved clip file. It is separate from Interface so Interface and its
+// many test doubles do not grow; callers reach it by type assertion.
+type ClipSampleRateStore interface {
+	// RecordClipSampleRate sets the stored clip sample rate (Hz) of the detection
+	// when its clip_name still equals clipName, overwriting any existing value. It
+	// is authoritative and used to correct a rate planned before the clip was written.
+	RecordClipSampleRate(noteID uint, clipName string, rate int) error
+	// FillClipSampleRate stores rate (Hz) only while the detection's clip_sample_rate
+	// is NULL and its clip_name still equals clipName. It reports whether a row
+	// changed, so concurrent or repeated fills converge and never overwrite a value
+	// written by the exporter.
+	FillClipSampleRate(noteID uint, clipName string, rate int) (bool, error)
+}
+
 // SearchFilters defines parameters for filtering detection records
 type SearchFilters struct {
 	Species string

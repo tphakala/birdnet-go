@@ -352,6 +352,7 @@ func NoteFromResult(result *detection.Result) Note {
 		Threshold:         result.Threshold,
 		Sensitivity:       result.Sensitivity,
 		ClipName:          result.ClipName,
+		ClipSampleRate:    result.ClipSampleRate,
 		ProcessingTime:    result.ProcessingTime,
 		Source: AudioSource{
 			ID:          result.AudioSource.ID,
@@ -421,6 +422,7 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 		Threshold:      note.Threshold,
 		Sensitivity:    note.Sensitivity,
 		ClipName:       note.ClipName,
+		ClipSampleRate: note.ClipSampleRate,
 		ProcessingTime: note.ProcessingTime,
 		Unlikely:       note.Unlikely,
 		Occurrence:     note.Occurrence,

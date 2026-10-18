@@ -248,7 +248,8 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 // EndTime comes from detectionEndTime, read with the caller's settings snapshot so the
 // saved span matches the one the privacy check used.
 // For extended captures the clip name is regenerated to reflect the actual duration,
-// with its container chosen from the Result's own model and sample rate.
+// with its container chosen from the Result's own model and sample rate, and the
+// planned clip sample rate is recomputed from it.
 func (p *Processor) normalizeDetectionTimes(item *PendingDetection, settings *conf.Settings) {
 	item.Detection.Result.BeginTime = item.FirstDetected
 
@@ -281,6 +282,10 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection, settings *co
 			// come from the Result, as in createDetection's resolveClipName.
 			item.Detection.Result.ClipName = p.applyExportFormatExtension(
 				settings, clipName, &item.Detection.Result)
+			// The clip may not have existed when the rate was planned (export was
+			// disabled then), so plan it again from the final clip name.
+			item.Detection.Result.ClipSampleRate = plannedClipSampleRate(
+				&item.Detection.Result, &settings.Realtime.Audio.Export)
 		}
 	}
 }

@@ -422,27 +422,44 @@ func TestNativeGate_ProfileRateSetsNyquist(t *testing.T) {
 	}
 }
 
-func TestNativeGate_BatProfileSetsNyquist(t *testing.T) {
+func TestNativeGate_BatProfileKeepsNativeRate(t *testing.T) {
 	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	const (
-		srcRate = 256000
-		toneHz  = 50000.0
-		batNyq  = 128000.0
-		seconds = 0.5
+		seconds     = 0.5
+		legacyNyqHz = 128000.0 // the old fixed bat axis, which must no longer apply
 	)
-	wantRow := int(math.Round((1 - toneHz/batNyq) * (nativeTestRows - 1)))
-	samples := toneSamples(srcRate, seconds, toneHz)
-	audio := writeNativeWAV(t, env.TempDir, "bat.wav", samples, srcRate)
+	tests := []struct {
+		name    string
+		srcRate int
+		toneHz  float64
+	}{
+		{"192 kHz clip", 192000, 80000},
+		{"256 kHz clip", 256000, 50000},
+		{"384 kHz clip", 384000, 150000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			nyq := float64(tt.srcRate) / 2
+			wantRow := int(math.Round((1 - tt.toneHz/nyq) * (nativeTestRows - 1)))
+			legacyRow := int(math.Round((1 - tt.toneHz/legacyNyqHz) * (nativeTestRows - 1)))
+			samples := toneSamples(tt.srcRate, seconds, tt.toneHz)
+			audio := writeNativeWAV(t, env.TempDir, "bat.wav", samples, tt.srcRate)
 
-	fromFile := filepath.Join(env.TempDir, "file.png")
-	require.NoError(t, gen.GenerateFromFile(t.Context(), audio, fromFile, nativeTestWidth, true, WithFrequencyProfile(BatProfile())))
-	fromPCM := filepath.Join(env.TempDir, "pcm.png")
-	require.NoError(t, gen.GenerateFromPCM(t.Context(), samplesToPCM(samples), fromPCM, nativeTestWidth, true, srcRate, WithFrequencyProfile(BatProfile())))
+			fromFile := filepath.Join(env.TempDir, "file.png")
+			require.NoError(t, gen.GenerateFromFile(t.Context(), audio, fromFile, nativeTestWidth, true, WithFrequencyProfile(BatProfile())))
+			fromPCM := filepath.Join(env.TempDir, "pcm.png")
+			require.NoError(t, gen.GenerateFromPCM(t.Context(), samplesToPCM(samples), fromPCM, nativeTestWidth, true, tt.srcRate, WithFrequencyProfile(BatProfile())))
 
-	for name, path := range map[string]string{"file": fromFile, "pcm": fromPCM} {
-		img := decodePNG(t, path)
-		assert.InDelta(t, wantRow, brightestRow(img, img.Bounds().Dx()/2), 1, name)
+			for name, path := range map[string]string{"file": fromFile, "pcm": fromPCM} {
+				img := decodePNG(t, path)
+				got := brightestRow(img, img.Bounds().Dx()/2)
+				assert.InDelta(t, wantRow, got, 1, name)
+				if tt.srcRate != 256000 {
+					assert.NotEqual(t, legacyRow, got, "%s: row must not match a 128 kHz Nyquist", name)
+				}
+			}
+		})
 	}
 }
 

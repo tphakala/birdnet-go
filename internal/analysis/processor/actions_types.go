@@ -160,7 +160,13 @@ type SaveAudioAction struct {
 	species string
 	// clipTags is the safe, display-ready detection metadata embedded as FLAC
 	// tags; see clip_tags.go for what may and may not be carried.
-	clipTags      clipTagMeta
+	clipTags clipTagMeta
+	// clipRates persists a corrected clip sample rate after the encode; nil when the
+	// datastore cannot store one (legacy mode) or in tests that do not need it.
+	clipRates datastore.ClipSampleRateStore
+	// plannedRate is the clip sample rate stored with the detection at save time
+	// (plannedClipSampleRate); the action corrects it when the encode wrote another.
+	plannedRate   int
 	NoteID        uint              // Note ID for correlation logging with pre-renderer
 	PreRenderer   PreRendererSubmit // Injected from processor
 	DetectionCtx  *DetectionContext // Shared context to signal ClipSaved to late consumers

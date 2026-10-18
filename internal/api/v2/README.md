@@ -245,6 +245,24 @@ responses carry `spectrogramOnly: true` for these detections (the field is omitt
 otherwise); `clipName` / `hasAudio` stay empty / false, so clients show the image but no
 player or download.
 
+**Spectrogram frequency range.** Bird spectrograms render at 24 kHz, so they span 0 to 12 kHz. Bat
+spectrograms render at the clip's own sample rate and span 0 to half of it (a 384 kHz clip shows 0 to
+192 kHz, a 192 kHz clip 0 to 96 kHz). Bat renders carry the `-bat-v3` token in their file name, and a
+fresh render removes the older `-bat-v2` and `-bat` files next to it.
+
+- Detection and search responses carry `clipSampleRate` (Hz, an integer) for the detection's original
+  audio clip. The field is omitted when the rate is unknown. A spectrogram-only detection reports the
+  original clip's rate, which kept images made before the `-bat-v3` change do not match.
+- `GET /detections/:id` fills a missing rate for an older bat detection by reading that clip's header
+  once (a few KB, never the whole clip), waiting at most 250 ms, and storing the value. If the clip is
+  unreadable, nothing is stored and the next request tries again. If the wait runs out, the field is left
+  out of that response and the read finishes in the background; once it has stored the rate, the next
+  request returns it. Lists and search never read a clip. A page from `GET /detections`, searches
+  included, can lag a stored value by its 5 minute cache; `POST /search` is not cached.
+- `sr=<Hz>` on `GET /spectrogram/:id` means the client draws its axis from that clip rate, so the
+  endpoint serves only the exact current render of the clip and answers `404` where it would otherwise
+  fall back to a nearest render. An invalid or absent `sr` is ignored.
+
 ### Notifications (`notifications/notifications.go`)
 
 | Method | Route                              | Handler                            | Auth | Description                                                                                                                                                                                    |
