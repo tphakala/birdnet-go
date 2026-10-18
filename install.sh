@@ -3431,7 +3431,10 @@ cleanup_hls_mount() {
                 print_message "⚠️ Failed to stop mount unit, trying manual unmount..." "$YELLOW"
             else
                 print_message "✅ Successfully stopped systemd mount unit" "$GREEN"
-                return 0
+                # Stopping the unit can leave lower layers mounted; return only once the path is clear.
+                if ! mountpoint -q "$hls_mount" 2>/dev/null; then
+                    return 0
+                fi
             fi
         else
             print_message "Found tmpfs mount at $hls_mount, attempting to unmount..." "$YELLOW"

@@ -596,26 +596,34 @@ assert_eq "unit has no umount step" "0" "$(grep -c 'umount' "$unit_section")"
 it "cleanup_hls_mount"
 load_fn cleanup_hls_mount
 
-hls_cleanup() { # layers mode -> "<layers left>|<outcome message>"
+hls_cleanup() { # layers mode [layers the unit stop removes] -> "<layers left>|<outcome message>"
     (
         CONFIG_DIR="${WORK}/hls-cleanup"
-        HLS_LAYERS="$1"; HLS_MODE="$2"; HLS_VIA_SUDO=0; HLS_OUTCOME=""; HLS_CALLS=0
+        HLS_LAYERS="$1"; HLS_MODE="$2"; HLS_UNIT_REMOVES="${3:-}"; HLS_VIA_SUDO=0; HLS_OUTCOME=""; HLS_CALLS=0
         print_message() {
             case "$1" in
-                *"Successfully unmounted"* | *"Failed to unmount"* | *"No tmpfs mount found"*) HLS_OUTCOME="$1" ;;
+                *"Successfully stopped"* | *"Successfully unmounted"* | *"Failed to unmount"* | *"No tmpfs mount found"*) HLS_OUTCOME="$1" ;;
             esac
         }
-        systemctl() { return 1; }
+        # With HLS_UNIT_REMOVES set, a systemd mount unit exists for the path and stopping it
+        # removes that many layers; the unit then reports inactive.
+        systemctl() {
+            case "$1" in
+                list-units) [ -z "$HLS_UNIT_REMOVES" ] || printf 'hls.mount loaded active mounted %s/hls\n' "$CONFIG_DIR" ;;
+                stop) HLS_LAYERS=$((HLS_LAYERS > HLS_UNIT_REMOVES ? HLS_LAYERS - HLS_UNIT_REMOVES : 0)) ;;
+                *) return 1 ;;
+            esac
+        }
         mount() { [ "$HLS_LAYERS" -gt 0 ] && printf 'tmpfs on %s/hls type tmpfs (rw)\n' "$CONFIG_DIR"; return 0; }
         mountpoint() { [ "$HLS_LAYERS" -gt 0 ]; }
         # HLS_MODE says which variant can remove a layer: plain umount, only sudo umount
-        # without -l, only the lazy umount -l, or none of them.
+        # without -l, only sudo umount -l, or none of them.
         umount() {
             HLS_CALLS=$((HLS_CALLS + 1))
             case "$HLS_MODE" in
                 plain) ;;
                 sudo) { [ "$HLS_VIA_SUDO" -eq 1 ] && [ "${1:-}" != "-l" ]; } || return 1 ;;
-                lazy) [ "${1:-}" = "-l" ] || return 1 ;;
+                lazy) { [ "$HLS_VIA_SUDO" -eq 1 ] && [ "${1:-}" = "-l" ]; } || return 1 ;;
                 *) return 1 ;;
             esac
             HLS_LAYERS=$((HLS_LAYERS - 1))
@@ -632,10 +640,14 @@ assert_eq "one layer is unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cle
 assert_eq "two stacked layers are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 2 plain)"
 assert_eq "219 stacked layers are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 219 plain)"
 assert_eq "layers only sudo umount can remove are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 sudo)"
-assert_eq "layers only umount -l can remove are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 lazy)"
+assert_eq "layers only sudo umount -l can remove are all unmounted" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 lazy)"
 assert_eq "an unmount that always fails stops the loop and reports it" "3|❌ Failed to unmount ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 none)"
 hls_cleanup 3 none >/dev/null
 assert_eq "a failing unmount tries plain, sudo and sudo -l once, then gives up" "3" "$(cat "${WORK}/hls-umount-calls")"
+assert_eq "a unit stop that clears every layer returns without unmounting" "0|✅ Successfully stopped systemd mount unit" "$(hls_cleanup 3 plain 3)"
+assert_eq "the unit stop alone clears the layers, no umount call" "0" "$(cat "${WORK}/hls-umount-calls")"
+assert_eq "a unit stop that leaves layers hands over to the unmount loop" "0|✅ Successfully unmounted ${WORK}/hls-cleanup/hls" "$(hls_cleanup 3 plain 1)"
+assert_eq "the unmount loop removes only the two layers the unit stop left" "2" "$(cat "${WORK}/hls-umount-calls")"
 assert_eq "the loop stops at its layer cap" "500|❌ Failed to unmount ${WORK}/hls-cleanup/hls" "$(hls_cleanup 2500 plain)"
 
 # ===========================================================================
