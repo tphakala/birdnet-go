@@ -294,6 +294,7 @@ func (c *Handler) registerHealthChecks() {
 		checks.NewPathAccessCheck(map[string]string{
 			"data": filepath.Dir(c.CurrentSettings().Output.SQLite.Path),
 		}),
+		checks.NewStoragePersistenceCheck(c.storagePersistenceReport),
 		checks.NewConfigConsistencyCheck(func() []string { return nil }),
 		checks.NewDiskBudgetCheck(
 			func() bool { return false }, // TODO: wire when disk budget feature exists

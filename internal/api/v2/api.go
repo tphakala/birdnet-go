@@ -192,6 +192,10 @@ type Controller struct {
 	// reading the plain c.models field there would race.
 	optimizeNotices atomic.Pointer[optimizeNoticeHook]
 
+	// storageNotices holds the scheduler that keeps the storage persistence bell
+	// notices in sync (the system handler), published when routes are initialized.
+	storageNotices atomic.Pointer[storageNoticeHook]
+
 	// DisableSaveSettings prevents persisting settings changes to disk.
 	// When set to true, all settings modifications remain in memory only.
 	// This is primarily used in testing but can be used in production for read-only mode.
@@ -663,9 +667,18 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// owns the diagnostics health infrastructure; its routes are registered in
 	// initRoutes below.
 	c.system = system.New(c.Core, c.startTime, c.healthErrorBuf, audioapi.LatestAudioLevels)
+	// The storage notices go to the injected notification service (nil keeps the
+	// process-wide one).
+	c.system.SetNotificationService(c.notificationService)
 
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
 	if initializeRoutes {
+		// Evaluate the storage persistence notices once at startup, then after a
+		// settings save changes one of the paths. Skipped when routes are not
+		// initialized (tests), like every other background activity here.
+		c.storageNotices.Store(&storageNoticeHook{scheduler: c.system})
+		c.system.StartStorageNoticeSync()
+
 		// Initialize synchronization channel for testing
 		c.goroutinesStarted = make(chan struct{})
 		c.initRoutes()
@@ -886,6 +899,11 @@ func (c *Controller) Shutdown() {
 	// Stop the pending model optimize notice evaluation, and ignore later ones.
 	if h := c.optimizeNotices.Load(); h != nil {
 		h.scheduler.StopOptimizeNoticeSync()
+	}
+
+	// Stop the pending storage notice evaluation, and ignore later ones.
+	if h := c.storageNotices.Load(); h != nil {
+		h.scheduler.StopStorageNoticeSync()
 	}
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
