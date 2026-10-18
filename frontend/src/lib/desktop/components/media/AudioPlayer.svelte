@@ -1650,8 +1650,9 @@
     }
 
     // The image requested with the clip rate still fails after the retries and
-    // the status check on the first failure did not answer 404 (it timed out,
-    // or the failure was not a missing render). Any persistent failure lands
+    // the status check on the first failure did not fall back (it timed out,
+    // the failure was not a missing render, or a 404 came with a pending or
+    // finished generation). Any persistent failure lands
     // here unless the status poll reports a queued or running generation
     // (handled above): load whatever render the server has, without the rate
     // and without an axis, before giving up.
