@@ -73,19 +73,19 @@ func wantsClipRateFill(note *datastore.Note) bool {
 // list, search and SSE paths never probe a clip for the rate.
 //
 // It opens the clip through SecureFS inside the shared work and probes the opened
-// file, so a symlink swapped in after an earlier cached stat cannot lead the probe
-// outside the export directory. It reads one clip header (never the audio), shares the probe and the guarded
-// write between concurrent requests for the same row, and waits at most
-// clipRateResponseBudget. On a miss note.ClipSampleRate stays 0 and the work
-// finishes in the background. A failed probe writes nothing, so the next request
-// tries again, and so does a panic in the shared work, which is contained and
-// treated as a failed probe. The write changes a NULL value only (DetectionRepository.FillClipSampleRate)
-// and runs under the work context. It does nothing without a repository.
+// file, so no path is re-resolved after the open. It reads one clip header (never
+// the audio), shares the probe and the guarded write between concurrent requests
+// for the same row, and waits at most clipRateResponseBudget. On a miss
+// note.ClipSampleRate stays 0 and the work finishes in the background. A failed
+// probe writes nothing, so the next request tries again, and so does a panic in
+// the shared work, which is contained and treated as a failed probe. The write
+// changes a NULL value only (DetectionRepository.FillClipSampleRate) and runs
+// under the work context. It does nothing without a repository.
 func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 	if c.Repo == nil || !wantsClipRateFill(note) {
 		return
 	}
-	rel, ok := c.clipProbeRel(note.ClipName)
+	rel, ok := c.resolveClipRel(note.ClipName)
 	if !ok {
 		return
 	}
@@ -123,12 +123,10 @@ func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 	}
 }
 
-// clipProbeRel resolves a stored clip name to its SecureFS-relative path, using
+// resolveClipRel resolves a stored clip name to its SecureFS-relative path, using
 // the same helpers as the spectrogram status endpoint. ok is false when the name
-// does not resolve inside the export directory. The name is only checked
-// lexically here; whether the clip is a regular file inside the root is decided
-// by the open in probeClipRel.
-func (c *Handler) clipProbeRel(clipName string) (string, bool) {
+// does not resolve inside the export directory. The name is checked lexically only.
+func (c *Handler) resolveClipRel(clipName string) (string, bool) {
 	if c.SFS == nil {
 		return "", false
 	}
@@ -139,10 +137,9 @@ func (c *Handler) clipProbeRel(clipName string) (string, bool) {
 	return rel, true
 }
 
-// probeClipRel opens the clip at rel inside the SecureFS root and probes the
-// opened file. The handle is closed before it returns, which is before the
-// database write.
-func (c *Handler) probeClipRel(ctx context.Context, rel string) (int, error) {
+// openAndProbeClip opens the clip at rel inside the SecureFS root and probes the
+// opened file. The handle is closed before the database write.
+func (c *Handler) openAndProbeClip(ctx context.Context, rel string) (int, error) {
 	f, err := c.SFS.OpenRegularRel(rel)
 	if err != nil {
 		return 0, err
@@ -151,12 +148,12 @@ func (c *Handler) probeClipRel(ctx context.Context, rel string) (int, error) {
 	return c.probeClipRate(ctx, f, rel)
 }
 
-// probeAndStoreClipRate opens the clip at rel, probes its header and stores the rate while the row
+// probeAndStoreClipRate probes the clip header and stores the rate while the row
 // is still NULL. It returns the probed rate even when the write fails or changes
 // no row, because the rate belongs to the clip the response names. The write runs
 // under ctx, so one that outlives the work timeout is cancelled and logged at debug.
 func (c *Handler) probeAndStoreClipRate(ctx context.Context, noteID uint, clipName, rel string) (int, error) {
-	rate, err := c.probeClipRel(ctx, rel)
+	rate, err := c.openAndProbeClip(ctx, rel)
 	if err != nil {
 		c.LogDebugIfEnabled("Clip sample rate probe failed",
 			logger.Uint64("note_id", uint64(noteID)),

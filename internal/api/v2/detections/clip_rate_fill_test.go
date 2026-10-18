@@ -435,10 +435,8 @@ func TestGetDetection_LazyFill_SymlinkOutsideClipDirIsNotProbed(t *testing.T) {
 	const clip = "2026/01/bat.wav"
 	tests := []struct {
 		name string
-		// warmStatCache stats the regular clip through SecureFS before it is
-		// replaced by the symlink. Any earlier StatRel of the clip, such as from the
-		// spectrogram status endpoint, warms that cache, and a cached entry would
-		// still describe the regular file after the swap.
+		// warmStatCache stats the regular clip first, so a cached entry would
+		// outlive the swap to a symlink.
 		warmStatCache bool
 	}{
 		{"symlink in place", false},
