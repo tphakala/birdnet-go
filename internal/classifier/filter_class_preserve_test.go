@@ -1,11 +1,20 @@
 package classifier
 
 import (
+	"fmt"
+	"math/rand/v2"
+	"os"
+	"path/filepath"
+	"slices"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/labels/vocalization"
 )
 
 // speciesConfidences returns a species->confidence map for a results slice, so
@@ -143,4 +152,103 @@ func TestGetTopKResults_NoFilterClassesUnchanged(t *testing.T) {
 
 	top := getTopKResults(results, 10)
 	assert.Len(t, top, 10, "bird-only chunk must be exactly top-K")
+}
+
+// preserveFilterClassesUncached is the pre-cache implementation of
+// preserveFilterClasses, kept as the reference the cached version must match.
+func preserveFilterClassesUncached(top, all []datastore.Results) []datastore.Results {
+	bestHuman, bestDog := -1, -1
+	var bestHumanConf, bestDogConf float32
+	for i := range all {
+		conf := all[i].Confidence
+		human, dog := vocalization.Classify(all[i].Species)
+		if human && (bestHuman == -1 || conf > bestHumanConf) {
+			bestHuman, bestHumanConf = i, conf
+		}
+		if dog && (bestDog == -1 || conf > bestDogConf) {
+			bestDog, bestDogConf = i, conf
+		}
+	}
+	top = appendIfAbsent(top, all, bestHuman)
+	return appendIfAbsent(top, all, bestDog)
+}
+
+// TestPreserveFilterClasses_CachedMatchesUncached runs the cached scan against the
+// uncached reference over every committed BirdNET label locale, several times per
+// locale so both the cold (classifying) and warm (cached) paths are compared.
+func TestPreserveFilterClasses_CachedMatchesUncached(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join("data", "labels", "V2.4", "*.txt"))
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+
+	const rounds = 3
+	r := rand.New(rand.NewPCG(3, 4)) //nolint:gosec // deterministic test data
+	for _, file := range files {
+		content, err := os.ReadFile(file)
+		require.NoError(t, err)
+		labels := strings.Split(strings.TrimRight(string(content), "\n"), "\n")
+
+		t.Run(filepath.Base(file), func(t *testing.T) {
+			all := make([]datastore.Results, len(labels))
+			for round := range rounds {
+				for i := range all {
+					all[i] = datastore.Results{Species: labels[i], Confidence: r.Float32()}
+				}
+				top := all[:defaultTopKResults]
+				want := preserveFilterClassesUncached(slices.Clip(slices.Clone(top)), all)
+				got := preserveFilterClasses(slices.Clip(slices.Clone(top)), all)
+				assert.Equal(t, want, got, "round %d", round)
+			}
+		})
+	}
+}
+
+// TestStoreFilterClasses_ResetsWhenFull checks the cache starts over instead of
+// growing past maxFilterClassCacheEntries.
+func TestStoreFilterClasses_ResetsWhenFull(t *testing.T) {
+	filterClassCache.Lock()
+	saved := filterClassCache.m
+	filterClassCache.m = make(map[string]filterClass, maxFilterClassCacheEntries)
+	for i := range maxFilterClassCacheEntries {
+		filterClassCache.m[strconv.Itoa(i)] = 0
+	}
+	filterClassCache.Unlock()
+	t.Cleanup(func() {
+		filterClassCache.Lock()
+		filterClassCache.m = saved
+		filterClassCache.Unlock()
+	})
+
+	storeFilterClasses(map[string]filterClass{"Dog_Dog": filterClassDog})
+
+	filterClassCache.RLock()
+	defer filterClassCache.RUnlock()
+	assert.Len(t, filterClassCache.m, 1)
+	assert.Equal(t, filterClassDog, filterClassCache.m["Dog_Dog"])
+}
+
+// TestPreserveFilterClasses_Concurrent runs the scan from several goroutines with
+// distinct label sets, as concurrently running models do, so the race detector
+// covers the shared cache's cold and warm paths.
+func TestPreserveFilterClasses_Concurrent(t *testing.T) {
+	const (
+		workers    = 8
+		iterations = 20
+		labelCount = 200
+	)
+	var wg sync.WaitGroup
+	for w := range workers {
+		all := make([]datastore.Results, labelCount)
+		for i := range all {
+			all[i] = datastore.Results{Species: fmt.Sprintf("Concurrent species %d_%d", w, i), Confidence: 0.5}
+		}
+		all[labelCount-1] = datastore.Results{Species: "Dog_Dog", Confidence: 0.1}
+		wg.Go(func() {
+			for range iterations {
+				got := preserveFilterClasses(slices.Clip(slices.Clone(all[:defaultTopKResults])), all)
+				assert.Len(t, got, defaultTopKResults+1)
+			}
+		})
+	}
+	wg.Wait()
 }
