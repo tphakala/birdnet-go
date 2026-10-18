@@ -30,12 +30,17 @@ const (
 	// otherwise reaped when the detection is deleted (the delete scan matches any
 	// "<base>_<width>px-" prefix).
 	batCacheSuffix = "bat-v3"
+
+	// batCacheSuffixV2 and batCacheSuffixLegacy are the earlier bat tokens whose
+	// renders batCacheSuffix supersedes. The legacy token predates versioning.
+	batCacheSuffixV2     = "bat-v2"
+	batCacheSuffixLegacy = "bat"
 )
 
 // supersededSuffixes maps a cache token to the older tokens whose renders it
 // replaces, newest first.
 var supersededSuffixes = map[string][]string{
-	batCacheSuffix: {"bat-v2", "bat"},
+	batCacheSuffix: {batCacheSuffixV2, batCacheSuffixLegacy},
 }
 
 // SupersededSuffixesForToken returns the older cache tokens that the given

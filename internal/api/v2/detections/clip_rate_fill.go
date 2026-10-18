@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
@@ -65,7 +66,7 @@ type clipRateFlight = singleflight.Group
 // no stored clip sample rate. Spectrogram-only rows have no clip name and are
 // never probed.
 func wantsClipRateFill(note *datastore.Note) bool {
-	return note.Model.ModelType == "bat" && note.ClipName != "" && note.ClipSampleRate == 0
+	return note.Model.ModelType == string(entities.ModelTypeBat) && note.ClipName != "" && note.ClipSampleRate == 0
 }
 
 // fillClipSampleRate learns the clip sample rate of an old bat detection that has
