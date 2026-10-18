@@ -3,6 +3,7 @@ package transcode
 import (
 	"context"
 	"io"
+	"io/fs"
 	"math"
 	"os"
 
@@ -125,17 +126,26 @@ func openSourceFile(path string) (*os.File, int64, error) {
 	if err != nil {
 		return nil, 0, wrapError(err, errors.CategoryFileIO, "decode_stat")
 	}
-	if !info.Mode().IsRegular() {
-		return nil, 0, wrapSentinel(ErrUnsupportedSource, nil, "decode_stat", "not a regular file", errors.CategoryValidation)
-	}
-	if info.Size() > maxSourceFileBytes {
-		return nil, 0, wrapSentinel(ErrAudioTooLong, nil, "decode_stat", "source file exceeds the size limit", errors.CategoryLimit)
+	if err := checkSourceInfo(info); err != nil {
+		return nil, 0, err
 	}
 	f, err := os.Open(path) //nolint:gosec // G304: path is a stored clip resolved by the caller from the configured clip directory
 	if err != nil {
 		return nil, 0, wrapError(err, errors.CategoryFileIO, "decode_open")
 	}
 	return f, info.Size(), nil
+}
+
+// checkSourceInfo rejects a source that is not a regular file or exceeds the
+// size bound.
+func checkSourceInfo(info fs.FileInfo) error {
+	if !info.Mode().IsRegular() {
+		return wrapSentinel(ErrUnsupportedSource, nil, "decode_stat", "not a regular file", errors.CategoryValidation)
+	}
+	if info.Size() > maxSourceFileBytes {
+		return wrapSentinel(ErrAudioTooLong, nil, "decode_stat", "source file exceeds the size limit", errors.CategoryLimit)
+	}
+	return nil
 }
 
 // decodeSource reads the requested range from an opened source.
