@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Os dados serão perdidos quando o contentor for recriado",
-        "notPersistentMessage": "Estes caminhos não estão num volume montado, pelo que os seus ficheiros são eliminados quando o contentor é recriado, por exemplo numa atualização da imagem: {paths}. Associe-lhes um volume ou uma pasta do anfitrião na configuração do seu contentor.",
+        "notPersistentMessage": "Estes caminhos estão em armazenamento que é eliminado quando o contentor é recriado, por exemplo numa atualização da imagem: {paths}. Associe-lhes um volume ou uma pasta do anfitrião na configuração do seu contentor.",
         "anonymousVolumeTitle": "Os dados estão guardados num volume anónimo do contentor",
         "anonymousVolumeMessage": "Estes caminhos estão em volumes anónimos que o ambiente de execução do contentor criou porque nenhum volume foi associado: {paths}. Um contentor iniciado de novo, por exemplo com docker run após uma atualização da imagem, recebe volumes novos e vazios, pelo que os dados parecem perdidos. Associe-lhes um volume com nome ou uma pasta do anfitrião."
       }

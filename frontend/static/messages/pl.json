@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Dane zostaną utracone po ponownym utworzeniu kontenera",
-        "notPersistentMessage": "Te ścieżki nie znajdują się na zamontowanym woluminie, więc ich pliki są usuwane po ponownym utworzeniu kontenera, na przykład przy aktualizacji obrazu: {paths}. Przypisz do nich wolumin lub katalog hosta w konfiguracji kontenera.",
+        "notPersistentMessage": "Te ścieżki znajdują się w pamięci masowej, która jest usuwana po ponownym utworzeniu kontenera, na przykład przy aktualizacji obrazu: {paths}. Przypisz do nich wolumin lub katalog hosta w konfiguracji kontenera.",
         "anonymousVolumeTitle": "Dane są przechowywane w anonimowym woluminie kontenera",
         "anonymousVolumeMessage": "Te ścieżki znajdują się w anonimowych woluminach, które środowisko uruchomieniowe kontenera utworzyło, ponieważ nie przypisano żadnego woluminu: {paths}. Kontener uruchomiony od nowa, na przykład poleceniem docker run po aktualizacji obrazu, otrzymuje nowe puste woluminy, więc dane wyglądają na utracone. Przypisz do nich nazwany wolumin lub katalog hosta."
       }

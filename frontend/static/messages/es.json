@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Los datos se perderán cuando se vuelva a crear el contenedor",
-        "notPersistentMessage": "Estas rutas no están en un volumen montado, por lo que sus archivos se eliminan cuando se vuelve a crear el contenedor, por ejemplo al actualizar la imagen: {paths}. Asigne un volumen o un directorio del host a estas rutas en la configuración de su contenedor.",
+        "notPersistentMessage": "Estas rutas están en un almacenamiento que se elimina cuando se vuelve a crear el contenedor, por ejemplo al actualizar la imagen: {paths}. Asigne un volumen o un directorio del host a estas rutas en la configuración de su contenedor.",
         "anonymousVolumeTitle": "Los datos se guardan en un volumen anónimo del contenedor",
         "anonymousVolumeMessage": "Estas rutas están en volúmenes anónimos que el entorno de ejecución del contenedor creó porque no se asignó ningún volumen: {paths}. Un contenedor iniciado de nuevo, por ejemplo con docker run tras actualizar la imagen, recibe volúmenes nuevos y vacíos, así que los datos parecen perdidos. Asigne a estas rutas un volumen con nombre o un directorio del host."
       }

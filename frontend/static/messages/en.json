@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Data will be lost when the container is recreated",
-        "notPersistentMessage": "These paths are not on a mounted volume, so their files are deleted when the container is recreated, for example on an image update: {paths}. Map a volume or a host directory to them in your container configuration.",
+        "notPersistentMessage": "These paths are on storage that is deleted when the container is recreated, for example on an image update: {paths}. Map a volume or a host directory to them in your container configuration.",
         "anonymousVolumeTitle": "Data is stored in an anonymous container volume",
         "anonymousVolumeMessage": "These paths are in anonymous volumes that the container runtime created because no volume was mapped: {paths}. A container started fresh, for example with docker run after an image update, gets new empty volumes, so the data seems lost. Map a named volume or a host directory to them."
       }

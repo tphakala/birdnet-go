@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Data går förlorad när containern återskapas",
-        "notPersistentMessage": "Dessa sökvägar ligger inte på en monterad volym, så deras filer raderas när containern återskapas, till exempel vid en uppdatering av avbilden: {paths}. Koppla en volym eller en värdkatalog till dem i din containerkonfiguration.",
+        "notPersistentMessage": "Dessa sökvägar ligger på lagring som raderas när containern återskapas, till exempel vid en uppdatering av avbilden: {paths}. Koppla en volym eller en värdkatalog till dem i din containerkonfiguration.",
         "anonymousVolumeTitle": "Data lagras i en anonym containervolym",
         "anonymousVolumeMessage": "Dessa sökvägar ligger i anonyma volymer som containerns körmiljö skapade eftersom ingen volym var kopplad: {paths}. En container som startas om från början, till exempel med docker run efter en uppdatering av avbilden, får nya tomma volymer, så data ser ut att ha försvunnit. Koppla en namngiven volym eller en värdkatalog till dem."
       }

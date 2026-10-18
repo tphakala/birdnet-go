@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Data går tapt når containeren gjenopprettes",
-        "notPersistentMessage": "Disse banene ligger ikke på et montert volum, så filene deres slettes når containeren gjenopprettes, for eksempel ved en oppdatering av imaget: {paths}. Knytt et volum eller en vertsmappe til dem i containerkonfigurasjonen din.",
+        "notPersistentMessage": "Disse banene ligger på lagring som slettes når containeren gjenopprettes, for eksempel ved en oppdatering av imaget: {paths}. Knytt et volum eller en vertsmappe til dem i containerkonfigurasjonen din.",
         "anonymousVolumeTitle": "Data lagres i et anonymt containervolum",
         "anonymousVolumeMessage": "Disse banene ligger i anonyme volumer som container-kjøretiden opprettet fordi ingen volum var knyttet til dem: {paths}. En container som startes på nytt, for eksempel med docker run etter en oppdatering av imaget, får nye tomme volumer, så dataene ser ut til å være tapt. Knytt et navngitt volum eller en vertsmappe til dem."
       }

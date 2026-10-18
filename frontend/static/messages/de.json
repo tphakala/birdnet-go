@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Daten gehen verloren, wenn der Container neu erstellt wird",
-        "notPersistentMessage": "Diese Pfade liegen nicht auf einem eingebundenen Volume, daher werden ihre Dateien gelöscht, wenn der Container neu erstellt wird, zum Beispiel bei einem Image-Update: {paths}. Ordnen Sie ihnen in Ihrer Container-Konfiguration ein Volume oder ein Host-Verzeichnis zu.",
+        "notPersistentMessage": "Diese Pfade liegen auf Speicher, der gelöscht wird, wenn der Container neu erstellt wird, zum Beispiel bei einem Image-Update: {paths}. Ordnen Sie ihnen in Ihrer Container-Konfiguration ein Volume oder ein Host-Verzeichnis zu.",
         "anonymousVolumeTitle": "Daten liegen in einem anonymen Container-Volume",
         "anonymousVolumeMessage": "Diese Pfade liegen in anonymen Volumes, die die Container-Laufzeit angelegt hat, weil kein Volume zugeordnet war: {paths}. Ein frisch gestarteter Container, zum Beispiel mit docker run nach einem Image-Update, erhält neue leere Volumes, sodass die Daten verloren scheinen. Ordnen Sie ihnen ein benanntes Volume oder ein Host-Verzeichnis zu."
       }

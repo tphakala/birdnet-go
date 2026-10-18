@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Dati tiks zaudēti, kad konteiners tiks izveidots no jauna",
-        "notPersistentMessage": "Šie ceļi nav uz pievienota sējuma, tāpēc to faili tiek dzēsti, kad konteiners tiek izveidots no jauna, piemēram, atjauninot attēlu: {paths}. Piesaistiet tiem sējumu vai resursdatora direktoriju sava konteinera konfigurācijā.",
+        "notPersistentMessage": "Šie ceļi atrodas krātuvē, kas tiek dzēsta, kad konteiners tiek izveidots no jauna, piemēram, atjauninot attēlu: {paths}. Piesaistiet tiem sējumu vai resursdatora direktoriju sava konteinera konfigurācijā.",
         "anonymousVolumeTitle": "Dati tiek glabāti anonīmā konteinera sējumā",
         "anonymousVolumeMessage": "Šie ceļi atrodas anonīmos sējumos, ko konteinera izpildlaiks izveidoja, jo neviens sējums nebija piesaistīts: {paths}. No jauna startēts konteiners, piemēram, ar docker run pēc attēla atjaunināšanas, saņem jaunus tukšus sējumus, tāpēc dati šķiet zaudēti. Piesaistiet tiem nosauktu sējumu vai resursdatora direktoriju."
       }

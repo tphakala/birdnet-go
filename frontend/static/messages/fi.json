@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Tiedot menetetään, kun kontti luodaan uudelleen",
-        "notPersistentMessage": "Nämä polut eivät ole liitetyllä taltiolla, joten niiden tiedostot poistetaan, kun kontti luodaan uudelleen, esimerkiksi image-päivityksen yhteydessä: {paths}. Yhdistä niihin taltio tai isäntäkoneen hakemisto konttisi asetuksissa.",
+        "notPersistentMessage": "Nämä polut ovat tallennustilassa, joka poistetaan, kun kontti luodaan uudelleen, esimerkiksi image-päivityksen yhteydessä: {paths}. Yhdistä niihin taltio tai isäntäkoneen hakemisto konttisi asetuksissa.",
         "anonymousVolumeTitle": "Tiedot tallennetaan nimettömälle konttitaltiolle",
         "anonymousVolumeMessage": "Nämä polut ovat nimettömillä taltioilla, jotka konttiympäristö loi, koska taltiota ei ollut yhdistetty: {paths}. Uudelleen käynnistetty kontti, esimerkiksi docker run -komennolla image-päivityksen jälkeen, saa uudet tyhjät taltiot, joten tiedot näyttävät kadonneen. Yhdistä niihin nimetty taltio tai isäntäkoneen hakemisto."
       }

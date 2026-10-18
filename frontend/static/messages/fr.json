@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Les données seront perdues lorsque le conteneur sera recréé",
-        "notPersistentMessage": "Ces chemins ne se trouvent pas sur un volume monté, donc leurs fichiers sont supprimés lorsque le conteneur est recréé, par exemple lors d'une mise à jour de l'image : {paths}. Associez-leur un volume ou un répertoire de l'hôte dans la configuration de votre conteneur.",
+        "notPersistentMessage": "Ces chemins se trouvent sur un stockage supprimé lorsque le conteneur est recréé, par exemple lors d'une mise à jour de l'image : {paths}. Associez-leur un volume ou un répertoire de l'hôte dans la configuration de votre conteneur.",
         "anonymousVolumeTitle": "Les données sont stockées dans un volume anonyme du conteneur",
         "anonymousVolumeMessage": "Ces chemins se trouvent dans des volumes anonymes que l'environnement d'exécution du conteneur a créés parce qu'aucun volume n'était associé : {paths}. Un conteneur démarré à neuf, par exemple avec docker run après une mise à jour de l'image, reçoit de nouveaux volumes vides, si bien que les données semblent perdues. Associez-leur un volume nommé ou un répertoire de l'hôte."
       }

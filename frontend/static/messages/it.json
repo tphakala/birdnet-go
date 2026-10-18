@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "I dati andranno persi quando il container viene ricreato",
-        "notPersistentMessage": "Questi percorsi non si trovano su un volume montato, quindi i loro file vengono eliminati quando il container viene ricreato, ad esempio durante un aggiornamento dell'immagine: {paths}. Associa loro un volume o una directory dell'host nella configurazione del container.",
+        "notPersistentMessage": "Questi percorsi si trovano su uno spazio di archiviazione che viene eliminato quando il container viene ricreato, ad esempio durante un aggiornamento dell'immagine: {paths}. Associa loro un volume o una directory dell'host nella configurazione del container.",
         "anonymousVolumeTitle": "I dati sono archiviati in un volume anonimo del container",
         "anonymousVolumeMessage": "Questi percorsi si trovano in volumi anonimi creati dal runtime del container perché non era stato associato alcun volume: {paths}. Un container avviato da zero, ad esempio con docker run dopo un aggiornamento dell'immagine, riceve nuovi volumi vuoti, quindi i dati sembrano persi. Associa loro un volume con nome o una directory dell'host."
       }

@@ -524,7 +524,7 @@
       },
       "storage": {
         "notPersistentTitle": "Az adatok elvesznek, amikor a tárolót újra létrehozzák",
-        "notPersistentMessage": "Ezek az útvonalak nem csatolt kötetre mutatnak, ezért a fájljaik törlődnek, amikor a tárolót újra létrehozzák, például egy image frissítésekor: {paths}. Rendeljen hozzájuk kötetet vagy gazdagép-könyvtárat a tároló konfigurációjában.",
+        "notPersistentMessage": "Ezek az útvonalak olyan tárhelyen vannak, amely törlődik, amikor a tárolót újra létrehozzák, például egy image frissítésekor: {paths}. Rendeljen hozzájuk kötetet vagy gazdagép-könyvtárat a tároló konfigurációjában.",
         "anonymousVolumeTitle": "Az adatok egy névtelen tárolókötetben vannak",
         "anonymousVolumeMessage": "Ezek az útvonalak névtelen kötetekben vannak, amelyeket a tároló futtatókörnyezete hozott létre, mert nem volt kötet hozzárendelve: {paths}. Az újonnan indított tároló, például egy image frissítése utáni docker run után, új, üres köteteket kap, így az adatok elveszettnek tűnnek. Rendeljen hozzájuk nevesített kötetet vagy gazdagép-könyvtárat."
       }
