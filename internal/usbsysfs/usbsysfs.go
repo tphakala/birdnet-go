@@ -24,8 +24,8 @@ import (
 // that keeps the loop finite.
 const maxWalkDepth = 12
 
-// maxAttrBytes bounds how much of a sysfs attribute ReadAttr reads; attributes
-// are at most one page.
+// maxAttrBytes bounds how much of a sysfs attribute ReadAttr reads. The
+// attributes this package reads (ids, speed, class, names) are far shorter.
 const maxAttrBytes = 4096
 
 // CardUSBDevice walks up from <root>/sys/class/sound/cardN to the USB device node and
