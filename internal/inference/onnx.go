@@ -303,6 +303,7 @@ func InitONNXRuntime(libraryPath string) (err error) {
 		return nil
 	}
 
+	configured := libraryPath != ""
 	if libraryPath == "" {
 		libraryPath = findONNXRuntimeLibrary()
 	}
@@ -315,6 +316,7 @@ func InitONNXRuntime(libraryPath string) (err error) {
 
 	ort.MustInitORT(libraryPath)
 	ortInitialized = true
+	publishORTRuntime(libraryPath, configured)
 	logKleidiAIWorkaround(ortlib.GetVersion(), runtime.GOARCH)
 	return nil
 }
@@ -396,5 +398,6 @@ func DestroyONNXRuntime() error {
 		return err
 	}
 	ortInitialized = false
+	clearORTRuntime()
 	return nil
 }

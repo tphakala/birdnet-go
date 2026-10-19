@@ -160,6 +160,12 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 		return true
 	})
 
+	// 5c. Describe the private instance for the diagnostic snapshot before any lock is
+	//     taken: NumSpecies can take the instance's own lock, which must not nest inside
+	//     the runtime-snapshot leaf lock. Published with the swap, never on a failed or
+	//     orphaned reload.
+	snap := newModelRuntimeSnapshot(registryID, next, configuredThreadsFor(registryID, settings, opts.threads))
+
 	// 6. Swap under entry.mu. Re-check the orphan guard: a Delete/Unload may have raced
 	//    the build/warm-up. Keeping the same *modelEntry preserves its mutex identity and
 	//    the globalInferenceCounters keying.
@@ -179,6 +185,8 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	entry.instance = next
 	entry.generation++
 	o.storeProbedLatency(registryID, probed, probeOK)
+	snap.Generation = entry.generation
+	o.publishReloadedModelRuntime(entry, &snap)
 	if opts.backend != nil {
 		entry.backend = *opts.backend
 	}

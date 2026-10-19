@@ -231,6 +231,11 @@ func (c *Handler) GenerateSupportDump(ctx echo.Context) error {
 		collector.SetAppEventsProvider(supportpkg.NewDatastoreAppEventsProvider(c.DS, nil))
 	}
 
+	// Wire the runtime info provider; it reads lock-free snapshots only
+	if req.IncludeSystemInfo {
+		collector.SetRuntimeInfoProvider(newRuntimeInfoProvider(c.Core))
+	}
+
 	// Set collection options
 	opts := supportpkg.CollectorOptions{
 		IncludeLogs:           req.IncludeLogs,

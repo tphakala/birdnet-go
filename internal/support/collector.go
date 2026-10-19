@@ -20,11 +20,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/mempolicy"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"gopkg.in/yaml.v3"
@@ -71,6 +74,7 @@ const (
 	metadataFileName       = "metadata.json"
 	configYAMLFileName     = "config.yaml"
 	systemInfoFileName     = "system_info.json"
+	runtimeInfoFileName    = "runtime_info.json"
 	databaseInfoFileName   = "database_info.json"
 	deploymentInfoFileName = "deployment_info.json"
 	appEventsFileName      = "app_events.json"
@@ -217,6 +221,8 @@ type Collector struct {
 	sensitiveKeys     []string
 	dbInfoProvider    DatabaseInfoProvider
 	appEventsProvider AppEventsProvider
+	// runtimeInfoProvider supplies runtime_info.json; nil in the CLI.
+	runtimeInfoProvider RuntimeInfoProvider
 }
 
 // DefaultSensitiveKeys returns the default list of sensitive configuration keys to redact.
@@ -474,6 +480,7 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 		getLogger().Debug("support: collecting system information")
 		dump.Diagnostics.SystemCollection.Attempted = true
 		dump.SystemInfo = c.collectSystemInfo()
+		dump.RuntimeInfo = c.collectRuntimeInfo(ctx)
 		dump.Diagnostics.SystemCollection.Successful = true
 		getLogger().Debug("support: system information collected",
 			logger.String("os", dump.SystemInfo.OS),
@@ -662,6 +669,28 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 				Build()
 		}
 		getLogger().Debug("support: system info added successfully")
+	}
+
+	// Add runtime info: the file exists whenever system info was requested, with
+	// available=false when no running instance was inspected.
+	if dump.RuntimeInfo != nil {
+		runtimeFile, err := w.Create(runtimeInfoFileName)
+		if err != nil {
+			getLogger().Error("support: failed to create runtime info file in archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_runtime_info_file").
+				Build()
+		}
+		if err := json.NewEncoder(runtimeFile).Encode(dump.RuntimeInfo); err != nil {
+			getLogger().Error("support: failed to write runtime info to archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_runtime_info").
+				Build()
+		}
 	}
 
 	// Add database info if collected
@@ -855,6 +884,8 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		info.MemoryMB = memStats.Sys / bytesPerMB
 	}
 
+	collectHostFacts(&info)
+
 	// Collect disk information
 	partitions, err := disk.Partitions(false)
 	if err == nil {
@@ -898,6 +929,30 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 	}
 
 	return info
+}
+
+// collectHostFacts fills the CPU, board, SIMD, kernel and cgroup memory fields
+// of info. Every probe is best effort: a failure leaves its field empty.
+func collectHostFacts(info *SystemInfo) {
+	info.CPUModel = sysinfo.GetCPUModel()
+	info.CPUFlags = sysinfo.GetCPUFlags()
+
+	hw := hwprofile.Hardware()
+	info.Board = hw.Board.Model
+	info.SIMD = hw.SIMD
+
+	if kernel, err := host.KernelVersion(); err == nil {
+		info.KernelVersion = kernel
+	}
+
+	if cg := mempolicy.DetectCgroupMemory(); cg.Version != "" {
+		info.CgroupMemory = &CgroupMemoryInfo{
+			Version:    cg.Version,
+			LimitBytes: cg.LimitBytes,
+			LimitExact: cg.LimitExact,
+			UsageBytes: cg.UsageBytes,
+		}
+	}
 }
 
 // collectConfig loads and scrubs the configuration

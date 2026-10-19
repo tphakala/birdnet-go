@@ -26,6 +26,10 @@ const (
 	cgroupV2File    = "memory.max"
 	cgroupV1File    = "memory.limit_in_bytes"
 
+	// Usage files of the same two hierarchies (see DetectCgroupMemoryAt).
+	cgroupV2UsageFile = "memory.current"
+	cgroupV1UsageFile = "memory.usage_in_bytes"
+
 	// cgroupV1UseHierarchyFile says whether a v1 memory cgroup's limit also
 	// covers its descendants.
 	cgroupV1UseHierarchyFile = "memory.use_hierarchy"
