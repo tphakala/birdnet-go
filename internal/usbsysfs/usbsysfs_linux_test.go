@@ -3,6 +3,7 @@ package usbsysfs
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,11 +12,11 @@ import (
 
 // linkCard creates <root>/sys/class/sound/card<n> as a symlink to cardDir, the way
 // the kernel exposes sound cards.
-func linkCard(t *testing.T, root, name, cardDir string) {
+func linkCard(t *testing.T, root string, n int, cardDir string) {
 	t.Helper()
 	classDir := filepath.Join(root, "sys", "class", "sound")
 	require.NoError(t, os.MkdirAll(classDir, 0o755))
-	require.NoError(t, os.Symlink(cardDir, filepath.Join(classDir, name)))
+	require.NoError(t, os.Symlink(cardDir, filepath.Join(classDir, "card"+strconv.Itoa(n))))
 }
 
 func TestCardUSBDevice_StopsAtDeviceNode(t *testing.T) {
@@ -29,7 +30,7 @@ func TestCardUSBDevice_StopsAtDeviceNode(t *testing.T) {
 	// the nearest one, the device.
 	require.NoError(t, os.WriteFile(filepath.Join(hub, "idVendor"), []byte("1d6b\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(dev, "idVendor"), []byte("0d8c\n"), 0o644))
-	linkCard(t, root, "card0", cardDir)
+	linkCard(t, root, 0, cardDir)
 
 	got, ok := CardUSBDevice(root, 0)
 
@@ -54,7 +55,7 @@ func TestCardUSBDevice_NotFound(t *testing.T) {
 		root := t.TempDir()
 		cardDir := filepath.Join(root, "sys", "devices", "platform", "snd_aloop.0", "sound", "card0")
 		require.NoError(t, os.MkdirAll(cardDir, 0o755))
-		linkCard(t, root, "card0", cardDir)
+		linkCard(t, root, 0, cardDir)
 
 		_, ok := CardUSBDevice(root, 0)
 		assert.False(t, ok)
@@ -64,10 +65,11 @@ func TestCardUSBDevice_NotFound(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()
 		// A directory outside <root>/sys that looks like a USB device must never be returned.
-		outside := filepath.Join(t.TempDir(), "device", "sound", "card0")
-		require.NoError(t, os.MkdirAll(outside, 0o755))
-		require.NoError(t, os.WriteFile(filepath.Join(filepath.Dir(filepath.Dir(outside)), "idVendor"), []byte("0d8c\n"), 0o644))
-		linkCard(t, root, "card0", outside)
+		outsideDev := filepath.Join(t.TempDir(), "device")
+		outsideCard := filepath.Join(outsideDev, "sound", "card0")
+		require.NoError(t, os.MkdirAll(outsideCard, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(outsideDev, "idVendor"), []byte("0d8c\n"), 0o644))
+		linkCard(t, root, 0, outsideCard)
 
 		_, ok := CardUSBDevice(root, 0)
 		assert.False(t, ok)
