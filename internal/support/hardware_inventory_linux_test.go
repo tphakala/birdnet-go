@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -78,6 +79,17 @@ func TestCollectHardwareInventory(t *testing.T) {
 		usb, cards := collectHardwareInventory(t.Context(), osLinux, root)
 		assert.Equal(t, &USBInventory{Available: true}, usb)
 		assert.Equal(t, &SoundCardInventory{Available: true}, cards)
+	})
+
+	t.Run("deadline passed before listing reports cancelled", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		populateHardwareTree(t, root)
+		ctx, cancel := context.WithDeadline(t.Context(), time.Unix(0, 0))
+		defer cancel()
+		usb, cards := collectHardwareInventory(ctx, osLinux, root)
+		assert.Equal(t, &USBInventory{Reason: "cancelled"}, usb)
+		assert.Equal(t, &SoundCardInventory{Reason: "cancelled"}, cards)
 	})
 
 	t.Run("context done before listing reports cancelled", func(t *testing.T) {
