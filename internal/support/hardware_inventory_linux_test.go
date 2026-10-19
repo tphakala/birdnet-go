@@ -1,9 +1,11 @@
 package support
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,6 +78,44 @@ func TestCollectHardwareInventory(t *testing.T) {
 		usb, cards := collectHardwareInventory(t.Context(), osLinux, root)
 		assert.Equal(t, &USBInventory{Available: true}, usb)
 		assert.Equal(t, &SoundCardInventory{Available: true}, cards)
+	})
+
+	t.Run("cancelled context marks both sections truncated", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		usb, cards := collectHardwareInventory(ctx, osLinux, t.TempDir())
+		assert.Equal(t, &USBInventory{Available: true, Truncated: true}, usb)
+		assert.Equal(t, &SoundCardInventory{Available: true, Truncated: true}, cards)
+	})
+
+	t.Run("truncation is reported per section", func(t *testing.T) {
+		t.Parallel()
+		// 129 USB devices exceed the device cap while the sound card
+		// directory stays empty, and the reverse for the second root.
+		usbRoot := t.TempDir()
+		usbDir := filepath.Join(usbRoot, "sys", "bus", "usb", "devices")
+		require.NoError(t, os.MkdirAll(usbDir, 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(usbRoot, "sys", "class", "sound"), 0o755))
+		for i := range 129 {
+			require.NoError(t, os.WriteFile(filepath.Join(usbDir, "1-"+strconv.Itoa(1000+i)), nil, 0o644))
+		}
+		usb, cards := collectHardwareInventory(t.Context(), osLinux, usbRoot)
+		assert.True(t, usb.Truncated)
+		assert.Len(t, usb.Devices, 128)
+		assert.False(t, cards.Truncated)
+
+		soundRoot := t.TempDir()
+		soundDir := filepath.Join(soundRoot, "sys", "class", "sound")
+		require.NoError(t, os.MkdirAll(soundDir, 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(soundRoot, "sys", "bus", "usb", "devices"), 0o755))
+		for i := range 33 {
+			require.NoError(t, os.WriteFile(filepath.Join(soundDir, "card"+strconv.Itoa(i)), nil, 0o644))
+		}
+		usb, cards = collectHardwareInventory(t.Context(), osLinux, soundRoot)
+		assert.False(t, usb.Truncated)
+		assert.True(t, cards.Truncated)
+		assert.Len(t, cards.Cards, 32)
 	})
 
 	t.Run("populated tree maps fields and never leaks the serial", func(t *testing.T) {

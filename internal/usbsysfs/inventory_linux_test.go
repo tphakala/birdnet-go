@@ -289,3 +289,95 @@ func TestInventory_DirectoryStates(t *testing.T) {
 		})
 	}
 }
+
+// countdownCtx is a context that reports cancellation after a fixed number of
+// polls, through Done or Err alike, so a test cancels the listers part way
+// through their loops without timing.
+type countdownCtx struct {
+	context.Context
+	remaining int
+	closed    chan struct{}
+}
+
+func newCountdownCtx(t *testing.T, open int) *countdownCtx {
+	t.Helper()
+	closed := make(chan struct{})
+	close(closed)
+	return &countdownCtx{Context: t.Context(), remaining: open, closed: closed}
+}
+
+// poll consumes one open poll and reports whether the context is cancelled.
+func (c *countdownCtx) poll() bool {
+	if c.remaining > 0 {
+		c.remaining--
+		return false
+	}
+	return true
+}
+
+func (c *countdownCtx) Done() <-chan struct{} {
+	if c.poll() {
+		return c.closed
+	}
+	return nil // a nil channel never becomes ready
+}
+
+func (c *countdownCtx) Err() error {
+	if c.poll() {
+		return context.Canceled
+	}
+	return nil
+}
+
+func TestInventory_CancelledMidIteration(t *testing.T) {
+	t.Parallel()
+	t.Run("devices", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		for _, name := range []string{"1-1", "1-2", "1-3"} {
+			writeUSBDevice(t, root, name, map[string]string{"idVendor": "0d8c"})
+		}
+		// Entry check and the first two items pass; the third item's check cancels.
+		got, truncated, err := Devices(newCountdownCtx(t, 3), root)
+		require.NoError(t, err)
+		assert.True(t, truncated)
+		require.Len(t, got, 2)
+		assert.Equal(t, "1-1", got[0].BusID)
+		assert.Equal(t, "1-2", got[1].BusID)
+	})
+	t.Run("cards", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		for n := range 3 {
+			writeSoundCard(t, root, n, "c"+strconv.Itoa(n), "")
+		}
+		got, truncated, err := SoundCards(newCountdownCtx(t, 3), root)
+		require.NoError(t, err)
+		assert.True(t, truncated)
+		require.Len(t, got, 2)
+		assert.Equal(t, 0, got[0].Index)
+		assert.Equal(t, 1, got[1].Index)
+	})
+}
+
+func TestInventory_SanitisesFreeText(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	long := strings.Repeat("p", 200)
+	dev := writeUSBDevice(t, root, "1-1", map[string]string{
+		"manufacturer": "Acme\x1b[31m\u200eCo",
+		"product":      long,
+	})
+	writeSoundCard(t, root, 0, "Card\x1b\u200eId", dev)
+
+	devices, _, err := Devices(t.Context(), root)
+	require.NoError(t, err)
+	require.Len(t, devices, 1)
+	assert.Equal(t, "Acme[31mCo", devices[0].Manufacturer)
+	assert.Equal(t, strings.Repeat("p", 128), devices[0].Product)
+
+	cards, _, err := SoundCards(t.Context(), root)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, "CardId", cards[0].ID)
+}
