@@ -139,15 +139,23 @@ var (
 	// US, European and dotted forms ("2026-10-16 00:12:34", "10/16/2026 00:12"),
 	// with optional fractional seconds (".015573" or ",123") and a Z or numeric
 	// UTC offset. An offset needs minutes ("+0200", "-05:00") so that a negative
-	// latitude after the time ("-45.12") is not read as one.
+	// latitude after the time ("-45.12") is not read as one. The date and the
+	// time are separated by "T", a space or ", " ("10/16/2026, 00:12:34").
 	// coordinatesPattern's keyword-less alternative reads the "-16 00" of such
 	// a prefix as a coordinate pair, so ScrubCoordinates keeps these spans
-	// out of the text it scrubs.
-	dateTimePattern = regexp.MustCompile(`\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3,9})?(?:Z|\s?[+-]\d{2}:?\d{2})?`)
+	// out of the text it scrubs. Slash dates without a time are protected
+	// through standaloneSlashDateSpans.
+	dateTimePattern = regexp.MustCompile(`\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}(?:T| |, )\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3,9})?(?:Z|\s?[+-]\d{2}:?\d{2})?`)
 
 	// syslogTimePattern matches the "Oct 16 00:12:34" prefix of a syslog line,
 	// for the same reason as dateTimePattern.
 	syslogTimePattern = regexp.MustCompile(`(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3,9})?`)
+
+	// slashDatePattern finds slash date candidates such as "10/16/2026" or
+	// "2026/10/16". The boundary rules that tell a date from a piece of a path
+	// or of a longer number live in standaloneSlashDateSpans, because RE2 has
+	// no lookaround.
+	slashDatePattern = regexp.MustCompile(`\b\d{1,4}/\d{1,2}/\d{1,4}`)
 
 	// Enhanced API token/key pattern - includes bearer tokens and more formats
 	// Requires a separator (: or =) between the key name and the token value
@@ -252,8 +260,169 @@ func ScrubQueryString(rawQuery string) string {
 }
 
 // ScrubFilePaths anonymizes file paths in text messages using AnonymizePath.
+// Standalone slash dates such as "10/16/2026" are not paths and are left as
+// they are; a path match that runs into such a date ends where the date begins.
 func ScrubFilePaths(message string) string {
-	return filePathPattern.ReplaceAllStringFunc(message, AnonymizePath)
+	loc := filePathPattern.FindStringIndex(message)
+	if loc == nil {
+		return message
+	}
+	if !strings.Contains(message, "/") {
+		return filePathPattern.ReplaceAllStringFunc(message, AnonymizePath)
+	}
+	spans := standaloneSlashDateSpans(message)
+	if len(spans) == 0 {
+		return filePathPattern.ReplaceAllStringFunc(message, AnonymizePath)
+	}
+
+	var out strings.Builder
+	pos := 0
+	next := 0 // index of the first span that may still overlap a match
+	for loc != nil {
+		start, end := pos+loc[0], pos+loc[1]
+		for next < len(spans) && spans[next][1] <= start {
+			next++
+		}
+		if next < len(spans) && spans[next][0] < end {
+			// The match overlaps a date: anonymize the part before it, keep the
+			// date, and resume after it.
+			span := spans[next]
+			if span[0] > start {
+				out.WriteString(message[pos:start])
+				out.WriteString(anonymizePathHead(message[start:span[0]]))
+			} else {
+				out.WriteString(message[pos:span[0]])
+			}
+			out.WriteString(message[span[0]:span[1]])
+			pos = span[1]
+		} else {
+			out.WriteString(message[pos:start])
+			out.WriteString(AnonymizePath(message[start:end]))
+			pos = end
+		}
+		loc = filePathPattern.FindStringIndex(message[pos:])
+	}
+	out.WriteString(message[pos:])
+	return out.String()
+}
+
+// anonymizePathHead anonymizes the head of a path match that was cut at a slash
+// date. Trailing spaces stay outside the hash, and a head made only of
+// separators and spaces is returned unchanged.
+func anonymizePathHead(head string) string {
+	trimmed := strings.TrimRight(head, " ")
+	if strings.Trim(trimmed, `/\ `) == "" {
+		return head
+	}
+	return AnonymizePath(trimmed) + head[len(trimmed):]
+}
+
+// maxClockHourDigits is the most digits a clock hour carries ("00" to "23").
+const maxClockHourDigits = 2
+
+// isPathSegmentByte reports whether b is in the segment class
+// [a-zA-Z0-9 ._-] of filePathPattern. The two must stay in sync.
+func isPathSegmentByte(b byte) bool {
+	return isWordByte(b) || b == ' ' || b == '.' || b == '-'
+}
+
+// isPathSeparator reports whether b is a Unix or Windows path separator.
+func isPathSeparator(b byte) bool {
+	return b == '/' || b == '\\'
+}
+
+// isDigitByte reports whether b is an ASCII digit.
+func isDigitByte(b byte) bool {
+	return b >= '0' && b <= '9'
+}
+
+// standaloneSlashDateSpans returns the [start, end) spans of slash dates in
+// message that cannot be part of a path or of a longer number, in order. A
+// candidate from slashDatePattern is kept only when:
+//  1. the byte before it is not a path separator (a date-shaped run inside
+//     "/data/2026/10/16/x.wav" is a run of directories);
+//  2. the byte after it is not a digit, nor "." or "," followed by a digit
+//     ("1/2/60.1699,24.9384" and "10/16/60,24.9384" are coordinate pairs, not
+//     dates);
+//  3. the run of path-segment bytes after it does not end at a path separator
+//     ("10/16/2026/john.wav", "10/16/2026 /john.wav");
+//  4. when the date is joined to a preceding path, it follows a space and what
+//     follows it is empty or a clock time ("T" or a space, 1-2 digits, then
+//     ":"); otherwise the text around it could be the rest of a path segment
+//     ("/home/john-10/16/2026");
+//  5. the run of path-segment bytes after it has no file extension shape, a
+//     "." followed by a word byte ("2026/10/16 john smith.wav" is a relative
+//     file name, not a date followed by prose).
+//
+// A rejected candidate keeps the behavior of the path stage for that text.
+func standaloneSlashDateSpans(message string) [][]int {
+	candidates := slashDatePattern.FindAllStringIndex(message, -1)
+	kept := candidates[:0]
+	for _, span := range candidates {
+		start, end := span[0], span[1]
+		if start > 0 && isPathSeparator(message[start-1]) {
+			continue
+		}
+		if end < len(message) && isDigitByte(message[end]) {
+			continue
+		}
+		if end+1 < len(message) && (message[end] == '.' || message[end] == ',') && isDigitByte(message[end+1]) {
+			continue
+		}
+		runEnd := end
+		for runEnd < len(message) && isPathSegmentByte(message[runEnd]) {
+			runEnd++
+		}
+		if runEnd < len(message) && isPathSeparator(message[runEnd]) {
+			continue
+		}
+		if hasExtensionDot(message[end:runEnd]) {
+			continue
+		}
+		if joinedToPath(message, start) && (message[start-1] != ' ' || !isClockTimeRun(message, end, runEnd)) {
+			continue
+		}
+		kept = append(kept, span)
+	}
+	return kept
+}
+
+// hasExtensionDot reports whether run contains a "." followed by a word byte,
+// the shape of a file extension such as ".wav".
+func hasExtensionDot(run string) bool {
+	for i := range len(run) - 1 {
+		if run[i] == '.' && isWordByte(run[i+1]) {
+			return true
+		}
+	}
+	return false
+}
+
+// joinedToPath reports whether scanning back from start over path-segment bytes
+// reaches a path separator, that is, whether the text at start could be the
+// continuation of a path.
+func joinedToPath(message string, start int) bool {
+	i := start - 1
+	for i >= 0 && isPathSegmentByte(message[i]) {
+		i--
+	}
+	return i >= 0 && isPathSeparator(message[i])
+}
+
+// isClockTimeRun reports whether message[end:runEnd], the path-segment run after
+// a date, is empty or the start of a clock time: "T" or a space, one or two
+// hour digits, and a ":" right after the run.
+func isClockTimeRun(message string, end, runEnd int) bool {
+	run := message[end:runEnd]
+	if run == "" {
+		return true
+	}
+	if run[0] != 'T' && run[0] != ' ' {
+		return false
+	}
+	hour := run[1:]
+	return len(hour) >= 1 && len(hour) <= maxClockHourDigits && isNumeric(hour) &&
+		runEnd < len(message) && message[runEnd] == ':'
 }
 
 // AnonymizeURL converts a URL to an anonymized form while preserving debugging value
@@ -422,7 +591,8 @@ func ScrubUUIDs(message string) string {
 // ScrubStandaloneIPs removes or anonymizes standalone IP addresses from text messages
 // It handles both IPv4 and IPv6 addresses that are not part of URLs.
 // Time-like candidates such as the "12:34:56" part of a timestamp are left
-// unchanged.
+// unchanged, and so are the vendor and product ids of usb-id tokens and the PCI
+// address of usb-path tokens (see isUSBDeviceToken).
 func ScrubStandaloneIPs(message string) string {
 	// First mark all URLs to avoid processing IPs within them
 	urlPositions := make(map[int]int) // start -> end position of URLs
@@ -444,7 +614,7 @@ func ScrubStandaloneIPs(message string) string {
 	// Find all IP matches in the original message to ensure coordinates
 	// are consistent with URL positions (avoids stale coordinate bug)
 	ipv4Matches := ipv4Pattern.FindAllStringIndex(message, -1)
-	ipv6Matches := dropTimeLikeMatches(message, ipv6Pattern.FindAllStringIndex(message, -1))
+	ipv6Matches := dropNonAddressMatches(message, ipv6Pattern.FindAllStringIndex(message, -1))
 
 	// Combine and sort by position to process in order
 	allMatches := make([][]int, 0, len(ipv4Matches)+len(ipv6Matches))
@@ -461,22 +631,83 @@ func ScrubStandaloneIPs(message string) string {
 // It replaces coordinate pairs with generic placeholders while preserving message structure.
 // Date-time and syslog time prefixes are not coordinate pairs; they are kept
 // as they are and the text around them is scrubbed on its own, so a pair
-// that follows a timestamp is still replaced.
+// that follows a timestamp is still replaced. Standalone slash dates are kept
+// too, and so are integer ALSA selectors such as "hw:1,0" (see isALSASelector).
 func ScrubCoordinates(message string) string {
-	protected := protectedTimeSpans(message)
+	protected := protectedDateTimeSpans(message)
 	if len(protected) == 0 {
-		return coordinatesPattern.ReplaceAllString(message, "[LAT],[LON]")
+		return scrubCoordinatePairs(message, message, 0)
 	}
 
 	var out strings.Builder
 	pos := 0
 	for _, span := range protected {
-		out.WriteString(coordinatesPattern.ReplaceAllString(message[pos:span[0]], "[LAT],[LON]"))
+		out.WriteString(scrubCoordinatePairs(message, message[pos:span[0]], pos))
 		out.WriteString(message[span[0]:span[1]])
 		pos = span[1]
 	}
-	out.WriteString(coordinatesPattern.ReplaceAllString(message[pos:], "[LAT],[LON]"))
+	out.WriteString(scrubCoordinatePairs(message, message[pos:], pos))
 	return out.String()
+}
+
+// coordinatePlaceholder replaces a coordinate pair in scrubbed text.
+const coordinatePlaceholder = "[LAT],[LON]"
+
+// alsaSelectorPrefixes are the ALSA PCM names that take a positional "CARD,DEV"
+// selector. The integer pair right after one of them is a device address, not a
+// coordinate; conf/validate.go already treats integer pairs as selectors.
+var alsaSelectorPrefixes = []string{"hw:", "plughw:", "dsnoop:", "dmix:"}
+
+// scrubCoordinatePairs replaces the coordinate pairs in seg, which is
+// message[offset:offset+len(seg)], except integer ALSA selectors. The selector
+// check sees the whole message, so the text before the segment is context. It
+// returns seg itself when nothing matches.
+func scrubCoordinatePairs(message, seg string, offset int) string {
+	matches := coordinatesPattern.FindAllStringIndex(seg, -1)
+	if len(matches) == 0 {
+		return seg
+	}
+	var out strings.Builder
+	pos := 0
+	for _, m := range matches {
+		out.WriteString(seg[pos:m[0]])
+		if isALSASelector(message, offset+m[0], offset+m[1]) {
+			out.WriteString(seg[m[0]:m[1]])
+		} else {
+			out.WriteString(coordinatePlaceholder)
+		}
+		pos = m[1]
+	}
+	out.WriteString(seg[pos:])
+	return out.String()
+}
+
+// isWordByte reports whether b is in the regexp word class [A-Za-z0-9_].
+func isWordByte(b byte) bool {
+	return b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z' || isDigitByte(b) || b == '_'
+}
+
+// isALSASelector reports whether message[start:end], a coordinatesPattern match,
+// is an ALSA selector: two integers separated by a comma, with no sign, decimal
+// point or space, right after one of alsaSelectorPrefixes. The byte before the
+// prefix must not be a word byte, so "myhw:60,24" is still scrubbed. A pair
+// after a bare colon is not kept: whole-degree coordinates must not leak.
+func isALSASelector(message string, start, end int) bool {
+	card, device, ok := strings.Cut(message[start:end], ",")
+	if !ok || !isNumeric(card) || !isNumeric(device) {
+		return false
+	}
+	before := message[:start]
+	for _, prefix := range alsaSelectorPrefixes {
+		if !strings.HasSuffix(before, prefix) {
+			continue
+		}
+		boundary := len(before) - len(prefix)
+		if boundary == 0 || !isWordByte(before[boundary-1]) {
+			return true
+		}
+	}
+	return false
 }
 
 // trimGluedCoordinate returns the end of the time prefix message[start:end]
@@ -499,13 +730,16 @@ func trimGluedCoordinate(message string, start, end int) int {
 	return start + comma
 }
 
-// protectedTimeSpans returns the date-time and syslog time prefixes in message
-// as sorted, non-overlapping [start, end) spans. A trailing comma fraction that
-// is really the start of a coordinate (see trimGluedCoordinate) is not part of
-// a span.
-func protectedTimeSpans(message string) [][]int {
+// protectedDateTimeSpans returns the date-time prefixes, syslog time prefixes
+// and standalone slash dates in message as sorted, non-overlapping [start, end)
+// spans. A trailing comma fraction that is really the start of a coordinate
+// (see trimGluedCoordinate) is not part of a span.
+func protectedDateTimeSpans(message string) [][]int {
 	spans := dateTimePattern.FindAllStringIndex(message, -1)
 	spans = append(spans, syslogTimePattern.FindAllStringIndex(message, -1)...)
+	if strings.Contains(message, "/") {
+		spans = append(spans, standaloneSlashDateSpans(message)...)
+	}
 	for _, span := range spans {
 		span[1] = trimGluedCoordinate(message, span[0], span[1])
 	}
@@ -792,15 +1026,59 @@ func isTimeLikeToken(s string) bool {
 	return hasDigit
 }
 
-// dropTimeLikeMatches removes the matches that are time-like tokens.
-// ipv6Pattern also matches the "12:34:56" part of a timestamp; those are left
-// untouched instead of being hashed. Every other match, including the ones
-// net.ParseIP rejects (MAC addresses, truncated IPv6 prefixes), is still
-// anonymized.
-func dropTimeLikeMatches(message string, matches [][]int) [][]int {
+// usbIDTokenPrefix starts the stable device token "usb-id:<vendor>:<product>:
+// <serial or "<redacted>">" that internal/audiocore/usb.go builds (hwIDToken)
+// and redacts (redactDeviceID). privacy cannot import audiocore (audiocore
+// imports privacy), so the prefix is repeated here.
+const usbIDTokenPrefix = "usb-id:"
+
+// usbPathTokenPrefix is the text before the PCI address in a "usb-path:" token
+// such as "usb-path:usb-0000:00:1d.0-1".
+const usbPathTokenPrefix = "usb-"
+
+// USB vendor and product ids are 4 hex digits; a PCI address is a 4 digit
+// domain, a 2 digit bus and a 2 digit device, all hex.
+const (
+	usbIDHexLen     = 4
+	pciBusHexLen    = 2
+	pciDeviceHexLen = 2
+)
+
+// ipv6Pattern groups: a usb-id match is "" (before the colon of the prefix),
+// vendor, product; a PCI address match is domain, bus, device.
+const usbTokenGroupCount = 3
+
+// isUSBDeviceToken reports whether the ipv6Pattern match message[start:end] is
+// the id part of a USB device token and not an address. Two exact shapes pass:
+//   - ":VVVV:PPPP" right after the literal "usb-id" (the match starts at the
+//     colon of "usb-id:"). A serial that starts with a word byte after the pair
+//     ("usb-id:046d:0825:SN12") puts a trailing colon into the match, which
+//     fails the shape, so the ids are anonymized with the serial;
+//   - "DDDD:BB:dd" right after "usb-" with a "." after it, the PCI address of a
+//     "usb-path:usb-0000:00:1d.0-1" token.
+//
+// A longer match, such as an address glued after the prefix, fails both shapes
+// and is anonymized. The match comes from ipv6Pattern, so it holds only hex
+// digits and colons and the group checks compare lengths only.
+func isUSBDeviceToken(message string, start, end int) bool {
+	groups := strings.Split(message[start:end], ":")
+	if strings.HasSuffix(message[:start+1], usbIDTokenPrefix) {
+		return len(groups) == usbTokenGroupCount && groups[0] == "" && len(groups[1]) == usbIDHexLen && len(groups[2]) == usbIDHexLen
+	}
+	return strings.HasSuffix(message[:start], usbPathTokenPrefix) && end < len(message) && message[end] == '.' &&
+		len(groups) == usbTokenGroupCount && len(groups[0]) == usbIDHexLen && len(groups[1]) == pciBusHexLen && len(groups[2]) == pciDeviceHexLen
+}
+
+// dropNonAddressMatches removes the matches that are not addresses: time-like
+// tokens and the ids of USB device tokens.
+// ipv6Pattern also matches the "12:34:56" part of a timestamp and the
+// "0d8c:0014" of "usb-id:0d8c:0014:<redacted>"; those are left untouched
+// instead of being hashed. Every other match, including the ones net.ParseIP
+// rejects (MAC addresses, truncated IPv6 prefixes), is still anonymized.
+func dropNonAddressMatches(message string, matches [][]int) [][]int {
 	kept := matches[:0]
 	for _, match := range matches {
-		if !isTimeLikeToken(message[match[0]:match[1]]) {
+		if !isTimeLikeToken(message[match[0]:match[1]]) && !isUSBDeviceToken(message, match[0], match[1]) {
 			kept = append(kept, match)
 		}
 	}
