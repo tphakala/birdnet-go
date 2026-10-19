@@ -1129,10 +1129,26 @@ func usbIDSerialEnd(message string, i, s int) int {
 	return k
 }
 
+// isMaskedSerialAt reports whether the serial at s is already the redaction
+// marker: the marker followed by the end of text, an isSerialTerminator byte,
+// or one ":" or "." that is itself followed by the end of text or a terminator
+// (an error suffix or the end of a sentence). A marker followed by any other
+// text is the start of a serial and is masked like one.
+func isMaskedSerialAt(message string, s int) bool {
+	rest, ok := strings.CutPrefix(message[s:], redactedUSBSerial)
+	if !ok {
+		return false
+	}
+	if rest != "" && (rest[0] == ':' || rest[0] == '.') {
+		rest = rest[1:]
+	}
+	return rest == "" || isSerialTerminator(rest[0])
+}
+
 // scrubUSBIDSerials masks the serial of every usb-id token in message (see
 // usbIDTokenPattern), giving "usb-id:<vendor>:<product>:<redacted>", so vendor
 // and product stay readable for later stages (see isUSBDeviceToken). A token
-// whose serial is empty or already starts with "<redacted>" is left alone,
+// whose serial is empty or already masked (see isMaskedSerialAt) is left alone,
 // which keeps the stage idempotent; any other serial is masked, failing closed.
 // usbIDSerialEnd decides where a serial ends. It returns message itself when
 // there is nothing to mask.
@@ -1145,7 +1161,7 @@ func scrubUSBIDSerials(message string) string {
 	for _, m := range usbIDTokenPattern.FindAllStringIndex(message, -1) {
 		i, s := m[0], m[1]
 		// A token inside a serial masked already is gone with that serial.
-		if i < pos || strings.HasPrefix(message[s:], redactedUSBSerial) {
+		if i < pos || isMaskedSerialAt(message, s) {
 			continue
 		}
 		e := usbIDSerialEnd(message, i, s)
