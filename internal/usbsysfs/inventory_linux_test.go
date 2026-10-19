@@ -52,10 +52,10 @@ func TestDevices_ListsDevicesSortedWithoutInterfaces(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, truncated)
 	want := []Device{
-		{BusID: "1-1", VendorID: "0d8c", ProductID: "0014", Manufacturer: "C-Media", Product: "USB Audio", Speed: "480", DeviceClass: "00"},
+		{BusID: "1-1", VendorID: "0d8c", ProductID: "0014", Manufacturer: "C-Media", Product: "USB Audio", SpeedMbps: "480", DeviceClass: "00"},
 		{BusID: "1-1.2", VendorID: "0d8c", ProductID: "0015"},
 		{BusID: "1-10", VendorID: "0001", ProductID: "0002"},
-		{BusID: "usb1", VendorID: "1d6b", ProductID: "0002", Speed: "480", DeviceClass: "09"},
+		{BusID: "usb1", VendorID: "1d6b", ProductID: "0002", SpeedMbps: "480", DeviceClass: "09"},
 	}
 	assert.Equal(t, want, got)
 	assert.NotContains(t, strings.Join(deviceStrings(got), "|"), serialMarker)
@@ -64,7 +64,7 @@ func TestDevices_ListsDevicesSortedWithoutInterfaces(t *testing.T) {
 func deviceStrings(devs []Device) []string {
 	out := make([]string, 0, len(devs)*7)
 	for _, d := range devs {
-		out = append(out, d.BusID, d.VendorID, d.ProductID, d.Manufacturer, d.Product, d.Speed, d.DeviceClass)
+		out = append(out, d.BusID, d.VendorID, d.ProductID, d.Manufacturer, d.Product, d.SpeedMbps, d.DeviceClass)
 	}
 	return out
 }
@@ -77,7 +77,7 @@ func TestDevices_ValidatesAttributes(t *testing.T) {
 		want  Device
 	}{
 		{"well formed", map[string]string{"idVendor": "0D8c", "idProduct": "00aF", "speed": "1.5", "bDeviceClass": "ef"},
-			Device{VendorID: "0D8c", ProductID: "00aF", Speed: "1.5", DeviceClass: "ef"}},
+			Device{VendorID: "0D8c", ProductID: "00aF", SpeedMbps: "1.5", DeviceClass: "ef"}},
 		{"short vendor", map[string]string{"idVendor": "0d8"}, Device{}},
 		{"long vendor", map[string]string{"idVendor": "0d8c0"}, Device{}},
 		{"short class", map[string]string{"bDeviceClass": "e"}, Device{}},
@@ -290,9 +290,9 @@ func TestInventory_DirectoryStates(t *testing.T) {
 	}
 }
 
-// countdownCtx is a context that reports cancellation after a fixed number of
-// polls, through Done or Err alike, so a test cancels the listers part way
-// through their loops without timing.
+// countdownCtx is a context whose Done channel reports cancellation after a
+// fixed number of polls, so a test cancels the listers part way through their
+// loops without timing.
 type countdownCtx struct {
 	context.Context
 	remaining int
@@ -306,27 +306,12 @@ func newCountdownCtx(t *testing.T, open int) *countdownCtx {
 	return &countdownCtx{Context: t.Context(), remaining: open, closed: closed}
 }
 
-// poll consumes one open poll and reports whether the context is cancelled.
-func (c *countdownCtx) poll() bool {
+func (c *countdownCtx) Done() <-chan struct{} {
 	if c.remaining > 0 {
 		c.remaining--
-		return false
+		return nil // a nil channel never becomes ready
 	}
-	return true
-}
-
-func (c *countdownCtx) Done() <-chan struct{} {
-	if c.poll() {
-		return c.closed
-	}
-	return nil // a nil channel never becomes ready
-}
-
-func (c *countdownCtx) Err() error {
-	if c.poll() {
-		return context.Canceled
-	}
-	return nil
+	return c.closed
 }
 
 func TestInventory_CancelledMidIteration(t *testing.T) {

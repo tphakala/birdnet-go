@@ -24,15 +24,11 @@ const (
 	maxTextRunes = 128
 )
 
-// Sysfs path segments and attribute names the inventory reads. The serial
-// attribute is deliberately absent.
+// Sysfs directories (relative to root) and attribute names the inventory reads.
+// The serial attribute is deliberately absent.
 const (
-	segSys     = "sys"
-	segBus     = "bus"
-	segUSB     = "usb"
-	segDevices = "devices"
-	segClass   = "class"
-	segSound   = "sound"
+	usbDevicesDir = "sys/bus/usb/devices"
+	soundClassDir = "sys/class/sound"
 
 	attrIDVendor     = "idVendor"
 	attrIDProduct    = "idProduct"
@@ -41,8 +37,6 @@ const (
 	attrSpeed        = "speed"
 	attrDeviceClass  = "bDeviceClass"
 	attrCardID       = "id"
-
-	cardPrefix = "card"
 )
 
 var (
@@ -69,7 +63,7 @@ type Device struct {
 	ProductID    string // idProduct, four hex digits
 	Manufacturer string // sanitised free text
 	Product      string // sanitised free text
-	Speed        string // Mbit/s as the kernel reports it, for example "480" or "1.5"
+	SpeedMbps    string // speed in Mbit/s as the kernel reports it, for example "480" or "1.5"
 	DeviceClass  string // bDeviceClass, two hex digits
 }
 
@@ -91,7 +85,7 @@ func Devices(ctx context.Context, root string) (devices []Device, truncated bool
 	if cancelled(ctx) {
 		return nil, true, nil
 	}
-	base := filepath.Join(root, segSys, segBus, segUSB, segDevices)
+	base := filepath.Join(root, usbDevicesDir)
 	names, truncated, err := listDir(base)
 	if err != nil {
 		return nil, false, err
@@ -113,7 +107,7 @@ func Devices(ctx context.Context, root string) (devices []Device, truncated bool
 			ProductID:    validOrEmpty(hex4Re, ReadAttr(filepath.Join(dir, attrIDProduct))),
 			Manufacturer: sanitizeText(ReadAttr(filepath.Join(dir, attrManufacturer))),
 			Product:      sanitizeText(ReadAttr(filepath.Join(dir, attrProduct))),
-			Speed:        validOrEmpty(speedRe, ReadAttr(filepath.Join(dir, attrSpeed))),
+			SpeedMbps:    validOrEmpty(speedRe, ReadAttr(filepath.Join(dir, attrSpeed))),
 			DeviceClass:  validOrEmpty(hex2Re, ReadAttr(filepath.Join(dir, attrDeviceClass))),
 		})
 	}
@@ -130,12 +124,16 @@ func SoundCards(ctx context.Context, root string) (cards []SoundCard, truncated 
 	if cancelled(ctx) {
 		return nil, true, nil
 	}
-	base := filepath.Join(root, segSys, segClass, segSound)
+	base := filepath.Join(root, soundClassDir)
 	names, truncated, err := listDir(base)
 	if err != nil {
 		return nil, false, err
 	}
-	indices := make([]int, 0, len(names))
+	type cardEntry struct {
+		index int
+		name  string
+	}
+	entries := make([]cardEntry, 0, len(names))
 	for _, name := range names {
 		m := cardNameRe.FindStringSubmatch(name)
 		if m == nil {
@@ -145,20 +143,20 @@ func SoundCards(ctx context.Context, root string) (cards []SoundCard, truncated 
 		if convErr != nil {
 			continue
 		}
-		indices = append(indices, idx)
+		entries = append(entries, cardEntry{index: idx, name: name})
 	}
-	slices.Sort(indices)
-	if len(indices) > maxSoundCards {
-		indices, truncated = indices[:maxSoundCards], true
+	slices.SortFunc(entries, func(a, b cardEntry) int { return a.index - b.index })
+	if len(entries) > maxSoundCards {
+		entries, truncated = entries[:maxSoundCards], true
 	}
-	cards = make([]SoundCard, 0, len(indices))
-	for _, idx := range indices {
+	cards = make([]SoundCard, 0, len(entries))
+	for _, e := range entries {
 		if cancelled(ctx) {
 			return cards, true, nil
 		}
-		dir := filepath.Join(base, cardPrefix+strconv.Itoa(idx))
-		card := SoundCard{Index: idx, ID: sanitizeText(ReadAttr(filepath.Join(dir, attrCardID)))}
-		if dev, ok := CardUSBDevice(root, idx); ok {
+		dir := filepath.Join(base, e.name)
+		card := SoundCard{Index: e.index, ID: sanitizeText(ReadAttr(filepath.Join(dir, attrCardID)))}
+		if dev, ok := CardUSBDevice(root, e.index); ok {
 			if busID := filepath.Base(dev); busIDRe.MatchString(busID) {
 				card.USBBusID = busID
 			}

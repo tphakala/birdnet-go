@@ -28,45 +28,22 @@ func collectHardwareInventory(ctx context.Context, goos, root string) (*USBInven
 	}
 
 	usb := &USBInventory{}
-	devices, truncated, err := usbsysfs.Devices(ctx, root)
-	if err != nil {
+	if devices, truncated, err := usbsysfs.Devices(ctx, root); err != nil {
 		usb.Reason = hardwareReason(err)
 	} else {
-		usb.Available = true
-		usb.Truncated = truncated
-		if len(devices) > 0 {
-			usb.Devices = make([]USBDeviceInfo, 0, len(devices))
-			for _, d := range devices {
-				usb.Devices = append(usb.Devices, USBDeviceInfo{
-					BusID:        d.BusID,
-					VendorID:     d.VendorID,
-					ProductID:    d.ProductID,
-					Manufacturer: d.Manufacturer,
-					Product:      d.Product,
-					SpeedMbps:    d.Speed,
-					DeviceClass:  d.DeviceClass,
-				})
-			}
+		usb.Available, usb.Truncated = true, truncated
+		for _, d := range devices {
+			usb.Devices = append(usb.Devices, USBDeviceInfo(d))
 		}
 	}
 
 	sound := &SoundCardInventory{}
-	cards, truncated, err := usbsysfs.SoundCards(ctx, root)
-	if err != nil {
+	if cards, truncated, err := usbsysfs.SoundCards(ctx, root); err != nil {
 		sound.Reason = hardwareReason(err)
 	} else {
-		sound.Available = true
-		sound.Truncated = truncated
-		if len(cards) > 0 {
-			sound.Cards = make([]SoundCardInfo, 0, len(cards))
-			for _, c := range cards {
-				sound.Cards = append(sound.Cards, SoundCardInfo{
-					Index:      c.Index,
-					ID:         c.ID,
-					USBBusID:   c.USBBusID,
-					HasCapture: c.HasCapture,
-				})
-			}
+		sound.Available, sound.Truncated = true, truncated
+		for _, c := range cards {
+			sound.Cards = append(sound.Cards, SoundCardInfo(c))
 		}
 	}
 	return usb, sound
