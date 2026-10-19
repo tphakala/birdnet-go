@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestScrubMetadataRedactsSecurityAddressListChanges covers settings_saved
@@ -49,7 +50,7 @@ func TestScrubMetadataMasksUSBSerialInDeviceChanges(t *testing.T) {
 	got := p.scrubMetadata(metadata)
 
 	changes, ok := got["changes"].(map[string]any)
-	assert.True(t, ok)
+	require.True(t, ok)
 	assert.Equal(t, map[string]any{
 		"old": "usb-id:0d8c:0014:<redacted>",
 		"new": "usb-id:046d:0825:<redacted>",
