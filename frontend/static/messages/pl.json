@@ -2926,6 +2926,11 @@
             "helpText": "Zapobiegaj powtórnym powiadomieniom dla tego samego gatunku w tym oknie czasowym. Ustaw na 0, aby wyłączyć."
           }
         },
+        "rulesNotice": {
+          "message": "Powiadomienia push o wykryciach pochodzą z reguł alertów na karcie Reguły. Wbudowane reguły wykryć powiadamiają tylko w aplikacji. Aby otrzymywać powiadomienia push, dodaj akcję {pushAction} do reguły {ruleName} lub utwórz regułę dla zdarzenia {eventName} z warunkiem pewności i czasem odnowienia.",
+          "previousFilters": "Ustawienia Minimalna pewność ({confidence} %) i Czas oczekiwania gatunku ({minutes} min) wprowadzone tutaj nie są używane przez reguły alertów.",
+          "openRules": "Otwórz Reguły"
+        },
         "noProviders": "Brak skonfigurowanych dostawców",
         "noProvidersDescription": "Dodaj dostawcę, aby zacząć otrzymywać powiadomienia push",
         "providers": {

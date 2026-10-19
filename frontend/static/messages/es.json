@@ -2926,6 +2926,11 @@
             "helpText": "Evita notificaciones repetidas para la misma especie dentro de este período. Establecer en 0 para desactivar."
           }
         },
+        "rulesNotice": {
+          "message": "Las notificaciones push de detecciones provienen de las reglas de alerta de la pestaña Reglas. Las reglas de detección integradas solo notifican en la aplicación. Para recibir notificaciones push, añada la acción {pushAction} a la regla {ruleName} o cree una regla para el evento {eventName} con una condición de confianza y un tiempo de espera.",
+          "previousFilters": "Las reglas de alerta no usan los ajustes de Confianza mínima ({confidence} %) y Tiempo de espera por especie ({minutes} min) que configuró aquí.",
+          "openRules": "Abrir Reglas"
+        },
         "noProviders": "Ningún proveedor configurado",
         "noProvidersDescription": "Añade un proveedor para comenzar a recibir notificaciones push",
         "providers": {

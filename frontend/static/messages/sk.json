@@ -2926,6 +2926,11 @@
             "helpText": "Zabrániť opakovaným upozorneniam na rovnaký druh v rámci tohto časového okna. Nastavte na 0 pre deaktiváciu."
           }
         },
+        "rulesNotice": {
+          "message": "Push upozornenia na detekcie vytvárajú pravidlá upozornení na karte Pravidlá. Vstavané pravidlá detekcie upozorňujú iba v aplikácii. Ak chcete dostávať push upozornenia, pridajte akciu {pushAction} do pravidla {ruleName} alebo vytvorte pravidlo pre udalosť {eventName} s podmienkou istoty a dobou čakania.",
+          "previousFilters": "Vaše nastavenia Minimálna istota ({confidence} %) a Cooldown druhu ({minutes} min) tu pravidlá upozornení nepoužívajú.",
+          "openRules": "Otvoriť Pravidlá"
+        },
         "noProviders": "Žiadni nakonfigurovaní poskytovatelia",
         "noProvidersDescription": "Pridajte poskytovateľa, aby ste začali dostávať push upozornenia",
         "providers": {

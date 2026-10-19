@@ -2926,6 +2926,11 @@
             "helpText": "Estää toistuvat ilmoitukset samasta lajista tämän aikavälin sisällä. Aseta 0 poistaaksesi käytöstä."
           }
         },
+        "rulesNotice": {
+          "message": "Havaintojen push-ilmoitukset tulevat Säännöt-välilehden hälytyssäännöistä. Sisäänrakennetut havaintosäännöt ilmoittavat vain sovelluksessa. Saat push-ilmoitukset lisäämällä toiminnon {pushAction} sääntöön {ruleName} tai luomalla tapahtumalle {eventName} säännön, jossa on luottamusehto ja odotusaika.",
+          "previousFilters": "Hälytyssäännöt eivät käytä tässä asettamiasi arvoja Vähimmäisluottamus ({confidence} %) ja Lajikohtainen odotusaika ({minutes} min).",
+          "openRules": "Avaa Säännöt"
+        },
         "noProviders": "Ei määritettyjä palveluntarjoajia",
         "noProvidersDescription": "Lisää palveluntarjoaja aloittaaksesi push-ilmoitusten vastaanottamisen",
         "providers": {

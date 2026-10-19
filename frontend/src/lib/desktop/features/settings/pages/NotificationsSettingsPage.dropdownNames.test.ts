@@ -32,6 +32,7 @@ vi.mock('$lib/api/alerts', () => ({
   fetchAlertHistory: vi.fn().mockResolvedValue([]),
   clearAlertHistory: vi.fn(),
   fetchAlertSchema: vi.fn().mockResolvedValue(null),
+  fetchAlertStatus: vi.fn().mockResolvedValue({ engine_active: false }),
   exportAlertRules: vi.fn(),
   importAlertRules: vi.fn(),
 }));

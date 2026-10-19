@@ -2926,6 +2926,11 @@
             "helpText": "Previene notifiche ripetute per la stessa specie entro questa finestra temporale. Imposta a 0 per disabilitare."
           }
         },
+        "rulesNotice": {
+          "message": "Le notifiche push dei rilevamenti provengono dalle regole di allerta nella scheda Regole. Le regole di rilevamento predefinite notificano solo nell'app. Per ricevere notifiche push, aggiungi l'azione {pushAction} alla regola {ruleName}, oppure crea una regola per l'evento {eventName} con una condizione di confidenza e un tempo di attesa.",
+          "previousFilters": "Le regole di allerta non usano le impostazioni Confidenza Minima ({confidence} %) e Raffreddamento Specie ({minutes} min) definite qui.",
+          "openRules": "Apri Regole"
+        },
         "noProviders": "Nessun fornitore configurato",
         "noProvidersDescription": "Aggiungi un fornitore per iniziare a ricevere notifiche push",
         "providers": {

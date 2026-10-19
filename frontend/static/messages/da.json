@@ -2926,6 +2926,11 @@
             "helpText": "Forhindrer gentagne notifikationer for samme art inden for dette tidsvindue. Sæt til 0 for at deaktivere."
           }
         },
+        "rulesNotice": {
+          "message": "Push-notifikationer om registreringer kommer fra alarmregler på fanen Regler. De indbyggede registreringsregler giver kun besked i appen. For at få push-notifikationer skal du tilføje handlingen {pushAction} til reglen {ruleName} eller oprette en regel for hændelsen {eventName} med en konfidensbetingelse og en afkøling.",
+          "previousFilters": "Dine indstillinger for Minimumskonfidens ({confidence}%) og Artspause ({minutes} min) her bruges ikke af alarmregler.",
+          "openRules": "Åbn Regler"
+        },
         "noProviders": "Ingen udbydere konfigureret",
         "noProvidersDescription": "Tilføj en udbyder for at begynde at modtage push-notifikationer",
         "providers": {
