@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -197,7 +199,7 @@ func listDir(dir string) (names []string, truncated bool, err error) {
 	}
 	defer func() { _ = f.Close() }()
 	names, readErr := f.Readdirnames(maxDirEntries + 1)
-	if readErr != nil && readErr != io.EOF {
+	if readErr != nil && !errors.Is(readErr, io.EOF) {
 		return nil, false, readErr
 	}
 	if len(names) > maxDirEntries {

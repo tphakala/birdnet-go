@@ -33,6 +33,9 @@ func collectHardwareInventory(ctx context.Context, goos, root string) (*USBInven
 		usb.Reason = hardwareReason(err)
 	} else {
 		usb.Available, usb.Truncated = true, truncated
+		if len(devices) > 0 {
+			usb.Devices = make([]USBDeviceInfo, 0, len(devices))
+		}
 		for _, d := range devices {
 			usb.Devices = append(usb.Devices, USBDeviceInfo(d))
 		}
@@ -43,6 +46,9 @@ func collectHardwareInventory(ctx context.Context, goos, root string) (*USBInven
 		sound.Reason = hardwareReason(err)
 	} else {
 		sound.Available, sound.Truncated = true, truncated
+		if len(cards) > 0 {
+			sound.Cards = make([]SoundCardInfo, 0, len(cards))
+		}
 		for _, c := range cards {
 			sound.Cards = append(sound.Cards, SoundCardInfo(c))
 		}
