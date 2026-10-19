@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/svelte';
+import { render, screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import NotificationsSettingsPage from './NotificationsSettingsPage.svelte';
-import { ApiError } from '$lib/utils/api';
+import { api, ApiError } from '$lib/utils/api';
 import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { fetchAlertRules } from '$lib/api/alerts';
 import type { AlertStatus } from '$lib/api/alerts';
 
 interface PushFixture {
@@ -51,6 +52,7 @@ const NOTICE_KEY = 'settings.notifications.push.rulesNotice.message';
 const PREVIOUS_FILTERS_KEY = 'settings.notifications.push.rulesNotice.previousFilters';
 const OPEN_RULES_KEY = 'settings.notifications.push.rulesNotice.openRules';
 const MIN_CONFIDENCE_LABEL = 'settings.notifications.push.filters.minConfidence.label';
+const ENABLED_DESCRIPTION = 'settings.notifications.push.enabledDescription';
 
 function conflict(): ApiError {
   return new ApiError('Alert rules require the enhanced (v2) database', 409, new Response());
@@ -67,6 +69,8 @@ describe('NotificationsSettingsPage detection filters under the alert engine', (
     pushFixture = { minConfidenceThreshold: 0, speciesCooldownMinutes: 0 };
     statusResult = () => Promise.resolve({ engine_active: false });
     vi.mocked(t).mockClear();
+    vi.mocked(fetchAlertRules).mockClear();
+    vi.mocked(api.patch).mockClear();
   });
 
   afterEach(() => {
@@ -85,7 +89,7 @@ describe('NotificationsSettingsPage detection filters under the alert engine', (
     expect(screen.queryByLabelText(MIN_CONFIDENCE_LABEL)).not.toBeInTheDocument();
   });
 
-  it('names the ignored filter values, as a percentage and minutes, when either is set', async () => {
+  it('names the ignored filter values, as a percentage and minutes, when both are set', async () => {
     statusResult = () => Promise.resolve({ engine_active: true });
     pushFixture = { minConfidenceThreshold: 0.05, speciesCooldownMinutes: 5 };
     render(NotificationsSettingsPage);
@@ -96,6 +100,67 @@ describe('NotificationsSettingsPage detection filters under the alert engine', (
       confidence: 5,
       minutes: 5,
     });
+  });
+
+  it('names the ignored values when only Minimum Confidence is set, as a whole percent', async () => {
+    statusResult = () => Promise.resolve({ engine_active: true });
+    // 0.07 * 100 is 7.000000000000001 in floating point, so this pins the rounding.
+    pushFixture = { minConfidenceThreshold: 0.07, speciesCooldownMinutes: 0 };
+    render(NotificationsSettingsPage);
+
+    const notice = await screen.findByRole('note');
+    expect(notice).toHaveTextContent(PREVIOUS_FILTERS_KEY);
+    expect(vi.mocked(t)).toHaveBeenCalledWith(
+      PREVIOUS_FILTERS_KEY,
+      expect.objectContaining({ confidence: 7 })
+    );
+  });
+
+  it('names the ignored values when only Species Cooldown is set', async () => {
+    statusResult = () => Promise.resolve({ engine_active: true });
+    pushFixture = { minConfidenceThreshold: 0, speciesCooldownMinutes: 5 };
+    render(NotificationsSettingsPage);
+
+    const notice = await screen.findByRole('note');
+    expect(notice).toHaveTextContent(PREVIOUS_FILTERS_KEY);
+  });
+
+  it('keeps the hidden filter values when the Channels tab is saved', async () => {
+    statusResult = () => Promise.resolve({ engine_active: true });
+    pushFixture = { minConfidenceThreshold: 0.05, speciesCooldownMinutes: 5 };
+    const user = userEvent.setup();
+    render(NotificationsSettingsPage);
+    await screen.findByRole('note');
+
+    // Toggling push makes the push settings dirty so the save button saves them.
+    await user.click(screen.getByLabelText('settings.notifications.push.enable'));
+    await user.click(
+      screen.getByRole('button', { name: /settings\.notifications\.templates\.saveButtonUnsaved/ })
+    );
+
+    expect(vi.mocked(api.patch)).toHaveBeenCalledWith('/api/v2/settings/notification', {
+      push: expect.objectContaining({ minConfidenceThreshold: 0.05, speciesCooldownMinutes: 5 }),
+    });
+  });
+
+  it('shows neither the filters nor the notice while the engine status is pending', async () => {
+    statusResult = () => new Promise<AlertStatus>(() => {});
+    render(NotificationsSettingsPage);
+
+    // Rendered only after the settings load with push enabled.
+    expect(await screen.findByText(ENABLED_DESCRIPTION)).toBeInTheDocument();
+    expect(screen.queryByLabelText(MIN_CONFIDENCE_LABEL)).not.toBeInTheDocument();
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+  });
+
+  it('keeps the filter inputs and the v2 state when the status request fails for another reason', async () => {
+    statusResult = () => Promise.reject(new Error('network down'));
+    render(NotificationsSettingsPage);
+
+    expect(await screen.findByLabelText(MIN_CONFIDENCE_LABEL)).toBeInTheDocument();
+    expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    // loadRules returns early once v2Available is false, so a call proves it stayed true.
+    await waitFor(() => expect(vi.mocked(fetchAlertRules)).toHaveBeenCalled());
   });
 
   it.each([
