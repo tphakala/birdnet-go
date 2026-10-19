@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Falskpositivfiltret kan därför kräva färre bekräftelser. Dina sparade inställningar är oförändrade; se Inställningar > Analys.",
         "cadenceOverloadedTitle": "Den här enheten hinner inte med ljudanalysen",
         "cadenceOverloadedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning, så analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor, eller välj en snabbare modellvariant."
+      },
+      "storage": {
+        "notPersistentTitle": "Data går förlorad när containern återskapas",
+        "notPersistentMessage": "Dessa sökvägar ligger på lagring som raderas när containern återskapas, till exempel vid en uppdatering av avbilden: {paths}. Koppla en volym eller en värdkatalog till dem i din containerkonfiguration.",
+        "anonymousVolumeTitle": "Data lagras i en anonym containervolym",
+        "anonymousVolumeMessage": "Dessa sökvägar ligger i anonyma volymer som containerns körmiljö skapade eftersom ingen volym var kopplad: {paths}. En container som startas om från början, till exempel med docker run efter en uppdatering av avbilden, får nya tomma volymer, så data ser ut att ha försvunnit. Koppla en namngiven volym eller en värdkatalog till dem."
       }
     },
     "loading": "Laddar aviseringar..."
@@ -2310,7 +2316,9 @@
       "saveAriaLabel": "Spara ändringar",
       "savingAriaLabel": "Sparar ändringar...",
       "unsavedChanges": "Osparade ändringar",
-      "toolbar": "Inställningsåtgärder"
+      "toolbar": "Inställningsåtgärder",
+      "validationBlocked": "Vissa fält behöver uppmärksammas innan du kan spara.",
+      "noChangesToSave": "Inga ändringar att spara."
     },
     "errors": {
       "loadFailed": "Kunde inte ladda inställningar",
@@ -3184,7 +3192,7 @@
         "vadEnable": "Aktivera Integritetsskydd (Silero VAD)",
         "vadHelp": "Kör en dedikerad neural talidentifieringsmodell jämte klassificeraren för robust röstfiltrering. Förbrukar ytterligare systemresurser (ca 20-30 MB RAM och CPU-inferens per segment).",
         "vadThresholdLabel": "Tröskelvärde för Integritetsskydd",
-        "vadThresholdHelp": "Känslighetströskel för talaktivitetsdetektorn (standard 0.35). Lägre värden gör filtret känsligare för tyst eller avlägset tal."
+        "vadThresholdHelp": "Känslighetströskel för talaktivitetsdetektorn (standard 0.6). Lägre värden gör filtret känsligare för tyst eller avlägset tal."
       },
       "falsePositivePrevention": {
         "title": "Förebyggande av falska positiva",
@@ -3736,6 +3744,8 @@
         "frequencyResponse": "Frekvenssvar",
         "cutoffFrequency": "Gränsfrekvens",
         "cutoffFrequencyHelp": "Frekvens vid vilken filtret börjar dämpa signaler. Fågelläten ligger typiskt i intervallet 1-10 kHz.",
+        "centerFrequency": "Mittfrekvens",
+        "bandwidth": "Bandbredd",
         "qFactor": "Q-faktor",
         "qFactorHelp": "Kvalitetsfaktorn styr filtrets skärpa. Lägre värden (0,1-1) ger mjukare lutning, högre värden (1-10) ger brantare avskärning.",
         "gain": "Förstärkning",
@@ -3743,17 +3753,31 @@
         "attenuation": "Dämpning",
         "attenuationHelp": "Filtrets avklingningshastighet. Högre värden ger brantare dämpning av filtrerade frekvenser.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Av",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Lägg till flera filter för att forma frekvensvaret för optimal fågeldetektering i din miljö.",
+        "emptyEntryRestored": "Ange ett tal. Det tidigare värdet behölls.",
         "graph": {
           "flatResponse": "Plant svar (inga filter tillämpade)",
           "frequency": "Frekvens (Hz)",
-          "gain": "Förstärkning (dB)"
+          "gain": "Förstärkning (dB)",
+          "loading": "Beräknar frekvenssvaret...",
+          "updating": "Uppdaterar frekvenssvaret...",
+          "error": "Frekvenssvaret kunde inte beräknas. Det uppdateras när du ändrar ett filter eller väljer Försök igen.",
+          "sampleRate": "Beräknat för en samplingsfrekvens på {rate} Hz.",
+          "clipped": "Svaret toppar vid {peak} dB, över grafens övre kant.",
+          "skippedHeading": "{count, plural, one {# filter tillämpas inte på ljudet} other {# filter tillämpas inte på ljudet}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) hoppas över: den här filtertypen stöds inte.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) hoppas över: dess inställningar är inte giltiga vid {rate} Hz.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) hoppas över: det kunde inte läggas till i filterkedjan.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) hoppas över."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3922,7 +3946,7 @@
       "allowSubnetBypassLabel": "Tillåt åtkomst från subnät att kringgå autentisering",
       "subnetBypassLocalNote": "När detta är aktiverat anses klienter i samma lokala nätverk som denna server automatiskt vara betrodda och hoppar över inloggningen. Använd fältet nedan endast för att utöka denna tillit till ytterligare nätverk (till exempel ett separat VLAN eller ett routat subnät).",
       "allowedSubnetsLabel": "Tillåtna subnät",
-      "allowedSubnetsHelp": "Ytterligare nätverksintervall som får kringgå inloggningen, utöver serverns eget lokala nätverk. CIDR-notation, kommaseparerade.",
+      "allowedSubnetsHelp": "Ytterligare nätverksintervall som får kringgå inloggningen, utöver serverns eget lokala nätverk. Använd CIDR-notation, som 192.168.10.0/24.",
       "securityWarningTitle": "Säkerhetsvarning:",
       "subnetWarningText": "Denna servers lokala nätverk och alla subnät som anges här får full åtkomst utan att logga in. Inkludera endast nätverk som du litar fullständigt på.",
       "httpsSettingsTitle": "HTTPS-inställningar",
@@ -4150,6 +4174,77 @@
         "downloadCertificate": "Ladda ner certifikat",
         "downloadCertificateHelp": "Installera detta certifikat i ditt operativsystems förtroendearkiv för att undvika webbläsarens säkerhetsvarningar.",
         "fileReadError": "Kunde inte läsa den valda filen"
+      },
+      "reverseProxy": {
+        "title": "Omvänd proxy",
+        "description": "För åtkomst via nginx, Caddy, Traefik, Cloudflare eller en annan proxy",
+        "listLabel": "Betrodda proxys",
+        "listHelp": "Lägg till adressen för varje proxy framför BirdNET-Go. Med Docker är detta ofta Docker-gatewayadressen, som 172.17.0.1.",
+        "placeholder": "Till exempel 172.17.0.1",
+        "emptyState": "Inga betrodda proxys. BirdNET-Go använder adressen som ansluter till den.",
+        "emptyStateCloudflareOnly": "Endast Cloudflares publicerade edge-adresser är betrodda. Inga andra proxys är listade.",
+        "rangeBadge": "Intervall",
+        "ruleOwnAddress": "Ange varje proxys egen adress. Ange aldrig ett intervall som även innehåller datorerna du surfar från.",
+        "ruleHeaders": "Proxyn måste lägga till klientadressen i X-Forwarded-For eller skriva över X-Real-IP.",
+        "cloudflareLabel": "Lita på Cloudflare",
+        "cloudflareHelp": "Aktivera detta när din webbplats levereras via Cloudflare. BirdNET-Go litar då på Cloudflares publicerade edge-adresser.",
+        "check": {
+          "title": "Din anslutning",
+          "recheck": "Kontrollera igen",
+          "checking": "Kontrollerar din anslutning",
+          "error": "Kunde inte kontrollera din anslutning.",
+          "stale": "Denna kontroll visar de sparade inställningarna. Spara för att kontrollera dina ändringar.",
+          "trust": "Lita på {peer}",
+          "trustWarning": "Lita bara på {peer} om det är din omvända proxy, inte datorn du surfar från.",
+          "trustWithCloudflare": "Lita på {peer} och Cloudflare",
+          "cloudflareInFront": "Cloudflare finns framför {peer}. Lita på båda för att verifiera din adress.",
+          "cloudflareEdge": "{peer} tillhör Cloudflare. Aktivera Lita på Cloudflare nedan.",
+          "chainHint": "Om en annan proxy finns framför {peer}, lista den också.",
+          "added": "Tillagd i listan. Spara för att tillämpa.",
+          "coveredBy": "Täcks redan av {range} i listan. Spara för att tillämpa.",
+          "selfClientCause": "Proxyn kanske vidarebefordrar sin egen adress som klient, ofta för att containerns portpublicering döljer den verkliga klienten. Åtgärda det i containerns eller proxyns nätverksinställningar."
+        },
+        "status": {
+          "direct": {
+            "title": "Direktansluten",
+            "body": "Din webbläsare ansluter direkt till BirdNET-Go från {peer}.",
+            "bodyNoPeer": "Din webbläsare ansluter direkt till BirdNET-Go.",
+            "hint": "Om du använder en omvänd proxy och {peer} är dess adress, ställ in proxyn att skicka X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Ansluten via en betrodd proxy",
+            "body": "Din anslutning går via {peer}, som är betrodd. Din adress {client} verifierades.",
+            "hint": "Om {client} är en annan proxy snarare än din dator, lista den proxyn också."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Din adress kunde inte verifieras",
+            "body": "{peer} är betrodd, men adressen den vidarebefordrar kunde inte verifieras. Vanliga orsaker:",
+            "causeRange": "Ett listat intervall innehåller även din dator, så ingen adress i kedjan räknas som din.",
+            "causeHeaders": "Proxyn lägger inte till X-Forwarded-For eller skriver inte över X-Real-IP.",
+            "causeConflict": "Proxyn skickar motstridiga eller upprepade adresshuvuden, eller endast ett Forwarded-huvud."
+          },
+          "untrusted_public_proxy": {
+            "title": "Ansluten via en offentlig proxy",
+            "body": "Din anslutning går via {peer}, en offentlig adress. Offentliga adresser erbjuds aldrig för att lita på med ett klick. Lägg till en manuellt endast om du är säker på att det är din proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Ansluten via en obetrodd proxy",
+            "body": "Din anslutning går via en proxy på {peer} som inte är betrodd, så BirdNET-Go kan inte verifiera din adress."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Proxy-huvuden kan inte verifieras",
+            "body": "Din anslutning går via {peer}, men adresshuvudena den skickar kunde inte verifieras även om den vore betrodd.",
+            "bodyNoPeer": "Din anslutning går via en proxy, men dess adress kunde inte läsas.",
+            "fix": "Ställ in proxyn att lägga till X-Forwarded-For eller skriva över X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Bakom en omvänd proxy fungerar detta kringgående endast när proxyn är listad som betrodd.",
+      "bypassProxyLink": "Konfigurera betrodda proxys",
+      "allowedSubnetsEmpty": "Inga ytterligare subnät. Endast serverns eget lokala nätverk får kringgå inloggningen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} har en post som inte är giltig.",
+        "pendingEntry": "{tab}: {field} har text som inte lades till. Tryck på Enter eller Lägg till, eller rensa den."
       }
     },
     "species": {
@@ -4936,6 +5031,28 @@
         "dragToReorder": "Dra för att ändra ordning på {species}",
         "edit": "Redigera art",
         "remove": "Ta bort art"
+      }
+    },
+    "networkAddressList": {
+      "add": "Lägg till",
+      "remove": "Ta bort {address}",
+      "empty": "Inga adresser tillagda ännu.",
+      "pendingHint": "Tryck på Enter eller Lägg till för att lägga till denna adress.",
+      "limitReached": "Listan är full ({max} poster).",
+      "rowDuplicate": "Dubblett",
+      "rowInvalid": {
+        "cidr": "Ogiltigt intervall",
+        "ip": "Ogiltig IP-adress",
+        "ipOrCidr": "Ogiltig adress eller intervall"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Ogiltigt intervall: {values}. Använd ett intervall som 192.168.1.0/24.",
+          "ip": "Ogiltig IP-adress: {values}. Använd en adress som 192.168.1.10.",
+          "ipOrCidr": "Ogiltig adress eller intervall: {values}. Använd en adress som 192.168.1.10 eller ett intervall som 192.168.1.0/24."
+        },
+        "duplicate": "Finns redan i listan: {values}.",
+        "limit": "Listan kan innehålla högst {max} poster. Inte tillagda: {values}."
       }
     }
   },

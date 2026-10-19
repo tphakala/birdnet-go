@@ -53,7 +53,7 @@ let mockLoadingState = {
   cleanup: vi.fn(),
 };
 
-// Mock useAudioPlayback — return reactive getters backed by mockAudioState
+// Mock useAudioPlayback - return reactive getters backed by mockAudioState
 vi.mock('$lib/utils/useAudioPlayback.svelte', () => ({
   useAudioPlayback: vi.fn(() => ({
     get isPlaying() {
@@ -98,7 +98,7 @@ vi.mock('$lib/utils/useAudioPlayback.svelte', () => ({
   })),
 }));
 
-// Mock useDelayedLoading — return reactive getters backed by mockLoadingState
+// Mock useDelayedLoading - return reactive getters backed by mockLoadingState
 vi.mock('$lib/utils/delayedLoading.svelte', () => ({
   useDelayedLoading: vi.fn(() => ({
     get loading() {
@@ -117,7 +117,7 @@ vi.mock('$lib/utils/delayedLoading.svelte', () => ({
   })),
 }));
 
-// Mock buildAppUrl — return input unchanged
+// Mock buildAppUrl - return input unchanged
 vi.mock('$lib/utils/urlHelpers', () => ({
   buildAppUrl: vi.fn((path: string) => path),
 }));
@@ -150,7 +150,7 @@ describe('SpectrogramPlayer', () => {
       setPlaybackSpeed: vi.fn(),
     };
 
-    // Reset loading mock state — default to loaded (not loading, no error)
+    // Reset loading mock state - default to loaded (not loading, no error)
     mockLoadingState = {
       loading: false,
       showSpinner: false,
@@ -348,6 +348,18 @@ describe('SpectrogramPlayer', () => {
 
     const btn = screen.getByRole('button');
     expect(btn).toBeDisabled();
+  });
+
+  it('labels the play button as loading, not Pause, while a playing clip reloads', () => {
+    mockAudioState.isLoading = true;
+    mockAudioState.isPlaying = true;
+
+    spectrogramTest.render({
+      audioUrl: '/api/v2/audio/test-123',
+      detectionId: 'test-123',
+    });
+
+    expect(screen.getByRole('button')).toHaveAttribute('aria-label', 'media.audio.loading');
   });
 
   // ---------------------------------------------------------------

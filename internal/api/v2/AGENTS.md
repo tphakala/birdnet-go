@@ -100,8 +100,13 @@ or the facade); it runs inside the normal `go test ./...` unit-test jobs.
    }
    ```
 
-   For detection CRUD use `c.Repo` (`datastore.DetectionRepository`); `c.DS` is
-   deprecated for new detection code.
+   **HARD RULE:** the legacy database is deprecated and is going away; never
+   expand it. Use `c.Repo` (`datastore.DetectionRepository` and the v2
+   repositories) for every detection read and write. Do not add new code that
+   calls `c.DS` or `datastore.Interface` for persistence, and do not add
+   methods, optional interfaces or type assertions on them. If the repository
+   lacks an operation, add it to the repository (with `context.Context` first),
+   not to `c.DS`. See `internal/datastore/AGENTS.md`.
 
 2. Add the route line to that domain's `RegisterRoutes(g *echo.Group)`:
 

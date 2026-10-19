@@ -138,6 +138,8 @@ type deletionRun struct {
 
 	locked map[string]struct{} // basenames of locked clips at the last refresh; nil: never refreshed
 
+	renderDirs renderDirCache // listings for render deletion, one per directory per batch
+
 	startedAt       time.Time
 	lastBoundaryAt  time.Time
 	batch           []string
@@ -232,8 +234,10 @@ func (r *deletionRun) boundaryDue() bool {
 	return len(r.batch) >= r.cfg.batchSize || r.now().Sub(r.lastBoundaryAt) >= r.cfg.maxBatchDuration
 }
 
-// releaseBatch hands the current batch to the release func and resets it.
+// releaseBatch hands the current batch to the release func and resets it and
+// the batch's render listings.
 func (r *deletionRun) releaseBatch() {
+	r.renderDirs.reset()
 	if len(r.batch) == 0 {
 		return
 	}

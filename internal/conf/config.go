@@ -33,7 +33,7 @@ type EqualizerFilter struct {
 	Q         float64 `yaml:"q" json:"q"`
 	Gain      float64 `yaml:"gain" json:"gain"`     // Only used for certain filter types like Peaking
 	Width     float64 `yaml:"width" json:"width"`   // Only used for certain filter types like BandPass and BandReject
-	Passes    int     `yaml:"passes" json:"passes"` // Filter passes for added attenuation or gain
+	Passes    int     `yaml:"passes" json:"passes"` // Cascaded filter sections: 0 turns the filter off, and so does a config.yaml entry with no passes key; 1 or more applies it that many times (at most 16); each pass adds 12 dB/oct for LowPass and HighPass
 }
 
 // EqualizerSettings is a struct for audio EQ settings
@@ -59,7 +59,7 @@ type ExportSettings struct {
 // NormalizationSettings contains audio normalization configuration based on EBU R128 standard.
 //
 // Clip normalization applies a single linear gain to reach TargetLUFS without
-// exceeding TruePeak (internal/audiocore/audionorm). There is no dynamic-range
+// exceeding TruePeak (go-audio-dsp loudnorm). There is no dynamic-range
 // stage, so LoudnessRange is accepted and validated but never applied; it is
 // retained only so existing config.yaml files keep loading unchanged.
 type NormalizationSettings struct {
@@ -527,7 +527,7 @@ type PrivacyFilterSettings struct {
 // inactive without one.
 type VADSettings struct {
 	Enabled   bool    `yaml:"enabled" json:"enabled"`     // true to enable the VAD speech gate (opt-in, default false)
-	Threshold float64 `yaml:"threshold" json:"threshold"` // speech-probability gate in (0,1]; default 0.35
+	Threshold float64 `yaml:"threshold" json:"threshold"` // speech-probability gate in (0,1]; default 0.6
 	ModelPath string  `yaml:"modelpath" json:"modelPath"` // optional override for the embedded silero .onnx; must be a sequence-export model (inputs input/h/c), not the stock upstream frame model; empty uses the embedded model
 }
 
@@ -1438,9 +1438,57 @@ type BatConfig struct {
 type UltrasonicFilterConfig struct {
 	Enabled          bool    `yaml:"enabled" json:"enabled"`                   // enable ultrasonic validation filter
 	CVThreshold      float64 `yaml:"cvthreshold" json:"cvThreshold"`           // detections with US frame CV below this are tagged unlikely
-	FFTSize          int     `yaml:"fftsize" json:"fftSize"`                   // FFT window size in samples (must be power of 2)
-	HopSize          int     `yaml:"hopsize" json:"hopSize"`                   // STFT hop size in samples
+	FFTSize          int     `yaml:"fftsize" json:"fftSize"`                   // FFT window size in samples (a power of 2, at least 2)
+	HopSize          int     `yaml:"hopsize" json:"hopSize"`                   // STFT hop size in samples, 1 to fftsize
 	FrequencySplitHz int     `yaml:"frequencysplithz" json:"frequencySplitHz"` // boundary between audible and ultrasonic bands in Hz
+}
+
+// ValidateSTFT checks the STFT fields of the filter: FFTSize a power of two of
+// at least 2, HopSize from 1 to FFTSize, and FrequencySplitHz positive. It
+// is the one rule set shared by settings validation, the load-time repair and
+// the filter itself; the filter computes nothing for a configuration it rejects.
+// Messages name the YAML keys so an operator can find the field.
+func (c UltrasonicFilterConfig) ValidateSTFT() error {
+	if err := c.validateFrame(); err != nil {
+		return err
+	}
+	return c.validateSplit()
+}
+
+// validateFrame checks the (FFTSize, HopSize) pair.
+func (c UltrasonicFilterConfig) validateFrame() error {
+	if c.FFTSize < minUltrasonicFFTSize || c.FFTSize&(c.FFTSize-1) != 0 {
+		return errors.Newf("bat.ultrasonicfilter.fftsize must be a power of two of at least %d, got %d",
+			minUltrasonicFFTSize, c.FFTSize).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_ultrasonic_filter").
+			Context("validation_type", "ultrasonic-filter").
+			Build()
+	}
+	if c.HopSize < 1 || c.HopSize > c.FFTSize {
+		return errors.Newf("bat.ultrasonicfilter.hopsize must be between 1 and bat.ultrasonicfilter.fftsize (%d), got %d",
+			c.FFTSize, c.HopSize).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_ultrasonic_filter").
+			Context("validation_type", "ultrasonic-filter").
+			Build()
+	}
+	return nil
+}
+
+// validateSplit checks FrequencySplitHz.
+func (c UltrasonicFilterConfig) validateSplit() error {
+	if c.FrequencySplitHz < 1 {
+		return errors.Newf("bat.ultrasonicfilter.frequencysplithz must be greater than 0, got %d", c.FrequencySplitHz).
+			Component("config").
+			Category(errors.CategoryValidation).
+			Context("operation", "validate_ultrasonic_filter").
+			Context("validation_type", "ultrasonic-filter").
+			Build()
+	}
+	return nil
 }
 
 // BSGConfig holds configuration for BSG regional bird models.
@@ -1623,6 +1671,26 @@ type Security struct {
 	// and a Forwarded header is not accepted. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
+
+	// PlainHTTPSessionClients lists the IP addresses of clients that reach the
+	// app directly over plain HTTP, for example another container calling
+	// http://birdnet-go:8080 while browsers use an HTTPS reverse proxy. Session
+	// cookies issued to these clients omit the Secure attribute so the clients can
+	// send them back; every other client keeps Secure whenever HTTPS is
+	// configured. Only exact addresses are accepted, not ranges. The match uses
+	// the connection's peer address, never forwarded headers, and applies only to
+	// requests that arrive without TLS and without reverse-proxy headers. Never
+	// list the address a reverse proxy or tunnel (such as cloudflared) connects
+	// from. With host networking or a native install, a proxy on the same host
+	// connects from loopback (127.0.0.1, ::1) or the host's own address, so do
+	// not list those when one runs there; with bridge networking and the proxy
+	// on the host, do not list the container network gateway. Give listed
+	// clients a fixed address so it cannot be reassigned: browser sessions
+	// through a proxy that terminates TLS without sending forwarding headers
+	// would otherwise lose Secure. Not shown in the web UI. Empty by default.
+	// Hot-reloadable.
+	PlainHTTPSessionClients []string `yaml:"plainhttpsessionclients" json:"plainHttpSessionClients"`
+
 	// PrivateMode, when true, requires the user to authenticate before any
 	// UI data is shown. Enforcement lives at the v2 API data layer, which
 	// returns 401 to unauthenticated requests; the public SPA shell is still

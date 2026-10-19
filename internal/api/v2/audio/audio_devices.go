@@ -34,6 +34,7 @@ func (c *Handler) RegisterAudioDeviceRoutes(g *echo.Group) {
 	audioGroup.GET("/devices/capabilities", c.GetDeviceCapabilities)
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
 	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
+	audioGroup.POST("/equalizer/response", c.ComputeEqualizerResponse)
 	audioGroup.GET("/sources", c.ListAudioSources)
 }
 

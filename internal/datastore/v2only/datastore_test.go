@@ -232,6 +232,27 @@ func TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore(t *testing.T) {
 		assert.Empty(t, got)
 	})
 
+	t.Run("sound class name does not prefix-match a longer class", func(t *testing.T) {
+		seedDetection(t, ds, "Car", day(9))
+		seedDetection(t, ds, "Car_passing_by", day(12))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Car", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-09", got)
+
+		got, err = ds.GetSpeciesLastDetectionDateBefore(ctx, "Car_passing_by", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-12", got)
+	})
+
+	t.Run("single-token class without a longer sibling keeps the legacy prefix match", func(t *testing.T) {
+		seedDetection(t, ds, "Dog_Dog", day(8))
+
+		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Dog", cutoff)
+		require.NoError(t, err)
+		assert.Equal(t, "2024-06-08", got)
+	})
+
 	t.Run("returns empty for an unknown species", func(t *testing.T) {
 		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, "Nonexistent species", cutoff)
 		require.NoError(t, err)
@@ -319,6 +340,61 @@ func TestV2OnlyDatastore_GetSpeciesFirstAndLastDetectionTimeBefore(t *testing.T)
 		require.NoError(t, err)
 		assert.Nil(t, first)
 		assert.Nil(t, last)
+	})
+
+	t.Run("each bound skips false positives but keeps reviewed-correct detections", func(t *testing.T) {
+		// Both ends of the range are false positives, so each bound must skip
+		// its own end. The newest genuine detection carries a "correct" review,
+		// which must not be excluded along with the false positives.
+		review := func(ts time.Time, status entities.VerificationStatus) {
+			t.Helper()
+			det := seedDetection(t, ds, "Sylvia atricapilla", ts)
+			require.NoError(t, ds.manager.DB().Create(&entities.DetectionReview{
+				DetectionID: det.ID,
+				Verified:    status,
+			}).Error)
+		}
+		review(day(9, 8), entities.VerificationFalsePositive)
+		seedDetection(t, ds, "Sylvia atricapilla", day(10, 8))
+		seedDetection(t, ds, "Sylvia atricapilla", day(12, 8))
+		review(day(13, 8), entities.VerificationCorrect)
+		review(day(14, 8), entities.VerificationFalsePositive)
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Sylvia atricapilla", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(10, 8), *first)
+		assert.Equal(t, day(13, 8), *last)
+	})
+
+	t.Run("sound class name does not prefix-match a longer class", func(t *testing.T) {
+		seedDetection(t, ds, "Car", day(9, 7))
+		seedDetection(t, ds, "Car_passing_by", day(12, 7))
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Car", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(9, 7), *first)
+		assert.Equal(t, day(9, 7), *last)
+
+		first, last, err = ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Car_passing_by", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(12, 7), *first)
+		assert.Equal(t, day(12, 7), *last)
+	})
+
+	t.Run("single-token class without a longer sibling keeps the legacy prefix match", func(t *testing.T) {
+		seedDetection(t, ds, "Dog_Dog", day(8, 7))
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Dog", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(8, 7), *first)
 	})
 
 	t.Run("returns nils for an unknown species", func(t *testing.T) {

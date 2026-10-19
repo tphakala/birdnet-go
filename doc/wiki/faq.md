@@ -158,7 +158,7 @@ birdnet:
 
 ### How do I do bat detection?
 
-Bats need an **ultrasonic-capable mic** (e.g. an AudioMoth) capturing at **192 kHz or higher**, and it is **Linux only** (high-rate exclusive sound-card mode). Install a regional BattyBirdNET model and assign it to that source. Bats only run at night by default, and clips that lack ultrasonic energy are flagged **"Unlikely"**. BirdNET-Go's spectrograms top out around 12 kHz, so to verify a bat call, download the clip and open it in a tool like Audacity (bat clips keep their full sample rate).
+Bats need an **ultrasonic-capable mic** (e.g. an AudioMoth) capturing at **192 kHz or higher**, and it is **Linux only** (high-rate exclusive sound-card mode). Install a regional BattyBirdNET model and assign it to that source. Bats only run at night by default, and clips that lack ultrasonic energy are flagged **"Unlikely"**. Bat spectrograms render at the clip's own sample rate and show up to half of it (a 192 kHz clip shows 0 to 96 kHz, a 384 kHz clip 0 to 192 kHz), so you can check a call in the detection view. Bat clips also keep their full sample rate, so you can download one and open it in a tool like Audacity.
 
 ### Where did the Sensitivity and Overlap settings go?
 
@@ -185,7 +185,7 @@ In rough order of impact:
 
 ### The privacy filter isn't catching human speech
 
-The privacy filter is limited by the model. The BirdNET model itself has poor human-speech recognition, so it can only do so much; this is a model limitation, not a BirdNET-Go bug. (Perch has human-speech classes, but the privacy filter does not map to them yet.)
+The privacy filter is limited by the model. The BirdNET model itself has poor human-speech recognition, so it can only do so much; this is a model limitation, not a BirdNET-Go bug. Perch V2 has human-speech classes and the privacy filter uses them. Among Perch V2 labels, only voiced sounds (speech, conversation, whispering, shouting, singing, laughter, crying, cheering, plus the `Homo sapiens` taxon) trigger it; its body and action labels such as coughing, breathing, clapping, footsteps or chewing do not, because they are not speech. All of BirdNET's `Human` classes still trigger it.
 
 ### A bird I can clearly hear isn't being detected
 

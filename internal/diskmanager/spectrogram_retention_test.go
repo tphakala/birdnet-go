@@ -237,26 +237,26 @@ func TestEvaluateClipChunk_OrphanWithRenderIsRetained(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = root.Close() }()
 
-	res := evaluateClipChunk(root, refs, now)
+	res := evaluateClipChunk(root, refs, now, true)
 
 	assert.Equal(t, []string{"2026/01/a.wav"}, res.retained)
 	assert.Equal(t, []string{"2026/01/zero.wav", "2026/01/dir.wav", "2026/01/none.wav"}, res.orphans)
 	assert.Equal(t, 1, res.positiveCount, "a render on disk counts as storage evidence")
 }
 
-func TestEvaluateClipChunk_OnlyRetainedRowsDoNotTripDetachedGuard(t *testing.T) {
+func TestReconcileClipOrphansPass_RetainedRowIsEvidenceForLaterOrphans(t *testing.T) {
 	withNoChunkPause(t)
 
 	baseDir := t.TempDir()
 	writeFileIn(t, baseDir, "2026/01/a_514px.png", "png")
-	// The ghost is a true orphan candidate: without the retained row's evidence the
-	// chunk has candidates and no positive evidence, and the guard would abort.
+	// The ghost is a true orphan candidate: only the retained row above it shows the
+	// storage is attached, so it is the evidence that lets the ghost be cleared.
 	store := &fakeReconcileStore{refs: []ClipReference{
 		{ID: 1, ClipName: "2026/01/a.wav", CompletionTime: time.Now().Add(testOld)},
 		{ID: 2, ClipName: "2026/01/ghost.wav", CompletionTime: time.Now().Add(testOld)},
 	}}
 
-	result := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir)
+	result := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir, nil)
 
 	assert.False(t, result.Aborted, "a surviving render is evidence that storage is attached")
 	assert.Equal(t, int64(1), result.Retained)
@@ -276,14 +276,14 @@ func TestReconcileClipOrphansPass_RetainsThenStable(t *testing.T) {
 		{ID: 3, ClipName: "2026/01/ghost.wav", CompletionTime: time.Now().Add(testOld)},
 	}}
 
-	first := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir)
+	first := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir, nil)
 	assert.False(t, first.Aborted)
 	assert.Equal(t, int64(1), first.Retained)
 	assert.Equal(t, int64(1), first.Cleared)
 	assert.Equal(t, []string{"2026/01/a.wav"}, store.retained)
 	assert.Equal(t, []string{"2026/01/ghost.wav"}, store.cleared)
 
-	second := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir)
+	second := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir, nil)
 	assert.False(t, second.Aborted)
 	assert.Equal(t, int64(0), second.Retained)
 	assert.Equal(t, []string{"2026/01/a.wav"}, store.retained, "second pass must not retain again")
@@ -303,9 +303,10 @@ func TestReconcileClipOrphansPass_RetainErrorLeavesRowsUntouched(t *testing.T) {
 		},
 	}
 
-	result := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir)
+	result := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir, nil)
 
 	assert.Equal(t, int64(0), result.Retained)
+	assert.Equal(t, 1, result.WriteErrors, "a failed retain call is counted")
 	assert.Empty(t, store.retained)
 	assert.Empty(t, store.cleared, "rows that failed to retain must not be cleared")
 }
@@ -433,7 +434,7 @@ func TestReconcileClipOrphansPass_SymlinkNamedLikeARenderIsNotRelinked(t *testin
 		{ID: 2, ClipName: "2026/01/a.wav", CompletionTime: time.Now().Add(testOld)},
 	}}
 
-	result := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir)
+	result := ReconcileClipOrphansPass(make(chan struct{}), store, baseDir, nil)
 
 	assert.Equal(t, int64(0), result.Retained)
 	assert.Empty(t, store.retained)

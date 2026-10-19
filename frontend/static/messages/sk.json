@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter falošne pozitívnych výsledkov preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia; pozrite Nastavenia > Analýza.",
         "cadenceOverloadedTitle": "Toto zariadenie nestíha analýzu zvuku",
         "cadenceOverloadedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia, preto môže analýza zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov, alebo zvoľte rýchlejší variant modelu."
+      },
+      "storage": {
+        "notPersistentTitle": "Dáta sa stratia pri opätovnom vytvorení kontajnera",
+        "notPersistentMessage": "Tieto cesty sú v úložisku, ktoré sa pri opätovnom vytvorení kontajnera odstráni, napríklad pri aktualizácii obrazu: {paths}. Namapujte na ne zväzok alebo adresár hostiteľa v konfigurácii kontajnera.",
+        "anonymousVolumeTitle": "Dáta sú uložené v anonymnom zväzku kontajnera",
+        "anonymousVolumeMessage": "Tieto cesty sú v anonymných zväzkoch, ktoré vytvorilo prostredie kontajnera, pretože nebol namapovaný žiadny zväzok: {paths}. Kontajner spustený odznova, napríklad príkazom docker run po aktualizácii obrazu, dostane nové prázdne zväzky, takže dáta vyzerajú stratené. Namapujte na ne pomenovaný zväzok alebo adresár hostiteľa."
       }
     },
     "loading": "Načítavam upozornenia..."
@@ -2310,7 +2316,9 @@
       "saveAriaLabel": "Uložiť zmeny",
       "savingAriaLabel": "Ukladajú sa zmeny...",
       "unsavedChanges": "Neuložené zmeny",
-      "toolbar": "Akcie nastavení"
+      "toolbar": "Akcie nastavení",
+      "validationBlocked": "Niektoré polia vyžadujú pozornosť, kým budete môcť uložiť.",
+      "noChangesToSave": "Žiadne zmeny na uloženie."
     },
     "errors": {
       "loadFailed": "Nepodarilo sa načítať nastavenia",
@@ -3184,7 +3192,7 @@
         "vadEnable": "Povoliť Ochranu Súkromia (Silero VAD)",
         "vadHelp": "Spúšťa vyhradený neurónový model detekcie reči popri klasifikátore pre spoľahlivé filtrovanie hlasu. Spotrebováva ďalšie systémové prostriedky (cca 20-30 MB RAM a inferenciu procesora na segment).",
         "vadThresholdLabel": "Prah Ochrany Súkromia",
-        "vadThresholdHelp": "Prah citlivosti pre detektor hlasovej aktivity (predvolené 0.35). Nižšie hodnoty robia filter citlivejším na tichú alebo vzdialenú reč."
+        "vadThresholdHelp": "Prah citlivosti pre detektor hlasovej aktivity (predvolené 0.6). Nižšie hodnoty robia filter citlivejším na tichú alebo vzdialenú reč."
       },
       "falsePositivePrevention": {
         "title": "Prevencia falošne pozitívnych výsledkov",
@@ -3736,6 +3744,8 @@
         "frequencyResponse": "Frekvenčná odozva",
         "cutoffFrequency": "Deliaca frekvencia",
         "cutoffFrequencyHelp": "Frekvencia, pri ktorej filter začína tlmíť signály. Vtáčí spev sa zvyčajne pohybuje v rozmedzí 1-10 kHz.",
+        "centerFrequency": "Stredná frekvencia",
+        "bandwidth": "Šírka pásma",
         "qFactor": "Q faktor",
         "qFactorHelp": "Činiteľ akosti (Q faktor) riadi ostrosť filtra. Nižšie hodnoty (0.1-1) vytvárajú jemnejšie sklony, vyššie hodnoty (1-10) vytvárajú strmšie rezy.",
         "gain": "Zisk",
@@ -3743,17 +3753,31 @@
         "attenuation": "Útlm",
         "attenuationHelp": "Rýchlosť poklesu filtra. Vyššie hodnoty poskytujú strmšie tlmenie filtrovaných frekvencií.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Vypnutý",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Pridajte viacero filtrov na tvarovanie frekvenčnej odozvy pre optimálnu detekciu vtákov vo vašom prostredí.",
+        "emptyEntryRestored": "Zadajte číslo. Predchádzajúca hodnota bola zachovaná.",
         "graph": {
           "flatResponse": "Plochá odozva (Žiadne filtre nie sú použité)",
           "frequency": "Frekvencia (Hz)",
-          "gain": "Zisk (dB)"
+          "gain": "Zisk (dB)",
+          "loading": "Výpočet frekvenčnej odozvy...",
+          "updating": "Aktualizácia frekvenčnej odozvy...",
+          "error": "Frekvenčnú odozvu sa nepodarilo vypočítať. Aktualizuje sa pri zmene filtra alebo po výbere možnosti Skúsiť znova.",
+          "sampleRate": "Vypočítané pre vzorkovaciu frekvenciu {rate} Hz.",
+          "clipped": "Odozva dosahuje maximum {peak} dB, čo je nad horným okrajom grafu.",
+          "skippedHeading": "{count, plural, one {# filter sa na zvuk nepoužije} few {# filtre sa na zvuk nepoužijú} many {# filtra sa na zvuk nepoužije} other {# filtrov sa na zvuk nepoužije}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) sa preskočí: tento typ filtra nie je podporovaný.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) sa preskočí: jeho nastavenia nie sú platné pri {rate} Hz.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) sa preskočí: nepodarilo sa ho pridať do reťazca filtrov.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) sa preskočí."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3922,7 +3946,7 @@
       "allowSubnetBypassLabel": "Povoliť prístup zo subnetu na obídenie autentifikácie",
       "subnetBypassLocalNote": "Keď je táto možnosť zapnutá, klienti v rovnakej lokálnej sieti ako tento server sú automaticky dôveryhodní a preskočia prihlásenie. Pole nižšie použite iba na rozšírenie tejto dôvery na ďalšie siete (napríklad samostatnú VLAN alebo smerovanú podsieť).",
       "allowedSubnetsLabel": "Povolené subnety",
-      "allowedSubnetsHelp": "Ďalšie sieťové rozsahy, ktoré môžu obísť prihlásenie, nad rámec vlastnej lokálnej siete tohto servera. Notácia CIDR, oddelené čiarkami.",
+      "allowedSubnetsHelp": "Ďalšie sieťové rozsahy, ktoré môžu obísť prihlásenie, nad rámec vlastnej lokálnej siete tohto servera. Použite notáciu CIDR, napríklad 192.168.10.0/24.",
       "securityWarningTitle": "Bezpečnostné varovanie:",
       "subnetWarningText": "Lokálna sieť tohto servera a všetky tu uvedené podsiete získajú plný prístup bez prihlásenia. Zahrňte iba siete, ktorým plne dôverujete.",
       "httpsSettingsTitle": "Nastavenia HTTPS",
@@ -4150,6 +4174,77 @@
         "downloadCertificate": "Stiahnuť certifikát",
         "downloadCertificateHelp": "Nainštalujte tento certifikát do úložiska dôveryhodných certifikátov vášho operačného systému, aby ste sa vyhli bezpečnostným upozorneniam prehliadača.",
         "fileReadError": "Nepodarilo sa prečítať vybraný súbor"
+      },
+      "reverseProxy": {
+        "title": "Reverzný proxy",
+        "description": "Pre prístup cez nginx, Caddy, Traefik, Cloudflare alebo iný proxy",
+        "listLabel": "Dôveryhodné proxy",
+        "listHelp": "Pridajte adresu každého proxy pred BirdNET-Go. Pri Dockeri je to často adresa brány Dockeru, napríklad 172.17.0.1.",
+        "placeholder": "Napríklad 172.17.0.1",
+        "emptyState": "Žiadne dôveryhodné proxy. BirdNET-Go používa adresu, ktorá sa k nemu pripája.",
+        "emptyStateCloudflareOnly": "Dôveryhodné sú iba zverejnené okrajové adresy Cloudflare. Nie sú uvedené žiadne iné proxy.",
+        "rangeBadge": "Rozsah",
+        "ruleOwnAddress": "Uveďte vlastnú adresu každého proxy. Nikdy neuvádzajte rozsah, ktorý obsahuje aj počítače, z ktorých prehliadate.",
+        "ruleHeaders": "Proxy musí pridať adresu klienta do X-Forwarded-For alebo prepísať X-Real-IP.",
+        "cloudflareLabel": "Dôverovať Cloudflare",
+        "cloudflareHelp": "Zapnite túto možnosť, keď je vaša stránka poskytovaná cez Cloudflare. BirdNET-Go potom dôveruje publikovaným edge adresám Cloudflare.",
+        "check": {
+          "title": "Vaše pripojenie",
+          "recheck": "Znova skontrolovať",
+          "checking": "Kontroluje sa vaše pripojenie",
+          "error": "Nepodarilo sa skontrolovať vaše pripojenie.",
+          "stale": "Táto kontrola zobrazuje uložené nastavenia. Uložte pre kontrolu zmien.",
+          "trust": "Dôverovať {peer}",
+          "trustWarning": "Dôverujte {peer} iba vtedy, ak je to váš reverzný proxy, nie počítač, z ktorého prehliadate.",
+          "trustWithCloudflare": "Dôverovať {peer} a Cloudflare",
+          "cloudflareInFront": "Cloudflare je pred {peer}. Dôverujte obom na overenie vašej adresy.",
+          "cloudflareEdge": "{peer} patrí pod Cloudflare. Zapnite možnosť Dôverovať Cloudflare nižšie.",
+          "chainHint": "Ak je pred {peer} ďalší proxy, uveďte ho tiež.",
+          "added": "Pridané do zoznamu. Uložte pre aplikovanie.",
+          "coveredBy": "Už pokryté rozsahom {range} v zozname. Uložte na použitie.",
+          "selfClientCause": "Proxy môže ako klienta odovzdávať svoju vlastnú adresu, často preto, že publikovanie portov kontajnera skrýva skutočného klienta. Opravte to v nastavení siete kontajnera alebo proxy."
+        },
+        "status": {
+          "direct": {
+            "title": "Pripojené priamo",
+            "body": "Váš prehliadač sa pripája k BirdNET-Go priamo z {peer}.",
+            "bodyNoPeer": "Váš prehliadač sa pripája k BirdNET-Go priamo.",
+            "hint": "Ak používate reverzný proxy a {peer} je jeho adresa, nastavte proxy tak, aby odosielal X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Pripojené cez dôveryhodný proxy",
+            "body": "Vaše pripojenie prechádza cez {peer}, ktorý je dôveryhodný. Vaša adresa {client} bola overená.",
+            "hint": "Ak je {client} ďalší proxy a nie váš počítač, uveďte aj tento proxy."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Vašu adresu sa nepodarilo overiť",
+            "body": "{peer} je dôveryhodný, ale adresu, ktorú odovzdáva, nebolo možné overiť. Časté príčiny:",
+            "causeRange": "Uvedený rozsah obsahuje aj váš počítač, takže žiadna adresa v reťazci sa nepovažuje za vašu.",
+            "causeHeaders": "Proxy nepridáva X-Forwarded-For ani neprepisuje X-Real-IP.",
+            "causeConflict": "Proxy odosiela konfliktné alebo opakované hlavičky adries, alebo iba hlavičku Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Pripojené cez verejný proxy",
+            "body": "Vaše pripojenie prechádza cez {peer}, verejnú adresu. Verejné adresy sa nikdy neponúkajú na dôverovanie jedným kliknutím. Pridajte ju manuálne iba vtedy, ak ste si istí, že je to váš proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Pripojené cez nedôveryhodný proxy",
+            "body": "Vaše pripojenie prechádza cez proxy na adrese {peer}, ktorý nie je dôveryhodný, takže BirdNET-Go nemôže overiť vašu adresu."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Hlavičky proxy nie je možné overiť",
+            "body": "Vaše pripojenie prechádza cez {peer}, ale odosielané hlavičky adries nebolo možné overiť, aj keby bol dôveryhodný.",
+            "bodyNoPeer": "Vaše pripojenie prechádza cez proxy, ale jeho adresu sa nepodarilo prečítať.",
+            "fix": "Nastavte proxy tak, aby pridával X-Forwarded-For alebo prepisoval X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Za reverzným proxy toto obídenie funguje iba vtedy, keď je proxy uvedený ako dôveryhodný.",
+      "bypassProxyLink": "Nastaviť dôveryhodné proxy",
+      "allowedSubnetsEmpty": "Žiadne ďalšie podsiete. Iba vlastná lokálna sieť tohto servera môže obísť prihlásenie.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} obsahuje neplatnú položku.",
+        "pendingEntry": "{tab}: {field} obsahuje text, ktorý nebol pridaný. Stlačte Enter alebo Pridať, alebo ho vymažte."
       }
     },
     "species": {
@@ -4936,6 +5031,28 @@
         "dragToReorder": "Potiahnite pre zmenu poradia druhu {species}",
         "edit": "Upraviť druh",
         "remove": "Odstrániť druh"
+      }
+    },
+    "networkAddressList": {
+      "add": "Pridať",
+      "remove": "Odstrániť {address}",
+      "empty": "Zatiaľ neboli pridané žiadne adresy.",
+      "pendingHint": "Stlačte Enter alebo Pridať pre pridanie tejto adresy.",
+      "limitReached": "Zoznam je plný ({max} položiek).",
+      "rowDuplicate": "Duplikát",
+      "rowInvalid": {
+        "cidr": "Neplatný rozsah",
+        "ip": "Neplatná IP adresa",
+        "ipOrCidr": "Neplatná adresa alebo rozsah"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Neplatný rozsah: {values}. Použite rozsah ako 192.168.1.0/24.",
+          "ip": "Neplatná IP adresa: {values}. Použite adresu ako 192.168.1.10.",
+          "ipOrCidr": "Neplatná adresa alebo rozsah: {values}. Použite adresu ako 192.168.1.10 alebo rozsah ako 192.168.1.0/24."
+        },
+        "duplicate": "Už je v zozname: {values}.",
+        "limit": "Zoznam môže obsahovať maximálne {max} položiek. Nepridané: {values}."
       }
     }
   },

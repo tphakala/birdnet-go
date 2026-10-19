@@ -1,6 +1,8 @@
 package securefs
 
 import (
+	"io"
+	"io/fs"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -485,6 +487,128 @@ func TestStatRel(t *testing.T) {
 	// StatRel with traversal should fail
 	_, err = sfs.StatRel("../outside.txt")
 	assert.Error(t, err, "StatRel should fail for path traversal attempt")
+}
+
+// TestOpenRegularRel verifies that OpenRegularRel opens only regular files
+// that resolve inside the root, and that it never consults the stat cache.
+func TestOpenRegularRel(t *testing.T) {
+	t.Parallel()
+
+	const content = "clip bytes"
+
+	tests := []struct {
+		name string
+		// setup prepares the base directory and returns the relative path to open.
+		setup func(t *testing.T, sfs *SecureFS, base string) string
+		// wantErr is matched with errors.Is.
+		wantErr error
+		// wantAnyErr requires some error without a specific sentinel.
+		wantAnyErr bool
+		// notErr is a sentinel the error must not match.
+		notErr error
+	}{
+		{
+			name: "regular file",
+			setup: func(t *testing.T, _ *SecureFS, base string) string {
+				t.Helper()
+				require.NoError(t, os.WriteFile(filepath.Join(base, "clip.wav"), []byte(content), 0o600))
+				return "clip.wav"
+			},
+		},
+		{
+			name: "symlink escaping the root",
+			setup: func(t *testing.T, _ *SecureFS, base string) string {
+				t.Helper()
+				outside := filepath.Join(t.TempDir(), "outside.wav")
+				require.NoError(t, os.WriteFile(outside, []byte(content), 0o600))
+				if err := os.Symlink(outside, filepath.Join(base, "esc.wav")); err != nil {
+					t.Skipf("symlinks unavailable: %v", err)
+				}
+				return "esc.wav"
+			},
+			wantAnyErr: true,
+			notErr:     fs.ErrNotExist,
+		},
+		{
+			name: "symlink escaping the root after a cached StatRel",
+			setup: func(t *testing.T, sfs *SecureFS, base string) string {
+				t.Helper()
+				clip := filepath.Join(base, "swap.wav")
+				require.NoError(t, os.WriteFile(clip, []byte(content), 0o600))
+				// Warm the stat cache while the clip is a regular file.
+				_, err := sfs.StatRel("swap.wav")
+				require.NoError(t, err)
+				outside := filepath.Join(t.TempDir(), "outside.wav")
+				require.NoError(t, os.WriteFile(outside, []byte(content), 0o600))
+				require.NoError(t, os.Remove(clip))
+				if err := os.Symlink(outside, clip); err != nil {
+					t.Skipf("symlinks unavailable: %v", err)
+				}
+				return "swap.wav"
+			},
+			wantAnyErr: true,
+			notErr:     fs.ErrNotExist,
+		},
+		{
+			// Only an implementation that trusts the cached stat (still a regular
+			// file) can get this wrong; the root's own confinement does not apply.
+			name: "directory swapped in after a cached StatRel",
+			setup: func(t *testing.T, sfs *SecureFS, base string) string {
+				t.Helper()
+				clip := filepath.Join(base, "swapdir.wav")
+				require.NoError(t, os.WriteFile(clip, []byte(content), 0o600))
+				_, err := sfs.StatRel("swapdir.wav")
+				require.NoError(t, err)
+				require.NoError(t, os.Remove(clip))
+				require.NoError(t, os.Mkdir(clip, 0o750))
+				return "swapdir.wav"
+			},
+			wantErr: ErrNotRegularFile,
+		},
+		{
+			name: "directory",
+			setup: func(t *testing.T, _ *SecureFS, base string) string {
+				t.Helper()
+				require.NoError(t, os.Mkdir(filepath.Join(base, "dir.wav"), 0o750))
+				return "dir.wav"
+			},
+			wantErr: ErrNotRegularFile,
+		},
+		{
+			name: "missing",
+			setup: func(*testing.T, *SecureFS, string) string {
+				return "missing.wav"
+			},
+			wantErr: fs.ErrNotExist,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sfs, base := setupSecureFS(t)
+			rel := tt.setup(t, sfs, base)
+
+			f, err := sfs.OpenRegularRel(rel)
+			if tt.wantErr == nil && !tt.wantAnyErr {
+				require.NoError(t, err)
+				defer func() { _ = f.Close() }()
+				got, readErr := io.ReadAll(f)
+				require.NoError(t, readErr)
+				assert.Equal(t, content, string(got))
+				return
+			}
+
+			require.Error(t, err)
+			assert.Nil(t, f)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			}
+			if tt.notErr != nil {
+				assert.NotErrorIs(t, err, tt.notErr)
+			}
+		})
+	}
 }
 
 // TestCacheUtilities verifies cache utility functions

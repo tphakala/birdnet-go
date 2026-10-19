@@ -75,3 +75,32 @@ func TestResolveSpeciesFilter_UnknownEntryStaysUnresolved(t *testing.T) {
 	assert.False(t, isAll)
 	assert.Empty(t, resolved, "an unknown entry must not resolve to any species")
 }
+
+// TestResolveSpeciesFilter_PerchSoundClass verifies that a Perch multi-word
+// sound class resolves by its full label or its spaced name, to its own key
+// only, and that a legacy first-token fragment no longer matches.
+func TestResolveSpeciesFilter_PerchSoundClass(t *testing.T) {
+	t.Parallel()
+
+	labels := []string{"Domestic_sounds_and_home_sounds", "Domestic_animals_and_pets", "Turdus merula_Eurasian Blackbird"}
+	tests := []struct {
+		name   string
+		entry  string
+		wantIn []string
+	}{
+		{"full label", "Domestic_sounds_and_home_sounds", []string{"domestic_sounds_and_home_sounds"}},
+		{"spaced name", "Domestic sounds and home sounds", []string{"domestic_sounds_and_home_sounds"}},
+		{"legacy fragment matches nothing", "Domestic", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			isAll, resolved := resolveSpeciesFilter([]string{tt.entry}, labels, nil, "", "test")
+			assert.False(t, isAll)
+			assert.Len(t, resolved, len(tt.wantIn))
+			for _, k := range tt.wantIn {
+				assert.True(t, resolved[k], k)
+			}
+		})
+	}
+}

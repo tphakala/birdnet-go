@@ -131,7 +131,7 @@ type HardwareInfo struct {
 	// can use them, so the UI can explain an unusable one instead of hiding it.
 	Accelerators []AcceleratorInfo `json:"accelerators,omitempty"`
 	// TotalRamBytes is the effective memory ceiling, host RAM clamped by any
-	// cgroup limit.
+	// cgroup limit. Omitted when the limit could not be determined exactly.
 	TotalRAMBytes int64 `json:"totalRamBytes,omitempty"`
 	// PhysicalCores is the physical core count.
 	PhysicalCores int `json:"physicalCores,omitempty"`

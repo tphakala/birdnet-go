@@ -63,4 +63,17 @@ describe('ReviewModal media section', () => {
     expect(document.querySelector('img.spectrogram-img')).toBeNull();
     expect(screen.queryByRole('button', { name: /play/i })).toBeNull();
   });
+
+  it('passes the clip sample rate to the player for a bat detection', () => {
+    render(ReviewModal, {
+      props: {
+        isOpen: true,
+        detection: createDetection({ modelType: 'bat', clipSampleRate: 384_000 }),
+        onClose: vi.fn(),
+      },
+    });
+
+    const img = screen.getByAltText('components.audio.spectrogramAlt');
+    expect(img.getAttribute('src')).toContain('sr=384000');
+  });
 });

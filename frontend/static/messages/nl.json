@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} met de ingestelde overlap van {configured} s overschrijdt de gemeten capaciteit van dit apparaat, dus audio wordt geanalyseerd met {effective} s overlap. Het Vals Positief Filter kan daardoor minder bevestigingen vereisen. Uw opgeslagen instellingen blijven ongewijzigd; zie Instellingen > Analyse.",
         "cadenceOverloadedTitle": "Dit apparaat kan de audioanalyse niet bijhouden",
         "cadenceOverloadedMessage": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} overschrijdt de gemeten capaciteit van dit apparaat, zelfs zonder overlap, dus de analyse kan achterlopen en detecties kunnen worden gemist. Schakel minder modellen of audiobronnen in, of kies een snellere modelvariant."
+      },
+      "storage": {
+        "notPersistentTitle": "Gegevens gaan verloren wanneer de container opnieuw wordt aangemaakt",
+        "notPersistentMessage": "Deze paden staan op opslag die wordt verwijderd wanneer de container opnieuw wordt aangemaakt, bijvoorbeeld bij een image-update: {paths}. Koppel er een volume of een hostmap aan in je containerconfiguratie.",
+        "anonymousVolumeTitle": "Gegevens staan in een anoniem containervolume",
+        "anonymousVolumeMessage": "Deze paden staan in anonieme volumes die de containerruntime heeft aangemaakt omdat er geen volume was gekoppeld: {paths}. Een opnieuw gestarte container, bijvoorbeeld met docker run na een image-update, krijgt nieuwe lege volumes, waardoor de gegevens verloren lijken. Koppel er een benoemd volume of een hostmap aan."
       }
     },
     "loading": "Meldingen laden..."
@@ -2310,7 +2316,9 @@
       "saveAriaLabel": "Wijzigingen bewaren",
       "savingAriaLabel": "Bewaren ...",
       "unsavedChanges": "Niet opgeslagen wijzigingen",
-      "toolbar": "Instellingenacties"
+      "toolbar": "Instellingenacties",
+      "validationBlocked": "Sommige velden vragen aandacht voordat u kunt opslaan.",
+      "noChangesToSave": "Geen wijzigingen om op te slaan."
     },
     "errors": {
       "loadFailed": "Instellingen konden niet worden geladen",
@@ -3184,7 +3192,7 @@
         "vadEnable": "Privacybescherming inschakelen (Silero VAD)",
         "vadHelp": "Voert een specifiek neuraal spraakdetectiemodel uit naast de classificator voor betrouwbare spraakfiltering. Verbruikt extra systeembronnen (ongeveer 20-30 MB RAM en CPU-inferentie per segment).",
         "vadThresholdLabel": "Drempelwaarde voor privacybescherming",
-        "vadThresholdHelp": "Gevoeligheidsdrempel voor de spraakactiviteitsdetector (standaard 0.35). Lagere waarden maken het filter gevoeliger voor zachte of verre spraak."
+        "vadThresholdHelp": "Gevoeligheidsdrempel voor de spraakactiviteitsdetector (standaard 0.6). Lagere waarden maken het filter gevoeliger voor zachte of verre spraak."
       },
       "falsePositivePrevention": {
         "title": "Vals Positief Preventie",
@@ -3736,6 +3744,8 @@
         "frequencyResponse": "Frequentie Respons",
         "cutoffFrequency": "Afsnij Frequentie",
         "cutoffFrequencyHelp": "Frequentie waarbij de filter signalen begint te verzwakken. Vogelroepen variëren typisch van 1-10 kHz.",
+        "centerFrequency": "Middenfrequentie",
+        "bandwidth": "Bandbreedte",
         "qFactor": "Q-factor",
         "qFactorHelp": "Kwaliteits factor bepaalt de scherpte van de filter. Lagere waarden (0.1-1) creëren zachtere hellingen, hogere waarden (1-10) creëren steilere afsnijdingen.",
         "gain": "Versterking",
@@ -3743,17 +3753,31 @@
         "attenuation": "Verzwakking",
         "attenuationHelp": "Filter rolloff snelheid. Hogere waarden geven steilere verzwakking van gefilterde frequenties.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Uit",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Voeg meerdere filters toe om de frequentie respons te vormen voor optimale vogel detectie in jouw omgeving.",
+        "emptyEntryRestored": "Voer een getal in. De vorige waarde is behouden.",
         "graph": {
           "flatResponse": "Vlakke respons (Geen filters toegepast)",
           "frequency": "Frequentie (Hz)",
-          "gain": "Versterking (dB)"
+          "gain": "Versterking (dB)",
+          "loading": "Frequentierespons berekenen...",
+          "updating": "Frequentierespons bijwerken...",
+          "error": "De frequentierespons kon niet worden berekend. Deze wordt bijgewerkt wanneer je een filter wijzigt of Opnieuw proberen kiest.",
+          "sampleRate": "Berekend voor een samplefrequentie van {rate} Hz.",
+          "clipped": "De respons piekt op {peak} dB, boven de bovenkant van de grafiek.",
+          "skippedHeading": "{count, plural, one {# filter wordt niet op de audio toegepast} other {# filters worden niet op de audio toegepast}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) wordt overgeslagen: dit filtertype wordt niet ondersteund.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) wordt overgeslagen: de instellingen zijn niet geldig bij {rate} Hz.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) wordt overgeslagen: het kon niet aan de filterketen worden toegevoegd.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) wordt overgeslagen."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3922,7 +3946,7 @@
       "allowSubnetBypassLabel": "Sta Toegang vanaf Subnet toe om Authenticatie te Omzeilen",
       "subnetBypassLocalNote": "Wanneer ingeschakeld worden clients in hetzelfde lokale netwerk als deze server automatisch vertrouwd en slaan ze de login over. Gebruik het onderstaande veld alleen om dat vertrouwen uit te breiden naar aanvullende netwerken (bijvoorbeeld een apart VLAN of een gerouteerd subnet).",
       "allowedSubnetsLabel": "Toegestane Subnets",
-      "allowedSubnetsHelp": "Aanvullende netwerkbereiken die de login mogen omzeilen, naast het eigen lokale netwerk van deze server. CIDR-notatie, gescheiden door komma's.",
+      "allowedSubnetsHelp": "Aanvullende netwerkbereiken die de login mogen omzeilen, naast het eigen lokale netwerk van deze server. Gebruik CIDR-notatie, zoals 192.168.10.0/24.",
       "securityWarningTitle": "Beveiligings Waarschuwing:",
       "subnetWarningText": "Het lokale netwerk van deze server en alle hier vermelde subnetten krijgen volledige toegang zonder in te loggen. Voeg alleen netwerken toe die u volledig vertrouwt.",
       "httpsSettingsTitle": "HTTPS Instellingen",
@@ -4150,6 +4174,77 @@
         "downloadCertificate": "Certificaat downloaden",
         "downloadCertificateHelp": "Installeer dit certificaat in het vertrouwensarchief van je besturingssysteem om beveiligingswaarschuwingen van de browser te voorkomen.",
         "fileReadError": "Kan het geselecteerde bestand niet lezen"
+      },
+      "reverseProxy": {
+        "title": "Omgekeerde proxy",
+        "description": "Voor toegang via nginx, Caddy, Traefik, Cloudflare of een andere proxy",
+        "listLabel": "Vertrouwde proxy's",
+        "listHelp": "Voeg het adres toe van elke proxy vóór BirdNET-Go. Bij Docker is dit vaak het Docker-gatewayadres, zoals 172.17.0.1.",
+        "placeholder": "Bijvoorbeeld 172.17.0.1",
+        "emptyState": "Geen vertrouwde proxy's. BirdNET-Go gebruikt het adres dat ermee verbindt.",
+        "emptyStateCloudflareOnly": "Alleen de gepubliceerde edge-adressen van Cloudflare worden vertrouwd. Er zijn geen andere proxy's opgegeven.",
+        "rangeBadge": "Bereik",
+        "ruleOwnAddress": "Vermeld het eigen adres van elke proxy. Vermeld nooit een bereik dat ook de computers bevat waarmee u browst.",
+        "ruleHeaders": "De proxy moet het clientadres toevoegen aan X-Forwarded-For of X-Real-IP overschrijven.",
+        "cloudflareLabel": "Cloudflare vertrouwen",
+        "cloudflareHelp": "Schakel dit in wanneer uw site via Cloudflare wordt aangeboden. BirdNET-Go vertrouwt dan de gepubliceerde edge-adressen van Cloudflare.",
+        "check": {
+          "title": "Uw verbinding",
+          "recheck": "Opnieuw controleren",
+          "checking": "Uw verbinding wordt gecontroleerd",
+          "error": "Kon uw verbinding niet controleren.",
+          "stale": "Deze controle toont de opgeslagen instellingen. Sla op om uw wijzigingen te controleren.",
+          "trust": "{peer} vertrouwen",
+          "trustWarning": "Vertrouw {peer} alleen als dit uw reverse proxy is, niet de computer waarmee u browst.",
+          "trustWithCloudflare": "{peer} en Cloudflare vertrouwen",
+          "cloudflareInFront": "Cloudflare bevindt zich vóór {peer}. Vertrouw beide om uw adres te verifiëren.",
+          "cloudflareEdge": "{peer} is van Cloudflare. Schakel hieronder Cloudflare vertrouwen in.",
+          "chainHint": "Als er zich nog een proxy vóór {peer} bevindt, vermeld deze dan ook.",
+          "added": "Aan de lijst toegevoegd. Sla op om toe te passen.",
+          "coveredBy": "Al gedekt door {range} in de lijst. Sla op om toe te passen.",
+          "selfClientCause": "De proxy stuurt mogelijk zijn eigen adres door als client, vaak omdat het publiceren van containerpoorten de echte client verbergt. Los dit op in de netwerkinstellingen van de container of proxy."
+        },
+        "status": {
+          "direct": {
+            "title": "Rechtstreeks verbonden",
+            "body": "Uw browser verbindt rechtstreeks met BirdNET-Go vanaf {peer}.",
+            "bodyNoPeer": "Uw browser verbindt rechtstreeks met BirdNET-Go.",
+            "hint": "Als u een reverse proxy gebruikt en {peer} is het adres ervan, stel de proxy dan in om X-Forwarded-For te verzenden."
+          },
+          "trusted_proxy": {
+            "title": "Verbonden via een vertrouwde proxy",
+            "body": "Uw verbinding verloopt via {peer}, die wordt vertrouwd. Uw adres {client} is geverifieerd.",
+            "hint": "Als {client} een andere proxy is in plaats van uw computer, vermeld die proxy dan ook."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Uw adres kon niet worden geverifieerd",
+            "body": "{peer} wordt vertrouwd, maar het adres dat deze doorstuurt kon niet worden geverifieerd. Veelvoorkomende oorzaken:",
+            "causeRange": "Een vermeld bereik bevat ook uw computer, waardoor geen enkel adres in de keten als het uwe telt.",
+            "causeHeaders": "De proxy voegt X-Forwarded-For niet toe en overschrijft X-Real-IP niet.",
+            "causeConflict": "De proxy verzendt conflicterende of herhaalde adresheaders, of alleen een Forwarded-header."
+          },
+          "untrusted_public_proxy": {
+            "title": "Verbonden via een openbare proxy",
+            "body": "Uw verbinding verloopt via {peer}, een openbaar adres. Openbare adressen worden nooit aangeboden om met één klik te vertrouwen. Voeg er alleen handmatig een toe als u zeker weet dat het uw proxy is."
+          },
+          "untrusted_proxy": {
+            "title": "Verbonden via een niet-vertrouwde proxy",
+            "body": "Uw verbinding verloopt via een proxy op {peer} die niet wordt vertrouwd, waardoor BirdNET-Go uw adres niet kan verifiëren."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Proxyheaders kunnen niet worden geverifieerd",
+            "body": "Uw verbinding verloopt via {peer}, maar de verzonden adresheaders konden niet worden geverifieerd, zelfs als deze werd vertrouwd.",
+            "bodyNoPeer": "Uw verbinding verloopt via een proxy, maar het adres ervan kon niet worden gelezen.",
+            "fix": "Stel de proxy in om X-Forwarded-For toe te voegen of X-Real-IP te overschrijven."
+          }
+        }
+      },
+      "bypassProxyNote": "Achter een reverse proxy werkt deze omzeiling alleen wanneer de proxy als vertrouwd is vermeld.",
+      "bypassProxyLink": "Vertrouwde proxy's instellen",
+      "allowedSubnetsEmpty": "Geen aanvullende subnetten. Alleen het eigen lokale netwerk van deze server mag de login omzeilen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} bevat een ongeldige invoer.",
+        "pendingEntry": "{tab}: {field} bevat tekst die niet is toegevoegd. Druk op Enter of Toevoegen, of wis de tekst."
       }
     },
     "species": {
@@ -4936,6 +5031,28 @@
         "dragToReorder": "Sleep om de sortering te wijzigen {species}",
         "edit": "Bewerk soort",
         "remove": "Verwijder soort"
+      }
+    },
+    "networkAddressList": {
+      "add": "Toevoegen",
+      "remove": "Verwijder {address}",
+      "empty": "Nog geen adressen toegevoegd.",
+      "pendingHint": "Druk op Enter of Toevoegen om dit adres toe te voegen.",
+      "limitReached": "De lijst is vol ({max} vermeldingen).",
+      "rowDuplicate": "Duplicaat",
+      "rowInvalid": {
+        "cidr": "Geen geldig bereik",
+        "ip": "Geen geldig IP-adres",
+        "ipOrCidr": "Geen geldig adres of bereik"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Geen geldig bereik: {values}. Gebruik een bereik zoals 192.168.1.0/24.",
+          "ip": "Geen geldig IP-adres: {values}. Gebruik een adres zoals 192.168.1.10.",
+          "ipOrCidr": "Geen geldig adres of bereik: {values}. Gebruik een adres zoals 192.168.1.10 of een bereik zoals 192.168.1.0/24."
+        },
+        "duplicate": "Staat al in de lijst: {values}.",
+        "limit": "De lijst bevat maximaal {max} vermeldingen. Niet toegevoegd: {values}."
       }
     }
   },

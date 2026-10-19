@@ -124,6 +124,9 @@ export function normalizePath(path: unknown, addTrailingSlash = false): string {
   return normalized;
 }
 
+// The path segment of the backend's login redirect (see internal/api/auth/middleware.go).
+const LOGIN_SEGMENT = 'login';
+
 /**
  * Gets the base path prefix for the app (everything before /ui/).
  * Handles reverse proxy scenarios like Home Assistant Ingress.
@@ -148,6 +151,11 @@ export function normalizePath(path: unknown, addTrailingSlash = false): string {
  * // Custom proxy
  * // pathname: '/proxy/birdnet/ui/settings'
  * getAppBasePath() // returns '/proxy/birdnet'
+ *
+ * @example
+ * // Backend login redirect behind a proxy (no 'ui' segment yet)
+ * // pathname: '/proxy/birdnet/login'
+ * getAppBasePath() // returns '/proxy/birdnet'
  */
 export function getAppBasePath(): string {
   if (typeof window === 'undefined') return '';
@@ -163,6 +171,13 @@ export function getAppBasePath(): string {
   // Using indexOf (first match) ensures we find the app boundary, not nested ui paths
   const segments = pathname.split('/').filter(Boolean);
   const uiIndex = segments.indexOf('ui');
+
+  // The backend redirects a logged-out visitor to '<prefix>/login', which has no
+  // 'ui' segment. Treat what precedes a final 'login' segment as the prefix, so the
+  // login route keeps it ('/login' alone has none).
+  if (uiIndex === -1 && segments.length > 1 && segments.at(-1) === LOGIN_SEGMENT) {
+    return '/' + segments.slice(0, -1).join('/');
+  }
 
   // If 'ui' segment not found or is the first segment, there's no prefix
   if (uiIndex <= 0) return '';

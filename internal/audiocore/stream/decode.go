@@ -3,9 +3,9 @@ package stream
 import (
 	"encoding/binary"
 	"fmt"
-	"math"
 
 	aacpcm "github.com/tphakala/go-aac/pcm"
+	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 	audiostream "github.com/tphakala/go-audio-stream"
 	mp3 "github.com/tphakala/go-mp3"
 	"github.com/tphakala/go-opus/opus"
@@ -38,9 +38,6 @@ const (
 	// decodes Opus straight into, skipping the downmix and resample stages.
 	opusOutputRate     = 48000
 	opusOutputChannels = 1
-
-	// s16FullScale scales a normalized [-1, 1] float to the 16-bit range.
-	s16FullScale = 32767
 )
 
 // frameDecoder converts one depacketized frame into interleaved little-endian
@@ -165,7 +162,12 @@ func (d *mp3FrameDecoder) decodeFrame(in []byte) (pcm []byte, sampleRate, channe
 		return d.out[:0], info.SampleRate, info.Channels, nil
 	}
 	out := d.out[:n*2]
-	float32ToS16LE(out, d.f32[:n])
+	// x32768, round half to even, saturating: the same encoding as the EQ,
+	// gain and resample stages. out holds exactly n samples, so the error
+	// (an odd length) cannot occur.
+	if _, err := dsppcm.Float32ToBytes(out, d.f32[:n]); err != nil {
+		return nil, 0, 0, fmt.Errorf("mp3 encode s16: %w", err)
+	}
 	return out, info.SampleRate, info.Channels, nil
 }
 
@@ -202,25 +204,6 @@ func (d *aacFrameDecoder) decodeFrame(in []byte) (pcm []byte, sampleRate, channe
 
 func (d *aacFrameDecoder) reset() error {
 	return d.dec.Reset()
-}
-
-// float32ToS16LE writes len(src) normalized float samples into dst as
-// interleaved little-endian s16, rounding to nearest. dst must have room for
-// len(src)*2 bytes. The float is clamped to [-1, 1] BEFORE the integer cast, so
-// an out-of-range input can never overflow the cast and bypass the clamp; the
-// reslice is also a bounds-check hint for this per-sample loop.
-func float32ToS16LE(dst []byte, src []float32) {
-	dst = dst[:len(src)*2]
-	for i, s := range src {
-		switch {
-		case s > 1:
-			s = 1
-		case s < -1:
-			s = -1
-		}
-		v := int16(math.Round(float64(s) * s16FullScale))
-		binary.LittleEndian.PutUint16(dst[i*2:], uint16(v))
-	}
 }
 
 // codecName is a short, stable label for a codec. It feeds the

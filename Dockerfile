@@ -68,9 +68,9 @@ RUN apt-get update -q && apt-get install -q -y \
     gcc-aarch64-linux-gnu && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Node.js v24 from NodeSource
+# Install Node.js v26 from NodeSource
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
+RUN curl -fsSL https://deb.nodesource.com/setup_26.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 

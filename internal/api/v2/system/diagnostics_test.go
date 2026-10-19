@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
 )
 
@@ -100,4 +101,20 @@ func TestMapInferenceSnapshotsDeterministicOrder(t *testing.T) {
 	}
 	assert.Equal(t, []string{"Alpha_Model", "Mango_Model", "Zebra_Model"}, ids,
 		"models must be returned in sorted ModelID order")
+}
+
+func TestRequiredToolsDropsSoxForNativeSpectrogram(t *testing.T) {
+	s := &conf.Settings{}
+	s.Realtime.Audio.SoxPath = "/usr/bin/sox"
+
+	names := func(tools []checks.ToolInfo) []string {
+		out := make([]string, 0, len(tools))
+		for _, tool := range tools {
+			out = append(out, tool.Name)
+		}
+		return out
+	}
+
+	assert.Equal(t, []string{"FFmpeg", "Sox"}, names(requiredTools(s, false)))
+	assert.Equal(t, []string{"FFmpeg"}, names(requiredTools(s, true)))
 }

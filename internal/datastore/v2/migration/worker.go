@@ -1652,6 +1652,8 @@ func (w *Worker) updateExistingRecords(ctx context.Context, records []*detection
 			// Keep clip_name and spectrogram_clip_name mutually exclusive.
 			updates["spectrogram_clip_name"] = nil
 		}
+		// clip_sample_rate is deliberately not touched: the legacy table has no such
+		// column, so the migration has nothing to copy and must not clear a stored value.
 
 		if updateErr := w.v2Detection.Update(ctx, r.ID, updates); updateErr != nil {
 			w.logger.Warn("failed to update record", logger.Uint64("id", uint64(r.ID)), logger.Error(updateErr))
@@ -1704,6 +1706,7 @@ func (w *Worker) migrateRecord(ctx context.Context, result *detection.Result) er
 			// Keep clip_name and spectrogram_clip_name mutually exclusive.
 			updates["spectrogram_clip_name"] = nil
 		}
+		// clip_sample_rate is left untouched here too (see the update above).
 		return w.v2Detection.Update(ctx, result.ID, updates)
 	}
 

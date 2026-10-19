@@ -48,6 +48,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
@@ -88,6 +89,10 @@ type Controller struct {
 	// settings; the remaining deps (Metrics, Processor, settings accessors, and the
 	// error/log helpers) all promote from the shared *apicore.Core.
 	integrations *integrations.Handler
+
+	// proxyTrust caches the checker the connection check builds from
+	// Security.TrustedProxies, rebuilt only when the list changes.
+	proxyTrust proxytrust.Cache
 
 	// detections serves the /api/v2/detections/* CRUD/review/lock/ignore/batch
 	// endpoints and POST /api/v2/search. Besides the shared *apicore.Core it holds
@@ -470,8 +475,8 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	c.weather = weather.New(c.Core)
 	c.rangeHandler = rangeapi.New(c.Core)
 	// The SSE handler receives the facade-owned auth check (isClientAuthenticated)
-	// so the public detection stream can anonymize the source DisplayName for
-	// unauthenticated subscribers (matching detections/analytics and the
+	// so the public detection and sound level streams can anonymize the source
+	// display name for unauthenticated subscribers (matching detections/analytics and the
 	// StreamAudioLevel precedent). The bound method value reads c.authService at
 	// call time, so the post-functional-option authService is observed per request.
 	c.sse = sse.New(c.Core, c.isClientAuthenticated)
@@ -658,9 +663,17 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// owns the diagnostics health infrastructure; its routes are registered in
 	// initRoutes below.
 	c.system = system.New(c.Core, c.startTime, c.healthErrorBuf, audioapi.LatestAudioLevels)
+	// The storage notices go to the injected notification service (nil keeps the
+	// process-wide one).
+	c.system.SetNotificationService(c.notificationService)
 
 	// Initialize routes if requested (skip in tests to avoid starting background goroutines)
 	if initializeRoutes {
+		// Evaluate the storage persistence notices once at startup, then after a
+		// settings save changes one of the paths. Skipped when routes are not
+		// initialized (tests), like every other background activity here.
+		c.system.StartStorageNoticeSync()
+
 		// Initialize synchronization channel for testing
 		c.goroutinesStarted = make(chan struct{})
 		c.initRoutes()
@@ -882,6 +895,9 @@ func (c *Controller) Shutdown() {
 	if h := c.optimizeNotices.Load(); h != nil {
 		h.scheduler.StopOptimizeNoticeSync()
 	}
+
+	// Stop the pending storage notice evaluation, and ignore later ones.
+	c.system.StopStorageNoticeSync()
 
 	// Cancel context to stop all goroutines, then wait for them to finish.
 	c.Cancel()

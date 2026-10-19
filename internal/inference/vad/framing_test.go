@@ -7,6 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// pcm16Scale normalises int16 to [-1.0, 1.0]; 32768 maps -32768 to -1.0. The
+// tests use it to build signals and expected values independently of the
+// library decode under test.
+const pcm16Scale = 32768.0
+
 func TestFrameCount(t *testing.T) {
 	t.Parallel()
 	tests := []struct {

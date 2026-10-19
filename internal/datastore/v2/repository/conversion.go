@@ -88,8 +88,12 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 
 	// Convert clip name
 	var clipName *string
+	var clipSampleRate *int
 	if result.ClipName != "" {
 		clipName = &result.ClipName
+		if result.ClipSampleRate > 0 {
+			clipSampleRate = &result.ClipSampleRate
+		}
 	}
 
 	// Convert location
@@ -121,6 +125,7 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 		Latitude:         lat,
 		Longitude:        lon,
 		ClipName:         clipName,
+		ClipSampleRate:   clipSampleRate,
 		ProcessingTimeMs: processingTimeMs,
 		Unlikely:         result.Unlikely,
 		LegacyID:         &legacyID,
@@ -213,6 +218,9 @@ func ConvertFromV2Detection(det *entities.Detection) *detection.Result {
 	// Convert clip name
 	if det.ClipName != nil {
 		result.ClipName = *det.ClipName
+	}
+	if det.ClipSampleRate != nil {
+		result.ClipSampleRate = *det.ClipSampleRate
 	}
 
 	// Convert processing time

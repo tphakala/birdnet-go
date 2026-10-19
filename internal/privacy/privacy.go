@@ -135,6 +135,20 @@ var (
 	// GPS coordinates pattern - matches decimal degree coordinates
 	coordinatesPattern = regexp.MustCompile(`(?:lat(?:itude)?|lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*[,\s]+(?:lng|lon|longitude)[:=]?\s*-?\d{1,3}\.?\d*|(?:lat(?:itude)?[:=]?\s*)?-?\d{1,3}\.?\d*[,\s]+-?\d{1,3}\.?\d*`)
 
+	// dateTimePattern matches the date-and-time prefix of a log line, in ISO,
+	// US, European and dotted forms ("2026-10-16 00:12:34", "10/16/2026 00:12"),
+	// with optional fractional seconds (".015573" or ",123") and a Z or numeric
+	// UTC offset. An offset needs minutes ("+0200", "-05:00") so that a negative
+	// latitude after the time ("-45.12") is not read as one.
+	// coordinatesPattern's keyword-less alternative reads the "-16 00" of such
+	// a prefix as a coordinate pair, so ScrubCoordinates keeps these spans
+	// out of the text it scrubs.
+	dateTimePattern = regexp.MustCompile(`\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}[T ]\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3,9})?(?:Z|\s?[+-]\d{2}:?\d{2})?`)
+
+	// syslogTimePattern matches the "Oct 16 00:12:34" prefix of a syslog line,
+	// for the same reason as dateTimePattern.
+	syslogTimePattern = regexp.MustCompile(`(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+\d{1,2}:\d{2}(?::\d{2})?(?:\.\d+|,\d{3,9})?`)
+
 	// Enhanced API token/key pattern - includes bearer tokens and more formats
 	// Requires a separator (: or =) between the key name and the token value
 	apiTokenPattern = regexp.MustCompile(`(?i)(?:(?:api[_-]?key|token|secret|auth)[:=]\s*|(?:bearer)(?:\s+token)?[:=\s]+|(?:with\s+(?:token|key|secret|auth))\s+)([A-Za-z0-9+/\-_]{8,}[A-Za-z0-9+/=]*)`)
@@ -406,7 +420,9 @@ func ScrubUUIDs(message string) string {
 }
 
 // ScrubStandaloneIPs removes or anonymizes standalone IP addresses from text messages
-// It handles both IPv4 and IPv6 addresses that are not part of URLs
+// It handles both IPv4 and IPv6 addresses that are not part of URLs.
+// Time-like candidates such as the "12:34:56" part of a timestamp are left
+// unchanged.
 func ScrubStandaloneIPs(message string) string {
 	// First mark all URLs to avoid processing IPs within them
 	urlPositions := make(map[int]int) // start -> end position of URLs
@@ -428,7 +444,7 @@ func ScrubStandaloneIPs(message string) string {
 	// Find all IP matches in the original message to ensure coordinates
 	// are consistent with URL positions (avoids stale coordinate bug)
 	ipv4Matches := ipv4Pattern.FindAllStringIndex(message, -1)
-	ipv6Matches := ipv6Pattern.FindAllStringIndex(message, -1)
+	ipv6Matches := dropTimeLikeMatches(message, ipv6Pattern.FindAllStringIndex(message, -1))
 
 	// Combine and sort by position to process in order
 	allMatches := make([][]int, 0, len(ipv4Matches)+len(ipv6Matches))
@@ -442,9 +458,71 @@ func ScrubStandaloneIPs(message string) string {
 }
 
 // ScrubCoordinates removes or anonymizes GPS coordinates from text messages
-// It replaces coordinate pairs with generic placeholders while preserving message structure
+// It replaces coordinate pairs with generic placeholders while preserving message structure.
+// Date-time and syslog time prefixes are not coordinate pairs; they are kept
+// as they are and the text around them is scrubbed on its own, so a pair
+// that follows a timestamp is still replaced.
 func ScrubCoordinates(message string) string {
-	return coordinatesPattern.ReplaceAllString(message, "[LAT],[LON]")
+	protected := protectedTimeSpans(message)
+	if len(protected) == 0 {
+		return coordinatesPattern.ReplaceAllString(message, "[LAT],[LON]")
+	}
+
+	var out strings.Builder
+	pos := 0
+	for _, span := range protected {
+		out.WriteString(coordinatesPattern.ReplaceAllString(message[pos:span[0]], "[LAT],[LON]"))
+		out.WriteString(message[span[0]:span[1]])
+		pos = span[1]
+	}
+	out.WriteString(coordinatesPattern.ReplaceAllString(message[pos:], "[LAT],[LON]"))
+	return out.String()
+}
+
+// trimGluedCoordinate returns the end of the time prefix message[start:end]
+// without a trailing comma fraction that is really the whole-degree part of a
+// coordinate: ",123" is a fraction of a second, but ",151.2093" is a longitude
+// written right after the time.
+func trimGluedCoordinate(message string, start, end int) int {
+	if end+1 >= len(message) || message[end] != '.' || message[end+1] < '0' || message[end+1] > '9' {
+		return end
+	}
+	comma := strings.LastIndexByte(message[start:end], ',')
+	if comma < 0 {
+		return end
+	}
+	for _, c := range message[start+comma+1 : end] {
+		if c < '0' || c > '9' {
+			return end
+		}
+	}
+	return start + comma
+}
+
+// protectedTimeSpans returns the date-time and syslog time prefixes in message
+// as sorted, non-overlapping [start, end) spans. A trailing comma fraction that
+// is really the start of a coordinate (see trimGluedCoordinate) is not part of
+// a span.
+func protectedTimeSpans(message string) [][]int {
+	spans := dateTimePattern.FindAllStringIndex(message, -1)
+	spans = append(spans, syslogTimePattern.FindAllStringIndex(message, -1)...)
+	for _, span := range spans {
+		span[1] = trimGluedCoordinate(message, span[0], span[1])
+	}
+	if len(spans) < 2 {
+		return spans
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i][0] < spans[j][0] })
+	merged := spans[:1]
+	for _, span := range spans[1:] {
+		last := merged[len(merged)-1]
+		if span[0] <= last[1] {
+			last[1] = max(last[1], span[1])
+			continue
+		}
+		merged = append(merged, span)
+	}
+	return merged
 }
 
 // ScrubAPITokens removes or anonymizes API tokens, keys, and secrets from text messages
@@ -686,6 +764,47 @@ func isNumeric(s string) bool {
 // isHexChar checks if a rune is a valid hex character
 func isHexChar(r rune) bool {
 	return (r >= '0' && r <= '9') || (r >= 'A' && r <= 'F') || (r >= 'a' && r <= 'f')
+}
+
+// maxTimeTokenColons is the most colons a clock time or position token such as
+// "12:34:56" or ":123:45" carries. A longer digit-only token is not a time.
+const maxTimeTokenColons = 2
+
+// isTimeLikeToken reports whether s is made of digits and colons only, has no
+// "::" and no more than maxTimeTokenColons colons: the shape of the "12:34:56"
+// part of a timestamp or the ":123:45" of a file position. Tokens with hex
+// letters (MAC addresses, IPv6 prefixes cut off by the regex) or more groups
+// are not time-like.
+func isTimeLikeToken(s string) bool {
+	if strings.Contains(s, "::") || strings.Count(s, ":") > maxTimeTokenColons {
+		return false
+	}
+	hasDigit := false
+	for _, r := range s {
+		switch {
+		case r == ':':
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		default:
+			return false
+		}
+	}
+	return hasDigit
+}
+
+// dropTimeLikeMatches removes the matches that are time-like tokens.
+// ipv6Pattern also matches the "12:34:56" part of a timestamp; those are left
+// untouched instead of being hashed. Every other match, including the ones
+// net.ParseIP rejects (MAC addresses, truncated IPv6 prefixes), is still
+// anonymized.
+func dropTimeLikeMatches(message string, matches [][]int) [][]int {
+	kept := matches[:0]
+	for _, match := range matches {
+		if !isTimeLikeToken(message[match[0]:match[1]]) {
+			kept = append(kept, match)
+		}
+	}
+	return kept
 }
 
 // replaceIPMatches replaces IP addresses in a message with their anonymized versions

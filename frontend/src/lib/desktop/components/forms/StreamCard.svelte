@@ -20,7 +20,6 @@
 -->
 <script lang="ts">
   import { getContext } from 'svelte';
-  import { generateId } from '$lib/utils/uuid';
   import {
     Settings,
     Trash2,
@@ -75,7 +74,6 @@
   interface LocalEqualizerSettings {
     enabled: boolean;
     filters: Array<{
-      id?: string;
       type: EqualizerFilterType;
       frequency: number;
       q?: number;
@@ -386,10 +384,7 @@
         editEqualizer.enabled || editEqualizer.filters.length > 0
           ? {
               enabled: editEqualizer.enabled,
-              filters: editEqualizer.filters.map(f => ({
-                ...f,
-                id: f.id || generateId(),
-              })),
+              filters: editEqualizer.filters,
             }
           : undefined;
 
@@ -685,6 +680,10 @@
           </button>
           {#if showEqualizer}
             <div id="stream-eq-{index}" class="mt-3" transition:slide={{ duration: 200 }}>
+              <!-- No sampleRate: a stream's EQ chain runs at the pipeline output rate,
+                   which is the server's configured rate (the preview default) for
+                   every stream except a bat stream with a higher native rate. The
+                   probed stream rate is not that rate, so it is not sent. -->
               <AudioEqualizerSettings
                 equalizerSettings={editEqualizer}
                 {disabled}

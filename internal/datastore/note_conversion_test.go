@@ -202,3 +202,17 @@ func TestAdditionalResultsToDatastoreResults_CarriesRawLabel(t *testing.T) {
 	assert.Equal(t, "speech", result[0].RawLabel)
 	assert.Equal(t, "male_speech_and_man_speaking", result[1].RawLabel)
 }
+
+func TestAdditionalResultsToDatastoreResults_PerchSoundClass(t *testing.T) {
+	input := []detection.AdditionalResult{{
+		Species:    detection.ParseSpeciesString("Domestic_animals_and_pets"),
+		Confidence: 0.5,
+		RawLabel:   "Domestic_animals_and_pets",
+	}}
+
+	got := datastore.AdditionalResultsToDatastoreResults(input)
+
+	require.Len(t, got, 1)
+	assert.Equal(t, "Domestic_animals_and_pets", got[0].Species)
+	assert.Equal(t, "Domestic_animals_and_pets", detection.ExtractScientificName(got[0].Species))
+}

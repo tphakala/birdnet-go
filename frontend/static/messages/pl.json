@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przy ustawionym nakładaniu {configured} s przekracza zmierzoną wydajność tego urządzenia, dlatego dźwięk jest analizowany z nakładaniem {effective} s. Filtr fałszywych pozytywów może więc wymagać mniej potwierdzeń. Zapisane ustawienia nie zmieniają się; zobacz Ustawienia > Analiza.",
         "cadenceOverloadedTitle": "To urządzenie nie nadąża z analizą dźwięku",
         "cadenceOverloadedMessage": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przekracza zmierzoną wydajność tego urządzenia nawet bez nakładania, dlatego analiza może się opóźniać, a wykrycia mogą zostać pominięte. Włącz mniej modeli lub źródeł dźwięku albo wybierz szybszy wariant modelu."
+      },
+      "storage": {
+        "notPersistentTitle": "Dane zostaną utracone po ponownym utworzeniu kontenera",
+        "notPersistentMessage": "Te ścieżki znajdują się w pamięci masowej, która jest usuwana po ponownym utworzeniu kontenera, na przykład przy aktualizacji obrazu: {paths}. Przypisz do nich wolumin lub katalog hosta w konfiguracji kontenera.",
+        "anonymousVolumeTitle": "Dane są przechowywane w anonimowym woluminie kontenera",
+        "anonymousVolumeMessage": "Te ścieżki znajdują się w anonimowych woluminach, które środowisko uruchomieniowe kontenera utworzyło, ponieważ nie przypisano żadnego woluminu: {paths}. Kontener uruchomiony od nowa, na przykład poleceniem docker run po aktualizacji obrazu, otrzymuje nowe puste woluminy, więc dane wyglądają na utracone. Przypisz do nich nazwany wolumin lub katalog hosta."
       }
     },
     "loading": "Ładowanie powiadomień..."
@@ -2310,7 +2316,9 @@
       "saveAriaLabel": "Zapisz Zmiany",
       "savingAriaLabel": "Zapisywanie zmian...",
       "unsavedChanges": "Niezapisane zmiany",
-      "toolbar": "Działania ustawień"
+      "toolbar": "Działania ustawień",
+      "validationBlocked": "Niektóre pola wymagają uwagi, zanim będzie można zapisać.",
+      "noChangesToSave": "Brak zmian do zapisania."
     },
     "errors": {
       "loadFailed": "Nie udało się załadować ustawień",
@@ -3184,7 +3192,7 @@
         "vadEnable": "Włącz Ochronę Prywatności (Silero VAD)",
         "vadHelp": "Uruchamia dedykowany model neuronowy do wykrywania mowy obok klasyfikatora w celu niezawodnego filtrowania głosu. Zużywa dodatkowe zasoby systemowe (ok. 20-30 MB pamięci RAM oraz inferencję procesora na segment).",
         "vadThresholdLabel": "Próg Ochrony Prywatności",
-        "vadThresholdHelp": "Próg czułości detektora aktywności głosowej (domyślnie 0.35). Niższe wartości sprawiają, że filtr jest bardziej czuły na cichą lub odległą mowę."
+        "vadThresholdHelp": "Próg czułości detektora aktywności głosowej (domyślnie 0.6). Niższe wartości sprawiają, że filtr jest bardziej czuły na cichą lub odległą mowę."
       },
       "falsePositivePrevention": {
         "title": "Zapobieganie Fałszywym Pozytywnościom",
@@ -3736,6 +3744,8 @@
         "frequencyResponse": "Charakterystyka Częstotliwościowa",
         "cutoffFrequency": "Częstotliwość Odcięcia",
         "cutoffFrequencyHelp": "Częstotliwość, przy której filtr zaczyna tłumić sygnały. Odgłosy ptaków zazwyczaj mieszczą się w zakresie 1-10 kHz.",
+        "centerFrequency": "Częstotliwość środkowa",
+        "bandwidth": "Szerokość pasma",
         "qFactor": "Współczynnik Q",
         "qFactorHelp": "Współczynnik jakości kontroluje ostrość filtra. Niższe wartości (0.1-1) tworzą łagodniejsze zbocza, wyższe wartości (1-10) tworzą ostrzejsze odcięcia.",
         "gain": "Wzmocnienie",
@@ -3743,17 +3753,31 @@
         "attenuation": "Tłumienie",
         "attenuationHelp": "Szybkość tłumienia filtra. Wyższe wartości zapewniają ostrzejsze tłumienie filtrowanych częstotliwości.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Wyłączony",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Dodaj wiele filtrów, aby ukształtować charakterystykę częstotliwościową dla optymalnej detekcji ptaków w twoim środowisku.",
+        "emptyEntryRestored": "Wpisz liczbę. Zachowano poprzednią wartość.",
         "graph": {
           "flatResponse": "Charakterystyka płaska (Brak filtrów)",
           "frequency": "Częstotliwość (Hz)",
-          "gain": "Wzmocnienie (dB)"
+          "gain": "Wzmocnienie (dB)",
+          "loading": "Obliczanie charakterystyki częstotliwościowej...",
+          "updating": "Aktualizowanie charakterystyki częstotliwościowej...",
+          "error": "Nie udało się obliczyć charakterystyki częstotliwościowej. Zostanie zaktualizowana po zmianie filtra lub po wybraniu opcji Ponów próbę.",
+          "sampleRate": "Obliczono dla częstotliwości próbkowania {rate} Hz.",
+          "clipped": "Odpowiedź osiąga szczyt {peak} dB, powyżej górnej krawędzi wykresu.",
+          "skippedHeading": "{count, plural, one {# filtr nie jest stosowany do dźwięku} few {# filtry nie są stosowane do dźwięku} many {# filtrów nie jest stosowanych do dźwięku} other {# filtra nie jest stosowane do dźwięku}}",
+          "skippedReasons": {
+            "unknown_type": "Filtr {number} ({type}, {frequency} Hz) jest pomijany: ten typ filtra nie jest obsługiwany.",
+            "invalid_parameters": "Filtr {number} ({type}, {frequency} Hz) jest pomijany: jego ustawienia są nieprawidłowe przy {rate} Hz.",
+            "add_failed": "Filtr {number} ({type}, {frequency} Hz) jest pomijany: nie udało się dodać go do łańcucha filtrów.",
+            "unknown": "Filtr {number} ({type}, {frequency} Hz) jest pomijany."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3922,7 +3946,7 @@
       "allowSubnetBypassLabel": "Zezwól na Dostęp z Podsieci Omijając Uwierzytelnianie",
       "subnetBypassLocalNote": "Po włączeniu klienci w tej samej sieci lokalnej co ten serwer są automatycznie zaufani i pomijają logowanie. Pole poniżej służy wyłącznie do rozszerzenia tego zaufania na dodatkowe sieci (na przykład osobną sieć VLAN lub trasowaną podsieć).",
       "allowedSubnetsLabel": "Dozwolone Podsieci",
-      "allowedSubnetsHelp": "Dodatkowe zakresy sieci, które mogą pominąć logowanie, oprócz własnej sieci lokalnej tego serwera. Notacja CIDR, oddzielone przecinkami.",
+      "allowedSubnetsHelp": "Dodatkowe zakresy sieci, które mogą pominąć logowanie, oprócz własnej sieci lokalnej tego serwera. Użyj notacji CIDR, na przykład 192.168.10.0/24.",
       "securityWarningTitle": "Ostrzeżenie Bezpieczeństwa:",
       "subnetWarningText": "Sieć lokalna tego serwera oraz wszystkie wymienione tutaj podsieci uzyskują pełny dostęp bez logowania. Uwzględniaj tylko sieci, którym w pełni ufasz.",
       "httpsSettingsTitle": "Ustawienia HTTPS",
@@ -4150,6 +4174,77 @@
         "downloadCertificate": "Pobierz certyfikat",
         "downloadCertificateHelp": "Zainstaluj ten certyfikat w magazynie zaufanych certyfikatów systemu operacyjnego, aby uniknąć ostrzeżeń bezpieczeństwa przeglądarki.",
         "fileReadError": "Nie udało się odczytać wybranego pliku"
+      },
+      "reverseProxy": {
+        "title": "Odwrotne proxy",
+        "description": "Dla dostępu przez nginx, Caddy, Traefik, Cloudflare lub inne proxy",
+        "listLabel": "Zaufane proxy",
+        "listHelp": "Dodaj adres każdego proxy poprzedzającego BirdNET-Go. W przypadku Dockera jest to często adres bramy Dockera, taki jak 172.17.0.1.",
+        "placeholder": "Na przykład 172.17.0.1",
+        "emptyState": "Brak zaufanych proxy. BirdNET-Go używa adresu, który się z nim łączy.",
+        "emptyStateCloudflareOnly": "Zaufane są tylko opublikowane adresy brzegowe Cloudflare. Nie wymieniono żadnych innych proxy.",
+        "rangeBadge": "Zakres",
+        "ruleOwnAddress": "Podaj własny adres każdego proxy. Nigdy nie podawaj zakresu obejmującego również komputery, z których przeglądasz stronę.",
+        "ruleHeaders": "Proxy musi dołączyć adres klienta do X-Forwarded-For lub zastąpić X-Real-IP.",
+        "cloudflareLabel": "Zaufaj Cloudflare",
+        "cloudflareHelp": "Włącz tę opcję, jeśli Twoja witryna jest obsługiwana przez Cloudflare. BirdNET-Go zaufa wtedy opublikowanym adresom brzegowym Cloudflare.",
+        "check": {
+          "title": "Twoje połączenie",
+          "recheck": "Sprawdź ponownie",
+          "checking": "Sprawdzanie Twojego połączenia",
+          "error": "Nie udało się sprawdzić Twojego połączenia.",
+          "stale": "To sprawdzenie pokazuje zapisane ustawienia. Zapisz, aby sprawdzić zmiany.",
+          "trust": "Zaufaj {peer}",
+          "trustWarning": "Ufaj {peer} tylko wtedy, gdy jest to Twoje reverse proxy, a nie komputer, z którego przeglądasz stronę.",
+          "trustWithCloudflare": "Zaufaj {peer} i Cloudflare",
+          "cloudflareInFront": "Cloudflare znajduje się przed {peer}. Zaufaj obu, aby zweryfikować swój adres.",
+          "cloudflareEdge": "{peer} należy do Cloudflare. Włącz poniżej opcję Zaufaj Cloudflare.",
+          "chainHint": "Jeśli przed {peer} znajduje się inne proxy, je także dodaj do listy.",
+          "added": "Dodano do listy. Zapisz, aby zastosować.",
+          "coveredBy": "Już objęte zakresem {range} na liście. Zapisz, aby zastosować.",
+          "selfClientCause": "Proxy może przekazywać własny adres jako adres klienta, często dlatego, że publikowanie portów kontenera ukrywa prawdziwego klienta. Popraw to w ustawieniach sieci kontenera lub proxy."
+        },
+        "status": {
+          "direct": {
+            "title": "Połączono bezpośrednio",
+            "body": "Twoja przeglądarka łączy się z BirdNET-Go bezpośrednio z {peer}.",
+            "bodyNoPeer": "Twoja przeglądarka łączy się z BirdNET-Go bezpośrednio.",
+            "hint": "Jeśli używasz reverse proxy, a {peer} to jego adres, skonfiguruj proxy, aby przesyłało X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Połączono przez zaufane proxy",
+            "body": "Twoje połączenie przechodzi przez {peer}, które jest zaufane. Twój adres {client} został zweryfikowany.",
+            "hint": "Jeśli {client} to inne proxy, a nie Twój komputer, dodaj to proxy również do listy."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Nie udało się zweryfikować Twojego adresu",
+            "body": "{peer} jest zaufane, ale przekazywany przez nie adres nie mógł zostać zweryfikowany. Częste przyczyny:",
+            "causeRange": "Podany zakres obejmuje również Twój komputer, więc żaden adres w łańcuchu nie jest uznawany za Twój.",
+            "causeHeaders": "Proxy nie dołącza nagłówka X-Forwarded-For ani nie zastępuje X-Real-IP.",
+            "causeConflict": "Proxy wysyła sprzeczne lub powtórzone nagłówki adresów albo tylko nagłówek Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Połączono przez publiczne proxy",
+            "body": "Twoje połączenie przechodzi przez {peer}, adres publiczny. Adresy publiczne nigdy nie są oferowane do zaufania jednym kliknięciem. Dodaj go ręcznie tylko wtedy, gdy masz pewność, że to Twoje proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Połączono przez niezaufane proxy",
+            "body": "Twoje połączenie przechodzi przez proxy pod adresem {peer}, które nie jest zaufane, więc BirdNET-Go nie może zweryfikować Twojego adresu."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Nagłówki proxy nie mogą zostać zweryfikowane",
+            "body": "Twoje połączenie przechodzi przez {peer}, ale wysyłane przez nie nagłówki adresów nie mogły zostać zweryfikowane, nawet gdyby było zaufane.",
+            "bodyNoPeer": "Twoje połączenie przechodzi przez proxy, ale jego adres nie mógł zostać odczytany.",
+            "fix": "Skonfiguruj proxy, aby dołączało nagłówek X-Forwarded-For lub zastępowało X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Za reverse proxy to pomijanie działa tylko wtedy, gdy proxy znajduje się na liście zaufanych.",
+      "bypassProxyLink": "Skonfiguruj zaufane proxy",
+      "allowedSubnetsEmpty": "Brak dodatkowych podsieci. Tylko własna sieć lokalna tego serwera może pominąć logowanie.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} zawiera nieprawidłowy wpis.",
+        "pendingEntry": "{tab}: {field} zawiera tekst, który nie został dodany. Naciśnij Enter lub Dodaj albo go wyczyść."
       }
     },
     "species": {
@@ -4936,6 +5031,28 @@
         "dragToReorder": "Przeciągnij, aby zmienić kolejność {species}",
         "edit": "Edytuj gatunek",
         "remove": "Usuń gatunek"
+      }
+    },
+    "networkAddressList": {
+      "add": "Dodaj",
+      "remove": "Usuń {address}",
+      "empty": "Nie dodano jeszcze żadnych adresów.",
+      "pendingHint": "Naciśnij Enter lub Dodaj, aby dodać ten adres.",
+      "limitReached": "Lista jest pełna ({max} wpisów).",
+      "rowDuplicate": "Duplikat",
+      "rowInvalid": {
+        "cidr": "Nieprawidłowy zakres",
+        "ip": "Nieprawidłowy adres IP",
+        "ipOrCidr": "Nieprawidłowy adres lub zakres"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Nieprawidłowy zakres: {values}. Użyj zakresu takiego jak 192.168.1.0/24.",
+          "ip": "Nieprawidłowy adres IP: {values}. Użyj adresu takiego jak 192.168.1.10.",
+          "ipOrCidr": "Nieprawidłowy adres lub zakres: {values}. Użyj adresu takiego jak 192.168.1.10 lub zakresu takiego jak 192.168.1.0/24."
+        },
+        "duplicate": "Już na liście: {values}.",
+        "limit": "Lista może zawierać maksymalnie {max} wpisów. Nie dodano: {values}."
       }
     }
   },

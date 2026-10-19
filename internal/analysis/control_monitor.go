@@ -58,6 +58,11 @@ type ControlMonitor struct {
 	// duplicating source setup logic.
 	reconfigureSourcesFn func()
 
+	// updateSourceGainsFn applies the configured gain of every running source to
+	// its live routes without a reconfigure or a stream probe. Set by
+	// AudioPipelineService after construction; nil skips it.
+	updateSourceGainsFn func()
+
 	// replanCadenceFn re-plans the analysis cadence without probing or diffing
 	// sources. Set by AudioPipelineService after construction; nil skips it.
 	replanCadenceFn func()
@@ -305,6 +310,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleRebuildExtendedCapture()
 	case "reconfigure_audio_sources":
 		cm.handleReconfigureAudioSources()
+	case "update_source_gains":
+		cm.handleUpdateSourceGains()
 	case "restart_audio_capture":
 		cm.handleRestartAudioCapture()
 	case "reconfigure_dynamic_thresholds":
@@ -327,6 +334,19 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
 	}
+}
+
+// handleUpdateSourceGains applies changed sound card and stream gains to the
+// running sources' live routes. Unlike handleReconfigureAudioSources it does not
+// diff or probe sources, restart anything, or rebuild the routes of a healthy
+// source; it only re-wires a source whose analysis route failed on the previous
+// pass, as every reconfigure does.
+func (cm *ControlMonitor) handleUpdateSourceGains() {
+	if cm.updateSourceGainsFn == nil {
+		return
+	}
+	cm.updateSourceGainsFn()
+	emitHotReload("source_gain")
 }
 
 // handleReconfigureLogDeduplication reinitializes the log deduplicator from current settings.

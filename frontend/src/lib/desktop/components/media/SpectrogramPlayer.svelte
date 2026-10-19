@@ -24,6 +24,7 @@
   import { get } from 'svelte/store';
   import { dashboardSettings } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
+  import { playButtonLabelKey } from '$lib/utils/audio';
   import { loggers } from '$lib/utils/logger';
 
   const logger = loggers.audio;
@@ -187,7 +188,7 @@
       class:is-playing={audio.isPlaying}
       onclick={handlePlayClick}
       disabled={audio.isLoading}
-      aria-label={audio.isPlaying ? t('media.audio.pause') : t('media.audio.play')}
+      aria-label={t(playButtonLabelKey(audio.isLoading, audio.isPlaying))}
     >
       {#if audio.isLoading}
         <div

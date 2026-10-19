@@ -24,6 +24,19 @@ export const MAX_AUDIO_LOAD_RETRIES = 3;
 /** Delay between audio load retries in milliseconds */
 export const AUDIO_RETRY_DELAY_MS = 2000;
 
+/**
+ * Background retry delays in ms for a dashboard card whose clip is still being
+ * exported. Spans the backend's pending-export window (about 90 s total). The
+ * entry count is the retry limit. A media element cannot read the HTTP status, so
+ * retries are blind.
+ */
+export const DASHBOARD_AUDIO_RETRY_DELAYS_MS: readonly number[] = [
+  2000, 4000, 8000, 16000, 30000, 30000,
+];
+
+/** DOMException name a browser uses when play() is interrupted by a load or pause */
+const ABORT_ERROR_NAME = 'AbortError';
+
 // =============================================================================
 // Playback Speed
 // =============================================================================
@@ -78,4 +91,32 @@ export function applyPlaybackRate(audio: HTMLAudioElement, rate: number): void {
  */
 export function dbToGain(db: number): number {
   return Math.pow(10, db / 20);
+}
+
+/**
+ * Whether a play() rejection is only an interruption (a load() or src change
+ * or pause() arrived before playback started), not a playback failure.
+ * Structural so it works for DOMException in browsers and in jsdom.
+ *
+ * @param err - the value a play() promise rejected with
+ * @returns true when the rejection is an AbortError
+ */
+export function isPlayInterruptedError(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && 'name' in err && err.name === ABORT_ERROR_NAME;
+}
+
+/**
+ * Translation key for a play button's accessible label. A loading clip reads as
+ * loading, never as Pause, even when the element already reports playing.
+ *
+ * @param isLoading - whether the clip is loading or reloading
+ * @param isPlaying - whether the element is playing
+ * @returns the i18n key to pass to t()
+ */
+export function playButtonLabelKey(
+  isLoading: boolean,
+  isPlaying: boolean
+): 'media.audio.loading' | 'media.audio.pause' | 'media.audio.play' {
+  if (isLoading) return 'media.audio.loading';
+  return isPlaying ? 'media.audio.pause' : 'media.audio.play';
 }

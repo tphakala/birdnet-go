@@ -49,6 +49,38 @@ func TestGetTopKResults_PreservesHumanAndDogPastTopK(t *testing.T) {
 	assert.Len(t, top, 12)
 }
 
+// TestGetTopKResults_PrivacyExcludedLabelsNotPreserved pins that human-category
+// classes the privacy filter ignores ("Hands", "Cough") are not force-retained past
+// the top-K, and do not displace a fainter "Speech" as the preserved human class
+// even when they score higher. Without the exclusion the strongest human-category
+// label, "Hands", would be appended instead of "Speech".
+func TestGetTopKResults_PrivacyExcludedLabelsNotPreserved(t *testing.T) {
+	t.Parallel()
+
+	results := make([]datastore.Results, 0, 15)
+	for i := range 12 {
+		results = append(results, datastore.Results{
+			Species:    "Bird_" + string(rune('A'+i)),
+			Confidence: 0.9 - float32(i)*0.01, // 0.90 .. 0.79, all above the faint classes
+		})
+	}
+	results = append(results,
+		datastore.Results{Species: "Hands", Confidence: 0.30},
+		datastore.Results{Species: "Cough", Confidence: 0.20},
+		datastore.Results{Species: "Speech", Confidence: 0.02},
+	)
+
+	top := getTopKResults(results, 10)
+
+	got := speciesConfidences(top)
+	assert.NotContains(t, got, "Hands", "privacy-excluded label must not be force-retained")
+	assert.NotContains(t, got, "Cough", "privacy-excluded label must not be force-retained")
+	require.Contains(t, got, "Speech", "the voiced human class must be the preserved one")
+	assert.InDelta(t, 0.02, got["Speech"], 1e-6)
+	// 10 birds + the preserved Speech only.
+	assert.Len(t, top, 11)
+}
+
 // TestGetTopKResults_NoDuplicateWhenClassInTopK verifies preservation does not
 // duplicate a human/dog class that already made the top-K.
 func TestGetTopKResults_NoDuplicateWhenClassInTopK(t *testing.T) {

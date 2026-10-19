@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc viltus pozitīvo filtrs var prasīt mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās; skatiet Iestatījumi > Analīze.",
         "cadenceOverloadedTitle": "Šī ierīce netiek līdzi audio analīzei",
         "cadenceOverloadedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās, tāpēc analīze var atpalikt un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu vai izvēlieties ātrāku modeļa variantu."
+      },
+      "storage": {
+        "notPersistentTitle": "Dati tiks zaudēti, kad konteiners tiks izveidots no jauna",
+        "notPersistentMessage": "Šie ceļi atrodas krātuvē, kas tiek dzēsta, kad konteiners tiek izveidots no jauna, piemēram, atjauninot attēlu: {paths}. Piesaistiet tiem sējumu vai resursdatora direktoriju sava konteinera konfigurācijā.",
+        "anonymousVolumeTitle": "Dati tiek glabāti anonīmā konteinera sējumā",
+        "anonymousVolumeMessage": "Šie ceļi atrodas anonīmos sējumos, ko konteinera izpildlaiks izveidoja, jo neviens sējums nebija piesaistīts: {paths}. No jauna startēts konteiners, piemēram, ar docker run pēc attēla atjaunināšanas, saņem jaunus tukšus sējumus, tāpēc dati šķiet zaudēti. Piesaistiet tiem nosauktu sējumu vai resursdatora direktoriju."
       }
     },
     "loading": "Ielādē paziņojumus..."
@@ -2310,7 +2316,9 @@
       "saveAriaLabel": "Saglabāt izmaiņas",
       "savingAriaLabel": "Saglabā izmaiņas...",
       "unsavedChanges": "Nesaglabātas izmaiņas",
-      "toolbar": "Iestatījumu darbības"
+      "toolbar": "Iestatījumu darbības",
+      "validationBlocked": "Dažiem laukiem nepieciešama uzmanība, pirms varat saglabāt.",
+      "noChangesToSave": "Nav izmaiņu, ko saglabāt."
     },
     "errors": {
       "loadFailed": "Neizdevās ielādēt iestatījumus",
@@ -3184,7 +3192,7 @@
         "vadEnable": "Iespējot Privātuma Aizsardzību (Silero VAD)",
         "vadHelp": "Darbojas ar atsevišķu neironu runas noteikšanas modeli blakus klasifikatoram uzticamai balss filtrēšanai. Patērē papildu sistēmas resursus (aptuveni 20-30 MB RAM un CPU inferenci uz segmentu).",
         "vadThresholdLabel": "Privātuma Aizsardzības slieksnis",
-        "vadThresholdHelp": "Jutības slieksnis balss aktivitātes detektoram (noklusējums 0,35). Zemākas vērtības padara filtru jutīgāku pret klusu vai attālu runu."
+        "vadThresholdHelp": "Jutības slieksnis balss aktivitātes detektoram (noklusējums 0,6). Zemākas vērtības padara filtru jutīgāku pret klusu vai attālu runu."
       },
       "falsePositivePrevention": {
         "title": "Viltus pozitīvo novēršana",
@@ -3736,6 +3744,8 @@
         "frequencyResponse": "Frekvenču raksturlīkne",
         "cutoffFrequency": "Robežfrekvence",
         "cutoffFrequencyHelp": "Frekvence, pie kuras filtrs sāk slāpēt signālus. Putnu dziesmas parasti ir diapazonā no 1 līdz 10 kHz.",
+        "centerFrequency": "Centrālā frekvence",
+        "bandwidth": "Joslas platums",
         "qFactor": "Q faktors",
         "qFactorHelp": "Kvalitātes faktors kontrolē filtra asumu. Zemākas vērtības (0,1-1) rada lēzenākas slīpnes, augstākas vērtības (1-10) rada stāvākas robežas.",
         "gain": "Pastiprināšana",
@@ -3743,17 +3753,31 @@
         "attenuation": "Slāpēšana",
         "attenuationHelp": "Filtra krituma ātrums. Augstākas vērtības nodrošina stāvāku filtrēto frekvenču slāpēšanu.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Izslēgts",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Pievienojiet vairākus filtrus, lai veidotu frekvenču raksturlīkni optimālai putnu noteikšanai jūsu vidē.",
+        "emptyEntryRestored": "Ievadiet skaitli. Iepriekšējā vērtība tika saglabāta.",
         "graph": {
           "flatResponse": "Plakana raksturlīkne (filtri nav lietoti)",
           "frequency": "Frekvence (Hz)",
-          "gain": "Pastiprināšana (dB)"
+          "gain": "Pastiprināšana (dB)",
+          "loading": "Aprēķina frekvenču raksturlīkni...",
+          "updating": "Atjaunina frekvenču raksturlīkni...",
+          "error": "Neizdevās aprēķināt frekvenču raksturlīkni. Tā tiek atjaunināta, kad maināt filtru vai izvēlaties Mēģināt vēlreiz.",
+          "sampleRate": "Aprēķināts {rate} Hz iztveršanas frekvencei.",
+          "clipped": "Atbildes maksimums ir {peak} dB, virs grafika augšējās malas.",
+          "skippedHeading": "{count, plural, zero {# filtri netiek lietoti audio} one {# filtrs netiek lietots audio} other {# filtri netiek lietoti audio}}",
+          "skippedReasons": {
+            "unknown_type": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: šis filtra tips netiek atbalstīts.",
+            "invalid_parameters": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: tā iestatījumi nav derīgi pie {rate} Hz.",
+            "add_failed": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists: to neizdevās pievienot filtru ķēdei.",
+            "unknown": "Filtrs {number} ({type}, {frequency} Hz) tiek izlaists."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3922,7 +3946,7 @@
       "allowSubnetBypassLabel": "Atļaut piekļuvi no apakštīkla, apejot autentifikāciju",
       "subnetBypassLocalNote": "Kad iespējots, klienti tajā pašā lokālajā tīklā kā šis serveris tiek automātiski uzskatīti par uzticamiem un izlaiž pieteikšanos. Izmantojiet zemāk esošo lauku tikai tam, lai paplašinātu šo uzticību uz papildu tīkliem (piemēram, atsevišķu VLAN vai maršrutētu apakštīklu).",
       "allowedSubnetsLabel": "Atļautie apakštīkli",
-      "allowedSubnetsHelp": "Papildu tīkla diapazoni, kas drīkst apiet pieteikšanos, papildus šī servera paša lokālajam tīklam. CIDR notācija, atdalīti ar komatiem.",
+      "allowedSubnetsHelp": "Papildu tīkla diapazoni, kas drīkst apiet pieteikšanos, papildus šī servera paša lokālajam tīklam. Izmantojiet CIDR notāciju, piemēram, 192.168.10.0/24.",
       "securityWarningTitle": "Drošības brīdinājums:",
       "subnetWarningText": "Šī servera lokālais tīkls un visi šeit norādītie apakštīkli iegūst pilnu piekļuvi bez pieteikšanās. Iekļaujiet tikai tīklus, kuriem pilnībā uzticaties.",
       "httpsSettingsTitle": "HTTPS iestatījumi",
@@ -4150,6 +4174,77 @@
         "downloadCertificate": "Lejupielādēt sertifikātu",
         "downloadCertificateHelp": "Instalējiet šo sertifikātu savas operētājsistēmas uzticamības krātuvē, lai izvairītos no pārlūkprogrammas drošības brīdinājumiem.",
         "fileReadError": "Neizdevās nolasīt izvēlēto failu"
+      },
+      "reverseProxy": {
+        "title": "Reversais starpniekserveris",
+        "description": "Piekļuvei caur nginx, Caddy, Traefik, Cloudflare vai citu starpniekserveri",
+        "listLabel": "Uzticamie starpniekserveri",
+        "listHelp": "Pievienojiet katra starpniekservera adresi, kas atrodas pirms BirdNET-Go. Ar Docker tā bieži ir Docker vārtejas adrese, piemēram, 172.17.0.1.",
+        "placeholder": "Piemēram, 172.17.0.1",
+        "emptyState": "Nav uzticamu starpniekserveru. BirdNET-Go izmanto adresi, kas tam pieslēdzas.",
+        "emptyStateCloudflareOnly": "Uzticamas ir tikai Cloudflare publicētās malas adreses. Citi starpniekserveri nav norādīti.",
+        "rangeBadge": "Diapazons",
+        "ruleOwnAddress": "Norādiet katra starpniekservera paša adresi. Nekad nenorādiet diapazonu, kurā ietilpst arī datori, no kuriem pārlūkojat.",
+        "ruleHeaders": "Starpniekserverim ir jāpievieno klienta adrese pie X-Forwarded-For vai jāpārraksta X-Real-IP.",
+        "cloudflareLabel": "Uzticēties Cloudflare",
+        "cloudflareHelp": "Ieslēdziet šo, ja vietne tiek nodrošināta caur Cloudflare. BirdNET-Go tad uzticas Cloudflare publicētajām edge adresēm.",
+        "check": {
+          "title": "Jūsu savienojums",
+          "recheck": "Pārbaudīt vēlreiz",
+          "checking": "Pārbauda savienojumu",
+          "error": "Neizdevās pārbaudīt savienojumu.",
+          "stale": "Šī pārbaude rāda saglabātos iestatījumus. Saglabājiet, lai pārbaudītu izmaiņas.",
+          "trust": "Uzticēties {peer}",
+          "trustWarning": "Uzticieties {peer} tikai tad, ja tas ir jūsu reversais starpniekserveris, nevis dators, no kura pārlūkojat.",
+          "trustWithCloudflare": "Uzticēties {peer} un Cloudflare",
+          "cloudflareInFront": "Cloudflare atrodas pirms {peer}. Uzticieties abiem, lai verificētu savu adresi.",
+          "cloudflareEdge": "{peer} pieder pie Cloudflare. Ieslēdziet zemāk Uzticēties Cloudflare.",
+          "chainHint": "Ja pirms {peer} atrodas cits starpniekserveris, norādiet sarakstā arī to.",
+          "added": "Pievienots sarakstam. Saglabājiet, lai lietotu.",
+          "coveredBy": "Jau ietverts sarakstā esošajā diapazonā {range}. Saglabājiet, lai lietotu.",
+          "selfClientCause": "Starpniekserveris, iespējams, pārsūta savu adresi kā klienta adresi, bieži tāpēc, ka konteinera portu publicēšana slēpj īsto klientu. Novērsiet to konteinera vai starpniekservera tīkla iestatījumos."
+        },
+        "status": {
+          "direct": {
+            "title": "Tiešs savienojums",
+            "body": "Jūsu pārlūkprogramma pieslēdzas BirdNET-Go tieši no {peer}.",
+            "bodyNoPeer": "Jūsu pārlūkprogramma pieslēdzas BirdNET-Go tieši.",
+            "hint": "Ja izmantojat reverso starpniekserveri un {peer} ir tā adrese, iestatiet starpniekserveri, lai tas nosūta X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Pieslēgts caur uzticamu starpniekserveri",
+            "body": "Jūsu savienojums nāk caur {peer}, kas ir uzticams. Jūsu adrese {client} tika verificēta.",
+            "hint": "Ja {client} ir cits starpniekserveris, nevis jūsu dators, norādiet sarakstā arī šo starpniekserveri."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Jūsu adresi nevarēja verificēt",
+            "body": "{peer} ir uzticams, taču tā pāradresēto adresi nevarēja verificēt. Biežākie iemesli:",
+            "causeRange": "Norādītajā diapazonā ietilpst arī jūsu dators, tāpēc neviena adrese ķēdē netiek uzskatīta par jūsu adresi.",
+            "causeHeaders": "Starpniekserveris nepievieno X-Forwarded-For vai nepārraksta X-Real-IP.",
+            "causeConflict": "Starpniekserveris nosūta pretrunīgas vai atkārtotas adrešu galvenes, vai tikai Forwarded galveni."
+          },
+          "untrusted_public_proxy": {
+            "title": "Pieslēgts caur publisku starpniekserveri",
+            "body": "Jūsu savienojums nāk caur {peer}, kas ir publiska adrese. Publiskas adreses nekad netiek piedāvātas viena klikšķa uzticēšanai. Pievienojiet manuāli tikai tad, ja esat pārliecināts, ka tas ir jūsu starpniekserveris."
+          },
+          "untrusted_proxy": {
+            "title": "Pieslēgts caur neuzticamu starpniekserveri",
+            "body": "Jūsu savienojums nāk caur starpniekserveri adresē {peer}, kas nav uzticams, tāpēc BirdNET-Go nevar verificēt jūsu adresi."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Starpniekservera galvenes nevar verificēt",
+            "body": "Jūsu savienojums nāk caur {peer}, taču tā nosūtītās adrešu galvenes nevarētu verificēt pat tad, ja tas būtu uzticams.",
+            "bodyNoPeer": "Jūsu savienojums nāk caur starpniekserveri, taču tā adresi nevarēja nolasīt.",
+            "fix": "Iestatiet starpniekserveri, lai tas pievienotu X-Forwarded-For vai pārrakstītu X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Aiz reversā starpniekservera šī apiešana darbojas tikai tad, ja starpniekserveris ir norādīts kā uzticams.",
+      "bypassProxyLink": "Iestatīt uzticamos starpniekserverus",
+      "allowedSubnetsEmpty": "Nav papildu apakštīklu. Tikai šī servera paša lokālais tīkls drīkst apiet pieteikšanos.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} ir nederīgs ieraksts.",
+        "pendingEntry": "{tab}: {field} ir teksts, kas netika pievienots. Nospiediet Enter vai Pievienot, vai notīriet to."
       }
     },
     "species": {
@@ -4936,6 +5031,28 @@
         "dragToReorder": "Velciet, lai pārkārtotu {species}",
         "edit": "Rediģēt sugu",
         "remove": "Noņemt sugu"
+      }
+    },
+    "networkAddressList": {
+      "add": "Pievienot",
+      "remove": "Noņemt {address}",
+      "empty": "Vēl nav pievienota neviena adrese.",
+      "pendingHint": "Nospiediet Enter vai Pievienot, lai pievienotu šo adresi.",
+      "limitReached": "Saraksts ir pilns ({max} ieraksti).",
+      "rowDuplicate": "Dublikāts",
+      "rowInvalid": {
+        "cidr": "Nederīgs diapazons",
+        "ip": "Nederīga IP adrese",
+        "ipOrCidr": "Nederīga adrese vai diapazons"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Nederīgs diapazons: {values}. Izmantojiet diapazonu, piemēram, 192.168.1.0/24.",
+          "ip": "Nederīga IP adrese: {values}. Izmantojiet adresi, piemēram, 192.168.1.10.",
+          "ipOrCidr": "Nederīga adrese vai diapazons: {values}. Izmantojiet adresi, piemēram, 192.168.1.10, vai diapazonu, piemēram, 192.168.1.0/24."
+        },
+        "duplicate": "Jau ir sarakstā: {values}.",
+        "limit": "Sarakstā var būt ne vairāk kā {max} ieraksti. Netika pievienots: {values}."
       }
     }
   },

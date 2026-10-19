@@ -420,6 +420,7 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 	apiController := p.apiService.APIController()
 	p.ctrlMonitor = NewControlMonitor(&p.wg, p.apiService.ControlChan(), p.done, p.restartChan, p.bufferMgr, proc, apiAudioLevelChan, p.soundLevelChan, apiController, metrics, p.quietHoursScheduler, p.engine, reconfigureFn, reconfigureSoundLevelFn, reconfigureMonitoringFn)
 	p.ctrlMonitor.replanCadenceFn = p.replanCadence
+	p.ctrlMonitor.updateSourceGainsFn = func() { p.applySourceGains(apiAudioLevelChan) }
 	p.ctrlMonitor.Start()
 
 	// Start restart loop goroutine.
@@ -776,8 +777,8 @@ func (p *AudioPipelineService) setupAudioSources(audioLevelChan chan audiocore.A
 // AudioRouter for each source ID, bridging output to the pipeline's soundLevelChan.
 //
 // The function is a no-op when Realtime.Audio.SoundLevel.Enabled is false so that
-// the DSP pipeline (27 biquad filters per source, per-second float64 accumulator
-// windows) is not allocated or exercised when sound level monitoring is off. It
+// the DSP pipeline (a go-audio-dsp octave meter with up to 30 band filters per
+// source) is not allocated or exercised when sound level monitoring is off. It
 // is also idempotent: sources that already have a tracked consumer are skipped,
 // so the caller may include previously registered source IDs.
 func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, operation string) {
@@ -788,7 +789,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 	}
 	slInterval := settings.Realtime.Audio.SoundLevel.Interval
 	if slInterval <= 0 {
-		slInterval = 10 // default 10-second aggregation window
+		slInterval = conf.DefaultSoundLevelInterval
 	}
 	for _, sid := range sourceIDs {
 		// Skip sources that already have a registered soundlevel consumer so
@@ -820,7 +821,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 
 		eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sourceSampleRate)
 
-		slProc, slErr := soundlevel.NewProcessor(sid, sid, sourceSampleRate, slInterval)
+		slProc, slErr := soundlevel.NewProcessor(sid, sourceName, sourceSampleRate, slInterval)
 		if slErr != nil {
 			log.Warn("failed to create sound level processor",
 				logger.String("source_id", sid),
@@ -897,6 +898,9 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 					if !ok {
 						return
 					}
+					// Follow a rename made since registration, which does not
+					// rebuild the consumer.
+					data.Name = p.currentSourceName(sid)
 					select {
 					case p.soundLevelChan <- data:
 					default:
@@ -911,6 +915,16 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 			logger.Int("interval_seconds", slInterval),
 			logger.String("operation", operation))
 	}
+}
+
+// currentSourceName returns the display name the registry holds for sourceID
+// now, or the ID when the source is gone or its display name is empty. The
+// publishers reject an empty name.
+func (p *AudioPipelineService) currentSourceName(sourceID string) string {
+	if src, ok := p.engine.Registry().Get(sourceID); ok && src.DisplayName != "" {
+		return src.DisplayName
+	}
+	return sourceID
 }
 
 // ReconfigureSoundLevel reconciles the sound level pipeline with the current
@@ -1073,7 +1087,6 @@ const (
 	operationRestartSource     = "restart_source"
 	operationReconfigureDiff   = "reconfigure_diff"
 	operationReconfigureParams = "reconfigure_params"
-	operationGainChange        = "gain_change"
 	operationModelChange       = "model_change"
 	operationRouteRetry        = "route_retry"
 	operationReplanCadence     = "replan_cadence"
@@ -1089,7 +1102,7 @@ const (
 // retry has failedLastPass set and is reported, not suppressed forever).
 func isReconfigureOperation(operation string) bool {
 	switch operation {
-	case operationReconfigureDiff, operationReconfigureParams, operationGainChange, operationModelChange, operationRouteRetry:
+	case operationReconfigureDiff, operationReconfigureParams, operationModelChange, operationRouteRetry:
 		return true
 	default:
 		return false
@@ -1477,7 +1490,8 @@ func (p *AudioPipelineService) forgetDeletedSourceHAEntities(src *audiocore.Audi
 // changed are touched - unchanged streams keep their capture buffers and
 // source IDs intact. When the desired sources change the analysis cadence, a
 // full capture restart is queued as well, which rebuilds every buffer at the
-// new step.
+// new step. A change of only a source's gain is applied to its live routes
+// (applySourceGain) without touching capture, buffers or routes.
 func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan audiocore.AudioLevelData) {
 	p.sourcesMu.Lock()
 	defer p.sourcesMu.Unlock()
@@ -1521,7 +1535,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	alreadyRunning := make(map[string]string) // connStr -> sourceID (for sources that stay)
 	sourceModelMap := make(map[string][]string)
 	var newSourceIDs []string
-	var gainChangedIDs []string
+	var gainChangedCount int
 	var reconfiguredIDs []string
 	var modelChangedIDs []string
 	var keptCount int
@@ -1543,7 +1557,8 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 			// Classify the kind of change needed, from most to least
 			// disruptive. Model changes are checked before gain-only
 			// changes so that a simultaneous gain + model update takes
-			// the model-change path (which also handles gain).
+			// the model-change path (which also handles gain by rebuilding
+			// the routes from the registry).
 			switch {
 			case sourceNeedsReconfigure(src, scm.config):
 				// Audio parameter change: full stop + restart.
@@ -1580,14 +1595,12 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 				modelChangedIDs = append(modelChangedIDs, src.ID)
 
 			case src.Gain != scm.config.Gain:
-				// Gain-only change: rebuild routes, keep capture running.
-				log.Info("gain changed for kept source, rebuilding routes",
-					logger.String("source_id", src.ID),
-					logger.Float64("old_gain_db", src.Gain),
-					logger.Float64("new_gain_db", scm.config.Gain),
-					logger.String("operation", operationReconfigureDiff))
-				registry.UpdateGain(src.ID, scm.config.Gain)
-				gainChangedIDs = append(gainChangedIDs, src.ID)
+				// Gain-only change: apply it to the live routes, keep capture and
+				// the routes running. Normally the update_source_gains action has
+				// done this already; this covers a reconfigure that runs first.
+				if p.applySourceGain(src, scm.config.Gain, operationReconfigureDiff) {
+					gainChangedCount++
+				}
 			}
 
 			// Sync display name if the config name changed (e.g., stream renamed in UI).
@@ -1669,13 +1682,6 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		p.registerSoundLevelConsumers(reconfiguredIDs, operationReconfigureParams)
 	}
 
-	// Rebuild routes for sources whose gain changed. The capture device
-	// stays running; only the routes are torn down and re-created so
-	// drainRoute picks up the new gainLinear value.
-	if len(gainChangedIDs) > 0 {
-		p.rebuildRoutesForSources(gainChangedIDs, sourceModelMap, audioLevelChan, operationGainChange)
-	}
-
 	// Rebuild routes for sources whose model assignment changed (e.g.,
 	// Perch added or removed). The capture device stays running; routes
 	// are torn down, stale analysis buffers are deallocated, and
@@ -1697,7 +1703,7 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 	// and its models never surface as not-analyzing (#4208 follow-up).
 	routeRetryIDs := p.retryPersistentRouteFailures(
 		alreadyRunning,
-		[][]string{newSourceIDs, reconfiguredIDs, gainChangedIDs, modelChangedIDs},
+		[][]string{newSourceIDs, reconfiguredIDs, modelChangedIDs},
 		sourceModelMap, audioLevelChan)
 
 	// Sync monitors for ALL active sources (kept + new) so UpdateMonitors
@@ -1717,18 +1723,81 @@ func (p *AudioPipelineService) reconfigureChangedSources(audioLevelChan chan aud
 		logger.Int("kept", keptCount),
 		logger.Int("added", len(newSourceIDs)),
 		logger.Int("removed", removedCount),
-		logger.Int("gain_changed", len(gainChangedIDs)),
+		logger.Int("gain_changed", gainChangedCount),
 		logger.Int("model_changed", len(modelChangedIDs)),
 		logger.Int("route_retried", len(routeRetryIDs)),
 		logger.String("operation", operationReconfigureDiff))
 }
 
+// operationUpdateGains labels the log lines of applySourceGains. It is not a
+// registration pass, so it is not part of isReconfigureOperation's vocabulary.
+const operationUpdateGains = "update_source_gains"
+
+// applySourceGains applies the configured gain of every running source to its
+// registry entry and its live routes, without a reconfigure: no stream is probed,
+// no capture restarts and no route of a healthy source is rebuilt, so open
+// live-audio listeners keep receiving audio. It resolves the desired sources with
+// the same rules as the reconfigure diff (including that rtsp.streams wins over
+// audio.sources) but with probeStreams false, so it never contacts a stream. A
+// source that is not running is left to the reconfigure path that adds it.
+//
+// It then runs the same persistent-route-failure retry the reconfigure path ends
+// with: a kept source whose analysis route failed on the previous pass is
+// re-wired (audioLevelChan feeds the rebuilt audio level route), which a gain
+// save used to do as part of a reconfigure. With no failure recorded the retry
+// returns without touching anything. It runs on the control monitor goroutine,
+// the one that also runs reconfigures, and under sourcesMu, which neither
+// buildSourceConfigs nor the retry takes, so a route rebuild cannot read the
+// registry between the registry and route updates.
+func (p *AudioPipelineService) applySourceGains(audioLevelChan chan audiocore.AudioLevelData) {
+	p.sourcesMu.Lock()
+	defer p.sourcesMu.Unlock()
+
+	registry := p.engine.Registry()
+	alreadyRunning := make(map[string]string) // connection string -> source ID
+	sourceModelMap := make(map[string][]string)
+	for _, scm := range p.buildSourceConfigs(nil, false) {
+		src, ok := registry.GetByConnection(scm.config.ConnectionString)
+		if !ok {
+			continue
+		}
+		alreadyRunning[scm.config.ConnectionString] = src.ID
+		sourceModelMap[src.ID] = scm.modelIDs
+		if src.Gain != scm.config.Gain {
+			p.applySourceGain(src, scm.config.Gain, operationUpdateGains)
+		}
+	}
+	p.retryPersistentRouteFailures(alreadyRunning, nil, sourceModelMap, audioLevelChan)
+}
+
+// applySourceGain moves src to gainDB in the registry and on its live routes and
+// logs the change. It reports whether the gain was applied; a rejected gain is
+// logged and leaves the previous one in place.
+func (p *AudioPipelineService) applySourceGain(src *audiocore.AudioSource, gainDB float64, operation string) bool {
+	log := audiocore.GetLogger()
+	if err := p.engine.UpdateSourceGain(src.ID, gainDB); err != nil {
+		log.Warn("failed to apply source gain",
+			logger.String("source_id", src.ID),
+			logger.Float64("gain_db", gainDB),
+			logger.Error(err),
+			logger.String("operation", operation))
+		return false
+	}
+	log.Info("source gain applied to live routes",
+		logger.String("source_id", src.ID),
+		logger.Float64("old_gain_db", src.Gain),
+		logger.Float64("new_gain_db", gainDB),
+		logger.String("operation", operation))
+	return true
+}
+
 // rebuildRoutesForSources tears down and re-creates the buffer, audio-level and
 // soundlevel routes for the given kept sources WITHOUT restarting capture:
 // Router().RemoveAllRoutes touches only the router, so the capture device keeps running.
-// Shared by the reconfigure paths that keep a source running but must rewire it (gain
-// change and persistent-route-failure retry), so the teardown+re-register sequence lives
-// in one place.
+// Used by the reconfigure paths that keep a source running but must rewire it
+// (persistent-route-failure retry), so the teardown+re-register sequence lives in one
+// place. A gain change does not come through here: UpdateSourceGain swaps the gain on
+// the live routes.
 func (p *AudioPipelineService) rebuildRoutesForSources(ids []string, sourceModelMap map[string][]string, audioLevelChan chan audiocore.AudioLevelData, operation string) {
 	for _, sid := range ids {
 		p.engine.Router().RemoveAllRoutes(sid)

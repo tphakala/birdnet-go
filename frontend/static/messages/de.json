@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt bei der eingestellten Überlappung von {configured} s die gemessene Kapazität dieses Geräts, daher wird mit {effective} s Überlappung analysiert. Der Falsch-Positiv-Filter kann dadurch weniger Bestätigungen verlangen. Ihre gespeicherten Einstellungen bleiben unverändert; siehe Einstellungen > Analyse.",
         "cadenceOverloadedTitle": "Dieses Gerät kommt mit der Audioanalyse nicht hinterher",
         "cadenceOverloadedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt die gemessene Kapazität dieses Geräts selbst ohne Überlappung, daher kann die Analyse in Verzug geraten und Erkennungen können verloren gehen. Aktivieren Sie weniger Modelle oder Audioquellen, oder wählen Sie eine schnellere Modellvariante."
+      },
+      "storage": {
+        "notPersistentTitle": "Daten gehen verloren, wenn der Container neu erstellt wird",
+        "notPersistentMessage": "Diese Pfade liegen auf Speicher, der gelöscht wird, wenn der Container neu erstellt wird, zum Beispiel bei einem Image-Update: {paths}. Ordnen Sie ihnen in Ihrer Container-Konfiguration ein Volume oder ein Host-Verzeichnis zu.",
+        "anonymousVolumeTitle": "Daten liegen in einem anonymen Container-Volume",
+        "anonymousVolumeMessage": "Diese Pfade liegen in anonymen Volumes, die die Container-Laufzeit angelegt hat, weil kein Volume zugeordnet war: {paths}. Ein frisch gestarteter Container, zum Beispiel mit docker run nach einem Image-Update, erhält neue leere Volumes, sodass die Daten verloren scheinen. Ordnen Sie ihnen ein benanntes Volume oder ein Host-Verzeichnis zu."
       }
     },
     "loading": "Benachrichtigungen werden geladen..."
@@ -2310,7 +2316,9 @@
       "saveAriaLabel": "Änderungen speichern",
       "savingAriaLabel": "Änderungen werden gespeichert...",
       "unsavedChanges": "Ungespeicherte Änderungen",
-      "toolbar": "Einstellungsaktionen"
+      "toolbar": "Einstellungsaktionen",
+      "validationBlocked": "Einige Felder müssen geprüft werden, bevor Sie speichern können.",
+      "noChangesToSave": "Keine Änderungen zu speichern."
     },
     "errors": {
       "loadFailed": "Einstellungen konnten nicht geladen werden",
@@ -3184,7 +3192,7 @@
         "vadEnable": "Privatsphären-Schutz aktivieren (Silero VAD)",
         "vadHelp": "Führt ein dediziertes neuronales Spracherkennungsmodell parallel zum Klassifikator für zuverlässige Sprachfilterung aus. Verbraucht zusätzliche Systemressourcen (ca. 20-30 MB RAM und CPU-Inferenz pro Segment).",
         "vadThresholdLabel": "Schwellenwert für Privatsphären-Schutz",
-        "vadThresholdHelp": "Empfindlichkeitsschwellenwert für die Sprachaktivitätserkennung (Standard 0,35). Niedrigere Werte machen den Filter empfindlicher für leise oder entfernte Sprache."
+        "vadThresholdHelp": "Empfindlichkeitsschwellenwert für die Sprachaktivitätserkennung (Standard 0,6). Niedrigere Werte machen den Filter empfindlicher für leise oder entfernte Sprache."
       },
       "falsePositivePrevention": {
         "title": "Falsch-Positiv-Prävention",
@@ -3736,6 +3744,8 @@
         "frequencyResponse": "Frequenzgang",
         "cutoffFrequency": "Grenzfrequenz",
         "cutoffFrequencyHelp": "Frequenz, bei der der Filter beginnt, Signale zu dämpfen. Vogelrufe liegen typischerweise zwischen 1-10 kHz.",
+        "centerFrequency": "Mittenfrequenz",
+        "bandwidth": "Bandbreite",
         "qFactor": "Q-Faktor",
         "qFactorHelp": "Qualitätsfaktor steuert die Schärfe des Filters. Niedrigere Werte (0,1-1) erzeugen sanftere Übergänge, höhere Werte (1-10) erzeugen steilere Abschnitte.",
         "gain": "Verstärkung",
@@ -3743,17 +3753,31 @@
         "attenuation": "Dämpfung",
         "attenuationHelp": "Filterabrollrate. Höhere Werte sorgen für steilere Dämpfung gefilterter Frequenzen.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Aus",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Fügen Sie mehrere Filter hinzu, um den Frequenzgang für optimale Vogelerkennung in Ihrer Umgebung zu gestalten.",
+        "emptyEntryRestored": "Geben Sie eine Zahl ein. Der vorherige Wert wurde beibehalten.",
         "graph": {
           "flatResponse": "Flacher Frequenzgang (Keine Filter aktiv)",
           "frequency": "Frequenz (Hz)",
-          "gain": "Verstärkung (dB)"
+          "gain": "Verstärkung (dB)",
+          "loading": "Frequenzgang wird berechnet...",
+          "updating": "Frequenzgang wird aktualisiert...",
+          "error": "Der Frequenzgang konnte nicht berechnet werden. Er wird aktualisiert, wenn du einen Filter änderst oder Erneut versuchen wählst.",
+          "sampleRate": "Berechnet für eine Abtastrate von {rate} Hz.",
+          "clipped": "Der Frequenzgang erreicht seinen Höchstwert bei {peak} dB, oberhalb des oberen Rands des Diagramms.",
+          "skippedHeading": "{count, plural, one {# Filter wird nicht auf das Audio angewendet} other {# Filter werden nicht auf das Audio angewendet}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) wird übersprungen: Dieser Filtertyp wird nicht unterstützt.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) wird übersprungen: Seine Einstellungen sind bei {rate} Hz ungültig.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) wird übersprungen: Er konnte nicht zur Filterkette hinzugefügt werden.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) wird übersprungen."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3922,7 +3946,7 @@
       "allowSubnetBypassLabel": "Zugriff aus Subnetz zur Umgehung der Authentifizierung erlauben",
       "subnetBypassLocalNote": "Wenn aktiviert, wird Clients im selben lokalen Netzwerk wie dieser Server automatisch vertraut und sie überspringen die Anmeldung. Verwenden Sie das Feld unten nur, um dieses Vertrauen auf weitere Netzwerke auszuweiten (zum Beispiel ein separates VLAN oder ein geroutetes Subnetz).",
       "allowedSubnetsLabel": "Erlaubte Subnetze",
-      "allowedSubnetsHelp": "Zusätzliche Netzwerkbereiche, die die Anmeldung umgehen dürfen, zusätzlich zum eigenen lokalen Netzwerk dieses Servers. CIDR-Notation, kommagetrennt.",
+      "allowedSubnetsHelp": "Zusätzliche Netzwerkbereiche, die die Anmeldung umgehen dürfen, zusätzlich zum eigenen lokalen Netzwerk dieses Servers. Verwenden Sie die CIDR-Notation, wie z.B. 192.168.10.0/24.",
       "securityWarningTitle": "Sicherheitswarnung:",
       "subnetWarningText": "Das lokale Netzwerk dieses Servers und alle hier aufgeführten Subnetze erhalten vollen Zugriff ohne Anmeldung. Fügen Sie nur Netzwerke hinzu, denen Sie voll vertrauen.",
       "httpsSettingsTitle": "HTTPS-Einstellungen",
@@ -4150,6 +4174,77 @@
         "downloadCertificate": "Zertifikat herunterladen",
         "downloadCertificateHelp": "Installieren Sie dieses Zertifikat im Vertrauensspeicher Ihres Betriebssystems, um Browser-Sicherheitswarnungen zu vermeiden.",
         "fileReadError": "Ausgewählte Datei konnte nicht gelesen werden"
+      },
+      "reverseProxy": {
+        "title": "Reverse-Proxy",
+        "description": "Für den Zugriff über nginx, Caddy, Traefik, Cloudflare oder einen anderen Proxy",
+        "listLabel": "Vertrauenswürdige Proxys",
+        "listHelp": "Fügen Sie die Adresse jedes Proxys vor BirdNET-Go hinzu. Bei Docker ist dies oft die Gateway-Adresse von Docker, wie z.B. 172.17.0.1.",
+        "placeholder": "Zum Beispiel 172.17.0.1",
+        "emptyState": "Keine vertrauenswürdigen Proxys. BirdNET-Go verwendet die Adresse, die sich damit verbindet.",
+        "emptyStateCloudflareOnly": "Nur die veröffentlichten Edge-Adressen von Cloudflare sind vertrauenswürdig. Es sind keine weiteren Proxys eingetragen.",
+        "rangeBadge": "Bereich",
+        "ruleOwnAddress": "Geben Sie die eigene Adresse jedes Proxys an. Listen Sie niemals einen Bereich auf, der auch die Computer enthält, von denen aus Sie browsen.",
+        "ruleHeaders": "Der Proxy muss die Client-Adresse an X-Forwarded-For anhängen oder X-Real-IP überschreiben.",
+        "cloudflareLabel": "Cloudflare vertrauen",
+        "cloudflareHelp": "Aktivieren Sie dies, wenn Ihre Website über Cloudflare bereitgestellt wird. BirdNET-Go vertraut dann den veröffentlichten Edge-Adressen von Cloudflare.",
+        "check": {
+          "title": "Ihre Verbindung",
+          "recheck": "Erneut prüfen",
+          "checking": "Verbindung wird geprüft",
+          "error": "Ihre Verbindung konnte nicht geprüft werden.",
+          "stale": "Diese Prüfung zeigt die gespeicherten Einstellungen. Speichern Sie, um Ihre Änderungen zu prüfen.",
+          "trust": "{peer} vertrauen",
+          "trustWarning": "Vertrauen Sie {peer} nur, wenn es sich um Ihren Reverse Proxy handelt und nicht um den Computer, von dem aus Sie browsen.",
+          "trustWithCloudflare": "{peer} und Cloudflare vertrauen",
+          "cloudflareInFront": "Cloudflare liegt vor {peer}. Vertrauen Sie beiden, um Ihre Adresse zu verifizieren.",
+          "cloudflareEdge": "{peer} gehört zu Cloudflare. Aktivieren Sie unten „Cloudflare vertrauen“.",
+          "chainHint": "Wenn ein weiterer Proxy vor {peer} liegt, listen Sie diesen ebenfalls auf.",
+          "added": "Zur Liste hinzugefügt. Speichern Sie zum Übernehmen.",
+          "coveredBy": "Bereits durch {range} in der Liste abgedeckt. Speichern Sie zum Übernehmen.",
+          "selfClientCause": "Der Proxy leitet möglicherweise seine eigene Adresse als Client weiter, oft weil die Portfreigabe des Containers den echten Client verbirgt. Beheben Sie das in der Netzwerkeinrichtung des Containers oder Proxys."
+        },
+        "status": {
+          "direct": {
+            "title": "Direkt verbunden",
+            "body": "Ihr Browser verbindet sich direkt von {peer} mit BirdNET-Go.",
+            "bodyNoPeer": "Ihr Browser verbindet sich direkt mit BirdNET-Go.",
+            "hint": "Wenn Sie einen Reverse Proxy verwenden und {peer} dessen Adresse ist, richten Sie den Proxy so ein, dass er X-Forwarded-For sendet."
+          },
+          "trusted_proxy": {
+            "title": "Über einen vertrauenswürdigen Proxy verbunden",
+            "body": "Ihre Verbindung erfolgt über {peer}, der vertrauenswürdig ist. Ihre Adresse {client} wurde verifiziert.",
+            "hint": "Wenn {client} ein weiterer Proxy statt Ihres Computers ist, listen Sie diesen Proxy ebenfalls auf."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Ihre Adresse konnte nicht verifiziert werden",
+            "body": "{peer} ist vertrauenswürdig, aber die weitergeleitete Adresse konnte nicht verifiziert werden. Häufige Ursachen:",
+            "causeRange": "Ein aufgelisteter Bereich enthält auch Ihren Computer, sodass keine Adresse in der Kette als Ihre gilt.",
+            "causeHeaders": "Der Proxy hängt X-Forwarded-For nicht an oder überschreibt X-Real-IP nicht.",
+            "causeConflict": "Der Proxy sendet widersprüchliche oder wiederholte Adress-Header oder nur einen Forwarded-Header."
+          },
+          "untrusted_public_proxy": {
+            "title": "Über einen öffentlichen Proxy verbunden",
+            "body": "Ihre Verbindung erfolgt über {peer}, eine öffentliche Adresse. Für öffentliche Adressen wird niemals ein Vertrauen per Mausklick angeboten. Fügen Sie eine solche Adresse nur manuell hinzu, wenn Sie sicher sind, dass es sich um Ihren Proxy handelt."
+          },
+          "untrusted_proxy": {
+            "title": "Über einen nicht vertrauenswürdigen Proxy verbunden",
+            "body": "Ihre Verbindung erfolgt über einen Proxy unter {peer}, der nicht vertrauenswürdig ist, daher kann BirdNET-Go Ihre Adresse nicht verifizieren."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Proxy-Header können nicht verifiziert werden",
+            "body": "Ihre Verbindung erfolgt über {peer}, aber die gesendeten Adress-Header könnten nicht einmal verifiziert werden, wenn er vertrauenswürdig wäre.",
+            "bodyNoPeer": "Ihre Verbindung erfolgt über einen Proxy, aber dessen Adresse konnte nicht gelesen werden.",
+            "fix": "Richten Sie den Proxy so ein, dass er X-Forwarded-For anhängt oder X-Real-IP überschreibt."
+          }
+        }
+      },
+      "bypassProxyNote": "Hinter einem Reverse Proxy funktioniert diese Umgehung nur, wenn der Proxy als vertrauenswürdig aufgeführt ist.",
+      "bypassProxyLink": "Vertrauenswürdige Proxys einrichten",
+      "allowedSubnetsEmpty": "Keine zusätzlichen Subnetze. Nur das eigene lokale Netzwerk dieses Servers darf die Anmeldung umgehen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} enthält einen ungültigen Eintrag.",
+        "pendingEntry": "{tab}: {field} enthält Text, der nicht hinzugefügt wurde. Drücken Sie die Eingabetaste oder Hinzufügen, oder löschen Sie ihn."
       }
     },
     "species": {
@@ -4936,6 +5031,28 @@
         "dragToReorder": "Ziehen zum Neuordnen von {species}",
         "edit": "Art bearbeiten",
         "remove": "Art entfernen"
+      }
+    },
+    "networkAddressList": {
+      "add": "Hinzufügen",
+      "remove": "{address} entfernen",
+      "empty": "Noch keine Adressen hinzugefügt.",
+      "pendingHint": "Drücken Sie die Eingabetaste oder Hinzufügen, um diese Adresse hinzuzufügen.",
+      "limitReached": "Die Liste ist voll ({max} Einträge).",
+      "rowDuplicate": "Duplikat",
+      "rowInvalid": {
+        "cidr": "Ungültiger Bereich",
+        "ip": "Ungültige IP-Adresse",
+        "ipOrCidr": "Ungültige Adresse oder ungültiger Bereich"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Ungültiger Bereich: {values}. Verwenden Sie einen Bereich wie 192.168.1.0/24.",
+          "ip": "Ungültige IP-Adresse: {values}. Verwenden Sie eine Adresse wie 192.168.1.10.",
+          "ipOrCidr": "Ungültige Adresse oder ungültiger Bereich: {values}. Verwenden Sie eine Adresse wie 192.168.1.10 oder einen Bereich wie 192.168.1.0/24."
+        },
+        "duplicate": "Bereits in der Liste: {values}.",
+        "limit": "Die Liste fasst höchstens {max} Einträge. Nicht hinzugefügt: {values}."
       }
     }
   },

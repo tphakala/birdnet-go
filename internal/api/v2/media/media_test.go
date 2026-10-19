@@ -21,7 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/middleware"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
@@ -1677,17 +1677,17 @@ func TestIsExportTempFor(t *testing.T) {
 		file string
 		want bool
 	}{
-		{"unique format", base + ".12345.1" + ffmpeg.TempExt, true},
-		{"unique format large seq", base + ".987.4096" + ffmpeg.TempExt, true},
-		{"pre-fix legacy format", base + ffmpeg.TempExt, true},
+		{"unique format", base + ".12345.1" + audiotemp.Ext, true},
+		{"unique format large seq", base + ".987.4096" + audiotemp.Ext, true},
+		{"pre-fix legacy format", base + audiotemp.Ext, true},
 		{"final clip", base, false},
 		{"final clip other ext", base + ".part", false},
-		{"sidecar spectrogram temp", base + ".png.12345.1" + ffmpeg.TempExt, false},
-		{"different clip", "other_99p_20260531T084138Z.m4a.12345.1" + ffmpeg.TempExt, false},
-		{"non-integer pid", base + ".abc.1" + ffmpeg.TempExt, false},
-		{"non-integer seq", base + ".12345.x" + ffmpeg.TempExt, false},
-		{"missing seq", base + ".12345" + ffmpeg.TempExt, false},
-		{"extra middle segment", base + ".12345.1.2" + ffmpeg.TempExt, false},
+		{"sidecar spectrogram temp", base + ".png.12345.1" + audiotemp.Ext, false},
+		{"different clip", "other_99p_20260531T084138Z.m4a.12345.1" + audiotemp.Ext, false},
+		{"non-integer pid", base + ".abc.1" + audiotemp.Ext, false},
+		{"non-integer seq", base + ".12345.x" + audiotemp.Ext, false},
+		{"missing seq", base + ".12345" + audiotemp.Ext, false},
+		{"extra middle segment", base + ".12345.1.2" + audiotemp.Ext, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1709,7 +1709,7 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	// Mirror the per-export unique temp name "<clip>.<pid>.<seq>.temp" the real
 	// exporters write, so this exercises the directory-scan detection in
 	// isAudioBeingEncoded rather than a fixed name that production never produces.
-	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
+	tempFilePath := audioFilePath + ".99999.1" + audiotemp.Ext
 	require.NoError(t, os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600))
 
 	waitStarted := make(chan struct{})
@@ -1746,7 +1746,7 @@ func TestServeAudioByIDWaitsForEncodingPreservesHeaders(t *testing.T) {
 
 	audioFilename := "turdus_migratorius_88p_20260724T143045Z.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
+	tempFilePath := audioFilePath + ".99999.1" + audiotemp.Ext
 	require.NoError(t, os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600))
 
 	mockDS := mocks.NewMockInterface(t)
@@ -1795,7 +1795,7 @@ func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
 	// Mirror the per-export unique temp name "<clip>.<pid>.<seq>.temp" the real
 	// exporters write, so this exercises the directory-scan detection in
 	// isAudioBeingEncoded rather than a fixed name that production never produces.
-	tempFilePath := audioFilePath + ".99999.1" + ffmpeg.TempExt
+	tempFilePath := audioFilePath + ".99999.1" + audiotemp.Ext
 
 	// Create only the temp file; the final file never appears.
 	err := os.WriteFile(tempFilePath, []byte("temp encoding data"), 0o600)

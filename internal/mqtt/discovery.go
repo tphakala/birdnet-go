@@ -393,7 +393,7 @@ func (p *Publisher) publishSourceDiscovery(ctx context.Context, source datastore
 	}
 
 	// Publish Sound Level sensor if sound level monitoring is enabled
-	// Band key format: formatBandKey() in internal/audiocore/soundlevel/processor.go produces "1.0_kHz" for 1000 Hz
+	// Band key format: bandKey() in internal/audiocore/soundlevel/processor.go produces "1.0_kHz" for 1000 Hz
 	if settings.Realtime.Audio.SoundLevel.Enabled {
 		if err := p.publishSensor(ctx, nodeID, entityKey, SensorSoundLevel, &DiscoveryPayload{
 			Name:              "Sound Level",

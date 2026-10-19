@@ -453,7 +453,7 @@ func TestNormalizeDetectionTimes_NonExtendedCapture(t *testing.T) {
 		ExtendedCapture: false,
 	}
 
-	p.normalizeDetectionTimes(item)
+	p.normalizeDetectionTimes(item, p.currentSettings())
 
 	// BeginTime should be backdated to FirstDetected
 	assert.Equal(t, firstDetected, item.Detection.Result.BeginTime)
@@ -506,7 +506,7 @@ func TestNormalizeDetectionTimes_ExtendedCapture(t *testing.T) {
 		ExtendedCapture: true,
 	}
 
-	p.normalizeDetectionTimes(item)
+	p.normalizeDetectionTimes(item, p.currentSettings())
 
 	// BeginTime should be backdated to FirstDetected
 	assert.Equal(t, firstDetected, item.Detection.Result.BeginTime)

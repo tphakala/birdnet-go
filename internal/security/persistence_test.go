@@ -111,11 +111,10 @@ func TestFilesystemStore(t *testing.T) {
 	InitializeGoth(settings, false)
 
 	// Verify that gothic.Store is a FilesystemStore
-	_, ok := gothic.Store.(*sessions.FilesystemStore)
-	assert.True(t, ok, "Gothic store should be a FilesystemStore")
+	store, ok := unwrapSessionStore(gothic.Store).(*sessions.FilesystemStore)
+	require.True(t, ok, "Gothic store should be a FilesystemStore")
 
 	// Check FilesystemStore options
-	store := gothic.Store.(*sessions.FilesystemStore)
 	assert.NotNil(t, store.Options, "Store options should not be nil")
 	assert.Equal(t, "/", store.Options.Path, "Path should be /")
 	assert.Equal(t, 86400*7, store.Options.MaxAge, "MaxAge should be 7 days")
@@ -160,7 +159,7 @@ func TestFilesystemStore_SecureCookieFlag(t *testing.T) {
 			settings := &conf.Settings{Security: conf.Security{SessionSecret: "test-secret"}}
 			InitializeGoth(settings, tt.secure)
 
-			store, ok := gothic.Store.(*sessions.FilesystemStore)
+			store, ok := unwrapSessionStore(gothic.Store).(*sessions.FilesystemStore)
 			require.True(t, ok, "gothic store should be a FilesystemStore")
 			require.NotNil(t, store.Options, "store options should not be nil")
 			assert.Equal(t, tt.secure, store.Options.Secure,

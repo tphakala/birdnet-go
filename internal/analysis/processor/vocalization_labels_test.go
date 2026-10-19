@@ -24,6 +24,9 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 
 	const source = "src1"
 	start := time.Date(2026, 6, 19, 8, 0, 0, 0, time.UTC)
+	// audioEnd differs from start so the human stamp is distinguishable: it is the
+	// chunk's audio end, while the dog filter still stamps StartTime.
+	audioEnd := start.Add(7 * time.Second)
 
 	enablePrivacy := func(s *conf.Settings) {
 		s.Realtime.PrivacyFilter.Enabled = true
@@ -46,6 +49,9 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 		{"privacy records Perch speech", "Speech", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, true},
 		{"privacy records localized BirdNET human", "Human vocal_Mensch Stimme", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, true},
 		{"privacy disabled does not record", "Speech", 0.9, func(_ *conf.Settings) {}, (*Processor).handleHumanDetection, true, false},
+		{"privacy ignores excluded Hands", "Hands", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, false},
+		{"privacy ignores excluded Human_group_actions", "Human_group_actions", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, false},
+		{"privacy ignores non-voiced Cough", "Cough", 0.9, enablePrivacy, (*Processor).handleHumanDetection, true, false},
 		{"privacy below threshold does not record", "Speech", 0.01, enablePrivacy, (*Processor).handleHumanDetection, true, false},
 		{"dog records Perch bark", "Bark", 0.9, enableDog, (*Processor).handleDogDetection, false, true},
 		{"dog records localized BirdNET dog", "Dog_Hund", 0.9, enableDog, (*Processor).handleDogDetection, false, true},
@@ -64,7 +70,7 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 				LastHumanDetection: make(map[string]HumanDetection),
 				LastDogDetection:   make(map[string]time.Time),
 			}
-			item := classifier.Results{StartTime: start}
+			item := classifier.Results{StartTime: start, Audio: classifier.AudioTiming{EndAt: audioEnd}}
 			item.Source.ID = source
 			result := datastore.Results{Species: tt.species, Confidence: tt.confidence}
 
@@ -77,7 +83,7 @@ func TestDetectionHandlers_RecordTimestamp(t *testing.T) {
 				got, ok := p.LastHumanDetection[source]
 				assert.Equal(t, tt.wantStored, ok, "unexpected record state in human map")
 				if tt.wantStored {
-					assert.Equal(t, start, got.Time)
+					assert.Equal(t, audioEnd, got.Time)
 				}
 				assert.Empty(t, p.LastDogDetection, "human handler must not write the dog map")
 			} else {
@@ -106,6 +112,11 @@ func TestShouldFilterDetection_DropsHumanLabels(t *testing.T) {
 	}{
 		{"Perch speech is dropped", "Speech", true},
 		{"localized BirdNET human is dropped", "Human vocal_Mensch Stimme", true},
+		// Classes excluded from the privacy filter are still human sounds, so the
+		// save filter must keep dropping them rather than save them as detections.
+		{"privacy-excluded Hands is still dropped", "Hands", true},
+		{"privacy-excluded Human_group_actions is still dropped", "Human_group_actions", true},
+		{"privacy-excluded Crowd is still dropped", "Crowd", true},
 		{"normal bird is not dropped by the human filter", "Turdus merula", false},
 	}
 

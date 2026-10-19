@@ -215,6 +215,14 @@ func (m *mockStore) GetNoteModelType(_ string) (string, error)     { return "bir
 func (m *mockStore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
 	return "", "bird", nil
 }
+
+func (m *mockStore) RecordClipSampleRate(_ context.Context, _ uint, _ string, _ int) error {
+	return nil
+}
+
+func (m *mockStore) FillClipSampleRate(_ context.Context, _ uint, _ string, _ int) (bool, error) {
+	return false, nil
+}
 func (m *mockStore) DeleteNoteClipPath(noteID string) error { return nil }
 func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]datastore.ClipForRemoval, error) {
 	return nil, nil
