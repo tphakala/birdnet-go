@@ -46,6 +46,17 @@ type SystemInfo struct {
 	MemoryMB     uint64      `json:"memory_mb"`
 	DiskInfo     []DiskInfo  `json:"disk_info"`
 	DockerInfo   *DockerInfo `json:"docker_info,omitempty"`
+	// CPUModel, CPUFlags, Board, SIMD, KernelVersion and CgroupMemory are
+	// machine facts for hardware triage. All are best effort and omitted when
+	// the host does not report them. None of them holds a path or a hostname.
+	CPUModel      string   `json:"cpu_model,omitempty"`
+	CPUFlags      []string `json:"cpu_flags,omitempty"`
+	Board         string   `json:"board,omitempty"` // device-tree model, for example a Raspberry Pi revision
+	SIMD          []string `json:"simd,omitempty"`  // SIMD extensions relevant to inference
+	KernelVersion string   `json:"kernel_version,omitempty"`
+	// CgroupMemory is the memory cgroup of the process; nil when no memory
+	// controller is found.
+	CgroupMemory *CgroupMemoryInfo `json:"cgroup_memory,omitempty"`
 	// RuntimeEnv holds the environment variables on the collector's allowlist
 	// (conf.SupportEnvAllowlist in production) that are actually set, so a dump
 	// can report runtime gates that config.yaml cannot record. Only non-empty
@@ -54,6 +65,14 @@ type SystemInfo struct {
 	// identically at every gate. Empty and omitted entirely when no allowlisted
 	// variable is set, which is the common case.
 	RuntimeEnv map[string]string `json:"runtime_env,omitempty"`
+}
+
+// CgroupMemoryInfo is the memory cgroup limit and usage of the BirdNET-Go process.
+type CgroupMemoryInfo struct {
+	Version    string `json:"version"`               // "v2" or "v1"
+	LimitBytes int64  `json:"limit_bytes"`           // 0 means no limit
+	LimitExact bool   `json:"limit_exact"`           // false when the limit is only an upper bound
+	UsageBytes int64  `json:"usage_bytes,omitempty"` // 0 means it could not be read
 }
 
 // DiskInfo represents information about a disk or filesystem mount point.

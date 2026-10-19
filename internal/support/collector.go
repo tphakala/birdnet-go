@@ -20,11 +20,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/mempolicy"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"gopkg.in/yaml.v3"
@@ -855,6 +858,8 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		info.MemoryMB = memStats.Sys / bytesPerMB
 	}
 
+	collectHostFacts(&info)
+
 	// Collect disk information
 	partitions, err := disk.Partitions(false)
 	if err == nil {
@@ -898,6 +903,30 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 	}
 
 	return info
+}
+
+// collectHostFacts fills the CPU, board, SIMD, kernel and cgroup memory fields
+// of info. Every probe is best effort: a failure leaves its field empty.
+func collectHostFacts(info *SystemInfo) {
+	info.CPUModel = sysinfo.GetCPUModel()
+	info.CPUFlags = sysinfo.GetCPUFlags()
+
+	hw := hwprofile.Hardware()
+	info.Board = hw.Board.Model
+	info.SIMD = hw.SIMD
+
+	if kernel, err := host.KernelVersion(); err == nil {
+		info.KernelVersion = kernel
+	}
+
+	if cg := mempolicy.DetectCgroupMemory(); cg.Version != "" {
+		info.CgroupMemory = &CgroupMemoryInfo{
+			Version:    cg.Version,
+			LimitBytes: cg.LimitBytes,
+			LimitExact: cg.LimitExact,
+			UsageBytes: cg.UsageBytes,
+		}
+	}
 }
 
 // collectConfig loads and scrubs the configuration

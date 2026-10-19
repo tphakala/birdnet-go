@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 
@@ -27,6 +28,7 @@ const (
 var (
 	cachedCPUArch   string
 	cachedCPUModel  string
+	cachedCPUFlags  []string
 	cachedEnvType   string
 	cachedEnvDetail string
 	archOnce        sync.Once
@@ -93,17 +95,32 @@ func GetCPUArch() string {
 	return cachedCPUArch
 }
 
-// GetCPUModel returns the CPU model name using gopsutil.
-// Returns empty string if detection fails.
-func GetCPUModel() string {
+// loadCPUInfo fills the cached CPU model and flags from gopsutil, once.
+func loadCPUInfo() {
 	cpuOnce.Do(func() {
 		infos, err := cpu.Info()
 		if err != nil || len(infos) == 0 {
 			return
 		}
 		cachedCPUModel = infos[0].ModelName
+		cachedCPUFlags = slices.Clone(infos[0].Flags)
 	})
+}
+
+// GetCPUModel returns the CPU model name using gopsutil.
+// Returns empty string if detection fails.
+func GetCPUModel() string {
+	loadCPUInfo()
 	return cachedCPUModel
+}
+
+// GetCPUFlags returns the CPU feature flags reported by gopsutil, for example
+// "avx2" or "asimd". It is best effort: the list is filled on Linux (amd64 and
+// arm64) and on Intel macOS, and is empty on Windows and Apple Silicon, where
+// gopsutil does not report flags. The result is a copy the caller may modify.
+func GetCPUFlags() []string {
+	loadCPUInfo()
+	return slices.Clone(cachedCPUFlags)
 }
 
 // DetectEnvironment returns the runtime environment type and optional detail.
