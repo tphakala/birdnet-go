@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -93,42 +94,53 @@ func (x *xorshift) next() uint32 {
 	return v
 }
 
-// parityClipSamples builds the reference clip: noise, two tones, a chirp and a
-// wideband burst near the end.
-func parityClipSamples() []int16 {
-	const (
-		noiseAmp   = 0.01
-		toneAAmp   = 0.25
-		toneBAmp   = 0.12
-		toneAHz    = 1500.0
-		toneBHz    = 4200.0
-		chirpAmp   = 0.2
-		chirpStart = 0.3
-		chirpEnd   = 1.2
-		chirpLoHz  = 2000.0
-		chirpHiHz  = 9000.0
-		burstStart = 1.7
-		burstEnd   = 1.85
-		burstAmp   = 0.3
-	)
-	n := parityClipRate * parityClipSeconds
-	out := make([]int16, n)
+// clipSpec describes a synthetic test clip: noise, two tones, a linear chirp and
+// a wideband burst. Times are in seconds from the start of the clip.
+type clipSpec struct {
+	rate, seconds        int
+	noiseAmp             float64
+	toneAHz, toneAAmp    float64
+	toneBHz, toneBAmp    float64
+	chirpLoHz, chirpHiHz float64
+	chirpAmp             float64
+	chirpStart, chirpEnd float64
+	burstAmp             float64
+	burstStart, burstEnd float64
+}
+
+// synthClip renders s as 16-bit samples. The noise comes from a fixed-seed
+// xorshift, so a clip is reproducible sample for sample.
+func synthClip(s *clipSpec) []int16 {
+	out := make([]int16, s.rate*s.seconds)
 	rng := xorshift(0x9e3779b9)
 	for i := range out {
-		t := float64(i) / parityClipRate
+		t := float64(i) / float64(s.rate)
 		noise := (float64(rng.next()>>8)/float64(1<<24) - 0.5) * 2
-		v := noiseAmp*noise + toneAAmp*math.Sin(2*math.Pi*toneAHz*t) + toneBAmp*math.Sin(2*math.Pi*toneBHz*t)
-		if t >= chirpStart && t < chirpEnd {
-			u := (t - chirpStart) / (chirpEnd - chirpStart)
-			phase := 2 * math.Pi * (chirpLoHz*(t-chirpStart) + (chirpHiHz-chirpLoHz)*(chirpEnd-chirpStart)*u*u/2)
-			v += chirpAmp * math.Sin(phase)
+		v := s.noiseAmp*noise + s.toneAAmp*math.Sin(2*math.Pi*s.toneAHz*t) + s.toneBAmp*math.Sin(2*math.Pi*s.toneBHz*t)
+		if t >= s.chirpStart && t < s.chirpEnd {
+			u := (t - s.chirpStart) / (s.chirpEnd - s.chirpStart)
+			phase := 2 * math.Pi * (s.chirpLoHz*(t-s.chirpStart) + (s.chirpHiHz-s.chirpLoHz)*(s.chirpEnd-s.chirpStart)*u*u/2)
+			v += s.chirpAmp * math.Sin(phase)
 		}
-		if t >= burstStart && t < burstEnd {
-			v += burstAmp * noise
+		if t >= s.burstStart && t < s.burstEnd {
+			v += s.burstAmp * noise
 		}
 		out[i] = int16(math.Round(v * math.MaxInt16))
 	}
 	return out
+}
+
+// parityClipSamples builds the reference clip: noise, two tones, a chirp and a
+// wideband burst near the end.
+func parityClipSamples() []int16 {
+	return synthClip(&clipSpec{
+		rate: parityClipRate, seconds: parityClipSeconds,
+		noiseAmp: 0.01,
+		toneAHz:  1500, toneAAmp: 0.25,
+		toneBHz: 4200, toneBAmp: 0.12,
+		chirpLoHz: 2000, chirpHiHz: 9000, chirpAmp: 0.2, chirpStart: 0.3, chirpEnd: 1.2,
+		burstAmp: 0.3, burstStart: 1.7, burstEnd: 1.85,
+	})
 }
 
 func TestParityClipMatchesGenerator(t *testing.T) {
@@ -376,17 +388,19 @@ func TestSoxReferenceParity(t *testing.T) {
 }
 
 // soxNativeRaster renders the clip with sox at its own rate, with no rate effect,
-// as a raw raster of the given height. The channels effect mirrors the
-// generator's file path, which mixes to mono before the spectrogram.
+// as a raw raster of the given height. The arguments come from the generator's
+// file path (a profile without a resample rate), with only the height replaced.
 func soxNativeRaster(t *testing.T, soxPath, audio string, c parityCase, height, secs int) *image.Paletted {
 	t.Helper()
+	gen, env := newNativeGenerator(t)
+	env.Settings.Realtime.Dashboard.Spectrogram.Style = c.style
+	env.Settings.Realtime.Dashboard.Spectrogram.DynamicRange = c.dr
 	out := filepath.Join(t.TempDir(), "sox-native.png")
-	styleArgs := getStyleArgs(c.style)
-	args := make([]string, 0, 16+len(styleArgs))
-	args = append(args, audio, "-n", "channels", strconv.Itoa(conf.NumChannels), "spectrogram",
-		"-x", strconv.Itoa(c.width), "-y", strconv.Itoa(height), "-d", strconv.Itoa(secs), "-z", c.dr, "-o", out, "-r")
-	args = append(args, styleArgs...)
-	cmd := exec.CommandContext(t.Context(), soxPath, args...) // #nosec G204 - sox path from LookPath, arguments built by the test
+	args := gen.getSoxArgs(t.Context(), env.Settings, audio, out, c.width, true, SoxInputFile, float64(secs), FrequencyProfile{})
+	y := slices.Index(args, "-y")
+	require.GreaterOrEqual(t, y, 0, "sox arguments carry -y")
+	args[y+1] = strconv.Itoa(height)
+	cmd := exec.CommandContext(t.Context(), soxPath, args...) // #nosec G204 - sox path from LookPath, arguments built by the generator
 	if combined, err := cmd.CombinedOutput(); err != nil {
 		require.NoError(t, err, "sox: %s", combined)
 	}
@@ -437,39 +451,15 @@ const (
 // and a wideband burst, with the events placed by fractions of the clip length so
 // they lie inside the compared columns.
 func rateClipSamples() []int16 {
-	const (
-		noiseAmp   = 0.01
-		toneAHz    = 2300.0
-		toneBHz    = 5100.0
-		toneAmp    = 0.15
-		chirpLoHz  = 3000.0
-		chirpHiHz  = 9000.0
-		chirpAmp   = 0.2
-		chirpStart = 0.2
-		chirpEnd   = 0.4
-		burstStart = 0.8
-		burstEnd   = 0.85
-		burstAmp   = 0.3
-	)
-	n := rateClipRate * rateClipSeconds
-	out := make([]int16, n)
-	rng := xorshift(0x9e3779b9)
-	for i := range out {
-		frac := float64(i) / float64(n)
-		t := float64(i) / rateClipRate
-		noise := (float64(rng.next()>>8)/float64(1<<24) - 0.5) * 2
-		v := noiseAmp*noise + toneAmp*math.Sin(2*math.Pi*toneAHz*t) + toneAmp*math.Sin(2*math.Pi*toneBHz*t)
-		if frac >= chirpStart && frac < chirpEnd {
-			dur := (chirpEnd - chirpStart) * rateClipSeconds
-			tc := t - chirpStart*rateClipSeconds
-			v += chirpAmp * math.Sin(2*math.Pi*(chirpLoHz*tc+(chirpHiHz-chirpLoHz)*tc*tc/(2*dur)))
-		}
-		if frac >= burstStart && frac < burstEnd {
-			v += burstAmp * noise
-		}
-		out[i] = int16(math.Round(v * math.MaxInt16))
-	}
-	return out
+	const secs = float64(rateClipSeconds)
+	return synthClip(&clipSpec{
+		rate: rateClipRate, seconds: rateClipSeconds,
+		noiseAmp: 0.01,
+		toneAHz:  2300, toneAAmp: 0.15,
+		toneBHz: 5100, toneBAmp: 0.15,
+		chirpLoHz: 3000, chirpHiHz: 9000, chirpAmp: 0.2, chirpStart: 0.2 * secs, chirpEnd: 0.4 * secs,
+		burstAmp: 0.3, burstStart: 0.8 * secs, burstEnd: 0.85 * secs,
+	})
 }
 
 // A 48 kHz clip analysed at its own rate must look like the same clip resampled

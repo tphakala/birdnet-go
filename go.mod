@@ -38,7 +38,7 @@ require (
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.44.0
 	github.com/tphakala/go-aac v0.7.1
-	github.com/tphakala/go-audio-dsp v0.9.0
+	github.com/tphakala/go-audio-dsp v0.10.1
 	github.com/tphakala/go-audio-resampler v1.9.0
 	github.com/tphakala/go-audio-stream v0.6.0
 	github.com/tphakala/go-flac v1.3.0
@@ -148,7 +148,7 @@ require (
 	github.com/tidwall/rtree v1.11.1 // indirect
 	github.com/tklauser/go-sysconf v0.4.0 // indirect
 	github.com/tklauser/numcpus v0.12.0 // indirect
-	github.com/tphakala/simd v1.13.0 // indirect
+	github.com/tphakala/simd v1.14.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect

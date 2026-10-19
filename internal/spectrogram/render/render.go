@@ -67,7 +67,7 @@ type Options struct {
 	// DC to DisplayRate/2 and the frequency axis is labelled for it. Zero draws at
 	// the source rate. Otherwise the source rate must be FrameMultiple times
 	// DisplayRate, and the source is analysed at its own rate with a frame that
-	// many times longer, of which the first Rows bins are drawn.
+	// many times longer, capped at DisplayRate/2 so it still yields Rows bins.
 	DisplayRate int
 	// Raw draws the raster alone, without axes and legend.
 	Raw bool
@@ -132,9 +132,8 @@ func Render(ctx context.Context, src Source, opt Options) (img image.Image, cols
 	}
 	rangeDB := float64(opt.RangeDB)
 	onColumn := func(col []float32, i int) {
-		// Fit returns FrameSize/2+1 bins; with a multiple above one only the first
-		// Rows lie in 0..DisplayRate/2.
-		for j, v := range col[:opt.Rows] {
+		// Fit returns exactly Rows bins, 0..DisplayRate/2 (see newFit).
+		for j, v := range col {
 			cv.Set(x0+i, y0+j, soxchrome.ColourIndex(v, rangeDB))
 		}
 		cols = i + 1
@@ -192,11 +191,19 @@ func newFit(rate int, span int64, opt Options, multiple int) (*spectrogram.Fit, 
 	if opt.Style.Window == WindowDolph {
 		window = stft.WindowShape{Family: stft.ShapeDolphChebyshev, AttenuationDB: spectrogram.DolphAttenuationDB(float64(opt.RangeDB), 0, 0)}
 	}
+	// With a multiple above one, cap the rows at DisplayRate/2 so Fit skips the
+	// bins above the picture and returns exactly Rows of them. A multiple of one
+	// keeps the zero cap, which is Nyquist.
+	var maxHz float64
+	if multiple > 1 {
+		maxHz = float64(opt.DisplayRate) / 2
+	}
 	fit, err := spectrogram.NewFit(spectrogram.FitConfig{
 		SampleRate: rate,
 		FrameSize:  multiple * 2 * (opt.Rows - 1),
 		Columns:    opt.Width,
 		Window:     window,
+		MaxHz:      maxHz,
 	})
 	if err == nil {
 		err = fit.Reset(span)

@@ -282,8 +282,8 @@ github.com/tklauser/numcpus v0.12.0 h1:NR85qdvHA9pFse3x3weVZ0r0ST8R6l5RHbZrlRaqo
 github.com/tklauser/numcpus v0.12.0/go.mod h1:ABHeXzJnr/qqwguhClkZKT1/8VABcYrsyUiUGobwWJg=
 github.com/tphakala/go-aac v0.7.1 h1:/aspCjUIl+7i+Xs6K43Xm7P+yucn3V6WSvEbdzOyebU=
 github.com/tphakala/go-aac v0.7.1/go.mod h1:5BL5jIIhw7Q1R6Tl7mUOHSoEQeKG7EUVNAGYRIQ7xbg=
-github.com/tphakala/go-audio-dsp v0.9.0 h1:FZ0kHwbitXLhEq4S8iz0FFiEE99N0sGhXhHi/9yiaeU=
-github.com/tphakala/go-audio-dsp v0.9.0/go.mod h1:JybMnlesX8sHXkjrsyBrtbyGl/XyFKbxbJ5/O2S/5G0=
+github.com/tphakala/go-audio-dsp v0.10.1 h1:Xz2FPPH7VtwtSaSTEPv5NlD2i7MAZ+kXu/5cJnMQ+Os=
+github.com/tphakala/go-audio-dsp v0.10.1/go.mod h1:1efpqFwL9HdTkTbLWUlWZdzwhtvbiVG7I7zolQ8Qopo=
 github.com/tphakala/go-audio-resampler v1.9.0 h1:eXgKfECm5pCzZoGKXjRa2PMrP31s9VtfLcwbzRc5lZo=
 github.com/tphakala/go-audio-resampler v1.9.0/go.mod h1:nTtlqspE2grKQB3wA/E5R0BWsEtIJDbRoUxMwBHv7VQ=
 github.com/tphakala/go-audio-stream v0.6.0 h1:aVMV95cgqpn3fOELIBVDSs9nKuYPLYts1ouQh7ooCfU=
@@ -306,8 +306,8 @@ github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a h1:BBvsu7Mes8McH6iky
 github.com/tphakala/goth v0.0.0-20260315123917-08c3db6a364a/go.mod h1:fht+y3WzLavlVj4eN6u+/lmoQ4lOcsL6blDhBckFLPE=
 github.com/tphakala/malgo v0.11.25-birdnet.1 h1:QwqenAMHWxLPcWDVEfRyqbYHPvMpr0IoNLHFcTG9YO0=
 github.com/tphakala/malgo v0.11.25-birdnet.1/go.mod h1:f9TtuN7DVrXMiV/yIceMeWpvanyVzJQMlBecJFVMxww=
-github.com/tphakala/simd v1.13.0 h1:toN0PH/OIyPlaSaaQQ9Z/IwjVFrrAq2iJsi0Lbtlm2Q=
-github.com/tphakala/simd v1.13.0/go.mod h1:eO53GkWg40mRbr2tzs0Xb1IMZQ5U8cMR+Aa1RlXUinE=
+github.com/tphakala/simd v1.14.0 h1:f1ZBojSE3udWggptQpGyTynVfVdCZxd/KTTfaiDeoCA=
+github.com/tphakala/simd v1.14.0/go.mod h1:eO53GkWg40mRbr2tzs0Xb1IMZQ5U8cMR+Aa1RlXUinE=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
 github.com/valyala/fasttemplate v1.2.2 h1:lxLXG0uE3Qnshl9QyaK6XJxMXlQZELvChBOCmQD0Loo=
