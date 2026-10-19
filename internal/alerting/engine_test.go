@@ -972,6 +972,10 @@ func TestEngine_DetectionCooldownIsSpeciesScoped(t *testing.T) {
 			name:      "built-in new species rule",
 			eventName: EventDetectionNewSpecies,
 		},
+		{
+			name:      "built-in infrequent species rule",
+			eventName: EventDetectionInfrequentSpecies,
+		},
 	}
 
 	for _, tt := range tests {
