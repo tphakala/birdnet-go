@@ -1191,10 +1191,13 @@ func scrubUSBIDSerials(message string) string {
 		i := search + rel
 		search = i + len(usbIDTokenPrefix)
 		s := usbIDSerialStart(message, i)
-		if s < 0 || s >= len(message) || isSerialTerminator(message[s]) || strings.HasPrefix(message[s:], redactedUSBSerial) {
+		if s < 0 || s >= len(message) || strings.HasPrefix(message[s:], redactedUSBSerial) {
 			continue
 		}
 		e := usbIDSerialEnd(message, i, s)
+		if e == s {
+			continue
+		}
 		out.WriteString(message[pos:s])
 		out.WriteString(redactedUSBSerial)
 		pos = e

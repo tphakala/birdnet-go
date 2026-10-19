@@ -2691,6 +2691,10 @@ func TestScrubMessage_MasksUSBIDSerials(t *testing.T) {
 		{"other escape stays inside the serial", `{"id":"usb-id:0d8c:0014:A1\\B2"}`, `{"id":"usb-id:0d8c:0014:<redacted>"}`},
 		{"masked token in quoted prose is kept", `msg="usb-id:0d8c:0014:<redacted> failed"`, `msg="usb-id:0d8c:0014:<redacted> failed"`},
 		{"masked token before a period is kept", "device usb-id:0d8c:0014:<redacted>.", "device usb-id:0d8c:0014:<redacted>."},
+		{"quoted serial that starts with a space", `device="usb-id:0d8c:0014: A1 B2"`, `device="usb-id:0d8c:0014:<redacted>"`},
+		{"quoted serial that starts with a comma", "'usb-id:0d8c:0014:,A1'", "'usb-id:0d8c:0014:<redacted>'"},
+		{"quoted empty serial is kept", `"usb-id:0d8c:0014:"`, `"usb-id:0d8c:0014:"`},
+		{"unquoted serial that starts with a space is empty", "usb-id:0d8c:0014: A1", "usb-id:0d8c:0014: A1"},
 		{"unterminated quoted serial runs to the end", `id="usb-id:0d8c:0014:A1 B2`, `id="usb-id:0d8c:0014:<redacted>`},
 	}
 	for _, tt := range tests {
