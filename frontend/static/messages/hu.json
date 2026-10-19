@@ -2926,6 +2926,11 @@
             "helpText": "Megakadályozza az ismételt értesítéseket ugyanahhoz a fajhoz ebben az időablakban. 0-ra állítva tilthatja."
           }
         },
+        "rulesNotice": {
+          "message": "A detektálások push értesítéseit a Szabályok lapon lévő riasztási szabályok küldik. A beépített detektálási szabályok csak az alkalmazásban értesítenek. Push értesítésekhez adja hozzá a(z) {pushAction} műveletet a(z) {ruleName} szabályhoz, vagy hozzon létre egy szabályt a(z) {eventName} eseményhez megbízhatósági feltétellel és lehűlési idővel.",
+          "previousFilters": "Az itt beállított Minimális megbízhatóság ({confidence}%) és Faj hűtési idő ({minutes} perc) értékeket a riasztási szabályok nem használják.",
+          "openRules": "Szabályok megnyitása"
+        },
         "noProviders": "Nincs szolgáltató konfigurálva",
         "noProvidersDescription": "Adjon hozzá egy szolgáltatót a push értesítések fogadásához",
         "providers": {

@@ -2180,6 +2180,9 @@ export type TranslationKey =
   | 'settings.notifications.push.filters.speciesCooldown.label'
   | 'settings.notifications.push.filters.speciesCooldown.unit'
   | 'settings.notifications.push.filters.speciesCooldown.helpText'
+  | 'settings.notifications.push.rulesNotice.message' // params: pushAction, ruleName, eventName
+  | 'settings.notifications.push.rulesNotice.previousFilters' // params: confidence, minutes
+  | 'settings.notifications.push.rulesNotice.openRules'
   | 'settings.notifications.push.noProviders'
   | 'settings.notifications.push.noProvidersDescription'
   | 'settings.notifications.push.providers.title'
@@ -4736,6 +4739,15 @@ export type TranslationParams = {
   'settings.notifications.templates.saveError': { message: string | number };
   'settings.notifications.testNotification.statusMessages.error': { message: string | number };
   'settings.notifications.statusMessages.error': { message: string | number };
+  'settings.notifications.push.rulesNotice.message': {
+    pushAction: string | number;
+    ruleName: string | number;
+    eventName: string | number;
+  };
+  'settings.notifications.push.rulesNotice.previousFilters': {
+    confidence: string | number;
+    minutes: string | number;
+  };
   'settings.notifications.push.providers.urlsPreview': { count: string | number };
   'settings.notifications.push.providers.deleteConfirm': { name: string | number };
   'settings.notifications.push.test.error': { message: string | number };

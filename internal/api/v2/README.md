@@ -580,6 +580,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | Method | Route                          | Handler                  | Auth | Description              |
 | ------ | ------------------------------ | ------------------------ | ---- | ------------------------ |
 | GET    | `/alerts/schema`               | `GetAlertSchema`         | ❌   | Alert schema for UI      |
+| GET    | `/alerts/status`               | `GetAlertStatus`         | ❌   | Alert engine state       |
 | GET    | `/alerts/rules`                | `ListAlertRules`         | ❌   | List rules (filterable)  |
 | GET    | `/alerts/rules/:id`            | `GetAlertRule`           | ❌   | Get single rule          |
 | GET    | `/alerts/rules/export`         | `ExportAlertRules`       | ✅   | Export rules as JSON     |

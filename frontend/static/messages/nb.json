@@ -2926,6 +2926,11 @@
             "helpText": "Forhindre gjentatte varsler for samme art innen dette tidsvinduet. Sett til 0 for å deaktivere."
           }
         },
+        "rulesNotice": {
+          "message": "Push-varsler om registreringer kommer fra varselregler på fanen Regler. De innebygde registreringsreglene varsler bare i appen. For å få push-varsler legger du til handlingen {pushAction} i regelen {ruleName}, eller oppretter en regel for hendelsen {eventName} med en sikkerhetsbetingelse og en nedkjøling.",
+          "previousFilters": "Innstillingene Minimum sikkerhet ({confidence}%) og Artsnedkjøling ({minutes} min) her brukes ikke av varselregler.",
+          "openRules": "Åpne Regler"
+        },
         "noProviders": "Ingen leverandører konfigurert",
         "noProvidersDescription": "Legg til en leverandør for å begynne å motta push-varsler",
         "providers": {

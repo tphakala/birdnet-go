@@ -2926,6 +2926,11 @@
             "helpText": "Förhindra upprepade aviseringar för samma art inom detta tidsfönster. Ange 0 för att inaktivera."
           }
         },
+        "rulesNotice": {
+          "message": "Push-notifieringar om detekteringar kommer från larmregler på fliken Regler. De inbyggda detekteringsreglerna aviserar bara i appen. För att få push-notifieringar lägger du till åtgärden {pushAction} i regeln {ruleName}, eller skapar en regel för händelsen {eventName} med ett konfidensvillkor och en väntetid.",
+          "previousFilters": "Dina inställningar Minsta konfidens ({confidence}%) och Artavkylning ({minutes} min) här används inte av larmregler.",
+          "openRules": "Öppna Regler"
+        },
         "noProviders": "Inga leverantörer konfigurerade",
         "noProvidersDescription": "Lägg till en leverantör för att börja ta emot push-aviseringar",
         "providers": {

@@ -2926,6 +2926,11 @@
             "helpText": "Zabrání opakovaným oznámením pro stejný druh v tomto časovém okně. Nastavte na 0 pro vypnutí."
           }
         },
+        "rulesNotice": {
+          "message": "Push upozornění na detekce vytvářejí pravidla upozornění na kartě Pravidla. Vestavěná pravidla pro detekce upozorňují pouze v aplikaci. Chcete-li dostávat push upozornění, přidejte akci {pushAction} do pravidla {ruleName}, nebo vytvořte pravidlo pro událost {eventName} s podmínkou jistoty a dobou čekání.",
+          "previousFilters": "Vaše nastavení Minimální jistota ({confidence} %) a Prodleva mezi druhy ({minutes} min) zde pravidla upozornění nepoužívají.",
+          "openRules": "Otevřít Pravidla"
+        },
         "noProviders": "Žádní nakonfigurovaní poskytovatelé",
         "noProvidersDescription": "Přidejte poskytovatele a začněte přijímat push oznámení",
         "providers": {

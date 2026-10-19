@@ -2926,6 +2926,11 @@
             "helpText": "Novērst atkārtotus paziņojumus par to pašu sugu šajā laika periodā. Iestatiet 0, lai atspējotu."
           }
         },
+        "rulesNotice": {
+          "message": "Push paziņojumus par noteikšanām sūta brīdinājumu noteikumi cilnē Noteikumi. Iebūvētie noteikšanas noteikumi paziņo tikai lietotnē. Lai saņemtu push paziņojumus, pievienojiet darbību {pushAction} noteikumam {ruleName} vai izveidojiet noteikumu notikumam {eventName} ar ticamības nosacījumu un atdzišanas periodu.",
+          "previousFilters": "Brīdinājumu noteikumi neizmanto šeit iestatītās vērtības Minimālā ticamība ({confidence}%) un Sugas pauze ({minutes} min).",
+          "openRules": "Atvērt Noteikumus"
+        },
         "noProviders": "Nav konfigurētu nodrošinātāju",
         "noProvidersDescription": "Pievienojiet nodrošinātāju, lai sāktu saņemt push paziņojumus",
         "providers": {

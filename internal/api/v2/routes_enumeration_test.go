@@ -40,6 +40,7 @@ var goldenRoutes = []string{
 	"GET /api/v2/alerts/rules/:id",
 	"GET /api/v2/alerts/rules/export",
 	"GET /api/v2/alerts/schema",
+	"GET /api/v2/alerts/status",
 	"GET /api/v2/analytics/confidence/distribution",
 	"GET /api/v2/analytics/sources",
 	"GET /api/v2/analytics/species/accumulation",

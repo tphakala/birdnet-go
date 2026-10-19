@@ -85,6 +85,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 	// Public read endpoints
 	alerts.GET("/schema", c.GetAlertSchema)
+	alerts.GET("/status", c.GetAlertStatus)
 	alerts.GET("/rules", c.ListAlertRules)
 	alerts.GET("/rules/:id", c.GetAlertRule)
 	alerts.GET("/history", c.ListAlertHistory)
@@ -244,6 +245,22 @@ func (c *Handler) engineUnavailable(ctx echo.Context) error {
 // enforced by requireV2Middleware on the alert route group.
 func (c *Handler) GetAlertSchema(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, alerting.GetSchema())
+}
+
+// alertStatusResponse is the body of GET /alerts/status.
+type alertStatusResponse struct {
+	// EngineActive is true when the alert rules engine handles detection
+	// notifications in this process.
+	EngineActive bool `json:"engine_active"`
+}
+
+// GetAlertStatus reports whether the alert rules engine handles detection
+// notifications in this process. It returns the flag that
+// notification.DetectionNotificationConsumer.ProcessDetectionEvent checks: when
+// it is false, the legacy push filters in Notification.Push still apply. v2
+// availability is enforced by requireV2Middleware on the alert route group.
+func (c *Handler) GetAlertStatus(ctx echo.Context) error {
+	return ctx.JSON(http.StatusOK, alertStatusResponse{EngineActive: notification.IsAlertEngineActive()})
 }
 
 // ListAlertRules returns all alert rules, optionally filtered.

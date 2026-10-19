@@ -2926,6 +2926,11 @@
             "helpText": "Verhindert wiederholte Benachrichtigungen für dieselbe Art innerhalb dieses Zeitfensters. Auf 0 setzen zum Deaktivieren."
           }
         },
+        "rulesNotice": {
+          "message": "Push-Benachrichtigungen für Erkennungen kommen von den Alarmregeln auf der Registerkarte Regeln. Die integrierten Erkennungsregeln benachrichtigen nur in der App. Um Push-Benachrichtigungen zu erhalten, fügen Sie der Regel {ruleName} die Aktion {pushAction} hinzu oder erstellen Sie eine Regel für das Ereignis {eventName} mit einer Konfidenzbedingung und einer Abklingzeit.",
+          "previousFilters": "Ihre Einstellungen Mindestkonfidenz ({confidence} %) und Arten-Abklingzeit ({minutes} Min) hier werden von Alarmregeln nicht verwendet.",
+          "openRules": "Regeln öffnen"
+        },
         "noProviders": "Keine Anbieter konfiguriert",
         "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um Push-Benachrichtigungen zu erhalten",
         "providers": {
