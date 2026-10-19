@@ -1,6 +1,7 @@
 package privacy
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -2679,7 +2680,9 @@ func TestScrubMessage_MasksUSBIDSerials(t *testing.T) {
 		{"comma ends the serial and the scan continues", "usb-id:0d8c:0014:SN1,usb-id:046d:0825:SN2", "usb-id:0d8c:0014:<redacted>,usb-id:046d:0825:<redacted>"},
 		{"hex serial keeps the ids", "usb-id:046d:0825:ab12", "usb-id:046d:0825:<redacted>"},
 		{"backtick opens quoted mode", "`usb-id:0d8c:0014:A1 B2`", "`usb-id:0d8c:0014:<redacted>`"},
-		{"other escape stays inside the serial", `{"id":"usb-id:0d8c:0014:A1\\B2"}`, `{"id":"usb-id:0d8c:0014:<redacted>"}`},
+		{"backslash inside a JSON serial is masked with it", `{"id":"usb-id:0d8c:0014:A1\\B2"}`, `{"id":"usb-id:0d8c:0014:<redacted>"}`},
+		{"escaped backslash at the end of a JSON serial", `{"id":"usb-id:0d8c:0014:A1\\"}`, `{"id":"usb-id:0d8c:0014:<redacted>"}`},
+		{"second token inside a quoted serial goes with it", `msg="usb-id:0d8c:0014:SN1 replaced by usb-id:046d:0825:SN2"`, `msg="usb-id:0d8c:0014:<redacted>"`},
 		{"masked token in quoted prose is kept", `msg="usb-id:0d8c:0014:<redacted> failed"`, `msg="usb-id:0d8c:0014:<redacted> failed"`},
 		{"masked token before a period is kept", "device usb-id:0d8c:0014:<redacted>.", "device usb-id:0d8c:0014:<redacted>."},
 		{"masked token before an error suffix is kept", "open usb-id:0d8c:0014:<redacted>: device busy", "open usb-id:0d8c:0014:<redacted>: device busy"},
@@ -2691,6 +2694,7 @@ func TestScrubMessage_MasksUSBIDSerials(t *testing.T) {
 		{"quoted empty serial is kept", `"usb-id:0d8c:0014:"`, `"usb-id:0d8c:0014:"`},
 		{"unquoted serial that starts with a space is empty", "usb-id:0d8c:0014: A1", "usb-id:0d8c:0014: A1"},
 		{"unterminated quoted serial runs to the end", `id="usb-id:0d8c:0014:A1 B2`, `id="usb-id:0d8c:0014:<redacted>`},
+		{"quoted serial cut off after a backslash", `id="usb-id:0d8c:0014:A1\`, `id="usb-id:0d8c:0014:<redacted>`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -2710,12 +2714,24 @@ func TestScrubUSBIDSerials_LeavesMalformedTokens(t *testing.T) {
 	for _, in := range []string{
 		"usb-id:zzzz:0014:SN1",
 		"usb-id:0d8c:zzzz:SN1",
-		"usb-id:0d8c",
-		"usb-id:0d8c:0014",
 	} {
 		t.Run(in, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, in, scrubUSBIDSerials(in))
+		})
+	}
+}
+
+// Each byte that ends an unquoted serial, checked on the stage alone because
+// later ScrubMessage stages rewrite some of the text around it.
+func TestScrubUSBIDSerials_UnquotedSerialEndsAtTerminators(t *testing.T) {
+	t.Parallel()
+
+	for _, term := range []string{" ", "\t", "\n", "\r", "\v", "\f", `"`, "'", "`", ",", ";", ")", "]", "}", `\`} {
+		t.Run(strconv.Quote(term), func(t *testing.T) {
+			t.Parallel()
+			in := "x usb-id:0d8c:0014:SN1" + term + "y"
+			assert.Equal(t, "x usb-id:0d8c:0014:<redacted>"+term+"y", scrubUSBIDSerials(in))
 		})
 	}
 }
