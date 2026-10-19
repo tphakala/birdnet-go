@@ -76,6 +76,95 @@ func TestCardUSBDevice_NotFound(t *testing.T) {
 	})
 }
 
+// walkDepthLimit is the documented upward-walk bound as a literal rather than
+// maxWalkDepth, so changing the bound fails the depth test instead of silently
+// moving its fixture. The walk checks the card directory first, then its parents,
+// for this many directories in total.
+const walkDepthLimit = 12
+
+func TestCardUSBDevice_DepthBound(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		vendorHeight int // levels above the card directory that carry the idVendor
+		wantFound    bool
+	}{
+		{"last directory the walk checks", walkDepthLimit - 1, true},
+		{"first directory beyond the bound", walkDepthLimit, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			root := t.TempDir()
+			// The chain is deeper than the bound, so the sysfs root never ends the walk first.
+			cardDir := filepath.Join(root, "sys", "devices")
+			for i := range walkDepthLimit + 3 {
+				cardDir = filepath.Join(cardDir, "d"+strconv.Itoa(i))
+			}
+			require.NoError(t, os.MkdirAll(cardDir, 0o755))
+			vendorDir := cardDir
+			for range tt.vendorHeight {
+				vendorDir = filepath.Dir(vendorDir)
+			}
+			require.NoError(t, os.WriteFile(filepath.Join(vendorDir, "idVendor"), []byte("0d8c\n"), 0o644))
+			linkCard(t, root, 0, cardDir)
+
+			got, ok := CardUSBDevice(root, 0)
+
+			require.Equal(t, tt.wantFound, ok)
+			if tt.wantFound {
+				want, err := filepath.EvalSymlinks(vendorDir)
+				require.NoError(t, err)
+				assert.Equal(t, want, got)
+			}
+		})
+	}
+}
+
+func TestCardUSBDevice_MultiDigitCardNumber(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	devices := make(map[int]string)
+	for _, card := range []int{2, 10} {
+		dev := filepath.Join(root, "sys", "devices", "dev"+strconv.Itoa(card))
+		cardDir := filepath.Join(dev, "sound", "card"+strconv.Itoa(card))
+		require.NoError(t, os.MkdirAll(cardDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(dev, "idVendor"), []byte("0d8c\n"), 0o644))
+		linkCard(t, root, card, cardDir)
+		devices[card] = dev
+	}
+
+	for card, dev := range devices {
+		got, ok := CardUSBDevice(root, card)
+
+		require.True(t, ok, "card %d", card)
+		want, err := filepath.EvalSymlinks(dev)
+		require.NoError(t, err)
+		assert.Equal(t, want, got, "card %d", card)
+	}
+}
+
+func TestCardUSBDevice_SymlinkedRoot(t *testing.T) {
+	t.Parallel()
+	realRoot := t.TempDir()
+	dev := filepath.Join(realRoot, "sys", "devices", "usb1")
+	cardDir := filepath.Join(dev, "sound", "card0")
+	require.NoError(t, os.MkdirAll(cardDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dev, "idVendor"), []byte("0d8c\n"), 0o644))
+	linkCard(t, realRoot, 0, cardDir)
+	// Reach the same tree through a symlinked root, as a symlinked temp dir or a macOS
+	// /var -> /private/var path would.
+	linkRoot := filepath.Join(t.TempDir(), "root")
+	require.NoError(t, os.Symlink(realRoot, linkRoot))
+
+	got, ok := CardUSBDevice(linkRoot, 0)
+
+	require.True(t, ok)
+	want, err := filepath.EvalSymlinks(dev)
+	require.NoError(t, err)
+	assert.Equal(t, want, got)
+}
+
 func TestReadAttr(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
