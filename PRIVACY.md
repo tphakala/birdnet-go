@@ -80,6 +80,8 @@ BirdNET-Go follows **Privacy by Design** principles:
 
 **IMPORTANT: The following telemetry data is ONLY collected when you explicitly enable it. By default, NO telemetry data is collected.**
 
+Builds older than about six months (183 days after their build date) do not send error reports, even with telemetry enabled. Update to a current release to resume reporting. Support dump uploads you request yourself still work.
+
 ### ✅ Technical Error Information (When Telemetry is Enabled)
 
 **Error Messages & Context**

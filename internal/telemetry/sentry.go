@@ -155,10 +155,14 @@ func resolveSentryDSN() string {
 	return strings.TrimSpace(sentryDSN)
 }
 
-// GetFrontendDSN returns the Sentry DSN for frontend error tracking. The
+// FrontendDSN returns the Sentry DSN for frontend error tracking, or "" when
+// settings do not allow reporting (telemetry off or the build too old). The
 // frontend shares the backend Sentry project, so it follows the same resolver
 // and therefore the same build-time/runtime precedence.
-func GetFrontendDSN() string {
+func FrontendDSN(settings *conf.Settings) string {
+	if !reportingAllowed(settings, time.Now()) {
+		return ""
+	}
 	return resolveSentryDSN()
 }
 
@@ -191,22 +195,32 @@ var (
 )
 
 // shouldSkipTelemetry returns true if telemetry should be skipped.
-// It checks test mode, whether Sentry is enabled in settings, and whether the
-// Sentry SDK is actually initialized for this build.
+// It checks test mode, whether Sentry is enabled in settings, whether this build
+// is still young enough to report, and whether the Sentry SDK is actually
+// initialized for this build.
 // This helper reduces code duplication across telemetry functions.
 func shouldSkipTelemetry() bool {
 	// In test mode, never skip (telemetry is always "enabled" for testing)
 	if testMode.Load() == testModeEnabled {
 		return false
 	}
-	settings := conf.GetSettings()
-	if settings == nil || !settings.Sentry.Enabled {
+	// Checked per call so a running process stops once its build ages out.
+	if !reportingAllowed(conf.GetSettings(), time.Now()) {
 		return true
 	}
 	// Even when opted in, skip when the SDK was never initialized for this build
 	// (no DSN configured). Otherwise the capture paths would run and log
 	// "event sent" while sentry-go silently no-ops because no client is bound.
 	return !sentryClientBound()
+}
+
+// discardDeferredMessages drops queued deferred messages and marks Sentry as
+// initialized, for the cases where the SDK will never be initialized.
+func discardDeferredMessages() {
+	deferredMutex.Lock()
+	deferredMessages = nil
+	sentryInitialized = true
+	deferredMutex.Unlock()
 }
 
 // sentryClientBound reports whether a real Sentry client is bound to the
@@ -248,16 +262,14 @@ func collectPlatformInfo() PlatformInfo {
 }
 
 // InitSentry initializes Sentry SDK with privacy-compliant settings
-// This function will only initialize Sentry if explicitly enabled by the user
+// This function will only initialize Sentry if explicitly enabled by the user,
+// a DSN is configured for this build, and the build is not older than
+// maxTelemetryBuildAge.
 func InitSentry(settings *conf.Settings) error {
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		GetLogger().Info("Sentry telemetry is disabled (opt-in required)")
-		// Drain deferred messages; Sentry will never initialize
-		deferredMutex.Lock()
-		deferredMessages = nil
-		sentryInitialized = true
-		deferredMutex.Unlock()
+		discardDeferredMessages()
 		return nil
 	}
 
@@ -273,11 +285,18 @@ func InitSentry(settings *conf.Settings) error {
 	if resolveSentryDSN() == "" {
 		GetLogger().Info("Sentry telemetry enabled but no DSN is configured for this build; skipping initialization",
 			logger.String("hint", "set "+sentryDSNEnvVar+" to point telemetry at a Sentry project"))
-		// Drain deferred messages; Sentry will never initialize for this build.
-		deferredMutex.Lock()
-		deferredMessages = nil
-		sentryInitialized = true
-		deferredMutex.Unlock()
+		discardDeferredMessages()
+		return nil
+	}
+
+	// Builds past their telemetry age do not report. Support dump uploads still
+	// work through InitMinimalSentryForSupport.
+	if buildTooOld(settings.BuildDate, time.Now()) {
+		GetLogger().Info("Sentry telemetry enabled but this build is too old to report errors; skipping initialization",
+			logger.String("build_date", settings.BuildDate),
+			logger.Int("max_build_age_days", maxTelemetryBuildAgeDays),
+			logger.String("hint", "update to a current release to resume error reporting"))
+		discardDeferredMessages()
 		return nil
 	}
 
@@ -345,7 +364,8 @@ func initializeSentrySDK(settings *conf.Settings) error {
 
 // createBeforeSendHook creates the BeforeSend hook for privacy filtering and
 // uptime enrichment. Only one BeforeSend can be attached to the Sentry client,
-// so uptime annotation runs inside this hook after privacy filtering.
+// so uptime annotation runs inside this hook after privacy filtering. It also
+// drops every event from a build past its telemetry age, except support dumps.
 func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
 	return func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 		// Guard against a nil event before the privacy filters dereference
@@ -353,6 +373,12 @@ func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.E
 		// helpers are not. Returning nil drops the event cleanly (CodeRabbit
 		// review on #2762).
 		if event == nil {
+			return nil
+		}
+
+		// Per event: direct sentry.* callers bypass shouldSkipTelemetry, and a
+		// running process can cross the age limit after init.
+		if buildTooOld(settings.BuildDate, time.Now()) && !isSupportDumpEvent(event) {
 			return nil
 		}
 
@@ -1147,7 +1173,7 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 		// Only allow support dump events
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			// Only allow events tagged as support dumps
-			if event.Tags == nil || event.Tags["type"] != "support_dump" {
+			if !isSupportDumpEvent(event) {
 				return nil // Drop all non-support events
 			}
 			// Skip ScrubMessage on event.Message: the message is built by our

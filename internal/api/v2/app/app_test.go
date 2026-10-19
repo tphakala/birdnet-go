@@ -1479,6 +1479,31 @@ func TestGetAppConfig_SentryConfigWhenEnabled(t *testing.T) {
 	assert.Equal(t, "test-system-id-123", response.Sentry.SystemID)
 }
 
+// TestGetAppConfig_SentryConfigOmittedForOldBuild tests that Sentry config is omitted
+// for a build past its telemetry age even when telemetry is enabled.
+func TestGetAppConfig_SentryConfigOmittedForOldBuild(t *testing.T) {
+	// Not parallel: publishes settings to the process-global snapshot that
+	// GetAppConfig reads via currentSettings.
+	_, controller := setupAppConfigTest(t, nil)
+
+	t.Setenv("BIRDNET_GO_SENTRY_DSN", "https://dummy@example.ingest.sentry.io/1")
+
+	controller.Settings.Load().Sentry.Enabled = true
+	controller.Settings.Load().BuildDate = time.Now().AddDate(-1, 0, 0).Format(time.RFC3339)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetAppConfig(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Nil(t, response.Sentry, "Sentry config must be omitted for an expired build")
+}
+
 // TestGetAppConfig_SentryConfigWhenDisabled tests that Sentry config is omitted when telemetry is disabled.
 func TestGetAppConfig_SentryConfigWhenDisabled(t *testing.T) {
 	// Not parallel: publishes settings to the process-global snapshot that
