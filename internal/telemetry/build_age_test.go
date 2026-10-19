@@ -16,7 +16,12 @@ func expiredBuildDate() string {
 func TestBuildTooOld(t *testing.T) {
 	t.Parallel()
 
+	// wantMaxBuildAgeDays is the cutoff PRIVACY.md and the wiki promise; kept
+	// separate from the production constant so a change to it fails here.
+	const wantMaxBuildAgeDays = 183
+
 	now := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	limit := now.AddDate(0, 0, -wantMaxBuildAgeDays)
 
 	tests := []struct {
 		name      string
@@ -26,8 +31,8 @@ func TestBuildTooOld(t *testing.T) {
 		{"empty build date fails open", "", false},
 		{"unparseable build date fails open", "garbage", false},
 		{"build date after now (clock behind) is not expired", now.Add(24 * time.Hour).Format(time.RFC3339), false},
-		{"exactly at the limit is not expired", now.Add(-maxTelemetryBuildAge).Format(time.RFC3339), false},
-		{"one second past the limit is expired", now.Add(-maxTelemetryBuildAge - time.Second).Format(time.RFC3339), true},
+		{"exactly at the limit is not expired", limit.Format(time.RFC3339), false},
+		{"one second past the limit is expired", limit.Add(-time.Second).Format(time.RFC3339), true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
