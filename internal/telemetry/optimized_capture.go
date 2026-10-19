@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -18,12 +19,7 @@ func UpdateTelemetryEnabled() {
 		return
 	}
 
-	settings := conf.GetSettings()
-	if settings != nil && settings.Sentry.Enabled {
-		telemetryEnabled.Store(true)
-	} else {
-		telemetryEnabled.Store(false)
-	}
+	telemetryEnabled.Store(reportingAllowed(conf.GetSettings(), time.Now()))
 }
 
 // IsTelemetryEnabled returns true if telemetry is enabled

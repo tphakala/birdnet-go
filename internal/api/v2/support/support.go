@@ -286,10 +286,7 @@ func (c *Handler) GenerateSupportDump(ctx echo.Context) error {
 
 	// Upload to Sentry if requested (works regardless of telemetry setting)
 	if req.UploadToSentry {
-		// Bind a client for the upload if none is bound. InitMinimalSentryForSupport
-		// reuses an initialized client, so with telemetry on this is a no-op; it
-		// binds the support-only client when telemetry is off, or when this build
-		// is too old for telemetry and InitSentry skipped initialization.
+		// Ensure a client is bound; a no-op when one is already initialized.
 		if err := telemetry.InitMinimalSentryForSupport(settings.SystemID, settings.Version); err != nil {
 			c.LogErrorIfEnabled("Failed to initialize minimal Sentry for support upload",
 				logger.Error(err),

@@ -104,7 +104,7 @@ func TestShouldSkipTelemetryForOldBuild(t *testing.T) {
 
 	conf.StoreSettings(&conf.Settings{
 		Sentry:    conf.SentrySettings{Enabled: true},
-		BuildDate: time.Now().Add(-maxTelemetryBuildAge - 24*time.Hour).Format(time.RFC3339),
+		BuildDate: expiredBuildDate(),
 	})
 	assert.True(t, shouldSkipTelemetry(), "an expired build must skip even with a bound client")
 }

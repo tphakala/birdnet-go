@@ -1489,7 +1489,6 @@ func TestGetAppConfig_SentryConfigOmittedForOldBuild(t *testing.T) {
 	t.Setenv("BIRDNET_GO_SENTRY_DSN", "https://dummy@example.ingest.sentry.io/1")
 
 	controller.Settings.Load().Sentry.Enabled = true
-	controller.Settings.Load().SystemID = "test-system-id-123"
 	controller.Settings.Load().BuildDate = time.Now().AddDate(-1, 0, 0).Format(time.RFC3339)
 
 	e := echo.New()

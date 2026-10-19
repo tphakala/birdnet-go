@@ -155,10 +155,14 @@ func resolveSentryDSN() string {
 	return strings.TrimSpace(sentryDSN)
 }
 
-// GetFrontendDSN returns the Sentry DSN for frontend error tracking. The
+// FrontendDSN returns the Sentry DSN for frontend error tracking, or "" when
+// settings do not allow reporting (telemetry off or the build too old). The
 // frontend shares the backend Sentry project, so it follows the same resolver
 // and therefore the same build-time/runtime precedence.
-func GetFrontendDSN() string {
+func FrontendDSN(settings *conf.Settings) string {
+	if !reportingAllowed(settings, time.Now()) {
+		return ""
+	}
 	return resolveSentryDSN()
 }
 
@@ -200,13 +204,8 @@ func shouldSkipTelemetry() bool {
 	if testMode.Load() == testModeEnabled {
 		return false
 	}
-	settings := conf.GetSettings()
-	if settings == nil || !settings.Sentry.Enabled {
-		return true
-	}
-	// Builds past their telemetry age never report, even with a client bound
-	// (a running process can cross the threshold after init).
-	if BuildTooOld(settings.BuildDate, time.Now()) {
+	// Checked per call so a running process stops once its build ages out.
+	if !reportingAllowed(conf.GetSettings(), time.Now()) {
 		return true
 	}
 	// Even when opted in, skip when the SDK was never initialized for this build
@@ -270,7 +269,6 @@ func InitSentry(settings *conf.Settings) error {
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		GetLogger().Info("Sentry telemetry is disabled (opt-in required)")
-		// Drain deferred messages; Sentry will never initialize
 		discardDeferredMessages()
 		return nil
 	}
@@ -287,14 +285,13 @@ func InitSentry(settings *conf.Settings) error {
 	if resolveSentryDSN() == "" {
 		GetLogger().Info("Sentry telemetry enabled but no DSN is configured for this build; skipping initialization",
 			logger.String("hint", "set "+sentryDSNEnvVar+" to point telemetry at a Sentry project"))
-		// Drain deferred messages; Sentry will never initialize for this build.
 		discardDeferredMessages()
 		return nil
 	}
 
 	// Builds past their telemetry age do not report. Support dump uploads still
 	// work through InitMinimalSentryForSupport.
-	if BuildTooOld(settings.BuildDate, time.Now()) {
+	if buildTooOld(settings.BuildDate, time.Now()) {
 		GetLogger().Info("Sentry telemetry enabled but this build is too old to report errors; skipping initialization",
 			logger.String("build_date", settings.BuildDate),
 			logger.Int("max_build_age_days", maxTelemetryBuildAgeDays),
@@ -379,10 +376,9 @@ func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.E
 			return nil
 		}
 
-		// Drop everything from a build past its telemetry age except user-requested
-		// support dumps. Evaluated per event so a long-running process stops sending
-		// once it crosses the threshold.
-		if BuildTooOld(settings.BuildDate, time.Now()) && !isSupportDumpEvent(event) {
+		// Per event: direct sentry.* callers bypass shouldSkipTelemetry, and a
+		// running process can cross the age limit after init.
+		if buildTooOld(settings.BuildDate, time.Now()) && !isSupportDumpEvent(event) {
 			return nil
 		}
 

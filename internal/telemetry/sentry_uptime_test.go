@@ -228,7 +228,7 @@ func TestCreateBeforeSendHook_OldBuildDropsAllButSupportDumps(t *testing.T) {
 	t.Parallel()
 
 	settings := &conf.Settings{
-		BuildDate: time.Now().Add(-maxTelemetryBuildAge - 24*time.Hour).Format(time.RFC3339),
+		BuildDate: expiredBuildDate(),
 	}
 	hook := createBeforeSendHook(settings)
 
