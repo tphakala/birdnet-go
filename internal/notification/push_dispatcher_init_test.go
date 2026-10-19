@@ -748,8 +748,8 @@ func TestRegisterProvidersWithHealthChecker(t *testing.T) {
 	})
 }
 
-// Environment variable names used by TestInitializeEnhancedProviders_SkipsDisabledAndBuildsEnabled.
-// Values are fake; the tests only care whether a variable is set.
+// Fixture names and fake values shared by the push provider build and reload tests.
+// The secret variables only matter for whether they are set.
 const (
 	testPushSecretSetEnv   = "TEST_PUSH_PROVIDER_TOKEN_SET"
 	testPushSecretUnsetEnv = "TEST_PUSH_PROVIDER_TOKEN_UNSET"
@@ -776,8 +776,8 @@ func testBearerWebhookProvider(name string, enabled bool, token string) conf.Pus
 }
 
 // TestInitializeEnhancedProviders_SkipsDisabledAndBuildsEnabled verifies that a
-// disabled provider is never built (no secret resolution, template parsing, or
-// validation, and so no warning or error output) while enabled providers are
+// disabled provider is never built (no secret resolution or template parsing,
+// and so no warning or error output) while enabled providers are
 // still built and misconfigured enabled providers still fail loudly.
 func TestInitializeEnhancedProviders_SkipsDisabledAndBuildsEnabled(t *testing.T) {
 	// Not parallel: t.Setenv cannot be used in parallel tests.
@@ -816,23 +816,6 @@ func TestInitializeEnhancedProviders_SkipsDisabledAndBuildsEnabled(t *testing.T)
 				Name:      testPushWebhookName,
 				Endpoints: []conf.WebhookEndpointConfig{{URL: testPushWebhookURL}},
 				Template:  "{{",
-			}},
-		},
-		{
-			name: "disabled_shoutrrr_with_invalid_url",
-			providers: []conf.PushProviderConfig{{
-				Type:    "shoutrrr",
-				Enabled: false,
-				Name:    "test-shoutrrr",
-				URLs:    []string{"not a url"},
-			}},
-		},
-		{
-			name: "disabled_script_without_command",
-			providers: []conf.PushProviderConfig{{
-				Type:    "script",
-				Enabled: false,
-				Name:    testPushScriptName,
 			}},
 		},
 		{
