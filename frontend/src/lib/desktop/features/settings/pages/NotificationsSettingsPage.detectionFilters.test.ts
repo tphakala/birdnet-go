@@ -151,6 +151,8 @@ describe('NotificationsSettingsPage detection filters under the alert engine', (
     expect(await screen.findByText(ENABLED_DESCRIPTION)).toBeInTheDocument();
     expect(screen.queryByLabelText(MIN_CONFIDENCE_LABEL)).not.toBeInTheDocument();
     expect(screen.queryByRole('note')).not.toBeInTheDocument();
+    // The Rules tab must not wait on the status call.
+    await waitFor(() => expect(vi.mocked(fetchAlertRules)).toHaveBeenCalled());
   });
 
   it('keeps the filter inputs and the v2 state when the status request fails for another reason', async () => {

@@ -1396,7 +1396,10 @@
   // onMount
   // ============================================================
   onMount(async () => {
-    await Promise.all([loadNotificationSettings(), loadSchema(), loadAlertStatus()]);
+    // Rules and history do not depend on the engine status, so a slow status
+    // call must not hold them back.
+    loadAlertStatus();
+    await Promise.all([loadNotificationSettings(), loadSchema()]);
     // Load rules and history after schema is ready
     loadRules();
     loadHistory();
