@@ -585,3 +585,43 @@ func TestCaptureMessage_InfoLevelFiltered(t *testing.T) {
 	FastCaptureMessage("Verbose trace", sentry.LevelDebug, "system")
 	// If we get here without panic, the early return works.
 }
+
+func TestInitSentry_OldBuildSkipsInit(t *testing.T) {
+	// Not parallel: mutates package-level state and the global hub.
+	t.Setenv(sentryDSNEnvVar, "https://dummy@example.ingest.sentry.io/1")
+	bindTestClient(t, nil)
+
+	deferredMutex.Lock()
+	prevUploader := attachmentUploader
+	deferredMutex.Unlock()
+	t.Cleanup(func() {
+		deferredMutex.Lock()
+		deferredMessages = nil
+		sentryInitialized = false
+		deferredOverflowLogged = false
+		attachmentUploader = prevUploader
+		deferredMutex.Unlock()
+	})
+
+	deferredMutex.Lock()
+	deferredMessages = []DeferredMessage{
+		{Message: "msg-1", Level: sentry.LevelWarning, Component: "test"},
+		{Message: "msg-2", Level: sentry.LevelError, Component: "test"},
+	}
+	sentryInitialized = false
+	deferredMutex.Unlock()
+
+	settings := &conf.Settings{
+		BuildDate: time.Now().Add(-maxTelemetryBuildAge - 24*time.Hour).Format(time.RFC3339),
+	}
+	settings.Sentry.Enabled = true
+
+	require.NoError(t, InitSentry(settings))
+
+	assert.False(t, sentryClientBound(), "an expired build must not bind a Sentry client")
+
+	deferredMutex.Lock()
+	defer deferredMutex.Unlock()
+	assert.Nil(t, deferredMessages, "deferred messages should be drained")
+	assert.True(t, sentryInitialized, "sentryInitialized should be true after the skip")
+}

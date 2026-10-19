@@ -286,16 +286,17 @@ func (c *Handler) GenerateSupportDump(ctx echo.Context) error {
 
 	// Upload to Sentry if requested (works regardless of telemetry setting)
 	if req.UploadToSentry {
-		// Initialize minimal Sentry if needed
-		if !settings.Sentry.Enabled {
-			if err := telemetry.InitMinimalSentryForSupport(settings.SystemID, settings.Version); err != nil {
-				c.LogErrorIfEnabled("Failed to initialize minimal Sentry for support upload",
-					logger.Error(err),
-					logger.String("dump_id", dump.ID),
-				)
-				response.Message = "Support dump generated successfully but upload initialization failed"
-				req.UploadToSentry = false // Fall back to download
-			}
+		// Bind a client for the upload if none is bound. InitMinimalSentryForSupport
+		// reuses an initialized client, so with telemetry on this is a no-op; it
+		// binds the support-only client when telemetry is off, or when this build
+		// is too old for telemetry and InitSentry skipped initialization.
+		if err := telemetry.InitMinimalSentryForSupport(settings.SystemID, settings.Version); err != nil {
+			c.LogErrorIfEnabled("Failed to initialize minimal Sentry for support upload",
+				logger.Error(err),
+				logger.String("dump_id", dump.ID),
+			)
+			response.Message = "Support dump generated successfully but upload initialization failed"
+			req.UploadToSentry = false // Fall back to download
 		}
 
 		// Proceed with upload if still requested

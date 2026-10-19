@@ -251,8 +251,9 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	// Include Sentry frontend config when telemetry is enabled AND a DSN is
 	// actually configured for this build. Builds without a DSN (plain `go build`
 	// or forks) must not hand the frontend an empty DSN, which would make the
-	// browser SDK fail to initialize.
-	if settings.Sentry.Enabled {
+	// browser SDK fail to initialize. Builds past the telemetry age get no
+	// Sentry block either, so the browser SDK is never configured for them.
+	if settings.Sentry.Enabled && !telemetry.BuildTooOld(settings.BuildDate, time.Now()) {
 		if dsn := telemetry.GetFrontendDSN(); dsn != "" {
 			response.Sentry = &SentryFrontendConfig{
 				Enabled:  true,

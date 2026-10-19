@@ -173,6 +173,10 @@ The same sensitive data always produces the same anonymized identifier, allowing
 
 **A:** No. Error tracking is completely disabled by default and requires explicit opt-in through the web interface.
 
+### Q: Why is nothing sent from my old installation?
+
+**A:** Builds older than about six months (183 days after their build date) do not send error reports, even with telemetry enabled. Update to a current release to resume reporting. Support dump uploads you request yourself still work.
+
 ### Q: Can I see what data is being sent?
 
 **A:** While you cannot see the exact transmitted data, all URLs and sensitive information are automatically anonymized using the privacy protection system described above.

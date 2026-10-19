@@ -149,6 +149,8 @@ The anonymized components are combined and hashed using SHA-256 to create a cons
 
 ## Data Transmission
 
+Builds older than about six months (183 days after their build date) do not send error reports, even with telemetry enabled. Update to a current release to resume reporting. Support dump uploads you request yourself still work.
+
 ### Where Data Goes
 
 Error reports are transmitted to:
