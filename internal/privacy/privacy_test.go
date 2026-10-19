@@ -939,7 +939,35 @@ func TestScrubCoordinates(t *testing.T) {
 	runScrubTests(t, ScrubCoordinates, tests)
 }
 
-func TestScrubMessage_KeepsSpaceSeparatedDateTimes(t *testing.T) {
+func TestScrubCoordinates_KeepsALSASelectors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"hw selector in a device name", "Blue Yeti Stereo Microphone: USB Audio (hw:1,0)", "Blue Yeti Stereo Microphone: USB Audio (hw:1,0)"},
+		{"plughw selector", "plughw:1,0", "plughw:1,0"},
+		{"dsnoop selector", "dsnoop:1,0", "dsnoop:1,0"},
+		{"dmix selector", "dmix:1,0", "dmix:1,0"},
+		{"two digit card and device", "hw:10,12", "hw:10,12"},
+		{"selector with subdevice", "hw:1,0,0", "hw:1,0,0"},
+		{"pair after a bare colon", "device :1,0", "device :[LAT],[LON]"},
+		{"whole degree pair after a bare colon", "pos :60,24", "pos :[LAT],[LON]"},
+		{"quoted bare colon value", `"device":":1,0"`, `"device":":[LAT],[LON]"`},
+		{"selector then coordinates", "hw:1,0 at 60.1699,24.9384", "hw:1,0 at [LAT],[LON]"},
+		{"decimal pair after hw", "hw:60.1699,24.9384", "hw:[LAT],[LON]"},
+		{"signed decimal pair after a colon", ":45.5,-120.5", ":[LAT],[LON]"},
+		{"labelled integer pair", "Location:60,24", "Location:[LAT],[LON]"},
+		{"quoted key before the colon", `{"lat":60,24}`, `{"lat":[LAT],[LON]}`},
+		{"hw prefix inside a word", "myhw:60,24", "myhw:[LAT],[LON]"},
+	}
+
+	runScrubTests(t, ScrubCoordinates, tests)
+}
+
+func TestScrubMessage_KeepsDatesAndTimes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -953,6 +981,16 @@ func TestScrubMessage_KeepsSpaceSeparatedDateTimes(t *testing.T) {
 		{"clock times", "from 10:15:30 to 11:45:00"},
 		{"dotted date time", "16.10.2026 00:12 started"},
 		{"date time with T", "2026-10-16T00:12:34 started"},
+		{"US slash date time", "10/16/2026 00:12:34 started"},
+		{"European slash date time", "16/10/2026 00:12:34"},
+		{"year first slash date time", "2026/10/16 00:12:34"},
+		{"two digit year slash date time", "10/16/26 00:12:34"},
+		{"slash date time with T and Z", "10/16/2026T00:12:34Z"},
+		{"slash date time with fraction", "10/16/2026 12:34:56.123"},
+		{"slash date in a sentence", "see 10/16/2026"},
+		{"year first slash date alone", "2026/10/16 started"},
+		{"slash date time after comma", "10/16/2026, 00:12:34 x"},
+		{"slash date before a count", "2026/10/16 50 birds"},
 	}
 
 	for _, tt := range tests {
@@ -1010,6 +1048,8 @@ func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
 		{"sentence period after fraction", "2026-10-16 00:12:34,123. 50 birds", "2026-10-16 00:12:34,123. 50 birds"},
 		{"Z suffix", "2026-10-16T00:12:34Z 60.1699,24.9384", "2026-10-16T00:12:34Z [LAT],[LON]"},
 		{"negative pair after time", "2026-10-16 00:12:34 -45.123,122.456", "2026-10-16 00:12:34 [LAT],[LON]"},
+		{"comma before time", "10/16/2026, 00:12:34 60.1699,24.9384", "10/16/2026, 00:12:34 [LAT],[LON]"},
+		{"pair after slash date", "10/16/2026, 60.1699,24.9384", "10/16/2026, [LAT],[LON]"},
 		{"pair between timestamps", "2026-10-16 00:12:34 at 60.1699,24.9384 until 2026-10-16 00:13:00", "2026-10-16 00:12:34 at [LAT],[LON] until 2026-10-16 00:13:00"},
 	}
 	for _, tt := range tests {
@@ -1045,11 +1085,11 @@ func TestTrimGluedCoordinate(t *testing.T) {
 	}
 }
 
-func TestProtectedTimeSpans_MergesTouchingSpans(t *testing.T) {
+func TestProtectedDateTimeSpans_MergesTouchingSpans(t *testing.T) {
 	t.Parallel()
 	// The date-time ends exactly where the syslog prefix starts.
 	in := "2026-10-16 00:12:34Oct 16 00:12:35"
-	assert.Equal(t, [][]int{{0, len(in)}}, protectedTimeSpans(in))
+	assert.Equal(t, [][]int{{0, len(in)}}, protectedDateTimeSpans(in))
 	assert.Equal(t, in, ScrubCoordinates(in))
 }
 
@@ -2450,6 +2490,110 @@ func TestScrubStandaloneIPs_NonTimeTokensStillHashed(t *testing.T) {
 			assert.NotContains(t, ScrubStandaloneIPs(tt.input), tt.leaks)
 		})
 	}
+}
+
+func TestScrubStandaloneIPs_KeepsUSBIDTokens(t *testing.T) {
+	t.Parallel()
+
+	keep := []struct {
+		name  string
+		input string
+	}{
+		{"redacted serial", "usb-id:0d8c:0014:<redacted>"},
+		{"empty serial at end of text", "usb-id:046d:0825:"},
+		{"no serial", "capture on usb-id:046d:0825 failed"},
+		{"bus path with hex letters", "usb-path:usb-0000:00:1d.0-1"},
+		{"bus path of digits", "usb-path:usb-0000:00:14.0-3"},
+	}
+	for _, tt := range keep {
+		t.Run("keeps "+tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.input, ScrubStandaloneIPs(tt.input))
+		})
+	}
+
+	scrub := []struct {
+		name     string
+		input    string
+		contains string
+		leaks    string
+	}{
+		{"address after the token", "usb-id:0d8c:0014:<redacted> peer 2001:db8::1", "usb-id:0d8c:0014:<redacted> peer public-ip-", "2001:db8::1"},
+		{"address glued after the prefix", "usb-id:2001:0db8::1", "", "2001:0db8"},
+		{"address glued after the pair", "usb-id:0d8c:0014:2001:db8::1", "", "2001:db8"},
+		{"address glued after usb-", "usb-path:usb-2001:db8::1.0-1", "", "2001:db8"},
+		{"longer match after usb-", "usb-path:usb-0000:00:1d:ab.0-1", "", "0000:00:1d:ab"},
+	}
+	for _, tt := range scrub {
+		t.Run("scrubs "+tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubStandaloneIPs(tt.input)
+			assert.Contains(t, got, tt.contains)
+			assert.NotContains(t, got, tt.leaks)
+		})
+	}
+}
+
+func TestScrubMessage_ScrubsPathsAroundDates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"dated directories stay one path", "/data/clips/2026/10/16/john.wav", AnonymizePath("/data/clips/2026/10/16/john.wav")},
+		{"date shaped tail after a slash", "/data/clips/10/16/2026", AnonymizePath("/data/clips/10/16/2026")},
+		{"path then date time", "path /var/log/john 10/16/2026 00:12:34", "path " + AnonymizePath("/var/log/john") + " 10/16/2026 00:12:34"},
+		{"single segment head stays hashed", "/john 10/16/2026", AnonymizePath("/john") + " 10/16/2026"},
+		{"separators only head", "/ 10/16/2026", "/ 10/16/2026"},
+		{"date time then path", "10/16/2026 00:12:34 open /home/john/x.db", "10/16/2026 00:12:34 open " + AnonymizePath("/home/john/x.db")},
+	}
+	runScrubTests(t, ScrubMessage, tests)
+
+	leaks := []struct {
+		name  string
+		input string
+	}{
+		{"date then path segment", "10/16/2026/john.wav"},
+		{"date then single segment path", "10/16/2026 /john.wav"},
+		{"path then date then path", "/home/x 10/16/2026 john/secret"},
+		{"path then date then word", "/home/x 10/16/2026 john"},
+		{"date then word glued to it", "/home/x 10/16/2026john"},
+		{"date followed by one more digit", "10/16/20261/john"},
+		{"windows dated directories", `C:\Users\john\2026\10\16\x.wav`},
+	}
+	for _, tt := range leaks {
+		t.Run("no leak "+tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.NotContains(t, ScrubMessage(tt.input), "john")
+		})
+	}
+}
+
+func TestScrubMessage_LogLinesKeepDeviceIDs(t *testing.T) {
+	t.Parallel()
+
+	keep := []string{
+		"10/16/2026 00:12:34 opened Blue Yeti Stereo Microphone: USB Audio (hw:1,0) id usb-id:0d8c:0014:<redacted>",
+		`{"time":"2026-10-16T00:12:34.015573-07:00","msg":"device ready","device":"hw:1,0","id":"usb-id:046d:0825:"}`,
+	}
+	for _, in := range keep {
+		t.Run("keeps "+in, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, in, ScrubMessage(in))
+		})
+	}
+
+	t.Run("scrubs private data beside device ids", func(t *testing.T) {
+		t.Parallel()
+		in := "10/16/2026 00:12:34 (hw:1,0) usb-id:0d8c:0014:<redacted> peer 2001:db8::1 at 60.1699,24.9384 file /home/john/clip.wav"
+		got := ScrubMessage(in)
+		assert.Contains(t, got, "10/16/2026 00:12:34 (hw:1,0) usb-id:0d8c:0014:<redacted> peer ")
+		for _, leak := range []string{"2001:db8::1", "60.1699", "24.9384", "john"} {
+			assert.NotContains(t, got, leak)
+		}
+	})
 }
 
 func TestScrubStandaloneIPs_IPv4LeadingZerosStillHashed(t *testing.T) {
