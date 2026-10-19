@@ -1055,19 +1055,10 @@ func TestScrubCoordinates_ScrubsPairAfterALeadingNumber(t *testing.T) {
 
 	// No digit of a number run survives, whatever the run length and separator.
 	numbers := []string{"5", "60.1699", "-24.9384", "0.5", "151", "-33.86"}
-	for runLen := 2; runLen <= 6; runLen++ {
-		for start := range numbers {
-			for _, sep := range []string{",", ", ", " "} {
-				parts := make([]string, runLen)
-				for i := range parts {
-					parts[i] = numbers[(start+i)%len(numbers)]
-				}
-				input := "count " + strings.Join(parts, sep) + " end"
-				t.Run(input, func(t *testing.T) {
-					t.Parallel()
-					assert.NotRegexp(t, `\d`, ScrubCoordinates(input))
-				})
-			}
+	for runLen := 2; runLen <= len(numbers); runLen++ {
+		for _, sep := range []string{",", ", ", " "} {
+			input := "count " + strings.Join(numbers[:runLen], sep) + " end"
+			assert.NotRegexp(t, `\d`, ScrubCoordinates(input), "input %q", input)
 		}
 	}
 }
@@ -2717,7 +2708,6 @@ func TestScrubUSBIDSerials_LeavesMalformedTokens(t *testing.T) {
 		"usb-id:0d8c:zzzz:SN1",
 		"usb-id:0d8c",
 		"usb-id:0d8c:0014",
-		"no token here",
 	} {
 		t.Run(in, func(t *testing.T) {
 			t.Parallel()

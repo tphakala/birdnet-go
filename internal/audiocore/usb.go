@@ -78,12 +78,9 @@ func deviceDedupKey(name string, ident usbIdentity) string {
 	return name
 }
 
-// redactDeviceID returns a log-safe form of a configured device identifier. A
-// usb-id token embeds the USB serial number, a persistent per-unit hardware
-// identifier, so the serial is masked before the value reaches logs, error
-// context, or support bundles. Bus-path and legacy ALSA/name identifiers carry
-// no such per-unit id and are returned unchanged. The masking itself lives in
-// privacy.RedactUSBDeviceID, shared with the support dump.
+// redactDeviceID returns a log-safe form of a configured device identifier: the
+// USB serial in a usb-id token, a per-unit hardware id, is masked by
+// privacy.RedactUSBDeviceID before the value reaches logs or error context.
 func redactDeviceID(deviceID string) string {
 	return privacy.RedactUSBDeviceID(deviceID)
 }
