@@ -79,8 +79,8 @@ type SoundCard struct {
 
 // Devices lists the USB devices (hubs included, interfaces excluded) under
 // <root>/sys/bus/usb/devices, sorted by BusID as plain text and capped at
-// maxDevices. truncated reports a cap, an oversized directory or cancellation.
-// err is ctx.Err() when ctx is done before the directory is listed, or the os
+// maxDevices. truncated reports a cap, an oversized directory or cancellation
+// after listing. err is ctx.Err() when ctx is done before the directory is listed, or the os
 // error when the directory cannot be listed; nothing else is an error. A ctx
 // cancelled after listing returns what was collected so far and a nil error.
 // It never reads the serial attribute.
@@ -121,7 +121,7 @@ func Devices(ctx context.Context, root string) (devices []Device, truncated bool
 // order, capped at maxSoundCards. USBBusID links a card to its USB device via
 // CardUSBDevice. truncated reports a cap, an oversized directory (the class
 // directory or a card directory), a card directory that cannot be listed or
-// cancellation. err is ctx.Err() when ctx is
+// cancellation after listing. err is ctx.Err() when ctx is
 // done before the class directory is listed, or the os error when it cannot be
 // listed; nothing else is an error. A ctx cancelled after listing returns what
 // was collected so far and a nil error.
