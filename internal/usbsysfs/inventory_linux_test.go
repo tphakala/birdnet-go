@@ -283,9 +283,9 @@ func TestInventory_DirectoryStates(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			cancel()
 			n, truncated, err := list(ctx, filepath.Join(t.TempDir(), "absent"))
-			require.NoError(t, err)
+			require.ErrorIs(t, err, context.Canceled)
 			assert.Zero(t, n)
-			assert.True(t, truncated)
+			assert.False(t, truncated)
 		})
 	}
 }

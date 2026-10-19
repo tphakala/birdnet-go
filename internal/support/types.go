@@ -76,7 +76,7 @@ type SystemInfo struct {
 // USBInventory lists the USB devices the host exposes. Serial numbers are never read.
 type USBInventory struct {
 	Available bool            `json:"available"`
-	Reason    string          `json:"reason,omitempty"` // unsupported_os, not_visible or unreadable when Available is false
+	Reason    string          `json:"reason,omitempty"` // unsupported_os, not_visible, unreadable or cancelled when Available is false
 	Truncated bool            `json:"truncated,omitempty"`
 	Devices   []USBDeviceInfo `json:"devices,omitempty"`
 }
@@ -95,7 +95,7 @@ type USBDeviceInfo struct {
 // SoundCardInventory lists the ALSA sound cards the host exposes.
 type SoundCardInventory struct {
 	Available bool            `json:"available"`
-	Reason    string          `json:"reason,omitempty"` // unsupported_os, not_visible or unreadable when Available is false
+	Reason    string          `json:"reason,omitempty"` // unsupported_os, not_visible, unreadable or cancelled when Available is false
 	Truncated bool            `json:"truncated,omitempty"`
 	Cards     []SoundCardInfo `json:"cards,omitempty"`
 }

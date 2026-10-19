@@ -80,13 +80,15 @@ func TestCollectHardwareInventory(t *testing.T) {
 		assert.Equal(t, &SoundCardInventory{Available: true}, cards)
 	})
 
-	t.Run("cancelled context marks both sections truncated", func(t *testing.T) {
+	t.Run("context done before listing reports cancelled", func(t *testing.T) {
 		t.Parallel()
+		root := t.TempDir()
+		populateHardwareTree(t, root)
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		usb, cards := collectHardwareInventory(ctx, osLinux, t.TempDir())
-		assert.Equal(t, &USBInventory{Available: true, Truncated: true}, usb)
-		assert.Equal(t, &SoundCardInventory{Available: true, Truncated: true}, cards)
+		usb, cards := collectHardwareInventory(ctx, osLinux, root)
+		assert.Equal(t, &USBInventory{Reason: "cancelled"}, usb)
+		assert.Equal(t, &SoundCardInventory{Reason: "cancelled"}, cards)
 	})
 
 	t.Run("truncation is reported per section", func(t *testing.T) {

@@ -5,8 +5,9 @@
 // package has no build tag and uses only the standard library; on a host
 // without the sysfs paths the readers report "not found" rather than failing.
 // The inventory listers Devices and SoundCards are the exception: they return
-// the os error when their top-level directory cannot be listed. Devices never
-// reads the serial attribute.
+// the os error when their top-level directory cannot be listed, and ctx.Err()
+// when the context is done before it is listed. Devices never reads the serial
+// attribute.
 package usbsysfs
 
 import (

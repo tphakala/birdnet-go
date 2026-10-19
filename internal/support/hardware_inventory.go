@@ -16,6 +16,7 @@ const (
 	hardwareReasonUnsupportedOS = "unsupported_os"
 	hardwareReasonNotVisible    = "not_visible" // the sysfs directory does not exist, for example masked in a container
 	hardwareReasonUnreadable    = "unreadable"  // it exists but cannot be listed
+	hardwareReasonCancelled     = "cancelled"   // the dump context ended before the directory was listed
 )
 
 // collectHardwareInventory lists USB devices and ALSA cards under root. It never
@@ -49,8 +50,12 @@ func collectHardwareInventory(ctx context.Context, goos, root string) (*USBInven
 	return usb, sound
 }
 
-// hardwareReason maps a sysfs listing error to a reason value.
+// hardwareReason maps a sysfs listing error, or the context error returned when
+// the dump context ended before listing, to a reason value.
 func hardwareReason(err error) string {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return hardwareReasonCancelled
+	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return hardwareReasonNotVisible
 	}

@@ -78,12 +78,13 @@ type SoundCard struct {
 // Devices lists the USB devices (hubs included, interfaces excluded) under
 // <root>/sys/bus/usb/devices, sorted by BusID as plain text and capped at
 // maxDevices. truncated reports a cap, an oversized directory or cancellation.
-// err is the os error when the directory cannot be listed; nothing else is an
-// error. A cancelled ctx returns what was collected so far and a nil error. It
-// never reads the serial attribute.
+// err is ctx.Err() when ctx is done before the directory is listed, or the os
+// error when the directory cannot be listed; nothing else is an error. A ctx
+// cancelled after listing returns what was collected so far and a nil error.
+// It never reads the serial attribute.
 func Devices(ctx context.Context, root string) (devices []Device, truncated bool, err error) {
 	if cancelled(ctx) {
-		return nil, true, nil
+		return nil, false, ctx.Err()
 	}
 	base := filepath.Join(root, usbDevicesDir)
 	names, truncated, err := listDir(base)
@@ -117,12 +118,13 @@ func Devices(ctx context.Context, root string) (devices []Device, truncated bool
 // SoundCards lists the ALSA cards under <root>/sys/class/sound in numeric
 // order, capped at maxSoundCards. USBBusID links a card to its USB device via
 // CardUSBDevice. truncated reports a cap, an oversized directory (the class
-// directory or a card directory) or cancellation. err is the os error when the
-// class directory cannot be listed; nothing else is an error. A cancelled ctx
-// returns what was collected so far and a nil error.
+// directory or a card directory) or cancellation. err is ctx.Err() when ctx is
+// done before the class directory is listed, or the os error when it cannot be
+// listed; nothing else is an error. A ctx cancelled after listing returns what
+// was collected so far and a nil error.
 func SoundCards(ctx context.Context, root string) (cards []SoundCard, truncated bool, err error) {
 	if cancelled(ctx) {
-		return nil, true, nil
+		return nil, false, ctx.Err()
 	}
 	base := filepath.Join(root, soundClassDir)
 	names, truncated, err := listDir(base)
@@ -170,8 +172,9 @@ func SoundCards(ctx context.Context, root string) (cards []SoundCard, truncated 
 	return cards, truncated, nil
 }
 
-// cancelled reports whether ctx is done. The listers return partial results
-// without an error on cancellation, so this is a bool rather than ctx.Err().
+// cancelled reports whether ctx is done. Once a listing has started the
+// listers return partial results without an error on cancellation, so this is
+// a bool rather than ctx.Err().
 func cancelled(ctx context.Context) bool {
 	select {
 	case <-ctx.Done():
