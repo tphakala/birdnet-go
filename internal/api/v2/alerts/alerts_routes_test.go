@@ -255,7 +255,6 @@ func TestGetAlertStatusReportsEngineFlag(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Not parallel: sets the process-global engine flag.
 			notification.SetAlertEngineActive(tc.active)
 			t.Cleanup(func() { notification.SetAlertEngineActive(false) })
 

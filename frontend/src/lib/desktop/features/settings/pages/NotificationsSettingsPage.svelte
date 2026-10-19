@@ -410,9 +410,9 @@
   // Whether the alert engine handles detection notifications; null while unknown.
   // When true, the legacy detection filters on the Channels tab have no effect.
   let alertEngineActive = $state<boolean | null>(null);
-  let hasLegacyFilterValues = $derived(
-    (pushSettings.minConfidenceThreshold ?? 0) > 0 || (pushSettings.speciesCooldownMinutes ?? 0) > 0
-  );
+  let legacyMinConfidence = $derived(pushSettings.minConfidenceThreshold ?? 0);
+  let legacyCooldownMinutes = $derived(pushSettings.speciesCooldownMinutes ?? 0);
+  let hasLegacyFilterValues = $derived(legacyMinConfidence > 0 || legacyCooldownMinutes > 0);
 
   let historyData = $state<AlertHistoryType[]>([]);
   let historyTotal = $state(0);
@@ -1470,7 +1470,7 @@
 
           <!-- Detection Filters Section: replaced by a pointer to the Rules tab
                while the alert engine is active, since the filters are unused then -->
-          {#if pushSettings.enabled && alertEngineActive === true}
+          {#if pushSettings.enabled && alertEngineActive}
             <ErrorAlert type="info" role="note">
               {#snippet children()}
                 <div class="space-y-2">
@@ -1484,8 +1484,8 @@
                   {#if hasLegacyFilterValues}
                     <p>
                       {t('settings.notifications.push.rulesNotice.previousFilters', {
-                        confidence: Math.round((pushSettings.minConfidenceThreshold ?? 0) * 100),
-                        minutes: pushSettings.speciesCooldownMinutes ?? 0,
+                        confidence: Math.round(legacyMinConfidence * 100),
+                        minutes: legacyCooldownMinutes,
                       })}
                     </p>
                   {/if}
