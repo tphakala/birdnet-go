@@ -47,15 +47,15 @@ func TestCollectHardwareInventory(t *testing.T) {
 		root := t.TempDir()
 		populateHardwareTree(t, root)
 		usb, cards := collectHardwareInventory(t.Context(), "darwin", root)
-		assert.Equal(t, &USBInventory{Reason: hardwareReasonUnsupportedOS}, usb)
-		assert.Equal(t, &SoundCardInventory{Reason: hardwareReasonUnsupportedOS}, cards)
+		assert.Equal(t, &USBInventory{Reason: "unsupported_os"}, usb)
+		assert.Equal(t, &SoundCardInventory{Reason: "unsupported_os"}, cards)
 	})
 
 	t.Run("sysfs not visible", func(t *testing.T) {
 		t.Parallel()
 		usb, cards := collectHardwareInventory(t.Context(), osLinux, t.TempDir())
-		assert.Equal(t, &USBInventory{Reason: hardwareReasonNotVisible}, usb)
-		assert.Equal(t, &SoundCardInventory{Reason: hardwareReasonNotVisible}, cards)
+		assert.Equal(t, &USBInventory{Reason: "not_visible"}, usb)
+		assert.Equal(t, &SoundCardInventory{Reason: "not_visible"}, cards)
 	})
 
 	t.Run("sysfs directories unreadable", func(t *testing.T) {
@@ -66,8 +66,8 @@ func TestCollectHardwareInventory(t *testing.T) {
 			require.NoError(t, os.WriteFile(filepath.Join(root, p), nil, 0o644))
 		}
 		usb, cards := collectHardwareInventory(t.Context(), osLinux, root)
-		assert.Equal(t, &USBInventory{Reason: hardwareReasonUnreadable}, usb)
-		assert.Equal(t, &SoundCardInventory{Reason: hardwareReasonUnreadable}, cards)
+		assert.Equal(t, &USBInventory{Reason: "unreadable"}, usb)
+		assert.Equal(t, &SoundCardInventory{Reason: "unreadable"}, cards)
 	})
 
 	t.Run("empty directories", func(t *testing.T) {
@@ -134,11 +134,50 @@ func TestCollectHardwareInventory(t *testing.T) {
 			{Index: 1, ID: "Device", USBBusID: "3-2", HasCapture: true},
 		}}, cards)
 
-		raw, err := json.Marshal(SystemInfo{USB: usb, SoundCards: cards})
+		raw, err := json.Marshal(struct {
+			USB        *USBInventory       `json:"usb"`
+			SoundCards *SoundCardInventory `json:"sound_cards"`
+		}{usb, cards})
 		require.NoError(t, err)
-		assert.Contains(t, string(raw), `"usb":`)
-		assert.Contains(t, string(raw), `"sound_cards":`)
-		assert.Contains(t, string(raw), `"speed_mbps":"480"`)
+		assert.JSONEq(t, `{
+			"usb": {"available": true, "devices": [{
+				"bus_id": "3-2", "vendor_id": "0d8c", "product_id": "0014",
+				"manufacturer": "C-Media", "product": "USB Audio",
+				"speed_mbps": "480", "device_class": "00"}]},
+			"sound_cards": {"available": true, "cards": [
+				{"index": 0, "has_capture": false},
+				{"index": 1, "id": "Device", "usb_bus_id": "3-2", "has_capture": true}]}
+		}`, string(raw))
 		assert.NotContains(t, string(raw), hardwareSerialMarker)
+
+		// A device with no readable attributes keeps only its bus id.
+		bare, err := json.Marshal(USBDeviceInfo{BusID: "1-1"})
+		require.NoError(t, err)
+		assert.JSONEq(t, `{"bus_id": "1-1"}`, string(bare))
+
+		full, err := json.Marshal(SystemInfo{USB: usb, SoundCards: cards})
+		require.NoError(t, err)
+		assert.Contains(t, string(full), `"usb":{`)
+		assert.Contains(t, string(full), `"sound_cards":{`)
 	})
+}
+
+func TestCollect_PassesContextToHardwareInventory(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	c := NewCollector(t.TempDir(), t.TempDir(), "test-system", "test-version")
+
+	dump, err := c.Collect(ctx, CollectorOptions{IncludeSystemInfo: true})
+
+	require.NoError(t, err)
+	require.NotNil(t, dump.SystemInfo.USB)
+	require.NotNil(t, dump.SystemInfo.SoundCards)
+	assert.Equal(t, "cancelled", dump.SystemInfo.USB.Reason)
+	assert.Equal(t, "cancelled", dump.SystemInfo.SoundCards.Reason)
+
+	raw, err := json.Marshal(dump.SystemInfo)
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"usb":{"available":false,"reason":"cancelled"}`)
+	assert.Contains(t, string(raw), `"sound_cards":{"available":false,"reason":"cancelled"}`)
 }
