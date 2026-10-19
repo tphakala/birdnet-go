@@ -433,7 +433,7 @@ Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-dsp
 
-License: https://github.com/tphakala/go-audio-dsp/blob/v0.9.0/LICENSE
+License: https://github.com/tphakala/go-audio-dsp/blob/v0.10.1/LICENSE
 Source: Apache-2.0
 
 ### github.com/tphakala/go-audio-resampler
@@ -483,7 +483,7 @@ Source: MIT
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.13.0/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.14.0/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool
