@@ -1241,7 +1241,10 @@ func (g *Generator) waitWithTimeout(cmd *exec.Cmd, timeout time.Duration) {
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()
 			select {
-			case <-done:
+			case err := <-done:
+				g.log().Debug("Process reaped after kill",
+					logger.Int("pid", pid),
+					logger.Error(err))
 			case <-time.After(1 * time.Second):
 				g.log().Error("Failed to reap process after kill",
 					logger.Int("pid", pid))

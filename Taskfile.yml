@@ -9,7 +9,7 @@ vars:
   # .github/workflows/golangci-lint.yml, .husky/pre-commit and
   # .devcontainer/postCreateCommand.sh;
   # .github/workflows/golangci-lint-version.yml fails when they differ.
-  GOLANGCI_LINT_VERSION: '2.14.0'
+  GOLANGCI_LINT_VERSION: '2.15.0'
   LABELS_DIR: internal/classifier/data/labels
   AVICOMMONS_DATA_DIR: internal/imageprovider/data
   AVICOMMONS_JSON_FILE: latest.json

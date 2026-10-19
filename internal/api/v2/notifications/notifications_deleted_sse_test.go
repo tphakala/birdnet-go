@@ -129,7 +129,8 @@ func TestStreamNotifications_PushesServerDeletes(t *testing.T) {
 
 	cancel()
 	select {
-	case <-errCh:
+	case err := <-errCh:
+		require.NoError(t, err, "stream handler should end cleanly after the client left")
 	case <-time.After(3 * time.Second):
 		require.Fail(t, "stream handler did not return after the client left")
 	}
