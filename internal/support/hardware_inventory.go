@@ -59,7 +59,7 @@ func collectHardwareInventory(ctx context.Context, goos, root string) (*USBInven
 // hardwareReason maps a sysfs listing error, or the context error returned when
 // the dump context ended before listing, to a reason value.
 func hardwareReason(err error) string {
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.IsContextCancellation(err) {
 		return hardwareReasonCancelled
 	}
 	if errors.Is(err, fs.ErrNotExist) {
