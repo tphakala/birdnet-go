@@ -45,6 +45,7 @@ func TestScrubMetadataMasksUSBSerialInDeviceChanges(t *testing.T) {
 			},
 			"realtime.audio.sources.1.device": map[string]any{"old": nil, "new": "hw:1,0"},
 		},
+		"devices": []any{"usb-id:0d8c:0014:LIST789", "hw:2,0"},
 	}
 
 	got := p.scrubMetadata(metadata)
@@ -56,4 +57,5 @@ func TestScrubMetadataMasksUSBSerialInDeviceChanges(t *testing.T) {
 		"new": "usb-id:046d:0825:<redacted>",
 	}, changes["realtime.audio.sources.0.device"])
 	assert.Equal(t, map[string]any{"old": nil, "new": "hw:1,0"}, changes["realtime.audio.sources.1.device"])
+	assert.Equal(t, []any{"usb-id:0d8c:0014:<redacted>", "hw:2,0"}, got["devices"])
 }
