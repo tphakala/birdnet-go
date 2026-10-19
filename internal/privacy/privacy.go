@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -1058,9 +1059,16 @@ const usbIDTokenPrefix = "usb-id:"
 // redactedUSBSerial replaces the serial of a usb-id device token.
 const redactedUSBSerial = "<redacted>"
 
+// usbIDHexGroup matches one usb-id vendor or product id: usbIDHexLen hex digits.
+var usbIDHexGroup = "[0-9A-Fa-f]{" + strconv.Itoa(usbIDHexLen) + "}"
+
 // usbIDTokenPattern matches a usb-id token up to its serial:
-// "usb-id:<vendor>:<product>:" with usbIDHexLen hex digits for each id.
-var usbIDTokenPattern = regexp.MustCompile(`usb-id:[0-9A-Fa-f]{4}:[0-9A-Fa-f]{4}:`)
+// "usb-id:<vendor>:<product>:".
+var usbIDTokenPattern = regexp.MustCompile(regexp.QuoteMeta(usbIDTokenPrefix) + usbIDHexGroup + ":" + usbIDHexGroup + ":")
+
+// usbSerialQuotes are the quote bytes that, right before a usb-id token, make
+// its serial a quoted value (see usbIDSerialEnd).
+const usbSerialQuotes = "\"'`"
 
 // RedactUSBDeviceID masks the serial of a whole "usb-id:<vendor>:<product>:<serial>"
 // device token, giving "usb-id:<vendor>:<product>:<redacted>". Anything that is
@@ -1107,7 +1115,7 @@ func isSerialTerminator(b byte) bool {
 // Otherwise the serial ends at the first isSerialTerminator byte, so an
 // unquoted serial that contains a space is masked only up to the space.
 func usbIDSerialEnd(message string, i, s int) int {
-	if i > 0 && strings.IndexByte("\"'`", message[i-1]) >= 0 {
+	if i > 0 && strings.IndexByte(usbSerialQuotes, message[i-1]) >= 0 {
 		quote := message[i-1]
 		for k := s; k < len(message); k++ {
 			switch message[k] {
