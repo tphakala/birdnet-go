@@ -114,6 +114,8 @@ func TestSanitizeText(t *testing.T) {
 		{"128 runes kept", strings.Repeat("x", 128), strings.Repeat("x", 128)},
 		{"129 runes cut", strings.Repeat("x", 129), strings.Repeat("x", 128)},
 		{"space after cut trimmed", strings.Repeat("x", 127) + "  y", strings.Repeat("x", 127)},
+		{"leading spaces after a dropped mark trimmed", "\u200e  Foo", "Foo"},
+		{"trailing space before a dropped control trimmed", "Foo \x1b", "Foo"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -167,6 +169,21 @@ func TestSoundCards_NumericOrderUSBLinkAndCapture(t *testing.T) {
 	assert.Equal(t, want, got)
 }
 
+func TestSoundCards_IgnoresUSBAncestorWithoutBusIDName(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	// An ancestor with idVendor whose name is not a kernel USB device name.
+	dev := filepath.Join(root, "sys", "devices", "pci0", "not a bus id")
+	require.NoError(t, os.MkdirAll(dev, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dev, "idVendor"), []byte("0d8c\n"), 0o644))
+	writeSoundCard(t, root, 0, "Odd", dev)
+
+	got, _, err := SoundCards(t.Context(), root)
+
+	require.NoError(t, err)
+	assert.Equal(t, []SoundCard{{Index: 0, ID: "Odd"}}, got)
+}
+
 func TestInventory_Caps(t *testing.T) {
 	t.Parallel()
 	makeDevices := func(t *testing.T, n int) string {
@@ -206,11 +223,35 @@ func TestInventory_Caps(t *testing.T) {
 		assert.Equal(t, "1-1000", got[0].BusID)
 		assert.Equal(t, "1-1127", got[127].BusID)
 	})
-	t.Run("1025 directory entries flag truncation", func(t *testing.T) {
+	t.Run("device directory over 1024 entries flags truncation", func(t *testing.T) {
 		t.Parallel()
-		_, truncated, err := Devices(t.Context(), makeDevices(t, 1025))
+		// Mostly interface entries and four devices, so only the directory
+		// listing cap, not the device cap, can set truncated.
+		root := makeDevices(t, 0)
+		dir := filepath.Join(root, "sys", "bus", "usb", "devices")
+		for i := range 1021 {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "1-1:1."+strconv.Itoa(i)), nil, 0o644))
+		}
+		for i := range 4 {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "2-"+strconv.Itoa(i+1)), nil, 0o644))
+		}
+		got, truncated, err := Devices(t.Context(), root)
 		require.NoError(t, err)
 		assert.True(t, truncated)
+		assert.LessOrEqual(t, len(got), 4)
+	})
+	t.Run("sound class directory over 1024 entries flags truncation", func(t *testing.T) {
+		t.Parallel()
+		// No cards at all, so only the directory listing cap can set truncated.
+		root := makeCards(t, 0)
+		dir := filepath.Join(root, "sys", "class", "sound")
+		for i := range 1025 {
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "controlC"+strconv.Itoa(i)), nil, 0o644))
+		}
+		got, truncated, err := SoundCards(t.Context(), root)
+		require.NoError(t, err)
+		assert.True(t, truncated)
+		assert.Empty(t, got)
 	})
 	t.Run("32 cards fit", func(t *testing.T) {
 		t.Parallel()
