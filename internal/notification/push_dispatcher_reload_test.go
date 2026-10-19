@@ -94,3 +94,44 @@ func TestReconfigureFromSettings_MultipleReconfigures(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, globalPushDispatcher)
 }
+
+// TestReconfigureFromSettings_AppliesProviderEnabledToggle verifies that the
+// registered provider set follows the enabled flag of the settings passed to
+// each reconfigure: enabling a provider builds it, disabling removes it.
+func TestReconfigureFromSettings_AppliesProviderEnabledToggle(t *testing.T) {
+	// Service first, dispatcher reset second: cleanups run LIFO, so the
+	// dispatcher is stopped before the service it subscribed to.
+	installIsolatedService(t, NewService(DefaultServiceConfig()))
+	resetDispatcherState(t)
+
+	settings := &conf.Settings{}
+	settings.Notification.Push.Enabled = true
+	settings.Notification.Push.Providers = []conf.PushProviderConfig{{
+		Type:      "webhook",
+		Enabled:   false,
+		Name:      testPushWebhookName,
+		Endpoints: []conf.WebhookEndpointConfig{{URL: testPushWebhookURL}},
+	}}
+
+	providerNames := func() []string {
+		dispatcherMu.Lock()
+		defer dispatcherMu.Unlock()
+		require.NotNil(t, globalPushDispatcher)
+		names := make([]string, 0, len(globalPushDispatcher.providers))
+		for i := range globalPushDispatcher.providers {
+			names = append(names, globalPushDispatcher.providers[i].name)
+		}
+		return names
+	}
+
+	require.NoError(t, ReconfigureFromSettings(settings))
+	assert.Empty(t, providerNames(), "disabled provider must not be registered")
+
+	settings.Notification.Push.Providers[0].Enabled = true
+	require.NoError(t, ReconfigureFromSettings(settings))
+	assert.Equal(t, []string{testPushWebhookName}, providerNames(), "enabling a provider must build it on the next reconfigure")
+
+	settings.Notification.Push.Providers[0].Enabled = false
+	require.NoError(t, ReconfigureFromSettings(settings))
+	assert.Empty(t, providerNames(), "disabling a provider must remove it on the next reconfigure")
+}

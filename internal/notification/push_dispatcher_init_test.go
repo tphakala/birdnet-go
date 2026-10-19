@@ -1,6 +1,7 @@
 package notification
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"testing"
@@ -745,4 +746,129 @@ func TestRegisterProvidersWithHealthChecker(t *testing.T) {
 		all := hc.GetAllProviderHealth()
 		assert.Len(t, all, 2)
 	})
+}
+
+// Fixture names and fake values shared by the push provider build and reload tests.
+// The secret variables only matter for whether they are set.
+const (
+	testPushSecretSetEnv   = "TEST_PUSH_PROVIDER_TOKEN_SET"
+	testPushSecretUnsetEnv = "TEST_PUSH_PROVIDER_TOKEN_UNSET"
+	testPushSecretValue    = "fake-token-value"
+	testPushWebhookURL     = "https://hooks.example.invalid/x"
+	testPushNtfyURL        = "ntfy://ntfy.sh/test-topic"
+	testPushNtfyName       = "test-ntfy"
+	testPushWebhookName    = "test-webhook"
+	testPushScriptName     = "test-script"
+)
+
+// testBearerWebhookProvider returns a webhook provider config with one bearer
+// endpoint whose token is the given value (typically a ${VAR} reference).
+func testBearerWebhookProvider(name string, enabled bool, token string) conf.PushProviderConfig {
+	return conf.PushProviderConfig{
+		Type:    "webhook",
+		Enabled: enabled,
+		Name:    name,
+		Endpoints: []conf.WebhookEndpointConfig{{
+			URL:  testPushWebhookURL,
+			Auth: conf.WebhookAuthConfig{Type: authTypeBearer, Token: token},
+		}},
+	}
+}
+
+// TestInitializeEnhancedProviders_SkipsDisabledAndBuildsEnabled verifies that a
+// disabled provider is never built (no secret resolution or template parsing,
+// and so no warning or error output) while enabled providers are
+// still built and misconfigured enabled providers still fail loudly.
+func TestInitializeEnhancedProviders_SkipsDisabledAndBuildsEnabled(t *testing.T) {
+	// Not parallel: t.Setenv cannot be used in parallel tests.
+	t.Setenv(testPushSecretSetEnv, testPushSecretValue)
+	t.Setenv(testPushSecretUnsetEnv, "") // empty counts as missing
+
+	unsetRef := "${" + testPushSecretUnsetEnv + "}"
+	setRef := "${" + testPushSecretSetEnv + "}"
+
+	ntfy := conf.PushProviderConfig{
+		Type:    "shoutrrr",
+		Enabled: true,
+		Name:    testPushNtfyName,
+		URLs:    []string{testPushNtfyURL},
+	}
+
+	tests := []struct {
+		name          string
+		providers     []conf.PushProviderConfig
+		wantNames     []string
+		wantLogOutput bool
+	}{
+		{
+			name: "ntfy_enabled_with_disabled_slack_example",
+			providers: []conf.PushProviderConfig{
+				ntfy,
+				testBearerWebhookProvider("slack-webhook", false, unsetRef),
+			},
+			wantNames: []string{testPushNtfyName},
+		},
+		{
+			name: "disabled_webhook_with_invalid_template",
+			providers: []conf.PushProviderConfig{{
+				Type:      "webhook",
+				Enabled:   false,
+				Name:      testPushWebhookName,
+				Endpoints: []conf.WebhookEndpointConfig{{URL: testPushWebhookURL}},
+				Template:  "{{",
+			}},
+		},
+		{
+			name: "disabled_unknown_type",
+			providers: []conf.PushProviderConfig{{
+				Type:    "pushover",
+				Enabled: false,
+				Name:    "test-unknown",
+			}},
+		},
+		{
+			name:      "enabled_webhook_with_set_secret",
+			providers: []conf.PushProviderConfig{testBearerWebhookProvider(testPushWebhookName, true, setRef)},
+			wantNames: []string{testPushWebhookName},
+		},
+		{
+			name:          "enabled_webhook_with_unset_secret",
+			providers:     []conf.PushProviderConfig{testBearerWebhookProvider(testPushWebhookName, true, unsetRef)},
+			wantLogOutput: true,
+		},
+		{
+			name: "enabled_script_with_command",
+			providers: []conf.PushProviderConfig{{
+				Type:    "script",
+				Enabled: true,
+				Name:    testPushScriptName,
+				Command: "/bin/true",
+			}},
+			wantNames: []string{testPushScriptName},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			d := &pushDispatcher{log: logger.NewSlogLogger(&buf, logger.LogLevelWarn, time.UTC)}
+
+			settings := &conf.Settings{}
+			settings.Notification.Push.Enabled = true
+			settings.Notification.Push.Providers = tt.providers
+
+			built := d.initializeEnhancedProviders(settings, nil)
+
+			gotNames := make([]string, 0, len(built))
+			for i := range built {
+				gotNames = append(gotNames, built[i].prov.GetName())
+			}
+			assert.ElementsMatch(t, tt.wantNames, gotNames)
+			if tt.wantLogOutput {
+				assert.NotEmpty(t, buf.String(), "an enabled misconfigured provider must log")
+			} else {
+				assert.Empty(t, buf.String(), "no warning or error output expected")
+			}
+		})
+	}
 }
