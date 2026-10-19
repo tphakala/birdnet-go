@@ -633,6 +633,9 @@ func ScrubStandaloneIPs(message string) string {
 // as they are and the text around them is scrubbed on its own, so a pair
 // that follows a timestamp is still replaced. Standalone slash dates are kept
 // too, and so are integer ALSA selectors such as "hw:1,0" (see isALSASelector).
+// A number left over at the end of a run of numbers is replaced with the pair
+// before it (see scrubCoordinatePairs), so a count in front of a pair does not
+// leave the longitude in clear.
 func ScrubCoordinates(message string) string {
 	protected := protectedDateTimeSpans(message)
 	if len(protected) == 0 {
@@ -658,10 +661,22 @@ const coordinatePlaceholder = "[LAT],[LON]"
 // coordinate; conf/validate.go already treats integer pairs as selectors.
 var alsaSelectorPrefixes = []string{"hw:", "plughw:", "dsnoop:", "dmix:"}
 
+// trailingNumberPattern matches the separator and the one number right after a
+// replaced coordinate match. Unlike the numbers in coordinatesPattern it takes a
+// whole number of any length, so a tail such as "1000.5" is consumed whole.
+var trailingNumberPattern = regexp.MustCompile(`^[,\s]+-?\d+\.?\d*`)
+
 // scrubCoordinatePairs replaces the coordinate pairs in seg, which is
 // message[offset:offset+len(seg)], except integer ALSA selectors. The selector
 // check sees the whole message, so the text before the segment is context. It
 // returns seg itself when nothing matches.
+//
+// coordinatesPattern pairs the numbers of a run left to right, so in a run of an
+// odd count (a count before a real pair: "count 5, 60.1699,24.9384") the last
+// number is not part of any match and would stay in clear. A replaced match
+// therefore also absorbs one number that follows it after commas or spaces,
+// unless that number is where the next match starts. This fails closed: no
+// digit of a number run survives, and a number right after a pair is lost too.
 func scrubCoordinatePairs(message, seg string, offset int) string {
 	matches := coordinatesPattern.FindAllStringIndex(seg, -1)
 	if len(matches) == 0 {
@@ -669,14 +684,21 @@ func scrubCoordinatePairs(message, seg string, offset int) string {
 	}
 	var out strings.Builder
 	pos := 0
-	for _, m := range matches {
+	for i, m := range matches {
 		out.WriteString(seg[pos:m[0]])
+		pos = m[1]
 		if isALSASelector(message, offset+m[0], offset+m[1]) {
 			out.WriteString(seg[m[0]:m[1]])
-		} else {
-			out.WriteString(coordinatePlaceholder)
+			continue
 		}
-		pos = m[1]
+		out.WriteString(coordinatePlaceholder)
+		next := len(seg)
+		if i+1 < len(matches) {
+			next = matches[i+1][0]
+		}
+		if tail := trailingNumberPattern.FindStringIndex(seg[pos:]); len(tail) > 0 && pos+tail[1] <= next {
+			pos += tail[1]
+		}
 	}
 	out.WriteString(seg[pos:])
 	return out.String()

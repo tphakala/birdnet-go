@@ -1027,6 +1027,51 @@ func TestScrubCoordinates_StillScrubsWithNeighbors(t *testing.T) {
 	}
 }
 
+func TestScrubCoordinates_ScrubsPairAfterALeadingNumber(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"count and comma", "count 5, 60.1699,24.9384", "count [LAT],[LON]"},
+		{"bare run", "5, 60.1699, 24.9384", "[LAT],[LON]"},
+		{"glued integer", "x 1,60.1699,24.9384", "x [LAT],[LON]"},
+		{"count and space", "count 5 60.1699,24.9384", "count [LAT],[LON]"},
+		{"space only", "count 5 60.1699 24.9384", "count [LAT],[LON]"},
+		{"negative values", "5,-33.86,151.21", "[LAT],[LON]"},
+		{"decimal first", "0.5, 60.1699, 24.9384", "[LAT],[LON]"},
+		{"listed pairs are not merged", "60.1699,24.9384, 61.4981,23.7610", "[LAT],[LON], [LAT],[LON]"},
+		{"long tail number is consumed whole", "60.1699, 24.9384, 1000.5", "[LAT],[LON]"},
+		{"kept selector, then a pair", "hw:1,0,0 60.1699,24.9384", "hw:1,0,[LAT],[LON]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ScrubCoordinates(tt.input))
+		})
+	}
+
+	// No digit of a number run survives, whatever the run length and separator.
+	numbers := []string{"5", "60.1699", "-24.9384", "0.5", "151", "-33.86"}
+	for runLen := 2; runLen <= 6; runLen++ {
+		for start := range numbers {
+			for _, sep := range []string{",", ", ", " "} {
+				parts := make([]string, runLen)
+				for i := range parts {
+					parts[i] = numbers[(start+i)%len(numbers)]
+				}
+				input := "count " + strings.Join(parts, sep) + " end"
+				t.Run(input, func(t *testing.T) {
+					t.Parallel()
+					assert.NotRegexp(t, `\d`, ScrubCoordinates(input))
+				})
+			}
+		}
+	}
+}
+
 func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
 	t.Parallel()
 
