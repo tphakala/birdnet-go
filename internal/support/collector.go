@@ -1005,8 +1005,9 @@ func (c *Collector) scrubConfig(config map[string]any) map[string]any {
 //   - IP address lists (trustedproxies, plainhttpsessionclients) keep their
 //     length, each entry replaced by its address class; the cloudflare preset is kept
 //
-// For non-sensitive keys, it recursively processes nested structures
-// and sanitizes RTSP URLs in string values.
+// For non-sensitive keys, it recursively processes nested structures,
+// sanitizes RTSP URLs in string values and masks the USB serial in "usb-id:"
+// device tokens (privacy.RedactUSBDeviceID).
 func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) any {
 	// Check if key is sensitive using word boundary matching
 	lowerKey := strings.ToLower(key)
@@ -1113,8 +1114,10 @@ func (c *Collector) processNonSensitiveValue(key string, value any, sensitiveKey
 		}
 		return scrubbed
 	case string:
-		// Sanitize RTSP URLs in all string values (existing behavior)
-		return privacy.SanitizeRTSPUrls(v)
+		// Sanitize RTSP URLs and mask USB serials in all string values. A device
+		// value (audio source, sources[].device) is exactly one identifier, so the
+		// whole-value helper applies and also masks a serial that contains spaces.
+		return privacy.RedactUSBDeviceID(privacy.SanitizeRTSPUrls(v))
 	default:
 		return value
 	}

@@ -121,6 +121,7 @@ BirdNET-Go follows **Privacy by Design** principles:
 
 - All sensitive configuration keys automatically redacted
 - URLs anonymized in log files
+- USB serial numbers in audio device identifiers are masked in the configuration and log files; the USB vendor and product IDs are kept
 - User control over what data to include in support packages
 
 ### ❌ Data We NEVER Collect (Telemetry)

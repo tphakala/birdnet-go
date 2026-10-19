@@ -2663,13 +2663,87 @@ func TestScrubMessage_LogLinesKeepDeviceIDs(t *testing.T) {
 
 	t.Run("scrubs private data beside device ids", func(t *testing.T) {
 		t.Parallel()
-		in := "10/16/2026 00:12:34 (hw:1,0) usb-id:0d8c:0014:<redacted> peer 2001:db8::1 at 60.1699,24.9384 file /home/john/clip.wav"
+		in := "10/16/2026 00:12:34 (hw:1,0) usb-id:0d8c:0014:SN12345 peer 2001:db8::1 at 60.1699,24.9384 file /home/john/clip.wav"
 		got := ScrubMessage(in)
 		assert.Contains(t, got, "10/16/2026 00:12:34 (hw:1,0) usb-id:0d8c:0014:<redacted> peer ")
-		for _, leak := range []string{"2001:db8::1", "60.1699", "24.9384", "john"} {
+		for _, leak := range []string{"SN12345", "2001:db8::1", "60.1699", "24.9384", "john"} {
 			assert.NotContains(t, got, leak)
 		}
 	})
+}
+
+func TestScrubMessage_MasksUSBIDSerials(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"bare token", "usb-id:0d8c:0014:SN12345", "usb-id:0d8c:0014:<redacted>"},
+		{"dots dashes underscores belong to the serial", "opened usb-id:0d8c:0014:SN-1.2_3 ok", "opened usb-id:0d8c:0014:<redacted> ok"},
+		{"quoted serial with a space", `{"id":"usb-id:0d8c:0014:A1 B2","x":1}`, `{"id":"usb-id:0d8c:0014:<redacted>","x":1}`},
+		{"nested JSON value ends at the escaped quote", `{\"id\":\"usb-id:0d8c:0014:SN1\"}`, `{\"id\":\"usb-id:0d8c:0014:<redacted>\"}`},
+		{"closing bracket ends the serial", "(usb-id:0d8c:0014:SN1)", "(usb-id:0d8c:0014:<redacted>)"},
+		{"comma ends the serial and the scan continues", "usb-id:0d8c:0014:SN1,usb-id:046d:0825:SN2", "usb-id:0d8c:0014:<redacted>,usb-id:046d:0825:<redacted>"},
+		{"hex serial keeps the ids", "usb-id:046d:0825:ab12", "usb-id:046d:0825:<redacted>"},
+		{"backtick opens quoted mode", "`usb-id:0d8c:0014:A1 B2`", "`usb-id:0d8c:0014:<redacted>`"},
+		{"other escape stays inside the serial", `{"id":"usb-id:0d8c:0014:A1\\B2"}`, `{"id":"usb-id:0d8c:0014:<redacted>"}`},
+		{"masked token in quoted prose is kept", `msg="usb-id:0d8c:0014:<redacted> failed"`, `msg="usb-id:0d8c:0014:<redacted> failed"`},
+		{"masked token before a period is kept", "device usb-id:0d8c:0014:<redacted>.", "device usb-id:0d8c:0014:<redacted>."},
+		{"unterminated quoted serial runs to the end", `id="usb-id:0d8c:0014:A1 B2`, `id="usb-id:0d8c:0014:<redacted>`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubMessage(tt.input)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, got, ScrubMessage(got), "second pass must not change the output")
+		})
+	}
+}
+
+// The later stages of ScrubMessage rewrite hex-and-colon text, so the stage is
+// checked on its own for text that is not a well-formed usb-id token.
+func TestScrubUSBIDSerials_LeavesMalformedTokens(t *testing.T) {
+	t.Parallel()
+
+	for _, in := range []string{
+		"usb-id:zzzz:0014:SN1",
+		"usb-id:0d8c:zzzz:SN1",
+		"usb-id:0d8c",
+		"usb-id:0d8c:0014",
+		"no token here",
+	} {
+		t.Run(in, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, in, scrubUSBIDSerials(in))
+		})
+	}
+}
+
+func TestRedactUSBDeviceID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"serial is masked", "usb-id:0b33:0024:ABC123", "usb-id:0b33:0024:<redacted>"},
+		{"empty serial is unchanged", "usb-id:0d8c:0014:", "usb-id:0d8c:0014:"},
+		{"usb-path is unchanged", "usb-path:usb-xhci-hcd.0-1", "usb-path:usb-xhci-hcd.0-1"},
+		{"device name is unchanged", "USB Audio Device", "USB Audio Device"},
+		{"malformed usb-id is unchanged", "usb-id:onlyone", "usb-id:onlyone"},
+		{"serial with a space is masked whole", "usb-id:0d8c:0014:A1 B2", "usb-id:0d8c:0014:<redacted>"},
+		{"already masked is unchanged", "usb-id:0d8c:0014:<redacted>", "usb-id:0d8c:0014:<redacted>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, RedactUSBDeviceID(tt.in))
+		})
+	}
 }
 
 func TestScrubStandaloneIPs_IPv4LeadingZerosStillHashed(t *testing.T) {

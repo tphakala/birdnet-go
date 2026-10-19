@@ -15,6 +15,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // Stable token prefixes persisted in conf.AudioSourceConfig.Device. A device
@@ -80,21 +82,10 @@ func deviceDedupKey(name string, ident usbIdentity) string {
 // usb-id token embeds the USB serial number, a persistent per-unit hardware
 // identifier, so the serial is masked before the value reaches logs, error
 // context, or support bundles. Bus-path and legacy ALSA/name identifiers carry
-// no such per-unit id and are returned unchanged.
+// no such per-unit id and are returned unchanged. The masking itself lives in
+// privacy.RedactUSBDeviceID, shared with the support dump.
 func redactDeviceID(deviceID string) string {
-	rest, ok := strings.CutPrefix(deviceID, usbIDTokenPrefix)
-	if !ok {
-		return deviceID
-	}
-	vendor, after, found := strings.Cut(rest, ":")
-	if !found {
-		return deviceID
-	}
-	product, serial, found := strings.Cut(after, ":")
-	if !found || serial == "" {
-		return deviceID
-	}
-	return usbIDTokenPrefix + vendor + ":" + product + ":<redacted>"
+	return privacy.RedactUSBDeviceID(deviceID)
 }
 
 // stableToken returns the preferred persisted identifier for this device, or ""
