@@ -76,7 +76,7 @@ func TestCardUSBDevice_NotFound(t *testing.T) {
 	})
 }
 
-// walkDepthLimit is the documented upward-walk bound as a literal rather than
+// walkDepthLimit is the upward-walk bound (12 in maxWalkDepth) as a literal rather than
 // maxWalkDepth, so changing the bound fails the depth test instead of silently
 // moving its fixture. The walk checks the card directory first, then its parents,
 // for this many directories in total.
