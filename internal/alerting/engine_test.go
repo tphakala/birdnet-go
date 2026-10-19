@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -275,12 +276,100 @@ func TestEngine_CooldownExpires(t *testing.T) {
 
 	// Manually expire cooldown by setting it in the past
 	engine.cooldownsMu.Lock()
-	engine.cooldowns["1"] = time.Now().Add(-2 * time.Second)
+	engine.cooldowns[cooldownKey(&rule, event)] = time.Now().Add(-2 * time.Second)
 	engine.cooldownsMu.Unlock()
 
 	engine.HandleEvent(event)
 
 	assert.Equal(t, 2, fireCount, "rule should fire again after cooldown expires")
+}
+
+func TestEngine_CooldownSweepDropsOnlyInactiveEntries(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const (
+			shortCooldownSec = 60
+			longCooldownSec  = 24 * 60 * 60
+			shortRuleID      = 1
+			longRuleID       = 2
+		)
+		shortRule := entities.AlertRule{
+			ID:          shortRuleID,
+			Enabled:     true,
+			ObjectType:  ObjectTypeStream,
+			TriggerType: TriggerTypeEvent,
+			EventName:   EventStreamDisconnected,
+			CooldownSec: shortCooldownSec,
+		}
+		longRule := entities.AlertRule{
+			ID:          longRuleID,
+			Enabled:     true,
+			ObjectType:  ObjectTypeStream,
+			TriggerType: TriggerTypeEvent,
+			EventName:   EventStreamError,
+			CooldownSec: longCooldownSec,
+		}
+		repo := newMockRepo(shortRule, longRule)
+
+		fired := make(map[uint]int)
+		engine := NewEngine(repo, func(rule *entities.AlertRule, _ *AlertEvent) {
+			fired[rule.ID]++
+		}, testLogger(), nil)
+		require.NoError(t, engine.RefreshRules(t.Context()))
+
+		send := func(eventName string) {
+			engine.HandleEvent(&AlertEvent{
+				ObjectType: ObjectTypeStream,
+				EventName:  eventName,
+				Properties: map[string]any{},
+				Timestamp:  time.Now(),
+			})
+		}
+		hasCooldown := func(ruleID uint) bool {
+			engine.cooldownsMu.RLock()
+			defer engine.cooldownsMu.RUnlock()
+			_, ok := engine.cooldowns[cooldownStateKey{ruleID: ruleID}]
+			return ok
+		}
+
+		send(EventStreamDisconnected)
+		send(EventStreamError)
+		require.Equal(t, 1, fired[shortRuleID])
+		require.Equal(t, 1, fired[longRuleID])
+		require.True(t, hasCooldown(shortRuleID))
+		require.True(t, hasCooldown(longRuleID))
+
+		// Well inside the interval nothing is swept, even an expired entry.
+		time.Sleep(2 * shortCooldownSec * time.Second)
+		send(EventStreamConnected)
+		assert.True(t, hasCooldown(shortRuleID), "no sweep before the interval has elapsed")
+
+		// An event that matches no rule still runs the sweep.
+		time.Sleep(cooldownPruneInterval - 2*shortCooldownSec*time.Second)
+		send(EventStreamConnected)
+		assert.False(t, hasCooldown(shortRuleID), "expired window should be swept")
+		assert.True(t, hasCooldown(longRuleID), "active window must survive the sweep")
+
+		send(EventStreamError)
+		assert.Equal(t, 1, fired[longRuleID], "swept neighbours must not reopen an active window")
+		send(EventStreamDisconnected)
+		require.True(t, hasCooldown(shortRuleID), "the swept rule starts a new window")
+
+		// The sweep records its time, so the next one waits a full interval.
+		time.Sleep(2 * shortCooldownSec * time.Second)
+		send(EventStreamConnected)
+		assert.True(t, hasCooldown(shortRuleID), "no sweep right after a sweep")
+
+		// Disabling a rule drops its entry although its window has not expired.
+		repo.mu.Lock()
+		repo.rules[1].Enabled = false
+		repo.mu.Unlock()
+		require.NoError(t, engine.RefreshRules(t.Context()))
+		time.Sleep(cooldownPruneInterval)
+		send(EventStreamConnected)
+		engine.cooldownsMu.RLock()
+		defer engine.cooldownsMu.RUnlock()
+		assert.Empty(t, engine.cooldowns, "entries of disabled rules should be swept")
+	})
 }
 
 func TestEngine_MultipleRulesMatchSameEvent(t *testing.T) {
@@ -1248,6 +1337,14 @@ func TestEngine_CooldownAtomicUnderConcurrency(t *testing.T) {
 
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
+	// Make a sweep due, with an entry of a rule that is not enabled for it to
+	// delete, so the sweep writes the map while the other goroutines acquire.
+	staleKey := cooldownStateKey{ruleID: rule.ID + 1}
+	engine.cooldownsMu.Lock()
+	engine.lastCooldownPrune = time.Now().Add(-2 * cooldownPruneInterval)
+	engine.cooldowns[staleKey] = time.Now()
+	engine.cooldownsMu.Unlock()
+
 	const goroutines = 50
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
@@ -1265,6 +1362,10 @@ func TestEngine_CooldownAtomicUnderConcurrency(t *testing.T) {
 	wg.Wait()
 
 	assert.Equal(t, int64(1), fireCount.Load(), "concurrent calls should fire exactly once with cooldown")
+
+	engine.cooldownsMu.RLock()
+	defer engine.cooldownsMu.RUnlock()
+	assert.NotContains(t, engine.cooldowns, staleKey, "the due sweep should drop the entry of a rule that is not enabled")
 }
 
 func TestEngine_MultipleRulesSameMetricNoDuplicateRecording(t *testing.T) {
