@@ -117,7 +117,7 @@ func TestCollectSystemInfoIncludesRuntimeEnv(t *testing.T) {
 	t.Setenv(conf.HuggingFaceEndpointEnvVar, "https://hf-mirror.example")
 
 	c := &Collector{}
-	info := c.collectSystemInfo()
+	info := c.collectSystemInfo(t.Context())
 
 	assert.Contains(t, info.RuntimeEnv, conf.HuggingFaceEndpointEnvVar)
 }

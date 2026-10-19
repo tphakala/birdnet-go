@@ -2772,7 +2772,7 @@
           "title": "A jelentés tartalma:",
           "applicationLogs": "**Alkalmazási naplók** - Legutóbbi hibák és debug információk",
           "configuration": "**Konfiguráció** - Az Ön beállításai személyes adatok eltávolításával",
-          "systemInfo": "**Rendszer információ** - OS verzió, memória és futásidejű részletek",
+          "systemInfo": "**Rendszer információ** - OS verzió, memória, hardver, csatlakoztatott USB-eszközök és hangkártyák, valamint futásidejű részletek",
           "notIncluded": "**NEM tartalmazza** - Hang fájlok, madár detektálások vagy személyes adatok"
         },
         "userMessage": {

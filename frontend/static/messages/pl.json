@@ -2772,7 +2772,7 @@
           "title": "Co jest zawarte w raporcie:",
           "applicationLogs": "**Logi aplikacji** - Ostatnie błędy i informacje debugowania",
           "configuration": "**Konfiguracja** - Twoje ustawienia z usuniętymi wrażliwymi danymi",
-          "systemInfo": "**Informacje systemowe** - Wersja systemu operacyjnego, pamięć i szczegóły środowiska uruchomieniowego",
+          "systemInfo": "**Informacje systemowe** - Wersja systemu operacyjnego, pamięć, sprzęt, podłączone urządzenia USB i karty dźwiękowe oraz szczegóły środowiska uruchomieniowego",
           "notIncluded": "**NIE zawiera** - Pliki audio, detekcje ptaków ani dane osobowe"
         },
         "userMessage": {

@@ -2772,7 +2772,7 @@
           "title": "Qué incluye el informe:",
           "applicationLogs": "**Registros de aplicación** - Errores recientes e información de depuración",
           "configuration": "**Configuración** - Tus ajustes con datos sensibles eliminados",
-          "systemInfo": "**Información del sistema** - Versión del SO, memoria y detalles de ejecución",
+          "systemInfo": "**Información del sistema** - Versión del SO, memoria, hardware, dispositivos USB conectados y tarjetas de sonido, y detalles de ejecución",
           "notIncluded": "**NO incluido** - Archivos de audio, detecciones de aves o datos personales"
         },
         "userMessage": {

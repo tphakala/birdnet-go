@@ -2772,7 +2772,7 @@
           "title": "Co je ve zprávě zahrnuto:",
           "applicationLogs": "**Záznamy aplikace** - nedávné chyby a ladicí informace",
           "configuration": "**Konfigurace** - vaše nastavení s odstraněnými citlivými daty",
-          "systemInfo": "**Informace o systému** - verze OS, paměť a podrobnosti o runtime",
+          "systemInfo": "**Informace o systému** - verze OS, paměť, hardware, připojená zařízení USB a zvukové karty a podrobnosti o runtime",
           "notIncluded": "**NENÍ zahrnuto** - zvukové soubory, detekce ptáků nebo osobní data"
         },
         "userMessage": {

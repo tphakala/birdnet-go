@@ -2772,7 +2772,7 @@
           "title": "Ce qui est inclus dans le rapport :",
           "applicationLogs": "**Journaux d'application** - Erreurs récentes et informations de débogage",
           "configuration": "**Configuration** - Vos paramètres avec les données sensibles supprimées",
-          "systemInfo": "**Informations système** - Version du système d'exploitation, mémoire et détails d'exécution",
+          "systemInfo": "**Informations système** - Version du système d'exploitation, mémoire, matériel, périphériques USB connectés et cartes son, et détails d'exécution",
           "notIncluded": "**NON inclus** - Fichiers audio, détections d'oiseaux ou données personnelles"
         },
         "userMessage": {

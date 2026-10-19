@@ -2772,7 +2772,7 @@
           "title": "Vad som ingår i rapporten:",
           "applicationLogs": "**Applikationsloggar** - Senaste fel och felsökningsinformation",
           "configuration": "**Konfiguration** - Dina inställningar med känslig data borttagen",
-          "systemInfo": "**Systeminformation** - OS-version, minne och körtidsdetaljer",
+          "systemInfo": "**Systeminformation** - OS-version, minne, hårdvara, anslutna USB-enheter och ljudkort samt körtidsdetaljer",
           "notIncluded": "**INGÅR INTE** - Ljudfiler, fågeldetektioner eller personuppgifter"
         },
         "userMessage": {

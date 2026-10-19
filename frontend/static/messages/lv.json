@@ -2772,7 +2772,7 @@
           "title": "Kas ir iekļauts ziņojumā:",
           "applicationLogs": "**Lietojumprogrammas žurnāli** - nesenie kļūdu un atkļūdošanas ieraksti",
           "configuration": "**Konfigurācija** - jūsu iestatījumi ar noņemtiem sensitīviem datiem",
-          "systemInfo": "**Sistēmas informācija** - OS versija, atmiņa un izpildlaika detaļas",
+          "systemInfo": "**Sistēmas informācija** - OS versija, atmiņa, aparatūra, pievienotās USB ierīces un skaņas kartes, kā arī izpildlaika detaļas",
           "notIncluded": "**NAV iekļauts** - audio faili, putnu noteikšanas vai personiskie dati"
         },
         "userMessage": {

@@ -479,7 +479,7 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 	if opts.IncludeSystemInfo {
 		getLogger().Debug("support: collecting system information")
 		dump.Diagnostics.SystemCollection.Attempted = true
-		dump.SystemInfo = c.collectSystemInfo()
+		dump.SystemInfo = c.collectSystemInfo(ctx)
 		dump.RuntimeInfo = c.collectRuntimeInfo(ctx)
 		dump.Diagnostics.SystemCollection.Successful = true
 		getLogger().Debug("support: system information collected",
@@ -863,7 +863,7 @@ func (c *Collector) collectRuntimeEnv(allowlist []string) map[string]string {
 }
 
 // collectSystemInfo gathers system information
-func (c *Collector) collectSystemInfo() SystemInfo {
+func (c *Collector) collectSystemInfo(ctx context.Context) SystemInfo {
 	info := SystemInfo{
 		OS:           runtime.GOOS,
 		Architecture: runtime.GOARCH,
@@ -885,6 +885,7 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 	}
 
 	collectHostFacts(&info)
+	info.USB, info.SoundCards = collectHardwareInventory(ctx, runtime.GOOS, hardwareInventoryRoot)
 
 	// Collect disk information
 	partitions, err := disk.Partitions(false)

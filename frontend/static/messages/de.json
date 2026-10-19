@@ -2772,7 +2772,7 @@
           "title": "Was im Bericht enthalten ist:",
           "applicationLogs": "**Anwendungsprotokolle** - Aktuelle Fehler und Debug-Informationen",
           "configuration": "**Konfiguration** - Ihre Einstellungen mit entfernten sensiblen Daten",
-          "systemInfo": "**Systeminformationen** - Betriebssystemversion, Speicher und Laufzeitdetails",
+          "systemInfo": "**Systeminformationen** - Betriebssystemversion, Speicher, Hardware, angeschlossene USB-Geräte und Soundkarten sowie Laufzeitdetails",
           "notIncluded": "**NICHT enthalten** - Audiodateien, Vogelerkennungen oder persönliche Daten"
         },
         "userMessage": {

@@ -2772,7 +2772,7 @@
           "title": "What's included in the report:",
           "applicationLogs": "**Application logs** - Recent errors and debug information",
           "configuration": "**Configuration** - Your settings with sensitive data removed",
-          "systemInfo": "**System information** - OS version, memory, and runtime details",
+          "systemInfo": "**System information** - OS version, memory, hardware, connected USB devices and sound cards, and runtime details",
           "notIncluded": "**NOT included** - Audio files, bird detections, or personal data"
         },
         "userMessage": {

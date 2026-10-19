@@ -2772,7 +2772,7 @@
           "title": "Hvad er inkluderet i rapporten:",
           "applicationLogs": "**Applikationslogfiler** - Nylige fejl og debuginformation",
           "configuration": "**Konfiguration** - Dine indstillinger med følsomme data fjernet",
-          "systemInfo": "**Systeminformation** - OS-version, hukommelse og kørselsdetaljer",
+          "systemInfo": "**Systeminformation** - OS-version, hukommelse, hardware, tilsluttede USB-enheder og lydkort samt kørselsdetaljer",
           "notIncluded": "**IKKE inkluderet** - Lydfiler, fugledetektioner eller personlige data"
         },
         "userMessage": {
