@@ -185,7 +185,7 @@ func TestInventory_Caps(t *testing.T) {
 		dir := filepath.Join(root, "sys", "class", "sound")
 		require.NoError(t, os.MkdirAll(dir, 0o755))
 		for i := range n {
-			require.NoError(t, os.WriteFile(filepath.Join(dir, "card"+strconv.Itoa(i)), nil, 0o644))
+			require.NoError(t, os.Mkdir(filepath.Join(dir, "card"+strconv.Itoa(i)), 0o755))
 		}
 		return root
 	}
@@ -226,6 +226,17 @@ func TestInventory_Caps(t *testing.T) {
 		require.Len(t, got, 32)
 		assert.True(t, truncated)
 		assert.Equal(t, 31, got[31].Index)
+	})
+	t.Run("unlistable card directory flags truncation", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeSoundCard(t, root, 0, "Ok", "", "pcmC0D0c")
+		classDir := filepath.Join(root, "sys", "class", "sound")
+		require.NoError(t, os.WriteFile(filepath.Join(classDir, "card1"), nil, 0o644))
+		got, truncated, err := SoundCards(t.Context(), root)
+		require.NoError(t, err)
+		assert.True(t, truncated)
+		assert.Equal(t, []SoundCard{{Index: 0, ID: "Ok", HasCapture: true}, {Index: 1}}, got)
 	})
 	t.Run("card directory with more than 1024 entries flags truncation", func(t *testing.T) {
 		t.Parallel()

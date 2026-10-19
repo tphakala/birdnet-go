@@ -112,7 +112,7 @@ func TestCollectHardwareInventory(t *testing.T) {
 		require.NoError(t, os.MkdirAll(soundDir, 0o755))
 		require.NoError(t, os.MkdirAll(filepath.Join(soundRoot, "sys", "bus", "usb", "devices"), 0o755))
 		for i := range 33 {
-			require.NoError(t, os.WriteFile(filepath.Join(soundDir, "card"+strconv.Itoa(i)), nil, 0o644))
+			require.NoError(t, os.Mkdir(filepath.Join(soundDir, "card"+strconv.Itoa(i)), 0o755))
 		}
 		usb, cards = collectHardwareInventory(t.Context(), osLinux, soundRoot)
 		assert.False(t, usb.Truncated)

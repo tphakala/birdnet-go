@@ -118,7 +118,8 @@ func Devices(ctx context.Context, root string) (devices []Device, truncated bool
 // SoundCards lists the ALSA cards under <root>/sys/class/sound in numeric
 // order, capped at maxSoundCards. USBBusID links a card to its USB device via
 // CardUSBDevice. truncated reports a cap, an oversized directory (the class
-// directory or a card directory) or cancellation. err is ctx.Err() when ctx is
+// directory or a card directory), a card directory that cannot be listed or
+// cancellation. err is ctx.Err() when ctx is
 // done before the class directory is listed, or the os error when it cannot be
 // listed; nothing else is an error. A ctx cancelled after listing returns what
 // was collected so far and a nil error.
@@ -166,6 +167,8 @@ func SoundCards(ctx context.Context, root string) (cards []SoundCard, truncated 
 		if entries, cut, listErr := listDir(dir); listErr == nil {
 			card.HasCapture = slices.ContainsFunc(entries, captureRe.MatchString)
 			truncated = truncated || cut
+		} else {
+			truncated = true // HasCapture is unknown for this card
 		}
 		cards = append(cards, card)
 	}
