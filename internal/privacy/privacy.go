@@ -341,13 +341,15 @@ func isDigitByte(b byte) bool {
 // candidate from slashDatePattern is kept only when:
 //  1. the byte before it is not a path separator (a date-shaped run inside
 //     "/data/2026/10/16/x.wav" is a run of directories);
-//  2. the byte after it is not a digit, nor "." followed by a digit
-//     ("1/2/60.1699,24.9384" is not a date);
+//  2. the byte after it is not a digit, nor "." or "," followed by a digit
+//     ("1/2/60.1699,24.9384" and "10/16/60,24.9384" are coordinate pairs, not
+//     dates);
 //  3. the run of path-segment bytes after it does not end at a path separator
 //     ("10/16/2026/john.wav", "10/16/2026 /john.wav");
-//  4. when the date is joined to a preceding path, what follows it is empty or
-//     a clock time ("T" or a space, 1-2 digits, then ":"); otherwise the text
-//     after it could be the rest of a path segment.
+//  4. when the date is joined to a preceding path, it follows a space and what
+//     follows it is empty or a clock time ("T" or a space, 1-2 digits, then
+//     ":"); otherwise the text around it could be the rest of a path segment
+//     ("/home/john-10/16/2026").
 //
 // A rejected candidate keeps the behavior of the path stage for that text.
 func standaloneSlashDateSpans(message string) [][]int {
@@ -361,7 +363,7 @@ func standaloneSlashDateSpans(message string) [][]int {
 		if end < len(message) && isDigitByte(message[end]) {
 			continue
 		}
-		if end+1 < len(message) && message[end] == '.' && isDigitByte(message[end+1]) {
+		if end+1 < len(message) && (message[end] == '.' || message[end] == ',') && isDigitByte(message[end+1]) {
 			continue
 		}
 		runEnd := end
@@ -371,7 +373,7 @@ func standaloneSlashDateSpans(message string) [][]int {
 		if runEnd < len(message) && isPathSeparator(message[runEnd]) {
 			continue
 		}
-		if joinedToPath(message, start) && !isClockTimeRun(message, end, runEnd) {
+		if joinedToPath(message, start) && (message[start-1] != ' ' || !isClockTimeRun(message, end, runEnd)) {
 			continue
 		}
 		kept = append(kept, span)
@@ -1007,10 +1009,10 @@ func isTimeLikeToken(s string) bool {
 	return hasDigit
 }
 
-// usbIDTokenPrefix starts the stable device token written as
-// "usb-id:<vendor>:<product>:<serial or "<redacted>">" by redactDeviceID in
-// internal/audiocore/usb.go. privacy cannot import audiocore (audiocore imports
-// privacy), so the prefix is repeated here.
+// usbIDTokenPrefix starts the stable device token "usb-id:<vendor>:<product>:
+// <serial or "<redacted>">" that internal/audiocore/usb.go builds (hwIDToken)
+// and redacts (redactDeviceID). privacy cannot import audiocore (audiocore
+// imports privacy), so the prefix is repeated here.
 const usbIDTokenPrefix = "usb-id:"
 
 // usbPathTokenPrefix is the text before the PCI address in a "usb-path:" token
@@ -1025,11 +1027,16 @@ const (
 	pciDeviceHexLen = 2
 )
 
+// ipv6Pattern groups: a usb-id match is "" (before the colon of the prefix),
+// vendor, product; a PCI address match is domain, bus, device.
+const usbTokenGroupCount = 3
+
 // isUSBDeviceToken reports whether the ipv6Pattern match message[start:end] is
 // the id part of a USB device token and not an address. Two exact shapes pass:
 //   - ":VVVV:PPPP" right after the literal "usb-id" (the match starts at the
-//     colon of "usb-id:"; ipv6Pattern ends on a word boundary, so a trailing
-//     colon is never part of it);
+//     colon of "usb-id:"). A serial that starts with a word byte after the pair
+//     ("usb-id:046d:0825:SN12") puts a trailing colon into the match, which
+//     fails the shape, so the ids are anonymized with the serial;
 //   - "DDDD:BB:dd" right after "usb-" with a "." after it, the PCI address of a
 //     "usb-path:usb-0000:00:1d.0-1" token.
 //
@@ -1039,10 +1046,10 @@ const (
 func isUSBDeviceToken(message string, start, end int) bool {
 	groups := strings.Split(message[start:end], ":")
 	if strings.HasSuffix(message[:start+1], usbIDTokenPrefix) {
-		return len(groups) == 3 && groups[0] == "" && len(groups[1]) == usbIDHexLen && len(groups[2]) == usbIDHexLen
+		return len(groups) == usbTokenGroupCount && groups[0] == "" && len(groups[1]) == usbIDHexLen && len(groups[2]) == usbIDHexLen
 	}
 	return strings.HasSuffix(message[:start], usbPathTokenPrefix) && end < len(message) && message[end] == '.' &&
-		len(groups) == 3 && len(groups[0]) == usbIDHexLen && len(groups[1]) == pciBusHexLen && len(groups[2]) == pciDeviceHexLen
+		len(groups) == usbTokenGroupCount && len(groups[0]) == usbIDHexLen && len(groups[1]) == pciBusHexLen && len(groups[2]) == pciDeviceHexLen
 }
 
 // dropNonAddressMatches removes the matches that are not addresses: time-like

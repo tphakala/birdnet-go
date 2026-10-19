@@ -1049,6 +1049,8 @@ func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
 		{"Z suffix", "2026-10-16T00:12:34Z 60.1699,24.9384", "2026-10-16T00:12:34Z [LAT],[LON]"},
 		{"negative pair after time", "2026-10-16 00:12:34 -45.123,122.456", "2026-10-16 00:12:34 [LAT],[LON]"},
 		{"comma before time", "10/16/2026, 00:12:34 60.1699,24.9384", "10/16/2026, 00:12:34 [LAT],[LON]"},
+		{"pair after date shaped prefix", "1/2/60.1699,24.9384", "1/2/[LAT],[LON]"},
+		{"whole degree latitude glued to a date shape", "10/16/60,24.9384", "10/16/[LAT],[LON]"},
 		{"pair after slash date", "10/16/2026, 60.1699,24.9384", "10/16/2026, [LAT],[LON]"},
 		{"pair between timestamps", "2026-10-16 00:12:34 at 60.1699,24.9384 until 2026-10-16 00:13:00", "2026-10-16 00:12:34 at [LAT],[LON] until 2026-10-16 00:13:00"},
 	}
@@ -2522,6 +2524,9 @@ func TestScrubStandaloneIPs_KeepsUSBIDTokens(t *testing.T) {
 		{"address glued after the prefix", "usb-id:2001:0db8::1", "", "2001:0db8"},
 		{"address glued after the pair", "usb-id:0d8c:0014:2001:db8::1", "", "2001:db8"},
 		{"address glued after usb-", "usb-path:usb-2001:db8::1.0-1", "", "2001:db8"},
+		{"truncated address after usb-id", "usb-id:2001:db8", "", "2001:db8"},
+		{"hex serial after the pair", "usb-id:046d:0825:ab12", "", "046d:0825"},
+		{"no dot after the PCI address", "usb-path:usb-0000:00:1d-1", "", "0000:00:1d"},
 		{"longer match after usb-", "usb-path:usb-0000:00:1d:ab.0-1", "", "0000:00:1d:ab"},
 	}
 	for _, tt := range scrub {
@@ -2545,6 +2550,7 @@ func TestScrubMessage_ScrubsPathsAroundDates(t *testing.T) {
 		{"dated directories stay one path", "/data/clips/2026/10/16/john.wav", AnonymizePath("/data/clips/2026/10/16/john.wav")},
 		{"date shaped tail after a slash", "/data/clips/10/16/2026", AnonymizePath("/data/clips/10/16/2026")},
 		{"path then date time", "path /var/log/john 10/16/2026 00:12:34", "path " + AnonymizePath("/var/log/john") + " 10/16/2026 00:12:34"},
+		{"date glued to a path segment", "/home/john-10/16/2026", AnonymizePath("/home/john-10/16/2026")},
 		{"single segment head stays hashed", "/john 10/16/2026", AnonymizePath("/john") + " 10/16/2026"},
 		{"separators only head", "/ 10/16/2026", "/ 10/16/2026"},
 		{"date time then path", "10/16/2026 00:12:34 open /home/john/x.db", "10/16/2026 00:12:34 open " + AnonymizePath("/home/john/x.db")},
