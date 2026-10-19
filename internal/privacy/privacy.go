@@ -349,7 +349,10 @@ func isDigitByte(b byte) bool {
 //  4. when the date is joined to a preceding path, it follows a space and what
 //     follows it is empty or a clock time ("T" or a space, 1-2 digits, then
 //     ":"); otherwise the text around it could be the rest of a path segment
-//     ("/home/john-10/16/2026").
+//     ("/home/john-10/16/2026");
+//  5. the run of path-segment bytes after it has no file extension shape, a
+//     "." followed by a word byte ("2026/10/16 john smith.wav" is a relative
+//     file name, not a date followed by prose).
 //
 // A rejected candidate keeps the behavior of the path stage for that text.
 func standaloneSlashDateSpans(message string) [][]int {
@@ -373,12 +376,26 @@ func standaloneSlashDateSpans(message string) [][]int {
 		if runEnd < len(message) && isPathSeparator(message[runEnd]) {
 			continue
 		}
+		if hasExtensionDot(message[end:runEnd]) {
+			continue
+		}
 		if joinedToPath(message, start) && (message[start-1] != ' ' || !isClockTimeRun(message, end, runEnd)) {
 			continue
 		}
 		kept = append(kept, span)
 	}
 	return kept
+}
+
+// hasExtensionDot reports whether run contains a "." followed by a word byte,
+// the shape of a file extension such as ".wav".
+func hasExtensionDot(run string) bool {
+	for i := range len(run) - 1 {
+		if run[i] == '.' && isWordByte(run[i+1]) {
+			return true
+		}
+	}
+	return false
 }
 
 // joinedToPath reports whether scanning back from start over path-segment bytes

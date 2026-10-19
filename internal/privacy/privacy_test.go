@@ -991,6 +991,7 @@ func TestScrubMessage_KeepsDatesAndTimes(t *testing.T) {
 		{"year first slash date alone", "2026/10/16 started"},
 		{"slash date time after comma", "10/16/2026, 00:12:34 x"},
 		{"slash date before a count", "2026/10/16 50 birds"},
+		{"slash date ending a sentence", "backup done 2026/10/16 started. Next run tomorrow"},
 	}
 
 	for _, tt := range tests {
@@ -2567,6 +2568,8 @@ func TestScrubMessage_ScrubsPathsAroundDates(t *testing.T) {
 		{"path then date then word", "/home/x 10/16/2026 john"},
 		{"date then word glued to it", "/home/x 10/16/2026john"},
 		{"date followed by one more digit", "10/16/20261/john"},
+		{"date then relative file name", "saved backup 2026/10/16 john smith.wav"},
+		{"date then dotted name", "10/16/2026 john.smith"},
 		{"windows dated directories", `C:\Users\john\2026\10\16\x.wav`},
 	}
 	for _, tt := range leaks {
