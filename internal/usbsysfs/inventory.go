@@ -211,9 +211,10 @@ func validOrEmpty(re *regexp.Regexp, s string) string {
 }
 
 // sanitizeText makes vendor-controlled free text safe for the unscrubbed
-// support dump: invalid UTF-8 becomes U+FFFD, whitespace becomes a single
-// space, control and format characters (escape sequences, bidi marks) are
-// dropped, and the result is cut to maxTextRunes runes.
+// support dump: invalid UTF-8 becomes U+FFFD, each whitespace character becomes
+// one space (the ends are trimmed), control and format characters (escape
+// sequences, bidi marks) are dropped, and the result is cut to maxTextRunes
+// runes.
 func sanitizeText(s string) string {
 	s = strings.ToValidUTF8(s, string(utf8.RuneError))
 	s = strings.Map(func(r rune) rune {
