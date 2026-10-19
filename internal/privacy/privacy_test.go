@@ -958,6 +958,9 @@ func TestScrubCoordinates_KeepsALSASelectors(t *testing.T) {
 		{"quoted bare colon value", `"device":":1,0"`, `"device":":[LAT],[LON]"`},
 		{"selector then coordinates", "hw:1,0 at 60.1699,24.9384", "hw:1,0 at [LAT],[LON]"},
 		{"decimal pair after hw", "hw:60.1699,24.9384", "hw:[LAT],[LON]"},
+		{"decimal second half after hw", "hw:1,24.9384", "hw:[LAT],[LON]"},
+		{"space before second half after hw", "hw:1, 24.9384", "hw:[LAT],[LON]"},
+		{"signed second half after hw", "hw:1,-2", "hw:[LAT],[LON]"},
 		{"signed decimal pair after a colon", ":45.5,-120.5", ":[LAT],[LON]"},
 		{"labelled integer pair", "Location:60,24", "Location:[LAT],[LON]"},
 		{"quoted key before the colon", `{"lat":60,24}`, `{"lat":[LAT],[LON]}`},
@@ -2551,6 +2554,7 @@ func TestScrubMessage_ScrubsPathsAroundDates(t *testing.T) {
 		{"dated directories stay one path", "/data/clips/2026/10/16/john.wav", AnonymizePath("/data/clips/2026/10/16/john.wav")},
 		{"date shaped tail after a slash", "/data/clips/10/16/2026", AnonymizePath("/data/clips/10/16/2026")},
 		{"path then date time", "path /var/log/john 10/16/2026 00:12:34", "path " + AnonymizePath("/var/log/john") + " 10/16/2026 00:12:34"},
+		{"path then date with T time", "/home/john 10/16/2026T12:34:56", AnonymizePath("/home/john") + " 10/16/2026T12:34:56"},
 		{"date glued to a path segment", "/home/john-10/16/2026", AnonymizePath("/home/john-10/16/2026")},
 		{"single segment head stays hashed", "/john 10/16/2026", AnonymizePath("/john") + " 10/16/2026"},
 		{"separators only head", "/ 10/16/2026", "/ 10/16/2026"},
@@ -2576,6 +2580,24 @@ func TestScrubMessage_ScrubsPathsAroundDates(t *testing.T) {
 		t.Run("no leak "+tt.name, func(t *testing.T) {
 			t.Parallel()
 			assert.NotContains(t, ScrubMessage(tt.input), "john")
+		})
+	}
+
+	// After a path, a date is kept only before a clock time; anything else
+	// could be the rest of a path segment, so the path stage handles it.
+	notClockTimes := []struct {
+		name  string
+		input string
+	}{
+		{"three digit hour", "/home/john 10/16/2026 123:45"},
+		{"hour without a colon", "/home/john 10/16/2026 12"},
+	}
+	for _, tt := range notClockTimes {
+		t.Run("date not kept after path "+tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubMessage(tt.input)
+			assert.NotContains(t, got, "10/16/2026")
+			assert.NotContains(t, got, "john")
 		})
 	}
 }
