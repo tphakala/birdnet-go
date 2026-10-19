@@ -69,13 +69,16 @@ func flushWithContext(ctx context.Context, operation string) error {
 	}
 }
 
-// supportDumpEventType is the "type" tag value that marks a user-requested
-// support dump upload.
+// eventTypeTagKey is the event tag that names what kind of event was sent.
+const eventTypeTagKey = "type"
+
+// supportDumpEventType is the eventTypeTagKey value that marks a
+// user-requested support dump upload.
 const supportDumpEventType = "support_dump"
 
 // isSupportDumpEvent reports whether event is a support dump upload.
 func isSupportDumpEvent(event *sentry.Event) bool {
-	return event != nil && event.Tags["type"] == supportDumpEventType
+	return event != nil && event.Tags[eventTypeTagKey] == supportDumpEventType
 }
 
 // AttachmentUploader handles uploading support dumps as Sentry attachments
@@ -175,8 +178,8 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 
 	// Add tags for filtering
 	event.Tags = map[string]string{
-		"type":      supportDumpEventType,
-		"system_id": systemID,
+		eventTypeTagKey: supportDumpEventType,
+		"system_id":     systemID,
 	}
 	if traceID != "" {
 		event.Tags["trace_id"] = traceID
@@ -317,8 +320,8 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 
 	// Add tags
 	event.Tags = map[string]string{
-		"type":      "support_request",
-		"system_id": systemID,
+		eventTypeTagKey: "support_request",
+		"system_id":     systemID,
 	}
 
 	// Capture event

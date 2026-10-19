@@ -235,6 +235,6 @@ func TestCreateBeforeSendHook_OldBuildDropsAllButSupportDumps(t *testing.T) {
 	assert.Nil(t, hook(sentry.NewEvent(), nil), "plain events from an expired build must be dropped")
 
 	dump := sentry.NewEvent()
-	dump.Tags = map[string]string{"type": supportDumpEventType}
+	dump.Tags = map[string]string{eventTypeTagKey: supportDumpEventType}
 	assert.NotNil(t, hook(dump, nil), "support dump events must pass on an expired build")
 }
