@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
@@ -18,9 +19,12 @@ func TestCollectSystemInfo_HostFacts(t *testing.T) {
 		t.Skip("host fact probes are only asserted on Linux")
 	}
 
-	info := (&Collector{}).collectSystemInfo()
+	info := (&Collector{}).collectSystemInfo(t.Context())
 
 	assert.NotEmpty(t, info.KernelVersion)
+	// Both inventory sections are always set; a nil one means an older dump.
+	require.NotNil(t, info.USB)
+	require.NotNil(t, info.SoundCards)
 	if flags := sysinfo.GetCPUFlags(); len(flags) > 0 {
 		assert.Equal(t, flags, info.CPUFlags)
 	}

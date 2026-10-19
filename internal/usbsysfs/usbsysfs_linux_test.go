@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -173,4 +174,9 @@ func TestReadAttr(t *testing.T) {
 
 	assert.Equal(t, "0d8c", ReadAttr(path))
 	assert.Empty(t, ReadAttr(filepath.Join(dir, "missing")))
+
+	// The bound is a literal so changing maxAttrBytes fails this test.
+	big := filepath.Join(dir, "big")
+	require.NoError(t, os.WriteFile(big, []byte(strings.Repeat("a", 5000)), 0o644))
+	assert.Len(t, ReadAttr(big), 4096)
 }

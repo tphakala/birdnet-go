@@ -2772,7 +2772,7 @@
           "title": "Čo je zahrnuté v správe:",
           "applicationLogs": "**Logy aplikácie** - Nedávne chyby a ladiace informácie",
           "configuration": "**Konfigurácia** - Vaše nastavenia s odstránenými citlivými údajmi",
-          "systemInfo": "**Informácie o systéme** - Verzia OS, pamäť a podrobnosti o runtime",
+          "systemInfo": "**Informácie o systéme** - Verzia OS, pamäť, hardvér, pripojené zariadenia USB a zvukové karty a podrobnosti o runtime",
           "notIncluded": "**NIE JE zahrnuté** - Audio súbory, detekcie vtákov alebo osobné údaje"
         },
         "userMessage": {

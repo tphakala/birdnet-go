@@ -2772,7 +2772,7 @@
           "title": "Cosa è incluso nel rapporto:",
           "applicationLogs": "**Log applicazione** - Errori recenti e informazioni debug",
           "configuration": "**Configurazione** - Le tue impostazioni con dati sensibili rimossi",
-          "systemInfo": "**Informazioni sistema** - Versione OS, memoria e dettagli runtime",
+          "systemInfo": "**Informazioni sistema** - Versione OS, memoria, hardware, dispositivi USB collegati e schede audio, e dettagli runtime",
           "notIncluded": "**NON incluso** - File audio, rilevamenti uccelli o dati personali"
         },
         "userMessage": {

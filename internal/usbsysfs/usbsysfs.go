@@ -4,9 +4,13 @@
 // prepended to the /sys paths, so tests can point them at a fake tree. The
 // package has no build tag and uses only the standard library; on a host
 // without the sysfs paths the readers report "not found" rather than failing.
+// The inventory listers Devices and SoundCards are the exception: they return
+// the os error when their top-level directory cannot be listed. Devices never
+// reads the serial attribute.
 package usbsysfs
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -17,6 +21,10 @@ import (
 // is normally only 3-4 levels above the card directory, so this is a generous cap
 // that keeps the loop finite.
 const maxWalkDepth = 12
+
+// maxAttrBytes bounds how much of a sysfs attribute ReadAttr reads; attributes
+// are at most one page.
+const maxAttrBytes = 4096
 
 // CardUSBDevice walks up from <root>/sys/class/sound/cardN to the USB device node and
 // returns its directory. The device node is the first ancestor exposing an "idVendor" file; the
@@ -56,9 +64,14 @@ func CardUSBDevice(root string, card int) (string, bool) {
 }
 
 // ReadAttr reads a single sysfs attribute file and returns its trimmed contents, or "" on
-// any read error.
+// any read error. It reads at most maxAttrBytes bytes; longer content is truncated.
 func ReadAttr(path string) string {
-	data, err := os.ReadFile(path)
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	data, err := io.ReadAll(io.LimitReader(f, maxAttrBytes))
 	if err != nil {
 		return ""
 	}

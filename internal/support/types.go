@@ -66,6 +66,46 @@ type SystemInfo struct {
 	// identically at every gate. Empty and omitted entirely when no allowlisted
 	// variable is set, which is the common case.
 	RuntimeEnv map[string]string `json:"runtime_env,omitempty"`
+	// USB and SoundCards are the connected USB devices and ALSA cards. Both are
+	// nil only in dumps from versions that predate them; a version that has them
+	// always sets both, with Available false and a Reason when they could not be read.
+	USB        *USBInventory       `json:"usb,omitempty"`
+	SoundCards *SoundCardInventory `json:"sound_cards,omitempty"`
+}
+
+// USBInventory lists the USB devices the host exposes. Serial numbers are never read.
+type USBInventory struct {
+	Available bool            `json:"available"`
+	Reason    string          `json:"reason,omitempty"` // unsupported_os, not_visible or unreadable when Available is false
+	Truncated bool            `json:"truncated,omitempty"`
+	Devices   []USBDeviceInfo `json:"devices,omitempty"`
+}
+
+// USBDeviceInfo is one USB device; every field except BusID is omitted when unknown.
+type USBDeviceInfo struct {
+	BusID        string `json:"bus_id"`
+	VendorID     string `json:"vendor_id,omitempty"`
+	ProductID    string `json:"product_id,omitempty"`
+	Manufacturer string `json:"manufacturer,omitempty"`
+	Product      string `json:"product,omitempty"`
+	SpeedMbps    string `json:"speed_mbps,omitempty"`
+	DeviceClass  string `json:"device_class,omitempty"`
+}
+
+// SoundCardInventory lists the ALSA sound cards the host exposes.
+type SoundCardInventory struct {
+	Available bool            `json:"available"`
+	Reason    string          `json:"reason,omitempty"` // unsupported_os, not_visible or unreadable when Available is false
+	Truncated bool            `json:"truncated,omitempty"`
+	Cards     []SoundCardInfo `json:"cards,omitempty"`
+}
+
+// SoundCardInfo is one ALSA sound card.
+type SoundCardInfo struct {
+	Index      int    `json:"index"`
+	ID         string `json:"id,omitempty"`
+	USBBusID   string `json:"usb_bus_id,omitempty"` // bus id of the backing USB device, empty for a non-USB card
+	HasCapture bool   `json:"has_capture"`
 }
 
 // CgroupMemoryInfo is the memory cgroup limit and usage of the BirdNET-Go process.

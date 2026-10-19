@@ -2772,7 +2772,7 @@
           "title": "Mitä raportti sisältää:",
           "applicationLogs": "**Sovelluslokit** - Viimeisimmät virheet ja virheenkorjaustiedot",
           "configuration": "**Kokoonpano** - Asetuksesi arkaluonteiset tiedot poistettuina",
-          "systemInfo": "**Järjestelmätiedot** - Käyttöjärjestelmän versio, muisti ja suoritusympäristön tiedot",
+          "systemInfo": "**Järjestelmätiedot** - Käyttöjärjestelmän versio, muisti, laitteisto, yhdistetyt USB-laitteet ja äänikortit sekä suoritusympäristön tiedot",
           "notIncluded": "**EI sisälly** - Äänitiedostoja, lintuhavaintoja tai henkilökohtaisia tietoja"
         },
         "userMessage": {
