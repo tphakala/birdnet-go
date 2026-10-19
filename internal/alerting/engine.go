@@ -29,8 +29,7 @@ const (
 	// cleanupBaseDelay is the base delay for exponential backoff between cleanup retries.
 	cleanupBaseDelay = 100 * time.Millisecond
 	// cooldownPruneInterval is the minimum time between sweeps that drop stale
-	// cooldown entries. Expired entries are harmless to rule decisions, so this
-	// only bounds memory.
+	// cooldown entries.
 	cooldownPruneInterval = 1 * time.Hour
 	// unknownDetectionSpeciesKey is used when detection events lack species metadata.
 	unknownDetectionSpeciesKey = "unknown"
