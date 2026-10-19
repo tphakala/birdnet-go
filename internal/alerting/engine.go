@@ -28,9 +28,9 @@ const (
 	cleanupMaxRetries = 3
 	// cleanupBaseDelay is the base delay for exponential backoff between cleanup retries.
 	cleanupBaseDelay = 100 * time.Millisecond
-	// cooldownPruneInterval is the minimum time between sweeps that drop cooldown
-	// entries which can no longer suppress anything. Expired entries are harmless
-	// to rule decisions, so this only bounds memory.
+	// cooldownPruneInterval is the minimum time between sweeps that drop stale
+	// cooldown entries. Expired entries are harmless to rule decisions, so this
+	// only bounds memory.
 	cooldownPruneInterval = 1 * time.Hour
 	// unknownDetectionSpeciesKey is used when detection events lack species metadata.
 	unknownDetectionSpeciesKey = "unknown"
@@ -49,11 +49,12 @@ type Engine struct {
 	telemetry      *AlertingTelemetry // nil-safe engine health reporter
 
 	// Cooldown tracking (in-memory, resets on restart).
-	// Key is the rule ID plus a scope: empty for event rules, or the metric
-	// instance for metric rules so that per-instance metrics (e.g., disk
-	// paths) have independent cooldowns. Entries that can no longer suppress
-	// anything are dropped by pruneCooldowns. lastCooldownPrune is the time of
-	// the last sweep. Both fields are guarded by cooldownsMu.
+	// Key is the rule ID plus a scope: the metric instance for metric rules
+	// so that per-instance metrics (e.g., disk paths) have independent
+	// cooldowns, the species for species-scoped detection rules, and empty
+	// for other event rules. Stale entries are dropped by pruneCooldowns.
+	// lastCooldownPrune is the time of the last sweep. Both fields are
+	// guarded by cooldownsMu.
 	cooldowns         map[cooldownStateKey]time.Time
 	lastCooldownPrune time.Time
 	cooldownsMu       sync.RWMutex
@@ -553,12 +554,16 @@ func (e *Engine) evaluateMetricConditions(rule *entities.AlertRule, event *Alert
 	return true
 }
 
-// pruneCooldowns drops cooldown entries that can no longer suppress anything:
-// those of rules missing from rules (deleted or disabled) and those whose rule
-// cooldown has elapsed. It runs at most once per cooldownPruneInterval. A
-// dropped entry reads the same as a missing one in tryAcquireCooldown and
-// cooldownExpiredLocked, so no fire or suppress decision changes. rules must be
-// the enabled-rule snapshot HandleEvent evaluates.
+// pruneCooldowns drops cooldown entries of rules missing from rules (deleted or
+// disabled) and entries whose rule cooldown has elapsed. It runs at most once
+// per cooldownPruneInterval. An elapsed entry reads the same as a missing one in
+// tryAcquireCooldown and cooldownExpiredLocked, so under the rule's current
+// CooldownSec dropping it does not change the outcome. Dropping the entry of a
+// missing rule forgets a window that is still open, and a swept entry cannot
+// honor a CooldownSec raised afterwards; in both cases a rule can notify once
+// more than it would have without the sweep. rules is the enabled-rule snapshot
+// HandleEvent took before this call, so a concurrent RefreshRules can leave it
+// slightly stale with the same effect.
 func (e *Engine) pruneCooldowns(rules []entities.AlertRule, now time.Time) {
 	e.cooldownsMu.Lock()
 	defer e.cooldownsMu.Unlock()
