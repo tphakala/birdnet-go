@@ -2674,6 +2674,7 @@ func TestScrubMessage_MasksUSBIDSerials(t *testing.T) {
 	}{
 		{"bare token", "usb-id:0d8c:0014:SN12345", "usb-id:0d8c:0014:<redacted>"},
 		{"dots dashes underscores belong to the serial", "opened usb-id:0d8c:0014:SN-1.2_3 ok", "opened usb-id:0d8c:0014:<redacted> ok"},
+		{"colons slashes and equals belong to the serial", "opened usb-id:0d8c:0014:AB:CD/EF=1 ok", "opened usb-id:0d8c:0014:<redacted> ok"},
 		{"quoted serial with a space", `{"id":"usb-id:0d8c:0014:A1 B2","x":1}`, `{"id":"usb-id:0d8c:0014:<redacted>","x":1}`},
 		{"nested JSON value ends at the escaped quote", `{\"id\":\"usb-id:0d8c:0014:SN1\"}`, `{\"id\":\"usb-id:0d8c:0014:<redacted>\"}`},
 		{"closing bracket ends the serial", "(usb-id:0d8c:0014:SN1)", "(usb-id:0d8c:0014:<redacted>)"},
