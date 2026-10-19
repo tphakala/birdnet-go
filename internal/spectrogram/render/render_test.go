@@ -489,6 +489,21 @@ func TestRenderDisplayRateDrawsFirstBins(t *testing.T) {
 	}
 }
 
+// The analysis yields exactly Rows bins at either frame multiple, so the column
+// callback draws every bin it gets and none fall outside the raster.
+func TestNewFitYieldsRowsBins(t *testing.T) {
+	for _, rows := range []int{129, 513, 1025, 4097} {
+		for _, tc := range []struct{ rate, multiple int }{{displayRate24k, 1}, {sourceRate48k, 2}} {
+			for _, window := range []WindowKind{WindowHann, WindowDolph} {
+				opt := Options{Width: 1026, Rows: rows, RangeDB: testRangeDB, DisplayRate: displayRate24k, Style: Style{Window: window}}
+				fit, err := newFit(tc.rate, int64(tc.rate), opt, tc.multiple)
+				require.NoError(t, err)
+				assert.Equalf(t, rows, fit.Bins(), "rows %d multiple %d window %v", rows, tc.multiple, window)
+			}
+		}
+	}
+}
+
 func TestFrameMultiple(t *testing.T) {
 	tests := []struct {
 		name         string
