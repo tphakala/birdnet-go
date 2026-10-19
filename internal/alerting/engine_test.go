@@ -942,48 +942,84 @@ func TestEngine_DetectionEscalationSteps_PrunesPreviousEpisode(t *testing.T) {
 	assert.True(t, newExists, "current episode escalation key should remain")
 }
 
-func TestEngine_DetectionNoveltyCooldownIsSpeciesScoped(t *testing.T) {
-	const noveltyEpisodeStart = "2026-05-23T12:00:00Z"
+func TestEngine_DetectionCooldownIsSpeciesScoped(t *testing.T) {
+	const (
+		noveltyEpisodeStart = "2026-05-23T12:00:00Z"
+		robin               = "Turdus migratorius"
+		blackbird           = "Turdus merula"
+	)
 
-	rule := entities.AlertRule{
-		ID:          1,
-		Enabled:     true,
-		ObjectType:  ObjectTypeDetection,
-		TriggerType: TriggerTypeEvent,
-		EventName:   EventDetectionOccurred,
-		CooldownSec: 3600,
-		Conditions: []entities.AlertCondition{
-			{Property: PropertyNoveltyEpisodeDays, Operator: OperatorGreaterOrEqual, Value: "7"},
+	tests := []struct {
+		name       string
+		eventName  string
+		conditions []entities.AlertCondition
+	}{
+		{
+			name:      "novelty condition",
+			eventName: EventDetectionOccurred,
+			conditions: []entities.AlertCondition{
+				{Property: PropertyNoveltyEpisodeDays, Operator: OperatorGreaterOrEqual, Value: "7"},
+			},
+		},
+		{
+			name:      "confidence condition only",
+			eventName: EventDetectionOccurred,
+			conditions: []entities.AlertCondition{
+				{Property: PropertyConfidence, Operator: OperatorGreaterOrEqual, Value: "0.7"},
+			},
+		},
+		{
+			name:      "built-in new species rule",
+			eventName: EventDetectionNewSpecies,
+		},
+		{
+			name:      "built-in infrequent species rule",
+			eventName: EventDetectionInfrequentSpecies,
 		},
 	}
 
-	var fired []string
-	repo := newMockRepo(rule)
-	engine := NewEngine(repo, func(_ *entities.AlertRule, event *AlertEvent) {
-		fired = append(fired, event.Properties[PropertyScientificName].(string))
-	}, testLogger(), nil)
-	require.NoError(t, engine.RefreshRules(t.Context()))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := entities.AlertRule{
+				ID:          1,
+				Enabled:     true,
+				ObjectType:  ObjectTypeDetection,
+				TriggerType: TriggerTypeEvent,
+				EventName:   tt.eventName,
+				CooldownSec: 3600,
+				Conditions:  tt.conditions,
+			}
 
-	emit := func(scientificName string) {
-		engine.HandleEvent(&AlertEvent{
-			ObjectType: ObjectTypeDetection,
-			EventName:  EventDetectionOccurred,
-			Properties: map[string]any{
-				PropertySpeciesName:         scientificName,
-				PropertyScientificName:      scientificName,
-				PropertyConfidence:          0.8,
-				PropertyNoveltyEpisodeDays:  9,
-				PropertyNoveltyEpisodeStart: noveltyEpisodeStart,
-			},
-			Timestamp: time.Now(),
+			var fired []string
+			repo := newMockRepo(rule)
+			engine := NewEngine(repo, func(_ *entities.AlertRule, event *AlertEvent) {
+				fired = append(fired, event.Properties[PropertyScientificName].(string))
+			}, testLogger(), nil)
+			require.NoError(t, engine.RefreshRules(t.Context()))
+
+			emit := func(scientificName string) {
+				engine.HandleEvent(&AlertEvent{
+					ObjectType: ObjectTypeDetection,
+					EventName:  tt.eventName,
+					Properties: map[string]any{
+						PropertySpeciesName:         scientificName,
+						PropertyScientificName:      scientificName,
+						PropertyConfidence:          0.8,
+						PropertyNoveltyEpisodeDays:  9,
+						PropertyNoveltyEpisodeStart: noveltyEpisodeStart,
+					},
+					Timestamp: time.Now(),
+				})
+			}
+
+			emit(robin)
+			emit(robin)
+			emit(blackbird)
+			emit(blackbird)
+
+			assert.Equal(t, []string{robin, blackbird}, fired)
 		})
 	}
-
-	emit("Setophaga castanea")
-	emit("Setophaga castanea")
-	emit("Bubo virginianus")
-
-	assert.Equal(t, []string{"Setophaga castanea", "Bubo virginianus"}, fired)
 }
 
 func TestEngine_EscalationSteps_ResetOnRecovery(t *testing.T) {

@@ -50,8 +50,8 @@ type Engine struct {
 	// Cooldown tracking (in-memory, resets on restart).
 	// Key is the rule ID plus a scope: the metric instance for metric rules
 	// so that per-instance metrics (e.g., disk paths) have independent
-	// cooldowns, the species for species-scoped detection rules, and empty
-	// for other event rules. Stale entries are dropped by pruneCooldowns.
+	// cooldowns, the species for detection event rules whose event names one,
+	// and empty for other event rules. Stale entries are dropped by pruneCooldowns.
 	// lastCooldownPrune is the time of the last sweep. Both fields are
 	// guarded by cooldownsMu.
 	cooldowns         map[cooldownStateKey]time.Time
@@ -126,8 +126,9 @@ type cooldownStateKey struct {
 
 // cooldownKey builds the cooldown state key. For metric rules, it includes
 // the metric instance (path) so per-instance metrics have independent cooldowns.
-// For species-scoped detection rules it includes the species; other event rules
-// use only the rule ID.
+// For event rules on detection events that name a species it includes the
+// species, so each species has its own window. Other event rules, and
+// species-less detection events, use only the rule ID.
 func cooldownKey(rule *entities.AlertRule, event *AlertEvent) cooldownStateKey {
 	if rule.TriggerType == TriggerTypeMetric {
 		return cooldownStateKey{ruleID: rule.ID, scope: metricBufferKey(rule.MetricName, event.Properties)}
@@ -156,28 +157,16 @@ func detectionSpeciesKey(event *AlertEvent) string {
 	return unknownDetectionSpeciesKey
 }
 
-// isSpeciesScopedDetectionRule reports whether a detection rule's cooldown and
-// escalation state should be tracked per species rather than per rule. The
-// caller passes speciesKey from detectionSpeciesKey(event); species-less
-// detections (unknownDetectionSpeciesKey) always use per-rule scoping. Novelty
-// conditions reuse detectionMetadataProperties as the single source of truth
-// for which properties scope a rule to a species.
+// isSpeciesScopedDetectionRule reports whether an event rule's cooldown should
+// be tracked per species rather than per rule. Every event rule on a detection
+// event is species-scoped when the event names a species, so one species'
+// notification never silences another. The caller passes speciesKey from
+// detectionSpeciesKey(event); species-less detections
+// (unknownDetectionSpeciesKey) fall back to one per-rule window.
 func isSpeciesScopedDetectionRule(rule *entities.AlertRule, event *AlertEvent, speciesKey string) bool {
-	if rule.TriggerType != TriggerTypeEvent || !isDetectionEvent(event.EventName) {
-		return false
-	}
-	if speciesKey == unknownDetectionSpeciesKey {
-		return false
-	}
-	if len(rule.EscalationSteps) > 0 {
-		return true
-	}
-	for i := range rule.Conditions {
-		if slices.Contains(detectionMetadataProperties, rule.Conditions[i].Property) {
-			return true
-		}
-	}
-	return false
+	return rule.TriggerType == TriggerTypeEvent &&
+		isDetectionEvent(event.EventName) &&
+		speciesKey != unknownDetectionSpeciesKey
 }
 
 func detectionEscalationKey(rule *entities.AlertRule, event *AlertEvent, speciesKey string) string {
