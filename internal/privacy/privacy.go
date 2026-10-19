@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -225,10 +226,13 @@ var userAgentPatterns = []userAgentPattern{
 }
 
 // ScrubMessage removes or anonymizes sensitive information from telemetry messages
-// It finds URLs and other sensitive data in the message and replaces them with anonymized versions
+// It finds URLs and other sensitive data in the message and replaces them with anonymized versions.
+// USB serial numbers in "usb-id:" device tokens are masked first, which keeps
+// the vendor and product ids readable for the IP address stage after it.
 func ScrubMessage(message string) string {
 	// Apply all scrubbing functions in sequence
-	result := urlPattern.ReplaceAllStringFunc(message, AnonymizeURL)
+	result := scrubUSBIDSerials(message)
+	result = urlPattern.ReplaceAllStringFunc(result, AnonymizeURL)
 	result = ScrubEmails(result)
 	result = ScrubUUIDs(result)
 	result = ScrubStandaloneIPs(result)
@@ -633,6 +637,7 @@ func ScrubStandaloneIPs(message string) string {
 // as they are and the text around them is scrubbed on its own, so a pair
 // that follows a timestamp is still replaced. Standalone slash dates are kept
 // too, and so are integer ALSA selectors such as "hw:1,0" (see isALSASelector).
+// A number left over after a pair is replaced with it (see scrubCoordinatePairs).
 func ScrubCoordinates(message string) string {
 	protected := protectedDateTimeSpans(message)
 	if len(protected) == 0 {
@@ -658,10 +663,21 @@ const coordinatePlaceholder = "[LAT],[LON]"
 // coordinate; conf/validate.go already treats integer pairs as selectors.
 var alsaSelectorPrefixes = []string{"hw:", "plughw:", "dsnoop:", "dmix:"}
 
+// trailingNumberPattern matches the separator and one number of any length
+// after a replaced coordinate match (see scrubCoordinatePairs).
+var trailingNumberPattern = regexp.MustCompile(`^[,\s]+-?\d+\.?\d*`)
+
 // scrubCoordinatePairs replaces the coordinate pairs in seg, which is
 // message[offset:offset+len(seg)], except integer ALSA selectors. The selector
 // check sees the whole message, so the text before the segment is context. It
 // returns seg itself when nothing matches.
+//
+// coordinatesPattern pairs the numbers of a run left to right, so in a run of an
+// odd count (a count before a real pair: "count 5, 60.1699,24.9384") the last
+// number is not part of any match and would stay in clear. A replaced match
+// therefore also absorbs one number that follows it after commas or spaces,
+// unless that number is where the next match starts. This fails closed: no
+// digit of a number run survives, and a number right after a pair is lost too.
 func scrubCoordinatePairs(message, seg string, offset int) string {
 	matches := coordinatesPattern.FindAllStringIndex(seg, -1)
 	if len(matches) == 0 {
@@ -669,14 +685,21 @@ func scrubCoordinatePairs(message, seg string, offset int) string {
 	}
 	var out strings.Builder
 	pos := 0
-	for _, m := range matches {
+	for i, m := range matches {
 		out.WriteString(seg[pos:m[0]])
+		pos = m[1]
 		if isALSASelector(message, offset+m[0], offset+m[1]) {
 			out.WriteString(seg[m[0]:m[1]])
-		} else {
-			out.WriteString(coordinatePlaceholder)
+			continue
 		}
-		pos = m[1]
+		out.WriteString(coordinatePlaceholder)
+		next := len(seg)
+		if i+1 < len(matches) {
+			next = matches[i+1][0]
+		}
+		if tail := trailingNumberPattern.FindStringIndex(seg[pos:]); len(tail) > 0 && pos+tail[1] <= next {
+			pos += tail[1]
+		}
 	}
 	out.WriteString(seg[pos:])
 	return out.String()
@@ -1027,10 +1050,145 @@ func isTimeLikeToken(s string) bool {
 }
 
 // usbIDTokenPrefix starts the stable device token "usb-id:<vendor>:<product>:
-// <serial or "<redacted>">" that internal/audiocore/usb.go builds (hwIDToken)
-// and redacts (redactDeviceID). privacy cannot import audiocore (audiocore
-// imports privacy), so the prefix is repeated here.
+// <serial or "<redacted>">" that internal/audiocore/usb.go builds (hwIDToken).
+// privacy cannot import audiocore (audiocore imports privacy), so the prefix is
+// repeated here. RedactUSBDeviceID is the shared masking that audiocore and the
+// support dump use for a whole token; scrubUSBIDSerials masks tokens in text.
 const usbIDTokenPrefix = "usb-id:"
+
+// redactedUSBSerial replaces the serial of a usb-id device token.
+const redactedUSBSerial = "<redacted>"
+
+// usbIDHexGroup matches one usb-id vendor or product id: usbIDHexLen hex digits.
+var usbIDHexGroup = "[0-9A-Fa-f]{" + strconv.Itoa(usbIDHexLen) + "}"
+
+// usbIDTokenPattern matches a usb-id token up to its serial:
+// "usb-id:<vendor>:<product>:".
+var usbIDTokenPattern = regexp.MustCompile(regexp.QuoteMeta(usbIDTokenPrefix) + usbIDHexGroup + ":" + usbIDHexGroup + ":")
+
+// usbSerialQuotes are the quote bytes that, right before a usb-id token, make
+// its serial a quoted value (see usbIDSerialEnd).
+const usbSerialQuotes = "\"'`"
+
+// RedactUSBDeviceID masks the serial of a whole "usb-id:<vendor>:<product>:<serial>"
+// device token, giving "usb-id:<vendor>:<product>:<redacted>". Anything that is
+// not such a token with a non-empty serial is returned unchanged. The value is
+// taken to be exactly one identifier (a log field or config value), so the
+// serial is everything after the second colon, spaces included; use
+// ScrubMessage for free text.
+func RedactUSBDeviceID(deviceID string) string {
+	rest, ok := strings.CutPrefix(deviceID, usbIDTokenPrefix)
+	if !ok {
+		return deviceID
+	}
+	vendor, after, found := strings.Cut(rest, ":")
+	if !found {
+		return deviceID
+	}
+	product, serial, found := strings.Cut(after, ":")
+	if !found || serial == "" {
+		return deviceID
+	}
+	return usbIDTokenPrefix + vendor + ":" + product + ":" + redactedUSBSerial
+}
+
+// isSerialTerminator reports whether b ends an unquoted usb-id serial: ASCII
+// whitespace or one of the quote, list and bracket characters that follow a
+// value in log text and JSON. "<" and ">" do not end a serial.
+func isSerialTerminator(b byte) bool {
+	switch b {
+	case ' ', '\t', '\n', '\r', '\v', '\f', '"', '\'', '`', ',', ';', ')', ']', '}', '\\':
+		return true
+	}
+	return false
+}
+
+// usbIDSerialEnd returns the index just past the serial that starts at s in the
+// token whose prefix starts at i.
+//
+// When the byte before the token is a quote (", ' or `), the serial is quoted:
+// it runs to the next matching quote, to a backslash directly followed by that
+// quote (a JSON value nested in another string), or to the end of the text.
+// Any other backslash escape is skipped as a pair and stays in the serial. A
+// quoted serial may contain spaces.
+//
+// Otherwise the serial ends at the first isSerialTerminator byte, so an
+// unquoted serial that contains a space is masked only up to the space.
+func usbIDSerialEnd(message string, i, s int) int {
+	if i > 0 && strings.IndexByte(usbSerialQuotes, message[i-1]) >= 0 {
+		quote := message[i-1]
+		for k := s; k < len(message); k++ {
+			switch message[k] {
+			case quote:
+				return k
+			case '\\':
+				if k+1 < len(message) && message[k+1] == quote {
+					return k
+				}
+				k++
+			}
+		}
+		return len(message)
+	}
+	k := s
+	for k < len(message) && !isSerialTerminator(message[k]) {
+		k++
+	}
+	return k
+}
+
+// isMaskedSerialAt reports whether the serial at s is already the redaction
+// marker: the marker followed by the end of text, an isSerialTerminator byte,
+// or one ":" or "." that is itself followed by the end of text or a terminator
+// (an error suffix or the end of a sentence). A marker followed by any other
+// text is the start of a serial and is masked like one.
+func isMaskedSerialAt(message string, s int) bool {
+	rest, ok := strings.CutPrefix(message[s:], redactedUSBSerial)
+	if !ok {
+		return false
+	}
+	if rest != "" && (rest[0] == ':' || rest[0] == '.') {
+		rest = rest[1:]
+	}
+	return rest == "" || isSerialTerminator(rest[0])
+}
+
+// scrubUSBIDSerials masks the serial of every usb-id token in message (see
+// usbIDTokenPattern), giving "usb-id:<vendor>:<product>:<redacted>", so vendor
+// and product stay readable for later stages (see isUSBDeviceToken). A token
+// whose serial is empty or already masked (see isMaskedSerialAt) is left alone,
+// which keeps the stage idempotent; any other serial is masked, failing closed.
+// usbIDSerialEnd decides where a serial ends. It returns message itself when
+// there is nothing to mask.
+func scrubUSBIDSerials(message string) string {
+	if !strings.Contains(message, usbIDTokenPrefix) {
+		return message
+	}
+	var out strings.Builder
+	pos := 0
+	for _, m := range usbIDTokenPattern.FindAllStringIndex(message, -1) {
+		i, s := m[0], m[1]
+		// A token inside a serial masked already is gone with that serial.
+		if i < pos || isMaskedSerialAt(message, s) {
+			continue
+		}
+		e := usbIDSerialEnd(message, i, s)
+		if e == s {
+			continue
+		}
+		if pos == 0 {
+			out.Grow(len(message))
+		}
+		out.WriteString(message[pos:s])
+		out.WriteString(redactedUSBSerial)
+		pos = e
+	}
+	if pos == 0 {
+		return message
+	}
+	out.WriteString(message[pos:])
+	return out.String()
+}
 
 // usbPathTokenPrefix is the text before the PCI address in a "usb-path:" token
 // such as "usb-path:usb-0000:00:1d.0-1".
@@ -1053,7 +1211,8 @@ const usbTokenGroupCount = 3
 //   - ":VVVV:PPPP" right after the literal "usb-id" (the match starts at the
 //     colon of "usb-id:"). A serial that starts with a word byte after the pair
 //     ("usb-id:046d:0825:SN12") puts a trailing colon into the match, which
-//     fails the shape, so the ids are anonymized with the serial;
+//     fails the shape, so ScrubStandaloneIPs alone anonymizes the ids with the
+//     serial; ScrubMessage masks the serial first, so the ids survive there;
 //   - "DDDD:BB:dd" right after "usb-" with a "." after it, the PCI address of a
 //     "usb-path:usb-0000:00:1d.0-1" token.
 //

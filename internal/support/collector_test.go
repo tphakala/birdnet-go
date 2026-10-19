@@ -228,6 +228,25 @@ func TestCollector_scrubConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "mask usb-id serials in device values",
+			config: map[string]any{
+				"realtime": map[string]any{"audio": map[string]any{"source": "usb-id:0d8c:0014:SN12345"}},
+				"sources": []any{
+					map[string]any{"name": "Mic", "device": "usb-id:0d8c:0014:SN12345"},
+					map[string]any{"device": "usb-path:usb-0000:00:14.0-3"},
+					map[string]any{"device": "hw:1,0"},
+				},
+			},
+			want: map[string]any{
+				"realtime": map[string]any{"audio": map[string]any{"source": "usb-id:0d8c:0014:<redacted>"}},
+				"sources": []any{
+					map[string]any{"name": "Mic", "device": "usb-id:0d8c:0014:<redacted>"},
+					map[string]any{"device": "usb-path:usb-0000:00:14.0-3"},
+					map[string]any{"device": "hw:1,0"},
+				},
+			},
+		},
+		{
 			name: "handle mixed case keys",
 			config: map[string]any{
 				"Password": "secret",
