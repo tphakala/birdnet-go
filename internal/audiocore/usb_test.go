@@ -176,6 +176,12 @@ func TestDeviceDedupKey(t *testing.T) {
 	assert.NotEqual(t, deviceDedupKey("Line In", none), deviceDedupKey("Mic In", none))
 }
 
+func TestRedactDeviceID(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, "usb-id:0b33:0024:<redacted>", redactDeviceID("usb-id:0b33:0024:ABC123"))
+	assert.Equal(t, "usb-path:usb-xhci-hcd.0-1", redactDeviceID("usb-path:usb-xhci-hcd.0-1"))
+}
+
 func TestMatchesDevice(t *testing.T) {
 	t.Parallel()
 	// A live USB device with a known identity (as resolved from /proc).
