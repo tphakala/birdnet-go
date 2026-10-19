@@ -108,6 +108,7 @@ BirdNET-Go follows **Privacy by Design** principles:
 
 - OS details, hardware specifications, runtime information
 - Disk usage and container information for troubleshooting
+- CPU model and features, kernel version, container memory limit, and the inference runtime state with the loaded models (library and model file names only, plus the container-side mount point of the models directory)
 
 **Log Files**
 

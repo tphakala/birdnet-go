@@ -74,6 +74,7 @@ const (
 	metadataFileName       = "metadata.json"
 	configYAMLFileName     = "config.yaml"
 	systemInfoFileName     = "system_info.json"
+	runtimeInfoFileName    = "runtime_info.json"
 	databaseInfoFileName   = "database_info.json"
 	deploymentInfoFileName = "deployment_info.json"
 	appEventsFileName      = "app_events.json"
@@ -220,6 +221,8 @@ type Collector struct {
 	sensitiveKeys     []string
 	dbInfoProvider    DatabaseInfoProvider
 	appEventsProvider AppEventsProvider
+	// runtimeInfoProvider supplies runtime_info.json; nil in the CLI.
+	runtimeInfoProvider RuntimeInfoProvider
 }
 
 // DefaultSensitiveKeys returns the default list of sensitive configuration keys to redact.
@@ -477,6 +480,7 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 		getLogger().Debug("support: collecting system information")
 		dump.Diagnostics.SystemCollection.Attempted = true
 		dump.SystemInfo = c.collectSystemInfo()
+		dump.RuntimeInfo = c.collectRuntimeInfo(ctx)
 		dump.Diagnostics.SystemCollection.Successful = true
 		getLogger().Debug("support: system information collected",
 			logger.String("os", dump.SystemInfo.OS),
@@ -665,6 +669,28 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 				Build()
 		}
 		getLogger().Debug("support: system info added successfully")
+	}
+
+	// Add runtime info: the file exists whenever system info was requested, with
+	// available=false when no running instance was inspected.
+	if dump.RuntimeInfo != nil {
+		runtimeFile, err := w.Create(runtimeInfoFileName)
+		if err != nil {
+			getLogger().Error("support: failed to create runtime info file in archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_runtime_info_file").
+				Build()
+		}
+		if err := json.NewEncoder(runtimeFile).Encode(dump.RuntimeInfo); err != nil {
+			getLogger().Error("support: failed to write runtime info to archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_runtime_info").
+				Build()
+		}
 	}
 
 	// Add database info if collected
