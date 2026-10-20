@@ -215,14 +215,14 @@ readable `reason` when it is known. The field is additive: status values are unc
 queued and generating answers carry no reason. A client that can read the body (a `fetch`,
 not an `<img>`) should act on it:
 
-| `reason`         | Where                                                                                           | What a client should do                  |
-| ---------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `not_generated`  | status `not_started`, source clip on disk                                                       | request generation                       |
-| `source_pending` | status `not_started` or `failed`, and the image `404` after the wait; the clip may still appear | retry later, a bounded number of times   |
-| `source_missing` | status `not_started` or `failed`, and the fast image `404`; the clip is gone for good           | stop retrying, show that no audio exists |
-| `source_invalid` | status `failed`; the clip exists but cannot be rendered                                         | stop retrying                            |
-| `busy`           | status `failed`; no generation slot in time, a deadline or a cancellation                       | retry with backoff                       |
-| `render_failed`  | status `failed`; any other generation failure                                                   | retry a bounded number of times          |
+| `reason`         | Where                                                                                                                  | What a client should do                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `not_generated`  | status `not_started`, source clip on disk                                                                              | request generation                       |
+| `source_pending` | status `not_started` or `failed`, and the image `404` after the wait; the clip may still appear                        | retry later, a bounded number of times   |
+| `source_missing` | status `not_started` or `failed`, and the fast image `404`; the clip is gone for good                                  | stop retrying, show that no audio exists |
+| `source_invalid` | status `failed`; the clip exists but cannot be rendered                                                                | stop retrying                            |
+| `busy`           | status `failed`; no generation slot in time, a deadline or a cancellation                                              | retry with backoff                       |
+| `render_failed`  | status `failed`; any other generation failure, and the image `404` when the rendered image is missing after generation | retry a bounded number of times          |
 
 A kept render of the clip can still be served by `GET /spectrogram/:id` when the audio is
 gone, so `source_missing` describes the audio, not every image request. The `Invalid audio

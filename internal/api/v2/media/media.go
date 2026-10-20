@@ -2296,6 +2296,8 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 //     encoding); the request is then answered at once. While the clip may still be
 //     written, the request first waits up to audioWaitTimeout and then answers with
 //     reason "source_pending" (or 503 with Retry-After when an export is pending).
+//   - The same 404 and message carry reason "render_failed" when the rendered image is
+//     missing after generation.
 //
 // IMPORTANT: Clients must check Content-Type header to determine response format:
 //   - image/png: Binary image data (display image)
@@ -2730,6 +2732,7 @@ func (c *Handler) failGoneSourceGeneration(noteID, clipPath, queueKey string, st
 //   - 200 OK: spectrogram already exists
 //   - 202 Accepted: generation queued or already in progress
 //   - 400 Bad Request: legacy width outside 100..2000
+//   - 404 Not Found: the detection has no audio clip
 //   - 503 Service Unavailable: Audio file not ready, or the detection's model type
 //     could not be looked up (includes Retry-After header); nothing is queued or written
 func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
