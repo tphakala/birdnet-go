@@ -3,6 +3,7 @@ package spectrogram
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"image"
 	"image/color"
 	"image/png"
@@ -45,6 +46,18 @@ const (
 	// nativeTestMinCols is the fewest raster columns a 2 s clip may produce at
 	// nativeTestWidth.
 	nativeTestMinCols = 250
+
+	// nativeStreamSeconds and nativeStreamToneHz describe a clip of three decode
+	// chunks, long enough for transcode.OpenMono to stream it.
+	nativeStreamSeconds = 3.3
+	nativeStreamToneHz  = 2000.0
+
+	// xingSearchBytes bounds the search for the Xing or Info tag at the start of an
+	// MP3. The flags word follows the tag name, and the frame count follows the
+	// flags.
+	xingSearchBytes  = 400
+	xingFlagsOffset  = 4
+	xingFramesOffset = 8
 
 	soxStubMarker = "SOXSTUB\n"
 	pngSignature  = "\x89PNG\r\n\x1a\n"
@@ -363,16 +376,97 @@ func TestNativeGate_ProcessedPreviewPath(t *testing.T) {
 func TestNativeGate_DecodeErrorReportedOnce(t *testing.T) {
 	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
-	in := filepath.Join(env.TempDir, "clip.xyz")
-	require.NoError(t, os.WriteFile(in, []byte("not audio"), 0o600))
+	unsupported := filepath.Join(env.TempDir, "clip.xyz")
+	require.NoError(t, os.WriteFile(unsupported, []byte("not audio"), 0o600))
+	// A truncated WAV fails while the render streams it, not before.
+	whole := writeNativeWAV(t, env.TempDir, "whole.wav", toneSamples(nativeCodecRate, nativeStreamSeconds, nativeStreamToneHz), nativeCodecRate)
+	wholeBytes, err := os.ReadFile(whole) //nolint:gosec // G304: test path
+	require.NoError(t, err)
+	truncated := filepath.Join(env.TempDir, "cut.wav")
+	require.NoError(t, os.WriteFile(truncated, wholeBytes[:len(wholeBytes)/2], 0o600))
 
-	err := gen.GenerateFromFile(t.Context(), in, filepath.Join(env.TempDir, "o.png"), nativeTestWidth, false)
+	tests := []struct {
+		name string
+		in   string
+		want error
+	}{
+		{name: "unsupported extension", in: unsupported, want: transcode.ErrUnsupportedSource},
+		{name: "truncated WAV", in: truncated, want: transcode.ErrTruncatedSource},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out := filepath.Join(env.TempDir, tt.name+".png")
 
-	require.ErrorIs(t, err, transcode.ErrUnsupportedSource)
-	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
-	require.True(t, ok)
-	assert.Equal(t, "audiocore/transcode", enhanced.GetComponent(), "the transcode error is kept, not rebuilt")
-	assert.Contains(t, err.Error(), "native spectrogram "+nativeOperationFile)
+			err := gen.GenerateFromFile(t.Context(), tt.in, out, nativeTestWidth, false)
+
+			require.ErrorIs(t, err, tt.want)
+			enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+			require.True(t, ok)
+			assert.Equal(t, "audiocore/transcode", enhanced.GetComponent(), "the transcode error is kept, not rebuilt")
+			assert.Contains(t, err.Error(), "native spectrogram "+nativeOperationFile)
+			assert.NoFileExists(t, out)
+			assertNoSpectrogramTemp(t, out)
+		})
+	}
+}
+
+// renderBuffered renders path the way the native file path did before clips
+// were streamed: decoded into memory, then drawn.
+func renderBuffered(t *testing.T, gen *Generator, env *testEnv, path, out string) {
+	t.Helper()
+	decoded, err := transcode.DecodeMono(t.Context(), path, 0)
+	require.NoError(t, err)
+	src, displayRate, err := analysisSource(decoded, BirdProfile())
+	require.NoError(t, err)
+	require.NoError(t, gen.renderNative(t.Context(), env.Settings, src, displayRate, out, nativeTestWidth, false, nativeOperationFile, 0, false, 0))
+}
+
+// mp3WithDoubledFrameCount returns an MP3 whose Xing or Info tag declares twice
+// the frames it holds, so a decoder reports a length twice the audio.
+func mp3WithDoubledFrameCount(t *testing.T, data []byte) []byte {
+	t.Helper()
+	head := data[:min(len(data), xingSearchBytes)]
+	idx := bytes.Index(head, []byte("Xing"))
+	if idx < 0 {
+		idx = bytes.Index(head, []byte("Info"))
+	}
+	require.GreaterOrEqual(t, idx, 0, "the encoder writes a length tag")
+	require.NotZero(t, binary.BigEndian.Uint32(data[idx+xingFlagsOffset:])&1, "the tag carries a frame count")
+	out := bytes.Clone(data)
+	binary.BigEndian.PutUint32(out[idx+xingFramesOffset:], 2*binary.BigEndian.Uint32(out[idx+xingFramesOffset:]))
+	return out
+}
+
+// A clip long enough to stream must produce the picture the buffered render
+// produces, including a file whose header declares more audio than it holds, which
+// is drawn again from memory instead of as a narrow picture.
+func TestGenerateNativeFromFile_MatchesTheBufferedRender(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	gen, env := newNativeGenerator(t)
+	samples := toneSamples(nativeCodecRate, nativeStreamSeconds, nativeStreamToneHz)
+	wavPath := writeNativeWAV(t, env.TempDir, "in.wav", samples, nativeCodecRate)
+	mp3Path := filepath.Join(env.TempDir, "good.mp3")
+	require.NoError(t, mp3.EncodePCM(t.Context(), &mp3.Options{PCMData: samplesToPCM(samples), OutputPath: mp3Path, SampleRate: nativeCodecRate, Channels: 1, BitDepth: 16}))
+	goodMP3, err := os.ReadFile(mp3Path) //nolint:gosec // G304: test path
+	require.NoError(t, err)
+	doubledPath := filepath.Join(env.TempDir, "doubled.mp3")
+	require.NoError(t, os.WriteFile(doubledPath, mp3WithDoubledFrameCount(t, goodMP3), 0o600))
+
+	for name, in := range map[string]string{"WAV": wavPath, "MP3 declaring twice its length": doubledPath} {
+		t.Run(name, func(t *testing.T) {
+			got := filepath.Join(env.TempDir, name+"-got.png")
+			want := filepath.Join(env.TempDir, name+"-want.png")
+
+			require.NoError(t, gen.GenerateFromFile(t.Context(), in, got, nativeTestWidth, false))
+			renderBuffered(t, gen, env, in, want)
+
+			gotBytes, err := os.ReadFile(got) //nolint:gosec // G304: test path
+			require.NoError(t, err)
+			wantBytes, err := os.ReadFile(want) //nolint:gosec // G304: test path
+			require.NoError(t, err)
+			assert.Equal(t, wantBytes, gotBytes)
+		})
+	}
 }
 
 // brightestRow returns the image row with the highest palette index in column x.
@@ -582,7 +676,7 @@ func TestRenderNative_OverwritesStaleTemp(t *testing.T) {
 	temp := filepath.Join(env.TempDir, "stale.png")
 	require.NoError(t, os.WriteFile(temp, bytes.Repeat([]byte("stale"), 1000), 0o600))
 
-	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), 0, temp, nativeTestWidth, false, nativeOperationFile, 0, 0)
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), 0, temp, nativeTestWidth, false, nativeOperationFile, 0, false, 0)
 
 	require.NoError(t, err)
 	requireNativePNG(t, temp)
@@ -598,7 +692,7 @@ func TestRenderNative_DoesNotWriteThroughASymlink(t *testing.T) {
 		t.Skipf("symlinks are not available: %v", err)
 	}
 
-	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), 0, temp, nativeTestWidth, false, nativeOperationFile, 0, 0)
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), 0, temp, nativeTestWidth, false, nativeOperationFile, 0, false, 0)
 
 	require.NoError(t, err)
 	got, readErr := os.ReadFile(victim) //nolint:gosec // G304: test path
@@ -615,7 +709,7 @@ func TestRenderNative_RemoveFailureIsFileIO(t *testing.T) {
 	require.NoError(t, os.MkdirAll(temp, 0o750))
 	require.NoError(t, os.WriteFile(filepath.Join(temp, "inner"), []byte("x"), 0o600))
 
-	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), 0, temp, nativeTestWidth, false, nativeOperationFile, 0, 0)
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), 0, temp, nativeTestWidth, false, nativeOperationFile, 0, false, 0)
 
 	require.Error(t, err)
 	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
@@ -665,7 +759,7 @@ func TestRenderNative_OpenFailureIsFileIO(t *testing.T) {
 	gen, env := newNativeGenerator(t)
 	temp := filepath.Join(env.TempDir, "no-such-dir", "out.png")
 
-	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), 0, temp, nativeTestWidth, false, nativeOperationFile, 0, 0)
+	err := gen.renderNative(t.Context(), env.Settings, nativeTestSource(t), 0, temp, nativeTestWidth, false, nativeOperationFile, 0, false, 0)
 
 	require.Error(t, err)
 	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
