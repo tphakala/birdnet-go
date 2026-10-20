@@ -840,70 +840,85 @@ func TestEncodePNG(t *testing.T) {
 	}
 }
 
-// Renders that run at the same time must each encode with their own encoder
-// buffer, and a buffer reused for a later image of another size must not leak
-// pixels from the earlier one. The inputs use two sizes so a reused buffer can
-// have last held an image of the other size.
-func TestNativeGate_ConcurrentPCMRendersKeepTheirOwnPixels(t *testing.T) {
+// Encodes that run at the same time must each use their own encoder buffer, and
+// a buffer reused for a later image of another size must not leak pixels from the
+// earlier one. The images come from real renders at two sizes. The encoding
+// goroutines are released together, and each cycles through every image, so the
+// encodes overlap and the same goroutine encodes a narrow image after a wide one.
+func TestEncodePNG_ConcurrentEncodesKeepTheirOwnPixels(t *testing.T) {
 	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	const (
-		rate        = 24000
-		rendersEach = 3
-		wideWidth   = 514
-		toneSecs    = 1
+		rate       = 24000
+		cyclesEach = 5
+		wideWidth  = 514
+		toneSecs   = 1
+		goroutineN = 4
 	)
 	inputs := []struct {
 		name   string
 		width  int
 		toneHz float64
-		pcm    []byte
 	}{
-		{name: "low narrow", width: nativeTestWidth, toneHz: 1500},
-		{name: "mid narrow", width: nativeTestWidth, toneHz: 3000},
-		{name: "high wide", width: wideWidth, toneHz: 6000},
-		{name: "top wide", width: wideWidth, toneHz: 9000},
+		{"low narrow", nativeTestWidth, 1500},
+		{"high wide", wideWidth, 6000},
+		{"mid narrow", nativeTestWidth, 3000},
+		{"top wide", wideWidth, 9000},
 	}
-	for i := range inputs {
-		inputs[i].pcm = samplesToPCM(toneSamples(rate, toneSecs, inputs[i].toneHz))
-	}
-	renderInput := func(i, n int) (string, error) {
-		path := filepath.Join(env.TempDir, fmt.Sprintf("in%d-render%d.png", i, n))
-		return path, gen.GenerateFromPCM(t.Context(), inputs[i].pcm, path, inputs[i].width, true, rate)
-	}
-
 	refs := make([]*image.Paletted, len(inputs))
-	for i := range inputs {
-		path, err := renderInput(i, 0)
-		require.NoError(t, err, inputs[i].name)
+	for i, in := range inputs {
+		path := filepath.Join(env.TempDir, fmt.Sprintf("ref%d.png", i))
+		pcm := samplesToPCM(toneSamples(rate, toneSecs, in.toneHz))
+		require.NoError(t, gen.GenerateFromPCM(t.Context(), pcm, path, in.width, true, rate), in.name)
 		refs[i] = decodePNG(t, path)
 	}
 
-	paths := make([][]string, len(inputs))
-	errs := make([]error, len(inputs))
+	// decoded is one encode result and the index of the reference it must equal.
+	type decoded struct {
+		ref int
+		img *image.Paletted
+	}
+	results := make([][]decoded, goroutineN)
+	errs := make([]error, goroutineN)
+	start := make(chan struct{})
 	var wg sync.WaitGroup
-	for i := range inputs {
+	for g := range goroutineN {
 		wg.Go(func() {
-			for n := 1; n <= rendersEach; n++ {
-				path, err := renderInput(i, n)
-				if err != nil {
-					errs[i] = err
-					return
+			<-start
+			for range cyclesEach {
+				for j := range refs {
+					ref := (g + j) % len(refs)
+					var out bytes.Buffer
+					if err := encodePNG(&out, refs[ref]); err != nil {
+						errs[g] = err
+						return
+					}
+					img, err := png.Decode(&out)
+					if err != nil {
+						errs[g] = err
+						return
+					}
+					got, ok := img.(*image.Paletted)
+					if !ok {
+						errs[g] = errors.NewStd(fmt.Sprintf("decoded %T, want *image.Paletted", img))
+						return
+					}
+					results[g] = append(results[g], decoded{ref: ref, img: got})
 				}
-				paths[i] = append(paths[i], path)
 			}
 		})
 	}
+	close(start)
 	wg.Wait()
 
-	for i, in := range inputs {
-		require.NoError(t, errs[i], in.name)
-		require.Len(t, paths[i], rendersEach, in.name)
-		for _, path := range paths[i] {
-			got := decodePNG(t, path)
-			assert.Equal(t, refs[i].Rect, got.Rect, in.name)
-			assert.Equal(t, refs[i].Palette, got.Palette, in.name)
-			assert.Equal(t, refs[i].Pix, got.Pix, in.name)
+	for g := range goroutineN {
+		require.NoError(t, errs[g], "goroutine %d", g)
+		require.Len(t, results[g], cyclesEach*len(refs), "goroutine %d", g)
+		for _, d := range results[g] {
+			want := refs[d.ref]
+			assert.Equal(t, want.Rect, d.img.Rect, inputs[d.ref].name)
+			assert.Equal(t, want.Palette, d.img.Palette, inputs[d.ref].name)
+			assert.Equal(t, want.Pix, d.img.Pix, inputs[d.ref].name)
 		}
 	}
 }
