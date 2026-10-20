@@ -1,12 +1,15 @@
 package buffer
 
 import (
+	"regexp"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // Test buffer shape: 1000 Hz, 16-bit, so one chunk of diagChunkBytes holds one
@@ -98,4 +101,35 @@ func TestCaptureBufferResetClearsWriteDiagnostics(t *testing.T) {
 		assert.Zero(t, after.gap)
 		assert.False(t, after.logged())
 	})
+}
+
+// logTime returns the time logged for key in captured text-handler output.
+func logTime(t *testing.T, out, key string) time.Time {
+	t.Helper()
+	m := regexp.MustCompile(key + `=(\S+)`).FindStringSubmatch(out)
+	require.Len(t, m, 2, "no %s in the log output", key)
+	ts, err := time.Parse(time.RFC3339Nano, m[1])
+	require.NoError(t, err)
+	return ts
+}
+
+// TestCaptureBufferWarmupLogKeepsRequestedStart checks that a read failing in
+// the warmup window logs the start the caller asked for, one second before the
+// first write, rather than the start clamped to the buffer. Not parallel: it
+// replaces the global logger.
+func TestCaptureBufferWarmupLogKeepsRequestedStart(t *testing.T) {
+	logs := logtest.CaptureBuffer(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		cb, chunk := newDiagBuffer(t)
+		cb.write(chunk)
+
+		now := time.Now()
+		_, err := cb.ReadSegment(now.Add(-time.Second), now.Add(3*time.Second))
+		require.ErrorIs(t, err, ErrInsufficientData)
+	})
+
+	out := logs.String()
+	require.Contains(t, out, "capture buffer read segment during warmup")
+	assert.Equal(t, time.Second, logTime(t, out, "buffer_start").Sub(logTime(t, out, "requested_start")))
 }

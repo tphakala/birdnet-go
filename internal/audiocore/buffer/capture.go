@@ -295,7 +295,9 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 	// Clamp startTime to the oldest available data so that requests for
 	// audio slightly before the buffer window still return what we have
 	// rather than failing outright. cb.startTime is kept current by Write()
-	// which refreshes it on every call after the buffer wraps.
+	// which refreshes it on every call after the buffer wraps. The caller's
+	// start is kept for the warmup debug line.
+	requestedStart := startTime
 	if startTime.Before(cb.startTime) {
 		startTime = cb.startTime
 	}
@@ -351,7 +353,7 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 				logger.Int("requested_end_byte", endByteOffset),
 				logger.Int("written_bytes", cb.writtenBytes),
 				logger.Bool("wrapped", cb.wrapped),
-				logger.Time("requested_start", startTime),
+				logger.Time("requested_start", requestedStart),
 				logger.Time("requested_end", endTime),
 				logger.Time("buffer_start", cb.startTime),
 				logger.Int64("lag_ms", cb.lagSinceFirstWrite(time.Now()).Milliseconds()),
