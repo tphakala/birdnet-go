@@ -279,8 +279,9 @@ func chunkBytes(frameBytes int) int {
 	return chunkFrames * frameBytes
 }
 
-// frameReader reads decoded PCM from a decoder in whole frames, with the
-// guards every read loop of this package needs.
+// frameReader reads decoded PCM from a decoder in whole frames. It carries the
+// context, zero-read and error-classification guards of the read loops that fill
+// a buffer (readLimited and MonoSource.Stream).
 type frameReader struct {
 	r          io.Reader
 	frameBytes int

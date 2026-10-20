@@ -187,9 +187,6 @@ func analysisSource(src *transcode.MonoSource, profile FrequencyProfile) (render
 // resampling. It is only logged, with the render and write times and the streamed
 // flag, so the renderers can be compared. budgetWeight is the render budget bytes
 // the caller holds (zero when it holds none), also only logged.
-//
-// An error wrapping transcode.ErrShorterThanDeclared is returned as it is, not
-// classified: the caller redoes the render from memory.
 func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, displayRate int, tempPath string, width int, raw bool, operation string, decodeElapsed time.Duration, streamed bool, budgetWeight int64) error {
 	renderStart := time.Now()
 	opt := render.Options{
@@ -202,9 +199,6 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 	}
 	img, cols, err := render.Render(ctx, src, opt)
 	if err != nil {
-		if errors.Is(err, transcode.ErrShorterThanDeclared) {
-			return err
-		}
 		return g.nativeError(ctx, err, operation)
 	}
 
@@ -266,8 +260,13 @@ func (g *Generator) nativeFileError(err error, operation, step string) error {
 // error exactly once, since a Build reports to telemetry whenever reporting is
 // active (see ErrorBuilder.Build in internal/errors). An error that is
 // already enhanced (built by the transcode package) is only wrapped with the
-// operation, even when the context has expired as well.
+// operation, even when the context has expired as well. An error wrapping
+// transcode.ErrShorterThanDeclared is returned as it is: it is the signal to
+// render the clip again from memory, not a failure to classify or report.
 func (g *Generator) nativeError(ctx context.Context, err error, operation string) error {
+	if errors.Is(err, transcode.ErrShorterThanDeclared) {
+		return err
+	}
 	if _, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		// Already built (and reported) by the transcode package; building again
 		// would report the same failure twice.

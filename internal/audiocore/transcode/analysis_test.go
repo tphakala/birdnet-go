@@ -422,28 +422,30 @@ func TestOpenMono_StreamsSameSamplesAsDecodeMono(t *testing.T) {
 	t.Parallel()
 
 	for _, fx := range fixtures() {
-		for _, target := range []int{0, 24000, 32000} {
-			t.Run(fmt.Sprintf("%s to %d", fx.name, target), func(t *testing.T) {
-				t.Parallel()
-				path, _ := writeFixture(t, fx, testRate, streamTestSeconds)
-
-				want, err := DecodeMono(t.Context(), path, target)
-				require.NoError(t, err)
-				got, err := OpenMono(t.Context(), path, 0)
-				require.NoError(t, err)
-				require.True(t, got.Streamed(), "a clip of several chunks streams")
-				if target > 0 {
-					got, err = got.WithRate(target)
+		t.Run(fx.name, func(t *testing.T) {
+			t.Parallel()
+			path, _ := writeFixture(t, fx, testRate, streamTestSeconds)
+			for _, target := range []int{0, 24000, 32000} {
+				t.Run(fmt.Sprintf("to %d", target), func(t *testing.T) {
+					t.Parallel()
+					want, err := DecodeMono(t.Context(), path, target)
 					require.NoError(t, err)
-				}
+					got, err := OpenMono(t.Context(), path, 0)
+					require.NoError(t, err)
+					require.True(t, got.Streamed(), "a clip of several chunks streams")
+					if target > 0 {
+						got, err = got.WithRate(target)
+						require.NoError(t, err)
+					}
 
-				assert.Equal(t, want.SampleRate(), got.SampleRate())
-				assert.Equal(t, want.SpanSamples(), got.SpanSamples())
-				first := collectStream(t, got)
-				assert.Equal(t, collectStream(t, want), first)
-				assert.Equal(t, first, collectStream(t, got), "a second Stream delivers the same samples")
-			})
-		}
+					assert.Equal(t, want.SampleRate(), got.SampleRate())
+					assert.Equal(t, want.SpanSamples(), got.SpanSamples())
+					first := collectStream(t, got)
+					assert.Equal(t, collectStream(t, want), first)
+					assert.Equal(t, first, collectStream(t, got), "a second Stream delivers the same samples")
+				})
+			}
+		})
 	}
 }
 
