@@ -17,7 +17,7 @@ import (
 
 const (
 	// seekClipSeconds is the length of the clips the seek tests window into. For
-	// Opus it spans three audio pages.
+	// Opus it spans at least opusMinAudioPages audio pages.
 	seekClipSeconds = 12.0
 	// seekMidFileSeconds is a window start past the first Opus audio page and its
 	// pre-roll, inside every format's clip.
@@ -90,8 +90,9 @@ func TestDecodeSource_WindowsAfterFrameZeroSeek(t *testing.T) {
 }
 
 // Opus windows are positioned by discarding, because go-opus's SeekToSample is
-// not bit-exact, so they equal the matching slice of the linear decode
-// byte for byte, also around the pre-roll and page boundaries a seek would land on.
+// not guaranteed bit-exact, so they equal the matching slice of the linear
+// decode byte for byte, also around the pre-roll and page boundaries a seek
+// would land on.
 func TestDecode_OpusWindowsMatchTheLinearDecode(t *testing.T) {
 	t.Parallel()
 

@@ -207,6 +207,30 @@ func TestOpenSource_ClosedFileIsAFileIOError(t *testing.T) {
 	}
 }
 
+// A file access that fails while decoding M4A frames, after the open succeeded,
+// reports the failure of the file, not a damaged clip.
+func TestDecodeError_M4AFrameReadFailureIsAFileIOError(t *testing.T) {
+	t.Parallel()
+
+	path, _ := writeFixture(t, fixtureNamed(t, "m4a"), testRate, 0.5)
+	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
+	require.NoError(t, err)
+	src, err := openSource(f, path)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	_, readErr := src.reader.Read(make([]byte, chunkBytes(src.channels*bytesPerSample)))
+	require.Error(t, readErr)
+	_, isPathErr := errors.AsType[*fs.PathError](readErr)
+	require.True(t, isPathErr, "the frame read failure keeps its *fs.PathError: %v", readErr)
+
+	got := decodeError("test", readErr)
+	assert.False(t, errors.Is(got, ErrUndecodableSource), "a disk fault is not a damaged clip")
+	enhanced, ok := errors.AsType[*errors.EnhancedError](got)
+	require.True(t, ok)
+	assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
+}
+
 func TestDecode_CorruptAndTruncatedInputs(t *testing.T) {
 	t.Parallel()
 
