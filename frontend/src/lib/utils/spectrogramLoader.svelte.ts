@@ -45,6 +45,12 @@ export const SLOW_SLOT_WAIT_WARN_MS = 5000;
 /** An image holding its load slot longer than this before load or error fired. */
 export const LONG_SLOT_HOLD_WARN_MS = 10000;
 
+/** Logger throttle keys, one per kind of diagnostic warning. */
+const POLL_LATE_THROTTLE_KEY = 'spectrogram-poll-late';
+const STATUS_SLOW_THROTTLE_KEY = 'spectrogram-status-slow';
+const SLOT_WAIT_THROTTLE_KEY = 'spectrogram-slot-wait';
+const SLOT_HOLD_THROTTLE_KEY = 'spectrogram-slot-hold';
+
 /**
  * Logs a throttled diagnostic warning when elapsedMs exceeds limitMs and the
  * diagnostics are turned on in this browser.
@@ -166,7 +172,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         LONG_SLOT_HOLD_WARN_MS,
         'Spectrogram image held its load slot for a long time',
         { detectionId: currentDetectionId, heldMs, state },
-        'spectrogram-slot-hold'
+        SLOT_HOLD_THROTTLE_KEY
       );
       releaseSlot();
       hasSlot = false;
@@ -376,7 +382,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         LATE_POLL_TIMER_WARN_MS,
         'Spectrogram poll timer fired late',
         { detectionId, intervalMs: interval, lateMs, visibility: document.visibilityState },
-        'spectrogram-poll-late'
+        POLL_LATE_THROTTLE_KEY
       );
       void pollOnce(detectionId);
     }, interval);
@@ -409,7 +415,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         SLOW_STATUS_FETCH_WARN_MS,
         'Spectrogram status request was slow',
         { detectionId, fetchMs, httpStatus: response.status },
-        'spectrogram-status-slow'
+        STATUS_SLOW_THROTTLE_KEY
       );
 
       if (isStale(detectionId)) return;
@@ -474,7 +480,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         SLOW_SLOT_WAIT_WARN_MS,
         'Spectrogram waited long for an image load slot',
         { detectionId, waitMs, ...getQueueStats() },
-        'spectrogram-slot-wait'
+        SLOT_WAIT_THROTTLE_KEY
       );
     }
 
