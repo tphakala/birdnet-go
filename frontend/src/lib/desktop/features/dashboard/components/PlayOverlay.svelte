@@ -595,8 +595,9 @@
       canplayTimeoutId = undefined;
     }
 
-    // A clip the server already reported gone for good is not retried or probed.
-    if (isSpectrogramSourceKnownMissing(detectionId)) {
+    // The original clip, already reported gone for good, is not retried or probed. An
+    // audible-bats source is a local blob and keeps its retries.
+    if (!audibleBatsSrc && isSpectrogramSourceKnownMissing(detectionId)) {
       failLoadPermanently();
       return;
     }

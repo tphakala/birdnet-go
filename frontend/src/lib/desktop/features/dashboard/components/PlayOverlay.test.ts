@@ -659,6 +659,19 @@ describe('PlayOverlay', () => {
       expect(alertShown()).toBe(true);
     });
 
+    it('keeps retrying an audible-bats clip while the original is reported gone', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS });
+      markSpectrogramSourceMissing(DETECTION_ID);
+      render(PlayOverlay, { props: { detectionId: DETECTION_ID, audibleBatsSrc: BATS_SRC } });
+
+      ctl.failLoad();
+      await advanceRetry(0);
+
+      expect(probeCalls()).toHaveLength(0);
+      expect(ctl.load).toHaveBeenCalledTimes(1);
+      expect(alertShown()).toBe(false);
+    });
+
     it('ignores a 404 that arrives after the retry already fired', async () => {
       restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
       mount();
