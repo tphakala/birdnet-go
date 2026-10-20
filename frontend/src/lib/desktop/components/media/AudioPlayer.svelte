@@ -215,6 +215,9 @@
   let statusPollTimer: ReturnType<typeof setTimeout> | undefined;
   let statusPollStartTime: number | undefined;
   let statusPollAbortController: AbortController | undefined;
+  // True once the status poll answered failed for the current attempt; ends the image
+  // retries, including one already in flight. Cleared whenever a new attempt starts.
+  let spectrogramStatusFailed = false;
 
   // ==========================================================================
   // User-requested spectrogram generation (INCOMPLETE FEATURE)
@@ -1456,6 +1459,7 @@
           spectrogramStatus = null;
           // Force reload by incrementing cache key (triggers Svelte reactivity)
           spectrogramCacheKey++;
+          spectrogramStatusFailed = false;
           debugLog('pollSpectrogramStatus: cache key updated', { cacheKey: spectrogramCacheKey });
         } else if (status.status === 'queued' || status.status === 'generating') {
           // Still processing, continue polling
@@ -1466,6 +1470,7 @@
           debugLog('pollSpectrogramStatus: generation failed');
           clearStatusPollTimer();
           clearSpectrogramRetryTimer();
+          spectrogramStatusFailed = true;
           spectrogramLoader.setError();
         } else {
           // not_started or an unknown status: end polling and leave the image
@@ -1576,6 +1581,7 @@
     spectrogramLoader.reset();
     spectrogramStatus = null;
     spectrogramRetryCount = 0; // Reset retry count on successful load
+    spectrogramStatusFailed = false;
     clearSpectrogramRetryTimer();
     clearStatusPollTimer(); // Also clear status polling
     clearSpectrogramProbe();
@@ -1605,7 +1611,7 @@
     }
 
     // Start polling for generation status on first error
-    if (spectrogramRetryCount === 0) {
+    if (spectrogramRetryCount === 0 && !spectrogramStatusFailed) {
       debugLog('handleSpectrogramError: first error, starting status polling');
       statusPollStartTime = Date.now();
       pollSpectrogramStatus();
@@ -1617,7 +1623,7 @@
 
     // Retry on any error (likely 503 or temporary failure) up to max retries, unless the
     // status poll already ended the attempt (a request in flight when it said failed)
-    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES && !spectrogramLoader.error) {
+    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES && !spectrogramStatusFailed) {
       // Use exponential backoff for retry
       // Use Math.min to safely select delay without direct array indexing
       const delayIndex = Math.min(spectrogramRetryCount, SPECTROGRAM_RETRY_DELAYS.length - 1);
@@ -1739,6 +1745,7 @@
         // Reset state and start polling
         spectrogramNeedsGeneration = false;
         spectrogramRetryCount = 0;
+        spectrogramStatusFailed = false;
         spectrogramLoader.setLoading(true);
         statusPollStartTime = Date.now();
 
@@ -1757,6 +1764,7 @@
         // Reset state and reload the spectrogram via reactive cache key
         spectrogramNeedsGeneration = false;
         spectrogramRetryCount = 0;
+        spectrogramStatusFailed = false;
         spectrogramLoader.setLoading(true);
 
         // Reload by incrementing cache key (triggers Svelte reactivity)
@@ -1836,6 +1844,7 @@
 
       // Reset retry/cache state for new spectrogram
       spectrogramRetryCount = 0;
+      spectrogramStatusFailed = false;
       spectrogramCacheKey = 0;
       spectrogramStatus = null;
       clearSpectrogramRetryTimer();

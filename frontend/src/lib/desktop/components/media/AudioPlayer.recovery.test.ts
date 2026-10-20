@@ -577,6 +577,19 @@ describe('AudioPlayer recovery', () => {
       expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
     });
 
+    it('retries again after a failed status once a later attempt starts', async () => {
+      stubStatusFetch([statusResponse('failed'), statusResponse('generating')]);
+      mount();
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(0);
+      // A late load ends the failed attempt; the next failure begins a new one
+      await fireEvent.load(spectrogramImg());
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+
+      expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+    });
+
     it('does not keep polling when a cancelled poll rejects with a non-abort error', async () => {
       let fail: (e: Error) => void = () => {};
       const stub = vi.fn(
