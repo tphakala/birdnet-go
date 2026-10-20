@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -836,6 +837,74 @@ func TestEncodePNG(t *testing.T) {
 	// flush. The encoder failure is covered by the larger image below.
 	for _, limit := range []int{0, 10, 100} {
 		require.ErrorIs(t, encodePNG(&failingWriter{n: limit}, img), errWriterFull, "limit %d", limit)
+	}
+}
+
+// Renders that run at the same time must each encode with their own encoder
+// buffer, and a buffer reused for a later image of another size must not leak
+// pixels from the earlier one. The inputs use two sizes so a reused buffer can
+// have last held an image of the other size.
+func TestNativeGate_ConcurrentPCMRendersKeepTheirOwnPixels(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	gen, env := newNativeGenerator(t)
+	const (
+		rate         = 24000
+		rendersEach  = 3
+		wideWidth    = 514
+		toneSecs     = 1
+		firstToneHz  = 1500.0
+		secondToneHz = 3000.0
+		thirdToneHz  = 6000.0
+		fourthToneHz = 9000.0
+	)
+	inputs := []struct {
+		name  string
+		width int
+		pcm   []byte
+	}{
+		{"low narrow", nativeTestWidth, samplesToPCM(toneSamples(rate, toneSecs, firstToneHz))},
+		{"mid narrow", nativeTestWidth, samplesToPCM(toneSamples(rate, toneSecs, secondToneHz))},
+		{"high wide", wideWidth, samplesToPCM(toneSamples(rate, toneSecs, thirdToneHz))},
+		{"top wide", wideWidth, samplesToPCM(toneSamples(rate, toneSecs, fourthToneHz))},
+	}
+	renderInput := func(i, n int) (string, error) {
+		path := filepath.Join(env.TempDir, fmt.Sprintf("in%d-render%d.png", i, n))
+		return path, gen.GenerateFromPCM(t.Context(), inputs[i].pcm, path, inputs[i].width, true, rate)
+	}
+
+	refs := make([]*image.Paletted, len(inputs))
+	for i := range inputs {
+		path, err := renderInput(i, 0)
+		require.NoError(t, err, inputs[i].name)
+		refs[i] = decodePNG(t, path)
+	}
+
+	paths := make([][]string, len(inputs))
+	errs := make([]error, len(inputs))
+	var wg sync.WaitGroup
+	for i := range inputs {
+		wg.Go(func() {
+			for n := 1; n <= rendersEach; n++ {
+				path, err := renderInput(i, n)
+				if err != nil {
+					errs[i] = err
+					return
+				}
+				paths[i] = append(paths[i], path)
+			}
+		})
+	}
+	wg.Wait()
+
+	for i, in := range inputs {
+		require.NoError(t, errs[i], in.name)
+		require.Len(t, paths[i], rendersEach, in.name)
+		for _, path := range paths[i] {
+			got := decodePNG(t, path)
+			assert.Equal(t, refs[i].Rect, got.Rect, in.name)
+			assert.Equal(t, refs[i].Palette, got.Palette, in.name)
+			assert.Equal(t, refs[i].Pix, got.Pix, in.name)
+		}
 	}
 }
 
