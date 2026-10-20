@@ -216,8 +216,9 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.Realtime.Audio.Equalizer.Filters[0].Type = mutated
 
 	dst.Realtime.Dashboard.CustomColors.Primary = mutated
-	mutatedBool := false
-	dst.Realtime.Dashboard.ShowAudioLevel = &mutatedBool
+	if dst.Realtime.Dashboard.ShowAudioLevel != nil {
+		*dst.Realtime.Dashboard.ShowAudioLevel = false
+	}
 	dst.Realtime.Dashboard.Layout.Elements[0].Banner.Title = mutated
 	dst.Realtime.Dashboard.Layout.Elements[0].Video.URL = mutated
 	dst.Realtime.Dashboard.Layout.Elements[0].Summary.SummaryLimit = 0
@@ -284,6 +285,29 @@ func mutateCloneEverywhere(dst *Settings) {
 		tags[0] = mutated
 	}
 	dst.Notification.Push.Providers[0] = pp
+}
+
+// TestCloneSettings_ShowAudioLevelIndependence verifies that ShowAudioLevel is
+// deep-cloned so mutations on the pointed-to boolean do not affect the original.
+func TestCloneSettings_ShowAudioLevelIndependence(t *testing.T) {
+	t.Parallel()
+
+	show := true
+	src := &Settings{}
+	src.Realtime.Dashboard.ShowAudioLevel = &show
+
+	dst := CloneSettings(src)
+
+	require.NotNil(t, dst.Realtime.Dashboard.ShowAudioLevel)
+	require.NotSame(t, src.Realtime.Dashboard.ShowAudioLevel, dst.Realtime.Dashboard.ShowAudioLevel,
+		"ShowAudioLevel pointer must not be aliased between src and dst")
+	assert.True(t, *dst.Realtime.Dashboard.ShowAudioLevel)
+
+	*dst.Realtime.Dashboard.ShowAudioLevel = false
+
+	assert.True(t, *src.Realtime.Dashboard.ShowAudioLevel,
+		"source pointer must not be modified by mutation of clone")
+	assert.False(t, *dst.Realtime.Dashboard.ShowAudioLevel)
 }
 
 // TestCloneSettings_IncludedScientificNamesIndependence verifies that
