@@ -55,11 +55,18 @@ func classifyFilterClass(label string) filterClass {
 }
 
 // storeFilterClasses adds newly classified labels to filterClassCache, starting
-// the cache over when it would exceed maxFilterClassCacheEntries.
+// the cache over when it would exceed maxFilterClassCacheEntries. Labels another
+// window stored meanwhile are not counted as new.
 func storeFilterClasses(misses map[string]filterClass) {
 	filterClassCache.Lock()
 	defer filterClassCache.Unlock()
-	if len(filterClassCache.m)+len(misses) > maxFilterClassCacheEntries {
+	added := 0
+	for label := range misses {
+		if _, ok := filterClassCache.m[label]; !ok {
+			added++
+		}
+	}
+	if len(filterClassCache.m)+added > maxFilterClassCacheEntries {
 		filterClassCache.m = make(map[string]filterClass, len(misses))
 	}
 	maps.Copy(filterClassCache.m, misses)

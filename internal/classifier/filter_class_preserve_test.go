@@ -227,6 +227,30 @@ func TestStoreFilterClasses_ResetsWhenFull(t *testing.T) {
 	assert.Equal(t, filterClassDog, filterClassCache.m["Dog_Dog"])
 }
 
+// TestStoreFilterClasses_KnownLabelsDoNotReset checks that misses another window
+// already stored do not count toward the bound, so a full cache is not reset by
+// labels it already holds.
+func TestStoreFilterClasses_KnownLabelsDoNotReset(t *testing.T) {
+	filterClassCache.Lock()
+	saved := filterClassCache.m
+	filterClassCache.m = make(map[string]filterClass, maxFilterClassCacheEntries)
+	for i := range maxFilterClassCacheEntries {
+		filterClassCache.m[strconv.Itoa(i)] = 0
+	}
+	filterClassCache.Unlock()
+	t.Cleanup(func() {
+		filterClassCache.Lock()
+		filterClassCache.m = saved
+		filterClassCache.Unlock()
+	})
+
+	storeFilterClasses(map[string]filterClass{"0": 0, "1": 0})
+
+	filterClassCache.RLock()
+	defer filterClassCache.RUnlock()
+	assert.Len(t, filterClassCache.m, maxFilterClassCacheEntries)
+}
+
 // TestPreserveFilterClasses_Concurrent runs the scan from several goroutines with
 // distinct label sets, as concurrently running models do, so the race detector
 // covers the shared cache's cold and warm paths.
