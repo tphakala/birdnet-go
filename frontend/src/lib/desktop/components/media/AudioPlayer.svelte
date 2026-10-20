@@ -215,6 +215,9 @@
   let statusPollTimer: ReturnType<typeof setTimeout> | undefined;
   let statusPollStartTime: number | undefined;
   let statusPollAbortController: AbortController | undefined;
+  // True once the status poll answered failed for the current attempt; ends the image
+  // retries, including one already in flight. Cleared whenever a new attempt starts.
+  let spectrogramStatusFailed = false;
 
   // ==========================================================================
   // User-requested spectrogram generation (INCOMPLETE FEATURE)
@@ -328,6 +331,9 @@
   // 404 from that path still arrives in time.
   const SPECTROGRAM_PROBE_TIMEOUT_MS = 8000;
   const HTTP_STATUS_NOT_FOUND = 404;
+  const HTTP_STATUS_REQUEST_TIMEOUT = 408;
+  const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
+  const HTTP_STATUS_SERVER_ERROR_MIN = 500;
   // Generation statuses that mean the exact-rate render is coming or already
   // there, so a 404 for it is not a missing render.
   const RENDER_PENDING_OR_READY_STATUSES = new Set([
@@ -1385,6 +1391,13 @@
       `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
     );
 
+  // Schedules the next poll without touching statusPollStartTime, so
+  // MAX_POLL_DURATION bounds the whole polling run and not one request.
+  const scheduleNextStatusPoll = () => {
+    if (statusPollTimer) clearTimeout(statusPollTimer);
+    statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
+  };
+
   const pollSpectrogramStatus = async () => {
     if (!showSpectrogram || !detectionId) {
       debugLog('pollSpectrogramStatus: skipped', {
@@ -1408,14 +1421,16 @@
       return;
     }
 
-    // Create new AbortController for this poll request
-    statusPollAbortController = new AbortController();
+    // Create new AbortController for this poll request, ending any request still in flight
+    statusPollAbortController?.abort();
+    const controller = new AbortController();
+    statusPollAbortController = controller;
 
     const statusUrl = spectrogramStatusUrl();
     debugLog('pollSpectrogramStatus: fetching', { url: statusUrl });
 
     try {
-      const response = await fetch(statusUrl, { signal: statusPollAbortController.signal });
+      const response = await fetch(statusUrl, { signal: controller.signal });
 
       debugLog('pollSpectrogramStatus: response', {
         ok: response.ok,
@@ -1424,6 +1439,8 @@
 
       if (response.ok) {
         const status = parseSpectrogramStatus(await response.json());
+        // The poll was cancelled (unmount, new detection, image loaded) while the body was read
+        if (controller.signal.aborted) return;
         spectrogramStatus = status ?? null;
         if (!status) return;
 
@@ -1445,17 +1462,40 @@
           spectrogramStatus = null;
           // Force reload by incrementing cache key (triggers Svelte reactivity)
           spectrogramCacheKey++;
+          spectrogramStatusFailed = false;
           debugLog('pollSpectrogramStatus: cache key updated', { cacheKey: spectrogramCacheKey });
         } else if (status.status === 'queued' || status.status === 'generating') {
           // Still processing, continue polling
           debugLog('pollSpectrogramStatus: still processing, scheduling next poll');
-          clearStatusPollTimer();
-          statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
+          scheduleNextStatusPoll();
         } else if (status.status === 'failed') {
-          // Generation failed
+          // Generation failed: stop polling and the image retries
           debugLog('pollSpectrogramStatus: generation failed');
           clearStatusPollTimer();
+          clearSpectrogramRetryTimer();
+          spectrogramStatusFailed = true;
           spectrogramLoader.setError();
+        } else {
+          // not_started or an unknown status: end polling and leave the image
+          // retries to decide the outcome.
+          debugLog('pollSpectrogramStatus: nothing in progress, ending poll', {
+            status: status.status,
+          });
+          clearStatusPollTimer();
+        }
+      } else if (!controller.signal.aborted) {
+        // The status request itself failed. A server error, timeout or rate limit is
+        // transient: try again at the poll interval, bounded by the MAX_POLL_DURATION
+        // check on entry. Any other client error (unknown detection) is permanent.
+        const transient =
+          response.status >= HTTP_STATUS_SERVER_ERROR_MIN ||
+          response.status === HTTP_STATUS_REQUEST_TIMEOUT ||
+          response.status === HTTP_STATUS_TOO_MANY_REQUESTS;
+        debugLog('pollSpectrogramStatus: non-OK response', { status: response.status, transient });
+        if (transient) {
+          scheduleNextStatusPoll();
+        } else {
+          clearStatusPollTimer();
         }
       }
     } catch (err) {
@@ -1465,8 +1505,12 @@
         debugLog('pollSpectrogramStatus: aborted');
         return;
       }
+      // A cancelled poll must not reschedule itself: clearStatusPollTimer already reset the
+      // start time, so the rescheduled chain would have no MAX_POLL_DURATION bound.
+      if (controller.signal.aborted) return;
       logger.error('Failed to poll spectrogram status', { detectionId, error: err });
       debugLog('pollSpectrogramStatus: error', err);
+      scheduleNextStatusPoll();
     }
   };
 
@@ -1543,8 +1587,11 @@
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
     debugLog('handleSpectrogramLoad: success');
-    spectrogramLoader.setLoading(false);
+    // reset() also clears a sticky error left by a failure that a late load outran
+    spectrogramLoader.reset();
+    spectrogramStatus = null;
     spectrogramRetryCount = 0; // Reset retry count on successful load
+    spectrogramStatusFailed = false;
     clearSpectrogramRetryTimer();
     clearStatusPollTimer(); // Also clear status polling
     clearSpectrogramProbe();
@@ -1574,7 +1621,7 @@
     }
 
     // Start polling for generation status on first error
-    if (spectrogramRetryCount === 0) {
+    if (spectrogramRetryCount === 0 && !spectrogramStatusFailed) {
       debugLog('handleSpectrogramError: first error, starting status polling');
       statusPollStartTime = Date.now();
       pollSpectrogramStatus();
@@ -1584,8 +1631,9 @@
       }
     }
 
-    // Retry on any error (likely 503 or temporary failure) up to max retries
-    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES) {
+    // Retry on any error (likely 503 or temporary failure) up to max retries, unless the
+    // status poll already ended the attempt (a request in flight when it said failed)
+    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES && !spectrogramStatusFailed) {
       // Use exponential backoff for retry
       // Use Math.min to safely select delay without direct array indexing
       const delayIndex = Math.min(spectrogramRetryCount, SPECTROGRAM_RETRY_DELAYS.length - 1);
@@ -1644,11 +1692,12 @@
       return;
     }
 
-    // Really failed - stop everything
+    // Really failed - stop the image retries. A status poll that is still scheduled (the
+    // status endpoint kept failing) is left to run: it ends on its own at a terminal
+    // status or MAX_POLL_DURATION, and an exists answer reloads the image.
     debugLog('handleSpectrogramError: giving up after max retries');
     spectrogramLoader.setError();
     clearSpectrogramRetryTimer();
-    clearStatusPollTimer();
 
     logger.warn('Spectrogram loading failed after max retries', {
       detectionId,
@@ -1707,6 +1756,7 @@
         // Reset state and start polling
         spectrogramNeedsGeneration = false;
         spectrogramRetryCount = 0;
+        spectrogramStatusFailed = false;
         spectrogramLoader.setLoading(true);
         statusPollStartTime = Date.now();
 
@@ -1725,6 +1775,7 @@
         // Reset state and reload the spectrogram via reactive cache key
         spectrogramNeedsGeneration = false;
         spectrogramRetryCount = 0;
+        spectrogramStatusFailed = false;
         spectrogramLoader.setLoading(true);
 
         // Reload by incrementing cache key (triggers Svelte reactivity)
@@ -1791,11 +1842,7 @@
   // Handle spectrogram base URL changes (different detection) with proper loading state
   $effect(() => {
     // Only reset loading state if base URL actually changed (new detection)
-    if (
-      spectrogramBaseUrl &&
-      spectrogramBaseUrl !== previousSpectrogramBaseUrl &&
-      !spectrogramLoader.error
-    ) {
+    if (spectrogramBaseUrl && spectrogramBaseUrl !== previousSpectrogramBaseUrl) {
       debugLog('spectrogramBaseUrl changed', {
         from: previousSpectrogramBaseUrl,
         to: spectrogramBaseUrl,
@@ -1808,7 +1855,9 @@
 
       // Reset retry/cache state for new spectrogram
       spectrogramRetryCount = 0;
+      spectrogramStatusFailed = false;
       spectrogramCacheKey = 0;
+      spectrogramStatus = null;
       clearSpectrogramRetryTimer();
       // Abort any in-flight status polling and status check when URL changes
       clearStatusPollTimer();
