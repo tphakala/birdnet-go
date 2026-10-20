@@ -256,15 +256,18 @@ func TestNonBlockingWriter_ConcurrentWritersKeepLinesWholeAndOrdered(t *testing.
 	w := newNonBlockingWriter(sink, bigLimit, nil)
 
 	var wg sync.WaitGroup
+	var writeErrors atomic.Int64
 	for g := range producers {
 		wg.Go(func() {
 			for i := range perProducer {
-				_, err := fmt.Fprintf(w, "g=%d i=%d\n", g, i)
-				assert.NoError(t, err)
+				if _, err := fmt.Fprintf(w, "g=%d i=%d\n", g, i); err != nil {
+					writeErrors.Add(1)
+				}
 			}
 		})
 	}
 	wg.Wait()
+	require.Zero(t, writeErrors.Load())
 	require.True(t, w.flush(consoleFlushTimeout))
 	require.Zero(t, w.dropped.Load(), "nothing may drop, or it would pass as reordering")
 
@@ -408,22 +411,12 @@ func TestCentralLogger_CloseIsBoundedAndRecordsDropsWhenSinkNeverRecovers(t *tes
 		}
 		synctest.Wait()
 
-		console.mu.Lock()
-		pending := len(console.queue) - console.head
-		console.mu.Unlock()
-		expectedDropped := int64(1 + testConsumedItems - 1 - pending)
-		require.Positive(t, expectedDropped)
-
 		start := time.Now()
 		require.NoError(t, cl.Close())
 		elapsed := time.Since(start)
 		assert.GreaterOrEqual(t, elapsed, consoleFlushTimeout)
 		assert.Less(t, elapsed, consoleFlushTimeout+consoleFlushPollInterval)
 
-		lines := readLogLines(t, filepath.Join(dir, "application.log"))
-		summaries := dropSummaries(t, lines)
-		require.Len(t, summaries, 1)
-		assert.InDelta(t, float64(expectedDropped), summaries[0]["dropped_lines"], 0)
 		assert.Zero(t, wrapperCalls.Load(), "Close reports into its own file, not through the writer's report function")
 
 		for range testOversizeBurst {
@@ -432,19 +425,99 @@ func TestCentralLogger_CloseIsBoundedAndRecordsDropsWhenSinkNeverRecovers(t *tes
 		}
 		sink.unblock()
 		require.True(t, console.flush(consoleFlushTimeout))
+
+		// Every line the sink received was kept; the rest were dropped, and
+		// Close recorded exactly that count.
+		delivered := sink.lines()
+		require.Greater(t, len(delivered), 1)
+		total := 1 + testConsumedItems
+		require.Less(t, len(delivered), total)
+		var deliveredBytes int
+		for _, line := range delivered[1:] {
+			deliveredBytes += len(line) + 1
+		}
+		assert.LessOrEqual(t, deliveredBytes, testConsoleLimit, "queued bytes stay within the limit")
+		summaries := dropSummaries(t, readLogLines(t, filepath.Join(dir, "application.log")))
+		require.Len(t, summaries, 1)
+		assert.InDelta(t, float64(total-len(delivered)), summaries[0]["dropped_lines"], 0)
+
 		assert.Equal(t, int64(1), wrapperCalls.Load(), "drainer reported against the closed logger")
 		assert.Equal(t, int64(testOversizeBurst), console.dropped.Load(), "count stays pending after Close")
 	})
 }
 
+// countingSink counts Write calls, including empty ones.
+type countingSink struct {
+	mu     sync.Mutex
+	writes int
+}
+
+func (c *countingSink) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.writes++
+	return len(p), nil
+}
+
+func (c *countingSink) count() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.writes
+}
+
 func TestNonBlockingWriter_EmptyWriteIsIgnored(t *testing.T) {
-	sink := &lockedBuffer{}
+	sink := &countingSink{}
 	w := newNonBlockingWriter(sink, testQueueLimit, nil)
 	n, err := w.WriteString("")
 	require.NoError(t, err)
 	assert.Zero(t, n)
-	assert.True(t, w.flush(consoleFlushTimeout))
-	assert.Empty(t, sink.String())
+	w.mu.Lock()
+	assert.False(t, w.running, "an empty write must not start the drainer")
+	assert.Empty(t, w.queue)
+	w.mu.Unlock()
+	require.True(t, w.flush(consoleFlushTimeout))
+	assert.Zero(t, sink.count(), "an empty write must never reach the sink")
+}
+
+func TestNonBlockingWriter_FlushReportsFalseWhileSinkIsStalled(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		sink := newBlockingSink()
+		w := newNonBlockingWriter(sink, testQueueLimit, nil)
+		t.Cleanup(func() { sink.unblock(); w.flush(consoleFlushTimeout) })
+
+		_, err := w.WriteString(testLine(0))
+		require.NoError(t, err)
+		synctest.Wait()
+
+		start := time.Now()
+		assert.False(t, w.flush(consoleFlushTimeout))
+		assert.Equal(t, consoleFlushTimeout, time.Since(start), "flush waits exactly the timeout")
+
+		sink.unblock()
+		assert.True(t, w.flush(consoleFlushTimeout))
+	})
+}
+
+func TestFlushConsole_UsesSharedWriterAndHonoursTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		sink := newBlockingSink()
+		prev := stdoutConsole
+		stdoutConsole = newNonBlockingWriter(sink, testQueueLimit, nil)
+		t.Cleanup(func() { stdoutConsole = prev })
+		t.Cleanup(func() { sink.unblock(); stdoutConsole.flush(consoleFlushTimeout) })
+
+		_, err := stdoutConsole.WriteString(testLine(0))
+		require.NoError(t, err)
+		synctest.Wait()
+
+		start := time.Now()
+		assert.False(t, FlushConsole(), "a stalled stdout must make FlushConsole give up")
+		assert.Equal(t, consoleFlushTimeout, time.Since(start))
+
+		sink.unblock()
+		assert.True(t, FlushConsole())
+		assert.Equal(t, []string{"line-0000"}, sink.lines())
+	})
 }
 
 func TestNonBlockingWriter_LineQueuedDuringReportIsStillWritten(t *testing.T) {
@@ -463,33 +536,51 @@ func TestNonBlockingWriter_LineQueuedDuringReportIsStillWritten(t *testing.T) {
 	assert.Equal(t, testLine(0)+"late\n", sink.String())
 }
 
-func TestConsoleWiring_DefaultsUseSharedStdoutWriter(t *testing.T) {
-	globalLoggerMu.Lock()
-	prev := globalLogger
-	globalLogger = nil
-	globalLoggerMu.Unlock()
-	t.Cleanup(func() { SetGlobal(prev) })
+func TestConsoleWiring_DefaultSinksWriteThroughSharedStdoutWriter(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		t.Chdir(t.TempDir()) // default module log paths are relative
 
-	assert.False(t, reportConsoleDropsToGlobal(1), "no global logger: count must be kept")
+		sink := &lockedBuffer{}
+		prevConsole := stdoutConsole
+		stdoutConsole = newNonBlockingWriter(sink, testConsoleLimit, nil)
+		t.Cleanup(func() { stdoutConsole = prevConsole })
 
-	fallback := Global()
-	assert.Same(t, stdoutConsole, fallback.console)
-	fallback.Module("wiring").Info("global fallback console line")
+		globalLoggerMu.Lock()
+		prevGlobal := globalLogger
+		globalLogger = nil
+		globalLoggerMu.Unlock()
+		t.Cleanup(func() { SetGlobal(prevGlobal) })
 
-	cl, err := NewCentralLogger(&LoggingConfig{
-		DefaultLevel: "info",
-		Console:      &ConsoleOutput{Enabled: false},
-		FileOutput:   &FileOutput{Enabled: false},
+		assert.False(t, reportConsoleDropsToGlobal(1), "no global logger: count must be kept")
+
+		fallback := Global()
+		assert.Same(t, stdoutConsole, fallback.console)
+		fallback.Module("wiring").Info("global fallback line")
+
+		cl, err := NewCentralLogger(&LoggingConfig{
+			DefaultLevel: "info",
+			Console:      &ConsoleOutput{Enabled: false},
+			FileOutput:   &FileOutput{Enabled: false},
+		})
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = cl.Close() })
+		assert.Same(t, stdoutConsole, cl.console)
+		cl.Module("wiring").Info("stdout fallback handler line")
+
+		NewConsoleLogger("wiring", LogLevelInfo).Info("boot console line")
+		NewSlogLogger(nil, LogLevelInfo, nil).Info("nil writer line")
+
+		require.True(t, FlushConsole())
+		out := sink.String()
+		for _, want := range []string{
+			"global fallback line",
+			"stdout fallback handler line",
+			"boot console line",
+			"nil writer line",
+		} {
+			assert.Contains(t, out, want, "sink must reach the shared stdout writer")
+		}
 	})
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = cl.Close() })
-	assert.Same(t, stdoutConsole, cl.console)
-	cl.Module("wiring").Info("stdout fallback handler line")
-
-	NewConsoleLogger("wiring", LogLevelInfo).Info("boot console line")
-	NewSlogLogger(nil, LogLevelInfo, nil).Info("nil writer line")
-
-	assert.True(t, FlushConsole())
 }
 
 func TestCentralLogger_DropSummarySkippedWhenFileLevelDisablesWarn(t *testing.T) {
@@ -530,4 +621,41 @@ func TestNonBlockingWriter_BacklogThatNeverEmptiesStaysBounded(t *testing.T) {
 		assert.LessOrEqual(t, len(w.queue), 4*testQueuedLines,
 			"consumed slots must be reclaimed while the backlog never drains")
 	})
+}
+
+func TestCentralLogger_CloseLetsDrainerReportBeforeTakingLock(t *testing.T) {
+	dir := t.TempDir()
+	sink := &lockedBuffer{}
+	console := newNonBlockingWriter(sink, testQueueLimit, nil)
+	cl, err := newCentralLogger(consoleTestConfig(dir, false), console)
+	require.NoError(t, err)
+
+	var mu sync.Mutex
+	var results []bool
+	console.report = func(n int64) bool {
+		ok := cl.writeConsoleDropSummary(n)
+		mu.Lock()
+		defer mu.Unlock()
+		results = append(results, ok)
+		return ok
+	}
+
+	// One oversize line is dropped, then a normal line starts the drainer,
+	// which reports the drop once it has written the line.
+	_, err = console.WriteString(strings.Repeat("x", testOversizeLine) + "\n")
+	require.NoError(t, err)
+	_, err = console.WriteString(testLine(0))
+	require.NoError(t, err)
+
+	// If Close waited for the drainer while holding cl.mu, the drainer's
+	// report could not take the read lock and would only run after the file
+	// was closed, where it returns false.
+	require.NoError(t, cl.Close())
+
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []bool{true}, results, "the drainer's own report must reach the open file")
+	summaries := dropSummaries(t, readLogLines(t, filepath.Join(dir, "application.log")))
+	require.Len(t, summaries, 1)
+	assert.InDelta(t, 1.0, summaries[0]["dropped_lines"], 0)
 }
