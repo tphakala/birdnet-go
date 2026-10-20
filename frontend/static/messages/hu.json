@@ -2927,7 +2927,7 @@
           }
         },
         "rulesNotice": {
-          "message": "A detektálások push értesítéseit a Szabályok lapon lévő riasztási szabályok küldik. A beépített detektálási szabályok csak az alkalmazásban értesítenek. Push értesítésekhez adja hozzá a(z) {pushAction} műveletet a(z) {ruleName} szabályhoz, vagy hozzon létre egy szabályt a(z) {eventName} eseményhez megbízhatósági feltétellel és lehűlési idővel.",
+          "message": "Az észlelések push értesítéseit a Szabályok lapon lévő riasztási szabályok küldik. A beépített észlelési szabályok csak az alkalmazásban értesítenek. Push értesítésekhez adja hozzá a(z) {pushAction} műveletet a(z) {ruleName} szabályhoz, vagy hozzon létre egy szabályt a(z) {eventName} eseményhez megbízhatósági feltétellel és lehűlési idővel.",
           "previousFilters": "Az itt beállított Minimális megbízhatóság ({confidence}%) és Faj hűtési idő ({minutes} perc) értékeket a riasztási szabályok nem használják.",
           "openRules": "Szabályok megnyitása"
         },
@@ -4191,7 +4191,7 @@
         "rangeBadge": "Tartomány",
         "ruleOwnAddress": "Minden proxy saját címét adja meg. Soha ne adjon meg olyan tartományt, amely tartalmazza azokat a számítógépeket is, amelyekről böngészik.",
         "ruleHeaders": "A proxynak hozzá kell fűznie a kliens címét az X-Forwarded-For fejléchez, vagy felül kell írnia az X-Real-IP fejlécet.",
-        "cloudflareLabel": "Megbízás a Cloudflare-ben",
+        "cloudflareLabel": "Cloudflare megbízása",
         "cloudflareHelp": "Kapcsolja be ezt, ha a webhely a Cloudflare-en keresztül működik. A BirdNET-Go ekkor megbízhatónak tekinti a Cloudflare közzétett edge címeit.",
         "check": {
           "title": "Az Ön kapcsolata",
@@ -4200,10 +4200,10 @@
           "error": "A kapcsolatot nem sikerült ellenőrizni.",
           "stale": "Ez az ellenőrzés a mentett beállításokat mutatja. Mentse a módosítások ellenőrzéséhez.",
           "trust": "{peer} megbízhatónak jelölése",
-          "trustWarning": "Csak akkor bízzon meg ebben ({peer}), ha ez az Ön fordított proxyja, és nem a böngészésre használt gép.",
+          "trustWarning": "Csak akkor bízzon meg ebben ({peer}), ha ez az Ön fordított proxyja, és nem az a gép, amelyről böngészik.",
           "trustWithCloudflare": "{peer} és a Cloudflare megbízhatónak jelölése",
           "cloudflareInFront": "A Cloudflare a(z) {peer} előtt helyezkedik el. A cím ellenőrzéséhez bízzon meg mindkettőben.",
-          "cloudflareEdge": "A(z) {peer} a Cloudflare-hez tartozik. Kapcsolja be alább a Megbízás a Cloudflare-ben beállítást.",
+          "cloudflareEdge": "A(z) {peer} a Cloudflare-hez tartozik. Kapcsolja be alább a Cloudflare megbízása beállítást.",
           "chainHint": "Ha egy másik proxy is van a(z) {peer} előtt, azt is adja meg a listában.",
           "added": "Hozzáadva a listához. Mentse az alkalmazáshoz.",
           "coveredBy": "A listában szereplő {range} tartomány már lefedi. Mentse az alkalmazáshoz.",
@@ -4219,7 +4219,7 @@
           "trusted_proxy": {
             "title": "Csatlakozás megbízható proxyn keresztül",
             "body": "A kapcsolat a(z) {peer} megbízható proxyn keresztül érkezik. Az Ön címe ({client}) ellenőrizve lett.",
-            "hint": "Ha a(z) {client} egy másik proxy a számítógépe helyett, azt a proxyt is adja meg a listában."
+            "hint": "Ha a(z) {client} nem az Ön számítógépe, hanem egy másik proxy, azt is adja meg a listában."
           },
           "trusted_proxy_unverified": {
             "title": "A címét nem sikerült ellenőrizni",
