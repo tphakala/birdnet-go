@@ -82,7 +82,8 @@ func pcmSourceRate(rate int) int {
 // generateNativeFromFile renders the spectrogram of an audio file into tempPath.
 // The render first takes its share of the memory budget, from the readiness
 // snapshot when the caller supplied one and from a header probe otherwise, then
-// decodes and draws at low priority.
+// opens the clip and draws it at low priority, decoding while it draws for a clip
+// that transcode.OpenMono streams.
 func (g *Generator) generateNativeFromFile(ctx context.Context, settings *conf.Settings, audioPath, tempPath string, width int, raw bool, profile FrequencyProfile, source *SourceState) error {
 	var decodedBytes int64
 	if source != nil {
@@ -103,16 +104,37 @@ func (g *Generator) generateNativeFromFile(ctx context.Context, settings *conf.S
 
 	return runAtLowPriority(func() error {
 		start := time.Now()
+		opened, err := transcode.OpenMono(ctx, audioPath, 0)
+		if err != nil {
+			return g.nativeError(ctx, err, nativeOperationFile)
+		}
+		err = g.renderMono(ctx, settings, opened, profile, tempPath, width, raw, time.Since(start), weight)
+		if !errors.Is(err, transcode.ErrShorterThanDeclared) {
+			return err
+		}
+		// The header declared more audio than the file delivered, so the span the
+		// render used was too long. Draw the file again from memory, which sizes the
+		// picture from what it holds. The failed attempt wrote no temp file.
+		g.log().Debug("Streamed clip is shorter than its header declares, decoding it into memory",
+			logger.String("operation", nativeOperationFile),
+			logger.Error(err))
+		start = time.Now()
 		decoded, err := transcode.DecodeMono(ctx, audioPath, 0)
 		if err != nil {
 			return g.nativeError(ctx, err, nativeOperationFile)
 		}
-		src, displayRate, err := analysisSource(decoded, profile)
-		if err != nil {
-			return g.nativeError(ctx, err, nativeOperationFile)
-		}
-		return g.renderNative(ctx, settings, src, displayRate, tempPath, width, raw, nativeOperationFile, time.Since(start), weight)
+		return g.renderMono(ctx, settings, decoded, profile, tempPath, width, raw, time.Since(start), weight)
 	})
+}
+
+// renderMono picks the analysis source and display rate for a clip opened or
+// decoded from a file and draws it.
+func (g *Generator) renderMono(ctx context.Context, settings *conf.Settings, mono *transcode.MonoSource, profile FrequencyProfile, tempPath string, width int, raw bool, prepElapsed time.Duration, weight int64) error {
+	src, displayRate, err := analysisSource(mono, profile)
+	if err != nil {
+		return g.nativeError(ctx, err, nativeOperationFile)
+	}
+	return g.renderNative(ctx, settings, src, displayRate, tempPath, width, raw, nativeOperationFile, prepElapsed, mono.Streamed(), weight)
 }
 
 // generateNativeFromPCM renders the spectrogram of s16le mono PCM into tempPath
@@ -129,7 +151,7 @@ func (g *Generator) generateNativeFromPCM(ctx context.Context, settings *conf.Se
 		if err != nil {
 			return g.nativeError(ctx, err, nativeOperationPCM)
 		}
-		return g.renderNative(ctx, settings, src, displayRate, tempPath, width, raw, nativeOperationPCM, time.Since(start), 0)
+		return g.renderNative(ctx, settings, src, displayRate, tempPath, width, raw, nativeOperationPCM, time.Since(start), false, 0)
 	})
 }
 
@@ -159,11 +181,13 @@ func analysisSource(src *transcode.MonoSource, profile FrequencyProfile) (render
 // exclusively, so a symlink or a file that appears in between still fails.
 // displayRate is the rate the picture is drawn for (see
 // render.Options.DisplayRate); zero draws at the rate of src. decodeElapsed is the
-// time the caller spent decoding src; resampling, when any, runs inside Render's
-// stream and counts as render time. It is only logged, with the render and write
-// times, so the renderers can be compared. budgetWeight is the render budget
-// bytes the caller holds (zero when it holds none), also only logged.
-func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, displayRate int, tempPath string, width int, raw bool, operation string, decodeElapsed time.Duration, budgetWeight int64) error {
+// time the caller spent preparing src: the whole decode for a source held in
+// memory, only the header open for a streamed one (streamed is true), whose
+// decode then runs inside Render's stream and counts as render time, as does
+// resampling. It is only logged, with the render and write times and the streamed
+// flag, so the renderers can be compared. budgetWeight is the render budget bytes
+// the caller holds (zero when it holds none), also only logged.
+func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, src render.Source, displayRate int, tempPath string, width int, raw bool, operation string, decodeElapsed time.Duration, streamed bool, budgetWeight int64) error {
 	renderStart := time.Now()
 	opt := render.Options{
 		Width:       width,
@@ -202,6 +226,7 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 		logger.Int("columns", cols),
 		logger.Int("sample_rate", src.SampleRate()),
 		logger.Int("display_rate", displayRate),
+		logger.Bool("streamed", streamed),
 		logger.Int64("budget_weight_bytes", budgetWeight),
 		logger.Int64("decode_ms", decodeElapsed.Milliseconds()),
 		logger.Int64("render_ms", renderElapsed.Milliseconds()),
@@ -235,8 +260,13 @@ func (g *Generator) nativeFileError(err error, operation, step string) error {
 // error exactly once, since a Build reports to telemetry whenever reporting is
 // active (see ErrorBuilder.Build in internal/errors). An error that is
 // already enhanced (built by the transcode package) is only wrapped with the
-// operation, even when the context has expired as well.
+// operation, even when the context has expired as well. An error wrapping
+// transcode.ErrShorterThanDeclared is returned as it is: it is the signal to
+// render the clip again from memory, not a failure to classify or report.
 func (g *Generator) nativeError(ctx context.Context, err error, operation string) error {
+	if errors.Is(err, transcode.ErrShorterThanDeclared) {
+		return err
+	}
 	if _, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		// Already built (and reported) by the transcode package; building again
 		// would report the same failure twice.

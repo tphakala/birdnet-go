@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/iotest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -538,5 +539,51 @@ func TestDecode_AcceptsTheSourceRateBounds(t *testing.T) {
 		pcm, err := decode(t.Context(), path, nil, 0)
 		require.NoError(t, err, "rate %d", rate)
 		assert.Equal(t, rate, pcm.SampleRate)
+	}
+}
+
+// Real decoders return short reads (go-m4a returns one access unit per Read), so
+// fill must keep reading until the buffer holds whole frames, and drop a partial
+// frame only at the end of the source.
+func TestFrameReader_FillsWholeFramesAcrossShortReads(t *testing.T) {
+	t.Parallel()
+
+	const (
+		frameBytes  = 4
+		wholeFrames = 50
+		tailBytes   = 3
+		bufFrames   = 8
+	)
+	input := make([]byte, wholeFrames*frameBytes+tailBytes)
+	for i := range input {
+		input[i] = byte(i)
+	}
+	want := input[:wholeFrames*frameBytes]
+	tests := []struct {
+		name string
+		wrap func(io.Reader) io.Reader
+	}{
+		{name: "one byte per read", wrap: iotest.OneByteReader},
+		{name: "half the request per read", wrap: iotest.HalfReader},
+		{name: "data returned together with EOF", wrap: iotest.DataErrReader},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fr := &frameReader{r: tt.wrap(bytes.NewReader(input)), frameBytes: frameBytes, op: "test_fill"}
+			buf := make([]byte, bufFrames*frameBytes)
+			var got []byte
+			for calls := 0; ; calls++ {
+				require.Less(t, calls, wholeFrames, "fill must reach the end of the source")
+				n, eof, err := fr.fill(t.Context(), buf)
+				require.NoError(t, err)
+				got = append(got, buf[:n]...)
+				if eof {
+					break
+				}
+				require.Equal(t, len(buf), n, "before the end every call fills the buffer")
+			}
+			assert.Equal(t, want, got, "the partial tail frame is dropped, nothing else")
+		})
 	}
 }
