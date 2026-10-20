@@ -751,14 +751,7 @@ func (c *Handler) handleAudioPending(ctx echo.Context, readyAt time.Time, logFie
 // This reduces 503 responses by waiting server-side instead of requiring
 // the client to retry.
 func (c *Handler) waitForAudioFile(ctx echo.Context, relClipPath, tempPath string) bool {
-	// Resolve the wait timeout. Production leaves the override at zero and uses the
-	// default constant; tests inject a short timeout to exercise the
-	// 503-after-timeout path without waiting the full default.
-	timeout := audioWaitTimeout
-	if c.audioWaitTimeoutOverride > 0 {
-		timeout = c.audioWaitTimeoutOverride
-	}
-	waitCtx, cancel := context.WithTimeout(ctx.Request().Context(), timeout)
+	waitCtx, cancel := context.WithTimeout(ctx.Request().Context(), c.audioWaitDuration())
 	defer cancel()
 
 	ticker := time.NewTicker(audioWaitPollInterval)
@@ -864,6 +857,36 @@ func (c *Handler) noteCaptureTimes(noteID string) (begin, end time.Time) {
 	return note.BeginTime, note.EndTime
 }
 
+// pendingExportWindow resolves the window in which the clip of a detection captured from
+// begin to end may still be written by a deferred (Extended Capture) export: readyAt is
+// when the capture was ready and deadline is readyAt plus pendingExportGraceMargin. ok is
+// false when no capture window applies (unknown times, or Extended Capture is off). Every
+// "export may still be pending" decision goes through it, so the audio and spectrogram
+// endpoints cannot disagree about the window.
+func (c *Handler) pendingExportWindow(begin, end time.Time) (readyAt, deadline time.Time, ok bool) {
+	win, ok := c.CurrentSettings().DetectionCaptureWindow(begin, end)
+	if !ok {
+		return time.Time{}, time.Time{}, false
+	}
+	return win.ReadyAt, win.ReadyAt.Add(pendingExportGraceMargin), true
+}
+
+// captureTimes memoizes noteCaptureTimes for one request, so the pre-check and the error
+// path of the same spectrogram request share a single datastore lookup.
+type captureTimes struct {
+	begin, end time.Time
+	loaded     bool
+}
+
+// captureTimesOnce returns the capture times of noteID, looking them up on first use.
+func (c *Handler) captureTimesOnce(ct *captureTimes, noteID string) (begin, end time.Time) {
+	if !ct.loaded {
+		ct.begin, ct.end = c.noteCaptureTimes(noteID)
+		ct.loaded = true
+	}
+	return ct.begin, ct.end
+}
+
 // clipGoneForGood reports whether the clip at relAudioPath, for a detection captured
 // from begin to end, can no longer appear: the answer is true only when no export can
 // still be writing it. It mirrors the no-wait 404 branch of handleAudio404WithWait, so
@@ -878,8 +901,7 @@ func (c *Handler) noteCaptureTimes(noteID string) (begin, end time.Time) {
 //     not gone;
 //   - a fresh export temp file means encoding is in progress.
 func (c *Handler) clipGoneForGood(relAudioPath string, begin, end time.Time) bool {
-	if win, ok := c.CurrentSettings().DetectionCaptureWindow(begin, end); ok &&
-		time.Now().Before(win.ReadyAt.Add(pendingExportGraceMargin)) {
+	if _, deadline, ok := c.pendingExportWindow(begin, end); ok && time.Now().Before(deadline) {
 		return false
 	}
 	if isRecentClipCompletion(end) {
@@ -971,9 +993,8 @@ func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, o
 	// that reads as data loss. This returns immediately (no wait loop), so it does not
 	// pin the worker. Once encoding actually starts, the temp-file branch above handles
 	// it. Filename-based serves pass zero times, so ok is false and this is skipped.
-	if win, ok := c.CurrentSettings().DetectionCaptureWindow(detectionBeginTime, detectionEndTime); ok &&
-		time.Now().Before(win.ReadyAt.Add(pendingExportGraceMargin)) {
-		return c.handleAudioPending(ctx, win.ReadyAt, logFields...)
+	if readyAt, deadline, ok := c.pendingExportWindow(detectionBeginTime, detectionEndTime); ok && time.Now().Before(deadline) {
+		return c.handleAudioPending(ctx, readyAt, logFields...)
 	}
 
 	// No temp file visible. For a detection whose capture completed long ago,
@@ -1284,14 +1305,12 @@ func isSpectrogramSourceFailure(err error) bool {
 // failure, so it is checked first. A source that was not on disk after the wait is
 // source_pending, never source_missing: only the sites that evaluate clipGoneForGood
 // may say source_missing, and a clip that was waited for may still appear. An
-// os.ErrNotExist wrapped in
-// ErrSpectrogramGeneration is the rendered PNG missing after generation, which is a
-// render failure, not a source one.
+// os.ErrNotExist wrapped in ErrSpectrogramGeneration is the rendered PNG missing after
+// generation, which is a render failure, not a source one.
 func spectrogramFailureReason(err error) string {
 	switch {
-	case isSpectrogramNotReady(err):
-		return spectrogramReasonSourcePending
-	case errors.Is(err, ErrAudioFileNotFound),
+	case isSpectrogramNotReady(err),
+		errors.Is(err, ErrAudioFileNotFound),
 		errors.Is(err, os.ErrNotExist) && !errors.Is(err, ErrSpectrogramGeneration):
 		return spectrogramReasonSourcePending
 	case isSpectrogramSourceFailure(err):
@@ -2119,7 +2138,7 @@ func (c *Handler) writeSpectrogramNotFound(ctx echo.Context, err error, reason s
 // invalid, the clip is on disk (or its stat failed for another reason), the exact render
 // already exists (the generate fast path serves it), or the clip may still be written.
 // The datastore is touched only after the cheap file checks pass.
-func (c *Handler) serveGoneSourceSpectrogram(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string) (handled bool, err error) {
+func (c *Handler) serveGoneSourceSpectrogram(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string, times *captureTimes) (handled bool, err error) {
 	relAudioPath, pathErr := c.normalizeAndValidatePath(clipPath)
 	if pathErr != nil {
 		return false, nil //nolint:nilerr // not handled here: the normal path answers the invalid path as before
@@ -2131,23 +2150,21 @@ func (c *Handler) serveGoneSourceSpectrogram(ctx echo.Context, noteID, clipPath 
 	if info, statErr := c.SFS.StatRel(exact); statErr == nil && info.Mode().IsRegular() && info.Size() > 0 {
 		return false, nil
 	}
-	begin, end := c.noteCaptureTimes(noteID)
+	begin, end := c.captureTimesOnce(times, noteID)
 	if !c.clipGoneForGood(relAudioPath, begin, end) {
 		return false, nil
 	}
 	if served, serveErr := c.serveExistingRender(ctx, noteID, relAudioPath, params, freqSuffix); served {
 		return true, serveErr
 	}
-	c.LogDebugIfEnabled("Spectrogram source audio clip gone, answering without waiting",
-		logger.String("note_id", noteID),
-		logger.String("clip_path", clipPath))
 	return true, c.writeSpectrogramNotFound(ctx, ErrAudioFileNotFound, spectrogramReasonSourceMissing)
 }
 
 // handleAutoPreRenderMode handles spectrogram generation and serving in auto/prerender modes.
 func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string, extraOpts ...spectrogram.GenerateOption) error {
 	// A clip that can no longer appear is answered at once, without the audio wait.
-	if handled, goneErr := c.serveGoneSourceSpectrogram(ctx, noteID, clipPath, params, freqSuffix); handled {
+	var times captureTimes
+	if handled, goneErr := c.serveGoneSourceSpectrogram(ctx, noteID, clipPath, params, freqSuffix, &times); handled {
 		return goneErr
 	}
 
@@ -2178,10 +2195,9 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 			// does not spam the error log, Sentry, or the bell. Otherwise the clip is
 			// genuinely missing (a reconcile ghost): Warn (not Error), and fall through to
 			// the 404 from spectrogramHTTPError.
-			begin, end := c.noteCaptureTimes(noteID)
-			if win, ok := c.CurrentSettings().DetectionCaptureWindow(begin, end); ok &&
-				time.Now().Before(win.ReadyAt.Add(pendingExportGraceMargin)) {
-				return c.handleAudioPending(ctx, win.ReadyAt, logFields...)
+			begin, end := c.captureTimesOnce(&times, noteID)
+			if readyAt, deadline, ok := c.pendingExportWindow(begin, end); ok && time.Now().Before(deadline) {
+				return c.handleAudioPending(ctx, readyAt, logFields...)
 			}
 			// Retention may have removed the audio between its file deletion and its
 			// database update; serve a kept render of this clip when there is one.
@@ -2624,8 +2640,8 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 			c.failGoneSourceGeneration(noteID, clipPath, queueKey, statErr)
 			return
 		}
-		if win, ok := c.CurrentSettings().DetectionCaptureWindow(begin, end); ok {
-			pendingDeadline = win.ReadyAt.Add(pendingExportGraceMargin)
+		if _, deadline, ok := c.pendingExportWindow(begin, end); ok {
+			pendingDeadline = deadline
 			if extra := time.Until(pendingDeadline); extra > 0 {
 				genTimeout += extra
 			}
@@ -2844,9 +2860,9 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Initialize queue status BEFORE spawning goroutine (prevents "not_started" flicker)
 	c.initializeQueueStatus(queueKey)
 
-	// Snapshot the queued status BEFORE the worker starts: a gone clip fails the worker
-	// within microseconds, and the 202 body must keep saying queued.
-	// If we initialized queue status, return it; otherwise return generic queued response
+	// Snapshot the queued status BEFORE the worker starts (a gone clip fails the worker
+	// within microseconds, and the 202 body must keep saying queued). If we initialized
+	// queue status, return it; otherwise return a generic queued response.
 	responseData := map[string]any{
 		"status":        spectrogramStatusQueued,
 		"queuePosition": 0,
@@ -3567,6 +3583,16 @@ func (c *Handler) checkAudioFileExists(relAudioPath string) error {
 	return nil
 }
 
+// audioWaitDuration is the server-side wait for an audio clip that is still being
+// written. Production leaves audioWaitTimeoutOverride at zero and uses audioWaitTimeout;
+// tests inject a short timeout to exercise the timeout paths without the full wait.
+func (c *Handler) audioWaitDuration() time.Duration {
+	if c.audioWaitTimeoutOverride > 0 {
+		return c.audioWaitTimeoutOverride
+	}
+	return audioWaitTimeout
+}
+
 // waitForAudioFileCtx polls for an audio file to appear on disk, using a context
 // for cancellation. This covers the race window where the detection DB record is
 // committed and SSE is broadcast before the async SaveAudioAction writes the file.
@@ -3580,13 +3606,8 @@ func (c *Handler) waitForAudioFileCtx(ctx context.Context, relAudioPath string) 
 		return nil
 	}
 
-	timeout := audioWaitTimeout
-	if c.audioWaitTimeoutOverride > 0 {
-		timeout = c.audioWaitTimeoutOverride
-	}
-
 	waitStart := time.Now()
-	waitCtx, cancel := context.WithTimeout(ctx, timeout)
+	waitCtx, cancel := context.WithTimeout(ctx, c.audioWaitDuration())
 	defer cancel()
 
 	ticker := time.NewTicker(audioWaitPollInterval)
@@ -3614,7 +3635,7 @@ func (c *Handler) waitForAudioFileCtx(ctx context.Context, relAudioPath string) 
 			}
 			getSpectrogramLogger().Debug("Audio file did not appear within wait timeout",
 				logger.String("relative_audio_path", relAudioPath),
-				logger.Duration("timeout", timeout),
+				logger.Duration("timeout", c.audioWaitDuration()),
 				logger.Int64("waited_ms", time.Since(waitStart).Milliseconds()))
 			return fmt.Errorf("%w: %w (path: %s)", ErrAudioFileNotFound, os.ErrNotExist, relAudioPath)
 		case <-ticker.C:

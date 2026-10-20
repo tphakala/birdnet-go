@@ -1,7 +1,7 @@
 // media_spectrogram_gone_test.go: coverage for answering a spectrogram request for a
 // clip whose audio is gone for good without the server-side wait, while keeping the
 // wait for a clip that may still be written, and for the machine readable reason the
-// status and 404 answers carry (Forgejo #1949).
+// status and 404 answers carry.
 
 package media
 

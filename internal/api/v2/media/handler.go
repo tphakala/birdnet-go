@@ -58,7 +58,8 @@ type Handler struct {
 	externalMediaProbe sysinfo.MountProber
 
 	// audioWaitTimeoutOverride overrides the server-side wait for an in-progress
-	// audio encoding used by waitForAudioFile. Zero in production, where the wait
+	// audio encoding used by waitForAudioFile and waitForAudioFileCtx (see
+	// audioWaitDuration). Zero in production, where the wait
 	// uses audioWaitTimeout. Tests set a short timeout to exercise the
 	// 503-after-timeout path without waiting the full default.
 	audioWaitTimeoutOverride time.Duration
