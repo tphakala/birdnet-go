@@ -69,6 +69,14 @@ func (s *blockingSink) Write(p []byte) (int, error) {
 	return s.buf.Write(p)
 }
 
+// step releases the write currently parked in the sink and parks the next one.
+func (s *blockingSink) step() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	close(s.release)
+	s.release = make(chan struct{})
+}
+
 // block installs a fresh channel so later writes stall again.
 func (s *blockingSink) block() {
 	s.mu.Lock()
@@ -494,4 +502,32 @@ func TestCentralLogger_DropSummarySkippedWhenFileLevelDisablesWarn(t *testing.T)
 	assert.True(t, cl.writeConsoleDropSummary(3), "disabled level must not accumulate the count")
 	require.NoError(t, cl.Flush())
 	assert.Empty(t, readLogLines(t, cfg.FileOutput.Path))
+}
+
+func TestNonBlockingWriter_BacklogThatNeverEmptiesStaysBounded(t *testing.T) {
+	const iterations = 200
+	synctest.Test(t, func(t *testing.T) {
+		sink := newBlockingSink()
+		w := newNonBlockingWriter(sink, testQueueLimit, nil)
+		t.Cleanup(func() { sink.unblock(); w.flush(consoleFlushTimeout) })
+
+		_, err := w.WriteString(testLine(0))
+		require.NoError(t, err)
+		synctest.Wait()
+		// Two lines in, one released per step: the queue never reaches empty.
+		for i := range iterations {
+			for j := range 2 {
+				_, err := w.WriteString(testLine(1 + 2*i + j))
+				require.NoError(t, err)
+			}
+			sink.step()
+			synctest.Wait()
+		}
+
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		assert.NotEqual(t, w.head, len(w.queue), "scenario must keep a backlog")
+		assert.LessOrEqual(t, len(w.queue), 4*testQueuedLines,
+			"consumed slots must be reclaimed while the backlog never drains")
+	})
 }

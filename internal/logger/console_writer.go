@@ -90,6 +90,14 @@ func (w *nonBlockingWriter) WriteString(s string) (int, error) {
 		w.dropped.Add(1)
 		return len(s), nil
 	}
+	if w.head > 0 && w.head >= len(w.queue)/2 {
+		// Reclaim the consumed prefix so a backlog that never fully drains
+		// cannot grow the slice without bound.
+		n := copy(w.queue, w.queue[w.head:])
+		clear(w.queue[n:])
+		w.queue = w.queue[:n]
+		w.head = 0
+	}
 	w.queue = append(w.queue, s)
 	w.queued += len(s)
 	start := !w.running
