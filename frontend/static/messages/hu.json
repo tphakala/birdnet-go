@@ -3197,7 +3197,7 @@
         "vadEnable": "Adatvédelmi Őr engedélyezése (Silero VAD)",
         "vadHelp": "Egy külön neurális beszédérzékelő modellt futtat az osztályozó mellett a megbízható hangszűrés érdekében. További rendszererőforrásokat használ (kb. 20-30 MB RAM és CPU-inferencia szegmensenként).",
         "vadThresholdLabel": "Adatvédelmi Őr küszöbértéke",
-        "vadThresholdHelp": "A hangaktivitás-érzékelő érzékenységi küszöbértéke (alapértelmezett 0.35). Alacsonyabb értékek esetén a szűrő érzékenyebb a halk vagy távoli beszédre."
+        "vadThresholdHelp": "A hangaktivitás-érzékelő érzékenységi küszöbértéke (alapértelmezett 0.6). Alacsonyabb értékek esetén a szűrő érzékenyebb a halk vagy távoli beszédre."
       },
       "falsePositivePrevention": {
         "title": "Hamis pozitív megelőzés",
