@@ -331,10 +331,13 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     return true;
   }
 
-  /** Resumes a parked poll: one status check that also handles a status evicted to not_started. */
+  /**
+   * Resumes a parked poll with one status poll. It keeps the poll error semantics, so a
+   * fetch error right after wake-up (network not back yet) schedules the next poll
+   * instead of ending in the error state.
+   */
   function resumePoll(detectionId: number): void {
-    if (!spendPollAttempt(detectionId)) return;
-    void checkStatus(detectionId);
+    void pollOnce(detectionId);
   }
 
   /**
@@ -603,6 +606,13 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
         if (status === 'failed') {
           retryAfterFailedStatus(detectionId);
+          return;
+        }
+
+        // The server dropped its entry (a failed one expires), so ask for generation
+        // again; the generate budget bounds this.
+        if (status === 'not_started') {
+          await triggerGeneration(detectionId);
           return;
         }
       }

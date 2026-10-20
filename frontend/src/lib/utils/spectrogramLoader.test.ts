@@ -685,6 +685,44 @@ describe('spectrogramLoader', () => {
       expect(loader.state).toBe('loading');
     });
 
+    it('keeps polling when the status request fails right after a resume', async () => {
+      let answer = statusAnswers('generating');
+      routeFetch(() => answer());
+      const loader = makeLoader({ initialPollIntervalMs: 100 });
+      loader.start(42);
+      await flushAll();
+
+      setVisibility('hidden');
+      await vi.advanceTimersByTimeAsync(10_000);
+
+      // The network is not back yet when the page becomes visible.
+      answer = () => Promise.reject(new TypeError('network not ready'));
+      setVisibility('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await flushAll();
+      expect(loader.state).toBe('polling');
+      expect(loader.error).toBe(false);
+
+      answer = statusAnswers('exists');
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(loader.state).toBe('loading');
+    });
+
+    it('asks for generation again when a poll finds the status back at not_started', async () => {
+      let statusCalls = 0;
+      routeFetch(() => {
+        statusCalls++;
+        return statusAnswers(statusCalls === 1 ? 'generating' : 'not_started')();
+      });
+      const loader = makeLoader({ initialPollIntervalMs: 100 });
+      loader.start(42);
+      await flushAll();
+      expect(fetchCount('generate')).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(150);
+      expect(fetchCount('generate')).toBe(1);
+    });
+
     it('keeps hide and show cycles within the poll budget', async () => {
       routeFetch(statusAnswers('generating'));
       const loader = makeLoader({ initialPollIntervalMs: 100, maxPollAttempts: 2 });
