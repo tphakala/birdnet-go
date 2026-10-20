@@ -697,6 +697,43 @@ describe('spectrogramLoader', () => {
       loader.destroy();
     });
 
+    it('warns when the first status check is slow', async () => {
+      mockFetch.mockImplementationOnce(() => {
+        vi.setSystemTime(Date.now() + SLOW_STATUS_FETCH_WARN_MS + 500);
+        return Promise.resolve(mockJsonResponse({ data: { status: 'exists' } }));
+      });
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram status request was slow',
+        null,
+        expect.objectContaining({ detectionId: 42, httpStatus: 200 }),
+        'spectrogram-status-slow'
+      );
+      loader.destroy();
+    });
+
+    it('warns when the generate request is slow, whatever its status', async () => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'not_started' } }));
+      mockFetch.mockImplementationOnce(() => {
+        vi.setSystemTime(Date.now() + SLOW_STATUS_FETCH_WARN_MS + 500);
+        return Promise.resolve(mockJsonResponse({ error: 'busy' }, 503));
+      });
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram generate request was slow',
+        null,
+        expect.objectContaining({ detectionId: 42, httpStatus: 503 }),
+        'spectrogram-generate-slow'
+      );
+      loader.destroy();
+    });
+
     it('warns with queue stats when the image slot wait is long', async () => {
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
       mockAcquireSlot.mockImplementationOnce(() => {

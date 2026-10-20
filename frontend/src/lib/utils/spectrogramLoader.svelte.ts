@@ -48,6 +48,7 @@ export const LONG_SLOT_HOLD_WARN_MS = 10000;
 /** Logger throttle keys, one per kind of diagnostic warning. */
 const POLL_LATE_THROTTLE_KEY = 'spectrogram-poll-late';
 const STATUS_SLOW_THROTTLE_KEY = 'spectrogram-status-slow';
+const GENERATE_SLOW_THROTTLE_KEY = 'spectrogram-generate-slow';
 const SLOT_WAIT_THROTTLE_KEY = 'spectrogram-slot-wait';
 const SLOT_HOLD_THROTTLE_KEY = 'spectrogram-slot-hold';
 
@@ -234,9 +235,18 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     while (fetchRetries <= config.maxFetchRetries) {
       try {
         abortController = new AbortController();
+        const fetchStart = Date.now();
         const response = await fetch(buildStatusUrl(detectionId), {
           signal: abortController.signal,
         });
+        const fetchMs = Date.now() - fetchStart;
+        warnIfOver(
+          fetchMs,
+          SLOW_STATUS_FETCH_WARN_MS,
+          'Spectrogram status request was slow',
+          { detectionId, fetchMs, httpStatus: response.status },
+          STATUS_SLOW_THROTTLE_KEY
+        );
 
         if (isStale(detectionId)) return;
 
@@ -326,11 +336,20 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         headers['X-CSRF-Token'] = csrfToken;
       }
 
+      const fetchStart = Date.now();
       const response = await fetch(buildGenerateUrl(detectionId), {
         method: 'POST',
         headers,
         signal: abortController.signal,
       });
+      const fetchMs = Date.now() - fetchStart;
+      warnIfOver(
+        fetchMs,
+        SLOW_STATUS_FETCH_WARN_MS,
+        'Spectrogram generate request was slow',
+        { detectionId, fetchMs, httpStatus: response.status },
+        GENERATE_SLOW_THROTTLE_KEY
+      );
 
       if (isStale(detectionId)) return;
 
