@@ -385,10 +385,22 @@ func TestGenerateSpectrogramByID_GoneSourceStillAnswersQueued(t *testing.T) {
 	assert.Equal(t, spectrogramStatusQueued, body.Data["status"], "the worker fails at once, the 202 still reports the queued state")
 	assert.NotContains(t, body.Data, "reason")
 
+	// The condition runs off the test goroutine, so it reads the queue entry the status
+	// endpoint reads without failing the test from there.
 	require.Eventually(t, func() bool {
-		data := getSpectrogramStatusData(t, h, e, goneTestQuery)
+		entry, ok := spectrogramQueue.Load(queueKey)
+		if !ok {
+			return false
+		}
+		queued, ok := entry.(*SpectrogramQueueStatus)
+		if !ok {
+			return false
+		}
+		data := queued.Get()
 		return data["status"] == spectrogramStatusFailed && data["reason"] == spectrogramReasonSourceMissing
-	}, 5*time.Second, 10*time.Millisecond, "the status poll then reports the gone source")
+	}, 5*time.Second, 10*time.Millisecond, "the queue entry then reports the gone source")
+	data := getSpectrogramStatusData(t, h, e, goneTestQuery)
+	assert.Equal(t, spectrogramReasonSourceMissing, data["reason"], "the status endpoint serves that entry")
 }
 
 func TestSpectrogramHTTPError_MissingRenderedImageIs404WithRenderFailedReason(t *testing.T) {
