@@ -2733,8 +2733,8 @@ func (c *Handler) failGoneSourceGeneration(noteID, clipPath, queueKey string, st
 //   - 202 Accepted: generation queued or already in progress
 //   - 400 Bad Request: legacy width outside 100..2000
 //   - 404 Not Found: the detection has no audio clip
-//   - 503 Service Unavailable: Audio file not ready, or the detection's model type
-//     could not be looked up (includes Retry-After header); nothing is queued or written
+//   - 503 Service Unavailable: the detection's model type could not be looked up
+//     (includes Retry-After header); nothing is queued or written
 func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Validate note ID and get clip path using shared helper
 	noteID, clipPath, err := c.validateNoteIDAndGetClipPath(ctx)
