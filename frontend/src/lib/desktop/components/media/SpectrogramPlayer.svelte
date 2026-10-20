@@ -50,7 +50,7 @@
   // --- Audio engine (shared composable) ---
   // Initial values are intentionally captured here; audioUrl reactivity is
   // handled below via $effect calling audio.setAudioUrl(). The composable
-  // stores detectionId only for logging and callbacks are stable references.
+  // reads detectionId once, for logging and the known-missing check, and callbacks are stable references.
   // svelte-ignore state_referenced_locally
   const initialAudioUrl = audioUrl;
   // svelte-ignore state_referenced_locally

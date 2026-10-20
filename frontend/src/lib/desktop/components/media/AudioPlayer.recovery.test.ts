@@ -22,10 +22,12 @@ import {
 } from '../../../../test/playSequences';
 import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS, CANPLAY_TIMEOUT_MS } from '$lib/utils/audio';
 import { loggers } from '$lib/utils/logger';
+import { mockAudioProbe, probeCalls } from '../../../../test/audioProbeMock';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
 import {
   clearSpectrogramSourceMarks,
   isSpectrogramSourceKnownMissing,
+  markSpectrogramSourceMissing,
 } from '$lib/utils/spectrogramStatus';
 import AudioPlayer from './AudioPlayer.svelte';
 
@@ -324,6 +326,7 @@ describe('AudioPlayer recovery', () => {
     });
 
     afterEach(() => {
+      clearSpectrogramSourceMarks();
       globalThis.fetch = originalFetch;
       URL.createObjectURL = originalCreateObjectURL;
       URL.revokeObjectURL = originalRevokeObjectURL;
@@ -337,6 +340,29 @@ describe('AudioPlayer recovery', () => {
       await fireEvent.click(screen.getByText(BATS_ENABLE_TEXT));
       await settle();
     }
+
+    it('does not probe a failing audible-bats source', async () => {
+      mount({ modelType: 'bat' });
+      await activateAudibleBats();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(probeCalls()).toHaveLength(0);
+    });
+
+    it('keeps retrying an audible-bats source while the original is reported gone', async () => {
+      markSpectrogramSourceMissing('test-123');
+      mount({ modelType: 'bat' });
+      await activateAudibleBats();
+      const loadsBefore = ctl.load.mock.calls.length;
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
 
     it('resumes playback on the swapped source', async () => {
       const { container } = mount({ modelType: 'bat' });
@@ -771,6 +797,134 @@ describe('AudioPlayer recovery', () => {
 
       expect(stub).toHaveBeenCalledTimes(3);
       expect(spectrogramImg().getAttribute('src')).toContain('cache=1');
+    });
+  });
+  describe('probe before retry', () => {
+    const MISSING_STATUS = 404;
+    const PENDING_STATUS = 503;
+    const PARTIAL_STATUS = 206;
+    const RETRY_AFTER_SECONDS = 9;
+    // Far longer than every retry delay, so a stray retry would show.
+    const LONG_WAIT_MS = AUDIO_RETRY_DELAY_MS * 10;
+    let restoreFetch: (() => void) | undefined;
+
+    afterEach(() => {
+      restoreFetch?.();
+      restoreFetch = undefined;
+      clearSpectrogramSourceMarks();
+    });
+
+    it('sends one ranged probe and no retries when the clip answers 404', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS });
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(probeCalls()).toHaveLength(1);
+      expect(probeCalls()[0]?.[0]).toBe('/audio/test.mp3');
+      expect(ctl.load).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(LOAD_ERROR_TEXT);
+    });
+
+    it('retries after Retry-After when the clip answers 503', async () => {
+      restoreFetch = mockAudioProbe({
+        status: PENDING_STATUS,
+        headers: { 'Retry-After': String(RETRY_AFTER_SECONDS) },
+      });
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+      expect(ctl.load).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(RETRY_AFTER_SECONDS * 1000 - AUDIO_RETRY_DELAY_MS);
+
+      expect(ctl.load).toHaveBeenCalledTimes(1);
+      expect(probeCalls()).toHaveLength(1);
+    });
+
+    it('keeps the scheduled retry when the probe answers 206', async () => {
+      restoreFetch = mockAudioProbe({ status: PARTIAL_STATUS });
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(probeCalls()).toHaveLength(1);
+      expect(ctl.load).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends no request and no retry for a clip the server reported gone', async () => {
+      restoreFetch = mockAudioProbe({ status: PARTIAL_STATUS });
+      markSpectrogramSourceMissing('test-123');
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(probeCalls()).toHaveLength(0);
+      expect(ctl.load).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(LOAD_ERROR_TEXT);
+    });
+
+    it('ignores a 404 that arrives after the retry already fired', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+      expect(ctl.load).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('probes only the first failure of a cycle and again after the budget resets', async () => {
+      restoreFetch = mockAudioProbe({ status: PARTIAL_STATUS });
+      const { container } = mount();
+
+      await exhaustLoadRetries(ctl);
+      expect(probeCalls()).toHaveLength(1);
+
+      await press(container);
+      ctl.failLoad();
+      await settle();
+
+      expect(probeCalls()).toHaveLength(2);
+    });
+
+    it('aborts the probe when the clip loads', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
+      mount();
+
+      ctl.failLoad();
+      ctl.completeLoad();
+
+      expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
+    });
+
+    it('ignores a probe answer for a clip that is no longer the current source', async () => {
+      const probeDelayMs = AUDIO_RETRY_DELAY_MS / 4;
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: probeDelayMs });
+      const { rerender } = mount();
+
+      ctl.failLoad();
+      await rerender({ audioUrl: '/audio/other.mp3', detectionId: 'other-1' });
+      await vi.advanceTimersByTimeAsync(probeDelayMs * 2);
+
+      expect(probeCalls()).toHaveLength(1);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('aborts the probe when the player unmounts', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
+      mount();
+
+      ctl.failLoad();
+      cleanup();
+
+      expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
     });
   });
 });
