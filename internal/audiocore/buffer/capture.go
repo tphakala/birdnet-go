@@ -45,7 +45,7 @@ type CaptureBuffer struct {
 	data              []byte
 	writeIndex        int
 	writtenBytes      int   // total bytes currently in the buffer (capped at bufferSize)
-	totalBytesWritten int64 // monotonic counter of all bytes ever written
+	totalBytesWritten int64 // monotonic counter of bytes kept (a write larger than the ring counts its tail)
 	sampleRate        int
 	bytesPerSample    int
 	bufferSize        int
@@ -185,7 +185,7 @@ func (cb *CaptureBuffer) writtenDuration(n int64) time.Duration {
 	return time.Duration(float64(n) / float64(cb.sampleRate*cb.bytesPerSample) * float64(time.Second))
 }
 
-// lagSinceFirstWrite is how far the audio written so far trails wall-clock time
+// lagSinceFirstWrite is how far the audio counted in totalBytesWritten (only the kept tail of a write larger than the ring) trails wall-clock time
 // since the first write. Before the first wrap, ReadSegment maps time to offsets
 // as if this were zero or less; a positive value of a few seconds makes recent
 // segments unreadable. In steady capture it sits around minus one chunk, since
@@ -437,8 +437,9 @@ func (cb *CaptureBuffer) WrittenBytes() int {
 	return cb.writtenBytes
 }
 
-// TotalBytesWritten returns the monotonically increasing count of all bytes
-// ever written to the buffer. Unlike WrittenBytes (which is capped at buffer
+// TotalBytesWritten returns the monotonically increasing count of bytes
+// written to the buffer; a write larger than the ring counts only the tail it
+// keeps. Unlike WrittenBytes (which is capped at buffer
 // size), this counter never decreases and is used internally for jitter-free
 // byte offset calculations.
 //
