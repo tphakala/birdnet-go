@@ -1018,6 +1018,14 @@ func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, o
 		return nil
 	}
 
+	// The detection finished recently and no encode is visible yet, so the export may
+	// still be queued: answer 503 + Retry-After (like the pending window above) instead
+	// of a 404 that clients read as a clip that is gone for good. An unknown completion
+	// time cannot be judged (filename-based serves), so it keeps the plain 404.
+	if !detectionEndTime.IsZero() {
+		return c.handleAudioNotReady(ctx)
+	}
+
 	return c.translateAudioServeError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
 }
 
