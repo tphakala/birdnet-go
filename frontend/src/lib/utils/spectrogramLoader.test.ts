@@ -7,6 +7,7 @@ const mockAcquireSlot = vi.fn(() => ({
   cancel: vi.fn(),
 }));
 const mockReleaseSlot = vi.fn();
+const mockGetQueueStats = vi.fn(() => ({ active: 3, queued: 2, maxConcurrent: 3 }));
 
 vi.mock('$lib/utils/imageLoadQueue', () => ({
   get acquireSlot() {
@@ -14,6 +15,9 @@ vi.mock('$lib/utils/imageLoadQueue', () => ({
   },
   get releaseSlot() {
     return mockReleaseSlot;
+  },
+  get getQueueStats() {
+    return mockGetQueueStats;
   },
   MAX_CONCURRENT_IMAGE_LOADS: 3,
 }));
@@ -38,7 +42,17 @@ vi.mock('$lib/utils/logger', () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-import { createSpectrogramLoader } from './spectrogramLoader.svelte';
+import { loggers } from '$lib/utils/logger';
+import { removeStoredValue, setStoredValue } from '$lib/utils/storage';
+import {
+  createSpectrogramLoader,
+  LATE_POLL_TIMER_WARN_MS,
+  LONG_SLOT_HOLD_WARN_MS,
+  SLOW_GENERATE_FETCH_WARN_MS,
+  SLOW_SLOT_WAIT_WARN_MS,
+  SLOW_STATUS_FETCH_WARN_MS,
+  SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY,
+} from './spectrogramLoader.svelte';
 
 // Helper to create mock JSON response
 function mockJsonResponse(data: Record<string, unknown>, status = 200) {
@@ -593,6 +607,191 @@ describe('spectrogramLoader', () => {
 
       expect(loader.state).toBe('error');
       expect(loader.error).toBe(true);
+      loader.destroy();
+    });
+  });
+
+  // The diagnostics move the wall clock with vi.setSystemTime, which leaves the
+  // fake timers alone, to stand in for a throttled timer, a request queued in
+  // the browser, or a held image slot.
+  describe('diagnostics', () => {
+    const warn = vi.mocked(loggers.ui.warn);
+    // For checks that exactly one diagnostic fired, not just that one did.
+    const warnMessages = () => warn.mock.calls.map(call => String(call[0]));
+
+    // Starts a loader on detection 42 that is polling every 100 ms.
+    async function startPolling() {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+      const loader = createSpectrogramLoader({ initialPollIntervalMs: 100 });
+      loader.start(42);
+      await flushAll();
+      return loader;
+    }
+
+    beforeEach(() => {
+      setStoredValue(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY, true);
+    });
+
+    afterEach(() => {
+      removeStoredValue(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY);
+    });
+
+    it('stays quiet with the diagnostics turned off, even for a long slot hold', async () => {
+      removeStoredValue(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY);
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      vi.setSystemTime(Date.now() + LONG_SLOT_HOLD_WARN_MS + 500);
+      loader.handleImageLoad();
+
+      expect(warn).not.toHaveBeenCalled();
+      loader.destroy();
+    });
+
+    it('warns when a poll timer fires late', async () => {
+      const loader = await startPolling();
+
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+      vi.setSystemTime(Date.now() + LATE_POLL_TIMER_WARN_MS + 1000);
+      vi.advanceTimersByTime(100);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram poll timer fired late',
+        null,
+        expect.objectContaining({ detectionId: 42, intervalMs: 100 }),
+        'spectrogram-poll-late'
+      );
+      loader.destroy();
+    });
+
+    it('stays quiet for an on-time poll, a fast status request and a quick image', async () => {
+      const loader = await startPolling();
+
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      vi.advanceTimersByTime(100);
+      await flushAll();
+      expect(loader.state).toBe('loading');
+      loader.handleImageLoad();
+
+      expect(warn).not.toHaveBeenCalled();
+      loader.destroy();
+    });
+
+    it('warns when a status poll request is slow', async () => {
+      const loader = await startPolling();
+
+      mockFetch.mockImplementationOnce(() => {
+        vi.setSystemTime(Date.now() + SLOW_STATUS_FETCH_WARN_MS + 500);
+        return Promise.resolve(mockJsonResponse({ data: { status: 'generating' } }));
+      });
+      vi.advanceTimersByTime(100);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram status request was slow',
+        null,
+        expect.objectContaining({ detectionId: 42, httpStatus: 200 }),
+        'spectrogram-status-slow'
+      );
+      loader.destroy();
+    });
+
+    it('warns when the first status check is slow', async () => {
+      mockFetch.mockImplementationOnce(() => {
+        vi.setSystemTime(Date.now() + SLOW_STATUS_FETCH_WARN_MS + 500);
+        return Promise.resolve(mockJsonResponse({ data: { status: 'exists' } }));
+      });
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram status request was slow',
+        null,
+        expect.objectContaining({ detectionId: 42, httpStatus: 200 }),
+        'spectrogram-status-slow'
+      );
+      loader.destroy();
+    });
+
+    it.each([
+      ['a non-OK status', mockJsonResponse({ error: 'busy' }, 503), 503],
+      ['an OK status that ends the cycle', mockJsonResponse({ data: { status: 'exists' } }), 200],
+    ])('warns when the generate request is slow, with %s', async (_label, response, httpStatus) => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'not_started' } }));
+      mockFetch.mockImplementationOnce(() => {
+        vi.setSystemTime(Date.now() + SLOW_GENERATE_FETCH_WARN_MS + 500);
+        return Promise.resolve(response);
+      });
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram generate request was slow',
+        null,
+        expect.objectContaining({ detectionId: 42, httpStatus }),
+        'spectrogram-generate-slow'
+      );
+      loader.destroy();
+    });
+
+    it('warns with queue stats when the image slot wait is long', async () => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      mockAcquireSlot.mockImplementationOnce(() => {
+        vi.setSystemTime(Date.now() + SLOW_SLOT_WAIT_WARN_MS + 500);
+        return { promise: Promise.resolve(true), cancel: vi.fn() };
+      });
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram waited long for an image load slot',
+        null,
+        expect.objectContaining({ detectionId: 42, active: 3, queued: 2, maxConcurrent: 3 }),
+        'spectrogram-slot-wait'
+      );
+      loader.destroy();
+    });
+
+    it('warns when an image holds its slot for a long time before loading', async () => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+      expect(loader.state).toBe('loading');
+
+      vi.setSystemTime(Date.now() + LONG_SLOT_HOLD_WARN_MS + 500);
+      loader.handleImageLoad();
+
+      expect(warnMessages()).toEqual(['Spectrogram image held its load slot for a long time']);
+      expect(mockReleaseSlot).toHaveBeenCalledTimes(1);
+      loader.destroy();
+    });
+
+    it.each([
+      ['load', (l: ReturnType<typeof createSpectrogramLoader>) => l.handleImageLoad()],
+      ['error', (l: ReturnType<typeof createSpectrogramLoader>) => l.handleImageError()],
+      ['stop', (l: ReturnType<typeof createSpectrogramLoader>) => l.stop()],
+    ])('names %s as what released a long slot hold', async (releasedBy, release) => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      vi.setSystemTime(Date.now() + LONG_SLOT_HOLD_WARN_MS + 500);
+      release(loader);
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram image held its load slot for a long time',
+        null,
+        expect.objectContaining({ detectionId: 42, releasedBy }),
+        'spectrogram-slot-hold'
+      );
       loader.destroy();
     });
   });
