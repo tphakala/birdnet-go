@@ -530,7 +530,23 @@ describe('AudioPlayer recovery', () => {
       const callsAtLimit = stub.mock.calls.length;
       await vi.advanceTimersByTimeAsync(MAX_POLL_DURATION_MS);
 
+      // Polling kept going until the limit, then stopped for good
+      expect(callsAtLimit).toBeGreaterThan(MAX_POLL_DURATION_MS / POLL_INTERVAL_MS / 2);
       expect(stub.mock.calls.length).toBe(callsAtLimit);
+    });
+
+    it('keeps polling after the status request throws a network error', async () => {
+      const stub = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError('network down'))
+        .mockResolvedValueOnce(statusResponse('failed'));
+      globalThis.fetch = stub;
+      mount();
+
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+      expect(stub).toHaveBeenCalledTimes(2);
       expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
     });
 
