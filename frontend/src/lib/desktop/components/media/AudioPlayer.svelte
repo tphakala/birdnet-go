@@ -50,7 +50,9 @@
     MAX_AUDIO_LOAD_RETRIES,
     AUDIO_RETRY_DELAY_MS,
     isPlayInterruptedError,
+    pendingRetryDelayMs,
     playButtonLabelKey,
+    probeAudioSource,
   } from '$lib/utils/audio';
   import {
     getAudioContext,
@@ -74,6 +76,7 @@
     fetchSpectrogramStatus,
     isTerminalSpectrogramReason,
     isRetryableSpectrogramReason,
+    isSpectrogramSourceKnownMissing,
     markSpectrogramSourceMissing,
     parseSpectrogramStatus,
     type SpectrogramGenerationStatus,
@@ -209,6 +212,8 @@
   // exists but audio file is still being encoded by FFmpeg (backend returns 503)
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  // Aborts the one byte probe of the audio URL that runs beside the first retry timer.
+  let audioProbeController: AbortController | undefined;
   // True when the user pressed play while a load retry was pending; consumed once
   // by 'loadedmetadata' or 'canplay' so the play intent is not lost when the
   // transient error is suppressed.
@@ -1086,7 +1091,10 @@
   const currentSource = () =>
     audibleBats.active && audibleBats.url ? audibleBats.url : (processedAudioUrl ?? audioUrl);
 
+  // Also ends the probe: it only matters while the retry it may cancel is pending.
   function clearAudioRetryTimer() {
+    audioProbeController?.abort();
+    audioProbeController = undefined;
     if (audioRetryTimer !== undefined) {
       clearTimeout(audioRetryTimer);
       audioRetryTimer = undefined;
@@ -1136,6 +1144,51 @@
     playRequestedAfterRetry = false;
     clearAudioRetryTimer();
     audioRetryCount = 0;
+  }
+
+  // Reload the active source after delayMs. A media element cannot read the HTTP status.
+  function scheduleLoadRetry(delayMs: number) {
+    if (audioRetryTimer !== undefined) clearTimeout(audioRetryTimer);
+    audioRetryTimer = setTimeout(() => {
+      clearAudioRetryTimer();
+      if (audioElement) {
+        // Retry against whichever source is currently active; reverting
+        // to the original audioUrl here would silently drop out of an
+        // active audible-bats or processed-audio derived clip while
+        // leaving its state flagged as still active.
+        replaceSource(currentSource());
+        audioElement.load();
+      }
+    }, delayMs);
+  }
+
+  // Gives up without retrying: the clip is gone, so the error shows now.
+  function failLoadPermanently() {
+    clearAudioRetryTimer();
+    error = t('media.audio.error');
+    isLoading = false;
+    playRequestedAfterRetry = false;
+    markPlaybackStopped();
+  }
+
+  // On the first failure of a load, ask the server what the failure was. The retry is
+  // already scheduled, so a 404 only has to cancel it and a 503 to move it later;
+  // any other answer leaves today's blind retry in place. Only the original clip is
+  // probed: a processed or audible-bats source is a local blob URL.
+  function probeFailedLoad() {
+    if (currentSource() !== audioUrl) return;
+    const controller = new AbortController();
+    audioProbeController = controller;
+    void probeAudioSource(audioUrl, controller.signal).then(outcome => {
+      if (controller.signal.aborted) return;
+      audioProbeController = undefined;
+      if (outcome.kind === 'missing') {
+        debugLog('Audio probe: clip is gone, not retrying');
+        failLoadPermanently();
+      } else if (outcome.kind === 'pending') {
+        scheduleLoadRetry(pendingRetryDelayMs(outcome, AUDIO_RETRY_DELAY_MS));
+      }
+    });
   }
 
   // Point the element at a new source. The assignment pauses the element without
@@ -1946,10 +1999,7 @@
         duration = 0;
         error = null;
         audioRetryCount = 0;
-        if (audioRetryTimer) {
-          clearTimeout(audioRetryTimer);
-          audioRetryTimer = undefined;
-        }
+        clearAudioRetryTimer();
         // Reset clip selection for new audio
         clearSelection();
       }
@@ -2065,23 +2115,21 @@
           canplayTimeoutId = undefined;
         }
 
+        // A clip the server already reported gone for good is not retried or probed.
+        if (isSpectrogramSourceKnownMissing(detectionId)) {
+          failLoadPermanently();
+          return;
+        }
+
         // Retry loading if under the retry limit; the audio file may still
         // be encoding (backend returns 503 which the browser treats as a load error)
         if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
+          const isFirstFailure = audioRetryCount === 0;
           clearAudioRetryTimer();
           audioRetryCount++;
           debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
-          audioRetryTimer = setTimeout(() => {
-            audioRetryTimer = undefined;
-            if (audioElement) {
-              // Retry against whichever source is currently active; reverting
-              // to the original audioUrl here would silently drop out of an
-              // active audible-bats or processed-audio derived clip while
-              // leaving its state flagged as still active.
-              replaceSource(currentSource());
-              audioElement.load();
-            }
-          }, AUDIO_RETRY_DELAY_MS);
+          scheduleLoadRetry(AUDIO_RETRY_DELAY_MS);
+          if (isFirstFailure) probeFailedLoad();
           return;
         }
 
@@ -2158,10 +2206,7 @@
       clearStatusPollTimer();
       clearSpectrogramProbe();
       spectrogramLoader.cleanup();
-      if (audioRetryTimer) {
-        clearTimeout(audioRetryTimer);
-        audioRetryTimer = undefined;
-      }
+      clearAudioRetryTimer();
 
       // Clear canplay safety timeout
       if (canplayTimeoutId) {

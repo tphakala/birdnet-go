@@ -35,7 +35,10 @@ import {
   MAX_AUDIO_LOAD_RETRIES,
   AUDIO_RETRY_DELAY_MS,
   isPlayInterruptedError,
+  pendingRetryDelayMs,
+  probeAudioSource,
 } from '$lib/utils/audio';
+import { isSpectrogramSourceKnownMissing } from '$lib/utils/spectrogramStatus';
 import {
   getAudioContext,
   isAudioContextSupported,
@@ -140,6 +143,8 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   let canplayTimeoutId: ReturnType<typeof setTimeout> | undefined;
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  // Aborts the one byte probe of the audio URL that runs beside the first retry timer.
+  let audioProbeController: AbortController | undefined;
   // True when the user pressed play during an active load retry; consumed by the
   // 'canplay' handler to resume playback once the reloaded clip is ready, so the
   // play intent is not lost when the transient error is suppressed.
@@ -224,11 +229,55 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
     if (isPlaying) handlePause();
   }
 
+  // Also ends the probe: it only matters while the retry it may cancel is pending.
   function clearRetryTimer() {
+    audioProbeController?.abort();
+    audioProbeController = undefined;
     if (audioRetryTimer !== undefined) {
       clearTimeout(audioRetryTimer);
       audioRetryTimer = undefined;
     }
+  }
+
+  // Retry the load after delayMs. A media element cannot read the HTTP status.
+  function scheduleLoadRetry(delayMs: number) {
+    if (audioRetryTimer !== undefined) clearTimeout(audioRetryTimer);
+    audioRetryTimer = setTimeout(() => {
+      clearRetryTimer();
+      if (audioElement) {
+        markPlaybackStopped();
+        audioElement.src = audioUrl;
+        audioElement.load();
+      }
+    }, delayMs);
+  }
+
+  // Gives up without retrying: the clip is gone, so the error shows now.
+  function failLoadPermanently() {
+    clearRetryTimer();
+    error = t('media.audio.error');
+    isLoading = false;
+    markPlaybackStopped();
+    // Drop any pending play intent so a late 'canplay' can't resume a failed clip.
+    playRequestedAfterRetry = false;
+  }
+
+  // On the first failure of a load, ask the server what the failure was. The retry is
+  // already scheduled, so a 404 only has to cancel it and a 503 to move it later;
+  // any other answer leaves today's blind retry in place.
+  function probeFailedLoad() {
+    const controller = new AbortController();
+    audioProbeController = controller;
+    void probeAudioSource(audioUrl, controller.signal).then(outcome => {
+      if (controller.signal.aborted) return;
+      audioProbeController = undefined;
+      if (outcome.kind === 'missing') {
+        debugLog('Audio probe: clip is gone, not retrying');
+        failLoadPermanently();
+      } else if (outcome.kind === 'pending') {
+        scheduleLoadRetry(pendingRetryDelayMs(outcome, AUDIO_RETRY_DELAY_MS));
+      }
+    });
   }
 
   // Resume playback the user asked for during a retry, at most once.
@@ -393,10 +442,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         error = null;
         audioRetryCount = 0;
         playRequestedAfterRetry = false;
-        if (audioRetryTimer) {
-          clearTimeout(audioRetryTimer);
-          audioRetryTimer = undefined;
-        }
+        clearRetryTimer();
         if (canplayTimeoutId) {
           clearTimeout(canplayTimeoutId);
           canplayTimeoutId = undefined;
@@ -460,10 +506,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       isLoading = false;
       error = null;
       audioRetryCount = 0;
-      if (audioRetryTimer) {
-        clearTimeout(audioRetryTimer);
-        audioRetryTimer = undefined;
-      }
+      clearRetryTimer();
       // If the user pressed play while the clip was still loading/encoding and we
       // suppressed the transient error, resume playback now that it can play.
       consumePendingPlay();
@@ -480,18 +523,18 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       // (MEDIA_ERR_SRC_NOT_SUPPORTED), indistinguishable from a genuinely
       // unsupported format, so we cannot skip retrying on code 4 without breaking
       // the still-encoding path. Retrying is bounded by MAX_AUDIO_LOAD_RETRIES.
+      // A clip the server already reported gone for good is not retried or probed.
+      if (isSpectrogramSourceKnownMissing(detectionId)) {
+        failLoadPermanently();
+        return;
+      }
       if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
+        const isFirstFailure = audioRetryCount === 0;
         clearRetryTimer();
         audioRetryCount++;
         debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
-        audioRetryTimer = setTimeout(() => {
-          audioRetryTimer = undefined;
-          if (audioElement) {
-            markPlaybackStopped();
-            audioElement.src = audioUrl;
-            audioElement.load();
-          }
-        }, AUDIO_RETRY_DELAY_MS);
+        scheduleLoadRetry(AUDIO_RETRY_DELAY_MS);
+        if (isFirstFailure) probeFailedLoad();
         return;
       }
 
@@ -517,10 +560,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
         clearTimeout(canplayTimeoutId);
         canplayTimeoutId = undefined;
       }
-      if (audioRetryTimer) {
-        clearTimeout(audioRetryTimer);
-        audioRetryTimer = undefined;
-      }
+      clearRetryTimer();
 
       // Remove all tracked event listeners
       eventListeners.forEach(({ element, event, handler }) => {
