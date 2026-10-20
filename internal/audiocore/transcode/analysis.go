@@ -18,8 +18,8 @@ import (
 const minStreamFrames = chunkFrames
 
 // analysisResampleQuality is the resampler preset for analysis audio. Medium
-// keeps High's passband (the engine passband end is 0.91 of the output Nyquist
-// against 0.912, go-audio-resampler v1.9.0 internal/engine/filter_params.go:73-74)
+// keeps High's passband (the engine passband end fraction is 0.91 against 0.912,
+// go-audio-resampler v1.9.0 internal/engine/filter_params.go:73-74)
 // with a 102 dB design stopband instead of 126 dB (filter_params.go:66-67), at a
 // lower cost per input sample.
 const analysisResampleQuality = audioresampler.QualityMedium
