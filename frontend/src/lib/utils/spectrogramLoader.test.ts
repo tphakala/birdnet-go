@@ -43,6 +43,7 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 import { loggers } from '$lib/utils/logger';
+import { removeStoredValue, setStoredValue } from '$lib/utils/storage';
 import {
   createSpectrogramLoader,
   LATE_POLL_TIMER_WARN_MS,
@@ -628,15 +629,15 @@ describe('spectrogramLoader', () => {
     }
 
     beforeEach(() => {
-      localStorage.setItem(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY, 'true');
+      setStoredValue(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY, true);
     });
 
     afterEach(() => {
-      localStorage.removeItem(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY);
+      removeStoredValue(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY);
     });
 
     it('stays quiet with the diagnostics turned off, even for a long slot hold', async () => {
-      localStorage.removeItem(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY);
+      removeStoredValue(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY);
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
       const loader = createSpectrogramLoader();
       loader.start(42);
