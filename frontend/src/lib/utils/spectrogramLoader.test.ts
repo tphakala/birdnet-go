@@ -614,7 +614,17 @@ describe('spectrogramLoader', () => {
   // the browser, or a held image slot.
   describe('diagnostics', () => {
     const warn = vi.mocked(loggers.ui.warn);
+    // For checks that exactly one diagnostic fired, not just that one did.
     const warnMessages = () => warn.mock.calls.map(call => String(call[0]));
+
+    // Starts a loader on detection 42 that is polling every 100 ms.
+    async function startPolling() {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+      const loader = createSpectrogramLoader({ initialPollIntervalMs: 100 });
+      loader.start(42);
+      await flushAll();
+      return loader;
+    }
 
     beforeEach(() => {
       localStorage.setItem(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY, 'true');
@@ -639,10 +649,7 @@ describe('spectrogramLoader', () => {
     });
 
     it('warns when a poll timer fires late', async () => {
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
-      const loader = createSpectrogramLoader({ initialPollIntervalMs: 100 });
-      loader.start(42);
-      await flushAll();
+      const loader = await startPolling();
 
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
       vi.setSystemTime(Date.now() + LATE_POLL_TIMER_WARN_MS + 1000);
@@ -659,10 +666,7 @@ describe('spectrogramLoader', () => {
     });
 
     it('stays quiet for an on-time poll, a fast status request and a quick image', async () => {
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
-      const loader = createSpectrogramLoader({ initialPollIntervalMs: 100 });
-      loader.start(42);
-      await flushAll();
+      const loader = await startPolling();
 
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
       vi.advanceTimersByTime(100);
@@ -675,10 +679,7 @@ describe('spectrogramLoader', () => {
     });
 
     it('warns when a status poll request is slow', async () => {
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
-      const loader = createSpectrogramLoader({ initialPollIntervalMs: 100 });
-      loader.start(42);
-      await flushAll();
+      const loader = await startPolling();
 
       mockFetch.mockImplementationOnce(() => {
         vi.setSystemTime(Date.now() + SLOW_STATUS_FETCH_WARN_MS + 500);
