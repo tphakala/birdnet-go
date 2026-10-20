@@ -278,6 +278,8 @@ describe('useAudioPlayback recovery', () => {
     const PENDING_STATUS = 503;
     const PARTIAL_STATUS = 206;
     const RETRY_AFTER_SECONDS = 9;
+    // Shorter than AUDIO_RETRY_DELAY_MS, so the answer lands while the first retry is pending.
+    const PROBE_DELAY_MS = AUDIO_RETRY_DELAY_MS / 4;
     // Far longer than every retry delay, so a stray retry would show.
     const LONG_WAIT_MS = AUDIO_RETRY_DELAY_MS * 10;
     let restoreFetch: (() => void) | undefined;
@@ -375,6 +377,59 @@ describe('useAudioPlayback recovery', () => {
 
       expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
       expect(getState().error).toBeNull();
+    });
+
+    it('probes only the first failure of a cycle and again after the budget resets', async () => {
+      restoreFetch = mockAudioProbe({ status: PARTIAL_STATUS });
+      await renderAndWait();
+
+      await exhaustLoadRetries(ctl);
+      expect(probeCalls()).toHaveLength(1);
+
+      await toggle();
+      ctl.failLoad();
+      await settle();
+
+      expect(probeCalls()).toHaveLength(2);
+    });
+
+    it('drops a queued play when the probe ends the retries', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: PROBE_DELAY_MS });
+      await renderAndWait();
+      ctl.setPlayMode('hold');
+
+      const pressed = getState().togglePlayPause();
+      await settle();
+      ctl.failLoad();
+      await pressed;
+      await vi.advanceTimersByTimeAsync(PROBE_DELAY_MS);
+      // The fake leaves a failed element unpaused; a real one is paused.
+      ctl.element.pause();
+      const playsBefore = ctl.play.mock.calls.length;
+      ctl.completeLoad();
+      await settle();
+
+      expect(ctl.play.mock.calls.length).toBe(playsBefore);
+    });
+
+    it('keeps a queued play when the probe answers 503', async () => {
+      restoreFetch = mockAudioProbe({
+        status: PENDING_STATUS,
+        headers: { 'Retry-After': String(RETRY_AFTER_SECONDS) },
+        delayMs: PROBE_DELAY_MS,
+      });
+      await renderAndWait();
+      ctl.setPlayMode('hold');
+
+      const pressed = getState().togglePlayPause();
+      await settle();
+      ctl.failLoad();
+      await pressed;
+      await vi.advanceTimersByTimeAsync(RETRY_AFTER_SECONDS * 1000 + PROBE_DELAY_MS);
+      ctl.completeLoad();
+      await settle();
+
+      expect(ctl.paused).toBe(false);
     });
 
     it('aborts the probe when the clip loads', async () => {

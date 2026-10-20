@@ -32,6 +32,7 @@ describe('probeAudioSource', () => {
 
   function respond(status: number, headers: Record<string, string> = {}) {
     const cancel = vi.fn().mockResolvedValue(undefined);
+    // Partial Response: the probe reads only status, headers and body.cancel.
     const response = {
       status,
       headers: new Headers(headers),
@@ -41,8 +42,11 @@ describe('probeAudioSource', () => {
     return cancel;
   }
 
+  const originalFetchImpl = vi.mocked(globalThis.fetch).getMockImplementation();
+
   afterEach(() => {
     vi.mocked(globalThis.fetch).mockReset();
+    if (originalFetchImpl) vi.mocked(globalThis.fetch).mockImplementation(originalFetchImpl);
   });
 
   it('sends one ranged GET of the url with the abort signal', async () => {

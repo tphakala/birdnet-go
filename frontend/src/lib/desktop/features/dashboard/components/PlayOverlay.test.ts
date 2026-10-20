@@ -685,6 +685,20 @@ describe('PlayOverlay', () => {
       expect(alertShown()).toBe(false);
     });
 
+    it('probes only the first failure of a cycle and again after the budget resets', async () => {
+      restoreFetch = mockAudioProbe({ status: PARTIAL_STATUS });
+      mount();
+
+      await exhaustRetries();
+      expect(probeCalls()).toHaveLength(1);
+
+      await click();
+      ctl.failLoad();
+      await settle();
+
+      expect(probeCalls()).toHaveLength(2);
+    });
+
     it('aborts the probe when the clip loads', async () => {
       restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
       mount();

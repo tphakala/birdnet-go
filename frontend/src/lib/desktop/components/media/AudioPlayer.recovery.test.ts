@@ -326,6 +326,7 @@ describe('AudioPlayer recovery', () => {
     });
 
     afterEach(() => {
+      clearSpectrogramSourceMarks();
       globalThis.fetch = originalFetch;
       URL.createObjectURL = originalCreateObjectURL;
       URL.revokeObjectURL = originalRevokeObjectURL;
@@ -339,6 +340,29 @@ describe('AudioPlayer recovery', () => {
       await fireEvent.click(screen.getByText(BATS_ENABLE_TEXT));
       await settle();
     }
+
+    it('does not probe a failing audible-bats source', async () => {
+      mount({ modelType: 'bat' });
+      await activateAudibleBats();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(probeCalls()).toHaveLength(0);
+    });
+
+    it('keeps retrying an audible-bats source while the original is reported gone', async () => {
+      markSpectrogramSourceMissing('test-123');
+      mount({ modelType: 'bat' });
+      await activateAudibleBats();
+      const loadsBefore = ctl.load.mock.calls.length;
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
 
     it('resumes playback on the swapped source', async () => {
       const { container } = mount({ modelType: 'bat' });
@@ -854,6 +878,20 @@ describe('AudioPlayer recovery', () => {
 
       expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('probes only the first failure of a cycle and again after the budget resets', async () => {
+      restoreFetch = mockAudioProbe({ status: PARTIAL_STATUS });
+      const { container } = mount();
+
+      await exhaustLoadRetries(ctl);
+      expect(probeCalls()).toHaveLength(1);
+
+      await press(container);
+      ctl.failLoad();
+      await settle();
+
+      expect(probeCalls()).toHaveLength(2);
     });
 
     it('aborts the probe when the clip loads', async () => {
