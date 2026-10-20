@@ -180,6 +180,9 @@
   }
 
   function handleSpectrogramError() {
+    // The error state is final for this attempt: a request that was in flight when a
+    // terminal reason ended the retries must not start them again.
+    if (spectrogramLoader.error) return;
     if (retryCount === 0) void endRetriesOnTerminalReason();
     if (retryCount < MAX_RETRIES) {
       const delay = RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)];

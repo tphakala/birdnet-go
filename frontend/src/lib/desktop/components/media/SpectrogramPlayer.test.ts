@@ -484,6 +484,36 @@ describe('SpectrogramPlayer', () => {
       );
     });
 
+    it('ends the retry loop when the verdict arrives after the first retry already fired', async () => {
+      let answer: (r: Response) => void = () => {};
+      statusFetch = vi.fn(
+        () =>
+          new Promise<Response>(resolve => {
+            answer = resolve;
+          })
+      );
+      vi.stubGlobal('fetch', statusFetch);
+      await failFirstImage();
+      // The first retry fires and its image request is in flight before the answer arrives.
+      await vi.advanceTimersByTimeAsync(FIRST_RETRY_DELAY_MS);
+      const retrySrc = screen.getByAltText('components.audio.spectrogramAlt').getAttribute('src');
+      expect(retrySrc).toContain('&t=');
+
+      answer(
+        new Response(JSON.stringify({ data: { status: 'failed', reason: 'source_missing' } }))
+      );
+      await vi.advanceTimersByTimeAsync(0);
+      expect(mockLoadingState.setError).toHaveBeenCalledTimes(1);
+      // The loading state is the real one's: the error is now set.
+      mockLoadingState.error = true;
+      await fireEvent.error(screen.getByAltText('components.audio.spectrogramAlt'));
+      await vi.advanceTimersByTimeAsync(PAST_ALL_RETRIES_MS);
+
+      expect(screen.getByAltText('components.audio.spectrogramAlt').getAttribute('src')).toBe(
+        retrySrc
+      );
+    });
+
     it('asks for the status once however many retries fail', async () => {
       answerStatus({ status: 'failed', reason: 'render_failed' });
 
