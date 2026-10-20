@@ -26,8 +26,8 @@ import { buildAppUrl } from '$lib/utils/urlHelpers';
 
 const logger = loggers.ui;
 
-// Diagnostics for a card whose spinner is held up after the render was asked
-// for: a late status poll timer, a slow status or generate request, a long wait for an image
+// Diagnostics for a card whose spinner is held up by the browser rather than by
+// the server: a late poll timer, a slow status request, a long wait for an image
 // slot, or an image that keeps its slot too long. They are off by default; turn
 // them on in one browser with localStorage.setItem('birdnet-debug-spectrogram',
 // 'true'), which takes effect without a reload. Each one then logs a throttled
@@ -36,13 +36,13 @@ const logger = loggers.ui;
 /** localStorage key that turns on the loader diagnostics in this browser. */
 export const SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY = 'birdnet-debug-spectrogram';
 
-/** A status poll timer firing this much later than scheduled was throttled, typically in a background tab. */
+/** A poll timer firing this much later than scheduled was throttled, typically in a background tab. */
 export const LATE_POLL_TIMER_WARN_MS = 2000;
-/** A status or generate request taking longer than this waited in the browser's connection queue or on the server. */
+/** A status request taking longer than this most likely waited in the browser's connection queue. */
 export const SLOW_STATUS_FETCH_WARN_MS = 3000;
 /** Waiting longer than this for an image load slot means the slots are held. */
 export const SLOW_SLOT_WAIT_WARN_MS = 5000;
-/** An image holding its load slot longer than this before load, error, stop or destroy released it. */
+/** An image holding its load slot longer than this before load or error fired. */
 export const LONG_SLOT_HOLD_WARN_MS = 10000;
 
 /** Logger throttle keys, one per kind of diagnostic warning. */
@@ -119,7 +119,7 @@ const DEFAULT_CONFIG: Required<SpectrogramLoaderConfig> = {
  * Call `stop()` when hidden or destroyed.
  * Read `state`, `spectrogramUrl`, `showSpinner`, `error` for UI binding.
  *
- * Logs the diagnostics described above when they are turned on
+ * Logs the browser-side diagnostics described above when they are turned on
  * (SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY).
  */
 export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}) {
