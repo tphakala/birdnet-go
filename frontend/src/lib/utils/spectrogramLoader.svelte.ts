@@ -167,14 +167,15 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     }
   }
 
-  function releaseCurrentSlot(): void {
+  /** Releases the image load slot; `releasedBy` names what ended the hold for the slot hold warning. */
+  function releaseCurrentSlot(releasedBy: 'load' | 'error' | 'stop'): void {
     if (hasSlot) {
       const heldMs = Date.now() - slotAcquiredAt;
       warnIfOver(
         heldMs,
         LONG_SLOT_HOLD_WARN_MS,
         'Spectrogram image held its load slot for a long time',
-        { detectionId: currentDetectionId, heldMs, state },
+        { detectionId: currentDetectionId, heldMs, releasedBy },
         SLOT_HOLD_THROTTLE_KEY
       );
       releaseSlot();
@@ -549,7 +550,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   function stop(): void {
     clearTimers();
     abortPending();
-    releaseCurrentSlot();
+    releaseCurrentSlot('stop');
 
     if (state !== 'loaded') {
       state = 'idle';
@@ -562,7 +563,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     showSpinner = false;
     imageRetryCount = 0;
     clearTimers();
-    releaseCurrentSlot();
+    releaseCurrentSlot('load');
   }
 
   function handleImageError(): void {
@@ -570,7 +571,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     if (detectionId === undefined) return;
 
     // Release slot immediately so other cards can load during retry delay
-    releaseCurrentSlot();
+    releaseCurrentSlot('error');
 
     if (imageRetryCount < config.maxImageRetries) {
       const delay =

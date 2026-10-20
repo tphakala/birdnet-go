@@ -771,5 +771,27 @@ describe('spectrogramLoader', () => {
       expect(mockReleaseSlot).toHaveBeenCalledTimes(1);
       loader.destroy();
     });
+
+    it.each([
+      ['load', (l: ReturnType<typeof createSpectrogramLoader>) => l.handleImageLoad()],
+      ['error', (l: ReturnType<typeof createSpectrogramLoader>) => l.handleImageError()],
+      ['stop', (l: ReturnType<typeof createSpectrogramLoader>) => l.stop()],
+    ])('names %s as what released a long slot hold', async (releasedBy, release) => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      vi.setSystemTime(Date.now() + LONG_SLOT_HOLD_WARN_MS + 500);
+      release(loader);
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram image held its load slot for a long time',
+        null,
+        expect.objectContaining({ detectionId: 42, releasedBy }),
+        'spectrogram-slot-hold'
+      );
+      loader.destroy();
+    });
   });
 });
