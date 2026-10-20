@@ -848,24 +848,24 @@ func TestNativeGate_ConcurrentPCMRendersKeepTheirOwnPixels(t *testing.T) {
 	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	const (
-		rate         = 24000
-		rendersEach  = 3
-		wideWidth    = 514
-		toneSecs     = 1
-		firstToneHz  = 1500.0
-		secondToneHz = 3000.0
-		thirdToneHz  = 6000.0
-		fourthToneHz = 9000.0
+		rate        = 24000
+		rendersEach = 3
+		wideWidth   = 514
+		toneSecs    = 1
 	)
 	inputs := []struct {
-		name  string
-		width int
-		pcm   []byte
+		name   string
+		width  int
+		toneHz float64
+		pcm    []byte
 	}{
-		{"low narrow", nativeTestWidth, samplesToPCM(toneSamples(rate, toneSecs, firstToneHz))},
-		{"mid narrow", nativeTestWidth, samplesToPCM(toneSamples(rate, toneSecs, secondToneHz))},
-		{"high wide", wideWidth, samplesToPCM(toneSamples(rate, toneSecs, thirdToneHz))},
-		{"top wide", wideWidth, samplesToPCM(toneSamples(rate, toneSecs, fourthToneHz))},
+		{name: "low narrow", width: nativeTestWidth, toneHz: 1500},
+		{name: "mid narrow", width: nativeTestWidth, toneHz: 3000},
+		{name: "high wide", width: wideWidth, toneHz: 6000},
+		{name: "top wide", width: wideWidth, toneHz: 9000},
+	}
+	for i := range inputs {
+		inputs[i].pcm = samplesToPCM(toneSamples(rate, toneSecs, inputs[i].toneHz))
 	}
 	renderInput := func(i, n int) (string, error) {
 		path := filepath.Join(env.TempDir, fmt.Sprintf("in%d-render%d.png", i, n))
