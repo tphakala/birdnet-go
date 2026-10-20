@@ -31,6 +31,10 @@ const (
 	// consoleDropModule is the module name on the drop summary record.
 	consoleDropModule = "logger"
 
+	// consoleDropCountKey is the attribute key carrying the dropped line count
+	// on the drop summary record. It is documented in the logger README.
+	consoleDropCountKey = "dropped_lines"
+
 	// consoleDropMessage is the message of the drop summary record.
 	consoleDropMessage = "Console output was dropped because stdout was not draining"
 )
@@ -222,6 +226,6 @@ func (cl *CentralLogger) writeConsoleDropSummary(n int64) bool {
 		return true
 	}
 	rec := slog.NewRecord(time.Now(), slog.LevelWarn, consoleDropMessage, 0)
-	rec.AddAttrs(slog.String(moduleKey, consoleDropModule), slog.Int64("dropped_lines", n))
+	rec.AddAttrs(slog.String(moduleKey, consoleDropModule), slog.Int64(consoleDropCountKey, n))
 	return handler.Handle(ctx, rec) == nil
 }
