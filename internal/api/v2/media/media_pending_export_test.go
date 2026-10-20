@@ -73,9 +73,10 @@ func TestServeAudioByID_PendingExport(t *testing.T) {
 
 			// Pending returns 503 via ctx.JSON (nil error, code on the recorder); a
 			// missing/ghost clip returns an echo.HTTPError 404. Resolve either way. The
-			// status code alone distinguishes the paths: a 503 can only come from the
-			// immediate pending branch (the grace/ghost path yields 404), so no wall-clock
-			// timing assertion is needed (and none is used, to avoid CI flakiness).
+			// Retry-After tells the pending paths apart: the immediate pending branch sizes
+			// it to the time left until ReadyAt (above the floor), while the post-grace 503
+			// of a recent clip uses the floor, so no wall-clock timing assertion is needed
+			// (and none is used, to avoid CI flakiness).
 			code := rec.Code
 			if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
 				code = httpErr.Code
@@ -87,7 +88,8 @@ func TestServeAudioByID_PendingExport(t *testing.T) {
 				require.NotEmpty(t, retryAfter, "503 must carry a Retry-After header")
 				secs, convErr := strconv.Atoi(retryAfter)
 				require.NoError(t, convErr)
-				assert.GreaterOrEqual(t, secs, minRetryAfterSeconds)
+				assert.Greater(t, secs, minRetryAfterSeconds,
+					"pending export must size Retry-After to the time left, above the floor")
 			}
 		})
 	}

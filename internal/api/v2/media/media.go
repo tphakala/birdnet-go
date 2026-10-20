@@ -939,7 +939,8 @@ func (c *Handler) unrenderedSourceReason(relAudioPath string, begin, end time.Ti
 // encoding. It checks for an active temp file and waits for encoding to complete,
 // then falls back to a brief grace period for the race window where FFmpeg hasn't
 // created the temp file yet or already renamed it. Returns nil if the file was
-// successfully served, or the original/translated error otherwise.
+// served or a 503 pending answer was written, or the original/translated error
+// otherwise.
 func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, detectionBeginTime, detectionEndTime time.Time, logFields ...logger.Field) error {
 	// A completed clip whose stored name drifted from the file on disk (a row from
 	// an older version, or a manual rename) is served from its actual path rather
@@ -1023,6 +1024,7 @@ func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, o
 	// of a 404 that clients read as a clip that is gone for good. An unknown completion
 	// time cannot be judged (filename-based serves), so it keeps the plain 404.
 	if !detectionEndTime.IsZero() {
+		c.LogDebugIfEnabled("Audio clip still missing after the grace wait for a recent detection", logFields...)
 		return c.handleAudioNotReady(ctx)
 	}
 

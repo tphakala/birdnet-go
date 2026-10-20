@@ -1882,7 +1882,7 @@ func TestIsRecentClipCompletion(t *testing.T) {
 // TestServeAudioByID_GraceSkippedForOldDetections verifies the defense-in-depth
 // grace-poll skip: a 404 for a detection whose capture completed long ago returns
 // immediately (no grace wait), while a recent detection still waits out the grace
-// period. Timing bounds around audioGracePeriod distinguish the two paths.
+// period and then answers 503 with Retry-After. Timing bounds around audioGracePeriod distinguish the two paths.
 func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 	// clipPath resolves but the file does not exist on disk, forcing the 404 path.
 	const missingClip = "2024/01/ghost_95p_20240101T000000Z.wav"
