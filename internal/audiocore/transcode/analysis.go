@@ -52,7 +52,7 @@ type MonoSource struct {
 // a spectrogram of the part that exists would be a short picture of a clip that
 // is cut or still being written. Formats without an exact length (MP3, M4A,
 // Opus) are not checked. The result holds the decoded clip in memory; OpenMono
-// avoids that for a source that declares its length.
+// avoids that for a source it can stream.
 func DecodeMono(ctx context.Context, path string, toRate int) (*MonoSource, error) {
 	buf, err := decodeChannels(ctx, path, nil, maxDecodedPCMBytes, 0, maxAnalysisChannels)
 	if err != nil {
@@ -70,16 +70,16 @@ func DecodeMono(ctx context.Context, path string, toRate int) (*MonoSource, erro
 // length. Errors that only a full decode finds (a WAV or FLAC cut short, a file
 // with no audio) come from Stream, not from OpenMono. A source whose header
 // declares no length, fewer frames than one chunk, or more frames than the
-// decoded-size bound is decoded into memory as DecodeMono does, and so reports
-// its errors from OpenMono. Stream on a file-backed source can wrap
-// ErrShorterThanDeclared; see Stream. toRate is as for DecodeMono.
+// decoded-size bound goes through DecodeMono instead, so it is decoded into
+// memory and DecodeMono's errors come from OpenMono. Stream on a file-backed
+// source can wrap ErrShorterThanDeclared; see Stream. toRate is as for
+// DecodeMono.
 func OpenMono(ctx context.Context, path string, toRate int) (*MonoSource, error) {
 	return openMono(ctx, path, toRate, maxDecodedPCMBytes)
 }
 
 // openMono is OpenMono with the most decoded bytes a streamed clip may declare.
-// OpenMono passes maxDecodedPCMBytes, so a clip that DecodeMono would refuse for
-// its size is never streamed.
+// OpenMono passes maxDecodedPCMBytes.
 func openMono(ctx context.Context, path string, toRate, maxBytes int) (*MonoSource, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -213,10 +213,9 @@ func (m *MonoSource) SpanSamples() int64 {
 // calls deliver identical samples while the file is unchanged. A file whose
 // header differs from the one OpenMono read wraps ErrUndecodableSource. A WAV or
 // FLAC that ends before its declared length wraps ErrTruncatedSource, and a file
-// with no audio wraps ErrUndecodableSource, in both cases after fn has received
-// the samples that exist. An M4A, MP3 or Opus file that delivers fewer frames
-// than declared returns an error wrapping ErrShorterThanDeclared, since
-// SpanSamples was then too long.
+// with no audio wraps ErrUndecodableSource. An M4A, MP3 or Opus file that
+// delivers fewer frames than declared returns an error wrapping
+// ErrShorterThanDeclared, since SpanSamples was then too long.
 func (m *MonoSource) Stream(ctx context.Context, fn func([]float32) error) error {
 	if m.Streamed() {
 		return m.streamFile(ctx, fn)

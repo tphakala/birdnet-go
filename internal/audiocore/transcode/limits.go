@@ -34,7 +34,7 @@ const (
 	// for an encoder, each counted in 16-bit output bytes. It covers the longest
 	// configurable extended capture at 48 kHz mono (1200 s, 115.2 MB) and a 262 s
 	// window at 256 kHz. It also bounds the declared length of a clip that
-	// OpenMono streams; a longer one is decoded as DecodeMono does.
+	// OpenMono streams; a longer declared length goes through DecodeMono.
 	maxDecodedPCMBytes = 128 << 20
 
 	// maxSourceFileBytes bounds the stored source file, checked with Stat before

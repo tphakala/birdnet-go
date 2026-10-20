@@ -82,8 +82,8 @@ func pcmSourceRate(rate int) int {
 // generateNativeFromFile renders the spectrogram of an audio file into tempPath.
 // The render first takes its share of the memory budget, from the readiness
 // snapshot when the caller supplied one and from a header probe otherwise, then
-// opens the clip and draws it at low priority, decoding while it draws when the
-// clip's header declares its length.
+// opens the clip and draws it at low priority, decoding while it draws for a clip
+// that transcode.OpenMono streams.
 func (g *Generator) generateNativeFromFile(ctx context.Context, settings *conf.Settings, audioPath, tempPath string, width int, raw bool, profile FrequencyProfile, source *SourceState) error {
 	var decodedBytes int64
 	if source != nil {
