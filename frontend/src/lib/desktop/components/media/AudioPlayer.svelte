@@ -1173,7 +1173,7 @@
 
   // On the first failure of a load, ask the server what the failure was. The retry is
   // already scheduled, so a 404 only has to cancel it and a 503 to move it later;
-  // any other answer leaves today's blind retry in place. Only the original clip is
+  // any other answer leaves the scheduled blind retry in place. Only the original clip is
   // probed: a processed or audible-bats source is a local blob URL.
   function probeFailedLoad() {
     if (currentSource() !== audioUrl) return;

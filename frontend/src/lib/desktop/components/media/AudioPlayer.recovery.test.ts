@@ -904,18 +904,6 @@ describe('AudioPlayer recovery', () => {
       expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
     });
 
-    it('aborts the probe when the detection changes', async () => {
-      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
-      const { rerender } = mount();
-
-      ctl.failLoad();
-      await rerender({ audioUrl: '/audio/other.mp3', detectionId: 'other-1' });
-      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
-
-      expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
-      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
-    });
-
     it('aborts the probe when the player unmounts', async () => {
       restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
       mount();

@@ -81,10 +81,17 @@ describe('probeAudioSource', () => {
       kind: 'pending',
       retryAfterMs: MAX_AUDIO_PROBE_RETRY_AFTER_MS,
     });
-    respond(503, { 'Retry-After': 'Wed, 21 Oct 2026 07:28:00 GMT' });
+    for (const value of ['Wed, 21 Oct 2026 07:28:00 GMT', '-5', '', 'abc']) {
+      respond(503, { 'Retry-After': value });
+      expect(await probeAudioSource(URL_UNDER_PROBE, new AbortController().signal)).toEqual({
+        kind: 'pending',
+        retryAfterMs: undefined,
+      });
+    }
+    respond(503, { 'Retry-After': '0' });
     expect(await probeAudioSource(URL_UNDER_PROBE, new AbortController().signal)).toEqual({
       kind: 'pending',
-      retryAfterMs: undefined,
+      retryAfterMs: 0,
     });
   });
 

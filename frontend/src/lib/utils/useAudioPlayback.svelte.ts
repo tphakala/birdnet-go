@@ -58,7 +58,7 @@ const logger = loggers.audio;
 export interface AudioPlaybackOptions {
   /** Initial audio source URL */
   audioUrl: string;
-  /** Unique detection ID for logging and element IDs */
+  /** Unique detection ID for logging, element IDs and the known-missing check; read once, so it must not change for one instance */
   detectionId: string;
   /** Default gain in dB (default: 0) */
   defaultGainDb?: number;
@@ -264,7 +264,7 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
 
   // On the first failure of a load, ask the server what the failure was. The retry is
   // already scheduled, so a 404 only has to cancel it and a 503 to move it later;
-  // any other answer leaves today's blind retry in place.
+  // any other answer leaves the scheduled blind retry in place.
   function probeFailedLoad() {
     const controller = new AbortController();
     audioProbeController = controller;
