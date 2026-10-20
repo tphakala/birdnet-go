@@ -7,6 +7,7 @@ package media
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -388,4 +389,17 @@ func TestGenerateSpectrogramByID_GoneSourceStillAnswersQueued(t *testing.T) {
 		data := getSpectrogramStatusData(t, h, e, goneTestQuery)
 		return data["status"] == spectrogramStatusFailed && data["reason"] == spectrogramReasonSourceMissing
 	}, 5*time.Second, 10*time.Millisecond, "the status poll then reports the gone source")
+}
+
+func TestSpectrogramHTTPError_MissingRenderedImageIs404WithRenderFailedReason(t *testing.T) {
+	_, h, _ := setupMediaTestEnvironment(t)
+	err := fmt.Errorf("%w: spectrogram file missing after generation: %w", ErrSpectrogramGeneration, os.ErrNotExist)
+
+	rec := httptest.NewRecorder()
+	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), rec)
+	_ = h.spectrogramHTTPError(c, err)
+
+	assert.Equal(t, http.StatusNotFound, rec.Code)
+	assert.Equal(t, spectrogramReasonRenderFailed, responseReason(t, rec))
+	assert.Contains(t, rec.Body.String(), msgSourceAudioNotFound)
 }
