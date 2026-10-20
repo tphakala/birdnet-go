@@ -268,8 +268,10 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
   function probeFailedLoad() {
     const controller = new AbortController();
     audioProbeController = controller;
-    void probeAudioSource(audioUrl, controller.signal).then(outcome => {
-      if (controller.signal.aborted) return;
+    const probedUrl = audioUrl;
+    void probeAudioSource(probedUrl, controller.signal).then(outcome => {
+      // An answer for a clip that is no longer the current source says nothing about it
+      if (controller.signal.aborted || probedUrl !== audioUrl) return;
       audioProbeController = undefined;
       if (outcome.kind === 'missing') {
         debugLog('Audio probe: clip is gone, not retrying');

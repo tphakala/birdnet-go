@@ -904,6 +904,19 @@ describe('AudioPlayer recovery', () => {
       expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
     });
 
+    it('ignores a probe answer for a clip that is no longer the current source', async () => {
+      const probeDelayMs = AUDIO_RETRY_DELAY_MS / 4;
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: probeDelayMs });
+      const { rerender } = mount();
+
+      ctl.failLoad();
+      await rerender({ audioUrl: '/audio/other.mp3', detectionId: 'other-1' });
+      await vi.advanceTimersByTimeAsync(probeDelayMs * 2);
+
+      expect(probeCalls()).toHaveLength(1);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
     it('aborts the probe when the player unmounts', async () => {
       restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
       mount();
