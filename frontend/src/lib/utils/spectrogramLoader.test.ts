@@ -730,34 +730,111 @@ describe('spectrogramLoader', () => {
       expect(fetchCount('status')).toBe(2);
     });
 
-    it('keeps one visibility listener for all parked loaders and removes it after the last stops', async () => {
-      routeFetch(statusAnswers('generating'));
-      const addSpy = vi.spyOn(document, 'addEventListener');
-      const removeSpy = vi.spyOn(document, 'removeEventListener');
-      const calls = (spy: typeof addSpy) =>
-        spy.mock.calls.filter(([type]) => type === 'visibilitychange').length;
+    // Spies on the listener registration of document and window; restores them even when an assertion fails.
+    async function withListenerSpies(
+      body: (calls: (target: 'add' | 'remove', type: string) => number) => Promise<void>
+    ) {
+      const spies = {
+        add: [vi.spyOn(document, 'addEventListener'), vi.spyOn(window, 'addEventListener')],
+        remove: [
+          vi.spyOn(document, 'removeEventListener'),
+          vi.spyOn(window, 'removeEventListener'),
+        ],
+      };
+      try {
+        await body((target, type) =>
+          spies[target].reduce(
+            (sum, spy) => sum + spy.mock.calls.filter(([eventType]) => eventType === type).length,
+            0
+          )
+        );
+      } finally {
+        [...spies.add, ...spies.remove].forEach(spy => spy.mockRestore());
+      }
+    }
 
+    // Starts three loaders that park on a hidden page.
+    async function parkThreeLoaders() {
       const parked = [makeLoader(), makeLoader(), makeLoader()];
       parked.forEach((loader, i) => loader.start(40 + i));
       await flushAll();
       setVisibility('hidden');
       await vi.advanceTimersByTimeAsync(10_000);
-      expect(calls(addSpy)).toBe(1);
+      return parked;
+    }
 
-      parked[0].destroy();
-      parked[1].destroy();
-      expect(calls(removeSpy)).toBe(0);
-      parked[2].destroy();
-      expect(calls(removeSpy)).toBe(1);
+    it('keeps one visibility listener pair for all parked loaders and removes it after the last stops', async () => {
+      routeFetch(statusAnswers('generating'));
+      await withListenerSpies(async calls => {
+        const parked = await parkThreeLoaders();
+        expect(calls('add', 'visibilitychange')).toBe(1);
+        expect(calls('add', 'pageshow')).toBe(1);
 
-      const fetchCallCount = mockFetch.mock.calls.length;
-      setVisibility('visible');
-      document.dispatchEvent(new Event('visibilitychange'));
+        parked[0].destroy();
+        parked[1].destroy();
+        expect(calls('remove', 'visibilitychange')).toBe(0);
+        expect(calls('remove', 'pageshow')).toBe(0);
+        parked[2].destroy();
+        expect(calls('remove', 'visibilitychange')).toBe(1);
+        expect(calls('remove', 'pageshow')).toBe(1);
+
+        const fetchCallCount = mockFetch.mock.calls.length;
+        setVisibility('visible');
+        document.dispatchEvent(new Event('visibilitychange'));
+        await flushAll();
+        expect(mockFetch.mock.calls.length).toBe(fetchCallCount);
+      });
+    });
+
+    it('resumes every parked loader on one visible event and removes the listeners', async () => {
+      routeFetch(statusAnswers('generating'));
+      await withListenerSpies(async calls => {
+        await parkThreeLoaders();
+        expect(fetchCount('status')).toBe(3);
+
+        setVisibility('visible');
+        document.dispatchEvent(new Event('visibilitychange'));
+        await flushAll();
+
+        expect(fetchCount('status')).toBe(6);
+        expect(calls('remove', 'visibilitychange')).toBe(1);
+        expect(calls('remove', 'pageshow')).toBe(1);
+      });
+    });
+
+    it('stops at the default of four generate requests for a source that keeps failing', async () => {
+      routeFetch(statusAnswers('failed'));
+      const loader = makeLoader();
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(fetchCount('generate')).toBe(4);
+      expect(loader.state).toBe('error');
+    });
+
+    it('doubles the re-trigger delay per generate request up to maxPollIntervalMs', async () => {
+      routeFetch(statusAnswers('failed'));
+      const loader = makeLoader({
+        initialPollIntervalMs: 100,
+        maxPollIntervalMs: 300,
+        maxGenerateRequests: 4,
+      });
+      loader.start(42);
       await flushAll();
-      expect(mockFetch.mock.calls.length).toBe(fetchCallCount);
 
-      addSpy.mockRestore();
-      removeSpy.mockRestore();
+      // The first re-trigger waits 100 ms, the second 200 ms and the third is clamped to 300 ms.
+      const generateTimes: [number, number][] = [
+        [99, 0],
+        [1, 1],
+        [299, 1],
+        [1, 2],
+        [399, 2],
+        [1, 3],
+      ];
+      for (const [advanceMs, expected] of generateTimes) {
+        await vi.advanceTimersByTimeAsync(advanceMs);
+        expect(fetchCount('generate')).toBe(expected);
+      }
     });
 
     it.each([
