@@ -84,6 +84,11 @@ func mainWithExitCode() int {
 	// Create bootstrap logger for pre-initialization messages
 	bootLog := logger.NewConsoleLogger("main", logger.LogLevelInfo)
 
+	// Deferred first so it runs last, after logger and telemetry shutdown. It
+	// also covers the early return paths whose bootLog line would otherwise
+	// still be queued when main calls os.Exit.
+	defer logger.FlushConsole()
+
 	// Ensure all systems are properly shut down on exit
 	defer func() {
 		if err := telemetry.ShutdownSystem(5 * time.Second); err != nil {
