@@ -16,7 +16,7 @@ require (
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jarcoal/httpmock v1.4.2
 	github.com/jlaffaye/ftp v0.2.4
-	github.com/klauspost/cpuid/v2 v2.4.0
+	github.com/klauspost/cpuid/v2 v2.4.1
 	github.com/labstack/echo/v4 v4.16.0
 	github.com/labstack/gommon v0.5.0
 	github.com/markbates/goth v1.82.0
