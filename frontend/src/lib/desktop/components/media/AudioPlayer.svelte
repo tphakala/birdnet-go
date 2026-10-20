@@ -1415,14 +1415,16 @@
       return;
     }
 
-    // Create new AbortController for this poll request
-    statusPollAbortController = new AbortController();
+    // Create new AbortController for this poll request, ending any request still in flight
+    statusPollAbortController?.abort();
+    const controller = new AbortController();
+    statusPollAbortController = controller;
 
     const statusUrl = spectrogramStatusUrl();
     debugLog('pollSpectrogramStatus: fetching', { url: statusUrl });
 
     try {
-      const response = await fetch(statusUrl, { signal: statusPollAbortController.signal });
+      const response = await fetch(statusUrl, { signal: controller.signal });
 
       debugLog('pollSpectrogramStatus: response', {
         ok: response.ok,
@@ -1431,6 +1433,8 @@
 
       if (response.ok) {
         const status = parseSpectrogramStatus(await response.json());
+        // The poll was cancelled (unmount, new detection, image loaded) while the body was read
+        if (controller.signal.aborted) return;
         spectrogramStatus = status ?? null;
         if (!status) return;
 
@@ -1471,7 +1475,7 @@
           });
           clearStatusPollTimer();
         }
-      } else {
+      } else if (!controller.signal.aborted) {
         // The status request itself failed: try again at the poll interval.
         // The MAX_POLL_DURATION check on entry bounds the rescheduling.
         debugLog('pollSpectrogramStatus: non-OK response, rescheduling', {
@@ -1486,6 +1490,9 @@
         debugLog('pollSpectrogramStatus: aborted');
         return;
       }
+      // A cancelled poll must not reschedule itself: clearStatusPollTimer already reset the
+      // start time, so the rescheduled chain would have no MAX_POLL_DURATION bound.
+      if (controller.signal.aborted) return;
       logger.error('Failed to poll spectrogram status', { detectionId, error: err });
       debugLog('pollSpectrogramStatus: error', err);
       scheduleNextStatusPoll();
@@ -1567,6 +1574,7 @@
     debugLog('handleSpectrogramLoad: success');
     // reset() also clears a sticky error left by a failure that a late load outran
     spectrogramLoader.reset();
+    spectrogramStatus = null;
     spectrogramRetryCount = 0; // Reset retry count on successful load
     clearSpectrogramRetryTimer();
     clearStatusPollTimer(); // Also clear status polling
@@ -1607,8 +1615,9 @@
       }
     }
 
-    // Retry on any error (likely 503 or temporary failure) up to max retries
-    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES) {
+    // Retry on any error (likely 503 or temporary failure) up to max retries, unless the
+    // status poll already ended the attempt (a request in flight when it said failed)
+    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES && !spectrogramLoader.error) {
       // Use exponential backoff for retry
       // Use Math.min to safely select delay without direct array indexing
       const delayIndex = Math.min(spectrogramRetryCount, SPECTROGRAM_RETRY_DELAYS.length - 1);
@@ -1828,6 +1837,7 @@
       // Reset retry/cache state for new spectrogram
       spectrogramRetryCount = 0;
       spectrogramCacheKey = 0;
+      spectrogramStatus = null;
       clearSpectrogramRetryTimer();
       // Abort any in-flight status polling and status check when URL changes
       clearStatusPollTimer();

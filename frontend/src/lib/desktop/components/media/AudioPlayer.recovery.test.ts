@@ -440,6 +440,8 @@ describe('AudioPlayer recovery', () => {
     const SPECTROGRAM_UNAVAILABLE_TEXT = 'components.audio.spectrogramUnavailable';
     // Longer than the sum of all retry backoffs (500 + 1000 + 2000 + 4000 ms)
     const PAST_ALL_BACKOFFS_MS = 10_000;
+    // First entry of SPECTROGRAM_RETRY_DELAYS in AudioPlayer.svelte
+    const SPECTROGRAM_FIRST_RETRY_DELAY_MS = 500;
     // SPECTROGRAM_POLL_INTERVAL in AudioPlayer.svelte
     const POLL_INTERVAL_MS = 2000;
     // MAX_POLL_DURATION in AudioPlayer.svelte
@@ -548,6 +550,63 @@ describe('AudioPlayer recovery', () => {
 
       expect(stub).toHaveBeenCalledTimes(2);
       expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+    });
+
+    it('does not restart the image retries when failed arrives while a retry is in flight', async () => {
+      let answer: (r: Response) => void = () => {};
+      globalThis.fetch = vi.fn(
+        () =>
+          new Promise<Response>(resolve => {
+            answer = resolve;
+          })
+      );
+      mount();
+      await fireEvent.error(spectrogramImg());
+      // The first retry fires and its image request is now in flight
+      await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+      expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+
+      answer(statusResponse('failed'));
+      await vi.advanceTimersByTimeAsync(0);
+      // The in-flight image request fails after the status answer
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+
+      expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+      expect(spectrogramImg().getAttribute('src')).not.toContain('retry=2');
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+    });
+
+    it('does not keep polling when a cancelled poll rejects with a non-abort error', async () => {
+      let fail: (e: Error) => void = () => {};
+      const stub = vi.fn(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            fail = reject;
+          })
+      );
+      globalThis.fetch = stub;
+      const { unmount } = mount();
+      await fireEvent.error(spectrogramImg());
+      expect(stub).toHaveBeenCalledTimes(1);
+
+      unmount();
+      fail(new TypeError('network down'));
+      await vi.advanceTimersByTimeAsync(MAX_POLL_DURATION_MS);
+
+      expect(stub).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops the generating overlay when the image loads', async () => {
+      stubStatusFetch([statusResponse('generating')]);
+      mount();
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText('components.audio.generating')).toBeInTheDocument();
+
+      await fireEvent.load(spectrogramImg());
+
+      expect(screen.queryByText('components.audio.generating')).not.toBeInTheDocument();
     });
 
     it('keeps polling after a failed status request and reloads the image once it exists', async () => {
