@@ -73,6 +73,7 @@
     SPECTROGRAM_REASON,
     fetchSpectrogramStatus,
     isTerminalSpectrogramReason,
+    isRetryableSpectrogramReason,
     markSpectrogramSourceMissing,
     parseSpectrogramStatus,
     type SpectrogramGenerationStatus,
@@ -1411,7 +1412,11 @@
     if (reason === SPECTROGRAM_REASON.sourceMissing) {
       markSpectrogramSourceMissing(detectionId);
     }
-    if (overlayRate !== undefined && !processedSpectrogramUrl) {
+    if (
+      reason === SPECTROGRAM_REASON.sourceMissing &&
+      overlayRate !== undefined &&
+      !processedSpectrogramUrl
+    ) {
       fallBackToImageWithoutRate();
       return;
     }
@@ -1497,6 +1502,14 @@
           isTerminalSpectrogramReason(status.reason)
         ) {
           endOnTerminalReason(status.reason);
+        } else if (status.status === 'failed' && isRetryableSpectrogramReason(status.reason)) {
+          // The server says a later request can succeed (the clip may still be written, the
+          // server was busy, a render failed): end the poll and leave the capped image
+          // retries to decide the outcome.
+          debugLog('pollSpectrogramStatus: retryable failure, leaving the image retries', {
+            reason: status.reason,
+          });
+          clearStatusPollTimer();
         } else if (status.status === 'failed') {
           // Generation failed: stop polling and the image retries
           debugLog('pollSpectrogramStatus: generation failed');

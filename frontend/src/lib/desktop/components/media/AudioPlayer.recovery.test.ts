@@ -507,6 +507,21 @@ describe('AudioPlayer recovery', () => {
         }
       );
 
+      it.each(['source_pending', 'busy', 'render_failed'])(
+        'keeps the capped image retries for a failed status with %s',
+        async reason => {
+          const stub = stubStatusFetch([statusResponse('failed', 200, reason)]);
+          mount();
+
+          await fireEvent.error(spectrogramImg());
+          await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+
+          expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+          expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+          expect(stub).toHaveBeenCalledTimes(1);
+        }
+      );
+
       it('marks the clip as known missing for source_missing only', async () => {
         stubStatusFetch([statusResponse('not_started', 200, 'source_missing')]);
         mount();

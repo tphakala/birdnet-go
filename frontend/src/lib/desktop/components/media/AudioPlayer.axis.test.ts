@@ -335,6 +335,20 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
         expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE)).toBeNull();
       });
 
+      it('keeps the rate and goes terminal at once for an unrenderable source', async () => {
+        probeResponder = checkUnavailable;
+        statusBody = { status: 'failed', reason: 'source_invalid' };
+        mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+        await settle();
+
+        await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+        await settle();
+
+        // No render can exist for a clip that cannot be decoded: no rate-less attempt
+        expect(imageSrc()).toContain('sr=');
+        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE)).toBeInTheDocument();
+      });
+
       it('goes terminal when the image without sr fails too, with no retries', async () => {
         probeResponder = checkUnavailable;
         statusBody = { status: 'not_started', reason: 'source_missing' };

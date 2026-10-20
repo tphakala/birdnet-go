@@ -30,6 +30,15 @@ export function isTerminalSpectrogramReason(reason: string | undefined): boolean
   return reason === SPECTROGRAM_REASON.sourceMissing || reason === SPECTROGRAM_REASON.sourceInvalid;
 }
 
+/** True for a reason where a later request can succeed, so a bounded number of retries is worthwhile. */
+export function isRetryableSpectrogramReason(reason: string | undefined): boolean {
+  return (
+    reason === SPECTROGRAM_REASON.sourcePending ||
+    reason === SPECTROGRAM_REASON.busy ||
+    reason === SPECTROGRAM_REASON.renderFailed
+  );
+}
+
 /** Most detections remembered as having no source clip; the oldest is forgotten first. */
 export const MAX_SOURCE_MARKS = 1000;
 
