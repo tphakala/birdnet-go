@@ -521,8 +521,10 @@ export function useAudioPlayback(options: AudioPlaybackOptions): AudioPlaybackSt
       // Retry on load failure (audio still encoding by FFmpeg, served as 503/404).
       // A media element reports such HTTP errors as MediaError.code 4
       // (MEDIA_ERR_SRC_NOT_SUPPORTED), indistinguishable from a genuinely
-      // unsupported format, so we cannot skip retrying on code 4 without breaking
-      // the still-encoding path. Retrying is bounded by MAX_AUDIO_LOAD_RETRIES.
+      // unsupported format, so the error code alone cannot end the retries without
+      // breaking the still-encoding path. probeAudioSource asks the server on the
+      // first failure instead. Retrying is bounded by MAX_AUDIO_LOAD_RETRIES.
+
       // A clip the server already reported gone for good is not retried or probed.
       if (isSpectrogramSourceKnownMissing(detectionId)) {
         failLoadPermanently();

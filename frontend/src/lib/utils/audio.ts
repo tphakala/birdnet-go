@@ -28,7 +28,9 @@ export const AUDIO_RETRY_DELAY_MS = 2000;
  * Background retry delays in ms for a dashboard card whose clip is still being
  * exported. Spans the backend's pending-export window (about 90 s total). The
  * entry count is the retry limit. A media element cannot read the HTTP status, so
- * retries are blind.
+ * the first failure of a load of the original clip is also checked with
+ * probeAudioSource: a 404 ends the retries and a 503 with a longer Retry-After than
+ * the scheduled delay lengthens that delay. Every other failure retries blind.
  */
 export const DASHBOARD_AUDIO_RETRY_DELAYS_MS: readonly number[] = [
   2000, 4000, 8000, 16000, 30000, 30000,

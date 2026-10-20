@@ -97,7 +97,8 @@
   // The element cannot read the HTTP status, so a load failure is retried on
   // DASHBOARD_AUDIO_RETRY_DELAYS_MS (that list's length is the limit) while one
   // ranged probe of the audio URL asks the server what the failure was: a 404
-  // ends the retries, a 503 moves the retry to Retry-After.
+  // ends the retries, a 503 delays the retry until Retry-After when that is longer
+  // than the scheduled delay.
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
   // Aborts the probe that runs beside the first retry timer.
