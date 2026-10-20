@@ -29,6 +29,18 @@ export function loadHls(): Promise<typeof Hls> {
   return hlsModule;
 }
 
+/** MIME type a browser with native HLS playback (Safari, iOS) reports support for. */
+const HLS_MIME_TYPE = 'application/vnd.apple.mpegurl';
+
+/**
+ * Reports whether live HLS audio can play here: through HLS.js when it loaded and
+ * the browser supports it, or natively. HlsClass is tryLoadHls()'s result.
+ */
+export function canPlayHls(HlsClass: typeof Hls | null): boolean {
+  if (HlsClass?.isSupported()) return true;
+  return document.createElement('audio').canPlayType(HLS_MIME_TYPE) !== '';
+}
+
 /**
  * Loads HLS.js like loadHls, but resolves to null when the import fails (for
  * example offline, or a chunk name left stale by an upgrade while the page was

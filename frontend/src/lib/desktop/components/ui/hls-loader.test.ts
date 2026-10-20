@@ -53,3 +53,25 @@ describe('hls-loader', () => {
     expect(await tryLoadHls()).toBeNull();
   });
 });
+
+describe('canPlayHls', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('is true when HLS.js loaded and is supported', async () => {
+    const { canPlayHls } = await freshLoader(() => ({ default: FakeHls }));
+    expect(canPlayHls(FakeHls as never)).toBe(true);
+  });
+
+  it('falls back to native HLS support when HLS.js is missing', async () => {
+    const { canPlayHls } = await freshLoader(() => ({ default: FakeHls }));
+    const canPlayType = vi.spyOn(HTMLMediaElement.prototype, 'canPlayType');
+
+    canPlayType.mockReturnValue('maybe');
+    expect(canPlayHls(null)).toBe(true);
+
+    canPlayType.mockReturnValue('');
+    expect(canPlayHls(null)).toBe(false);
+  });
+});

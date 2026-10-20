@@ -21,7 +21,7 @@
   import { t } from '$lib/i18n';
   import { appState, hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { HLS_AUDIO_CONFIG } from '$lib/desktop/components/ui/hls-config';
-  import { tryLoadHls } from '$lib/desktop/components/ui/hls-loader';
+  import { canPlayHls, tryLoadHls } from '$lib/desktop/components/ui/hls-loader';
   import { useSpectrogramAnalyser } from '$lib/utils/useSpectrogramAnalyser.svelte';
   import SpectrogramCanvas from '$lib/desktop/components/media/SpectrogramCanvas.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
@@ -200,6 +200,13 @@
       // cannot leave a started stream without a player.
       const HlsClass = await tryLoadHls();
       if (signal.aborted) return;
+      if (!canPlayHls(HlsClass)) {
+        // No server stream is started and the saved auto-start preference is kept,
+        // so a later attempt can succeed once HLS.js loads.
+        logger.warn('MiniSpectrogram: no HLS player available');
+        isConnecting = false;
+        return;
+      }
 
       const encodedSourceId = encodeURIComponent(sourceId);
 

@@ -12,7 +12,7 @@
   import type Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, EXPECTED_STALL_ERRORS } from './hls-config';
-  import { tryLoadHls } from './hls-loader';
+  import { canPlayHls, tryLoadHls } from './hls-loader';
 
   const logger = loggers.audio;
 
@@ -447,6 +447,11 @@
       // cannot leave a started stream without a player.
       const HlsClass = await tryLoadHls();
       if (isStaleStart(requestId)) return;
+      if (!canPlayHls(HlsClass)) {
+        playingSource = null;
+        showStatusMessage(t('media.audio.hlsNotSupported'));
+        return;
+      }
 
       // Use fetchWithCSRF for authenticated HLS endpoint
       const data = await fetchWithCSRF<{
@@ -459,8 +464,20 @@
         body: { session_id: sessionId },
       });
 
-      // Discard stale response if user switched sources or stopped during fetch
-      if (isStaleStart(requestId)) return;
+      // Discard stale response if user switched sources or stopped during fetch.
+      // The stop may have reached the server before this start registered its
+      // client, so stop the stream this start created unless a newer start is
+      // playing the same source.
+      if (isStaleStart(requestId)) {
+        if (playingSource !== sourceId) {
+          fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
+            method: 'POST',
+            keepalive: true,
+            body: { session_id: sessionId },
+          }).catch(() => {});
+        }
+        return;
+      }
 
       activeStreamToken = data.stream_token;
       const hlsUrl = buildAppUrl(data.playlist_url);
