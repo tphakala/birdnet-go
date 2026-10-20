@@ -1,6 +1,7 @@
 package media
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -338,4 +339,44 @@ func TestServeSpectrogramByID_UnsupportedSourceIs422(t *testing.T) {
 	requireLogLevel(t, logs.String(), "Spectrogram generation skipped: source audio cannot be rendered", "WARN")
 	assert.NotContains(t, logs.String(), `level=ERROR msg="Spectrogram generation failed"`, "a source failure is not logged as an error")
 	assert.Equal(t, before, dirNames(t, tempDir), "a rejected clip leaves no PNG behind")
+}
+
+func TestSpectrogramFailureReason(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{
+			"not ready wrapping a source failure is checked before it",
+			fmt.Errorf("%w: %w", ffmpeg.ErrAudioFileNotReady, transcode.ErrUndecodableSource),
+			spectrogramReasonSourcePending,
+		},
+		{
+			"source that did not appear within the wait is never terminal",
+			fmt.Errorf("%w: %w (path: a.wav)", ErrAudioFileNotFound, os.ErrNotExist),
+			spectrogramReasonSourcePending,
+		},
+		{"unrenderable source", productionWrap(transcode.ErrUnsupportedSource), spectrogramReasonSourceInvalid},
+		{
+			"slot timeout",
+			fmt.Errorf("timeout waiting for generation slot: %w", context.DeadlineExceeded),
+			spectrogramReasonBusy,
+		},
+		{"canceled", context.Canceled, spectrogramReasonBusy},
+		{"plain failure", errors.NewStd("boom"), spectrogramReasonRenderFailed},
+		{
+			"output PNG missing after generation is a render failure",
+			fmt.Errorf("%w: spectrogram file missing after generation: %w", ErrSpectrogramGeneration, os.ErrNotExist),
+			spectrogramReasonRenderFailed,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, spectrogramFailureReason(tt.err))
+		})
+	}
 }

@@ -209,6 +209,26 @@ readiness check and the render also answers 503 and nothing is cached (one remov
 render starts answers 404), and a WAV or FLAC that holds fewer samples than
 its header declares answers 422 (a rerun after the file is completed renders it).
 
+**Spectrogram reasons.** The status answer (`GET /spectrogram/:id/status`, in `data`) and the
+`404` of `GET /spectrogram/:id` for a missing source clip (in `data`) carry a machine
+readable `reason` when it is known. The field is additive: status values are unchanged, and
+queued and generating answers carry no reason. A client that can read the body (a `fetch`,
+not an `<img>`) should act on it:
+
+| `reason`         | Where                                                                                           | What a client should do                  |
+| ---------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `not_generated`  | status `not_started`, source clip on disk                                                       | request generation                       |
+| `source_pending` | status `not_started` or `failed`, and the image `404` after the wait; the clip may still appear | retry later, a bounded number of times   |
+| `source_missing` | status `not_started` or `failed`, and the fast image `404`; the clip is gone for good           | stop retrying, show that no audio exists |
+| `source_invalid` | status `failed`; the clip exists but cannot be rendered                                         | stop retrying                            |
+| `busy`           | status `failed`; no generation slot in time, a deadline or a cancellation                       | retry with backoff                       |
+| `render_failed`  | status `failed`; any other generation failure                                                   | retry a bounded number of times          |
+
+A kept render of the clip can still be served by `GET /spectrogram/:id` when the audio is
+gone, so `source_missing` describes the audio, not every image request. The `Invalid audio
+path` `not_started` answer and the `404` of user-requested mode (which carries `data.mode`)
+carry no reason.
+
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve
 through the provider chain, and thirty queued thumbnail requests also exhaust a
@@ -231,6 +251,15 @@ should honor `Retry-After` and retry; the clip appears once the capture complete
 `404` from these endpoints means the clip is genuinely absent (never produced, or purged
 by retention). These pending 503s are intentionally not logged as errors and are not
 reported to telemetry, since they are expected, self-resolving backpressure.
+
+A by-ID spectrogram request (`GET /spectrogram/:id`) for a clip that can no longer appear
+answers `404` at once, with `data.reason` set to `source_missing`, instead of first waiting
+up to 5 seconds for the file. A clip can no longer appear when its detection completed more
+than 10 minutes ago, it is past the pending window, no export temp file is present and no
+copy of it exists under another audio extension: the same condition under which
+`GET /audio/:id` answers `404` without waiting. While the clip may still be written, the
+request keeps the wait and answers `404` with `reason` `source_pending` afterwards. A
+missing source is logged at Debug (or Warn after the wait), not as an API error.
 
 **Spectrogram after retention (`GET /spectrogram/:id`).** When the retention policy
 deletes a detection's audio and the "keep spectrograms" setting is on, the detection

@@ -253,6 +253,30 @@ const (
 	spectrogramStatusNotStarted = "not_started"
 )
 
+// Reasons a spectrogram is unavailable, reported as "reason" in the status answer and
+// in the data of the 404 image response. They are additive: a client that ignores the
+// field keeps working. See the README "Spectrogram reasons" section for client meaning.
+const (
+	// spectrogramReasonNotGenerated: the source clip is on disk and no render exists yet.
+	spectrogramReasonNotGenerated = "not_generated"
+	// spectrogramReasonSourcePending: the source clip is not on disk but may still be
+	// written (pending export, recent detection, or it did not appear within the wait).
+	spectrogramReasonSourcePending = "source_pending"
+	// spectrogramReasonSourceMissing: the source clip is gone for good. Set only by
+	// sites that evaluate clipGoneForGood.
+	spectrogramReasonSourceMissing = "source_missing"
+	// spectrogramReasonSourceInvalid: the clip exists but cannot be rendered.
+	spectrogramReasonSourceInvalid = "source_invalid"
+	// spectrogramReasonBusy: generation was refused or interrupted by load, a deadline
+	// or cancellation; retry with backoff.
+	spectrogramReasonBusy = "busy"
+	// spectrogramReasonRenderFailed: generation failed for any other reason.
+	spectrogramReasonRenderFailed = "render_failed"
+)
+
+// msgSourceAudioNotFound is the message of the 404 answered for a missing source clip.
+const msgSourceAudioNotFound = "Source audio file not found"
+
 // audioEncodingMaxAge is the maximum age of a temp file to be considered
 // "still encoding". Temp files older than this are likely stale from a
 // failed FFmpeg export and should not trigger a 503 response.
@@ -840,6 +864,55 @@ func (c *Handler) noteCaptureTimes(noteID string) (begin, end time.Time) {
 	return note.BeginTime, note.EndTime
 }
 
+// clipGoneForGood reports whether the clip at relAudioPath, for a detection captured
+// from begin to end, can no longer appear: the answer is true only when no export can
+// still be writing it. It mirrors the no-wait 404 branch of handleAudio404WithWait, so
+// "gone" here implies GET /audio/:id answers 404 without waiting for the same times and
+// settings. A false answer means the clip may still be written (or is served from
+// another extension) and callers keep their wait. The checks run cheapest first:
+//   - inside ReadyAt plus pendingExportGraceMargin an Extended Capture export may be
+//     deferred, so the clip is pending;
+//   - a recent or unknown completion time (isRecentClipCompletion; zero counts as
+//     recent) may still be encoding or racing the rename;
+//   - a clip under another known extension is served by the audio endpoint, so it is
+//     not gone;
+//   - a fresh export temp file means encoding is in progress.
+func (c *Handler) clipGoneForGood(relAudioPath string, begin, end time.Time) bool {
+	if win, ok := c.CurrentSettings().DetectionCaptureWindow(begin, end); ok &&
+		time.Now().Before(win.ReadyAt.Add(pendingExportGraceMargin)) {
+		return false
+	}
+	if isRecentClipCompletion(end) {
+		return false
+	}
+	if _, found := c.findAlternateAudioPath(relAudioPath); found {
+		return false
+	}
+	if _, encoding := c.findEncodingTempPath(relAudioPath); encoding {
+		return false
+	}
+	return true
+}
+
+// unrenderedSourceReason explains why a clip without a render cannot be rendered yet,
+// for the status answer: not_generated when the source is on disk, source_missing when
+// it is absent and clipGoneForGood, source_pending when it is absent but may still be
+// written. It returns "" when the source state cannot be determined (a stat error other
+// than not-exist), so the reason is omitted rather than guessed.
+func (c *Handler) unrenderedSourceReason(relAudioPath string, begin, end time.Time) string {
+	_, err := c.SFS.StatRel(relAudioPath)
+	switch {
+	case err == nil:
+		return spectrogramReasonNotGenerated
+	case !errors.Is(err, os.ErrNotExist):
+		return ""
+	case c.clipGoneForGood(relAudioPath, begin, end):
+		return spectrogramReasonSourceMissing
+	default:
+		return spectrogramReasonSourcePending
+	}
+}
+
 // handleAudio404WithWait handles a 404 error for an audio file that may still be
 // encoding. It checks for an active temp file and waits for encoding to complete,
 // then falls back to a brief grace period for the race window where FFmpeg hasn't
@@ -1204,6 +1277,30 @@ func isSpectrogramNotReady(err error) bool {
 func isSpectrogramSourceFailure(err error) bool {
 	_, _, ok := spectrogramSourceStatus(err)
 	return ok
+}
+
+// spectrogramFailureReason classifies a failed generation into one of the
+// spectrogramReason* values. The order matters: a not-ready error can wrap a source
+// failure, so it is checked first. A source that was not on disk after the wait is
+// source_pending, never source_missing: only the sites that evaluate clipGoneForGood
+// may say source_missing, and a clip that was waited for may still appear. An
+// os.ErrNotExist wrapped in
+// ErrSpectrogramGeneration is the rendered PNG missing after generation, which is a
+// render failure, not a source one.
+func spectrogramFailureReason(err error) string {
+	switch {
+	case isSpectrogramNotReady(err):
+		return spectrogramReasonSourcePending
+	case errors.Is(err, ErrAudioFileNotFound),
+		errors.Is(err, os.ErrNotExist) && !errors.Is(err, ErrSpectrogramGeneration):
+		return spectrogramReasonSourcePending
+	case isSpectrogramSourceFailure(err):
+		return spectrogramReasonSourceInvalid
+	case spectrogram.IsOperationalError(err):
+		return spectrogramReasonBusy
+	default:
+		return spectrogramReasonRenderFailed
+	}
 }
 
 // transcodeError turns a failed transcode into the HTTP response. A disconnected
@@ -1747,8 +1844,9 @@ func (c *Handler) spectrogramHTTPError(ctx echo.Context, err error) error {
 		}
 		return c.writeAudioNotReady(ctx, err, "Audio file is still being processed, please retry", secs)
 	case errors.Is(err, ErrAudioFileNotFound) || errors.Is(err, os.ErrNotExist):
-		// Handle cases where the source audio file doesn't exist
-		return c.HandleError(ctx, err, "Source audio file not found", http.StatusNotFound)
+		// The source audio file does not exist (after the wait, or the rendered PNG is
+		// missing after generation). Not a server fault, so no error-level report.
+		return c.writeSpectrogramNotFound(ctx, err, spectrogramFailureReason(err))
 	case errors.Is(err, ErrInvalidAudioPath) || errors.Is(err, ErrPathTraversalAttempt):
 		// Handle path traversal or invalid path errors
 		return c.HandleError(ctx, err, "Invalid audio file path specified", http.StatusBadRequest)
@@ -1983,19 +2081,76 @@ func (c *Handler) returnSpectrogramNotGeneratedError(ctx echo.Context) (bool, er
 
 	// Return standard error response with mode in data field (API v2 envelope)
 	// Mode is placed in data object to maintain envelope consistency
-	return true, ctx.JSON(http.StatusNotFound, map[string]any{
+	return true, writeNotFoundWithData(ctx, errorResp, map[string]any{
+		"mode": conf.SpectrogramModeUserRequested,
+	})
+}
+
+// writeNotFoundWithData writes a 404 in the API v2 error envelope with data as its
+// "data" object.
+func writeNotFoundWithData(ctx echo.Context, errorResp *apicore.ErrorResponse, data map[string]any) error {
+	return ctx.JSON(http.StatusNotFound, map[string]any{
 		"error":          errorResp.Error,
 		"message":        errorResp.Message,
 		"code":           errorResp.Code,
 		"correlation_id": errorResp.CorrelationID,
-		"data": map[string]any{
-			"mode": conf.SpectrogramModeUserRequested,
-		},
+		"data":           data,
 	})
+}
+
+// writeSpectrogramNotFound answers 404 "Source audio file not found" with the reason in
+// data.reason, so a client that can read the body can tell a clip that is gone for good
+// (source_missing) from one that may still appear (source_pending). A missing source is
+// not a server fault, so it is logged at Debug, like writeAudioNotReady.
+func (c *Handler) writeSpectrogramNotFound(ctx echo.Context, err error, reason string) error {
+	errorResp := c.NewErrorResponse(err, msgSourceAudioNotFound, http.StatusNotFound)
+	c.LogDebugIfEnabled("Spectrogram source audio not found",
+		logger.String("correlation_id", errorResp.CorrelationID),
+		logger.String("reason", reason),
+		logger.String("path", ctx.Request().URL.Path),
+		logger.String("ip", ctx.RealIP()))
+	return writeNotFoundWithData(ctx, errorResp, map[string]any{"reason": reason})
+}
+
+// serveGoneSourceSpectrogram answers a by-ID spectrogram request without the audio wait
+// when the source clip is gone for good (clipGoneForGood): it serves a kept render of
+// the clip if there is one, else 404 with data.reason "source_missing". handled is
+// false, with nothing written, whenever the request needs the normal path: the path is
+// invalid, the clip is on disk (or its stat failed for another reason), the exact render
+// already exists (the generate fast path serves it), or the clip may still be written.
+// The datastore is touched only after the cheap file checks pass.
+func (c *Handler) serveGoneSourceSpectrogram(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string) (handled bool, err error) {
+	relAudioPath, pathErr := c.normalizeAndValidatePath(clipPath)
+	if pathErr != nil {
+		return false, nil //nolint:nilerr // not handled here: the normal path answers the invalid path as before
+	}
+	if _, statErr := c.SFS.StatRel(relAudioPath); !errors.Is(statErr, os.ErrNotExist) {
+		return false, nil
+	}
+	_, _, _, exact := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
+	if info, statErr := c.SFS.StatRel(exact); statErr == nil && info.Mode().IsRegular() && info.Size() > 0 {
+		return false, nil
+	}
+	begin, end := c.noteCaptureTimes(noteID)
+	if !c.clipGoneForGood(relAudioPath, begin, end) {
+		return false, nil
+	}
+	if served, serveErr := c.serveExistingRender(ctx, noteID, relAudioPath, params, freqSuffix); served {
+		return true, serveErr
+	}
+	c.LogDebugIfEnabled("Spectrogram source audio clip gone, answering without waiting",
+		logger.String("note_id", noteID),
+		logger.String("clip_path", clipPath))
+	return true, c.writeSpectrogramNotFound(ctx, ErrAudioFileNotFound, spectrogramReasonSourceMissing)
 }
 
 // handleAutoPreRenderMode handles spectrogram generation and serving in auto/prerender modes.
 func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath string, params spectrogramParameters, freqSuffix string, extraOpts ...spectrogram.GenerateOption) error {
+	// A clip that can no longer appear is answered at once, without the audio wait.
+	if handled, goneErr := c.serveGoneSourceSpectrogram(ctx, noteID, clipPath, params, freqSuffix); handled {
+		return goneErr
+	}
+
 	// Auto or prerender mode - generate on-demand if needed
 	generationStart := time.Now()
 	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, extraOpts...)
@@ -2123,9 +2278,29 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 //     }
 //     }
 //
+// 3. Error - source audio clip missing (Auto/Prerender Mode, no render of the clip kept):
+//   - Content-Type: application/json
+//   - Status: 404 Not Found
+//   - Body (API v2 envelope):
+//     {
+//     "error": "...",
+//     "message": "Source audio file not found",
+//     "code": 404,
+//     "correlation_id": "abc12345",
+//     "data": {
+//     "reason": "source_missing"
+//     }
+//     }
+//   - data.reason is "source_missing" when the clip can no longer appear (the detection
+//     completed more than diskmanager.ClipRecencyWindow ago, no export is pending or
+//     encoding); the request is then answered at once. While the clip may still be
+//     written, the request first waits up to audioWaitTimeout and then answers with
+//     reason "source_pending" (or 503 with Retry-After when an export is pending).
+//
 // IMPORTANT: Clients must check Content-Type header to determine response format:
 //   - image/png: Binary image data (display image)
-//   - application/json: Error response (handle error, show generate button if data.mode=user-requested)
+//   - application/json: Error response (handle error, show generate button if data.mode=user-requested,
+//     stop retrying if data.reason=source_missing)
 //
 // TODO: Consider adding a dedicated endpoint or format query parameter for cleaner API design:
 //
@@ -2266,7 +2441,8 @@ func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 //	    "status": "not_started|queued|generating|generated|failed|exists",
 //	    "queuePosition": 0,  // Position in queue (0 if not queued)
 //	    "startedAt": "2025-10-20T...",  // When generation started (if in progress)
-//	    "message": "Additional status information"
+//	    "message": "Additional status information",
+//	    "reason": "not_generated|source_pending|source_missing|source_invalid|busy|render_failed"
 //	  },
 //	  "error": "",
 //	  "message": "Status retrieved successfully"
@@ -2279,6 +2455,16 @@ func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 //   - "generated": Successfully generated (in queue cache)
 //   - "failed": Generation failed
 //   - "exists": Already exists on disk
+//
+// "reason" is present only when known, on "not_started" and "failed" answers:
+//   - "not_generated": (not_started) the source clip is on disk and no render exists
+//   - "source_pending": the source clip is not on disk but may still be written, or did
+//     not appear within the wait; retry later
+//   - "source_missing": the source clip is gone for good (see clipGoneForGood); stop
+//   - "source_invalid": (failed) the clip cannot be rendered; stop
+//   - "busy": (failed) generation was refused or interrupted by load, a deadline or
+//     cancellation; retry with backoff
+//   - "render_failed": (failed) any other generation failure
 //
 // A legacy width query value outside 100..2000 answers 400. It answers 503 with
 // Retry-After when the detection's model type cannot be looked up, rather than
@@ -2379,13 +2565,18 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 		})
 	}
 
-	// Not in queue and doesn't exist on disk
+	// Not in queue and doesn't exist on disk. The reason says whether the source clip
+	// is on disk, may still be written, or is gone, so clients can stop retrying.
+	data := map[string]any{
+		"status":        spectrogramStatusNotStarted,
+		"queuePosition": 0,
+		"message":       "Spectrogram generation not started",
+	}
+	if reason := c.unrenderedSourceReason(relAudioPath, detection.BeginTime, detection.EndTime); reason != "" {
+		data["reason"] = reason
+	}
 	return ctx.JSON(http.StatusOK, map[string]any{
-		"data": map[string]any{
-			"status":        spectrogramStatusNotStarted,
-			"queuePosition": 0,
-			"message":       "Spectrogram generation not started",
-		},
+		"data":    data,
 		"error":   "",
 		"message": "Spectrogram not yet generated",
 	})
@@ -2402,7 +2593,7 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 		if r := recover(); r != nil {
 			if queueKey != "" {
 				failedStatus := &SpectrogramQueueStatus{}
-				failedStatus.Update(spectrogramStatusFailed, 0, "Generation failed")
+				failedStatus.Fail(spectrogramReasonRenderFailed, "Generation failed")
 				spectrogramQueue.Store(queueKey, failedStatus)
 				time.AfterFunc(failedStatusRetentionTime, func() {
 					deleteFailedStatusIfUnchanged(queueKey, failedStatus)
@@ -2425,6 +2616,12 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 	var pendingDeadline time.Time
 	if _, statErr := c.SFS.StatRel(relAudioPath); statErr != nil {
 		begin, end := c.noteCaptureTimes(noteID)
+		// A clip that cannot appear any more is reported at once instead of after the
+		// audio wait; a clip that may still be written takes the unchanged path below.
+		if errors.Is(statErr, os.ErrNotExist) && c.clipGoneForGood(relAudioPath, begin, end) {
+			c.failGoneSourceGeneration(noteID, clipPath, queueKey, statErr)
+			return
+		}
 		if win, ok := c.CurrentSettings().DetectionCaptureWindow(begin, end); ok {
 			pendingDeadline = win.ReadyAt.Add(pendingExportGraceMargin)
 			if extra := time.Until(pendingDeadline); extra > 0 {
@@ -2455,7 +2652,7 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 	spectrogramPath, err := c.generateSpectrogramFromRel(bgCtx, relAudioPath, clipPath, queueKey, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, profileOpt)
 	if err != nil {
 		if queueKey != "" {
-			c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Generation failed")
+			c.failQueueStatus(queueKey, spectrogramFailureReason(err), "Generation failed")
 		}
 
 		logFields := []logger.Field{
@@ -2486,6 +2683,20 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 		logger.String("spectrogram_path", spectrogramPath))
 }
 
+// failGoneSourceGeneration records a by-ID generation as failed with source_missing
+// because the clip cannot appear any more, starts the retention of the failed entry so
+// the status poll sees it, and logs at Warn like the after-wait path does.
+func (c *Handler) failGoneSourceGeneration(noteID, clipPath, queueKey string, statErr error) {
+	if queueKey != "" {
+		c.failQueueStatus(queueKey, spectrogramReasonSourceMissing, msgSourceAudioNotFound)
+		c.cleanupQueueStatus(queueKey)
+	}
+	c.LogWarnIfEnabled("Async spectrogram generation skipped: audio clip not available",
+		logger.String("note_id", noteID),
+		logger.String("clip_path", clipPath),
+		logger.Error(statErr))
+}
+
 // GenerateSpectrogramByID triggers spectrogram generation for a specific detection
 //
 // Route: POST /api/v2/spectrogram/:id/generate
@@ -2512,12 +2723,13 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 //
 // A 202 carries the queue status in "data"; poll the status endpoint for progress.
 // A generation failure is reported through the status endpoint, not by this handler.
+// That includes a source clip that is gone: the request still answers 202 and the
+// status endpoint then reports "failed" with reason "source_missing".
 //
 // HTTP Status Codes:
 //   - 200 OK: spectrogram already exists
 //   - 202 Accepted: generation queued or already in progress
 //   - 400 Bad Request: legacy width outside 100..2000
-//   - 404 Not Found: Audio file not found
 //   - 503 Service Unavailable: Audio file not ready, or the detection's model type
 //     could not be looked up (includes Retry-After header); nothing is queued or written
 func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
@@ -2629,21 +2841,14 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	// Initialize queue status BEFORE spawning goroutine (prevents "not_started" flicker)
 	c.initializeQueueStatus(queueKey)
 
-	// Start async generation in background with proper cleanup and panic recovery.
-	// Track goroutine lifecycle for graceful shutdown. The body lives in a named method
-	// to keep this request handler's cognitive complexity in check.
-	c.Go(func() {
-		c.runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, queueKey, params, freqSuffix, profile)
-	})
-
-	// Return 202 Accepted immediately - client should poll status endpoint
+	// Snapshot the queued status BEFORE the worker starts: a gone clip fails the worker
+	// within microseconds, and the 202 body must keep saying queued.
 	// If we initialized queue status, return it; otherwise return generic queued response
 	responseData := map[string]any{
 		"status":        spectrogramStatusQueued,
 		"queuePosition": 0,
 		"message":       "Generation queued",
 	}
-
 	if queueKey != "" {
 		if statusValue, exists := spectrogramQueue.Load(queueKey); exists {
 			if status, ok := statusValue.(*SpectrogramQueueStatus); ok {
@@ -2652,6 +2857,14 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 		}
 	}
 
+	// Start async generation in background with proper cleanup and panic recovery.
+	// Track goroutine lifecycle for graceful shutdown. The body lives in a named method
+	// to keep this request handler's cognitive complexity in check.
+	c.Go(func() {
+		c.runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, queueKey, params, freqSuffix, profile)
+	})
+
+	// Return 202 Accepted immediately - client should poll status endpoint
 	return ctx.JSON(http.StatusAccepted, map[string]any{
 		"data":    responseData,
 		"error":   "",
@@ -2707,6 +2920,7 @@ type SpectrogramQueueStatus struct {
 	queuePosition int       // Position in queue (0 if generating/generated)
 	startedAt     time.Time // When generation started
 	message       string    // Additional status message
+	reason        string    // spectrogramReason* value for a failed status, empty otherwise
 }
 
 // Update atomically updates all fields
@@ -2722,6 +2936,7 @@ func (s *SpectrogramQueueStatus) Update(status string, queuePos int, message str
 	s.status = status
 	s.queuePosition = queuePos
 	s.message = message
+	s.reason = "" // any transition clears a stale failure reason
 
 	// Only set startedAt when transitioning into "generating" state
 	// This preserves accurate generation start time across multiple updates
@@ -2731,16 +2946,33 @@ func (s *SpectrogramQueueStatus) Update(status string, queuePos int, message str
 	}
 }
 
-// Get returns a snapshot of the current status (safe for JSON marshaling)
+// Fail atomically marks the status failed with the given spectrogramReason* value and
+// message.
+func (s *SpectrogramQueueStatus) Fail(reason, message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.status = spectrogramStatusFailed
+	s.queuePosition = 0
+	s.message = message
+	s.reason = reason
+}
+
+// Get returns a snapshot of the current status (safe for JSON marshaling). The
+// "reason" key is present only when a reason is known, so queued and generating
+// snapshots are unchanged.
 func (s *SpectrogramQueueStatus) Get() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return map[string]any{
+	snapshot := map[string]any{
 		"status":        s.status,
 		"queuePosition": s.queuePosition,
 		"startedAt":     s.startedAt,
 		"message":       s.message,
 	}
+	if s.reason != "" {
+		snapshot["reason"] = s.reason
+	}
+	return snapshot
 }
 
 // GetStatus returns just the status string (thread-safe)
@@ -3261,6 +3493,20 @@ func (c *Handler) updateQueueStatus(queueKey, status string, queuePos int, messa
 	}
 }
 
+// failQueueStatus marks the queue entry for queueKey failed with a reason (thread-safe).
+// Like updateQueueStatus it does nothing when the entry is absent.
+func (c *Handler) failQueueStatus(queueKey, reason, message string) {
+	if statusValue, exists := spectrogramQueue.Load(queueKey); exists {
+		if queueStatus, ok := statusValue.(*SpectrogramQueueStatus); ok {
+			queueStatus.Fail(reason, message)
+		} else {
+			getSpectrogramLogger().Error("Invalid queue status type in fail",
+				logger.String("key", queueKey),
+				logger.String("type", fmt.Sprintf("%T", statusValue)))
+		}
+	}
+}
+
 // waitForPendingClip polls for a not-yet-written audio clip to appear on disk, up to
 // deadline, returning true if it appeared. Unlike waitForAudioFileCtx (a short fixed
 // wait for the FFmpeg encode race), this covers the longer Extended Capture deferral
@@ -3322,7 +3568,8 @@ func (c *Handler) checkAudioFileExists(relAudioPath string) error {
 // for cancellation. This covers the race window where the detection DB record is
 // committed and SSE is broadcast before the async SaveAudioAction writes the file.
 // It uses the same timeout and poll interval as the audio serving wait logic
-// (audioWaitTimeout / audioWaitPollInterval).
+// (audioWaitTimeout / audioWaitPollInterval); audioWaitTimeoutOverride, zero in
+// production, shortens the timeout for tests.
 // Returns nil if the file appeared, or the original not-found error otherwise.
 func (c *Handler) waitForAudioFileCtx(ctx context.Context, relAudioPath string) error {
 	// Immediate check - avoid waiting if file already exists.
@@ -3330,8 +3577,13 @@ func (c *Handler) waitForAudioFileCtx(ctx context.Context, relAudioPath string) 
 		return nil
 	}
 
+	timeout := audioWaitTimeout
+	if c.audioWaitTimeoutOverride > 0 {
+		timeout = c.audioWaitTimeoutOverride
+	}
+
 	waitStart := time.Now()
-	waitCtx, cancel := context.WithTimeout(ctx, audioWaitTimeout)
+	waitCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	ticker := time.NewTicker(audioWaitPollInterval)
@@ -3359,7 +3611,7 @@ func (c *Handler) waitForAudioFileCtx(ctx context.Context, relAudioPath string) 
 			}
 			getSpectrogramLogger().Debug("Audio file did not appear within wait timeout",
 				logger.String("relative_audio_path", relAudioPath),
-				logger.Duration("timeout", audioWaitTimeout),
+				logger.Duration("timeout", timeout),
 				logger.Int64("waited_ms", time.Since(waitStart).Milliseconds()))
 			return fmt.Errorf("%w: %w (path: %s)", ErrAudioFileNotFound, os.ErrNotExist, relAudioPath)
 		case <-ticker.C:
@@ -3486,7 +3738,7 @@ func (c *Handler) acquireSemaphoreSlot(ctx context.Context, queueKey string) err
 				logger.Int("timeout_seconds", int(semaphoreAcquireTimeout.Seconds())),
 				logger.Int("slots_in_use", len(spectrogramSemaphore)),
 				logger.Int64("waited_ms", time.Since(waitStart).Milliseconds()))
-			c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Request timeout - server busy, please retry")
+			c.failQueueStatus(queueKey, spectrogramReasonBusy, "Request timeout - server busy, please retry")
 			return fmt.Errorf("timeout waiting for generation slot: %w", err)
 		}
 
@@ -3495,7 +3747,7 @@ func (c *Handler) acquireSemaphoreSlot(ctx context.Context, queueKey string) err
 			logger.Error(err),
 			logger.Int64("waited_ms", time.Since(waitStart).Milliseconds()))
 
-		c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Generation canceled")
+		c.failQueueStatus(queueKey, spectrogramReasonBusy, "Generation canceled")
 		return err
 	}
 }
@@ -3708,9 +3960,10 @@ func (c *Handler) generateSpectrogram(ctx context.Context, audioPath string, wid
 	if err != nil {
 		return "", err
 	}
-	// Serve-flow callers have no note ID and no status poller, so pass an empty
-	// queueKey: generateSpectrogramFromRel falls back to the path-based key for both
-	// queue tracking and singleflight coalescing (unchanged behavior).
+	// Serve-flow callers pass an empty queueKey on purpose: generateSpectrogramFromRel
+	// falls back to the path-based key for both queue tracking and singleflight
+	// coalescing, so their failures (including a not-ready 503) never show as failed
+	// on the by-ID status, which reads only the note-ID-based key.
 	return c.generateSpectrogramFromRel(ctx, relAudioPath, audioPath, "", width, raw, style, dynamicRange, freqSuffix, extraOpts...)
 }
 
@@ -3891,7 +4144,7 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 		// Mark the queue entry failed BEFORE returning so the deferred cleanupQueueStatus
 		// retains it for the polling window. Otherwise cleanup deletes the still-"generating"
 		// entry on the way out and a polling client sees "not_started" instead of the error.
-		c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Generation failed")
+		c.failQueueStatus(queueKey, spectrogramFailureReason(err), "Generation failed")
 
 		getSpectrogramLogger().Debug("Spectrogram generation failed",
 			logger.String("queue_key", queueKey),
