@@ -16,6 +16,13 @@
  * due (a status check that may be followed by a generate request, or the
  * generate request of a re-trigger) when the page is visible again. Generate
  * requests per start() are capped by maxGenerateRequests.
+ *
+ * The status `reason` refines that: a terminal reason (source_missing,
+ * source_invalid) sends no generate request. source_invalid fails the
+ * detection at once; source_missing first loads the plain image once, for a
+ * render the server kept, and fails when that image fails. The failure
+ * outlives stop() and start(). A `busy` failure is retried with backoff
+ * outside the generate budget.
  */
 
 import {
@@ -28,6 +35,12 @@ import { getCsrfToken } from '$lib/utils/api';
 import { getStoredValue } from '$lib/utils/storage';
 import { loggers } from '$lib/utils/logger';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
+import {
+  SPECTROGRAM_REASON,
+  isTerminalSpectrogramReason,
+  markSpectrogramSourceMissing,
+  parseSpectrogramStatus,
+} from '$lib/utils/spectrogramStatus';
 
 const logger = loggers.ui;
 
@@ -158,9 +171,21 @@ export interface SpectrogramLoaderConfig {
   maxGenerateRequests?: number;
 }
 
-/** Status values returned by the backend */
-type SpectrogramStatus =
-  'exists' | 'generated' | 'not_started' | 'queued' | 'generating' | 'failed';
+/** Status values the loader knows how to act on */
+const SPECTROGRAM_STATUSES = [
+  'exists',
+  'generated',
+  'not_started',
+  'queued',
+  'generating',
+  'failed',
+] as const;
+
+type SpectrogramStatus = (typeof SPECTROGRAM_STATUSES)[number];
+
+function isSpectrogramStatus(value: string): value is SpectrogramStatus {
+  return SPECTROGRAM_STATUSES.some(known => known === value);
+}
 
 const DEFAULT_CONFIG: Required<SpectrogramLoaderConfig> = {
   size: 'md',
@@ -205,6 +230,14 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   let spinnerTimer: ReturnType<typeof setTimeout> | undefined;
   let pollAttempts = 0;
   let generateRequests = 0;
+  // Re-triggers after a `busy` failure; they are not counted in generateRequests.
+  let busyRetries = 0;
+  // Detection the server reported as terminally failed (source_missing, source_invalid).
+  // Unlike the state, it survives stop() so a scroll out and back keeps the verdict.
+  let terminalDetectionId: number | undefined;
+  // True while the plain image of a detection whose source clip is gone is being
+  // loaded: a render the server kept may still show, and a failure is final.
+  let probingKeptRender = false;
   // Bumped by stop() so a status check backoff that outlives its start() ends.
   let lifecycle = 0;
   let parkedResume: (() => void) | undefined;
@@ -259,6 +292,8 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   function resetInternalState(): void {
     pollAttempts = 0;
     generateRequests = 0;
+    busyRetries = 0;
+    probingKeptRender = false;
     currentPollInterval = config.initialPollIntervalMs;
     imageRetryCount = 0;
   }
@@ -274,6 +309,29 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     state = 'error';
     hasError = true;
     showSpinner = false;
+  }
+
+  /** Ends the cycle in the error state for a reason retrying cannot change, and remembers it for this detection. */
+  function failTerminally(detectionId: number, reason: string | undefined): void {
+    terminalDetectionId = detectionId;
+    failPermanently(detectionId, 'Spectrogram cannot be rendered, not retrying', { reason });
+  }
+
+  /**
+   * Acts on a terminal reason. A missing source clip does not mean a missing image: the
+   * server may still hold a render it kept, which the plain image request serves. So the
+   * image is loaded once without generating; handleImageError makes its failure final.
+   * An invalid clip fails at once.
+   */
+  function handleTerminalReason(detectionId: number, reason: string | undefined): void {
+    if (reason === SPECTROGRAM_REASON.sourceMissing) {
+      markSpectrogramSourceMissing(detectionId);
+      logger.debug('Spectrogram source clip is gone, trying a kept render only', { detectionId });
+      probingKeptRender = true;
+      void acquireAndLoad(detectionId);
+      return;
+    }
+    failTerminally(detectionId, reason);
   }
 
   /** Parks the cycle step that is due; the shared listener runs `resume` once the page is visible. */
@@ -345,8 +403,11 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
    * the capture window before it fails, so a few retries cover short-lived failures
    * and the generate budget ends a permanent one.
    */
-  function retryAfterFailedStatus(detectionId: number): void {
-    if (generateRequests >= config.maxGenerateRequests) {
+  function retryAfterFailedStatus(detectionId: number, reason?: string): void {
+    // A busy server did not reject this detection, so its retries do not spend the
+    // generate budget; the poll budget still ends the cycle.
+    const busy = reason === SPECTROGRAM_REASON.busy;
+    if (!busy && generateRequests >= config.maxGenerateRequests) {
       failPermanently(detectionId, 'Spectrogram generation failed on server after retries', {
         generateRequests,
       });
@@ -354,11 +415,12 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     }
     logger.debug('Spectrogram generation failed, retrying', { detectionId, generateRequests });
     state = 'polling';
+    const attempt = busy ? busyRetries++ : generateRequests;
     const delay = Math.min(
-      config.initialPollIntervalMs * Math.pow(2, generateRequests),
+      config.initialPollIntervalMs * Math.pow(2, attempt),
       config.maxPollIntervalMs
     );
-    const trigger = () => void triggerGeneration(detectionId);
+    const trigger = () => void triggerGeneration(detectionId, !busy);
     scheduleCycleStep(detectionId, delay, trigger, trigger);
   }
 
@@ -427,9 +489,10 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
           throw new Error(`Status check failed: ${String(response.status)}`);
         }
 
-        const json = (await response.json()) as { data: { status: string } };
-        const status = json.data.status as SpectrogramStatus;
-        serverStatus = status;
+        const parsed = parseSpectrogramStatus(await response.json());
+        if (!parsed) throw new Error('Status check returned no status');
+        const status = parsed.status;
+        serverStatus = isSpectrogramStatus(status) ? status : undefined;
 
         switch (status) {
           case 'exists':
@@ -438,6 +501,10 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
             return;
 
           case 'not_started':
+            if (isTerminalSpectrogramReason(parsed.reason)) {
+              handleTerminalReason(detectionId, parsed.reason);
+              return;
+            }
             await triggerGeneration(detectionId);
             return;
 
@@ -447,7 +514,11 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
             return;
 
           case 'failed':
-            retryAfterFailedStatus(detectionId);
+            if (isTerminalSpectrogramReason(parsed.reason)) {
+              handleTerminalReason(detectionId, parsed.reason);
+              return;
+            }
+            retryAfterFailedStatus(detectionId, parsed.reason);
             return;
 
           default:
@@ -473,18 +544,24 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     }
   }
 
-  async function triggerGeneration(detectionId: number): Promise<void> {
+  /**
+   * `countsAgainstBudget` is false for the re-trigger of a `busy` failure, which is
+   * neither limited by nor counted in the generate budget.
+   */
+  async function triggerGeneration(detectionId: number, countsAgainstBudget = true): Promise<void> {
     if (isStale(detectionId)) return;
 
     // The single place a generate request is sent, so every path that asks for one
     // (failed, not_started, unknown status, resume) is counted.
-    if (generateRequests >= config.maxGenerateRequests) {
-      failPermanently(detectionId, 'Spectrogram generation failed on server after retries', {
-        generateRequests,
-      });
-      return;
+    if (countsAgainstBudget) {
+      if (generateRequests >= config.maxGenerateRequests) {
+        failPermanently(detectionId, 'Spectrogram generation failed on server after retries', {
+          generateRequests,
+        });
+        return;
+      }
+      generateRequests++;
     }
-    generateRequests++;
 
     state = 'triggering';
     abortController = new AbortController();
@@ -514,9 +591,9 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
       if (isStale(detectionId)) return;
 
       if (response.ok || response.status === 202) {
-        const json = (await response.json()) as { data: { status: string } };
-        const status = json.data.status as SpectrogramStatus;
-        serverStatus = status;
+        const answer = parseSpectrogramStatus(await response.json());
+        const status = answer?.status;
+        serverStatus = status !== undefined && isSpectrogramStatus(status) ? status : undefined;
 
         if (status === 'exists') {
           await acquireAndLoad(detectionId);
@@ -595,17 +672,26 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
       if (isStale(detectionId)) return;
 
       if (response.ok) {
-        const json = (await response.json()) as { data: { status: string } };
-        const status = json.data.status as SpectrogramStatus;
-        serverStatus = status;
+        const parsed = parseSpectrogramStatus(await response.json());
+        if (!parsed) throw new Error('Status poll returned no status');
+        const status = parsed.status;
+        serverStatus = isSpectrogramStatus(status) ? status : undefined;
 
         if (status === 'exists' || status === 'generated') {
           await acquireAndLoad(detectionId);
           return;
         }
 
+        if (
+          (status === 'failed' || status === 'not_started') &&
+          isTerminalSpectrogramReason(parsed.reason)
+        ) {
+          handleTerminalReason(detectionId, parsed.reason);
+          return;
+        }
+
         if (status === 'failed') {
-          retryAfterFailedStatus(detectionId);
+          retryAfterFailedStatus(detectionId, parsed.reason);
           return;
         }
 
@@ -674,6 +760,15 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
       return;
     }
 
+    // Same detection the server reported as terminally failed: a scroll out and back
+    // must not reset the verdict (stop() leaves the state idle).
+    if (currentDetectionId === detectionId && terminalDetectionId === detectionId) {
+      state = 'error';
+      hasError = true;
+      showSpinner = false;
+      return;
+    }
+
     // New detection or restart after transient error
     stop();
     currentDetectionId = detectionId;
@@ -700,6 +795,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   }
 
   function handleImageLoad(): void {
+    probingKeptRender = false;
     state = 'loaded';
     showSpinner = false;
     imageRetryCount = 0;
@@ -713,6 +809,13 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
     // Release slot immediately so other cards can load during retry delay
     releaseCurrentSlot('error');
+
+    // The plain image of a detection without a source clip failed: no kept render, final.
+    if (probingKeptRender) {
+      probingKeptRender = false;
+      failTerminally(detectionId, SPECTROGRAM_REASON.sourceMissing);
+      return;
+    }
 
     if (imageRetryCount < config.maxImageRetries) {
       const delay =

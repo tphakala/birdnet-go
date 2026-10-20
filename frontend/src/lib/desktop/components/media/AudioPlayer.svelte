@@ -70,7 +70,11 @@
   import { getCsrfToken } from '$lib/utils/api';
   import { isKnownSampleRate, lookupClipSampleRate } from '$lib/utils/clipSampleRateLookup';
   import {
+    SPECTROGRAM_REASON,
     fetchSpectrogramStatus,
+    isTerminalSpectrogramReason,
+    isRetryableSpectrogramReason,
+    markSpectrogramSourceMissing,
     parseSpectrogramStatus,
     type SpectrogramGenerationStatus,
   } from '$lib/utils/spectrogramStatus';
@@ -1398,6 +1402,36 @@
     statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
   };
 
+  // Ends the attempt: no more retries, polls or probes, and the unavailable state shows.
+  const endAttemptUnavailable = () => {
+    clearStatusPollTimer();
+    clearSpectrogramRetryTimer();
+    clearSpectrogramProbe();
+    spectrogramStatusFailed = true;
+    spectrogramLoader.setError();
+  };
+
+  // The server reported a reason retrying cannot change (the source clip is gone or
+  // cannot be rendered). source_missing describes the audio, not the image: a request
+  // that carried the clip rate is first tried without it, which the server answers
+  // from any render it kept. Otherwise every retry, poll and probe ends and the
+  // unavailable state shows.
+  const endOnTerminalReason = (reason: string | undefined) => {
+    debugLog('pollSpectrogramStatus: terminal reason', { reason });
+    if (reason === SPECTROGRAM_REASON.sourceMissing) {
+      markSpectrogramSourceMissing(detectionId);
+    }
+    if (
+      reason === SPECTROGRAM_REASON.sourceMissing &&
+      overlayRate !== undefined &&
+      !processedSpectrogramUrl
+    ) {
+      fallBackToImageWithoutRate();
+      return;
+    }
+    endAttemptUnavailable();
+  };
+
   const pollSpectrogramStatus = async () => {
     if (!showSpectrogram || !detectionId) {
       debugLog('pollSpectrogramStatus: skipped', {
@@ -1468,16 +1502,20 @@
           // Still processing, continue polling
           debugLog('pollSpectrogramStatus: still processing, scheduling next poll');
           scheduleNextStatusPoll();
-        } else if (status.status === 'failed') {
-          // Generation failed: stop polling and the image retries
+        } else if (
+          (status.status === 'failed' || status.status === 'not_started') &&
+          isTerminalSpectrogramReason(status.reason)
+        ) {
+          endOnTerminalReason(status.reason);
+        } else if (status.status === 'failed' && !isRetryableSpectrogramReason(status.reason)) {
+          // Generation failed and the server does not say a later request can succeed:
+          // stop polling and the image retries
           debugLog('pollSpectrogramStatus: generation failed');
-          clearStatusPollTimer();
-          clearSpectrogramRetryTimer();
-          spectrogramStatusFailed = true;
-          spectrogramLoader.setError();
+          endAttemptUnavailable();
         } else {
-          // not_started or an unknown status: end polling and leave the image
-          // retries to decide the outcome.
+          // not_started, an unknown status, or a failure the server marks retryable (the
+          // clip may still be written, the server was busy, a render failed): end polling
+          // and leave the image retries to decide the outcome.
           debugLog('pollSpectrogramStatus: nothing in progress, ending poll', {
             status: status.status,
           });

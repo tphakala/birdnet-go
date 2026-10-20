@@ -45,6 +45,11 @@ vi.stubGlobal('fetch', mockFetch);
 import { loggers } from '$lib/utils/logger';
 import { removeStoredValue, setStoredValue } from '$lib/utils/storage';
 import {
+  SPECTROGRAM_REASON,
+  clearSpectrogramSourceMarks,
+  isSpectrogramSourceKnownMissing,
+} from '$lib/utils/spectrogramStatus';
+import {
   createSpectrogramLoader,
   LATE_POLL_TIMER_WARN_MS,
   LONG_SLOT_HOLD_WARN_MS,
@@ -103,6 +108,10 @@ function statusAnswers(status: string) {
   return () => Promise.resolve(mockJsonResponse({ data: { status } }));
 }
 
+function statusAnswersWithReason(status: string, reason: string) {
+  return () => Promise.resolve(mockJsonResponse({ data: { status, reason } }));
+}
+
 function fetchCount(kind: 'status' | 'generate'): number {
   return mockFetch.mock.calls.filter(([url]) => String(url).includes(`/${kind}?`)).length;
 }
@@ -128,6 +137,7 @@ describe('spectrogramLoader', () => {
     for (const loader of madeLoaders.splice(0)) loader.destroy();
     Reflect.deleteProperty(document, 'visibilityState');
     vi.useRealTimers();
+    clearSpectrogramSourceMarks();
     resetBasePath();
   });
 
@@ -897,6 +907,197 @@ describe('spectrogramLoader', () => {
 
       expect(fetchCount('status')).toBe(expectedFetches);
     });
+  });
+
+  describe('status reason', () => {
+    const PLAIN_IMAGE_URL = '/api/v2/spectrogram/42?size=md&raw=true';
+    // Longer than every poll and re-trigger delay, so a loader still cycling would show it.
+    const LONG_WAIT_MS = 120_000;
+
+    it.each([
+      ['failed', SPECTROGRAM_REASON.sourceInvalid],
+      ['not_started', SPECTROGRAM_REASON.sourceInvalid],
+    ])('fails at once on %s with %s and sends no generate request', async (status, reason) => {
+      routeFetch(statusAnswersWithReason(status, reason));
+      const loader = makeLoader();
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(fetchCount('generate')).toBe(0);
+      expect(fetchCount('status')).toBe(1);
+      expect(loader.state).toBe('error');
+      expect(loader.error).toBe(true);
+    });
+
+    it('stays failed across stop and start for the same detection', async () => {
+      routeFetch(statusAnswersWithReason('failed', SPECTROGRAM_REASON.sourceInvalid));
+      const loader = makeLoader();
+      loader.start(42);
+      await flushAll();
+      const callsAfterFailure = mockFetch.mock.calls.length;
+
+      loader.stop();
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(mockFetch.mock.calls.length).toBe(callsAfterFailure);
+      expect(loader.state).toBe('error');
+      expect(loader.error).toBe(true);
+    });
+
+    it('still starts a different detection after a terminal failure', async () => {
+      routeFetch(statusAnswersWithReason('failed', SPECTROGRAM_REASON.sourceInvalid));
+      const loader = makeLoader();
+      loader.start(42);
+      await flushAll();
+
+      routeFetch(statusAnswers('exists'));
+      loader.start(99);
+      await flushAll();
+
+      expect(loader.error).toBe(false);
+      expect(loader.spectrogramUrl).toBe('/api/v2/spectrogram/99?size=md&raw=true');
+    });
+
+    it('loads the plain image once instead of generating for a missing source, and marks the clip', async () => {
+      routeFetch(statusAnswersWithReason('not_started', SPECTROGRAM_REASON.sourceMissing));
+      const loader = makeLoader();
+      loader.start(42);
+      await flushAll();
+
+      expect(fetchCount('generate')).toBe(0);
+      expect(loader.spectrogramUrl).toBe(PLAIN_IMAGE_URL);
+      expect(loader.state).toBe('loading');
+      expect(isSpectrogramSourceKnownMissing(42)).toBe(true);
+
+      // A render the server kept shows after all.
+      loader.handleImageLoad();
+      expect(loader.state).toBe('loaded');
+      expect(loader.error).toBe(false);
+    });
+
+    it('fails permanently when the plain image of a missing source fails, without image retries', async () => {
+      routeFetch(statusAnswersWithReason('not_started', SPECTROGRAM_REASON.sourceMissing));
+      const loader = makeLoader();
+      loader.start(42);
+      await flushAll();
+      const slotsAcquired = mockAcquireSlot.mock.calls.length;
+
+      loader.handleImageError();
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(loader.state).toBe('error');
+      expect(loader.error).toBe(true);
+      expect(mockAcquireSlot.mock.calls.length).toBe(slotsAcquired);
+      expect(fetchCount('generate')).toBe(0);
+
+      // A scroll out and back must not reset the verdict.
+      const callsAfterFailure = mockFetch.mock.calls.length;
+      loader.stop();
+      loader.start(42);
+      await flushAll();
+      expect(mockFetch.mock.calls.length).toBe(callsAfterFailure);
+      expect(loader.state).toBe('error');
+      expect(loader.error).toBe(true);
+    });
+
+    it('applies a missing source reported by a poll the same way', async () => {
+      let answers = 0;
+      routeFetch(() =>
+        Promise.resolve(
+          mockJsonResponse({
+            data:
+              answers++ === 0
+                ? { status: 'generating' }
+                : { status: 'not_started', reason: SPECTROGRAM_REASON.sourceMissing },
+          })
+        )
+      );
+      const loader = makeLoader();
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(2000);
+
+      expect(fetchCount('generate')).toBe(0);
+      expect(loader.spectrogramUrl).toBe(PLAIN_IMAGE_URL);
+    });
+
+    it('tries the plain image once for a missing source reported as failed, without generating', async () => {
+      routeFetch(statusAnswersWithReason('failed', SPECTROGRAM_REASON.sourceMissing));
+      const loader = makeLoader();
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(fetchCount('generate')).toBe(0);
+      expect(loader.spectrogramUrl).toBe(PLAIN_IMAGE_URL);
+      expect(loader.state).toBe('loading');
+    });
+
+    // A poll that finds the first answer `generating` and the second `failed` with a reason.
+    async function startAndPollFailed(reason: string): Promise<Loader> {
+      let answers = 0;
+      routeFetch(() =>
+        Promise.resolve(
+          mockJsonResponse({
+            data: answers++ === 0 ? { status: 'generating' } : { status: 'failed', reason },
+          })
+        )
+      );
+      const loader = makeLoader();
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+      return loader;
+    }
+
+    it('ends a poll that answers failed with source_invalid without generating', async () => {
+      const loader = await startAndPollFailed(SPECTROGRAM_REASON.sourceInvalid);
+
+      expect(fetchCount('generate')).toBe(0);
+      expect(fetchCount('status')).toBe(2);
+      expect(loader.state).toBe('error');
+    });
+
+    it('tries the plain image when a poll answers failed with source_missing', async () => {
+      const loader = await startAndPollFailed(SPECTROGRAM_REASON.sourceMissing);
+
+      expect(fetchCount('generate')).toBe(0);
+      expect(fetchCount('status')).toBe(2);
+      expect(loader.spectrogramUrl).toBe(PLAIN_IMAGE_URL);
+    });
+
+    it('keeps retrying past the generate budget while the server is busy', async () => {
+      routeFetch(statusAnswersWithReason('failed', SPECTROGRAM_REASON.busy));
+      const loader = makeLoader();
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(fetchCount('generate')).toBeGreaterThan(4);
+      expect(loader.error).toBe(false);
+    });
+
+    it.each([SPECTROGRAM_REASON.sourcePending, SPECTROGRAM_REASON.renderFailed])(
+      'keeps the generate budget for a failed status with %s',
+      async reason => {
+        routeFetch(statusAnswersWithReason('failed', reason));
+        const loader = makeLoader();
+        loader.start(42);
+        await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+        expect(fetchCount('generate')).toBe(4);
+        expect(loader.state).toBe('error');
+      }
+    );
+
+    it.each([SPECTROGRAM_REASON.notGenerated, SPECTROGRAM_REASON.sourcePending])(
+      'still asks for generation on not_started with %s',
+      async reason => {
+        routeFetch(statusAnswersWithReason('not_started', reason));
+        const loader = makeLoader();
+        loader.start(42);
+        await flushAll();
+
+        expect(fetchCount('generate')).toBe(1);
+      }
+    );
   });
 
   // The diagnostics move the wall clock with vi.setSystemTime, which leaves the
