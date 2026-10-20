@@ -47,6 +47,7 @@ import {
   createSpectrogramLoader,
   LATE_POLL_TIMER_WARN_MS,
   LONG_SLOT_HOLD_WARN_MS,
+  SLOW_GENERATE_FETCH_WARN_MS,
   SLOW_SLOT_WAIT_WARN_MS,
   SLOW_STATUS_FETCH_WARN_MS,
   SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY,
@@ -715,11 +716,14 @@ describe('spectrogramLoader', () => {
       loader.destroy();
     });
 
-    it('warns when the generate request is slow, whatever its status', async () => {
+    it.each([
+      ['a non-OK status', mockJsonResponse({ error: 'busy' }, 503), 503],
+      ['an OK status that ends the cycle', mockJsonResponse({ data: { status: 'exists' } }), 200],
+    ])('warns when the generate request is slow, with %s', async (_label, response, httpStatus) => {
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'not_started' } }));
       mockFetch.mockImplementationOnce(() => {
-        vi.setSystemTime(Date.now() + SLOW_STATUS_FETCH_WARN_MS + 500);
-        return Promise.resolve(mockJsonResponse({ error: 'busy' }, 503));
+        vi.setSystemTime(Date.now() + SLOW_GENERATE_FETCH_WARN_MS + 500);
+        return Promise.resolve(response);
       });
       const loader = createSpectrogramLoader();
       loader.start(42);
@@ -728,7 +732,7 @@ describe('spectrogramLoader', () => {
       expect(warn).toHaveBeenCalledWith(
         'Spectrogram generate request was slow',
         null,
-        expect.objectContaining({ detectionId: 42, httpStatus: 503 }),
+        expect.objectContaining({ detectionId: 42, httpStatus }),
         'spectrogram-generate-slow'
       );
       loader.destroy();
