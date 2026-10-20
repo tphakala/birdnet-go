@@ -25,9 +25,9 @@ const (
 	// seekWindowFrames is the length of the windows the seek tests read.
 	seekWindowFrames = 3000
 	// opusPreRollFrames is how far go-opus's SeekToSample decodes before its
-	// target (80 ms at 48 kHz). The window starts below use it to sit around the
+	// target in v1.3.0 (1.28 s at 48 kHz). The window starts below use it to sit around the
 	// positions where a seek would land on a page.
-	opusPreRollFrames = 3840
+	opusPreRollFrames = 61440
 	// opusMinAudioPages is the number of audio pages the Opus window test needs to
 	// have starts past the first page.
 	opusMinAudioPages = 3
@@ -90,7 +90,7 @@ func TestDecodeSource_WindowsAfterFrameZeroSeek(t *testing.T) {
 }
 
 // Opus windows are positioned by discarding, because go-opus's SeekToSample is
-// not bit-exact on CELT, so they equal the matching slice of the linear decode
+// not bit-exact, so they equal the matching slice of the linear decode
 // byte for byte, also around the pre-roll and page boundaries a seek would land on.
 func TestDecode_OpusWindowsMatchTheLinearDecode(t *testing.T) {
 	t.Parallel()
@@ -103,7 +103,7 @@ func TestDecode_OpusWindowsMatchTheLinearDecode(t *testing.T) {
 	require.GreaterOrEqual(t, len(pageEnds), opusMinAudioPages)
 	b1, b2 := pageEnds[0], pageEnds[1]
 
-	// b1+3840 is the first start whose seek would land past the first audio page.
+	// b1+opusPreRollFrames is the first start whose seek would land past the first audio page.
 	starts := []int64{
 		1, opusPreRollFrames - 1, opusPreRollFrames, opusPreRollFrames + 1,
 		b1 + opusPreRollFrames - 1, b1 + opusPreRollFrames, b1 + opusPreRollFrames + 1,
