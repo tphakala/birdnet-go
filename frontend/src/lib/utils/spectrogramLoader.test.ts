@@ -49,6 +49,7 @@ import {
   LONG_SLOT_HOLD_WARN_MS,
   SLOW_SLOT_WAIT_WARN_MS,
   SLOW_STATUS_FETCH_WARN_MS,
+  SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY,
 } from './spectrogramLoader.svelte';
 
 // Helper to create mock JSON response
@@ -614,6 +615,28 @@ describe('spectrogramLoader', () => {
   describe('diagnostics', () => {
     const warn = vi.mocked(loggers.ui.warn);
     const warnMessages = () => warn.mock.calls.map(call => String(call[0]));
+
+    beforeEach(() => {
+      localStorage.setItem(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY, 'true');
+    });
+
+    afterEach(() => {
+      localStorage.removeItem(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY);
+    });
+
+    it('stays quiet with the diagnostics turned off, even for a long slot hold', async () => {
+      localStorage.removeItem(SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY);
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      vi.setSystemTime(Date.now() + LONG_SLOT_HOLD_WARN_MS + 500);
+      loader.handleImageLoad();
+
+      expect(warn).not.toHaveBeenCalled();
+      loader.destroy();
+    });
 
     it('warns when a poll timer fires late', async () => {
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
