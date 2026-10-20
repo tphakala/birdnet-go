@@ -251,10 +251,11 @@ sized to the remaining time. Clients
 should honor `Retry-After` and retry; the clip appears once the capture completes. The
 same `503` answers `GET /audio/:id` for a detection that completed within the last 10
 minutes when its clip is still missing after a short grace wait, because the export may
-still be queued (its `Retry-After` is the short minimum). A `404` from these endpoints
+still be queued (its `Retry-After` is the short minimum). A `404` from `GET /audio/:id`
 means the clip is absent: never produced, or purged by retention, and for a detection
 older than 10 minutes. A request with no known completion time (a filename serve) also
-answers `404` after the grace wait. These pending 503s are intentionally not logged as errors and are not
+answers `404` after the grace wait. A `404` from `GET /spectrogram/:id` carries
+`data.reason`, described below: `source_pending` means the clip may still appear. These pending 503s are intentionally not logged as errors and are not
 reported to telemetry, since they are expected, self-resolving backpressure.
 
 A by-ID spectrogram request (`GET /spectrogram/:id`) for a clip that can no longer appear
