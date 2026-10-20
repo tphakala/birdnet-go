@@ -484,6 +484,60 @@ describe('SpectrogramPlayer', () => {
       );
     });
 
+    describe('a status check still pending', () => {
+      let answer: (r: Response) => void = () => {};
+      const terminalAnswer = () =>
+        new Response(JSON.stringify({ data: { status: 'failed', reason: 'source_missing' } }));
+
+      beforeEach(() => {
+        statusFetch = vi.fn(
+          () =>
+            new Promise<Response>(resolve => {
+              answer = resolve;
+            })
+        );
+        vi.stubGlobal('fetch', statusFetch);
+      });
+
+      it('is dropped when the image loads', async () => {
+        await failFirstImage();
+        await fireEvent.load(screen.getByAltText('components.audio.spectrogramAlt'));
+
+        answer(terminalAnswer());
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(mockLoadingState.setError).not.toHaveBeenCalled();
+      });
+
+      it('is dropped when the detection changes', async () => {
+        const { rerender } = spectrogramTest.render({
+          audioUrl: '/api/v2/audio/test-123',
+          detectionId: 'test-123',
+        });
+        await fireEvent.error(screen.getByAltText('components.audio.spectrogramAlt'));
+        await rerender({ detectionId: 'other-456' });
+
+        answer(terminalAnswer());
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(mockLoadingState.setError).not.toHaveBeenCalled();
+      });
+
+      it('is dropped when the player is destroyed', async () => {
+        const { unmount } = spectrogramTest.render({
+          audioUrl: '/api/v2/audio/test-123',
+          detectionId: 'test-123',
+        });
+        await fireEvent.error(screen.getByAltText('components.audio.spectrogramAlt'));
+        unmount();
+
+        answer(terminalAnswer());
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(mockLoadingState.setError).not.toHaveBeenCalled();
+      });
+    });
+
     it('asks for the status once however many retries fail', async () => {
       answerStatus({ status: 'failed', reason: 'render_failed' });
 

@@ -1021,6 +1021,49 @@ describe('spectrogramLoader', () => {
       expect(loader.spectrogramUrl).toBe(PLAIN_IMAGE_URL);
     });
 
+    it('tries the plain image once for a missing source reported as failed, without generating', async () => {
+      routeFetch(statusAnswersWithReason('failed', SPECTROGRAM_REASON.sourceMissing));
+      const loader = makeLoader();
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(fetchCount('generate')).toBe(0);
+      expect(loader.spectrogramUrl).toBe(PLAIN_IMAGE_URL);
+      expect(loader.state).toBe('loading');
+    });
+
+    // A poll that finds the first answer `generating` and the second `failed` with a reason.
+    async function startAndPollFailed(reason: string): Promise<Loader> {
+      let answers = 0;
+      routeFetch(() =>
+        Promise.resolve(
+          mockJsonResponse({
+            data: answers++ === 0 ? { status: 'generating' } : { status: 'failed', reason },
+          })
+        )
+      );
+      const loader = makeLoader();
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+      return loader;
+    }
+
+    it('ends a poll that answers failed with source_invalid without generating', async () => {
+      const loader = await startAndPollFailed(SPECTROGRAM_REASON.sourceInvalid);
+
+      expect(fetchCount('generate')).toBe(0);
+      expect(fetchCount('status')).toBe(2);
+      expect(loader.state).toBe('error');
+    });
+
+    it('tries the plain image when a poll answers failed with source_missing', async () => {
+      const loader = await startAndPollFailed(SPECTROGRAM_REASON.sourceMissing);
+
+      expect(fetchCount('generate')).toBe(0);
+      expect(fetchCount('status')).toBe(2);
+      expect(loader.spectrogramUrl).toBe(PLAIN_IMAGE_URL);
+    });
+
     it('keeps retrying past the generate budget while the server is busy', async () => {
       routeFetch(statusAnswersWithReason('failed', SPECTROGRAM_REASON.busy));
       const loader = makeLoader();

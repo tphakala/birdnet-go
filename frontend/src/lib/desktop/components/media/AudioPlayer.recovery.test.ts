@@ -523,6 +523,33 @@ describe('AudioPlayer recovery', () => {
         expect(isSpectrogramSourceKnownMissing('other-1')).toBe(false);
       });
 
+      it('marks the clip as known missing when failed carries source_missing', async () => {
+        stubStatusFetch([statusResponse('failed', 200, 'source_missing')]);
+        mount();
+
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(isSpectrogramSourceKnownMissing('test-123')).toBe(true);
+      });
+
+      it('ends the image retries when a later poll reports a terminal reason', async () => {
+        stubStatusFetch([
+          statusResponse('generating'),
+          statusResponse('not_started', 200, 'source_missing'),
+        ]);
+        mount();
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+        expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+
+        await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+
+        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+        expect(spectrogramImg().getAttribute('src')).not.toContain('retry=2');
+      });
+
       it.each(['source_pending', 'not_generated'])(
         'keeps the image retries going for not_started with %s',
         async reason => {
