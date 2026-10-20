@@ -169,9 +169,21 @@ export interface SpectrogramLoaderConfig {
   maxGenerateRequests?: number;
 }
 
-/** Status values returned by the backend */
-type SpectrogramStatus =
-  'exists' | 'generated' | 'not_started' | 'queued' | 'generating' | 'failed';
+/** Status values the loader knows how to act on */
+const SPECTROGRAM_STATUSES = [
+  'exists',
+  'generated',
+  'not_started',
+  'queued',
+  'generating',
+  'failed',
+] as const;
+
+type SpectrogramStatus = (typeof SPECTROGRAM_STATUSES)[number];
+
+function isSpectrogramStatus(value: string): value is SpectrogramStatus {
+  return SPECTROGRAM_STATUSES.some(known => known === value);
+}
 
 const DEFAULT_CONFIG: Required<SpectrogramLoaderConfig> = {
   size: 'md',
@@ -477,8 +489,8 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
         const parsed = parseSpectrogramStatus(await response.json());
         if (!parsed) throw new Error('Status check returned no status');
-        const status = parsed.status as SpectrogramStatus;
-        serverStatus = status;
+        const status = parsed.status;
+        serverStatus = isSpectrogramStatus(status) ? status : undefined;
 
         switch (status) {
           case 'exists':
@@ -578,8 +590,8 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
       if (response.ok || response.status === 202) {
         const json = (await response.json()) as { data: { status: string } };
-        const status = json.data.status as SpectrogramStatus;
-        serverStatus = status;
+        const status = json.data.status;
+        serverStatus = isSpectrogramStatus(status) ? status : undefined;
 
         if (status === 'exists') {
           await acquireAndLoad(detectionId);
@@ -660,8 +672,8 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
       if (response.ok) {
         const parsed = parseSpectrogramStatus(await response.json());
         if (!parsed) throw new Error('Status poll returned no status');
-        const status = parsed.status as SpectrogramStatus;
-        serverStatus = status;
+        const status = parsed.status;
+        serverStatus = isSpectrogramStatus(status) ? status : undefined;
 
         if (status === 'exists' || status === 'generated') {
           await acquireAndLoad(detectionId);
