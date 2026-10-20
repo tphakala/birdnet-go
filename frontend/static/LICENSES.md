@@ -203,7 +203,7 @@ Source: ISC
 
 ### github.com/klauspost/cpuid/v2
 
-License: https://github.com/klauspost/cpuid/blob/v2.4.0/LICENSE
+License: https://github.com/klauspost/cpuid/blob/v2.4.1/LICENSE
 Source: MIT
 
 ### github.com/kr/fs
