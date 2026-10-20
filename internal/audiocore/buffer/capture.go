@@ -136,7 +136,7 @@ func (cb *CaptureBuffer) Initialized() bool {
 // counter is always advanced, providing jitter-free byte offset calculations.
 // At debug level it logs a pause between writes longer than
 // captureWriteGapLogThreshold and the completion of the first lap, each with
-// the lag of the written audio behind wall-clock time.
+// the lag that lagSinceFirstWrite reports.
 //
 // Empty data is silently ignored. Write is safe for concurrent use.
 func (cb *CaptureBuffer) Write(data []byte) error {
@@ -151,8 +151,8 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 
 // captureWriteDiagnostics describes one Write for debug logging: the pause since
 // the previous write, whether this write completed the first lap of the ring,
-// and, only when one of those is logged, the lag of the written audio behind
-// wall-clock time since the first write.
+// and, only when one of those is logged, the lag that lagSinceFirstWrite
+// reports.
 type captureWriteDiagnostics struct {
 	gap      time.Duration
 	firstLap bool
