@@ -40,6 +40,8 @@ export const SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY = 'birdnet-debug-spectrogram';
 export const LATE_POLL_TIMER_WARN_MS = 2000;
 /** A status request taking longer than this most likely waited in the browser's connection queue. */
 export const SLOW_STATUS_FETCH_WARN_MS = 3000;
+/** A generate request taking longer than this most likely waited in the browser's connection queue. */
+export const SLOW_GENERATE_FETCH_WARN_MS = 3000;
 /** Waiting longer than this for an image load slot means the slots are held. */
 export const SLOW_SLOT_WAIT_WARN_MS = 5000;
 /** An image holding its load slot longer than this before load or error fired. */
@@ -345,7 +347,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
       const fetchMs = Date.now() - fetchStart;
       warnIfOver(
         fetchMs,
-        SLOW_STATUS_FETCH_WARN_MS,
+        SLOW_GENERATE_FETCH_WARN_MS,
         'Spectrogram generate request was slow',
         { detectionId, fetchMs, httpStatus: response.status },
         GENERATE_SLOW_THROTTLE_KEY
