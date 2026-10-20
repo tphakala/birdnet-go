@@ -448,7 +448,7 @@ Source: MIT
 
 ### github.com/tphakala/go-flac
 
-License: https://github.com/tphakala/go-flac/blob/v1.3.0/LICENSE
+License: https://github.com/tphakala/go-flac/blob/v1.4.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-hls
@@ -458,7 +458,7 @@ Source: MIT
 
 ### github.com/tphakala/go-m4a
 
-License: https://github.com/tphakala/go-m4a/blob/v0.7.0/LICENSE
+License: https://github.com/tphakala/go-m4a/blob/v0.8.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-mp3
@@ -468,7 +468,7 @@ Source: MIT
 
 ### github.com/tphakala/go-opus
 
-License: https://github.com/tphakala/go-opus/blob/v1.2.1/LICENSE
+License: https://github.com/tphakala/go-opus/blob/v1.3.0/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/tphakala/go-tflite
