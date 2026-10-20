@@ -68,6 +68,54 @@ async function flushAll() {
   await vi.advanceTimersByTimeAsync(0);
 }
 
+type Loader = ReturnType<typeof createSpectrogramLoader>;
+
+// Loaders made through makeLoader are destroyed after each test: the parked-loader
+// registry is module state, so a loader left parked by a failed assertion would
+// fire into the next test's mocks.
+const madeLoaders: Loader[] = [];
+function makeLoader(config: Parameters<typeof createSpectrogramLoader>[0] = {}): Loader {
+  const loader = createSpectrogramLoader(config);
+  madeLoaders.push(loader);
+  return loader;
+}
+
+// Stubs document.visibilityState; the afterEach below restores jsdom's own value.
+function setVisibility(visibility: DocumentVisibilityState) {
+  Object.defineProperty(document, 'visibilityState', {
+    configurable: true,
+    get: () => visibility,
+  });
+}
+
+// Answers status and generate requests by URL, so a test does not depend on exact poll counts.
+function routeFetch(
+  status: () => Promise<unknown>,
+  generate: () => Promise<unknown> = () =>
+    Promise.resolve(mockJsonResponse({ data: { status: 'queued' } }, 202))
+) {
+  mockFetch.mockImplementation((url: string) =>
+    url.includes('/generate') ? generate() : status()
+  );
+}
+
+function statusAnswers(status: string) {
+  return () => Promise.resolve(mockJsonResponse({ data: { status } }));
+}
+
+function fetchCount(kind: 'status' | 'generate'): number {
+  return mockFetch.mock.calls.filter(([url]) => String(url).includes(`/${kind}?`)).length;
+}
+
+// Hides the page long enough for every pending cycle timer to fire and park, then shows it again.
+async function hideAndShow(target: EventTarget = document, eventName = 'visibilitychange') {
+  setVisibility('hidden');
+  await vi.advanceTimersByTimeAsync(1000);
+  setVisibility('visible');
+  target.dispatchEvent(new Event(eventName));
+  await flushAll();
+}
+
 describe('spectrogramLoader', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -77,6 +125,8 @@ describe('spectrogramLoader', () => {
   });
 
   afterEach(() => {
+    for (const loader of madeLoaders.splice(0)) loader.destroy();
+    Reflect.deleteProperty(document, 'visibilityState');
     vi.useRealTimers();
     resetBasePath();
   });
@@ -254,47 +304,46 @@ describe('spectrogramLoader', () => {
       loader.destroy();
     });
 
-    it('retries on failed status then errors after max attempts', async () => {
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+    // A dead clip answers `failed`, or `not_started` once the server evicts the failed
+    // entry, so the generate budget has to hold on both.
+    it.each([
+      [
+        'failed',
+        async () => {
+          await vi.advanceTimersByTimeAsync(2000);
+        },
+      ],
+      [
+        'not_started',
+        async () => {
+          await hideAndShow();
+          await hideAndShow();
+        },
+      ],
+    ])(
+      'sends at most maxGenerateRequests generate requests when the status is %s, then errors',
+      async (status, drive) => {
+        routeFetch(statusAnswers(status));
+        const loader = makeLoader({
+          initialPollIntervalMs: 10,
+          maxPollIntervalMs: 40,
+          maxGenerateRequests: 2,
+        });
+        loader.start(42);
+        await flushAll();
+        await drive();
 
-      const loader = createSpectrogramLoader({
-        initialPollIntervalMs: 100,
-        maxPollIntervalMs: 200,
-        maxPollAttempts: 2,
-      });
-      loader.start(42);
-      await flushAll();
+        expect(fetchCount('generate')).toBe(2);
+        expect(loader.state).toBe('error');
+        expect(loader.error).toBe(true);
 
-      // First failed — retries by re-triggering generation
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'failed' } }));
-      vi.advanceTimersByTime(100);
-      await flushAll();
-      expect(loader.state).toBe('polling');
-
-      // Generation trigger returns queued, poll again
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'queued' } }, 202));
-      await vi.advanceTimersByTimeAsync(200);
-      await flushAll();
-
-      // Second failed — still within budget, retries again
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'failed' } }));
-      await vi.advanceTimersByTimeAsync(200);
-      await flushAll();
-
-      // Generation trigger returns queued
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'queued' } }, 202));
-      await vi.advanceTimersByTimeAsync(200);
-      await flushAll();
-
-      // Third poll — exceeds maxPollAttempts, gives up
-      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'failed' } }));
-      await vi.advanceTimersByTimeAsync(200);
-      await flushAll();
-
-      expect(loader.state).toBe('error');
-      expect(loader.error).toBe(true);
-      loader.destroy();
-    });
+        const fetchCallCount = mockFetch.mock.calls.length;
+        loader.start(42);
+        document.dispatchEvent(new Event('visibilitychange'));
+        await vi.advanceTimersByTimeAsync(1000);
+        expect(mockFetch.mock.calls.length).toBe(fetchCallCount);
+      }
+    );
 
     it('gives up after maxPollAttempts', async () => {
       mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
@@ -335,6 +384,7 @@ describe('spectrogramLoader', () => {
         initialPollIntervalMs: 10,
         maxPollIntervalMs: 10,
         maxPollAttempts: 1,
+        maxGenerateRequests: 1,
       });
       loader.start(42);
       await flushAll();
@@ -608,6 +658,129 @@ describe('spectrogramLoader', () => {
       expect(loader.state).toBe('error');
       expect(loader.error).toBe(true);
       loader.destroy();
+    });
+  });
+
+  describe('hidden page and request budget', () => {
+    it.each([
+      ['visibilitychange', document],
+      ['pageshow', window],
+    ])('resumes a parked poll with a status check on %s', async (eventName, target) => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+      const loader = makeLoader({ initialPollIntervalMs: 100 });
+      loader.start(42);
+      await flushAll();
+      expect(fetchCount('status')).toBe(1);
+
+      setVisibility('hidden');
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      expect(fetchCount('status')).toBe(1);
+
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      setVisibility('visible');
+      target.dispatchEvent(new Event(eventName));
+      await flushAll();
+
+      expect(fetchCount('status')).toBe(2);
+      expect(loader.state).toBe('loading');
+    });
+
+    it('keeps hide and show cycles within the poll budget', async () => {
+      routeFetch(statusAnswers('generating'));
+      const loader = makeLoader({ initialPollIntervalMs: 100, maxPollAttempts: 2 });
+      loader.start(42);
+      await flushAll();
+
+      for (let i = 0; i < 5; i++) {
+        await hideAndShow();
+      }
+
+      // The initial check is not a cycle status check.
+      expect(fetchCount('status') - 1).toBeLessThanOrEqual(2);
+      expect(loader.state).toBe('error');
+    });
+
+    it('parks a failed re-trigger while hidden and sends the generate when visible', async () => {
+      routeFetch(statusAnswers('failed'));
+      const loader = makeLoader({ initialPollIntervalMs: 100, maxGenerateRequests: 1 });
+      loader.start(42);
+      await flushAll();
+
+      setVisibility('hidden');
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(fetchCount('generate')).toBe(0);
+
+      setVisibility('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await flushAll();
+      expect(fetchCount('generate')).toBe(1);
+    });
+
+    it('makes only the first status check when started in a hidden page', async () => {
+      routeFetch(statusAnswers('generating'));
+      setVisibility('hidden');
+      const loader = makeLoader({ initialPollIntervalMs: 100 });
+      loader.start(42);
+      await vi.advanceTimersByTimeAsync(10 * 60 * 1000);
+      expect(fetchCount('status')).toBe(1);
+
+      setVisibility('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await flushAll();
+      expect(fetchCount('status')).toBe(2);
+    });
+
+    it('keeps one visibility listener for all parked loaders and removes it after the last stops', async () => {
+      routeFetch(statusAnswers('generating'));
+      const addSpy = vi.spyOn(document, 'addEventListener');
+      const removeSpy = vi.spyOn(document, 'removeEventListener');
+      const calls = (spy: typeof addSpy) =>
+        spy.mock.calls.filter(([type]) => type === 'visibilitychange').length;
+
+      const parked = [makeLoader(), makeLoader(), makeLoader()];
+      parked.forEach((loader, i) => loader.start(40 + i));
+      await flushAll();
+      setVisibility('hidden');
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(calls(addSpy)).toBe(1);
+
+      parked[0].destroy();
+      parked[1].destroy();
+      expect(calls(removeSpy)).toBe(0);
+      parked[2].destroy();
+      expect(calls(removeSpy)).toBe(1);
+
+      const fetchCallCount = mockFetch.mock.calls.length;
+      setVisibility('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+      await flushAll();
+      expect(mockFetch.mock.calls.length).toBe(fetchCallCount);
+
+      addSpy.mockRestore();
+      removeSpy.mockRestore();
+    });
+
+    it.each([
+      ['stop', 700, 1],
+      ['stop then start', 700, 2],
+    ])('ends the status check backoff after %s', async (label, advanceMs, expectedFetches) => {
+      let statusCalls = 0;
+      routeFetch(() => {
+        statusCalls++;
+        return statusCalls === 1
+          ? Promise.reject(new Error('Network error'))
+          : Promise.resolve(mockJsonResponse({ data: { status: 'generating' } }));
+      });
+      const loader = makeLoader({ maxFetchRetries: 2 });
+      loader.start(42);
+      await flushAll();
+
+      await vi.advanceTimersByTimeAsync(100);
+      loader.stop();
+      if (label === 'stop then start') loader.start(42);
+      await vi.advanceTimersByTimeAsync(advanceMs);
+
+      expect(fetchCount('status')).toBe(expectedFetches);
     });
   });
 

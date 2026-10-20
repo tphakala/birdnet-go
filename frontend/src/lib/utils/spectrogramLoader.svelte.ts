@@ -11,6 +11,10 @@
  * Designed to prevent head-of-line blocking under HTTP/1.1 constraints.
  * Status checks and generation triggers don't use queue slots.
  * Only the final image fetch (confirmed ready on disk) uses a slot.
+ *
+ * The poll cycle pauses while the page is hidden and resumes with one status
+ * check when the page is visible again. Generate requests per start() are
+ * capped by maxGenerateRequests.
  */
 
 import {
@@ -47,6 +51,14 @@ export const SLOW_SLOT_WAIT_WARN_MS = 5000;
 /** An image holding its load slot longer than this before load or error fired. */
 export const LONG_SLOT_HOLD_WARN_MS = 10000;
 
+/**
+ * Generate requests a loader sends per start(): the first plus three re-triggers.
+ * The server waits out the capture window before it reports `failed`, so a
+ * `failed` is either short-lived (file not ready, render interrupted), which a few
+ * retries cover, or permanent (source clip missing), which more retries only repeat.
+ */
+const DEFAULT_MAX_GENERATE_REQUESTS = 4;
+
 /** Logger throttle keys, one per kind of diagnostic warning. */
 const POLL_LATE_THROTTLE_KEY = 'spectrogram-poll-late';
 const STATUS_SLOW_THROTTLE_KEY = 'spectrogram-status-slow';
@@ -76,6 +88,50 @@ function warnIfOver(
   }
 }
 
+function isPageHidden(): boolean {
+  return document.visibilityState === 'hidden';
+}
+
+// Loaders whose poll cycle is parked while the page is hidden. One shared pair of
+// listeners serves all of them and is attached only while at least one is parked,
+// so many cards cost one listener and a skipped destroy() cannot leak one.
+const parkedLoaderResumers = new Set<() => void>();
+let visibilityListenersAttached = false;
+
+function attachVisibilityListeners(): void {
+  document.addEventListener('visibilitychange', resumeParkedLoaders);
+  // A back/forward cache restore may not fire visibilitychange.
+  window.addEventListener('pageshow', resumeParkedLoaders);
+  visibilityListenersAttached = true;
+}
+
+function detachVisibilityListeners(): void {
+  document.removeEventListener('visibilitychange', resumeParkedLoaders);
+  window.removeEventListener('pageshow', resumeParkedLoaders);
+  visibilityListenersAttached = false;
+}
+
+/** Resumes every parked loader once the page is visible; the event also fires on hide. */
+function resumeParkedLoaders(): void {
+  if (isPageHidden()) return;
+  // Clear first so a resumer that parks again re-registers and re-attaches cleanly.
+  const resumers = [...parkedLoaderResumers];
+  parkedLoaderResumers.clear();
+  detachVisibilityListeners();
+  for (const resume of resumers) resume();
+}
+
+function addParkedLoader(resume: () => void): void {
+  parkedLoaderResumers.add(resume);
+  if (!visibilityListenersAttached) attachVisibilityListeners();
+}
+
+function removeParkedLoader(resume: () => void): void {
+  if (parkedLoaderResumers.delete(resume) && parkedLoaderResumers.size === 0) {
+    detachVisibilityListeners();
+  }
+}
+
 /** Loading states for the spectrogram loader state machine */
 export type SpectrogramLoadState =
   | 'idle'
@@ -97,6 +153,8 @@ export interface SpectrogramLoaderConfig {
   maxImageRetries?: number;
   imageRetryDelays?: number[];
   maxFetchRetries?: number;
+  /** Generate requests per `start()`, the first one included. */
+  maxGenerateRequests?: number;
 }
 
 /** Status values returned by the backend */
@@ -112,6 +170,7 @@ const DEFAULT_CONFIG: Required<SpectrogramLoaderConfig> = {
   maxImageRetries: 3,
   imageRetryDelays: [500, 1000, 2000],
   maxFetchRetries: 2,
+  maxGenerateRequests: DEFAULT_MAX_GENERATE_REQUESTS,
 };
 
 /**
@@ -120,6 +179,10 @@ const DEFAULT_CONFIG: Required<SpectrogramLoaderConfig> = {
  * Call `start(detectionId)` when the card becomes visible.
  * Call `stop()` when hidden or destroyed.
  * Read `state`, `spectrogramUrl`, `showSpinner`, `error` for UI binding.
+ *
+ * The poll cycle pauses while the page is hidden and resumes with one status
+ * check when it is visible again. Generate requests per `start()` are capped by
+ * `maxGenerateRequests`.
  *
  * Logs the browser-side diagnostics described above when they are turned on
  * (SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY).
@@ -139,6 +202,10 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   let pollTimer: ReturnType<typeof setTimeout> | undefined;
   let spinnerTimer: ReturnType<typeof setTimeout> | undefined;
   let pollAttempts = 0;
+  let generateRequests = 0;
+  // Bumped by stop() so a status check backoff that outlives its start() ends.
+  let lifecycle = 0;
+  let parkedResume: (() => void) | undefined;
   let currentPollInterval: number = config.initialPollIntervalMs;
   let imageRetryCount = 0;
   let slotHandle: SlotHandle | undefined;
@@ -189,8 +256,105 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
   function resetInternalState(): void {
     pollAttempts = 0;
+    generateRequests = 0;
     currentPollInterval = config.initialPollIntervalMs;
     imageRetryCount = 0;
+  }
+
+  /** Ends the cycle in the sticky error state that start() will not retry for the same detection. */
+  function failPermanently(
+    detectionId: number,
+    message: string,
+    context: Record<string, unknown> = {}
+  ): void {
+    logger.warn(message, { detectionId, ...context });
+    serverStatus = 'failed';
+    state = 'error';
+    hasError = true;
+    showSpinner = false;
+  }
+
+  /** Parks the cycle step that is due; the shared listener runs `resume` once the page is visible. */
+  function park(detectionId: number, resume: () => void): void {
+    logger.debug('Spectrogram polling paused while the page is hidden', { detectionId });
+    parkedResume = resume;
+    addParkedLoader(resumeFromPark);
+  }
+
+  function resumeFromPark(): void {
+    const resume = parkedResume;
+    parkedResume = undefined;
+    if (resume === undefined || destroyed || state !== 'polling') return;
+    resume();
+  }
+
+  function unpark(): void {
+    if (parkedResume !== undefined) {
+      parkedResume = undefined;
+      removeParkedLoader(resumeFromPark);
+    }
+  }
+
+  /**
+   * Arms the next cycle step. If the page is hidden when the timer fires, the step
+   * is parked and `resume` runs when the page is visible again, so a hidden tab
+   * sends no cycle requests. The check is at fire time so an armed delay always elapses.
+   */
+  function scheduleCycleStep(
+    detectionId: number,
+    delayMs: number,
+    run: () => void,
+    resume: () => void
+  ): void {
+    if (isStale(detectionId)) return;
+
+    pollTimer = setTimeout(() => {
+      pollTimer = undefined;
+      if (isStale(detectionId)) return;
+      if (isPageHidden()) {
+        park(detectionId, resume);
+        return;
+      }
+      run();
+    }, delayMs);
+  }
+
+  /** Counts one poll attempt against the cycle budget; false when the budget is spent. */
+  function spendPollAttempt(detectionId: number): boolean {
+    pollAttempts++;
+    if (pollAttempts > config.maxPollAttempts) {
+      failPermanently(detectionId, 'Spectrogram polling timed out', { attempts: pollAttempts });
+      return false;
+    }
+    return true;
+  }
+
+  /** Resumes a parked poll: one status check that also handles a status evicted to not_started. */
+  function resumePoll(detectionId: number): void {
+    if (!spendPollAttempt(detectionId)) return;
+    void checkStatus(detectionId);
+  }
+
+  /**
+   * Re-triggers generation after the server reported `failed`. The server waits out
+   * the capture window before it fails, so a few retries cover short-lived failures
+   * and the generate budget ends a permanent one.
+   */
+  function retryAfterFailedStatus(detectionId: number): void {
+    if (generateRequests >= config.maxGenerateRequests) {
+      failPermanently(detectionId, 'Spectrogram generation failed on server after retries', {
+        generateRequests,
+      });
+      return;
+    }
+    logger.debug('Spectrogram generation failed, retrying', { detectionId, generateRequests });
+    state = 'polling';
+    const delay = Math.min(
+      config.initialPollIntervalMs * Math.pow(2, generateRequests),
+      config.maxPollIntervalMs
+    );
+    const trigger = () => void triggerGeneration(detectionId);
+    scheduleCycleStep(detectionId, delay, trigger, trigger);
   }
 
   function startSpinnerDelay(): void {
@@ -234,6 +398,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
     state = 'checking';
 
+    const myLifecycle = lifecycle;
     let fetchRetries = 0;
     while (fetchRetries <= config.maxFetchRetries) {
       try {
@@ -277,30 +442,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
             return;
 
           case 'failed':
-            // Treat as transient if we still have poll budget — the audio file
-            // may not have been written yet when generation was attempted.
-            // Retry the full generation cycle after a delay.
-            if (pollAttempts < config.maxPollAttempts) {
-              pollAttempts++;
-              logger.debug('Spectrogram generation failed, retrying (audio may not be ready)', {
-                detectionId,
-                attempt: pollAttempts,
-              });
-              currentPollInterval = Math.min(
-                config.initialPollIntervalMs * Math.pow(2, Math.min(pollAttempts, 4)),
-                config.maxPollIntervalMs
-              );
-              pollTimer = setTimeout(() => {
-                if (isStale(detectionId)) return;
-                void triggerGeneration(detectionId);
-              }, currentPollInterval);
-              state = 'polling';
-              return;
-            }
-            logger.warn('Spectrogram generation failed on server after retries', { detectionId });
-            state = 'error';
-            hasError = true;
-            showSpinner = false;
+            retryAfterFailedStatus(detectionId);
             return;
 
           default:
@@ -321,13 +463,23 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
           return;
         }
         await new Promise(resolve => setTimeout(resolve, 500 * fetchRetries));
-        if (isStale(detectionId)) return;
+        if (isStale(detectionId) || myLifecycle !== lifecycle) return;
       }
     }
   }
 
   async function triggerGeneration(detectionId: number): Promise<void> {
     if (isStale(detectionId)) return;
+
+    // The single place a generate request is sent, so every path that asks for one
+    // (failed, not_started, unknown status, resume) is counted.
+    if (generateRequests >= config.maxGenerateRequests) {
+      failPermanently(detectionId, 'Spectrogram generation failed on server after retries', {
+        generateRequests,
+      });
+      return;
+    }
+    generateRequests++;
 
     state = 'triggering';
     abortController = new AbortController();
@@ -385,44 +537,39 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
     state = 'polling';
     currentPollInterval = config.initialPollIntervalMs;
-    // Note: pollAttempts is NOT reset here — it accumulates across the entire
-    // start() lifecycle so that failed-status retries properly count toward
-    // the maxPollAttempts budget. It is reset in resetInternalState() when
-    // start() is called with a new detection or after a fresh user action.
+    // Note: pollAttempts and generateRequests are NOT reset here. pollAttempts
+    // counts cycle status checks (timer polls and resumes) and generateRequests
+    // counts generate requests across the entire start() lifecycle. Both are reset
+    // in resetInternalState() when start() is called with a new detection or after
+    // a fresh user action.
     schedulePoll(detectionId);
   }
 
   function schedulePoll(detectionId: number): void {
-    if (isStale(detectionId)) return;
-
     const interval = currentPollInterval;
     const scheduledAt = Date.now();
-    pollTimer = setTimeout(() => {
-      const lateMs = Date.now() - scheduledAt - interval;
-      warnIfOver(
-        lateMs,
-        LATE_POLL_TIMER_WARN_MS,
-        'Spectrogram poll timer fired late',
-        { detectionId, intervalMs: interval, lateMs, visibility: document.visibilityState },
-        POLL_LATE_THROTTLE_KEY
-      );
-      void pollOnce(detectionId);
-    }, interval);
+    scheduleCycleStep(
+      detectionId,
+      interval,
+      () => {
+        const lateMs = Date.now() - scheduledAt - interval;
+        warnIfOver(
+          lateMs,
+          LATE_POLL_TIMER_WARN_MS,
+          'Spectrogram poll timer fired late',
+          { detectionId, intervalMs: interval, lateMs, visibility: document.visibilityState },
+          POLL_LATE_THROTTLE_KEY
+        );
+        void pollOnce(detectionId);
+      },
+      () => resumePoll(detectionId)
+    );
   }
 
   async function pollOnce(detectionId: number): Promise<void> {
     if (isStale(detectionId)) return;
 
-    pollAttempts++;
-
-    if (pollAttempts > config.maxPollAttempts) {
-      logger.warn('Spectrogram polling timed out', { detectionId, attempts: pollAttempts });
-      serverStatus = 'failed';
-      state = 'error';
-      hasError = true;
-      showSpinner = false;
-      return;
-    }
+    if (!spendPollAttempt(detectionId)) return;
 
     abortController = new AbortController();
 
@@ -453,27 +600,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
         }
 
         if (status === 'failed') {
-          // Don't give up immediately — audio file may not have been ready.
-          // Re-trigger generation if we still have poll budget.
-          if (pollAttempts < config.maxPollAttempts) {
-            logger.debug('Spectrogram failed during poll, re-triggering generation', {
-              detectionId,
-              attempt: pollAttempts,
-            });
-            currentPollInterval = Math.min(
-              config.initialPollIntervalMs * Math.pow(2, Math.min(pollAttempts, 4)),
-              config.maxPollIntervalMs
-            );
-            pollTimer = setTimeout(() => {
-              if (isStale(detectionId)) return;
-              void triggerGeneration(detectionId);
-            }, currentPollInterval);
-            return;
-          }
-          logger.warn('Spectrogram generation failed after retries', { detectionId });
-          state = 'error';
-          hasError = true;
-          showSpinner = false;
+          retryAfterFailedStatus(detectionId);
           return;
         }
       }
@@ -548,6 +675,8 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   }
 
   function stop(): void {
+    lifecycle++;
+    unpark();
     clearTimers();
     abortPending();
     releaseCurrentSlot('stop');
