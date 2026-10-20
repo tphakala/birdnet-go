@@ -151,12 +151,17 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 
 // captureWriteDiagnostics describes one Write for debug logging: the pause since
 // the previous write, whether this write completed the first lap of the ring,
-// and the lag of the written audio behind wall-clock time since the first write.
+// and, only when one of those is logged, the lag of the written audio behind
+// wall-clock time since the first write.
 type captureWriteDiagnostics struct {
 	gap      time.Duration
 	firstLap bool
-	elapsed  time.Duration
 	lag      time.Duration
+}
+
+// logged reports whether this write produces a debug line.
+func (d captureWriteDiagnostics) logged() bool {
+	return d.firstLap || d.gap > captureWriteGapLogThreshold
 }
 
 // log emits the debug lines for a write gap and for the first completed lap.
@@ -170,7 +175,6 @@ func (d captureWriteDiagnostics) log(source string) {
 	if d.firstLap {
 		getLogger().Debug("capture buffer completed its first lap",
 			logger.String("source", source),
-			logger.Int64("elapsed_ms", d.elapsed.Milliseconds()),
 			logger.Int64("lag_ms", d.lag.Milliseconds()))
 	}
 }
@@ -241,8 +245,9 @@ func (cb *CaptureBuffer) write(data []byte) captureWriteDiagnostics {
 		cb.startTime = now.Add(-cb.bufferDuration)
 	}
 
-	diag.elapsed = now.Sub(cb.firstWriteTime)
-	diag.lag = cb.lagSinceFirstWrite(now)
+	if diag.logged() {
+		diag.lag = cb.lagSinceFirstWrite(now)
+	}
 	return diag
 }
 
@@ -349,7 +354,6 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 				logger.Time("requested_start", startTime),
 				logger.Time("requested_end", endTime),
 				logger.Time("buffer_start", cb.startTime),
-				logger.Int64("written_ms", cb.writtenDuration(int64(cb.writtenBytes)).Milliseconds()),
 				logger.Int64("lag_ms", cb.lagSinceFirstWrite(time.Now()).Milliseconds()),
 			)
 			return nil, fmt.Errorf("capture_buffer_read_segment during warmup: %w", ErrInsufficientData)

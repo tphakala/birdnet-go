@@ -19,59 +19,66 @@ const (
 	diagChunkBytes     = diagSampleRate * diagBytesPerSample
 )
 
-// TestCaptureBufferWriteDiagnosticsGapAndLag checks the gap and lag a write
-// reports: steady one-second chunks keep the lag at minus one chunk (the first
-// chunk is mapped to the time of its own write), and a stall of three extra
-// seconds shows as a four-second gap and a lag that grows by three seconds.
+// newDiagBuffer returns an empty test buffer and a one-second chunk for it.
+func newDiagBuffer(t *testing.T) (cb *CaptureBuffer, chunk []byte) {
+	t.Helper()
+	cb, err := NewCaptureBuffer(diagSeconds, diagSampleRate, diagBytesPerSample, "diag-test")
+	require.NoError(t, err)
+	return cb, make([]byte, diagChunkBytes)
+}
+
+// TestCaptureBufferWriteDiagnosticsGapAndLag checks the gap a write reports and
+// that the lag is only computed for a logged write: steady one-second chunks
+// log nothing, while a stall of three extra seconds shows as a four-second gap
+// with the written audio two seconds behind (5 s elapsed, 3 s written, and the
+// first chunk mapped to the time of its own write).
 func TestCaptureBufferWriteDiagnosticsGapAndLag(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		cb, err := NewCaptureBuffer(diagSeconds, diagSampleRate, diagBytesPerSample, "diag-test")
-		require.NoError(t, err)
-		chunk := make([]byte, diagChunkBytes)
+		cb, chunk := newDiagBuffer(t)
 
 		first := cb.write(chunk)
 		assert.Zero(t, first.gap, "the first write has no previous write")
-		assert.Equal(t, -time.Second, first.lag)
+		assert.False(t, first.logged())
 
 		time.Sleep(time.Second)
 		steady := cb.write(chunk)
 		assert.Equal(t, time.Second, steady.gap)
-		assert.Equal(t, -time.Second, steady.lag)
+		assert.False(t, steady.logged())
+		assert.Zero(t, steady.lag, "lag is not computed for a write that logs nothing")
 
 		time.Sleep(4 * time.Second)
 		stalled := cb.write(chunk)
+		assert.True(t, stalled.logged())
 		assert.Equal(t, 4*time.Second, stalled.gap)
-		assert.Equal(t, 2*time.Second, stalled.lag, "5 s elapsed, 3 s of audio written")
+		assert.Equal(t, 2*time.Second, stalled.lag)
 	})
 }
 
 // TestCaptureBufferWriteDiagnosticsFirstLapOnce checks that exactly one write,
 // the one that wraps the ring for the first time, reports the first lap, and
-// that it carries the elapsed time since the first write.
+// that steady capture reaches it at minus one chunk of lag.
 func TestCaptureBufferWriteDiagnosticsFirstLapOnce(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		cb, err := NewCaptureBuffer(diagSeconds, diagSampleRate, diagBytesPerSample, "diag-test")
-		require.NoError(t, err)
-		chunk := make([]byte, diagChunkBytes)
+		cb, chunk := newDiagBuffer(t)
 
 		var laps []int
-		var lapElapsed time.Duration
+		var lapLag time.Duration
 		for i := range 12 {
 			if i > 0 {
 				time.Sleep(time.Second)
 			}
 			if d := cb.write(chunk); d.firstLap {
 				laps = append(laps, i)
-				lapElapsed = d.elapsed
+				lapLag = d.lag
 			}
 		}
 
 		require.Equal(t, []int{4}, laps, "only the fifth write completes the first lap")
-		assert.Equal(t, 4*time.Second, lapElapsed)
+		assert.Equal(t, -time.Second, lapLag)
 	})
 }
 
@@ -81,9 +88,7 @@ func TestCaptureBufferResetClearsWriteDiagnostics(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
-		cb, err := NewCaptureBuffer(diagSeconds, diagSampleRate, diagBytesPerSample, "diag-test")
-		require.NoError(t, err)
-		chunk := make([]byte, diagChunkBytes)
+		cb, chunk := newDiagBuffer(t)
 
 		cb.write(chunk)
 		time.Sleep(10 * time.Second)
@@ -91,6 +96,6 @@ func TestCaptureBufferResetClearsWriteDiagnostics(t *testing.T) {
 
 		after := cb.write(chunk)
 		assert.Zero(t, after.gap)
-		assert.Equal(t, -time.Second, after.lag)
+		assert.False(t, after.logged())
 	})
 }
