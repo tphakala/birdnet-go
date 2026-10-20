@@ -16,6 +16,7 @@ import (
 	mp3pcm "github.com/tphakala/go-mp3/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -23,6 +24,11 @@ const (
 	testToneHz     = 1000.0
 	testBitrate    = 96
 )
+
+// tagFrameBytes is the size of the leading Xing/Info tag frame, which has the
+// size of an MPEG-1 Layer III audio frame at testBitrate and testSampleRate:
+// 144 * 96000 / 48000.
+const tagFrameBytes = 288
 
 // tonePCM builds interleaved little-endian mono int16 PCM holding a sine wave at
 // freq Hz. A pure tone survives lossy coding well enough that its energy stays
@@ -106,16 +112,17 @@ func TestEncodePCM_RoundTripsAudibleTone(t *testing.T) {
 	got, rate, channels := decodeMP3(t, out)
 	assert.Equal(t, testSampleRate, rate)
 	assert.Equal(t, 1, channels)
-	// go-mp3 emits a tagless stream, so decode adds priming rather than trimming
-	// it: the decoded clip is at least as long as the source second.
-	assert.Greater(t, len(got), testSampleRate-4096, "decoded clip is too short")
+	// The stream carries a gapless tag, so the decoder trims the encoder priming
+	// and the end padding and returns exactly the encoded length.
+	assert.Len(t, got, testSampleRate, "the gapless tag restores the encoded length")
 	assert.Greater(t, toneEnergyRatio(got, testSampleRate, testToneHz), 0.8,
 		"decoded audio should still be dominated by the source tone")
 }
 
-// The MP3 output is a bare frame stream with no container: it must start with an
-// MPEG-1 Layer III frame sync (0xFF 0xFB), not an ID3 or Xing tag.
-func TestEncodePCM_WritesMP3FrameStream(t *testing.T) {
+// The MP3 output is a bare frame stream with no container. It starts with an
+// MPEG-1 Layer III frame sync (0xFF 0xFB): the first frame is the Xing/Info tag
+// frame, which carries a normal frame header, and holds the gapless LAME tag.
+func TestEncodePCM_WritesTaggedMP3FrameStream(t *testing.T) {
 	t.Parallel()
 	out := filepath.Join(t.TempDir(), "clip.mp3")
 	require.NoError(t, EncodePCM(t.Context(), &Options{
@@ -132,6 +139,11 @@ func TestEncodePCM_WritesMP3FrameStream(t *testing.T) {
 	require.Greater(t, len(b), 4, "MP3 stream truncated")
 	assert.Equal(t, byte(0xFF), b[0], "MP3 stream must start with a frame sync byte")
 	assert.Equal(t, byte(0xE0), b[1]&0xE0, "second byte must carry the 11-bit frame sync")
+
+	require.Greater(t, len(b), tagFrameBytes, "the tag frame must be complete")
+	tagFrame := b[:tagFrameBytes]
+	assert.Contains(t, string(tagFrame), "Info", "the first frame must be a CBR Info tag")
+	assert.Contains(t, string(tagFrame), "LAME", "the Info tag must carry the gapless LAME tag")
 }
 
 func TestEncodePCM_AppliesGain(t *testing.T) {
@@ -168,7 +180,7 @@ func TestEncodePCM_DoesNotMutateSource(t *testing.T) {
 	copy(original, pcm)
 
 	// Both gain paths: -3 dB copies the buffer, 0 dB hands the caller's slice
-	// straight to the library (pcmgain.Applied is zero-copy there).
+	// straight to the library (gain.AppliedBytes is zero-copy at 0 dB).
 	for _, gainDB := range []float64{-3, 0} {
 		require.NoError(t, EncodePCM(t.Context(), &Options{
 			PCMData:     pcm,
@@ -337,8 +349,8 @@ func TestSupports_BitDepthAndChannels(t *testing.T) {
 	require.Error(t, Supports(48000, 8, 1))
 	// go-mp3 reads int16 only, and the shared gain/loudness path is int16-only
 	// too, so wider depths must be rejected rather than silently reinterpreted.
-	require.Error(t, Supports(48000, 24, 1), "24-bit must be rejected: pcmgain is int16-only")
-	require.Error(t, Supports(48000, 32, 1), "32-bit must be rejected: pcmgain is int16-only")
+	require.Error(t, Supports(48000, 24, 1), "24-bit must be rejected: gain and loudnorm are int16-only")
+	require.Error(t, Supports(48000, 32, 1), "32-bit must be rejected: gain and loudnorm are int16-only")
 	require.NoError(t, Supports(48000, 16, 2))
 	require.Error(t, Supports(48000, 16, 0))
 	require.Error(t, Supports(48000, 16, 3))
@@ -456,4 +468,26 @@ func rms(samples []int16) float64 {
 		sum += float64(v) * float64(v)
 	}
 	return math.Sqrt(sum / float64(len(samples)))
+}
+
+// A NaN gain cannot be turned into a scale factor: the encoder reports a
+// validation error from the gain step and leaves no output file.
+func TestEncodePCM_NaNGainFailsAtGainInit(t *testing.T) {
+	t.Parallel()
+	out := filepath.Join(t.TempDir(), "clip.mp3")
+	err := EncodePCM(t.Context(), &Options{
+		PCMData:     tonePCM(t, testSampleRate, 0.25, testToneHz),
+		OutputPath:  out,
+		SampleRate:  testSampleRate,
+		Channels:    1,
+		BitDepth:    16,
+		BitrateKbps: testBitrate,
+		GainDB:      math.NaN(),
+	})
+	require.Error(t, err)
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok, "want an enhanced error, got %T", err)
+	assert.Equal(t, string(errors.CategoryValidation), enhanced.GetCategory())
+	assert.Equal(t, "mp3_gain_init", enhanced.GetContext()["operation"])
+	assert.NoFileExists(t, out)
 }

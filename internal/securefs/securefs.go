@@ -469,6 +469,42 @@ func (sfs *SecureFS) StatRel(relPath string) (fs.FileInfo, error) {
 	})
 }
 
+// OpenRegularRel opens a regular file for reading, named by a path relative to
+// the base directory. The open happens inside the os.Root, so neither ".." nor
+// a symlink pointing outside the base directory can escape it, and the stat
+// cache is not consulted: the regular-file decision is made on the opened
+// handle. On unix the open does not block on a FIFO; a FIFO, device node or
+// other non-regular file is closed again and reported as ErrNotRegularFile.
+// Opening a slow block device can still block in the kernel before that check.
+//
+// Errors from validation and from the os.Root are returned unwrapped, so
+// callers can match fs.ErrNotExist and fs.ErrPermission. The caller owns the
+// returned file and must close it. Its offset is at 0.
+func (sfs *SecureFS) OpenRegularRel(relPath string) (*os.File, error) {
+	validatedRelPath, err := sfs.ValidateRelativePath(relPath)
+	if err != nil {
+		return nil, err
+	}
+
+	// No enhanced error here: a missing clip is expected and must not raise a
+	// telemetry report (see ServeRelativeFile).
+	f, err := sfs.root.OpenFile(validatedRelPath, openRegularFlags, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("stat %s: %w", validatedRelPath, err)
+	}
+	if !info.Mode().IsRegular() {
+		_ = f.Close()
+		return nil, fmt.Errorf("open %s: %w", validatedRelPath, ErrNotRegularFile)
+	}
+	return f, nil
+}
+
 // Exists checks if a path exists with validation
 func (sfs *SecureFS) Exists(path string) (bool, error) {
 	// Get relative path for os.Root operations

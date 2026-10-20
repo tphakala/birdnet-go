@@ -47,6 +47,18 @@ func TestPrivacyFilterMetrics_VADRecorders(t *testing.T) {
 	assert.Equal(t, 1, testutil.CollectAndCount(m.vadInferenceDuration), "one histogram series")
 }
 
+func TestPrivacyFilterMetrics_RecordUnscannedSave(t *testing.T) {
+	t.Parallel()
+	registry := prometheus.NewRegistry()
+	m, err := NewPrivacyFilterMetrics(registry)
+	require.NoError(t, err)
+
+	m.RecordUnscannedSave()
+	m.RecordUnscannedSave()
+
+	assert.InDelta(t, 2.0, testutil.ToFloat64(m.unscannedSavesTotal), 0.0001)
+}
+
 // TestPrivacyFilterMetrics_Collect proves the collector exposes every metric it
 // owns, so a metric silently dropped from Describe/Collect (and thus from
 // /metrics) is caught rather than passing by asserting fields directly.
@@ -61,10 +73,12 @@ func TestPrivacyFilterMetrics_Collect(t *testing.T) {
 	m.RecordVADSpeechHit()
 	m.ObserveVADInference(0.003)
 	m.SetVADLastSpeechProbability(0.4)
+	m.RecordUnscannedSave()
 
 	// discardsTotal(1) + vadSpeechHitsTotal(1) + vadInferenceDuration(1) +
-	// vadLastSpeechProbability(1) = 4 series exposed through the registered collector.
-	assert.Equal(t, 4, testutil.CollectAndCount(m), "all four metrics must be collected")
+	// vadLastSpeechProbability(1) + unscannedSavesTotal(1) = 5 series exposed
+	// through the registered collector.
+	assert.Equal(t, 5, testutil.CollectAndCount(m), "all five metrics must be collected")
 }
 
 // TestPrivacyFilterMetrics_NilSafe proves the recorders no-op on a nil group so
@@ -77,5 +91,6 @@ func TestPrivacyFilterMetrics_NilSafe(t *testing.T) {
 		m.RecordVADSpeechHit()
 		m.ObserveVADInference(0.01)
 		m.SetVADLastSpeechProbability(0.5)
+		m.RecordUnscannedSave()
 	})
 }

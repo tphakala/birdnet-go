@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro falsi positivi può richiedere meno conferme. Le impostazioni salvate non cambiano; vedi Impostazioni > Analisi.",
         "cadenceOverloadedTitle": "Questo dispositivo non riesce a tenere il passo con l'analisi audio",
         "cadenceOverloadedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} supera la capacità misurata di questo dispositivo anche senza sovrapposizione, quindi l'analisi può accumulare ritardo e alcuni rilevamenti possono andare persi. Attiva meno modelli o sorgenti audio, oppure scegli una variante del modello più veloce."
+      },
+      "storage": {
+        "notPersistentTitle": "I dati andranno persi quando il container viene ricreato",
+        "notPersistentMessage": "Questi percorsi si trovano su uno spazio di archiviazione che viene eliminato quando il container viene ricreato, ad esempio durante un aggiornamento dell'immagine: {paths}. Associa loro un volume o una directory dell'host nella configurazione del container.",
+        "anonymousVolumeTitle": "I dati sono archiviati in un volume anonimo del container",
+        "anonymousVolumeMessage": "Questi percorsi si trovano in volumi anonimi creati dal runtime del container perché non era stato associato alcun volume: {paths}. Un container avviato da zero, ad esempio con docker run dopo un aggiornamento dell'immagine, riceve nuovi volumi vuoti, quindi i dati sembrano persi. Associa loro un volume con nome o una directory dell'host."
       }
     },
     "loading": "Caricamento notifiche..."
@@ -2310,7 +2316,9 @@
       "saveAriaLabel": "Salva Modifiche",
       "savingAriaLabel": "Salvataggio modifiche...",
       "unsavedChanges": "Modifiche non salvate",
-      "toolbar": "Azioni impostazioni"
+      "toolbar": "Azioni impostazioni",
+      "validationBlocked": "Alcuni campi richiedono attenzione prima di poter salvare.",
+      "noChangesToSave": "Nessuna modifica da salvare."
     },
     "errors": {
       "loadFailed": "Caricamento delle impostazioni non riuscito",
@@ -2764,7 +2772,7 @@
           "title": "Cosa è incluso nel rapporto:",
           "applicationLogs": "**Log applicazione** - Errori recenti e informazioni debug",
           "configuration": "**Configurazione** - Le tue impostazioni con dati sensibili rimossi",
-          "systemInfo": "**Informazioni sistema** - Versione OS, memoria e dettagli runtime",
+          "systemInfo": "**Informazioni sistema** - Versione OS, memoria, hardware, dispositivi USB collegati e schede audio, e dettagli runtime",
           "notIncluded": "**NON incluso** - File audio, rilevamenti uccelli o dati personali"
         },
         "userMessage": {
@@ -2917,6 +2925,11 @@
             "unit": "min",
             "helpText": "Previene notifiche ripetute per la stessa specie entro questa finestra temporale. Imposta a 0 per disabilitare."
           }
+        },
+        "rulesNotice": {
+          "message": "Le notifiche push dei rilevamenti provengono dalle regole di allerta nella scheda Regole. Le regole di rilevamento predefinite notificano solo nell'app. Per ricevere notifiche push, aggiungi l'azione {pushAction} alla regola {ruleName}, oppure crea una regola per l'evento {eventName} con una condizione di confidenza e un tempo di attesa.",
+          "previousFilters": "Le regole di allerta non usano le impostazioni Confidenza Minima ({confidence} %) e Raffreddamento Specie ({minutes} min) definite qui.",
+          "openRules": "Apri Regole"
         },
         "noProviders": "Nessun fornitore configurato",
         "noProvidersDescription": "Aggiungi un fornitore per iniziare a ricevere notifiche push",
@@ -3184,7 +3197,7 @@
         "vadEnable": "Attiva Protezione Privacy (Silero VAD)",
         "vadHelp": "Esegue un modello neurale dedicato di rilevamento vocale accanto al classificatore per un filtraggio vocale affidabile. Consuma risorse di sistema aggiuntive (circa 20-30 MB di RAM e inferenza CPU per segmento).",
         "vadThresholdLabel": "Soglia Protezione Privacy",
-        "vadThresholdHelp": "Soglia di sensibilità per il rilevatore di attività vocale (predefinito 0.35). Valori inferiori rendono il filtro più sensibile a voci flebili o distanti."
+        "vadThresholdHelp": "Soglia di sensibilità per il rilevatore di attività vocale (predefinito 0.6). Valori inferiori rendono il filtro più sensibile a voci flebili o distanti."
       },
       "falsePositivePrevention": {
         "title": "Prevenzione Falsi Positivi",
@@ -3736,6 +3749,8 @@
         "frequencyResponse": "Risposta Frequenza",
         "cutoffFrequency": "Frequenza Taglio",
         "cutoffFrequencyHelp": "Frequenza alla quale il filtro inizia ad attenuare segnali. Richiami uccelli variano tipicamente da 1-10 kHz.",
+        "centerFrequency": "Frequenza centrale",
+        "bandwidth": "Larghezza di banda",
         "qFactor": "Fattore Q",
         "qFactorHelp": "Fattore qualità controlla la nitidezza del filtro. Valori più bassi (0.1-1) creano pendenze più dolci, valori più alti (1-10) creano tagli più ripidi.",
         "gain": "Guadagno",
@@ -3743,17 +3758,31 @@
         "attenuation": "Attenuazione",
         "attenuationHelp": "Tasso attenuazione filtro. Valori più alti forniscono attenuazione più ripida delle frequenze filtrate.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Disattivato",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Aggiungi più filtri per modellare la risposta in frequenza per rilevamento ottimale uccelli nel tuo ambiente.",
+        "emptyEntryRestored": "Inserisci un numero. È stato mantenuto il valore precedente.",
         "graph": {
           "flatResponse": "Risposta Piatta (Nessun Filtro Applicato)",
           "frequency": "Frequenza (Hz)",
-          "gain": "Guadagno (dB)"
+          "gain": "Guadagno (dB)",
+          "loading": "Calcolo della risposta in frequenza...",
+          "updating": "Aggiornamento della risposta in frequenza...",
+          "error": "Impossibile calcolare la risposta in frequenza. Si aggiorna quando modifichi un filtro o selezioni Riprova.",
+          "sampleRate": "Calcolata per una frequenza di campionamento di {rate} Hz.",
+          "clipped": "La risposta raggiunge un picco di {peak} dB, sopra il bordo superiore del grafico.",
+          "skippedHeading": "{count, plural, one {# filtro non viene applicato all'audio} other {# filtri non vengono applicati all'audio}}",
+          "skippedReasons": {
+            "unknown_type": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: questo tipo di filtro non è supportato.",
+            "invalid_parameters": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: le sue impostazioni non sono valide a {rate} Hz.",
+            "add_failed": "Il filtro {number} ({type}, {frequency} Hz) viene saltato: non è stato possibile aggiungerlo alla catena di filtri.",
+            "unknown": "Il filtro {number} ({type}, {frequency} Hz) viene saltato."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3922,7 +3951,7 @@
       "allowSubnetBypassLabel": "Consenti Accesso da Sottorete per Bypassare Autenticazione",
       "subnetBypassLocalNote": "Quando è attivo, i client sulla stessa rete locale di questo server sono considerati attendibili automaticamente e saltano l'accesso. Usa il campo sottostante solo per estendere questa fiducia ad altre reti (ad esempio una VLAN separata o una sottorete instradata).",
       "allowedSubnetsLabel": "Sottoreti Consentite",
-      "allowedSubnetsHelp": "Intervalli di rete aggiuntivi che possono bypassare l'accesso, oltre alla rete locale di questo server. Notazione CIDR, separati da virgole.",
+      "allowedSubnetsHelp": "Intervalli di rete aggiuntivi che possono bypassare l'accesso, oltre alla rete locale di questo server. Usa la notazione CIDR, come 192.168.10.0/24.",
       "securityWarningTitle": "Avviso Sicurezza:",
       "subnetWarningText": "La rete locale di questo server e tutte le sottoreti elencate qui ottengono accesso completo senza effettuare l'accesso. Includi solo reti di cui ti fidi completamente.",
       "httpsSettingsTitle": "Impostazioni HTTPS",
@@ -4150,6 +4179,77 @@
         "downloadCertificate": "Scarica certificato",
         "downloadCertificateHelp": "Installa questo certificato nell'archivio certificati del tuo sistema operativo per evitare avvisi di sicurezza del browser.",
         "fileReadError": "Impossibile leggere il file selezionato"
+      },
+      "reverseProxy": {
+        "title": "Proxy inverso",
+        "description": "Per l'accesso tramite nginx, Caddy, Traefik, Cloudflare o un altro proxy",
+        "listLabel": "Proxy attendibili",
+        "listHelp": "Aggiungi l'indirizzo di ciascun proxy davanti a BirdNET-Go. Con Docker questo è spesso l'indirizzo del gateway Docker, come 172.17.0.1.",
+        "placeholder": "Per esempio, 172.17.0.1",
+        "emptyState": "Nessun proxy attendibile. BirdNET-Go utilizza l'indirizzo che si collega ad esso.",
+        "emptyStateCloudflareOnly": "Solo gli indirizzi edge pubblicati da Cloudflare sono attendibili. Non è elencato nessun altro proxy.",
+        "rangeBadge": "Intervallo",
+        "ruleOwnAddress": "Elenca l'indirizzo specifico di ciascun proxy. Non elencare mai un intervallo che include anche i computer da cui navighi.",
+        "ruleHeaders": "Il proxy deve aggiungere l'indirizzo del client a X-Forwarded-For o sovrascrivere X-Real-IP.",
+        "cloudflareLabel": "Considera attendibile Cloudflare",
+        "cloudflareHelp": "Attiva questa opzione se il tuo sito è servito tramite Cloudflare. BirdNET-Go considererà attendibili gli indirizzi edge pubblicati da Cloudflare.",
+        "check": {
+          "title": "La tua connessione",
+          "recheck": "Verifica di nuovo",
+          "checking": "Verifica della connessione in corso",
+          "error": "Impossibile verificare la connessione.",
+          "stale": "Questo controllo mostra le impostazioni salvate. Salva per verificare le modifiche.",
+          "trust": "Considera attendibile {peer}",
+          "trustWarning": "Considera attendibile {peer} solo se è il tuo reverse proxy, non il computer da cui stai navigando.",
+          "trustWithCloudflare": "Considera attendibili {peer} e Cloudflare",
+          "cloudflareInFront": "Cloudflare si trova davanti a {peer}. Considera attendibili entrambi per verificare il tuo indirizzo.",
+          "cloudflareEdge": "{peer} appartiene a Cloudflare. Attiva Considera attendibile Cloudflare qui sotto.",
+          "chainHint": "Se un altro proxy si trova davanti a {peer}, inserisci anche quello nell'elenco.",
+          "added": "Aggiunto all'elenco. Salva per applicare.",
+          "coveredBy": "Già coperto da {range} nell'elenco. Salva per applicare.",
+          "selfClientCause": "Il proxy potrebbe inoltrare il proprio indirizzo come client, spesso perché la pubblicazione delle porte del container nasconde il client reale. Correggi la configurazione di rete del container o del proxy."
+        },
+        "status": {
+          "direct": {
+            "title": "Connesso direttamente",
+            "body": "Il tuo browser si connette a BirdNET-Go direttamente da {peer}.",
+            "bodyNoPeer": "Il tuo browser si connette a BirdNET-Go direttamente.",
+            "hint": "Se usi un reverse proxy e {peer} è il suo indirizzo, configura il proxy per inviare X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Connesso tramite un proxy attendibile",
+            "body": "La tua connessione passa attraverso {peer}, che è attendibile. Il tuo indirizzo {client} è stato verificato.",
+            "hint": "Se {client} è un altro proxy anziché il tuo computer, inserisci anche quel proxy nell'elenco."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Impossibile verificare il tuo indirizzo",
+            "body": "{peer} è attendibile, ma l'indirizzo che inoltra non può essere verificato. Cause comuni:",
+            "causeRange": "Un intervallo elencato contiene anche il tuo computer, quindi nessun indirizzo nella catena conta come tuo.",
+            "causeHeaders": "Il proxy non aggiunge X-Forwarded-For né sovrascrive X-Real-IP.",
+            "causeConflict": "Il proxy invia intestazioni di indirizzo contrastanti o ripetute, o solo un'intestazione Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Connesso tramite un proxy pubblico",
+            "body": "La tua connessione passa attraverso {peer}, un indirizzo pubblico. Gli indirizzi pubblici non sono mai offerti per l'approvazione con un clic. Aggiungine uno manualmente solo se sei sicuro che sia il tuo proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Connesso tramite un proxy non attendibile",
+            "body": "La tua connessione passa attraverso un proxy su {peer} che non è attendibile, quindi BirdNET-Go non può verificare il tuo indirizzo."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Le intestazioni del proxy non possono essere verificate",
+            "body": "La tua connessione passa attraverso {peer}, ma le intestazioni di indirizzo che invia non potrebbero essere verificate anche se fosse attendibile.",
+            "bodyNoPeer": "La tua connessione passa attraverso un proxy, ma non è stato possibile leggere il suo indirizzo.",
+            "fix": "Configura il proxy per aggiungere X-Forwarded-For o sovrascrivere X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Dietro un reverse proxy, questo bypass funziona solo se il proxy è elencato come attendibile.",
+      "bypassProxyLink": "Configura proxy attendibili",
+      "allowedSubnetsEmpty": "Nessuna sottorete aggiuntiva. Solo la rete locale di questo server può bypassare l'accesso.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} contiene una voce non valida.",
+        "pendingEntry": "{tab}: {field} contiene testo non aggiunto. Premi Invio o Aggiungi, oppure cancellalo."
       }
     },
     "species": {
@@ -4908,6 +5008,28 @@
         "dragToReorder": "Trascina per riordinare {species}",
         "edit": "Modifica specie",
         "remove": "Rimuovi specie"
+      }
+    },
+    "networkAddressList": {
+      "add": "Aggiungi",
+      "remove": "Rimuovi {address}",
+      "empty": "Nessun indirizzo ancora aggiunto.",
+      "pendingHint": "Premi Invio o Aggiungi per aggiungere questo indirizzo.",
+      "limitReached": "La lista è piena ({max} voci).",
+      "rowDuplicate": "Duplicato",
+      "rowInvalid": {
+        "cidr": "Intervallo non valido",
+        "ip": "Indirizzo IP non valido",
+        "ipOrCidr": "Indirizzo o intervallo non valido"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Intervallo non valido: {values}. Usa un intervallo come 192.168.1.0/24.",
+          "ip": "Indirizzo IP non valido: {values}. Usa un indirizzo come 192.168.1.10.",
+          "ipOrCidr": "Indirizzo o intervallo non valido: {values}. Usa un indirizzo come 192.168.1.10 o un intervallo come 192.168.1.0/24."
+        },
+        "duplicate": "Già presente nell'elenco: {values}.",
+        "limit": "La lista contiene al massimo {max} voci. Non aggiunto: {values}."
       }
     }
   },

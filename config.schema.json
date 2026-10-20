@@ -892,7 +892,7 @@
         },
         "passes": {
           "type": "integer",
-          "description": "Filter passes for added attenuation or gain"
+          "description": "Cascaded filter sections: 0 turns the filter off, and so does a config.yaml entry with no passes key; 1 or more applies it that many times (at most 16); each pass adds 12 dB/oct for LowPass and HighPass"
         }
       },
       "additionalProperties": false,
@@ -2144,6 +2144,13 @@
           "$ref": "#/$defs/PublicAccess",
           "description": "features accessible without authentication"
         },
+        "plainhttpsessionclients": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "PlainHTTPSessionClients lists the IP addresses of clients that reach the\napp directly over plain HTTP, for example another container calling\nhttp://birdnet-go:8080 while browsers use an HTTPS reverse proxy. Session\ncookies issued to these clients omit the Secure attribute so the clients can\nsend them back; every other client keeps Secure whenever HTTPS is\nconfigured. Only exact addresses are accepted, not ranges. The match uses\nthe connection's peer address, never forwarded headers, and applies only to\nrequests that arrive without TLS and without reverse-proxy headers. Never\nlist the address a reverse proxy or tunnel (such as cloudflared) connects\nfrom. With host networking or a native install, a proxy on the same host\nconnects from loopback (127.0.0.1, ::1) or the host's own address, so do\nnot list those when one runs there; with bridge networking and the proxy\non the host, do not list the container network gateway. Give listed\nclients a fixed address so it cannot be reassigned: browser sessions\nthrough a proxy that terminates TLS without sending forwarding headers\nwould otherwise lose Secure. Not shown in the web UI. Empty by default.\nHot-reloadable."
+        },
         "privatemode": {
           "type": "boolean",
           "description": "PrivateMode, when true, requires the user to authenticate before any\nUI data is shown. Enforcement lives at the v2 API data layer, which\nreturns 401 to unauthenticated requests; the public SPA shell is still\nserved so it can render a login form instead of the dashboard,\ndetections, analytics, search, about, and notifications views. Settings\nand system routes are additionally auth-gated at the HTTP layer.\nPublicAccess.LiveAudio still applies independently.\nDefault is false to preserve guest-friendly upstream behavior."
@@ -2665,11 +2672,11 @@
         },
         "fftsize": {
           "type": "integer",
-          "description": "FFT window size in samples (must be power of 2)"
+          "description": "FFT window size in samples (a power of 2, at least 2)"
         },
         "hopsize": {
           "type": "integer",
-          "description": "STFT hop size in samples"
+          "description": "STFT hop size in samples, 1 to fftsize"
         },
         "frequencysplithz": {
           "type": "integer",
@@ -2688,7 +2695,7 @@
         },
         "threshold": {
           "type": "number",
-          "description": "speech-probability gate in (0,1]; default 0.35"
+          "description": "speech-probability gate in (0,1]; default 0.6"
         },
         "modelpath": {
           "type": "string",

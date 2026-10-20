@@ -94,9 +94,6 @@ services:
       #   target: /external
       #   bind:
       #     propagation: rslave
-    # Mount HLS stream segment files directory as tmpfs (RAM disk)
-    tmpfs:
-      - /config/hls:exec,size=50M,uid=${BIRDNET_UID:-1000},gid=${BIRDNET_GID:-1000},mode=0755
     # For ALSA audio input (sound card).
     # On a host without a sound card (RTSP streams only), remove /dev/snd or
     # `docker compose up` fails.

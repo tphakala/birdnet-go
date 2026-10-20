@@ -1207,7 +1207,16 @@ func (d *pushDispatcher) getCircuitBreakerConfig(settings *conf.Settings) Circui
 }
 
 // buildEnhancedProvider creates a single enhanced provider with all supporting components.
+// It returns nil without building anything for a disabled provider, so a disabled
+// provider resolves no secrets and reports no errors.
 func (d *pushDispatcher) buildEnhancedProvider(pc *conf.PushProviderConfig, cbConfig CircuitBreakerConfig, settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) *enhancedProvider {
+	if !pc.Enabled {
+		d.log.Debug("skipping disabled push provider",
+			logger.String("name", pc.Name),
+			logger.String("type", pc.Type))
+		return nil
+	}
+
 	prov := buildProvider(pc, d.log)
 	if prov == nil {
 		return nil
@@ -1218,10 +1227,6 @@ func (d *pushDispatcher) buildEnhancedProvider(pc *conf.PushProviderConfig, cbCo
 			logger.String("name", pc.Name),
 			logger.String("type", pc.Type),
 			logger.Error(err))
-		return nil
-	}
-
-	if !prov.IsEnabled() {
 		return nil
 	}
 

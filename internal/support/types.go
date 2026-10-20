@@ -24,6 +24,7 @@ type SupportDump struct {
 	DatabaseInfo   *DatabaseInfo         `json:"database_info,omitempty"`   // Database schema and health diagnostics
 	DeploymentInfo *DeploymentInfo       `json:"deployment_info,omitempty"` // Deployment context for troubleshooting
 	AppEvents      []AppEventEntry       `json:"app_events,omitempty"`      // Recent application events
+	RuntimeInfo    *RuntimeInfo          `json:"runtime_info,omitempty"`    // Inference runtime and loaded model state
 }
 
 // LogEntry represents a single log entry from application logs or system journals.
@@ -46,6 +47,17 @@ type SystemInfo struct {
 	MemoryMB     uint64      `json:"memory_mb"`
 	DiskInfo     []DiskInfo  `json:"disk_info"`
 	DockerInfo   *DockerInfo `json:"docker_info,omitempty"`
+	// CPUModel, CPUFlags, Board, SIMD, KernelVersion and CgroupMemory are
+	// machine facts for hardware triage. All are best effort and omitted when
+	// the host does not report them. None of them holds a path or a hostname.
+	CPUModel      string   `json:"cpu_model,omitempty"`
+	CPUFlags      []string `json:"cpu_flags,omitempty"`
+	Board         string   `json:"board,omitempty"` // device-tree model, for example a Raspberry Pi revision
+	SIMD          []string `json:"simd,omitempty"`  // SIMD extensions relevant to inference
+	KernelVersion string   `json:"kernel_version,omitempty"`
+	// CgroupMemory is the memory cgroup of the process; nil when no memory
+	// controller is found.
+	CgroupMemory *CgroupMemoryInfo `json:"cgroup_memory,omitempty"`
 	// RuntimeEnv holds the environment variables on the collector's allowlist
 	// (conf.SupportEnvAllowlist in production) that are actually set, so a dump
 	// can report runtime gates that config.yaml cannot record. Only non-empty
@@ -54,6 +66,54 @@ type SystemInfo struct {
 	// identically at every gate. Empty and omitted entirely when no allowlisted
 	// variable is set, which is the common case.
 	RuntimeEnv map[string]string `json:"runtime_env,omitempty"`
+	// USB and SoundCards are the connected USB devices and ALSA cards. Both are
+	// nil only in dumps from versions that predate them; a version that has them
+	// always sets both, with Available false and a Reason when they could not be read.
+	USB        *USBInventory       `json:"usb,omitempty"`
+	SoundCards *SoundCardInventory `json:"sound_cards,omitempty"`
+}
+
+// USBInventory lists the USB devices the host exposes. Serial numbers are never read.
+type USBInventory struct {
+	Available bool            `json:"available"`
+	Reason    string          `json:"reason,omitempty"` // unsupported_os, not_visible, unreadable or cancelled when Available is false
+	Truncated bool            `json:"truncated,omitempty"`
+	Devices   []USBDeviceInfo `json:"devices,omitempty"`
+}
+
+// USBDeviceInfo is one USB device; every field except BusID is omitted when unknown.
+type USBDeviceInfo struct {
+	BusID        string `json:"bus_id"`
+	VendorID     string `json:"vendor_id,omitempty"`
+	ProductID    string `json:"product_id,omitempty"`
+	Manufacturer string `json:"manufacturer,omitempty"`
+	Product      string `json:"product,omitempty"`
+	SpeedMbps    string `json:"speed_mbps,omitempty"`
+	DeviceClass  string `json:"device_class,omitempty"`
+}
+
+// SoundCardInventory lists the ALSA sound cards the host exposes.
+type SoundCardInventory struct {
+	Available bool            `json:"available"`
+	Reason    string          `json:"reason,omitempty"` // unsupported_os, not_visible, unreadable or cancelled when Available is false
+	Truncated bool            `json:"truncated,omitempty"`
+	Cards     []SoundCardInfo `json:"cards,omitempty"`
+}
+
+// SoundCardInfo is one ALSA sound card.
+type SoundCardInfo struct {
+	Index      int    `json:"index"`
+	ID         string `json:"id,omitempty"`
+	USBBusID   string `json:"usb_bus_id,omitempty"` // bus id of the backing USB device, empty for a non-USB card
+	HasCapture bool   `json:"has_capture"`
+}
+
+// CgroupMemoryInfo is the memory cgroup limit and usage of the BirdNET-Go process.
+type CgroupMemoryInfo struct {
+	Version    string `json:"version"`               // "v2" or "v1"
+	LimitBytes int64  `json:"limit_bytes"`           // 0 means no limit
+	LimitExact bool   `json:"limit_exact"`           // false when the limit is only an upper bound
+	UsageBytes int64  `json:"usage_bytes,omitempty"` // 0 means it could not be read
 }
 
 // DiskInfo represents information about a disk or filesystem mount point.
@@ -293,4 +353,179 @@ type AppEventEntry struct {
 // Implemented by the datastore layer, consumed by the support collector.
 type AppEventsProvider interface {
 	GetRecentAppEvents(ctx context.Context, limit int) ([]AppEventEntry, error)
+}
+
+// RuntimeInfoProvider supplies the inference runtime state for a support dump.
+// The provider lives outside this package because the state is owned by the
+// inference and classifier packages. An implementation must not wait on
+// inference or model loading: the dump has a deadline. It never returns nil.
+type RuntimeInfoProvider interface {
+	// CollectRuntimeInfo returns the current runtime state. Fields tagged
+	// json:"-" carry raw values for finalizeRuntimeInfo, which converts them to
+	// the shipped fields.
+	CollectRuntimeInfo(ctx context.Context) *RuntimeInfo
+}
+
+// RuntimeInfo is the content of runtime_info.json: the ONNX Runtime and OpenVINO
+// state, the loaded models, the range filter, and which models each audio source
+// is assigned. It holds no library or model path and no hostname: raw paths live only in
+// json:"-" fields and are reduced to a basename plus a fixed location class
+// before the dump ships. The one path-like value is the container-side mount point of the models directory.
+type RuntimeInfo struct {
+	// Available is false when no running instance could be inspected, as in the
+	// CLI collector.
+	Available bool `json:"available"`
+	// Reason says why Available is false, or which sections are missing.
+	Reason string `json:"reason,omitempty"`
+
+	ONNXRuntime *ONNXRuntimeInfo `json:"onnx_runtime,omitempty"`
+	OpenVINO    *OpenVINOInfo    `json:"openvino,omitempty"`
+
+	// OrchestratorAvailable is false when the model orchestrator could not be
+	// reached, in which case Models is absent and RangeFilter holds configuration facts only.
+	OrchestratorAvailable bool `json:"orchestrator_available"`
+	// BirdNETThreadsSetting is the configured birdnet.threads value; 0 means auto.
+	BirdNETThreadsSetting int                     `json:"birdnet_threads_setting"`
+	Models                []ModelRuntimeInfo      `json:"models,omitempty"`
+	RangeFilter           *RangeFilterRuntimeInfo `json:"range_filter,omitempty"`
+	Sources               []SourceModelInfo       `json:"sources,omitempty"`
+	ModelsDirectory       *ModelsDirectoryInfo    `json:"models_directory,omitempty"`
+}
+
+// ONNXRuntimeInfo is the ONNX Runtime state.
+type ONNXRuntimeInfo struct {
+	Initialized     bool   `json:"initialized"`
+	Version         string `json:"version,omitempty"`
+	RequiredVersion string `json:"required_version,omitempty"`
+	// LibraryFile is the basename of the loaded library after symlink resolution.
+	LibraryFile string `json:"library_file,omitempty"`
+	// LibraryDir is a well-known system directory, "custom" for any other, and
+	// empty when the library is found by the dynamic loader's search.
+	LibraryDir string `json:"library_dir,omitempty"`
+	// LibrarySource is "configured", "auto" or "loader_search".
+	LibrarySource string `json:"library_source,omitempty"`
+
+	// LibraryPath and LibraryConfigured are the raw values the provider fills.
+	LibraryPath       string `json:"-"`
+	LibraryConfigured bool   `json:"-"`
+}
+
+// OpenVINOInfo is the OpenVINO backend state.
+type OpenVINOInfo struct {
+	CompiledIn  bool `json:"compiled_in"`
+	Initialized bool `json:"initialized"`
+	Active      bool `json:"active"`
+	// LibraryFile, LibraryDir and LibrarySource describe the library that is
+	// really loaded, as for ONNXRuntimeInfo.
+	LibraryFile   string            `json:"library_file,omitempty"`
+	LibraryDir    string            `json:"library_dir,omitempty"`
+	LibrarySource string            `json:"library_source,omitempty"`
+	Probe         OpenVINOProbeInfo `json:"probe"`
+
+	// LibraryPath is the raw value the provider fills; empty when no library
+	// is loaded.
+	LibraryPath string `json:"-"`
+}
+
+// OpenVINOProbeInfo is the cached OpenVINO device probe result.
+type OpenVINOProbeInfo struct {
+	// Status is "not_run", "in_flight" or "cached".
+	Status  string   `json:"status"`
+	Devices []string `json:"devices,omitempty"`
+	// Failed is true when the cached probe failed. The error text is not shipped.
+	Failed bool `json:"failed"`
+}
+
+// ModelRuntimeInfo is one loaded model.
+type ModelRuntimeInfo struct {
+	RegistryID string `json:"registry_id"`
+	Backend    string `json:"backend"`
+	Device     string `json:"device"`
+	Precision  string `json:"precision,omitempty"`
+	// ModelFile is the basename of the model file, or the built-in marker.
+	ModelFile  string `json:"model_file"`
+	LabelCount int    `json:"label_count"`
+	// ConfiguredThreads is the thread count the model was built with as
+	// configured, not a measured value; 0 means the backend default.
+	ConfiguredThreads int       `json:"configured_threads"`
+	Generation        uint64    `json:"generation"`
+	LoadedAt          time.Time `json:"loaded_at"`
+
+	// ModelPath is the raw model path the provider fills.
+	ModelPath string `json:"-"`
+}
+
+// RangeFilterRuntimeInfo is the range filter state. Paths are reported only as
+// whether they are set and whether the file exists.
+type RangeFilterRuntimeInfo struct {
+	Available            bool     `json:"available"`
+	Active               bool     `json:"active"`
+	FellBack             bool     `json:"fell_back"`
+	Backend              string   `json:"backend,omitempty"`
+	MappedSpecies        int      `json:"mapped_species"`
+	Participants         []string `json:"participants,omitempty"`
+	IncludedSpeciesCount int      `json:"included_species_count"`
+	// Model is the configured range filter model version.
+	Model                string `json:"model,omitempty"`
+	ModelPathConfigured  bool   `json:"model_path_configured"`
+	ModelFileExists      bool   `json:"model_file_exists"`
+	LabelsPathConfigured bool   `json:"labels_path_configured"`
+	LabelsFileExists     bool   `json:"labels_file_exists"`
+	StockGeomodelPresent bool   `json:"stock_geomodel_present"`
+}
+
+// Kinds of SourceModelInfo.
+const (
+	// SourceKindAudio is an entry of audio.sources.
+	SourceKindAudio = "audio_source"
+	// SourceKindStream is an entry of realtime.rtsp.streams.
+	SourceKindStream = "stream"
+)
+
+// SourceModelInfo is the model assignment of one configured audio source or
+// stream. It is identified by kind and index in its config list; names, devices
+// and URLs are never copied.
+type SourceModelInfo struct {
+	Kind  string `json:"kind"`
+	Index int    `json:"index"`
+	// Enabled is always true for audio sources, which have no enabled flag.
+	Enabled bool `json:"enabled"`
+	// Models are the configured model IDs that name a known model. Unknown IDs
+	// are free text and are counted in UnknownModels, never shipped.
+	Models []string `json:"models,omitempty"`
+	// RegistryIDs are the registry IDs those resolve to.
+	RegistryIDs []string `json:"registry_ids,omitempty"`
+	// UnknownModels counts the configured IDs that name no known model. A source
+	// whose named models are all unknown runs the first default target only.
+	UnknownModels int `json:"unknown_models,omitempty"`
+	// UsesDefault is true when no models are listed, so the default targets run.
+	UsesDefault bool `json:"uses_default"`
+}
+
+// Sources of ModelsDirectoryInfo.Source.
+const (
+	// ModelsDirSourceConfigured means models.directory is set.
+	ModelsDirSourceConfigured = "configured"
+	// ModelsDirSourceDefault means the per-user default directory is used.
+	ModelsDirSourceDefault = "default"
+	// ModelsDirSourceUnavailable means no directory could be resolved.
+	ModelsDirSourceUnavailable = "unavailable"
+)
+
+// PersistenceNotApplicable is reported instead of a persistence class outside
+// Docker and Podman containers, where the check has no meaning.
+const PersistenceNotApplicable = "not_applicable"
+
+// ModelsDirectoryInfo describes the model directory in use. The directory is not
+// named, but MountPoint can equal it.
+type ModelsDirectoryInfo struct {
+	Source string `json:"source"`
+	Exists bool   `json:"exists"`
+	// Persistence is the persistence class of the directory, "not_applicable"
+	// outside containers.
+	Persistence string `json:"persistence,omitempty"`
+	// MountPoint and FSType describe the mount covering the directory. They are
+	// container-side values; MountPoint equals the directory when it is a mount of its own.
+	MountPoint string `json:"mount_point,omitempty"`
+	FSType     string `json:"fs_type,omitempty"`
 }

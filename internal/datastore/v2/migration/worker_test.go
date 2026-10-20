@@ -763,3 +763,86 @@ func TestWorker_ProcessDirtyIDsBatch_KeepsLockedGhostButClearsDirty(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), count, "dirty id must be cleared even when the v2 row is locked")
 }
+
+const (
+	rateKeepID      = uint(77)
+	rateKeepRate    = 384000
+	rateKeepOldClip = "2026/01/old.flac"
+	rateKeepNewClip = "2026/01/new.flac"
+	rateKeepSpecies = "Myotis daubentonii"
+)
+
+// newRateKeepWorker returns a worker over real repositories and a v2 detection
+// that already stores a clip sample rate, as written by the exporter.
+func newRateKeepWorker(t *testing.T) (*Worker, *gorm.DB) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(filepath.Join(t.TempDir(), "ratekeep.db")), &gorm.Config{
+		Logger:                                   gorm_logger.Default.LogMode(gorm_logger.Silent),
+		DisableForeignKeyConstraintWhenMigrating: true,
+	})
+	require.NoError(t, err)
+	require.NoError(t, db.AutoMigrate(&entities.Detection{}, &entities.DetectionLock{}, &entities.DetectionReview{},
+		&entities.AIModel{}, &entities.Label{}, &entities.LabelType{}, &entities.TaxonomicClass{}, &entities.AudioSource{}))
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { assert.NoError(t, sqlDB.Close()) })
+
+	labelType := &entities.LabelType{Name: "species"}
+	require.NoError(t, db.Create(labelType).Error)
+	rate := rateKeepRate
+	clip := rateKeepOldClip
+	require.NoError(t, db.Create(&entities.Detection{
+		ID: rateKeepID, ModelID: 1, LabelID: 1, DetectedAt: time.Now().Unix(), Confidence: 0.9,
+		ClipName: &clip, ClipSampleRate: &rate,
+	}).Error)
+
+	return &Worker{
+		v2Detection:        repository.NewDetectionRepository(db, nil, false, false),
+		labelRepo:          repository.NewLabelRepository(db, nil, false, false),
+		modelRepo:          repository.NewModelRepository(db, nil, false, false),
+		sourceRepo:         repository.NewAudioSourceRepository(db, nil, false, false),
+		logger:             testLogger(),
+		speciesLabelTypeID: labelType.ID,
+	}, db
+}
+
+func rateKeepResult() *detection.Result {
+	return &detection.Result{
+		ID:         rateKeepID,
+		Species:    detection.Species{ScientificName: rateKeepSpecies},
+		Confidence: 0.8,
+		ClipName:   rateKeepNewClip,
+		Model:      detection.ModelInfo{Name: "BattyBirdNET", Version: "1.0"},
+	}
+}
+
+// requireRateKept asserts the row took the legacy clip name (the update ran) and
+// still carries the exporter's clip sample rate.
+func requireRateKept(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	var det entities.Detection
+	require.NoError(t, db.First(&det, rateKeepID).Error)
+	require.NotNil(t, det.ClipName)
+	require.Equal(t, rateKeepNewClip, *det.ClipName, "the update must have run")
+	require.NotNil(t, det.ClipSampleRate, "the migration must not clear a stored clip sample rate")
+	assert.Equal(t, rateKeepRate, *det.ClipSampleRate)
+}
+
+// TestWorker_UpdateExistingRecords_KeepsClipSampleRate verifies the legacy table
+// has no rate to copy, so updating an existing v2 row leaves its rate alone.
+func TestWorker_UpdateExistingRecords_KeepsClipSampleRate(t *testing.T) {
+	w, db := newRateKeepWorker(t)
+
+	assert.Equal(t, 1, w.updateExistingRecords(t.Context(), []*detection.Result{rateKeepResult()}))
+	requireRateKept(t, db)
+}
+
+// TestWorker_MigrateRecord_UpdateBranchKeepsClipSampleRate is the same check for
+// the update branch of migrateRecord.
+func TestWorker_MigrateRecord_UpdateBranchKeepsClipSampleRate(t *testing.T) {
+	w, db := newRateKeepWorker(t)
+
+	require.NoError(t, w.migrateRecord(t.Context(), rateKeepResult()))
+	requireRateKept(t, db)
+}

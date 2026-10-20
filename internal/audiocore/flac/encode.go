@@ -10,8 +10,8 @@ import (
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
-	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/go-audio-dsp/gain"
 	goflacmeta "github.com/tphakala/go-flac"
 	goflac "github.com/tphakala/go-flac/pcm"
 )
@@ -326,7 +326,14 @@ func encodeSamples(ctx context.Context, enc *goflac.Encoder, pcmData []byte, gai
 		return nil
 	}
 
-	factor := pcmgain.FactorFromDB(gainDB)
+	g, err := gain.New(gainDB)
+	if err != nil {
+		return errors.New(err).
+			Component("audiocore/flac").
+			Category(errors.CategoryValidation).
+			Context("operation", "flac_gain_init").
+			Build()
+	}
 	scratchPtr := gainScratchPool.Get().(*[]byte)
 	scratch := *scratchPtr
 	defer gainScratchPool.Put(scratchPtr)
@@ -338,7 +345,13 @@ func encodeSamples(ctx context.Context, enc *goflac.Encoder, pcmData []byte, gai
 		}
 		end := min(off+len(scratch), len(src))
 		chunk := scratch[:end-off]
-		pcmgain.ApplyInt16(chunk, src[off:end], factor)
+		if err := g.ApplyBytesTo(chunk, src[off:end]); err != nil {
+			return errors.New(err).
+				Component("audiocore/flac").
+				Category(errors.CategoryAudio).
+				Context("operation", "flac_apply_gain").
+				Build()
+		}
 		if _, err := enc.Write(chunk); err != nil {
 			return wrapWriteErr(err)
 		}

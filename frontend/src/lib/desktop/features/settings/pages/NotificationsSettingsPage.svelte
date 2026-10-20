@@ -8,6 +8,8 @@
 
   Features:
   - Push notification provider management (add/edit/delete)
+  - Rules notice in place of the legacy detection filters while the alert
+    engine is active (the filters only apply when it is not)
   - Notification template customization
   - Alert rule list with toggle, test, edit, delete
   - Inline rule editor (AlertRuleEditor component)
@@ -19,7 +21,7 @@
   @component
 -->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { downloadBlob } from '$lib/utils/fileHelpers';
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
@@ -80,6 +82,7 @@
     fetchAlertHistory,
     clearAlertHistory,
     fetchAlertSchema,
+    fetchAlertStatus,
     exportAlertRules,
     importAlertRules,
   } from '$lib/api/alerts';
@@ -87,7 +90,9 @@
   import { formatLocalDateTime } from '$lib/utils/date';
   import { schemaObjectTypeLabel } from '$lib/utils/alertSchema';
   import { translateField } from '$lib/utils/notifications';
-  import { navigation } from '$lib/stores/navigation.svelte';
+  import { navigation, handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
+  import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
 
   const logger = loggers.settings;
 
@@ -402,6 +407,12 @@
   let loadingRules = $state(false);
   let schema = $state<AlertSchema | null>(null);
   let v2Available = $state(true);
+  // Whether the alert engine handles detection notifications; null while unknown.
+  // When true, the legacy detection filters on the Channels tab have no effect.
+  let alertEngineActive = $state<boolean | null>(null);
+  let legacyMinConfidence = $derived(pushSettings.minConfidenceThreshold ?? 0);
+  let legacyCooldownMinutes = $derived(pushSettings.speciesCooldownMinutes ?? 0);
+  let hasLegacyFilterValues = $derived(legacyMinConfidence > 0 || legacyCooldownMinutes > 0);
 
   let historyData = $state<AlertHistoryType[]>([]);
   let historyTotal = $state(0);
@@ -1123,6 +1134,33 @@
     }
   }
 
+  async function loadAlertStatus() {
+    try {
+      const status = await fetchAlertStatus();
+      alertEngineActive = status.engine_active;
+    } catch (err) {
+      // Fall back to showing the filters: they are live whenever the engine is
+      // not, so hiding them on an unknown state could hide working settings.
+      alertEngineActive = false;
+      if (err instanceof ApiError && err.status === 409) {
+        v2Available = false;
+        return;
+      }
+      logger.error('Failed to load alert engine status', err, {
+        component: 'NotificationsSettingsPage',
+      });
+    }
+  }
+
+  // The link switches tabs, which unmounts the Channels panel and the link with
+  // it; move focus to the Rules tab so it does not fall back to the page body.
+  async function openRulesTab(event: MouseEvent) {
+    handleAppLinkClick(event);
+    if (!event.defaultPrevented) return;
+    await tick();
+    document.getElementById('settings-tab-rules')?.focus();
+  }
+
   async function loadHistory() {
     if (!v2Available) return;
     loadingHistory = true;
@@ -1358,6 +1396,9 @@
   // onMount
   // ============================================================
   onMount(async () => {
+    // Rules and history do not depend on the engine status, so a slow status
+    // call must not hold them back.
+    loadAlertStatus();
     await Promise.all([loadNotificationSettings(), loadSchema()]);
     // Load rules and history after schema is ready
     loadRules();
@@ -1430,8 +1471,38 @@
             </p>
           {/if}
 
-          <!-- Detection Filters Section -->
-          {#if pushSettings.enabled}
+          <!-- Detection Filters Section: replaced by a pointer to the Rules tab
+               while the alert engine is active, since the filters are unused then -->
+          {#if pushSettings.enabled && alertEngineActive}
+            <ErrorAlert type="info" role="note">
+              {#snippet children()}
+                <div class="space-y-2">
+                  <p>
+                    {t('settings.notifications.push.rulesNotice.message', {
+                      pushAction: t('settings.alerts.editor.actionPush'),
+                      ruleName: t('settings.alerts.builtInRules.newSpecies.name'),
+                      eventName: t('settings.alerts.schema.events.detection_occurred'),
+                    })}
+                  </p>
+                  {#if hasLegacyFilterValues}
+                    <p>
+                      {t('settings.notifications.push.rulesNotice.previousFilters', {
+                        confidence: Math.round(legacyMinConfidence * 100),
+                        minutes: legacyCooldownMinutes,
+                      })}
+                    </p>
+                  {/if}
+                  <a
+                    href={buildAppUrl(SETTINGS_ROUTES.notificationsRules)}
+                    onclick={openRulesTab}
+                    class="inline-block font-medium underline hover:opacity-80"
+                  >
+                    {t('settings.notifications.push.rulesNotice.openRules')}
+                  </a>
+                </div>
+              {/snippet}
+            </ErrorAlert>
+          {:else if pushSettings.enabled && alertEngineActive === false}
             <div class="rounded-lg bg-[var(--color-base-200)]">
               <div class="p-6">
                 <h3 class="text-base font-semibold mb-4">

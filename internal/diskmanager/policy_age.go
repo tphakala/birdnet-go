@@ -239,7 +239,7 @@ func AgeBasedCleanup(quit <-chan struct{}, db Interface) CleanupResult {
 // deletion took (zero when the file was not eligible, i.e. reason is not ageReasonEligible), and
 // any deletion error.
 func processSingleAgeFile(file *FileInfo, retentionCutoffUnix int64, speciesTotalCount map[string]int,
-	minClipsPerSpecies int, keepSpectrograms bool, now func() time.Time) (deleted bool, reason string, latency time.Duration, err error) {
+	minClipsPerSpecies int, keepSpectrograms bool, now func() time.Time, dirs *renderDirCache) (deleted bool, reason string, latency time.Duration, err error) {
 	// Check eligibility
 	eligible, reason := isEligibleForAgeDeletion(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies)
 	if !eligible {
@@ -255,7 +255,7 @@ func processSingleAgeFile(file *FileInfo, retentionCutoffUnix int64, speciesTota
 
 	// Perform deletion
 	start := now()
-	delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, "age")
+	delErr := deleteFileAndOptionalSpectrogram(file, reason, keepSpectrograms, "age", dirs)
 	latency = now().Sub(start)
 	if delErr != nil {
 		return false, reason, latency, delErr
@@ -326,7 +326,7 @@ func processAgeBasedDeletionLoop(files []FileInfo, speciesTotalCount map[string]
 
 		file := &files[i]
 		run.markLocked(file)
-		deleted, reason, latency, delErr := processSingleAgeFile(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies, keepSpectrograms, run.now)
+		deleted, reason, latency, delErr := processSingleAgeFile(file, retentionCutoffUnix, speciesTotalCount, minClipsPerSpecies, keepSpectrograms, run.now, &run.renderDirs)
 
 		if errors.Is(delErr, errFileAlreadyGone) {
 			// Removed elsewhere since the scan: it no longer counts toward its

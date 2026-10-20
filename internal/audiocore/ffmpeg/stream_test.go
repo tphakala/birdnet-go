@@ -1485,8 +1485,10 @@ func TestProcessAudio_ResponsiveToContextCancel(t *testing.T) {
 	cancel()
 
 	select {
-	case <-done:
-		// processAudio returned promptly — this is the expected behavior.
+	case err := <-done:
+		// processAudio returned promptly, which is what this test checks; the
+		// error it returns on cancellation is not under test.
+		t.Logf("processAudio returned after cancellation: %v", err)
 	case <-time.After(2 * time.Second):
 		require.Fail(t, "processAudio did not respond to context cancellation within 2s")
 	}
@@ -1581,8 +1583,10 @@ func TestProcessAudio_DataFlowsThroughReaderGoroutine(t *testing.T) {
 	_ = pw.Close()
 
 	select {
-	case <-done:
-		// processAudio exited (may return error due to quick-exit detection).
+	case err := <-done:
+		// processAudio exited; it may return an error from quick-exit detection,
+		// which this test does not check.
+		t.Logf("processAudio returned: %v", err)
 	case <-time.After(2 * time.Second):
 		require.Fail(t, "processAudio did not complete within 2s")
 	}

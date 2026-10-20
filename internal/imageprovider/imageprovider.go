@@ -426,8 +426,10 @@ var nonAvianClasses = map[string]bool{
 // have images available from bird image providers.
 // It checks two sources:
 //   - nonAvianClasses: legacy BirdNET v2.x Title-case-with-spaces split names.
-//   - nonbird.IsNonBirdName: Perch v2 (FSD50K) classes and their underscore-split
-//     first tokens (e.g. "Power" from "power_tool", "speech"). Case-insensitive.
+//   - nonbird.IsNonBirdName: Perch v2 (FSD50K) classes by full label for new
+//     detections, and by underscore-split first token (e.g. "Power" from
+//     "power_tool") for names stored before full labels were kept whole.
+//     Case-insensitive.
 func isNonAvianClass(scientificName string) bool {
 	return nonAvianClasses[scientificName] || nonbird.IsNonBirdName(scientificName)
 }

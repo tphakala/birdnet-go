@@ -6,18 +6,21 @@ import (
 
 // Rolling-aggregation window for the streaming path.
 const (
-	// aggWindowSeconds is the span of recent audio the streaming aggregate
-	// covers, matching the analysis chunk length the stateless detector scored.
+	// aggWindowSeconds is the span of recent audio the rolling window keeps
+	// between flushes. It does not need to span a whole model clip: the gate
+	// stamps each speech hit with the end of the audio it scored, and every hop
+	// is fresh in exactly one Flush, so a hop's hit is recorded by the Flush
+	// that inferred it. A single Flush that infers more than this span is
+	// scored over all of its new hops (see Flush).
 	aggWindowSeconds = 3
 	// aggWindowFrames is aggWindowSeconds expressed in hops: ceil(3 s * 16000 Hz
-	// / 512) = 94, exactly the hop count of one full 3 s chunk. Aggregating the
-	// last aggWindowFrames per-hop probabilities therefore reproduces the old
-	// full-chunk window ("speech sustained >= minConsec hops anywhere in the
-	// recent ~3 s trips the gate") while each hop is inferred only once: the
-	// stateless path re-scored the same 3 s window on every overlapping chunk,
-	// the streaming path scores each hop once and lets it stay eligible in the
-	// ring for the same ~3 s it would have stayed inside overlapping chunks.
-	// Detection coverage is therefore preserved, not weakened.
+	// / 512) = 94. Between Flush calls the ring holds the last aggWindowFrames
+	// per-hop probabilities, so a hop stays eligible for the aggregate for about
+	// 3 s while being inferred only once. When one Flush infers more hops than
+	// aggWindowFrames (a step longer than ~3 s, as with 5 s models), the
+	// aggregate instead spans every new hop plus the minConsec-1 hops before
+	// them, so no inferred hop goes unscored and speech straddling the flush
+	// boundary still counts.
 	aggWindowFrames = (aggWindowSeconds*sampleRate16k + windowSamples - 1) / windowSamples
 )
 
@@ -34,10 +37,15 @@ type Streamer interface {
 	// Flush resamples all buffered audio to 16k, frames it into complete 512-hops
 	// (prepending the carried 64-sample context, sub-hop remainder retained for
 	// next Flush), runs the sequence model over the stacked hops carrying h/c
-	// forward, appends the per-hop probs to a rolling window covering the last
-	// aggWindowFrames frames, and returns the aggregate speech probability over
-	// that window. ok is false when no complete hop was available. framesRun is
-	// the number of hops actually inferred (for metrics).
+	// forward, and returns the aggregate speech probability over every newly
+	// inferred hop plus the prior hops that fill aggWindowFrames, or the last
+	// minConsec-1 prior hops when that is more, so a run straddling the flush
+	// boundary counts. The rolling window is then trimmed to the last
+	// aggWindowFrames hops for the next Flush. The window need not span a whole
+	// model clip, because the caller stamps hits with the end of the scored
+	// audio and each hop is inferred in exactly one Flush. ok is false when no complete hop
+	// was available. framesRun is the number of hops actually inferred (for
+	// metrics).
 	Flush(sess SpeechSession) (prob float32, ok bool, framesRun int, err error)
 	// Reset clears h/c, the sample carry buffer, the hop context, and the rolling
 	// window. Call on a source discontinuity (gap, restart, sampleRate change).
@@ -136,13 +144,18 @@ func (s *streamer) Flush(sess SpeechSession) (prob float32, ok bool, framesRun i
 	rem := copy(s.pending, s.pending[n*windowSamples:])
 	s.pending = s.pending[:rem]
 
-	// Append the fresh per-hop probabilities and trim the ring to the last
-	// aggWindowFrames, so the aggregate always covers the recent ~3 s.
+	// Aggregate before trimming so every newly inferred hop is scored, even when
+	// one Flush yields more than aggWindowFrames hops. The prior ring is first
+	// cut to whichever is larger: the hops that fill the window to
+	// aggWindowFrames, or the minConsec-1 hops that let speech straddling the
+	// flush boundary reach the sustain length. After aggregating, the ring is
+	// trimmed back to aggWindowFrames for the next Flush.
+	keepPrior := max(aggWindowFrames-len(probs), s.minConsec-1, 0)
+	s.ring = trimToLast(s.ring, keepPrior)
 	s.ring = append(s.ring, probs...)
-	if over := len(s.ring) - aggWindowFrames; over > 0 {
-		s.ring = s.ring[:copy(s.ring, s.ring[over:])]
-	}
-	return aggregate(s.ring, s.minConsec), true, n, nil
+	res := aggregate(s.ring, s.minConsec)
+	s.ring = trimToLast(s.ring, aggWindowFrames)
+	return res, true, n, nil
 }
 
 // Reset implements Streamer.
@@ -154,4 +167,14 @@ func (s *streamer) Reset() {
 	clear(s.ctx[:])
 	clear(s.h[:])
 	clear(s.c[:])
+}
+
+// trimToLast keeps the last keep elements of ring, moving them to the front in
+// place (the backing array is reused). It returns ring unchanged when it holds
+// keep elements or fewer.
+func trimToLast(ring []float32, keep int) []float32 {
+	if len(ring) <= keep {
+		return ring
+	}
+	return ring[:copy(ring, ring[len(ring)-keep:])]
 }

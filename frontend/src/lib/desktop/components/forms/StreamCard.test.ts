@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
 import { screen, cleanup, fireEvent, render } from '@testing-library/svelte';
 import StreamCard from './StreamCard.svelte';
+import {
+  restoreElementAnimate,
+  stubElementAnimate,
+} from '../../../../test/fixtures/elementAnimate';
 import type { StreamConfig } from '$lib/stores/settings';
 
 // Replace heavy edit-mode children with inert components; the model list is a
@@ -23,7 +27,7 @@ vi.mock('./QuietHoursEditor.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
 }));
 vi.mock('./StreamTestButton.svelte', async () => ({
-  default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
+  default: (await import('../../../../test/fixtures/MockStreamTestButton.svelte')).default,
 }));
 vi.mock('./StreamTimeline.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
@@ -32,7 +36,7 @@ vi.mock('./StreamChannelControls.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
 }));
 vi.mock('$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte', async () => ({
-  default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
+  default: (await import('../../../../test/fixtures/MockAudioEqualizerSettings.svelte')).default,
 }));
 vi.mock('$lib/desktop/components/ui/StatusPill.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
@@ -129,5 +133,24 @@ describe('StreamCard empty-list save guard (H1 consistency)', () => {
     expect(onUpdate).toHaveBeenCalledTimes(1);
     // At N=0 there is nothing to map, so the cleared list saves as [].
     expect(onUpdate.mock.lastCall?.[0]?.models).toEqual([]);
+  });
+});
+
+describe('StreamCard equalizer preview', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('previews a stream equalizer without a sampleRate, even after a test probed one', async () => {
+    stubElementAnimate();
+    onTestFinished(restoreElementAnimate);
+    renderCard(vi.fn((_stream: StreamConfig) => true));
+
+    await fireEvent.click(screen.getByRole('button', { name: 'common.edit' }));
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'settings.audio.audioFilters.title' })
+    );
+
+    expect(screen.getByTestId('audio-equalizer-settings')).toHaveTextContent('none');
   });
 });

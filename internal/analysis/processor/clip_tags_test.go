@@ -147,7 +147,7 @@ func TestClipTags_ExcludeLocationSourceAndStation(t *testing.T) {
 	for _, tt := range saveAudioBranchCases(sourceID, newDetection) {
 		t.Run(tt.name, func(t *testing.T) {
 			p, det := tt.build(t)
-			action := p.buildSaveAudioAction(det, &DetectionContext{})
+			action := p.buildSaveAudioAction(det, &DetectionContext{}, p.currentSettings())
 			require.NotNil(t, action)
 			// Every branch carries exactly the tag-safe fields, in original case
 			// (species is lowercased for aggregation; the tag is not).

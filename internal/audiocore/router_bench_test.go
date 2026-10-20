@@ -50,7 +50,6 @@ func BenchmarkHandleRouteFrame_Resample(b *testing.B) {
 				Consumer:         mc,
 				resampler:        rs,
 				sourceSampleRate: tc.fromRate,
-				gainLinear:       1.0,
 				inbox:            make(chan AudioFrame, 1),
 				done:             make(chan struct{}),
 				stopped:          make(chan struct{}),
@@ -106,13 +105,13 @@ func BenchmarkHandleRouteFrame_Contention(b *testing.B) {
 			for i := range routeCount {
 				mc := newMockConsumer(fmt.Sprintf("bench-%d", i))
 				routes[i] = &Route{
-					SourceID:   "bench",
-					Consumer:   mc,
-					gainLinear: 2.0, // triggers applyProcessing
-					inbox:      make(chan AudioFrame, 1),
-					done:       make(chan struct{}),
-					stopped:    make(chan struct{}),
+					SourceID: "bench",
+					Consumer: mc,
+					inbox:    make(chan AudioFrame, 1),
+					done:     make(chan struct{}),
+					stopped:  make(chan struct{}),
 				}
+				routes[i].gain.Store(testGain(b, 6.020599913279624)) // triggers applyProcessing
 			}
 
 			// Warm pools so steady-state reuse is established.
@@ -122,7 +121,7 @@ func BenchmarkHandleRouteFrame_Contention(b *testing.B) {
 					Data: frameData, SampleRate: 48000,
 					BitDepth: 16, Channels: 1,
 				}
-				res, err := r.applyProcessing(frame, route, nil)
+				res, err := r.applyProcessing(frame, route, nil, route.gain.Load())
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -155,5 +154,58 @@ func BenchmarkHandleRouteFrame_Contention(b *testing.B) {
 			}
 			wg.Wait()
 		})
+	}
+}
+
+// BenchmarkHandleRouteFrame_ResampleEQ measures handleRouteFrame through the
+// resample-then-process path (256 kHz source to 48 kHz consumer, three-band EQ
+// plus gain), which hands the resampler's float32 output to the processing
+// stage.
+func BenchmarkHandleRouteFrame_ResampleEQ(b *testing.B) {
+	const (
+		srcRate = 256000
+		dstRate = 48000
+	)
+	mgr := buffer.NewManager(GetLogger())
+	r := NewAudioRouter(GetLogger(), mgr)
+	b.Cleanup(r.Close)
+
+	rs, err := resample.NewResampler(srcRate, dstRate)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = rs.Close() })
+
+	mc := newMockConsumer("bench-resample-eq")
+	mc.sampleRate = dstRate
+	route := &Route{
+		SourceID:         "bench",
+		Consumer:         mc,
+		resampler:        rs,
+		sourceSampleRate: srcRate,
+		inbox:            make(chan AudioFrame, 1),
+		done:             make(chan struct{}),
+		stopped:          make(chan struct{}),
+	}
+	route.gain.Store(testGain(b, 6.020599913279624))
+	route.filterChain.Store(testChain(b, dstRate, benchEQBands...))
+
+	frame := AudioFrame{
+		SourceID: "bench", SourceName: "bench",
+		Data: int16sToBytes(noiseAndTone(srcRate/10, srcRate)), SampleRate: srcRate,
+		BitDepth: 16, Channels: 1,
+	}
+
+	for range 4 {
+		r.handleRouteFrame(frame, route)
+		<-mc.frames
+	}
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for b.Loop() {
+		r.handleRouteFrame(frame, route)
+		<-mc.frames
 	}
 }

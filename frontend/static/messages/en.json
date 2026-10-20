@@ -521,6 +521,12 @@
         "cadenceCappedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} at the configured {configured} s overlap exceeds the measured capacity of this device, so audio is analyzed with {effective} s overlap. This can lower the number of confirmations the false positive filter requires. Your saved settings are unchanged; see Settings > Analysis.",
         "cadenceOverloadedTitle": "This device cannot keep up with audio analysis",
         "cadenceOverloadedMessage": "Running {models, plural, one {# model} other {# models}} on {sources, plural, one {# audio source} other {# audio sources}} exceeds the measured capacity of this device even without overlap, so analysis can fall behind and detections can be missed. Enable fewer models or audio sources, or choose a faster model variant."
+      },
+      "storage": {
+        "notPersistentTitle": "Data will be lost when the container is recreated",
+        "notPersistentMessage": "These paths are on storage that is deleted when the container is recreated, for example on an image update: {paths}. Map a volume or a host directory to them in your container configuration.",
+        "anonymousVolumeTitle": "Data is stored in an anonymous container volume",
+        "anonymousVolumeMessage": "These paths are in anonymous volumes that the container runtime created because no volume was mapped: {paths}. A container started fresh, for example with docker run after an image update, gets new empty volumes, so the data seems lost. Map a named volume or a host directory to them."
       }
     },
     "loading": "Loading notifications..."
@@ -2310,7 +2316,9 @@
       "saveAriaLabel": "Save Changes",
       "savingAriaLabel": "Saving changes...",
       "unsavedChanges": "Unsaved changes",
-      "toolbar": "Settings actions"
+      "toolbar": "Settings actions",
+      "validationBlocked": "Some fields need attention before you can save.",
+      "noChangesToSave": "No changes to save."
     },
     "errors": {
       "loadFailed": "Failed to load settings",
@@ -2764,7 +2772,7 @@
           "title": "What's included in the report:",
           "applicationLogs": "**Application logs** - Recent errors and debug information",
           "configuration": "**Configuration** - Your settings with sensitive data removed",
-          "systemInfo": "**System information** - OS version, memory, and runtime details",
+          "systemInfo": "**System information** - OS version, memory, hardware, connected USB devices and sound cards, and runtime details",
           "notIncluded": "**NOT included** - Audio files, bird detections, or personal data"
         },
         "userMessage": {
@@ -2917,6 +2925,11 @@
             "unit": "min",
             "helpText": "Prevent repeated notifications for the same species within this time window. Set to 0 to disable."
           }
+        },
+        "rulesNotice": {
+          "message": "Detection push notifications come from alert rules on the Rules tab. The built-in detection rules notify only in the app. To get pushes, add the {pushAction} action to the {ruleName} rule, or create a rule for the {eventName} event with a confidence condition and a cooldown.",
+          "previousFilters": "Your Minimum Confidence ({confidence}%) and Species Cooldown ({minutes} min) settings here are not used by alert rules.",
+          "openRules": "Open Rules"
         },
         "noProviders": "No providers configured",
         "noProvidersDescription": "Add a provider to start receiving push notifications",
@@ -3184,7 +3197,7 @@
         "vadEnable": "Enable Privacy Guard (Silero VAD)",
         "vadHelp": "Runs a dedicated neural speech-detection model alongside the classifier for robust voice filtering. Consumes additional system resources (approx. 20-30 MB RAM and CPU inference per segment).",
         "vadThresholdLabel": "Privacy Guard Threshold",
-        "vadThresholdHelp": "Sensitivity threshold for the Privacy Guard voice activity detector (default 0.35). Lower values make the filter more sensitive to quiet or distant speech."
+        "vadThresholdHelp": "Sensitivity threshold for the Privacy Guard voice activity detector (default 0.6). Lower values make the filter more sensitive to quiet or distant speech."
       },
       "falsePositivePrevention": {
         "title": "False Positive Prevention",
@@ -3736,6 +3749,8 @@
         "frequencyResponse": "Frequency Response",
         "cutoffFrequency": "Cutoff Frequency",
         "cutoffFrequencyHelp": "Frequency at which the filter begins to attenuate signals. Bird calls typically range from 1-10 kHz.",
+        "centerFrequency": "Center Frequency",
+        "bandwidth": "Bandwidth",
         "qFactor": "Q Factor",
         "qFactorHelp": "Quality factor controls the sharpness of the filter. Lower values (0.1-1) create gentler slopes, higher values (1-10) create steeper cutoffs.",
         "gain": "Gain",
@@ -3743,17 +3758,31 @@
         "attenuation": "Attenuation",
         "attenuationHelp": "Filter rolloff rate. Higher values provide steeper attenuation of filtered frequencies.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Off",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Add multiple filters to shape the frequency response for optimal bird detection in your environment.",
+        "emptyEntryRestored": "Enter a number. The previous value was kept.",
         "graph": {
           "flatResponse": "Flat Response (No Filters Applied)",
           "frequency": "Frequency (Hz)",
-          "gain": "Gain (dB)"
+          "gain": "Gain (dB)",
+          "loading": "Calculating the frequency response...",
+          "updating": "Updating the frequency response...",
+          "error": "Could not calculate the frequency response. It updates when you change a filter, or select Retry.",
+          "sampleRate": "Calculated for a sample rate of {rate} Hz.",
+          "clipped": "The response peaks at {peak} dB, above the top of the graph.",
+          "skippedHeading": "{count, plural, one {# filter is not applied to the audio} other {# filters are not applied to the audio}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) is skipped: this filter type is not supported.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) is skipped: its settings are not valid at {rate} Hz.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) is skipped: it could not be added to the filter chain.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) is skipped."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3922,7 +3951,7 @@
       "allowSubnetBypassLabel": "Allow Access from Subnet to Bypass Authentication",
       "subnetBypassLocalNote": "When enabled, clients on the same local network as this server are trusted automatically and skip the login. Use the field below only to extend that trust to additional networks (for example a separate VLAN or a routed subnet).",
       "allowedSubnetsLabel": "Allowed Subnets",
-      "allowedSubnetsHelp": "Additional network ranges that may bypass the login, on top of this server's own local network. CIDR notation, comma-separated.",
+      "allowedSubnetsHelp": "Additional network ranges that may bypass the login, on top of this server's own local network. Use CIDR notation, such as 192.168.10.0/24.",
       "securityWarningTitle": "Security Warning:",
       "subnetWarningText": "This server's local network and any subnets listed here get full access without logging in. Only include networks you fully trust.",
       "httpsSettingsTitle": "HTTPS Settings",
@@ -4150,6 +4179,77 @@
         "downloadCertificate": "Download Certificate",
         "downloadCertificateHelp": "Install this certificate in your operating system's trust store to avoid browser security warnings.",
         "fileReadError": "Failed to read the selected file"
+      },
+      "reverseProxy": {
+        "title": "Reverse Proxy",
+        "description": "For access through nginx, Caddy, Traefik, Cloudflare or another proxy",
+        "listLabel": "Trusted proxies",
+        "listHelp": "Add the address of each proxy in front of BirdNET-Go. With Docker this is often the Docker gateway address, such as 172.17.0.1.",
+        "placeholder": "For example, 172.17.0.1",
+        "emptyState": "No trusted proxies. BirdNET-Go uses the address that connects to it.",
+        "emptyStateCloudflareOnly": "Only Cloudflare's published edge addresses are trusted. No other proxies are listed.",
+        "rangeBadge": "Range",
+        "ruleOwnAddress": "List each proxy's own address. Never list a range that also holds the computers you browse from.",
+        "ruleHeaders": "The proxy must append the client address to X-Forwarded-For or overwrite X-Real-IP.",
+        "cloudflareLabel": "Trust Cloudflare",
+        "cloudflareHelp": "Turn this on when your site is served through Cloudflare. BirdNET-Go then trusts Cloudflare's published edge addresses.",
+        "check": {
+          "title": "Your connection",
+          "recheck": "Check again",
+          "checking": "Checking your connection",
+          "error": "Could not check your connection.",
+          "stale": "This check shows the saved settings. Save to check your changes.",
+          "trust": "Trust {peer}",
+          "trustWarning": "Only trust {peer} if it is your reverse proxy, not the computer you are browsing from.",
+          "trustWithCloudflare": "Trust {peer} and Cloudflare",
+          "cloudflareInFront": "Cloudflare sits in front of {peer}. Trust both to verify your address.",
+          "cloudflareEdge": "{peer} belongs to Cloudflare. Turn on Trust Cloudflare below.",
+          "chainHint": "If another proxy sits in front of {peer}, list it too.",
+          "added": "Added to the list. Save to apply.",
+          "coveredBy": "Already covered by {range} in the list. Save to apply.",
+          "selfClientCause": "The proxy may forward its own address as the client, often because container port publishing hides the real client. Fix this in the container or proxy network setup."
+        },
+        "status": {
+          "direct": {
+            "title": "Connected directly",
+            "body": "Your browser connects to BirdNET-Go directly from {peer}.",
+            "bodyNoPeer": "Your browser connects to BirdNET-Go directly.",
+            "hint": "If you use a reverse proxy and {peer} is its address, set the proxy to send X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Connected through a trusted proxy",
+            "body": "Your connection comes through {peer}, which is trusted. Your address {client} was verified.",
+            "hint": "If {client} is another proxy rather than your computer, list that proxy too."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Your address could not be verified",
+            "body": "{peer} is trusted, but the address it forwards could not be verified. Common causes:",
+            "causeRange": "A listed range also holds your computer, so no address in the chain counts as yours.",
+            "causeHeaders": "The proxy does not append X-Forwarded-For or overwrite X-Real-IP.",
+            "causeConflict": "The proxy sends conflicting or repeated address headers, or only a Forwarded header."
+          },
+          "untrusted_public_proxy": {
+            "title": "Connected through a public proxy",
+            "body": "Your connection comes through {peer}, a public address. Public addresses are never offered for one-click trust. Add one by hand only if you are sure it is your proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Connected through an untrusted proxy",
+            "body": "Your connection comes through a proxy at {peer} that is not trusted, so BirdNET-Go cannot verify your address."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Proxy headers cannot be verified",
+            "body": "Your connection comes through {peer}, but the address headers it sends could not be verified even if it were trusted.",
+            "bodyNoPeer": "Your connection comes through a proxy, but its address could not be read.",
+            "fix": "Set the proxy to append X-Forwarded-For or overwrite X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Behind a reverse proxy, this bypass works only when the proxy is listed as trusted.",
+      "bypassProxyLink": "Set up trusted proxies",
+      "allowedSubnetsEmpty": "No additional subnets. Only this server's own local network may bypass the login.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} has an entry that is not valid.",
+        "pendingEntry": "{tab}: {field} has text that was not added. Press Enter or Add, or clear it."
       }
     },
     "species": {
@@ -4908,6 +5008,28 @@
         "dragToReorder": "Drag to reorder {species}",
         "edit": "Edit species",
         "remove": "Remove species"
+      }
+    },
+    "networkAddressList": {
+      "add": "Add",
+      "remove": "Remove {address}",
+      "empty": "No addresses added yet.",
+      "pendingHint": "Press Enter or Add to add this address.",
+      "limitReached": "The list is full ({max} entries).",
+      "rowDuplicate": "Duplicate",
+      "rowInvalid": {
+        "cidr": "Not a valid range",
+        "ip": "Not a valid IP address",
+        "ipOrCidr": "Not a valid address or range"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Not a valid range: {values}. Use a range such as 192.168.1.0/24.",
+          "ip": "Not a valid IP address: {values}. Use an address such as 192.168.1.10.",
+          "ipOrCidr": "Not a valid address or range: {values}. Use an address such as 192.168.1.10 or a range such as 192.168.1.0/24."
+        },
+        "duplicate": "Already in the list: {values}.",
+        "limit": "The list holds at most {max} entries. Not added: {values}."
       }
     }
   },

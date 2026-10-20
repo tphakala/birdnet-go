@@ -331,3 +331,17 @@ func TestConvertToAdditionalResults_SkipsNonFiniteConfidence(t *testing.T) {
 	assert.Equal(t, "Periparus ater", result[0].Species.ScientificName)
 	assert.Equal(t, "Turdus merula", result[1].Species.ScientificName)
 }
+
+func TestConvertToAdditionalResults_PerchSoundClassesStayDistinct(t *testing.T) {
+	t.Parallel()
+
+	input := []datastore.Results{
+		{Species: "Domestic_sounds_and_home_sounds", Confidence: 0.90},
+		{Species: "Domestic_animals_and_pets", Confidence: 0.60},
+	}
+
+	result := convertToAdditionalResults(input, "Domestic_sounds_and_home_sounds")
+
+	require.Len(t, result, 1, "only the primary class is dropped")
+	assert.Equal(t, "Domestic_animals_and_pets", result[0].Species.ScientificName)
+}

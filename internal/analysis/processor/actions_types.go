@@ -160,7 +160,14 @@ type SaveAudioAction struct {
 	species string
 	// clipTags is the safe, display-ready detection metadata embedded as FLAC
 	// tags; see clip_tags.go for what may and may not be carried.
-	clipTags      clipTagMeta
+	clipTags clipTagMeta
+	// clipRates is the detection repository the corrected clip sample rate is
+	// written through after the encode; nil only for a processor built without a
+	// repository (tests).
+	clipRates clipSampleRateRecorder
+	// plannedRate is the clip sample rate stored with the detection at save time
+	// (plannedClipSampleRate); the action corrects it when the encode wrote another.
+	plannedRate   int
 	NoteID        uint              // Note ID for correlation logging with pre-renderer
 	PreRenderer   PreRendererSubmit // Injected from processor
 	DetectionCtx  *DetectionContext // Shared context to signal ClipSaved to late consumers
@@ -221,6 +228,12 @@ type BirdWeatherAction struct {
 // convention used by other per-species analytics queries).
 type speciesDetectionTimeSource interface {
 	GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Context, scientificName string, before time.Time) (first, last *time.Time, err error)
+}
+
+// clipSampleRateRecorder is the single detection repository method SaveAudioAction
+// needs to correct the stored clip sample rate after the encode.
+type clipSampleRateRecorder interface {
+	RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error
 }
 
 type MqttAction struct {

@@ -74,6 +74,7 @@
     spectrogramOnly?: boolean; // audio removed by retention, spectrogram image kept
     source?: string;
     modelType?: string;
+    clipSampleRate?: number; // Hz; omitted when the server does not know it yet
   }
 
   interface AudioSourceOption {
@@ -231,6 +232,7 @@
   let selectedSpeciesName = $state('');
   let selectedDetectionId = $state<string | undefined>(undefined);
   let selectedModelType = $state('');
+  let selectedClipSampleRate = $state<number | undefined>(undefined);
 
   function openMobilePlayer(result: SearchResult) {
     if (!result?.id) return;
@@ -238,6 +240,7 @@
     selectedSpeciesName = localizeSpeciesName(result.scientificName, result.commonName);
     selectedDetectionId = result.id;
     selectedModelType = result.modelType ?? '';
+    selectedClipSampleRate = result.clipSampleRate;
     showMobilePlayer = true;
   }
 
@@ -247,6 +250,7 @@
     selectedSpeciesName = '';
     selectedDetectionId = undefined;
     selectedModelType = '';
+    selectedClipSampleRate = undefined;
   }
 
   // Form validation
@@ -1151,6 +1155,7 @@
                                 enableClipExtraction={clipExtractionEnabled}
                                 clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
                                 modelType={result.modelType}
+                                clipSampleRate={result.clipSampleRate}
                               />
                             </div>
                           {:else if result.spectrogramOnly}
@@ -1341,6 +1346,7 @@
                 speciesName={selectedSpeciesName}
                 detectionId={selectedDetectionId}
                 modelType={selectedModelType}
+                clipSampleRate={selectedClipSampleRate}
                 onClose={closeMobilePlayer}
               />
             </div>

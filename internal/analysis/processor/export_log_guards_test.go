@@ -1,13 +1,16 @@
 package processor
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/go-audio-dsp/loudnorm"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
@@ -17,7 +20,7 @@ import (
 // deterministic; the tests here assert on log counts, not on names.
 var fallbackTestTime = time.Date(2026, 7, 20, 9, 37, 1, 0, time.UTC)
 
-// unmeasurableSampleRate is below audionorm's K-weighting minimum, so a
+// unmeasurableSampleRate is below loudnorm's minimum sample rate, so a
 // loudness measurement of a clip at this rate fails. It is a property of the
 // capture source rather than of any one clip, which is exactly why the WARN it
 // produces is guarded per (reason, format, rate).
@@ -101,18 +104,18 @@ func TestResampleKeyDistinguishesRatePairs(t *testing.T) {
 }
 
 // TestNormalizeSkipLogsOncePerFormat drives the real log site. Normalization is
-// enabled with a target audionorm cannot accept, which is the branch that used
+// enabled with a target loudnorm cannot accept, which is the branch that used
 // to emit on every single detection of an affected install.
 func TestNormalizeSkipLogsOncePerFormat(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	resetExportLogGuards(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
-	// Out of audionorm's accepted range, so resolveExportGainDB takes the
+	// Out of loudnorm's accepted range, so resolveExportGainDB takes the
 	// targets arm rather than measuring. Unreachable for a validated config;
 	// set directly here because that branch is the one under test.
 	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
-	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionormMinTargetLUFS - 10
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = loudnorm.AbsoluteGateLUFS - 10
 	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
 
 	for range 5 {
@@ -148,7 +151,7 @@ func TestNormalizeSkipReasonsAreNotConflated(t *testing.T) {
 	// BOTH arms are driven at unmeasurableSampleRate, which is what makes this
 	// test discriminating. The rate must be the shared one rather than
 	// conf.SampleRate: arm 2 reaches the measurement-failure branch only because
-	// the rate is below audionorm's K-weighting minimum, and with mono int16 PCM
+	// the rate is below loudnorm's minimum sample rate, and with mono int16 PCM
 	// no other input can force that failure. Arm 1 does not care about the rate
 	// at all, so it is the one that moves.
 	//
@@ -157,11 +160,11 @@ func TestNormalizeSkipReasonsAreNotConflated(t *testing.T) {
 	// the revert it exists to catch.
 	const rate = unmeasurableSampleRate
 
-	// Arm 1: targets outside audionorm's accepted range, so the targets branch
+	// Arm 1: targets outside loudnorm's accepted range, so the targets branch
 	// is taken before any measurement is attempted.
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", format)
 	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
-	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionormMinTargetLUFS - 10
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = loudnorm.AbsoluteGateLUFS - 10
 	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
 	_, normalized, err := a.resolveExportGainDB(t.Context(), rate, format)
 	require.NoError(t, err)
@@ -193,7 +196,7 @@ func TestNormalizeSkipLineOmitsDetectionID(t *testing.T) {
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
 	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
-	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = audionormMinTargetLUFS - 10
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = loudnorm.AbsoluteGateLUFS - 10
 	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
 
 	_, _, err := a.resolveExportGainDB(t.Context(), conf.SampleRate, "mp3")
@@ -223,11 +226,11 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 	resetExportLogGuards(t)
 
 	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
-	// An odd byte count cannot be whole int16 samples, so ResampleBytes rejects
-	// it. The rate is above conf.SampleRate so resolveExportParams takes the
-	// resampling branch rather than passing the clip through.
-	a.pcmData = []byte{0x01, 0x02, 0x03}
-	a.sourceSampleRate = conf.SampleRate * 2
+	// 100 Hz is outside the resampler's ratio range to 48 kHz, so the upsample
+	// fails deterministically. (An odd byte count no longer fails: the PCM is
+	// trimmed to whole frames first.)
+	const unresamplableRate = 100
+	a.sourceSampleRate = unresamplableRate
 
 	for range 4 {
 		// resolveExportParams returns no error; a failed resample is reported
@@ -236,7 +239,7 @@ func TestResampleFailureLogsOncePerRatePair(t *testing.T) {
 		_, _, _ = a.resolveExportParams(filepath.Join(t.TempDir(), "clip.mp3"))
 		// resolveExportParams rewrites sourceSampleRate only on success; on the
 		// failure path under test it stays put, so the loop keeps re-entering.
-		a.sourceSampleRate = conf.SampleRate * 2
+		a.sourceSampleRate = unresamplableRate
 	}
 
 	assert.Equal(t, 1, countLines(t, logs.String(), "audio_export_resample"),
@@ -265,7 +268,7 @@ func TestNormalizedReportsWhetherMeasurementRan(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, normalized, "normalization disabled must not report as normalized")
 
-	// Normalization on with targets audionorm accepts, at a measurable rate:
+	// Normalization on with targets loudnorm accepts, at a measurable rate:
 	// the measurement runs and the gain comes from it.
 	on := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
 	on.Settings.Realtime.Audio.Export.Normalization.Enabled = true
@@ -340,4 +343,77 @@ func TestMQTTNotReadyWarnsPerTopic(t *testing.T) {
 	assert.Equal(t, 2, countLines(t, logs.String(), "publish_mqtt_not_ready"),
 		"one line per topic: repeats stay silent, a renamed topic is explained again")
 	assert.Contains(t, logs.String(), "birdnet-renamed/soundlevel")
+}
+
+// TestResolveExportGainDB_CancelledContextFailsExport pins that a cancelled
+// context fails the export instead of degrading to the static gain, and that
+// the error still satisfies errors.Is(err, context.Canceled) so the caller
+// reports a shutdown rather than a failure. The unmeasurable-rate case makes
+// the planner return a non-cancellation error while the context is done, which
+// is the case the conditional join exists for.
+func TestResolveExportGainDB_CancelledContextFailsExport(t *testing.T) {
+	resetExportLogGuards(t)
+
+	cases := []struct {
+		name string
+		rate int
+	}{
+		{"measurable rate", conf.SampleRate},
+		{"unmeasurable rate", unmeasurableSampleRate},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
+			a.Settings.Realtime.Audio.Export.Gain = 3
+			a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
+			a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = -23
+			a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
+
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+
+			gainDB, normalized, err := a.resolveExportGainDB(ctx, tc.rate, "mp3")
+			require.ErrorIs(t, err, context.Canceled)
+			assert.Zero(t, gainDB, "a cancelled export must not fall back to the static gain")
+			assert.False(t, normalized)
+		})
+	}
+}
+
+// lateCancelCtx reports no error for its first live calls to Err and
+// context.Canceled afterwards, which models a context that is cancelled while
+// the planner is running: the planner sees a live context and fails for its own
+// reason, and the caller then finds the context done.
+type lateCancelCtx struct {
+	context.Context
+	live  int32
+	calls atomic.Int32
+}
+
+func (c *lateCancelCtx) Err() error {
+	if c.calls.Add(1) <= c.live {
+		return nil
+	}
+	return context.Canceled
+}
+
+// TestResolveExportGainDB_CancelAfterPlannerFailureStillReportsCancellation pins
+// the conditional errors.Join in resolveExportGainDB: the planner fails on an
+// unmeasurable rate with a live context, the context is done by the time the
+// caller looks, and the returned error must still satisfy
+// errors.Is(err, context.Canceled) so a shutdown is not logged as a WARN
+// failure. The two live calls are the leading check in
+// planNativeNormalizationGain and the one at the top of loudnorm.PlanBytes.
+func TestResolveExportGainDB_CancelAfterPlannerFailureStillReportsCancellation(t *testing.T) {
+	resetExportLogGuards(t)
+
+	a := newExportLogAction(t, t.TempDir(), "clip.mp3", "mp3")
+	a.Settings.Realtime.Audio.Export.Normalization.Enabled = true
+	a.Settings.Realtime.Audio.Export.Normalization.TargetLUFS = -23
+	a.Settings.Realtime.Audio.Export.Normalization.TruePeak = -2
+
+	ctx := &lateCancelCtx{Context: t.Context(), live: 2}
+	_, normalized, err := a.resolveExportGainDB(ctx, unmeasurableSampleRate, "mp3")
+	require.ErrorIs(t, err, context.Canceled)
+	assert.False(t, normalized)
 }

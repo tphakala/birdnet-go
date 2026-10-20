@@ -14,7 +14,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/audiocore/pcmgain"
+	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/go-audio-dsp/gain"
 	goflac "github.com/tphakala/go-flac/pcm"
 )
 
@@ -117,33 +118,62 @@ func TestEncodePCM_ConcurrentSamePathNoTempCollision(t *testing.T) {
 	assertNoTempLeftover(t, path)
 }
 
-func TestEncodePCM_GainRoundTrip(t *testing.T) {
+// lsbTolerance is the rounding contract between go-audio-dsp gain (float32,
+// ties to even) and an independent float64 reference.
+const lsbTolerance = 1
+
+// assertWithinOneLSBOfReference checks every sample of got against an
+// independent float64 reference, math.Round(float64(s)*factor) with int16
+// saturation, within lsbTolerance.
+func assertWithinOneLSBOfReference(t *testing.T, src, got []byte, gainDB float64) {
+	t.Helper()
+	require.Len(t, got, len(src))
+	factor := math.Pow(10, gainDB/20)
+	for i := 0; i+1 < len(src); i += 2 {
+		in := float64(int16(binary.LittleEndian.Uint16(src[i:])))
+		ref := min(max(math.Round(in*factor), math.MinInt16), math.MaxInt16)
+		out := float64(int16(binary.LittleEndian.Uint16(got[i:])))
+		if math.Abs(out-ref) > lsbTolerance {
+			require.Failf(t, "sample outside one LSB of the reference",
+				"sample %d: input %v gain %v dB: got %v, reference %v", i/2, in, gainDB, out, ref)
+		}
+	}
+}
+
+// oneShotGain returns src scaled in a single gain.ApplyBytes call on a clone.
+func oneShotGain(t *testing.T, src []byte, gainDB float64) []byte {
+	t.Helper()
+	g, err := gain.New(gainDB)
+	require.NoError(t, err)
+	out := bytes.Clone(src)
+	require.NoError(t, g.ApplyBytes(out))
+	return out
+}
+
+func TestEncodePCM_GainWithinOneLSBOfReference(t *testing.T) {
 	t.Parallel()
 	pcm := makeTestPCM(10000)
 	opts := baseOpts(filepath.Join(t.TempDir(), "clip.flac"), pcm)
 	opts.GainDB = 6.0 // roughly 2x
 	require.NoError(t, EncodePCM(t.Context(), opts))
 
-	want := make([]byte, len(pcm))
-	pcmgain.ApplyInt16(want, pcm, math.Pow(10, opts.GainDB/20))
-	assert.Equal(t, want, decodeFLAC(t, opts.OutputPath),
-		"decoded PCM must equal the gained input (gain applied, stored losslessly)")
+	assertWithinOneLSBOfReference(t, pcm, decodeFLAC(t, opts.OutputPath), opts.GainDB)
 }
 
-// TestEncodePCM_GainRoundTripMultiChunk drives PCM larger than two gain scratch
+// TestEncodePCM_GainChunkedEqualsOneShot drives PCM larger than two gain scratch
 // chunks with a non-aligned final chunk, so the gain loop iterates several times
-// including a short final chunk (the single-chunk GainRoundTrip test cannot
+// including a short final chunk (the single-chunk GainWithinOneLSBOfReference test cannot
 // reach those branches).
-func TestEncodePCM_GainRoundTripMultiChunk(t *testing.T) {
+func TestEncodePCM_GainChunkedEqualsOneShot(t *testing.T) {
 	t.Parallel()
 	pcm := makeTestPCM(2*gainScratchBytes + 777)
 	opts := baseOpts(filepath.Join(t.TempDir(), "clip.flac"), pcm)
 	opts.GainDB = 6.0
 	require.NoError(t, EncodePCM(t.Context(), opts))
 
-	want := make([]byte, len(pcm))
-	pcmgain.ApplyInt16(want, pcm, math.Pow(10, opts.GainDB/20))
-	assert.Equal(t, want, decodeFLAC(t, opts.OutputPath))
+	got := decodeFLAC(t, opts.OutputPath)
+	assertWithinOneLSBOfReference(t, pcm, got, opts.GainDB)
+	assert.Equal(t, oneShotGain(t, pcm, opts.GainDB), got, "the chunked loop must equal one-shot gain")
 }
 
 // makeTestPCMStereo builds interleaved L/R int16 LE PCM with the given frame
@@ -388,10 +418,10 @@ func TestEncodePCMToBuffer_RoundTripLossless(t *testing.T) {
 	assert.Equal(t, pcm, decodeFLACBytes(t, buf.Bytes()), "decoded PCM must equal input (lossless)")
 }
 
-// TestEncodePCMToBuffer_GainRoundTrip uses PCM larger than two gain scratch
+// TestEncodePCMToBuffer_GainChunkedEqualsOneShot uses PCM larger than two gain scratch
 // chunks (with a non-aligned tail) so the shared chunked gain loop is exercised
 // through the buffer path too.
-func TestEncodePCMToBuffer_GainRoundTrip(t *testing.T) {
+func TestEncodePCMToBuffer_GainChunkedEqualsOneShot(t *testing.T) {
 	t.Parallel()
 	pcm := makeTestPCM(2*gainScratchBytes + 777)
 	opts := bufferBaseOpts(pcm)
@@ -399,10 +429,9 @@ func TestEncodePCMToBuffer_GainRoundTrip(t *testing.T) {
 	buf, err := EncodePCMToBuffer(t.Context(), opts)
 	require.NoError(t, err)
 
-	want := make([]byte, len(pcm))
-	pcmgain.ApplyInt16(want, pcm, math.Pow(10, opts.GainDB/20))
-	assert.Equal(t, want, decodeFLACBytes(t, buf.Bytes()),
-		"decoded PCM must equal the gained input (gain applied, stored losslessly)")
+	got := decodeFLACBytes(t, buf.Bytes())
+	assertWithinOneLSBOfReference(t, pcm, got, opts.GainDB)
+	assert.Equal(t, oneShotGain(t, pcm, opts.GainDB), got, "the chunked loop must equal one-shot gain")
 }
 
 func TestEncodePCMToBuffer_StereoRoundTrip(t *testing.T) {
@@ -524,4 +553,37 @@ func TestEncodePCMToBuffer_CancelledDuringEncode(t *testing.T) {
 	ctx := &errAfterCtx{Context: t.Context(), after: 1}
 	_, err := EncodePCMToBuffer(ctx, opts)
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+// A NaN gain cannot be turned into a scale factor: the file and buffer
+// encoders report a validation error from the gain step, and the file encoder
+// leaves neither an output file nor a temp file.
+func TestEncodePCM_NaNGainFailsAtGainInit(t *testing.T) {
+	t.Parallel()
+	pcm := makeTestPCM(10000)
+
+	check := func(t *testing.T, err error) {
+		t.Helper()
+		require.Error(t, err)
+		enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+		require.True(t, ok, "want an enhanced error, got %T", err)
+		assert.Equal(t, string(errors.CategoryValidation), enhanced.GetCategory())
+		assert.Equal(t, "flac_gain_init", enhanced.GetContext()["operation"])
+	}
+
+	t.Run("file", func(t *testing.T) {
+		t.Parallel()
+		opts := baseOpts(filepath.Join(t.TempDir(), "clip.flac"), pcm)
+		opts.GainDB = math.NaN()
+		check(t, EncodePCM(t.Context(), opts))
+		assert.NoFileExists(t, opts.OutputPath)
+		assertNoTempLeftover(t, opts.OutputPath)
+	})
+	t.Run("buffer", func(t *testing.T) {
+		t.Parallel()
+		opts := bufferBaseOpts(pcm)
+		opts.GainDB = math.NaN()
+		_, err := EncodePCMToBuffer(t.Context(), opts)
+		check(t, err)
+	})
 }

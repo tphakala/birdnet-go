@@ -189,6 +189,23 @@ func (r *detectionRepository) GetHourly(ctx context.Context, date, hour string, 
 	return results, total, nil
 }
 
+// RecordClipSampleRate forwards to the store, passing ctx so the write is bounded by it.
+func (r *detectionRepository) RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error {
+	if err := r.store.RecordClipSampleRate(ctx, id, clipName, rate); err != nil {
+		return fmt.Errorf("failed to record clip sample rate for detection %d: %w", id, err)
+	}
+	return nil
+}
+
+// FillClipSampleRate forwards to the store, passing ctx so the write is bounded by it.
+func (r *detectionRepository) FillClipSampleRate(ctx context.Context, id uint, clipName string, rate int) (bool, error) {
+	changed, err := r.store.FillClipSampleRate(ctx, id, clipName, rate)
+	if err != nil {
+		return false, fmt.Errorf("failed to fill clip sample rate for detection %d: %w", id, err)
+	}
+	return changed, nil
+}
+
 // Lock sets a lock on a detection.
 func (r *detectionRepository) Lock(ctx context.Context, id string) error {
 	if err := r.store.LockNote(id); err != nil {
@@ -352,6 +369,7 @@ func NoteFromResult(result *detection.Result) Note {
 		Threshold:         result.Threshold,
 		Sensitivity:       result.Sensitivity,
 		ClipName:          result.ClipName,
+		ClipSampleRate:    result.ClipSampleRate,
 		ProcessingTime:    result.ProcessingTime,
 		Source: AudioSource{
 			ID:          result.AudioSource.ID,
@@ -369,6 +387,7 @@ func NoteFromResult(result *detection.Result) Note {
 
 // AdditionalResultsToDatastoreResults converts a slice of detection.AdditionalResult
 // to datastore.Results for database persistence or JSON serialization.
+// Each species is written in its stored label form (see detection.Species.StoredLabel).
 func AdditionalResultsToDatastoreResults(results []detection.AdditionalResult) []Results {
 	if len(results) == 0 {
 		return nil
@@ -376,12 +395,8 @@ func AdditionalResultsToDatastoreResults(results []detection.AdditionalResult) [
 
 	dsResults := make([]Results, len(results))
 	for i, r := range results {
-		speciesStr := r.Species.ScientificName + "_" + r.Species.CommonName
-		if r.Species.Code != "" {
-			speciesStr += "_" + r.Species.Code
-		}
 		dsResults[i] = Results{
-			Species:    speciesStr,
+			Species:    r.Species.StoredLabel(),
 			Confidence: float32(r.Confidence),
 			RawLabel:   r.RawLabel,
 		}
@@ -424,6 +439,7 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 		Threshold:      note.Threshold,
 		Sensitivity:    note.Sensitivity,
 		ClipName:       note.ClipName,
+		ClipSampleRate: note.ClipSampleRate,
 		ProcessingTime: note.ProcessingTime,
 		Unlikely:       note.Unlikely,
 		Occurrence:     note.Occurrence,
