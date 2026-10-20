@@ -246,10 +246,16 @@ broadcast are emitted before its audio clip is written, and with Extended Captur
 clip write is deferred until the capture tail is recorded (up to the capture-buffer
 size). While a clip is still legitimately pending, the by-ID audio and spectrogram
 endpoints (`GET /audio/:id`, `GET /spectrogram/:id`) return `503 Service Unavailable`
-with a `Retry-After` header sized to the remaining time, instead of `404`. Clients
-should honor `Retry-After` and retry; the clip appears once the capture completes. A
-`404` from these endpoints means the clip is genuinely absent (never produced, or purged
-by retention). These pending 503s are intentionally not logged as errors and are not
+with a `Retry-After` header, instead of `404`; for the Extended Capture window it is
+sized to the remaining time. Clients
+should honor `Retry-After` and retry; the clip appears once the capture completes. The
+same `503` answers `GET /audio/:id` for a detection that completed within the last 10
+minutes when its clip is still missing after a short grace wait, because the export may
+still be queued (its `Retry-After` is the short minimum). A `404` from `GET /audio/:id`
+means the clip is absent: never produced, or purged by retention, and for a detection
+older than 10 minutes. A request with no known completion time (a filename serve) also
+answers `404` after the grace wait. A `404` from `GET /spectrogram/:id` carries
+`data.reason`, described below: `source_pending` means the clip may still appear. These pending 503s are intentionally not logged as errors and are not
 reported to telemetry, since they are expected, self-resolving backpressure.
 
 A by-ID spectrogram request (`GET /spectrogram/:id`) for a clip that can no longer appear

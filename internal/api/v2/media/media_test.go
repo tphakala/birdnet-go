@@ -1882,7 +1882,7 @@ func TestIsRecentClipCompletion(t *testing.T) {
 // TestServeAudioByID_GraceSkippedForOldDetections verifies the defense-in-depth
 // grace-poll skip: a 404 for a detection whose capture completed long ago returns
 // immediately (no grace wait), while a recent detection still waits out the grace
-// period. Timing bounds around audioGracePeriod distinguish the two paths.
+// period and then answers 503 with Retry-After. Timing bounds around audioGracePeriod distinguish the two paths.
 func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 	// clipPath resolves but the file does not exist on disk, forcing the 404 path.
 	const missingClip = "2024/01/ghost_95p_20240101T000000Z.wav"
@@ -1890,17 +1890,20 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 	tests := []struct {
 		name       string
 		endTime    time.Time
+		wantStatus int
 		maxElapsed time.Duration // set: proves grace was skipped
 		minElapsed time.Duration // set: proves grace ran
 	}{
 		{
 			name:       "old detection skips grace and 404s immediately",
 			endTime:    time.Now().Add(-time.Hour),
+			wantStatus: http.StatusNotFound,
 			maxElapsed: audioGracePeriod,
 		},
 		{
-			name:       "recent detection still waits the grace period",
+			name:       "recent detection waits the grace period and answers 503 while the export may be queued",
 			endTime:    time.Now(),
+			wantStatus: http.StatusServiceUnavailable,
 			minElapsed: audioGracePeriod,
 		},
 	}
@@ -1924,12 +1927,19 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 			handlerErr := controller.ServeAudioByID(c)
 			elapsed := time.Since(start)
 
-			// The missing clip resolves to a 404, returned as an echo.HTTPError
-			// (the framework translates it to the HTTP response).
-			require.Error(t, handlerErr, "missing clip must error")
-			httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr)
-			require.True(t, ok, "expected an echo.HTTPError")
-			assert.Equal(t, http.StatusNotFound, httpErr.Code, "missing clip must 404")
+			if tc.wantStatus == http.StatusNotFound {
+				// The missing clip resolves to a 404, returned as an echo.HTTPError
+				// (the framework translates it to the HTTP response).
+				require.Error(t, handlerErr, "missing clip must error")
+				httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr)
+				require.True(t, ok, "expected an echo.HTTPError")
+				assert.Equal(t, http.StatusNotFound, httpErr.Code, "missing clip must 404")
+			} else {
+				// A pending answer is written directly with a Retry-After hint.
+				require.NoError(t, handlerErr)
+				assert.Equal(t, tc.wantStatus, rec.Code)
+				assert.NotEmpty(t, rec.Header().Get(echo.HeaderRetryAfter), "503 must carry Retry-After")
+			}
 			if tc.maxElapsed > 0 {
 				assert.Less(t, elapsed, tc.maxElapsed,
 					"old detection must skip the grace wait")
