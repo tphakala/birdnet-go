@@ -12,9 +12,10 @@
  * Status checks and generation triggers don't use queue slots.
  * Only the final image fetch (confirmed ready on disk) uses a slot.
  *
- * The poll cycle pauses while the page is hidden and resumes with one status
- * check when the page is visible again. Generate requests per start() are
- * capped by maxGenerateRequests.
+ * The poll cycle pauses while the page is hidden and resumes the step that was
+ * due (a status check that may be followed by a generate request, or the
+ * generate request of a re-trigger) when the page is visible again. Generate
+ * requests per start() are capped by maxGenerateRequests.
  */
 
 import {
@@ -180,9 +181,10 @@ const DEFAULT_CONFIG: Required<SpectrogramLoaderConfig> = {
  * Call `stop()` when hidden or destroyed.
  * Read `state`, `spectrogramUrl`, `showSpinner`, `error` for UI binding.
  *
- * The poll cycle pauses while the page is hidden and resumes with one status
- * check when it is visible again. Generate requests per `start()` are capped by
- * `maxGenerateRequests`.
+ * The poll cycle pauses while the page is hidden and resumes the step that was
+ * due (a status check that may be followed by a generate request, or the
+ * generate request of a re-trigger) when it is visible again. Generate requests
+ * per `start()` are capped by `maxGenerateRequests`.
  *
  * Logs the browser-side diagnostics described above when they are turned on
  * (SPECTROGRAM_DIAGNOSTICS_STORAGE_KEY).
