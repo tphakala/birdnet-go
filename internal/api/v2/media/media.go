@@ -3343,6 +3343,9 @@ func (c *Handler) waitForAudioFileCtx(ctx context.Context, relAudioPath string) 
 			// Final check before giving up - the file may have appeared
 			// between the last tick and the deadline.
 			if _, err := c.SFS.StatRel(relAudioPath); err == nil {
+				getSpectrogramLogger().Debug("Audio file appeared after waiting",
+					logger.String("relative_audio_path", relAudioPath),
+					logger.Int64("waited_ms", time.Since(waitStart).Milliseconds()))
 				return nil
 			}
 			// Distinguish a genuine "file never appeared" from a canceled/timed-out
@@ -3481,14 +3484,16 @@ func (c *Handler) acquireSemaphoreSlot(ctx context.Context, queueKey string) err
 			getSpectrogramLogger().Warn("Timeout waiting for semaphore slot",
 				logger.String("queue_key", queueKey),
 				logger.Int("timeout_seconds", int(semaphoreAcquireTimeout.Seconds())),
-				logger.Int("slots_in_use", len(spectrogramSemaphore)))
+				logger.Int("slots_in_use", len(spectrogramSemaphore)),
+				logger.Int64("waited_ms", time.Since(waitStart).Milliseconds()))
 			c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Request timeout - server busy, please retry")
 			return fmt.Errorf("timeout waiting for generation slot: %w", err)
 		}
 
 		getSpectrogramLogger().Debug("Context canceled while waiting for semaphore",
 			logger.String("queue_key", queueKey),
-			logger.Error(err))
+			logger.Error(err),
+			logger.Int64("waited_ms", time.Since(waitStart).Milliseconds()))
 
 		c.updateQueueStatus(queueKey, spectrogramStatusFailed, 0, "Generation canceled")
 		return err
