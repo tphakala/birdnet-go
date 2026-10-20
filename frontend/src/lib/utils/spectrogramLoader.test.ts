@@ -7,6 +7,7 @@ const mockAcquireSlot = vi.fn(() => ({
   cancel: vi.fn(),
 }));
 const mockReleaseSlot = vi.fn();
+const mockGetQueueStats = vi.fn(() => ({ active: 3, queued: 2, maxConcurrent: 3 }));
 
 vi.mock('$lib/utils/imageLoadQueue', () => ({
   get acquireSlot() {
@@ -14,6 +15,9 @@ vi.mock('$lib/utils/imageLoadQueue', () => ({
   },
   get releaseSlot() {
     return mockReleaseSlot;
+  },
+  get getQueueStats() {
+    return mockGetQueueStats;
   },
   MAX_CONCURRENT_IMAGE_LOADS: 3,
 }));
@@ -38,7 +42,14 @@ vi.mock('$lib/utils/logger', () => ({
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-import { createSpectrogramLoader } from './spectrogramLoader.svelte';
+import { loggers } from '$lib/utils/logger';
+import {
+  createSpectrogramLoader,
+  LATE_POLL_TIMER_WARN_MS,
+  LONG_SLOT_HOLD_WARN_MS,
+  SLOW_SLOT_WAIT_WARN_MS,
+  SLOW_STATUS_FETCH_WARN_MS,
+} from './spectrogramLoader.svelte';
 
 // Helper to create mock JSON response
 function mockJsonResponse(data: Record<string, unknown>, status = 200) {
@@ -593,6 +604,106 @@ describe('spectrogramLoader', () => {
 
       expect(loader.state).toBe('error');
       expect(loader.error).toBe(true);
+      loader.destroy();
+    });
+  });
+
+  // The diagnostics move the wall clock with vi.setSystemTime, which leaves the
+  // fake timers alone, to stand in for a throttled timer, a request queued in
+  // the browser, or a held image slot.
+  describe('diagnostics', () => {
+    const warn = vi.mocked(loggers.ui.warn);
+    const warnMessages = () => warn.mock.calls.map(call => String(call[0]));
+
+    it('warns when a poll timer fires late', async () => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+      const loader = createSpectrogramLoader({ initialPollIntervalMs: 100 });
+      loader.start(42);
+      await flushAll();
+
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+      vi.setSystemTime(Date.now() + LATE_POLL_TIMER_WARN_MS + 1000);
+      vi.advanceTimersByTime(100);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram poll timer fired late',
+        null,
+        expect.objectContaining({ detectionId: 42, intervalMs: 100 }),
+        'spectrogram-poll-late'
+      );
+      loader.destroy();
+    });
+
+    it('stays quiet for an on-time poll, a fast status request and a quick image', async () => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+      const loader = createSpectrogramLoader({ initialPollIntervalMs: 100 });
+      loader.start(42);
+      await flushAll();
+
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      vi.advanceTimersByTime(100);
+      await flushAll();
+      expect(loader.state).toBe('loading');
+      loader.handleImageLoad();
+
+      expect(warn).not.toHaveBeenCalled();
+      loader.destroy();
+    });
+
+    it('warns when a status poll request is slow', async () => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'generating' } }));
+      const loader = createSpectrogramLoader({ initialPollIntervalMs: 100 });
+      loader.start(42);
+      await flushAll();
+
+      mockFetch.mockImplementationOnce(() => {
+        vi.setSystemTime(Date.now() + SLOW_STATUS_FETCH_WARN_MS + 500);
+        return Promise.resolve(mockJsonResponse({ data: { status: 'generating' } }));
+      });
+      vi.advanceTimersByTime(100);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram status request was slow',
+        null,
+        expect.objectContaining({ detectionId: 42, httpStatus: 200 }),
+        'spectrogram-status-slow'
+      );
+      loader.destroy();
+    });
+
+    it('warns with queue stats when the image slot wait is long', async () => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      mockAcquireSlot.mockImplementationOnce(() => {
+        vi.setSystemTime(Date.now() + SLOW_SLOT_WAIT_WARN_MS + 500);
+        return { promise: Promise.resolve(true), cancel: vi.fn() };
+      });
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+
+      expect(warn).toHaveBeenCalledWith(
+        'Spectrogram waited long for an image load slot',
+        null,
+        expect.objectContaining({ detectionId: 42, active: 3, queued: 2, maxConcurrent: 3 }),
+        'spectrogram-slot-wait'
+      );
+      loader.destroy();
+    });
+
+    it('warns when an image holds its slot for a long time before loading', async () => {
+      mockFetch.mockResolvedValueOnce(mockJsonResponse({ data: { status: 'exists' } }));
+      const loader = createSpectrogramLoader();
+      loader.start(42);
+      await flushAll();
+      expect(loader.state).toBe('loading');
+
+      vi.setSystemTime(Date.now() + LONG_SLOT_HOLD_WARN_MS + 500);
+      loader.handleImageLoad();
+
+      expect(warnMessages()).toEqual(['Spectrogram image held its load slot for a long time']);
+      expect(mockReleaseSlot).toHaveBeenCalledTimes(1);
       loader.destroy();
     });
   });

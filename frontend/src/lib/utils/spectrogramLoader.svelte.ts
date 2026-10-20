@@ -13,12 +13,30 @@
  * Only the final image fetch (confirmed ready on disk) uses a slot.
  */
 
-import { acquireSlot, releaseSlot, type SlotHandle } from '$lib/utils/imageLoadQueue';
+import {
+  acquireSlot,
+  getQueueStats,
+  releaseSlot,
+  type SlotHandle,
+} from '$lib/utils/imageLoadQueue';
 import { getCsrfToken } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
 import { buildAppUrl } from '$lib/utils/urlHelpers';
 
 const logger = loggers.ui;
+
+// Diagnostic thresholds. Each one logs a throttled warning (warnings are kept in
+// production builds) when a card's spinner is held up by the browser rather
+// than by the server.
+
+/** A poll timer firing this much later than scheduled was throttled, typically in a background tab. */
+export const LATE_POLL_TIMER_WARN_MS = 2000;
+/** A status request taking longer than this most likely waited in the browser's connection queue. */
+export const SLOW_STATUS_FETCH_WARN_MS = 3000;
+/** Waiting longer than this for an image load slot means the slots are held. */
+export const SLOW_SLOT_WAIT_WARN_MS = 5000;
+/** An image holding its load slot longer than this before load or error fired. */
+export const LONG_SLOT_HOLD_WARN_MS = 10000;
 
 /** Loading states for the spectrogram loader state machine */
 export type SpectrogramLoadState =
@@ -64,6 +82,10 @@ const DEFAULT_CONFIG: Required<SpectrogramLoaderConfig> = {
  * Call `start(detectionId)` when the card becomes visible.
  * Call `stop()` when hidden or destroyed.
  * Read `state`, `spectrogramUrl`, `showSpinner`, `error` for UI binding.
+ *
+ * Logs a throttled warning when the browser rather than the server holds a card
+ * up: a late poll timer, a slow status request, a long wait for an image slot,
+ * or an image that keeps its slot too long (thresholds above).
  */
 export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}) {
   const config = { ...DEFAULT_CONFIG, ...userConfig };
@@ -84,6 +106,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   let imageRetryCount = 0;
   let slotHandle: SlotHandle | undefined;
   let hasSlot = false;
+  let slotAcquiredAt = 0;
   let abortController: AbortController | undefined;
   let destroyed = false;
 
@@ -109,6 +132,15 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
   function releaseCurrentSlot(): void {
     if (hasSlot) {
+      const heldMs = Date.now() - slotAcquiredAt;
+      if (heldMs > LONG_SLOT_HOLD_WARN_MS) {
+        logger.warn(
+          'Spectrogram image held its load slot for a long time',
+          null,
+          { detectionId: currentDetectionId, heldMs, state },
+          'spectrogram-slot-hold'
+        );
+      }
       releaseSlot();
       hasSlot = false;
     }
@@ -308,9 +340,20 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
   function schedulePoll(detectionId: number): void {
     if (isStale(detectionId)) return;
 
+    const interval = currentPollInterval;
+    const scheduledAt = Date.now();
     pollTimer = setTimeout(() => {
+      const lateMs = Date.now() - scheduledAt - interval;
+      if (lateMs > LATE_POLL_TIMER_WARN_MS) {
+        logger.warn(
+          'Spectrogram poll timer fired late',
+          null,
+          { detectionId, intervalMs: interval, lateMs, visibility: document.visibilityState },
+          'spectrogram-poll-late'
+        );
+      }
       void pollOnce(detectionId);
-    }, currentPollInterval);
+    }, interval);
   }
 
   async function pollOnce(detectionId: number): Promise<void> {
@@ -330,9 +373,19 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     abortController = new AbortController();
 
     try {
+      const fetchStart = Date.now();
       const response = await fetch(buildStatusUrl(detectionId), {
         signal: abortController.signal,
       });
+      const fetchMs = Date.now() - fetchStart;
+      if (fetchMs > SLOW_STATUS_FETCH_WARN_MS) {
+        logger.warn(
+          'Spectrogram status request was slow',
+          null,
+          { detectionId, fetchMs, httpStatus: response.status },
+          'spectrogram-status-slow'
+        );
+      }
 
       if (isStale(detectionId)) return;
 
@@ -386,8 +439,18 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
 
     state = 'acquiring-slot';
 
+    const waitStart = Date.now();
     slotHandle = acquireSlot();
     const acquired = await slotHandle.promise;
+    const waitMs = Date.now() - waitStart;
+    if (acquired && waitMs > SLOW_SLOT_WAIT_WARN_MS) {
+      logger.warn(
+        'Spectrogram waited long for an image load slot',
+        null,
+        { detectionId, waitMs, ...getQueueStats() },
+        'spectrogram-slot-wait'
+      );
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- state can change during await
     if (!acquired || isStale(detectionId) || state !== 'acquiring-slot') {
@@ -398,6 +461,7 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
     }
 
     hasSlot = true;
+    slotAcquiredAt = Date.now();
     state = 'loading';
     spectrogramUrl = buildImageUrl(detectionId);
   }
