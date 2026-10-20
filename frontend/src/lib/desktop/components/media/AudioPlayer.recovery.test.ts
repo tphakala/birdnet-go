@@ -434,4 +434,119 @@ describe('AudioPlayer recovery', () => {
       });
     }
   );
+
+  describe('spectrogram retry and error state', () => {
+    const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
+    const SPECTROGRAM_UNAVAILABLE_TEXT = 'components.audio.spectrogramUnavailable';
+    // Longer than the sum of all retry backoffs (500 + 1000 + 2000 + 4000 ms)
+    const PAST_ALL_BACKOFFS_MS = 10_000;
+    // SPECTROGRAM_POLL_INTERVAL in AudioPlayer.svelte
+    const POLL_INTERVAL_MS = 2000;
+    // MAX_POLL_DURATION in AudioPlayer.svelte
+    const MAX_POLL_DURATION_MS = 5 * 60 * 1000;
+    const SERVER_ERROR_STATUS = 500;
+    let originalFetch: typeof globalThis.fetch;
+
+    function statusResponse(status: string, httpStatus = 200): Response {
+      return new Response(JSON.stringify({ status }), {
+        status: httpStatus,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Answers the status endpoint from a queue, one entry per request.
+    function stubStatusFetch(responses: Response[]) {
+      const stub = vi.fn(async () => {
+        const next = responses.shift();
+        if (!next) throw new Error('unexpected extra status request');
+        return next;
+      });
+      globalThis.fetch = stub;
+      return stub;
+    }
+
+    function spectrogramImg(): HTMLImageElement {
+      return screen.getByAltText<HTMLImageElement>(SPECTROGRAM_ALT);
+    }
+
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    it('stops the image retries when the status poll reports failed', async () => {
+      stubStatusFetch([statusResponse('failed')]);
+      mount();
+
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+
+      expect(spectrogramImg().getAttribute('src')).not.toContain('retry=');
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+    });
+
+    it('clears the unavailable overlay when the image loads after a failure', async () => {
+      stubStatusFetch([statusResponse('failed')]);
+      mount();
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+
+      await fireEvent.load(spectrogramImg());
+
+      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+      expect(spectrogramImg().classList.contains('invisible')).toBe(false);
+    });
+
+    it('starts a fresh request with retry count 0 when the detection changes after a failure', async () => {
+      stubStatusFetch([statusResponse('not_started')]);
+      const { rerender } = mount();
+      // Exhaust the retries so the loader ends in the error state
+      for (let i = 0; i < 5; i++) {
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+      }
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      expect(spectrogramImg().getAttribute('src')).toContain('retry=');
+
+      await rerender({ audioUrl: '/audio/next.mp3', detectionId: 'next-456' });
+
+      const src = spectrogramImg().getAttribute('src') ?? '';
+      expect(src).toContain('/api/v2/spectrogram/next-456');
+      expect(src).not.toContain('retry=');
+      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+    });
+
+    it('stops polling after the maximum poll duration when every status request fails', async () => {
+      const stub = vi.fn(async () => statusResponse('', SERVER_ERROR_STATUS));
+      globalThis.fetch = stub;
+      mount();
+      await fireEvent.error(spectrogramImg());
+
+      await vi.advanceTimersByTimeAsync(MAX_POLL_DURATION_MS + POLL_INTERVAL_MS * 2);
+      const callsAtLimit = stub.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(MAX_POLL_DURATION_MS);
+
+      expect(stub.mock.calls.length).toBe(callsAtLimit);
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+    });
+
+    it('keeps polling after a failed status request and reloads the image once it exists', async () => {
+      const stub = stubStatusFetch([
+        statusResponse('', SERVER_ERROR_STATUS),
+        statusResponse('generating'),
+        statusResponse('exists'),
+      ]);
+      mount();
+
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3);
+
+      expect(stub).toHaveBeenCalledTimes(3);
+      expect(spectrogramImg().getAttribute('src')).toContain('cache=1');
+    });
+  });
 });

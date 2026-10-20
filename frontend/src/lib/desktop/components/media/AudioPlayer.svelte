@@ -1385,6 +1385,13 @@
       `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
     );
 
+  // Schedules the next poll without touching statusPollStartTime, so
+  // MAX_POLL_DURATION bounds the whole polling run and not one request.
+  const scheduleNextStatusPoll = () => {
+    if (statusPollTimer) clearTimeout(statusPollTimer);
+    statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
+  };
+
   const pollSpectrogramStatus = async () => {
     if (!showSpectrogram || !detectionId) {
       debugLog('pollSpectrogramStatus: skipped', {
@@ -1449,14 +1456,28 @@
         } else if (status.status === 'queued' || status.status === 'generating') {
           // Still processing, continue polling
           debugLog('pollSpectrogramStatus: still processing, scheduling next poll');
-          clearStatusPollTimer();
-          statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
+          scheduleNextStatusPoll();
         } else if (status.status === 'failed') {
-          // Generation failed
+          // Generation failed: stop polling and the image retries
           debugLog('pollSpectrogramStatus: generation failed');
           clearStatusPollTimer();
+          clearSpectrogramRetryTimer();
           spectrogramLoader.setError();
+        } else {
+          // not_started or an unknown status: end polling and leave the image
+          // retries to decide the outcome.
+          debugLog('pollSpectrogramStatus: nothing in progress, ending poll', {
+            status: status.status,
+          });
+          clearStatusPollTimer();
         }
+      } else {
+        // The status request itself failed: try again at the poll interval.
+        // The MAX_POLL_DURATION check on entry bounds the rescheduling.
+        debugLog('pollSpectrogramStatus: non-OK response, rescheduling', {
+          status: response.status,
+        });
+        scheduleNextStatusPoll();
       }
     } catch (err) {
       // Ignore abort errors
@@ -1467,6 +1488,7 @@
       }
       logger.error('Failed to poll spectrogram status', { detectionId, error: err });
       debugLog('pollSpectrogramStatus: error', err);
+      scheduleNextStatusPoll();
     }
   };
 
@@ -1543,7 +1565,8 @@
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
     debugLog('handleSpectrogramLoad: success');
-    spectrogramLoader.setLoading(false);
+    // reset() also clears a sticky error left by a failure that a late load outran
+    spectrogramLoader.reset();
     spectrogramRetryCount = 0; // Reset retry count on successful load
     clearSpectrogramRetryTimer();
     clearStatusPollTimer(); // Also clear status polling
@@ -1791,11 +1814,7 @@
   // Handle spectrogram base URL changes (different detection) with proper loading state
   $effect(() => {
     // Only reset loading state if base URL actually changed (new detection)
-    if (
-      spectrogramBaseUrl &&
-      spectrogramBaseUrl !== previousSpectrogramBaseUrl &&
-      !spectrogramLoader.error
-    ) {
+    if (spectrogramBaseUrl && spectrogramBaseUrl !== previousSpectrogramBaseUrl) {
       debugLog('spectrogramBaseUrl changed', {
         from: previousSpectrogramBaseUrl,
         to: spectrogramBaseUrl,
