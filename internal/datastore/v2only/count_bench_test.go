@@ -27,6 +27,10 @@ func BenchmarkCountSpeciesDetections(b *testing.B) {
 	}
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
+			// A database that does not cover the interval would time an empty count.
+			n, err := ds.CountSpeciesDetections(tc.species, tc.date, tc.hour, tc.duration)
+			require.NoError(b, err)
+			require.Positive(b, n, "benchmark database has no detections for this case")
 			b.ReportAllocs()
 			for b.Loop() {
 				_, err := ds.CountSpeciesDetections(tc.species, tc.date, tc.hour, tc.duration)
@@ -50,6 +54,10 @@ func BenchmarkCountHourlyDetections(b *testing.B) {
 	}
 	for _, tc := range cases {
 		b.Run(tc.name, func(b *testing.B) {
+			// A database that does not cover the interval would time an empty count.
+			n, err := ds.CountHourlyDetections(tc.date, tc.hour, tc.duration)
+			require.NoError(b, err)
+			require.Positive(b, n, "benchmark database has no detections for this case")
 			b.ReportAllocs()
 			for b.Loop() {
 				_, err := ds.CountHourlyDetections(tc.date, tc.hour, tc.duration)
