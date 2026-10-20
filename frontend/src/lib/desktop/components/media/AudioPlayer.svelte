@@ -70,7 +70,10 @@
   import { getCsrfToken } from '$lib/utils/api';
   import { isKnownSampleRate, lookupClipSampleRate } from '$lib/utils/clipSampleRateLookup';
   import {
+    SPECTROGRAM_REASON,
     fetchSpectrogramStatus,
+    isTerminalSpectrogramReason,
+    markSpectrogramSourceMissing,
     parseSpectrogramStatus,
     type SpectrogramGenerationStatus,
   } from '$lib/utils/spectrogramStatus';
@@ -1398,6 +1401,27 @@
     statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
   };
 
+  // The server reported a reason retrying cannot change (the source clip is gone or
+  // cannot be rendered). source_missing describes the audio, not the image: a request
+  // that carried the clip rate is first tried without it, which the server answers
+  // from any render it kept. Otherwise every retry, poll and probe ends and the
+  // unavailable state shows.
+  const endOnTerminalReason = (reason: string | undefined) => {
+    debugLog('pollSpectrogramStatus: terminal reason', { reason });
+    if (reason === SPECTROGRAM_REASON.sourceMissing) {
+      markSpectrogramSourceMissing(detectionId);
+    }
+    if (overlayRate !== undefined && !processedSpectrogramUrl) {
+      fallBackToImageWithoutRate();
+      return;
+    }
+    clearStatusPollTimer();
+    clearSpectrogramRetryTimer();
+    clearSpectrogramProbe();
+    spectrogramStatusFailed = true;
+    spectrogramLoader.setError();
+  };
+
   const pollSpectrogramStatus = async () => {
     if (!showSpectrogram || !detectionId) {
       debugLog('pollSpectrogramStatus: skipped', {
@@ -1468,6 +1492,11 @@
           // Still processing, continue polling
           debugLog('pollSpectrogramStatus: still processing, scheduling next poll');
           scheduleNextStatusPoll();
+        } else if (
+          (status.status === 'failed' || status.status === 'not_started') &&
+          isTerminalSpectrogramReason(status.reason)
+        ) {
+          endOnTerminalReason(status.reason);
         } else if (status.status === 'failed') {
           // Generation failed: stop polling and the image retries
           debugLog('pollSpectrogramStatus: generation failed');

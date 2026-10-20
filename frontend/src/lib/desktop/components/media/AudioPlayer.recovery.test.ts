@@ -23,6 +23,10 @@ import {
 import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS, CANPLAY_TIMEOUT_MS } from '$lib/utils/audio';
 import { loggers } from '$lib/utils/logger';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
+import {
+  clearSpectrogramSourceMarks,
+  isSpectrogramSourceKnownMissing,
+} from '$lib/utils/spectrogramStatus';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -452,8 +456,8 @@ describe('AudioPlayer recovery', () => {
     const STATUS_ERRORS_BEFORE_RECOVERY = 8;
     let originalFetch: typeof globalThis.fetch;
 
-    function statusResponse(status: string, httpStatus = 200): Response {
-      return new Response(JSON.stringify({ status }), {
+    function statusResponse(status: string, httpStatus = 200, reason?: string): Response {
+      return new Response(JSON.stringify({ status, ...(reason ? { reason } : {}) }), {
         status: httpStatus,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -480,6 +484,58 @@ describe('AudioPlayer recovery', () => {
 
     afterEach(() => {
       globalThis.fetch = originalFetch;
+      clearSpectrogramSourceMarks();
+    });
+
+    describe('status reason', () => {
+      it.each([
+        ['not_started', 'source_missing'],
+        ['not_started', 'source_invalid'],
+      ])(
+        'ends every retry within one tick for a failed image and %s with %s',
+        async (status, reason) => {
+          const stub = stubStatusFetch([statusResponse(status, 200, reason)]);
+          mount();
+
+          await fireEvent.error(spectrogramImg());
+          await vi.advanceTimersByTimeAsync(0);
+
+          expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+          await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS + MAX_POLL_DURATION_MS);
+          expect(spectrogramImg().getAttribute('src')).not.toContain('retry=');
+          expect(stub).toHaveBeenCalledTimes(1);
+        }
+      );
+
+      it('marks the clip as known missing for source_missing only', async () => {
+        stubStatusFetch([statusResponse('not_started', 200, 'source_missing')]);
+        mount();
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(0);
+        expect(isSpectrogramSourceKnownMissing('test-123')).toBe(true);
+
+        cleanup();
+        clearSpectrogramSourceMarks();
+        stubStatusFetch([statusResponse('failed', 200, 'source_invalid')]);
+        mount({ detectionId: 'other-1' });
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(0);
+        expect(isSpectrogramSourceKnownMissing('other-1')).toBe(false);
+      });
+
+      it.each(['source_pending', 'not_generated'])(
+        'keeps the image retries going for not_started with %s',
+        async reason => {
+          stubStatusFetch([statusResponse('not_started', 200, reason)]);
+          mount();
+
+          await fireEvent.error(spectrogramImg());
+          await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+
+          expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+          expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+        }
+      );
     });
 
     it('stops the image retries when the status poll reports failed', async () => {
