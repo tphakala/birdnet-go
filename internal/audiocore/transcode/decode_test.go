@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	m4a "github.com/tphakala/go-m4a"
+	aacm4a "github.com/tphakala/go-m4a/aacm4a"
 	wavpcm "github.com/tphakala/go-wav/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
@@ -207,19 +208,37 @@ func TestOpenSource_ClosedFileIsAFileIOError(t *testing.T) {
 	}
 }
 
-// A file access that fails while decoding M4A frames, after the open succeeded,
-// reports the failure of the file, not a damaged clip.
+// failingReads is an io.ReadSeeker that seeks the file and whose Read fails
+// with an *fs.PathError once failing is set.
+type failingReads struct {
+	*os.File
+	failing bool
+}
+
+func (r *failingReads) Read(p []byte) (int, error) {
+	if r.failing {
+		return 0, &fs.PathError{Op: "read", Path: r.Name(), Err: io.ErrClosedPipe}
+	}
+	return r.File.Read(p)
+}
+
+// A file read that fails while decoding M4A frames, after the open succeeded,
+// reports the failure of the file, not a damaged clip: go-m4a keeps the
+// *fs.PathError of a failed frame read in the chain. The decoder is built as
+// openM4A builds it, over a reader whose Read starts failing after the open.
 func TestDecodeError_M4AFrameReadFailureIsAFileIOError(t *testing.T) {
 	t.Parallel()
 
 	path, _ := writeFixture(t, fixtureNamed(t, "m4a"), testRate, 0.5)
 	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
 	require.NoError(t, err)
-	src, err := openSource(f, path)
+	t.Cleanup(func() { assert.NoError(t, f.Close()) })
+	r := &failingReads{File: f}
+	dec, info, err := aacm4a.NewSeekableDecoder(r, m4a.WithMaxBoxBuffer(maxM4ABoxBytes))
 	require.NoError(t, err)
-	require.NoError(t, f.Close())
+	r.failing = true
 
-	_, readErr := src.reader.Read(make([]byte, chunkBytes(src.channels*bytesPerSample)))
+	_, readErr := dec.Read(make([]byte, chunkBytes(info.Channels*bytesPerSample)))
 	require.Error(t, readErr)
 	_, isPathErr := errors.AsType[*fs.PathError](readErr)
 	require.True(t, isPathErr, "the frame read failure keeps its *fs.PathError: %v", readErr)
