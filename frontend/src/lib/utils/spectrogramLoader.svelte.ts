@@ -591,9 +591,9 @@ export function createSpectrogramLoader(userConfig: SpectrogramLoaderConfig = {}
       if (isStale(detectionId)) return;
 
       if (response.ok || response.status === 202) {
-        const json = (await response.json()) as { data: { status: string } };
-        const status = json.data.status;
-        serverStatus = isSpectrogramStatus(status) ? status : undefined;
+        const answer = parseSpectrogramStatus(await response.json());
+        const status = answer?.status;
+        serverStatus = status !== undefined && isSpectrogramStatus(status) ? status : undefined;
 
         if (status === 'exists') {
           await acquireAndLoad(detectionId);
