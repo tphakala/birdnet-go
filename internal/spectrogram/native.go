@@ -8,6 +8,7 @@ import (
 	"image/png"
 	"io"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
@@ -27,6 +28,11 @@ const (
 
 	// nativeWriteBufferBytes is the buffer between the PNG encoder and the file.
 	nativeWriteBufferBytes = 64 * 1024
+
+	// nativePNGCompression is the deflate effort of the PNG encoder. The level
+	// only trades file size for encode time; the decoded pixels and palette are
+	// the same at every level.
+	nativePNGCompression = png.BestSpeed
 
 	// nativeRendererName tags telemetry and logs from this path.
 	nativeRendererName = "native"
@@ -235,11 +241,38 @@ func (g *Generator) renderNative(ctx context.Context, settings *conf.Settings, s
 	return nil
 }
 
-// encodePNG writes img to w as a PNG. The encoder issues many small writes, so
-// they go through a buffer that is flushed before returning.
+// pngEncoderBufferPool implements png.EncoderBufferPool over a sync.Pool, so
+// concurrent encodes each get their own buffer and reuse it for later images.
+// Get returns nil when the pool is empty, which makes the encoder allocate a new
+// buffer (image/png/writer.go:613-615, go1.27.3).
+type pngEncoderBufferPool struct {
+	pool sync.Pool
+}
+
+// Get returns a pooled encoder buffer, or nil when none is available.
+func (p *pngEncoderBufferPool) Get() *png.EncoderBuffer {
+	buf, _ := p.pool.Get().(*png.EncoderBuffer)
+	return buf
+}
+
+// Put returns an encoder buffer to the pool.
+func (p *pngEncoderBufferPool) Put(buf *png.EncoderBuffer) {
+	p.pool.Put(buf)
+}
+
+// nativePNGEncoder encodes every native render at the fast compression level
+// with pooled buffers. It is safe for concurrent use.
+var nativePNGEncoder = &png.Encoder{
+	CompressionLevel: nativePNGCompression,
+	BufferPool:       &pngEncoderBufferPool{},
+}
+
+// encodePNG writes img to w as a PNG at the fast compression level, with pooled
+// encoder buffers. The encoder issues many small writes, so they go through a
+// buffer that is flushed before returning.
 func encodePNG(w io.Writer, img image.Image) error {
 	buf := bufio.NewWriterSize(w, nativeWriteBufferBytes)
-	if err := png.Encode(buf, img); err != nil {
+	if err := nativePNGEncoder.Encode(buf, img); err != nil {
 		return err
 	}
 	return buf.Flush()

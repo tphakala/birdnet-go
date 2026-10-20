@@ -441,7 +441,7 @@ const (
 	// two analyses frame the clip edges differently.
 	edgeColumnFraction = 0.05
 	// maxRowMeanIndexDiff is the largest allowed difference of a row's mean
-	// palette index between the two renders. Measured worst case 0.77.
+	// palette index between the two renders. Measured worst case 0.49.
 	maxRowMeanIndexDiff = 1.0
 	// rateClipDisplayHz is the display rate of the compared renders.
 	rateClipDisplayHz = 24000

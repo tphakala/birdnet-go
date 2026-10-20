@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -836,6 +837,89 @@ func TestEncodePNG(t *testing.T) {
 	// flush. The encoder failure is covered by the larger image below.
 	for _, limit := range []int{0, 10, 100} {
 		require.ErrorIs(t, encodePNG(&failingWriter{n: limit}, img), errWriterFull, "limit %d", limit)
+	}
+}
+
+// Encodes that run at the same time must each use their own encoder buffer, and
+// a buffer reused for a later image of another size must not leak pixels from the
+// earlier one. The images come from real renders at two sizes. The encoding
+// goroutines are released together, and each cycles through every image, so the
+// encodes overlap and the same goroutine encodes a narrow image after a wide one.
+func TestEncodePNG_ConcurrentEncodesKeepTheirOwnPixels(t *testing.T) {
+	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+	gen, env := newNativeGenerator(t)
+	const (
+		rate       = 24000
+		cyclesEach = 5
+		wideWidth  = 514
+		toneSecs   = 1
+		goroutineN = 4
+	)
+	inputs := []struct {
+		name   string
+		width  int
+		toneHz float64
+	}{
+		{"low narrow", nativeTestWidth, 1500},
+		{"high wide", wideWidth, 6000},
+		{"mid narrow", nativeTestWidth, 3000},
+		{"top wide", wideWidth, 9000},
+	}
+	refs := make([]*image.Paletted, len(inputs))
+	for i, in := range inputs {
+		path := filepath.Join(env.TempDir, fmt.Sprintf("ref%d.png", i))
+		pcm := samplesToPCM(toneSamples(rate, toneSecs, in.toneHz))
+		require.NoError(t, gen.GenerateFromPCM(t.Context(), pcm, path, in.width, true, rate), in.name)
+		refs[i] = decodePNG(t, path)
+	}
+
+	// decoded is one encode result and the index of the reference it must equal.
+	type decoded struct {
+		ref int
+		img *image.Paletted
+	}
+	results := make([][]decoded, goroutineN)
+	errs := make([]error, goroutineN)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for g := range goroutineN {
+		wg.Go(func() {
+			<-start
+			for range cyclesEach {
+				for j := range refs {
+					ref := (g + j) % len(refs)
+					var out bytes.Buffer
+					if err := encodePNG(&out, refs[ref]); err != nil {
+						errs[g] = err
+						return
+					}
+					img, err := png.Decode(&out)
+					if err != nil {
+						errs[g] = err
+						return
+					}
+					got, ok := img.(*image.Paletted)
+					if !ok {
+						errs[g] = errors.NewStd(fmt.Sprintf("decoded %T, want *image.Paletted", img))
+						return
+					}
+					results[g] = append(results[g], decoded{ref: ref, img: got})
+				}
+			}
+		})
+	}
+	close(start)
+	wg.Wait()
+
+	for g := range goroutineN {
+		require.NoError(t, errs[g], "goroutine %d", g)
+		require.Len(t, results[g], cyclesEach*len(refs), "goroutine %d", g)
+		for _, d := range results[g] {
+			want := refs[d.ref]
+			assert.Equal(t, want.Rect, d.img.Rect, inputs[d.ref].name)
+			assert.Equal(t, want.Palette, d.img.Palette, inputs[d.ref].name)
+			assert.Equal(t, want.Pix, d.img.Pix, inputs[d.ref].name)
+		}
 	}
 }
 

@@ -17,6 +17,13 @@ import (
 // resampling) as DecodeMono reports them.
 const minStreamFrames = chunkFrames
 
+// analysisResampleQuality is the resampler preset for analysis audio. Medium
+// keeps High's passband (the engine passband end fraction is 0.91 against 0.912,
+// go-audio-resampler v1.9.0 internal/engine/filter_params.go:73-74)
+// with a 102 dB design stopband instead of 126 dB (filter_params.go:66-67), at a
+// lower cost per input sample.
+const analysisResampleQuality = audioresampler.QualityMedium
+
 // MonoSource is decoded audio prepared for spectral analysis: the decoded
 // samples are downmixed to mono and, when a target rate differs from the source
 // rate, resampled while streaming. It is backed either by the decoded 16-bit
@@ -311,7 +318,7 @@ type monoPump struct {
 func newMonoPump(srcRate, dstRate, channels, maxFrames int) (*monoPump, error) {
 	p := &monoPump{channels: channels, mono: make([]float32, maxFrames)}
 	if dstRate != srcRate {
-		rs, err := audioresampler.NewEngineFloat32(float64(srcRate), float64(dstRate), audioresampler.QualityHigh)
+		rs, err := audioresampler.NewEngineFloat32(float64(srcRate), float64(dstRate), analysisResampleQuality)
 		if err != nil {
 			return nil, wrapError(err, errors.CategoryAudio, "mono_resample_init")
 		}
