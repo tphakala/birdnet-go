@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -616,10 +617,24 @@ func TestNonBlockingWriter_BacklogThatNeverEmptiesStaysBounded(t *testing.T) {
 		}
 
 		w.mu.Lock()
-		defer w.mu.Unlock()
 		assert.NotEqual(t, w.head, len(w.queue), "scenario must keep a backlog")
 		assert.LessOrEqual(t, len(w.queue), 4*testQueuedLines,
 			"consumed slots must be reclaimed while the backlog never drains")
+		w.mu.Unlock()
+
+		// Compaction must keep every accepted line, once, in order.
+		sink.unblock()
+		require.True(t, w.flush(consoleFlushTimeout))
+		delivered := sink.lines()
+		last := -1
+		for _, line := range delivered {
+			idx, err := strconv.Atoi(strings.TrimPrefix(line, "line-"))
+			require.NoError(t, err)
+			require.Greater(t, idx, last, "lines must stay in order without duplicates")
+			last = idx
+		}
+		assert.Equal(t, int64(1+2*iterations), int64(len(delivered))+w.dropped.Load(),
+			"every written line is either delivered or counted as dropped")
 	})
 }
 
