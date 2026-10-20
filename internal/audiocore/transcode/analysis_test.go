@@ -631,8 +631,62 @@ func TestOpenMono_StreamReportsASourceShorterThanDeclared(t *testing.T) {
 	err = m.Stream(t.Context(), func([]float32) error { return nil })
 	require.ErrorIs(t, err, ErrShorterThanDeclared)
 	require.NotErrorIs(t, err, ErrUndecodableSource, "this is a signal to decode buffered, not a source fault")
+	_, enhanced := errors.AsType[*errors.EnhancedError](err)
+	assert.False(t, enhanced, "the signal is built without the errors builder, so it is not reported")
 
 	buffered, err := DecodeMono(t.Context(), path, 0)
 	require.NoError(t, err, "the buffered decode still renders what the file holds")
 	assert.Less(t, buffered.SpanSamples(), m.SpanSamples())
+}
+
+// A file replaced between OpenMono and Stream must not stream with the shape the
+// header declared at open: that would draw a span the audio does not have.
+func TestMonoSource_StreamRejectsAFileChangedSinceOpen(t *testing.T) {
+	t.Parallel()
+
+	const frames = 2 * chunkFrames
+	tests := []struct {
+		name        string
+		replacement []byte
+	}{
+		{name: "different sample rate", replacement: wavBytes(t, 44100, 1, frames)},
+		{name: "longer file", replacement: wavBytes(t, testRate, 1, frames+chunkFrames)},
+		{name: "shorter file", replacement: wavBytes(t, testRate, 1, chunkFrames)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "clip.wav")
+			writeBytes(t, path, wavBytes(t, testRate, 1, frames))
+			m, err := OpenMono(t.Context(), path, 0)
+			require.NoError(t, err)
+			require.True(t, m.Streamed())
+			writeBytes(t, path, tt.replacement)
+
+			err = m.Stream(t.Context(), func([]float32) error { return nil })
+
+			require.ErrorIs(t, err, ErrUndecodableSource)
+			require.NotErrorIs(t, err, ErrTruncatedSource, "the changed header is reported before any frame is read")
+		})
+	}
+}
+
+// A WAV whose header declares audio but whose body is empty has no audio to
+// draw: that is undecodable, not truncated, as the buffered decode reports it.
+func TestOpenMono_HeaderOnlyWAVHoldsNoAudio(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "empty.wav")
+	writeBytes(t, path, wavBytes(t, testRate, 1, 2*chunkFrames)[:wavHeaderBytes])
+	m, err := OpenMono(t.Context(), path, 0)
+	require.NoError(t, err)
+	require.True(t, m.Streamed())
+
+	err = m.Stream(t.Context(), func([]float32) error { return nil })
+
+	require.ErrorIs(t, err, ErrUndecodableSource)
+	require.NotErrorIs(t, err, ErrTruncatedSource)
+	_, bufferedErr := DecodeMono(t.Context(), path, 0)
+	require.ErrorIs(t, bufferedErr, ErrUndecodableSource)
+	require.NotErrorIs(t, bufferedErr, ErrTruncatedSource, "the streamed classification matches the buffered one")
 }

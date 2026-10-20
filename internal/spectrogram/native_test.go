@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"image"
 	"image/color"
 	"image/png"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,6 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/spectrogram/render"
 	"github.com/tphakala/birdnet-go/internal/spectrogram/soxchrome"
 )
@@ -452,21 +455,51 @@ func TestGenerateNativeFromFile_MatchesTheBufferedRender(t *testing.T) {
 	doubledPath := filepath.Join(env.TempDir, "doubled.mp3")
 	require.NoError(t, os.WriteFile(doubledPath, mp3WithDoubledFrameCount(t, goodMP3), 0o600))
 
-	for name, in := range map[string]string{"WAV": wavPath, "MP3 declaring twice its length": doubledPath} {
-		t.Run(name, func(t *testing.T) {
-			got := filepath.Join(env.TempDir, name+"-got.png")
-			want := filepath.Join(env.TempDir, name+"-want.png")
+	tests := []struct {
+		name         string
+		in           string
+		wantStreamed bool
+	}{
+		{name: "WAV", in: wavPath, wantStreamed: true},
+		{name: "MP3 declaring twice its length", in: doubledPath, wantStreamed: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := filepath.Join(env.TempDir, tt.name+"-got.png")
+			want := filepath.Join(env.TempDir, tt.name+"-want.png")
+			logs := logtest.CaptureBuffer(t)
 
-			require.NoError(t, gen.GenerateFromFile(t.Context(), in, got, nativeTestWidth, false))
-			renderBuffered(t, gen, env, in, want)
+			require.NoError(t, gen.GenerateFromFile(t.Context(), tt.in, got, nativeTestWidth, false))
+			rendered := logs.String()
+			renderBuffered(t, gen, env, tt.in, want)
 
 			gotBytes, err := os.ReadFile(got) //nolint:gosec // G304: test path
 			require.NoError(t, err)
 			wantBytes, err := os.ReadFile(want) //nolint:gosec // G304: test path
 			require.NoError(t, err)
 			assert.Equal(t, wantBytes, gotBytes)
+			assert.Contains(t, rendered, fmt.Sprintf("streamed=%t", tt.wantStreamed))
+			assert.NotContains(t, rendered, fmt.Sprintf("streamed=%t", !tt.wantStreamed))
+			assert.Equal(t, !tt.wantStreamed, strings.Contains(rendered, "shorter than its header declares"), "only the over-declared file is rendered again from memory")
 		})
 	}
+}
+
+// The short-source signal is not a failure to classify or report: nativeError
+// returns it as it is so the caller can render the clip again from memory.
+func TestNativeError_ShortSourceSignalIsPassedThrough(t *testing.T) {
+	gen, _ := newNativeGenerator(t)
+	signal := fmt.Errorf("%w: read 1 of 2 declared frames", transcode.ErrShorterThanDeclared)
+
+	got := gen.nativeError(t.Context(), signal, nativeOperationFile)
+
+	require.ErrorIs(t, got, transcode.ErrShorterThanDeclared)
+	_, enhanced := errors.AsType[*errors.EnhancedError](got)
+	assert.False(t, enhanced, "the signal is not built through the errors builder")
+
+	other := gen.nativeError(t.Context(), errors.NewStd("plain failure"), nativeOperationFile)
+	_, enhanced = errors.AsType[*errors.EnhancedError](other)
+	assert.True(t, enhanced, "any other error is still classified")
 }
 
 // brightestRow returns the image row with the highest palette index in column x.
