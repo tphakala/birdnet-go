@@ -18,9 +18,11 @@
  * requests per start() are capped by maxGenerateRequests.
  *
  * The status `reason` refines that: a terminal reason (source_missing,
- * source_invalid) fails the detection at once, and the failure outlives
- * stop() and start(); a `busy` failure is retried with backoff outside the
- * generate budget.
+ * source_invalid) sends no generate request. source_invalid fails the
+ * detection at once; source_missing first loads the plain image once, for a
+ * render the server kept, and fails when that image fails. The failure
+ * outlives stop() and start(). A `busy` failure is retried with backoff
+ * outside the generate budget.
  */
 
 import {
