@@ -27,7 +27,7 @@ import { buildAppUrl } from '$lib/utils/urlHelpers';
 const logger = loggers.ui;
 
 // Diagnostics for a card whose spinner is held up by the browser rather than by
-// the server: a late poll timer, a slow status request, a long wait for an image
+// the server: a late poll timer, a slow status or generate request, a long wait for an image
 // slot, or an image that keeps its slot too long. They are off by default; turn
 // them on in one browser with localStorage.setItem('birdnet-debug-spectrogram',
 // 'true'), which takes effect without a reload. Each one then logs a throttled
