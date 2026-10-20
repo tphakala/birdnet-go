@@ -447,6 +447,9 @@ describe('AudioPlayer recovery', () => {
     // MAX_POLL_DURATION in AudioPlayer.svelte
     const MAX_POLL_DURATION_MS = 5 * 60 * 1000;
     const SERVER_ERROR_STATUS = 500;
+    const NOT_FOUND_STATUS = 404;
+    // Failed status answers before the endpoint recovers, enough to outlast the image retries
+    const STATUS_ERRORS_BEFORE_RECOVERY = 8;
     let originalFetch: typeof globalThis.fetch;
 
     function statusResponse(status: string, httpStatus = 200): Response {
@@ -588,6 +591,41 @@ describe('AudioPlayer recovery', () => {
       await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
 
       expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+    });
+
+    it('ends polling at a permanent client error from the status endpoint', async () => {
+      const stub = vi.fn(async () => statusResponse('', NOT_FOUND_STATUS));
+      globalThis.fetch = stub;
+      mount();
+
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(MAX_POLL_DURATION_MS);
+
+      expect(stub).toHaveBeenCalledTimes(1);
+    });
+
+    it('still reloads the image when the status recovers after the image retries ran out', async () => {
+      const stub = stubStatusFetch([
+        ...Array.from({ length: STATUS_ERRORS_BEFORE_RECOVERY }, () =>
+          statusResponse('', SERVER_ERROR_STATUS)
+        ),
+        statusResponse('exists'),
+      ]);
+      mount();
+      await fireEvent.error(spectrogramImg());
+      // Run every image retry out at its backoff; each retry request fails in turn
+      for (const backoffMs of [500, 1000, 2000, 4000]) {
+        await vi.advanceTimersByTimeAsync(backoffMs);
+        await fireEvent.error(spectrogramImg());
+      }
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      // The status endpoint has not recovered yet, so the poll is still running
+      expect(stub.mock.calls.length).toBeLessThan(STATUS_ERRORS_BEFORE_RECOVERY);
+
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * STATUS_ERRORS_BEFORE_RECOVERY);
+
+      expect(stub).toHaveBeenCalledTimes(STATUS_ERRORS_BEFORE_RECOVERY + 1);
+      expect(spectrogramImg().getAttribute('src')).toContain('cache=1');
     });
 
     it('does not keep polling when a cancelled poll rejects with a non-abort error', async () => {

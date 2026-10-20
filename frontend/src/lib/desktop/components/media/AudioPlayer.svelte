@@ -331,6 +331,9 @@
   // 404 from that path still arrives in time.
   const SPECTROGRAM_PROBE_TIMEOUT_MS = 8000;
   const HTTP_STATUS_NOT_FOUND = 404;
+  const HTTP_STATUS_REQUEST_TIMEOUT = 408;
+  const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
+  const HTTP_STATUS_SERVER_ERROR_MIN = 500;
   // Generation statuses that mean the exact-rate render is coming or already
   // there, so a 404 for it is not a missing render.
   const RENDER_PENDING_OR_READY_STATUSES = new Set([
@@ -1481,12 +1484,19 @@
           clearStatusPollTimer();
         }
       } else if (!controller.signal.aborted) {
-        // The status request itself failed: try again at the poll interval.
-        // The MAX_POLL_DURATION check on entry bounds the rescheduling.
-        debugLog('pollSpectrogramStatus: non-OK response, rescheduling', {
-          status: response.status,
-        });
-        scheduleNextStatusPoll();
+        // The status request itself failed. A server error, timeout or rate limit is
+        // transient: try again at the poll interval, bounded by the MAX_POLL_DURATION
+        // check on entry. Any other client error (unknown detection) is permanent.
+        const transient =
+          response.status >= HTTP_STATUS_SERVER_ERROR_MIN ||
+          response.status === HTTP_STATUS_REQUEST_TIMEOUT ||
+          response.status === HTTP_STATUS_TOO_MANY_REQUESTS;
+        debugLog('pollSpectrogramStatus: non-OK response', { status: response.status, transient });
+        if (transient) {
+          scheduleNextStatusPoll();
+        } else {
+          clearStatusPollTimer();
+        }
       }
     } catch (err) {
       // Ignore abort errors
@@ -1682,11 +1692,12 @@
       return;
     }
 
-    // Really failed - stop everything
+    // Really failed - stop the image retries. A status poll that is still scheduled (the
+    // status endpoint kept failing) is left to run: it ends on its own at a terminal
+    // status or MAX_POLL_DURATION, and an exists answer reloads the image.
     debugLog('handleSpectrogramError: giving up after max retries');
     spectrogramLoader.setError();
     clearSpectrogramRetryTimer();
-    clearStatusPollTimer();
 
     logger.warn('Spectrogram loading failed after max retries', {
       detectionId,
