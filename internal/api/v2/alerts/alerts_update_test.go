@@ -321,3 +321,22 @@ func TestUpdateAlertRule_KeepsKeyedNameAndDescription(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateAlertRule_SavesTextOfARuleWithoutKeys(t *testing.T) {
+	const editedDescription = "My own description"
+
+	stored := storedHighCPURule(t)
+	stored.BuiltIn = false
+	stored.NameKey = ""
+	stored.DescriptionKey = ""
+	stored.EscalationSteps = nil
+	edited := *stored
+	edited.Name = renamedRule
+	edited.Description = editedDescription
+
+	saved := putAlertRule(t, stored, editorBody(t, &edited, nil))
+
+	assert.Equal(t, renamedRule, saved.Name, "a rule with no name key has no stored text to protect")
+	assert.Equal(t, editedDescription, saved.Description, "a rule with no description key has no stored text to protect")
+	assert.False(t, saved.BuiltIn)
+}
