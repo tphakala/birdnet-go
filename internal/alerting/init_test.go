@@ -3,6 +3,7 @@ package alerting
 import (
 	"context"
 	"io"
+	"slices"
 	"testing"
 	"time"
 
@@ -148,30 +149,148 @@ func TestInitialize_SubscribesToEventBus(t *testing.T) {
 	assert.Equal(t, 1, handlerCount)
 }
 
-func TestSeedDefaultRules_MigratesEscalationSteps(t *testing.T) {
-	// Simulate existing installation: all default rules exist but the low disk
-	// rule has no escalation steps (pre-migration state).
+// lowDiskDefaultSteps are the escalation steps of the shipped "Low disk space" rule.
+var lowDiskDefaultSteps = []float64{85, 90, 95, 99}
+
+// seedRulesWithLowDisk returns a repo holding every default rule without
+// escalation steps (the pre-migration state), after applying mutate to the
+// "Low disk space" row, together with that row's ID.
+func seedRulesWithLowDisk(t *testing.T, mutate func(rule *entities.AlertRule)) (repo *initMockRepo, lowDiskID uint) {
+	t.Helper()
 	defaults := DefaultRules()
 	existing := make([]entities.AlertRule, len(defaults))
 	copy(existing, defaults)
 	for i := range existing {
-		existing[i].ID = uint(i + 1)      //nolint:gosec // test, no overflow risk
-		existing[i].EscalationSteps = nil // pre-migration: no steps
-	}
-	repo := &initMockRepo{rules: existing}
-
-	err := seedDefaultRules(t.Context(), repo, initTestLogger())
-	require.NoError(t, err)
-
-	// Verify the low disk rule was updated with escalation steps.
-	for i := range repo.rules {
-		if repo.rules[i].NameKey == RuleKeyLowDiskName {
-			assert.Equal(t, []float64{85, 90, 95, 99}, repo.rules[i].EscalationSteps,
-				"existing low disk rule should get escalation steps from migration")
-			return
+		existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
+		existing[i].EscalationSteps = nil
+		if existing[i].NameKey == RuleKeyLowDiskName {
+			lowDiskID = existing[i].ID
+			existing[i].Conditions = slices.Clone(existing[i].Conditions)
+			mutate(&existing[i])
 		}
 	}
-	t.Fatal("low disk rule not found after seeding")
+	require.NotZero(t, lowDiskID, "low disk default rule not found")
+	return &initMockRepo{rules: existing}, lowDiskID
+}
+
+func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(rule *entities.AlertRule)
+		want   []float64
+	}{
+		{
+			name:   "keyed built-in without steps gets default steps",
+			mutate: func(_ *entities.AlertRule) {},
+			want:   lowDiskDefaultSteps,
+		},
+		{
+			// Rows seeded before name keys existed have an empty NameKey.
+			name: "legacy built-in without name key gets default steps",
+			mutate: func(r *entities.AlertRule) {
+				r.NameKey = ""
+				r.DescriptionKey = ""
+			},
+			want: lowDiskDefaultSteps,
+		},
+		{
+			name: "user-created rule sharing the built-in name is untouched",
+			mutate: func(r *entities.AlertRule) {
+				r.BuiltIn = false
+				r.NameKey = ""
+				r.DescriptionKey = ""
+			},
+		},
+		{
+			name: "legacy built-in with changed condition is untouched",
+			mutate: func(r *entities.AlertRule) {
+				r.NameKey = ""
+				r.DescriptionKey = ""
+				r.Conditions[0].Value = "80"
+			},
+		},
+		{
+			name: "legacy built-in with changed metric is untouched",
+			mutate: func(r *entities.AlertRule) {
+				r.NameKey = ""
+				r.DescriptionKey = ""
+				r.MetricName = MetricCPUUsage
+			},
+		},
+		{
+			name: "existing steps are kept",
+			mutate: func(r *entities.AlertRule) {
+				r.NameKey = ""
+				r.DescriptionKey = ""
+				r.EscalationSteps = []float64{80, 90}
+			},
+			want: []float64{80, 90},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, id := seedRulesWithLowDisk(t, tt.mutate)
+			ruleCount := len(repo.rules)
+
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+
+			assert.Len(t, repo.rules, ruleCount, "no rule should be added or removed")
+			for i := range repo.rules {
+				if repo.rules[i].ID == id {
+					assert.Equal(t, tt.want, repo.rules[i].EscalationSteps)
+					return
+				}
+			}
+			t.Fatal("low disk rule not found after seeding")
+		})
+	}
+}
+
+func TestSeedDefaultRules_LegacyLowDiskRuleNotifiesOncePerStep(t *testing.T) {
+	// A legacy "Low disk space" row (no name key, no steps) re-notified on every
+	// cooldown expiry while usage stayed above the threshold. After migration the
+	// engine must stay quiet at the same step.
+	repo, _ := seedRulesWithLowDisk(t, func(r *entities.AlertRule) {
+		r.NameKey = ""
+		r.DescriptionKey = ""
+	})
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+
+	var fired int
+	engine := NewEngine(repo, func(rule *entities.AlertRule, _ *AlertEvent) {
+		if rule.MetricName == MetricDiskUsage {
+			fired++
+		}
+	}, initTestLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	base := time.Now().Add(-10 * time.Minute)
+	emit := func(offset time.Duration) {
+		engine.HandleEvent(&AlertEvent{
+			ObjectType: ObjectTypeSystem,
+			MetricName: MetricDiskUsage,
+			Properties: map[string]any{PropertyValue: 86.0, PropertyPath: "/"},
+			Timestamp:  base.Add(offset),
+		})
+	}
+
+	// Samples covering the 300 s sustained window, dense enough that the
+	// window after the last emit below also starts within the grace period.
+	emit(0)
+	emit(60 * time.Second)
+	emit(150 * time.Second)
+	emit(300 * time.Second)
+	require.Equal(t, 1, fired, "sustained breach should notify once")
+
+	// Expire the cooldown; the same step must not notify again.
+	engine.cooldownsMu.Lock()
+	for k := range engine.cooldowns {
+		engine.cooldowns[k] = time.Now().Add(-31 * time.Minute)
+	}
+	engine.cooldownsMu.Unlock()
+	emit(330 * time.Second)
+	assert.Equal(t, 1, fired, "same step must not re-notify after the cooldown expires")
 }
 
 func TestEnrichFromEventProps_DetectionNotification(t *testing.T) {
