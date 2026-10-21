@@ -21,7 +21,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
@@ -47,8 +46,8 @@ const (
 
 // Spectrogram size constants - FFT-friendly dimensions. Aliased from apicore so
 // the media renderer here and the detections clip-deletion file matching share
-// one source. Heights are 2^n + 1 so sox DFT size (2*(height-1)) is a power of 2,
-// enabling fast FFT instead of brute-force DFT (~20x speedup). Widths are 2x
+// one source. Heights are 2^n + 1 so the analysis frame (2*(height-1)) is a power
+// of 2, enabling fast FFT instead of brute-force DFT. Widths are 2x
 // height to maintain ~2:1 aspect ratio.
 const (
 	SpectrogramSizeSm = apicore.SpectrogramSizeSm // height=129, DFT=256
@@ -721,7 +720,7 @@ func (c *Handler) writeAudioNotReady(ctx echo.Context, err error, message string
 // handleAudioNotReady returns a 503 Service Unavailable response with a
 // Retry-After header, indicating that the audio file is still being encoded.
 func (c *Handler) handleAudioNotReady(ctx echo.Context) error {
-	return c.writeAudioNotReady(ctx, ffmpeg.ErrAudioFileNotReady, "Audio file is still being processed, please retry", minRetryAfterSeconds)
+	return c.writeAudioNotReady(ctx, errAudioFileNotReady, "Audio file is still being processed, please retry", minRetryAfterSeconds)
 }
 
 // handleAudioPending returns a 503 + Retry-After for a clip whose export is scheduled
@@ -742,7 +741,7 @@ func (c *Handler) handleAudioPending(ctx echo.Context, readyAt time.Time, logFie
 			logger.Int("retry_after", retryAfter),
 		}, logFields...)...)
 
-	return c.writeAudioNotReady(ctx, ffmpeg.ErrAudioFileNotReady, "Audio clip is scheduled for export and not yet available", retryAfter)
+	return c.writeAudioNotReady(ctx, errAudioFileNotReady, "Audio clip is scheduled for export and not yet available", retryAfter)
 }
 
 // waitForAudioFile polls for an audio file to appear on disk while encoding
@@ -1299,8 +1298,8 @@ func spectrogramSourceStatus(err error) (status int, message string, ok bool) {
 // readiness (spectrogram.ErrSourceChanged), which it reports before the handler
 // wraps it as not-ready.
 func isSpectrogramNotReady(err error) bool {
-	return errors.Is(err, ffmpeg.ErrAudioFileNotReady) ||
-		errors.Is(err, ffmpeg.ErrAudioFileIncomplete) ||
+	return errors.Is(err, errAudioFileNotReady) ||
+		errors.Is(err, errAudioFileIncomplete) ||
 		errors.Is(err, spectrogram.ErrSourceChanged)
 }
 
@@ -2223,7 +2222,7 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 		case isSpectrogramSourceFailure(err):
 			c.LogWarnIfEnabled("Spectrogram generation skipped: source audio cannot be rendered", logFields...)
 		default:
-			// Unexpected failures (sox/ffmpeg broken, unreadable clip, etc.)
+			// Unexpected failures (unreadable clip, render bug, etc.)
 			c.LogErrorIfEnabled("Spectrogram generation failed", logFields...)
 		}
 		return c.spectrogramHTTPError(ctx, err)
@@ -2920,9 +2919,7 @@ const spectrogramRetryAfterSecondsInt = 2
 const (
 	spectrogramGenerationTimeout = 5 * time.Minute  // Max time for async spectrogram generation
 	spectrogramRetryDelay        = 2 * time.Second  // Default retry delay for validation errors
-	soxDurationTimeout           = 3 * time.Second  // Timeout for sox --info duration queries
 	failedStatusRetentionTime    = 30 * time.Second // How long to retain failed statuses for polling
-	ffprobeCacheMaxEntries       = 100              // Maximum entries in ffprobe cache before cleanup
 	spectrogramVerifyRetries     = 3                // Number of verification retries after generation
 	spectrogramVerifyBaseDelay   = 50               // Base delay in milliseconds for verification retries
 )
@@ -3139,272 +3136,6 @@ func buildSpectrogramKey(relSpectrogramPath string, width int, raw bool) string 
 // out of the key lets GetSpectrogramStatus answer queue hits without a model-type lookup.
 func buildSpectrogramQueueKey(noteID string, width int, raw bool, style, dynamicRange string) string {
 	return fmt.Sprintf("%s:%d:%t%s", noteID, width, raw, buildStyleSuffix(style, dynamicRange))
-}
-
-// ffprobeCache provides a unified cache for all FFprobe operations (validation and duration)
-// to avoid repeated expensive subprocess calls
-var ffprobeCache = struct {
-	sync.RWMutex
-	validation map[string]*validationCacheEntry
-	duration   map[string]*durationCacheEntry
-}{
-	validation: make(map[string]*validationCacheEntry),
-	duration:   make(map[string]*durationCacheEntry),
-}
-
-type validationCacheEntry struct {
-	result    *ffmpeg.ValidationResult
-	timestamp time.Time
-	fileSize  int64
-	modTime   time.Time
-}
-
-type durationCacheEntry struct {
-	duration  float64
-	timestamp time.Time
-	fileSize  int64
-	modTime   time.Time
-}
-
-// validateSpectrogramInputs validates that the audio file is complete and ready for spectrogram generation.
-// It returns the validation result and any error encountered during validation.
-// With the native renderer selected it checks readiness in Go
-// (validateNativeSpectrogramInput) and returns a nil result with the state of the
-// file that passed, which the generator compares against before publishing; the
-// ffprobe path below serves the sox renderer and returns a nil state.
-func (c *Handler) validateSpectrogramInputs(ctx context.Context, absAudioPath, audioPath, queueKey string) (*ffmpeg.ValidationResult, *spectrogram.SourceState, error) {
-	// Check cache first
-	fileInfo, err := os.Stat(absAudioPath)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to stat audio file: %w", err)
-	}
-
-	// The native renderer needs no duration and no ffprobe; see spectrogram_native_ready.go.
-	if conf.NativeSpectrogramEnabled() {
-		state, err := validateNativeSpectrogramInput(ctx, absAudioPath, audioPath, queueKey)
-		if err != nil {
-			return nil, nil, err
-		}
-		return nil, &state, nil
-	}
-	result, err := c.validateFFprobeInputs(ctx, fileInfo, absAudioPath, audioPath, queueKey)
-	return result, nil, err
-}
-
-// validateFFprobeInputs is the ffprobe readiness check of validateSpectrogramInputs
-// for the sox renderer; fileInfo is the stat of absAudioPath.
-func (c *Handler) validateFFprobeInputs(ctx context.Context, fileInfo os.FileInfo, absAudioPath, audioPath, queueKey string) (*ffmpeg.ValidationResult, error) {
-	cacheKey := fmt.Sprintf("%s:%d:%s", absAudioPath, fileInfo.Size(), fileInfo.ModTime().Format(time.RFC3339Nano))
-
-	// Try to get from cache
-	ffprobeCache.RLock()
-	if entry, ok := ffprobeCache.validation[cacheKey]; ok {
-		// Cache hit - check if still valid (cache for 5 minutes)
-		if time.Since(entry.timestamp) < 5*time.Minute &&
-			entry.fileSize == fileInfo.Size() &&
-			entry.modTime.Equal(fileInfo.ModTime()) {
-			ffprobeCache.RUnlock()
-			getSpectrogramLogger().Debug("Audio validation cache hit",
-				logger.String("abs_audio_path", absAudioPath),
-				logger.Float64("cache_age_seconds", time.Since(entry.timestamp).Seconds()),
-				logger.String("queue_key", queueKey))
-			return entry.result, nil
-		}
-	}
-	ffprobeCache.RUnlock()
-
-	getSpectrogramLogger().Debug("Starting audio validation with FFprobe",
-		logger.String("abs_audio_path", absAudioPath),
-		logger.String("queue_key", queueKey))
-
-	validationStart := time.Now()
-	validationResult, err := ffmpeg.ValidateFile(ctx, absAudioPath)
-	validationDuration := time.Since(validationStart)
-
-	if err != nil {
-		// Context errors should be propagated immediately
-		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			getSpectrogramLogger().Warn("Audio validation canceled or timed out",
-				logger.String("audio_path", audioPath),
-				logger.String("abs_audio_path", absAudioPath),
-				logger.Error(err),
-				logger.Int64("validation_duration_ms", validationDuration.Milliseconds()),
-				logger.String("queue_key", queueKey))
-			return nil, err
-		}
-		// Other validation errors
-		getSpectrogramLogger().Error("Audio validation failed with FFprobe",
-			logger.String("audio_path", audioPath),
-			logger.String("abs_audio_path", absAudioPath),
-			logger.Error(err),
-			logger.Int64("validation_duration_ms", validationDuration.Milliseconds()),
-			logger.String("queue_key", queueKey))
-		return nil, &AudioNotReadyError{
-			RetryAfter: spectrogramRetryDelay, // Default retry for validation errors
-			Err:        fmt.Errorf("%w: %w", ffmpeg.ErrAudioFileNotReady, err),
-		}
-	}
-
-	// Check if the file is ready
-	if !validationResult.IsValid {
-		getSpectrogramLogger().Info("Audio file not ready for processing, client should retry",
-			logger.String("audio_path", audioPath),
-			logger.String("abs_audio_path", absAudioPath),
-			logger.Int64("file_size", validationResult.FileSize),
-			logger.Bool("is_complete", validationResult.IsComplete),
-			logger.Bool("is_valid", validationResult.IsValid),
-			logger.Int64("retry_after_ms", validationResult.RetryAfter.Milliseconds()),
-			logger.Int64("validation_duration_ms", validationDuration.Milliseconds()),
-			logger.Any("validation_error", validationResult.Error),
-			logger.String("queue_key", queueKey))
-
-		// Track retry metrics
-		c.LogInfoIfEnabled("Spectrogram generation deferred - audio not ready",
-			logger.String("audio_path", audioPath),
-			logger.Int64("file_size", validationResult.FileSize),
-			logger.Int64("retry_after_ms", validationResult.RetryAfter.Milliseconds()),
-			logger.String("component", "media.spectrogram"),
-			logger.String("metric_type", "audio_not_ready"))
-
-		// Return a specific error that indicates the file is not ready
-		// This will be handled by the HTTP handler to return 503
-		if validationResult.Error != nil {
-			return validationResult, &AudioNotReadyError{
-				RetryAfter: validationResult.RetryAfter,
-				Err:        fmt.Errorf("%w: %w", ffmpeg.ErrAudioFileNotReady, validationResult.Error),
-			}
-		}
-		return validationResult, &AudioNotReadyError{
-			RetryAfter: validationResult.RetryAfter,
-			Err:        ffmpeg.ErrAudioFileNotReady,
-		}
-	}
-
-	getSpectrogramLogger().Debug("Audio file validated successfully with FFprobe",
-		logger.String("audio_path", audioPath),
-		logger.String("abs_audio_path", absAudioPath),
-		logger.Float64("duration_seconds", validationResult.Duration),
-		logger.String("format", validationResult.Format),
-		logger.Int64("file_size_bytes", validationResult.FileSize),
-		logger.Int("sample_rate", validationResult.SampleRate),
-		logger.Int("channels", validationResult.Channels),
-		logger.Int("bitrate", validationResult.BitRate),
-		logger.Bool("is_valid", validationResult.IsValid),
-		logger.Bool("is_complete", validationResult.IsComplete),
-		logger.Int64("validation_duration_ms", validationDuration.Milliseconds()),
-		logger.String("queue_key", queueKey))
-
-	// Cache the successful validation result
-	ffprobeCache.Lock()
-	// Clean old entries if cache is getting large
-	if len(ffprobeCache.validation) > ffprobeCacheMaxEntries {
-		now := time.Now()
-		for k, v := range ffprobeCache.validation {
-			if now.Sub(v.timestamp) > 5*time.Minute {
-				delete(ffprobeCache.validation, k)
-			}
-		}
-	}
-	ffprobeCache.validation[cacheKey] = &validationCacheEntry{
-		result:    validationResult,
-		timestamp: time.Now(),
-		fileSize:  fileInfo.Size(),
-		modTime:   fileInfo.ModTime(),
-	}
-
-	// Also cache the duration value for sox --info duration calls
-	if validationResult.Duration > 0 {
-		// Clean duration cache if needed
-		if len(ffprobeCache.duration) > ffprobeCacheMaxEntries {
-			now := time.Now()
-			for k, v := range ffprobeCache.duration {
-				if now.Sub(v.timestamp) > 5*time.Minute {
-					delete(ffprobeCache.duration, k)
-				}
-			}
-		}
-		ffprobeCache.duration[cacheKey] = &durationCacheEntry{
-			duration:  validationResult.Duration,
-			timestamp: time.Now(),
-			fileSize:  fileInfo.Size(),
-			modTime:   fileInfo.ModTime(),
-		}
-	}
-	ffprobeCache.Unlock()
-
-	return validationResult, nil
-}
-
-// getCachedAudioDuration retrieves audio duration from cache or calls sox --info if not cached
-func getCachedAudioDuration(ctx context.Context, audioPath string) float64 {
-	// Check if file exists and get info
-	fileInfo, err := os.Stat(audioPath)
-	if err != nil {
-		getSpectrogramLogger().Debug("Failed to stat audio file for duration cache",
-			logger.String("audio_path", audioPath),
-			logger.Error(err))
-		return 0
-	}
-
-	cacheKey := fmt.Sprintf("%s:%d:%s", audioPath, fileInfo.Size(), fileInfo.ModTime().Format(time.RFC3339Nano))
-
-	// Try to get from cache
-	ffprobeCache.RLock()
-	if entry, ok := ffprobeCache.duration[cacheKey]; ok {
-		// Cache hit - check if still valid (cache for 5 minutes)
-		if time.Since(entry.timestamp) < 5*time.Minute &&
-			entry.fileSize == fileInfo.Size() &&
-			entry.modTime.Equal(fileInfo.ModTime()) {
-			ffprobeCache.RUnlock()
-			getSpectrogramLogger().Debug("Audio duration cache hit",
-				logger.String("audio_path", audioPath),
-				logger.Float64("duration", entry.duration),
-				logger.Float64("cache_age_seconds", time.Since(entry.timestamp).Seconds()))
-			return entry.duration
-		}
-	}
-	ffprobeCache.RUnlock()
-
-	// Cache miss - call sox --info
-	getSpectrogramLogger().Debug("Audio duration cache miss, calling sox --info",
-		logger.String("audio_path", audioPath))
-
-	// Use a timeout context to prevent hanging
-	durationCtx, cancel := context.WithTimeout(ctx, soxDurationTimeout)
-	defer cancel()
-
-	duration, err := ffmpeg.GetAudioDuration(durationCtx, audioPath)
-	if err != nil {
-		getSpectrogramLogger().Warn("Failed to get audio duration with sox --info",
-			logger.Error(err),
-			logger.String("audio_path", audioPath))
-		return 0
-	}
-
-	// Cache the result
-	ffprobeCache.Lock()
-	// Clean old entries if cache is getting large
-	if len(ffprobeCache.duration) > ffprobeCacheMaxEntries {
-		now := time.Now()
-		for k, v := range ffprobeCache.duration {
-			if now.Sub(v.timestamp) > 5*time.Minute {
-				delete(ffprobeCache.duration, k)
-			}
-		}
-	}
-	ffprobeCache.duration[cacheKey] = &durationCacheEntry{
-		duration:  duration,
-		timestamp: time.Now(),
-		fileSize:  fileInfo.Size(),
-		modTime:   fileInfo.ModTime(),
-	}
-	ffprobeCache.Unlock()
-
-	getSpectrogramLogger().Debug("Audio duration retrieved and cached",
-		logger.String("audio_path", audioPath),
-		logger.Float64("duration", duration))
-
-	return duration
 }
 
 // normalizeAndValidatePath handles path normalization and validation
@@ -3787,7 +3518,7 @@ func (c *Handler) acquireSemaphoreSlot(ctx context.Context, queueKey string) err
 }
 
 // performSpectrogramGeneration executes the actual spectrogram generation logic
-func (c *Handler) performSpectrogramGeneration(ctx context.Context, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey string, width int, raw bool, validatedDuration float64, extraOpts ...spectrogram.GenerateOption) (any, error) {
+func (c *Handler) performSpectrogramGeneration(ctx context.Context, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey string, width int, raw bool, extraOpts ...spectrogram.GenerateOption) (any, error) {
 	// Fast path inside the group - now race-free
 	getSpectrogramLogger().Debug("Inside singleflight group, double-checking if spectrogram exists",
 		logger.String("queue_key", queueKey))
@@ -3830,23 +3561,21 @@ func (c *Handler) performSpectrogramGeneration(ctx context.Context, relSpectrogr
 		logger.String("abs_audio_path", absAudioPath),
 		logger.String("abs_spectrogram_path", absSpectrogramPath),
 		logger.Int("width", width),
-		logger.Bool("raw", raw),
-		logger.String("generator", "shared_generator_with_sox_ffmpeg_fallback"))
+		logger.Bool("raw", raw))
 
 	// Note: Directory creation is handled by the shared generator
 
 	// Log when we're about to start actual generation
-	getSpectrogramLogger().Info("Starting SoX/FFmpeg generation",
+	getSpectrogramLogger().Info("Starting spectrogram render",
 		logger.String("queue_key", queueKey),
 		logger.Int("semaphore_slots_in_use", len(spectrogramSemaphore)),
 		logger.Int("max_slots", maxConcurrentSpectrograms))
 
-	// Generate the spectrogram with SoX or FFmpeg fallback
-	if err := c.generateWithFallback(ctx, absAudioPath, absSpectrogramPath, queueKey, width, raw, validatedDuration, extraOpts...); err != nil {
+	if err := c.renderSpectrogram(ctx, absAudioPath, absSpectrogramPath, queueKey, width, raw, extraOpts...); err != nil {
 		return nil, err
 	}
 
-	getSpectrogramLogger().Info("Completed SoX/FFmpeg generation",
+	getSpectrogramLogger().Info("Completed spectrogram render",
 		logger.String("queue_key", queueKey),
 		logger.Int("semaphore_slots_in_use", len(spectrogramSemaphore)),
 		logger.Int("max_slots", maxConcurrentSpectrograms))
@@ -3919,8 +3648,8 @@ func (c *Handler) verifySpectrogramFile(absPath, relPath string) error {
 	return fmt.Errorf("%w: spectrogram file missing after generation: %w", ErrSpectrogramGeneration, statErr)
 }
 
-// generateWithFallback attempts to generate a spectrogram with SoX, falling back to FFmpeg on failure
-func (c *Handler) generateWithFallback(ctx context.Context, absAudioPath, absSpectrogramPath, queueKey string, width int, raw bool, validatedDuration float64, extraOpts ...spectrogram.GenerateOption) error {
+// renderSpectrogram renders a spectrogram with the shared generator and logs a failure at the level its kind deserves
+func (c *Handler) renderSpectrogram(ctx context.Context, absAudioPath, absSpectrogramPath, queueKey string, width int, raw bool, extraOpts ...spectrogram.GenerateOption) error {
 	generationStart := time.Now()
 
 	getSpectrogramLogger().Debug("Starting spectrogram generation via shared generator",
@@ -3929,16 +3658,8 @@ func (c *Handler) generateWithFallback(ctx context.Context, absAudioPath, absSpe
 		logger.Int("width", width),
 		logger.Bool("raw", raw))
 
-	// Use shared generator which handles Sox→FFmpeg fallback internally.
-	// Pass the pre-validated duration from FFprobe to avoid a redundant sox --info call
-	// (which fails for MP3/AAC without libsox-fmt-mp3, causing dark spectrograms).
-	var genOpts []spectrogram.GenerateOption
-	if validatedDuration > 0 {
-		genOpts = append(genOpts, spectrogram.WithDuration(validatedDuration))
-	}
-	genOpts = append(genOpts, extraOpts...)
-	if err := c.spectrogramGenerator.GenerateFromFile(ctx, absAudioPath, absSpectrogramPath, width, raw, genOpts...); err != nil {
-		// Check if this is an expected operational error (context canceled, process killed)
+	if err := c.spectrogramGenerator.GenerateFromFile(ctx, absAudioPath, absSpectrogramPath, width, raw, extraOpts...); err != nil {
+		// Check if this is an expected operational error (context canceled, interrupted render)
 		// These are normal events during shutdown, timeout, or resource management
 		switch {
 		case spectrogram.IsOperationalError(err):
@@ -4068,9 +3789,8 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 	defer c.cleanupQueueStatus(queueKey)
 
 	// Use singleflight to coalesce duplicate requests for the same spectrogram.
-	// Audio validation (FFprobe) and generation run inside the group so that
-	// concurrent requests share a single FFprobe call and generation pass
-	// instead of each spawning redundant subprocesses (fixes #2342).
+	// Audio validation and generation run inside the group so that concurrent
+	// requests share a single readiness check and generation pass.
 	getSpectrogramLogger().Debug("Starting singleflight generation",
 		logger.String("queue_key", queueKey),
 		logger.String("singleflight_key", singleflightKey))
@@ -4098,36 +3818,23 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 			return nil, err
 		}
 
-		// Step 5: Validate audio file with FFprobe (expensive ~300ms subprocess), or
-		// with the pure-Go check when the native renderer is selected.
-		// Running inside singleflight ensures only one FFprobe call per unique spectrogram key.
-		validationResult, sourceState, err := c.validateSpectrogramInputs(sharedCtx, absAudioPath, audioPath, queueKey)
+		// Step 5: Validate the audio file with the pure-Go readiness check.
+		// Running inside singleflight ensures only one check per unique spectrogram key.
+		sourceState, err := validateNativeSpectrogramInput(sharedCtx, absAudioPath, audioPath, queueKey)
 		if err != nil {
 			return nil, err
 		}
-		// With the native renderer the generator re-checks the file against the state
-		// readiness judged, so a clip that grew while it waited for a slot or decoded
-		// is not published as a short image. A new slice keeps the caller's backing
-		// array unwritten.
-		genOpts := extraOpts
-		if sourceState != nil {
-			genOpts = append(slices.Clip(extraOpts), spectrogram.WithSourceState(*sourceState))
-		}
-
-		// Extract validated duration to pass to the generator, avoiding a redundant
-		// sox --info call (which fails for MP3/AAC without libsox-fmt-mp3).
-		var validatedDuration float64
-		if validationResult != nil {
-			validatedDuration = validationResult.Duration
-		}
+		// The generator re-checks the file against the state readiness judged, so a
+		// clip that grew while it waited for a slot or decoded is not published as a
+		// short image. A new slice keeps the caller's backing array unwritten.
+		genOpts := append(slices.Clip(extraOpts), spectrogram.WithSourceState(sourceState))
 
 		getSpectrogramLogger().Debug("Proceeding with spectrogram generation",
 			logger.String("queue_key", queueKey),
 			logger.String("abs_audio_path", absAudioPath),
 			logger.String("abs_spectrogram_path", absSpectrogramPath),
 			logger.Int("width", width),
-			logger.Bool("raw", raw),
-			logger.Float64("validated_duration", validatedDuration))
+			logger.Bool("raw", raw))
 
 		// Acquire semaphore inside singleflight - only the actual worker gets a slot
 		if err := c.acquireSemaphoreSlot(sharedCtx, queueKey); err != nil {
@@ -4144,7 +3851,7 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 				logger.Int("slots_now_available", maxConcurrentSpectrograms-slotsAfterRelease),
 				logger.Int64("total_duration_ms", time.Since(start).Milliseconds()))
 		}()
-		generated, genErr := c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey, width, raw, validatedDuration, genOpts...)
+		generated, genErr := c.performSpectrogramGeneration(sharedCtx, relSpectrogramPath, absAudioPath, absSpectrogramPath, queueKey, width, raw, genOpts...)
 		if errors.Is(genErr, spectrogram.ErrSourceChanged) {
 			// Not-ready, so the client gets a 503 with Retry-After and nothing is cached.
 			return nil, notReadyError(genErr)
@@ -4223,11 +3930,6 @@ func (c *Handler) removeStaleRender(relAudioPath string, width int, raw bool, st
 			logger.Error(rmErr))
 	}
 }
-
-// Note: createSpectrogramWithSoX, getSoxSpectrogramArgs, createSpectrogramWithFFmpeg,
-// waitWithTimeout, and waitWithTimeoutErr have been removed. All spectrogram generation
-// now uses the shared generator from internal/spectrogram/generator.go via
-// c.spectrogramGenerator.GenerateFromFile().
 
 // GetSpeciesImage serves an image for a bird species by scientific name
 func (c *Handler) GetSpeciesImage(ctx echo.Context) error {

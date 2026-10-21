@@ -185,7 +185,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/spectrogram/:id/process`           | `ProcessedSpectrogramByID` | ✅   | Spectrogram of denoised/normalized clip |
 
 **On-demand clip processing.** `clip`, `process`, `audible-bats` and the processed
-spectrogram decode the stored clip and process it in Go without FFmpeg; the processed spectrogram is then rendered by the spectrogram generator (SoX, with an FFmpeg fallback).
+spectrogram decode the stored clip and process it in Go without FFmpeg; the processed spectrogram is then rendered natively in Go by the spectrogram generator.
 `clip` accepts the formats `wav`, `flac`, `mp3`, `aac` (served as `.m4a`) and `opus`
 (served as `.ogg`); any other value answers **400**. Filters apply
 in the order denoise (`light`, `medium`, `heavy`), loudness normalization, gain
@@ -363,7 +363,7 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 **Blocked fields:** a set of fields can never be written through the settings API, on either write path. Both `PUT /settings` and `PATCH /settings/:section` merge the request into the current settings and then restore the blocked fields from the pre-update snapshot. Sending such a field is not an error: the rest of the request is applied normally and only the blocked values are reverted.
 
-The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg/sox tool paths and the sox format list (`Realtime.Audio.FfmpegPath`/`SoxPath`/`SoxAudioTypes`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
+The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg tool path (`Realtime.Audio.FfmpegPath`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
 
 Both verbs report identically under the `skippedFields` response key: it lists only the blocked paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed), and it is an empty array (`[]`) when nothing was reverted. Do not treat a non-empty list as a request failure. Because the frontend sends the whole settings object on every save, a `PUT` that carries the blanked `Security.BasicAuth.ClientID`/`ClientSecret` reports those two whenever BasicAuth is configured; that is expected and the rest of the save still applies.
 

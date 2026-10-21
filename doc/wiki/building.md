@@ -18,7 +18,7 @@ For development work within VSCode, using the provided [devcontainer](https://co
 
 **Inside the Devcontainer:**
 
-- All Go, CGO, TensorFlow, ONNX Runtime, FFmpeg, and SoX dependencies are pre-installed.
+- All Go, CGO, TensorFlow, ONNX Runtime, and FFmpeg dependencies are pre-installed.
 - Your source code is mounted into the container.
 - An `air` development server ([`.air.toml`](../../.air.toml)) is automatically started. It watches for code changes (`.go`, `.html`, `.css`, `.js`, etc.) and triggers:
   - Tailwind CSS recompilation.

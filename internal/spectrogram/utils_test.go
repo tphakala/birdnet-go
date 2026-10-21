@@ -6,7 +6,6 @@ import (
 	"os/exec"
 	"runtime"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -469,41 +468,6 @@ func TestIsOperationalError_HonorsPriorityLow(t *testing.T) {
 		Build()
 	assert.False(t, IsOperationalError(otherCategoryLowErr),
 		"a PriorityLow error in a non-system category should not be classified as operational")
-}
-
-// TestIsOperationalExecError verifies the context-aware classification helper used at
-// the generator exec sites: a done context means the failure is attributable to
-// cancellation/timeout regardless of the platform-dependent surface error.
-func TestIsOperationalExecError(t *testing.T) {
-	t.Parallel()
-
-	t.Run("canceled context is operational regardless of surface error", func(t *testing.T) {
-		t.Parallel()
-		ctx, cancel := context.WithCancel(t.Context())
-		cancel()
-		// Errors that IsOperationalError alone would reject (the exact Windows
-		// surfaces: missing-binary lookup error and TerminateProcess exit code 1).
-		assert.True(t, isOperationalExecError(ctx, fmt.Errorf("executable file not found in PATH")))
-		assert.True(t, isOperationalExecError(ctx, fmt.Errorf("exit status 1")))
-	})
-
-	t.Run("deadline-exceeded context is operational", func(t *testing.T) {
-		t.Parallel()
-		ctx, cancel := context.WithTimeout(t.Context(), time.Nanosecond)
-		t.Cleanup(cancel)
-		<-ctx.Done()
-		assert.True(t, isOperationalExecError(ctx, fmt.Errorf("exit status 1")))
-	})
-
-	t.Run("live context delegates to IsOperationalError", func(t *testing.T) {
-		t.Parallel()
-		ctx := t.Context()
-		assert.False(t, isOperationalExecError(ctx, fmt.Errorf("exit status 1")),
-			"a genuine failure under a live context stays non-operational")
-		assert.True(t, isOperationalExecError(ctx, context.Canceled),
-			"a surfaced context.Canceled is operational even under a live context")
-		assert.True(t, isOperationalExecError(ctx, fmt.Errorf("process failed: %s", signalKilledMessage)))
-	})
 }
 
 func TestSizeToPixelsRoundTrip(t *testing.T) {

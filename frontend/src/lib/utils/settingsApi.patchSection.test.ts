@@ -54,7 +54,7 @@ describe('settingsAPI.patchSection', () => {
     mockFetch.mockResolvedValueOnce(jsonResponse(200, { skippedFields: null }));
     const { settingsAPI } = await import('./settingsApi.js');
     // A variable, not a literal: structural typing lets the extra keys through.
-    const audio = { source: 'hw:1,0', ffmpegPath: '/opt/ffmpeg', soxPath: '/opt/sox' };
+    const audio = { source: 'hw:1,0', ffmpegPath: '/opt/ffmpeg' };
 
     await settingsAPI.patchSection('audio', audio);
 
@@ -79,8 +79,6 @@ describe('settingsAPI.patchSection', () => {
     birdnet({ rangeFilter: undefined });
     // @ts-expect-error ffmpegPath is validated at startup and blocked on the API
     audio({ ffmpegPath: '/usr/bin/ffmpeg' });
-    // @ts-expect-error soxPath is validated at startup and blocked on the API
-    audio({ soxPath: '/usr/bin/sox' });
 
     expect(birdnet({ threshold: 0.8 })).toEqual({ threshold: 0.8 });
   });

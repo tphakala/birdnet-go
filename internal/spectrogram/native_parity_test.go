@@ -1,16 +1,10 @@
 package spectrogram
 
 import (
-	"encoding/binary"
 	"fmt"
 	"image"
 	"math"
-	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"slices"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,44 +16,24 @@ import (
 	"github.com/tphakala/birdnet-go/internal/spectrogram/soxchrome"
 )
 
-// Parity thresholds against sox renders. Record measured numbers in the PR;
-// tighten, never loosen silently.
+// Parity thresholds against the committed sox renders. Tighten, never loosen
+// silently.
 const (
 	// minRasterEqualReference is the fraction of raster pixels with equal palette
 	// index against the committed sox references, which measure 0.9999 or better.
-	// This is the only parity test that runs without a sox binary, so it keeps the
-	// tight bound.
 	minRasterEqualReference = 0.995
-	// minRasterEqualLive is the same bound for the live sox cases. Two measure
-	// 0.9901 (3 s tone clip at width 258 with a Dolph window at 120 dB, every
-	// difference one palette step), so the reference bound of 0.995 is relaxed for the
-	// live cases only. The 2050 px 48 kHz cases, which compare two different
-	// analyses of one clip, measure 0.9917 to 0.9972.
-	minRasterEqualLive = 0.985
-	maxRasterIndexDiff = 2 // largest allowed index difference in the raster
-	// maxOutlierFractionLive is the fraction of raster pixels the live cases may
-	// have beyond maxRasterIndexDiff. The 2050 px 48 kHz cases compare the native
-	// analysis at 48 kHz with sox's resampled one, so a few isolated pixels differ
-	// by more than the reference renders allow; the committed references keep the
-	// strict maximum. The worst measured case is 0.00033 (698 pixels of the 2050
-	// px raster).
-	maxOutlierFractionLive = 0.002
-	// soxMaxRows is the largest -y sox 14.4.2 accepts. A 48 kHz bird clip is
-	// analysed at its own rate with a frame twice as long, so sox can draw that
-	// reference only up to 1026 px wide (2049 rows at 2050 px).
-	soxMaxRows         = 1200
-	minGridEqual       = 0.98 // fraction of grid pixels away from text that match
-	minNativeTextInSox = 0.95 // native text pixels inside sox's dilated text mask
-	minSoxTextInNative = 0.90 // sox text pixels inside native's dilated text mask
-	textDilation       = 2    // pixels
-	soxFooterRows      = 14   // image rows at the bottom holding sox's footer comment
+	maxRasterIndexDiff      = 2    // largest allowed index difference in the raster
+	minGridEqual            = 0.98 // fraction of grid pixels away from text that match
+	minNativeTextInSox      = 0.95 // native text pixels inside sox's dilated text mask
+	minSoxTextInNative      = 0.90 // sox text pixels inside native's dilated text mask
+	textDilation            = 2    // pixels
+	soxFooterRows           = 14   // image rows at the bottom holding sox's footer comment
 
 	// The committed reference clip.
 	parityClipRate    = 24000
 	parityClipSeconds = 2
 	parityClipDir     = "render/testdata/sox"
 	parityClipName    = "clip.wav"
-	parityRegenEnv    = "SOX_REGEN"
 )
 
 // parityCase is one sox reference render of the committed clip.
@@ -146,9 +120,6 @@ func parityClipSamples() []int16 {
 func TestParityClipMatchesGenerator(t *testing.T) {
 	want := parityClipSamples()
 	path := filepath.Join(parityClipDir, parityClipName)
-	if os.Getenv(parityRegenEnv) != "" {
-		writeNativeWAV(t, filepath.Dir(path), parityClipName, want, parityClipRate)
-	}
 	src, err := transcode.DecodeMono(t.Context(), path, 0)
 	require.NoError(t, err)
 	var got []float32
@@ -331,24 +302,9 @@ func fractionIn(points []image.Point, m *mask) float64 {
 	return float64(in) / float64(len(points))
 }
 
-// soxRenderer renders with the real sox through the generator, gate off.
-func soxRender(t *testing.T, soxPath, audio string, c parityCase, profile FrequencyProfile, secs float64) string {
-	t.Helper()
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "")
-	gen, env := newNativeGenerator(t)
-	env.Settings.Realtime.Audio.SoxPath = soxPath
-	env.Settings.Realtime.Audio.SoxAudioTypes = []string{"wav"}
-	env.Settings.Realtime.Dashboard.Spectrogram.Style = c.style
-	env.Settings.Realtime.Dashboard.Spectrogram.DynamicRange = c.dr
-	out := filepath.Join(env.TempDir, "sox.png")
-	require.NoError(t, gen.GenerateFromFile(t.Context(), audio, out, c.width, c.raw, WithDuration(secs), WithFrequencyProfile(profile)))
-	return out
-}
-
-// nativeRender renders with the native renderer through the generator, gate on.
+// nativeRender renders through the generator.
 func nativeRender(t *testing.T, audio string, c parityCase, profile FrequencyProfile) string {
 	t.Helper()
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	env.Settings.Realtime.Dashboard.Spectrogram.Style = c.style
 	env.Settings.Realtime.Dashboard.Spectrogram.DynamicRange = c.dr
@@ -365,68 +321,19 @@ func rangeOf(t *testing.T, dr string) int {
 }
 
 // TestSoxReferenceParity compares the native render of the committed clip with
-// the committed sox renders. It needs no sox binary. With SOX_REGEN=1 it
-// regenerates the references with the installed sox first.
+// the committed sox renders. It needs no sox binary; the references were
+// rendered once by sox 14.4.2 (see render/testdata/sox/README.md).
 func TestSoxReferenceParity(t *testing.T) {
 	clip, err := filepath.Abs(filepath.Join(parityClipDir, parityClipName))
 	require.NoError(t, err)
 	for _, c := range parityCases() {
 		t.Run(c.name, func(t *testing.T) {
 			ref := filepath.Join(parityClipDir, c.name+".png")
-			if os.Getenv(parityRegenEnv) != "" {
-				soxPath := requireSoxAvailable(t)
-				require.NoError(t, os.MkdirAll(parityClipDir, 0o750))
-				data, err := os.ReadFile(soxRender(t, soxPath, clip, c, BirdProfile(), parityClipSeconds))
-				require.NoError(t, err)
-				require.NoError(t, os.WriteFile(ref, data, 0o600))
-			}
 			out := nativeRender(t, clip, c, BirdProfile())
 			m := assertParity(t, decodePNG(t, out), decodePNG(t, ref), c.raw, rangeOf(t, c.dr), minRasterEqualReference, 0)
 			t.Logf("%s: %s", c.name, m)
 		})
 	}
-}
-
-// soxNativeRaster renders the clip with sox at its own rate, with no rate effect,
-// as a raw raster of the given height. The arguments come from the generator's
-// file path (a profile without a resample rate), with only the height replaced.
-func soxNativeRaster(t *testing.T, soxPath, audio string, c parityCase, height, secs int) *image.Paletted {
-	t.Helper()
-	gen, env := newNativeGenerator(t)
-	env.Settings.Realtime.Dashboard.Spectrogram.Style = c.style
-	env.Settings.Realtime.Dashboard.Spectrogram.DynamicRange = c.dr
-	out := filepath.Join(t.TempDir(), "sox-native.png")
-	args := gen.getSoxArgs(t.Context(), env.Settings, audio, out, c.width, true, SoxInputFile, float64(secs), FrequencyProfile{})
-	y := slices.Index(args, "-y")
-	require.GreaterOrEqual(t, y, 0, "sox arguments carry -y")
-	args[y+1] = strconv.Itoa(height)
-	cmd := exec.CommandContext(t.Context(), soxPath, args...) // #nosec G204 - sox path from LookPath, arguments built by the generator
-	if combined, err := cmd.CombinedOutput(); err != nil {
-		require.NoError(t, err, "sox: %s", combined)
-	}
-	return decodePNG(t, out)
-}
-
-// withNativeRateRaster returns sox with its raster replaced by the bottom rows
-// rows of nativeRate, the same clip drawn at its own rate with a taller frame:
-// those rows cover the same 0 to 12 kHz as sox's resampled render.
-func withNativeRateRaster(t *testing.T, sox, nativeRate *image.Paletted, raw bool, rows int) *image.Paletted {
-	t.Helper()
-	b := sox.Bounds()
-	x0, y0, cols := 0, 0, b.Dx()
-	if !raw {
-		x0, y0 = soxchrome.MarginLeft, soxchrome.MarginAbove
-		cols = b.Dx() - (soxchrome.MarginLeft + soxchrome.GapBetween + soxchrome.LegendWidth + soxchrome.MarginRight)
-	}
-	require.Equal(t, cols, nativeRate.Bounds().Dx(), "the two sox renders must have the same column count")
-	require.Equal(t, sox.Palette, nativeRate.Palette, "PLTE")
-	top := nativeRate.Bounds().Dy() - rows
-	for y := range rows {
-		for x := range cols {
-			sox.SetColorIndex(x0+x, y0+y, nativeRate.ColorIndexAt(x, top+y))
-		}
-	}
-	return sox
 }
 
 // Bounds for TestNativeRateMatchesResampledBelowRollOff.
@@ -467,7 +374,7 @@ func rateClipSamples() []int16 {
 // not apply: the resampler advances its output by half its latency, which
 // decorrelates the noise texture, so the mean palette index of each row over the
 // interior columns is compared instead. This needs no sox binary. Time alignment
-// is pinned by the render package tests and the live sox parity test.
+// is pinned by the render package tests.
 func TestNativeRateMatchesResampledBelowRollOff(t *testing.T) {
 	native, err := transcode.MonoFromPCM16(samplesToPCM(rateClipSamples()), rateClipRate, 0)
 	require.NoError(t, err)
@@ -502,118 +409,5 @@ func TestNativeRateMatchesResampledBelowRollOff(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// liveInput is one input signal form for TestSoxParityLive.
-type liveInput struct {
-	name     string
-	rate     int
-	channels int
-	profile  FrequencyProfile
-}
-
-// liveParityInputs are the source forms compared against the live sox binary.
-func liveParityInputs() []liveInput {
-	return []liveInput{
-		{"mono24k", 24000, 1, BirdProfile()},
-		{"mono48k", 48000, 1, BirdProfile()},
-		{"stereo48k", 48000, 2, BirdProfile()},
-		{"mono256k", 256000, 1, BatProfile()},
-		{"mono384k", 384000, 1, BatProfile()},
-	}
-}
-
-// liveCase is one live parity comparison.
-type liveCase struct {
-	in liveInput
-	c  parityCase
-}
-
-// liveParityCases is a deterministic pairwise subset over input, size, style,
-// range and raw.
-func liveParityCases() []liveCase {
-	const total = 40
-	inputs := liveParityInputs()
-	widths := []int{100, 258, 514, 1026, 2050}
-	styles := []string{conf.SpectrogramStyleDefault, conf.SpectrogramStyleScientificDark, conf.SpectrogramStyleHighContrastDark, conf.SpectrogramStyleScientific}
-	ranges := []string{"80", "100", "120"}
-	out := make([]liveCase, 0, total)
-	for i := range total {
-		in, wi := inputs[i%len(inputs)], i/len(inputs)
-		if i >= len(inputs)*len(widths) {
-			in, wi = inputs[(i*3)%len(inputs)], i*2+1
-		}
-		c := parityCase{
-			width: widths[wi%len(widths)],
-			style: styles[i%len(styles)],
-			dr:    ranges[i%len(ranges)],
-			raw:   i%7 == 0,
-		}
-		c.name = fmt.Sprintf("%s_w%d_%s_z%s_raw%v", in.name, c.width, c.style, c.dr, c.raw)
-		out = append(out, liveCase{in, c})
-	}
-	return out
-}
-
-// writeLiveWAV writes a tonal clip (tones and a chirp) at the input's rate and
-// channel count. Both channels carry the same signal, so the mono mix equals it.
-func writeLiveWAV(t *testing.T, path string, in liveInput, secs int) {
-	t.Helper()
-	nyq := float64(in.rate) / 2
-	frames := in.rate * secs
-	samples := make([]int16, frames*in.channels)
-	for i := range frames {
-		tm := float64(i) / float64(in.rate)
-		v := 0.25*math.Sin(2*math.Pi*0.12*nyq*tm) + 0.15*math.Sin(2*math.Pi*0.31*nyq*tm)
-		v += 0.2 * math.Sin(2*math.Pi*(0.05*nyq+0.2*nyq*tm/float64(secs))*tm)
-		for c := range in.channels {
-			samples[i*in.channels+c] = int16(math.Round(v * math.MaxInt16))
-		}
-	}
-	data := samplesToPCM(samples)
-	const hdr = 44
-	buf := make([]byte, hdr+len(data))
-	copy(buf, "RIFF")
-	binary.LittleEndian.PutUint32(buf[4:], uint32(hdr-8+len(data))) //nolint:gosec // G115: bounded test sizes
-	copy(buf[8:], "WAVEfmt ")
-	binary.LittleEndian.PutUint32(buf[16:], 16)
-	binary.LittleEndian.PutUint16(buf[20:], 1)
-	binary.LittleEndian.PutUint16(buf[22:], uint16(in.channels))           //nolint:gosec // G115: small test value
-	binary.LittleEndian.PutUint32(buf[24:], uint32(in.rate))               //nolint:gosec // G115: small test value
-	binary.LittleEndian.PutUint32(buf[28:], uint32(in.rate*in.channels*2)) //nolint:gosec // G115: small test value
-	binary.LittleEndian.PutUint16(buf[32:], uint16(in.channels*2))         //nolint:gosec // G115: small test value
-	binary.LittleEndian.PutUint16(buf[34:], 16)
-	copy(buf[36:], "data")
-	binary.LittleEndian.PutUint32(buf[40:], uint32(len(data))) //nolint:gosec // G115: bounded test sizes
-	copy(buf[hdr:], data)
-	require.NoError(t, os.WriteFile(path, buf, 0o600))
-}
-
-// TestSoxParityLive compares native renders with the real sox binary over a
-// pairwise subset of sizes, styles, ranges and input forms. Skips without sox.
-func TestSoxParityLive(t *testing.T) {
-	soxPath := requireSoxAvailable(t)
-	if runtime.GOOS == osWindows {
-		t.Skip("live sox parity runs on POSIX hosts")
-	}
-	const secs = 3
-	for _, lc := range liveParityCases() {
-		t.Run(lc.c.name, func(t *testing.T) {
-			dir := t.TempDir()
-			audio := filepath.Join(dir, "in.wav")
-			writeLiveWAV(t, audio, lc.in, secs)
-			soxOut := soxRender(t, soxPath, audio, lc.c, lc.in.profile, secs)
-			natOut := nativeRender(t, audio, lc.c, lc.in.profile)
-			soxImg := decodePNG(t, soxOut)
-			// A clip analysed at its own rate is compared with sox analysing it at
-			// that rate too, where sox can draw the longer frame.
-			mult, ok := render.FrameMultiple(lc.in.rate, lc.in.profile.ResampleRate)
-			if rows := fftFriendlyHeight(lc.c.width); ok && mult > 1 && mult*(rows-1) < soxMaxRows {
-				soxImg = withNativeRateRaster(t, soxImg, soxNativeRaster(t, soxPath, audio, lc.c, mult*(rows-1)+1, secs), lc.c.raw, rows)
-			}
-			m := assertParity(t, decodePNG(t, natOut), soxImg, lc.c.raw, rangeOf(t, lc.c.dr), minRasterEqualLive, maxOutlierFractionLive)
-			t.Logf("%s", m)
-		})
 	}
 }

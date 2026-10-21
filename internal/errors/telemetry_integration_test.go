@@ -441,7 +441,7 @@ func TestShouldReportToSentry_AllowsNonDatabaseContextCancellation(t *testing.T)
 // TestShouldReportToSentry_FiltersLowPrioritySystemInterruptions verifies that a
 // CategorySystem error explicitly tagged PriorityLow is suppressed even when its
 // surface error is not a context sentinel. The spectrogram generator tags
-// context-driven Sox/FFmpeg interruptions this way using the governing context,
+// context-driven render interruptions this way using the governing context,
 // because the OS surface error is platform-dependent: on Windows a context-killed
 // process exits with status 1 (no context sentinel) and on Linux a mid-run kill
 // surfaces as "signal: killed", so isContextCancellation alone misses them.

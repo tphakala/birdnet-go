@@ -1,6 +1,5 @@
 // Package spectrogram provides background pre-rendering of spectrograms to eliminate UI lag.
-// Pre-rendering feeds PCM data directly to Sox (bypassing FFmpeg), or to the native renderer when
-// BIRDNET_SPECTROGRAM_RENDERER=native, in a background worker pool.
+// Pre-rendering feeds PCM data directly to the native renderer in a background worker pool.
 package spectrogram
 
 import (

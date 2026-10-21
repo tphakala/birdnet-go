@@ -18,9 +18,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/spectrogram/render"
 )
 
-// This file is the native (pure Go) spectrogram path, selected per render by
-// conf.NativeSpectrogramEnabled. It writes only the temp file the caller
-// publishes with a rename, and never falls back to sox or FFmpeg.
+// This file is the native (pure Go) spectrogram path, the only one. It writes
+// only the temp file the caller publishes with a rename.
 
 const (
 	// nativeOutputFilePerm is the permission mode of the temporary PNG.
@@ -37,30 +36,16 @@ const (
 	// nativeRendererName tags telemetry and logs from this path.
 	nativeRendererName = "native"
 
-	// soxRendererName tags the completion logs of the sox and FFmpeg path, so
-	// the two renderers' timings can be compared.
-	soxRendererName = "sox"
-
 	// Operation names of the two native entry points.
 	nativeOperationFile = "generate_native_file"
 	nativeOperationPCM  = "generate_native_pcm"
 
-	// Dynamic range presets in dB, matching the sox -z values for the
-	// conf.SpectrogramDynamicRange* settings.
+	// Dynamic range presets in dB for the conf.SpectrogramDynamicRange*
+	// settings.
 	nativeRangeHighContrastDB = 80
 	nativeRangeStandardDB     = 100
 	nativeRangeExtendedDB     = 120
 )
-
-// selectedRenderer reads the renderer gate once and returns the name to log
-// with whether the native path is selected, so the branch taken and the logged
-// name cannot differ.
-func selectedRenderer() (name string, native bool) {
-	if conf.NativeSpectrogramEnabled() {
-		return nativeRendererName, true
-	}
-	return soxRendererName, false
-}
 
 // nativeRangeDB maps the dynamic range preset strings getDynamicRange returns to
 // dB; an unknown preset gives 0, which render rejects as invalid options.
@@ -77,7 +62,7 @@ func nativeRangeDB(preset string) int {
 }
 
 // pcmSourceRate returns the capture rate for prerender PCM, falling back to the
-// configured sample rate for a non-positive value (as generateWithSoxPCM does).
+// configured sample rate for a non-positive value.
 func pcmSourceRate(rate int) int {
 	if rate <= 0 {
 		return conf.SampleRate
@@ -306,8 +291,8 @@ func (g *Generator) nativeError(ctx context.Context, err error, operation string
 		return fmt.Errorf("native spectrogram %s: %w", operation, err)
 	}
 	if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		// Context-driven interruption is operational, like the sox path's
-		// (IsOperationalError).
+		// Context-driven interruption is operational (IsOperationalError reads
+		// this PriorityLow, CategorySystem classification).
 		return errors.New(err).
 			Component("spectrogram").
 			Category(errors.CategorySystem).

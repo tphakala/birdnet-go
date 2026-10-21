@@ -3,6 +3,7 @@
 package media
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -381,9 +382,8 @@ func TestServeAudioClip(t *testing.T) {
 	}
 }
 
-// TestServeSpectrogram tests the ServeSpectrogram handler using SecureFS
-// Note: This test verifies the handler logic calls SecureFS, but does not
-// guarantee actual spectrogram generation works if tools are missing.
+// TestServeSpectrogram tests the ServeSpectrogram handler using SecureFS,
+// including on-demand rendering by the built-in renderer.
 func TestServeSpectrogram(t *testing.T) {
 	// Setup test environment with SecureFS rooted in tempDir
 	e, controller, tempDir := setupMediaTestEnvironment(t)
@@ -395,7 +395,7 @@ func TestServeSpectrogram(t *testing.T) {
 	require.NoError(t, err)
 
 	// --- Simulate Spectrogram Generation (by creating the expected file) ---
-	// This allows testing the "file exists" path without running external tools.
+	// This allows testing the "file exists" path without rendering.
 	// Default is raw=true, so the filename format is audio_800px.png
 	spectrogramFilename := "audio_800px.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
@@ -410,6 +410,7 @@ func TestServeSpectrogram(t *testing.T) {
 		width          string
 		expectedStatus int
 		expectedBody   string
+		expectPNG      bool // body is a freshly rendered PNG, not a fixed string
 	}{
 		{
 			name:           "Spectrogram generated/exists",
@@ -419,12 +420,11 @@ func TestServeSpectrogram(t *testing.T) {
 			expectedBody:   spectrogramContent,
 		},
 		{
-			name:     "Spectrogram needs generation (file doesn't exist initially)",
-			filename: audioFilename,
-			width:    "1200", // Different width means different file
-			// Expect error because external tools likely won't run in test
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "",
+			name:           "Spectrogram renders on demand (file doesn't exist initially)",
+			filename:       audioFilename,
+			width:          "1200", // Different width means different file
+			expectedStatus: http.StatusOK,
+			expectPNG:      true,
 		},
 		{
 			name:           "Non-existent audio file",
@@ -462,7 +462,11 @@ func TestServeSpectrogram(t *testing.T) {
 
 			// For success cases, check response content
 			if tc.expectedStatus == http.StatusOK {
-				assert.Equal(t, tc.expectedBody, rec.Body.String())
+				if tc.expectPNG {
+					assert.True(t, bytes.HasPrefix(rec.Body.Bytes(), []byte(pngSignature)), "body must be a PNG")
+				} else {
+					assert.Equal(t, tc.expectedBody, rec.Body.String())
+				}
 				assert.Equal(t, "image/png", rec.Header().Get("Content-Type"))
 			}
 		})
@@ -561,6 +565,7 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 		expectedStatus int
 		expectedBody   string
 		isAudioFile    bool // Flag to indicate if this is an audio file that needs special handling
+		expectPNG      bool // body is a freshly rendered PNG, not a fixed string
 	}{
 		{
 			name:           "Audio endpoint",
@@ -577,11 +582,10 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 			isAudioFile:    false,
 		},
 		{
-			name:           "Spectrogram endpoint (needs generation - likely fails)",
+			name:           "Spectrogram endpoint (renders on demand)",
 			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=1200",
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "",
-			isAudioFile:    false,
+			expectedStatus: http.StatusOK,
+			expectPNG:      true,
 		},
 		{
 			name:           "Missing audio file",
@@ -609,6 +613,11 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 			if tc.expectedStatus == http.StatusOK {
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
+				if tc.expectPNG {
+					assert.True(t, bytes.HasPrefix(body, []byte(pngSignature)), "body must be a PNG")
+					assert.Equal(t, "image/png", resp.Header.Get("Content-Type"))
+					return
+				}
 				assertMediaResponseBody(t, body, tc.expectedBody, tc.isAudioFile)
 			}
 		})

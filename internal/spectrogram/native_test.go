@@ -12,8 +12,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
-	"runtime"
-	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -63,8 +61,8 @@ const (
 	xingFlagsOffset  = 4
 	xingFramesOffset = 8
 
-	soxStubMarker = "SOXSTUB\n"
-	pngSignature  = "\x89PNG\r\n\x1a\n"
+	existingFileMarker = "EXISTING\n"
+	pngSignature       = "\x89PNG\r\n\x1a\n"
 )
 
 // nativeTestSamples returns a mono 16-bit clip: a tone plus a sweep.
@@ -94,36 +92,6 @@ func writeNativeWAV(t *testing.T, dir, name string, samples []int16, rate int) s
 	path := filepath.Join(dir, name)
 	require.NoError(t, wav.EncodePCM(t.Context(), &wav.Options{PCMData: samplesToPCM(samples), OutputPath: path, SampleRate: rate, BitDepth: 16}))
 	return path
-}
-
-// markerSoxStub returns a sox stand-in that writes the marker to its "-o" target
-// and records each run in the returned file. POSIX only.
-func markerSoxStub(t *testing.T) (stub, ranFile string) {
-	t.Helper()
-	dir := t.TempDir()
-	stub = filepath.Join(dir, "sox")
-	ranFile = filepath.Join(dir, "ran")
-	script := "#!/bin/sh\n" +
-		"echo run >> '" + ranFile + "'\n" +
-		"prev=\"\"\n" +
-		"for a in \"$@\"; do\n" +
-		"  if [ \"$prev\" = \"-o\" ]; then printf 'SOXSTUB\\n' > \"$a\"; fi\n" +
-		"  prev=\"$a\"\n" +
-		"done\n" +
-		"cat > /dev/null\n" +
-		"exit 0\n"
-	require.NoError(t, os.WriteFile(stub, []byte(script), 0o700)) //nolint:gosec // G306: test stub must be executable
-	return stub, ranFile
-}
-
-func stubRuns(t *testing.T, ranFile string) int {
-	t.Helper()
-	data, err := os.ReadFile(ranFile) //nolint:gosec // G304: test path
-	if os.IsNotExist(err) {
-		return 0
-	}
-	require.NoError(t, err)
-	return bytes.Count(data, []byte("run"))
 }
 
 func newNativeGenerator(t *testing.T) (*Generator, *testEnv) {
@@ -158,54 +126,11 @@ func requireNativePNG(t *testing.T, path string) {
 	assert.LessOrEqual(t, cols, nativeTestWidth)
 }
 
-func requireStubFile(t *testing.T, path string) {
+func requireMarkerFile(t *testing.T, path string) {
 	t.Helper()
 	raw, err := os.ReadFile(path) //nolint:gosec // G304: test path
 	require.NoError(t, err)
-	assert.Equal(t, soxStubMarker, string(raw))
-}
-
-func skipWithoutPOSIXShell(t *testing.T) {
-	t.Helper()
-	if runtime.GOOS == osWindows {
-		t.Skip("sox stub requires a POSIX shell")
-	}
-}
-
-func TestNativeGate_Transitions(t *testing.T) {
-	skipWithoutPOSIXShell(t)
-	gen, env := newNativeGenerator(t)
-	stub, ran := markerSoxStub(t)
-	env.Settings.Realtime.Audio.SoxPath = stub
-	env.Settings.Realtime.Audio.SoxAudioTypes = []string{"wav"}
-	audio := writeNativeWAV(t, env.TempDir, "in.wav", nativeTestSamples(24000), 24000)
-
-	sequences := map[string][]bool{
-		"off on off": {false, true, false},
-		"on on":      {true, true},
-	}
-	for name, steps := range sequences {
-		t.Run(name, func(t *testing.T) {
-			_ = os.Remove(ran)
-			wantRuns := 0
-			for i, on := range steps {
-				if on {
-					t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
-				} else {
-					t.Setenv(conf.EnvNativeSpectrogramRenderer, "")
-				}
-				out := filepath.Join(env.TempDir, name, string(rune('a'+i))+".png")
-				require.NoError(t, gen.GenerateFromFile(t.Context(), audio, out, nativeTestWidth, false, WithDuration(nativeTestSeconds)))
-				if on {
-					requireNativePNG(t, out)
-				} else {
-					requireStubFile(t, out)
-					wantRuns++
-				}
-				assert.Equal(t, wantRuns, stubRuns(t, ran), "step %d", i)
-			}
-		})
-	}
+	assert.Equal(t, existingFileMarker, string(raw))
 }
 
 // TestNativeGate_PrerenderSubmitLeavesExistingFile pins that a prerender submit
@@ -215,20 +140,18 @@ func TestNativeGate_PrerenderSubmitLeavesExistingFile(t *testing.T) {
 	clip := filepath.Join(env.TempDir, "clip.wav")
 	spec, err := BuildSpectrogramPath(clip)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(spec, []byte(soxStubMarker), 0o600))
+	require.NoError(t, os.WriteFile(spec, []byte(existingFileMarker), 0o600))
 
 	job := createTestJob(clip, 1)
 	require.NoError(t, pr.Submit(job))
 
 	assert.Equal(t, int64(1), pr.GetStats().Skipped)
-	requireStubFile(t, spec)
+	requireMarkerFile(t, spec)
 }
 
 func TestNativeGate_NoSoxNeeded(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	t.Setenv("PATH", "")
 	gen, env := newNativeGenerator(t)
-	env.Settings.Realtime.Audio.SoxPath = filepath.Join(env.TempDir, "missing-sox")
 	samples := nativeTestSamples(24000)
 	pcm48 := samplesToPCM(nativeTestSamples(nativeCodecRate))
 
@@ -253,11 +176,10 @@ func TestNativeGate_NoSoxNeeded(t *testing.T) {
 }
 
 // TestNativeGate_PrerenderRendersWithoutBinaries renders a prerender job through
-// processJob with no sox configured and no binary on PATH.
+// processJob with no binary on PATH.
 func TestNativeGate_PrerenderRendersWithoutBinaries(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	t.Setenv("PATH", "")
-	pr, env := createTestPreRenderer(t, &PreRendererTestOptions{SoxPath: "", SpectrogramSize: nativeTestSize})
+	pr, env := createTestPreRenderer(t, &PreRendererTestOptions{SpectrogramSize: nativeTestSize})
 	clip := filepath.Join(env.TempDir, "clip.wav")
 	spec, err := BuildSpectrogramPath(clip)
 	require.NoError(t, err)
@@ -271,31 +193,7 @@ func TestNativeGate_PrerenderRendersWithoutBinaries(t *testing.T) {
 	assert.Zero(t, pr.GetStats().Failed)
 }
 
-func TestNativeGate_FailureNoFallback(t *testing.T) {
-	skipWithoutPOSIXShell(t)
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
-	gen, env := newNativeGenerator(t)
-	stub, ran := markerSoxStub(t)
-	env.Settings.Realtime.Audio.SoxPath = stub
-	env.Settings.Realtime.Audio.SoxAudioTypes = []string{"wav", "mp3"}
-
-	corrupt := filepath.Join(env.TempDir, "corrupt.wav")
-	require.NoError(t, os.WriteFile(corrupt, []byte("RIFF....WAVEjunk"), 0o600))
-	unsupported := filepath.Join(env.TempDir, "clip.xyz")
-	require.NoError(t, os.WriteFile(unsupported, []byte("not audio"), 0o600))
-
-	for _, in := range []string{corrupt, unsupported} {
-		out := filepath.Join(env.TempDir, filepath.Base(in)+".png")
-		err := gen.GenerateFromFile(t.Context(), in, out, nativeTestWidth, false)
-		require.Error(t, err, in)
-		assert.NoFileExists(t, out)
-		assertNoSpectrogramTemp(t, out)
-	}
-	assert.Zero(t, stubRuns(t, ran), "sox must not run as a fallback")
-}
-
 func TestNativeGate_WidthBelowMinimum(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	audio := writeNativeWAV(t, env.TempDir, "in.wav", nativeTestSamples(24000), 24000)
 
@@ -308,7 +206,6 @@ func TestNativeGate_WidthBelowMinimum(t *testing.T) {
 }
 
 func TestNativeGate_CanceledIsOperational(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	samples := nativeTestSamples(24000)
 	audio := writeNativeWAV(t, env.TempDir, "in.wav", samples, 24000)
@@ -332,7 +229,6 @@ func TestNativeGate_CanceledIsOperational(t *testing.T) {
 }
 
 func TestNativeGate_StyleHotReload(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	audio := writeNativeWAV(t, env.TempDir, "in.wav", nativeTestSamples(24000), 24000)
 
@@ -347,7 +243,6 @@ func TestNativeGate_StyleHotReload(t *testing.T) {
 }
 
 func TestNativeGate_FileAndPCMAgree(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	samples := nativeTestSamples(48000)
 	audio := writeNativeWAV(t, env.TempDir, "in.wav", samples, 48000)
@@ -365,7 +260,6 @@ func TestNativeGate_FileAndPCMAgree(t *testing.T) {
 }
 
 func TestNativeGate_ProcessedPreviewPath(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	audio := writeNativeWAV(t, env.TempDir, "in.wav", nativeTestSamples(24000), 24000)
 	// The processed preview creates its output file before rendering.
@@ -378,7 +272,6 @@ func TestNativeGate_ProcessedPreviewPath(t *testing.T) {
 }
 
 func TestNativeGate_DecodeErrorReportedOnce(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	unsupported := filepath.Join(env.TempDir, "clip.xyz")
 	require.NoError(t, os.WriteFile(unsupported, []byte("not audio"), 0o600))
@@ -445,7 +338,6 @@ func mp3WithDoubledFrameCount(t *testing.T, data []byte) []byte {
 // produces, including a file whose header declares more audio than it holds, which
 // is drawn again from memory instead of as a narrow picture.
 func TestGenerateNativeFromFile_MatchesTheBufferedRender(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	samples := toneSamples(nativeCodecRate, nativeStreamSeconds, nativeStreamToneHz)
 	wavPath := writeNativeWAV(t, env.TempDir, "in.wav", samples, nativeCodecRate)
@@ -524,7 +416,6 @@ func toneSamples(rate int, seconds, freq float64) []int16 {
 }
 
 func TestNativeGate_ProfileRateSetsNyquist(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	const (
 		toneHz    = 3000.0
@@ -595,7 +486,6 @@ func TestAnalysisSource(t *testing.T) {
 }
 
 func TestNativeGate_BatProfileKeepsNativeRate(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	const (
 		seconds     = 0.5
@@ -636,7 +526,6 @@ func TestNativeGate_BatProfileKeepsNativeRate(t *testing.T) {
 }
 
 func TestNativeGate_PCMZeroRateUsesDefault(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	assert.Equal(t, conf.SampleRate, pcmSourceRate(0))
 	assert.Equal(t, conf.SampleRate, pcmSourceRate(-1))
@@ -653,41 +542,6 @@ func TestNativeGate_PCMZeroRateUsesDefault(t *testing.T) {
 	b, err := os.ReadFile(explicit) //nolint:gosec // G304: test path
 	require.NoError(t, err)
 	assert.Equal(t, a, b)
-}
-
-func TestNativeGate_PCMFailureNoFallback(t *testing.T) {
-	skipWithoutPOSIXShell(t)
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
-	gen, env := newNativeGenerator(t)
-	stub, ran := markerSoxStub(t)
-	env.Settings.Realtime.Audio.SoxPath = stub
-
-	out := filepath.Join(env.TempDir, "fail.png")
-	// One byte is less than one 16-bit sample, so the native source rejects it.
-	err := gen.GenerateFromPCM(t.Context(), []byte{1}, out, nativeTestWidth, false, 24000)
-
-	require.Error(t, err)
-	assert.NoFileExists(t, out)
-	assertNoSpectrogramTemp(t, out)
-	assert.Zero(t, stubRuns(t, ran), "sox must not run as a fallback")
-}
-
-func TestStyleForMatchesGetStyleArgs(t *testing.T) {
-	for _, name := range []string{
-		conf.SpectrogramStyleDefault, conf.SpectrogramStyleScientificDark,
-		conf.SpectrogramStyleHighContrastDark, conf.SpectrogramStyleScientific, "", "bogus",
-	} {
-		args := getStyleArgs(name)
-		want := render.Style{Palette: soxchrome.PaletteSpec{
-			Monochrome:      slices.Contains(args, "-m"),
-			HighColour:      slices.Contains(args, "-h"),
-			LightBackground: slices.Contains(args, "-l"),
-		}}
-		if slices.Contains(args, "dolph") {
-			want.Window = render.WindowDolph
-		}
-		assert.Equal(t, want, render.StyleFor(name), name)
-	}
 }
 
 func TestNativeRangeDB(t *testing.T) {
@@ -754,41 +608,6 @@ func TestRenderNative_RemoveFailureIsFileIO(t *testing.T) {
 	assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
 }
 
-func TestNativeGate_PCMTransitions(t *testing.T) {
-	skipWithoutPOSIXShell(t)
-	gen, env := newNativeGenerator(t)
-	stub, ran := markerSoxStub(t)
-	env.Settings.Realtime.Audio.SoxPath = stub
-	pcm := samplesToPCM(nativeTestSamples(24000))
-
-	sequences := map[string][]bool{
-		"off on off": {false, true, false},
-		"on on":      {true, true},
-	}
-	for name, steps := range sequences {
-		t.Run(name, func(t *testing.T) {
-			_ = os.Remove(ran)
-			wantRuns := 0
-			for i, on := range steps {
-				if on {
-					t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
-				} else {
-					t.Setenv(conf.EnvNativeSpectrogramRenderer, "")
-				}
-				out := filepath.Join(env.TempDir, name, string(rune('a'+i))+".png")
-				require.NoError(t, gen.GenerateFromPCM(t.Context(), pcm, out, nativeTestWidth, false, 24000))
-				if on {
-					requireNativePNG(t, out)
-				} else {
-					requireStubFile(t, out)
-					wantRuns++
-				}
-				assert.Equal(t, wantRuns, stubRuns(t, ran), "step %d", i)
-			}
-		})
-	}
-}
-
 func TestRenderNative_OpenFailureIsFileIO(t *testing.T) {
 	gen, env := newNativeGenerator(t)
 	temp := filepath.Join(env.TempDir, "no-such-dir", "out.png")
@@ -846,7 +665,6 @@ func TestEncodePNG(t *testing.T) {
 // goroutines are released together, and each cycles through every image, so the
 // encodes overlap and the same goroutine encodes a narrow image after a wide one.
 func TestEncodePNG_ConcurrentEncodesKeepTheirOwnPixels(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	gen, env := newNativeGenerator(t)
 	const (
 		rate       = 24000
@@ -939,16 +757,4 @@ func TestEncodePNG_FailureWhileEncoding(t *testing.T) {
 	}
 
 	require.ErrorIs(t, encodePNG(&failingWriter{n: 0}, img), errWriterFull)
-}
-
-func TestSelectedRendererFollowsTheGate(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "")
-	name, native := selectedRenderer()
-	assert.Equal(t, soxRendererName, name)
-	assert.False(t, native)
-
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
-	name, native = selectedRenderer()
-	assert.Equal(t, nativeRendererName, name)
-	assert.True(t, native)
 }

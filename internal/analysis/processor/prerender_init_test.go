@@ -3,7 +3,6 @@ package processor
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -15,18 +14,16 @@ import (
 const preRenderSpectrogramSize = "lg"
 
 // newPreRenderInitSettings returns settings that pass every initPreRenderer
-// check except the sox binary, which is left unconfigured.
+// check; no external binary is configured.
 func newPreRenderInitSettings(t *testing.T) *conf.Settings {
 	t.Helper()
 	s := conftest.GetTestSettings()
 	s.Realtime.Audio.Export.Path = t.TempDir()
 	s.Realtime.Dashboard.Spectrogram.Size = preRenderSpectrogramSize
-	s.Realtime.Audio.SoxPath = ""
 	return s
 }
 
-func TestInitPreRenderer_NativeGateNeedsNoSox(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
+func TestInitPreRenderer_NeedsNoSoxBinary(t *testing.T) {
 	t.Setenv("PATH", "")
 	p := &Processor{Settings: newPreRenderInitSettings(t)}
 
@@ -36,13 +33,4 @@ func TestInitPreRenderer_NativeGateNeedsNoSox(t *testing.T) {
 	pr, ok := p.preRenderer.(*spectrogram.PreRenderer)
 	require.True(t, ok)
 	t.Cleanup(pr.Stop)
-}
-
-func TestInitPreRenderer_GateOffStillRequiresSox(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "")
-	p := &Processor{Settings: newPreRenderInitSettings(t)}
-
-	p.initPreRenderer()
-
-	assert.Nil(t, p.preRenderer)
 }

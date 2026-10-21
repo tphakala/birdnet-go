@@ -7,7 +7,7 @@ echo "Setting up BirdNET-Go development environment..."
 sudo apt-get update -q
 
 # Install required runtime dependencies
-sudo apt-get install -y ca-certificates libasound2 ffmpeg sox alsa-utils
+sudo apt-get install -y ca-certificates libasound2 ffmpeg alsa-utils
 
 # Install development tools (git is already included)
 sudo apt-get install -y nano vim curl wget git dialog build-essential fish socat

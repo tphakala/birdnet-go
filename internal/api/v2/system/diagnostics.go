@@ -289,7 +289,7 @@ func (c *Handler) registerHealthChecks() {
 
 		// Config checks
 		checks.NewToolAvailabilityCheck(func() []checks.ToolInfo {
-			return requiredTools(c.CurrentSettings(), conf.NativeSpectrogramEnabled())
+			return requiredTools(c.CurrentSettings())
 		}),
 		checks.NewPathAccessCheck(map[string]string{
 			"data": filepath.Dir(c.CurrentSettings().Output.SQLite.Path),
@@ -830,21 +830,14 @@ func (c *Handler) GetRecentErrors(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, entries)
 }
 
-// requiredTools lists the external binaries the health check expects. Only the
-// sox renderer uses Sox; with the native spectrogram renderer it is not needed.
-func requiredTools(s *conf.Settings, nativeSpectrogram bool) []checks.ToolInfo {
-	tools := []checks.ToolInfo{
+// requiredTools lists the external binaries the health check expects: FFmpeg,
+// used for network stream capture.
+func requiredTools(s *conf.Settings) []checks.ToolInfo {
+	return []checks.ToolInfo{
 		{
 			Name:    "FFmpeg",
 			Path:    s.Realtime.Audio.FfmpegPath,
 			Version: s.Realtime.Audio.FfmpegVersion,
 		},
 	}
-	if !nativeSpectrogram {
-		tools = append(tools, checks.ToolInfo{
-			Name: "Sox",
-			Path: s.Realtime.Audio.SoxPath,
-		})
-	}
-	return tools
 }

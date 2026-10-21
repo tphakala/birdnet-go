@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Vislabākais vājiem signāliem. Putnu balsis skaidri izceļas no fona trokšņa. Ieteicams zinātniskajiem/pelēktoņu stiliem.",
                   "standard": "Noklusējuma sabalansēts iestatījums. Labs lielākajai daļai lietojumu.",
-                  "extended": "Redzamas vairāk detaļas, bet zemāks kontrasts. SoX noklusējuma vērtība."
+                  "extended": "Redzamas vairāk detaļas, bet zemāks kontrasts."
                 }
               },
               "enabled": {

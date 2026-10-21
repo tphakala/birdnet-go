@@ -511,7 +511,7 @@ func (s *AudioSettings) clearFfmpegMetadata() {
 // detector; only tests override it (see validate_audio_export_test.go).
 var ffmpegVersionDetector = GetFfmpegVersionFrom
 
-// validateAudioSettings validates the audio settings and sets ffmpeg and sox paths
+// validateAudioSettings validates the audio settings and sets the ffmpeg path
 func validateAudioSettings(settings *AudioSettings) error {
 	// Validate and determine the effective FFmpeg path
 	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
@@ -548,21 +548,9 @@ func validateAudioSettings(settings *AudioSettings) error {
 				settings.FfprobePath = ""
 				GetLogger().Warn("FFprobe not found alongside FFmpeg or in PATH",
 					logger.String("expected_path", ffprobePath),
-					logger.String("impact", "Audio validation via FFprobe will be disabled"))
+					logger.String("impact", "Network stream probing (sample rate and channel detection) via FFprobe will be disabled"))
 			}
 		}
-	}
-
-	// Validate and determine the effective SoX path, using the same
-	// ValidateToolPath pattern as FFmpeg (configured path first, then PATH).
-	validatedSoxPath, soxErr := ValidateToolPath(settings.SoxPath, GetSoxBinaryName())
-	if soxErr != nil {
-		settings.SoxPath = ""
-		settings.SoxAudioTypes = nil
-		GetLogger().Warn("SoX not available", logger.Error(soxErr), logger.String("impact", "Spectrogram generation via SoX will be disabled"))
-	} else {
-		settings.SoxPath = validatedSoxPath
-		settings.SoxAudioTypes = GetSoxFormats(validatedSoxPath)
 	}
 
 	// Validate audio sources

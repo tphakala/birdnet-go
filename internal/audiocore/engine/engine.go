@@ -68,10 +68,6 @@ type Config struct {
 	// It is handed to the FFmpeg stream manager as a manager-level option.
 	FFmpegPath string
 
-	// SoxPath is the absolute path to the SoX binary.
-	// Reserved for future use by audio processing subsystems.
-	SoxPath string
-
 	// Transport is the default RTSP transport protocol ("tcp" or "udp").
 	Transport string
 
@@ -164,8 +160,6 @@ type AudioEngine struct {
 	ctx       context.Context
 	cancel    context.CancelCauseFunc
 
-	// soxPath is the absolute path to the SoX binary.
-	soxPath string
 	// transport is the default RTSP transport protocol.
 	transport string
 	// debug enables verbose debug logging for stream capture.
@@ -232,7 +226,6 @@ func New(ctx context.Context, cfg *Config, scheduler *schedule.QuietHoursSchedul
 		logger:               log.With(logger.String("component", "audio_engine")),
 		ctx:                  engineCtx,
 		cancel:               cancel,
-		soxPath:              cfg.SoxPath,
 		transport:            cfg.Transport,
 		debug:                cfg.Debug,
 		captureBufferSeconds: captureBufferSecs(cfg.CaptureBufferSeconds),

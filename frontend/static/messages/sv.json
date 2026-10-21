@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Bäst för svaga signaler. Fågelläten framträder tydligt mot bakgrundsbruset. Rekommenderas för vetenskapliga/gråskalestilar.",
                   "standard": "Standardbalanserad inställning. Bra för de flesta användningsfall.",
-                  "extended": "Mer detaljer synliga men lägre kontrast. SoX standardvärde."
+                  "extended": "Mer detaljer synliga men lägre kontrast."
                 }
               },
               "enabled": {

@@ -36,7 +36,7 @@ import (
 //   - TestPatchYamlDashFieldsAreEitherBlockedOrRederived pins the fields that
 //     PUT protects via yaml:"-" but PATCH does not.
 //
-// Leaves tagged json:"-" (BirdNET.Labels, Realtime.Audio.SoxAudioTypes, Input)
+// Leaves tagged json:"-" (BirdNET.Labels, Input)
 // are covered by the direct test only. The JSON merge cannot reach them at all,
 // so an HTTP-level immutability assertion would pass with enforcement deleted;
 // listing them in both places would make coverage look better than it is.
@@ -268,13 +268,6 @@ func TestPatchCannotChangeBlockedFields(t *testing.T) {
 			section: "audio",
 			seed:    func(s *conf.Settings) { s.Realtime.Audio.FfmpegPath = "/usr/bin/ffmpeg" },
 			body:    map[string]any{"ffmpegPath": "/tmp/attacker/ffmpeg"},
-		},
-		{
-			leaf:    "Realtime.Audio.SoxPath",
-			name:    "Realtime.Audio.SoxPath via the audio section",
-			section: "audio",
-			seed:    func(s *conf.Settings) { s.Realtime.Audio.SoxPath = "/usr/bin/sox" },
-			body:    map[string]any{"soxPath": "/tmp/attacker/sox"},
 		},
 	}
 
@@ -597,20 +590,6 @@ func TestRestoreBlockedFieldsCoversEveryLeaf(t *testing.T) {
 			seed:    func(s *conf.Settings) { s.Realtime.Audio.FfmpegPath = "/usr/bin/ffmpeg" },
 			tamper:  func(s *conf.Settings) { s.Realtime.Audio.FfmpegPath = "/tmp/attacker/ffmpeg" },
 			current: func(s *conf.Settings) any { return s.Realtime.Audio.FfmpegPath },
-		},
-		{
-			name:    "Realtime.Audio.SoxPath",
-			path:    "Realtime.Audio.SoxPath",
-			seed:    func(s *conf.Settings) { s.Realtime.Audio.SoxPath = "/usr/bin/sox" },
-			tamper:  func(s *conf.Settings) { s.Realtime.Audio.SoxPath = "/tmp/attacker/sox" },
-			current: func(s *conf.Settings) any { return s.Realtime.Audio.SoxPath },
-		},
-		{
-			name:    "Realtime.Audio.SoxAudioTypes",
-			path:    "Realtime.Audio.SoxAudioTypes",
-			seed:    func(s *conf.Settings) { s.Realtime.Audio.SoxAudioTypes = []string{"wav", "flac"} },
-			tamper:  func(s *conf.Settings) { s.Realtime.Audio.SoxAudioTypes = []string{"injected"} },
-			current: func(s *conf.Settings) any { return s.Realtime.Audio.SoxAudioTypes },
 		},
 	}
 

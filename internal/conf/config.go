@@ -108,8 +108,6 @@ type AudioSettings struct {
 	FfmpegVersion   string              `yaml:"-" json:"ffmpegVersion,omitempty"`                               // ffmpeg version string, runtime value
 	FfmpegMajor     int                 `yaml:"-" json:"ffmpegMajor,omitempty"`                                 // ffmpeg major version number, runtime value
 	FfmpegMinor     int                 `yaml:"-" json:"ffmpegMinor,omitempty"`                                 // ffmpeg minor version number, runtime value
-	SoxPath         string              `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`                  // path to sox, runtime value
-	SoxAudioTypes   []string            `yaml:"-" json:"-"`                                                     // supported audio types of sox, runtime value
 	FfprobePath     string              `yaml:"-" json:"-"`                                                     // path to ffprobe, derived from ffmpeg path at runtime
 	StreamTransport string              `yaml:"streamtransport" json:"streamTransport"`                         // preferred transport for audio streaming: "auto", "sse", or "ws"
 	Export          ExportSettings      `yaml:"export" json:"export"`                                           // export settings
@@ -141,15 +139,6 @@ func (a *AudioSettings) FindSourceByID(sourceID string) *AudioSourceConfig {
 		}
 	}
 	return nil
-}
-
-// NeedsFfprobeWorkaround returns true if the current FFmpeg version requires
-// using ffprobe to get audio file length for spectrograms (FFmpeg 5.x bug).
-// FFmpeg 7.x and later have this issue fixed.
-func (a *AudioSettings) NeedsFfprobeWorkaround() bool {
-	// FFmpeg 5.x has a bug that requires using ffprobe for audio duration
-	// FFmpeg 7.x and later have this fixed
-	return a.FfmpegMajor == 5
 }
 
 // HasFfmpegVersion returns true if FFmpeg version information has been detected and populated.
@@ -256,13 +245,13 @@ const (
 	SpectrogramStyleScientific       = "scientific"
 )
 
-// Spectrogram dynamic range preset constants (dB values for Sox -z parameter).
+// Spectrogram dynamic range preset constants (dynamic range in dB).
 // Lower values increase contrast, making weak signals stand out better.
 // Higher values show more detail but with lower contrast.
 const (
 	SpectrogramDynamicRangeHighContrast = "80"  // High contrast - weak signals visible
 	SpectrogramDynamicRangeStandard     = "100" // Standard - balanced (default)
-	SpectrogramDynamicRangeExtended     = "120" // Extended - more detail, Sox default
+	SpectrogramDynamicRangeExtended     = "120" // Extended - more detail
 )
 
 // SpectrogramPreRender contains settings for spectrogram generation modes.

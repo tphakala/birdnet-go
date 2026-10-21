@@ -190,7 +190,7 @@ func IsContextCancellation(err error) bool {
 // isSuppressibleOperationalError reports whether ee is an expected operational
 // interruption that should not be forwarded to Sentry. Such interruptions arise
 // routinely during graceful shutdown, client disconnects, and request timeouts
-// (e.g. an HTTP client disconnects mid-query, or Sox/FFmpeg is killed when the
+// (e.g. an HTTP client disconnects mid-query, or an FFmpeg child is killed when the
 // requesting client navigates away).
 //
 // Two signals qualify:

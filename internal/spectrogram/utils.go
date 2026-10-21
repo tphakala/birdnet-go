@@ -15,9 +15,9 @@ import (
 )
 
 // Spectrogram size constants define pixel widths for different display contexts.
-// Heights are computed as 2^n + 1 to ensure sox uses fast FFT (O(n log n)) instead of
-// brute-force DFT (O(n²)). Sox DFT size = 2*(height-1), so height must be 2^n + 1
-// for the DFT size to be a power of 2. Widths are 2× height to maintain ~2:1 aspect ratio.
+// Heights are computed as 2^n + 1 so the analysis frame, 2*(height-1), is a power of 2
+// and the FFT takes its fast path (O(n log n)) instead of brute-force DFT (O(n²)).
+// Widths are 2× height to maintain ~2:1 aspect ratio.
 const (
 	// sizeSmallPx is the width for compact display in lists and dashboards (height=129, DFT=256)
 	sizeSmallPx = 258
@@ -126,7 +126,7 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 // The function checks for operational errors in this order:
 //  1. Context errors (Canceled, DeadlineExceeded)
 //  2. An operational classification already attached upstream: a CategorySystem
-//     EnhancedError tagged PriorityLow (set by the generator via isOperationalExecError)
+//     EnhancedError tagged PriorityLow (set by nativeError for context interruptions)
 //  3. Process exit codes (SIGKILL=137, SIGTERM=143) - more reliable than string matching
 //  4. String matching for "signal: killed" - fallback for compatibility
 func IsOperationalError(err error) bool {
@@ -139,13 +139,11 @@ func IsOperationalError(err error) bool {
 		return true
 	}
 
-	// Honor an operational classification already attached upstream. The generator
+	// Honor an operational classification already attached upstream. nativeError
 	// tags context-driven interruptions as a CategorySystem error with PriorityLow
-	// using the governing context (see isOperationalExecError); that is the only
-	// reliable signal on Windows, where a context-killed process exits with status 1
-	// and never matches the signal-based checks below. Requiring CategorySystem (the
-	// category the generator pairs with these interruptions) keeps an unrelated
-	// PriorityLow error from being misread as operational. Downstream consumers
+	// using the governing context. Requiring CategorySystem (the category it pairs
+	// with these interruptions) keeps an unrelated PriorityLow error from being
+	// misread as operational. Downstream consumers
 	// (prerenderer, API media handlers) then get a consistent answer without
 	// re-deriving it from a platform-dependent surface error.
 	if enhanced, ok := errors.AsType[*errors.EnhancedError](err); ok && enhanced.GetPriority() == errors.PriorityLow &&
@@ -163,30 +161,6 @@ func IsOperationalError(err error) bool {
 
 	// Fallback to string matching for compatibility with other error types
 	return strings.Contains(err.Error(), signalKilledMessage)
-}
-
-// isOperationalExecError reports whether a failed external-process execution should
-// be treated as an expected operational event (context cancellation or deadline)
-// rather than a genuine failure. It checks the governing context first because the
-// surface error from an exec that was canceled, timed out, or skipped due to an
-// already-done context is platform-dependent and not always recognizable by
-// IsOperationalError:
-//
-//   - On Windows a context-killed process exits with status 1 (TerminateProcess),
-//     which has no Unix signal semantics, so it never matches the SIGKILL/SIGTERM
-//     exit codes or the "signal: killed" string that IsOperationalError looks for.
-//   - On Windows, Cmd.Start resolves the executable before it observes context
-//     cancellation, so an already-canceled context combined with a missing binary
-//     surfaces as "executable file not found" instead of context.Canceled.
-//
-// ctx.Err() is the reliable, platform-independent signal: if the context that
-// governed the exec is done, the failure is attributable to cancellation/timeout
-// regardless of how the OS reported it.
-func isOperationalExecError(ctx context.Context, err error) bool {
-	if ctx != nil && ctx.Err() != nil {
-		return true
-	}
-	return IsOperationalError(err)
 }
 
 // BuildSpectrogramPathWithParams builds a spectrogram path with size/raw encoded in filename.

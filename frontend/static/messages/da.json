@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Bedst til svage signaler. Fuglekald fremstår tydeligt fra baggrundsstøj. Anbefales til videnskabelige/gråtonestile.",
                   "standard": "Standard balanceret indstilling. God til de fleste anvendelser.",
-                  "extended": "Flere detaljer synlige, men lavere kontrast. SoX-standardværdi."
+                  "extended": "Flere detaljer synlige, men lavere kontrast."
                 }
               },
               "enabled": {

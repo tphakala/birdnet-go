@@ -84,7 +84,6 @@ func requireToneRow(t *testing.T, root, rel string, toneHz, nyquistHz float64) {
 }
 
 func TestServeSpectrogramByID_BatTokenTransition(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 
 	// a, b: a fresh native-rate render supersedes the older files, then is served.
 	t.Run("generates bat-v3 and removes superseded files, then serves the fast path", func(t *testing.T) {
@@ -177,7 +176,6 @@ func newModelLookupFailsHandler(t *testing.T, mode string) (*Handler, *echo.Echo
 // it answers 503 with Retry-After and generates and serves nothing. A request
 // without sr keeps the bird fallback.
 func TestServeSpectrogramByID_OverlayRateRefusesBirdFallback(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 
 	t.Run("sr request answers 503 and generates nothing", func(t *testing.T) {
 		h, e, root := newModelLookupFailsHandler(t, conf.SpectrogramModeAuto)
@@ -204,7 +202,6 @@ func TestServeSpectrogramByID_OverlayRateRefusesBirdFallback(t *testing.T) {
 // status answer a retryable 503 instead of acting on a guessed bird profile when
 // the model type lookup fails, and that nothing is queued or written.
 func TestSpectrogramByID_ModelTypeLookupFailureIs503(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 
 	// queueKey returns the queue key the handlers derive for batQuery, cleared
 	// before the test and again on cleanup (the queue is package-global).

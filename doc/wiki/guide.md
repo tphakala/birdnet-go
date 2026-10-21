@@ -97,11 +97,9 @@ Pre-compiled BirdNET-Go executables are also available at https://github.com/tph
 BirdNET-Go has minimal external dependencies, but requires a few specific tools for certain features:
 
 - **TensorFlow Lite C library**: Required for the core audio analysis functionality
-- **FFmpeg**: Required for RTSP stream capture and for spectrograms: each on-demand spectrogram first checks the clip with ffprobe (part of FFmpeg), and FFmpeg renders clips in formats the installed SoX cannot read (AAC always, MP3 and Opus on SoX builds without them) or when SoX fails. Saved clips in every export format (WAV, FLAC, Opus, AAC and MP3) are encoded natively and do not need FFmpeg. Clip downloads in every format, the denoise, normalize and gain previews, and audible-bats playback are also processed natively. The HLS live stream is now encoded natively and no longer uses FFmpeg. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
+- **FFmpeg**: Required for RTSP and other network stream capture. Saved clips in every export format (WAV, FLAC, Opus, AAC and MP3) are encoded natively and do not need FFmpeg. Clip downloads in every format, the denoise, normalize and gain previews, and audible-bats playback are also processed natively. The HLS live stream is now encoded natively and no longer uses FFmpeg. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
 
   The HLS live stream is encoded in-process and served from memory, so nothing is written to the HLS directory. Its output sample rate is fixed at 48 kHz, so `webserver.livestream.samplerate` has no effect (a warning is logged if it is set to anything else), and `webserver.livestream.ffmpegloglevel` no longer applies since there is no FFmpeg process to configure.
-
-- **SoX**: Required for rendering spectrograms in the web interface
 
 > **Note**: When using the Docker installation method, all these dependencies are already included in the Docker image, so you don't need to install them separately. This is one of the major advantages of using the Docker-based installation.
 
@@ -188,7 +186,6 @@ realtime:
   audio:
     source: "" # Audio source to use for analysis
     ffmpegpath: "" # Path to ffmpeg (runtime value)
-    soxpath: "" # Path to sox (runtime value)
     streamtransport: auto # Preferred transport for audio streaming: auto, sse, or ws
     soundlevel:
       enabled: false # Enable sound level monitoring in 1/3rd octave bands

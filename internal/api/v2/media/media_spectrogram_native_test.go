@@ -4,9 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-	"testing/synctest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +18,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 	"github.com/tphakala/birdnet-go/internal/audiocore/wav"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 )
@@ -45,13 +42,12 @@ func restoreFFprobePath(t *testing.T) {
 	t.Cleanup(func() { ffmpeg.SetFFprobePath(prior) })
 }
 
-// clearBinaryEnvironment makes sox, ffmpeg and ffprobe unresolvable by name or
+// clearBinaryEnvironment makes ffmpeg and ffprobe unresolvable by name or
 // by configured path.
 func clearBinaryEnvironment(t *testing.T, settings *conf.Settings) {
 	t.Helper()
 	t.Setenv("PATH", "")
 	restoreFFprobePath(t)
-	settings.Realtime.Audio.SoxPath = ""
 	settings.Realtime.Audio.FfmpegPath = ""
 }
 
@@ -79,32 +75,10 @@ var nativeClipWriters = map[string]func(t *testing.T, path string, pcm []byte){
 	},
 }
 
-func TestValidateSpectrogramInputs_GateOffStillUsesFFprobe(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "")
-	t.Setenv("PATH", "")
-	restoreFFprobePath(t)
-
-	path := filepath.Join(t.TempDir(), "clip.wav")
-	writeToneWAV(t, path, nativeReadyRate, nativeReadySeconds, fixtureToneHz)
-	h := &Handler{}
-
-	synctest.Test(t, func(t *testing.T) {
-		result, state, err := h.validateSpectrogramInputs(t.Context(), path, filepath.Base(path), "gate-off-key")
-
-		assert.Nil(t, result)
-		assert.Nil(t, state)
-		_, ok := errors.AsType[*AudioNotReadyError](err)
-		require.True(t, ok, "got %T: %v", err, err)
-		require.ErrorIs(t, err, ffmpeg.ErrAudioFileNotReady)
-		require.ErrorIs(t, err, ffmpeg.ErrAudioFileInvalid, "the gate-off path must still go through ffprobe")
-	})
-}
-
 func TestGenerateSpectrogramFromRel_NativeNeedsNoBinaries(t *testing.T) {
 	for format, write := range nativeClipWriters {
 		t.Run(format, func(t *testing.T) {
 			withRestoredGlobalSettings(t)
-			t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 
 			tmp := t.TempDir()
 			sfs, err := securefs.New(tmp)
@@ -137,12 +111,6 @@ func TestGenerateSpectrogramFromRel_NativeNeedsNoBinaries(t *testing.T) {
 			data, err := os.ReadFile(absSpec)
 			require.NoError(t, err)
 			require.True(t, bytes.HasPrefix(data, []byte(pngSignature)), "the output is a PNG")
-
-			ffprobeCache.RLock()
-			for key := range ffprobeCache.validation {
-				assert.Falsef(t, strings.HasPrefix(key, absAudio), "native readiness must not write ffprobeCache: %s", key)
-			}
-			ffprobeCache.RUnlock()
 
 			// A PNG at the final path is served, never redrawn.
 			require.NoError(t, os.WriteFile(absSpec, []byte(nativeGateMarker), 0o600))

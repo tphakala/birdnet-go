@@ -695,7 +695,7 @@ func mergeJSONIntoStruct(data json.RawMessage, target any) error {
 	//
 	// Only slices are affected: scalar, map, and struct fields are correctly
 	// overwritten by json.Unmarshal. We must NOT zero the entire struct because
-	// fields tagged json:"-" (runtime values like Labels, SoxAudioTypes) would
+	// fields tagged json:"-" (runtime values like Labels) would
 	// be destroyed and are absent from mergedJSON.
 	zeroJSONSliceFields(reflect.ValueOf(target))
 

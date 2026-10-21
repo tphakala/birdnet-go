@@ -40,9 +40,6 @@ var supportEnvAllowlist = []string{
 	// Opt-in native network stream ingest (see native_ingest.go). Remove it here
 	// when the gate is retired.
 	EnvNativeStreamIngest,
-	// Opt-in native spectrogram renderer (see native_spectrogram.go). Remove it
-	// here when the gate is retired.
-	EnvNativeSpectrogramRenderer,
 	// Not a BIRDNET_ variable, and the one entry here whose value is withheld:
 	// the name matches the "endpoint" sensitive-key pattern on its underscore
 	// boundary, so a dump records that it is set but redacts what it is set to.
