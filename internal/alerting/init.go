@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -423,18 +424,77 @@ func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*e
 	return nil, false
 }
 
-// sameTrigger reports whether two rules have the same trigger definition and
-// conditions. Conditions are compared in slice order on Property, Operator,
-// Value and DurationSec; IDs, sort order and timestamps are ignored. Stored
-// conditions carry no guaranteed order, which does not matter because every
-// default rule has at most one condition.
-func sameTrigger(a, b *entities.AlertRule) bool {
-	return a.ObjectType == b.ObjectType && a.TriggerType == b.TriggerType &&
-		a.MetricName == b.MetricName && a.EventName == b.EventName &&
-		slices.EqualFunc(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
-			return x.Property == y.Property && x.Operator == y.Operator &&
-				x.Value == y.Value && x.DurationSec == y.DurationSec
+// SameThreshold reports whether two rules fire at the same values: the same
+// object type, trigger type, metric and event, and the same conditions on
+// Property, Operator and Value (numbers compare by value under a numeric operator). Conditions are all
+// required to hold, so their order does not matter. It decides whether escalation steps still fit a rule,
+// because a stepped rule fires only at or above its lowest step. DurationSec is
+// not compared: steps do not depend on how long a condition must hold.
+func SameThreshold(a, b *entities.AlertRule) bool {
+	return sameRuleShape(a, b) &&
+		sameConditions(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
+			return x.Property == y.Property && x.Operator == y.Operator && sameConditionValue(x.Operator, x.Value, y.Value)
 		})
+}
+
+// sameTrigger reports whether two rules have the same trigger definition and
+// conditions: SameThreshold, with the same matching of conditions and values,
+// plus an equal DurationSec on each matched condition. IDs, sort order and
+// timestamps are ignored.
+func sameTrigger(a, b *entities.AlertRule) bool {
+	return sameRuleShape(a, b) &&
+		sameConditions(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
+			return x.Property == y.Property && x.Operator == y.Operator && sameConditionValue(x.Operator, x.Value, y.Value) &&
+				x.DurationSec == y.DurationSec
+		})
+}
+
+// sameConditionValue reports whether two condition values are equal under an
+// operator. For the numeric operators the evaluator reads the value as a number,
+// so values that both parse as numbers are compared as numbers: "90" and "90.0"
+// are the same threshold. Any other operator compares text, and then the values
+// must match exactly.
+func sameConditionValue(operator, a, b string) bool {
+	if a == b {
+		return true
+	}
+	if !slices.Contains(numericOperators, operator) {
+		return false
+	}
+	fa, errA := strconv.ParseFloat(a, 64)
+	fb, errB := strconv.ParseFloat(b, 64)
+	return errA == nil && errB == nil && fa == fb
+}
+
+// sameRuleShape reports whether two rules have the same object type, trigger
+// type, metric and event.
+func sameRuleShape(a, b *entities.AlertRule) bool {
+	return a.ObjectType == b.ObjectType && a.TriggerType == b.TriggerType &&
+		a.MetricName == b.MetricName && a.EventName == b.EventName
+}
+
+// sameConditions reports whether a and b hold the same conditions in any order,
+// where same says when two conditions are equal. Each condition of b matches at
+// most one condition of a, so [x, x] and [x, y] differ.
+func sameConditions(a, b []entities.AlertCondition, same func(x, y entities.AlertCondition) bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	used := make([]bool, len(b))
+	for _, x := range a {
+		matched := false
+		for i, y := range b {
+			if !used[i] && same(x, y) {
+				used[i] = true
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }
 
 // migrateEscalationSteps fills EscalationSteps on stored built-in rules that

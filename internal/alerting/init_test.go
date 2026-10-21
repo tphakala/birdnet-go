@@ -768,3 +768,101 @@ func TestNotificationAdapter_DispatchTemplateBehavior(t *testing.T) {
 		})
 	}
 }
+
+func TestSameThreshold(t *testing.T) {
+	defaults := DefaultRules()
+	i := slices.IndexFunc(defaults, func(rule entities.AlertRule) bool { return rule.NameKey == RuleKeyHighCPUName })
+	require.GreaterOrEqual(t, i, 0, "the High CPU usage default exists")
+	base := defaults[i]
+	require.Len(t, base.Conditions, 1, "precondition: one threshold condition")
+
+	// variant returns a copy of the base rule with change applied. The condition
+	// slice is cloned so a change to it does not reach the base.
+	variant := func(change func(rule *entities.AlertRule)) *entities.AlertRule {
+		rule := base
+		rule.Conditions = slices.Clone(base.Conditions)
+		change(&rule)
+		return &rule
+	}
+
+	tests := []struct {
+		name   string
+		change func(rule *entities.AlertRule)
+		want   bool
+	}{
+		{"identical", func(*entities.AlertRule) {}, true},
+		{"duration is not compared", func(r *entities.AlertRule) { r.Conditions[0].DurationSec++ }, true},
+		{"condition ids and sort order are not compared", func(r *entities.AlertRule) {
+			r.Conditions[0].ID++
+			r.Conditions[0].SortOrder++
+		}, true},
+		{"cooldown, enabled and actions are not compared", func(r *entities.AlertRule) {
+			r.CooldownSec++
+			r.Enabled = !r.Enabled
+			r.Actions = nil
+		}, true},
+		{"the same number written another way", func(r *entities.AlertRule) { r.Conditions[0].Value += ".0" }, true},
+		{"object type", func(r *entities.AlertRule) { r.ObjectType += "x" }, false},
+		{"trigger type", func(r *entities.AlertRule) { r.TriggerType += "x" }, false},
+		{"metric name", func(r *entities.AlertRule) { r.MetricName += "x" }, false},
+		{"event name", func(r *entities.AlertRule) { r.EventName += "x" }, false},
+		{"condition property", func(r *entities.AlertRule) { r.Conditions[0].Property += "x" }, false},
+		{"condition operator", func(r *entities.AlertRule) { r.Conditions[0].Operator += "x" }, false},
+		{"condition value", func(r *entities.AlertRule) { r.Conditions[0].Value += "1" }, false},
+		{"condition removed", func(r *entities.AlertRule) { r.Conditions = nil }, false},
+		{"condition added", func(r *entities.AlertRule) { r.Conditions = append(r.Conditions, r.Conditions[0]) }, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SameThreshold(&base, variant(tt.change))
+
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSameThreshold_ConditionOrder(t *testing.T) {
+	cond := func(value string, durationSec int) entities.AlertCondition {
+		return entities.AlertCondition{Property: PropertyValue, Operator: OperatorGreaterThan, Value: value, DurationSec: durationSec}
+	}
+	rule := func(conditions ...entities.AlertCondition) *entities.AlertRule {
+		return &entities.AlertRule{ObjectType: ObjectTypeSystem, TriggerType: TriggerTypeMetric, MetricName: MetricCPUUsage, Conditions: conditions}
+	}
+
+	tests := []struct {
+		name          string
+		a, b          *entities.AlertRule
+		wantThreshold bool
+		wantTrigger   bool
+	}{
+		{"same order", rule(cond("1", 5), cond("2", 6)), rule(cond("1", 5), cond("2", 6)), true, true},
+		{"reordered", rule(cond("1", 5), cond("2", 6)), rule(cond("2", 6), cond("1", 5)), true, true},
+		{"durations swapped between conditions", rule(cond("1", 5), cond("2", 6)), rule(cond("1", 6), cond("2", 5)), true, false},
+		{"a duplicate does not match a distinct condition", rule(cond("1", 5), cond("1", 5)), rule(cond("1", 5), cond("2", 5)), false, false},
+		{"one condition differs", rule(cond("1", 5), cond("2", 6)), rule(cond("1", 5), cond("3", 6)), false, false},
+		{"different counts", rule(cond("1", 5)), rule(cond("1", 5), cond("1", 5)), false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantThreshold, SameThreshold(tt.a, tt.b), "SameThreshold")
+			assert.Equal(t, tt.wantTrigger, sameTrigger(tt.a, tt.b), "sameTrigger")
+		})
+	}
+}
+
+func TestSameThreshold_NumbersEqualOnlyForNumericOperators(t *testing.T) {
+	rule := func(operator, value string) *entities.AlertRule {
+		return &entities.AlertRule{
+			ObjectType: ObjectTypeSystem, TriggerType: TriggerTypeMetric, MetricName: MetricCPUUsage,
+			Conditions: []entities.AlertCondition{{Property: PropertyValue, Operator: operator, Value: value}},
+		}
+	}
+
+	for _, operator := range numericOperators {
+		assert.True(t, SameThreshold(rule(operator, "90"), rule(operator, "90.0")), "%s compares numbers", operator)
+	}
+	assert.False(t, SameThreshold(rule(OperatorIs, "90"), rule(OperatorIs, "90.0")),
+		"a string operator compares the text, so 90 and 90.0 differ")
+}
