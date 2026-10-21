@@ -258,18 +258,23 @@ func highestStepExceeded(steps []float64, value float64) (step float64, found bo
 	return step, found
 }
 
-// shouldSuppressEscalation checks if a metric rule should be suppressed
-// because the metric hasn't crossed a new escalation step. Returns true
-// if the rule should NOT fire. When it returns false (allow fire), it also
-// returns a shallow copy of properties with PropertyThresholdStep set.
-func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *AlertEvent) (suppress bool, props map[string]any) {
-	if len(rule.EscalationSteps) == 0 {
-		return false, event.Properties
-	}
-
+// shouldSuppressEscalation decides whether a metric rule with escalation steps
+// fires for this event. Returns true if the rule should NOT fire, either
+// because the metric hasn't crossed a new escalation step or because the
+// cooldown is still active. When it returns false (allow fire), it has already
+// acquired the cooldown and recorded the step, so callers must not acquire the
+// cooldown again, and it also returns a shallow copy of properties with
+// PropertyThresholdStep set.
+//
+// The step is recorded only together with the cooldown, so a step crossed
+// during a cooldown stays pending and fires once the cooldown ends. The caller
+// guarantees rule.EscalationSteps is not empty.
+func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *AlertEvent, cdKey cooldownStateKey) (suppress bool, props map[string]any) {
+	// Samples without a usable value skip the step comparison and are limited
+	// by the cooldown alone.
 	val, ok := event.Properties[PropertyValue]
 	if !ok {
-		return false, event.Properties
+		return !e.tryAcquireCooldown(cdKey, rule.CooldownSec), event.Properties
 	}
 	floatVal, err := toFloat64(val)
 	if err != nil {
@@ -277,7 +282,7 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 			logger.String("metric", event.MetricName),
 			logger.String("object_type", event.ObjectType),
 			logger.Error(err))
-		return false, event.Properties
+		return !e.tryAcquireCooldown(cdKey, rule.CooldownSec), event.Properties
 	}
 
 	currentStep, stepFound := highestStepExceeded(rule.EscalationSteps, floatVal)
@@ -286,17 +291,24 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 	}
 
 	key := escalationKey(rule.ID, event.MetricName, event.Properties)
+	now := time.Now()
 
-	// Single write lock for atomic check-and-update to avoid TOCTOU race
-	// where two goroutines both pass the read check and both fire.
+	// Lock order matches shouldSuppressDetectionEscalation. Checks and writes
+	// happen under both locks so two goroutines cannot both fire.
+	e.cooldownsMu.Lock()
 	e.escalationsMu.Lock()
 	lastStep, exists := e.escalations[key]
-	if exists && lastStep >= currentStep {
+	if (exists && lastStep >= currentStep) || !e.cooldownExpiredLocked(cdKey, rule.CooldownSec, now) {
 		e.escalationsMu.Unlock()
+		e.cooldownsMu.Unlock()
 		return true, nil
 	}
 	e.escalations[key] = currentStep
 	e.escalationsMu.Unlock()
+	if rule.CooldownSec > 0 {
+		e.cooldowns[cdKey] = now
+	}
+	e.cooldownsMu.Unlock()
 
 	// Shallow-copy properties and add the threshold step (don't mutate shared map).
 	propsCopy := make(map[string]any, len(event.Properties)+1)
@@ -423,17 +435,13 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 
 		cdKey := cooldownKey(rule, event)
 
-		// Metric rules with escalation steps: check escalation BEFORE
-		// acquiring cooldown so a suppressed step doesn't consume the
-		// cooldown and block a later, legitimate escalated alert.
-		// The escalation path has its own atomic protection via
-		// shouldSuppressEscalation.
+		// Metric rules with escalation steps: shouldSuppressEscalation checks
+		// the step and acquires the cooldown atomically, so a suppressed step
+		// doesn't consume the cooldown and a step blocked by the cooldown
+		// isn't recorded as delivered.
 		if rule.TriggerType == TriggerTypeMetric && len(rule.EscalationSteps) > 0 {
-			suppress, props := e.shouldSuppressEscalation(rule, event)
+			suppress, props := e.shouldSuppressEscalation(rule, event, cdKey)
 			if suppress {
-				continue
-			}
-			if !e.tryAcquireCooldown(cdKey, rule.CooldownSec) {
 				continue
 			}
 			augmentedEvent := &AlertEvent{
