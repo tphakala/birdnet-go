@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { screen } from '@testing-library/svelte';
 import { renderTyped } from '../../../../../test/render-helpers';
+import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
 
 vi.mock('$lib/i18n', () => ({
   t: vi.fn((key: string) => key),
@@ -17,5 +18,21 @@ describe('WelcomeStep Accessibility', () => {
     expect(
       screen.getByRole('heading', { level: 4, name: 'wizard.steps.welcome.heading' })
     ).toBeInTheDocument();
+  });
+});
+
+describe('WelcomeStep logo', () => {
+  afterEach(() => {
+    resetBasePath();
+  });
+
+  it('keeps the reverse-proxy prefix', () => {
+    setBasePath('/proxy');
+    renderTyped(WelcomeStep, { props: {} });
+
+    expect(screen.getByRole('img', { name: 'about.logoAlt' })).toHaveAttribute(
+      'src',
+      '/proxy/ui/assets/BirdNET-Go-logo.webp'
+    );
   });
 });
