@@ -262,16 +262,19 @@ func highestStepExceeded(steps []float64, value float64) (step float64, found bo
 // fires for this event. Returns true if the rule should NOT fire, either
 // because the metric hasn't crossed a new escalation step or because the
 // cooldown is still active. When it returns false (allow fire), it has already
-// acquired the cooldown and recorded the step, so callers must not acquire the
-// cooldown again, and it also returns a shallow copy of properties with
-// PropertyThresholdStep set.
+// acquired the cooldown, so callers must not acquire the cooldown again.
 //
-// The step is recorded only together with the cooldown, so a step crossed
-// during a cooldown stays pending and fires once the cooldown ends. The caller
-// guarantees rule.EscalationSteps is not empty.
+// For a numeric value it also records the step and returns a shallow copy of
+// properties with PropertyThresholdStep set. The step is recorded only together
+// with the cooldown, so a step crossed during a cooldown stays pending and
+// fires once the cooldown ends. A rule without steps, or a sample without a
+// numeric value, skips the step comparison: only the cooldown limits it, no
+// step is recorded and the event properties are returned unchanged.
 func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *AlertEvent, cdKey cooldownStateKey) (suppress bool, props map[string]any) {
-	// Samples without a usable value skip the step comparison and are limited
-	// by the cooldown alone.
+	if len(rule.EscalationSteps) == 0 {
+		return !e.tryAcquireCooldown(cdKey, rule.CooldownSec), event.Properties
+	}
+
 	val, ok := event.Properties[PropertyValue]
 	if !ok {
 		return !e.tryAcquireCooldown(cdKey, rule.CooldownSec), event.Properties

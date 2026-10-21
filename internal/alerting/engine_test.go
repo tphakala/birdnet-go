@@ -1181,15 +1181,17 @@ func TestEngine_EscalationWithCooldown_StepCrossedDuringCooldownNotifiesAfterExp
 	assert.Equal(t, []float64{86, 91, 96}, fired, "step 95 should notify after the cooldown ends")
 }
 
-func TestEngine_ShouldSuppressEscalation_UnusableValueIsLimitedByCooldownOnly(t *testing.T) {
-	// A sample without a numeric value cannot be compared with the steps, so
-	// only the cooldown limits it and no step is recorded.
+func TestEngine_ShouldSuppressEscalation_UnusableInputIsLimitedByCooldownOnly(t *testing.T) {
+	// A sample that cannot be compared with the steps (no numeric value, or a
+	// rule without steps) is limited by the cooldown alone and records no step.
 	tests := []struct {
 		name       string
+		steps      []float64
 		properties map[string]any
 	}{
-		{name: "missing value", properties: map[string]any{PropertyPath: "/"}},
-		{name: "non-numeric value", properties: map[string]any{PropertyValue: "n/a", PropertyPath: "/"}},
+		{name: "missing value", steps: []float64{85, 90}, properties: map[string]any{PropertyPath: "/"}},
+		{name: "non-numeric value", steps: []float64{85, 90}, properties: map[string]any{PropertyValue: "n/a", PropertyPath: "/"}},
+		{name: "rule without steps", steps: nil, properties: map[string]any{PropertyValue: 91.0, PropertyPath: "/"}},
 	}
 
 	for _, tt := range tests {
@@ -1201,7 +1203,7 @@ func TestEngine_ShouldSuppressEscalation_UnusableValueIsLimitedByCooldownOnly(t 
 				TriggerType:     TriggerTypeMetric,
 				MetricName:      MetricDiskUsage,
 				CooldownSec:     300,
-				EscalationSteps: []float64{85, 90},
+				EscalationSteps: tt.steps,
 			}
 			engine := NewEngine(newMockRepo(rule), func(*entities.AlertRule, *AlertEvent) {}, testLogger(), nil)
 			event := &AlertEvent{
