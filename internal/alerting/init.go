@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"slices"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -358,7 +360,12 @@ func Initialize(
 }
 
 // seedDefaultRules ensures all built-in default rules exist. It checks by name
-// so partial seeds from previous runs self-heal on restart.
+// so partial seeds from previous runs self-heal on restart. It also adds the
+// default escalation steps to existing built-in rules that lack them,
+// including legacy rows without a name key. The two checks differ on purpose:
+// a rule counts as already seeded by name alone, but only counts as the shipped
+// default for migration when its trigger and conditions match too (see
+// defaultRuleFor).
 func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, log logger.Logger) error {
 	existing, err := repo.ListRules(ctx, repository.AlertRuleFilter{})
 	if err != nil {
@@ -386,25 +393,63 @@ func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, 
 		log.Info("seeded default alert rules", logger.Int("created", created))
 	}
 
-	// Migrate existing built-in rules: populate EscalationSteps on rules
-	// that were seeded before escalation support was added.
-	allDefaults := DefaultRules()
-	defaultSteps := make(map[string][]float64, len(allDefaults))
-	for i := range allDefaults {
-		if allDefaults[i].BuiltIn && len(allDefaults[i].EscalationSteps) > 0 {
-			defaultSteps[allDefaults[i].NameKey] = allDefaults[i].EscalationSteps
+	migrateEscalationSteps(ctx, repo, existing, log)
+
+	return nil
+}
+
+// defaultRuleFor returns the shipped default that a stored built-in rule was
+// seeded from. Rules with a NameKey match the default with the same key. Rules
+// seeded before name keys existed have an empty NameKey and match the default
+// with the same Name only when the trigger definition and conditions are equal
+// too, so a rule whose threshold was changed is not mistaken for the default.
+func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*entities.AlertRule, bool) {
+	if !rule.BuiltIn {
+		return nil, false
+	}
+	for i := range defaults {
+		def := &defaults[i]
+		if rule.NameKey != "" {
+			if def.NameKey == rule.NameKey {
+				return def, true
+			}
+			continue
+		}
+		if def.Name == rule.Name && sameTrigger(rule, def) {
+			return def, true
 		}
 	}
+	return nil, false
+}
+
+// sameTrigger reports whether two rules have the same trigger definition and
+// conditions. Conditions are compared in slice order on Property, Operator,
+// Value and DurationSec; IDs, sort order and timestamps are ignored. Stored
+// conditions carry no guaranteed order, which does not matter because every
+// default rule has at most one condition.
+func sameTrigger(a, b *entities.AlertRule) bool {
+	return a.ObjectType == b.ObjectType && a.TriggerType == b.TriggerType &&
+		a.MetricName == b.MetricName && a.EventName == b.EventName &&
+		slices.EqualFunc(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
+			return x.Property == y.Property && x.Operator == y.Operator &&
+				x.Value == y.Value && x.DurationSec == y.DurationSec
+		})
+}
+
+// migrateEscalationSteps fills EscalationSteps on stored built-in rules that
+// were seeded before escalation support was added. Rules that already have
+// steps are left alone. Rules seeded before name keys existed are matched by
+// name and trigger (see defaultRuleFor). A failed update is logged and does
+// not stop the remaining rules.
+func migrateEscalationSteps(ctx context.Context, repo repository.AlertRuleRepository, existing []entities.AlertRule, log logger.Logger) {
+	allDefaults := DefaultRules()
 	for i := range existing {
 		rule := &existing[i]
-		if !rule.BuiltIn || rule.NameKey == "" {
+		def, ok := defaultRuleFor(rule, allDefaults)
+		if !ok || len(def.EscalationSteps) == 0 || len(rule.EscalationSteps) > 0 {
 			continue
 		}
-		steps, ok := defaultSteps[rule.NameKey]
-		if !ok || len(rule.EscalationSteps) > 0 {
-			continue
-		}
-		rule.EscalationSteps = steps
+		rule.EscalationSteps = slices.Clone(def.EscalationSteps)
 		if err := repo.UpdateRule(ctx, rule); err != nil {
 			log.Warn("failed to migrate escalation steps for built-in rule",
 				logger.String("name", rule.Name),
@@ -414,6 +459,4 @@ func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, 
 		log.Info("migrated escalation steps for built-in rule",
 			logger.String("name", rule.Name))
 	}
-
-	return nil
 }
