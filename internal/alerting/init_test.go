@@ -29,8 +29,9 @@ type initMockRepo struct {
 	updateErrs map[uint]error
 }
 
-// ListRules returns a copy, so a change reaches the stored rules only through
-// UpdateRule, as it does with a real repository.
+// ListRules returns a shallow copy, so assigning a field of a returned rule
+// reaches the stored rules only through UpdateRule, as it does with a real
+// repository. Slices inside a returned rule are shared with the stored rule.
 func (m *initMockRepo) ListRules(_ context.Context, _ repository.AlertRuleFilter) ([]entities.AlertRule, error) {
 	return slices.Clone(m.rules), nil
 }
