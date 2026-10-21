@@ -95,6 +95,11 @@ type DetectionRepository interface {
 	// Returns results, total count, and any error.
 	Search(ctx context.Context, filters *SearchFilters) ([]*entities.Detection, int64, error)
 
+	// CountSearch returns the number of detections matching the given filters,
+	// the same total Search reports, without loading any rows. Sorting and
+	// pagination fields are ignored.
+	CountSearch(ctx context.Context, filters *SearchFilters) (int64, error)
+
 	// === Counts ===
 
 	// CountAll returns the total number of detections.
