@@ -210,3 +210,81 @@ func TestUpdateAlertRule_KeepsServerOwnedFields(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdateAlertRule_KeepsKeyedNameAndDescription(t *testing.T) {
+	const (
+		translatedName        = "Korkea suorittimen käyttö"
+		translatedDescription = "Ilmoittaa, kun suorittimen käyttö ylittää rajan"
+		editedDescription     = "My own description"
+	)
+
+	tests := []struct {
+		name            string
+		edit            func(rule *entities.AlertRule)
+		extra           map[string]any
+		renamed         bool
+		wantDescription func(stored *entities.AlertRule) string
+		wantSteps       func(stored *entities.AlertRule) []float64
+	}{
+		{
+			name: "translated text with both keys kept leaves the stored text",
+			edit: func(rule *entities.AlertRule) {
+				rule.Name = translatedName
+				rule.Description = translatedDescription
+			},
+			wantDescription: func(stored *entities.AlertRule) string { return stored.Description },
+			wantSteps:       func(stored *entities.AlertRule) []float64 { return stored.EscalationSteps },
+		},
+		{
+			name: "an edited description clears its key and is saved as typed",
+			edit: func(rule *entities.AlertRule) {
+				rule.Name = translatedName
+				rule.Description = editedDescription
+				rule.DescriptionKey = ""
+			},
+			wantDescription: func(*entities.AlertRule) string { return editedDescription },
+			wantSteps:       func(stored *entities.AlertRule) []float64 { return stored.EscalationSteps },
+		},
+		{
+			name: "translated text together with different steps still leaves the stored name",
+			edit: func(rule *entities.AlertRule) {
+				rule.Name = translatedName
+				rule.Description = translatedDescription
+			},
+			extra:           map[string]any{"escalation_steps": []float64{customStepLow, customStepHigh}},
+			wantDescription: func(stored *entities.AlertRule) string { return stored.Description },
+			wantSteps:       func(*entities.AlertRule) []float64 { return []float64{customStepLow, customStepHigh} },
+		},
+		{
+			name: "an edited name clears its key and is saved as typed",
+			edit: func(rule *entities.AlertRule) {
+				rule.Name = renamedRule
+				rule.NameKey = ""
+			},
+			renamed:         true,
+			wantDescription: func(stored *entities.AlertRule) string { return stored.Description },
+			wantSteps:       func(stored *entities.AlertRule) []float64 { return stored.EscalationSteps },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stored := storedHighCPURule(t)
+			require.NotEmpty(t, stored.NameKey, "precondition: the default has a name key")
+			require.NotEmpty(t, stored.DescriptionKey, "precondition: the default has a description key")
+			edited := storedHighCPURule(t)
+			tt.edit(edited)
+
+			saved := putAlertRule(t, stored, editorBody(t, edited, tt.extra))
+
+			wantName := storedHighCPURule(t).Name
+			if tt.renamed {
+				wantName = renamedRule
+			}
+			assert.Equal(t, wantName, saved.Name, "with the key kept, startup finds a default by its stored English name; a cleared key means a typed name")
+			assert.Equal(t, tt.wantDescription(storedHighCPURule(t)), saved.Description)
+			assert.Equal(t, !tt.renamed, saved.BuiltIn, "a localized save is not a rename")
+			assert.Equal(t, tt.wantSteps(storedHighCPURule(t)), saved.EscalationSteps)
+		})
+	}
+}
