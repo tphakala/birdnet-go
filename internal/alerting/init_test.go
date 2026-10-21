@@ -155,6 +155,8 @@ var lowDiskDefaultSteps = []float64{85, 90, 95, 99}
 const (
 	// lowDiskLoweredThreshold is a threshold below the shipped "> 85" condition.
 	lowDiskLoweredThreshold = "80"
+	// unmatchedNameKey is a name key that no default rule carries.
+	unmatchedNameKey = "alerts.rules.unmatched.name"
 	// lowDiskTestUsage is a disk usage percentage above the first escalation step.
 	lowDiskTestUsage = 86.0
 	// lowDiskSustainWindow is the sustained duration of the shipped condition.
@@ -225,7 +227,7 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 		{
 			name: "built-in with an unknown name key is untouched",
 			mutate: func(r *entities.AlertRule) {
-				r.NameKey = "alerts.rules.unknown.name"
+				r.NameKey = unmatchedNameKey
 			},
 		},
 		{
