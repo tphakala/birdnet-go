@@ -851,3 +851,18 @@ func TestSameThreshold_ConditionOrder(t *testing.T) {
 		})
 	}
 }
+
+func TestSameThreshold_NumbersEqualOnlyForNumericOperators(t *testing.T) {
+	rule := func(operator, value string) *entities.AlertRule {
+		return &entities.AlertRule{
+			ObjectType: ObjectTypeSystem, TriggerType: TriggerTypeMetric, MetricName: MetricCPUUsage,
+			Conditions: []entities.AlertCondition{{Property: PropertyValue, Operator: operator, Value: value}},
+		}
+	}
+
+	for _, operator := range numericOperators {
+		assert.True(t, SameThreshold(rule(operator, "90"), rule(operator, "90.0")), "%s compares numbers", operator)
+	}
+	assert.False(t, SameThreshold(rule(OperatorIs, "90"), rule(OperatorIs, "90.0")),
+		"a string operator compares the text, so 90 and 90.0 differ")
+}

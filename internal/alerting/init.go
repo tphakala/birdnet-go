@@ -426,14 +426,14 @@ func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*e
 
 // SameThreshold reports whether two rules fire at the same values: the same
 // object type, trigger type, metric and event, and the same conditions on
-// Property, Operator and Value (numbers compare by value). Conditions are all
+// Property, Operator and Value (numbers compare by value under a numeric operator). Conditions are all
 // required to hold, so their order does not matter. It decides whether escalation steps still fit a rule,
 // because a stepped rule fires only at or above its lowest step. DurationSec is
 // not compared: steps do not depend on how long a condition must hold.
 func SameThreshold(a, b *entities.AlertRule) bool {
 	return sameRuleShape(a, b) &&
 		sameConditions(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
-			return x.Property == y.Property && x.Operator == y.Operator && sameConditionValue(x.Value, y.Value)
+			return x.Property == y.Property && x.Operator == y.Operator && sameConditionValue(x.Operator, x.Value, y.Value)
 		})
 }
 
@@ -444,17 +444,22 @@ func SameThreshold(a, b *entities.AlertRule) bool {
 func sameTrigger(a, b *entities.AlertRule) bool {
 	return sameRuleShape(a, b) &&
 		sameConditions(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
-			return x.Property == y.Property && x.Operator == y.Operator && sameConditionValue(x.Value, y.Value) &&
+			return x.Property == y.Property && x.Operator == y.Operator && sameConditionValue(x.Operator, x.Value, y.Value) &&
 				x.DurationSec == y.DurationSec
 		})
 }
 
-// sameConditionValue reports whether two condition values are equal. Values that
-// both parse as numbers are compared as numbers, as the evaluator reads them, so
-// "90" and "90.0" are the same threshold; anything else must match exactly.
-func sameConditionValue(a, b string) bool {
+// sameConditionValue reports whether two condition values are equal under an
+// operator. For the numeric operators the evaluator reads the value as a number,
+// so values that both parse as numbers are compared as numbers: "90" and "90.0"
+// are the same threshold. Any other operator compares text, and then the values
+// must match exactly.
+func sameConditionValue(operator, a, b string) bool {
 	if a == b {
 		return true
+	}
+	if !slices.Contains(numericOperators, operator) {
+		return false
 	}
 	fa, errA := strconv.ParseFloat(a, 64)
 	fb, errB := strconv.ParseFloat(b, 64)
