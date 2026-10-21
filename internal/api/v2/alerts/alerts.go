@@ -390,8 +390,9 @@ func keepServerOwnedFields(rule, existing *entities.AlertRule) {
 	}
 }
 
-// UpdateAlertRule replaces an existing alert rule. built_in and unchanged
-// escalation_steps are handled as keepServerOwnedFields describes.
+// UpdateAlertRule replaces an existing alert rule. built_in, the stored name and
+// description of a keyed rule, and unchanged escalation_steps are handled as
+// keepServerOwnedFields describes.
 func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
 	// The updated rule must be refreshed into the engine; refuse with 503 if the
 	// engine failed to initialize rather than silently persisting an inert change.
