@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -425,26 +426,39 @@ func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*e
 
 // SameThreshold reports whether two rules fire at the same values: the same
 // object type, trigger type, metric and event, and the same conditions on
-// Property, Operator and Value. Conditions are all required to hold, so their
-// order does not matter. It decides whether escalation steps still fit a rule,
+// Property, Operator and Value (numbers compare by value). Conditions are all
+// required to hold, so their order does not matter. It decides whether escalation steps still fit a rule,
 // because a stepped rule fires only at or above its lowest step. DurationSec is
 // not compared: steps do not depend on how long a condition must hold.
 func SameThreshold(a, b *entities.AlertRule) bool {
 	return sameRuleShape(a, b) &&
 		sameConditions(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
-			return x.Property == y.Property && x.Operator == y.Operator && x.Value == y.Value
+			return x.Property == y.Property && x.Operator == y.Operator && sameConditionValue(x.Value, y.Value)
 		})
 }
 
 // sameTrigger reports whether two rules have the same trigger definition and
-// conditions: SameThreshold plus an equal DurationSec on each matched condition.
-// IDs, sort order and timestamps are ignored.
+// conditions: SameThreshold, with the same matching of conditions and values,
+// plus an equal DurationSec on each matched condition. IDs, sort order and
+// timestamps are ignored.
 func sameTrigger(a, b *entities.AlertRule) bool {
 	return sameRuleShape(a, b) &&
 		sameConditions(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
-			return x.Property == y.Property && x.Operator == y.Operator && x.Value == y.Value &&
+			return x.Property == y.Property && x.Operator == y.Operator && sameConditionValue(x.Value, y.Value) &&
 				x.DurationSec == y.DurationSec
 		})
+}
+
+// sameConditionValue reports whether two condition values are equal. Values that
+// both parse as numbers are compared as numbers, as the evaluator reads them, so
+// "90" and "90.0" are the same threshold; anything else must match exactly.
+func sameConditionValue(a, b string) bool {
+	if a == b {
+		return true
+	}
+	fa, errA := strconv.ParseFloat(a, 64)
+	fb, errB := strconv.ParseFloat(b, 64)
+	return errA == nil && errB == nil && fa == fb
 }
 
 // sameRuleShape reports whether two rules have the same object type, trigger

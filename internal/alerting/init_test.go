@@ -801,6 +801,7 @@ func TestSameThreshold(t *testing.T) {
 			r.Enabled = !r.Enabled
 			r.Actions = nil
 		}, true},
+		{"the same number written another way", func(r *entities.AlertRule) { r.Conditions[0].Value += ".0" }, true},
 		{"object type", func(r *entities.AlertRule) { r.ObjectType += "x" }, false},
 		{"trigger type", func(r *entities.AlertRule) { r.TriggerType += "x" }, false},
 		{"metric name", func(r *entities.AlertRule) { r.MetricName += "x" }, false},
