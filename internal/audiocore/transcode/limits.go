@@ -60,7 +60,7 @@ const (
 
 	// maxAnalysisChannels is the highest channel count the analysis decode
 	// (DecodeMono) accepts. Stored and imported recordings can be stereo; the
-	// spectrogram path downmixes them to mono, as sox and ffmpeg do.
+	// spectrogram path downmixes them to mono.
 	maxAnalysisChannels = 2
 )
 

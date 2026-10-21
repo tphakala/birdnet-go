@@ -89,9 +89,7 @@ jobs:
 
       - name: Install FFmpeg
         run: |
-          # Only ffmpeg: sox is not reliably packaged on Chocolatey, and the
-          # sox-dependent tests skip when it is absent (exec.LookPath("sox")),
-          # so it is not needed to run the suite.
+          # Only ffmpeg: it is the only external tool the suite uses.
           choco install -y --no-progress ffmpeg
 
       - name: Setup TensorFlow headers

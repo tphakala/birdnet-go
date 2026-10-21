@@ -41,7 +41,6 @@ func BenchmarkNativeGenerateFromFile(b *testing.B) {
 	if dir == "" {
 		b.Skipf("%s is not set", benchClipDirEnv)
 	}
-	b.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 
 	for _, length := range benchClipLengths {
 		for _, format := range benchClipFormats {

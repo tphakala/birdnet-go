@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -37,9 +36,9 @@ const (
 func nativeReadyBackoff(base time.Duration) time.Duration {
 	var total time.Duration
 	delay := base
-	for range ffmpeg.MaxValidationAttempts - 1 {
+	for range maxReadinessAttempts - 1 {
 		total += delay
-		delay *= ffmpeg.RetryDelayMultiplier
+		delay *= readinessBackoffMultiplier
 	}
 	return total
 }
@@ -57,7 +56,7 @@ func requireNotReady(t *testing.T, err error) {
 	require.Error(t, err)
 	anr, ok := errors.AsType[*AudioNotReadyError](err)
 	require.Truef(t, ok, "want AudioNotReadyError, got %T: %v", err, err)
-	require.ErrorIs(t, err, ffmpeg.ErrAudioFileNotReady)
+	require.ErrorIs(t, err, errAudioFileNotReady)
 	assert.Equal(t, spectrogramRetryDelay, anr.RetryAfter)
 }
 
@@ -92,12 +91,12 @@ func TestValidateNativeSpectrogramInput_ReadyClip(t *testing.T) {
 			write(t, path, nativeReadyRate, nativeReadySeconds, fixtureToneHz)
 			info, err := os.Stat(path)
 			require.NoError(t, err)
-			require.GreaterOrEqual(t, info.Size(), ffmpeg.MinValidAudioSize)
+			require.GreaterOrEqual(t, info.Size(), minReadyAudioBytes)
 
 			synctest.Test(t, func(t *testing.T) {
 				elapsed, err := callNative(t.Context(), path)
 				require.NoError(t, err)
-				assert.Equal(t, ffmpeg.FileStabilityCheckDuration, elapsed)
+				assert.Equal(t, fileStabilityCheckDuration, elapsed)
 			})
 		})
 	}
@@ -128,20 +127,20 @@ func TestValidateNativeSpectrogramInput_EmptyFileExhausts(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		elapsed, err := callNative(t.Context(), path)
 		requireNotReady(t, err)
-		require.ErrorIs(t, err, ffmpeg.ErrAudioFileEmpty)
-		assert.Equal(t, nativeReadyBackoff(ffmpeg.ValidationRetryDelay), elapsed)
+		require.ErrorIs(t, err, errAudioFileEmpty)
+		assert.Equal(t, nativeReadyBackoff(readinessRetryDelay), elapsed)
 	})
 }
 
 func TestValidateNativeSpectrogramInput_TinyFileExhausts(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tiny.wav")
-	require.NoError(t, os.WriteFile(path, make([]byte, ffmpeg.MinValidAudioSize-1), 0o600))
+	require.NoError(t, os.WriteFile(path, make([]byte, minReadyAudioBytes-1), 0o600))
 
 	synctest.Test(t, func(t *testing.T) {
 		elapsed, err := callNative(t.Context(), path)
 		requireNotReady(t, err)
-		require.ErrorIs(t, err, ffmpeg.ErrAudioFileTooSmall)
-		assert.Equal(t, nativeReadyBackoff(ffmpeg.ValidationRetryDelay), elapsed)
+		require.ErrorIs(t, err, errAudioFileTooSmall)
+		assert.Equal(t, nativeReadyBackoff(readinessRetryDelay), elapsed)
 	})
 }
 
@@ -153,7 +152,7 @@ func TestValidateNativeSpectrogramInput_GrowingFileRetriesUntilStable(t *testing
 		var wg sync.WaitGroup
 		var appendErr error
 		wg.Go(func() {
-			time.Sleep(ffmpeg.FileStabilityCheckDuration / 2)
+			time.Sleep(fileStabilityCheckDuration / 2)
 			appendErr = appendBytes(path)
 		})
 
@@ -164,7 +163,7 @@ func TestValidateNativeSpectrogramInput_GrowingFileRetriesUntilStable(t *testing
 		require.NoError(t, err)
 		// Attempt 1 waits one window and sees a change; the raised retry delay
 		// is ValidationRetryDelay*RetryDelayMultiplier; attempt 2 is stable.
-		want := ffmpeg.FileStabilityCheckDuration + ffmpeg.ValidationRetryDelay*ffmpeg.RetryDelayMultiplier + ffmpeg.FileStabilityCheckDuration
+		want := fileStabilityCheckDuration + readinessRetryDelay*readinessBackoffMultiplier + fileStabilityCheckDuration
 		assert.Equal(t, want, elapsed)
 	})
 }
@@ -195,9 +194,9 @@ func TestValidateNativeSpectrogramInput_NeverStableExhausts(t *testing.T) {
 		require.NoError(t, appendErr)
 
 		requireNotReady(t, err)
-		require.ErrorIs(t, err, ffmpeg.ErrAudioFileIncomplete)
-		want := ffmpeg.MaxValidationAttempts*ffmpeg.FileStabilityCheckDuration +
-			nativeReadyBackoff(ffmpeg.ValidationRetryDelay*ffmpeg.RetryDelayMultiplier)
+		require.ErrorIs(t, err, errAudioFileIncomplete)
+		want := maxReadinessAttempts*fileStabilityCheckDuration +
+			nativeReadyBackoff(readinessRetryDelay*readinessBackoffMultiplier)
 		assert.Equal(t, want, elapsed)
 	})
 }
@@ -210,7 +209,7 @@ func TestValidateNativeSpectrogramInput_UndecodableIsNotRetried(t *testing.T) {
 		elapsed, err := callNative(t.Context(), path)
 		requireNotReady(t, err)
 		require.ErrorIs(t, err, transcode.ErrUndecodableSource)
-		assert.Equal(t, ffmpeg.FileStabilityCheckDuration, elapsed)
+		assert.Equal(t, fileStabilityCheckDuration, elapsed)
 	})
 }
 
@@ -223,7 +222,7 @@ func TestValidateNativeSpectrogramInput_UnsupportedIsPermanent(t *testing.T) {
 		require.ErrorIs(t, err, transcode.ErrUnsupportedSource)
 		_, isNotReady := errors.AsType[*AudioNotReadyError](err)
 		assert.False(t, isNotReady)
-		assert.NotErrorIs(t, err, ffmpeg.ErrAudioFileNotReady)
+		assert.NotErrorIs(t, err, errAudioFileNotReady)
 	})
 }
 
@@ -235,7 +234,7 @@ func TestValidateNativeSpectrogramInput_CanceledDuringStabilityWait(t *testing.T
 		ctx, cancel := context.WithCancel(t.Context())
 		var wg sync.WaitGroup
 		wg.Go(func() {
-			time.Sleep(ffmpeg.FileStabilityCheckDuration / 2)
+			time.Sleep(fileStabilityCheckDuration / 2)
 			cancel()
 		})
 
@@ -250,13 +249,13 @@ func TestValidateNativeSpectrogramInput_CanceledDuringStabilityWait(t *testing.T
 
 func TestValidateNativeSpectrogramInput_CanceledDuringBackoff(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "tiny.wav")
-	require.NoError(t, os.WriteFile(path, make([]byte, ffmpeg.MinValidAudioSize-1), 0o600))
+	require.NoError(t, os.WriteFile(path, make([]byte, minReadyAudioBytes-1), 0o600))
 
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		var wg sync.WaitGroup
 		wg.Go(func() {
-			time.Sleep(ffmpeg.ValidationRetryDelay / 2)
+			time.Sleep(readinessRetryDelay / 2)
 			cancel()
 		})
 
@@ -266,7 +265,7 @@ func TestValidateNativeSpectrogramInput_CanceledDuringBackoff(t *testing.T) {
 		require.ErrorIs(t, err, context.Canceled)
 		_, isNotReady := errors.AsType[*AudioNotReadyError](err)
 		assert.False(t, isNotReady)
-		assert.Equal(t, ffmpeg.ValidationRetryDelay/2, elapsed)
+		assert.Equal(t, readinessRetryDelay/2, elapsed)
 	})
 }
 
@@ -323,7 +322,7 @@ func TestValidateNativeSpectrogramInput_TransitionsAreJudgedOnCurrentBytes(t *te
 			for _, s := range seq {
 				switch s {
 				case stepTiny:
-					require.NoError(t, os.WriteFile(path, make([]byte, ffmpeg.MinValidAudioSize-1), 0o600))
+					require.NoError(t, os.WriteFile(path, make([]byte, minReadyAudioBytes-1), 0o600))
 				case stepValid:
 					require.NoError(t, os.WriteFile(path, validBytes, 0o600))
 				case stepCorrupt:
@@ -340,7 +339,7 @@ func TestValidateNativeSpectrogramInput_TransitionsAreJudgedOnCurrentBytes(t *te
 						require.NoErrorf(t, err, "step %s", s)
 					case stepTiny:
 						requireNotReady(t, err)
-						require.ErrorIs(t, err, ffmpeg.ErrAudioFileTooSmall)
+						require.ErrorIs(t, err, errAudioFileTooSmall)
 					case stepCorrupt:
 						requireNotReady(t, err)
 						require.ErrorIs(t, err, transcode.ErrUndecodableSource)

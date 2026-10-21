@@ -169,7 +169,6 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.sources` | audio-source-config[] | Audio capture devices |
 | `realtime.audio.source` | string | Legacy: migrated to Sources on load |
 | `realtime.audio.ffmpegpath` | string | path to ffmpeg, runtime value |
-| `realtime.audio.soxpath` | string | path to sox, runtime value |
 | `realtime.audio.streamtransport` | string | preferred transport for audio streaming: "auto", "sse", or "ws" |
 | `realtime.audio.export.debug` | boolean | true to enable audio export debug |
 | `realtime.audio.export.enabled` | boolean | export audio clips containing indentified bird calls |

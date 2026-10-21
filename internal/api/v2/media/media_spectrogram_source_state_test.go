@@ -16,7 +16,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 )
@@ -37,7 +36,6 @@ const (
 func nativeSourceStateHandler(t *testing.T) (h *Handler, root string) {
 	t.Helper()
 	withRestoredGlobalSettings(t)
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 
 	root = t.TempDir()
 	sfs, err := securefs.New(root)

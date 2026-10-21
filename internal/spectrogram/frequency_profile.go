@@ -7,9 +7,9 @@ package spectrogram
 // (drawn for birdResampleHz, an axis of 0 to 12 kHz).
 type FrequencyProfile struct {
 	// ResampleRate is the rate in Hz the image is drawn for: the axis spans 0 to
-	// half of it. 0 keeps the clip's native rate. The sox and FFmpeg paths resample
-	// to it; the native path analyses a clip at an accepted multiple of it without
-	// resampling (see analysisSource) and resamples any other clip.
+	// half of it. 0 keeps the clip's native rate. The renderer analyses a clip at an
+	// accepted multiple of it without resampling (see analysisSource) and resamples
+	// any other clip.
 	ResampleRate int
 	suffix       string // Cache-filename token identifying the profile; "" for the default bird render
 }

@@ -8,7 +8,7 @@ import (
 )
 
 // nativeRenderNice is the nice value native renders run at on Linux, the value
-// sox ran at through `nice -n 19` (createCommandWithNice).
+// the earlier external renderer ran at through `nice -n 19`.
 const nativeRenderNice = 19
 
 // runAtLowPriority runs fn on a goroutine locked to its own OS thread, with that

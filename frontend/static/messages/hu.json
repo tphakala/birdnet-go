@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Legjobb gyenge jelekhez. A madárhangok tisztán kiemelkednek a háttérzajból. Ajánlott tudományos/szürkeárnyalatos stílusokhoz.",
                   "standard": "Alapértelmezett kiegyensúlyozott beállítás. A legtöbb felhasználási esethez jó.",
-                  "extended": "Több részlet látható, de alacsonyabb kontraszt. SoX alapértelmezett érték."
+                  "extended": "Több részlet látható, de alacsonyabb kontraszt."
                 }
               },
               "enabled": {

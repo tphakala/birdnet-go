@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Migliore per segnali deboli. I richiami degli uccelli risaltano chiaramente dal rumore di fondo. Raccomandato per stili scientifici/scala di grigi.",
                   "standard": "Impostazione bilanciata predefinita. Buona per la maggior parte dei casi d'uso.",
-                  "extended": "Più dettagli visibili ma contrasto inferiore. Valore predefinito SoX."
+                  "extended": "Più dettagli visibili ma contrasto inferiore."
                 }
               },
               "enabled": {

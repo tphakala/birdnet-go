@@ -45,10 +45,6 @@
           "type": "string",
           "description": "path to ffmpeg, runtime value"
         },
-        "soxpath": {
-          "type": "string",
-          "description": "path to sox, runtime value"
-        },
         "streamtransport": {
           "type": "string",
           "description": "preferred transport for audio streaming: \"auto\", \"sse\", or \"ws\""

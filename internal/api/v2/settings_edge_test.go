@@ -414,18 +414,6 @@ func TestFieldPermissionEnforcement(t *testing.T) {
 			description: "reachable runtime fields are reverted and reported as skipped",
 			shouldSkip:  []string{"Species", "LastUpdated"},
 		},
-		{
-			name:    "SoxAudioTypes is ignored, not skipped",
-			section: "audio",
-			update: map[string]any{
-				"soxAudioTypes": []string{"wav", "mp3"}, // Runtime field, json:"-"
-				"export": map[string]any{
-					"enabled": true, // Allowed field
-				},
-			},
-			description:   "json:\"-\" field is silently ignored on PATCH",
-			shouldNotSkip: []string{"SoxAudioTypes"},
-		},
 	}
 
 	for _, tt := range tests {

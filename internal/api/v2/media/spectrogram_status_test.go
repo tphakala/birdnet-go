@@ -16,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -159,7 +158,7 @@ func TestSpectrogramHTTPError_NotReadyWinsOverSourceStatus(t *testing.T) {
 func TestSpectrogramSourceStatus_NotReadyIsNotASourceFailure(t *testing.T) {
 	t.Parallel()
 
-	notReadyAndUndecodable := fmt.Errorf("%w: %w", ffmpeg.ErrAudioFileNotReady, transcode.ErrUndecodableSource)
+	notReadyAndUndecodable := fmt.Errorf("%w: %w", errAudioFileNotReady, transcode.ErrUndecodableSource)
 	tests := []struct {
 		name       string
 		err        error
@@ -167,7 +166,7 @@ func TestSpectrogramSourceStatus_NotReadyIsNotASourceFailure(t *testing.T) {
 		wantSource bool
 	}{
 		{"not ready wrapping undecodable", notReadyAndUndecodable, true, false},
-		{"incomplete", ffmpeg.ErrAudioFileIncomplete, true, false},
+		{"incomplete", errAudioFileIncomplete, true, false},
 		{"source changed wrapping truncated", fmt.Errorf("%w: after render: %w", spectrogram.ErrSourceChanged, transcode.ErrTruncatedSource), true, false},
 		{"truncated source", productionWrap(transcode.ErrTruncatedSource), false, true},
 		{"unsupported source", productionWrap(transcode.ErrUnsupportedSource), false, true},
@@ -232,7 +231,6 @@ func dirNames(t *testing.T, dir string) []string {
 }
 
 func TestSpectrogramEndpoints_RejectOutOfRangeWidthBeforeWork(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	e, h, tempDir := setupMediaTestEnvironment(t)
 
 	writeToneWAV(t, fixturePath(tempDir, sourceName), 48000, 1, fixtureToneHz)
@@ -281,7 +279,6 @@ func TestSpectrogramEndpoints_RejectOutOfRangeWidthBeforeWork(t *testing.T) {
 }
 
 func TestProcessedSpectrogramByID_TooShortClipIs422(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	e, h, tempDir := setupMediaTestEnvironment(t)
 	clearBinaryEnvironment(t, h.Settings.Load())
 
@@ -317,7 +314,6 @@ func TestServeSpectrogramByID_RetainedRenderRejectsOutOfRangeWidth(t *testing.T)
 }
 
 func TestServeSpectrogramByID_UnsupportedSourceIs422(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	e, h, tempDir := setupMediaTestEnvironment(t)
 	clearBinaryEnvironment(t, h.Settings.Load())
 
@@ -351,7 +347,7 @@ func TestSpectrogramFailureReason(t *testing.T) {
 	}{
 		{
 			"not ready wrapping a source failure is checked before it",
-			fmt.Errorf("%w: %w", ffmpeg.ErrAudioFileNotReady, transcode.ErrUndecodableSource),
+			fmt.Errorf("%w: %w", errAudioFileNotReady, transcode.ErrUndecodableSource),
 			spectrogramReasonSourcePending,
 		},
 		{

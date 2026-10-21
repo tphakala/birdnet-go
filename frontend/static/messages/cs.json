@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Nejlepší pro slabé signály. Ptačí zpěv jasně vyniká ze šumu pozadí. Doporučeno pro vědecké styly / styly ve stupních šedi.",
                   "standard": "Výchozí vyvážené nastavení. Dobré pro většinu případů použití.",
-                  "extended": "Viditelnost více detailů, ale nižší kontrast. Výchozí hodnota SoX."
+                  "extended": "Viditelnost více detailů, ale nižší kontrast."
                 }
               },
               "enabled": {

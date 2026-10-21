@@ -32,7 +32,7 @@ func loadConfigFromYAML(t *testing.T, cfg string) (settings *Settings, configPat
 	ConfigPath = configPath
 
 	settings, err := Load()
-	require.NoError(t, err, "a config with a lossy export and no bitrate must load")
+	require.NoError(t, err, "the test config must load")
 	return settings, configPath
 }
 
