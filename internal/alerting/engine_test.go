@@ -1228,6 +1228,133 @@ func TestEngine_ShouldSuppressEscalation_UnusableInputIsLimitedByCooldownOnly(t 
 	}
 }
 
+func TestEngine_EscalationWithCooldown_HoldsSampleWhenNoStepIsRecorded(t *testing.T) {
+	// With no step recorded for the rule, an active cooldown must still hold
+	// the sample, and the sample fires once the cooldown ends.
+	newRule := func() entities.AlertRule {
+		return entities.AlertRule{
+			ID:              1,
+			Enabled:         true,
+			ObjectType:      ObjectTypeSystem,
+			TriggerType:     TriggerTypeMetric,
+			MetricName:      MetricDiskUsage,
+			CooldownSec:     1800,
+			EscalationSteps: []float64{85, 90},
+			Conditions: []entities.AlertCondition{
+				{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 0},
+			},
+		}
+	}
+	expireCooldown := func(engine *Engine) {
+		engine.cooldownsMu.Lock()
+		for k := range engine.cooldowns {
+			engine.cooldowns[k] = time.Now().Add(-time.Hour)
+		}
+		engine.cooldownsMu.Unlock()
+	}
+
+	t.Run("re-breach after recovery inside the cooldown", func(t *testing.T) {
+		var fired []float64
+		engine := NewEngine(newMockRepo(newRule()), func(_ *entities.AlertRule, e *AlertEvent) {
+			fired = append(fired, e.Properties[PropertyValue].(float64))
+		}, testLogger(), nil)
+		require.NoError(t, engine.RefreshRules(t.Context()))
+
+		emit := func(value float64) {
+			engine.HandleEvent(&AlertEvent{
+				ObjectType: ObjectTypeSystem,
+				MetricName: MetricDiskUsage,
+				Properties: map[string]any{PropertyValue: value, PropertyPath: "/"},
+				Timestamp:  time.Now(),
+			})
+		}
+
+		emit(86)
+		require.Equal(t, []float64{86}, fired)
+
+		// Recovery below the lowest step clears the recorded step.
+		emit(80)
+		emit(86)
+		assert.Equal(t, []float64{86}, fired, "re-breach inside the cooldown should be held")
+
+		expireCooldown(engine)
+		emit(86)
+		assert.Equal(t, []float64{86, 86}, fired, "re-breach should notify after the cooldown ends")
+	})
+
+	t.Run("numeric sample right after an unusable-value fire", func(t *testing.T) {
+		rule := newRule()
+		engine := NewEngine(newMockRepo(rule), func(*entities.AlertRule, *AlertEvent) {}, testLogger(), nil)
+		event := func(properties map[string]any) *AlertEvent {
+			return &AlertEvent{
+				ObjectType: ObjectTypeSystem,
+				MetricName: MetricDiskUsage,
+				Properties: properties,
+				Timestamp:  time.Now(),
+			}
+		}
+		unusable := event(map[string]any{PropertyPath: "/"})
+		numeric := event(map[string]any{PropertyValue: 91.0, PropertyPath: "/"})
+		cdKey := cooldownKey(&rule, numeric)
+
+		suppress, _ := engine.shouldSuppressEscalation(&rule, unusable, cdKey)
+		require.False(t, suppress, "the sample without a value should pass the cooldown")
+
+		suppress, _ = engine.shouldSuppressEscalation(&rule, numeric, cdKey)
+		assert.True(t, suppress, "the numeric sample should be held by the cooldown")
+
+		expireCooldown(engine)
+		suppress, props := engine.shouldSuppressEscalation(&rule, numeric, cdKey)
+		assert.False(t, suppress, "the numeric sample should pass after the cooldown ends")
+		assert.InDelta(t, 90.0, props[PropertyThresholdStep], 0, "the crossed step should be reported")
+	})
+}
+
+func TestEngine_EscalationWithCooldown_ConcurrentAscendingStepsNotifyOnce(t *testing.T) {
+	// Concurrent samples at different steps all race for one cooldown. Checking
+	// the step and stamping the cooldown in one critical section lets exactly
+	// one of them notify. A race makes this test fail only some of the time.
+	rule := entities.AlertRule{
+		ID:              1,
+		Enabled:         true,
+		ObjectType:      ObjectTypeSystem,
+		TriggerType:     TriggerTypeMetric,
+		MetricName:      MetricDiskUsage,
+		CooldownSec:     1800,
+		EscalationSteps: []float64{85, 90, 95, 99},
+		Conditions: []entities.AlertCondition{
+			{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "85", DurationSec: 0},
+		},
+	}
+
+	var fireCount atomic.Int64
+	engine := NewEngine(newMockRepo(rule), func(*entities.AlertRule, *AlertEvent) {
+		fireCount.Add(1)
+	}, testLogger(), nil)
+	require.NoError(t, engine.RefreshRules(t.Context()))
+
+	const samplesPerStep = 20
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for _, value := range []float64{86, 91, 96, 99.5} {
+		for range samplesPerStep {
+			wg.Go(func() {
+				<-start
+				engine.HandleEvent(&AlertEvent{
+					ObjectType: ObjectTypeSystem,
+					MetricName: MetricDiskUsage,
+					Properties: map[string]any{PropertyValue: value, PropertyPath: "/"},
+					Timestamp:  time.Now(),
+				})
+			})
+		}
+	}
+	close(start)
+	wg.Wait()
+
+	assert.Equal(t, int64(1), fireCount.Load(), "only one sample should win the cooldown")
+}
+
 func TestEngine_EscalationSteps_MultiplePathsIndependent(t *testing.T) {
 	rule := entities.AlertRule{
 		ID:              1,
