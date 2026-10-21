@@ -176,6 +176,8 @@ const lowDiskShortenedSustainSec = 60
 const (
 	// lowDiskLoweredThreshold is a threshold below the shipped "> 85" condition.
 	lowDiskLoweredThreshold = "80"
+	// lowDiskCustomCooldownSec is a cooldown, in seconds, different from the shipped one.
+	lowDiskCustomCooldownSec = 120
 	// unmatchedNameKey is a name key that no default rule carries.
 	unmatchedNameKey = "alerts.rules.unmatched.name"
 	// lowDiskTestUsage is a disk usage percentage above the first escalation step.
@@ -246,9 +248,32 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 			mutate: legacyRow(func(r *entities.AlertRule) { r.BuiltIn = false }),
 		},
 		{
-			name: "keyed built-in with changed condition still gets default steps",
+			// A rule with steps fires only at or above its lowest step, so default
+			// steps on a lowered threshold would suppress the samples below them.
+			name: "keyed built-in with changed threshold is untouched",
 			mutate: func(r *entities.AlertRule) {
 				r.Conditions[0].Value = lowDiskLoweredThreshold
+			},
+		},
+		{
+			name: "keyed built-in with changed sustained duration is untouched",
+			mutate: func(r *entities.AlertRule) {
+				r.Conditions[0].DurationSec = lowDiskShortenedSustainSec
+			},
+		},
+		{
+			name: "keyed built-in with changed metric is untouched",
+			mutate: func(r *entities.AlertRule) {
+				r.MetricName = MetricCPUUsage
+			},
+		},
+		{
+			// Settings outside the trigger do not affect where an alert fires.
+			name: "keyed built-in with changed cooldown, enabled flag and actions still gets default steps",
+			mutate: func(r *entities.AlertRule) {
+				r.CooldownSec = lowDiskCustomCooldownSec
+				r.Enabled = false
+				r.Actions = []entities.AlertAction{{Target: TargetBell}}
 			},
 			want:        lowDiskDefaultSteps,
 			wantWritten: true,
