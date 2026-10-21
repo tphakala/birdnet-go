@@ -51,6 +51,15 @@ func storedHighCPURule(t *testing.T) *entities.AlertRule {
 	return &rule
 }
 
+// storedLegacyHighCPURule returns the High CPU usage default as a rule seeded
+// before name keys existed: built-in, with no name key.
+func storedLegacyHighCPURule(t *testing.T) *entities.AlertRule {
+	t.Helper()
+	rule := storedHighCPURule(t)
+	rule.NameKey = ""
+	return rule
+}
+
 // editorBody returns the JSON the settings rule editor sends for rule: the rule
 // as stored, without the fields the editor does not know about (built_in and
 // escalation_steps) and without timestamps. extra fields are merged on top.
@@ -172,6 +181,30 @@ func TestUpdateAlertRule_KeepsServerOwnedFields(t *testing.T) {
 			wantBuiltIn:  false,
 			wantSteps:    sameSteps,
 			whyItMatters: "a renamed built-in plus the default seeded on restart would be two built-ins that cannot be deleted",
+		},
+		{
+			name:         "clearing the name key alone is a rename",
+			stored:       storedHighCPURule,
+			edit:         func(rule *entities.AlertRule) { rule.NameKey = "" },
+			wantBuiltIn:  false,
+			wantSteps:    sameSteps,
+			whyItMatters: "the key identifies the rule, so a request without it no longer names the default",
+		},
+		{
+			name:         "a legacy built-in rule without a name key renamed becomes a custom rule",
+			stored:       storedLegacyHighCPURule,
+			edit:         func(rule *entities.AlertRule) { rule.Name = renamedRule },
+			wantBuiltIn:  false,
+			wantSteps:    sameSteps,
+			whyItMatters: "without a key the name is the only identity, and startup seeds the default again",
+		},
+		{
+			name:         "a legacy built-in rule without a name key saved unchanged stays built-in",
+			stored:       storedLegacyHighCPURule,
+			edit:         func(rule *entities.AlertRule) { rule.CooldownSec++ },
+			wantBuiltIn:  true,
+			wantSteps:    sameSteps,
+			whyItMatters: "an unchanged name is not a rename, key or no key",
 		},
 		{
 			name: "built_in in the body cannot promote a custom rule",

@@ -768,3 +768,55 @@ func TestNotificationAdapter_DispatchTemplateBehavior(t *testing.T) {
 		})
 	}
 }
+
+func TestSameThreshold(t *testing.T) {
+	defaults := DefaultRules()
+	i := slices.IndexFunc(defaults, func(rule entities.AlertRule) bool { return rule.NameKey == RuleKeyHighCPUName })
+	require.GreaterOrEqual(t, i, 0, "the High CPU usage default exists")
+	base := defaults[i]
+	require.Len(t, base.Conditions, 1, "precondition: one threshold condition")
+
+	// variant returns a copy of the base rule with change applied. The condition
+	// slice is cloned so a change to it does not reach the base.
+	variant := func(change func(rule *entities.AlertRule)) *entities.AlertRule {
+		rule := base
+		rule.Conditions = slices.Clone(base.Conditions)
+		change(&rule)
+		return &rule
+	}
+
+	tests := []struct {
+		name   string
+		change func(rule *entities.AlertRule)
+		want   bool
+	}{
+		{"identical", func(*entities.AlertRule) {}, true},
+		{"duration is not compared", func(r *entities.AlertRule) { r.Conditions[0].DurationSec++ }, true},
+		{"condition ids and sort order are not compared", func(r *entities.AlertRule) {
+			r.Conditions[0].ID++
+			r.Conditions[0].SortOrder++
+		}, true},
+		{"cooldown, enabled and actions are not compared", func(r *entities.AlertRule) {
+			r.CooldownSec++
+			r.Enabled = !r.Enabled
+			r.Actions = nil
+		}, true},
+		{"object type", func(r *entities.AlertRule) { r.ObjectType += "x" }, false},
+		{"trigger type", func(r *entities.AlertRule) { r.TriggerType += "x" }, false},
+		{"metric name", func(r *entities.AlertRule) { r.MetricName += "x" }, false},
+		{"event name", func(r *entities.AlertRule) { r.EventName += "x" }, false},
+		{"condition property", func(r *entities.AlertRule) { r.Conditions[0].Property += "x" }, false},
+		{"condition operator", func(r *entities.AlertRule) { r.Conditions[0].Operator += "x" }, false},
+		{"condition value", func(r *entities.AlertRule) { r.Conditions[0].Value += "1" }, false},
+		{"condition removed", func(r *entities.AlertRule) { r.Conditions = nil }, false},
+		{"condition added", func(r *entities.AlertRule) { r.Conditions = append(r.Conditions, r.Conditions[0]) }, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SameThreshold(&base, variant(tt.change))
+
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
