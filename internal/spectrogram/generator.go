@@ -337,7 +337,7 @@ func checkSourceUnchanged(ctx context.Context, source *SourceState, audioPath st
 //
 // Context Timeout Behavior:
 // This function enforces a 90-second timeout for spectrogram generation.
-// The pre-renderer also sets its own timeout (see prerenderer.go:416), so the
+// The pre-renderer also sets its own timeout (generationTimeout in prerenderer.go), so the
 // effective timeout will be whichever is shorter. This layered approach ensures
 // both the pre-renderer and generator have safety limits.
 func (g *Generator) GenerateFromPCM(ctx context.Context, pcmData []byte, outputPath string, width int, raw bool, sampleRate int, opts ...GenerateOption) error {

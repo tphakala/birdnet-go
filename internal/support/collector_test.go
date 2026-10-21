@@ -1177,7 +1177,6 @@ func createComprehensiveMockConfig() map[string]any {
 			"audio": map[string]any{
 				"source":          "plughw:1,0",
 				"ffmpegPath":      "/usr/bin/ffmpeg",
-				"soxPath":         "/usr/bin/sox",
 				"streamTransport": "auto",
 				"soundLevel": map[string]any{
 					"enabled":              true,
