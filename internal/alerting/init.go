@@ -423,17 +423,30 @@ func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*e
 	return nil, false
 }
 
-// sameTrigger reports whether two rules have the same trigger definition and
-// conditions. Conditions are compared in slice order on Property, Operator,
-// Value and DurationSec; IDs, sort order and timestamps are ignored. Stored
-// conditions carry no guaranteed order, which does not matter because every
-// default rule has at most one condition.
-func sameTrigger(a, b *entities.AlertRule) bool {
+// SameThreshold reports whether two rules fire at the same values: the same
+// object type, trigger type, metric and event, and conditions equal in slice
+// order on Property, Operator and Value. It decides whether escalation steps
+// still fit a rule, because a stepped rule fires only at or above its lowest
+// step. DurationSec is not compared: steps do not depend on how long a
+// condition must hold. Conditions are compared in slice order, so a stored
+// order that differs reports "changed", which only ever drops steps.
+func SameThreshold(a, b *entities.AlertRule) bool {
 	return a.ObjectType == b.ObjectType && a.TriggerType == b.TriggerType &&
 		a.MetricName == b.MetricName && a.EventName == b.EventName &&
 		slices.EqualFunc(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
-			return x.Property == y.Property && x.Operator == y.Operator &&
-				x.Value == y.Value && x.DurationSec == y.DurationSec
+			return x.Property == y.Property && x.Operator == y.Operator && x.Value == y.Value
+		})
+}
+
+// sameTrigger reports whether two rules have the same trigger definition and
+// conditions: SameThreshold plus equal DurationSec per condition. IDs, sort
+// order and timestamps are ignored. Stored conditions carry no guaranteed
+// order, which does not matter because every default rule has at most one
+// condition.
+func sameTrigger(a, b *entities.AlertRule) bool {
+	return SameThreshold(a, b) &&
+		slices.EqualFunc(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
+			return x.DurationSec == y.DurationSec
 		})
 }
 

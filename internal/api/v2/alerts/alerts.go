@@ -346,7 +346,40 @@ func (c *Handler) CreateAlertRule(ctx echo.Context) error {
 	return ctx.JSON(http.StatusCreated, rule)
 }
 
-// UpdateAlertRule replaces an existing alert rule.
+// keepServerOwnedFields adjusts an updated rule for the fields a request does
+// not control.
+//
+// BuiltIn marks a rule as owned by the shipped defaults, so a request cannot set
+// it. A rename ends the ownership: the editor clears the name key when the user
+// edits the name, and startup seeds a default by name, so a renamed rule that
+// stayed built-in would be joined by a second built-in default that neither
+// could be deleted in the UI.
+//
+// A stepped rule fires only at or above its lowest step, so escalation steps
+// must not outlive a change of thresholds, or alerts between the new threshold
+// and the first step are lost. Steps that the request omits, or sends equal to
+// the stored ones (a client that reads, edits and writes back), therefore stay
+// while the rule fires at the same values and are removed once it does not. The
+// editor sends no steps, and without this a save would turn a notify-once rule
+// back into one that repeats on every cooldown. Different steps in the body are
+// the client's choice and are saved as sent.
+func keepServerOwnedFields(rule, existing *entities.AlertRule) {
+	renamed := rule.NameKey != existing.NameKey ||
+		(existing.NameKey == "" && rule.Name != existing.Name)
+	rule.BuiltIn = existing.BuiltIn && !renamed
+
+	if rule.EscalationSteps != nil && !slices.Equal(rule.EscalationSteps, existing.EscalationSteps) {
+		return
+	}
+	if alerting.SameThreshold(rule, existing) {
+		rule.EscalationSteps = existing.EscalationSteps
+	} else {
+		rule.EscalationSteps = nil
+	}
+}
+
+// UpdateAlertRule replaces an existing alert rule. built_in and unchanged
+// escalation_steps are handled as keepServerOwnedFields describes.
 func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
 	// The updated rule must be refreshed into the engine; refuse with 503 if the
 	// engine failed to initialize rather than silently persisting an inert change.
@@ -375,6 +408,7 @@ func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
 
 	rule.ID = existing.ID
 	rule.CreatedAt = existing.CreatedAt
+	keepServerOwnedFields(rule, existing)
 
 	if err := c.alertRuleRepo.UpdateRule(ctx.Request().Context(), rule); err != nil {
 		c.LogErrorIfEnabled("failed to update alert rule", logger.Error(err))
