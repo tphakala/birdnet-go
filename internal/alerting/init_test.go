@@ -331,8 +331,8 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 
 			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
 
-			// Only the low disk row has default steps, so it is the only row that
-			// can be written back.
+			// seedRulesWithLowDisk leaves every other row with its default steps,
+			// so the low disk row is the only row that can be written back.
 			var wantUpdated []uint
 			if tt.wantWritten {
 				wantUpdated = []uint{id}
