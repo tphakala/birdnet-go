@@ -113,6 +113,30 @@ func (ds *DataStore) GetActiveNotificationHistory(ctx context.Context, after tim
 	return histories, nil
 }
 
+// GetActiveNotificationHistoryByType retrieves all notification history
+// records of the given type that were sent after the specified time. This is
+// the same query as GetActiveNotificationHistory, generalized by
+// notification type, for consumers tracking a notification type other than
+// "new_species" (e.g. "lifer") that needs its own independent suppression
+// state on restart.
+func (ds *DataStore) GetActiveNotificationHistoryByType(ctx context.Context, notificationType string, after time.Time) ([]NotificationHistory, error) {
+	var histories []NotificationHistory
+
+	err := ds.DB.WithContext(ctx).Where("notification_type = ? AND last_sent >= ?", notificationType, after).
+		Order("last_sent DESC").
+		Find(&histories).Error
+
+	if err != nil {
+		return nil, dbError(err, "get_active_notification_history_by_type", errors.PriorityMedium,
+			"notification_type", notificationType,
+			"after", after.Format(time.RFC3339),
+			"table", "notification_histories",
+			"action", "restore_notification_suppression")
+	}
+
+	return histories, nil
+}
+
 // DeleteExpiredNotificationHistory removes all notification history records that have expired
 // Returns the count of deleted records
 // This is typically called periodically by a cleanup job

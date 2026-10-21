@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/events"
+	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
 // Test constants for better readability and maintainability
@@ -317,6 +319,157 @@ func TestPublishDetectionEvent_SuppressedNewSpecies(t *testing.T) {
 	assert.False(t, received[0].IsNewSpecies(), "suppressed new species should publish as ordinary detection")
 }
 
+// TestPublishDetectionEvent_LiferOnList verifies that a species already on
+// the user's imported life list does not raise a lifer notification.
+func TestPublishDetectionEvent_LiferOnList(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.LifeList.Enabled = true
+	settings.Realtime.LifeList.Species = []string{det.Result.Species.ScientificName + "_" + det.Result.Species.CommonName}
+
+	mockDS := mocks.NewMockInterface(t)
+	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
+	})
+
+	action := &DatabaseAction{
+		Settings:          settings,
+		Result:            det.Result,
+		CorrelationID:     "test-lifer-on-list",
+		NewSpeciesTracker: tracker,
+	}
+
+	action.publishDetectionEvent(t.Context(), false, 30, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	metadata := consumer.GetReceivedEvents()[0].GetMetadata()
+	assert.NotContains(t, metadata, events.DetectionMetadataIsLifer,
+		"species already on the life list must not be flagged as a lifer")
+}
+
+// TestPublishDetectionEvent_LiferNotOnList verifies that a species not on
+// the life list is flagged as a lifer on first detection, and that a repeat
+// detection within the suppression window is not flagged again.
+func TestPublishDetectionEvent_LiferNotOnList(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.LifeList.Enabled = true
+	settings.Realtime.LifeList.Species = []string{"Turdus merula_Common Blackbird"} // unrelated species
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().
+		GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		GetActiveNotificationHistoryByType(mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).
+		Maybe()
+
+	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
+	})
+
+	action := &DatabaseAction{
+		Settings:          settings,
+		Result:            det.Result,
+		CorrelationID:     "test-lifer-not-on-list",
+		NewSpeciesTracker: tracker,
+	}
+
+	// First detection: should be flagged as a lifer.
+	action.publishDetectionEvent(t.Context(), false, 30, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	metadata := consumer.GetReceivedEvents()[0].GetMetadata()
+	assert.Equal(t, true, metadata[events.DetectionMetadataIsLifer],
+		"species not on the life list must be flagged as a lifer on first detection")
+
+	// Second detection, same species, still within the suppression window:
+	// must not be flagged again.
+	action.publishDetectionEvent(t.Context(), false, 30, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 2)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	metadata2 := consumer.GetReceivedEvents()[1].GetMetadata()
+	assert.NotContains(t, metadata2, events.DetectionMetadataIsLifer,
+		"a repeat detection within the suppression window must not re-flag as a lifer")
+}
+
+// TestPublishDetectionEvent_LiferIndependentOfNewSpecies verifies that lifer
+// status is orthogonal to isNewSpecies: a new-species detection for a species
+// already on the life list must not be flagged as a lifer.
+func TestPublishDetectionEvent_LiferIndependentOfNewSpecies(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.LifeList.Enabled = true
+	settings.Realtime.LifeList.Species = []string{det.Result.Species.ScientificName + "_" + det.Result.Species.CommonName}
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().
+		GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		GetActiveNotificationHistoryByType(mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).
+		Maybe()
+
+	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
+	})
+
+	action := &DatabaseAction{
+		Settings:          settings,
+		Result:            det.Result,
+		CorrelationID:     "test-lifer-vs-new-species",
+		NewSpeciesTracker: tracker,
+	}
+
+	// isNewSpecies=true, but species IS on the life list: must publish as new
+	// species without a lifer flag.
+	action.publishDetectionEvent(t.Context(), true, 0, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	received := consumer.GetReceivedEvents()[0]
+	assert.True(t, received.IsNewSpecies())
+	assert.NotContains(t, received.GetMetadata(), events.DetectionMetadataIsLifer)
+}
+
 // TestPublishDetectionEvent_NoEventBus verifies graceful handling when the
 // event bus is not initialized.
 func TestPublishDetectionEvent_NoEventBus(t *testing.T) {
@@ -335,4 +488,90 @@ func TestPublishDetectionEvent_NoEventBus(t *testing.T) {
 		action.publishDetectionEvent(t.Context(), false, 10, species.NoveltyStatus{})
 		action.publishDetectionEvent(t.Context(), true, 0, species.NoveltyStatus{})
 	})
+}
+
+// recordingImageProvider resolves immediately and records every species it was
+// asked for, so a test can assert that the image cache was warmed rather than
+// only that a detection published.
+type recordingImageProvider struct {
+	mu      sync.Mutex
+	fetched []string
+}
+
+func (p *recordingImageProvider) Fetch(scientificName string) (imageprovider.BirdImage, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.fetched = append(p.fetched, scientificName)
+	return imageprovider.BirdImage{ScientificName: scientificName, URL: "https://example.invalid/bird.jpg"}, nil
+}
+
+func (p *recordingImageProvider) fetchedNames() []string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return slices.Clone(p.fetched)
+}
+
+// TestPublishDetectionEvent_LiferWarmsImageCache guards an asymmetry in
+// publishDetectionEvent: warmSpeciesImage used to run only on the
+// new-species branch, so a lifer that is NOT new to this install (a species
+// detected before the life list was imported) took the ordinary-detection
+// path and never warmed the cache. That notification still renders as a
+// detection card wanting a thumbnail, so it could show up imageless.
+func TestPublishDetectionEvent_LiferWarmsImageCache(t *testing.T) {
+	consumer := setupEventBusWithConsumer(t)
+
+	det := testDetection()
+	settings := &conf.Settings{Debug: true}
+	settings.Realtime.LifeList.Enabled = true
+	// Life list is non-empty but deliberately excludes this species, so the
+	// detection is a lifer.
+	settings.Realtime.LifeList.Species = []string{"Some other species_Other Bird"}
+
+	mockDS := mocks.NewMockInterface(t)
+	mockDS.EXPECT().
+		GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		GetActiveNotificationHistoryByType(mock.Anything, mock.Anything, mock.AnythingOfType("time.Time")).
+		Return([]datastore.NotificationHistory{}, nil).
+		Maybe()
+	mockDS.EXPECT().
+		SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
+		Return(nil).
+		Maybe()
+
+	tracker := species.NewTrackerFromSettings(mockDS, &conf.SpeciesTrackingSettings{
+		Enabled:                      true,
+		NewSpeciesWindowDays:         testWindowDays,
+		SyncIntervalMinutes:          testSyncIntervalMins,
+		NotificationSuppressionHours: testSuppressionHours,
+	})
+
+	provider := &recordingImageProvider{}
+	cache := &imageprovider.BirdImageCache{}
+	cache.SetImageProvider(provider)
+
+	action := &DatabaseAction{
+		Settings:          settings,
+		Result:            det.Result,
+		CorrelationID:     "test-lifer-warms-image",
+		NewSpeciesTracker: tracker,
+		processor:         &Processor{BirdImageCache: cache},
+	}
+
+	// isNewSpecies=false: this is the ordinary-detection path, the one that
+	// previously skipped the warm-up entirely.
+	action.publishDetectionEvent(t.Context(), false, 30, species.NoveltyStatus{})
+
+	require.EventuallyWithT(t, func(collect *assert.CollectT) {
+		assert.Len(collect, consumer.GetReceivedEvents(), 1)
+	}, 2*time.Second, 50*time.Millisecond)
+
+	received := consumer.GetReceivedEvents()[0]
+	require.Contains(t, received.GetMetadata(), events.DetectionMetadataIsLifer,
+		"precondition: this detection must actually be a lifer")
+
+	assert.Contains(t, provider.fetchedNames(), det.Result.Species.ScientificName,
+		"a lifer on the ordinary-detection path must still warm its species image")
 }
