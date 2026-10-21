@@ -88,7 +88,10 @@ func TestV2OnlyDatastore_CountDetectionsMatchListing(t *testing.T) {
 		}{
 			{"one hour", "2024-03-31", "05", 1, 2},
 			{"window across the gap", "2024-03-31", "02", 3, 4},
-			{"whole day", "2024-03-31", "00", 24, 9},
+			// The window is 24 elapsed hours from local midnight, and 2024-03-31 is only
+			// 23 hours long in Helsinki, so it also takes in the 2024-04-01 00:00 finch:
+			// 8 rows on the 31st plus that one.
+			{"24 hours from midnight spills into the next day", "2024-03-31", "00", 24, 9},
 			{"zero duration is empty", "2024-03-31", "06", 0, 0},
 			{"day before", "2024-03-30", "23", 1, 1},
 		}

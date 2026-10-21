@@ -900,9 +900,9 @@ func TestGetTopSpecies_NoLimitWhenNonPositive(t *testing.T) {
 }
 
 // TestCountSearch_MatchesSearchTotal pins CountSearch to the total Search reports and
-// to the number of rows an unpaginated Search returns, across every filter family
-// (label, time range, hours, confidence, text query, review, lock), and checks that
-// sorting and pagination fields do not change the count.
+// to the number of rows an unpaginated Search returns, across the label, time range,
+// hours, confidence, text query, review and lock filters, and checks that sorting and
+// pagination fields do not change the count.
 func TestCountSearch_MatchesSearchTotal(t *testing.T) {
 	db := setupDetectionTestDBWithLabels(t)
 	ctx := t.Context()
@@ -917,6 +917,9 @@ func TestCountSearch_MatchesSearchTotal(t *testing.T) {
 	const (
 		parusCount  = 6
 		turdusCount = 4
+		// lowConfidence is below the confidence threshold used by the cases below,
+		// while createDetectionForLabel's default confidence is above it.
+		lowConfidence = 0.3
 	)
 	parusIDs := make([]uint, 0, parusCount)
 	for i := range int64(parusCount) {
@@ -925,6 +928,9 @@ func TestCountSearch_MatchesSearchTotal(t *testing.T) {
 	for i := range int64(turdusCount) {
 		createDetectionForLabel(t, db, turdus.ID, base+i*hour+1)
 	}
+	lowConfidenceIDs := []uint{parusIDs[3], parusIDs[4]}
+	require.NoError(t, db.Table(tableDetections).Where("id IN ?", lowConfidenceIDs).
+		Update("confidence", lowConfidence).Error)
 	require.NoError(t, db.Table(tableDetectionReviews).Create(&entities.DetectionReview{
 		DetectionID: parusIDs[0], Verified: entities.VerificationFalsePositive,
 	}).Error)
@@ -936,7 +942,7 @@ func TestCountSearch_MatchesSearchTotal(t *testing.T) {
 	}).Error)
 
 	start, end := base+hour, base+4*hour
-	minConf := 0.5
+	confidenceThreshold := 0.5
 	falsePositive := VerificationFilter(entities.VerificationFalsePositive)
 	yes, no := true, false
 
@@ -951,7 +957,8 @@ func TestCountSearch_MatchesSearchTotal(t *testing.T) {
 		{name: "half-open time range", filters: &SearchFilters{StartTime: &start, EndTime: &end}, want: 6},
 		{name: "label and time range", filters: &SearchFilters{LabelIDs: []uint{turdus.ID}, StartTime: &start, EndTime: &end}, want: 3},
 		{name: "included hours", filters: &SearchFilters{IncludedHours: []int{0, 5}}, want: 3},
-		{name: "min confidence", filters: &SearchFilters{MinConfidence: &minConf}, want: 10},
+		{name: "min confidence", filters: &SearchFilters{MinConfidence: &confidenceThreshold}, want: 8},
+		{name: "max confidence", filters: &SearchFilters{MaxConfidence: &confidenceThreshold}, want: 2},
 		{name: "text query joins labels", filters: &SearchFilters{Query: "Turdus"}, want: 4},
 		{name: "verified joins reviews", filters: &SearchFilters{Verified: &falsePositive}, want: 1},
 		{name: "reviewed", filters: &SearchFilters{IsReviewed: &yes}, want: 2},
