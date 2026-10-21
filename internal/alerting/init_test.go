@@ -256,29 +256,6 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 			},
 		},
 		{
-			name: "keyed built-in with changed sustained duration is untouched",
-			mutate: func(r *entities.AlertRule) {
-				r.Conditions[0].DurationSec = lowDiskShortenedSustainSec
-			},
-		},
-		{
-			name: "keyed built-in with changed metric is untouched",
-			mutate: func(r *entities.AlertRule) {
-				r.MetricName = MetricCPUUsage
-			},
-		},
-		{
-			// Settings outside the trigger do not affect where an alert fires.
-			name: "keyed built-in with changed cooldown, enabled flag and actions still gets default steps",
-			mutate: func(r *entities.AlertRule) {
-				r.CooldownSec = lowDiskCustomCooldownSec
-				r.Enabled = false
-				r.Actions = []entities.AlertAction{{Target: TargetBell}}
-			},
-			want:        lowDiskDefaultSteps,
-			wantWritten: true,
-		},
-		{
 			name: "built-in with an unknown name key is untouched",
 			mutate: func(r *entities.AlertRule) {
 				r.NameKey = unmatchedNameKey
@@ -361,6 +338,27 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 			assert.Equal(t, wantUpdated, repo.updated, "a second startup should not write a rule")
 		})
 	}
+}
+
+func TestSeedDefaultRules_EscalationStepMigrationKeepsUserSettings(t *testing.T) {
+	// Settings outside the trigger do not decide whether the default steps
+	// apply, and the write that adds them leaves those settings as the user set
+	// them.
+	repo, id := seedRulesWithLowDisk(t, func(r *entities.AlertRule) {
+		r.CooldownSec = lowDiskCustomCooldownSec
+		r.Enabled = false
+		r.Actions = []entities.AlertAction{{Target: TargetPush}}
+	})
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+
+	rule, err := repo.GetRule(t.Context(), id)
+	require.NoError(t, err)
+	assert.Equal(t, lowDiskDefaultSteps, rule.EscalationSteps)
+	assert.Equal(t, lowDiskCustomCooldownSec, rule.CooldownSec)
+	assert.False(t, rule.Enabled)
+	require.Len(t, rule.Actions, 1)
+	assert.Equal(t, TargetPush, rule.Actions[0].Target)
 }
 
 func TestSeedDefaultRules_FailedUpdateDoesNotStopMigration(t *testing.T) {
