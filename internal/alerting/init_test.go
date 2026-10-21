@@ -1,9 +1,11 @@
 package alerting
 
 import (
+	"bytes"
 	"context"
 	"io"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -20,10 +23,16 @@ import (
 type initMockRepo struct {
 	rules   []entities.AlertRule
 	history []entities.AlertHistory
+	// updated holds the id of each UpdateRule call that stored a rule.
+	updated []uint
+	// updateErrs makes UpdateRule fail for the listed rule ids.
+	updateErrs map[uint]error
 }
 
+// ListRules returns a copy, so a change reaches the stored rules only through
+// UpdateRule, as it does with a real repository.
 func (m *initMockRepo) ListRules(_ context.Context, _ repository.AlertRuleFilter) ([]entities.AlertRule, error) {
-	return m.rules, nil
+	return slices.Clone(m.rules), nil
 }
 
 func (m *initMockRepo) GetRule(_ context.Context, id uint) (*entities.AlertRule, error) {
@@ -42,9 +51,13 @@ func (m *initMockRepo) CreateRule(_ context.Context, rule *entities.AlertRule) e
 }
 
 func (m *initMockRepo) UpdateRule(_ context.Context, rule *entities.AlertRule) error {
+	if err, ok := m.updateErrs[rule.ID]; ok {
+		return err
+	}
 	for i := range m.rules {
 		if m.rules[i].ID == rule.ID {
 			m.rules[i] = *rule
+			m.updated = append(m.updated, rule.ID)
 			return nil
 		}
 	}
@@ -170,6 +183,12 @@ const (
 	lowDiskSustainWindow = 300 * time.Second
 	// lowDiskCooldownElapsed is longer than the shipped 1800 s cooldown.
 	lowDiskCooldownElapsed = 31 * time.Minute
+	// updateFailureMessage is the cause of a failed rule write in the tests.
+	updateFailureMessage = "rule store unavailable"
+	// migratedLogMessage is logged for each rule the migration wrote.
+	migratedLogMessage = "migrated escalation steps for built-in rule"
+	// failedLogMessage is logged for each rule the migration could not write.
+	failedLogMessage = "failed to migrate escalation steps for built-in rule"
 )
 
 // legacyRow wraps change so the row also looks like one seeded before name keys
@@ -205,17 +224,21 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 		name   string
 		mutate func(rule *entities.AlertRule)
 		want   []float64
+		// wantWritten is whether the low disk row is written back.
+		wantWritten bool
 	}{
 		{
-			name:   "keyed built-in without steps gets default steps",
-			mutate: func(_ *entities.AlertRule) {},
-			want:   lowDiskDefaultSteps,
+			name:        "keyed built-in without steps gets default steps",
+			mutate:      func(_ *entities.AlertRule) {},
+			want:        lowDiskDefaultSteps,
+			wantWritten: true,
 		},
 		{
 			// Rows seeded before name keys existed have an empty NameKey.
-			name:   "legacy built-in without name key gets default steps",
-			mutate: legacyRow(func(_ *entities.AlertRule) {}),
-			want:   lowDiskDefaultSteps,
+			name:        "legacy built-in without name key gets default steps",
+			mutate:      legacyRow(func(_ *entities.AlertRule) {}),
+			want:        lowDiskDefaultSteps,
+			wantWritten: true,
 		},
 		{
 			name:   "user-created rule sharing the built-in name is untouched",
@@ -226,7 +249,8 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 			mutate: func(r *entities.AlertRule) {
 				r.Conditions[0].Value = lowDiskLoweredThreshold
 			},
-			want: lowDiskDefaultSteps,
+			want:        lowDiskDefaultSteps,
+			wantWritten: true,
 		},
 		{
 			name: "built-in with an unknown name key is untouched",
@@ -292,12 +316,59 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 
 			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
 
+			// Only the low disk row has default steps, so it is the only row that
+			// can be written back.
+			var wantUpdated []uint
+			if tt.wantWritten {
+				wantUpdated = []uint{id}
+			}
+
 			assert.Len(t, repo.rules, ruleCount, "no rule should be added or removed")
+			assert.Equal(t, wantUpdated, repo.updated)
 			rule, err := repo.GetRule(t.Context(), id)
 			require.NoError(t, err)
 			assert.Equal(t, tt.want, rule.EscalationSteps)
+
+			// A second startup finds the steps in place and changes nothing.
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+			assert.Len(t, repo.rules, ruleCount, "a second startup should not add or remove a rule")
+			assert.Equal(t, wantUpdated, repo.updated, "a second startup should not write a rule")
 		})
 	}
+}
+
+func TestSeedDefaultRules_FailedUpdateDoesNotStopMigration(t *testing.T) {
+	// Two stored rows match the low disk default, one keyed and one legacy. The
+	// write for the first fails; the second must still be migrated.
+	repo, failedID := seedRulesWithLowDisk(t, func(_ *entities.AlertRule) {})
+	second, _ := seedRulesWithLowDisk(t, legacyRow(func(_ *entities.AlertRule) {}))
+	secondRule := second.rules[failedID-1]
+	secondRule.ID = uint(len(repo.rules)) + 1 //nolint:gosec // test, no overflow risk
+	repo.rules = append(repo.rules, secondRule)
+	repo.updateErrs = map[uint]error{failedID: errors.NewStd(updateFailureMessage)}
+
+	var logOutput bytes.Buffer
+	log := logger.NewSlogLogger(&logOutput, logger.LogLevelInfo, nil)
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, log))
+
+	failed, err := repo.GetRule(t.Context(), failedID)
+	require.NoError(t, err)
+	assert.Empty(t, failed.EscalationSteps, "the row whose write failed is not stored with steps")
+	migrated, err := repo.GetRule(t.Context(), secondRule.ID)
+	require.NoError(t, err)
+	assert.Equal(t, lowDiskDefaultSteps, migrated.EscalationSteps, "the next row is still migrated")
+	assert.Equal(t, []uint{secondRule.ID}, repo.updated)
+	var warning string
+	for line := range strings.Lines(logOutput.String()) {
+		if strings.Contains(line, failedLogMessage) {
+			warning = line
+		}
+	}
+	require.NotEmpty(t, warning, "the failed write is logged")
+	assert.Contains(t, warning, failed.Name, "the warning names the rule")
+	assert.Contains(t, warning, updateFailureMessage, "the warning carries the cause")
+	assert.Equal(t, 1, strings.Count(logOutput.String(), migratedLogMessage), "only the written row is reported as migrated")
 }
 
 func TestSeedDefaultRules_LegacyLowDiskRuleDoesNotRenotifySameStepAfterCooldown(t *testing.T) {
