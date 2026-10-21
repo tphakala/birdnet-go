@@ -1,8 +1,17 @@
 package alerting
 
 import (
+	"strconv"
+
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
+
+// highUsageThresholdPercent is the usage, in percent, above which the High CPU
+// usage and High memory usage rules fire. Their condition value and their
+// escalation step both come from it, so the step cannot drift above the
+// threshold. The rule descriptions and their translations spell the number
+// out, so they have to change with it.
+const highUsageThresholdPercent = 90
 
 // DefaultRules returns the built-in alert rules that ship with BirdNET-Go.
 // These are seeded on first v2 activation and can be restored via reset-defaults.
@@ -96,9 +105,9 @@ func DefaultRules() []entities.AlertRule {
 			CooldownSec:    900,
 			// A single step makes the engine notify once while usage stays at or
 			// above it, instead of on every cooldown.
-			EscalationSteps: []float64{90},
+			EscalationSteps: []float64{highUsageThresholdPercent},
 			Conditions: []entities.AlertCondition{
-				{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "90", DurationSec: 300, SortOrder: 0},
+				{Property: PropertyValue, Operator: OperatorGreaterThan, Value: strconv.Itoa(highUsageThresholdPercent), DurationSec: 300, SortOrder: 0},
 			},
 			Actions: []entities.AlertAction{
 				{Target: TargetBell, SortOrder: 0},
@@ -117,9 +126,9 @@ func DefaultRules() []entities.AlertRule {
 			CooldownSec:    900,
 			// A single step makes the engine notify once while usage stays at or
 			// above it, instead of on every cooldown.
-			EscalationSteps: []float64{90},
+			EscalationSteps: []float64{highUsageThresholdPercent},
 			Conditions: []entities.AlertCondition{
-				{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "90", DurationSec: 300, SortOrder: 0},
+				{Property: PropertyValue, Operator: OperatorGreaterThan, Value: strconv.Itoa(highUsageThresholdPercent), DurationSec: 300, SortOrder: 0},
 			},
 			Actions: []entities.AlertAction{
 				{Target: TargetBell, SortOrder: 0},
