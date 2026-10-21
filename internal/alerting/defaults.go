@@ -94,6 +94,9 @@ func DefaultRules() []entities.AlertRule {
 			TriggerType:    TriggerTypeMetric,
 			MetricName:     MetricCPUUsage,
 			CooldownSec:    900,
+			// A single step makes the engine notify once while usage stays at or
+			// above it, instead of on every cooldown.
+			EscalationSteps: []float64{90},
 			Conditions: []entities.AlertCondition{
 				{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "90", DurationSec: 300, SortOrder: 0},
 			},
@@ -112,6 +115,9 @@ func DefaultRules() []entities.AlertRule {
 			TriggerType:    TriggerTypeMetric,
 			MetricName:     MetricMemoryUsage,
 			CooldownSec:    900,
+			// A single step makes the engine notify once while usage stays at or
+			// above it, instead of on every cooldown.
+			EscalationSteps: []float64{90},
 			Conditions: []entities.AlertCondition{
 				{Property: PropertyValue, Operator: OperatorGreaterThan, Value: "90", DurationSec: 300, SortOrder: 0},
 			},

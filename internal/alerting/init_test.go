@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -182,6 +183,9 @@ const (
 	unmatchedNameKey = "alerts.rules.unmatched.name"
 	// lowDiskTestUsage is a disk usage percentage above the first escalation step.
 	lowDiskTestUsage = 86.0
+	// highUsageTestValue is a CPU or memory percentage just above the shipped
+	// "> 90" condition.
+	highUsageTestValue = 91.0
 	// lowDiskSustainWindow is the sustained duration of the shipped condition.
 	lowDiskSustainWindow = 300 * time.Second
 	// lowDiskCooldownElapsed is longer than the shipped 1800 s cooldown.
@@ -204,22 +208,30 @@ func legacyRow(change func(rule *entities.AlertRule)) func(rule *entities.AlertR
 	}
 }
 
-// seedRulesWithLowDisk returns a repo holding every default rule without
-// escalation steps (the pre-migration state), after applying mutate to the
-// "Low disk space" row, together with that row's ID.
-func seedRulesWithLowDisk(t *testing.T, mutate func(rule *entities.AlertRule)) (repo *initMockRepo, lowDiskID uint) {
+// seedRulesWithoutSteps returns a repo holding every default rule, with the
+// rule that has the given name key stripped of its escalation steps (the
+// pre-migration state) and mutate applied to it, together with that row's ID.
+// The other rows keep their default steps, so the target is the only row the
+// migration can write.
+func seedRulesWithoutSteps(t *testing.T, nameKey string, mutate func(rule *entities.AlertRule)) (repo *initMockRepo, ruleID uint) {
 	t.Helper()
 	existing := DefaultRules()
 	for i := range existing {
 		existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
-		existing[i].EscalationSteps = nil
-		if existing[i].NameKey == RuleKeyLowDiskName {
-			lowDiskID = existing[i].ID
+		if existing[i].NameKey == nameKey {
+			ruleID = existing[i].ID
+			existing[i].EscalationSteps = nil
 			mutate(&existing[i])
 		}
 	}
-	require.NotZero(t, lowDiskID, "low disk default rule not found")
-	return &initMockRepo{rules: existing}, lowDiskID
+	require.NotZero(t, ruleID, "default rule %q not found", nameKey)
+	return &initMockRepo{rules: existing}, ruleID
+}
+
+// seedRulesWithLowDisk is seedRulesWithoutSteps for the "Low disk space" row.
+func seedRulesWithLowDisk(t *testing.T, mutate func(rule *entities.AlertRule)) (repo *initMockRepo, lowDiskID uint) {
+	t.Helper()
+	return seedRulesWithoutSteps(t, RuleKeyLowDiskName, mutate)
 }
 
 func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
@@ -395,30 +407,76 @@ func TestSeedDefaultRules_FailedUpdateDoesNotStopMigration(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(logOutput.String(), migratedLogMessage), "only the written row is reported as migrated")
 }
 
-func TestSeedDefaultRules_LegacyLowDiskRuleDoesNotRenotifySameStepAfterCooldown(t *testing.T) {
-	// A legacy "Low disk space" row (no name key, no steps) re-notified on every
-	// cooldown expiry while usage stayed above the threshold. After migration the
-	// engine must stay quiet at the same step.
-	repo, _ := seedRulesWithLowDisk(t, legacyRow(func(_ *entities.AlertRule) {}))
-	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+func TestSeedDefaultRules_MigratedRuleDoesNotRenotifySameStepAfterCooldown(t *testing.T) {
+	// A stored system metric row without steps re-notified on every cooldown
+	// expiry while usage stayed above the threshold. After migration the engine
+	// must stay quiet at the same step, including for a sample just above the
+	// rule's threshold.
+	tests := []struct {
+		name    string
+		nameKey string
+		mutate  func(rule *entities.AlertRule)
+		metric  string
+		usage   float64
+		props   map[string]any
+	}{
+		{
+			name:    "legacy low disk space",
+			nameKey: RuleKeyLowDiskName,
+			mutate:  legacyRow(func(_ *entities.AlertRule) {}),
+			metric:  MetricDiskUsage,
+			usage:   lowDiskTestUsage,
+			props:   map[string]any{PropertyPath: "/"},
+		},
+		{
+			name:    "keyed high CPU usage",
+			nameKey: RuleKeyHighCPUName,
+			mutate:  func(_ *entities.AlertRule) {},
+			metric:  MetricCPUUsage,
+			usage:   highUsageTestValue,
+		},
+		{
+			name:    "keyed high memory usage",
+			nameKey: RuleKeyHighMemoryName,
+			mutate:  func(_ *entities.AlertRule) {},
+			metric:  MetricMemoryUsage,
+			usage:   highUsageTestValue,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, _ := seedRulesWithoutSteps(t, tt.nameKey, tt.mutate)
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
 
-	var fired int
-	engine := NewEngine(repo, func(rule *entities.AlertRule, _ *AlertEvent) {
-		if rule.MetricName == MetricDiskUsage {
-			fired++
-		}
-	}, initTestLogger(), nil)
-	require.NoError(t, engine.RefreshRules(t.Context()))
+			var fired int
+			engine := NewEngine(repo, func(rule *entities.AlertRule, _ *AlertEvent) {
+				if rule.MetricName == tt.metric {
+					fired++
+				}
+			}, initTestLogger(), nil)
+			require.NoError(t, engine.RefreshRules(t.Context()))
 
-	base := time.Now().Add(-2 * lowDiskSustainWindow)
-	emit := func(offset time.Duration) {
-		engine.HandleEvent(&AlertEvent{
-			ObjectType: ObjectTypeSystem,
-			MetricName: MetricDiskUsage,
-			Properties: map[string]any{PropertyValue: lowDiskTestUsage, PropertyPath: "/"},
-			Timestamp:  base.Add(offset),
+			base := time.Now().Add(-2 * lowDiskSustainWindow)
+			emit := func(offset time.Duration) {
+				props := map[string]any{PropertyValue: tt.usage}
+				maps.Copy(props, tt.props)
+				engine.HandleEvent(&AlertEvent{
+					ObjectType: ObjectTypeSystem,
+					MetricName: tt.metric,
+					Properties: props,
+					Timestamp:  base.Add(offset),
+				})
+			}
+			assertNoRenotifyAfterCooldown(t, engine, emit, &fired)
 		})
 	}
+}
+
+// assertNoRenotifyAfterCooldown feeds a sustained breach through emit, expects
+// one notification, then expires every cooldown and expects the same step to
+// stay quiet.
+func assertNoRenotifyAfterCooldown(t *testing.T, engine *Engine, emit func(offset time.Duration), fired *int) {
+	t.Helper()
 
 	// Samples covering the sustained window, dense enough that the window
 	// after the last emit below also starts within the grace period.
@@ -426,7 +484,7 @@ func TestSeedDefaultRules_LegacyLowDiskRuleDoesNotRenotifySameStepAfterCooldown(
 	emit(lowDiskSustainWindow / 5)
 	emit(lowDiskSustainWindow / 2)
 	emit(lowDiskSustainWindow)
-	require.Equal(t, 1, fired, "sustained breach should notify once")
+	require.Equal(t, 1, *fired, "sustained breach should notify once")
 
 	// Expire the cooldown; the same step must not notify again.
 	engine.cooldownsMu.Lock()
@@ -435,7 +493,7 @@ func TestSeedDefaultRules_LegacyLowDiskRuleDoesNotRenotifySameStepAfterCooldown(
 	}
 	engine.cooldownsMu.Unlock()
 	emit(lowDiskSustainWindow + lowDiskSustainWindow/10)
-	assert.Equal(t, 1, fired, "same step must not re-notify after the cooldown expires")
+	assert.Equal(t, 1, *fired, "same step must not re-notify after the cooldown expires")
 }
 
 func TestEnrichFromEventProps_DetectionNotification(t *testing.T) {
