@@ -424,31 +424,58 @@ func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*e
 }
 
 // SameThreshold reports whether two rules fire at the same values: the same
-// object type, trigger type, metric and event, and conditions equal in slice
-// order on Property, Operator and Value. It decides whether escalation steps
-// still fit a rule, because a stepped rule fires only at or above its lowest
-// step. DurationSec is not compared: steps do not depend on how long a
-// condition must hold. Conditions are compared in slice order, so a stored
-// order that differs reports "changed", so steps are removed (update) or not
-// added (seeding).
+// object type, trigger type, metric and event, and the same conditions on
+// Property, Operator and Value. Conditions are all required to hold, so their
+// order does not matter. It decides whether escalation steps still fit a rule,
+// because a stepped rule fires only at or above its lowest step. DurationSec is
+// not compared: steps do not depend on how long a condition must hold.
 func SameThreshold(a, b *entities.AlertRule) bool {
-	return a.ObjectType == b.ObjectType && a.TriggerType == b.TriggerType &&
-		a.MetricName == b.MetricName && a.EventName == b.EventName &&
-		slices.EqualFunc(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
+	return sameRuleShape(a, b) &&
+		sameConditions(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
 			return x.Property == y.Property && x.Operator == y.Operator && x.Value == y.Value
 		})
 }
 
 // sameTrigger reports whether two rules have the same trigger definition and
-// conditions: SameThreshold plus equal DurationSec per condition. IDs, sort
-// order and timestamps are ignored. Stored conditions carry no guaranteed
-// order, which does not matter because every default rule has at most one
-// condition.
+// conditions: SameThreshold plus an equal DurationSec on each matched condition.
+// IDs, sort order and timestamps are ignored.
 func sameTrigger(a, b *entities.AlertRule) bool {
-	return SameThreshold(a, b) &&
-		slices.EqualFunc(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
-			return x.DurationSec == y.DurationSec
+	return sameRuleShape(a, b) &&
+		sameConditions(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
+			return x.Property == y.Property && x.Operator == y.Operator && x.Value == y.Value &&
+				x.DurationSec == y.DurationSec
 		})
+}
+
+// sameRuleShape reports whether two rules have the same object type, trigger
+// type, metric and event.
+func sameRuleShape(a, b *entities.AlertRule) bool {
+	return a.ObjectType == b.ObjectType && a.TriggerType == b.TriggerType &&
+		a.MetricName == b.MetricName && a.EventName == b.EventName
+}
+
+// sameConditions reports whether a and b hold the same conditions in any order,
+// where same says when two conditions are equal. Each condition of b matches at
+// most one condition of a, so [x, x] and [x, y] differ.
+func sameConditions(a, b []entities.AlertCondition, same func(x, y entities.AlertCondition) bool) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	used := make([]bool, len(b))
+	for _, x := range a {
+		matched := false
+		for i, y := range b {
+			if !used[i] && same(x, y) {
+				used[i] = true
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
 }
 
 // migrateEscalationSteps fills EscalationSteps on stored built-in rules that

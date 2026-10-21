@@ -30,6 +30,10 @@ const (
 	customStepLow    = 95.0
 	customStepHigh   = 99.0
 	renamedRule      = "My CPU alert"
+
+	// secondConditionValue is the threshold of the extra condition in a
+	// two-condition rule.
+	secondConditionValue = "95"
 )
 
 // storedHighCPURule returns the High CPU usage default as it sits in the
@@ -49,6 +53,17 @@ func storedHighCPURule(t *testing.T) *entities.AlertRule {
 	require.NotEmpty(t, rule.EscalationSteps, "precondition: the default carries escalation steps")
 	require.Len(t, rule.Conditions, 1, "precondition: one threshold condition")
 	return &rule
+}
+
+// storedTwoConditionHighCPURule returns the High CPU usage default with a second
+// threshold condition, as a custom setup with two conditions would be stored.
+func storedTwoConditionHighCPURule(t *testing.T) *entities.AlertRule {
+	t.Helper()
+	rule := storedHighCPURule(t)
+	second := rule.Conditions[0]
+	second.Value = secondConditionValue
+	rule.Conditions = append(rule.Conditions, second)
+	return rule
 }
 
 // storedLegacyHighCPURule returns the High CPU usage default as a rule seeded
@@ -181,6 +196,15 @@ func TestUpdateAlertRule_KeepsServerOwnedFields(t *testing.T) {
 			wantBuiltIn:  false,
 			wantSteps:    sameSteps,
 			whyItMatters: "a renamed built-in plus the default seeded on restart would be two built-ins that cannot be deleted",
+		},
+		{
+			name:   "the same conditions in another order keep the steps",
+			stored: storedTwoConditionHighCPURule,
+			edit:   func(rule *entities.AlertRule) { slices.Reverse(rule.Conditions) },
+
+			wantBuiltIn:  true,
+			wantSteps:    sameSteps,
+			whyItMatters: "conditions are ANDed, so their order is not a change of thresholds",
 		},
 		{
 			name:         "clearing the name key alone is a rename",

@@ -820,3 +820,33 @@ func TestSameThreshold(t *testing.T) {
 		})
 	}
 }
+
+func TestSameThreshold_ConditionOrder(t *testing.T) {
+	cond := func(value string, durationSec int) entities.AlertCondition {
+		return entities.AlertCondition{Property: PropertyValue, Operator: OperatorGreaterThan, Value: value, DurationSec: durationSec}
+	}
+	rule := func(conditions ...entities.AlertCondition) *entities.AlertRule {
+		return &entities.AlertRule{ObjectType: ObjectTypeSystem, TriggerType: TriggerTypeMetric, MetricName: MetricCPUUsage, Conditions: conditions}
+	}
+
+	tests := []struct {
+		name          string
+		a, b          *entities.AlertRule
+		wantThreshold bool
+		wantTrigger   bool
+	}{
+		{"same order", rule(cond("1", 5), cond("2", 6)), rule(cond("1", 5), cond("2", 6)), true, true},
+		{"reordered", rule(cond("1", 5), cond("2", 6)), rule(cond("2", 6), cond("1", 5)), true, true},
+		{"durations swapped between conditions", rule(cond("1", 5), cond("2", 6)), rule(cond("1", 6), cond("2", 5)), true, false},
+		{"a duplicate does not match a distinct condition", rule(cond("1", 5), cond("1", 5)), rule(cond("1", 5), cond("2", 5)), false, false},
+		{"one condition differs", rule(cond("1", 5), cond("2", 6)), rule(cond("1", 5), cond("3", 6)), false, false},
+		{"different counts", rule(cond("1", 5)), rule(cond("1", 5), cond("1", 5)), false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantThreshold, SameThreshold(tt.a, tt.b), "SameThreshold")
+			assert.Equal(t, tt.wantTrigger, sameTrigger(tt.a, tt.b), "sameTrigger")
+		})
+	}
+}
