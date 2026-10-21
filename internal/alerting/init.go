@@ -362,7 +362,10 @@ func Initialize(
 // seedDefaultRules ensures all built-in default rules exist. It checks by name
 // so partial seeds from previous runs self-heal on restart. It also adds the
 // default escalation steps to existing built-in rules that lack them,
-// including legacy rows without a name key.
+// including legacy rows without a name key. The two checks differ on purpose:
+// a rule counts as already seeded by name alone, but only counts as the shipped
+// default for migration when its trigger and conditions match too (see
+// defaultRuleFor).
 func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, log logger.Logger) error {
 	existing, err := repo.ListRules(ctx, repository.AlertRuleFilter{})
 	if err != nil {
@@ -425,19 +428,12 @@ func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*e
 // conditions carry no guaranteed order, which does not matter because every
 // default rule has at most one condition.
 func sameTrigger(a, b *entities.AlertRule) bool {
-	if a.ObjectType != b.ObjectType || a.TriggerType != b.TriggerType ||
-		a.MetricName != b.MetricName || a.EventName != b.EventName ||
-		len(a.Conditions) != len(b.Conditions) {
-		return false
-	}
-	for i := range a.Conditions {
-		ca, cb := &a.Conditions[i], &b.Conditions[i]
-		if ca.Property != cb.Property || ca.Operator != cb.Operator ||
-			ca.Value != cb.Value || ca.DurationSec != cb.DurationSec {
-			return false
-		}
-	}
-	return true
+	return a.ObjectType == b.ObjectType && a.TriggerType == b.TriggerType &&
+		a.MetricName == b.MetricName && a.EventName == b.EventName &&
+		slices.EqualFunc(a.Conditions, b.Conditions, func(x, y entities.AlertCondition) bool {
+			return x.Property == y.Property && x.Operator == y.Operator &&
+				x.Value == y.Value && x.DurationSec == y.DurationSec
+		})
 }
 
 // migrateEscalationSteps fills EscalationSteps on stored built-in rules that

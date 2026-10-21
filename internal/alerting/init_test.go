@@ -187,15 +187,12 @@ func legacyRow(change func(rule *entities.AlertRule)) func(rule *entities.AlertR
 // "Low disk space" row, together with that row's ID.
 func seedRulesWithLowDisk(t *testing.T, mutate func(rule *entities.AlertRule)) (repo *initMockRepo, lowDiskID uint) {
 	t.Helper()
-	defaults := DefaultRules()
-	existing := make([]entities.AlertRule, len(defaults))
-	copy(existing, defaults)
+	existing := DefaultRules()
 	for i := range existing {
 		existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
 		existing[i].EscalationSteps = nil
 		if existing[i].NameKey == RuleKeyLowDiskName {
 			lowDiskID = existing[i].ID
-			existing[i].Conditions = slices.Clone(existing[i].Conditions)
 			mutate(&existing[i])
 		}
 	}
@@ -296,13 +293,9 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
 
 			assert.Len(t, repo.rules, ruleCount, "no rule should be added or removed")
-			for i := range repo.rules {
-				if repo.rules[i].ID == id {
-					assert.Equal(t, tt.want, repo.rules[i].EscalationSteps)
-					return
-				}
-			}
-			t.Fatal("low disk rule not found after seeding")
+			rule, err := repo.GetRule(t.Context(), id)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, rule.EscalationSteps)
 		})
 	}
 }
