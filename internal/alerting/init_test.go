@@ -152,6 +152,27 @@ func TestInitialize_SubscribesToEventBus(t *testing.T) {
 // lowDiskDefaultSteps are the escalation steps of the shipped "Low disk space" rule.
 var lowDiskDefaultSteps = []float64{85, 90, 95, 99}
 
+const (
+	// lowDiskLoweredThreshold is a threshold below the shipped "> 85" condition.
+	lowDiskLoweredThreshold = "80"
+	// lowDiskTestUsage is a disk usage percentage above the first escalation step.
+	lowDiskTestUsage = 86.0
+	// lowDiskSustainWindow is the sustained duration of the shipped condition.
+	lowDiskSustainWindow = 300 * time.Second
+	// lowDiskCooldownElapsed is longer than the shipped 1800 s cooldown.
+	lowDiskCooldownElapsed = 31 * time.Minute
+)
+
+// legacyRow wraps change so the row also looks like one seeded before name keys
+// existed: no NameKey and no DescriptionKey.
+func legacyRow(change func(rule *entities.AlertRule)) func(rule *entities.AlertRule) {
+	return func(r *entities.AlertRule) {
+		r.NameKey = ""
+		r.DescriptionKey = ""
+		change(r)
+	}
+}
+
 // seedRulesWithLowDisk returns a repo holding every default rule without
 // escalation steps (the pre-migration state), after applying mutate to the
 // "Low disk space" row, together with that row's ID.
@@ -186,45 +207,67 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 		},
 		{
 			// Rows seeded before name keys existed have an empty NameKey.
-			name: "legacy built-in without name key gets default steps",
+			name:   "legacy built-in without name key gets default steps",
+			mutate: legacyRow(func(_ *entities.AlertRule) {}),
+			want:   lowDiskDefaultSteps,
+		},
+		{
+			name:   "user-created rule sharing the built-in name is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.BuiltIn = false }),
+		},
+		{
+			name: "keyed built-in with changed condition still gets default steps",
 			mutate: func(r *entities.AlertRule) {
-				r.NameKey = ""
-				r.DescriptionKey = ""
+				r.Conditions[0].Value = lowDiskLoweredThreshold
 			},
 			want: lowDiskDefaultSteps,
 		},
 		{
-			name: "user-created rule sharing the built-in name is untouched",
+			name: "built-in with an unknown name key is untouched",
 			mutate: func(r *entities.AlertRule) {
-				r.BuiltIn = false
-				r.NameKey = ""
-				r.DescriptionKey = ""
+				r.NameKey = "alerts.rules.unknown.name"
 			},
 		},
 		{
-			name: "legacy built-in with changed condition is untouched",
-			mutate: func(r *entities.AlertRule) {
-				r.NameKey = ""
-				r.DescriptionKey = ""
-				r.Conditions[0].Value = "80"
-			},
+			name:   "legacy built-in with changed threshold is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].Value = lowDiskLoweredThreshold }),
 		},
 		{
-			name: "legacy built-in with changed metric is untouched",
-			mutate: func(r *entities.AlertRule) {
-				r.NameKey = ""
-				r.DescriptionKey = ""
-				r.MetricName = MetricCPUUsage
-			},
+			name:   "legacy built-in with changed metric is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.MetricName = MetricCPUUsage }),
 		},
 		{
-			name: "existing steps are kept",
-			mutate: func(r *entities.AlertRule) {
-				r.NameKey = ""
-				r.DescriptionKey = ""
-				r.EscalationSteps = []float64{80, 90}
-			},
-			want: []float64{80, 90},
+			name:   "legacy built-in with changed condition property is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].Property = PropertyPath }),
+		},
+		{
+			name:   "legacy built-in with changed operator is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].Operator = OperatorLessThan }),
+		},
+		{
+			name:   "legacy built-in with changed sustained duration is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].DurationSec = 0 }),
+		},
+		{
+			name:   "legacy built-in without its condition is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions = nil }),
+		},
+		{
+			name:   "legacy built-in with changed object type is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.ObjectType = ObjectTypeStream }),
+		},
+		{
+			name:   "legacy built-in with changed trigger type is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.TriggerType = TriggerTypeEvent }),
+		},
+		{
+			name:   "legacy built-in with an event name is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.EventName = EventStreamDisconnected }),
+		},
+		{
+			name:   "existing steps are kept",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.EscalationSteps = []float64{80, 90} }),
+			want:   []float64{80, 90},
 		},
 	}
 
@@ -247,14 +290,11 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 	}
 }
 
-func TestSeedDefaultRules_LegacyLowDiskRuleNotifiesOncePerStep(t *testing.T) {
+func TestSeedDefaultRules_LegacyLowDiskRuleDoesNotRenotifySameStepAfterCooldown(t *testing.T) {
 	// A legacy "Low disk space" row (no name key, no steps) re-notified on every
 	// cooldown expiry while usage stayed above the threshold. After migration the
 	// engine must stay quiet at the same step.
-	repo, _ := seedRulesWithLowDisk(t, func(r *entities.AlertRule) {
-		r.NameKey = ""
-		r.DescriptionKey = ""
-	})
+	repo, _ := seedRulesWithLowDisk(t, legacyRow(func(_ *entities.AlertRule) {}))
 	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
 
 	var fired int
@@ -265,31 +305,31 @@ func TestSeedDefaultRules_LegacyLowDiskRuleNotifiesOncePerStep(t *testing.T) {
 	}, initTestLogger(), nil)
 	require.NoError(t, engine.RefreshRules(t.Context()))
 
-	base := time.Now().Add(-10 * time.Minute)
+	base := time.Now().Add(-2 * lowDiskSustainWindow)
 	emit := func(offset time.Duration) {
 		engine.HandleEvent(&AlertEvent{
 			ObjectType: ObjectTypeSystem,
 			MetricName: MetricDiskUsage,
-			Properties: map[string]any{PropertyValue: 86.0, PropertyPath: "/"},
+			Properties: map[string]any{PropertyValue: lowDiskTestUsage, PropertyPath: "/"},
 			Timestamp:  base.Add(offset),
 		})
 	}
 
-	// Samples covering the 300 s sustained window, dense enough that the
-	// window after the last emit below also starts within the grace period.
+	// Samples covering the sustained window, dense enough that the window
+	// after the last emit below also starts within the grace period.
 	emit(0)
-	emit(60 * time.Second)
-	emit(150 * time.Second)
-	emit(300 * time.Second)
+	emit(lowDiskSustainWindow / 5)
+	emit(lowDiskSustainWindow / 2)
+	emit(lowDiskSustainWindow)
 	require.Equal(t, 1, fired, "sustained breach should notify once")
 
 	// Expire the cooldown; the same step must not notify again.
 	engine.cooldownsMu.Lock()
 	for k := range engine.cooldowns {
-		engine.cooldowns[k] = time.Now().Add(-31 * time.Minute)
+		engine.cooldowns[k] = time.Now().Add(-lowDiskCooldownElapsed)
 	}
 	engine.cooldownsMu.Unlock()
-	emit(330 * time.Second)
+	emit(lowDiskSustainWindow + lowDiskSustainWindow/10)
 	assert.Equal(t, 1, fired, "same step must not re-notify after the cooldown expires")
 }
 
