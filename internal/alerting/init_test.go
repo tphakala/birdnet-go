@@ -176,6 +176,8 @@ const lowDiskShortenedSustainSec = 60
 const (
 	// lowDiskLoweredThreshold is a threshold below the shipped "> 85" condition.
 	lowDiskLoweredThreshold = "80"
+	// lowDiskCustomCooldownSec is a cooldown, in seconds, different from the shipped one.
+	lowDiskCustomCooldownSec = 120
 	// unmatchedNameKey is a name key that no default rule carries.
 	unmatchedNameKey = "alerts.rules.unmatched.name"
 	// lowDiskTestUsage is a disk usage percentage above the first escalation step.
@@ -246,12 +248,12 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 			mutate: legacyRow(func(r *entities.AlertRule) { r.BuiltIn = false }),
 		},
 		{
-			name: "keyed built-in with changed condition still gets default steps",
+			// A rule with steps fires only at or above its lowest step, so default
+			// steps on a lowered threshold would suppress the samples below them.
+			name: "keyed built-in with changed threshold is untouched",
 			mutate: func(r *entities.AlertRule) {
 				r.Conditions[0].Value = lowDiskLoweredThreshold
 			},
-			want:        lowDiskDefaultSteps,
-			wantWritten: true,
 		},
 		{
 			name: "built-in with an unknown name key is untouched",
@@ -336,6 +338,27 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 			assert.Equal(t, wantUpdated, repo.updated, "a second startup should not write a rule")
 		})
 	}
+}
+
+func TestSeedDefaultRules_EscalationStepMigrationKeepsUserSettings(t *testing.T) {
+	// Settings outside the trigger do not decide whether the default steps
+	// apply, and the write that adds them leaves those settings as the user set
+	// them.
+	repo, id := seedRulesWithLowDisk(t, func(r *entities.AlertRule) {
+		r.CooldownSec = lowDiskCustomCooldownSec
+		r.Enabled = false
+		r.Actions = []entities.AlertAction{{Target: TargetPush}}
+	})
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+
+	rule, err := repo.GetRule(t.Context(), id)
+	require.NoError(t, err)
+	assert.Equal(t, lowDiskDefaultSteps, rule.EscalationSteps)
+	assert.Equal(t, lowDiskCustomCooldownSec, rule.CooldownSec)
+	assert.False(t, rule.Enabled)
+	require.Len(t, rule.Actions, 1)
+	assert.Equal(t, TargetPush, rule.Actions[0].Target)
 }
 
 func TestSeedDefaultRules_FailedUpdateDoesNotStopMigration(t *testing.T) {

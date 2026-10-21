@@ -401,21 +401,22 @@ func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, 
 // defaultRuleFor returns the shipped default that a stored built-in rule was
 // seeded from. Rules with a NameKey match the default with the same key. Rules
 // seeded before name keys existed have an empty NameKey and match the default
-// with the same Name only when the trigger definition and conditions are equal
-// too, so a rule whose threshold was changed is not mistaken for the default.
+// with the same Name. Either way the trigger definition and conditions must be
+// equal to the default's too, so a rule whose threshold was changed is not
+// mistaken for the default and given steps that start above its threshold.
 func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*entities.AlertRule, bool) {
 	if !rule.BuiltIn {
 		return nil, false
 	}
 	for i := range defaults {
 		def := &defaults[i]
+		var identified bool
 		if rule.NameKey != "" {
-			if def.NameKey == rule.NameKey {
-				return def, true
-			}
-			continue
+			identified = def.NameKey == rule.NameKey
+		} else {
+			identified = def.Name == rule.Name
 		}
-		if def.Name == rule.Name && sameTrigger(rule, def) {
+		if identified && sameTrigger(rule, def) {
 			return def, true
 		}
 	}
@@ -438,8 +439,8 @@ func sameTrigger(a, b *entities.AlertRule) bool {
 
 // migrateEscalationSteps fills EscalationSteps on stored built-in rules that
 // were seeded before escalation support was added. Rules that already have
-// steps are left alone. Rules seeded before name keys existed are matched by
-// name and trigger (see defaultRuleFor). A failed update is logged and does
+// steps are left alone, and so are rules whose trigger or conditions differ
+// from the default (see defaultRuleFor). A failed update is logged and does
 // not stop the remaining rules.
 func migrateEscalationSteps(ctx context.Context, repo repository.AlertRuleRepository, existing []entities.AlertRule, log logger.Logger) {
 	allDefaults := DefaultRules()
