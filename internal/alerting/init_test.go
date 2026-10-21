@@ -262,6 +262,14 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions = nil }),
 		},
 		{
+			name: "legacy built-in with an added condition is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) {
+				r.Conditions = append(r.Conditions, entities.AlertCondition{
+					Property: PropertyPath, Operator: OperatorIs, Value: "/",
+				})
+			}),
+		},
+		{
 			name:   "legacy built-in with changed object type is untouched",
 			mutate: legacyRow(func(r *entities.AlertRule) { r.ObjectType = ObjectTypeStream }),
 		},
