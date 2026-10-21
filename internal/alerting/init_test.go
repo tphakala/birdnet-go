@@ -152,6 +152,13 @@ func TestInitialize_SubscribesToEventBus(t *testing.T) {
 // lowDiskDefaultSteps are the escalation steps of the shipped "Low disk space" rule.
 var lowDiskDefaultSteps = []float64{85, 90, 95, 99}
 
+// customEscalationSteps are user-chosen steps that differ from the defaults.
+var customEscalationSteps = []float64{80, 90}
+
+// lowDiskShortenedSustainSec is a sustained duration, in seconds, shorter than
+// the shipped condition's.
+const lowDiskShortenedSustainSec = 60
+
 const (
 	// lowDiskLoweredThreshold is a threshold below the shipped "> 85" condition.
 	lowDiskLoweredThreshold = "80"
@@ -248,7 +255,7 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 		},
 		{
 			name:   "legacy built-in with changed sustained duration is untouched",
-			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].DurationSec = 0 }),
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].DurationSec = lowDiskShortenedSustainSec }),
 		},
 		{
 			name:   "legacy built-in without its condition is untouched",
@@ -268,8 +275,8 @@ func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
 		},
 		{
 			name:   "existing steps are kept",
-			mutate: legacyRow(func(r *entities.AlertRule) { r.EscalationSteps = []float64{80, 90} }),
-			want:   []float64{80, 90},
+			mutate: legacyRow(func(r *entities.AlertRule) { r.EscalationSteps = slices.Clone(customEscalationSteps) }),
+			want:   customEscalationSteps,
 		},
 	}
 
