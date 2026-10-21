@@ -429,7 +429,8 @@ func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*e
 // still fit a rule, because a stepped rule fires only at or above its lowest
 // step. DurationSec is not compared: steps do not depend on how long a
 // condition must hold. Conditions are compared in slice order, so a stored
-// order that differs reports "changed", which only ever drops steps.
+// order that differs reports "changed", so steps are removed (update) or not
+// added (seeding).
 func SameThreshold(a, b *entities.AlertRule) bool {
 	return a.ObjectType == b.ObjectType && a.TriggerType == b.TriggerType &&
 		a.MetricName == b.MetricName && a.EventName == b.EventName &&

@@ -189,7 +189,7 @@ func TestUpdateAlertRule_KeepsServerOwnedFields(t *testing.T) {
 			},
 			wantBuiltIn:  false,
 			wantSteps:    noSteps,
-			whyItMatters: "built_in is owned by seeding and reset, never by a request",
+			whyItMatters: "an update keeps the stored built_in flag",
 		},
 	}
 
