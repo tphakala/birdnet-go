@@ -2258,12 +2258,20 @@ func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "novelty-flags")
 
+	// The yearly reset date is set explicitly: a zero month and day make
+	// shouldResetYear (species/season.go) reset the yearly set on every call
+	// made on 30 November, which would clear the seeded species.
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: 30,
 		SyncIntervalMinutes:  60,
-		YearlyTracking:       conf.YearlyTrackingSettings{Enabled: true, WindowDays: 30},
-		SeasonalTracking:     conf.SeasonalTrackingSettings{Enabled: true, WindowDays: 30},
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			WindowDays: 30,
+			ResetMonth: conf.DefaultYearlyTrackingResetMonth,
+			ResetDay:   conf.DefaultYearlyTrackingResetDay,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{Enabled: true, WindowDays: 30},
 	}
 
 	tracker := species.NewTrackerFromSettings(nil, settings)
