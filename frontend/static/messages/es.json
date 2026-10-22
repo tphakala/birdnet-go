@@ -1581,7 +1581,7 @@
           "restartTitle": "Reinicio necesario",
           "restartBody": "Reinicie la aplicación para cambiar a la base de datos V2. La limpieza de la base de datos heredada estará disponible después del reinicio.",
           "fallbackError": "Discrepancia en el recuento de registros entre las bases de datos heredada y V2. Es posible que algunos registros no se hayan migrado correctamente.",
-          "migrateInfo": "La migración transferirá {count} registros de la base de datos heredada al nuevo esquema V2. El modo de escritura dual garantiza cero pérdida de datos durante la migración.",
+          "migrateInfo": "La migración transferirá {count} registros de la base de datos heredada al nuevo esquema V2. Las nuevas detecciones guardadas durante la migración también se copian a la nueva base de datos, por lo que no se pierden datos.",
           "sourceLegacy": "Origen (heredada)",
           "targetV2": "Destino (V2)",
           "recordsLabel": "Registros",
@@ -1633,7 +1633,7 @@
         },
         "notes": {
           "in_progress": "Puede seguir utilizando el sistema normalmente mientras la migración se ejecuta en segundo plano.",
-          "dual_write": "Migración en curso. Sus datos están seguros - todas las nuevas detecciones se guardan en ambas bases de datos. Puede seguir usando BirdNET-Go normalmente.",
+          "dual_write": "Migración en curso. Sus datos están seguros - las nuevas detecciones se guardan en la base de datos actual y se copian a la nueva base de datos durante la migración. Puede seguir usando BirdNET-Go normalmente.",
           "migrating": "Copiando sus detecciones existentes a la nueva base de datos. Esto puede tardar un poco dependiendo de cuántas detecciones tenga. Puede pausar y reanudar en cualquier momento.",
           "validating": "Verificando que todos los registros se copiaron correctamente. ¡Casi listo!",
           "cutover": "Cambiando a la nueva base de datos. Esto solo toma un momento.",

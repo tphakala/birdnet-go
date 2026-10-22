@@ -1581,7 +1581,7 @@
           "restartTitle": "Vyžaduje sa reštart",
           "restartBody": "Reštartujte aplikáciu pre prepnutie na databázu V2. Vyčistenie starej databázy bude dostupné po reštarte.",
           "fallbackError": "Nesúlad počtu záznamov medzi starou a V2 databázou. Niektoré záznamy sa možno nemigrovali správne.",
-          "migrateInfo": "Migrácia prenesie {count} záznamov zo starej databázy do nového schémy V2. Režim dvojitého zápisu zabezpečuje nulovú stratu dát počas migrácie.",
+          "migrateInfo": "Migrácia prenesie {count} záznamov zo starej databázy do nového schémy V2. Nové detekcie uložené počas migrácie sa tiež skopírujú do novej databázy, takže nedôjde k strate dát.",
           "sourceLegacy": "Zdroj (Legacy)",
           "targetV2": "Cieľ (V2)",
           "recordsLabel": "Záznamy",
@@ -1633,7 +1633,7 @@
         },
         "notes": {
           "in_progress": "Systém môžete naďalej normálne používať, kým migrácia prebieha na pozadí.",
-          "dual_write": "Migrácia prebieha. Vaše dáta sú v bezpečí - všetky nové detekcie sa ukladajú do oboch databáz.",
+          "dual_write": "Migrácia prebieha. Vaše dáta sú v bezpečí - nové detekcie sa ukladajú do aktuálnej databázy a počas migrácie sa kopírujú do novej databázy.",
           "migrating": "Kopírujú sa vaše existujúce detekcie do novej databázy.",
           "validating": "Overuje sa, či boli všetky záznamy skopírované správne. Skoro hotovo!",
           "cutover": "Prepína sa na novú databázu. To trvá len chvíľu.",

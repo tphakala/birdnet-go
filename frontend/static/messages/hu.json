@@ -1581,7 +1581,7 @@
           "restartTitle": "Újraindítás szükséges",
           "restartBody": "Indítsa újra az alkalmazást a V2 adatbázisra való átálláshoz. A régi adatbázis karbantartása az újraindítás után lesz elérhető.",
           "fallbackError": "A rekordok száma nem egyezik a régi és V2 adatbázisok között. Egyes rekordok esetleg nem migrálódtak helyesen.",
-          "migrateInfo": "A migráció {count} rekordot fog átmásolni a régi adatbázisból az új V2 sémába. A dupla-írás mód biztosítja a nulla adatvesztést a migráció alatt.",
+          "migrateInfo": "A migráció {count} rekordot fog átmásolni a régi adatbázisból az új V2 sémába. A migráció alatt mentett új észleléseket a rendszer szintén átmásolja az új adatbázisba, így nem vész el adat.",
           "sourceLegacy": "Forrás (Régi)",
           "targetV2": "Cél (V2)",
           "recordsLabel": "Rekordok",
@@ -1633,7 +1633,7 @@
         },
         "notes": {
           "in_progress": "A rendszer normálisan használható a migráció háttérben való futása közben.",
-          "dual_write": "Migráció folyamatban. Az adatai biztonságban vannak — az összes új észlelés mindkét adatbázisba mentésre kerül.",
+          "dual_write": "Migráció folyamatban. Az adatai biztonságban vannak - az új észleléseket a jelenlegi adatbázisba menti a rendszer, és a migráció során átmásolja az új adatbázisba.",
           "migrating": "A meglévő észlelések másolása az új adatbázisba.",
           "validating": "Az összes rekord helyes másolásának ellenőrzése. Majdnem kész!",
           "cutover": "Az új adatbázisra való átállás. Ez csak egy pillanatig tart.",

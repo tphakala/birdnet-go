@@ -1581,7 +1581,7 @@
           "restartTitle": "Riavvio necessario",
           "restartBody": "Riavvia l'applicazione per passare al database V2. La pulizia del database legacy sarà disponibile dopo il riavvio.",
           "fallbackError": "Discrepanza nel conteggio dei record tra i database legacy e V2. Alcuni record potrebbero non essere stati migrati correttamente.",
-          "migrateInfo": "La migrazione trasferirà {count} record dal database legacy al nuovo schema V2. La modalità di scrittura doppia garantisce zero perdita di dati durante la migrazione.",
+          "migrateInfo": "La migrazione trasferirà {count} record dal database legacy al nuovo schema V2. Anche i nuovi rilevamenti salvati durante la migrazione vengono copiati nel nuovo database, quindi nessun dato va perso.",
           "sourceLegacy": "Sorgente (Legacy)",
           "targetV2": "Destinazione (V2)",
           "recordsLabel": "Record",
@@ -1633,7 +1633,7 @@
         },
         "notes": {
           "in_progress": "Puoi continuare a usare il sistema normalmente mentre la migrazione viene eseguita in background.",
-          "dual_write": "Migrazione in corso. I tuoi dati sono al sicuro - tutti i nuovi rilevamenti vengono salvati in entrambi i database.",
+          "dual_write": "Migrazione in corso. I tuoi dati sono al sicuro - i nuovi rilevamenti vengono salvati nel database attuale e copiati nel nuovo database durante la migrazione.",
           "migrating": "Copia dei rilevamenti esistenti nel nuovo database.",
           "validating": "Verifica che tutti i record siano stati copiati correttamente. Quasi fatto!",
           "cutover": "Passaggio al nuovo database. Richiede solo un momento.",
