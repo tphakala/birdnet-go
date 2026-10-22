@@ -23,21 +23,18 @@ import (
 )
 
 // Test constants for integration tests
-const (
-	testBirdNetName = "TestBirdNet"
-	testMQTTBroker  = "tcp://mqtt.example.com:1883"
-)
+const testBirdNetName = "TestBirdNet"
 
 // connectionHandlerCase is one row of runIntegrationConnectionHandlerTest.
-// cancelRequest sends the request with an already-cancelled context, so a valid
+// Every request is sent with an already-cancelled context, so a valid
 // configuration reaches the streaming entry without any network stage running.
-// expectedType, when set, is compared with the response Content-Type.
+// expectedType, when set, is compared with the response Content-Type and the
+// response must also carry the streaming Cache-Control header.
 type connectionHandlerCase struct {
 	name           string
 	setupSettings  func(*Handler)
 	expectedStatus int
 	expectedBody   string
-	cancelRequest  bool
 	expectedType   string
 }
 
@@ -66,9 +63,7 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Handler
 			} else {
 				req = httptest.NewRequest(http.MethodPost, endpoint, http.NoBody)
 			}
-			if tc.cancelRequest {
-				req = req.WithContext(cancelledContext(t))
-			}
+			req = req.WithContext(cancelledContext(t))
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
@@ -80,6 +75,7 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Handler
 			assert.Equal(t, tc.expectedStatus, rec.Code)
 			if tc.expectedType != "" {
 				assert.Equal(t, tc.expectedType, rec.Header().Get(echo.HeaderContentType))
+				assert.Equal(t, "no-cache", rec.Header().Get(echo.HeaderCacheControl))
 			}
 
 			// Check response body
@@ -106,13 +102,13 @@ func TestGetMQTTStatus(t *testing.T) {
 		{
 			name:           "MQTT Disabled",
 			mqttEnabled:    false,
-			mqttBroker:     testMQTTBroker,
+			mqttBroker:     refusingBroker,
 			mqttTopic:      "birdnet/detections",
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT is disabled")
-				assert.Equal(t, testMQTTBroker, result["broker"], "Broker should match configuration")
+				assert.Equal(t, refusingBroker, result["broker"], "Broker should match configuration")
 				assert.Equal(t, "birdnet/detections", result["topic"], "Topic should match configuration")
 				_, hasLastError := result["last_error"]
 				assert.False(t, hasLastError, "There should be no error when MQTT is disabled")
@@ -255,7 +251,7 @@ func TestTestMQTTConnection(t *testing.T) {
 			name: "MQTT Not Enabled",
 			setupSettings: func(controller *Handler) {
 				controller.Settings.Load().Realtime.MQTT.Enabled = false
-				controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
+				controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   `{"success":false,"message":"MQTT is not enabled in settings"}`,
@@ -270,12 +266,11 @@ func TestTestMQTTConnection(t *testing.T) {
 			expectedBody:   `{"success":false,"message":"MQTT broker not configured"}`,
 		},
 		{
-			name: "Valid Config Enters Streaming",
+			name: "Valid Config Sets Streaming Headers",
 			setupSettings: func(controller *Handler) {
 				controller.Settings.Load().Realtime.MQTT.Enabled = true
 				controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
 			},
-			cancelRequest:  true,
 			expectedStatus: http.StatusOK,
 			expectedType:   echo.MIMEApplicationJSON,
 		},
@@ -307,12 +302,11 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 			expectedBody:   `{"success":false,"message":"BirdWeather station ID not configured","state":"failed"}`,
 		},
 		{
-			name: "Valid Config Enters Streaming",
+			name: "Valid Config Sets Streaming Headers",
 			setupSettings: func(controller *Handler) {
 				controller.Settings.Load().Realtime.Birdweather.Enabled = true
 				controller.Settings.Load().Realtime.Birdweather.ID = "ABC123"
 			},
-			cancelRequest:  true,
 			expectedStatus: http.StatusOK,
 			expectedType:   echo.MIMEApplicationJSON,
 		},
@@ -775,7 +769,12 @@ func TestTestWeatherAuthentication_OpenWeatherSendsConfiguredKey(t *testing.T) {
 	msg, err := controller.testWeatherAuthentication(t.Context(), testSettings)
 	require.NoError(t, err)
 	assert.Contains(t, msg, "Successfully authenticated")
-	assert.Equal(t, apiKey, <-gotAppID)
+	select {
+	case got := <-gotAppID:
+		assert.Equal(t, apiKey, got)
+	default:
+		require.Fail(t, "the authentication stage sent no request")
+	}
 }
 
 // TestTestEBirdConnection_RestoresRedactedAPIKey verifies the eBird
