@@ -529,6 +529,8 @@ realtime:
         threshold: 0.7
 `)
 	assert.NotContains(t, settings.Realtime.Species.Config, "larus sp.")
+	assert.NotContains(t, settings.Realtime.Species.Config, "larus sp",
+		"the zero-value entry viper's split leaves for the scalar must be dropped too")
 	assert.Contains(t, settings.Realtime.Species.Config, "american robin")
 }
 

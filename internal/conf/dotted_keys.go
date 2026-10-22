@@ -307,8 +307,9 @@ func reDecodeDottedStructMaps(settings *Settings) error {
 // real "st" next to "st. helena plover" or a default "spring" next to
 // "spring.late" survives with the value Unmarshal gave it.
 //
-// A dotted entry whose value is not a mapping is skipped: Unmarshal already
-// ignored it as a split unknown field. Maps without dotted keys are returned
+// A dotted entry whose value is not a mapping is not stored (Unmarshal already
+// ignored it as a split unknown field), but its phantom prefix entry is still
+// dropped by the same rule. Maps without dotted keys are returned
 // unchanged.
 func reDecodeDottedMapKeys[V any](entries map[string]V, viperPath string) (map[string]V, error) {
 	raw, ok := viper.Get(viperPath).(map[string]any)
@@ -321,6 +322,9 @@ func reDecodeDottedMapKeys[V any](entries map[string]V, viperPath string) (map[s
 		if !dotted {
 			continue
 		}
+		// Unmarshal left a phantom under the prefix even when the value is not
+		// a mapping, so the prefix is checked before the value is skipped.
+		prefixes[prefix] = struct{}{}
 		if _, isMap := rawValue.(map[string]any); !isMap {
 			continue
 		}
@@ -350,7 +354,6 @@ func reDecodeDottedMapKeys[V any](entries map[string]V, viperPath string) (map[s
 			entries = make(map[string]V)
 		}
 		entries[key] = entry
-		prefixes[prefix] = struct{}{}
 	}
 	for prefix := range prefixes {
 		if !viper.IsSet(viperPath + viperKeyDelimiter + prefix) {
