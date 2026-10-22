@@ -267,6 +267,20 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 			Build()
 	}
 
+	// The client in effect for this attempt. It is nil while MQTT is being
+	// reconfigured or after it was disabled; treat that like a transient
+	// connection issue: the detection is saved, so no retry.
+	client := a.attemptClient()
+	if client == nil {
+		GetLogger().Warn("MQTT publish skipped: no MQTT client (detection saved to database)",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("topic", s.Realtime.MQTT.Topic),
+			logger.String("operation", "mqtt_publish_no_client"))
+		return nil
+	}
+
 	// Get bird image of detected bird using the shared helper
 	birdImage := getBirdImageFromCache(a.DetectionCtx, a.BirdImageCache, a.Result.Species.ScientificName, a.Result.Species.CommonName, a.CorrelationID)
 	// The URL stays the provider's upstream address. An MQTT subscriber is not a
@@ -355,20 +369,6 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	// Create a context with timeout for publishing
 	ctx, cancel := context.WithTimeout(context.Background(), MQTTPublishTimeout)
 	defer cancel()
-
-	// The client in effect for this attempt. It is nil while MQTT is being
-	// reconfigured or after it was disabled; treat that like a transient
-	// connection issue: the detection is saved, so no retry.
-	client := a.attemptClient()
-	if client == nil {
-		GetLogger().Warn("MQTT publish skipped: no MQTT client (detection saved to database)",
-			logger.String("component", "analysis.processor.actions"),
-			logger.String("detection_id", a.CorrelationID),
-			logger.String("species", a.Result.Species.CommonName),
-			logger.String("topic", s.Realtime.MQTT.Topic),
-			logger.String("operation", "mqtt_publish_no_client"))
-		return nil
-	}
 
 	// Publish the note to the MQTT broker.
 	// The detection is already saved to the database (this action is enqueued after the save).

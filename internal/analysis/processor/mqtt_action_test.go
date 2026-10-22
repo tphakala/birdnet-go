@@ -619,14 +619,7 @@ func TestMqttAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
 			newClient := NewMockMQTTClient()
 			p := &Processor{Settings: initial, EventTracker: NewEventTracker(time.Hour), MqttClient: oldClient}
 
-			det := testDetection()
-			var action *MqttAction
-			for _, a := range p.getDefaultActions(&det, initial) {
-				if m, ok := a.(*MqttAction); ok {
-					action = m
-				}
-			}
-			require.NotNil(t, action, "MQTT action should be built while MQTT is enabled")
+			action := defaultActionOfType[*MqttAction](t, p, initial)
 
 			tt.change(p, initial, newClient)
 
@@ -968,4 +961,19 @@ func TestMqttAction_Execute_RetryReusesEventTrackerDecision(t *testing.T) {
 	require.NoError(t, newAction().Execute(t.Context(), nil))
 	assert.Len(t, mockClient.GetPublishedMessages(), 1,
 		"a second detection of the species inside the interval stays rate limited")
+}
+
+// defaultActionOfType builds the default actions of a detection with p and
+// returns the one of type T, failing the test when none was built.
+func defaultActionOfType[T Action](t *testing.T, p *Processor, settings *conf.Settings) T {
+	t.Helper()
+	det := testDetection()
+	for _, a := range p.getDefaultActions(&det, settings) {
+		if typed, ok := a.(T); ok {
+			return typed
+		}
+	}
+	var zero T
+	require.Failf(t, "action not built", "no %T in the default actions", zero)
+	return zero
 }

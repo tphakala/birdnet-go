@@ -1368,14 +1368,7 @@ func TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
 			// A zero client rejects an upload without PCM before touching its settings.
 			p := &Processor{Settings: initial, EventTracker: NewEventTracker(time.Hour), BwClient: &birdweather.BwClient{}}
 
-			det := testDetection()
-			var action *BirdWeatherAction
-			for _, a := range p.getDefaultActions(&det, initial) {
-				if b, ok := a.(*BirdWeatherAction); ok {
-					action = b
-				}
-			}
-			require.NotNil(t, action, "BirdWeather action should be built while it is enabled")
+			action := defaultActionOfType[*BirdWeatherAction](t, p, initial)
 
 			tt.change(p, initial)
 
