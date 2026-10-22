@@ -42,7 +42,6 @@ func TestGenerateCorrelationID_UniformOverCharset(t *testing.T) {
 	expected := float64(correlationIDSamples*correlationIDLength) / float64(len(correlationIDAlphabet))
 	for _, r := range correlationIDAlphabet {
 		assert.InDelta(t, expected, float64(counts[r]), correlationIDTolerance*expected, "character %q", r)
-		delete(counts, r)
 	}
-	assert.Empty(t, counts, "characters outside the alphabet")
+	assert.Len(t, counts, len(correlationIDAlphabet), "characters outside the alphabet")
 }

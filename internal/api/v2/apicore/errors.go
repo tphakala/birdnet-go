@@ -71,17 +71,19 @@ func GenerateCorrelationID() string {
 	// Bytes at or above it are redrawn, so every character is equally likely.
 	const byteLimit = (math.MaxUint8 + 1) / len(charset) * len(charset)
 
-	id := make([]byte, 0, length)
+	// buf[:n] holds the characters accepted so far; each pass draws bytes for
+	// the rest and keeps the ones below byteLimit.
 	buf := make([]byte, length)
-	for len(id) < length {
-		rand.Read(buf)
-		for _, v := range buf {
-			if int(v) < byteLimit && len(id) < length {
-				id = append(id, charset[int(v)%len(charset)])
+	for n := 0; n < length; {
+		rand.Read(buf[n:])
+		for _, v := range buf[n:] {
+			if int(v) < byteLimit {
+				buf[n] = charset[int(v)%len(charset)]
+				n++
 			}
 		}
 	}
-	return string(id)
+	return string(buf)
 }
 
 // handleErrorInternal is the shared implementation for HandleError and HandleErrorWithKey.
