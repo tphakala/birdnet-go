@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Eskalationsstufen sind ungültig",
       "engineUnavailable": "Die Alerting-Engine ist nicht verfügbar"
     },
+    "insights": {
+      "v2Required": "Einblicke erfordern die erweiterte (v2) Datenbank"
+    },
     "detection": {
       "invalidDate": "Ungültiges {paramName}-Format, verwenden Sie JJJJ-MM-TT"
     },

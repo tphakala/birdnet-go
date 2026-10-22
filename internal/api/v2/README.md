@@ -639,7 +639,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ### Insights (`analytics/insights.go`)
 
-Requires enhanced (v2) database. Returns 409 Conflict if not available.
+Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.insights.v2Required` if not available.
 
 | Method | Route                               | Handler                    | Auth | Description                              |
 | ------ | ----------------------------------- | -------------------------- | ---- | ---------------------------------------- |

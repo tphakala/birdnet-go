@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Az eszkalációs lépések érvénytelenek",
       "engineUnavailable": "Riasztási motor nem elérhető"
     },
+    "insights": {
+      "v2Required": "Az elemzésekhez a bővített (v2) adatbázis szükséges"
+    },
     "detection": {
       "invalidDate": "Érvénytelen {paramName} formátum, használja az ÉÉÉÉ-HH-NN formátumot"
     },

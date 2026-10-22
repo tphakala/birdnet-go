@@ -17,13 +17,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// requireV2 checks that the enhanced database is available and returns an error
-// response if not. Shared by the insights handlers in this file. The alerts
-// domain (now its own package) keeps its own copy of this guard; consolidating
-// the two is deferred so this extraction stays behavior-preserving.
+// requireV2 writes the 409 Conflict response the insights handlers in this file
+// return when the enhanced (v2) database is not in use (legacy mode or an active
+// migration). It carries the insights message and error key.
 func (c *Handler) requireV2(ctx echo.Context) error {
 	return c.HandleErrorWithKey(ctx, nil,
-		"Alert rules require the enhanced (v2) database", http.StatusConflict, notification.MsgErrAlertV2Required, nil)
+		insightsV2RequiredMessage, http.StatusConflict, notification.MsgErrInsightsV2Required, nil)
 }
 
 // Insights constants
@@ -41,6 +40,11 @@ const (
 	migrationMinTotalDetections = 5
 	expectedTodayWindowDays     = 3  // +/- days around today's DOY
 	expectedTodayMaxYears       = 10 // how many previous years to scan
+
+	// insightsV2RequiredMessage is the English text of the 409 response sent when
+	// the enhanced database is not in use. It matches errors.insights.v2Required
+	// in frontend/static/messages/en.json.
+	insightsV2RequiredMessage = "Insights require the enhanced (v2) database"
 )
 
 // --- Response types ---

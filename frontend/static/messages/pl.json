@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Kroki eskalacji są nieprawidłowe",
       "engineUnavailable": "Silnik alertów jest niedostępny"
     },
+    "insights": {
+      "v2Required": "Analizy wymagają rozszerzonej bazy danych (v2)"
+    },
     "detection": {
       "invalidDate": "Nieprawidłowy format {paramName}, użyj RRRR-MM-DD"
     },
