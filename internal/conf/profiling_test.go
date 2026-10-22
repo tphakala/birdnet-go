@@ -62,8 +62,7 @@ func TestEnsureProfilingToken(t *testing.T) {
 
 			before := tt.settings.Diagnostics.Profiling.Token
 
-			generated, err := EnsureProfilingToken(tt.settings)
-			require.NoError(t, err)
+			generated := EnsureProfilingToken(tt.settings)
 			assert.Equal(t, tt.wantGenerated, generated)
 
 			got := tt.settings.Diagnostics.Profiling.Token
@@ -76,8 +75,7 @@ func TestEnsureProfilingToken(t *testing.T) {
 			// Length is derived, not hardcoded, so raising the entropy in
 			// GenerateRandomSecret does not silently leave this assertion
 			// pinning the old size.
-			expected, err := GenerateRandomSecret()
-			require.NoError(t, err)
+			expected := GenerateRandomSecret()
 			assert.Len(t, got, len(expected),
 				"a token should carry the same entropy as any other generated secret")
 
@@ -101,12 +99,10 @@ func TestEnsureProfilingTokenIsUnique(t *testing.T) {
 	first := settingsWithProfiling(true, "", false)
 	second := settingsWithProfiling(true, "", false)
 
-	generated, err := EnsureProfilingToken(first)
-	require.NoError(t, err)
+	generated := EnsureProfilingToken(first)
 	require.True(t, generated)
 
-	generated, err = EnsureProfilingToken(second)
-	require.NoError(t, err)
+	generated = EnsureProfilingToken(second)
 	require.True(t, generated)
 
 	assert.NotEqual(t, first.Diagnostics.Profiling.Token, second.Diagnostics.Profiling.Token)
@@ -120,13 +116,11 @@ func TestEnsureProfilingTokenIsIdempotent(t *testing.T) {
 
 	settings := settingsWithProfiling(true, "", false)
 
-	generated, err := EnsureProfilingToken(settings)
-	require.NoError(t, err)
+	generated := EnsureProfilingToken(settings)
 	require.True(t, generated)
 	minted := settings.Diagnostics.Profiling.Token
 
-	generated, err = EnsureProfilingToken(settings)
-	require.NoError(t, err)
+	generated = EnsureProfilingToken(settings)
 	assert.False(t, generated, "a second pass must report no change")
 	assert.Equal(t, minted, settings.Diagnostics.Profiling.Token,
 		"the token must be stable across restarts; a profiling session outlives one")

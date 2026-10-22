@@ -73,19 +73,12 @@ func migrateStreamEnabledDefaults() bool {
 // configs that predate the field so session signing remains stable across
 // restarts. Unlike the security package's temporary runtime fallback, this
 // updates the loaded settings and best-effort saves the generated secret.
-func ensureSessionSecret(settings *Settings) error {
+func ensureSessionSecret(settings *Settings) {
 	if settings.Security.SessionSecret != "" {
-		return nil
+		return
 	}
 
-	sessionSecret, err := GenerateRandomSecret()
-	if err != nil {
-		return errors.New(err).
-			Component("conf").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "generate_session_secret").
-			Build()
-	}
+	sessionSecret := GenerateRandomSecret()
 
 	settings.Security.SessionSecret = sessionSecret
 
@@ -99,21 +92,19 @@ func ensureSessionSecret(settings *Settings) error {
 	// This ensures the secret remains the same across restarts
 	configFile := viper.ConfigFileUsed()
 	if configFile == "" {
-		return nil
+		return
 	}
 
 	if err := SaveYAMLConfig(configFile, settings); err != nil {
 		// Log the error but don't fail - the generated secret will work for this session
 		GetLogger().Warn("Failed to save generated SessionSecret to config file", logger.Error(err))
-		return nil
+		return
 	}
 
 	// Set secure file permissions after saving
 	if err := os.Chmod(configFile, 0o600); err != nil {
 		GetLogger().Warn("Failed to set secure permissions on config file", logger.Error(err))
 	}
-
-	return nil
 }
 
 // EnsureProfilingToken mints diagnostics.profiling.token when the pprof
@@ -137,31 +128,22 @@ func ensureSessionSecret(settings *Settings) error {
 //
 // The caller owns persistence, and is told whether anything changed so it can
 // decide whether a write is needed.
-func EnsureProfilingToken(settings *Settings) (bool, error) {
+func EnsureProfilingToken(settings *Settings) bool {
 	if settings == nil {
-		return false, nil
+		return false
 	}
 
 	profiling := &settings.Diagnostics.Profiling
 	if !profiling.Enabled || profiling.Token != "" || settings.IsAuthProviderConfigured() {
-		return false, nil
+		return false
 	}
 
-	token, err := GenerateRandomSecret()
-	if err != nil {
-		return false, errors.New(err).
-			Component("conf").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "generate_profiling_token").
-			Build()
-	}
-
-	profiling.Token = token
+	profiling.Token = GenerateRandomSecret()
 
 	// The value itself is never logged.
 	GetLogger().Info("Generated profiling token; no authentication provider is configured, so /debug/pprof/ requires the token from diagnostics.profiling.token")
 
-	return true, nil
+	return true
 }
 
 // migrateLegacyProvider converts a legacy SocialProvider to the new OAuthProviderConfig format.

@@ -381,9 +381,6 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	})
 }
 
-// publishAndSaveSettings publishes updated settings and persists to disk.
-// Must be called while c.settingsMutex is held. On save failure, the atomic
-// Settings snapshot is rolled back to current.
 // ensureProfilingTokenForSave mints the profiling token into a settings
 // snapshot that is about to be published and persisted, so enabling pprof at
 // runtime on an instance with no authentication provider yields a usable
@@ -397,19 +394,18 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 // diagnostics change, so the two handlers that CAN (PUT /settings and
 // PATCH /settings/:section) never minted anything.
 //
-// Non-fatal by design. The pprof routes fail closed without a token, and a
-// diagnostics credential must not cost the user the rest of their settings
-// change. EnsureProfilingToken is a no-op unless profiling is enabled, the
-// token is empty, and no auth provider is configured, so the normal save path
-// pays a boolean check and nothing else.
+// EnsureProfilingToken is a no-op unless profiling is enabled, the token is
+// empty, and no auth provider is configured, so the normal save path pays a
+// boolean check and nothing else.
 func ensureProfilingTokenForSave(updated *conf.Settings) {
-	if _, err := conf.EnsureProfilingToken(updated); err != nil {
-		apicore.GetLogger().Warn(
-			"Failed to generate profiling token; the profiling endpoints will refuse requests",
-			logger.Error(err))
-	}
+	// Whether a token was minted does not matter here: the caller persists the
+	// whole snapshot either way.
+	conf.EnsureProfilingToken(updated)
 }
 
+// publishAndSaveSettings publishes updated settings and persists to disk.
+// Must be called while c.settingsMutex is held. On save failure, the atomic
+// Settings snapshot is rolled back to current.
 func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
 	ensureProfilingTokenForSave(updated)
 	if c.isGlobalOwner {
