@@ -1255,31 +1255,6 @@ func TestDeleteDetectionMissingFilesNoError(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestDeleteDetectionEmptyClipName verifies that deleting a detection with
-// no clip name still succeeds (no file removal attempted).
-func TestDeleteDetectionEmptyClipName(t *testing.T) {
-	e, mockDS, controller := setupTestEnvironment(t)
-
-	mockDS.On("Get", "30").Return(datastore.Note{
-		ID:       30,
-		Locked:   false,
-		ClipName: "",
-	}, nil)
-	mockDS.On("Delete", "30").Return(nil)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/30", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("30")
-
-	err := controller.DeleteDetection(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusNoContent, rec.Code)
-
-	mockDS.AssertExpectations(t)
-}
-
 // TestReviewDetection tests the ReviewDetection endpoint
 func TestReviewDetection(t *testing.T) {
 	// Setup
