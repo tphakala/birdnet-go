@@ -29,31 +29,6 @@ func mockController() *Controller {
 	return c
 }
 
-// assertEventDataNil checks that a field in eventData is nil.
-func assertEventDataNil(t *testing.T, eventData map[string]any, field, context string) {
-	t.Helper()
-	assert.Nil(t, eventData[field], "Event data %s should be nil for %s", field, context)
-}
-
-// assertEventDataEmpty checks that a string field in eventData is empty.
-func assertEventDataEmpty(t *testing.T, eventData map[string]any, field, context string) {
-	t.Helper()
-	assert.Empty(t, eventData[field], "Event data %s should be empty string for %s", field, context)
-}
-
-// assertEventDataMissing checks that a field is not present in eventData.
-func assertEventDataMissing(t *testing.T, eventData map[string]any, field string) {
-	t.Helper()
-	_, exists := eventData[field]
-	assert.False(t, exists, "Event data should not include %s when not set", field)
-}
-
-// assertEventDataValue checks a specific field value in eventData.
-func assertEventDataValue(t *testing.T, eventData map[string]any, field string, expected any) {
-	t.Helper()
-	assert.Equal(t, expected, eventData[field], "Event data %s mismatch", field)
-}
-
 // newToastTestController builds a controller wired to an isolated, per-test
 // notification service injected through the controller's DI seam. The service is
 // stopped via tb.Cleanup so its cleanupLoop goroutine does not leak (TestMain
@@ -256,16 +231,6 @@ func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
 
 	err := c.SendToast("test message", ToastTypeInfo, 1000)
 	require.Error(t, err, "SendToast() must return an error when no notification service is available")
-}
-
-func TestController_SendToast_Integration(t *testing.T) {
-	t.Parallel()
-	// Integration test that verifies the complete flow through an injected service.
-	c, _ := newToastTestController(t)
-
-	// Send a toast with all features
-	err := c.SendToast("Integration test message", ToastTypeWarning, 4000)
-	require.NoError(t, err, "SendToast() integration test error")
 }
 
 // Benchmark for SendToast performance

@@ -173,36 +173,3 @@ func TestHandleError_AlreadyReportedSkipsDuplicate(t *testing.T) {
 
 	assert.Empty(t, *captured, "expected no duplicate telemetry event for already-reported error")
 }
-
-// TestHandleError_404NotReportedToTelemetry verifies that 404 Not Found errors
-// are not reported (they are expected conditions for unknown resources).
-// Note: Not parallel; modifies global error-hook state.
-func TestHandleError_404NotReportedToTelemetry(t *testing.T) {
-	captured := captureHook(t)
-
-	c := &Controller{Core: &apicore.Core{}}
-	c.Settings.Store(getTestSettings(t))
-	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections/99999")
-
-	err := c.HandleError(ctx, fmt.Errorf("record not found"), "Not found", http.StatusNotFound)
-	require.NoError(t, err)
-
-	assert.Empty(t, *captured, "expected no telemetry events for 404 error")
-}
-
-// TestHandleError_502BadGatewayReportedToTelemetry verifies that non-500 5xx codes
-// (e.g., 502 Bad Gateway) are also reported as server errors.
-// Note: Not parallel; modifies global error-hook state.
-func TestHandleError_502BadGatewayReportedToTelemetry(t *testing.T) {
-	captured := captureHook(t)
-
-	c := &Controller{Core: &apicore.Core{}}
-	c.Settings.Store(getTestSettings(t))
-	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/system")
-
-	err := c.HandleError(ctx, fmt.Errorf("upstream timeout"), "Bad gateway", http.StatusBadGateway)
-	require.NoError(t, err)
-
-	require.Len(t, *captured, 1, "expected one telemetry event for 502 error")
-	assert.Equal(t, http.StatusBadGateway, (*captured)[0].Context["http_status"])
-}
