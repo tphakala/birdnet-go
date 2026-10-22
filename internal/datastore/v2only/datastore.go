@@ -3250,7 +3250,16 @@ func (ds *Datastore) GetSpeciesDetectionDatesInPeriod(ctx context.Context, start
 var scientificNameLikeEscaper = strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`)
 
 // labelIDsForScientificName returns the "d.label_id IN (...)" clause and its
-// arguments for a scientific-name history lookup.
+// arguments for a scientific-name history lookup. Labels are matched as described
+// on labelMatchForScientificName.
+func labelIDsForScientificName(tablePrefix, scientificName string) (clause string, args []any) {
+	match, args := labelMatchForScientificName(scientificName)
+	return fmt.Sprintf("d.label_id IN (SELECT id FROM %slabels WHERE %s)", tablePrefix, match), args
+}
+
+// labelMatchForScientificName returns a predicate on an unqualified labels
+// scientific_name column, and its arguments, selecting the labels that belong to
+// scientificName in a history lookup.
 //
 // A bare scientific name matches exactly, or a legacy concatenated label stored
 // as "ScientificName_CommonName". The "!_%" suffix is "literal underscore
@@ -3261,13 +3270,13 @@ var scientificNameLikeEscaper = strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `
 // distinct class "Car_passing_by"; the legacy concatenated form of such a name
 // is no longer matched. Every other name, including a single-token class like
 // "Dog" that BirdNET also emits as "Dog_Dog", keeps the prefix match.
-func labelIDsForScientificName(tablePrefix, scientificName string) (clause string, args []any) {
+func labelMatchForScientificName(scientificName string) (predicate string, args []any) {
 	if nonbird.IsMultiWordClassPrefix(scientificName) {
-		return fmt.Sprintf("d.label_id IN (SELECT id FROM %slabels WHERE scientific_name = ?)", tablePrefix), []any{scientificName}
+		return "scientific_name = ?", []any{scientificName}
 	}
 	// Escape LIKE metacharacters with '!' (see scientificNameLikeEscaper).
 	escaped := scientificNameLikeEscaper.Replace(scientificName)
-	return fmt.Sprintf("d.label_id IN (SELECT id FROM %slabels WHERE scientific_name = ? OR scientific_name LIKE ? ESCAPE '!')", tablePrefix), []any{scientificName, escaped + `!_%`}
+	return "scientific_name = ? OR scientific_name LIKE ? ESCAPE '!'", []any{scientificName, escaped + `!_%`}
 }
 
 // GetSpeciesLastDetectionDateBefore returns the last detection date before the given date.
@@ -3277,23 +3286,28 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 		return "", fmt.Errorf("invalid before date format: %w", err)
 	}
 
-	// Bucket dates by the configured timezone, anchored to the before date.
-	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(before.Unix()))
-
 	var result struct {
-		LastSeenDate string `gorm:"column:last_seen_date"`
+		LastDetectedAt *int64 `gorm:"column:last_detected_at"`
 	}
 
+	// Find the latest non-false-positive detection time per matching label, then the
+	// latest of those. Correlating on one label at a time lets the (label_id,
+	// detected_at) index be walked backwards from the cutoff and stop at the first
+	// qualifying row; aggregating over "label_id IN (...)" would read every earlier
+	// detection of the species, which is most of the table for a dominant species.
 	prefix := ds.manager.TablePrefix()
-	labelIDsClause, labelIDsArgs := labelIDsForScientificName(prefix, scientificName)
+	latestForLabel := fmt.Sprintf(
+		"SELECT d.detected_at FROM %sdetections d LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id"+
+			" WHERE d.label_id = l.id AND d.detected_at < ? AND (dr.verified IS NULL OR dr.verified != ?)"+
+			" ORDER BY d.detected_at DESC LIMIT 1",
+		prefix, prefix)
+	labelMatch, labelMatchArgs := labelMatchForScientificName(scientificName)
 	query := ds.manager.DB().WithContext(ctx).
-		Table(prefix+"detections d").
-		Select(fmt.Sprintf("COALESCE(MAX(%s), '') as last_seen_date", dateExpr)).
-		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
-		Where("d.detected_at < ?", before.Unix()).
-		// See labelIDsForScientificName for the matching rule.
-		Where(labelIDsClause, labelIDsArgs...).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
+		Table(prefix+"labels l").
+		Select(fmt.Sprintf("MAX((%s)) AS last_detected_at", latestForLabel),
+			before.Unix(), string(entities.VerificationFalsePositive)).
+		// See labelMatchForScientificName for the matching rule.
+		Where(labelMatch, labelMatchArgs...)
 
 	if err := query.Scan(&result).Error; err != nil {
 		return "", errors.New(err).
@@ -3305,13 +3319,20 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 			Build()
 	}
 
-	return result.LastSeenDate, nil
+	if result.LastDetectedAt == nil {
+		return "", nil
+	}
+
+	// Bucket the date by the configured timezone, anchored to the before date: the
+	// same fixed-offset calendar date detectionDateExpr computes in SQL.
+	offset := int64(ds.zoneOffsetSeconds(before.Unix()))
+	return time.Unix(*result.LastDetectedAt+offset, 0).UTC().Format(time.DateOnly), nil
 }
 
 // GetSpeciesFirstAndLastDetectionTimeBefore returns the earliest and most-recent
 // detection times for a species that occurred strictly before `before`.
 // Either/both may be nil when there is no prior detection. The name is matched
-// as described on labelIDsForScientificName.
+// as described on labelMatchForScientificName.
 func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Context, scientificName string, before time.Time) (first, last *time.Time, err error) {
 	var result struct {
 		FirstDetectedAt *int64 `gorm:"column:first_detected_at"`
@@ -3326,7 +3347,7 @@ func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Conte
 			Select(aggregate).
 			Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
 			Where("d.detected_at < ?", before.Unix()).
-			// See labelIDsForScientificName for the matching rule.
+			// See labelMatchForScientificName for the matching rule.
 			Where(labelIDsClause, labelIDsArgs...).
 			Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
 	}
