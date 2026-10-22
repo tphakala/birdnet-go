@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Last opp registreringer til BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg ikke funnet",
-          "message": "Installer FFmpeg for å aktivere FLAC-kodingsstøtte. BirdWeather avvikler WAV-opplastinger til fordel for komprimerte FLAC-lydfiler."
-        },
         "enable": "Aktiver BirdWeather-opplastinger",
         "token": {
           "label": "BirdWeather-token",

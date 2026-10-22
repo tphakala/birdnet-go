@@ -2378,8 +2378,6 @@ export type TranslationKey =
   | 'settings.filters.errors.speciesLoadFailed'
   | 'settings.integration.birdweather.title'
   | 'settings.integration.birdweather.description'
-  | 'settings.integration.birdweather.ffmpegWarning.title'
-  | 'settings.integration.birdweather.ffmpegWarning.message'
   | 'settings.integration.birdweather.enable'
   | 'settings.integration.birdweather.token.label'
   | 'settings.integration.birdweather.token.helpText'

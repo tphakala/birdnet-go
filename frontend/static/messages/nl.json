@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Upload herkenningen naar BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg niet gedetecteerd",
-          "message": "Installeer FFmpeg om FLAC encoding ondersteuning in te schakelen, BirdWeather stopt met WAV uploads ten gunste van gecomprimeerde FLAC audio bestanden."
-        },
         "enable": "Schakel BirdWeather Uploads in",
         "token": {
           "label": "BirdWeather-token",

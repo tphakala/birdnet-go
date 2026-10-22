@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Lähetä havainnot BirdWeatheriin",
-        "ffmpegWarning": {
-          "title": "FFmpeg ei havaittu",
-          "message": "Asenna FFmpeg ottaaksesi käyttöön FLAC-koodauksen tuen, BirdWeather on lopettamassa WAV-tiedostojen tuen pakattujen FLAC-äänitiedostojen hyväksi."
-        },
         "enable": "Ota käyttöön BirdWeather-lähetykset",
         "token": {
           "label": "BirdWeather-tunnus",

@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Erkennungen zu BirdWeather hochladen",
-        "ffmpegWarning": {
-          "title": "FFmpeg nicht erkannt",
-          "message": "Bitte installieren Sie FFmpeg, um die FLAC-Kodierungsunterstützung zu aktivieren. BirdWeather veraltet WAV-Uploads zugunsten komprimierter FLAC-Audiodateien."
-        },
         "enable": "BirdWeather-Uploads aktivieren",
         "token": {
           "label": "BirdWeather-Token",
