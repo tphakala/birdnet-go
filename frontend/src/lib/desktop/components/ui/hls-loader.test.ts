@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const FakeHls = { isSupported: () => true };
+const UnsupportedHls = { isSupported: () => false };
 
 // Each test imports a fresh hls-loader so its module-level cache starts empty.
 async function freshLoader(hlsFactory: () => { default: typeof FakeHls }) {
@@ -62,6 +63,20 @@ describe('canPlayHls', () => {
   it('is true when HLS.js loaded and is supported', async () => {
     const { canPlayHls } = await freshLoader(() => ({ default: FakeHls }));
     expect(canPlayHls(FakeHls as never)).toBe(true);
+  });
+
+  it('is false when HLS.js loaded but is unsupported and there is no native HLS', async () => {
+    const { canPlayHls } = await freshLoader(() => ({ default: FakeHls }));
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('');
+
+    expect(canPlayHls(UnsupportedHls as never)).toBe(false);
+  });
+
+  it('uses native HLS when HLS.js loaded but is unsupported', async () => {
+    const { canPlayHls } = await freshLoader(() => ({ default: FakeHls }));
+    vi.spyOn(HTMLMediaElement.prototype, 'canPlayType').mockReturnValue('maybe');
+
+    expect(canPlayHls(UnsupportedHls as never)).toBe(true);
   });
 
   it('falls back to native HLS support when HLS.js is missing', async () => {

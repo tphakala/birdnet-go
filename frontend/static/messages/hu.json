@@ -5057,6 +5057,7 @@
       "loop": "Ismétlés be/ki",
       "player": "Hang lejátszó",
       "autoplayBlocked": "Kattintson a lejátszáshoz (automatikus lejátszás letiltva)",
+      "hlsLoadFailed": "A hanglejátszó betöltése sikertelen, kérjük, próbálja újra",
       "hlsNotSupported": "A HLS lejátszás nem támogatott ebben a böngészőben",
       "streamStarting": "Audio stream indítása...",
       "levelFor": "Hangszint: {source}",

@@ -5057,6 +5057,7 @@
       "loop": "Skift gentag",
       "player": "Lydafspiller",
       "autoplayBlocked": "Klik for at afspille (autoplay blokeret)",
+      "hlsLoadFailed": "Lydafspilleren kunne ikke indlæses, prøv igen",
       "hlsNotSupported": "HLS-afspilning understøttes ikke i denne browser",
       "streamStarting": "Starter lydstrøm...",
       "levelFor": "Lydniveau for {source}",

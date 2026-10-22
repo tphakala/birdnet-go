@@ -49,6 +49,7 @@
   const SMOOTHING_FACTOR = 0.4;
   const ZERO_LEVEL_TIMEOUT = 5000;
   const HEARTBEAT_INTERVAL = 20000;
+  const ERROR_STATUS_HIDE_DELAY_MS = 3000;
 
   const sessionId = generateSessionId();
 
@@ -416,8 +417,9 @@
       // Attach to media element and load source
       hlsInstance.attachMedia(audio);
       hlsInstance.loadSource(hlsUrl);
-    } else if (audio?.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (Safari, iOS)
+    } else {
+      // Native HLS support (Safari, iOS). startPlayback checked canPlayHls
+      // before the server stream was started, so a native player exists here.
       audio.src = hlsUrl;
       audio.play().catch((err: Error) => {
         // Handle playback start error
@@ -425,9 +427,6 @@
           showStatusMessage(t('media.audio.autoplayBlocked'));
         }
       });
-    } else {
-      showStatusMessage(t('media.audio.hlsNotSupported'));
-      // HLS playback not supported
     }
   }
 
@@ -449,7 +448,12 @@
       if (isStaleStart(requestId)) return;
       if (!canPlayHls(HlsClass)) {
         playingSource = null;
-        showStatusMessage(t('media.audio.hlsNotSupported'));
+        // A null HlsClass means HLS.js failed to load (offline, stale chunk), which
+        // a retry can fix; otherwise this browser has no HLS player at all.
+        showStatusMessage(
+          HlsClass === null ? t('media.audio.hlsLoadFailed') : t('media.audio.hlsNotSupported')
+        );
+        globalThis.setTimeout(() => hideStatusMessage(), ERROR_STATUS_HIDE_DELAY_MS);
         return;
       }
 
@@ -488,8 +492,8 @@
 
       startHeartbeat();
     } catch (error) {
-      // Only show error if this is still the active request
-      if (requestId !== startRequestId) return;
+      // Only show error if this start was not superseded or stopped
+      if (isStaleStart(requestId)) return;
 
       // Handle audio stream access error
       const message =
@@ -497,7 +501,7 @@
           ? t('media.audio.loginRequired')
           : t('media.audio.streamError');
       showStatusMessage(message);
-      globalThis.setTimeout(() => hideStatusMessage(), 3000);
+      globalThis.setTimeout(() => hideStatusMessage(), ERROR_STATUS_HIDE_DELAY_MS);
     }
   }
 
@@ -542,12 +546,11 @@
 
   // Toggle playback for a source
   function toggleSourcePlayback(source: string) {
-    if (isPlaying && playingSource === source) {
+    // playingSource is set as soon as a start begins, before isPlaying, so
+    // this also stops a stream that is still starting (the stop icon shows then).
+    if (playingSource === source) {
       stopPlayback();
     } else {
-      if (isPlaying) {
-        stopPlayback();
-      }
       startPlayback(source);
     }
   }

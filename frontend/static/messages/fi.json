@@ -5057,6 +5057,7 @@
       "loop": "Vaihda silmukka",
       "player": "Äänisoitin",
       "autoplayBlocked": "Klikkaa toistaaksesi (automaattinen toisto estetty)",
+      "hlsLoadFailed": "Äänisoittimen lataaminen epäonnistui, yritä uudelleen",
       "hlsNotSupported": "HLS-toisto ei ole tuettu tässä selaimessa",
       "streamStarting": "Käynnistetään äänistriimi...",
       "levelFor": "Äänitaso lähteelle {source}",

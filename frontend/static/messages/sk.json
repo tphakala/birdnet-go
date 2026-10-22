@@ -5057,6 +5057,7 @@
       "loop": "Prepnúť opakovanie",
       "player": "Prehrávač zvuku",
       "autoplayBlocked": "Kliknutím spustíte prehrávanie (automatické prehrávanie blokované)",
+      "hlsLoadFailed": "Prehrávač zvuku sa nepodarilo načítať, skúste to znova",
       "hlsNotSupported": "Prehrávanie HLS nie je v tomto prehliadači podporované",
       "streamStarting": "Spúšťa sa audio stream...",
       "levelFor": "Úroveň zvuku pre {source}",
