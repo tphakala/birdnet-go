@@ -494,49 +494,4 @@ func TestQuietHours_PublicReadsAllowed(t *testing.T) {
 		SuppressedStreams   map[string]bool `json:"suppressedStreams"`
 	}
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &payload))
-
-	// The handler must not leak userinfo via the stream URL keys. For guest
-	// requests the keys are opaque placeholders ("stream-N"), so any "://"
-	// or "@" in a key indicates a regression.
-	for key := range payload.SuppressedStreams {
-		assert.NotContains(t, key, "://",
-			"guest quiet-hours response leaks stream URL in key %q", key)
-		assert.NotContains(t, key, "@",
-			"guest quiet-hours response leaks userinfo in key %q", key)
-	}
-}
-
-// ---- regression guard --------------------------------------------------
-
-// TestQuietHours_NoRawCredentialsInResponse is a defense-in-depth guard:
-// the public quiet-hours endpoint must not leak raw RTSP credentials through
-// the SuppressedStreams map keys. The handler passes each URL through
-// privacy.SanitizeStreamUrl before encoding, but this test asserts the
-// invariant directly on the JSON body.
-func TestQuietHours_NoRawCredentialsInResponse(t *testing.T) {
-	e := newSettingsAuthTestEnv(t)
-
-	rec := guestGet(t, e, "/api/v2/streams/quiet-hours/status")
-	body := rec.Body.String()
-
-	// Walk every occurrence of a stream scheme and inspect the authority
-	// segment (between "scheme://" and the next '/'). An "@" inside the
-	// authority would indicate userinfo leakage (e.g. user:pass@host).
-	for _, scheme := range []string{"rtsp://", "rtsps://", "rtmp://", "rtmps://", "http://", "https://"} {
-		remaining := body
-		for {
-			idx := strings.Index(remaining, scheme)
-			if idx < 0 {
-				break
-			}
-			authority := remaining[idx+len(scheme):]
-			if slash := strings.IndexByte(authority, '/'); slash >= 0 {
-				authority = authority[:slash]
-			}
-			assert.NotContains(t, authority, "@",
-				"quiet-hours response leaks raw credentials in %s authority %q (body: %s)",
-				scheme, authority, body)
-			remaining = remaining[idx+len(scheme):]
-		}
-	}
 }

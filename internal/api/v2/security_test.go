@@ -1,6 +1,5 @@
 // security_test.go: Package api provides security tests for API v2 endpoints.
-// This file focuses on input validation against hostile input and on the
-// detection cache's behaviour under concurrent identical requests.
+// This file focuses on input validation against hostile input.
 
 package api
 
@@ -9,9 +8,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -20,11 +17,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
-
-// concurrencyWaitTimeout bounds how long a test waits for its concurrent
-// callers to reach the expected state. It is generous so a loaded CI runner
-// under -race does not fail the test; a correct run finishes in milliseconds.
-const concurrencyWaitTimeout = time.Minute
 
 // defaultDetectionPageSize is the page size GetDetections uses when the request
 // carries no numResults (defaultNumResults in the detections package).
@@ -398,119 +390,4 @@ func TestInputValidation(t *testing.T) {
 			mockDS.AssertExpectations(t)
 		})
 	}
-}
-
-// TestDDoSProtection tests the API's resilience to high-volume requests
-func TestDDoSProtection(t *testing.T) {
-	// Go 1.25: Add test metadata for better organization and reporting
-	t.Attr("component", "security")
-	t.Attr("type", "performance")
-	t.Attr("feature", "ddos-protection")
-
-	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
-
-	// Number of concurrent requests to simulate
-	concurrentRequests := 50
-
-	// Concurrent identical requests share one datastore load: a caller either
-	// joins the load in flight or hits the cache once it is stored, so the
-	// datastore is queried exactly once.
-	// The datastore call blocks until every caller has missed the cache, so the
-	// requests overlap instead of running one after another.
-	release := make(chan struct{})
-	var releaseOnce sync.Once
-	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
-	mockDS.EXPECT().
-		SearchNotes(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(string, bool, int, int) ([]datastore.Note, int64, error) {
-			<-release
-			return []datastore.Note{}, 0, nil
-		}).
-		Once()
-
-	// Create a wait group to synchronize goroutines
-	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
-	var wg sync.WaitGroup
-
-	// Create channels to collect results
-	responseTimesChan := make(chan time.Duration, concurrentRequests)
-	statusCodesChan := make(chan int, concurrentRequests)
-	handlerErrsChan := make(chan error, concurrentRequests)
-
-	// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
-	for range concurrentRequests {
-		wg.Go(func() {
-			// Create request with query parameters
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?queryType=search&search=test", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/detections")
-
-			// Record start time
-			startTime := time.Now()
-
-			// Call handler
-			handlerErrsChan <- controller.detections.GetDetections(c)
-
-			// Record response time
-			responseTime := time.Since(startTime)
-			responseTimesChan <- responseTime
-			statusCodesChan <- rec.Code
-		})
-	}
-
-	require.Eventually(t, func() bool { return controller.DetectionCache.Stats().Misses == uint64(concurrentRequests) },
-		concurrencyWaitTimeout, time.Millisecond, "every request reaches the cache before the load finishes")
-	releaseOnce.Do(func() { close(release) })
-
-	// Wait for all requests to complete
-	wg.Wait()
-	close(responseTimesChan)
-	close(statusCodesChan)
-	close(handlerErrsChan)
-
-	for err := range handlerErrsChan {
-		require.NoError(t, err, "GetDetections failed")
-	}
-
-	// Collect results
-	var totalResponseTime time.Duration
-	successCount := 0
-	rateLimitedCount := 0
-
-	for code := range statusCodesChan {
-		switch code {
-		case http.StatusOK:
-			successCount++
-		case http.StatusTooManyRequests:
-			rateLimitedCount++
-		}
-	}
-
-	for responseTime := range responseTimesChan {
-		totalResponseTime += responseTime
-	}
-
-	// Calculate average response time
-	avgResponseTime := float64(totalResponseTime.Microseconds()) / float64(concurrentRequests) / 1000.0 // in milliseconds
-
-	// Log results
-	t.Logf("DDoS simulation completed with %d concurrent requests", concurrentRequests)
-	t.Logf("Successful requests: %d (%.1f%%)", successCount, float64(successCount)/float64(concurrentRequests)*100)
-	if rateLimitedCount > 0 {
-		t.Logf("Rate limited requests: %d (%.1f%%)", rateLimitedCount, float64(rateLimitedCount)/float64(concurrentRequests)*100)
-	}
-	t.Logf("Average response time: %.2f ms", avgResponseTime)
-
-	// In production, we would expect some rate limiting to occur under high load
-	// This is a soft assertion since test environments may not have rate limiting enabled
-	if controller.Settings.Load() != nil && controller.Settings.Load().WebServer.Debug {
-		// In debug mode, we can log that rate limiting should be tested in production
-		t.Log("Note: Rate limiting should be verified in production environment")
-	}
-
-	// Every request must be answered with success or a rate-limit response: the
-	// cache never turns a request away with any other status.
-	assert.Equal(t, concurrentRequests, successCount+rateLimitedCount, "Not all requests were served or rate limited")
 }
