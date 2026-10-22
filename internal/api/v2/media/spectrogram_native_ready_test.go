@@ -120,28 +120,30 @@ func TestValidateNativeSpectrogramInput_SettledClipSkipsStabilityWait(t *testing
 	})
 }
 
-func TestValidateNativeSpectrogramInput_EmptyFileExhausts(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "empty.wav")
-	require.NoError(t, os.WriteFile(path, nil, 0o600))
+// A file below the minimum audio size never becomes ready: the empty and the
+// undersized case each exhaust the retries with their own error.
+func TestValidateNativeSpectrogramInput_UndersizedFileExhausts(t *testing.T) {
+	tests := []struct {
+		name    string
+		content []byte
+		wantErr error
+	}{
+		{"empty", nil, errAudioFileEmpty},
+		{"tiny", make([]byte, minReadyAudioBytes-1), errAudioFileTooSmall},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), tt.name+".wav")
+			require.NoError(t, os.WriteFile(path, tt.content, 0o600))
 
-	synctest.Test(t, func(t *testing.T) {
-		elapsed, err := callNative(t.Context(), path)
-		requireNotReady(t, err)
-		require.ErrorIs(t, err, errAudioFileEmpty)
-		assert.Equal(t, nativeReadyBackoff(readinessRetryDelay), elapsed)
-	})
-}
-
-func TestValidateNativeSpectrogramInput_TinyFileExhausts(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "tiny.wav")
-	require.NoError(t, os.WriteFile(path, make([]byte, minReadyAudioBytes-1), 0o600))
-
-	synctest.Test(t, func(t *testing.T) {
-		elapsed, err := callNative(t.Context(), path)
-		requireNotReady(t, err)
-		require.ErrorIs(t, err, errAudioFileTooSmall)
-		assert.Equal(t, nativeReadyBackoff(readinessRetryDelay), elapsed)
-	})
+			synctest.Test(t, func(t *testing.T) {
+				elapsed, err := callNative(t.Context(), path)
+				requireNotReady(t, err)
+				require.ErrorIs(t, err, tt.wantErr)
+				assert.Equal(t, nativeReadyBackoff(readinessRetryDelay), elapsed)
+			})
+		})
+	}
 }
 
 func TestValidateNativeSpectrogramInput_GrowingFileRetriesUntilStable(t *testing.T) {

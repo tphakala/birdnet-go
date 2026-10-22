@@ -87,13 +87,7 @@ func TestProcessAudioByID_AppliesGain(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
 
 	// The source tone peaks at fixtureAmp of full scale; -6 dB halves it.
-	var peak int
-	body := rec.Body.Bytes()[44:]
-	for i := 0; i+1 < len(body); i += 2 {
-		v := int(int16(uint16(body[i]) | uint16(body[i+1])<<8)) //nolint:gosec // G115: PCM bit reinterpretation in a test
-		peak = max(peak, max(v, -v))
-	}
-	assert.InDelta(t, fixtureAmp*math.MaxInt16/2, float64(peak), 4)
+	assert.InDelta(t, fixtureAmp*math.MaxInt16/2, float64(wavPeak(rec.Body.Bytes())), 4)
 }
 
 func TestProcessAudioByID_Rejections(t *testing.T) {

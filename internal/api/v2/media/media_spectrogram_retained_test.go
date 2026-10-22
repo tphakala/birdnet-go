@@ -98,69 +98,6 @@ func TestServeSpectrogramByID_SpectrogramOnly_ServesExactRender(t *testing.T) {
 	}
 }
 
-func TestServeSpectrogramByID_SpectrogramOnly_FallsBackToNearestRender(t *testing.T) {
-	tests := []struct {
-		name  string
-		files map[string]string
-		want  string
-	}{
-		{
-			name:  "only a larger legend render exists",
-			files: map[string]string{"2026/01/a_1026px-legend.png": "legend 1026"},
-			want:  "legend 1026",
-		},
-		{
-			name: "raw match beats width",
-			files: map[string]string{
-				"2026/01/a_514px-legend.png": "legend 514",
-				"2026/01/a_2050px.png":       "raw 2050",
-			},
-			want: "raw 2050",
-		},
-		{
-			name: "sized beats unsized",
-			files: map[string]string{
-				"2026/01/a.png":        "prerender",
-				"2026/01/a_2050px.png": "raw 2050", // farther from 514 than the unsized file, so only the rank prefers it
-			},
-			want: "raw 2050",
-		},
-		{
-			name: "tie goes to the larger width",
-			files: map[string]string{
-				"2026/01/a_258px.png": "raw 258",
-				"2026/01/a_770px.png": "raw 770",
-			},
-			want: "raw 770",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
-			for rel, content := range tt.files {
-				writeRetainedFile(t, root, rel, content)
-			}
-			h.DS = noClipDS(t, retainedClipName, false)
-
-			rec := serveSpectrogram(t, h, e, "?size=md&raw=true")
-
-			require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-			assert.Equal(t, tt.want, rec.Body.String())
-		})
-	}
-}
-
-func TestServeSpectrogramByID_SpectrogramOnly_ServesPrerenderFile(t *testing.T) {
-	h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
-	writeRetainedFile(t, root, "2026/01/a.png", "prerender")
-	h.DS = noClipDS(t, retainedClipName, false)
-
-	rec := serveSpectrogram(t, h, e, "?size=md&raw=true")
-
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	assert.Equal(t, "prerender", rec.Body.String())
-}
-
 func TestServeSpectrogramByID_SpectrogramOnly_IgnoresOtherClipsRenders(t *testing.T) {
 	h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
 	// An extended-capture sibling of the same base is another clip's render.
@@ -351,12 +288,52 @@ func TestServeSpectrogramByID_SpectrogramOnly_DetectionLookupFailures(t *testing
 	}
 }
 
-func TestServeSpectrogramByID_SpectrogramOnly_RenderChoiceIsDeterministic(t *testing.T) {
+// With no exact render the handler picks one deterministically from the clip's
+// own files: raw match first, then sized over unsized, then the nearest width
+// (ties to the larger), then the lexical name.
+func TestServeSpectrogramByID_SpectrogramOnly_ChoosesRender(t *testing.T) {
 	tests := []struct {
 		name  string
 		files map[string]string
 		want  string
+		// needsCaseSensitiveFS skips the row where the filesystem folds a.png and
+		// a.PNG into one file.
+		needsCaseSensitiveFS bool
 	}{
+		{
+			name:  "only a larger legend render exists",
+			files: map[string]string{"2026/01/a_1026px-legend.png": "legend 1026"},
+			want:  "legend 1026",
+		},
+		{
+			name: "raw match beats width",
+			files: map[string]string{
+				"2026/01/a_514px-legend.png": "legend 514",
+				"2026/01/a_2050px.png":       "raw 2050",
+			},
+			want: "raw 2050",
+		},
+		{
+			name: "sized beats unsized",
+			files: map[string]string{
+				"2026/01/a.png":        "prerender",
+				"2026/01/a_2050px.png": "raw 2050", // farther from 514 than the unsized file, so only the rank prefers it
+			},
+			want: "raw 2050",
+		},
+		{
+			name:  "an unsized prerender alone is served",
+			files: map[string]string{"2026/01/a.png": "prerender"},
+			want:  "prerender",
+		},
+		{
+			name: "tie goes to the larger width",
+			files: map[string]string{
+				"2026/01/a_258px.png": "raw 258",
+				"2026/01/a_770px.png": "raw 770",
+			},
+			want: "raw 770",
+		},
 		{
 			name: "nearest width wins",
 			files: map[string]string{
@@ -371,7 +348,8 @@ func TestServeSpectrogramByID_SpectrogramOnly_RenderChoiceIsDeterministic(t *tes
 				"2026/01/a.png": "lower",
 				"2026/01/a.PNG": "upper",
 			},
-			want: "upper", // "a.PNG" sorts before "a.png"
+			want:                 "upper", // "a.PNG" sorts before "a.png"
+			needsCaseSensitiveFS: true,
 		},
 	}
 	for _, tt := range tests {
@@ -380,11 +358,10 @@ func TestServeSpectrogramByID_SpectrogramOnly_RenderChoiceIsDeterministic(t *tes
 			for rel, content := range tt.files {
 				writeRetainedFile(t, root, rel, content)
 			}
-			if len(tt.files) == 2 {
-				// A case-insensitive filesystem collapses a.png and a.PNG into one file.
+			if tt.needsCaseSensitiveFS {
 				entries, err := os.ReadDir(filepath.Join(root, "2026", "01"))
 				require.NoError(t, err)
-				if len(entries) != 2 {
+				if len(entries) != len(tt.files) {
 					t.Skip("case-insensitive filesystem")
 				}
 			}
@@ -426,7 +403,7 @@ func TestServeSpectrogramByID_SpectrogramOnly_ZeroByteExactRenderFallsThrough(t 
 func TestServeSpectrogramByID_UserRequestedModeWithAudioKeepsGenerateEnvelope(t *testing.T) {
 	h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeUserRequested)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "2026", "01"), 0o750))
-	require.NoError(t, createTestAudioFile(t, filepath.Join(root, "2026", "01", "a.wav")))
+	createTestAudioFile(t, filepath.Join(root, "2026", "01", "a.wav"))
 	// A render of another size exists, but the audio is present, so the user must be
 	// able to generate the size they asked for.
 	writeRetainedFile(t, root, "2026/01/a_1026px-legend.png", "legend")

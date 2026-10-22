@@ -54,7 +54,10 @@ func probeError(t *testing.T, path string) error {
 	return err
 }
 
-func TestSpectrogramHTTPError_SourceErrorsAre422(t *testing.T) {
+// Source errors the clip cannot be rendered from answer 422. ErrInvalidOptions
+// stays a 500: after the parse-site width check no request value reaches it, so
+// it is a server fault.
+func TestSpectrogramHTTPError_SourceErrorStatus(t *testing.T) {
 	_, h, _ := setupMediaTestEnvironment(t)
 	dir := t.TempDir()
 
@@ -87,19 +90,22 @@ func TestSpectrogramHTTPError_SourceErrorsAre422(t *testing.T) {
 		tooLongMsg     = "Audio is too long for on-demand processing"
 		tooShortMsg    = "Source audio is too short for a spectrogram"
 		truncatedMsg   = "Source audio is shorter than its header declares"
+		genericMsg     = "Failed to generate spectrogram"
 	)
 	tests := []struct {
 		name string
 		err  error
+		code int
 		msg  string
 	}{
-		{"unsupported extension", probeError(t, legacy), unsupportedMsg},
-		{"rate below 8 kHz", probeError(t, lowRate), unsupportedMsg},
-		{"undecodable at decode time", decodeErr, undecodableMsg},
-		{"truncated wav", truncatedErr, truncatedMsg},
-		{"too long", probeError(t, huge), tooLongMsg},
-		{"no columns", errors.New(render.ErrNoColumns).Component("spectrogram").Category(errors.CategoryValidation).Build(), tooShortMsg},
-		{"empty clip", errors.New(render.ErrEmptyClip).Component("spectrogram").Category(errors.CategoryValidation).Build(), tooShortMsg},
+		{"unsupported extension", probeError(t, legacy), http.StatusUnprocessableEntity, unsupportedMsg},
+		{"rate below 8 kHz", probeError(t, lowRate), http.StatusUnprocessableEntity, unsupportedMsg},
+		{"undecodable at decode time", decodeErr, http.StatusUnprocessableEntity, undecodableMsg},
+		{"truncated wav", truncatedErr, http.StatusUnprocessableEntity, truncatedMsg},
+		{"too long", probeError(t, huge), http.StatusUnprocessableEntity, tooLongMsg},
+		{"no columns", errors.New(render.ErrNoColumns).Component("spectrogram").Category(errors.CategoryValidation).Build(), http.StatusUnprocessableEntity, tooShortMsg},
+		{"empty clip", errors.New(render.ErrEmptyClip).Component("spectrogram").Category(errors.CategoryValidation).Build(), http.StatusUnprocessableEntity, tooShortMsg},
+		{"invalid options is a server fault", errors.New(render.ErrInvalidOptions).Component("spectrogram").Category(errors.CategoryValidation).Build(), http.StatusInternalServerError, genericMsg},
 	}
 	e := echo.New()
 	for _, tt := range tests {
@@ -107,22 +113,10 @@ func TestSpectrogramHTTPError_SourceErrorsAre422(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), rec)
 			_ = h.spectrogramHTTPError(c, productionWrap(tt.err))
-			assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+			assert.Equal(t, tt.code, rec.Code)
 			assert.Contains(t, rec.Body.String(), tt.msg)
 		})
 	}
-}
-
-func TestSpectrogramHTTPError_InvalidOptionsStays500(t *testing.T) {
-	_, h, _ := setupMediaTestEnvironment(t)
-	err := errors.New(render.ErrInvalidOptions).Component("spectrogram").Category(errors.CategoryValidation).Build()
-
-	rec := httptest.NewRecorder()
-	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), rec)
-	_ = h.spectrogramHTTPError(c, productionWrap(err))
-
-	assert.Equal(t, http.StatusInternalServerError, rec.Code,
-		"after the parse-site width check no request value reaches ErrInvalidOptions, so it is a server fault")
 }
 
 func TestSpectrogramHTTPError_NotReadyWinsOverSourceStatus(t *testing.T) {
