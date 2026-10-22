@@ -11,6 +11,9 @@ import {
 const HLS_LOAD_FAILED = t('media.audio.hlsLoadFailed');
 const HLS_NOT_SUPPORTED = t('media.audio.hlsNotSupported');
 const PLAY_LABEL = t('media.audio.play');
+const STOP_LABEL = t('media.audio.stop');
+// STORAGE_KEY mirrors the auto-start preference key in MiniSpectrogram.svelte.
+const STORAGE_KEY = 'birdnet-spectrogram-active';
 
 const ERROR_HIDE_DELAY_MS = 3000;
 const SOURCE_ID = 'source-a';
@@ -67,6 +70,8 @@ describe('MiniSpectrogram HLS player availability', () => {
     vi.clearAllMocks();
     mocks.fetchWithCSRF.mockResolvedValue({});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Unmounting keeps the auto-start preference, so clear it between tests.
+    localStorage.removeItem(STORAGE_KEY);
   });
 
   let media: FakeMediaController | null = null;
@@ -168,5 +173,27 @@ describe('MiniSpectrogram HLS player availability', () => {
     await waitForNextTick();
 
     expect(startRequests()).toBe(0);
+  });
+
+  it('keeps the auto-start preference on unmount and clears it on stop', async () => {
+    const controller = installFakeMediaElement();
+    media = controller;
+    mocks.tryLoadHls.mockResolvedValue(null);
+    mocks.canPlayHls.mockReturnValue(true);
+    mocks.fetchWithCSRF.mockResolvedValue({
+      stream_token: 'token',
+      playlist_url: '/playlist.m3u8',
+    });
+    render(MiniSpectrogram);
+    await fireEvent.click(screen.getByRole('button', { name: PLAY_LABEL }));
+    await waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).toBe('true'));
+
+    cleanup();
+    expect(localStorage.getItem(STORAGE_KEY)).toBe('true');
+
+    // The next mount starts on its own and the stop button clears the preference.
+    render(MiniSpectrogram);
+    await fireEvent.click(await screen.findByRole('button', { name: STOP_LABEL }));
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
 });
