@@ -5053,6 +5053,7 @@
       "loop": "Växla upprepning",
       "player": "Ljudspelare",
       "autoplayBlocked": "Klicka för att spela (autouppspelning blockerad)",
+      "hlsLoadFailed": "Det gick inte att läsa in ljudspelaren, ladda om sidan och försök igen",
       "hlsNotSupported": "HLS-uppspelning stöds inte i den här webbläsaren",
       "streamStarting": "Startar ljudström...",
       "levelFor": "Ljudnivå för {source}",

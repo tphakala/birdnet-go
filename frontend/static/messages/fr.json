@@ -5053,6 +5053,7 @@
       "loop": "Basculer la boucle",
       "player": "Lecteur audio",
       "autoplayBlocked": "Cliquez pour lire (lecture automatique bloquée)",
+      "hlsLoadFailed": "Impossible de charger le lecteur audio, veuillez recharger la page et réessayer",
       "hlsNotSupported": "La lecture HLS n'est pas prise en charge dans ce navigateur",
       "streamStarting": "Démarrage du flux audio...",
       "levelFor": "Niveau audio pour {source}",

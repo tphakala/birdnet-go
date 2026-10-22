@@ -5053,6 +5053,7 @@
       "loop": "Wiederholung umschalten",
       "player": "Audioplayer",
       "autoplayBlocked": "Klicken zum Abspielen (Autoplay blockiert)",
+      "hlsLoadFailed": "Der Audioplayer konnte nicht geladen werden, bitte die Seite neu laden und erneut versuchen",
       "hlsNotSupported": "HLS-Wiedergabe wird in diesem Browser nicht unterstützt",
       "streamStarting": "Audiostream wird gestartet...",
       "levelFor": "Audiopegel für {source}",

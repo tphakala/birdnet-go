@@ -3706,6 +3706,7 @@ export type TranslationKey =
   | 'media.audio.loop'
   | 'media.audio.player'
   | 'media.audio.autoplayBlocked'
+  | 'media.audio.hlsLoadFailed'
   | 'media.audio.hlsNotSupported'
   | 'media.audio.streamStarting'
   | 'media.audio.levelFor' // params: source

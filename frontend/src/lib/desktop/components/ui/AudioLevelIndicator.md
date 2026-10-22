@@ -40,7 +40,7 @@ Uses v2 API endpoints:
 
 ## Dependencies
 
-- HLS.js library (loaded via script tag in main HTML)
+- HLS.js library (loaded on demand by `hls-loader.ts` on first playback, as its own chunk)
 - Tailwind CSS for styling
 - Browser support for EventSource API
 

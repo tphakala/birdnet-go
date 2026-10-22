@@ -5053,6 +5053,7 @@
       "loop": "Toggle loop",
       "player": "Audio player",
       "autoplayBlocked": "Click to play (autoplay blocked)",
+      "hlsLoadFailed": "Could not load the audio player, reload the page and try again",
       "hlsNotSupported": "HLS playback not supported in this browser",
       "streamStarting": "Starting audio stream...",
       "levelFor": "Audio level for {source}",

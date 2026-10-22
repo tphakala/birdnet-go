@@ -5053,6 +5053,7 @@
       "loop": "Przełącz pętlę",
       "player": "Odtwarzacz audio",
       "autoplayBlocked": "Kliknij, aby odtworzyć (autoodtwarzanie zablokowane)",
+      "hlsLoadFailed": "Nie udało się załadować odtwarzacza audio, odśwież stronę i spróbuj ponownie",
       "hlsNotSupported": "Odtwarzanie HLS nie jest obsługiwane w tej przeglądarce",
       "streamStarting": "Uruchamianie strumienia audio...",
       "levelFor": "Poziom dźwięku dla {source}",
