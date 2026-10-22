@@ -75,10 +75,7 @@ func (c *Handler) newStagingDst(base string) (string, error) {
 		return "", err
 	}
 	buf := make([]byte, stagingTokenBytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "", errors.New(err).Component("imports").Category(errors.CategoryGeneric).
-			Context("op", "staging-token").Build()
-	}
+	rand.Read(buf)
 	return filepath.Join(base, stagingDirPrefix+hex.EncodeToString(buf)), nil
 }
 

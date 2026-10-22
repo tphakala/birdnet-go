@@ -536,12 +536,10 @@ func SanitizeFFmpegError(text string) string {
 // GenerateSystemID creates a unique system identifier
 // The ID is 12 characters long, URL-safe, and case-insensitive
 // Format: XXXX-XXXX-XXXX (14 chars total with hyphens)
-func GenerateSystemID() (string, error) {
+func GenerateSystemID() string {
 	// Generate random bytes (will become 12 hex characters)
 	bytes := make([]byte, systemIDRandomBytes)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("failed to generate random bytes: %w", err)
-	}
+	rand.Read(bytes)
 
 	// Convert to hex string (12 characters)
 	id := hex.EncodeToString(bytes)
@@ -552,7 +550,7 @@ func GenerateSystemID() (string, error) {
 		id[systemIDSegmentLen:2*systemIDSegmentLen],
 		id[2*systemIDSegmentLen:])
 
-	return strings.ToUpper(formatted), nil
+	return strings.ToUpper(formatted)
 }
 
 // IsValidSystemID checks if a system ID has the correct format
