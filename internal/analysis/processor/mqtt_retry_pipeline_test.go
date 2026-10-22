@@ -3,6 +3,7 @@
 package processor
 
 import (
+	"context"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -131,4 +132,35 @@ func TestDefaultActions_MQTTPublishRetriedThroughQueue(t *testing.T) {
 		assert.Equal(t, 1, p.JobQueue.GetStats().TotalJobs, "only the composite job may be enqueued")
 		assert.Zero(t, mqttClient.GetPublishCalls(), "no publish for a detection whose save failed")
 	})
+}
+
+// TestEnqueueAction_EnqueueFailureDoesNotStopComposite verifies that a failed
+// enqueue (queue full, stopped or context done) does not stop the composite, so
+// the steps after the enqueue step still run for a detection that is saved.
+func TestEnqueueAction_EnqueueFailureDoesNotStopComposite(t *testing.T) {
+	t.Parallel()
+
+	wrapped := &MockAction{}
+	later := &MockAction{}
+	var enqueued []*Task
+
+	composite := &CompositeAction{
+		Actions: []Action{
+			&enqueueAction{
+				action: wrapped,
+				enqueue: func(_ context.Context, task *Task) error {
+					enqueued = append(enqueued, task)
+					return fmt.Errorf("job queue is full")
+				},
+			},
+			later,
+		},
+	}
+
+	require.NoError(t, composite.Execute(t.Context(), nil))
+
+	require.Len(t, enqueued, 1)
+	assert.Same(t, wrapped, enqueued[0].Action, "the wrapped action is handed to the queue")
+	assert.Zero(t, wrapped.GetExecuteCount(), "the wrapped action is not run inline")
+	assert.Equal(t, 1, later.GetExecuteCount(), "later composite steps still run")
 }
