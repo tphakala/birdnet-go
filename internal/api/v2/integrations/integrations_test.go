@@ -487,8 +487,7 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Build the handler outside the bubble: apitest.NewCore starts
-			// goroutines that must not belong to it.
+			// The handler is built outside the bubble.
 			e, controller := newIntegrationsTestHandler(t)
 
 			synctest.Test(t, func(t *testing.T) {
@@ -529,8 +528,8 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 }
 
 // TestGetMQTTStatusEnabled exercises GetMQTTStatus with MQTT enabled and verifies
-// the broker/topic are reported back. The connection check runs against an
-// unreachable broker, so connected stays false.
+// the broker/topic are reported back. The connection check runs against a local
+// broker that drops every connection, so connected stays false.
 func TestGetMQTTStatusEnabled(t *testing.T) {
 	refusingBroker := newRefusingMQTTBroker(t)
 

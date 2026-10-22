@@ -76,7 +76,9 @@ func newRefusingMQTTBroker(t *testing.T) string {
 
 // cancelledContext returns a context that is already cancelled. A request built
 // on it makes the handlers' outbound HTTP calls fail before any DNS lookup or
-// dial, so network stages never run.
+// dial (net/http transport.go roundTrip checks ctx.Done() first, Go 1.27.3
+// lines 694-698), and the MQTT and BirdWeather test clients return before
+// their stages (mqtt/testing.go:378, birdweather/connection_probe.go:957).
 func cancelledContext(t *testing.T) context.Context {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())

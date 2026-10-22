@@ -278,7 +278,6 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 func TestSSERapidDisconnectReleasesClients(t *testing.T) {
 	// Goroutine leak checking is now handled centrally in TestMain
 	t.Attr("component", "sse")
-	t.Attr("issue", "unbuffered-channel-fix")
 
 	server, core := setupSSETestServer(t)
 
