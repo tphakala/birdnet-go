@@ -64,6 +64,9 @@ const (
 	// saveTransactionTimeout is the maximum duration for a Save transaction.
 	// This prevents indefinite lock holding during slow I/O operations.
 	saveTransactionTimeout = 30 * time.Second
+	// saveContributionsTimeout bounds the best-effort model contribution write that
+	// follows a committed Save, so a slow transaction cannot starve it of its budget.
+	saveContributionsTimeout = 30 * time.Second
 )
 
 // parseHour validates and parses an hour string to an integer.
@@ -958,7 +961,9 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// downstream actions (MQTT, SSE) publish detectionId=0 (GitHub #2453).
 	note.ID = det.ID
 
-	ds.saveModelContributionsBestEffort(txCtx, det.ID, note.ModelContributions)
+	contribCtx, cancelContribs := context.WithTimeout(ctx, saveContributionsTimeout)
+	defer cancelContribs()
+	ds.saveModelContributionsBestEffort(contribCtx, det.ID, note.ModelContributions)
 
 	return nil
 }
