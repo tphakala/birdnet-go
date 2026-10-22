@@ -1817,10 +1817,9 @@ func TestAddCommentMethod(t *testing.T) {
 		commentText string
 		saveErr     error
 		expectSave  bool
-		expectError bool
 	}{
 		{name: "Valid comment", commentText: "This is a test comment", expectSave: true},
-		{name: "Database error", commentText: "This is a test comment", saveErr: errors.NewStd("database error"), expectSave: true, expectError: true},
+		{name: "Database error", commentText: "This is a test comment", saveErr: errors.NewStd("database error"), expectSave: true},
 		{name: "Empty comment saves nothing", commentText: ""},
 	}
 
@@ -1834,8 +1833,8 @@ func TestAddCommentMethod(t *testing.T) {
 			}
 
 			err := controller.AddComment(noteID, tc.commentText)
-			if tc.expectError {
-				require.Error(t, err)
+			if tc.saveErr != nil {
+				require.ErrorIs(t, err, tc.saveErr)
 			} else {
 				require.NoError(t, err)
 			}
