@@ -3,10 +3,8 @@
 package spectrogram
 
 import (
-	"context"
 	"fmt"
 	"maps"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -30,15 +28,6 @@ const (
 
 	// sizeExtraLargePx is the width for maximum quality for expert review (height=1025, DFT=2048)
 	sizeExtraLargePx = 2050
-
-	// signalKilledMessage is the error message pattern for process termination
-	signalKilledMessage = "signal: killed"
-
-	// exitCodeSIGKILL is the exit code when a process is terminated by SIGKILL (128 + 9)
-	exitCodeSIGKILL = 137
-
-	// exitCodeSIGTERM is the exit code when a process is terminated by SIGTERM (128 + 15)
-	exitCodeSIGTERM = 143
 )
 
 // validSizes maps size strings to pixel widths (single source of truth).
@@ -120,47 +109,30 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 }
 
 // IsOperationalError checks if an error is an expected operational event rather than
-// a genuine failure. Operational errors include context cancellation, deadline exceeded,
-// and process kills (e.g. context-triggered SIGKILL/SIGTERM).
+// a genuine failure, such as a context cancellation, an expired deadline, or a render
+// interrupted by either.
 //
 // The function checks for operational errors in this order:
-//  1. Context errors (Canceled, DeadlineExceeded)
+//  1. Context errors (Canceled, DeadlineExceeded) anywhere in the error chain
 //  2. An operational classification already attached upstream: a CategorySystem
 //     EnhancedError tagged PriorityLow (set by nativeError for context interruptions)
-//  3. Process exit codes (SIGKILL=137, SIGTERM=143) - more reliable than string matching
-//  4. String matching for "signal: killed" - fallback for compatibility
 func IsOperationalError(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	// Check standard context errors
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.IsContextCancellation(err) {
 		return true
 	}
 
 	// Honor an operational classification already attached upstream. nativeError
 	// tags context-driven interruptions as a CategorySystem error with PriorityLow
-	// using the governing context. Requiring CategorySystem (the category it pairs
-	// with these interruptions) keeps an unrelated PriorityLow error from being
-	// misread as operational. Downstream consumers
-	// (prerenderer, API media handlers) then get a consistent answer without
-	// re-deriving it from a platform-dependent surface error.
-	if enhanced, ok := errors.AsType[*errors.EnhancedError](err); ok && enhanced.GetPriority() == errors.PriorityLow &&
-		enhanced.Category == errors.CategorySystem {
-		return true
-	}
-
-	// Check for process termination via exit codes (more reliable than string matching)
-	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
-		code := exitErr.ExitCode()
-		if code == exitCodeSIGKILL || code == exitCodeSIGTERM {
-			return true
-		}
-	}
-
-	// Fallback to string matching for compatibility with other error types
-	return strings.Contains(err.Error(), signalKilledMessage)
+	// using the governing context. IsSuppressibleOperationalError is the shared
+	// definition the Sentry filter uses, so an unrelated PriorityLow error in
+	// another category is not misread as operational and downstream consumers
+	// (prerenderer, API media handlers) get the same answer.
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	return ok && errors.IsSuppressibleOperationalError(enhanced)
 }
 
 // BuildSpectrogramPathWithParams builds a spectrogram path with size/raw encoded in filename.
