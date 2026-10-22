@@ -40,12 +40,19 @@ func TestRandomDelay_Bounds(t *testing.T) {
 			// Inside the synctest bubble the clock is fake, so the elapsed
 			// time is exactly the duration randomDelay chose.
 			synctest.Test(t, func(t *testing.T) {
+				seen := make(map[time.Duration]struct{})
 				for range randomDelayDraws {
 					start := time.Now()
 					require.NotPanics(t, func() { randomDelay(t.Context(), tt.minMs, tt.maxMs) })
 					elapsed := time.Since(start)
 					assert.GreaterOrEqual(t, elapsed, tt.wantLo)
 					assert.Less(t, elapsed, tt.wantHi)
+					seen[elapsed] = struct{}{}
+				}
+				// A range wider than one value must produce more than one delay,
+				// otherwise the jitter is constant and the mitigation is gone.
+				if tt.wantHi-tt.wantLo > time.Millisecond {
+					assert.Greater(t, len(seen), 1, "the delay never varied")
 				}
 			})
 		})
