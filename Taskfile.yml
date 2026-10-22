@@ -408,7 +408,8 @@ tasks:
             ca-certificates
 
           # Audio capture library (required at runtime for microphone access)
-          # and ffmpeg (stream ingest, until native stream ingest is the default)
+          # and ffmpeg (stream ingest until native stream ingest is the default,
+          # and the tone publisher for the integration contract tests)
           # Use libasound2-dev which works on both Debian/Ubuntu <24.04 (libasound2)
           # and Ubuntu 24.04+ (libasound2t64 via time_t transition)
           $SUDO apt-get install -y libasound2-dev ffmpeg
@@ -835,11 +836,13 @@ tasks:
           echo "   Install with: task download-onnxruntime"
         fi
 
-        # ffmpeg (optional: only ffmpeg-based stream ingest uses it; no test requires it)
+        # ffmpeg and ffprobe (optional: ffmpeg-based stream ingest and probing use
+        # them, the integration MediaMTX contract tests need them, and some
+        # encoder tests skip without them)
         if command -v ffmpeg >/dev/null 2>&1; then
           echo "✅ FFmpeg: $(ffmpeg -version 2>&1 | head -n1)"
         else
-          echo "⚠️  FFmpeg: not found (only needed for ffmpeg-based stream ingest)"
+          echo "⚠️  FFmpeg: not found (needed for ffmpeg-based stream ingest and probing and for the integration MediaMTX contract tests; encoder validation tests skip without it)"
         fi
 
         echo ""
