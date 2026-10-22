@@ -24,17 +24,18 @@ import (
 //
 //   - logging.modules entries for dotted module names decode as key
 //     "analysis" with a zero-value ModuleOutput, so every setting the user
-//     wrote for the module is silently dropped and applyConfigDefaults'
-//     ensureModuleOutput reinstates the default (console_also: true).
+//     wrote for the module is silently dropped and the logger's
+//     applyConfigDefaults then reinstates the module's defaultModuleOutputs
+//     entry (console_also: true).
 //
 //   - logging.module_levels entries for dotted module names make
 //     viper.Unmarshal fail outright ("expected type 'string', got
 //     unconvertible type 'map[string]interface {}'"), which is fatal to
 //     Load() and therefore to application startup.
 //
-// The application itself writes these dotted keys: ensureModuleOutput
-// registers "audio.ffmpeg", "spectrogram.prerenderer" and
-// "analysis.processor" as first-class module names and the save path
+// The application itself writes these dotted keys: the logger's
+// defaultModuleOutputs registers "audio.ffmpeg", "spectrogram.prerenderer"
+// and "analysis.processor" as first-class module names and the save path
 // (yaml.Marshal) round-trips them verbatim. The write side is correct YAML;
 // the read side is what loses them.
 //
@@ -45,13 +46,16 @@ import (
 //     "spectrogram.prerenderer" has become a nested map that cannot decode
 //     into string at all. A decode hook flattens those nested values back
 //     into dotted keys before mapstructure decodes them, which keeps
-//     Unmarshal (and therefore Load) from failing.
+//     Unmarshal (and therefore Load) from failing. The hook cannot recover
+//     a parent and a dotted child that coexist ("audio" and "audio.ffmpeg"),
+//     because AllSettings keeps only one of them.
 //
 //  2. For logging.modules the hook cannot tell a dotted-key remainder apart
 //     from a legitimate map value by shape alone, so after Unmarshal the two
 //     logging maps are re-decoded from viper's raw subtree, where the
 //     original flat keys are still intact (viper.Get splits only the search
-//     path, not the values it returns).
+//     path, not the values it returns). This covers module_levels too, for
+//     the parent plus dotted child case the hook cannot recover.
 
 // decodeHookFlattenMaxDepth bounds the nesting a malformed config can drive the
 // hook through before it gives up. Real dotted keys are one level deep (the
@@ -166,7 +170,8 @@ func reDecodeLoggingConfig(settings *Settings) error {
 // built-in default for that module instead of a zero value, so a partial
 // entry like "analysis.processor: {console_also: false}" keeps Enabled=true
 // and its default file path rather than silently disabling the module's log
-// file.
+// file. Entries whose raw value is not a mapping are left as Unmarshal
+// produced them.
 func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 	rawModules, ok := section["modules"].(map[string]any)
 	if !ok {
@@ -176,6 +181,14 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 		settings.Logging.ModuleOutputs = make(map[string]logger.ModuleOutput, len(rawModules))
 	}
 	for name, rawValue := range rawModules {
+		// A module entry must be a mapping. A scalar or null under a dotted
+		// name was split by viper and ignored by Unmarshal, and a non-dotted
+		// scalar already fails Unmarshal, so skipping keeps the entry exactly
+		// as Unmarshal produced it and the logger's defaultModuleOutputs
+		// fills an absent known module.
+		if _, isMap := rawValue.(map[string]any); !isMap {
+			continue
+		}
 		entry, hasBase := settings.Logging.ModuleOutputs[name]
 		if !hasBase {
 			entry, _ = logger.DefaultModuleOutput(name)
@@ -205,11 +218,10 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 }
 
 // reDecodeModuleLevels rebuilds settings.Logging.ModuleLevels the same way.
-// Unmarshal already decodes module_levels with the DottedKeyDecodeHook
-// composed in (scalar-valued maps are exactly what the hook flattens), so
-// this pass is belt-and-braces: it costs one lookup and guarantees the two
-// maps are always restored from the same raw subtree, whether Unmarshal's
-// path or this one is what a future refactor changes first.
+// The hook restores a lone dotted key, but when a parent and a dotted child
+// are both set ("audio" and "audio.ffmpeg"), AllSettings has already dropped
+// one of them (one path needs a string where the other needs a map), so this
+// pass is required; the raw subtree keeps both.
 func reDecodeModuleLevels(settings *Settings, section map[string]any) error {
 	rawLevels, ok := section["module_levels"].(map[string]any)
 	if !ok {

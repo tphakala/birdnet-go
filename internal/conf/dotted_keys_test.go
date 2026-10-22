@@ -1,11 +1,9 @@
 package conf
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,6 +14,12 @@ import (
 // every setting for dotted module names (decoding them as a zero-value
 // module whose name lost the suffix), and logging.module_levels with any
 // dotted key made viper.Unmarshal - and therefore Load - fail outright.
+// taxonomySynonyms is the other scalar-valued map the hook protects.
+
+// dottedKeyLoadIterations repeats a Load whose outcome depends on viper's
+// random map iteration order. Without the repair a single load fails about
+// 70% of the time, so 20 loads leave a negligible chance of a false pass.
+const dottedKeyLoadIterations = 20
 
 // dottedKeysConfig is the smallest config that exercises both failure modes
 // plus a non-dotted control entry for each map.
@@ -37,7 +41,7 @@ logging:
 
 // TestLoad_DottedModuleNamesAreKeptInModuleOutputs pins the reported symptom:
 // settings a user writes for a dotted module name must reach the logger
-// instead of being dropped and replaced by the ensureModuleOutput default.
+// instead of being dropped and replaced by the logger's defaultModuleOutputs entry.
 func TestLoad_DottedModuleNamesAreKeptInModuleOutputs(t *testing.T) {
 	settings, _ := loadConfigFromYAML(t, dottedKeysConfig)
 
@@ -92,10 +96,10 @@ logging:
 	assert.Equal(t, "logs/actions.log", out["analysis.processor"].FilePath,
 		"a partial entry must keep the module's default log file path")
 
-	// Same contract for a second dotted module seeded from a different
-	// default file, set only through module_levels this time - the maps are
-	// independent, so a module missing from logging.modules keeps the
-	// defaults applyConfigDefaults gives it.
+	// Same contract for a second dotted module whose default lives in a
+	// different file (audio.ffmpeg defaults to logs/audio.log), again set
+	// through logging.modules with only `enabled`, so the file path must come
+	// from the module default.
 	cfg2 := `
 security:
   sessionsecret: "0123456789abcdef0123456789abcdef"
@@ -129,108 +133,156 @@ func TestLoad_DottedModuleNamesAreKeptInModuleLevels(t *testing.T) {
 		"the split prefix must not survive as a phantom entry")
 }
 
-// TestLoad_DottedKeysInOtherScalarMaps proves the decode hook is generic for
-// scalar-valued maps: notification push provider environment variables and
-// webhook endpoint headers are map[string]string, whose keys are user-chosen
-// and can legitimately contain dots. They must survive loading the same way.
-func TestLoad_DottedKeysInOtherScalarMaps(t *testing.T) {
-	cfg := `
+// TestLoad_DottedTaxonomySynonymKeysAreKept pins that the decode hook is wired
+// into Load() for a scalar-valued map that has no re-decode behind it.
+// taxonomySynonyms keys are user-chosen and legitimately contain dots
+// ("larus sp.", "T. migratorius"). Viper splits keys of scalar-valued maps it
+// reaches by key path, which today means logging.module_levels and
+// taxonomySynonyms. Without the hook a single load fails about 70% of the
+// time, depending on viper's random map order, so the load repeats. Keys come
+// back lowercased by viper, which is fine because buildSynonymIndexes
+// lowercases them anyway.
+func TestLoad_DottedTaxonomySynonymKeysAreKept(t *testing.T) {
+	const cfg = `
 security:
   sessionsecret: "0123456789abcdef0123456789abcdef"
-notification:
-  push:
-    providers:
-      - name: webhook-test
-        type: webhook
-        environment:
-          model.name: birdnet-v2.4
-        endpoints:
-          - url: http://example.invalid/hook
-            headers:
-              user.agent: birdnet-go
+taxonomySynonyms:
+  larus sp.: larus argentatus
+  T. migratorius: turdus migratorius
+`
+	want := map[string]string{
+		"larus sp.":      "larus argentatus",
+		"t. migratorius": "turdus migratorius",
+	}
+	for i := range dottedKeyLoadIterations {
+		settings, _ := loadConfigFromYAML(t, cfg)
+		require.Equal(t, want, settings.TaxonomySynonyms, "iteration %d", i)
+	}
+}
+
+// TestLoad_DottedChildAndParentModuleKeysAreBothKept pins the case the decode
+// hook cannot recover: a module and its dotted child set side by side. Viper's
+// AllSettings keeps only one of "audio" and "audio.ffmpeg" (one path needs a
+// string where the other needs a map), so both maps are rebuilt from the raw
+// subtree. Parent and child differ in every pair so a swapped or lost entry
+// shows. The outcome depends on viper's random map order, so the load repeats.
+func TestLoad_DottedChildAndParentModuleKeysAreBothKept(t *testing.T) {
+	const cfg = `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+logging:
+  modules:
+    audio:
+      level: info
+    audio.ffmpeg:
+      level: warn
+    spectrogram:
+      level: error
+    spectrogram.prerenderer:
+      level: info
+  module_levels:
+    audio: info
+    audio.ffmpeg: warn
+    spectrogram: error
+    spectrogram.prerenderer: warn
+`
+	wantLevels := map[string]string{
+		"audio":                   "info",
+		"audio.ffmpeg":            "warn",
+		"spectrogram":             "error",
+		"spectrogram.prerenderer": "warn",
+	}
+	wantOutputLevels := map[string]string{
+		"audio":                   "info",
+		"audio.ffmpeg":            "warn",
+		"spectrogram":             "error",
+		"spectrogram.prerenderer": "info",
+	}
+	for i := range dottedKeyLoadIterations {
+		settings, _ := loadConfigFromYAML(t, cfg)
+		require.Equal(t, wantLevels, settings.Logging.ModuleLevels, "iteration %d", i)
+		for name, level := range wantOutputLevels {
+			require.Contains(t, settings.Logging.ModuleOutputs, name, "iteration %d", i)
+			assert.Equal(t, level, settings.Logging.ModuleOutputs[name].Level,
+				"iteration %d, module %s", i, name)
+		}
+	}
+}
+
+// TestLoad_ScalarDottedModuleEntryIsIgnored pins that a scalar under a dotted
+// logging.modules name does not fail Load. Main ignores it (viper splits the
+// name and Unmarshal drops the unknown field), so the re-decode must skip
+// values that are not mappings instead of failing startup.
+func TestLoad_ScalarDottedModuleEntryIsIgnored(t *testing.T) {
+	const cfg = `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+logging:
+  modules:
+    analysis.processor: true
 `
 	settings, _ := loadConfigFromYAML(t, cfg)
 
-	providers := settings.Notification.Push.Providers
-	require.Len(t, providers, 1)
-	env := providers[0].Environment
-	require.Contains(t, env, "model.name",
-		"a dotted environment key must survive as one entry")
-	assert.Equal(t, "birdnet-v2.4", env["model.name"])
-
-	require.Len(t, providers[0].Endpoints, 1)
-	headers := providers[0].Endpoints[0].Headers
-	require.Contains(t, headers, "user.agent",
-		"a dotted header key must survive as one entry")
-	assert.Equal(t, "birdnet-go", headers["user.agent"])
+	out := settings.Logging.ModuleOutputs
+	assert.NotContains(t, out, "analysis.processor",
+		"a scalar entry is ignored as on main; the logger defaults fill the module")
+	assert.True(t, out["analysis"].Enabled,
+		"the standalone analysis module must not be damaged")
 }
 
 // TestDottedKeyDecodeHook_ScalarMapsOnly pins the hook's core behavior and
-// blast radius: it must flatten split keys for scalar-valued maps, and must
-// not touch map[string]any or struct-valued targets, where nested maps are
-// legitimate data the hook cannot distinguish from a split key by shape.
+// blast radius through the hook itself: it flattens split keys for
+// scalar-valued maps, and leaves map[string]any and struct-valued targets
+// alone, where nested maps are legitimate data the hook cannot distinguish
+// from a split key by shape.
 func TestDottedKeyDecodeHook_ScalarMapsOnly(t *testing.T) {
 	t.Parallel()
 
-	// Scalar-valued map: the nested value is unambiguously a split key.
-	split := map[string]any{
-		"analysis": map[string]any{"processor": "warn"},
-		"ebird":    "error",
+	type moduleStub struct {
+		Level string `mapstructure:"level"`
 	}
-	flat := flattenDottedMapKeys(split, 0)
-	assert.Equal(t, map[string]any{
-		"analysis.processor": "warn",
-		"ebird":              "error",
-	}, flat)
 
-	// A key with two dots reassembles in one pass.
-	twoDots := map[string]any{
-		"a": map[string]any{"b": map[string]any{"c": "v"}},
-	}
-	assert.Equal(t, map[string]any{"a.b.c": "v"}, flattenDottedMapKeys(twoDots, 0))
+	t.Run("scalar map is flattened", func(t *testing.T) {
+		t.Parallel()
+		var got map[string]string
+		decodeThroughHook(t, map[string]any{
+			"analysis": map[string]any{"processor": "warn"},
+			"a":        map[string]any{"b": map[string]any{"c": "v"}},
+			"ebird":    "error",
+		}, &got)
+		assert.Equal(t, map[string]string{
+			"analysis.processor": "warn",
+			"a.b.c":              "v",
+			"ebird":              "error",
+		}, got)
+	})
+
+	t.Run("any map keeps its nesting", func(t *testing.T) {
+		t.Parallel()
+		input := map[string]any{"range": map[string]any{"model": "birdnet"}}
+		var got map[string]any
+		decodeThroughHook(t, input, &got)
+		assert.Equal(t, input, got)
+	})
+
+	t.Run("struct map keeps its keys", func(t *testing.T) {
+		t.Parallel()
+		var got map[string]moduleStub
+		decodeThroughHook(t, map[string]any{
+			"birdnet": map[string]any{"level": "debug"},
+		}, &got)
+		assert.Equal(t, map[string]moduleStub{"birdnet": {Level: "debug"}}, got)
+	})
 }
 
-// TestDottedKeyDecodeHook_UnmarshalKeepsNestedAnyMaps guards against a
-// regression that would flatten nested maps inside map[string]any targets,
-// where nesting is legitimate configuration.
-func TestDottedKeyDecodeHook_UnmarshalKeepsNestedAnyMaps(t *testing.T) {
-	t.Parallel()
-
-	type metaConfig struct {
-		Filters map[string]any `mapstructure:"filters"`
-	}
-	v := viper.New()
-	v.SetConfigType("yaml")
-	require.NoError(t, v.ReadConfig(strings.NewReader(`
-filters:
-  range:
-    model: birdnet
-    enabled: true
-`)))
-
-	var cfg metaConfig
-	err := v.Unmarshal(&cfg, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
-		DottedKeyDecodeHook(), DurationDecodeHook())))
+// decodeThroughHook decodes input into result with only DottedKeyDecodeHook
+// installed, so a test sees what the hook does and nothing else.
+func decodeThroughHook(t *testing.T, input, result any) {
+	t.Helper()
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:     result,
+		DecodeHook: DottedKeyDecodeHook(),
+	})
 	require.NoError(t, err)
-	require.NotNil(t, cfg.Filters)
-	require.Contains(t, cfg.Filters, "range",
-		"nested map[string]any values must not be flattened away")
-}
-
-// TestDottedKeyDecodeHook_AppliesToWholeSettings pins the composed-hook
-// behavior end to end on the Settings type itself: module_levels with a
-// dotted key decodes without error and logging.modules keeps the dotted
-// entry, exactly as the Load-level tests assert but without the global
-// loader state, so a failure here points at the hook rather than Load.
-func TestDottedKeyDecodeHook_AppliesToWholeSettings(t *testing.T) {
-	t.Parallel()
-
-	v := viper.New()
-	v.SetConfigType("yaml")
-	require.NoError(t, v.ReadConfig(strings.NewReader(dottedKeysConfig)))
-
-	var settings Settings
-	err := v.Unmarshal(&settings, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
-		DottedKeyDecodeHook(), DurationDecodeHook())))
-	require.NoError(t, err, "a dotted module_levels key must not fail the unmarshal")
+	require.NoError(t, decoder.Decode(input))
 }

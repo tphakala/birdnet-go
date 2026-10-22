@@ -118,7 +118,7 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 	// CentralLogger.Module routes to a module's own writer only when that module
 	// has an output entry AND it is enabled, otherwise it falls back to the
 	// shared base handler. On a default install birdweather gets its own file
-	// (ensureModuleOutput, DefaultBirdweatherLogPath), so these lines land
+	// (the logger's defaultModuleOutputs entry, DefaultBirdweatherLogPath), so these lines land
 	// outside what the endpoint reads and never appear there. Disable or
 	// redirect the birdweather module output and they land in the default output
 	// instead, at which point they DO appear, which is what the matching
