@@ -2322,6 +2322,8 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 				RetryConfig:       mqttRetryConfig,
 				CorrelationID:     det.CorrelationID,
 				SpeciesTimeSource: speciesTimeSource,
+				liveSettings:      p.currentSettings,
+				liveClient:        p.GetMQTTClient,
 			}
 		}
 	}
@@ -2414,6 +2416,8 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 				pcmData:       det.pcmData3s,
 				RetryConfig:   bwRetryConfig,
 				CorrelationID: det.CorrelationID,
+				liveSettings:  p.currentSettings,
+				liveClient:    p.GetBwClient,
 			})
 		}
 	}

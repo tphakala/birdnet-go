@@ -19,7 +19,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
-	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -119,7 +118,7 @@ func (c *Handler) currentOptimizeOffers() []optimizeOffer {
 		}
 	}
 	s := c.CurrentSettings()
-	ortStatus := inference.CheckORTAvailability(s.BirdNET.ONNXRuntimePath)
+	ortStatus := c.checkORT(s.BirdNET.ONNXRuntimePath)
 	c.ensureHostProbed()
 	byVariant, recommended, _ := c.rankCatalog(visible, ortStatus)
 	offers := optimizeOffers(visible, installed, byVariant, recommended)

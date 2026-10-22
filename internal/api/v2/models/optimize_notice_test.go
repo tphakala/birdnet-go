@@ -101,6 +101,7 @@ func newCountingOptimizeTestHandler(t *testing.T, profile *hwprofile.Profile) (*
 	mm.ScanInstalled()
 	core.ModelManager = mm
 	h := New(core, nil)
+	h.ortProbe = availableORT
 	evaluations := &atomic.Int32{}
 	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
 		evaluations.Add(1)
@@ -288,6 +289,7 @@ func TestSyncOptimizeNotice_CustomPrimaryModelGetsNoNotice(t *testing.T) {
 	mm.ScanInstalled()
 	core.ModelManager = mm
 	h := New(core, nil)
+	h.ortProbe = availableORT
 	profile := aarch64LowRAMONNXProfile()
 	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return profile }
 	notices := &fakeNotices{}
@@ -742,6 +744,7 @@ func TestModelHandlers_ScheduleOptimizeNoticeSync(t *testing.T) {
 		h := New(core, nil)
 		profile := amd64ONNXProfile() // perch-v2 must pass the install compatibility gate
 		h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return profile }
+		h.ortProbe = availableORT
 		h.notices = &fakeNotices{}
 		t.Cleanup(h.StopOptimizeNoticeSync)
 		// Arm Start's timer, then clear it so the handler's own schedule is visible.

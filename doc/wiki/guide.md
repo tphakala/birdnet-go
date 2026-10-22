@@ -252,9 +252,9 @@ realtime:
     locationaccuracy: 10 # Accuracy of location in meters
     retrysettings:
       enabled: true # Enable retry mechanism
-      maxretries: 5 # Maximum number of retry attempts
-      initialdelay: 5 # Initial delay before first retry in seconds
-      maxdelay: 300 # Maximum delay between retries in seconds
+      maxretries: 3 # Maximum number of retry attempts
+      initialdelay: 30 # Initial delay before first retry in seconds
+      maxdelay: 600 # Maximum delay between retries in seconds
       backoffmultiplier: 2.0 # Multiplier for exponential backoff
 
   # Weather integration settings
@@ -301,8 +301,8 @@ realtime:
     retrysettings:
       enabled: true # Enable retry mechanism
       maxretries: 5 # Maximum number of retry attempts
-      initialdelay: 5 # Initial delay before first retry in seconds
-      maxdelay: 300 # Maximum delay between retries in seconds
+      initialdelay: 30 # Initial delay before first retry in seconds
+      maxdelay: 3600 # Maximum delay between retries in seconds
       backoffmultiplier: 2.0 # Multiplier for exponential backoff
       # Retries apply when a publish fails with an error. While the broker connection is down, publishes are skipped:
       # they are not queued or retried, so detections made during an outage are not sent later.

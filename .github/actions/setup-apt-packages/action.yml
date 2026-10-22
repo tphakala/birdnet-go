@@ -12,10 +12,11 @@ inputs:
   execute-install-scripts:
     description: >-
       Whether cache-apt-pkgs-action runs each package's post-install (dpkg)
-      maintainer scripts on a cache miss. The unit-tests job leaves this true
-      (its default). Build/release callers that manage their own post-install
-      steps (e.g. cross-compiler symlinks, qemu binfmt) pass 'false' so routing
-      them through this action keeps their original behavior unchanged.
+      maintainer scripts on a cache miss. Callers that need the packages' normal
+      post-install behavior leave this true (the default). Build/release callers
+      that manage their own post-install steps (e.g. cross-compiler symlinks,
+      qemu binfmt) pass 'false' so routing them through this action keeps their
+      original behavior unchanged.
     required: false
     default: 'true'
 
@@ -39,17 +40,7 @@ runs:
       run: |
         sudo ldconfig
 
-        # Verify key binaries work; reinstall on failure
         FAILED=""
-        for pkg in ${{ inputs.packages }}; do
-          case "$pkg" in
-            ffmpeg)
-              if ! ffmpeg -version > /dev/null 2>&1; then
-                FAILED="$FAILED ffmpeg"
-              fi
-              ;;
-          esac
-        done
 
         # If the cache-restore action itself did not succeed (e.g. a corrupt
         # cache made tar exit 2), continue-on-error above kept the job alive but

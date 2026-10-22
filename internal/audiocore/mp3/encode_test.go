@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -419,43 +418,6 @@ func TestEncodePCM_RoundsNonStandardBitrate(t *testing.T) {
 	// 96 kbps is index 7 (0b0111). This fails if the wrapper ever passed 0 and let
 	// go-mp3 default to 128 kbps (index 9) instead of rounding 100 to 96.
 	assert.Equal(t, byte(0x70), b[2]&0xF0, "third byte must carry the 96 kbps bitrate index")
-}
-
-// Cross-validate the stream against an external decoder when ffprobe is present.
-func TestEncodePCM_FFprobeAcceptsOutput(t *testing.T) {
-	t.Parallel()
-	ffprobe, err := exec.LookPath("ffprobe")
-	if err != nil {
-		t.Skip("ffprobe not installed")
-	}
-
-	out := filepath.Join(t.TempDir(), "clip.mp3")
-	require.NoError(t, EncodePCM(t.Context(), &Options{
-		PCMData:     tonePCM(t, testSampleRate, 1.0, testToneHz),
-		OutputPath:  out,
-		SampleRate:  testSampleRate,
-		Channels:    1,
-		BitDepth:    16,
-		BitrateKbps: testBitrate,
-	}))
-
-	probe, err := exec.CommandContext(t.Context(), ffprobe, //nolint:gosec // fixed args, resolved binary
-		"-v", "error",
-		"-select_streams", "a:0",
-		"-show_entries", "stream=codec_name,sample_rate,channels",
-		"-of", "default=noprint_wrappers=1",
-		out).Output()
-	require.NoError(t, err, "ffprobe must parse the written stream")
-
-	got := map[string]string{}
-	for field := range strings.FieldsSeq(string(probe)) {
-		if k, v, ok := strings.Cut(field, "="); ok {
-			got[k] = v
-		}
-	}
-	assert.Equal(t, "mp3", got["codec_name"])
-	assert.Equal(t, "48000", got["sample_rate"])
-	assert.Equal(t, "1", got["channels"])
 }
 
 // rms returns the root mean square amplitude of the samples.

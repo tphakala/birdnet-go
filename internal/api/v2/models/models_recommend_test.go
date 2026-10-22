@@ -41,6 +41,10 @@ func amd64ONNXProfile() hwprofile.Profile {
 	}
 }
 
+// availableORT is an ortProbe seam that reports a usable ONNX Runtime whatever
+// the host has installed.
+func availableORT(string) inference.ORTStatus { return inference.ORTStatus{Available: true} }
+
 // catalogRequest issues GET /models/catalog against the handler and returns the
 // decoded catalog.
 func catalogRequest(t *testing.T, h *Handler) []CatalogEntryResponse {

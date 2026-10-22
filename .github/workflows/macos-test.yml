@@ -77,9 +77,6 @@ jobs:
             echo "ONNXRUNTIME_VERSION=${onnx}"
           } >> "$GITHUB_ENV"
 
-      - name: Install FFmpeg
-        run: brew install ffmpeg
-
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0
         with:

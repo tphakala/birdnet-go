@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -1325,4 +1326,122 @@ func TestBirdWeatherAction_Execute_RetryReusesEventTrackerDecision(t *testing.T)
 	// With no client the action returns an error after the rate limit check.
 	require.Error(t, action.Execute(t.Context(), nil), "first attempt reaches the client check")
 	require.Error(t, action.Execute(t.Context(), nil), "retry must reach the client check too")
+}
+
+// TestBirdWeatherAction_Execute_ResolvesSettingsOncePerAttempt verifies that one
+// Execute reads one settings snapshot, so the enabled flag, the threshold and the
+// debug flag cannot come from two versions after a reload mid-attempt.
+func TestBirdWeatherAction_Execute_ResolvesSettingsOncePerAttempt(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.Birdweather.Enabled = true
+	settings.Debug = true
+	det := testDetection()
+
+	var settingsCalls int
+	action := &BirdWeatherAction{
+		Result:       det.Result,
+		EventTracker: NewEventTracker(time.Hour),
+		liveSettings: func() *conf.Settings {
+			settingsCalls++
+			return settings
+		},
+		liveClient: func() *birdweather.BwClient { return nil },
+	}
+
+	// No client: the attempt reads the enabled flag and the threshold, then fails
+	// at the client check.
+	require.Error(t, action.Execute(t.Context(), nil))
+	assert.Equal(t, 1, settingsCalls, "one settings snapshot per attempt")
+}
+
+// TestBirdWeatherAction_Execute_NilResolverResultUsesCapturedSettings verifies
+// that a resolver returning no snapshot falls back to the settings the action was
+// built with: the enabled check passes on them and the missing client is reported.
+func TestBirdWeatherAction_Execute_NilResolverResultUsesCapturedSettings(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.Birdweather.Enabled = true
+	det := testDetection()
+
+	action := &BirdWeatherAction{
+		Settings:     settings,
+		Result:       det.Result,
+		EventTracker: NewEventTracker(time.Hour),
+		liveSettings: func() *conf.Settings { return nil },
+		liveClient:   func() *birdweather.BwClient { return nil },
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "BirdWeather client is not initialized")
+}
+
+// TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild verifies that an
+// action built before a settings change or a client removal uses the settings
+// and client in effect when it executes, the way a queued retry does.
+// Not parallel: it publishes global settings.
+func TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
+	tests := []struct {
+		name    string
+		change  func(p *Processor, initial *conf.Settings)
+		wantErr bool
+	}{
+		{
+			name: "birdweather disabled",
+			change: func(_ *Processor, initial *conf.Settings) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.Birdweather.Enabled = false
+				conf.StoreSettings(updated)
+			},
+		},
+		{
+			// The detection confidence (0.95) is below the raised threshold, so the
+			// upload is skipped; with the build-time threshold it would reach the client.
+			name: "threshold raised",
+			change: func(_ *Processor, initial *conf.Settings) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.Birdweather.Threshold = 0.99
+				conf.StoreSettings(updated)
+			},
+		},
+		{
+			name:    "client removed",
+			change:  func(p *Processor, _ *conf.Settings) { p.SetBwClient(nil) },
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prev := conf.GetSettings()
+			t.Cleanup(func() { conf.StoreSettings(prev) })
+
+			initial := &conf.Settings{}
+			initial.Realtime.Birdweather.Enabled = true
+			// Keep the once-per-day range filter gate closed so getDefaultActions
+			// does not publish a settings snapshot of its own.
+			initial.BirdNET.RangeFilter.LastUpdated = time.Now()
+			conf.StoreSettings(initial)
+
+			// A zero client rejects an upload without PCM before touching its settings.
+			p := &Processor{Settings: initial, EventTracker: NewEventTracker(time.Hour), BwClient: &birdweather.BwClient{}}
+
+			action := defaultActionOfType[*BirdWeatherAction](t, p, initial)
+
+			tt.change(p, initial)
+
+			err := action.Execute(t.Context(), nil)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			// The nil-client branch is the only one that returns this message;
+			// the zero client fails with an empty-PCM validation error.
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "BirdWeather client is not initialized")
+		})
+	}
 }
