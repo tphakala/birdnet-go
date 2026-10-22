@@ -67,7 +67,7 @@ func createTestBirdImage() imageprovider.BirdImage {
 }
 
 // createTestSSEDetectionData creates an SSEDetectionData with all fields populated
-// using the newSSEDetectionData constructor (same code path as production).
+// using the NewSSEDetectionData constructor (same code path as production).
 func createTestSSEDetectionData() SSEDetectionData {
 	note := createTestNoteWithAllFields()
 	birdImage := createTestBirdImage()
