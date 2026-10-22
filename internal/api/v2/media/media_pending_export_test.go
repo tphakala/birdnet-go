@@ -98,8 +98,9 @@ func TestServeAudioByID_PendingExport(t *testing.T) {
 
 // TestWaitForPendingClip covers the async spectrogram worker's bounded wait for a
 // not-yet-written clip. Each subtest runs under synctest with an injected poll
-// interval, so elapsed times are exact fake-clock durations. The controller is
-// built outside the bubble; the writer goroutine that makes the file appear runs
+// interval, so elapsed times are fake-clock durations, asserted exactly except
+// when the file appears, where the poll that sees it may land one interval after
+// the write. The controller is built outside the bubble; the writer goroutine that makes the file appear runs
 // inside it, so the file appears at a known fake-clock instant while the file
 // system itself stays real.
 func TestWaitForPendingClip(t *testing.T) {

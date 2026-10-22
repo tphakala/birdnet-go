@@ -1878,9 +1878,10 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 			e, controller, _ := setupMediaTestEnvironment(t)
 
 			synctest.Test(t, func(t *testing.T) {
-				// The mock and the end time are created inside the bubble: the bubble
-				// clock starts at a fake epoch, so a time.Now() taken outside it would
-				// make the recent detection look decades old.
+				// The end time is taken inside the bubble: the bubble clock starts at
+				// 2000-01-01 UTC (testing/synctest docs), so a time.Now() taken outside
+				// it would lie decades in the bubble's future and every row would count
+				// as recent.
 				mockDS := mocks.NewMockInterface(t)
 				mockDS.On("GetNoteClipPath", "42").Return(missingClip, nil)
 				mockDS.On("Get", "42").Return(datastore.Note{ID: 42, EndTime: time.Now().Add(-tc.age)}, nil).Maybe()
