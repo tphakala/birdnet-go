@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -852,35 +854,49 @@ func TestPatchYamlDashFieldsAreEitherBlockedOrRederived(t *testing.T) {
 
 // TestPatchFfmpegMetadataIsRederivedNotClientSettable exercises the other half of
 // the claim above. The list in that test is only a list; this drives a real PATCH
-// and asserts the re-derivation actually happens for two of the three fields.
+// and asserts the re-derivation actually happens for all three fields.
 //
-// Asserts what the value is NOT, deliberately: validateAudioSettings sets these
-// from the real binary when ffmpeg is present and clears them when it is absent,
-// so any assertion on the resulting value would depend on the test machine.
+// The configured ffmpeg path points at an empty, non-executable stub file. The
+// path validator accepts any existing regular file (conf.ValidateToolPath), so
+// validateAudioSettings takes its success arm on every host, ffmpeg installed or
+// not: it keeps the path and then asks the file for its version. Running the stub
+// fails, which the version probe reports as an empty version and zero numbers
+// (conf.GetFfmpegVersionFromContext). Asserting that the path survived is what
+// proves the success arm ran; the failure arm clears the path along with the
+// metadata, which would make the metadata assertions pass without any
+// re-derivation. The stub has no file extension on purpose, so Windows has
+// nothing to resolve it by. The comment on ffmpegVersionDetector in conf records
+// that exec'ing such stubs concurrently crashed the Windows race detector, and
+// package api cannot replace that detector, so the behavior of this test on
+// Windows is NOT MEASURED.
 //
-// Two limits worth knowing before trusting it. It only distinguishes re-derivation
-// from enforcement when ffmpeg is ON PATH: without it, validateAudioSettings takes
-// its failure arm and clearFfmpegMetadata zeroes the same fields for an unrelated
-// reason, so the assertions hold even if the re-derivation were deleted. CI
-// installs ffmpeg on all three platforms, so that gap is a slim dev container
-// only. And it asserts the value rather than the wiring, so renaming the json tag
-// would make the PATCH stop reaching the field and the test pass vacuously.
+// It asserts the value rather than the wiring, so renaming the json tag would
+// make the PATCH stop reaching the field and the test pass vacuously.
 func TestPatchFfmpegMetadataIsRederivedNotClientSettable(t *testing.T) {
+	stub := filepath.Join(t.TempDir(), "ffmpeg-stub")
+	require.NoError(t, os.WriteFile(stub, nil, 0o600))
+
 	e := echo.New()
 	controller := getTestController(t, e)
 	settings := controller.Settings.Load()
+	settings.Realtime.Audio.FfmpegPath = stub
 	settings.Realtime.Audio.FfmpegVersion = "6.0-real"
 	settings.Realtime.Audio.FfmpegMajor = 6
 
 	patchSection(t, e, controller, "audio", map[string]any{
 		"ffmpegVersion": "99.9-attacker",
 		"ffmpegMajor":   99,
+		"ffmpegMinor":   99,
 	})
 
-	updated := controller.Settings.Load()
-	assert.NotEqual(t, "99.9-attacker", updated.Realtime.Audio.FfmpegVersion,
+	audio := controller.Settings.Load().Realtime.Audio
+	require.Equal(t, stub, audio.FfmpegPath,
+		"the configured stub must survive validation, or the metadata assertions below prove nothing")
+	assert.Empty(t, audio.FfmpegVersion,
 		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
-	assert.NotEqual(t, 99, updated.Realtime.Audio.FfmpegMajor,
+	assert.Zero(t, audio.FfmpegMajor,
+		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
+	assert.Zero(t, audio.FfmpegMinor,
 		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
 }
 

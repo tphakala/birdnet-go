@@ -97,39 +97,6 @@ func TestDashboardLayoutWidthPersistence(t *testing.T) {
 	assert.Equal(t, "half", elements2[2].Width, "detections-grid should have 'half'")
 }
 
-// TestMergePreservesJSONDashFields verifies that mergeJSONIntoStruct preserves
-// fields tagged json:"-" (runtime values invisible to JSON) when zeroing slices.
-func TestMergePreservesJSONDashFields(t *testing.T) {
-	initialSettings := getTestSettings(t)
-	// Set runtime-only field (json:"-") that must survive a merge
-	initialSettings.BirdNET.Labels = []string{"species1", "species2"}
-
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// PATCH birdnet section: Labels (json:"-") must survive
-	update := map[string]any{"sensitivity": 1.0}
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/birdnet", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("birdnet")
-
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Runtime field must be preserved: Labels is json:"-" and would be
-	// destroyed if zeroJSONSliceFields zeroed json:"-" tagged slices.
-	assert.Equal(t, []string{"species1", "species2"}, controller.Settings.Load().BirdNET.Labels,
-		"BirdNET.Labels (json:\"-\") must survive merge")
-}
-
 // TestDashboardPartialUpdate verifies dashboard settings preserve unmodified fields
 func TestDashboardPartialUpdate(t *testing.T) {
 	// Get initial settings and override some values for testing
@@ -619,51 +586,36 @@ func TestValidationErrors(t *testing.T) {
 	}
 }
 
-// TestDeepNestedUpdates verifies deeply nested object updates preserve all levels
-func TestDeepNestedUpdates(t *testing.T) {
-	t.Parallel()
-
-	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings(t)
-	initialSettings.Realtime.MQTT.TLS.Enabled = true
-	initialSettings.Realtime.MQTT.TLS.InsecureSkipVerify = false
-
-	// Capture initial values
-	initialMaxRetries := initialSettings.Realtime.MQTT.RetrySettings.MaxRetries
-	initialBackoff := initialSettings.Realtime.MQTT.RetrySettings.BackoffMultiplier
-	initialTLSEnabled := initialSettings.Realtime.MQTT.TLS.Enabled
-
+// TestPatchNestedObjectKeepsSiblingSlices pins the nested-object merge of the
+// PATCH path. The body names one scalar inside the equalizer object, and the
+// filter slice next to it must come through untouched. A slice is the case a
+// struct-only assertion cannot see: the merge resets every JSON-visible slice
+// before decoding, so a nested object that is replaced instead of merged loses
+// its slices, while json.Unmarshal would keep an absent scalar either way.
+func TestPatchNestedObjectKeepsSiblingSlices(t *testing.T) {
 	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only one deeply nested field
-	update := map[string]any{
-		"retrySettings": map[string]any{
-			"initialDelay": 30,
+	controller := getTestController(t, e)
+	controller.Settings.Load().Realtime.Audio.Equalizer = conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "HighPass", Frequency: 200, Q: 0.707, Passes: 1},
+			{Type: "LowPass", Frequency: 14000, Q: 0.707, Passes: 2},
 		},
 	}
 
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
+	patchSection(t, e, controller, "audio", map[string]any{
+		"equalizer": map[string]any{"enabled": false},
+	})
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/mqtt", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("mqtt")
-
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify only the targeted field changed
-	settings := controller.Settings.Load()
-	assert.Equal(t, 30, settings.Realtime.MQTT.RetrySettings.InitialDelay)                           // Changed
-	assert.Equal(t, initialMaxRetries, settings.Realtime.MQTT.RetrySettings.MaxRetries)              // Preserved
-	assert.InDelta(t, initialBackoff, settings.Realtime.MQTT.RetrySettings.BackoffMultiplier, 0.001) // Preserved
-	assert.Equal(t, initialTLSEnabled, settings.Realtime.MQTT.TLS.Enabled)                           // Preserved
+	eq := controller.Settings.Load().Realtime.Audio.Equalizer
+	assert.False(t, eq.Enabled, "the field in the body must change")
+	require.Len(t, eq.Filters, 2, "the sibling filter slice must survive")
+	assert.Equal(t, "HighPass", eq.Filters[0].Type)
+	assert.InDelta(t, 200.0, eq.Filters[0].Frequency, 0.001)
+	assert.Equal(t, 1, eq.Filters[0].Passes)
+	assert.Equal(t, "LowPass", eq.Filters[1].Type)
+	assert.InDelta(t, 14000.0, eq.Filters[1].Frequency, 0.001)
+	assert.Equal(t, 2, eq.Filters[1].Passes)
 }
 
 // TestStreamsSettingsChanged_DetectsModelEdits verifies that per-stream model
