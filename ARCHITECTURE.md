@@ -217,14 +217,14 @@ Related storage: `internal/diskmanager` enforces clip retention (age, usage and 
 
 ## Security
 
-Detail for the authentication package is in code and in [`doc/wiki/security.md`](doc/wiki/security.md); note that `internal/security/README.md` predates API v2 and still names v1 paths.
+Detail for the authentication package is in [`internal/security/README.md`](internal/security/README.md) and the user-facing [`doc/wiki/security.md`](doc/wiki/security.md).
 
 **Model.** Authentication is binary: a request is authenticated or it is not. There are no roles. When no provider is configured the instance is open.
 
 **Providers** (`internal/security`):
 
 - Password login, implemented as an OAuth2 authorization-code flow against the server itself, issuing access tokens.
-- Social login through goth: Google, GitHub, Microsoft, LINE and a generic OIDC provider (always with PKCE), each restricted by a user id allowlist.
+- Social login through goth: Google, GitHub, Microsoft, LINE, Kakao and a generic OIDC provider (always with PKCE), each restricted by a user id allowlist.
 - **Local subnet bypass** (off by default) has two parts. The request gate admits loopback and the configured CIDRs only. A separate same-subnet-as-host check applies to `IsUserAuthenticated` and cookie handling.
 - **Trusted proxies** (`security.trustedproxies`, with a Cloudflare preset): forwarded client IP headers are honoured only from configured proxies, through `internal/security/proxytrust`.
 - Public access can be opened per feature, for example live audio. Private mode gates the whole v2 API.
@@ -330,5 +330,6 @@ CGO is required for TensorFlow Lite. The frontend is embedded with `//go:embed a
 - [`doc/wiki/`](doc/wiki/): user-facing documentation, including `detection-pipeline.md`, `configuration-reference.md`, `security.md` and `building.md`.
 - [`internal/api/v2/README.md`](internal/api/v2/README.md): API endpoint catalog.
 - [`internal/datastore/AGENTS.md`](internal/datastore/AGENTS.md): datastore rules and the migration direction.
+- [`internal/classifier/README.md`](internal/classifier/README.md): the orchestrator, model manager and how to add a model.
 - [`internal/analysis/jobqueue/README.md`](internal/analysis/jobqueue/README.md), [`internal/analysis/species/README.md`](internal/analysis/species/README.md), [`internal/notification/README.md`](internal/notification/README.md), [`internal/mqtt/README.md`](internal/mqtt/README.md), [`internal/birdweather/README.md`](internal/birdweather/README.md), [`internal/backup/README.md`](internal/backup/README.md): per-package behaviour.
-- [`internal/events/ARCHITECTURE.md`](internal/events/ARCHITECTURE.md): the async event system in depth. It dates from the original design and its numbers may be out of date.
+- [`internal/events/ARCHITECTURE.md`](internal/events/ARCHITECTURE.md): the async event system in depth.
