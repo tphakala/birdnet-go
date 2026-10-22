@@ -2245,8 +2245,8 @@ func restoreBlockedFieldsRecursively(
 		currentField := currentValue.FieldByName(fieldName)
 		updatedField := updatedValue.FieldByName(fieldName)
 		// A map entry naming a field that no longer exists (renamed or removed)
-		// must not panic a live request. TestBlockedFieldMapNamesRealFields is
-		// what turns such an entry into a test failure instead.
+		// must not panic a live request. TestRestoreBlockedFieldsCoversEveryLeaf
+		// is what turns such an entry into a test failure instead.
 		if !currentField.IsValid() || !updatedField.IsValid() || !currentField.CanInterface() {
 			continue
 		}
