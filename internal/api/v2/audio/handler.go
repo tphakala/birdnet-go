@@ -21,7 +21,8 @@
 //
 // probeStreamInfo is an injectable stream-probe seam used by the stream-test
 // endpoint; it defaults to ffmpeg.ProbeStreamInfo lazily and is overridden in
-// tests.
+// tests. listCaptureDevices is the same kind of seam for the device endpoints,
+// defaulting to audiocore.ListCaptureDevices.
 package audio
 
 import (
@@ -88,6 +89,11 @@ type Handler struct {
 	// default (the system resolver is used); overridden in tests so they never
 	// touch real DNS.
 	lookupStreamHost lookupHostFunc
+
+	// listCaptureDevices lists the capture devices for the device endpoints. nil
+	// by default (audiocore.ListCaptureDevices is used); overridden in tests so
+	// they never open a real audio device.
+	listCaptureDevices func() ([]audiocore.DeviceInfo, error)
 
 	// audioLevelChan is the live audio-level channel injected by the parent server
 	// via SetAudioLevelChan after construction.

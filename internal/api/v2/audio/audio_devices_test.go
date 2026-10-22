@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -24,13 +25,16 @@ func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Handler) {
 	settings := &conf.Settings{
 		Realtime: conf.RealtimeSettings{
 			Audio: conf.AudioSettings{
-				Source: "test-device",
+				Sources: []conf.AudioSourceConfig{{Device: "test-device"}},
 			},
 		},
 	}
 
 	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.Settings.Store(settings)
+	// No test may reach real audio hardware through this fixture; tests that
+	// need devices replace the lister.
+	controller.listCaptureDevices = func() ([]audiocore.DeviceInfo, error) { return nil, nil }
 
 	return e, controller
 }
@@ -69,59 +73,86 @@ func TestGetActiveAudioDevice(t *testing.T) {
 	t.Attr("type", "integration")
 	t.Attr("feature", "audio-device")
 
-	t.Run("With configured device", func(t *testing.T) {
-		e, controller := setupSystemTestEnvironment(t)
-		// Settings already have a device configured
+	const (
+		configuredName = "test-device"
+		configuredID   = ":1,0"
+	)
 
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/active", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/system/audio/active")
-
-		err := controller.GetActiveAudioDevice(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response map[string]any
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-
-		// Should have device info
-		assert.Contains(t, response, "device", "Response should contain device")
-		assert.Contains(t, response, "active", "Response should contain active flag")
-	})
-
-	t.Run("No device configured", func(t *testing.T) {
-		e := echo.New()
-		settings := &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				Audio: conf.AudioSettings{
-					Source: "", // No device configured
-				},
+	tests := []struct {
+		name         string
+		sources      []conf.AudioSourceConfig
+		devices      []audiocore.DeviceInfo
+		wantActive   bool
+		wantVerified bool
+		wantMessage  string
+		wantName     string
+		wantID       string
+	}{
+		{
+			name:    "configured device listed by name",
+			sources: []conf.AudioSourceConfig{{Device: configuredName}},
+			devices: []audiocore.DeviceInfo{
+				{Name: "other-device", ID: ":0,0"},
+				{Name: configuredName, ID: configuredID},
 			},
-		}
-		controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
-		controller.Settings.Store(settings)
+			wantActive:   true,
+			wantVerified: true,
+			wantName:     configuredName,
+			wantID:       configuredID,
+		},
+		{
+			name:    "configured device not listed",
+			sources: []conf.AudioSourceConfig{{Device: configuredName}},
+			devices: []audiocore.DeviceInfo{
+				{Name: "other-device", ID: ":0,0"},
+			},
+			wantActive:   true,
+			wantVerified: false,
+			wantMessage:  "Configured audio device not found on the system",
+			wantName:     configuredName,
+		},
+		{
+			name:        "no device configured",
+			sources:     nil,
+			wantMessage: "No audio device currently active",
+		},
+	}
 
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/active", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/system/audio/active")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			e, controller := setupSystemTestEnvironment(t)
+			settings := controller.Settings.Load()
+			settings.Realtime.Audio.Sources = tt.sources
+			controller.listCaptureDevices = func() ([]audiocore.DeviceInfo, error) { return tt.devices, nil }
 
-		err := controller.GetActiveAudioDevice(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/system/audio/active", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/system/audio/active")
 
-		var response map[string]any
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
+			err := controller.GetActiveAudioDevice(c)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusOK, rec.Code)
 
-		// Should indicate no device active
-		active, ok := response["active"].(bool)
-		require.True(t, ok, "response should have 'active' field as bool")
-		assert.False(t, active, "Should not be active when no device configured")
-		msg, ok := response["message"].(string)
-		require.True(t, ok, "response should have 'message' field as string")
-		assert.Contains(t, msg, "No audio device", "Should have appropriate message")
-	})
+			var response struct {
+				Device   *ActiveAudioDevice `json:"device"`
+				Active   bool               `json:"active"`
+				Verified bool               `json:"verified"`
+				Message  string             `json:"message"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+			assert.Equal(t, tt.wantActive, response.Active)
+			assert.Equal(t, tt.wantVerified, response.Verified)
+			assert.Equal(t, tt.wantMessage, response.Message)
+			if tt.wantName == "" {
+				assert.Nil(t, response.Device, "no device is reported when none is configured")
+				return
+			}
+			require.NotNil(t, response.Device)
+			assert.Equal(t, tt.wantName, response.Device.Name)
+			assert.Equal(t, tt.wantID, response.Device.ID)
+		})
+	}
 }
