@@ -2112,13 +2112,17 @@ func (s *Settings) IsAuthProviderConfigured() bool {
 	return s.Security.BasicAuth.Enabled || len(s.GetEnabledOAuthProviders()) > 0
 }
 
+// randomSecretBytes is the number of random bytes in a GenerateRandomSecret
+// secret: 256 bits, which encode to 43 base64url characters.
+const randomSecretBytes = 32
+
 // GenerateRandomSecret generates a URL-safe base64 encoded random string
 // suitable for use as a client secret. The output is 43 characters long,
 // providing 256 bits of entropy. It cannot fail: crypto/rand.Read never
 // returns an error and crashes the program if the system's random source is
 // unavailable.
 func GenerateRandomSecret() string {
-	bytes := make([]byte, 32)
+	bytes := make([]byte, randomSecretBytes)
 	rand.Read(bytes)
 	return base64.RawURLEncoding.EncodeToString(bytes)
 }

@@ -1241,6 +1241,10 @@ func (c *Handler) GetV2DatabaseStats(ctx echo.Context) error {
 const (
 	// backupDiskSpaceBuffer is the additional disk space required beyond the database size for backup.
 	backupDiskSpaceBuffer = 100 * 1024 * 1024 // 100 MB
+
+	// backupTempSuffixBytes is the number of random bytes in the temp file name
+	// suffix, so the name cannot be predicted.
+	backupTempSuffixBytes = 8
 )
 
 // DownloadDatabaseBackup handles POST /api/v2/system/database/backup
@@ -1346,7 +1350,7 @@ func (c *Handler) DownloadDatabaseBackup(ctx echo.Context) error {
 	// Create temp file path for VACUUM INTO with random suffix to prevent
 	// predictable filenames (symlink attacks on shared /tmp).
 	timestamp := time.Now().Format("20060102-150405")
-	randomBytes := make([]byte, 8)
+	randomBytes := make([]byte, backupTempSuffixBytes)
 	cryptorand.Read(randomBytes)
 	randomSuffix := "-" + hex.EncodeToString(randomBytes)
 	tempPath := filepath.Join(os.TempDir(), fmt.Sprintf("birdnet-%s-backup-%s%s.db", dbType, timestamp, randomSuffix))
