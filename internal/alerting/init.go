@@ -544,8 +544,8 @@ func migrateEscalationSteps(ctx context.Context, repo repository.AlertRuleReposi
 // the default's escalation steps only when the rule has none. Everything else,
 // including the cooldown, enabled state, actions and conditions, stays as
 // stored. A repaired row is built-in, so a later start does not select it
-// again. A failed write is logged and retried on the next start, and leaves the
-// row in existing unchanged.
+// again. A failed write is logged and retried on the next start, and the stored
+// row stays as it was.
 func repairDamagedDefaults(ctx context.Context, repo repository.AlertRuleRepository, existing []entities.AlertRule, log logger.Logger) {
 	defaults := DefaultRules()
 
