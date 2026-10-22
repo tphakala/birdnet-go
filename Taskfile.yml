@@ -408,7 +408,7 @@ tasks:
             ca-certificates
 
           # Audio capture library (required at runtime for microphone access)
-          # and tools for full test coverage (clip export)
+          # and ffmpeg (stream ingest, until native stream ingest is the default)
           # Use libasound2-dev which works on both Debian/Ubuntu <24.04 (libasound2)
           # and Ubuntu 24.04+ (libasound2t64 via time_t transition)
           $SUDO apt-get install -y libasound2-dev ffmpeg
@@ -835,11 +835,11 @@ tasks:
           echo "   Install with: task download-onnxruntime"
         fi
 
-        # Audio tools (optional but needed for full test coverage)
+        # ffmpeg (optional: only ffmpeg-based stream ingest uses it; no test requires it)
         if command -v ffmpeg >/dev/null 2>&1; then
           echo "✅ FFmpeg: $(ffmpeg -version 2>&1 | head -n1)"
         else
-          echo "⚠️  FFmpeg: not found (stream capture and clip decoding tests will be skipped)"
+          echo "⚠️  FFmpeg: not found (only needed for ffmpeg-based stream ingest)"
         fi
 
         echo ""
