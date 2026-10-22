@@ -66,8 +66,10 @@ type RetryConfig struct {
 // that can be executed by the job queue.
 //
 // Implementations MUST respect context cancellation by checking ctx.Done()
-// periodically during Execute(). Failure to do so will cause goroutine leaks
-// when jobs time out.
+// periodically during Execute(). An attempt that ignores cancellation keeps
+// running after its timeout; the queue waits for it (up to a ceiling) before
+// starting another attempt of the same job, and its goroutine lives until
+// Execute returns.
 type Action interface {
 	Execute(ctx context.Context, data any) error
 	GetDescription() string // Returns a human-readable description of the action

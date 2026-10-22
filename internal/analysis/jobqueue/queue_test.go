@@ -986,62 +986,106 @@ func TestDropOldestJob(t *testing.T) {
 	assert.Equal(t, 3, stats.SuccessfulJobs, "Successful jobs should be 3")
 }
 
-// TestHangingJobTimeout tests that hanging jobs are properly timed out
-func TestHangingJobTimeout(t *testing.T) {
-	// Create a new job queue
-	queue := setupTestQueue(t, 100, false)
-	defer teardownTestQueue(t, queue)
+// overrunAction ignores its context, like BirdWeatherAction. Its first start
+// runs firstAttempt; every later start returns nil at once. It records the
+// virtual time of each start.
+type overrunAction struct {
+	mu           sync.Mutex
+	starts       []time.Time
+	firstAttempt func() error
+}
 
-	// Create a mock action that hangs indefinitely
-	action := &MockAction{
-		ExecuteTimeout: true, // This will cause the action to hang
+func (a *overrunAction) Execute(_ context.Context, _ any) error {
+	a.mu.Lock()
+	a.starts = append(a.starts, time.Now())
+	first := len(a.starts) == 1
+	a.mu.Unlock()
+	if first {
+		return a.firstAttempt()
+	}
+	return nil
+}
+
+func (a *overrunAction) GetDescription() string { return "overrun action" }
+
+func (a *overrunAction) startTimes() []time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.starts)
+}
+
+// TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns pins that a job never
+// has two attempts running at once: after an attempt overruns the job timeout
+// the queue waits for it before starting the next one, credits a late success,
+// and fails the job after the ceiling when the attempt never returns.
+func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
+	const (
+		tick       = 10 * time.Millisecond
+		lateReturn = 45 * time.Second // after the 30s job timeout
+	)
+
+	tests := []struct {
+		name        string
+		firstResult error // returned after lateReturn; ignored when neverReturns
+		neverReturn bool
+		wantStarts  int
+		wantOK      int
+		wantFailed  int
+	}{
+		{name: "late success", wantStarts: 1, wantOK: 1},
+		{name: "late failure", firstResult: errors.NewStd("late failure"), wantStarts: 2, wantOK: 1},
+		{name: "never returns", neverReturn: true, wantStarts: 1, wantFailed: 1},
 	}
 
-	// Create test data
-	data := &TestData{ID: "hanging-job"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				release := make(chan struct{})
+				defer close(release) // lets a hung attempt exit so the bubble can end
+				action := &overrunAction{firstAttempt: func() error {
+					if tt.neverReturn {
+						<-release
+						return nil
+					}
+					time.Sleep(lateReturn)
+					return tt.firstResult
+				}}
 
-	// Create retry config
-	config := RetryConfig{
-		Enabled:      true,
-		MaxRetries:   1,
-		InitialDelay: 10 * time.Millisecond,
-		MaxDelay:     100 * time.Millisecond,
-		Multiplier:   2.0,
+				queue := NewJobQueueWithOptions(100, false)
+				queue.SetProcessingInterval(tick)
+				queue.StartWithContext(t.Context())
+
+				began := time.Now()
+				_, err := queue.Enqueue(t.Context(), action, &TestData{ID: "overrun"}, RetryConfig{
+					Enabled:      true,
+					MaxRetries:   2,
+					InitialDelay: time.Second,
+					MaxDelay:     time.Minute,
+					Multiplier:   2.0,
+				})
+				require.NoError(t, err)
+
+				// Past the 30s timeout, the late return and, for the hung
+				// attempt, the ceiling.
+				time.Sleep(abandonedAttemptCeiling + DefaultJobExecutionTimeout + time.Minute)
+				synctest.Wait()
+
+				starts := action.startTimes()
+				require.Len(t, starts, tt.wantStarts, "attempt starts")
+				if tt.wantStarts == 2 {
+					assert.GreaterOrEqual(t, starts[1].Sub(began), lateReturn,
+						"second attempt must not start before the first returned")
+				}
+				stats := queue.GetStats()
+				assert.Equal(t, tt.wantOK, stats.SuccessfulJobs, "successful jobs")
+				assert.Equal(t, tt.wantFailed, stats.FailedJobs, "failed jobs")
+				assert.Zero(t, stats.PendingJobs, "terminal job must leave the queue")
+
+				// A hung attempt must not block shutdown.
+				require.NoError(t, queue.StopWithTimeout(time.Second))
+			})
+		})
 	}
-
-	// Create a done channel to signal when the test is complete
-	done := make(chan struct{})
-
-	// Enqueue the job in a goroutine so we don't block the test
-	go func() {
-		// Enqueue the job
-		job, err := queue.Enqueue(t.Context(), action, data, config)
-		assert.NoError(t, err, "Failed to enqueue job")
-		assert.NotNil(t, job, "Job should not be nil")
-
-		// Signal that the job has been enqueued
-		close(done)
-	}()
-
-	// Wait for the job to be enqueued
-	waitForChannel(t, done, ShortTestTimeout, "Timed out waiting for job to be enqueued")
-
-	// Wait for the processing ticker to pick the job up and start it. The action
-	// increments its execute count before hanging, so poll for that instead of
-	// sleeping a fixed 2s that can be missed under CI load.
-	require.Eventually(t, func() bool {
-		return action.GetExecuteCount() == 1
-	}, DefaultTestTimeout, 10*time.Millisecond, "hanging job should be picked up and started")
-
-	// The job should be running at this point
-	// We can't directly check the job status, but we can check that the action was executed
-	assert.Equal(t, 1, action.GetExecuteCount(), "Action should have been executed once")
-
-	// We can't wait for the full 30-second timeout in a unit test,
-	// so we'll just verify that the timeout mechanism exists by checking the code
-
-	// In a real-world scenario, the job would eventually time out after 30 seconds,
-	// and the error would be recorded in the job's LastError field
 }
 
 // TestContextCancellation tests that jobs are properly cancelled when the context is cancelled
