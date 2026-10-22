@@ -837,8 +837,8 @@ tasks:
         fi
 
         # ffmpeg and ffprobe (optional: ffmpeg-based stream ingest uses ffmpeg,
-        # stream probing uses ffprobe, the integration MediaMTX contract tests
-        # need ffmpeg, and the encoder validation tests skip without ffprobe)
+        # stream probing uses ffprobe, and the integration MediaMTX contract
+        # tests need ffmpeg)
         if command -v ffmpeg >/dev/null 2>&1; then
           echo "✅ FFmpeg: $(ffmpeg -version 2>&1 | head -n1)"
         else
@@ -847,7 +847,7 @@ tasks:
         if command -v ffprobe >/dev/null 2>&1; then
           echo "✅ FFprobe: $(ffprobe -version 2>&1 | head -n1)"
         else
-          echo "⚠️  FFprobe: not found (needed for stream probing; encoder validation tests skip without it)"
+          echo "⚠️  FFprobe: not found (needed for stream probing)"
         fi
 
         echo ""
