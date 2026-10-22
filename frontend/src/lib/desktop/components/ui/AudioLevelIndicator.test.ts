@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { deferred, type Deferred } from '../../../../test/async-helpers';
+import { BUFFERING_STRATEGY } from './hls-config';
 
 // The global i18n mock returns the key for untranslated strings, so t() here
 // yields exactly the text the component renders.
@@ -53,6 +54,25 @@ const SOURCE_B = 'source-b';
 // FakeHls is the HLS.js class stand-in; the constructor spy shows whether the
 // component went on to set up a player.
 const hlsConstructed = vi.fn();
+type HlsHandler = (event: string, data?: unknown) => void;
+// hlsHandlers holds the handler the component registered for each HLS.js event.
+let hlsHandlers = new Map<string, HlsHandler>();
+// emitHls fires an HLS.js event at the component's handler, failing when none is registered.
+function emitHls(event: string, data?: unknown) {
+  const handler = hlsHandlers.get(event);
+  if (!handler) throw new Error(`no HLS.js handler registered for ${event}`);
+  handler(event, data);
+}
+// HEARTBEAT_INTERVAL_MS mirrors HEARTBEAT_INTERVAL in AudioLevelIndicator.svelte.
+const HEARTBEAT_INTERVAL_MS = 20000;
+// heartbeatCalls counts keep-alive heartbeats, not the ?disconnect=true ones.
+function heartbeatCalls(): number {
+  return mocks.fetchWithCSRF.mock.calls.filter(([url]) => url === '/api/v2/streams/hls/heartbeat')
+    .length;
+}
+// flush lets pending promise callbacks settle on the real timer.
+const flush = () => new Promise(resolve => globalThis.setTimeout(resolve, 0));
+
 class FakeHls {
   static Events = { ERROR: 'e', MEDIA_ATTACHED: 'a', MANIFEST_PARSED: 'm', FRAG_BUFFERED: 'f' };
   static ErrorTypes = { MEDIA_ERROR: 'mediaError' };
@@ -60,7 +80,9 @@ class FakeHls {
   constructor() {
     hlsConstructed();
   }
-  on() {}
+  on(event: string, handler: HlsHandler) {
+    hlsHandlers.set(event, handler);
+  }
   attachMedia() {}
   loadSource() {}
   destroy() {}
@@ -114,6 +136,7 @@ describe('AudioLevelIndicator start and stop', () => {
     vi.clearAllMocks();
     mocks.sse = null;
     startCalls = [];
+    hlsHandlers = new Map();
     mocks.tryLoadHls.mockResolvedValue(FakeHls);
     mocks.canPlayHls.mockReturnValue(true);
     mocks.fetchWithCSRF.mockImplementation((url: string) => {
@@ -246,5 +269,104 @@ describe('AudioLevelIndicator start and stop', () => {
     await clickSourceButton(SOURCE_A);
 
     await waitFor(() => expect(startCalls).toHaveLength(2));
+  });
+
+  it('plays a started stream through HLS.js once enough fragments are buffered and sends heartbeats', async () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    await renderWithSources();
+    await clickSourceButton(SOURCE_A);
+    await waitFor(() => expect(startCalls).toHaveLength(1));
+    // Fake intervals only now: waitFor polls with setInterval. They must be fake before
+    // the start resolves, because startHeartbeat() schedules the interval then.
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    startCalls[0].response.resolve(startResponse());
+    await flush();
+    expect(hlsConstructed).toHaveBeenCalledTimes(1);
+
+    for (let i = 1; i < BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY; i++) {
+      emitHls(FakeHls.Events.FRAG_BUFFERED);
+    }
+    expect(play).not.toHaveBeenCalled();
+    emitHls(FakeHls.Events.FRAG_BUFFERED);
+    expect(play).toHaveBeenCalledTimes(1);
+
+    document.getElementById('hls-audio-player')?.dispatchEvent(new Event('playing'));
+    await vi.advanceTimersByTimeAsync(HEARTBEAT_INTERVAL_MS);
+    expect(heartbeatCalls()).toBe(1);
+  });
+
+  it('stops the stream on a fatal HLS.js error', async () => {
+    await renderWithSources();
+    await clickSourceButton(SOURCE_A);
+    await waitFor(() => expect(startCalls).toHaveLength(1));
+    startCalls[0].response.resolve(startResponse());
+    await waitFor(() => expect(hlsConstructed).toHaveBeenCalledTimes(1));
+    const stopsBefore = stopCallsFor(SOURCE_A);
+
+    emitHls(FakeHls.Events.ERROR, {
+      fatal: true,
+      type: 'networkError',
+      details: 'manifestLoadError',
+    });
+
+    expect(stopCallsFor(SOURCE_A)).toBe(stopsBefore + 1);
+  });
+
+  it('plays natively when HLS.js failed to load and the browser plays HLS', async () => {
+    mocks.tryLoadHls.mockResolvedValue(null);
+    const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
+    await renderWithSources();
+    await clickSourceButton(SOURCE_A);
+    await waitFor(() => expect(startCalls).toHaveLength(1));
+    startCalls[0].response.resolve(startResponse());
+
+    await waitFor(() => expect(play).toHaveBeenCalledTimes(1));
+    expect(document.getElementById('hls-audio-player')?.getAttribute('src')).toBe('/playlist.m3u8');
+    expect(hlsConstructed).not.toHaveBeenCalled();
+  });
+
+  it('starts again after an HLS check fails and keeps the newer message for its full delay', async () => {
+    mocks.tryLoadHls.mockResolvedValue(null);
+    mocks.canPlayHls.mockReturnValue(false);
+    await renderWithSources();
+    // clearTimeout must be faked too, or clearStatusHideTimer cannot cancel a fake timer.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+    await clickSourceButton(SOURCE_A);
+    expect(await screen.findByText(HLS_LOAD_FAILED)).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(ERROR_STATUS_HIDE_DELAY_MS / 2);
+
+    mocks.tryLoadHls.mockResolvedValue(FakeHls);
+    await clickSourceButton(SOURCE_A);
+    expect(await screen.findByText(HLS_NOT_SUPPORTED)).toBeInTheDocument();
+
+    // The first message's hide timer would fire here if it had not been cancelled.
+    await vi.advanceTimersByTimeAsync(ERROR_STATUS_HIDE_DELAY_MS / 2);
+    expect(screen.getByText(HLS_NOT_SUPPORTED)).toBeInTheDocument();
+  });
+
+  it('stops the server stream of a start that resolves after unmount', async () => {
+    await renderWithSources();
+    await clickSourceButton(SOURCE_A);
+    await waitFor(() => expect(startCalls).toHaveLength(1));
+
+    cleanup();
+    startCalls[0].response.resolve(startResponse());
+
+    await waitFor(() => expect(stopCallsFor(SOURCE_A)).toBe(1));
+    expect(hlsConstructed).not.toHaveBeenCalled();
+  });
+
+  it('does not start a server stream when stopped while HLS.js loads', async () => {
+    const load = deferred<typeof FakeHls | null>();
+    mocks.tryLoadHls.mockReturnValue(load.promise);
+    await renderWithSources();
+    await clickSourceButton(SOURCE_A);
+    await clickSourceButton(SOURCE_A); // the stop icon shows while the start is loading
+
+    load.resolve(FakeHls);
+    await flush();
+
+    expect(startCalls).toHaveLength(0);
   });
 });
