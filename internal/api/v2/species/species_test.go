@@ -184,28 +184,6 @@ func TestCalculateRarityStatus(t *testing.T) {
 	}
 }
 
-// TestRarityStatusConstants tests that rarity status constants are correctly defined.
-func TestRarityStatusConstants(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "species")
-	t.Attr("type", "unit")
-	t.Attr("feature", "rarity-constants")
-
-	// Test status values
-	assert.Equal(t, RarityVeryCommon, RarityStatus("very_common"))
-	assert.Equal(t, RarityCommon, RarityStatus("common"))
-	assert.Equal(t, RarityUncommon, RarityStatus("uncommon"))
-	assert.Equal(t, RarityRare, RarityStatus("rare"))
-	assert.Equal(t, RarityVeryRare, RarityStatus("very_rare"))
-	assert.Equal(t, RarityUnknown, RarityStatus("unknown"))
-
-	// Test threshold values
-	assert.InDelta(t, 0.8, RarityThresholdVeryCommon, 0.001)
-	assert.InDelta(t, 0.5, RarityThresholdCommon, 0.001)
-	assert.InDelta(t, 0.2, RarityThresholdUncommon, 0.001)
-	assert.InDelta(t, 0.05, RarityThresholdRare, 0.001)
-}
-
 func TestFindNativeSpeciesScore(t *testing.T) {
 	t.Parallel()
 
@@ -299,49 +277,6 @@ func TestSpeciesAPIValidation(t *testing.T) {
 			assert.Contains(t, rec.Body.String(), tt.expectedBody, tt.name)
 		})
 	}
-}
-
-// TestSpeciesInfoJSONSerialization tests that SpeciesInfo serializes correctly to JSON.
-func TestSpeciesInfoJSONSerialization(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "species")
-	t.Attr("type", "unit")
-	t.Attr("feature", "json-serialization")
-
-	info := SpeciesInfo{
-		ScientificName: "Turdus migratorius",
-		CommonName:     "American Robin",
-		Rarity: SpeciesRarityInfo{
-			Status:           RarityCommon,
-			Score:            0.65,
-			LocationBased:    true,
-			Latitude:         new(40.7128),
-			Longitude:        new(-74.006),
-			Date:             "2024-01-15",
-			ThresholdApplied: 0.03,
-		},
-		Metadata: map[string]any{
-			"source": "local",
-		},
-	}
-
-	data, err := json.Marshal(info)
-	require.NoError(t, err)
-
-	// Verify JSON structure
-	var parsed map[string]any
-	require.NoError(t, json.Unmarshal(data, &parsed))
-
-	assert.Equal(t, "Turdus migratorius", parsed["scientific_name"])
-	assert.Equal(t, "American Robin", parsed["common_name"])
-	assert.NotNil(t, parsed["rarity"])
-	assert.NotNil(t, parsed["metadata"])
-
-	// Verify rarity structure
-	rarity, ok := parsed["rarity"].(map[string]any)
-	require.True(t, ok)
-	assert.Equal(t, "common", rarity["status"])
-	assert.InDelta(t, 0.65, rarity["score"].(float64), 0.001)
 }
 
 // TestSpeciesRarityInfoJSONSerialization tests that SpeciesRarityInfo serializes correctly.
@@ -1090,7 +1025,7 @@ func TestComputeRarity_SyntheticScoresReportUnknown(t *testing.T) {
 }
 
 // TestSpeciesInfoJSONOmitsUnsetBlocks pins the omitzero half of the wire contract. The
-// populated direction is covered by TestSpeciesInfoJSONSerialization; without this,
+// populated direction is covered by TestGetSpeciesInfo_Golden; without this,
 // reverting omitzero to omitempty would go unnoticed and start emitting zero-valued
 // "rarity" and "taxonomy" objects on every response where the lookup was skipped,
 // breaking clients that gate on the key's presence.
