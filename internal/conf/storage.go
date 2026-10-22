@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -73,11 +74,27 @@ func Load() (*Settings, error) {
 	streamEnabledMigrated := migrateStreamEnabledDefaults()
 
 	// Unmarshal the config into settings, with custom Duration decode hook
-	if err := viper.Unmarshal(settings, viper.DecodeHook(DurationDecodeHook())); err != nil {
+	// DottedKeyDecodeHook restores flat map keys that viper split on "."
+	// (scalar-valued maps that viper reaches by key path, today
+	// logging.module_levels and taxonomySynonyms; maps inside list entries are
+	// never split, see #4523).
+	// Composed with DurationDecodeHook because both hooks must run; a single
+	// non-composed hook would silently drop the other.
+	if err := viper.Unmarshal(settings, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+		DottedKeyDecodeHook(), DurationDecodeHook()))); err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "unmarshal-config").
 			Build()
+	}
+
+	// Re-decode the logging section from viper's raw subtree: AllSettings()
+	// has re-split dotted module keys ("analysis.processor") into nested maps,
+	// losing them from logging.modules and, when a parent and a dotted child
+	// coexist, from module_levels. The raw subtree keeps the flat keys, so
+	// decoding from it restores both (#4523).
+	if err := reDecodeLoggingConfig(settings); err != nil {
+		return nil, err
 	}
 
 	// Normalize species config keys to lowercase for case-insensitive matching
