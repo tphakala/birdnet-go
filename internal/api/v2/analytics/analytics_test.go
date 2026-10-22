@@ -1408,17 +1408,22 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 		},
 	}
 
-	// Expected hourly counts (only for species meeting confidence threshold)
-	var expectedAmcroConfidenceHourly [24]int
+	// Hourly counts for both species. The woodpecker has a non-zero count, so it can only be
+	// absent from the response because its note is below the confidence threshold.
+	var expectedAmcroConfidenceHourly, expectedRbwoConfidenceHourly [24]int
 	expectedAmcroConfidenceHourly[8] = 1
+	expectedRbwoConfidenceHourly[10] = 1
 
 	// Setup mock expectations
 	// GetTopBirdsData is called with the normalized confidence
 	mockDS.On("GetTopBirdsData", mock.Anything, "2025-03-07", expectedMinConfidence, 0).Return(mockNotesConfidence, nil)
-	// GetBatchHourlyOccurrences is called for all species returned by GetTopBirdsData
-	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", "2025-03-07", mock.Anything, expectedMinConfidence).Return(map[string][24]int{
+	// GetBatchHourlyOccurrences must be asked only for species that meet the threshold
+	onlyCrow := mock.MatchedBy(func(species []string) bool {
+		return slices.Equal(species, []string{sciAmericanCrow})
+	})
+	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", "2025-03-07", onlyCrow, expectedMinConfidence).Return(map[string][24]int{
 		sciAmericanCrow:         expectedAmcroConfidenceHourly,
-		sciRedBelliedWoodpecker: {}, // Filtered out later
+		sciRedBelliedWoodpecker: expectedRbwoConfidenceHourly,
 	}, nil)
 
 	// Create a controller with our mock
@@ -1435,9 +1440,6 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	// Verify no error occurred
 	require.NoError(t, err)
 
-	// Verify the threshold was correctly normalized (70% -> 0.7)
-	assert.InDelta(t, 0.7, expectedMinConfidence, 0.01)
-
 	// Verify the response status code
 	assert.Equal(t, http.StatusOK, rec.Code)
 
@@ -1447,10 +1449,8 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify the response only includes species with confidence >= 0.7
-	for _, species := range response {
-		assert.NotEqual(t, "Red-bellied Woodpecker", species.CommonName)
-		assert.Equal(t, "American Crow", species.CommonName)
-	}
+	require.Len(t, response, 1, "only the species meeting the threshold is returned")
+	assert.Equal(t, "American Crow", response[0].CommonName)
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)

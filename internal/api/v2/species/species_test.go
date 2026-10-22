@@ -660,6 +660,9 @@ func TestGetAllSpecies(t *testing.T) {
 			var response AllSpeciesResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 			assert.Equal(t, tt.expectedCount, response.Count)
+			// A JSON null decodes to a nil slice and an empty array to a non-nil one, so this
+			// catches an empty list serialized as null.
+			require.NotNil(t, response.Species, "species must be a JSON array, not null")
 			require.Len(t, response.Species, tt.expectedCount)
 
 			if tt.expectedCount > 0 {
