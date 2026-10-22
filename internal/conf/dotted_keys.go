@@ -66,6 +66,7 @@ import (
 // only the dotted keys from the raw subtree and drops the phantom prefix entry
 // when no viper layer (file, defaults, environment, flags, overrides) really
 // sets that prefix, which viper.IsSet answers for the exact path.
+//
 // reDecodeModuleOutputs applies the same rule to the zero-value entry Unmarshal
 // leaves under the first segment of a dotted logging.modules name, so it is not
 // written back to config.yaml by a later save.
@@ -241,10 +242,7 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 		// checked before the value is skipped. It is dropped unless viper
 		// reports the exact prefix path as set (a sibling entry in the file or
 		// a built-in default such as audio), same rule as reDecodeDottedMapKeys.
-		if prefix, _, dotted := strings.Cut(name, viperKeyDelimiter); dotted &&
-			!viper.IsSet(loggingModulesViperPath+viperKeyDelimiter+prefix) {
-			delete(settings.Logging.ModuleOutputs, prefix)
-		}
+		dropSplitPrefixEntry(settings.Logging.ModuleOutputs, loggingModulesViperPath, name)
 		// A module entry must be a mapping. A scalar or null under a dotted
 		// name was split by viper and ignored by Unmarshal, and a non-dotted
 		// scalar already fails Unmarshal, so skipping leaves the entry out and
@@ -297,6 +295,17 @@ func reDecodeModuleLevels(settings *Settings, section map[string]any) error {
 	return nil
 }
 
+// dropSplitPrefixEntry deletes the zero-value entry viper.Unmarshal left under
+// the first segment of a dotted key, unless viper.IsSet reports that exact
+// path as set (a sibling entry in the file or a default such as "audio"). A key
+// without a dot is left alone.
+func dropSplitPrefixEntry[V any](entries map[string]V, viperPath, key string) {
+	prefix, _, dotted := strings.Cut(key, viperKeyDelimiter)
+	if dotted && !viper.IsSet(viperPath+viperKeyDelimiter+prefix) {
+		delete(entries, prefix)
+	}
+}
+
 // reDecodeDottedStructMaps restores species config and season keys that contain
 // a dot (see the file comment). Maps without dotted keys are left untouched.
 func reDecodeDottedStructMaps(settings *Settings) error {
@@ -335,15 +344,12 @@ func reDecodeDottedMapKeys[V any](entries map[string]V, viperPath string) (map[s
 		return entries, nil
 	}
 	for key, rawValue := range raw {
-		prefix, _, dotted := strings.Cut(key, viperKeyDelimiter)
-		if !dotted {
+		if !strings.Contains(key, viperKeyDelimiter) {
 			continue
 		}
 		// Unmarshal left a phantom under the prefix even when the value is not
 		// a mapping, so the prefix is checked before the value is skipped.
-		if !viper.IsSet(viperPath + viperKeyDelimiter + prefix) {
-			delete(entries, prefix)
-		}
+		dropSplitPrefixEntry(entries, viperPath, key)
 		if _, isMap := rawValue.(map[string]any); !isMap {
 			continue
 		}
