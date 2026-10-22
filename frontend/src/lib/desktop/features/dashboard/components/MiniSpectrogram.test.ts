@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
+import { deferred } from '../../../../../test/async-helpers';
+import {
+  installFakeMediaElement,
+  type FakeMediaController,
+} from '../../../../../test/fakeMediaElement';
 
 const HLS_LOAD_FAILED = t('media.audio.hlsLoadFailed');
 const HLS_NOT_SUPPORTED = t('media.audio.hlsNotSupported');
@@ -63,7 +68,12 @@ describe('MiniSpectrogram HLS player availability', () => {
     vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
+  let media: FakeMediaController | null = null;
+
   afterEach(() => {
+    cleanup();
+    media?.restore();
+    media = null;
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
@@ -125,5 +135,37 @@ describe('MiniSpectrogram HLS player availability', () => {
     expect(startRequests()).toBe(1);
     expect(screen.queryByText(HLS_LOAD_FAILED)).toBeNull();
     expect(screen.queryByText(HLS_NOT_SUPPORTED)).toBeNull();
+  });
+
+  it('plays natively when HLS.js failed to load and the browser plays HLS', async () => {
+    const controller = installFakeMediaElement();
+    media = controller;
+    mocks.tryLoadHls.mockResolvedValue(null);
+    mocks.canPlayHls.mockReturnValue(true);
+    mocks.fetchWithCSRF.mockResolvedValue({
+      stream_token: 'token',
+      playlist_url: '/playlist.m3u8',
+    });
+    render(MiniSpectrogram);
+
+    await fireEvent.click(screen.getByRole('button', { name: PLAY_LABEL }));
+
+    await waitFor(() => expect(controller.play).toHaveBeenCalledTimes(1));
+    expect(controller.element.getAttribute('src')).toBe('/playlist.m3u8');
+  });
+
+  it('does not start a server stream when unmounted while HLS.js loads', async () => {
+    const load = deferred<null>();
+    mocks.tryLoadHls.mockReturnValue(load.promise);
+    mocks.canPlayHls.mockReturnValue(true);
+    render(MiniSpectrogram);
+
+    await fireEvent.click(screen.getByRole('button', { name: PLAY_LABEL }));
+    await waitFor(() => expect(mocks.tryLoadHls).toHaveBeenCalledTimes(1));
+    cleanup();
+    load.resolve(null);
+    await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+
+    expect(startRequests()).toBe(0);
   });
 });
