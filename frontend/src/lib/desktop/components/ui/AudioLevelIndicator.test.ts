@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
+import { deferred, type Deferred } from '../../../../test/async-helpers';
 
 // The global i18n mock returns the key for untranslated strings, so t() here
 // yields exactly the text the component renders.
@@ -11,22 +12,6 @@ const START_LABEL = t('media.audio.startPlayback');
 const STOP_LABEL = t('media.audio.stopPlayback');
 
 const ERROR_STATUS_HIDE_DELAY_MS = 3000;
-
-interface Deferred<T> {
-  promise: Promise<T>;
-  resolve: (value: T) => void;
-  reject: (reason: unknown) => void;
-}
-
-function deferred<T>(): Deferred<T> {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
-}
 
 const mocks = vi.hoisted(() => ({
   tryLoadHls: vi.fn(),
@@ -248,5 +233,18 @@ describe('AudioLevelIndicator start and stop', () => {
     startCalls[0].response.reject(new Error('network down'));
 
     expect(await screen.findByText(STREAM_ERROR)).toBeInTheDocument();
+  });
+
+  it('starts again with one click after a failed start', async () => {
+    await renderWithSources();
+
+    await clickSourceButton(SOURCE_A);
+    await waitFor(() => expect(startCalls).toHaveLength(1));
+    startCalls[0].response.reject(new Error('network down'));
+    await screen.findByText(STREAM_ERROR);
+
+    await clickSourceButton(SOURCE_A);
+
+    await waitFor(() => expect(startCalls).toHaveLength(2));
   });
 });

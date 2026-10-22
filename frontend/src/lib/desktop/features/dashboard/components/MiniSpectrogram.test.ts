@@ -97,4 +97,33 @@ describe('MiniSpectrogram HLS player availability', () => {
     expect(screen.queryByText(HLS_LOAD_FAILED)).toBeNull();
     expect(startRequests()).toBe(0);
   });
+
+  it('starts the stream and builds an HLS.js player when HLS.js is available', async () => {
+    const constructed = vi.fn();
+    class FakeHls {
+      static Events = { MANIFEST_PARSED: 'm', ERROR: 'e' };
+      static isSupported = () => true;
+      constructor() {
+        constructed();
+      }
+      on() {}
+      loadSource() {}
+      attachMedia() {}
+      destroy() {}
+    }
+    mocks.tryLoadHls.mockResolvedValue(FakeHls);
+    mocks.canPlayHls.mockReturnValue(true);
+    mocks.fetchWithCSRF.mockResolvedValue({
+      stream_token: 'token',
+      playlist_url: '/playlist.m3u8',
+    });
+    render(MiniSpectrogram);
+
+    await fireEvent.click(screen.getByRole('button', { name: PLAY_LABEL }));
+
+    await waitFor(() => expect(constructed).toHaveBeenCalledTimes(1));
+    expect(startRequests()).toBe(1);
+    expect(screen.queryByText(HLS_LOAD_FAILED)).toBeNull();
+    expect(screen.queryByText(HLS_NOT_SUPPORTED)).toBeNull();
+  });
 });

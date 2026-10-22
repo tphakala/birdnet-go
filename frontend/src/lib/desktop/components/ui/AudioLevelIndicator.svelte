@@ -59,6 +59,7 @@
   let zeroLevelTime: { [key: string]: number } = {};
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let startRequestId = 0;
+  let statusHideTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
@@ -229,11 +230,26 @@
     }
   }
 
+  function clearStatusHideTimer() {
+    if (statusHideTimer) {
+      globalThis.clearTimeout(statusHideTimer);
+      statusHideTimer = null;
+    }
+  }
+
+  // Show an error and hide it after a delay. A newer message replaces the pending hide
+  // so it cannot be hidden early by an older error's timer.
+  function showTransientError(message: string) {
+    showStatusMessage(message);
+    statusHideTimer = globalThis.setTimeout(() => hideStatusMessage(), ERROR_STATUS_HIDE_DELAY_MS);
+  }
+
   // Show status message.
   // Use queueMicrotask to defer state mutations so they never occur
   // synchronously inside a $derived or $effect evaluation, which would
   // trigger Svelte 5's state_unsafe_mutation error.
   function showStatusMessage(message: string) {
+    clearStatusHideTimer();
     queueMicrotask(() => {
       statusMessage = message;
       showStatus = true;
@@ -242,6 +258,7 @@
 
   // Hide status message (deferred for the same reason as showStatusMessage).
   function hideStatusMessage() {
+    clearStatusHideTimer();
     queueMicrotask(() => {
       showStatus = false;
     });
@@ -450,10 +467,9 @@
         playingSource = null;
         // A null HlsClass means HLS.js failed to load (offline, stale chunk), which
         // a retry can fix; otherwise this browser has no HLS player at all.
-        showStatusMessage(
+        showTransientError(
           HlsClass === null ? t('media.audio.hlsLoadFailed') : t('media.audio.hlsNotSupported')
         );
-        globalThis.setTimeout(() => hideStatusMessage(), ERROR_STATUS_HIDE_DELAY_MS);
         return;
       }
 
@@ -500,8 +516,10 @@
         error instanceof Error && error.message.includes('permission')
           ? t('media.audio.loginRequired')
           : t('media.audio.streamError');
-      showStatusMessage(message);
-      globalThis.setTimeout(() => hideStatusMessage(), ERROR_STATUS_HIDE_DELAY_MS);
+      // Reset to idle (clears playingSource, stops any server stream) so the next
+      // click starts again instead of stopping a stream that never played.
+      stopPlayback();
+      showTransientError(message);
     }
   }
 
@@ -606,6 +624,11 @@
 
         cleanupEventSource();
         stopHeartbeat();
+        clearStatusHideTimer();
+        // Make a start still in flight stale so it neither sets up a player nor
+        // leaves its server stream running.
+        startRequestId++;
+        playingSource = null;
 
         if (audioElementRef) {
           audioElementRef.pause();
