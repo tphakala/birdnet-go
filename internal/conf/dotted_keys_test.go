@@ -1,8 +1,10 @@
 package conf
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -321,4 +323,216 @@ func decodeThroughHook(t *testing.T, input, result any) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, decoder.Decode(input))
+}
+
+// structMapConfigPrefix is the config every struct-map test shares: a valid
+// session secret so Load passes validation.
+const structMapConfigPrefix = `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+`
+
+// dottedSpeciesConfig carries species names with dots: an abbreviation with an
+// inner dot, an apostrophe, a trailing dot, a parent key ("St") that coexists
+// with a dotted child, and a non-dotted control. Loading this minimal config
+// already triggers migration saves, which the test asserts before it relies on
+// them.
+const dottedSpeciesConfig = structMapConfigPrefix + `
+realtime:
+  species:
+    config:
+      "St. Helena Plover":
+        threshold: 0.8
+        interval: 30
+        actions:
+          - type: ExecuteCommand
+            command: /bin/true
+            parameters: [CommonName, Confidence]
+      "Mrs. Gould's Sunbird":
+        threshold: "0.9"
+      "Larus sp.":
+        threshold: 0.6
+      "St":
+        threshold: 0.5
+      "American Robin":
+        threshold: 0.7
+`
+
+var dottedSpeciesKeys = []string{
+	"st. helena plover", "mrs. gould's sunbird", "larus sp.", "st", "american robin",
+}
+
+// TestLoad_DottedSpeciesConfigKeysAreKept pins that species names containing a
+// dot reach Settings.Realtime.Species.Config intact, both in memory and in the
+// file a migration rewrites during Load, with no zero-value prefix entry.
+func TestLoad_DottedSpeciesConfigKeysAreKept(t *testing.T) {
+	for range dottedKeyLoadIterations {
+		settings, configPath := loadConfigFromYAML(t, dottedSpeciesConfig)
+
+		cfg := settings.Realtime.Species.Config
+		require.ElementsMatch(t, dottedSpeciesKeys, mapKeys(cfg),
+			"dotted names must be kept, with no phantom prefix entry (mrs, larus sp)")
+
+		helena := cfg["st. helena plover"]
+		assert.InDelta(t, 0.8, helena.Threshold, 1e-9)
+		assert.Equal(t, 30, helena.Interval)
+		require.Len(t, helena.Actions, 1)
+		assert.Equal(t, "ExecuteCommand", helena.Actions[0].Type)
+		assert.Equal(t, []string{"CommonName", "Confidence"}, helena.Actions[0].Parameters)
+
+		assert.InDelta(t, 0.9, cfg["mrs. gould's sunbird"].Threshold, 1e-9,
+			"a string threshold must convert with the same weak typing Unmarshal uses")
+		assert.InDelta(t, 0.6, cfg["larus sp."].Threshold, 1e-9)
+		assert.InDelta(t, 0.5, cfg["st"].Threshold, 1e-9,
+			"the real parent key must keep its own value")
+		assert.InDelta(t, 0.7, cfg["american robin"].Threshold, 1e-9)
+
+		// A migration rewrote the file during Load; it must hold the repaired keys.
+		data, err := os.ReadFile(configPath) //nolint:gosec // test-controlled path
+		require.NoError(t, err)
+		require.NotEqual(t, dottedSpeciesConfig, string(data),
+			"the test config must trigger a migration save, otherwise the disk check proves nothing")
+		assert.ElementsMatch(t, dottedSpeciesKeys, mapKeys(readPersistedSettings(t, configPath).Realtime.Species.Config),
+			"the migration save must not write a phantom entry or drop a dotted one")
+	}
+}
+
+// TestLoad_DottedSeasonNamesKeepDefaultSeasons pins that dotted season names
+// load (the phantom "early" season has zero dates and used to fail validation)
+// and that a default season sharing a prefix with a dotted one is kept.
+func TestLoad_DottedSeasonNamesKeepDefaultSeasons(t *testing.T) {
+	const cfg = structMapConfigPrefix + `
+realtime:
+  speciestracking:
+    seasonaltracking:
+      seasons:
+        early.spring:
+          startmonth: 2
+          startday: 5
+        spring.late:
+          startmonth: 4
+          startday: 1
+`
+	for range dottedKeyLoadIterations {
+		settings, _ := loadConfigFromYAML(t, cfg)
+
+		seasons := settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons
+		require.ElementsMatch(t,
+			[]string{"early.spring", "spring.late", "spring", "summer", "fall", "winter"},
+			mapKeys(seasons))
+		assert.Equal(t, Season{StartMonth: 2, StartDay: 5}, seasons["early.spring"])
+		assert.Equal(t, Season{StartMonth: 4, StartDay: 1}, seasons["spring.late"])
+		assert.Equal(t, Season{StartMonth: 3, StartDay: 20}, seasons["spring"],
+			"the default season sharing a prefix with a dotted name must stay")
+	}
+}
+
+// TestLoad_DottedStructMapKeysSurviveSaveAndReload pins that the keys the save
+// path writes load back to the same maps, repeatedly.
+func TestLoad_DottedStructMapKeysSurviveSaveAndReload(t *testing.T) {
+	const cfg = structMapConfigPrefix + `
+realtime:
+  species:
+    config:
+      "St. Helena Plover":
+        threshold: 0.8
+      "Larus sp.":
+        threshold: 0.6
+      "American Robin":
+        threshold: 0.7
+  speciestracking:
+    seasonaltracking:
+      seasons:
+        early.spring:
+          startmonth: 2
+          startday: 5
+`
+	first, configPath := loadConfigFromYAML(t, cfg)
+	require.NoError(t, SaveYAMLConfig(configPath, first))
+
+	// The save writes "actions: []" for entries without actions, so the first
+	// reload (empty slice) is the baseline for the fixed-point comparison, not
+	// the first load (nil slice); the key sets are compared against the first.
+	var prev *Settings
+	for range 3 {
+		data, err := os.ReadFile(configPath) //nolint:gosec // test-controlled path
+		require.NoError(t, err)
+		next, nextPath := loadConfigFromYAML(t, string(data))
+		assert.ElementsMatch(t, mapKeys(first.Realtime.Species.Config), mapKeys(next.Realtime.Species.Config))
+		assert.ElementsMatch(t, mapKeys(first.Realtime.SpeciesTracking.SeasonalTracking.Seasons),
+			mapKeys(next.Realtime.SpeciesTracking.SeasonalTracking.Seasons))
+		if prev != nil {
+			assert.Equal(t, prev.Realtime.Species.Config, next.Realtime.Species.Config)
+			assert.Equal(t, prev.Realtime.SpeciesTracking.SeasonalTracking.Seasons,
+				next.Realtime.SpeciesTracking.SeasonalTracking.Seasons)
+		}
+		require.NoError(t, SaveYAMLConfig(nextPath, next))
+		configPath, prev = nextPath, next
+	}
+}
+
+// TestLoad_BadDottedStructMapEntryNamesTheKey pins that an invalid value under
+// a dotted key fails Load and names the path and key, as it already does under
+// a non-dotted key.
+func TestLoad_BadDottedStructMapEntryNamesTheKey(t *testing.T) {
+	tests := []struct {
+		name, yaml, wantPath string
+	}{
+		{"species", `
+realtime:
+  species:
+    config:
+      "St. Helena Plover":
+        threshold: not-a-number
+`, "realtime.species.config[st. helena plover]"},
+		{"season", `
+realtime:
+  speciestracking:
+    seasonaltracking:
+      seasons:
+        early.spring:
+          startmonth: not-a-number
+`, "realtime.speciestracking.seasonaltracking.seasons[early.spring]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configPath := filepath.Join(t.TempDir(), "config.yaml")
+			require.NoError(t, os.WriteFile(configPath, []byte(structMapConfigPrefix+tt.yaml), 0o600))
+
+			oldPath := ConfigPath
+			oldSettings := CloneSettings(GetSettings())
+			t.Cleanup(func() {
+				ConfigPath = oldPath
+				viper.Reset()
+				StoreSettings(oldSettings)
+			})
+			viper.Reset()
+			ConfigPath = configPath
+
+			_, err := Load()
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantPath)
+		})
+	}
+}
+
+// TestLoad_ScalarDottedSpeciesEntryIsIgnored pins that a dotted species key
+// whose value is not a mapping is skipped, as Unmarshal already skipped it,
+// instead of failing the load or creating an entry.
+func TestLoad_ScalarDottedSpeciesEntryIsIgnored(t *testing.T) {
+	settings, _ := loadConfigFromYAML(t, structMapConfigPrefix+`
+realtime:
+  species:
+    config:
+      "Larus sp.": 5
+      "American Robin":
+        threshold: 0.7
+`)
+	assert.NotContains(t, settings.Realtime.Species.Config, "larus sp.")
+	assert.Contains(t, settings.Realtime.Species.Config, "american robin")
+}
+
+// mapKeys returns the keys of m in unspecified order.
+func mapKeys[V any](m map[string]V) []string {
+	return slices.Collect(maps.Keys(m))
 }

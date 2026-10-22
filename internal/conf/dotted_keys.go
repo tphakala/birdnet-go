@@ -2,6 +2,7 @@ package conf
 
 import (
 	"reflect"
+	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
@@ -56,6 +57,30 @@ import (
 //     original flat keys are still intact (viper.Get splits only the search
 //     path, not the values it returns). This covers module_levels too, for
 //     the parent plus dotted child case the hook cannot recover.
+//
+// The same split hits the two config maps whose keys the user types and whose
+// values are structs: realtime.species.config ("St. Helena Plover") and the
+// seasonal tracking seasons ("early.spring"). Unmarshal decodes "st" with a
+// zero-value SpeciesConfig (or "early" with a zero Season, which then fails
+// validation) and the real entry is lost. reDecodeDottedStructMaps re-decodes
+// only the dotted keys from the raw subtree and drops the phantom prefix entry
+// when no viper layer (file, defaults, environment, flags, overrides) really
+// sets that prefix, which viper.IsSet answers for the exact path.
+
+const (
+	// viperKeyDelimiter is the key delimiter viper splits config paths on.
+	viperKeyDelimiter = "."
+
+	// speciesConfigViperPath is the viper path of Settings.Realtime.Species.Config.
+	speciesConfigViperPath = "realtime.species.config"
+
+	// seasonalTrackingSeasonsViperPath is the viper path of
+	// Settings.Realtime.SpeciesTracking.SeasonalTracking.Seasons.
+	seasonalTrackingSeasonsViperPath = "realtime.speciestracking.seasonaltracking.seasons"
+
+	// opDecodeDottedMapKeys is the error context operation for the struct-map repair.
+	opDecodeDottedMapKeys = "decode-dotted-map-keys"
+)
 
 // decodeHookFlattenMaxDepth bounds the nesting a malformed config can drive the
 // hook through before it gives up. Real dotted keys are one level deep (the
@@ -78,7 +103,8 @@ const decodeHookFlattenMaxDepth = 32
 // Only maps whose decoded value type is a scalar (string, bool, numbers)
 // need this: for those, a map value can never be legitimate input, so any
 // nested map is unambiguously a split dotted key. Struct-valued maps are
-// handled by reDecodeLoggingConfig instead, where the target type decides.
+// handled by reDecodeLoggingConfig and reDecodeDottedStructMaps instead, where
+// the target type decides.
 func flattenDottedMapKeys(data map[string]any, depth int) map[string]any {
 	if depth > decodeHookFlattenMaxDepth || data == nil {
 		return data
@@ -91,10 +117,17 @@ func flattenDottedMapKeys(data map[string]any, depth int) map[string]any {
 			continue
 		}
 		for nestedKey, nestedValue := range flattenDottedMapKeys(nested, depth+1) {
-			flat[key+"."+nestedKey] = nestedValue
+			flat[key+viperKeyDelimiter+nestedKey] = nestedValue
 		}
 	}
 	return flat
+}
+
+// configDecodeHook is the one hook composition viper.Unmarshal in Load and every
+// re-decode from the raw config subtree use, so their decode semantics cannot
+// drift apart. Both hooks must be composed; a single one would drop the other.
+func configDecodeHook() mapstructure.DecodeHookFunc {
+	return mapstructure.ComposeDecodeHookFunc(DottedKeyDecodeHook(), DurationDecodeHook())
 }
 
 // DottedKeyDecodeHook returns a mapstructure hook that restores flat map
@@ -107,8 +140,8 @@ func DottedKeyDecodeHook() mapstructure.DecodeHookFunc {
 		}
 		// map[string]any targets legitimately hold nested maps (e.g.
 		// realtime.metadata_filters, backup target settings); leave those
-		// alone. Struct-valued maps (logging.modules) are repaired after
-		// Unmarshal from the raw config subtree instead.
+		// alone. Struct-valued maps (logging.modules, species config,
+		// seasons) are repaired after Unmarshal from the raw config subtree instead.
 		switch to.Elem().Kind() {
 		case reflect.Interface, reflect.Map, reflect.Struct, reflect.Slice:
 			return data, nil
@@ -196,7 +229,7 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 			Result:           &entry,
 			WeaklyTypedInput: true,
-			DecodeHook:       mapstructure.ComposeDecodeHookFunc(DottedKeyDecodeHook(), DurationDecodeHook()),
+			DecodeHook:       configDecodeHook(),
 		})
 		if err != nil {
 			return errors.New(err).
@@ -244,4 +277,85 @@ func reDecodeModuleLevels(settings *Settings, section map[string]any) error {
 		settings.Logging.ModuleLevels[name] = level
 	}
 	return nil
+}
+
+// reDecodeDottedStructMaps restores species config and season keys that contain
+// a dot (see the file comment). Maps without dotted keys are left untouched.
+func reDecodeDottedStructMaps(settings *Settings) error {
+	species, err := reDecodeDottedMapKeys(settings.Realtime.Species.Config, speciesConfigViperPath)
+	if err != nil {
+		return err
+	}
+	settings.Realtime.Species.Config = species
+
+	tracking := &settings.Realtime.SpeciesTracking.SeasonalTracking
+	seasons, err := reDecodeDottedMapKeys(tracking.Seasons, seasonalTrackingSeasonsViperPath)
+	if err != nil {
+		return err
+	}
+	tracking.Seasons = seasons
+	return nil
+}
+
+// reDecodeDottedMapKeys repairs a struct-valued map at viperPath whose
+// user-typed keys contain ".". Each dotted key is decoded from the raw subtree
+// (where viper.Get still returns the flat key) over a zero V and stored under
+// its full key. Unmarshal meanwhile stored a zero-value phantom entry under the
+// first segment of every such key; that entry is deleted unless viper.IsSet
+// reports the segment as set. IsSet searches every layer (override, flags,
+// environment, config file, defaults) but matches only the exact path, so a
+// real "st" next to "st. helena plover" or a default "spring" next to
+// "spring.late" survives with the value Unmarshal gave it.
+//
+// A dotted entry whose value is not a mapping is skipped: Unmarshal already
+// ignored it as a split unknown field. Maps without dotted keys are returned
+// unchanged.
+func reDecodeDottedMapKeys[V any](entries map[string]V, viperPath string) (map[string]V, error) {
+	raw, ok := viper.Get(viperPath).(map[string]any)
+	if !ok {
+		return entries, nil
+	}
+	prefixes := make(map[string]struct{})
+	for key, rawValue := range raw {
+		prefix, _, dotted := strings.Cut(key, viperKeyDelimiter)
+		if !dotted {
+			continue
+		}
+		if _, isMap := rawValue.(map[string]any); !isMap {
+			continue
+		}
+		var entry V
+		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+			Result:           &entry,
+			WeaklyTypedInput: true,
+			DecodeHook:       configDecodeHook(),
+		})
+		if err != nil {
+			return nil, errors.New(err).
+				Category(errors.CategoryConfiguration).
+				Context("operation", opDecodeDottedMapKeys).
+				Context("key", key).
+				Build()
+		}
+		if err := decoder.Decode(rawValue); err != nil {
+			// The decoder reports field paths relative to this entry only, so
+			// name the path and key in the message as well as in the context.
+			return nil, errors.Newf("%s[%s]: %w", viperPath, key, err).
+				Category(errors.CategoryConfiguration).
+				Context("operation", opDecodeDottedMapKeys).
+				Context("key", key).
+				Build()
+		}
+		if entries == nil {
+			entries = make(map[string]V)
+		}
+		entries[key] = entry
+		prefixes[prefix] = struct{}{}
+	}
+	for prefix := range prefixes {
+		if !viper.IsSet(viperPath + viperKeyDelimiter + prefix) {
+			delete(entries, prefix)
+		}
+	}
+	return entries, nil
 }

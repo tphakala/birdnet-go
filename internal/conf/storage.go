@@ -9,7 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/go-viper/mapstructure/v2"
 	"github.com/spf13/viper"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -80,8 +79,7 @@ func Load() (*Settings, error) {
 	// never split, see #4523).
 	// Composed with DurationDecodeHook because both hooks must run; a single
 	// non-composed hook would silently drop the other.
-	if err := viper.Unmarshal(settings, viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
-		DottedKeyDecodeHook(), DurationDecodeHook()))); err != nil {
+	if err := viper.Unmarshal(settings, viper.DecodeHook(configDecodeHook())); err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "unmarshal-config").
@@ -94,6 +92,14 @@ func Load() (*Settings, error) {
 	// coexist, from module_levels. The raw subtree keeps the flat keys, so
 	// decoding from it restores both (#4523).
 	if err := reDecodeLoggingConfig(settings); err != nil {
+		return nil, err
+	}
+
+	// Restore species config and season keys that contain a dot. This must run
+	// before key normalization and before any persistMigration below, so a
+	// migration save never writes the zero-value phantom entry viper's split
+	// leaves behind.
+	if err := reDecodeDottedStructMaps(settings); err != nil {
 		return nil, err
 	}
 
