@@ -247,13 +247,6 @@ export const settingsAPI = {
     audioDevices: (): Promise<Array<{ id: string; name: string }>> => {
       return api.get('/api/v2/system/audio-devices');
     },
-
-    /**
-     * Check FFmpeg availability
-     */
-    ffmpegStatus: (): Promise<{ available: boolean; version?: string }> => {
-      return api.get('/api/v2/system/ffmpeg');
-    },
   },
 
   /**

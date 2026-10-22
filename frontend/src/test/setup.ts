@@ -458,7 +458,6 @@ vi.mock('$lib/utils/settingsApi.js', () => {
       },
       system: {
         audioDevices: vi.fn().mockResolvedValue([]),
-        ffmpegVersion: vi.fn().mockResolvedValue({ version: '5.0.0', available: true }),
       },
     },
   };
