@@ -1328,6 +1328,34 @@ func TestBirdWeatherAction_Execute_RetryReusesEventTrackerDecision(t *testing.T)
 	require.Error(t, action.Execute(t.Context(), nil), "retry must reach the client check too")
 }
 
+// TestBirdWeatherAction_Execute_ResolvesSettingsOncePerAttempt verifies that one
+// Execute reads one settings snapshot, so the enabled flag, the threshold and the
+// debug flag cannot come from two versions after a reload mid-attempt.
+func TestBirdWeatherAction_Execute_ResolvesSettingsOncePerAttempt(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.Birdweather.Enabled = true
+	settings.Debug = true
+	det := testDetection()
+
+	var settingsCalls int
+	action := &BirdWeatherAction{
+		Result:       det.Result,
+		EventTracker: NewEventTracker(time.Hour),
+		liveSettings: func() *conf.Settings {
+			settingsCalls++
+			return settings
+		},
+		liveClient: func() *birdweather.BwClient { return nil },
+	}
+
+	// No client: the attempt reads the enabled flag and the threshold, then fails
+	// at the client check.
+	require.Error(t, action.Execute(t.Context(), nil))
+	assert.Equal(t, 1, settingsCalls, "one settings snapshot per attempt")
+}
+
 // TestBirdWeatherAction_Execute_NilResolverResultUsesCapturedSettings verifies
 // that a resolver returning no snapshot falls back to the settings the action was
 // built with: the enabled check passes on them and the missing client is reported.
