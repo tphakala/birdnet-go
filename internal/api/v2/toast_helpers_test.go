@@ -122,9 +122,10 @@ func runSendToastTest(t *testing.T, c *Controller, service *notification.Service
 	require.NoError(t, err, "SendToast() unexpected error")
 
 	// SendToast returns after the synchronous, non-blocking broadcast
-	// (notification/service_extensions.go, Service.CreateWithMetadata calling
-	// Service.broadcast), so the notification is already in the subscriber
-	// channel and no wait is needed.
+	// (notification/service_extensions.go:69, Service.CreateWithMetadata calling
+	// Service.broadcast; notification/service.go:629-636, sendToSubscriber), so
+	// the notification is already in the subscriber channel and no wait is
+	// needed.
 	select {
 	case notif := <-notifCh:
 		verifyToastNotification(t, notif, tc)
