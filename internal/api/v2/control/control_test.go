@@ -14,6 +14,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
@@ -193,14 +194,16 @@ func TestGetAvailableActions(t *testing.T) {
 	}
 }
 
-// TestNewWiresContainerCheck tests that New installs the real container check.
+// TestNewWiresContainerCheck tests that New installs sysinfo.IsContainer itself.
 // Every other test replaces the field, so without this a New that left it nil
-// would pass them all and panic in production.
+// would pass them all and panic in production. The functions are compared by
+// identity because a constant check returns the same value as the real one on
+// any host that is not in a container.
 func TestNewWiresContainerCheck(t *testing.T) {
 	_, h, _ := newControlTestHandler(t)
 
 	require.NotNil(t, h.isContainer)
-	assert.Equal(t, sysinfo.IsContainer(), h.isContainer())
+	assert.Equal(t, reflect.ValueOf(sysinfo.IsContainer).Pointer(), reflect.ValueOf(h.isContainer).Pointer())
 }
 
 // testControlSendTimeout is the request deadline for the blocked-channel test.
