@@ -993,6 +993,44 @@ func TestSeedDefaultRules_RepairsDamagedDefaults(t *testing.T) {
 			wantWritten: true,
 		},
 		{
+			// No default has an empty key, so a keyless row can only match by name;
+			// the repair must not treat a rule the user created as a default.
+			name:    "a damaged row without a name key is untouched",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(lowDisk.Name, lowDisk.Description)(r)
+				r.NameKey = ""
+			},
+			wantName: lowDisk.Name,
+			wantDesc: lowDisk.Description,
+		},
+		{
+			name:    "existing steps are kept",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, translatedLowDiskDescription)(r)
+				r.EscalationSteps = slices.Clone(customEscalationSteps)
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    lowDisk.Description,
+			wantSteps:   customEscalationSteps,
+			wantWritten: true,
+		},
+		{
+			name:    "a changed description key keeps the description",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, customDescription)(r)
+				r.DescriptionKey = unmatchedNameKey
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    customDescription,
+			wantSteps:   lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+		{
 			name:        "an event default saved by the editor is repaired without steps",
 			nameKey:     RuleKeyNewSpeciesName,
 			damage:      editorSaved(translatedLowDiskName, translatedLowDiskDescription),
@@ -1124,6 +1162,16 @@ func TestSeedDefaultRules_RepairsDamagedDefaultOnceCopyIsGone(t *testing.T) {
 func TestSeedDefaultRules_FailedRepairLeavesRowAndIsLogged(t *testing.T) {
 	repo, id := seedRulesWithDamagedDefault(t, RuleKeyLowDiskName,
 		editorSaved(translatedLowDiskName, translatedLowDiskDescription))
+	// A second damaged default, listed after Low disk, must still be repaired.
+	var laterID uint
+	for i := range repo.rules {
+		if repo.rules[i].NameKey == RuleKeyBirdWeatherName {
+			laterID = repo.rules[i].ID
+			editorSaved(translatedLowDiskName, translatedLowDiskDescription)(&repo.rules[i])
+		}
+	}
+	require.NotZero(t, laterID)
+	require.Greater(t, laterID, id, "the second damaged default is listed after the failing one")
 	repo.updateErrs = map[uint]error{id: errors.NewStd(updateFailureMessage)}
 
 	var logOutput bytes.Buffer
@@ -1135,7 +1183,9 @@ func TestSeedDefaultRules_FailedRepairLeavesRowAndIsLogged(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, rule.BuiltIn, "a failed write leaves the stored row as it was")
 	assert.Empty(t, rule.EscalationSteps)
-	assert.Empty(t, repo.updated)
+	later, err := repo.GetRule(t.Context(), laterID)
+	require.NoError(t, err)
+	assert.True(t, later.BuiltIn, "a failed write does not stop the repair of the next row")
+	assert.Equal(t, []uint{laterID}, repo.updated)
 	assert.Contains(t, logOutput.String(), "failed to repair built-in alert rule")
-	assert.NotContains(t, logOutput.String(), "repaired built-in alert rule")
 }
