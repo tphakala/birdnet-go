@@ -105,20 +105,47 @@ func TestSeedDefaultRules_EmptyRepo(t *testing.T) {
 	assert.Len(t, repo.rules, expectedCount)
 }
 
-func TestSeedDefaultRules_AlreadySeeded(t *testing.T) {
-	// Pre-populate with all default rules so seeding finds them by name
-	defaults := DefaultRules()
-	existing := make([]entities.AlertRule, len(defaults))
-	for i := range defaults {
-		existing[i] = defaults[i]
-		existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
-	}
-	repo := &initMockRepo{rules: existing}
-	err := seedDefaultRules(t.Context(), repo, initTestLogger())
-	require.NoError(t, err)
+// translatedLowDiskName stands for the name the settings editor stored for the
+// Low disk space default when the UI language was German.
+const translatedLowDiskName = "Wenig Speicherplatz"
 
-	// Should not add any new rules since all defaults already exist
-	assert.Len(t, repo.rules, len(defaults))
+func TestSeedDefaultRules_FindsStoredDefaults(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(rule *entities.AlertRule)
+	}{
+		{"every default stored under its name", func(*entities.AlertRule) {}},
+		{"a keyed default stored under a translated name", func(rule *entities.AlertRule) {
+			rule.Name = translatedLowDiskName
+		}},
+		{"a keyed default saved as a custom rule under a translated name", func(rule *entities.AlertRule) {
+			rule.Name = translatedLowDiskName
+			rule.BuiltIn = false
+			rule.EscalationSteps = nil
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defaults := DefaultRules()
+			existing := make([]entities.AlertRule, len(defaults))
+			for i := range defaults {
+				existing[i] = defaults[i]
+				existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
+				if existing[i].NameKey == RuleKeyLowDiskName {
+					tt.mutate(&existing[i])
+				}
+			}
+			repo := &initMockRepo{rules: existing}
+
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+			assert.Len(t, repo.rules, len(defaults), "first run creates nothing")
+
+			updatedAfterFirst := len(repo.updated)
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+			assert.Len(t, repo.rules, len(defaults), "second run creates nothing")
+			assert.Len(t, repo.updated, updatedAfterFirst, "second run writes nothing")
+		})
+	}
 }
 
 func TestInitialize_SeedsAndCreatesEngine(t *testing.T) {

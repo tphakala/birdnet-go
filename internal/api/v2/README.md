@@ -625,11 +625,13 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | PATCH  | `/alerts/rules/:id/toggle`     | `ToggleAlertRule`        | ✅   | Enable/disable rule      |
 | DELETE | `/alerts/rules/:id`            | `DeleteAlertRule`        | ✅   | Delete rule              |
 | POST   | `/alerts/rules/:id/test`       | `TestAlertRule`          | ✅   | Test-fire rule           |
-| POST   | `/alerts/rules/reset-defaults` | `ResetDefaultAlertRules` | ✅   | Re-seed built-in rules   |
+| POST   | `/alerts/rules/reset-defaults` | `ResetDefaultAlertRules` | ✅   | Restore built-in rules   |
 | POST   | `/alerts/rules/import`         | `ImportAlertRules`       | ✅   | Import rules from JSON   |
 | DELETE | `/alerts/history`              | `ClearAlertHistory`      | ✅   | Delete all history       |
 
-`PUT /alerts/rules/:id` replaces the rule, with three exceptions. `built_in` in the body is ignored and the stored flag is kept. A rule that has a `name_key` or `description_key` keeps its stored `name` or `description` while the request sends the same key, because the editor sends the translated text and startup finds a default by its stored name. Renaming a built-in rule (changing its `name_key`, or its `name` when it has no key) makes it a custom rule. An omitted, null or unchanged `escalation_steps` keeps the stored steps while the rule's object type, trigger type, metric, event and each condition's property, operator and value are unchanged, and removes them otherwise, since a rule with steps fires only at or above its lowest step. A condition's `duration_sec` does not affect this. Steps that differ from the stored ones replace them.
+`PUT /alerts/rules/:id` replaces the rule, with three exceptions. `built_in` in the body is ignored and the stored flag is kept. A rule that has a `name_key` or `description_key` keeps its stored `name` or `description` while the request sends the same key, because the editor sends the translated text. Renaming a built-in rule (changing its `name_key`, or its `name` when it has no key) makes it a custom rule. An omitted, null or unchanged `escalation_steps` keeps the stored steps while the rule's object type, trigger type, metric, event and each condition's property, operator and value are unchanged, and removes them otherwise, since a rule with steps fires only at or above its lowest step. A condition's `duration_sec` does not affect this. Steps that differ from the stored ones replace them.
+
+`POST /alerts/rules/reset-defaults` deletes the built-in rules and creates each shipped default again, except a default whose `name` or `name_key` a remaining rule already has. It returns `status` (`"defaults reset"`), `created` (number of defaults created) and `skipped` (names of the defaults it did not create). `POST /alerts/rules/import` does not create a rule whose `name`, or non-empty `name_key`, matches a stored rule or a rule imported earlier in the same request, and imports the others. It returns `imported`, `total` and `skipped` (names of the rules it did not create for that reason). Startup seeding recognises a default the same way.
 
 **Query Parameters:**
 

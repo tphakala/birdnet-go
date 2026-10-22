@@ -360,12 +360,14 @@ func Initialize(
 	return engine, nil
 }
 
-// seedDefaultRules ensures all built-in default rules exist. It checks by name
-// so partial seeds from previous runs self-heal on restart. It also adds the
+// seedDefaultRules ensures all built-in default rules exist. A default counts as
+// already seeded when a stored rule has its name or its non-empty name key, so
+// partial seeds from previous runs self-heal on restart and a rule the editor
+// saved under a translated name is not seeded a second time. It also adds the
 // default escalation steps to existing built-in rules that lack them,
 // including legacy rows without a name key. The two checks differ on purpose:
-// a rule counts as already seeded by name alone, but only counts as the shipped
-// default for migration when its trigger and conditions match too (see
+// a rule counts as already seeded by name or key alone, but only counts as the
+// shipped default for migration when its trigger and conditions match too (see
 // defaultRuleFor).
 func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, log logger.Logger) error {
 	existing, err := repo.ListRules(ctx, repository.AlertRuleFilter{})
@@ -373,16 +375,12 @@ func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, 
 		return err
 	}
 
-	// Build set of existing rule names for fast lookup
-	existingNames := make(map[string]struct{}, len(existing))
-	for i := range existing {
-		existingNames[existing[i].Name] = struct{}{}
-	}
+	index := NewRuleNameIndex(existing)
 
 	defaults := DefaultRules()
 	var created int
 	for i := range defaults {
-		if _, exists := existingNames[defaults[i].Name]; exists {
+		if index.Has(&defaults[i]) {
 			continue
 		}
 		if err := repo.CreateRule(ctx, &defaults[i]); err != nil {
