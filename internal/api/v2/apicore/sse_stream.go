@@ -21,8 +21,9 @@ const (
 	// below the server WriteTimeout so a quiet stream is not torn down.
 	SSEHeartbeatInterval = 15 * time.Second
 
-	// SSEEventLoopSleep is the sleep duration used to throttle an SSE poll loop
-	// when there are no events to send.
+	// SSEEventLoopSleep is the sleep duration used to throttle the model install
+	// progress stream, which polls the model manager for state. The detection and
+	// sound level streams block on their channels and do not use it.
 	SSEEventLoopSleep = 10 * time.Millisecond
 
 	// SSEWriteDeadline bounds how long a single SSE message write may block on a
