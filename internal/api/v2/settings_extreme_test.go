@@ -11,8 +11,14 @@ import (
 )
 
 // summaryLimitReset is the value an out-of-range dashboard summaryLimit is reset
-// to (internal/conf/validate_realtime.go:170-171).
+// to (internal/conf/validate_realtime.go:169-172).
 const summaryLimitReset = 10
+
+// summaryLimitIsReset asserts the dashboard summaryLimit was reset, not stored.
+func summaryLimitIsReset(t *testing.T, s *conf.Settings) {
+	t.Helper()
+	assert.Equal(t, summaryLimitReset, s.Realtime.Dashboard.SummaryLimit)
+}
 
 // TestPatchNumericBounds pins the numeric limits a section PATCH enforces.
 // Rejected rows must answer 400 and publish nothing. Accepted rows must answer
@@ -112,31 +118,22 @@ func TestPatchNumericBounds(t *testing.T) {
 		// An out-of-range summaryLimit is reset instead of rejected
 		// (internal/conf/validate_realtime.go:169-172).
 		{
-			name:    "summaryLimit above the maximum is reset to the minimum",
-			section: "dashboard",
-			body:    map[string]any{"summaryLimit": 2147483647},
-			accepted: func(t *testing.T, s *conf.Settings) {
-				t.Helper()
-				assert.Equal(t, summaryLimitReset, s.Realtime.Dashboard.SummaryLimit)
-			},
+			name:     "summaryLimit above the maximum is reset to the minimum",
+			section:  "dashboard",
+			body:     map[string]any{"summaryLimit": 2147483647},
+			accepted: summaryLimitIsReset,
 		},
 		{
-			name:    "negative summaryLimit is reset to the minimum",
-			section: "dashboard",
-			body:    map[string]any{"summaryLimit": -100},
-			accepted: func(t *testing.T, s *conf.Settings) {
-				t.Helper()
-				assert.Equal(t, summaryLimitReset, s.Realtime.Dashboard.SummaryLimit)
-			},
+			name:     "negative summaryLimit is reset to the minimum",
+			section:  "dashboard",
+			body:     map[string]any{"summaryLimit": -100},
+			accepted: summaryLimitIsReset,
 		},
 		{
-			name:    "summaryLimit below the minimum is reset to the minimum",
-			section: "dashboard",
-			body:    map[string]any{"summaryLimit": 5},
-			accepted: func(t *testing.T, s *conf.Settings) {
-				t.Helper()
-				assert.Equal(t, summaryLimitReset, s.Realtime.Dashboard.SummaryLimit)
-			},
+			name:     "summaryLimit below the minimum is reset to the minimum",
+			section:  "dashboard",
+			body:     map[string]any{"summaryLimit": 5},
+			accepted: summaryLimitIsReset,
 		},
 	}
 

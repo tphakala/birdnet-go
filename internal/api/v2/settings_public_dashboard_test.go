@@ -12,7 +12,6 @@ package api
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -209,7 +208,8 @@ func TestGetDashboardSettings_DoesNotLeakSecrets(t *testing.T) {
 // exposing GET /settings/dashboard did not open anything else. A single /:section
 // route serves every PATCH (see the route registration in settings.go), so the
 // dashboard PATCH row guards PATCH on every section; PUT and the two reads are
-// registered separately and each needs its own row.
+// registered separately and each needs its own row. The requests go through the
+// real authentication middleware.
 func TestProtectedSettingsRoutesRequireAuth(t *testing.T) {
 	e := newSettingsAuthTestEnv(t)
 
@@ -227,11 +227,7 @@ func TestProtectedSettingsRoutesRequireAuth(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var body io.Reader = http.NoBody
-			if tt.body != "" {
-				body = strings.NewReader(tt.body)
-			}
-			req := httptest.NewRequest(tt.method, tt.path, body)
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
 			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 			rec := httptest.NewRecorder()
 

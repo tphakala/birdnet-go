@@ -99,8 +99,9 @@ func TestDashboardLayoutWidthPersistence(t *testing.T) {
 
 // TestPatchSectionPreservesOmittedFields verifies that a section PATCH changes
 // only the scalar it names, leaving the section's other scalars alone, and that
-// an empty body changes nothing. Every seed puts a non-default value into each
-// preserved field, so a field reset to its zero value shows as a difference.
+// an empty body changes nothing. Each preserved field holds a non-zero value,
+// from the row's seed or from getTestSettings, so a field reset to its zero
+// value shows as a difference.
 //
 // The table pins scalar preservation only. A nested object that is replaced
 // instead of merged keeps its scalars (json.Unmarshal leaves absent ones alone)

@@ -67,6 +67,14 @@ const (
 	eqTestQ            = 0.707
 )
 
+// eqPutPaths is where a PUT payload carries each equalizer, as a JSON path for
+// patchSettingsEQ.
+var eqPutPaths = map[eqLocation][]string{
+	eqGlobal: {"realtime", "audio"},
+	eqSource: {"realtime", "audio", "sources", "[0]"},
+	eqStream: {"realtime", "rtsp", "streams", "[0]"},
+}
+
 // eqFilterSpec is one filter a round-trip row sends and expects back.
 type eqFilterSpec struct {
 	filterType string
@@ -161,16 +169,10 @@ func TestEQFilterRoundTrip(t *testing.T) {
 			}
 			eq := map[string]any{"enabled": true, "filters": filters}
 
-			switch tt.method {
-			case http.MethodPut:
-				paths := map[eqLocation][]string{
-					eqGlobal: {"realtime", "audio"},
-					eqSource: {"realtime", "audio", "sources", "[0]"},
-					eqStream: {"realtime", "rtsp", "streams", "[0]"},
-				}
-				body := patchSettingsEQ(t, controller.Settings.Load(), eq, paths[tt.location]...)
+			if tt.method == http.MethodPut {
+				body := patchSettingsEQ(t, controller.Settings.Load(), eq, eqPutPaths[tt.location]...)
 				putRawSettings(t, e, controller, string(body))
-			case http.MethodPatch:
+			} else {
 				switch tt.location {
 				case eqGlobal:
 					patchSection(t, e, controller, "realtime", map[string]any{"audio": map[string]any{"equalizer": eq}})
@@ -183,8 +185,6 @@ func TestEQFilterRoundTrip(t *testing.T) {
 						"name": eqTestStreamName, "url": eqTestStreamURL, "enabled": true, "type": "rtsp", "equalizer": eq,
 					}}})
 				}
-			default:
-				require.FailNow(t, "unknown method", "%s", tt.method)
 			}
 
 			saved := controller.Settings.Load()
