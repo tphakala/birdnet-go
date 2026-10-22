@@ -1410,8 +1410,8 @@ func TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
 				require.NoError(t, err)
 				return
 			}
-			// The nil-client branch is the only one that marks the error non-retryable
-			// with this message; the zero client fails with an empty-PCM validation error.
+			// The nil-client branch is the only one that returns this message;
+			// the zero client fails with an empty-PCM validation error.
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "BirdWeather client is not initialized")
 		})

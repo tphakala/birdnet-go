@@ -98,15 +98,15 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 	// reconfigured or after it was removed.
 	client := a.attemptClient()
 	if client == nil {
-		// Client initialization failures indicate configuration issues that require
-		// manual intervention (e.g., missing API keys, disabled service)
-		// Retrying won't fix these problems, so mark as non-retryable
+		// A nil client means BirdWeather was removed, failed to initialize, or is
+		// between disconnect and reconnect during a reconfigure. The error is returned
+		// so the job queue retries it under RetryConfig and a later attempt finds the new client.
 		return errors.Newf("BirdWeather client is not initialized").
 			Component("analysis.processor").
 			Category(errors.CategoryIntegration).
 			Context("operation", "birdweather_upload").
 			Context("integration", "birdweather").
-			Context("retryable", false). // Configuration error - not retryable
+			Context("retryable", false). // Informational only; nothing reads this key, and the job queue retries under RetryConfig
 			Context("config_section", "realtime.birdweather").
 			Build()
 	}
@@ -262,7 +262,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 			Category(errors.CategoryConfiguration).
 			Context("operation", "mqtt_publish").
 			Context("integration", "mqtt").
-			Context("retryable", false). // Configuration error - not retryable
+			Context("retryable", false). // Informational only; nothing reads this key, and the job queue retries under RetryConfig
 			Context("config_section", "realtime.mqtt.topic").
 			Build()
 	}

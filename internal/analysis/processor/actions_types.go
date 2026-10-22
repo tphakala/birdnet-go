@@ -213,7 +213,7 @@ type PreRendererSubmit interface {
 
 type BirdWeatherAction struct {
 	// Settings is the snapshot captured when the action was built; used only
-	// when liveSettings is nil.
+	// when liveSettings is nil or returns nil.
 	Settings *conf.Settings
 	Result   detection.Result // Domain model (single source of truth)
 	pcmData  []byte
@@ -271,7 +271,7 @@ func (d *rateLimitDecision) allow(check func() bool) bool {
 
 type MqttAction struct {
 	// Settings is the snapshot captured when the action was built; used only
-	// when liveSettings is nil.
+	// when liveSettings is nil or returns nil.
 	Settings       *conf.Settings
 	Result         detection.Result // Domain model (single source of truth)
 	BirdImageCache *imageprovider.BirdImageCache
