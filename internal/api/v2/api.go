@@ -947,7 +947,9 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 }
 
 // InitializeAPI creates a new API controller and registers all routes.
-// Auth middleware and service should be passed via functional options.
+// Auth middleware and service should be passed via functional options. It logs
+// the error, flushes console output and exits the process if the controller
+// cannot be created.
 func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string, proc *processor.Processor,
@@ -957,6 +959,8 @@ func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings
 	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, metrics, opts...)
 	if err != nil {
 		GetLogger().Error("Failed to initialize API", logger.Error(err))
+		// os.Exit runs no defers, so write the queued console output first.
+		logger.FlushConsole()
 		os.Exit(1)
 	}
 

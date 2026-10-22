@@ -411,6 +411,8 @@ func handleEmptySessionSecret(settings *conf.Settings) {
 	if err != nil {
 		GetLogger().Error("FATAL: Cannot generate temporary SessionSecret, crypto/rand is unavailable. Shutting down to prevent insecure operation.",
 			logger.Error(err))
+		// os.Exit runs no defers, so write the queued console output first.
+		logger.FlushConsole()
 		os.Exit(1)
 	}
 	settings.Security.SessionSecret = tempSecret
