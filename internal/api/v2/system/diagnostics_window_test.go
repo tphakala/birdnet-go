@@ -19,7 +19,7 @@ import (
 // setupDiagnosticsTest creates a test system Handler wired for diagnostics
 // tests with the given health metrics store and optional event buffer. Its
 // callers run in parallel, so the core does not publish settings (a
-// process-global); those tests register their own checks and read none.
+// process-global); RunDiagnostics in these tests reads none.
 func setupDiagnosticsTest(t *testing.T, store *observability.HealthMetricsStore, eventBuf *observability.HealthEventBuffer) (*echo.Echo, *Handler) {
 	t.Helper()
 	e := echo.New()
