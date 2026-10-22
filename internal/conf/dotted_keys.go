@@ -130,6 +130,21 @@ func configDecodeHook() mapstructure.DecodeHookFunc {
 	return mapstructure.ComposeDecodeHookFunc(DottedKeyDecodeHook(), DurationDecodeHook())
 }
 
+// decodeRawEntry decodes one raw config value over *result with the same
+// settings viper.Unmarshal uses, so entries re-read from the raw subtree behave
+// exactly like entries Unmarshal decoded itself.
+func decodeRawEntry(result, raw any) error {
+	decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:           result,
+		WeaklyTypedInput: true,
+		DecodeHook:       configDecodeHook(),
+	})
+	if err != nil {
+		return err
+	}
+	return decoder.Decode(raw)
+}
+
 // DottedKeyDecodeHook returns a mapstructure hook that restores flat map
 // keys viper split on ".". It only rewrites maps whose value type is scalar,
 // where a nested map value is unambiguous evidence of a split key.
@@ -226,19 +241,7 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 		if !hasBase {
 			entry, _ = logger.DefaultModuleOutput(name)
 		}
-		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-			Result:           &entry,
-			WeaklyTypedInput: true,
-			DecodeHook:       configDecodeHook(),
-		})
-		if err != nil {
-			return errors.New(err).
-				Category(errors.CategoryConfiguration).
-				Context("operation", "decode-logging-modules").
-				Context("module", name).
-				Build()
-		}
-		if err := decoder.Decode(rawValue); err != nil {
+		if err := decodeRawEntry(&entry, rawValue); err != nil {
 			// The decoder reports field paths relative to this entry only, so
 			// name the module in the message as well as in the context.
 			return errors.Newf("logging.modules[%s]: %w", name, err).
@@ -316,7 +319,6 @@ func reDecodeDottedMapKeys[V any](entries map[string]V, viperPath string) (map[s
 	if !ok {
 		return entries, nil
 	}
-	prefixes := make(map[string]struct{})
 	for key, rawValue := range raw {
 		prefix, _, dotted := strings.Cut(key, viperKeyDelimiter)
 		if !dotted {
@@ -324,24 +326,14 @@ func reDecodeDottedMapKeys[V any](entries map[string]V, viperPath string) (map[s
 		}
 		// Unmarshal left a phantom under the prefix even when the value is not
 		// a mapping, so the prefix is checked before the value is skipped.
-		prefixes[prefix] = struct{}{}
+		if !viper.IsSet(viperPath + viperKeyDelimiter + prefix) {
+			delete(entries, prefix)
+		}
 		if _, isMap := rawValue.(map[string]any); !isMap {
 			continue
 		}
 		var entry V
-		decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
-			Result:           &entry,
-			WeaklyTypedInput: true,
-			DecodeHook:       configDecodeHook(),
-		})
-		if err != nil {
-			return nil, errors.New(err).
-				Category(errors.CategoryConfiguration).
-				Context("operation", opDecodeDottedMapKeys).
-				Context("key", key).
-				Build()
-		}
-		if err := decoder.Decode(rawValue); err != nil {
+		if err := decodeRawEntry(&entry, rawValue); err != nil {
 			// The decoder reports field paths relative to this entry only, so
 			// name the path and key in the message as well as in the context.
 			return nil, errors.Newf("%s[%s]: %w", viperPath, key, err).
@@ -354,11 +346,6 @@ func reDecodeDottedMapKeys[V any](entries map[string]V, viperPath string) (map[s
 			entries = make(map[string]V)
 		}
 		entries[key] = entry
-	}
-	for prefix := range prefixes {
-		if !viper.IsSet(viperPath + viperKeyDelimiter + prefix) {
-			delete(entries, prefix)
-		}
 	}
 	return entries, nil
 }

@@ -3,12 +3,10 @@ package conf
 import (
 	"maps"
 	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -248,18 +246,7 @@ logging:
     analysis.processor:
       max_size: not-a-number
 `
-	configPath := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configPath, []byte(cfg), 0o600))
-
-	oldPath := ConfigPath
-	oldSettings := CloneSettings(GetSettings())
-	t.Cleanup(func() {
-		ConfigPath = oldPath
-		viper.Reset()
-		StoreSettings(oldSettings)
-	})
-	viper.Reset()
-	ConfigPath = configPath
+	prepareConfigFromYAML(t, cfg)
 
 	_, err := Load()
 	require.Error(t, err)
@@ -496,18 +483,7 @@ realtime:
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			configPath := filepath.Join(t.TempDir(), "config.yaml")
-			require.NoError(t, os.WriteFile(configPath, []byte(structMapConfigPrefix+tt.yaml), 0o600))
-
-			oldPath := ConfigPath
-			oldSettings := CloneSettings(GetSettings())
-			t.Cleanup(func() {
-				ConfigPath = oldPath
-				viper.Reset()
-				StoreSettings(oldSettings)
-			})
-			viper.Reset()
-			ConfigPath = configPath
+			prepareConfigFromYAML(t, structMapConfigPrefix+tt.yaml)
 
 			_, err := Load()
 			require.Error(t, err)

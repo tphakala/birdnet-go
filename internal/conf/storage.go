@@ -72,13 +72,10 @@ func Load() (*Settings, error) {
 	// missing field before unmarshal so the runtime struct can use a plain bool.
 	streamEnabledMigrated := migrateStreamEnabledDefaults()
 
-	// Unmarshal the config into settings, with custom Duration decode hook
-	// DottedKeyDecodeHook restores flat map keys that viper split on "."
-	// (scalar-valued maps that viper reaches by key path, today
-	// logging.module_levels and taxonomySynonyms; maps inside list entries are
-	// never split, see #4523).
-	// Composed with DurationDecodeHook because both hooks must run; a single
-	// non-composed hook would silently drop the other.
+	// Unmarshal the config into settings. configDecodeHook restores flat map
+	// keys that viper split on "." (scalar-valued maps that viper reaches by
+	// key path, today logging.module_levels and taxonomySynonyms; maps inside
+	// list entries are never split, see #4523) and decodes durations.
 	if err := viper.Unmarshal(settings, viper.DecodeHook(configDecodeHook())); err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryConfiguration).
