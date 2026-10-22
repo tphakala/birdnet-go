@@ -1426,9 +1426,9 @@ type batchResult struct {
 func (w *Worker) processBatch(ctx context.Context) (batchResult, error) {
 	// Get the last migrated ID from the state manager (NOT from V2 table).
 	// CRITICAL: We must use state.LastMigratedID because V2 can hold
-	// rows above the watermark. Querying MAX(legacy_id)
-	// from V2 would return the newest detection's ID, causing the worker to
-	// incorrectly believe all historical records have been migrated.
+	// rows above the watermark (for example from catch-up or tail sync). Querying
+	// MAX(legacy_id) from V2 would then run ahead of the watermark, causing the
+	// worker to incorrectly believe all historical records have been migrated.
 	state, err := w.stateManager.GetState()
 	if err != nil {
 		return batchResult{}, fmt.Errorf("failed to get migration state: %w", err)
