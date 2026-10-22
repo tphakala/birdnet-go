@@ -23,7 +23,6 @@ const (
 type hotReloadEntry struct {
 	categories []hotReloadCategory
 	action     string
-	todoAction string
 }
 
 // hotReloadRegistry maps dot-separated field paths to their reload behavior.
@@ -310,9 +309,6 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Import": {categories: []hotReloadCategory{hotReloadFresh}},
 }
 
-// Ceiling decreases as TODO actions are implemented; target is zero.
-const maxTodoActions = 0
-
 // TestSettingsHotReloadCoverage ensures every leaf field in conf.Settings has
 // a declared hot-reload behavior in the registry. Fails CI when a new field
 // is added without declaring how it applies at runtime.
@@ -365,9 +361,6 @@ func TestDetectorTableActionsReferenced(t *testing.T) {
 		if entry.action != "" {
 			registryActions[entry.action] = true
 		}
-		if entry.todoAction != "" {
-			registryActions[entry.todoAction] = true
-		}
 	}
 
 	for _, a := range SettingsChangeActions() {
@@ -378,22 +371,6 @@ func TestDetectorTableActionsReferenced(t *testing.T) {
 		assert.True(t, registryActions[a],
 			"audio detector action %q is not referenced by any registry entry", a)
 	}
-}
-
-// TestTodoActionCeiling asserts the number of TODO gaps trends toward zero.
-func TestTodoActionCeiling(t *testing.T) {
-	t.Parallel()
-
-	var todoCount int
-	for _, entry := range hotReloadRegistry {
-		if entry.todoAction != "" {
-			todoCount++
-		}
-	}
-	t.Logf("current TODO:action count: %d (ceiling: %d)", todoCount, maxTodoActions)
-	assert.LessOrEqual(t, todoCount, maxTodoActions,
-		"TODO:action count %d exceeds ceiling %d; implement detectors or raise ceiling intentionally",
-		todoCount, maxTodoActions)
 }
 
 func walkSettingsType(t reflect.Type, prefix string, visited map[reflect.Type]bool, uncovered *[]string) {

@@ -13,7 +13,6 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
@@ -25,15 +24,6 @@ const (
 	testHelsinkiLongitude = 24.9384 // Helsinki, Finland longitude for SunCalc tests
 	testControlChannelBuf = 10      // Control channel buffer size for concurrent test scenarios
 )
-
-// newMinimalController creates a Controller for simple validation tests.
-// Use this for tests that only need to call handler methods without database or full infrastructure.
-// Includes default settings to prevent nil pointer panics if a handler accesses c.Settings.
-func newMinimalController() *Controller {
-	c := &Controller{Core: &apicore.Core{}}
-	c.Settings.Store(apitest.NewValidTestSettings())
-	return c
-}
 
 // setupTestEnvironment creates a complete facade test environment.
 //
