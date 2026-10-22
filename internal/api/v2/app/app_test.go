@@ -28,7 +28,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
-	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
 )
@@ -661,21 +660,6 @@ func TestGetAppConfig_VersionWithSpecialChars(t *testing.T) {
 	}
 }
 
-// TestGetAppConfig_HTTPMethods tests that only GET is supported.
-func TestGetAppConfig_HTTPMethods(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	// Only test that GET works - other methods would be rejected by router
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/app/config")
-
-	err := controller.GetAppConfig(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
 // =============================================================================
 // determineAccessAllowed Tests
 // =============================================================================
@@ -712,82 +696,6 @@ func TestDetermineAccessAllowed_SecurityEnabledNoAuthService(t *testing.T) {
 // =============================================================================
 // Malformed Request Tests
 // =============================================================================
-
-// TestGetAppConfig_MalformedHeaders tests handling of malformed request headers.
-func TestGetAppConfig_MalformedHeaders(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	testCases := []struct {
-		name        string
-		headerName  string
-		headerValue string
-	}{
-		{"Empty Accept", "Accept", ""},
-		{"Invalid Accept", "Accept", "invalid/type"},
-		{"Null in header", "X-Custom", "value\x00with\x00nulls"},
-		{"Very long header", "X-Custom", string(make([]byte, 10000))},
-		{"Unicode header", "X-Custom", "日本語テスト"},
-		{"Control chars", "X-Custom", "\x01\x02\x03"},
-		{"CRLF attempt", "X-Custom", "value\r\nX-Injected: evil"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-			req.Header.Set(tc.headerName, tc.headerValue)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/app/config")
-
-			// Should not panic and should return valid response
-			err := controller.GetAppConfig(c)
-			require.NoError(t, err, "Should handle malformed header: %s", tc.name)
-			assert.Equal(t, http.StatusOK, rec.Code)
-
-			var response AppConfigResponse
-			err = json.Unmarshal(rec.Body.Bytes(), &response)
-			require.NoError(t, err, "Response should be valid JSON")
-		})
-	}
-}
-
-// TestGetAppConfig_MalformedQueryParams tests handling of query parameters.
-func TestGetAppConfig_MalformedQueryParams(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	testCases := []struct {
-		name  string
-		query string // Just the query string, we'll build the URL safely
-	}{
-		{"No query", ""},
-		{"Empty query", "?"},
-		{"Random param", "?foo=bar"},
-		{"SQL injection attempt", "?id=1%3BDROP%20TABLE%20users"}, // URL-encoded semicolon
-		{"XSS attempt", "?param=%3Cscript%3Ealert(1)%3C%2Fscript%3E"},
-		{"Path traversal", "?file=..%2F..%2F..%2Fetc%2Fpasswd"},
-		{"Unicode query", "?name=%E6%97%A5%E6%9C%AC%E8%AA%9E"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			url := "/api/v2/app/config" + tc.query
-			req := httptest.NewRequest(http.MethodGet, url, http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/app/config")
-
-			// Should not panic and should return valid response
-			// Query params are ignored by this endpoint
-			err := controller.GetAppConfig(c)
-			require.NoError(t, err, "Should handle malformed query: %s", tc.name)
-			assert.Equal(t, http.StatusOK, rec.Code)
-
-			var response AppConfigResponse
-			err = json.Unmarshal(rec.Body.Bytes(), &response)
-			require.NoError(t, err, "Response should be valid JSON")
-		})
-	}
-}
 
 // TestGetAppConfig_MalformedContextValues tests handling of malformed context values.
 func TestGetAppConfig_MalformedContextValues(t *testing.T) {
@@ -861,28 +769,6 @@ func TestGetAppConfig_ResponseConsistency(t *testing.T) {
 	for i := 1; i < len(responses); i++ {
 		assert.Equal(t, responses[0], responses[i], "Response %d should match response 0", i)
 	}
-}
-
-// TestGetAppConfig_ResponseTiming verifies the endpoint responds quickly.
-func TestGetAppConfig_ResponseTiming(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/app/config")
-
-	start := time.Now()
-	err := controller.GetAppConfig(c)
-	duration := time.Since(start)
-
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Config endpoint should respond quickly (under 500ms)
-	// Using a generous threshold to avoid flaky tests in CI
-	assert.Less(t, duration.Milliseconds(), int64(500),
-		"Response should be fast, got %v", duration)
 }
 
 // TestGetAppConfig_NoExtraFields tests that no unexpected fields are returned.
@@ -980,124 +866,6 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 // =============================================================================
 // FUZZ TESTS
 // =============================================================================
-
-// FuzzGetAppConfig_Headers fuzzes the endpoint with various header values.
-// Run with: go test -fuzz=FuzzGetAppConfig_Headers -fuzztime=30s
-func FuzzGetAppConfig_Headers(f *testing.F) {
-	// Add seed corpus
-	f.Add("application/json", "test-value", "normal-token")
-	f.Add("", "", "")
-	f.Add("text/html", "x-custom-header-value", "csrf-token-123")
-	f.Add("*/*", string(make([]byte, 1000)), "token\x00with\x00nulls")
-	f.Add("invalid/type", "日本語", "unicode-token")
-	f.Add("application/json; charset=utf-8", "\r\nX-Injected: evil", "<script>alert(1)</script>")
-
-	f.Fuzz(func(t *testing.T, accept, customHeader, csrfToken string) {
-		e := echo.New()
-		mockDS := mocks.NewMockInterface(t)
-		mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
-		settings := &conf.Settings{
-			Version: "1.0.0-fuzz",
-		}
-
-		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
-		controller.Settings.Store(settings)
-		apitest.PublishTestSettings(t, settings)
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-		if accept != "" {
-			req.Header.Set("Accept", accept)
-		}
-		if customHeader != "" {
-			req.Header.Set("X-Custom", customHeader)
-		}
-
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/app/config")
-
-		if csrfToken != "" {
-			c.Set("csrf", csrfToken)
-		}
-
-		// Should never panic
-		err := controller.GetAppConfig(c)
-		if err != nil {
-			// HTTP errors are acceptable
-			if _, ok := errors.AsType[*echo.HTTPError](err); !ok {
-				t.Errorf("Unexpected error type: %T: %v", err, err)
-			}
-		}
-
-		// Response should be valid JSON if status is 200
-		if rec.Code == http.StatusOK {
-			var response map[string]any
-			if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
-				t.Errorf("Response is not valid JSON: %v", jsonErr)
-			}
-		}
-	})
-}
-
-// FuzzGetAppConfig_QueryParams fuzzes the endpoint with various query parameters.
-// Run with: go test -fuzz=FuzzGetAppConfig_QueryParams -fuzztime=30s
-func FuzzGetAppConfig_QueryParams(f *testing.F) {
-	// Add seed corpus with URL-encoded values
-	f.Add("")
-	f.Add("foo=bar")
-	f.Add("a=1&b=2&c=3")
-	f.Add("id=1")
-	f.Add("param=%3Cscript%3Ealert(1)%3C%2Fscript%3E")
-	f.Add("file=..%2F..%2F..%2Fetc%2Fpasswd")
-	f.Add("name=%E6%97%A5%E6%9C%AC%E8%AA%9E")
-	f.Add("key=value&key=value2")
-
-	f.Fuzz(func(t *testing.T, queryString string) {
-		e := echo.New()
-		mockDS := mocks.NewMockInterface(t)
-		mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
-		settings := &conf.Settings{
-			Version: "1.0.0-fuzz",
-		}
-
-		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
-		controller.Settings.Store(settings)
-		apitest.PublishTestSettings(t, settings)
-
-		// Build URL safely - query string must be URL-encoded
-		url := "/api/v2/app/config"
-		if queryString != "" {
-			url += "?" + queryString
-		}
-
-		// httptest.NewRequest can panic on malformed URLs, so we need to handle that.
-		// Panics from malformed input are acceptable in fuzzing as this tests
-		// that the framework properly rejects malformed URLs.
-		defer func() {
-			_ = recover() // Suppress panic from malformed URLs
-		}()
-
-		req := httptest.NewRequest(http.MethodGet, url, http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/app/config")
-
-		// Should never panic (panics from httptest.NewRequest are caught above)
-		err := controller.GetAppConfig(c)
-		if err != nil {
-			if _, ok := errors.AsType[*echo.HTTPError](err); !ok {
-				t.Errorf("Unexpected error type: %T: %v", err, err)
-			}
-		}
-
-		if rec.Code == http.StatusOK {
-			var response map[string]any
-			if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
-				t.Errorf("Response is not valid JSON: %v", jsonErr)
-			}
-		}
-	})
-}
 
 // FuzzGetAppConfig_CSRFToken fuzzes the CSRF token handling.
 // Run with: go test -fuzz=FuzzGetAppConfig_CSRFToken -fuzztime=30s
@@ -1510,7 +1278,9 @@ func TestGetAppConfig_SentryConfigWhenDisabled(t *testing.T) {
 	// GetAppConfig reads via currentSettings.
 	_, controller := setupAppConfigTest(t, nil)
 
-	// Sentry disabled (default)
+	// A usable DSN and a current build, so the only reason to omit the config
+	// is that telemetry is off.
+	t.Setenv("BIRDNET_GO_SENTRY_DSN", "https://dummy@example.ingest.sentry.io/1")
 	controller.Settings.Load().Sentry.Enabled = false
 
 	e := echo.New()

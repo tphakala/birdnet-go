@@ -700,7 +700,7 @@ func TestBuildHardwareInfo(t *testing.T) {
 // into capability derivation, which would have offered a notflite build models
 // it cannot execute.
 func TestGetInferenceStatus_TFLiteFollowsTheBuildTag(t *testing.T) {
-	t.Parallel()
+	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
 
 	e := echo.New()
 	rec := httptest.NewRecorder()

@@ -39,12 +39,13 @@ func passthroughMiddleware() echo.MiddlewareFunc {
 // is removed), so this reuses that base directory as the browse root instead of
 // re-rooting SFS, which would invert the cleanup order and break Windows TempDir
 // removal. A passthrough auth middleware is injected so requests route through
-// the /filesystem group middleware.
+// the /filesystem group middleware. Many callers run in parallel, so the core
+// does not publish settings (a process-global); BrowseFileSystem reads none.
 func setupFilesystemTestEnvironment(t *testing.T) (*echo.Echo, *Handler, string) {
 	t.Helper()
 
 	e := echo.New()
-	core := apitest.NewCore(t, apitest.WithEcho(e))
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
 
 	// Set passthrough auth middleware for testing so the /filesystem group
 	// middleware (c.AuthMiddleware) is non-nil and lets requests through.
@@ -58,6 +59,27 @@ func setupFilesystemTestEnvironment(t *testing.T) (*echo.Echo, *Handler, string)
 	h.RegisterRoutes(core.Group)
 
 	return e, h, tempDir
+}
+
+// symlinkOrSkip creates a symlink and skips the test if the OS denies it.
+// Creating symlinks on Windows requires SeCreateSymbolicLinkPrivilege
+// (admin or Developer Mode). CI runners have it, but a local developer may
+// not, so skip rather than fail when creation is not permitted.
+func symlinkOrSkip(t *testing.T, target, link string) string {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		// Without SeCreateSymbolicLinkPrivilege (admin or Developer Mode)
+		// os.Symlink fails on Windows with ERROR_PRIVILEGE_NOT_HELD. Gate the
+		// skip on GOOS, not errors.Is(err, os.ErrPermission): syscall.Errno.Is
+		// maps only ERROR_ACCESS_DENIED/EACCES/EPERM to os.ErrPermission, so
+		// it would NOT match ERROR_PRIVILEGE_NOT_HELD and the skip would never
+		// fire. On Unix a symlink failure is a genuine error and must fail.
+		if runtime.GOOS == osWindows {
+			t.Skipf("skipping: cannot create symlink (needs privilege/Developer Mode on Windows): %v", err)
+		}
+		require.NoError(t, err)
+	}
+	return link
 }
 
 // TestFilesystemRouteRegistration verifies the filesystem handler registers exactly
@@ -569,27 +591,6 @@ func TestValidateSymlinkTarget(t *testing.T) {
 	targetFile := filepath.Join(targetDir, "file.txt")
 	require.NoError(t, os.WriteFile(targetFile, []byte("target"), 0o600))
 
-	// symlinkOrSkip creates a symlink and skips the subtest if the OS denies it.
-	// Creating symlinks on Windows requires SeCreateSymbolicLinkPrivilege
-	// (admin or Developer Mode). CI runners have it, but a local developer may
-	// not, so skip rather than fail when creation is not permitted.
-	symlinkOrSkip := func(t *testing.T, target, link string) string {
-		t.Helper()
-		if err := os.Symlink(target, link); err != nil {
-			// Without SeCreateSymbolicLinkPrivilege (admin or Developer Mode)
-			// os.Symlink fails on Windows with ERROR_PRIVILEGE_NOT_HELD. Gate the
-			// skip on GOOS, not errors.Is(err, os.ErrPermission): syscall.Errno.Is
-			// maps only ERROR_ACCESS_DENIED/EACCES/EPERM to os.ErrPermission, so
-			// it would NOT match ERROR_PRIVILEGE_NOT_HELD and the skip would never
-			// fire. On Unix a symlink failure is a genuine error and must fail.
-			if runtime.GOOS == osWindows {
-				t.Skipf("skipping: cannot create symlink (needs privilege/Developer Mode on Windows): %v", err)
-			}
-			require.NoError(t, err)
-		}
-		return link
-	}
-
 	tests := []struct {
 		name        string
 		setup       func(t *testing.T) string // Returns symlink path; may t.Skip if symlinks are unavailable
@@ -669,7 +670,7 @@ func TestBrowseFileSystem_SymlinkHandling(t *testing.T) {
 
 	// Create a valid symlink to the target directory
 	validLink := filepath.Join(tempDir, "valid_link")
-	require.NoError(t, os.Symlink(targetDir, validLink))
+	symlinkOrSkip(t, targetDir, validLink)
 
 	server := httptest.NewServer(e)
 	defer server.Close()
@@ -692,9 +693,9 @@ func TestBrowseFileSystem_SymlinkHandling(t *testing.T) {
 	var foundSymlink bool
 	for _, item := range response.Items {
 		if item.Name == "valid_link" {
-			// Symlink to directory is shown as folder (follows symlink for type)
-			assert.Contains(t, []string{"folder", "symlink"}, item.Type,
-				"Symlink should be shown as folder or symlink")
+			// convertDirEntryToItem classifies by the entry's own mode, not the
+			// link target's, so a link to a directory is "symlink", not "folder".
+			assert.Equal(t, "symlink", item.Type, "a symlink to a directory must not be reported as a folder")
 			foundSymlink = true
 		}
 	}

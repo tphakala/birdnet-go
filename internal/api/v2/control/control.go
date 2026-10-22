@@ -5,7 +5,7 @@
 // dependencies and helpers (HandleError, the logging helpers, Debug, Context,
 // GetShutdownRequester, and the audio Engine) promote onto it.
 //
-// Two domain members differ from the Core-only leaf domains:
+// The domain-specific members that differ from the Core-only leaf domains are:
 //   - controlChan is the control-signal channel. It is SHARED: the settings
 //     domain also sends on it and internal/analysis creates and closes it, so
 //     the facade keeps the field and injects the same channel here as a
@@ -13,6 +13,8 @@
 //   - sourceRestarter is referenced only by this domain (SetSourceRestarter and
 //     the restart-source endpoint), so the Handler owns it outright. The facade
 //     exposes a one-line SetSourceRestarter delegator for the external pipeline.
+//   - isContainer reports whether the process runs in a container. New sets it
+//     to sysinfo.IsContainer; tests in this package replace it.
 package control
 
 import (
@@ -79,7 +81,15 @@ type Handler struct {
 
 	controlChan     chan<- string
 	sourceRestarter atomic.Pointer[SourceRestarterFunc]
+
+	// isContainer reports whether the process runs in a container. New sets it
+	// to sysinfo.IsContainer; tests in this package replace it.
+	isContainer func() bool
 }
+
+// restartFlushDelay is how long a restart waits after answering so the HTTP
+// response is flushed before shutdown begins.
+const restartFlushDelay = 500 * time.Millisecond
 
 // New builds a control Handler around the shared core and the shared
 // control-signal channel. controlChan MUST be the same channel the settings
@@ -89,6 +99,7 @@ func New(core *apicore.Core, controlChan chan<- string) *Handler {
 	return &Handler{
 		Core:        core,
 		controlChan: controlChan,
+		isContainer: sysinfo.IsContainer,
 	}
 }
 
@@ -144,7 +155,7 @@ func (c *Handler) GetAvailableActions(ctx echo.Context) error {
 		},
 	}
 
-	if sysinfo.IsContainer() {
+	if c.isContainer() {
 		actions = append(actions, ControlAction{
 			Action:      ActionRestartContainer,
 			Description: "Restart the container",
@@ -280,7 +291,7 @@ func (c *Handler) handleRestartRequest(ctx echo.Context, action string, setFlag 
 	// Schedule shutdown after response is sent (500ms to ensure HTTP flush).
 	// Capture sr locally so the goroutine uses a stable reference.
 	go func() {
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(restartFlushDelay)
 		sr.RequestShutdown()
 	}()
 
@@ -312,7 +323,7 @@ func (c *Handler) RestartContainer(ctx echo.Context) error {
 	)
 
 	// Check if running in a container
-	if !sysinfo.IsContainer() {
+	if !c.isContainer() {
 		envType, _ := sysinfo.GetEnvironment()
 		return c.HandleError(ctx, fmt.Errorf("not running in a container (environment: %s)", envType),
 			"Container restart is only available when running inside a container",

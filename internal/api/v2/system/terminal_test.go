@@ -15,6 +15,7 @@ type mockPTY struct {
 	resizeCols uint16
 	resizeRows uint16
 	resizeErr  error
+	resized    bool
 	written    []byte
 	readData   []byte
 	closed     bool
@@ -36,6 +37,7 @@ func (m *mockPTY) Close() error {
 }
 
 func (m *mockPTY) Resize(cols, rows uint16) error {
+	m.resized = true
 	m.resizeCols = cols
 	m.resizeRows = rows
 	return m.resizeErr
@@ -45,18 +47,20 @@ func TestHandleResizeMessage(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		msg      string
-		wantCols uint16
-		wantRows uint16
-		handled  bool
+		name       string
+		msg        string
+		wantCols   uint16
+		wantRows   uint16
+		wantResize bool
+		handled    bool
 	}{
 		{
-			name:     "valid resize",
-			msg:      `{"type":"resize","cols":120,"rows":40}`,
-			wantCols: 120,
-			wantRows: 40,
-			handled:  true,
+			name:       "valid resize",
+			msg:        `{"type":"resize","cols":120,"rows":40}`,
+			wantCols:   120,
+			wantRows:   40,
+			wantResize: true,
+			handled:    true,
 		},
 		{
 			name:    "not a resize message",
@@ -69,8 +73,13 @@ func TestHandleResizeMessage(t *testing.T) {
 			handled: false,
 		},
 		{
-			name:    "zero dimensions ignored",
-			msg:     `{"type":"resize","cols":0,"rows":0}`,
+			name:    "zero cols ignored",
+			msg:     `{"type":"resize","cols":0,"rows":40}`,
+			handled: true,
+		},
+		{
+			name:    "zero rows ignored",
+			msg:     `{"type":"resize","cols":120,"rows":0}`,
 			handled: true,
 		},
 	}
@@ -81,7 +90,8 @@ func TestHandleResizeMessage(t *testing.T) {
 			mock := &mockPTY{}
 			result := handleResizeMessage(mock, []byte(tt.msg))
 			assert.Equal(t, tt.handled, result)
-			if tt.wantCols > 0 {
+			assert.Equal(t, tt.wantResize, mock.resized, "Resize call")
+			if tt.wantResize {
 				assert.Equal(t, tt.wantCols, mock.resizeCols)
 				assert.Equal(t, tt.wantRows, mock.resizeRows)
 			}
