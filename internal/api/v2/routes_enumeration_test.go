@@ -91,6 +91,12 @@ var criticalRoutes = []string{
 	"GET /api/v2/insights/migration",
 	"POST /api/v2/tls/certificate",
 	"POST /api/v2/import/birdnet-pi",
+	"GET /api/v2/auth/callback",
+	"POST /api/v2/auth/logout",
+	"GET /api/v2/tls/certificate",
+	"DELETE /api/v2/tls/certificate",
+	"POST /api/v2/tls/certificate/generate",
+	"GET /api/v2/tls/certificate/download",
 }
 
 // publicMutationRoutes lists the routes that change state (any method other
