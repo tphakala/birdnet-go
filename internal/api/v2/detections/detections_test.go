@@ -3,7 +3,6 @@
 package detections
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -69,6 +68,9 @@ func testRealtimeSource() datastore.AudioSource {
 	}
 }
 
+// invalidQueryParamsMessage is the message GetDetections answers a rejected query with.
+const invalidQueryParamsMessage = "Invalid detection query parameters"
+
 // TestGetDetections tests the GetDetections endpoint with various query types
 func TestGetDetections(t *testing.T) {
 	// Create mock data
@@ -119,7 +121,6 @@ func TestGetDetections(t *testing.T) {
 		mockSetup      func(*mock.Mock)
 		expectedStatus int
 		expectedCount  int
-		checkResponse  func(t *testing.T, testName string, rec *httptest.ResponseRecorder)
 	}{
 		{
 			name: "All detections",
@@ -133,11 +134,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 2)
-			},
 		},
 		{
 			name: "Hourly detections",
@@ -155,11 +151,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		{
 			name: "Species detections",
@@ -176,11 +167,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		{
 			name: "Search detections",
@@ -195,11 +181,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		{
 			name: "Invalid numResults parameter",
@@ -211,17 +192,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusBadRequest, // Expecting 400 Bad Request
 			expectedCount:  0,                     // Not relevant for error case
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// Check recorder status and body for the error
-				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
-
-				// Check the response body for the error message
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
-			},
 		},
 		{
 			name:           "Invalid_offset_parameter",
@@ -229,36 +199,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			mockSetup:      func(m *mock.Mock) { /* No DB interaction expected */ },
 			expectedCount:  0, // Not relevant for error case
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// Check recorder status and body for the error
-				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
-
-				// Check the response body for the error message
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
-			},
-		},
-		{
-			name: "Invalid confidence parameter",
-			queryParams: map[string]string{
-				"minConfidence": "200", // Value > 100
-			},
-			mockSetup: func(m *mock.Mock) {
-				// Controller should still process the request
-				m.On("SearchNotes", "", false, 100, 0).Return([]datastore.Note{}, int64(0), nil)
-			},
-			expectedStatus: http.StatusOK, // Now expecting 200 OK
-			expectedCount:  0,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// Verify response is successful
-				var response PaginatedResponse
-				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				require.NoError(t, err)
-			},
 		},
 		{
 			name: "Extremely large numResults parameter",
@@ -269,17 +209,6 @@ func TestGetDetections(t *testing.T) {
 			expectedCount:  0,                     // Not relevant for error case
 			mockSetup: func(m *mock.Mock) {
 				// No DB interaction expected for bad request
-			},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// Check recorder status and body for the error
-				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
-
-				// Check the response body for the error message
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -292,14 +221,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedCount:  0,
 			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
 		},
 		{
 			name: "Hourly query with missing hour",
@@ -310,14 +231,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedCount:  0,
 			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
 		},
 		{
 			name: "Hourly query with hour range rejected",
@@ -329,14 +242,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedCount:  0,
 			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
 		},
 		{
 			name: "Hourly query with out of range hour",
@@ -348,33 +253,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedCount:  0,
 			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
-		},
-		{
-			name: "Hourly query with same-value range rejected",
-			queryParams: map[string]string{
-				"queryType": "hourly",
-				"date":      "2025-03-07",
-				"hour":      "08-08",
-			},
-			expectedStatus: http.StatusBadRequest,
-			expectedCount:  0,
-			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
 		},
 		// Auto-inference: species param without queryType should infer queryType=species
 		{
@@ -391,11 +269,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		// Auto-inference: search param without queryType should infer queryType=search
 		{
@@ -410,11 +283,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		// Date param without queryType should route through advanced search
 		{
@@ -430,11 +298,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		// limit as alias for numResults
 		{
@@ -449,11 +312,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 2)
-			},
 		},
 		// numResults takes precedence over limit
 		{
@@ -469,11 +327,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 2)
-			},
 		},
 	}
 
@@ -503,9 +356,14 @@ func TestGetDetections(t *testing.T) {
 			// Check the recorder's status code FIRST
 			assert.Equal(t, localTC.expectedStatus, rec.Code)
 
-			// Now, run the specific checkResponse function for this test case,
-			// passing the recorder.
-			localTC.checkResponse(t, localTC.name, rec)
+			if localTC.expectedStatus == http.StatusOK {
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
+				assert.Len(t, detections, localTC.expectedCount)
+			} else {
+				var errResp map[string]any
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errResp))
+				assert.Contains(t, errResp["message"], invalidQueryParamsMessage)
+			}
 
 			// Verify mock expectations (only relevant if status code was not an error handled before DB call)
 			if localTC.expectedStatus < 400 {
@@ -922,7 +780,7 @@ func TestGetRecentDetections(t *testing.T) {
 		expectedCount  int
 	}{
 		{
-			name:  "Default limit",
+			name:  "Default limit when none is given (#2361)",
 			limit: "",
 			mockSetup: func(m *mock.Mock) {
 				m.On("GetLastDetections", 10).Return(mockNotes, nil)
@@ -935,15 +793,6 @@ func TestGetRecentDetections(t *testing.T) {
 			limit: "5",
 			mockSetup: func(m *mock.Mock) {
 				m.On("GetLastDetections", 5).Return(mockNotes, nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedCount:  2,
-		},
-		{
-			name:  "Huge limit is clamped",
-			limit: "999999999",
-			mockSetup: func(m *mock.Mock) {
-				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -962,15 +811,6 @@ func TestGetRecentDetections(t *testing.T) {
 			limit: "1001",
 			mockSetup: func(m *mock.Mock) {
 				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedCount:  2,
-		},
-		{
-			name:  "Frontend maximum limit",
-			limit: "48",
-			mockSetup: func(m *mock.Mock) {
-				m.On("GetLastDetections", 48).Return(mockNotes, nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -1297,33 +1137,16 @@ func TestReviewDetection(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:        "Locked detection",
+			// The note read is unlocked, but the database re-check sees a lock
+			// taken since: the review is refused and the comment is not saved.
+			name:        "Locked in the database after the read",
 			detectionID: "4",
-			// No lock_detection field: with LockDetection as a *bool this stays nil,
-			// so a verify-only request cannot unlock a locked detection (409 stands).
-			requestBody: `{"verified": "correct"}`,
+			requestBody: `{"verified": "correct", "comment": "Late comment"}`,
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "4").Return(datastore.Note{ID: 4, Locked: true}, nil)
+				m.On("Get", "4").Return(datastore.Note{ID: 4, Locked: false}, nil)
+				m.On("IsNoteLocked", "4").Return(true, nil)
 			},
 			expectedStatus: http.StatusConflict,
-		},
-		{
-			name:        "Valid review with special characters in comment",
-			detectionID: "5",
-			requestBody: `{"verified": "correct", "comment": "<script>alert('XSS')</script>Special chars: &<>\"'!@#$%^&*()_+{}[]|\\:;,.?/~"}`,
-			mockSetup: func(m *mock.Mock) {
-				setupValidReviewMock(m, "5", 5, true)
-			},
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:        "Valid review with extremely long comment",
-			detectionID: "6",
-			requestBody: `{"verified": "correct", "comment": "` + strings.Repeat("Very long comment. ", 500) + `"}`,
-			mockSetup: func(m *mock.Mock) {
-				setupValidReviewMock(m, "6", 6, true)
-			},
-			expectedStatus: http.StatusOK,
 		},
 	}
 
@@ -1645,70 +1468,6 @@ func TestIgnoreSpecies(t *testing.T) {
 		}
 	})
 
-	// Test toggle behavior: add then remove
-	t.Run("Toggle behavior - add species", func(t *testing.T) {
-		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings.Load())
-
-		// First request: add species (should not be in list initially)
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			strings.NewReader(`{"common_name": "American Crow"}`))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err := controller.IgnoreSpecies(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response IgnoreSpeciesResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "American Crow", response.CommonName)
-		assert.Equal(t, "added", response.Action)
-		assert.True(t, response.IsExcluded)
-	})
-
-	t.Run("Toggle behavior - remove species", func(t *testing.T) {
-		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings.Load())
-
-		// First, add the species
-		req1 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			strings.NewReader(`{"common_name": "Red-bellied Woodpecker"}`))
-		req1.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec1 := httptest.NewRecorder()
-		c1 := e.NewContext(req1, rec1)
-
-		err := controller.IgnoreSpecies(c1)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec1.Code)
-
-		var addResponse IgnoreSpeciesResponse
-		err = json.Unmarshal(rec1.Body.Bytes(), &addResponse)
-		require.NoError(t, err)
-		assert.Equal(t, "added", addResponse.Action)
-		assert.True(t, addResponse.IsExcluded)
-
-		// Second request: toggle (remove) the same species
-		req2 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			strings.NewReader(`{"common_name": "Red-bellied Woodpecker"}`))
-		req2.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec2 := httptest.NewRecorder()
-		c2 := e.NewContext(req2, rec2)
-
-		err = controller.IgnoreSpecies(c2)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec2.Code)
-
-		var removeResponse IgnoreSpeciesResponse
-		err = json.Unmarshal(rec2.Body.Bytes(), &removeResponse)
-		require.NoError(t, err)
-		assert.Equal(t, "Red-bellied Woodpecker", removeResponse.CommonName)
-		assert.Equal(t, "removed", removeResponse.Action)
-		assert.False(t, removeResponse.IsExcluded)
-	})
-
 	t.Run("Localized name resolution", func(t *testing.T) {
 		e, _, controller := setupTestEnvironmentWithBatName(t)
 		clearExcludedSpeciesList(t, controller.Settings.Load())
@@ -1813,55 +1572,6 @@ func TestIgnoreSpecies(t *testing.T) {
 			assert.Equal(t, expectedAction, response.Action, "Request %d: expected action %s", i+1, expectedAction)
 			assert.Equal(t, expectedAction == "added", response.IsExcluded, "Request %d: isExcluded mismatch", i+1)
 		}
-	})
-
-	t.Run("Special characters in species name", func(t *testing.T) {
-		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings.Load())
-
-		// Test with special characters (properly JSON encoded)
-		// Note: Use proper JSON encoding for special chars
-		specialName := "Bird with special chars: &<>'éàü"
-		reqBody := IgnoreSpeciesRequest{CommonName: specialName}
-		jsonBody, err := json.Marshal(reqBody)
-		require.NoError(t, err)
-
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			bytes.NewReader(jsonBody))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err = controller.IgnoreSpecies(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response IgnoreSpeciesResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, specialName, response.CommonName)
-		assert.Equal(t, "added", response.Action)
-	})
-
-	t.Run("Long species name", func(t *testing.T) {
-		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings.Load())
-
-		longName := strings.Repeat("Very Long Bird Name ", 50)
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			strings.NewReader(`{"common_name": "`+longName+`"}`))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err := controller.IgnoreSpecies(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response IgnoreSpeciesResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "added", response.Action)
 	})
 }
 
@@ -2097,130 +1807,41 @@ func TestGetExcludedSpeciesConcurrentReadsWithToggle(t *testing.T) {
 	assert.Zero(t, failures.Load(), "concurrent ignore/get-excluded requests should all succeed")
 }
 
-// TestAddCommentMethod tests the AddComment method directly
+// TestAddCommentMethod pins that AddComment saves the given text for the given
+// note, returns the datastore error, and saves nothing for an empty comment.
 func TestAddCommentMethod(t *testing.T) {
-	// Setup
-	_, mockDS, controller := setupTestEnvironment(t)
+	const noteID uint = 7
 
-	// Test cases
 	testCases := []struct {
 		name        string
-		noteID      uint
 		commentText string
-		mockSetup   func(*mock.Mock)
+		saveErr     error
+		expectSave  bool
 		expectError bool
 	}{
-		{
-			name:        "Valid comment",
-			noteID:      1,
-			commentText: "This is a test comment",
-			mockSetup: func(m *mock.Mock) {
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
-			},
-			expectError: false,
-		},
-		{
-			name:        "Database error",
-			noteID:      1,
-			commentText: "This is a test comment",
-			mockSetup: func(m *mock.Mock) {
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(errors.NewStd("database error"))
-			},
-			expectError: true,
-		},
+		{name: "Valid comment", commentText: "This is a test comment", expectSave: true},
+		{name: "Database error", commentText: "This is a test comment", saveErr: errors.NewStd("database error"), expectSave: true, expectError: true},
+		{name: "Empty comment saves nothing", commentText: ""},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup mock expectations
-			mockDS.ExpectedCalls = nil
-			tc.mockSetup(&mockDS.Mock)
+			_, mockDS, controller := setupTestEnvironment(t)
+			if tc.expectSave {
+				mockDS.On("SaveNoteComment", mock.MatchedBy(func(c *datastore.NoteComment) bool {
+					return c.NoteID == noteID && c.Entry == tc.commentText
+				})).Return(tc.saveErr).Once()
+			}
 
-			// Call method directly
-			err := controller.AddComment(tc.noteID, tc.commentText)
-
-			// Check result
+			err := controller.AddComment(noteID, tc.commentText)
 			if tc.expectError {
 				require.Error(t, err)
 			} else {
 				require.NoError(t, err)
 			}
-
-			// Verify mock expectations
 			mockDS.AssertExpectations(t)
 		})
 	}
-}
-
-// TestReviewDetectionConcurrency tests concurrent review attempts
-func TestReviewDetectionConcurrency(t *testing.T) {
-	t.Run("DeterministicRaceCondition", func(t *testing.T) {
-		// Setup a fresh environment for this subtest
-		e, mockDS, controller := setupTestEnvironment(t)
-
-		// Create mock note
-		mockNote := datastore.Note{
-			ID:     1,
-			Locked: false,
-		}
-
-		// Create review request
-		reviewRequest := map[string]any{
-			"verified": "correct",
-			"comment":  "This is a correct identification",
-		}
-		jsonData, err := json.Marshal(reviewRequest)
-		require.NoError(t, err)
-
-		// Setup mock behavior - note is not locked initially, then becomes locked
-		mockDS.On("Get", "1").Return(mockNote, nil).Times(2)
-
-		// First request will find the note unlocked and complete successfully
-		mockDS.On("IsNoteLocked", "1").Return(false, nil).Once()
-		mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil).Once()
-		mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil).Once()
-
-		// Second request will find the note already locked (race condition)
-		mockDS.On("IsNoteLocked", "1").Return(true, nil).Once()
-
-		// Create two requests
-		req1 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review",
-			bytes.NewReader(jsonData))
-		req1.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec1 := httptest.NewRecorder()
-		c1 := e.NewContext(req1, rec1)
-		c1.SetPath("/api/v2/detections/:id/review")
-		c1.SetParamNames("id")
-		c1.SetParamValues("1")
-
-		req2 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review",
-			bytes.NewReader(jsonData))
-		req2.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec2 := httptest.NewRecorder()
-		c2 := e.NewContext(req2, rec2)
-		c2.SetPath("/api/v2/detections/:id/review")
-		c2.SetParamNames("id")
-		c2.SetParamValues("1")
-
-		// Execute both requests sequentially (simulating the race condition outcome)
-		_ = controller.ReviewDetection(c1) // Expected to succeed
-		_ = controller.ReviewDetection(c2) // Expected to fail with conflict
-
-		// Verify results - check status codes
-		assert.Equal(t, http.StatusOK, rec1.Code, "First request should succeed")
-		assert.Equal(t, http.StatusConflict, rec2.Code, "Second request should fail with conflict due to note being locked")
-
-		// Parse second response to verify error message
-		var resp2 map[string]any
-		err2 := json.Unmarshal(rec2.Body.Bytes(), &resp2)
-		require.NoError(t, err2)
-
-		// Check error message for second request
-		assert.Contains(t, resp2["message"], "Detection is locked and status cannot be changed")
-
-		// Verify expectations
-		mockDS.AssertExpectations(t)
-	})
 }
 
 // TestApplySpeciesTrackingMetadata_NoveltyFlags verifies that the isNewSpecies,

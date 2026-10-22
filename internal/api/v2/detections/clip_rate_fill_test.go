@@ -253,25 +253,32 @@ func TestGetDetection_LazyFill_Budget(t *testing.T) {
 }
 
 func TestGetDetection_LazyFill_ProbeErrors(t *testing.T) {
+	const probeFailedLog = "Clip sample rate probe failed"
 	tests := []struct {
-		name string
-		err  error
+		name      string
+		err       error
+		wantClass string
 	}{
-		{"missing file", os.ErrNotExist},
-		{"permission denied", os.ErrPermission},
-		{"unsupported codec", transcode.ErrUnsupportedSource},
-		{"header unparsable", errors.NewStd("bad header")},
-		{"header with no frame", transcode.ErrUndecodableSource},
+		{"missing file", os.ErrNotExist, clipRateErrMissing},
+		{"permission denied", os.ErrPermission, clipRateErrPermission},
+		{"unsupported codec", transcode.ErrUnsupportedSource, clipRateErrUnsupported},
+		{"header unparsable", errors.NewStd("bad header"), clipRateErrOther},
+		{"header with no frame", transcode.ErrUndecodableSource, clipRateErrNoAudio},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			prober := &fakeProber{err: tt.err}
 			e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
+			rec := newLevelRecorder()
+			h.APILogger = rec
 
 			status, rate := getDetectionRate(t, e, h)
 			assert.Equal(t, http.StatusOK, status)
 			assert.Zero(t, rate)
 			assert.Zero(t, store.fills(), "nothing is written")
+			class, ok := rec.debugField(probeFailedLog, "error_class")
+			require.True(t, ok, "the probe failure is logged with its class")
+			assert.Equal(t, tt.wantClass, class)
 
 			_, rate = getDetectionRate(t, e, h)
 			assert.Zero(t, rate)

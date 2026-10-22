@@ -105,30 +105,6 @@ func TestGetDetections_DefaultParams(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-func TestGetRecentDetections_DefaultParams(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "detections")
-	t.Attr("type", "regression")
-	t.Attr("issue", "2361")
-
-	e, mockDS, controller := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
-
-	notes := testNotes()
-
-	// Default limit is 10
-	mockDS.On("GetLastDetections", 10).Return(notes, nil).Once()
-
-	rec := executeRequest(t, e, http.MethodGet, "/api/v2/detections/recent", controller.GetRecentDetections)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var result []map[string]any
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-	assert.NotEmpty(t, result, "should return recent detections with default limit")
-
-	mockDS.AssertExpectations(t)
-}
-
 func TestSearchDetections_EmptyBody(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "search")
