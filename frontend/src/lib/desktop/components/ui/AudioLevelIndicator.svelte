@@ -102,9 +102,9 @@
 
       audioElementRef.addEventListener('error', _e => {
         if (!playingSource) return; // Ignore errors from cleanup
-        showStatusMessage(t('media.audio.playError'));
-        isPlaying = false;
+        // stopPlayback hides the status message, so show the error after it.
         stopPlayback();
+        showTransientError(t('media.audio.playError'));
       });
 
       document.body.appendChild(audioElementRef);
@@ -373,8 +373,9 @@
 
         if (data.fatal) {
           // Handle fatal HLS error
-          showStatusMessage(t('media.audio.playbackError', { details: data.details }));
+          // stopPlayback hides the status message, so show the error after it.
           stopPlayback();
+          showTransientError(t('media.audio.playbackError', { details: data.details }));
         } else if (data.type === HlsClass.ErrorTypes.MEDIA_ERROR) {
           // Handle non-fatal media errors with improved categorization
           if (EXPECTED_STALL_ERRORS.has(data.details)) {
@@ -421,6 +422,11 @@
             minRequired: BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY,
           });
           audio.play().catch((err: Error) => {
+            // pause() or teardown interrupted play(); the stop already reported its own outcome.
+            if (err.name === 'AbortError') {
+              logger.debug('Playback start interrupted:', err);
+              return;
+            }
             logger.error('Playback start error:', err);
             if (err.name === 'NotAllowedError') {
               showStatusMessage(t('media.audio.autoplayBlocked'));
