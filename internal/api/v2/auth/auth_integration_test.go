@@ -160,6 +160,7 @@ func TestV2AuthFlow_CompleteLogin(t *testing.T) {
 		token, err := gothic.GetFromSession("access_token", replay)
 		require.NoError(t, err, "the session cookie must carry the access token")
 		assert.NotEmpty(t, token)
+		require.NoError(t, h.authService.ValidateToken(token), "the stored token must be one the auth service accepts")
 	})
 }
 
