@@ -1028,6 +1028,7 @@ func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
 		name        string
 		firstResult error // returned after lateReturn; ignored when neverReturns
 		neverReturn bool
+		retryDelay  time.Duration // InitialDelay; zero means time.Second
 		wantStarts  int
 		wantOK      int
 		wantFailed  int
@@ -1035,6 +1036,8 @@ func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
 		{name: "late success", wantStarts: 1, wantOK: 1},
 		{name: "late failure", firstResult: errors.NewStd("late failure"), wantStarts: 2, wantOK: 1},
 		{name: "never returns", neverReturn: true, wantStarts: 1, wantFailed: 1},
+		// The retry is not due for 30 minutes, yet the ceiling still applies.
+		{name: "never returns with long backoff", neverReturn: true, retryDelay: 30 * time.Minute, wantStarts: 1, wantFailed: 1},
 	}
 
 	for _, tt := range tests {
@@ -1056,11 +1059,15 @@ func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
 				queue.StartWithContext(t.Context())
 
 				began := time.Now()
+				retryDelay := tt.retryDelay
+				if retryDelay == 0 {
+					retryDelay = time.Second
+				}
 				_, err := queue.Enqueue(t.Context(), action, &TestData{ID: "overrun"}, RetryConfig{
 					Enabled:      true,
 					MaxRetries:   2,
-					InitialDelay: time.Second,
-					MaxDelay:     time.Minute,
+					InitialDelay: retryDelay,
+					MaxDelay:     max(time.Minute, retryDelay),
 					Multiplier:   2.0,
 				})
 				require.NoError(t, err)

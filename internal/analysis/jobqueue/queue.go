@@ -463,10 +463,15 @@ func (q *JobQueue) processDueJobs(ctx context.Context) {
 	now := q.clock.Now()
 
 	for _, job := range q.jobs {
-		if (job.Status == JobStatusPending || job.Status == JobStatusRetrying) && !job.NextRetryAt.After(now) {
-			if q.holdForAbandonedAttemptLocked(ctx, job, now) {
-				continue
-			}
+		if job.Status != JobStatusPending && job.Status != JobStatusRetrying {
+			continue
+		}
+		// Checked before the due test so the ceiling applies even while a
+		// long backoff delay is still running.
+		if q.holdForAbandonedAttemptLocked(ctx, job, now) {
+			continue
+		}
+		if !job.NextRetryAt.After(now) {
 			dueJobs = append(dueJobs, job)
 			job.Status = JobStatusRunning
 		}
@@ -495,9 +500,9 @@ func (q *JobQueue) processDueJobs(ctx context.Context) {
 	}
 }
 
-// holdForAbandonedAttemptLocked reports whether a due job must not start a new
-// attempt because an earlier attempt that overran its timeout is still
-// running. Once the attempt has been abandoned for abandonedAttemptCeiling the
+// holdForAbandonedAttemptLocked reports whether a pending or retrying job must
+// not start a new attempt because an earlier attempt that overran its timeout
+// is still running. Once the attempt has been abandoned for abandonedAttemptCeiling the
 // job is failed instead, without starting another attempt.
 // IMPORTANT: Caller must hold q.mu lock.
 func (q *JobQueue) holdForAbandonedAttemptLocked(ctx context.Context, job *Job, now time.Time) bool {
