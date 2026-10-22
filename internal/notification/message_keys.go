@@ -97,6 +97,9 @@ const (
 	MsgErrAlertInvalidEscalation = "errors.alert.invalidEscalation"
 	MsgErrAlertEngineUnavailable = "errors.alert.engineUnavailable"
 
+	// Insights errors
+	MsgErrInsightsV2Required = "errors.insights.v2Required"
+
 	// Detection errors
 	MsgErrDetectionInvalidDate = "errors.detection.invalidDate"
 

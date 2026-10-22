@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Escalatiestappen zijn ongeldig",
       "engineUnavailable": "Alerting-engine is niet beschikbaar"
     },
+    "insights": {
+      "v2Required": "Inzichten vereisen de uitgebreide (v2) database"
+    },
     "detection": {
       "invalidDate": "Ongeldig {paramName}-formaat, gebruik JJJJ-MM-DD"
     },

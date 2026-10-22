@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Eskalaatioaskeleet ovat virheellisiä",
       "engineUnavailable": "Hälytysjärjestelmä ei ole käytettävissä"
     },
+    "insights": {
+      "v2Required": "Analyysit vaativat laajennetun (v2) tietokannan"
+    },
     "detection": {
       "invalidDate": "Virheellinen {paramName}-muoto, käytä VVVV-KK-PP"
     },

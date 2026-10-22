@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Eskaleringstrinn er ugyldige",
       "engineUnavailable": "Varslingsmotoren er utilgjengelig"
     },
+    "insights": {
+      "v2Required": "Innsikt krever den forbedrede (v2) databasen"
+    },
     "detection": {
       "invalidDate": "Ugyldig {paramName}-format, bruk ÅÅÅÅ-MM-DD"
     },

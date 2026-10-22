@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Eskalācijas soļi nav derīgi",
       "engineUnavailable": "Brīdinājumu dzinis nav pieejams"
     },
+    "insights": {
+      "v2Required": "Analīzei nepieciešama uzlabotā (v2) datubāze"
+    },
     "detection": {
       "invalidDate": "Nederīgs {paramName} formāts, izmantojiet YYYY-MM-DD"
     },

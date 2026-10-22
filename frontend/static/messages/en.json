@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Escalation steps are invalid",
       "engineUnavailable": "Alerting engine is unavailable"
     },
+    "insights": {
+      "v2Required": "Insights require the enhanced (v2) database"
+    },
     "detection": {
       "invalidDate": "Invalid {paramName} format, use YYYY-MM-DD"
     },

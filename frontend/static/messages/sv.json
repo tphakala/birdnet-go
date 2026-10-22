@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Eskaleringsstegen är ogiltiga",
       "engineUnavailable": "Varningsmotorn är otillgänglig"
     },
+    "insights": {
+      "v2Required": "Insikter kräver den utökade (v2) databasen"
+    },
     "detection": {
       "invalidDate": "Ogiltigt {paramName}-format, använd ÅÅÅÅ-MM-DD"
     },

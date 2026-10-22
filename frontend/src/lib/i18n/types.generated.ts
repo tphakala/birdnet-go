@@ -3875,6 +3875,7 @@ export type TranslationKey =
   | 'errors.alert.invalidJSON'
   | 'errors.alert.invalidEscalation'
   | 'errors.alert.engineUnavailable'
+  | 'errors.insights.v2Required'
   | 'errors.detection.invalidDate' // params: paramName
   | 'errors.backup.invalidType'
   | 'errors.backup.alreadyRunning'

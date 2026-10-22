@@ -5289,6 +5289,9 @@
       "invalidEscalation": "Les étapes d'escalade sont invalides",
       "engineUnavailable": "Le moteur d'alerte est indisponible"
     },
+    "insights": {
+      "v2Required": "Les analyses nécessitent la base de données améliorée (v2)"
+    },
     "detection": {
       "invalidDate": "Format de {paramName} invalide, utilisez AAAA-MM-JJ"
     },
