@@ -64,6 +64,9 @@ const (
 	// saveTransactionTimeout is the maximum duration for a Save transaction.
 	// This prevents indefinite lock holding during slow I/O operations.
 	saveTransactionTimeout = 30 * time.Second
+	// saveContributionsTimeout bounds the best-effort model contribution write that
+	// follows a committed Save, so a slow transaction cannot starve it of its budget.
+	saveContributionsTimeout = 30 * time.Second
 )
 
 // parseHour validates and parses an hour string to an integer.
@@ -815,6 +818,8 @@ func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []data
 // Save saves a note with its results atomically.
 // The detection and its predictions are saved in a single transaction to prevent
 // partial writes (e.g., detection saved but predictions failed).
+// Model contributions are written after the transaction commits, on a best-effort
+// basis: a failure to resolve or persist them is logged and does not fail the save.
 func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) error {
 	ctx := context.Background()
 
@@ -961,7 +966,26 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// downstream actions (MQTT, SSE) publish detectionId=0 (GitHub #2453).
 	note.ID = det.ID
 
+	contribCtx, cancelContribs := context.WithTimeout(ctx, saveContributionsTimeout)
+	defer cancelContribs()
+	ds.saveModelContributionsBestEffort(contribCtx, det.ID, note.ModelContributions)
+
 	return nil
+}
+
+// saveModelContributionsBestEffort resolves and persists model contributions for a
+// detection that has already committed. Contributions are supplementary metadata, so
+// a failure is logged and never rolls back or fails the detection save.
+func (ds *Datastore) saveModelContributionsBestEffort(ctx context.Context, detectionID uint, modelContribs map[string]detection.ResultModelContrib) {
+	contribs := ds.resolveModelContributions(ctx, modelContribs)
+	if len(contribs) == 0 {
+		return
+	}
+	if err := ds.detection.SaveModelContributions(ctx, detectionID, contribs); err != nil && ds.log != nil {
+		ds.log.Warn("v2 model contributions save failed",
+			logger.Uint64("detection_id", uint64(detectionID)),
+			logger.Error(err))
+	}
 }
 
 // buildDedupedPredictions deduplicates predictions by label_id, keeping the highest confidence
@@ -986,6 +1010,45 @@ func buildDedupedPredictions(detectionID uint, results []datastore.Results, pred
 		})
 	}
 	return preds
+}
+
+// resolveModelContributions resolves each contributing AI model in the map and
+// deduplicates by database ModelID (summing hit counts and keeping the maximum
+// confidence) to guard against idx_contrib_detection_model unique constraint violations.
+func (ds *Datastore) resolveModelContributions(ctx context.Context, modelContribs map[string]detection.ResultModelContrib) []*entities.DetectionModelContribution {
+	if len(modelContribs) == 0 {
+		return nil
+	}
+
+	seen := make(map[uint]int, len(modelContribs))
+	contribs := make([]*entities.DetectionModelContribution, 0, len(modelContribs))
+	for _, contrib := range modelContribs {
+		m := contrib.Model.WithDefaults()
+		modelEntity, err := ds.model.GetOrCreate(ctx, m.Name, m.Version, m.Variant,
+			detection.ResolveModelType(m.Name, m.Version), m.ClassifierPath)
+		if err != nil {
+			if ds.log != nil {
+				ds.log.Warn("failed to resolve model for contribution",
+					logger.String("model_name", m.Name),
+					logger.Error(err))
+			}
+			continue
+		}
+		if idx, exists := seen[modelEntity.ID]; exists {
+			contribs[idx].HitCount += contrib.HitCount
+			if contrib.MaxConfidence > contribs[idx].MaxConfidence {
+				contribs[idx].MaxConfidence = contrib.MaxConfidence
+			}
+			continue
+		}
+		seen[modelEntity.ID] = len(contribs)
+		contribs = append(contribs, &entities.DetectionModelContribution{
+			ModelID:       modelEntity.ID,
+			HitCount:      contrib.HitCount,
+			MaxConfidence: contrib.MaxConfidence,
+		})
+	}
+	return contribs
 }
 
 // Delete deletes a note by ID.

@@ -376,12 +376,13 @@ func NoteFromResult(result *detection.Result) Note {
 			SafeString:  result.AudioSource.SafeString,
 			DisplayName: result.AudioSource.DisplayName,
 		},
-		Unlikely:   result.Unlikely,
-		Occurrence: result.Occurrence,
-		Verified:   result.Verified,
-		Locked:     result.Locked,
-		Model:      result.Model,
-		RawLabel:   result.RawLabel,
+		Unlikely:           result.Unlikely,
+		Occurrence:         result.Occurrence,
+		Verified:           result.Verified,
+		Locked:             result.Locked,
+		Model:              result.Model,
+		ModelContributions: result.ModelContributions,
+		RawLabel:           result.RawLabel,
 	}
 }
 
