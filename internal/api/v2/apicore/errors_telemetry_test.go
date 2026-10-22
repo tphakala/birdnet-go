@@ -1,6 +1,6 @@
-// telemetry_test.go: Tests for API v2 Sentry telemetry integration.
+// errors_telemetry_test.go: Tests for API v2 Sentry telemetry integration.
 // Verifies that HandleError() reports 5xx errors to telemetry and excludes 4xx errors.
-package api
+package apicore
 
 import (
 	"fmt"
@@ -11,7 +11,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -28,10 +28,18 @@ func captureHook(t *testing.T) *[]*errors.EnhancedError {
 	return &captured
 }
 
+// newTelemetryTestCore returns a Core with an empty settings snapshot published,
+// the minimum HandleError reads (the debug flag, off by default).
+func newTelemetryTestCore() *Core {
+	c := &Core{}
+	c.Settings.Store(&conf.Settings{})
+	return c
+}
+
 // newTestContext creates an echo.Context for use in telemetry tests. It also sets
 // the matched route pattern (via SetPath) to the request path, simulating echo's
 // post-routing state: the telemetry endpoint context is now recorded from
-// apicore.RoutePattern(ctx) (the matched route pattern) rather than the raw URL
+// RoutePattern(ctx) (the matched route pattern) rather than the raw URL
 // path, so the token-bearing path of a request like an HLS stream is never sent to
 // Sentry. The static test paths used here have no path parameters, so the pattern
 // equals the path.
@@ -51,8 +59,7 @@ func newTestContext(t *testing.T, method, path string) (echo.Context, *httptest.
 func TestHandleError_5xxReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Core: &apicore.Core{}}
-	c.Settings.Store(getTestSettings(t))
+	c := newTelemetryTestCore()
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections")
 
 	err := c.HandleError(ctx, fmt.Errorf("database failure"), "Internal server error", http.StatusInternalServerError)
@@ -75,8 +82,7 @@ func TestHandleError_5xxReportedToTelemetry(t *testing.T) {
 func TestHandleError_5xxTelemetryErrorIsScrubbed(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Core: &apicore.Core{}}
-	c.Settings.Store(getTestSettings(t))
+	c := newTelemetryTestCore()
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/streams")
 
 	credErr := fmt.Errorf("failed to dial rtsp://user:pass@192.168.1.50:554/stream")
@@ -95,8 +101,7 @@ func TestHandleError_5xxTelemetryErrorIsScrubbed(t *testing.T) {
 func TestHandleError_4xxNotReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Core: &apicore.Core{}}
-	c.Settings.Store(getTestSettings(t))
+	c := newTelemetryTestCore()
 	ctx, _ := newTestContext(t, http.MethodPost, "/api/v2/settings")
 
 	err := c.HandleError(ctx, fmt.Errorf("missing field"), "Bad request", http.StatusBadRequest)
@@ -111,8 +116,7 @@ func TestHandleError_4xxNotReportedToTelemetry(t *testing.T) {
 func TestHandleError_NilError_5xxReported(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Core: &apicore.Core{}}
-	c.Settings.Store(getTestSettings(t))
+	c := newTelemetryTestCore()
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/health")
 
 	err := c.HandleError(ctx, nil, "Service unavailable", http.StatusServiceUnavailable)
@@ -131,8 +135,7 @@ func TestHandleError_NilError_5xxReported(t *testing.T) {
 func TestHandleErrorWithKey_5xxReportedToTelemetry(t *testing.T) {
 	captured := captureHook(t)
 
-	c := &Controller{Core: &apicore.Core{}}
-	c.Settings.Store(getTestSettings(t))
+	c := newTelemetryTestCore()
 	ctx, _ := newTestContext(t, http.MethodDelete, "/api/v2/detections/123")
 
 	err := c.HandleErrorWithKey(
@@ -164,8 +167,7 @@ func TestHandleError_AlreadyReportedSkipsDuplicate(t *testing.T) {
 	// Now install the hook (after pre-reporting, so the Build() call above is not counted).
 	captured := captureHook(t)
 
-	c := &Controller{Core: &apicore.Core{}}
-	c.Settings.Store(getTestSettings(t))
+	c := newTelemetryTestCore()
 	ctx, _ := newTestContext(t, http.MethodGet, "/api/v2/detections")
 
 	err := c.HandleError(ctx, preReported, "Internal server error", http.StatusInternalServerError)

@@ -39,18 +39,6 @@ func seedNames(t *testing.T, c *Controller, r datastore.SpeciesNameResolver, lab
 	c.names.Rebuild(labels, locale)
 }
 
-func TestResolveCommonName(t *testing.T) {
-	t.Parallel()
-
-	m := map[string]string{
-		"Turdus merula": "Eurasian Blackbird",
-		"Parus major":   "Great Tit",
-	}
-	assert.Equal(t, "Eurasian Blackbird", apicore.ResolveCommonName(m, "Turdus merula"))
-	// A miss falls back to the input verbatim.
-	assert.Equal(t, "Unknown species", apicore.ResolveCommonName(m, "Unknown species"))
-}
-
 // TestWithSpeciesIndex_SharesInjectedService verifies the WithSpeciesIndex option
 // makes the facade read the orchestrator-owned shared service (ownsNames false),
 // and that the facade never rebuilds a service it does not own.
