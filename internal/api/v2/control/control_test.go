@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"reflect"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -55,8 +56,11 @@ func newControlHandler(t *testing.T, e *echo.Echo) *Handler {
 func runControlEndpointTest(t *testing.T, e *echo.Echo, controlChan chan string, method, path string, handler func(echo.Context) error, expectedMessage, expectedAction, expectedSignal string) {
 	t.Helper()
 
-	// Create a request
-	req := httptest.NewRequest(method, path, http.NoBody)
+	// The signal handlers take no input, so a body that is not valid JSON must
+	// not change the outcome. A non-empty body with a JSON content type is
+	// what makes a handler that binds its body fail.
+	req := httptest.NewRequest(method, path, strings.NewReader("{invalid-json"))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath(path)
