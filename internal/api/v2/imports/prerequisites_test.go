@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -331,6 +333,46 @@ func TestCheckMemoryAvailable_Threshold(t *testing.T) {
 			assert.Equal(t, tt.want, check.Status, check.Message)
 		})
 	}
+}
+
+// Tolerances for TestHostProbes_NilSeams. Free disk space and available memory
+// drift between two readings, so the accessors are compared with a window around
+// the readings taken just before and after the call.
+const (
+	hostProbeDiskTolerance      = 256 * 1024 * 1024
+	hostProbeMemoryToleranceDiv = 16 // a sixteenth of the total memory of the machine
+)
+
+// TestHostProbes_NilSeams verifies that without the seams the free disk space and
+// available memory are close to the host's own free and available readings, so
+// neither falls back to a total.
+func TestHostProbes_NilSeams(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	dir := t.TempDir()
+	controller := &Handler{Core: &apicore.Core{}}
+
+	diskBefore, err := disk.Usage(dir)
+	require.NoError(t, err)
+	free, err := controller.diskFree(dir)
+	require.NoError(t, err)
+	diskAfter, err := disk.Usage(dir)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, free+hostProbeDiskTolerance, min(diskBefore.Free, diskAfter.Free))
+	assert.LessOrEqual(t, free, max(diskBefore.Free, diskAfter.Free)+hostProbeDiskTolerance)
+
+	memBefore, err := mem.VirtualMemory()
+	require.NoError(t, err)
+	available, err := controller.availableMemory()
+	require.NoError(t, err)
+	memAfter, err := mem.VirtualMemory()
+	require.NoError(t, err)
+	memTolerance := memBefore.Total / hostProbeMemoryToleranceDiv
+	assert.Positive(t, available)
+	assert.GreaterOrEqual(t, available+memTolerance, min(memBefore.Available, memAfter.Available))
+	assert.LessOrEqual(t, available, max(memBefore.Available, memAfter.Available)+memTolerance)
 }
 
 // TestCheckExistingV2Data_NilManager tests checkExistingV2Data when V2Manager is nil.
