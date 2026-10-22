@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 )
@@ -298,21 +299,38 @@ func TestCheckRecordCount_V2OnlyMode(t *testing.T) {
 	assert.Contains(t, check.Message, "enhanced database mode")
 }
 
-// TestCheckMemoryAvailable tests checkMemoryAvailable function.
-func TestCheckMemoryAvailable(t *testing.T) {
+// TestCheckMemoryAvailable_Threshold pins the memory_available thresholds: at
+// MinMemoryBytes the check passes, one byte below it warns, and a failed probe
+// is skipped rather than reported as low memory.
+func TestCheckMemoryAvailable_Threshold(t *testing.T) {
 	t.Attr("component", "migration")
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	controller := &Handler{Core: &apicore.Core{}}
-	controller.Settings.Store(apitest.NewValidTestSettings())
+	tests := []struct {
+		name      string
+		available uint64
+		probeErr  error
+		want      string
+	}{
+		{name: "at the minimum passes", available: MinMemoryBytes, want: CheckStatusPassed},
+		{name: "one byte below the minimum warns", available: MinMemoryBytes - 1, want: CheckStatusWarning},
+		{name: "probe error is skipped", probeErr: errors.NewStd("meminfo unavailable"), want: CheckStatusSkipped},
+	}
 
-	check := controller.checkMemoryAvailable()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			controller := &Handler{Core: &apicore.Core{}}
+			controller.Settings.Store(apitest.NewValidTestSettings())
+			controller.availableMemoryFn = func() (uint64, error) { return tt.available, tt.probeErr }
 
-	assert.Equal(t, "memory_available", check.ID)
-	assert.Equal(t, CheckSeverityWarning, check.Severity)
-	// Status depends on actual system memory, so just verify it's valid
-	assert.Contains(t, []string{CheckStatusPassed, CheckStatusWarning, CheckStatusSkipped}, check.Status)
+			check := controller.checkMemoryAvailable()
+
+			assert.Equal(t, "memory_available", check.ID)
+			assert.Equal(t, CheckSeverityWarning, check.Severity)
+			assert.Equal(t, tt.want, check.Status, check.Message)
+		})
+	}
 }
 
 // TestCheckExistingV2Data_NilManager tests checkExistingV2Data when V2Manager is nil.
@@ -404,21 +422,58 @@ func TestCheckWritePermission_Success(t *testing.T) {
 	assert.Contains(t, check.Message, "Write access verified")
 }
 
-// TestCheckDiskSpace tests checkDiskSpace function.
-func TestCheckDiskSpace(t *testing.T) {
+// TestCheckDiskSpace_Threshold pins the disk_space thresholds: exactly
+// MinDiskSpaceBytes free passes, one byte less fails, a probe error is an
+// error, a MySQL (remote) database is skipped, and for SQLite the free space of
+// the database directory is the one asked for.
+func TestCheckDiskSpace_Threshold(t *testing.T) {
 	t.Attr("component", "migration")
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	_, controller, _ := setupPrerequisitesTestEnvironment(t)
+	tests := []struct {
+		name     string
+		mysql    bool
+		free     uint64
+		probeErr error
+		want     string
+	}{
+		{name: "exactly the minimum passes", free: MinDiskSpaceBytes, want: CheckStatusPassed},
+		{name: "one byte short fails", free: MinDiskSpaceBytes - 1, want: CheckStatusFailed},
+		{name: "probe error is an error", probeErr: errors.NewStd("statfs failed"), want: CheckStatusError},
+		{name: "mysql is skipped", mysql: true, want: CheckStatusSkipped},
+	}
 
-	check := controller.checkDiskSpace()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, controller, _ := setupPrerequisitesTestEnvironment(t)
+			if tt.mysql {
+				settings := getTestSettings(t)
+				settings.Output.SQLite.Enabled = false
+				settings.Output.MySQL.Enabled = true
+				controller.Settings.Store(settings)
+				apitest.PublishTestSettings(t, settings)
+			}
+			var askedPath string
+			controller.diskFreeFn = func(path string) (uint64, error) {
+				askedPath = path
+				return tt.free, tt.probeErr
+			}
 
-	assert.Equal(t, "disk_space", check.ID)
-	assert.Equal(t, CheckSeverityCritical, check.Severity)
-	// Status depends on actual disk space, so just verify it's valid
-	assert.Contains(t, []string{CheckStatusPassed, CheckStatusFailed, CheckStatusError}, check.Status)
-	assert.NotEmpty(t, check.Message)
+			check := controller.checkDiskSpace()
+
+			assert.Equal(t, "disk_space", check.ID)
+			assert.Equal(t, CheckSeverityCritical, check.Severity)
+			assert.Equal(t, tt.want, check.Status, check.Message)
+			if tt.mysql {
+				assert.Empty(t, askedPath, "a remote database has no local disk to probe")
+				return
+			}
+			wantDir, err := controller.getDatabaseDirectoryResolved()
+			require.NoError(t, err)
+			assert.Equal(t, wantDir, askedPath, "the free space of the database directory is checked")
+		})
+	}
 }
 
 // TestIsUsingMySQL_SQLite tests isUsingMySQL returns false for SQLite config.
@@ -579,8 +634,16 @@ func setupPrerequisitesTestEnvironment(t *testing.T) (*echo.Echo, *Handler, *dat
 	}
 
 	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: testDS, Repo: mockRepo}}
+	controller.diskFreeFn = stubDiskFree
 	controller.Settings.Store(getTestSettings(t))
 	apitest.PublishTestSettings(t, controller.Settings.Load())
 
 	return e, controller, sm
 }
+
+// testDiskFreeBytes is the free space the setup helpers report. It is twice the
+// disk_space minimum so the critical check passes whatever the host disk holds.
+const testDiskFreeBytes = 2 * MinDiskSpaceBytes
+
+// stubDiskFree is the diskFreeFn the setup helpers install.
+func stubDiskFree(string) (uint64, error) { return testDiskFreeBytes, nil }

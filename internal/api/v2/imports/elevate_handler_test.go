@@ -92,19 +92,11 @@ func TestElevateImport_RejectsContainer(t *testing.T) {
 }
 
 func TestElevateImport_InsufficientSpace(t *testing.T) {
-	// chmod 0o000 is a no-op on Windows, so the source stays readable, staging (and
-	// thus the disk preflight) is skipped, and the 507 is never produced. Native
-	// elevation/staging is unix-only.
-	if runtime.GOOS == osWindows {
-		t.Skip("chmod-forced unreadable source is unix-only; native staging does not run on Windows")
-	}
+	// A regular file that is not a BirdNET-Pi database: discovery.Probe reports it
+	// invalid whatever the uid, so the handler takes the staging path where the
+	// disk preflight runs. A valid database would be read directly and skip staging.
 	src := filepath.Join(t.TempDir(), "birds.db")
-	writeMinimalBirdNetPiDB(t, src)
-	// Make unreadable so Probe returns cand.Valid=false, triggering the staging
-	// path where the disk preflight runs. Without this, the source is directly
-	// readable (cand.Valid=true) and staging (+ preflight) is skipped entirely.
-	require.NoError(t, os.Chmod(src, 0o000))
-	t.Cleanup(func() { _ = os.Chmod(src, 0o600) })
+	require.NoError(t, os.WriteFile(src, []byte("not a BirdNET-Pi database"), 0o600))
 
 	h := New(testCore(t), nil)
 	h.isContainerEnv = func() bool { return false }
