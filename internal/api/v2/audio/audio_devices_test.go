@@ -32,8 +32,8 @@ func setupSystemTestEnvironment(t *testing.T) (*echo.Echo, *Handler) {
 
 	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 	controller.Settings.Store(settings)
-	// No test may reach real audio hardware through this fixture; tests that
-	// need devices replace the lister.
+	// Device listing never reaches real audio hardware through this fixture;
+	// tests that need devices replace the lister.
 	controller.listCaptureDevices = func() ([]audiocore.DeviceInfo, error) { return nil, nil }
 
 	return e, controller

@@ -688,80 +688,62 @@ func publishWeatherTestSettings(t *testing.T, mutate func(*conf.Settings)) (*ech
 func TestTestWeatherConnection_RestoresRedactedAPIKey(t *testing.T) {
 	const savedKey = "real-saved-key-123"
 
-	tests := []struct {
-		name       string
-		provider   string
-		bodyField  string
-		saveKey    func(s *conf.Settings, key string)
-		savedKey   string
-		wantStatus int
+	providers := []struct {
+		name      string
+		provider  string
+		bodyField string
+		saveKey   func(s *conf.Settings, key string)
 	}{
 		{
-			name:      "OpenWeather placeholder without saved key fails validation",
+			name:      "OpenWeather",
 			provider:  WeatherProviderOpenWeather,
 			bodyField: "openWeather",
-			saveKey: func(s *conf.Settings, key string) {
-				s.Realtime.Weather.OpenWeather.APIKey = key
-			},
-			wantStatus: http.StatusBadRequest,
+			saveKey:   func(s *conf.Settings, key string) { s.Realtime.Weather.OpenWeather.APIKey = key },
 		},
 		{
-			name:      "OpenWeather placeholder with saved key passes validation",
-			provider:  WeatherProviderOpenWeather,
-			bodyField: "openWeather",
-			saveKey: func(s *conf.Settings, key string) {
-				s.Realtime.Weather.OpenWeather.APIKey = key
-			},
-			savedKey:   savedKey,
-			wantStatus: http.StatusOK,
-		},
-		{
-			name:      "PirateWeather placeholder without saved key fails validation",
+			name:      "PirateWeather",
 			provider:  WeatherProviderPirateWeather,
 			bodyField: "pirateWeather",
-			saveKey: func(s *conf.Settings, key string) {
-				s.Realtime.Weather.PirateWeather.APIKey = key
-			},
-			wantStatus: http.StatusBadRequest,
-		},
-		{
-			name:      "PirateWeather placeholder with saved key passes validation",
-			provider:  WeatherProviderPirateWeather,
-			bodyField: "pirateWeather",
-			saveKey: func(s *conf.Settings, key string) {
-				s.Realtime.Weather.PirateWeather.APIKey = key
-			},
-			savedKey:   savedKey,
-			wantStatus: http.StatusOK,
+			saveKey:   func(s *conf.Settings, key string) { s.Realtime.Weather.PirateWeather.APIKey = key },
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			e, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
-				tt.saveKey(s, tt.savedKey)
+	for _, p := range providers {
+		for _, saved := range []string{"", savedKey} {
+			t.Run(fmt.Sprintf("%s saved key %q", p.name, saved), func(t *testing.T) {
+				e, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
+					p.saveKey(s, saved)
+				})
+
+				body := fmt.Sprintf(`{"provider":%q,%q:{"apiKey":%q}}`,
+					p.provider, p.bodyField, redactedSecretPlaceholder)
+				req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/weather/test",
+					strings.NewReader(body)).WithContext(cancelledContext(t))
+				req.Header.Set("Content-Type", "application/json")
+				rec := httptest.NewRecorder()
+
+				require.NoError(t, controller.TestWeatherConnection(e.NewContext(req, rec)))
+				assertRestoredKeyOutcome(t, rec, saved)
 			})
-
-			body := fmt.Sprintf(`{"provider":%q,%q:{"apiKey":%q}}`,
-				tt.provider, tt.bodyField, redactedSecretPlaceholder)
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/weather/test",
-				strings.NewReader(body)).WithContext(cancelledContext(t))
-			req.Header.Set("Content-Type", "application/json")
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			err := controller.TestWeatherConnection(c)
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantStatus, rec.Code)
-			if tt.savedKey == "" {
-				assert.Contains(t, rec.Body.String(), "API key is required",
-					"placeholder restored to an empty key must fail the required-key validation")
-			} else {
-				assert.NotContains(t, rec.Body.String(), "API key is required",
-					"placeholder restored to the saved key must pass the required-key validation")
-			}
-		})
+		}
 	}
+}
+
+// assertRestoredKeyOutcome checks the result of sending the redacted placeholder
+// to a test-connection handler: with no saved key the restored value is empty
+// and validation fails with 400; with a saved key validation passes and the
+// handler starts streaming with 200.
+func assertRestoredKeyOutcome(t *testing.T, rec *httptest.ResponseRecorder, savedKey string) {
+	t.Helper()
+	if savedKey == "" {
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "API key is required",
+			"placeholder restored to an empty key must fail the required-key validation")
+		return
+	}
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "API key is required",
+		"placeholder restored to the saved key must pass the required-key validation")
 }
 
 // TestTestWeatherAuthentication_OpenWeatherSendsConfiguredKey verifies the
@@ -802,19 +784,10 @@ func TestTestWeatherAuthentication_OpenWeatherSendsConfiguredKey(t *testing.T) {
 // cancelled, so a request that reaches the streaming stages stops at the first
 // network stage without any HTTP request leaving the process.
 func TestTestEBirdConnection_RestoresRedactedAPIKey(t *testing.T) {
-	tests := []struct {
-		name       string
-		savedKey   string
-		wantStatus int
-	}{
-		{"placeholder without saved key fails validation", "", http.StatusBadRequest},
-		{"placeholder with saved key passes validation", "real-ebird-key-456", http.StatusOK},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, saved := range []string{"", "real-ebird-key-456"} {
+		t.Run(fmt.Sprintf("saved key %q", saved), func(t *testing.T) {
 			e, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
-				s.Realtime.EBird.APIKey = tt.savedKey
+				s.Realtime.EBird.APIKey = saved
 			})
 
 			body := fmt.Sprintf(`{"enabled":true,"apiKey":%q,"locale":"en"}`, redactedSecretPlaceholder)
@@ -822,18 +795,9 @@ func TestTestEBirdConnection_RestoresRedactedAPIKey(t *testing.T) {
 				strings.NewReader(body)).WithContext(cancelledContext(t))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
 
-			err := controller.TestEBirdConnection(c)
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantStatus, rec.Code)
-			if tt.savedKey == "" {
-				assert.Contains(t, rec.Body.String(), "API key is required",
-					"placeholder restored to an empty key must fail the required-key validation")
-			} else {
-				assert.NotContains(t, rec.Body.String(), "API key is required",
-					"placeholder restored to the saved key must pass the required-key validation")
-			}
+			require.NoError(t, controller.TestEBirdConnection(e.NewContext(req, rec)))
+			assertRestoredKeyOutcome(t, rec, saved)
 		})
 	}
 }

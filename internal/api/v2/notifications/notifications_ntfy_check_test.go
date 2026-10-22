@@ -30,10 +30,6 @@ func newNtfyCheckRequest(t *testing.T, host string) *http.Request {
 	return req
 }
 
-// ntfyGuardPreconditionTimeout bounds the plain-client precondition probe in
-// TestCheckNtfyServer_ProbesThroughGuardedClient.
-const ntfyGuardPreconditionTimeout = 2 * time.Second
-
 func TestCheckNtfyServer_HTTPSuccess(t *testing.T) {
 	// Spin up a fake HTTP server that mimics the ntfy /v1/health response
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -154,6 +150,9 @@ func TestCheckNtfyServer_InjectionRejected(t *testing.T) {
 // found and this test would fail. Nothing outside the machine is contacted
 // either way.
 func TestCheckNtfyServer_ProbesThroughGuardedClient(t *testing.T) {
+	// ntfyGuardPreconditionTimeout bounds the plain-client precondition probe.
+	const ntfyGuardPreconditionTimeout = 2 * time.Second
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
