@@ -71,6 +71,12 @@ function heartbeatCalls(): number {
   return mocks.fetchWithCSRF.mock.calls.filter(([url]) => url === '/api/v2/streams/hls/heartbeat')
     .length;
 }
+// disconnectCalls counts the ?disconnect=true heartbeats.
+function disconnectCalls(): number {
+  return mocks.fetchWithCSRF.mock.calls.filter(
+    ([url]) => url === '/api/v2/streams/hls/heartbeat?disconnect=true'
+  ).length;
+}
 
 class FakeHls {
   static Events = { ERROR: 'e', MEDIA_ATTACHED: 'a', MANIFEST_PARSED: 'm', FRAG_BUFFERED: 'f' };
@@ -430,5 +436,20 @@ describe('AudioLevelIndicator start and stop', () => {
     await waitForNextTick();
 
     expect(startCalls).toHaveLength(0);
+  });
+
+  it('sends the disconnect heartbeat when playback stops, not when it starts', async () => {
+    await renderWithSources();
+    await clickSourceButton(SOURCE_A);
+    await waitFor(() => expect(startCalls).toHaveLength(1));
+    startCalls[0].response.resolve(startResponse());
+    // startHeartbeat runs once the start response has been handled.
+    await waitForNextTick();
+    expect(hlsConstructed).toHaveBeenCalledTimes(1);
+    expect(disconnectCalls()).toBe(0);
+
+    await clickSourceButton(SOURCE_A);
+
+    expect(disconnectCalls()).toBe(1);
   });
 });
