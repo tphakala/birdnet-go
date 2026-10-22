@@ -12,9 +12,7 @@ import (
 
 // newNameMapController builds a bare Controller with an initialized species-name
 // index, for exercising the facade name-map accessors without spinning up the full
-// facade. The underlying builder itself is golden-tested in internal/speciesindex;
-// these tests cover the facade wiring (resolver install plus rebuild feeding the
-// accessors).
+// facade. The underlying builder itself is golden-tested in internal/speciesindex.
 func newNameMapController(t *testing.T) *Controller {
 	t.Helper()
 	e := echo.New()
