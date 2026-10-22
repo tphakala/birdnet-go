@@ -127,7 +127,10 @@ or the facade); it runs inside the normal `go test ./...` unit-test jobs.
    entry `{"<domain> routes", func() { c.<domain>.RegisterRoutes(c.Group) }}` in
    `initRoutes`. Registration is explicit (not `init()`-based) so order stays
    deterministic; preserve the existing ordering.
-3. New domains are subpackages of `api/v2`, so the "all new endpoints stay under
+3. Add one of the domain's routes to `criticalRoutes` in
+   `routes_enumeration_test.go`. `initRoutes` recovers a panicking initializer
+   and carries on, so only that list notices a domain whose routes vanished.
+4. New domains are subpackages of `api/v2`, so the "all new endpoints stay under
    api/v2" rule holds.
 
 A single `RegisterRoutes` is the norm, but a larger domain may expose several named
@@ -157,6 +160,14 @@ original per-route registration order across the split.
 - PrivateMode: all endpoints are gated by `apicore.PrivateModeAuth` group
   middleware; the bootstrap/login/live-audio carve-outs are listed in the facade's
   `isPrivateModeExempt` allow-list (keyed on method + path, fail-closed).
+- Route wiring is tested in `routes_enumeration_test.go`, which sends a request
+  through every registered route with a stand-in for `AuthMiddleware`. Every
+  route that is not a GET or HEAD, and every route under the auth-only prefixes
+  (`authOnlyPrefixes`), must reach the stand-in unless it is listed in
+  `publicMutationRoutes` or `publicReadRoutes` with a reason. With PrivateMode on,
+  every route outside `isPrivateModeExempt` must reach it too. A new mutating
+  route needs no test edit; a route that is meant to be public needs an
+  allow-list entry.
 
 ## Route namespace guide
 

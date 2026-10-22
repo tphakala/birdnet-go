@@ -54,35 +54,6 @@ func assertEventDataValue(t *testing.T, eventData map[string]any, field string, 
 	assert.Equal(t, expected, eventData[field], "Event data %s mismatch", field)
 }
 
-// mapStringToToastType converts a string toast type to notification.ToastType.
-func mapStringToToastType(toastType string) notification.ToastType {
-	switch toastType {
-	case ToastTypeSuccess:
-		return notification.ToastTypeSuccess
-	case ToastTypeError:
-		return notification.ToastTypeError
-	case ToastTypeWarning:
-		return notification.ToastTypeWarning
-	case ToastTypeInfo:
-		return notification.ToastTypeInfo
-	default:
-		return notification.ToastTypeInfo
-	}
-}
-
-// assertToastTypeMapping verifies toast type string to enum mapping.
-func assertToastTypeMapping(t *testing.T, input string, actual, expected notification.ToastType) {
-	t.Helper()
-	assert.Equal(t, expected, actual, "Toast type mapping for %q mismatch", input)
-}
-
-// assertNotificationMapping verifies notification type and priority mapping.
-func assertNotificationMapping(t *testing.T, toastType string, notif *notification.Notification, expectedType notification.Type, expectedPriority notification.Priority) {
-	t.Helper()
-	assert.Equal(t, expectedType, notif.Type, "Toast to notification type mapping for %q mismatch", toastType)
-	assert.Equal(t, expectedPriority, notif.Priority, "Toast to notification priority mapping for %q mismatch", toastType)
-}
-
 // newToastTestController builds a controller wired to an isolated, per-test
 // notification service injected through the controller's DI seam. The service is
 // stopped via tb.Cleanup so its cleanupLoop goroutine does not leak (TestMain
@@ -268,33 +239,6 @@ func verifyNotificationTypeMapping(t *testing.T, notif *notification.Notificatio
 
 	assert.Equal(t, expectedNotifType, notif.Type, "SendToast() notification type mismatch")
 	assert.Equal(t, expectedPriority, notif.Priority, "SendToast() notification priority mismatch")
-}
-
-func TestController_SendToast_TypeMapping(t *testing.T) {
-	tests := []struct {
-		toastType         string
-		expectedNotifType notification.Type
-		expectedPriority  notification.Priority
-		expectedToastType notification.ToastType
-	}{
-		{ToastTypeSuccess, notification.TypeInfo, notification.PriorityLow, notification.ToastTypeSuccess},
-		{ToastTypeError, notification.TypeError, notification.PriorityHigh, notification.ToastTypeError},
-		{ToastTypeWarning, notification.TypeWarning, notification.PriorityMedium, notification.ToastTypeWarning},
-		{ToastTypeInfo, notification.TypeInfo, notification.PriorityLow, notification.ToastTypeInfo},
-		{"invalid", notification.TypeInfo, notification.PriorityLow, notification.ToastTypeInfo},
-		{"", notification.TypeInfo, notification.PriorityLow, notification.ToastTypeInfo},
-	}
-
-	for _, tt := range tests {
-		t.Run("type_"+tt.toastType, func(t *testing.T) {
-			actualToastType := mapStringToToastType(tt.toastType)
-			assertToastTypeMapping(t, tt.toastType, actualToastType, tt.expectedToastType)
-
-			toast := notification.NewToast("test", actualToastType)
-			notif := toast.ToNotification()
-			assertNotificationMapping(t, tt.toastType, notif, tt.expectedNotifType, tt.expectedPriority)
-		})
-	}
 }
 
 func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
