@@ -1,7 +1,6 @@
 package classifier
 
 import (
-	"maps"
 	"sync"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -55,21 +54,20 @@ func classifyFilterClass(label string) filterClass {
 }
 
 // storeFilterClasses adds newly classified labels to filterClassCache, starting
-// the cache over when it would exceed maxFilterClassCacheEntries. Labels another
-// window stored meanwhile are not counted as new.
+// the cache over whenever a label that is not yet cached would take it past
+// maxFilterClassCacheEntries, so the bound holds for any size of misses. Labels
+// another window stored meanwhile are already cached and never trigger a restart.
+// A single set of misses larger than the bound keeps restarting the cache, which
+// is slower but still correct.
 func storeFilterClasses(misses map[string]filterClass) {
 	filterClassCache.Lock()
 	defer filterClassCache.Unlock()
-	added := 0
-	for label := range misses {
-		if _, ok := filterClassCache.m[label]; !ok {
-			added++
+	for label, fc := range misses {
+		if _, ok := filterClassCache.m[label]; !ok && len(filterClassCache.m) >= maxFilterClassCacheEntries {
+			clear(filterClassCache.m)
 		}
+		filterClassCache.m[label] = fc
 	}
-	if len(filterClassCache.m)+added > maxFilterClassCacheEntries {
-		filterClassCache.m = make(map[string]filterClass, len(misses))
-	}
-	maps.Copy(filterClassCache.m, misses)
 }
 
 // preserveFilterClasses ensures the privacy and dog-bark filters still see the

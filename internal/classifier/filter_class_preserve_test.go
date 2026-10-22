@@ -203,9 +203,11 @@ func TestPreserveFilterClasses_CachedMatchesUncached(t *testing.T) {
 	}
 }
 
-// TestStoreFilterClasses_ResetsWhenFull checks the cache starts over instead of
-// growing past maxFilterClassCacheEntries.
-func TestStoreFilterClasses_ResetsWhenFull(t *testing.T) {
+// fillFilterClassCache replaces the process-wide filterClassCache with one holding
+// maxFilterClassCacheEntries numeric keys and restores the original when the test
+// ends. The tests using it swap shared state, so they must not call t.Parallel.
+func fillFilterClassCache(t *testing.T) {
+	t.Helper()
 	filterClassCache.Lock()
 	saved := filterClassCache.m
 	filterClassCache.m = make(map[string]filterClass, maxFilterClassCacheEntries)
@@ -218,6 +220,12 @@ func TestStoreFilterClasses_ResetsWhenFull(t *testing.T) {
 		filterClassCache.m = saved
 		filterClassCache.Unlock()
 	})
+}
+
+// TestStoreFilterClasses_ResetsWhenFull checks the cache starts over instead of
+// growing past maxFilterClassCacheEntries.
+func TestStoreFilterClasses_ResetsWhenFull(t *testing.T) {
+	fillFilterClassCache(t)
 
 	storeFilterClasses(map[string]filterClass{"Dog_Dog": filterClassDog})
 
@@ -227,22 +235,27 @@ func TestStoreFilterClasses_ResetsWhenFull(t *testing.T) {
 	assert.Equal(t, filterClassDog, filterClassCache.m["Dog_Dog"])
 }
 
+// TestStoreFilterClasses_OversizedMissesStayBounded checks a single set of misses
+// larger than the bound leaves the cache within it rather than storing them all.
+func TestStoreFilterClasses_OversizedMissesStayBounded(t *testing.T) {
+	fillFilterClassCache(t)
+
+	misses := make(map[string]filterClass, maxFilterClassCacheEntries+1)
+	for i := range maxFilterClassCacheEntries + 1 {
+		misses["new-"+strconv.Itoa(i)] = filterClassHuman
+	}
+	storeFilterClasses(misses)
+
+	filterClassCache.RLock()
+	defer filterClassCache.RUnlock()
+	assert.LessOrEqual(t, len(filterClassCache.m), maxFilterClassCacheEntries)
+}
+
 // TestStoreFilterClasses_KnownLabelsDoNotReset checks that misses another window
 // already stored do not count toward the bound, so a full cache is not reset by
 // labels it already holds.
 func TestStoreFilterClasses_KnownLabelsDoNotReset(t *testing.T) {
-	filterClassCache.Lock()
-	saved := filterClassCache.m
-	filterClassCache.m = make(map[string]filterClass, maxFilterClassCacheEntries)
-	for i := range maxFilterClassCacheEntries {
-		filterClassCache.m[strconv.Itoa(i)] = 0
-	}
-	filterClassCache.Unlock()
-	t.Cleanup(func() {
-		filterClassCache.Lock()
-		filterClassCache.m = saved
-		filterClassCache.Unlock()
-	})
+	fillFilterClassCache(t)
 
 	storeFilterClasses(map[string]filterClass{"0": 0, "1": 0})
 
