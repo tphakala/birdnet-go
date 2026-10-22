@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -96,61 +97,76 @@ func TestServeAudioByID_PendingExport(t *testing.T) {
 }
 
 // TestWaitForPendingClip covers the async spectrogram worker's bounded wait for a
-// not-yet-written clip. It uses an injected short poll interval and real short
-// deadlines rather than synctest, because the file appearing is a real filesystem
-// event decoupled from any fake clock.
+// not-yet-written clip. Each subtest runs under synctest with an injected poll
+// interval, so elapsed times are fake-clock durations, asserted exactly except
+// when the file appears, where the poll that sees it may land one interval after
+// the write. The controller is built outside the bubble; the writer goroutine that makes the file appear runs
+// inside it, so the file appears at a known fake-clock instant while the file
+// system itself stays real.
 func TestWaitForPendingClip(t *testing.T) {
-	const rel = "pending.wav"
-	const pollInterval = 5 * time.Millisecond
+	const (
+		rel          = "pending.wav"
+		pollInterval = 5 * time.Millisecond
+		waitDeadline = time.Second
+		appearAfter  = 20 * time.Millisecond
+	)
 
-	t.Run("returns true immediately when the file already exists", func(t *testing.T) {
+	t.Run("returns true without polling when the file already exists", func(t *testing.T) {
 		_, controller, tempDir := setupMediaTestEnvironment(t)
 		require.NoError(t, os.WriteFile(filepath.Join(tempDir, rel), []byte("x"), 0o600))
 
-		// Deadline in the past: if the fast-path existence check did not short-circuit,
-		// the wait would return false at once. A true result proves the pre-poll check
-		// fired, without asserting a flaky wall-clock upper bound.
-		ok := controller.waitForPendingClip(t.Context(), rel, time.Now().Add(-time.Second), pollInterval)
+		synctest.Test(t, func(t *testing.T) {
+			start := time.Now()
+			ok := controller.waitForPendingClip(t.Context(), rel, start.Add(waitDeadline), pollInterval)
 
-		assert.True(t, ok)
+			assert.True(t, ok)
+			assert.Zero(t, time.Since(start), "an existing file must not wait a poll interval")
+		})
 	})
 
-	t.Run("returns false when the file never appears by the deadline", func(t *testing.T) {
+	t.Run("returns false at the deadline when the file never appears", func(t *testing.T) {
 		_, controller, _ := setupMediaTestEnvironment(t)
 
-		const waitDeadline = 50 * time.Millisecond
-		// Lower bound only (context.WithDeadline never fires early, so slow/-race CI can
-		// only push elapsed higher): proves the poller waited toward the deadline rather
-		// than returning false immediately. Derived from waitDeadline so the two stay in
-		// sync if the deadline is retuned.
-		const minWait = waitDeadline - 10*time.Millisecond
+		synctest.Test(t, func(t *testing.T) {
+			start := time.Now()
+			ok := controller.waitForPendingClip(t.Context(), rel, start.Add(waitDeadline), pollInterval)
 
-		start := time.Now()
-		ok := controller.waitForPendingClip(t.Context(), rel, time.Now().Add(waitDeadline), pollInterval)
-
-		assert.False(t, ok)
-		assert.GreaterOrEqual(t, time.Since(start), minWait, "should wait until near the deadline")
+			assert.False(t, ok)
+			assert.Equal(t, waitDeadline, time.Since(start), "must wait exactly until the deadline")
+		})
 	})
 
-	t.Run("returns true when the file appears before the deadline", func(t *testing.T) {
+	t.Run("returns true within one poll of the file appearing", func(t *testing.T) {
 		_, controller, tempDir := setupMediaTestEnvironment(t)
-		go func() {
-			time.Sleep(20 * time.Millisecond)
-			_ = os.WriteFile(filepath.Join(tempDir, rel), []byte("x"), 0o600)
-		}()
 
-		ok := controller.waitForPendingClip(t.Context(), rel, time.Now().Add(time.Second), pollInterval)
+		synctest.Test(t, func(t *testing.T) {
+			go func() {
+				time.Sleep(appearAfter)
+				_ = os.WriteFile(filepath.Join(tempDir, rel), []byte("x"), 0o600)
+			}()
 
-		assert.True(t, ok)
+			start := time.Now()
+			ok := controller.waitForPendingClip(t.Context(), rel, start.Add(waitDeadline), pollInterval)
+
+			assert.True(t, ok)
+			elapsed := time.Since(start)
+			assert.GreaterOrEqual(t, elapsed, appearAfter, "cannot return before the file exists")
+			assert.LessOrEqual(t, elapsed, appearAfter+pollInterval, "must notice the file within one poll")
+		})
 	})
 
-	t.Run("returns false promptly when the context is canceled", func(t *testing.T) {
+	t.Run("returns false without waiting when the context is canceled", func(t *testing.T) {
 		_, controller, _ := setupMediaTestEnvironment(t)
-		ctx, cancel := context.WithCancel(t.Context())
-		cancel()
 
-		ok := controller.waitForPendingClip(ctx, rel, time.Now().Add(time.Second), pollInterval)
+		synctest.Test(t, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
 
-		assert.False(t, ok)
+			start := time.Now()
+			ok := controller.waitForPendingClip(ctx, rel, start.Add(waitDeadline), pollInterval)
+
+			assert.False(t, ok)
+			assert.Zero(t, time.Since(start), "a canceled context must return without polling")
+		})
 	})
 }

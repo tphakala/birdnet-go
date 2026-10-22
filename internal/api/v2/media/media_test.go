@@ -15,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -52,17 +53,6 @@ func assertFullContentHeaders(t *testing.T, rec *httptest.ResponseRecorder, expe
 	}
 }
 
-// assertAudioErrorResponse checks error response body content.
-func assertAudioErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, status int) {
-	t.Helper()
-	switch status {
-	case http.StatusNotFound:
-		assert.Contains(t, rec.Body.String(), "File not found", "Expected 'File not found' in body for 404")
-	case http.StatusBadRequest:
-		assert.Contains(t, rec.Body.String(), "Invalid file path", "Expected 'Invalid file path' in body for 400")
-	}
-}
-
 // assertAudioClipResponse validates the response based on expected status and content type.
 func assertAudioClipResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, expectedLength int64, partialContent, isSmallFile bool) {
 	t.Helper()
@@ -74,23 +64,6 @@ func assertAudioClipResponse(t *testing.T, rec *httptest.ResponseRecorder, expec
 		} else if expectedStatus == http.StatusOK {
 			assertFullContentHeaders(t, rec, expectedLength, isSmallFile)
 		}
-	} else {
-		assertAudioErrorResponse(t, rec, expectedStatus)
-	}
-}
-
-// assertHandlerError checks handler error matches expected status for error responses.
-func assertHandlerError(t *testing.T, handlerErr error, expectedStatus int) {
-	t.Helper()
-	if expectedStatus < 400 {
-		require.NoError(t, handlerErr)
-		return
-	}
-	if handlerErr == nil {
-		return // Handler returned nil, response written to recorder
-	}
-	if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
-		assert.Equal(t, expectedStatus, httpErr.Code)
 	}
 }
 
@@ -298,6 +271,7 @@ func TestServeAudioClip(t *testing.T) {
 		expectedLength      int64 // Use int64 for http.ServeContent
 		partialContent      bool
 		expectedDisposition string
+		wantBody            string // substring of the error body, checked when set
 	}{
 		{
 			name:                "Small file - full content",
@@ -354,6 +328,7 @@ func TestServeAudioClip(t *testing.T) {
 			expectedStatus: http.StatusNotFound,
 			expectedLength: 0,
 			partialContent: false,
+			wantBody:       "File not found",
 		},
 		{
 			name:           "Invalid filename (traversal attempt)",
@@ -362,6 +337,7 @@ func TestServeAudioClip(t *testing.T) {
 			expectedStatus: http.StatusBadRequest, // SecureFS correctly detects and blocks traversal attempts
 			expectedLength: 0,
 			partialContent: false,
+			wantBody:       "Invalid file path",
 		},
 	}
 
@@ -377,6 +353,9 @@ func TestServeAudioClip(t *testing.T) {
 
 			isSmallFile := tc.filename == smallFilename
 			assertAudioClipResponse(t, rec, tc.expectedStatus, tc.expectedLength, tc.partialContent, isSmallFile)
+			if tc.wantBody != "" {
+				assert.Contains(t, rec.Body.String(), tc.wantBody)
+			}
 			assert.Equal(t, tc.expectedDisposition, rec.Header().Get("Content-Disposition"))
 		})
 	}
@@ -479,11 +458,16 @@ func TestServeSpectrogram(t *testing.T) {
 // fixture files into. A passthrough auth middleware is injected so the
 // authenticated ID-based routes (clip extraction / audio processing) register and
 // can be exercised without a real auth service.
-func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Handler, string) {
+//
+// opts are appended to the core options. Tests that call t.Parallel() must pass
+// apitest.WithoutSettingsPublish(): publishing replaces the process-global
+// settings snapshot and restores the previous one in Cleanup, so parallel
+// publishers restore each other's snapshots.
+func setupMediaTestEnvironment(t *testing.T, opts ...apitest.CoreOption) (*echo.Echo, *Handler, string) {
 	t.Helper()
 
 	e := echo.New()
-	core := apitest.NewCore(t, apitest.WithEcho(e))
+	core := apitest.NewCore(t, append([]apitest.CoreOption{apitest.WithEcho(e)}, opts...)...)
 	// Passthrough auth so the authenticated clip/process routes register and run
 	// without a real auth service.
 	core.AuthMiddleware = passthroughMiddleware()
@@ -802,9 +786,8 @@ func TestRangeHeaderHandling(t *testing.T) {
 			c.SetParamNames("filename")
 			c.SetParamValues(filename)
 
-			handlerErr := controller.ServeAudioClip(c)
+			require.NoError(t, controller.ServeAudioClip(c))
 			assert.Equal(t, tc.expectedStatus, rec.Code)
-			assertHandlerError(t, handlerErr, tc.expectedStatus)
 
 			if rec.Code == http.StatusOK || rec.Code == http.StatusPartialContent {
 				tc.validateFunc(t, rec)
@@ -1836,34 +1819,6 @@ func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
 		"JSON error response should not advertise an audio filename")
 }
 
-// TestServeAudioClipNoTempFileReturns404 verifies that a missing file without
-// a temp file returns 404 (not 503).
-func TestServeAudioClipNoTempFileReturns404(t *testing.T) {
-	e, controller, _ := setupMediaTestEnvironment(t)
-
-	audioFilename := "nonexistent.wav"
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/media/audio/:filename")
-	ctx.SetParamNames("filename")
-	ctx.SetParamValues(audioFilename)
-
-	handlerErr := controller.ServeAudioClip(ctx)
-
-	// Should return 404, not 503
-	if handlerErr != nil {
-		if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
-			assert.Equal(t, http.StatusNotFound, httpErr.Code,
-				"Should return 404 when no temp file exists")
-		}
-	} else {
-		assert.Equal(t, http.StatusNotFound, rec.Code,
-			"Should return 404 when no temp file exists")
-	}
-}
-
 // TestIsRecentClipCompletion covers the recency predicate shared with the
 // reconcile crawler: a zero completion time is treated as recent (fail-safe),
 // times inside the window are recent, and times older than the window are not.
@@ -1890,30 +1845,31 @@ func TestIsRecentClipCompletion(t *testing.T) {
 
 // TestServeAudioByID_GraceSkippedForOldDetections verifies the defense-in-depth
 // grace-poll skip: a 404 for a detection whose capture completed long ago returns
-// immediately (no grace wait), while a recent detection still waits out the grace
-// period and then answers 503 with Retry-After. Timing bounds around audioGracePeriod distinguish the two paths.
+// at once (no grace wait), while a recent detection still waits out the grace
+// period and then answers 503 with Retry-After. It runs under synctest, so the
+// elapsed time is the exact fake-clock duration: zero for the old detection and
+// audioGracePeriod for the recent one.
 func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 	// clipPath resolves but the file does not exist on disk, forcing the 404 path.
 	const missingClip = "2024/01/ghost_95p_20240101T000000Z.wav"
 
 	tests := []struct {
-		name       string
-		endTime    time.Time
-		wantStatus int
-		maxElapsed time.Duration // set: proves grace was skipped
-		minElapsed time.Duration // set: proves grace ran
+		name        string
+		age         time.Duration // how long before now the capture completed
+		wantStatus  int
+		wantElapsed time.Duration
 	}{
 		{
-			name:       "old detection skips grace and 404s immediately",
-			endTime:    time.Now().Add(-time.Hour),
-			wantStatus: http.StatusNotFound,
-			maxElapsed: audioGracePeriod,
+			name:        "old detection skips grace and 404s immediately",
+			age:         time.Hour,
+			wantStatus:  http.StatusNotFound,
+			wantElapsed: 0,
 		},
 		{
-			name:       "recent detection waits the grace period and answers 503 while the export may be queued",
-			endTime:    time.Now(),
-			wantStatus: http.StatusServiceUnavailable,
-			minElapsed: audioGracePeriod,
+			name:        "recent detection waits the grace period and answers 503 while the export may be queued",
+			age:         0,
+			wantStatus:  http.StatusServiceUnavailable,
+			wantElapsed: audioGracePeriod,
 		},
 	}
 
@@ -1921,42 +1877,39 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e, controller, _ := setupMediaTestEnvironment(t)
 
-			mockDS := mocks.NewMockInterface(t)
-			mockDS.On("GetNoteClipPath", "42").Return(missingClip, nil)
-			mockDS.On("Get", "42").Return(datastore.Note{ID: 42, EndTime: tc.endTime}, nil).Maybe()
-			controller.DS = mockDS
+			synctest.Test(t, func(t *testing.T) {
+				// The end time is taken inside the bubble: the bubble clock starts at
+				// 2000-01-01 UTC (testing/synctest docs), so a time.Now() taken outside
+				// it would lie decades in the bubble's future and every row would count
+				// as recent.
+				mockDS := mocks.NewMockInterface(t)
+				mockDS.On("GetNoteClipPath", "42").Return(missingClip, nil)
+				mockDS.On("Get", "42").Return(datastore.Note{ID: 42, EndTime: time.Now().Add(-tc.age)}, nil).Maybe()
+				controller.DS = mockDS
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/42", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetParamNames("id")
-			c.SetParamValues("42")
+				req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/42", http.NoBody)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+				c.SetParamNames("id")
+				c.SetParamValues("42")
 
-			start := time.Now()
-			handlerErr := controller.ServeAudioByID(c)
-			elapsed := time.Since(start)
+				start := time.Now()
+				handlerErr := controller.ServeAudioByID(c)
+				elapsed := time.Since(start)
 
-			if tc.wantStatus == http.StatusNotFound {
-				// The missing clip resolves to a 404, returned as an echo.HTTPError
-				// (the framework translates it to the HTTP response).
-				require.Error(t, handlerErr, "missing clip must error")
-				httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr)
-				require.True(t, ok, "expected an echo.HTTPError")
-				assert.Equal(t, http.StatusNotFound, httpErr.Code, "missing clip must 404")
-			} else {
-				// A pending answer is written directly with a Retry-After hint.
-				require.NoError(t, handlerErr)
-				assert.Equal(t, tc.wantStatus, rec.Code)
-				assert.NotEmpty(t, rec.Header().Get(echo.HeaderRetryAfter), "503 must carry Retry-After")
-			}
-			if tc.maxElapsed > 0 {
-				assert.Less(t, elapsed, tc.maxElapsed,
-					"old detection must skip the grace wait")
-			}
-			if tc.minElapsed > 0 {
-				assert.GreaterOrEqual(t, elapsed, tc.minElapsed,
-					"recent detection must wait out the grace period")
-			}
+				// A missing clip resolves to an echo.HTTPError (the framework turns it
+				// into the response); a pending answer is written directly.
+				code := rec.Code
+				if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
+					code = httpErr.Code
+				}
+				assert.Equal(t, tc.wantStatus, code)
+				assert.Equal(t, tc.wantElapsed, elapsed)
+				if tc.wantStatus == http.StatusServiceUnavailable {
+					require.NoError(t, handlerErr)
+					assert.NotEmpty(t, rec.Header().Get(echo.HeaderRetryAfter), "503 must carry Retry-After")
+				}
+			})
 		})
 	}
 }
@@ -2191,7 +2144,7 @@ func TestAudioRangeWithGzipMiddleware_EndToEnd(t *testing.T) {
 	// Arrange: set up environment with gzip middleware on the Echo instance.
 	// Echo middleware added via e.Use() applies to all routes at request time,
 	// so routes registered by setupMediaTestEnvironment are already covered.
-	e, _, tempDir := setupMediaTestEnvironment(t)
+	e, _, tempDir := setupMediaTestEnvironment(t, apitest.WithoutSettingsPublish())
 	e.Use(middleware.NewGzip())
 
 	audioFilename := "gzip-range-test.wav"
@@ -2276,7 +2229,7 @@ func TestAudioRangeConsistencyAcrossSequentialRequests(t *testing.T) {
 	)
 
 	// Arrange
-	e, _, tempDir := setupMediaTestEnvironment(t)
+	e, _, tempDir := setupMediaTestEnvironment(t, apitest.WithoutSettingsPublish())
 	filename := "sequential-range-test.wav"
 	filePath := filepath.Join(tempDir, filename)
 	audioURL := "/api/v2/media/audio/" + filename
@@ -2332,17 +2285,13 @@ func TestAudioRangeConsistencyAcrossSequentialRequests(t *testing.T) {
 		"416 response must include Content-Range with the current file size")
 }
 
-// concurrentRangeResult holds the outcome of a single concurrent range request.
-type concurrentRangeResult struct {
-	statusCode int
-	err        error
-}
-
 // TestAudioConcurrentRangeRequests verifies that the audio endpoint handles
-// simultaneous range requests to the same file without panics, data corruption,
-// or races. Each response must be one of 200 (full content), 206 (partial), or
-// 416 (range not satisfiable). Results are collected via a channel so all
-// assertions run in the main goroutine (required by testify).
+// simultaneous range requests to the same file without data corruption or
+// races. Each response must carry the exact status for its Range header and, for
+// 2xx responses, exactly the bytes of the requested slice of the file. Results
+// are collected via a channel so all assertions run in the main goroutine
+// (required by testify). Run under -race, it also fails on unsynchronized state
+// shared between requests.
 func TestAudioConcurrentRangeRequests(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "media")
@@ -2352,55 +2301,55 @@ func TestAudioConcurrentRangeRequests(t *testing.T) {
 	const (
 		concurrentWorkers = 20
 		fileDataSize      = 100000
-		fileTotalSize     = fileDataSize + 44 // WAV header
 	)
 
-	// Accepted HTTP status codes for a valid range request response
-	acceptableStatuses := []int{
-		http.StatusOK,
-		http.StatusPartialContent,
-		http.StatusRequestedRangeNotSatisfiable,
-	}
-
 	// Arrange
-	e, _, tempDir := setupMediaTestEnvironment(t)
+	e, _, tempDir := setupMediaTestEnvironment(t, apitest.WithoutSettingsPublish())
 	filename := "concurrent-range-test.wav"
 	filePath := filepath.Join(tempDir, filename)
 	createLargeWAVFile(t, filePath, fileDataSize)
+	// The file as written is the oracle for every expected body.
+	fileBytes, err := os.ReadFile(filePath) //nolint:gosec // G304: path is under t.TempDir()
+	require.NoError(t, err)
 
 	audioURL := "/api/v2/media/audio/" + filename
 
-	// Diverse range headers that exercise different code paths
-	rangeHeaders := []string{
-		"",              // full content (no range)
-		"bytes=0-99",    // first 100 bytes
-		"bytes=100-199", // middle chunk
-		"bytes=-100",    // last 100 bytes
-		"bytes=0-",      // from start to end
-		fmt.Sprintf("bytes=0-%d", fileTotalSize-1),  // entire file as range
-		fmt.Sprintf("bytes=%d-", fileTotalSize-100), // near the end
-		"bytes=0-0",     // single byte
-		"bytes=999999-", // out of bounds (expect 416)
-		"bytes=invalid", // malformed (expect 416)
+	// Diverse range headers that exercise different code paths. wantBody is nil
+	// for 416 rows, whose body is an error text and not part of the contract.
+	rangeCases := []struct {
+		rangeHeader string
+		wantStatus  int
+		wantBody    []byte
+	}{
+		{"", http.StatusOK, fileBytes},
+		{"bytes=0-99", http.StatusPartialContent, fileBytes[:100]},
+		{"bytes=100-199", http.StatusPartialContent, fileBytes[100:200]},
+		{"bytes=-100", http.StatusPartialContent, fileBytes[len(fileBytes)-100:]},
+		{"bytes=0-0", http.StatusPartialContent, fileBytes[:1]},
+		{"bytes=999999-", http.StatusRequestedRangeNotSatisfiable, nil},
+		{"bytes=invalid", http.StatusRequestedRangeNotSatisfiable, nil},
+	}
+
+	type result struct {
+		caseIdx int
+		code    int
+		body    []byte
 	}
 
 	// Act: launch concurrent workers
-	results := make(chan concurrentRangeResult, concurrentWorkers)
+	results := make(chan result, concurrentWorkers)
 	var wg sync.WaitGroup
 
 	for i := range concurrentWorkers {
-		rangeHeader := rangeHeaders[i%len(rangeHeaders)]
+		caseIdx := i % len(rangeCases)
 		wg.Go(func() {
 			req := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
-			if rangeHeader != "" {
-				req.Header.Set("Range", rangeHeader)
+			if h := rangeCases[caseIdx].rangeHeader; h != "" {
+				req.Header.Set("Range", h)
 			}
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, req)
-			results <- concurrentRangeResult{
-				statusCode: rec.Code,
-				err:        nil,
-			}
+			results <- result{caseIdx: caseIdx, code: rec.Code, body: rec.Body.Bytes()}
 		})
 	}
 
@@ -2412,9 +2361,11 @@ func TestAudioConcurrentRangeRequests(t *testing.T) {
 	resultCount := 0
 	for res := range results {
 		resultCount++
-		require.NoError(t, res.err, "Concurrent request must not return an error")
-		assert.Contains(t, acceptableStatuses, res.statusCode,
-			"Response status %d is not in the accepted set %v", res.statusCode, acceptableStatuses)
+		tc := rangeCases[res.caseIdx]
+		assert.Equal(t, tc.wantStatus, res.code, "status for Range %q", tc.rangeHeader)
+		if tc.wantBody != nil {
+			assert.Equal(t, tc.wantBody, res.body, "body for Range %q", tc.rangeHeader)
+		}
 	}
 	assert.Equal(t, concurrentWorkers, resultCount,
 		"Must receive a result from every concurrent worker")
@@ -2433,7 +2384,7 @@ func TestAudioETagInvalidatesStaleCache(t *testing.T) {
 	t.Attr("type", "regression")
 	t.Attr("issue", "2846")
 
-	e, controller, tempDir := setupMediaTestEnvironment(t)
+	e, controller, tempDir := setupMediaTestEnvironment(t, apitest.WithoutSettingsPublish())
 
 	const filename = "etag-cache-test.wav"
 	const dataSize = 2048
