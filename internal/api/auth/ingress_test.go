@@ -93,8 +93,8 @@ func TestRequestBasePath(t *testing.T) {
 			xIngressPath: "relative/path",
 			expected:     "",
 		},
-		// One rejected sequence per row, so dropping any entry from this
-		// package's isSafePathPrefix fails a row.
+		// One rejected sequence per row, so dropping any entry other than "://"
+		// (subsumed by "//") from this package's isSafePathPrefix fails a row.
 		{
 			name:         "Path traversal in X-Ingress-Path rejected",
 			xIngressPath: "/ingress/../admin",
