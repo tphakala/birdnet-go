@@ -347,7 +347,7 @@
   }
 
   // stopRuntime tears down the stream without clearing localStorage persistence.
-  // Used by $effect cleanup so reactive re-runs don't erase the user's play preference.
+  // Used by the onMount cleanup so leaving the dashboard keeps the user's auto-start preference.
   function stopRuntime() {
     abortController?.abort();
     abortController = null;
@@ -493,7 +493,7 @@
     }
     return () => {
       if (errorTimer) globalThis.clearTimeout(errorTimer);
-      stop();
+      stopRuntime();
     };
   });
 </script>
