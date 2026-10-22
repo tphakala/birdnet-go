@@ -64,3 +64,70 @@ func TestEqualizerTemplateShipsBypassed(t *testing.T) {
 		require.Equal(t, 0, *eq.Filters[i].Passes, "%s ships with passes 0 in config.yaml, which turns the filter off", wantType)
 	}
 }
+
+// TestRetryTemplateMatchesCodeDefaults pins the retry settings of the embedded
+// config.yaml (what new installs receive) to the viper defaults (what a config
+// without the keys receives), so the two cannot drift apart again. Not parallel:
+// it resets the global viper instance.
+func TestRetryTemplateMatchesCodeDefaults(t *testing.T) {
+	t.Cleanup(viper.Reset)
+
+	// Pointer fields so a deleted template key fails instead of reading as zero.
+	type retryProbe struct {
+		Enabled           *bool    `yaml:"enabled"`
+		MaxRetries        *int     `yaml:"maxretries"`
+		InitialDelay      *int     `yaml:"initialdelay"`
+		MaxDelay          *int     `yaml:"maxdelay"`
+		BackoffMultiplier *float64 `yaml:"backoffmultiplier"`
+	}
+	var probe struct {
+		Realtime struct {
+			MQTT struct {
+				RetrySettings retryProbe `yaml:"retrysettings"`
+			} `yaml:"mqtt"`
+			Birdweather struct {
+				RetrySettings retryProbe `yaml:"retrysettings"`
+			} `yaml:"birdweather"`
+		} `yaml:"realtime"`
+	}
+	template, err := configFiles.ReadFile("config.yaml")
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(template, &probe))
+
+	tests := []struct {
+		prefix   string
+		template retryProbe
+	}{
+		{"realtime.mqtt.retrysettings", probe.Realtime.MQTT.RetrySettings},
+		{"realtime.birdweather.retrysettings", probe.Realtime.Birdweather.RetrySettings},
+	}
+
+	viper.Reset()
+	setDefaultConfig()
+
+	for _, tt := range tests {
+		t.Run(tt.prefix, func(t *testing.T) {
+			require.NotNil(t, tt.template.Enabled, "config.yaml must set enabled")
+			require.NotNil(t, tt.template.MaxRetries, "config.yaml must set maxretries")
+			require.NotNil(t, tt.template.InitialDelay, "config.yaml must set initialdelay")
+			require.NotNil(t, tt.template.MaxDelay, "config.yaml must set maxdelay")
+			require.NotNil(t, tt.template.BackoffMultiplier, "config.yaml must set backoffmultiplier")
+
+			want := RetrySettings{
+				Enabled:           viper.GetBool(tt.prefix + ".enabled"),
+				MaxRetries:        viper.GetInt(tt.prefix + ".maxretries"),
+				InitialDelay:      viper.GetInt(tt.prefix + ".initialdelay"),
+				MaxDelay:          viper.GetInt(tt.prefix + ".maxdelay"),
+				BackoffMultiplier: viper.GetFloat64(tt.prefix + ".backoffmultiplier"),
+			}
+			got := RetrySettings{
+				Enabled:           *tt.template.Enabled,
+				MaxRetries:        *tt.template.MaxRetries,
+				InitialDelay:      *tt.template.InitialDelay,
+				MaxDelay:          *tt.template.MaxDelay,
+				BackoffMultiplier: *tt.template.BackoffMultiplier,
+			}
+			require.Equal(t, want, got, "config.yaml retry settings must equal the defaults in defaults.go")
+		})
+	}
+}
