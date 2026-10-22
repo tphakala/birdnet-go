@@ -6,6 +6,7 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
 	"maps"
 	"net/http"
 	"net/http/httptest"
@@ -480,10 +481,10 @@ func TestGetAppConfig_NoSensitiveDataExposed(t *testing.T) {
 	assert.NotContains(t, body, "Password", "Password field should not exist")
 }
 
-// TestGetAppConfig_UnusableCSRFContextValueGetsNewToken tests that a CSRF
+// TestGetAppConfig_UnusableCSRFContextValueIsNotServed tests that a CSRF
 // context value that cannot be used as a token (a non-string, or an empty
-// string) is replaced by a freshly generated token instead of being served.
-func TestGetAppConfig_UnusableCSRFContextValueGetsNewToken(t *testing.T) {
+// string) is not served as the token, and that a non-empty token is returned.
+func TestGetAppConfig_UnusableCSRFContextValueIsNotServed(t *testing.T) {
 	tests := []struct {
 		name  string
 		value any
@@ -508,8 +509,8 @@ func TestGetAppConfig_UnusableCSRFContextValueGetsNewToken(t *testing.T) {
 			var response AppConfigResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 
-			assert.NotEmpty(t, response.CSRFToken, "a new token should be generated")
-			assert.NotEqual(t, tt.value, response.CSRFToken, "the unusable context value must not be served")
+			assert.NotEmpty(t, response.CSRFToken, "a token should still be returned")
+			assert.NotEqual(t, fmt.Sprint(tt.value), response.CSRFToken, "the unusable context value must not be served")
 		})
 	}
 }
