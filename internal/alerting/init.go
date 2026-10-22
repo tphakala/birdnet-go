@@ -368,7 +368,8 @@ func Initialize(
 // including legacy rows without a name key. The two checks differ on purpose:
 // a rule counts as already seeded by name or key alone, but only counts as the
 // shipped default for migration when its trigger and conditions match too (see
-// defaultRuleFor).
+// defaultRuleFor). Before that migration it repairs built-in rules the settings
+// editor saved as custom rules (see repairDamagedDefaults).
 func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, log logger.Logger) error {
 	existing, err := repo.ListRules(ctx, repository.AlertRuleFilter{})
 	if err != nil {
@@ -392,6 +393,7 @@ func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, 
 		log.Info("seeded default alert rules", logger.Int("created", created))
 	}
 
+	repairDamagedDefaults(ctx, repo, existing, log)
 	migrateEscalationSteps(ctx, repo, existing, log)
 
 	return nil
@@ -403,23 +405,27 @@ func seedDefaultRules(ctx context.Context, repo repository.AlertRuleRepository, 
 // with the same Name. Either way the trigger definition and conditions must be
 // equal to the default's too, so a rule whose threshold was changed is not
 // mistaken for the default and given steps that start above its threshold.
+// The key or name match is identifiesDefault.
 func defaultRuleFor(rule *entities.AlertRule, defaults []entities.AlertRule) (*entities.AlertRule, bool) {
 	if !rule.BuiltIn {
 		return nil, false
 	}
 	for i := range defaults {
 		def := &defaults[i]
-		var identified bool
-		if rule.NameKey != "" {
-			identified = def.NameKey == rule.NameKey
-		} else {
-			identified = def.Name == rule.Name
-		}
-		if identified && sameTrigger(rule, def) {
+		if identifiesDefault(rule, def) && sameTrigger(rule, def) {
 			return def, true
 		}
 	}
 	return nil, false
+}
+
+// identifiesDefault reports whether a stored rule is named as def: by name key
+// when the rule has one, by name otherwise. It does not look at the trigger.
+func identifiesDefault(rule, def *entities.AlertRule) bool {
+	if rule.NameKey != "" {
+		return rule.NameKey == def.NameKey
+	}
+	return rule.Name == def.Name
 }
 
 // SameThreshold reports whether two rules fire at the same values: the same
@@ -518,4 +524,90 @@ func migrateEscalationSteps(ctx context.Context, repo repository.AlertRuleReposi
 		log.Info("migrated escalation steps for built-in rule",
 			logger.String("name", rule.Name))
 	}
+}
+
+// repairDamagedDefaults makes a stored rule built-in again when the settings
+// editor saved it as a custom rule. Before the update endpoint kept the
+// built-in flag, saving a built-in rule stored built_in = false and no
+// escalation steps, while the name key stayed unless the user renamed the rule.
+//
+// A rule is repaired when it is not built-in, has the non-empty name key of a
+// shipped default, and has that default's trigger (sameTrigger). A different
+// trigger means the user changed what the rule fires on, and default steps
+// would start above its threshold. A rule without a name key is never repaired:
+// it cannot be told from a rule the user created. A rule is also left alone,
+// and logged, when a built-in row already holds the default, so a default never
+// has two built-in rows; the first repaired row claims its default.
+//
+// The repair sets the built-in flag and the shipped English name, the shipped
+// description only when the rule still has the default's description key, and
+// the default's escalation steps only when the rule has none. Everything else,
+// including the cooldown, enabled state, actions and conditions, stays as
+// stored. A repaired row is built-in, so a later start does not select it
+// again. A failed write is logged and retried on the next start, and the stored
+// row stays as it was.
+func repairDamagedDefaults(ctx context.Context, repo repository.AlertRuleRepository, existing []entities.AlertRule, log logger.Logger) {
+	defaults := DefaultRules()
+
+	claimed := make(map[string]struct{}, len(defaults))
+	for i := range existing {
+		if !existing[i].BuiltIn {
+			continue
+		}
+		for j := range defaults {
+			if identifiesDefault(&existing[i], &defaults[j]) {
+				claimed[defaults[j].NameKey] = struct{}{}
+			}
+		}
+	}
+
+	for i := range existing {
+		rule := &existing[i]
+		if rule.BuiltIn || rule.NameKey == "" {
+			continue
+		}
+		def := damagedDefaultFor(rule, defaults)
+		if def == nil {
+			continue
+		}
+		if _, held := claimed[def.NameKey]; held {
+			log.Info("kept a copy of a built-in alert rule as a custom rule",
+				logger.String("name", rule.Name),
+				logger.Uint64("id", uint64(rule.ID)))
+			continue
+		}
+
+		repaired := *rule
+		repaired.BuiltIn = true
+		repaired.Name = def.Name
+		if rule.DescriptionKey != "" && rule.DescriptionKey == def.DescriptionKey {
+			repaired.Description = def.Description
+		}
+		if len(rule.EscalationSteps) == 0 {
+			repaired.EscalationSteps = slices.Clone(def.EscalationSteps)
+		}
+		if err := repo.UpdateRule(ctx, &repaired); err != nil {
+			log.Warn("failed to repair built-in alert rule",
+				logger.String("name", rule.Name),
+				logger.Uint64("id", uint64(rule.ID)),
+				logger.Error(err))
+			continue
+		}
+		existing[i] = repaired
+		claimed[def.NameKey] = struct{}{}
+		log.Info("repaired built-in alert rule",
+			logger.String("name", repaired.Name),
+			logger.Uint64("id", uint64(repaired.ID)))
+	}
+}
+
+// damagedDefaultFor returns the shipped default whose name key and trigger a
+// keyed stored rule has, or nil.
+func damagedDefaultFor(rule *entities.AlertRule, defaults []entities.AlertRule) *entities.AlertRule {
+	for i := range defaults {
+		if defaults[i].NameKey == rule.NameKey && sameTrigger(rule, &defaults[i]) {
+			return &defaults[i]
+		}
+	}
+	return nil
 }

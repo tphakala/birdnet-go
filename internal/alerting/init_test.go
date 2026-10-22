@@ -893,3 +893,299 @@ func TestSameThreshold_NumbersEqualOnlyForNumericOperators(t *testing.T) {
 	assert.False(t, SameThreshold(rule(OperatorIs, "90"), rule(OperatorIs, "90.0")),
 		"a string operator compares the text, so 90 and 90.0 differ")
 }
+
+const (
+	// translatedLowDiskDescription stands for the description the settings
+	// editor stored for the Low disk space default under a German UI.
+	translatedLowDiskDescription = "Meldet, wenn die Festplattenbelegung 85 % uebersteigt"
+	// customDescription is a description the user typed over the default one.
+	customDescription = "my own description"
+)
+
+// editorSaved returns the damage the settings editor did before it kept the
+// built-in flag: the row is no longer built-in, has no escalation steps, and
+// holds the given name and description text. The name and description keys stay.
+func editorSaved(name, description string) func(rule *entities.AlertRule) {
+	return func(r *entities.AlertRule) {
+		r.BuiltIn = false
+		r.EscalationSteps = nil
+		r.Name = name
+		r.Description = description
+	}
+}
+
+// seedRulesWithDamagedDefault returns a repo holding every default rule, with
+// the rule that has the given name key damaged by damage, together with that
+// row's ID. The other rows are stock built-in rules.
+func seedRulesWithDamagedDefault(t *testing.T, nameKey string, damage func(rule *entities.AlertRule)) (repo *initMockRepo, ruleID uint) {
+	t.Helper()
+	existing := DefaultRules()
+	for i := range existing {
+		existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
+		if existing[i].NameKey == nameKey {
+			ruleID = existing[i].ID
+			damage(&existing[i])
+		}
+	}
+	require.NotZero(t, ruleID, "default rule %q not found", nameKey)
+	return &initMockRepo{rules: existing}, ruleID
+}
+
+// defaultByKey returns a copy of the shipped default with the given name key.
+func defaultByKey(t *testing.T, nameKey string) entities.AlertRule {
+	t.Helper()
+	defaults := DefaultRules()
+	for i := range defaults {
+		if defaults[i].NameKey == nameKey {
+			return defaults[i]
+		}
+	}
+	require.FailNow(t, "default rule not found", nameKey)
+	return entities.AlertRule{}
+}
+
+func TestSeedDefaultRules_RepairsDamagedDefaults(t *testing.T) {
+	lowDisk := defaultByKey(t, RuleKeyLowDiskName)
+	newSpecies := defaultByKey(t, RuleKeyNewSpeciesName)
+
+	tests := []struct {
+		name    string
+		nameKey string
+		damage  func(rule *entities.AlertRule)
+		// extra returns rows to append next to the damaged one.
+		extra func(damaged *entities.AlertRule, nextID uint) []entities.AlertRule
+
+		wantBuiltIn bool
+		wantName    string
+		wantDesc    string
+		wantSteps   []float64
+		// wantWritten is whether the damaged row is written back.
+		wantWritten bool
+		// wantExtraBuiltIn is the built-in flag expected on the first extra row.
+		wantExtraBuiltIn bool
+	}{
+		{
+			name:    "Low disk saved under a translated name is repaired",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, translatedLowDiskDescription)(r)
+				r.CooldownSec = lowDiskCustomCooldownSec
+				r.Enabled = false
+				r.Actions = []entities.AlertAction{{Target: TargetPush}}
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    lowDisk.Description,
+			wantSteps:   lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+		{
+			name:    "a custom description is kept",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, customDescription)(r)
+				r.DescriptionKey = ""
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    customDescription,
+			wantSteps:   lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+		{
+			// No default has an empty key, so a keyless row can only match by name;
+			// the repair must not treat a rule the user created as a default.
+			name:    "a damaged row without a name key is untouched",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(lowDisk.Name, lowDisk.Description)(r)
+				r.NameKey = ""
+			},
+			wantName: lowDisk.Name,
+			wantDesc: lowDisk.Description,
+		},
+		{
+			name:    "existing steps are kept",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, translatedLowDiskDescription)(r)
+				r.EscalationSteps = slices.Clone(customEscalationSteps)
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    lowDisk.Description,
+			wantSteps:   customEscalationSteps,
+			wantWritten: true,
+		},
+		{
+			name:    "a changed description key keeps the description",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, customDescription)(r)
+				r.DescriptionKey = unmatchedNameKey
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    customDescription,
+			wantSteps:   lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+		{
+			name:        "an event default saved by the editor is repaired without steps",
+			nameKey:     RuleKeyNewSpeciesName,
+			damage:      editorSaved(translatedLowDiskName, translatedLowDiskDescription),
+			wantBuiltIn: true,
+			wantName:    newSpecies.Name,
+			wantDesc:    newSpecies.Description,
+			wantWritten: true,
+		},
+		{
+			name:    "a damaged row with a changed threshold is untouched",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, translatedLowDiskDescription)(r)
+				r.Conditions[0].Value = lowDiskLoweredThreshold
+			},
+			wantName: translatedLowDiskName,
+			wantDesc: translatedLowDiskDescription,
+		},
+		{
+			name:    "a damaged row next to a built-in copy is untouched",
+			nameKey: RuleKeyLowDiskName,
+			damage:  editorSaved(translatedLowDiskName, translatedLowDiskDescription),
+			extra: func(_ *entities.AlertRule, nextID uint) []entities.AlertRule {
+				copyRule := defaultByKey(t, RuleKeyLowDiskName)
+				copyRule.ID = nextID
+				return []entities.AlertRule{copyRule}
+			},
+			wantName:         translatedLowDiskName,
+			wantDesc:         translatedLowDiskDescription,
+			wantExtraBuiltIn: true,
+		},
+		{
+			name:    "two damaged copies: only the first is repaired",
+			nameKey: RuleKeyLowDiskName,
+			damage:  editorSaved(translatedLowDiskName, translatedLowDiskDescription),
+			extra: func(damaged *entities.AlertRule, nextID uint) []entities.AlertRule {
+				second := *damaged
+				second.ID = nextID
+				return []entities.AlertRule{second}
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    lowDisk.Description,
+			wantSteps:   lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, id := seedRulesWithDamagedDefault(t, tt.nameKey, tt.damage)
+			var extraID uint
+			if tt.extra != nil {
+				extraID = uint(len(repo.rules)) + 1 //nolint:gosec // test, no overflow risk
+				repo.rules = append(repo.rules, tt.extra(&repo.rules[id-1], extraID)...)
+			}
+			ruleCount := len(repo.rules)
+			var wantUpdated []uint
+			if tt.wantWritten {
+				wantUpdated = []uint{id}
+			}
+
+			for run := range 2 {
+				require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+				assert.Len(t, repo.rules, ruleCount, "run %d adds or removes no rule", run+1)
+				assert.Equal(t, wantUpdated, repo.updated, "run %d writes the damaged row at most once in total", run+1)
+			}
+
+			rule, err := repo.GetRule(t.Context(), id)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantBuiltIn, rule.BuiltIn)
+			assert.Equal(t, tt.wantName, rule.Name)
+			assert.Equal(t, tt.wantDesc, rule.Description)
+			assert.Equal(t, tt.wantSteps, rule.EscalationSteps)
+
+			if extraID != 0 {
+				extra, err := repo.GetRule(t.Context(), extraID)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantExtraBuiltIn, extra.BuiltIn, "the extra row keeps its flag")
+			}
+		})
+	}
+}
+
+func TestSeedDefaultRules_RepairKeepsUserSettings(t *testing.T) {
+	// The repair restores what the editor dropped and leaves the settings the
+	// user can change in the editor as they are stored.
+	repo, id := seedRulesWithDamagedDefault(t, RuleKeyLowDiskName, func(r *entities.AlertRule) {
+		editorSaved(translatedLowDiskName, translatedLowDiskDescription)(r)
+		r.CooldownSec = lowDiskCustomCooldownSec
+		r.Enabled = false
+		r.Actions = []entities.AlertAction{{Target: TargetPush}}
+	})
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+
+	rule, err := repo.GetRule(t.Context(), id)
+	require.NoError(t, err)
+	assert.Equal(t, lowDiskCustomCooldownSec, rule.CooldownSec)
+	assert.False(t, rule.Enabled)
+	require.Len(t, rule.Actions, 1)
+	assert.Equal(t, TargetPush, rule.Actions[0].Target)
+	assert.Equal(t, []uint{id}, repo.updated, "one write, not a repair plus a step migration")
+}
+
+func TestSeedDefaultRules_RepairsDamagedDefaultOnceCopyIsGone(t *testing.T) {
+	repo, damagedID := seedRulesWithDamagedDefault(t, RuleKeyLowDiskName,
+		editorSaved(translatedLowDiskName, translatedLowDiskDescription))
+	copyRule := defaultByKey(t, RuleKeyLowDiskName)
+	copyRule.ID = uint(len(repo.rules)) + 1 //nolint:gosec // test, no overflow risk
+	repo.rules = append(repo.rules, copyRule)
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+	assert.Empty(t, repo.updated, "the damaged row next to a built-in copy is left alone")
+
+	// The user deletes the built-in copy.
+	repo.rules = slices.DeleteFunc(repo.rules, func(r entities.AlertRule) bool { return r.ID == copyRule.ID })
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+	assert.Equal(t, []uint{damagedID}, repo.updated, "the surviving damaged row is repaired")
+	rule, err := repo.GetRule(t.Context(), damagedID)
+	require.NoError(t, err)
+	assert.True(t, rule.BuiltIn)
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+	assert.Equal(t, []uint{damagedID}, repo.updated, "the third start writes nothing")
+}
+
+func TestSeedDefaultRules_FailedRepairLeavesRowAndIsLogged(t *testing.T) {
+	repo, id := seedRulesWithDamagedDefault(t, RuleKeyLowDiskName,
+		editorSaved(translatedLowDiskName, translatedLowDiskDescription))
+	// A second damaged default, listed after Low disk, must still be repaired.
+	var laterID uint
+	for i := range repo.rules {
+		if repo.rules[i].NameKey == RuleKeyBirdWeatherName {
+			laterID = repo.rules[i].ID
+			editorSaved(translatedLowDiskName, translatedLowDiskDescription)(&repo.rules[i])
+		}
+	}
+	require.NotZero(t, laterID)
+	require.Greater(t, laterID, id, "the second damaged default is listed after the failing one")
+	repo.updateErrs = map[uint]error{id: errors.NewStd(updateFailureMessage)}
+
+	var logOutput bytes.Buffer
+	log := logger.NewSlogLogger(&logOutput, logger.LogLevelInfo, nil)
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, log))
+
+	rule, err := repo.GetRule(t.Context(), id)
+	require.NoError(t, err)
+	assert.False(t, rule.BuiltIn, "a failed write leaves the stored row as it was")
+	assert.Empty(t, rule.EscalationSteps)
+	later, err := repo.GetRule(t.Context(), laterID)
+	require.NoError(t, err)
+	assert.True(t, later.BuiltIn, "a failed write does not stop the repair of the next row")
+	assert.Equal(t, []uint{laterID}, repo.updated)
+	assert.Contains(t, logOutput.String(), "failed to repair built-in alert rule")
+}
