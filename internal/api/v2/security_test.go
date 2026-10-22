@@ -199,7 +199,7 @@ func assertHTTPErrorContains(t *testing.T, tcName string, httpErr *echo.HTTPErro
 	assert.Failf(t, "could not extract error message", "tc=%s: HTTPError.Message is not string and Unwrap returned nil", tcName)
 }
 
-// TestInputValidation tests that API endpoints properly validate and reject invalid inputs
+// TestInputValidation sends hostile input to the detection and review handlers and checks the status each answers with and, for search terms, that the text reaches the datastore unchanged.
 func TestInputValidation(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
