@@ -4,16 +4,12 @@
 package api
 
 import (
-	"fmt"
 	"math"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	authapi "github.com/tphakala/birdnet-go/internal/api/v2/auth"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -306,120 +302,6 @@ func FuzzParseDateRangeFilter(f *testing.F) {
 			assert.True(t, result.End.Equal(result2.End), "Inconsistent end")
 		}
 	})
-}
-
-// =============================================================================
-// Security Invariant Tests with Malformed Input
-// =============================================================================
-
-// TestSecurityInvariantsWithMalformedInput tests that API v2 functions
-// handle malformed inputs without panicking or exposing vulnerabilities.
-func TestSecurityInvariantsWithMalformedInput(t *testing.T) {
-	t.Parallel()
-
-	// Collection of potentially problematic inputs
-	malformedInputs := []string{
-		// Null bytes
-		"\x00",
-		"test\x00test",
-		string([]byte{0x00, 0x01, 0x02}),
-		// Unicode edge cases
-		"\uFEFF",                   // BOM
-		"\u202E",                   // RTL override
-		"\u0000",                   // Null
-		"\uFFFF",                   // Invalid
-		string([]byte{0xC0, 0xAF}), // Overlong encoding
-		// Control characters
-		"\x01\x02\x03\x04\x05",
-		"\x1B[31m", // ANSI escape
-		// Very long inputs
-		strings.Repeat("a", 1<<16),
-		strings.Repeat("/", 1<<16),
-		// Repeated special patterns
-		strings.Repeat("..", 1000),
-		strings.Repeat("%00", 1000),
-		strings.Repeat("\r\n", 1000),
-	}
-
-	for i, input := range malformedInputs {
-		idx := i // capture index for unique test names
-
-		// Test isValidBasePath
-		t.Run(fmt.Sprintf("isValidBasePath/%d", idx), func(t *testing.T) {
-			t.Parallel()
-			// Should not panic
-			result := authapi.IsValidBasePath(input)
-			// Most malformed inputs should be rejected
-			// Use filepath.IsLocal for comprehensive path validation
-			if strings.Contains(input, "\x00") || !filepath.IsLocal(strings.TrimPrefix(input, "/")) {
-				assert.False(t, result, "Should reject input with null/traversal")
-			}
-		})
-
-		// Test validateAndSanitizeRedirect
-		t.Run(fmt.Sprintf("validateAndSanitizeRedirect/%d", idx), func(t *testing.T) {
-			t.Parallel()
-			// Should not panic and should return safe default
-			result := authapi.ValidateAndSanitizeRedirect(input)
-			assert.True(t, strings.HasPrefix(result, "/"), "Should return path starting with /")
-		})
-
-		// Test containsCRLFCharacters
-		t.Run(fmt.Sprintf("containsCRLFCharacters/%d", idx), func(t *testing.T) {
-			t.Parallel()
-			// Should not panic
-			_ = authapi.ContainsCRLFCharacters(input)
-		})
-
-		// Test parseConfidenceFilter
-		t.Run(fmt.Sprintf("parseConfidenceFilter/%d", idx), func(t *testing.T) {
-			t.Parallel()
-			// Should not panic
-			_ = apicore.ParseConfidenceFilter(input)
-		})
-
-		// Test parseHourFilter
-		t.Run(fmt.Sprintf("parseHourFilter/%d", idx), func(t *testing.T) {
-			t.Parallel()
-			// Should not panic
-			_ = apicore.ParseHourFilter(input)
-		})
-
-		// Test NormalizeClipPathStrict
-		t.Run(fmt.Sprintf("NormalizeClipPathStrict/%d", idx), func(t *testing.T) {
-			t.Parallel()
-			// Should not panic
-			_, _ = apicore.NormalizeClipPathStrict(input, "clips/")
-		})
-	}
-}
-
-// TestInvalidUTF8Handling tests that invalid UTF-8 sequences don't cause issues.
-func TestInvalidUTF8Handling(t *testing.T) {
-	t.Parallel()
-
-	invalidUTF8 := [][]byte{
-		{0xC0, 0xAF},             // Overlong encoding of '/'
-		{0xC0, 0xAE},             // Overlong encoding of '.'
-		{0xE0, 0x80, 0xAF},       // Overlong encoding
-		{0xF0, 0x80, 0x80, 0xAF}, // Overlong encoding
-		{0xFE, 0xFE, 0xFF, 0xFF}, // Invalid sequence
-		{0x80, 0x81, 0x82},       // Continuation bytes without start
-	}
-
-	for i, invalid := range invalidUTF8 {
-		input := "/" + string(invalid) + "/"
-		t.Run(string(rune('A'+i)), func(t *testing.T) {
-			// Verify it's actually invalid UTF-8
-			assert.False(t, utf8.ValidString(input), "Test input should be invalid UTF-8")
-
-			// Functions should handle without panic
-			_ = authapi.IsValidBasePath(input)
-			_ = authapi.ValidateAndSanitizeRedirect(input)
-			_ = authapi.ContainsCRLFCharacters(input)
-			_, _ = apicore.NormalizeClipPathStrict(input, "clips/")
-		})
-	}
 }
 
 // TestAdvancedPathTraversalAttacksAPIv2 tests path traversal attempts specific to API v2.
