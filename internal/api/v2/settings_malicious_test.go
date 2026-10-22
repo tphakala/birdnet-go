@@ -40,8 +40,8 @@ func TestPatchAudioRejectsUnsafeExportPath(t *testing.T) {
 // TestPatchRejectsMistypedValues verifies that a value of the wrong JSON type,
 // or an enum value outside the allowed set, is rejected with a 400 and that
 // nothing is published. Some rows are rejected while the body is merged into the
-// section and others by the section validator; the contract pinned here is that
-// either way the live settings stay untouched.
+// section and others by validation after the merge; the contract pinned here is
+// that either way the live settings stay untouched.
 func TestPatchRejectsMistypedValues(t *testing.T) {
 	tests := []struct {
 		name    string

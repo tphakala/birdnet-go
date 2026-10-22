@@ -82,7 +82,8 @@ func TestEnsureProfilingTokenForSave_NoOpCases(t *testing.T) {
 
 // TestEnablingProfilingThroughSettingsMintsToken pins that switching profiling
 // on through either settings write path leaves a usable token in the published
-// snapshot. Both paths publish on their own (see the note on
+// snapshot when no auth provider is configured (the only case in which
+// conf.EnsureProfilingToken mints one). Both paths publish on their own (see the note on
 // ensureProfilingTokenForSave), so a mint wired into only one of them leaves the
 // other enabling pprof with an empty token that the gate then refuses until a
 // restart.
