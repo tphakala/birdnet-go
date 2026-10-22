@@ -22,11 +22,12 @@ import (
 //
 // It lives in the classifier package, not internal/api/v2, on purpose: the
 // notification EMISSION for a change is already covered by
-// TestNotifyRegionStaleness_EmitsPerChange, and the thin Controller glue by
-// TestController_notifyRegionStaleness_Guards, so this test can assert the
-// detector output directly without initializing the process-global notification
-// singleton (which the api/v2 suite's TestController_SendToast_ServiceNotInitialized
-// forbids any api/v2 test from doing).
+// TestNotifyRegionStaleness_EmitsPerChange, and the Controller glue's nil
+// ModelManager guard by TestController_notifyRegionStaleness_NilModelManager, so
+// this test can assert the detector output directly without initializing the
+// process-global notification singleton (which the api/v2 suite's
+// TestController_SendToast_ServiceNotInitialized forbids any api/v2 test from
+// doing).
 func TestDetectRegionStaleness_FiresForInstalledRegionalSlice(t *testing.T) {
 	t.Parallel()
 
