@@ -588,8 +588,7 @@ func newOnDiskDetectionRepo(t *testing.T) (repository.DetectionRepository, *sql.
 }
 
 // plantGhostDetection inserts a v2 detection row that has no matching legacy row,
-// simulating a dual-write delete where the legacy row was removed but the v2 delete
-// failed and the id was marked dirty.
+// simulating a dirty id whose legacy row was deleted after a copy of it reached v2.
 func plantGhostDetection(t *testing.T, repo repository.DetectionRepository, id uint) {
 	t.Helper()
 	require.NoError(t, repo.SaveWithID(t.Context(), &entities.Detection{

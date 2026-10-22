@@ -12,12 +12,12 @@ change seems to need the legacy store, stop and ask the maintainer.
 
 What counts as legacy:
 
-| Legacy (frozen)                                                        | Where                                                                                 |
-| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| The pre-v2 schema (the `notes` table and the GORM models mapped to it) | `internal/datastore` (for example `Note` in `model.go`)                               |
-| The legacy store implementations                                       | `DataStore` (`interfaces.go`), `SQLiteStore` (`sqlite.go`), `MySQLStore` (`mysql.go`) |
-| The legacy and dual-write modes                                        | `internal/datastore/v2/repository/dual_write.go` and the mode handling in `v2/`       |
-| The store API shaped around the legacy schema                          | `datastore.Interface` and the `c.DS` accessor in API code                             |
+| Legacy (frozen)                                                        | Where                                                                                   |
+| ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| The pre-v2 schema (the `notes` table and the GORM models mapped to it) | `internal/datastore` (for example `Note` in `model.go`)                                 |
+| The legacy store implementations                                       | `DataStore` (`interfaces.go`), `SQLiteStore` (`sqlite.go`), `MySQLStore` (`mysql.go`)   |
+| The legacy and dual-write modes                                        | the migration mode handling in `internal/datastore/v2/` (`state_manager.go`, `mode.go`) |
+| The store API shaped around the legacy schema                          | `datastore.Interface` and the `c.DS` accessor in API code                               |
 
 What a PR must not do:
 
@@ -45,7 +45,7 @@ What is still allowed:
 
 Reviewers: reject any PR that adds behavior to the files listed above. A change
 to `model.go`, `interfaces.go` (the `Interface` or `DataStore` definitions),
-`sqlite.go`, `mysql.go` or `dual_write.go` that adds anything other than a
+`sqlite.go` or `mysql.go` that adds anything other than a
 removal or a behavior-preserving fix needs the maintainer's explicit approval.
 
 ## How to add persistence (v2 only)
