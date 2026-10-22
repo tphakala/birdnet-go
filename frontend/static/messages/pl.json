@@ -2601,10 +2601,6 @@
               "label": "Maksymalna Liczba Gatunków w Tabeli Podsumowania Dziennego",
               "helpText": "Maksymalna liczba gatunków wyświetlanych w tabeli podsumowania dziennego (Wartość między 10 a 1000)"
             },
-            "showAudioLevel": {
-              "label": "Show Audio Level Indicator",
-              "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
-            },
             "thumbnails": {
               "title": "Wyświetlanie Miniatur",
               "summary": {
@@ -4847,9 +4843,8 @@
         "title": "Wygląd",
         "description": "Dostosuj wygląd interfejsu BirdNET-Go",
         "showAudioLevel": {
-          "label": "Show Audio Level Indicator",
-          "description": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)",
-          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+          "label": "Pokaż wskaźnik poziomu dźwięku",
+          "helpText": "Pokaż wskaźnik poziomu dźwięku na żywo w nagłówku (otwiera ciągły strumień; wyłącz, aby zmniejszyć obciążenie procesora i sieci)"
         }
       },
       "language": {

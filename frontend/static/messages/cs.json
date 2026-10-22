@@ -2601,10 +2601,6 @@
               "label": "Maximální počet druhů v tabulce denního souhrnu",
               "helpText": "Maximální počet druhů zobrazených v tabulce denního souhrnu (hodnota mezi 10 a 1000)"
             },
-            "showAudioLevel": {
-              "label": "Show Audio Level Indicator",
-              "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
-            },
             "thumbnails": {
               "title": "Zobrazení náhledů",
               "summary": {
@@ -4847,9 +4843,8 @@
         "title": "Vzhled",
         "description": "Přizpůsobte vzhled svého rozhraní BirdNET-Go",
         "showAudioLevel": {
-          "label": "Show Audio Level Indicator",
-          "description": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)",
-          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+          "label": "Zobrazit indikátor úrovně zvuku",
+          "helpText": "Zobrazit živý indikátor úrovně zvuku v záhlaví (otevírá nepřetržitý stream; vypněte pro snížení zatížení procesoru a sítě)"
         }
       },
       "language": {

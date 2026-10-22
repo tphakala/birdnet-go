@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS, createEmptySettings } from './settings';
+import {
+  settingsStore,
+  settingsActions,
+  hasUnsavedChanges,
+  SECTION_STORE_PATHS,
+  createEmptySettings,
+} from './settings';
 import type {
   AudioSettings,
   BirdNetSettings,

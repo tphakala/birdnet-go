@@ -7,17 +7,20 @@ describe('appState - showAudioLevel', () => {
   });
 
   it('updates showAudioLevel when initializeFromConfig is called with false', () => {
-    initializeFromConfig({ showAudioLevel: false } as AppConfig);
+    const config: Partial<AppConfig> = { showAudioLevel: false };
+    initializeFromConfig(config);
     expect(appState.showAudioLevel).toBe(false);
   });
 
   it('updates showAudioLevel when initializeFromConfig is called with true', () => {
-    initializeFromConfig({ showAudioLevel: true } as AppConfig);
+    const config: Partial<AppConfig> = { showAudioLevel: true };
+    initializeFromConfig(config);
     expect(appState.showAudioLevel).toBe(true);
   });
 
   it('falls back to true when initializeFromConfig is called with undefined', () => {
-    initializeFromConfig({} as AppConfig);
+    const config: Partial<AppConfig> = {};
+    initializeFromConfig(config);
     expect(appState.showAudioLevel).toBe(true);
   });
 });

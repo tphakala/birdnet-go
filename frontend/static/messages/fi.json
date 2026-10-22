@@ -2601,10 +2601,6 @@
               "label": "Lajien enimmäismäärä päivittäisessä yhteenvetotaulukossa",
               "helpText": "Päivittäisessä yhteenvetotaulukossa näytettävien lajien enimmäismäärä (arvo välillä 10-1000)"
             },
-            "showAudioLevel": {
-              "label": "Show Audio Level Indicator",
-              "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
-            },
             "thumbnails": {
               "title": "Pikkukuvien näyttö",
               "summary": {
@@ -4847,9 +4843,8 @@
         "title": "Ulkoasu",
         "description": "Mukauta BirdNET-Go-käyttöliittymän ulkoasua",
         "showAudioLevel": {
-          "label": "Show Audio Level Indicator",
-          "description": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)",
-          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+          "label": "Näytä äänitason ilmaisin",
+          "helpText": "Näytä reaaliaikainen äänitason ilmaisin yläpalkissa (avaa jatkuvan tietovirran; poista käytöstä suorittimen ja verkon käytön vähentämiseksi)"
         }
       },
       "language": {

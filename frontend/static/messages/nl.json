@@ -2601,10 +2601,6 @@
               "label": "Maximum aantal soorten in de Dagelijks overzicht tabel",
               "helpText": "Maximum aantal soorten dat wordt getoond in de Dagelijks overzicht tabel (waarde tussen 10 en 1000)"
             },
-            "showAudioLevel": {
-              "label": "Show Audio Level Indicator",
-              "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
-            },
             "thumbnails": {
               "title": "Afbeelding weergave",
               "summary": {
@@ -4847,9 +4843,8 @@
         "title": "Uiterlijk",
         "description": "Pas het uiterlijk van uw BirdNET-Go-interface aan",
         "showAudioLevel": {
-          "label": "Show Audio Level Indicator",
-          "description": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)",
-          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+          "label": "Geluidsniveau-indicator weergeven",
+          "helpText": "Live geluidsniveau-indicator in de koptekst weergeven (opent een continue stream; uitschakelen om CPU- en netwerkgebruik te verminderen)"
         }
       },
       "language": {

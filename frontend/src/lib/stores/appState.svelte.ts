@@ -277,7 +277,7 @@ async function fetchConfig(): Promise<AppConfigResponse> {
 /**
  * Updates application state from loaded configuration.
  */
-export function initializeFromConfig(config: AppConfig): void {
+export function initializeFromConfig(config: Partial<AppConfig>): void {
   appState.showAudioLevel = config.showAudioLevel ?? true;
 }
 

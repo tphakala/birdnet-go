@@ -2601,10 +2601,6 @@
               "label": "Número máximo de especies en la tabla de resumen diario",
               "helpText": "Número máximo de especies mostradas en la tabla de resumen diario (valor entre 10 y 1000)"
             },
-            "showAudioLevel": {
-              "label": "Show Audio Level Indicator",
-              "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
-            },
             "thumbnails": {
               "title": "Visualización de miniaturas",
               "summary": {
@@ -4847,9 +4843,8 @@
         "title": "Apariencia",
         "description": "Personaliza la apariencia de tu interfaz BirdNET-Go",
         "showAudioLevel": {
-          "label": "Show Audio Level Indicator",
-          "description": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)",
-          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+          "label": "Mostrar indicador de nivel de audio",
+          "helpText": "Mostrar el indicador de nivel de audio en vivo en el encabezado (abre una transmisión continua; desactive para reducir el uso de CPU y red)"
         }
       },
       "language": {
