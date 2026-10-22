@@ -383,9 +383,9 @@ func (c *Handler) CreateAlertRule(ctx echo.Context) error {
 //
 // For the same reason a rule that has a name key keeps its stored Name while the
 // request sends the same key. The editor sends the translated text there, and
-// storing it would make the stored name depend on the editor's language, while
-// creating, resetting and importing rules compare stored names. The
-// description follows its own key.
+// storing it would make the stored name depend on the editor's language, which
+// API clients, exports and the create-time name check read. The description
+// follows its own key.
 //
 // A stepped rule fires only at or above its lowest step, so escalation steps
 // must not outlive a change of thresholds, or alerts between the new threshold
