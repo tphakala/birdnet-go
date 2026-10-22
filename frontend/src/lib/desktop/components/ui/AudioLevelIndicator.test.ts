@@ -158,7 +158,7 @@ describe('AudioLevelIndicator start and stop', () => {
     vi.restoreAllMocks();
   });
 
-  it('reports a failed HLS.js load as retryable and hides the message', async () => {
+  it('reports a failed HLS.js load and hides the message', async () => {
     mocks.tryLoadHls.mockResolvedValue(null);
     mocks.canPlayHls.mockReturnValue(false);
     await renderWithSources();

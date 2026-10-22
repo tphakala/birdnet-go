@@ -5057,7 +5057,7 @@
       "loop": "Pārslēgt cilpu",
       "player": "Audio atskaņotājs",
       "autoplayBlocked": "Noklikšķiniet, lai atskaņotu (automātiskā atskaņošana bloķēta)",
-      "hlsLoadFailed": "Neizdevās ielādēt audio atskaņotāju, lūdzu, mēģiniet vēlreiz",
+      "hlsLoadFailed": "Neizdevās ielādēt audio atskaņotāju, lūdzu, pārlādējiet lapu un mēģiniet vēlreiz",
       "hlsNotSupported": "HLS atskaņošana šajā pārlūkā netiek atbalstīta",
       "streamStarting": "Tiek startēta audio straume...",
       "levelFor": "Audio līmenis avotam {source}",

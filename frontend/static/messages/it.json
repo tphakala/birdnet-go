@@ -5057,7 +5057,7 @@
       "loop": "Attiva/disattiva ripetizione",
       "player": "Lettore audio",
       "autoplayBlocked": "Clicca per riprodurre (riproduzione automatica bloccata)",
-      "hlsLoadFailed": "Impossibile caricare il lettore audio, riprova",
+      "hlsLoadFailed": "Impossibile caricare il lettore audio, ricarica la pagina e riprova",
       "hlsNotSupported": "La riproduzione HLS non è supportata in questo browser",
       "streamStarting": "Avvio dello stream audio...",
       "levelFor": "Livello audio per {source}",

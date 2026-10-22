@@ -78,7 +78,7 @@ describe('MiniSpectrogram HLS player availability', () => {
     vi.restoreAllMocks();
   });
 
-  it('shows a retryable message when HLS.js fails to load, then hides it', async () => {
+  it('shows the load failure message when HLS.js fails to load, then hides it', async () => {
     mocks.tryLoadHls.mockResolvedValue(null);
     mocks.canPlayHls.mockReturnValue(false);
     render(MiniSpectrogram);
@@ -89,7 +89,7 @@ describe('MiniSpectrogram HLS player availability', () => {
     expect(await screen.findByText(HLS_LOAD_FAILED)).toBeInTheDocument();
     expect(screen.queryByText(HLS_NOT_SUPPORTED)).toBeNull();
     expect(startRequests()).toBe(0);
-    // The play button is usable again for a retry.
+    // The play button is enabled again.
     expect(screen.getByRole('button', { name: PLAY_LABEL })).toBeEnabled();
 
     await vi.advanceTimersByTimeAsync(ERROR_HIDE_DELAY_MS);

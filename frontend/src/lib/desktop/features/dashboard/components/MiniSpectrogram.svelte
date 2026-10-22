@@ -220,7 +220,7 @@
         logger.warn('MiniSpectrogram: no HLS player available');
         isConnecting = false;
         // A null HlsClass means HLS.js failed to load (offline, stale chunk), which a
-        // retry can fix; otherwise this browser has no HLS player at all.
+        // page reload usually fixes; otherwise this browser has no HLS player at all.
         showError(
           HlsClass === null ? t('media.audio.hlsLoadFailed') : t('media.audio.hlsNotSupported')
         );

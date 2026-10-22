@@ -5057,7 +5057,7 @@
       "loop": "Alternar repetição",
       "player": "Reprodutor de áudio",
       "autoplayBlocked": "Clique para reproduzir (reprodução automática bloqueada)",
-      "hlsLoadFailed": "Não foi possível carregar o reprodutor de áudio, tente novamente",
+      "hlsLoadFailed": "Não foi possível carregar o reprodutor de áudio, recarregue a página e tente novamente",
       "hlsNotSupported": "A reprodução HLS não é suportada neste navegador",
       "streamStarting": "Iniciando transmissão de áudio...",
       "levelFor": "Nível de áudio para {source}",

@@ -5057,7 +5057,7 @@
       "loop": "Activar bucle",
       "player": "Reproductor de audio",
       "autoplayBlocked": "Haz clic para reproducir (reproducción automática bloqueada)",
-      "hlsLoadFailed": "No se pudo cargar el reproductor de audio, inténtalo de nuevo",
+      "hlsLoadFailed": "No se pudo cargar el reproductor de audio, recarga la página e inténtalo de nuevo",
       "hlsNotSupported": "La reproducción HLS no es compatible con este navegador",
       "streamStarting": "Iniciando transmisión de audio...",
       "levelFor": "Nivel de audio para {source}",

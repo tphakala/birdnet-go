@@ -5057,7 +5057,7 @@
       "loop": "Herhaling aan/uit",
       "player": "Audiospeler",
       "autoplayBlocked": "Klik om af te spelen (autoplay geblokkeerd)",
-      "hlsLoadFailed": "De audiospeler kon niet worden geladen, probeer het opnieuw",
+      "hlsLoadFailed": "De audiospeler kon niet worden geladen, laad de pagina opnieuw en probeer het nogmaals",
       "hlsNotSupported": "HLS-weergave wordt niet ondersteund in deze browser",
       "streamStarting": "Audiostream wordt gestart...",
       "levelFor": "Audioniveau voor {source}",

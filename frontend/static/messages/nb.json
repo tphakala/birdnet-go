@@ -5057,7 +5057,7 @@
       "loop": "Veksle sløyfe",
       "player": "Lydspiller",
       "autoplayBlocked": "Klikk for å spille av (autoavspilling blokkert)",
-      "hlsLoadFailed": "Kunne ikke laste lydspilleren, prøv igjen",
+      "hlsLoadFailed": "Kunne ikke laste lydspilleren, last siden på nytt og prøv igjen",
       "hlsNotSupported": "HLS-avspilling støttes ikke i denne nettleseren",
       "streamStarting": "Starter lydstrøm...",
       "levelFor": "Lydnivå for {source}",
