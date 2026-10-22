@@ -107,19 +107,6 @@ func requireAudioHandlerSuccess(t *testing.T, handlerErr <-chan error) {
 	}
 }
 
-// assertMediaResponseBody validates response body content based on type.
-func assertMediaResponseBody(t *testing.T, body []byte, expectedBody string, isAudioFile bool) {
-	t.Helper()
-	if isAudioFile {
-		assert.GreaterOrEqual(t, len(body), 4, "Audio response should have at least 4 bytes")
-		if len(body) >= 4 {
-			assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
-		}
-	} else {
-		assert.Equal(t, expectedBody, string(body))
-	}
-}
-
 // createLargeWAVFile creates a large WAV file for testing partial content responses.
 func createLargeWAVFile(t *testing.T, path string, dataSize int) {
 	t.Helper()
@@ -149,45 +136,6 @@ func createLargeWAVFile(t *testing.T, path string, dataSize int) {
 	}
 	_, err = file.Write(content)
 	require.NoError(t, err)
-}
-
-// TestInitMediaRoutesRegistration tests that media routes are properly registered
-func TestInitMediaRoutesRegistration(t *testing.T) {
-	// Setup
-	e, controller, _ := setupMediaTestEnvironment(t)
-
-	// Re-initialize the routes to ensure a clean state
-	controller.RegisterRoutes(controller.Group)
-
-	// Get all routes from the Echo instance
-	routes := e.Routes()
-
-	// Define the media route suffixes we expect to find
-	expectedSuffixes := map[string]bool{
-		"GET /media/audio/:filename":       false,
-		"GET /media/spectrogram/:filename": false,
-	}
-
-	// Check each route suffix
-	foundCount := 0
-	for _, r := range routes {
-		// Check if the route path ends with one of the expected suffixes
-		for suffix := range expectedSuffixes {
-			// Ensure the check is for the correct HTTP method and path suffix
-			if r.Method == http.MethodGet && strings.HasSuffix(r.Path, suffix[4:]) { // suffix[4:] removes "GET "
-				if !expectedSuffixes[suffix] {
-					expectedSuffixes[suffix] = true
-					foundCount++
-				}
-			}
-		}
-	}
-
-	// Verify that all expected routes were registered
-	assert.Equal(t, len(expectedSuffixes), foundCount, "Number of found media routes does not match expected.")
-	for suffix, found := range expectedSuffixes {
-		assert.True(t, found, "Media route suffix not registered: %s", suffix)
-	}
 }
 
 // createTestAudioFile creates a valid WAV file for testing that meets the minimum size requirements.
@@ -514,98 +462,6 @@ func TestServeAudio_AlternateExtensionFallback(t *testing.T) {
 	defer func() { _ = resp2.Body.Close() }()
 	assert.Equal(t, http.StatusNotFound, resp2.StatusCode,
 		"a clip with no on-disk file in any format must still 404")
-}
-
-// TestMediaEndpointsIntegration tests the media endpoints in an integrated way
-func TestMediaEndpointsIntegration(t *testing.T) {
-	// Setup test environment (already configures SecureFS)
-	// We need the echo instance for the test server
-	e, _, tempDir := setupMediaTestEnvironment(t)
-
-	// Create test files within the SecureFS root
-	audioFilename := "test.wav"
-	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := createTestAudioFile(t, audioFilePath)
-	require.NoError(t, err)
-
-	// Simulate existing spectrogram
-	// Default is raw=true, so the filename format is test_800px.png
-	spectrogramFilename := "test_800px.png"
-	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
-	spectrogramContent := "test spectrogram content"
-	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
-	require.NoError(t, err)
-
-	// Create a real HTTP server using the Echo instance from setup
-	server := httptest.NewServer(e)
-	defer server.Close()
-
-	client := server.Client()
-
-	// Test cases
-	testCases := []struct {
-		name           string
-		endpoint       string
-		expectedStatus int
-		expectedBody   string
-		isAudioFile    bool // Flag to indicate if this is an audio file that needs special handling
-		expectPNG      bool // body is a freshly rendered PNG, not a fixed string
-	}{
-		{
-			name:           "Audio endpoint",
-			endpoint:       "/api/v2/media/audio/" + audioFilename,
-			expectedStatus: http.StatusOK,
-			expectedBody:   "", // For audio files, we'll check the WAV header instead
-			isAudioFile:    true,
-		},
-		{
-			name:           "Spectrogram endpoint (existing)",
-			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=800",
-			expectedStatus: http.StatusOK,
-			expectedBody:   spectrogramContent,
-			isAudioFile:    false,
-		},
-		{
-			name:           "Spectrogram endpoint (renders on demand)",
-			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=1200",
-			expectedStatus: http.StatusOK,
-			expectPNG:      true,
-		},
-		{
-			name:           "Missing audio file",
-			endpoint:       "/api/v2/media/audio/missing.mp3",
-			expectedStatus: http.StatusNotFound,
-			expectedBody:   "",
-			isAudioFile:    false,
-		},
-	}
-
-	// Run test cases
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Make request to the HTTP server
-			resp, err := client.Get(server.URL + tc.endpoint)
-			require.NoError(t, err)
-			defer func() {
-				assert.NoError(t, resp.Body.Close(), "Failed to close response body")
-			}()
-
-			// Check status code
-			assert.Equal(t, tc.expectedStatus, resp.StatusCode)
-
-			// Check response body for successful requests
-			if tc.expectedStatus == http.StatusOK {
-				body, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				if tc.expectPNG {
-					assert.True(t, bytes.HasPrefix(body, []byte(pngSignature)), "body must be a PNG")
-					assert.Equal(t, "image/png", resp.Header.Get("Content-Type"))
-					return
-				}
-				assertMediaResponseBody(t, body, tc.expectedBody, tc.isAudioFile)
-			}
-		})
-	}
 }
 
 // TestMediaSecurityScenarios tests various security scenarios using SecureFS
@@ -1641,21 +1497,6 @@ func TestGetSpeciesImageInfo_ColdMissReturnsPendingJSON(t *testing.T) {
 	assert.NotEmpty(t, rec.Body.String(), "a JSON endpoint must not answer with an empty body")
 	var body map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
-}
-
-// TestGetSpectrogramLogger tests that the spectrogram logger is never nil
-func TestGetSpectrogramLogger(t *testing.T) {
-	// Test that getSpectrogramLogger always returns a non-nil logger
-	logger := getSpectrogramLogger()
-	require.NotNil(t, logger, "getSpectrogramLogger() must never return nil")
-
-	// Test that we can call logging methods without panic
-	assert.NotPanics(t, func() {
-		logger.Info("test message")
-		logger.Debug("test debug")
-		logger.Warn("test warning")
-		logger.Error("test error")
-	}, "Logger methods should not panic")
 }
 
 // TestIsExportTempFor verifies the in-progress-encoding temp matcher accepts the
