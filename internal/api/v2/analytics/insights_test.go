@@ -15,7 +15,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
-	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 // mockInsightsRepo is a simple mock for handler tests. When err is non-nil every
@@ -498,8 +497,10 @@ func TestInsightsHandlersReturn409WithoutEnhancedDatabase(t *testing.T) {
 
 			var resp apicore.ErrorResponse
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-			assert.Equal(t, notification.MsgErrInsightsV2Required, resp.ErrorKey)
-			assert.Equal(t, insightsV2RequiredMessage, resp.Message)
+			// Literals, not the production constants, so a changed constant
+			// value fails here. They match errors.insights.v2Required in en.json.
+			assert.Equal(t, "errors.insights.v2Required", resp.ErrorKey)
+			assert.Equal(t, "Insights require the enhanced (v2) database", resp.Message)
 		})
 	}
 }
