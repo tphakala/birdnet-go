@@ -294,21 +294,39 @@ describe('AudioLevelIndicator start and stop', () => {
     expect(heartbeatCalls()).toBe(1);
   });
 
-  it('stops the stream on a fatal HLS.js error', async () => {
+  it.each([
+    {
+      trigger: 'a fatal HLS.js error',
+      message: t('media.audio.playbackError', { details: 'manifestLoadError' }),
+      fail: () =>
+        emitHls(FakeHls.Events.ERROR, {
+          fatal: true,
+          type: 'networkError',
+          details: 'manifestLoadError',
+        }),
+    },
+    {
+      trigger: 'an audio element error',
+      message: t('media.audio.playError'),
+      fail: () => document.getElementById('hls-audio-player')?.dispatchEvent(new Event('error')),
+    },
+  ])('stops the stream and shows a transient error on $trigger', async ({ message, fail }) => {
     await renderWithSources();
     await clickSourceButton(SOURCE_A);
     await waitFor(() => expect(startCalls).toHaveLength(1));
     startCalls[0].response.resolve(startResponse());
     await waitFor(() => expect(hlsConstructed).toHaveBeenCalledTimes(1));
     const stopsBefore = stopCallsFor(SOURCE_A);
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
 
-    emitHls(FakeHls.Events.ERROR, {
-      fatal: true,
-      type: 'networkError',
-      details: 'manifestLoadError',
-    });
+    fail();
 
     expect(stopCallsFor(SOURCE_A)).toBe(stopsBefore + 1);
+    // Settle the deferred status updates without running the hide timer.
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByText(message)).toBeInTheDocument();
+    await vi.advanceTimersByTimeAsync(ERROR_STATUS_HIDE_DELAY_MS);
+    expect(screen.queryByText(message)).toBeNull();
   });
 
   it('plays natively when HLS.js failed to load and the browser plays HLS', async () => {
