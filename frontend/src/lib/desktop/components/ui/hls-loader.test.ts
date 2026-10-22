@@ -42,7 +42,6 @@ describe('hls-loader', () => {
     await expect(loadHls()).rejects.toThrow();
 
     fail = false;
-    vi.resetModules();
     expect(await loadHls()).toBe(FakeHls);
   });
 
