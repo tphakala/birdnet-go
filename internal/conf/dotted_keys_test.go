@@ -1,9 +1,12 @@
 package conf
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-viper/mapstructure/v2"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -228,6 +231,39 @@ logging:
 		"a scalar entry is ignored as on main; the logger defaults fill the module")
 	assert.True(t, out["analysis"].Enabled,
 		"the standalone analysis module must not be damaged")
+}
+
+// TestLoad_BadDottedModuleEntryNamesTheModule pins that a mapping entry with an
+// invalid field value fails Load with an error that names the module. The
+// decoder reports field paths relative to the entry, so without the module in
+// the message a dotted entry would only report "max_size".
+func TestLoad_BadDottedModuleEntryNamesTheModule(t *testing.T) {
+	const cfg = `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+logging:
+  modules:
+    analysis.processor:
+      max_size: not-a-number
+`
+	configPath := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(cfg), 0o600))
+
+	oldPath := ConfigPath
+	oldSettings := CloneSettings(GetSettings())
+	t.Cleanup(func() {
+		ConfigPath = oldPath
+		viper.Reset()
+		StoreSettings(oldSettings)
+	})
+	viper.Reset()
+	ConfigPath = configPath
+
+	_, err := Load()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "logging.modules[analysis.processor]",
+		"the error must name the module the decoder rejected")
+	assert.Contains(t, err.Error(), "max_size")
 }
 
 // TestDottedKeyDecodeHook_ScalarMapsOnly pins the hook's core behavior and

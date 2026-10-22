@@ -206,7 +206,9 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 				Build()
 		}
 		if err := decoder.Decode(rawValue); err != nil {
-			return errors.New(err).
+			// The decoder reports field paths relative to this entry only, so
+			// name the module in the message as well as in the context.
+			return errors.Newf("logging.modules[%s]: %w", name, err).
 				Category(errors.CategoryConfiguration).
 				Context("operation", "decode-logging-modules").
 				Context("module", name).
