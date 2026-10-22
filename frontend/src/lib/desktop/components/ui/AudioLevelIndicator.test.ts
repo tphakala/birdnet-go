@@ -329,6 +329,51 @@ describe('AudioLevelIndicator start and stop', () => {
     expect(screen.queryByText(message)).toBeNull();
   });
 
+  // Starts a stream whose HLS.js play() call stays pending, as when the first
+  // fragments are buffered but playback has not begun yet.
+  async function startWithPendingPlay() {
+    const pendingPlay = deferred();
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockReturnValue(pendingPlay.promise);
+    await renderWithSources();
+    await clickSourceButton(SOURCE_A);
+    await waitFor(() => expect(startCalls).toHaveLength(1));
+    startCalls[0].response.resolve(startResponse());
+    await waitFor(() => expect(hlsConstructed).toHaveBeenCalledTimes(1));
+    for (let i = 0; i < BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY; i++) {
+      emitHls(FakeHls.Events.FRAG_BUFFERED);
+    }
+    return pendingPlay;
+  }
+
+  it('shows no play error when a manual stop interrupts a pending HLS.js play()', async () => {
+    const pendingPlay = await startWithPendingPlay();
+
+    await clickSourceButton(SOURCE_A);
+    pendingPlay.reject(new DOMException('interrupted by pause()', 'AbortError'));
+    await waitForNextTick();
+
+    expect(screen.queryByText(t('media.audio.playError'))).toBeNull();
+  });
+
+  it('keeps the fatal error toast when the interrupted HLS.js play() rejects with AbortError', async () => {
+    const pendingPlay = await startWithPendingPlay();
+    const message = t('media.audio.playbackError', { details: 'manifestLoadError' });
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+
+    emitHls(FakeHls.Events.ERROR, {
+      fatal: true,
+      type: 'networkError',
+      details: 'manifestLoadError',
+    });
+    pendingPlay.reject(new DOMException('interrupted by pause()', 'AbortError'));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(screen.getByText(message)).toBeInTheDocument();
+    expect(screen.queryByText(t('media.audio.playError'))).toBeNull();
+    await vi.advanceTimersByTimeAsync(ERROR_STATUS_HIDE_DELAY_MS);
+    expect(screen.queryByText(message)).toBeNull();
+  });
+
   it('plays natively when HLS.js failed to load and the browser plays HLS', async () => {
     mocks.tryLoadHls.mockResolvedValue(null);
     const play = vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);

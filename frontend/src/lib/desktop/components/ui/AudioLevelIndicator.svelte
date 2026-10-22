@@ -422,6 +422,11 @@
             minRequired: BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY,
           });
           audio.play().catch((err: Error) => {
+            // pause() or teardown interrupted play(); the stop already reported its own outcome.
+            if (err.name === 'AbortError') {
+              logger.debug('Playback start interrupted:', err);
+              return;
+            }
             logger.error('Playback start error:', err);
             if (err.name === 'NotAllowedError') {
               showStatusMessage(t('media.audio.autoplayBlocked'));
