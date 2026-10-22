@@ -338,7 +338,7 @@ func TestUpdateAlertRule_KeepsKeyedNameAndDescription(t *testing.T) {
 			if tt.renamed {
 				wantName = renamedRule
 			}
-			assert.Equal(t, wantName, saved.Name, "with the key kept, startup finds a default by its stored English name; a cleared key means a typed name")
+			assert.Equal(t, wantName, saved.Name, "with the key kept, the stored name stays the shipped English name; a cleared key means a typed name")
 			assert.Equal(t, tt.wantDescription(storedHighCPURule(t)), saved.Description)
 			assert.Equal(t, !tt.renamed, saved.BuiltIn, "a localized save is not a rename")
 			assert.Equal(t, tt.wantSteps(storedHighCPURule(t)), saved.EscalationSteps)
