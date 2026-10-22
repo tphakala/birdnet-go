@@ -1328,6 +1328,29 @@ func TestBirdWeatherAction_Execute_RetryReusesEventTrackerDecision(t *testing.T)
 	require.Error(t, action.Execute(t.Context(), nil), "retry must reach the client check too")
 }
 
+// TestBirdWeatherAction_Execute_NilResolverResultUsesCapturedSettings verifies
+// that a resolver returning no snapshot falls back to the settings the action was
+// built with: the enabled check passes on them and the missing client is reported.
+func TestBirdWeatherAction_Execute_NilResolverResultUsesCapturedSettings(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.Birdweather.Enabled = true
+	det := testDetection()
+
+	action := &BirdWeatherAction{
+		Settings:     settings,
+		Result:       det.Result,
+		EventTracker: NewEventTracker(time.Hour),
+		liveSettings: func() *conf.Settings { return nil },
+		liveClient:   func() *birdweather.BwClient { return nil },
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "BirdWeather client is not initialized")
+}
+
 // TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild verifies that an
 // action built before a settings change or a client removal uses the settings
 // and client in effect when it executes, the way a queued retry does.
@@ -1343,6 +1366,16 @@ func TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
 			change: func(_ *Processor, initial *conf.Settings) {
 				updated := conf.CloneSettings(initial)
 				updated.Realtime.Birdweather.Enabled = false
+				conf.StoreSettings(updated)
+			},
+		},
+		{
+			// The detection confidence (0.95) is below the raised threshold, so the
+			// upload is skipped; with the build-time threshold it would reach the client.
+			name: "threshold raised",
+			change: func(_ *Processor, initial *conf.Settings) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.Birdweather.Threshold = 0.99
 				conf.StoreSettings(updated)
 			},
 		},

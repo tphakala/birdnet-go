@@ -587,6 +587,15 @@ func TestMqttAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
 			wantOld: []string{changedTopic, mqtt.SourceDetectionTopic(changedTopic, testSourceID)},
 		},
 		{
+			name: "home assistant discovery disabled",
+			change: func(_ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.MQTT.HomeAssistant.Enabled = false
+				conf.StoreSettings(updated)
+			},
+			wantOld: []string{testMQTTTopic},
+		},
+		{
 			name: "client replaced",
 			change: func(p *Processor, _ *conf.Settings, newClient *MockMQTTClient) {
 				p.SetMQTTClient(newClient)
@@ -976,4 +985,57 @@ func defaultActionOfType[T Action](t *testing.T, p *Processor, settings *conf.Se
 	var zero T
 	require.Failf(t, "action not built", "no %T in the default actions", zero)
 	return zero
+}
+
+// TestMqttAction_Execute_ResolvesSettingsOncePerAttempt verifies that one
+// Execute reads one settings snapshot: the resolver is called once, so the shared
+// publish and the per-source republish cannot mix values from two versions.
+func TestMqttAction_Execute_ResolvesSettingsOncePerAttempt(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+	settings.Realtime.MQTT.HomeAssistant.Enabled = true
+
+	client := NewMockMQTTClient()
+	det := testDetection()
+	var settingsCalls int
+	action := &MqttAction{
+		Result:       det.Result,
+		EventTracker: NewEventTracker(testEventTrackerInterval),
+		liveSettings: func() *conf.Settings {
+			settingsCalls++
+			return settings
+		},
+		liveClient: func() mqtt.Client { return client },
+	}
+
+	require.NoError(t, action.Execute(t.Context(), nil))
+	assert.Equal(t, 1, settingsCalls, "one settings snapshot per attempt")
+	assert.Equal(t, 2, client.GetPublishCalls(), "shared topic and per-source topic")
+}
+
+// TestMqttAction_Execute_NilResolverResultUsesCapturedSettings verifies that a
+// resolver returning no snapshot falls back to the settings the action was built
+// with instead of dereferencing nil.
+func TestMqttAction_Execute_NilResolverResultUsesCapturedSettings(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	client := NewMockMQTTClient()
+	det := testDetection()
+	action := &MqttAction{
+		Settings:     settings,
+		Result:       det.Result,
+		EventTracker: NewEventTracker(testEventTrackerInterval),
+		liveSettings: func() *conf.Settings { return nil },
+		liveClient:   func() mqtt.Client { return client },
+	}
+
+	require.NoError(t, action.Execute(t.Context(), nil))
+	assert.Equal(t, 1, client.GetPublishCalls(), "published with the captured settings")
 }
