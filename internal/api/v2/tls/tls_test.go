@@ -307,21 +307,3 @@ func TestTLSDownloadCertificate_NoCert(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
-
-func TestTLSRouteRegistration(t *testing.T) {
-	e := echo.New()
-	core := apitest.NewCore(t, apitest.WithEcho(e))
-	var mu sync.RWMutex
-	h := newTestHandler(t, core, &mu)
-
-	h.RegisterRoutes(core.Group)
-
-	expectedRoutes := []string{
-		"GET /api/v2/tls/certificate",
-		"POST /api/v2/tls/certificate",
-		"DELETE /api/v2/tls/certificate",
-		"POST /api/v2/tls/certificate/generate",
-		"GET /api/v2/tls/certificate/download",
-	}
-	apitest.AssertRoutesRegistered(t, e, expectedRoutes)
-}

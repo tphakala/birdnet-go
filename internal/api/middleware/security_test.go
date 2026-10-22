@@ -346,6 +346,41 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
 	})
 
+	// Which origin a credentialed request is answered for depends on whether
+	// the configured list holds the wildcard; the rows pin the current answer.
+	originRows := []struct {
+		name           string
+		allowedOrigins []string
+		origin         string
+		wantReflected  bool
+	}{
+		{"origin outside an explicit list is not answered", []string{"https://trusted.example.com"}, "https://other.example.com", false},
+		{"wildcard among explicit origins reflects any origin", []string{"https://trusted.example.com", "*"}, "https://other.example.com", true},
+		{"empty list does not reflect the origin", nil, "https://other.example.com", false},
+	}
+	for _, tt := range originRows {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			corsMiddleware := NewCORS(&SecurityConfig{
+				AllowedOrigins:   tt.allowedOrigins,
+				AllowCredentials: true,
+			})
+			c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", tt.origin)
+			handler := corsMiddleware(func(c echo.Context) error {
+				return c.String(http.StatusOK, "ok")
+			})
+			require.NoError(t, handler(c))
+
+			allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
+			if tt.wantReflected {
+				assert.Equal(t, tt.origin, allowOrigin)
+			} else {
+				assert.NotEqual(t, tt.origin, allowOrigin)
+			}
+		})
+	}
+
 	t.Run("preflight reflects origin with credentials", func(t *testing.T) {
 		t.Parallel()
 
