@@ -55,7 +55,7 @@ var (
 
 // RetryConfig holds the configuration for retry behavior of an action
 type RetryConfig struct {
-	Enabled      bool          // Whether retry is enabled for this action
+	Enabled      bool          // Whether retry is enabled for this action; false means a single attempt
 	MaxRetries   int           // Maximum number of retry attempts
 	InitialDelay time.Duration // Initial delay before first retry
 	MaxDelay     time.Duration // Maximum delay between retries

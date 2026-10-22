@@ -277,7 +277,7 @@ flowchart LR
 
     COMP --> DBA[DatabaseAction\nSave to SQLite/MySQL]
     COMP --> SSEA[SSE Broadcast\nLive web feed]
-    COMP --> MQTTA[MQTT Publish\nHome Assistant discovery]
+    COMP -->|enqueues after save| MQTTA[MQTT Publish job\nretried by the queue]
 
     DBA -->|DetectionEvent| EB[Event Bus]
     EB --> ALRT[Alert Engine\nPush notifications\nWebhooks]
@@ -287,7 +287,7 @@ flowchart LR
     GA --> CMDA[Custom Command]
 ```
 
-**CompositeAction** wraps Database, SSE, and MQTT as sequential steps. `SaveAudioAction` is queued as a separate job that runs alongside it, so slow clip encoding never blocks the real-time broadcast. A client can therefore request a clip before its file exists; the media API waits briefly for it and answers 503 with `Retry-After` while the export is still pending.
+**CompositeAction** runs the database save, a step that enqueues the MQTT publish as its own job, and the SSE broadcast, in that order. MQTT is a separate job so that `realtime.mqtt.retrysettings` applies to it, and it still starts after the save so the payload carries the database id; the composite itself is never retried because that would save the detection again. Without a database, SSE and MQTT are queued as independent actions. `SaveAudioAction` is queued as a separate job that runs alongside it, so slow clip encoding never blocks the real-time broadcast. A client can therefore request a clip before its file exists; the media API waits briefly for it and answers 503 with `Retry-After` while the export is still pending.
 
 ### Audio Export
 
