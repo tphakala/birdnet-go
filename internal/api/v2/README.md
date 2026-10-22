@@ -508,13 +508,12 @@ HLS playlist and segment routes use token-based authentication instead of standa
 
 **Features:**
 
-- FFmpeg-based HLS streaming with AAC audio encoding
+- In-process HLS streaming (go-hls) with native AAC encoding, no FFmpeg process
 - Token-based auth for HLS content (no auth middleware on playlist/segment routes)
 - Automatic stream cleanup after 5 minutes of inactivity
 - Stream reuse: existing healthy streams are reused for new clients
 - Client tracking with heartbeat-based keep-alive
 - Secure file serving with path validation
-- Cross-platform support (FIFO on Unix, stdin pipe on Windows)
 - Configurable bitrate (16-320 kbps), sample rate, and segment length
 
 **Configuration (via settings):**

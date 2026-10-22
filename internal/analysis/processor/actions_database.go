@@ -222,8 +222,8 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 
 	// NOTE: Audio export is intentionally NOT performed here.
 	// It runs as a separate action (SaveAudioAction) outside the CompositeAction
-	// that contains Database -> SSE -> MQTT. This prevents slow audio encoding
-	// (e.g., FFmpeg on Raspberry Pi) from blocking SSE/MQTT broadcasts and
+	// that contains Database -> SSE -> MQTT. This prevents slow clip encoding
+	// (e.g., on a Raspberry Pi with an SD card) from blocking SSE/MQTT broadcasts and
 	// causing CompositeAction 30s timeouts (Sentry BIRDNET-GO-WD).
 	//
 	// The media API already handles the race where SSE broadcasts a ClipName

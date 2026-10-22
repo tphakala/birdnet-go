@@ -277,8 +277,9 @@ const (
 const msgSourceAudioNotFound = "Source audio file not found"
 
 // audioEncodingMaxAge is the maximum age of a temp file to be considered
-// "still encoding". Temp files older than this are likely stale from a
-// failed FFmpeg export and should not trigger a 503 response.
+// "still encoding". Temp files older than this are likely left behind by an
+// export that was killed before it renamed or removed its temp file, and
+// should not trigger a 503 response.
 const audioEncodingMaxAge = 30 * time.Second
 
 // audioRetryAfterSeconds is the Retry-After header value returned when
@@ -295,8 +296,8 @@ const audioWaitTimeout = 5 * time.Second
 const audioWaitPollInterval = 250 * time.Millisecond
 
 // audioGracePeriod is the maximum time to wait for an audio file to appear
-// when no temp file is visible. This covers the race window where FFmpeg
-// hasn't created the temp file yet or has already atomically renamed it.
+// when no temp file is visible. This covers the race window where the export
+// hasn't created its temp file yet or has already atomically renamed it.
 const audioGracePeriod = 1 * time.Second
 
 // pendingExportGraceMargin extends a detection's computed capture-ready time to
@@ -790,7 +791,7 @@ func (c *Handler) waitForAudioFile(ctx echo.Context, relClipPath, tempPath strin
 
 // waitForAudioFileGrace performs a brief poll for an audio file to appear
 // when no temp file is visible. This handles the race condition where the
-// detection DB record is committed but FFmpeg hasn't created the temp file
+// detection DB record is committed but the export hasn't created its temp file
 // yet, or has already atomically renamed it to the final path.
 // Returns true if the file appeared within the grace period.
 func (c *Handler) waitForAudioFileGrace(ctx echo.Context, relClipPath string) bool {
@@ -936,10 +937,10 @@ func (c *Handler) unrenderedSourceReason(relAudioPath string, begin, end time.Ti
 
 // handleAudio404WithWait handles a 404 error for an audio file that may still be
 // encoding. It checks for an active temp file and waits for encoding to complete,
-// then falls back to a brief grace period for the race window where FFmpeg hasn't
-// created the temp file yet or already renamed it. Returns nil if the file was
-// served or a 503 pending answer was written, or the original/translated error
-// otherwise.
+// then falls back to a brief grace period for the race window where the export
+// hasn't created its temp file yet or already renamed it. Returns nil if the file
+// was served or a 503 pending answer was written, or the original/translated
+// error otherwise.
 func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, originalErr error, detectionBeginTime, detectionEndTime time.Time, logFields ...logger.Field) error {
 	// A completed clip whose stored name drifted from the file on disk (a row from
 	// an older version, or a manual rename) is served from its actual path rather
@@ -1003,13 +1004,13 @@ func (c *Handler) handleAudio404WithWait(ctx echo.Context, relClipPath string, o
 	// pre-reconcile ghost, not a live encode. Waiting would only pin an HTTP
 	// worker for the full grace period, and a page full of such ghosts would pin
 	// one worker each. Recent (or unknown-age) detections still get the brief
-	// grace wait for the FFmpeg race window.
+	// grace wait for the export race window.
 	if !isRecentClipCompletion(detectionEndTime) {
 		return c.translateAudioServeError(ctx, originalErr, "Failed to serve audio clip due to an unexpected error")
 	}
 
-	// Brief grace wait for the race window where FFmpeg hasn't created the temp
-	// file yet or already renamed it.
+	// Brief grace wait for the race window where the export hasn't created its
+	// temp file yet or already renamed it.
 	if c.waitForAudioFileGrace(ctx, relClipPath) {
 		if retryErr := c.SFS.ServeRelativeFile(ctx, relClipPath); retryErr != nil {
 			return c.translateAudioServeError(ctx, retryErr, "Failed to serve audio clip after grace wait")
@@ -1069,7 +1070,7 @@ func (c *Handler) ServeAudioClip(ctx echo.Context) error {
 	err = c.SFS.ServeRelativeFile(ctx, normalizedFilename)
 
 	if err != nil {
-		// Check if this is a 404 for a file that's still being encoded by FFmpeg.
+		// Check if this is a 404 for a file that's still being exported.
 		// The detection DB record is committed before audio export completes, so the
 		// frontend may request the file before it exists on disk.
 		if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok && httpErr.Code == http.StatusNotFound {
@@ -3269,7 +3270,7 @@ func (c *Handler) failQueueStatus(queueKey, reason, message string) {
 
 // waitForPendingClip polls for a not-yet-written audio clip to appear on disk, up to
 // deadline, returning true if it appeared. Unlike waitForAudioFileCtx (a short fixed
-// wait for the FFmpeg encode race), this covers the longer Extended Capture deferral
+// wait for the export race), this covers the longer Extended Capture deferral
 // window, so it is only called from the async generation goroutine, which holds no HTTP
 // worker. It returns promptly on ctx cancellation (shutdown) so it never hangs a tracked
 // goroutine. pollInterval is a parameter so tests can drive it with a short real interval.

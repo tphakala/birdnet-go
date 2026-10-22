@@ -2352,7 +2352,7 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 	// - No polling needed (eliminates the old 5-second sleep hack in SSE)
 	//
 	// IMPORTANT: Audio export is NOT included in this CompositeAction. It runs as a
-	// separate independent action to prevent slow FFmpeg encoding (especially on
+	// separate independent action to prevent slow clip encoding (especially on
 	// Raspberry Pi) from blocking SSE/MQTT broadcasts. The media API handles the
 	// race where a client requests audio before export completes, using server-side
 	// wait with retries and 503 + Retry-After responses.
@@ -2386,9 +2386,9 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 	// Add SaveAudioAction if audio export is enabled.
 	// This runs as an INDEPENDENT action (not inside the CompositeAction) so that
 	// slow audio encoding does not block the Database -> SSE -> MQTT pipeline.
-	// On resource-constrained hardware (RPi with SD cards), FFmpeg encoding can
-	// take 10-30+ seconds, which previously caused CompositeAction 30s timeouts
-	// (Sentry BIRDNET-GO-WD), preventing SSE/MQTT from ever firing.
+	// On resource-constrained hardware (RPi with SD cards), clip export took
+	// 10-30+ seconds back when it ran on FFmpeg, which caused CompositeAction 30s
+	// timeouts (Sentry BIRDNET-GO-WD), preventing SSE/MQTT from ever firing.
 	if settings.Realtime.Audio.Export.Enabled && databaseAction != nil {
 		actions = append(actions, p.buildSaveAudioAction(det, detectionCtx, settings))
 	}

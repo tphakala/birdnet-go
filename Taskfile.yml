@@ -839,7 +839,7 @@ tasks:
         if command -v ffmpeg >/dev/null 2>&1; then
           echo "✅ FFmpeg: $(ffmpeg -version 2>&1 | head -n1)"
         else
-          echo "⚠️  FFmpeg: not found (audio export and clip tests will be skipped)"
+          echo "⚠️  FFmpeg: not found (stream capture and clip decoding tests will be skipped)"
         fi
 
         echo ""

@@ -145,7 +145,7 @@ gorm.io/driver/mysql
 github.com/stretchr/testify
 
 // Audio processing (external binaries)
-// - FFmpeg (audio format conversion, RTSP streams)
+// - FFmpeg (RTSP and other network stream capture)
 ```
 
 ### AI Model Integration
@@ -546,7 +546,6 @@ internal/analysis/
 internal/myaudio/
 ├── capture.go          # Audio capture from devices (via malgo)
 ├── encode.go           # Audio encoding (PCM to WAV)
-├── ffmpeg_export.go    # FFmpeg-based audio export and conversion
 ├── ffmpeg_stream.go    # RTSP stream handling via FFmpeg
 ├── ffmpeg_manager.go   # FFmpeg process lifecycle management
 ├── resample.go         # Audio resampling (file analysis mode only)

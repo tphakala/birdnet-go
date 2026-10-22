@@ -287,7 +287,7 @@ flowchart LR
     GA --> CMDA[Custom Command]
 ```
 
-**CompositeAction** wraps Database, SSE, and MQTT as sequential steps. `SaveAudioAction` runs separately to avoid slow FFmpeg encoding blocking the real-time broadcast.
+**CompositeAction** wraps Database, SSE, and MQTT as sequential steps. `SaveAudioAction` is queued as a separate job that runs alongside it, so slow clip encoding never blocks the real-time broadcast. A client can therefore request a clip before its file exists; the media API waits briefly for it and answers 503 with `Retry-After` while the export is still pending.
 
 ### Audio Export
 

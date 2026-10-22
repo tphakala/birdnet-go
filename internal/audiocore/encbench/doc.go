@@ -1,5 +1,6 @@
 // Package encbench holds an on-demand comparison harness that measures the
-// native Go clip encoders against the FFmpeg export path on the same PCM.
+// native Go clip encoders against FFmpeg on the same PCM, using the encoder and
+// container per format that clip export used before it went native.
 //
 // It has no production code. The harness lives behind the "enccompare" build
 // tag so it never runs in CI, where FFmpeg availability and machine load would

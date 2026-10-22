@@ -209,7 +209,7 @@
   let spectrogramCacheKey = $state(0);
 
   // Audio load retry state: handles race condition where detection DB record
-  // exists but audio file is still being encoded by FFmpeg (backend returns 503)
+  // exists but audio file is still being exported (backend returns 503)
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
   // Aborts the one byte probe of the audio URL that runs beside the first retry timer.

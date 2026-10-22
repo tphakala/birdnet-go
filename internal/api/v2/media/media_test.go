@@ -1965,7 +1965,7 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 // appears shortly after the initial request (no temp file visible), the
 // grace period wait catches it instead of returning 404. This covers the
 // race condition from issue #2355 where the detection DB record is committed
-// but FFmpeg hasn't created the temp file yet.
+// but the export hasn't created its temp file yet.
 func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
