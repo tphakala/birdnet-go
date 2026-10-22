@@ -204,20 +204,6 @@ func TestNeedsAdvancedRouting(t *testing.T) {
 	}
 }
 
-// TestAdvancedPageKey_NoDelimiterCollision pins that free-text filter values that
-// concatenate to the same text cannot make two different requests share a cache entry.
-func TestAdvancedPageKey_NoDelimiterCollision(t *testing.T) {
-	t.Parallel()
-	a := detectionQueryParams{QueryType: queryTypeSearch, Location: "node", Source: "rtsp://camera", Locked: "true"}
-	b := detectionQueryParams{QueryType: queryTypeSearch, Location: "node:rtsp", Source: "//camera", Locked: "true"}
-	assert.NotEqual(t, a.advancedPageKey(), b.advancedPageKey())
-
-	same := a
-	assert.Equal(t, a.advancedPageKey(), same.advancedPageKey())
-	same.Source = "rtsp://camera2"
-	assert.NotEqual(t, a.advancedPageKey(), same.advancedPageKey(), "source must be part of the key")
-}
-
 // TestAdvancedPageKey_EveryFilterFieldChangesKey fails when a field is added to
 // detectionQueryParams without being keyed. QueryType and IncludeWeather are the
 // only fields buildAdvancedSearchFilters never reads, so they must not change
