@@ -17,8 +17,11 @@ import (
 // diagnostics validator gap: a PATCH carrying a negative profiling rate used to
 // return 200 and persist the negative to config.yaml. It must now be rejected,
 // while a valid rate still succeeds.
+//
+// Not parallel: a valid rate is applied to the process-global block and mutex
+// profile rates, which resetProfileRates puts back to off afterwards.
 func TestDiagnosticsProfilingRateValidation(t *testing.T) {
-	t.Parallel()
+	resetProfileRates(t)
 
 	tests := []struct {
 		name         string
@@ -44,8 +47,6 @@ func TestDiagnosticsProfilingRateValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := echo.New()
 			controller := getTestController(t, e)
 

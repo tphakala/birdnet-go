@@ -292,9 +292,9 @@ func TestAudioSourcesSectionPatch(t *testing.T) {
 }
 
 // TestValidationErrors verifies validation rules are enforced
+//
+// Not parallel: see the note in settings_blocked_fields_test.go.
 func TestValidationErrors(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name          string
 		section       string
@@ -327,10 +327,8 @@ func TestValidationErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := echo.New()
-			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10)}
+			controller := getTestController(t, e)
 
 			var body []byte
 			var err error

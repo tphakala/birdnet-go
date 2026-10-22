@@ -541,9 +541,9 @@ func TestRestoreRedactedSecrets_WebhookNewProvider(t *testing.T) {
 		},
 	)
 
-	assert.NotPanics(t, func() {
-		require.NoError(t, restoreRedactedSecrets(current, incoming))
-	})
+	var err error
+	assert.NotPanics(t, func() { err = restoreRedactedSecrets(current, incoming) })
+	require.NoError(t, err)
 
 	// The new provider's token should be kept as-is (not restored from anything)
 	assert.Equal(t, "fresh-token",

@@ -120,8 +120,6 @@ func TestSpeciesSettingsPatchGetSync(t *testing.T) {
 
 // TestSpeciesSettingsRejectInvalid tests that invalid species config is rejected by the API
 func TestSpeciesSettingsRejectInvalid(t *testing.T) {
-	t.Parallel()
-
 	// Setup
 	e := echo.New()
 	controller := createTestController(t)
@@ -198,8 +196,6 @@ func getRealtime(t *testing.T, e *echo.Echo, c *Controller) *httptest.ResponseRe
 // TestSpeciesConfigNormalizationOnAPIUpdate tests that species config keys
 // are normalized to lowercase when updated via API
 func TestSpeciesConfigNormalizationOnAPIUpdate(t *testing.T) {
-	t.Parallel()
-
 	e := echo.New()
 	settings := apitest.NewValidTestSettings()
 	settings.Realtime.Species = conf.SpeciesSettings{
