@@ -87,11 +87,6 @@ jobs:
       - name: Verify gcc
         run: gcc --version
 
-      - name: Install FFmpeg
-        run: |
-          # Only ffmpeg: it is the only external tool the suite uses.
-          choco install -y --no-progress ffmpeg
-
       - name: Setup TensorFlow headers
         run: |
           # Scripted directly rather than via Task: the Taskfile has no MSYS

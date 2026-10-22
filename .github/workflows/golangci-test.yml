@@ -78,12 +78,6 @@ jobs:
         if: matrix.shard == 0
         run: go build -tags "noembed,skipfrontend,notflite" ./...
 
-      - name: Install FFmpeg and test dependencies
-        uses: ./.github/actions/setup-apt-packages
-        with:
-          packages: ffmpeg procps
-        timeout-minutes: 3
-
       - name: Cache Go tools
         uses: actions/cache@v6
         with:
@@ -177,12 +171,6 @@ jobs:
 
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow
-
-      - name: Install FFmpeg for integration tests
-        uses: ./.github/actions/setup-apt-packages
-        with:
-          packages: ffmpeg
-        timeout-minutes: 3
 
       - name: Set up gotestsum
         run: |
