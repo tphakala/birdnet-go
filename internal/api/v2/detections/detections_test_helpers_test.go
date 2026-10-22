@@ -55,11 +55,13 @@ func buildTestHandler(t *testing.T, core *apicore.Core, commonToSci, sciToCommon
 // wired through an apitest core, with empty name maps. It mirrors the package-api
 // helper of the same name (which returned a *Controller); the handler's settings
 // route group is wired (core.Group) so route-registration tests can register routes.
-func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Handler) {
+// opts are passed to apitest.NewCore after the echo and datastore options; a
+// parallel test passes apitest.WithoutSettingsPublish().
+func setupTestEnvironment(t *testing.T, opts ...apitest.CoreOption) (*echo.Echo, *mocks.MockInterface, *Handler) {
 	t.Helper()
 	e := echo.New()
 	mockDS := mocks.NewMockInterface(t)
-	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(mockDS))
+	core := apitest.NewCore(t, append([]apitest.CoreOption{apitest.WithEcho(e), apitest.WithDatastore(mockDS)}, opts...)...)
 	h := buildTestHandler(t, core, map[string]string{}, map[string]string{})
 	return e, mockDS, h
 }

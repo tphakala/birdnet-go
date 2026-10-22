@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -83,7 +84,7 @@ func executeRequest(t *testing.T, e *echo.Echo, method, path string, handler ech
 // This reproduces the exact scenario from #2352.
 func setupPostMigrationTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Handler) {
 	t.Helper()
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
 
 	// Run migration - moves SummaryLimit into layout element, zeros deprecated field
 	migrated := controller.Settings.Load().MigrateDashboardLayout()
@@ -128,7 +129,7 @@ func TestGetDetections_DefaultParams(t *testing.T) {
 	t.Attr("type", "regression")
 	t.Attr("issue", "2361")
 
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
 	verifyGetDetectionsDefaults(t, e, mockDS, controller)
 }
 
@@ -138,7 +139,7 @@ func TestGetRecentDetections_DefaultParams(t *testing.T) {
 	t.Attr("type", "regression")
 	t.Attr("issue", "2361")
 
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
 
 	notes := testNotes()
 
@@ -162,9 +163,7 @@ func TestSearchDetections_EmptyBody(t *testing.T) {
 	t.Attr("type", "regression")
 	t.Attr("issue", "2361")
 
-	// Must use setupTestEnvironment because HandleSearch calls c.Debug() which
-	// dereferences c.Settings.WebServer.Debug.
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
 
 	mockResults := []datastore.DetectionRecord{
 		{
