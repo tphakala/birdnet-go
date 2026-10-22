@@ -556,17 +556,22 @@ func TestMqttAction_Execute_EmptyTopic(t *testing.T) {
 // must not keep the snapshot and client it was built with.
 // Not parallel: it publishes global settings.
 func TestMqttAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
-	const changedTopic = "birdnet/changed"
+	const (
+		changedTopic = "birdnet/changed"
+		// testSourceID is the audio source ID testDetection carries; with HA
+		// discovery enabled the detection is also republished to its topic.
+		testSourceID = "test-source"
+	)
 
 	tests := []struct {
 		name   string
-		change func(t *testing.T, p *Processor, initial *conf.Settings, newClient *MockMQTTClient)
+		change func(p *Processor, initial *conf.Settings, newClient *MockMQTTClient)
 		// wantOld and wantNew are the topics expected on the old and the new client.
 		wantOld, wantNew []string
 	}{
 		{
 			name: "mqtt disabled",
-			change: func(_ *testing.T, _ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
+			change: func(_ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
 				updated := conf.CloneSettings(initial)
 				updated.Realtime.MQTT.Enabled = false
 				conf.StoreSettings(updated)
@@ -574,23 +579,23 @@ func TestMqttAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
 		},
 		{
 			name: "topic changed",
-			change: func(_ *testing.T, _ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
+			change: func(_ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
 				updated := conf.CloneSettings(initial)
 				updated.Realtime.MQTT.Topic = changedTopic
 				conf.StoreSettings(updated)
 			},
-			wantOld: []string{changedTopic},
+			wantOld: []string{changedTopic, mqtt.SourceDetectionTopic(changedTopic, testSourceID)},
 		},
 		{
 			name: "client replaced",
-			change: func(_ *testing.T, p *Processor, _ *conf.Settings, newClient *MockMQTTClient) {
+			change: func(p *Processor, _ *conf.Settings, newClient *MockMQTTClient) {
 				p.SetMQTTClient(newClient)
 			},
-			wantNew: []string{testMQTTTopic},
+			wantNew: []string{testMQTTTopic, mqtt.SourceDetectionTopic(testMQTTTopic, testSourceID)},
 		},
 		{
 			name: "client removed",
-			change: func(_ *testing.T, p *Processor, _ *conf.Settings, _ *MockMQTTClient) {
+			change: func(p *Processor, _ *conf.Settings, _ *MockMQTTClient) {
 				p.DisconnectMQTTClient()
 			},
 		},
@@ -604,6 +609,7 @@ func TestMqttAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
 			initial := &conf.Settings{}
 			initial.Realtime.MQTT.Enabled = true
 			initial.Realtime.MQTT.Topic = testMQTTTopic
+			initial.Realtime.MQTT.HomeAssistant.Enabled = true
 			// Keep the once-per-day range filter gate closed so getDefaultActions
 			// does not publish a settings snapshot of its own.
 			initial.BirdNET.RangeFilter.LastUpdated = time.Now()
@@ -622,7 +628,7 @@ func TestMqttAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
 			}
 			require.NotNil(t, action, "MQTT action should be built while MQTT is enabled")
 
-			tt.change(t, p, initial, newClient)
+			tt.change(p, initial, newClient)
 
 			require.NoError(t, action.Execute(t.Context(), nil))
 
