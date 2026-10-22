@@ -149,7 +149,7 @@ If that prints nothing, or prints an empty string, no token has been minted yet.
 Check that `diagnostics.profiling.enabled` is `true`, that the instance has been
 restarted since, and that it has no authentication provider configured (with one,
 no token is generated because none is needed). If all three hold and there is
-still no `token:` line, generation or persistence failed: the startup log carries
+still no `token:` line, persistence failed: the startup log carries
 the reason, and a config file the process cannot write is the usual cause.
 
 Every example below assumes the token is in a shell variable. This is the same

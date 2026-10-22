@@ -209,17 +209,11 @@ func Load() (*Settings, error) {
 	}
 
 	// Auto-generate SessionSecret if not set (for backward compatibility)
-	if err := ensureSessionSecret(settings); err != nil {
-		return nil, err
-	}
+	ensureSessionSecret(settings)
 
 	// Mint the profiling token when pprof is enabled without an authentication
-	// provider. Deliberately non-fatal: without a token the pprof routes refuse
-	// every request, which is the safe outcome, and a diagnostics feature must
-	// not be able to stop the application from starting.
-	if generated, err := EnsureProfilingToken(settings); err != nil {
-		GetLogger().Warn("Failed to generate profiling token; the profiling endpoints will refuse requests", logger.Error(err))
-	} else if generated {
+	// provider.
+	if EnsureProfilingToken(settings) {
 		// A token that is minted but never written to disk is worse than none:
 		// it gates the endpoints for this process while being unreadable (it is
 		// never logged), and the next start mints a different one. Say so
@@ -434,28 +428,12 @@ func createDefaultConfig() error {
 
 	// If the basicauth secret is not set, generate a random one
 	if viper.GetString("security.basicauth.clientsecret") == "" {
-		clientSecret, err := GenerateRandomSecret()
-		if err != nil {
-			return errors.New(err).
-				Component("conf").
-				Category(errors.CategoryConfiguration).
-				Context("operation", "generate_client_secret").
-				Build()
-		}
-		viper.Set("security.basicauth.clientsecret", clientSecret)
+		viper.Set("security.basicauth.clientsecret", GenerateRandomSecret())
 	}
 	// If the session secret is not set, generate a random one
 	// This ensures backward compatibility for existing deployments
 	if viper.GetString("security.sessionsecret") == "" {
-		sessionSecret, err := GenerateRandomSecret()
-		if err != nil {
-			return errors.New(err).
-				Component("conf").
-				Category(errors.CategoryConfiguration).
-				Context("operation", "generate_session_secret").
-				Build()
-		}
-		viper.Set("security.sessionsecret", sessionSecret)
+		viper.Set("security.sessionsecret", GenerateRandomSecret())
 	}
 
 	// Create directories for config file
