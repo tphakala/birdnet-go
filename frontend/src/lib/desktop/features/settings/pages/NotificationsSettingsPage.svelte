@@ -90,7 +90,7 @@
   import { formatLocalDateTime } from '$lib/utils/date';
   import { schemaObjectTypeLabel } from '$lib/utils/alertSchema';
   import { translateField } from '$lib/utils/notifications';
-  import { navigation, handleAppLinkClick } from '$lib/stores/navigation.svelte';
+  import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { SETTINGS_ROUTES } from '$lib/utils/settingsRoutes';
 
@@ -1421,12 +1421,9 @@
       {#snippet children()}
         {t('settings.alerts.v2Required')}
         <a
-          href="/ui/system/database"
+          href={buildAppUrl('/ui/system/database')}
           class="underline font-medium ml-1 hover:opacity-80"
-          onclick={(e: MouseEvent) => {
-            e.preventDefault();
-            navigation.navigate('/ui/system/database');
-          }}
+          onclick={handleAppLinkClick}
         >
           {t('settings.alerts.v2RequiredLink')}
         </a>

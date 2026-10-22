@@ -5,6 +5,7 @@ import NotificationsSettingsPage from './NotificationsSettingsPage.svelte';
 import { api, ApiError } from '$lib/utils/api';
 import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
+import { setBasePath, resetBasePath } from '$lib/utils/urlHelpers';
 import { fetchAlertRules } from '$lib/api/alerts';
 import type { AlertStatus } from '$lib/api/alerts';
 
@@ -75,6 +76,7 @@ describe('NotificationsSettingsPage detection filters under the alert engine', (
 
   afterEach(() => {
     Object.defineProperty(window, 'location', { value: originalLocation, configurable: true });
+    resetBasePath();
   });
 
   it('shows the rules notice and link instead of the filters when the engine is active', async () => {
@@ -187,5 +189,19 @@ describe('NotificationsSettingsPage detection filters under the alert engine', (
     const rulesTab = document.getElementById('settings-tab-rules');
     expect(rulesTab).toHaveAttribute('aria-selected', 'true');
     expect(rulesTab).toHaveFocus();
+  });
+
+  it('links to the database page with the reverse-proxy prefix when alert rules need v2', async () => {
+    setBasePath('/proxy');
+    navigation.redirect('/ui/settings/notifications?tab=rules');
+    vi.mocked(fetchAlertRules).mockRejectedValueOnce(conflict());
+    const user = userEvent.setup();
+    render(NotificationsSettingsPage);
+
+    const link = await screen.findByRole('link', { name: 'settings.alerts.v2RequiredLink' });
+    expect(link).toHaveAttribute('href', '/proxy/ui/system/database');
+
+    await user.click(link);
+    expect(navigation.currentPath).toBe('/ui/system/database');
   });
 });

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
+  import { buildAppUrl } from '$lib/utils/urlHelpers';
   import type { WizardStepProps } from '../types';
 
   let { onValidChange }: WizardStepProps = $props();
@@ -13,7 +14,7 @@
 <div class="flex flex-col items-center gap-4 pt-6 text-center">
   <div class="flex h-32 w-32 items-center justify-center">
     <img
-      src="/ui/assets/BirdNET-Go-logo.webp"
+      src={buildAppUrl('/ui/assets/BirdNET-Go-logo.webp')}
       alt={t('about.logoAlt')}
       class="h-full w-full object-contain"
     />
