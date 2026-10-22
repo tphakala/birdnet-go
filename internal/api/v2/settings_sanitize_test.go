@@ -226,19 +226,6 @@ func TestSanitizeSettingsForAPI_EmptySecretsStayEmpty(t *testing.T) {
 	assert.Empty(t, sanitized.Realtime.EBird.APIKey, "empty ebird key should stay empty")
 }
 
-// getSettingsSectionResponse drives GetSectionSettings for section and returns
-// the recorded response, without asserting its status.
-func getSettingsSectionResponse(t *testing.T, e *echo.Echo, c *Controller, section string) *httptest.ResponseRecorder {
-	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/"+section, http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues(section)
-	require.NoError(t, c.GetSectionSettings(ctx))
-	return rec
-}
-
 // TestGetSettingsHandlersRedactSecrets drives the real GET handlers over a
 // snapshot holding a secret in every field the sanitizer covers, and checks that
 // no raw secret value reaches the response body. The sanitizer's own unit tests
@@ -312,7 +299,14 @@ func TestGetSettingsHandlersRedactSecrets(t *testing.T) {
 	} {
 		t.Run("GET /settings/"+section, func(t *testing.T) {
 			e, c := newController(t)
-			assertRedacted(t, getSettingsSectionResponse(t, e, c, section))
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/"+section, http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("section")
+			ctx.SetParamValues(section)
+			require.NoError(t, c.GetSectionSettings(ctx))
+
+			assertRedacted(t, rec)
 		})
 	}
 }
