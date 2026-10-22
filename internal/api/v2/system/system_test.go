@@ -119,6 +119,11 @@ func TestGetDeviceBaseName(t *testing.T) {
 			expected: "dm-0",
 		},
 		{
+			name:     "Two-letter SCSI disk partition",
+			device:   "/dev/sdaa1",
+			expected: "sdaa",
+		},
+		{
 			name:     "Xen virtual disk partition",
 			device:   "/dev/xvda1",
 			expected: "xvda",
@@ -149,7 +154,7 @@ func TestGetDeviceBaseName(t *testing.T) {
 			expected: "disk0",
 		},
 		{
-			name:     "Windows drive letter passes through on every OS",
+			name:     "Windows drive letter is its own key",
 			device:   "C:",
 			expected: "C:",
 		},
