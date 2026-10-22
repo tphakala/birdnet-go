@@ -1581,7 +1581,7 @@
           "restartTitle": "Reinicialização necessária",
           "restartBody": "Reinicie o aplicativo para mudar para o banco de dados V2. A limpeza do banco de dados legado estará disponível após a reinicialização.",
           "fallbackError": "Divergência na contagem de registos entre os bancos de dados legado e V2. Alguns registos podem não ter sido migrados corretamente.",
-          "migrateInfo": "A migração transferirá {count} registos do banco de dados legado para o novo esquema V2. As novas detecções salvas durante a migração também são copiadas para o novo banco de dados, portanto nenhum dado é perdido.",
+          "migrateInfo": "A migração transferirá {count} registos do banco de dados legado para o novo esquema V2. As novas detecções salvas durante a migração também são copiadas para o novo banco de dados.",
           "sourceLegacy": "Origem (legado)",
           "targetV2": "Destino (V2)",
           "recordsLabel": "Registos",

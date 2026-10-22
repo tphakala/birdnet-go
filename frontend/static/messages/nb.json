@@ -1581,7 +1581,7 @@
           "restartTitle": "Omstart kreves",
           "restartBody": "Start applikasjonen på nytt for å bytte til V2-databasen. Opprydding av eldre database vil være tilgjengelig etter omstart.",
           "fallbackError": "Antall poster stemmer ikke mellom eldre og V2-database. Noen poster kan ikke ha migrert korrekt.",
-          "migrateInfo": "Migreringen vil overføre {count} poster fra den eldre databasen til det nye V2-skjemaet. Nye registreringer som lagres under migreringen kopieres også til den nye databasen, slik at ingen data går tapt.",
+          "migrateInfo": "Migreringen vil overføre {count} poster fra den eldre databasen til det nye V2-skjemaet. Nye registreringer som lagres under migreringen kopieres også til den nye databasen.",
           "sourceLegacy": "Kilde (eldre)",
           "targetV2": "Mål (V2)",
           "recordsLabel": "Poster",

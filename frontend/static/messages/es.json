@@ -1581,7 +1581,7 @@
           "restartTitle": "Reinicio necesario",
           "restartBody": "Reinicie la aplicación para cambiar a la base de datos V2. La limpieza de la base de datos heredada estará disponible después del reinicio.",
           "fallbackError": "Discrepancia en el recuento de registros entre las bases de datos heredada y V2. Es posible que algunos registros no se hayan migrado correctamente.",
-          "migrateInfo": "La migración transferirá {count} registros de la base de datos heredada al nuevo esquema V2. Las nuevas detecciones guardadas durante la migración también se copian a la nueva base de datos, por lo que no se pierden datos.",
+          "migrateInfo": "La migración transferirá {count} registros de la base de datos heredada al nuevo esquema V2. Las nuevas detecciones guardadas durante la migración también se copian a la nueva base de datos.",
           "sourceLegacy": "Origen (heredada)",
           "targetV2": "Destino (V2)",
           "recordsLabel": "Registros",

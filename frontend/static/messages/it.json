@@ -1581,7 +1581,7 @@
           "restartTitle": "Riavvio necessario",
           "restartBody": "Riavvia l'applicazione per passare al database V2. La pulizia del database legacy sarà disponibile dopo il riavvio.",
           "fallbackError": "Discrepanza nel conteggio dei record tra i database legacy e V2. Alcuni record potrebbero non essere stati migrati correttamente.",
-          "migrateInfo": "La migrazione trasferirà {count} record dal database legacy al nuovo schema V2. Anche i nuovi rilevamenti salvati durante la migrazione vengono copiati nel nuovo database, quindi nessun dato va perso.",
+          "migrateInfo": "La migrazione trasferirà {count} record dal database legacy al nuovo schema V2. Anche i nuovi rilevamenti salvati durante la migrazione vengono copiati nel nuovo database.",
           "sourceLegacy": "Sorgente (Legacy)",
           "targetV2": "Destinazione (V2)",
           "recordsLabel": "Record",

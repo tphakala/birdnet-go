@@ -1581,7 +1581,7 @@
           "restartTitle": "Nepieciešama restartēšana",
           "restartBody": "Restartējiet lietojumprogrammu, lai pārslēgtos uz V2 datubāzi. Mantotās datubāzes tīrīšana būs pieejama pēc restartēšanas.",
           "fallbackError": "Ierakstu skaita neatbilstība starp mantoto un V2 datubāzēm. Daži ieraksti, iespējams, nav pareizi migrēti.",
-          "migrateInfo": "Migrācija pārsūtīs {count} ierakstus no mantotās datubāzes uz jauno V2 shēmu. Migrācijas laikā saglabātās jaunās atpazīšanas tiek kopētas arī uz jauno datubāzi, tāpēc dati netiek zaudēti.",
+          "migrateInfo": "Migrācija pārsūtīs {count} ierakstus no mantotās datubāzes uz jauno V2 shēmu. Migrācijas laikā saglabātās jaunās atpazīšanas tiek kopētas arī uz jauno datubāzi.",
           "sourceLegacy": "Avots (mantotā)",
           "targetV2": "Mērķis (V2)",
           "recordsLabel": "Ieraksti",

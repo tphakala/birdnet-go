@@ -1581,7 +1581,7 @@
           "restartTitle": "Vyžadován restart",
           "restartBody": "Restartujte aplikaci pro přepnutí na databázi V2. Vyčištění původní databáze bude k dispozici po restartu.",
           "fallbackError": "Nesoulad počtu záznamů mezi původní a V2 databází. Některé záznamy se možná nemigrovaly správně.",
-          "migrateInfo": "Migrace přenese {count} záznamů z původní databáze do nového schématu V2. Nové detekce uložené během migrace se také zkopírují do nové databáze, takže nedojde ke ztrátě dat.",
+          "migrateInfo": "Migrace přenese {count} záznamů z původní databáze do nového schématu V2. Nové detekce uložené během migrace se také zkopírují do nové databáze.",
           "sourceLegacy": "Zdroj (původní)",
           "targetV2": "Cíl (V2)",
           "recordsLabel": "Záznamy",

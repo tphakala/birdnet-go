@@ -1581,7 +1581,7 @@
           "restartTitle": "Redémarrage requis",
           "restartBody": "Redémarrez l'application pour basculer vers la base de données V2. Le nettoyage de l'ancienne base de données sera disponible après le redémarrage.",
           "fallbackError": "Incohérence du nombre d'enregistrements entre les bases de données ancienne et V2. Certains enregistrements n'ont peut-être pas été migrés correctement.",
-          "migrateInfo": "La migration transférera {count} enregistrements de l'ancienne base de données vers le nouveau schéma V2. Les nouvelles détections enregistrées pendant la migration sont également copiées vers la nouvelle base de données, aucune donnée n'est donc perdue.",
+          "migrateInfo": "La migration transférera {count} enregistrements de l'ancienne base de données vers le nouveau schéma V2. Les nouvelles détections enregistrées pendant la migration sont également copiées vers la nouvelle base de données.",
           "sourceLegacy": "Source (ancienne)",
           "targetV2": "Cible (V2)",
           "recordsLabel": "Enregistrements",

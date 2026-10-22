@@ -1581,7 +1581,7 @@
           "restartTitle": "Genstart påkrævet",
           "restartBody": "Genstart applikationen for at skifte til V2-databasen. Oprydning af ældre database vil være tilgængelig efter genstart.",
           "fallbackError": "Uoverensstemmelse i antal poster mellem ældre og V2-databaser. Nogle poster er muligvis ikke migreret korrekt.",
-          "migrateInfo": "Migreringen vil overføre {count} poster fra den ældre database til det nye V2-skema. Nye registreringer, der gemmes under migreringen, kopieres også til den nye database, så der går ingen data tabt.",
+          "migrateInfo": "Migreringen vil overføre {count} poster fra den ældre database til det nye V2-skema. Nye registreringer, der gemmes under migreringen, kopieres også til den nye database.",
           "sourceLegacy": "Kilde (Ældre)",
           "targetV2": "Mål (V2)",
           "recordsLabel": "Poster",

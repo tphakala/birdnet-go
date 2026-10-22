@@ -1581,7 +1581,7 @@
           "restartTitle": "Wymagane ponowne uruchomienie",
           "restartBody": "Uruchom ponownie aplikację, aby przełączyć się na bazę danych V2. Czyszczenie starszej bazy danych będzie dostępne po ponownym uruchomieniu.",
           "fallbackError": "Niezgodność liczby rekordów między starszą bazą danych a V2. Niektóre rekordy mogły nie zostać poprawnie zmigrowane.",
-          "migrateInfo": "Migracja przeniesie {count} rekordów ze starszej bazy danych do nowego schematu V2. Nowe wykrycia zapisane podczas migracji są również kopiowane do nowej bazy danych, więc żadne dane nie zostaną utracone.",
+          "migrateInfo": "Migracja przeniesie {count} rekordów ze starszej bazy danych do nowego schematu V2. Nowe wykrycia zapisane podczas migracji są również kopiowane do nowej bazy danych.",
           "sourceLegacy": "Źródło (starsza)",
           "targetV2": "Cel (V2)",
           "recordsLabel": "Rekordy",

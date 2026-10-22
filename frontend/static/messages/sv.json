@@ -1581,7 +1581,7 @@
           "restartTitle": "Omstart krävs",
           "restartBody": "Starta om applikationen för att byta till V2-databasen. Rensning av äldre databas blir tillgänglig efter omstart.",
           "fallbackError": "Antal poster stämmer inte mellan äldre och V2-databaser. Vissa poster kan ha migrerats felaktigt.",
-          "migrateInfo": "Migreringen kommer att överföra {count} poster från den äldre databasen till det nya V2-schemat. Nya detektioner som sparas under migreringen kopieras också till den nya databasen, så ingen data går förlorad.",
+          "migrateInfo": "Migreringen kommer att överföra {count} poster från den äldre databasen till det nya V2-schemat. Nya detektioner som sparas under migreringen kopieras också till den nya databasen.",
           "sourceLegacy": "Källa (Äldre)",
           "targetV2": "Mål (V2)",
           "recordsLabel": "Poster",

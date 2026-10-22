@@ -1581,7 +1581,7 @@
           "restartTitle": "Uudelleenkäynnistys vaaditaan",
           "restartBody": "Käynnistä sovellus uudelleen vaihtaaksesi V2-tietokantaan. Vanhan tietokannan siivous on käytettävissä uudelleenkäynnistyksen jälkeen.",
           "fallbackError": "Tietuemäärä ei täsmää vanhan ja V2-tietokannan välillä. Joitain tietueita ei ehkä ole siirretty oikein.",
-          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Siirron aikana tallennetut uudet havainnot kopioidaan myös uuteen tietokantaan, joten tietoja ei menetetä.",
+          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Siirron aikana tallennetut uudet havainnot kopioidaan myös uuteen tietokantaan.",
           "sourceLegacy": "Lähde (vanha)",
           "targetV2": "Kohde (V2)",
           "recordsLabel": "Tietueet",
