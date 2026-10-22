@@ -55,6 +55,10 @@ type Handler struct {
 	// ensureHostProbed). nil means inference.EnsureOpenVINOProbe; tests inject a
 	// counter.
 	ensureOVProbe func()
+	// ortProbe reports the ONNX Runtime status for the configured library path.
+	// nil means inference.CheckORTAvailability; tests inject a fixed status so
+	// the install gate and the recommender do not depend on the host runtime.
+	ortProbe func(configuredPath string) inference.ORTStatus
 	// notices is the notification sink for the optimize bell notice. nil means
 	// the process-wide notification service; tests inject a fake.
 	notices noticeService
@@ -313,7 +317,7 @@ func (c *Handler) GetModelCatalog(ctx echo.Context) error {
 	catalog := make([]CatalogEntryResponse, 0, len(visible))
 
 	// Check ORT availability once, reuse for all entries that require ONNX.
-	ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
+	ortStatus := c.checkORT(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 
 	// Hardware recommendations are gated to authenticated (or auth-not-required)
 	// requests, so an anonymous caller on an auth-enabled instance cannot read the
@@ -691,6 +695,15 @@ func (c *Handler) requestedVariantCompatibility(entry *classifier.CatalogEntry, 
 	return rec.Compatible, true, rec.Blockers, hostArch
 }
 
+// checkORT probes ONNX Runtime availability through the ortProbe seam, falling
+// back to inference.CheckORTAvailability when no probe is injected.
+func (c *Handler) checkORT(configuredPath string) inference.ORTStatus {
+	if c.ortProbe != nil {
+		return c.ortProbe(configuredPath)
+	}
+	return inference.CheckORTAvailability(configuredPath)
+}
+
 // ensureHostProbed runs the out-of-process OpenVINO device probe when the live
 // host profile is in use, so the optimize bell notice, which persists until the
 // next trigger, sees the real device list. Without it, a host that loaded the
@@ -845,7 +858,7 @@ func (c *Handler) InstallModel(ctx echo.Context) error {
 	// Probe ORT once: it gates ONNX-only variants below and also feeds the hardware
 	// profile the compatibility gate consults, mirroring how GetModelCatalog probes
 	// it a single time per request.
-	ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
+	ortStatus := c.checkORT(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 
 	// Reject installation of ONNX-dependent models when ORT is unavailable. The gate
 	// is variant-scoped: an entry may be ORT-free overall (e.g. BirdNET v2.4, whose
@@ -983,7 +996,7 @@ func (c *Handler) ReinstallModel(ctx echo.Context) error {
 
 	// Reject reinstall of ONNX-dependent models when ORT is unavailable.
 	if entry.RequiresONNX {
-		ortStatus := inference.CheckORTAvailability(c.CurrentSettings().BirdNET.ONNXRuntimePath)
+		ortStatus := c.checkORT(c.CurrentSettings().BirdNET.ONNXRuntimePath)
 		if !ortStatus.Available {
 			return c.HandleError(ctx, nil,
 				"model requires ONNX Runtime "+inference.ORTRequiredVersion()+": "+ortStatus.Error,
