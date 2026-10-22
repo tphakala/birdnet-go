@@ -289,6 +289,7 @@ func TestGetHourlyWeatherForDayNoData(t *testing.T) {
 
 		// Check response content
 		assert.Equal(t, "No weather data found for the specified date", response.Message)
+		require.NotNil(t, response.Data, "data must be a JSON array, not null")
 		assert.Empty(t, response.Data)
 	}
 }
@@ -328,6 +329,7 @@ func TestGetHourlyWeatherForDayFutureDate(t *testing.T) {
 
 		// Check response content
 		assert.Equal(t, "No weather data available for future date", response.Message)
+		require.NotNil(t, response.Data, "data must be a JSON array, not null")
 		assert.Empty(t, response.Data)
 	}
 
