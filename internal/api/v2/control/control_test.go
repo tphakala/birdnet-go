@@ -588,6 +588,11 @@ func TestInvalidPayloads(t *testing.T) {
 	}
 }
 
+// testFlushDelay is the flush delay the restart tests expect. It is a literal
+// rather than restartFlushDelay so that changing the production value fails
+// the tests instead of moving the expectation with it.
+const testFlushDelay = 500 * time.Millisecond
+
 // mockShutdownRequester is a test double for ShutdownRequester. The restart
 // goroutine writes called, so it is atomic.
 type mockShutdownRequester struct {
@@ -624,10 +629,11 @@ func TestRestartServer(t *testing.T) {
 		assert.Equal(t, ActionRestartServer, result.Action)
 		assert.Equal(t, restart.RestartBinary, restart.Requested())
 
+		time.Sleep(testFlushDelay - time.Nanosecond)
 		synctest.Wait()
-		assert.False(t, mock.called.Load(), "shutdown must wait for the response to flush")
+		assert.False(t, mock.called.Load(), "shutdown must not be requested before the flush delay has elapsed")
 
-		time.Sleep(restartFlushDelay)
+		time.Sleep(time.Nanosecond)
 		synctest.Wait()
 		assert.True(t, mock.called.Load(), "shutdown must be requested after the flush delay")
 	})
@@ -717,10 +723,11 @@ func TestRestartContainer(t *testing.T) {
 				assert.Equal(t, ActionRestartContainer, result.Action)
 				assert.Equal(t, restart.RestartContainer, restart.Requested())
 
+				time.Sleep(testFlushDelay - time.Nanosecond)
 				synctest.Wait()
-				assert.False(t, mock.called.Load(), "shutdown must wait for the response to flush")
+				assert.False(t, mock.called.Load(), "shutdown must not be requested before the flush delay has elapsed")
 
-				time.Sleep(restartFlushDelay)
+				time.Sleep(time.Nanosecond)
 				synctest.Wait()
 				assert.True(t, mock.called.Load(), "shutdown must be requested after the flush delay")
 			})
