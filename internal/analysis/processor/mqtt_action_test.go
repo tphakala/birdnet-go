@@ -549,33 +549,98 @@ func TestMqttAction_Execute_EmptyTopic(t *testing.T) {
 	assert.Contains(t, err.Error(), "MQTT topic is not specified", "Error should mention topic")
 }
 
-// TestMqttAction_Execute_DisabledAfterCreation verifies that MqttAction exits
-// silently when MQTT is disabled via settings after the action was created.
-// This supports hot-reload: disabling MQTT in the UI takes effect immediately.
-func TestMqttAction_Execute_DisabledAfterCreation(t *testing.T) {
-	t.Parallel()
+// TestMqttAction_Execute_FollowsReconfigureAfterBuild verifies that an action
+// built before a settings change or a client reconfigure uses the settings and
+// client in effect when it executes, the way a queued retry does. Settings are
+// replaced, never mutated, and a reconfigure swaps the client, so the action
+// must not keep the snapshot and client it was built with.
+// Not parallel: it publishes global settings.
+func TestMqttAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
+	const changedTopic = "birdnet/changed"
 
-	mockClient := NewMockMQTTClient()
-	settings := &conf.Settings{}
-	settings.Realtime.MQTT.Enabled = true
-	settings.Realtime.MQTT.Topic = testMQTTTopic
-
-	eventTracker := NewEventTracker(testEventTrackerInterval)
-	det := testDetection()
-
-	action := &MqttAction{
-		Settings:     settings,
-		Result:       det.Result,
-		MqttClient:   mockClient,
-		EventTracker: eventTracker,
+	tests := []struct {
+		name   string
+		change func(t *testing.T, p *Processor, initial *conf.Settings, newClient *MockMQTTClient)
+		// wantOld and wantNew are the topics expected on the old and the new client.
+		wantOld, wantNew []string
+	}{
+		{
+			name: "mqtt disabled",
+			change: func(_ *testing.T, _ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.MQTT.Enabled = false
+				conf.StoreSettings(updated)
+			},
+		},
+		{
+			name: "topic changed",
+			change: func(_ *testing.T, _ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.MQTT.Topic = changedTopic
+				conf.StoreSettings(updated)
+			},
+			wantOld: []string{changedTopic},
+		},
+		{
+			name: "client replaced",
+			change: func(_ *testing.T, p *Processor, _ *conf.Settings, newClient *MockMQTTClient) {
+				p.SetMQTTClient(newClient)
+			},
+			wantNew: []string{testMQTTTopic},
+		},
+		{
+			name: "client removed",
+			change: func(_ *testing.T, p *Processor, _ *conf.Settings, _ *MockMQTTClient) {
+				p.DisconnectMQTTClient()
+			},
+		},
 	}
 
-	// Simulate runtime hot-reload toggle after action creation.
-	settings.Realtime.MQTT.Enabled = false
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prev := conf.GetSettings()
+			t.Cleanup(func() { conf.StoreSettings(prev) })
 
-	err := action.Execute(t.Context(), nil)
-	require.NoError(t, err, "Should silently return nil when MQTT is disabled")
-	assert.Equal(t, 0, mockClient.GetPublishCalls(), "Should not attempt publish when disabled")
+			initial := &conf.Settings{}
+			initial.Realtime.MQTT.Enabled = true
+			initial.Realtime.MQTT.Topic = testMQTTTopic
+			// Keep the once-per-day range filter gate closed so getDefaultActions
+			// does not publish a settings snapshot of its own.
+			initial.BirdNET.RangeFilter.LastUpdated = time.Now()
+			conf.StoreSettings(initial)
+
+			oldClient := NewMockMQTTClient()
+			newClient := NewMockMQTTClient()
+			p := &Processor{Settings: initial, EventTracker: NewEventTracker(time.Hour), MqttClient: oldClient}
+
+			det := testDetection()
+			var action *MqttAction
+			for _, a := range p.getDefaultActions(&det, initial) {
+				if m, ok := a.(*MqttAction); ok {
+					action = m
+				}
+			}
+			require.NotNil(t, action, "MQTT action should be built while MQTT is enabled")
+
+			tt.change(t, p, initial, newClient)
+
+			require.NoError(t, action.Execute(t.Context(), nil))
+
+			topics := func(c *MockMQTTClient) []string {
+				msgs := c.GetPublishedMessages()
+				out := make([]string, 0, len(msgs))
+				for _, m := range msgs {
+					out = append(out, m.topic)
+				}
+				return out
+			}
+			assert.ElementsMatch(t, tt.wantOld, topics(oldClient), "messages on the client the action was built with")
+			assert.ElementsMatch(t, tt.wantNew, topics(newClient), "messages on the replacement client")
+			if tt.wantOld == nil {
+				assert.Zero(t, oldClient.GetPublishCalls(), "no publish attempt on the old client")
+			}
+		})
+	}
 }
 
 // TestMqttAction_Execute_ClearsClipNameWhenExportFailed verifies that MqttAction

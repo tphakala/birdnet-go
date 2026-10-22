@@ -258,21 +258,54 @@ func (d *rateLimitDecision) allow(check func() bool) bool {
 }
 
 type MqttAction struct {
+	// Settings is the snapshot captured when the action was built; used only
+	// when liveSettings is nil.
 	Settings       *conf.Settings
 	Result         detection.Result // Domain model (single source of truth)
 	BirdImageCache *imageprovider.BirdImageCache
-	MqttClient     mqtt.Client
-	EventTracker   *EventTracker
-	DetectionCtx   *DetectionContext    // Shared context from DatabaseAction
-	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
-	Description    string
-	CorrelationID  string            // Detection correlation ID for log tracking
-	mu             sync.Mutex        // Protect concurrent access to Result
-	rateLimit      rateLimitDecision // Event-tracker verdict of the first attempt, reused by queue retries
+	// MqttClient is the client captured when the action was built; used only
+	// when liveClient is nil.
+	MqttClient   mqtt.Client
+	EventTracker *EventTracker
+	DetectionCtx *DetectionContext // Shared context from DatabaseAction
+	// RetryConfig is fixed for the life of the job; a settings change applies
+	// to detections made after it.
+	RetryConfig jobqueue.RetryConfig
+	// liveSettings returns the settings snapshot in effect when an attempt runs,
+	// so a queued retry follows settings changes; nil uses Settings.
+	liveSettings func() *conf.Settings
+	// liveClient returns the MQTT client in effect when an attempt runs, so a
+	// retry after a reconfigure uses the new client; nil uses MqttClient.
+	liveClient    func() mqtt.Client
+	Description   string
+	CorrelationID string            // Detection correlation ID for log tracking
+	mu            sync.Mutex        // Protect concurrent access to Result
+	rateLimit     rateLimitDecision // Event-tracker verdict of the first attempt, reused by queue retries
 	// SpeciesTimeSource provides the species' first-ever and most-recent previous
 	// detection times for the MQTT payload. Nil when the database is disabled or
 	// the backend does not support the query; the payload then carries null fields.
 	SpeciesTimeSource speciesDetectionTimeSource
+}
+
+// attemptSettings returns the settings snapshot for one attempt: the live
+// snapshot when a resolver is set and returns one, else the captured Settings.
+func (a *MqttAction) attemptSettings() *conf.Settings {
+	if a.liveSettings != nil {
+		if s := a.liveSettings(); s != nil {
+			return s
+		}
+	}
+	return a.Settings
+}
+
+// attemptClient returns the MQTT client for one attempt. A set resolver is
+// authoritative even when it returns nil (the client was removed): falling back
+// to the captured client would publish on a disconnected one.
+func (a *MqttAction) attemptClient() mqtt.Client {
+	if a.liveClient != nil {
+		return a.liveClient()
+	}
+	return a.MqttClient
 }
 
 type UpdateRangeFilterAction struct {

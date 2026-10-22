@@ -217,6 +217,8 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 // Transient connection errors (EOF, not connected) are logged as warnings and
 // are not returned, so they are not retried: the detection is already saved to
 // the database. This eliminates the TOCTOU race at Layer 2 (GitHub #2397).
+// The settings snapshot and the MQTT client are resolved once per attempt, so a
+// queued retry follows settings changes and client reconfiguration.
 func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -234,15 +236,19 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 		return nil
 	}
 
-	// Early check if MQTT is still enabled in settings.
-	// Supports hot-reload: disabling MQTT in the UI takes effect immediately,
-	// even for actions already queued. Matches BirdWeatherAction pattern.
-	if !a.Settings.Realtime.MQTT.Enabled {
+	// One settings snapshot for the whole attempt, so a reload mid-attempt cannot
+	// mix values from two versions.
+	s := a.attemptSettings()
+
+	// Early check if MQTT is still enabled in the settings of this attempt.
+	// Disabling MQTT in the UI takes effect immediately, even for actions
+	// already queued.
+	if !s.Realtime.MQTT.Enabled {
 		return nil
 	}
 
 	// Validate MQTT settings
-	if a.Settings.Realtime.MQTT.Topic == "" {
+	if s.Realtime.MQTT.Topic == "" {
 		return errors.Newf("MQTT topic is not specified").
 			Component("analysis.processor").
 			Category(errors.CategoryConfiguration).
@@ -342,11 +348,25 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	ctx, cancel := context.WithTimeout(context.Background(), MQTTPublishTimeout)
 	defer cancel()
 
+	// The client in effect for this attempt. It is nil while MQTT is being
+	// reconfigured or after it was disabled; treat that like a transient
+	// connection issue: the detection is saved, so no retry.
+	client := a.attemptClient()
+	if client == nil {
+		GetLogger().Warn("MQTT publish skipped: no MQTT client (detection saved to database)",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("topic", s.Realtime.MQTT.Topic),
+			logger.String("operation", "mqtt_publish_no_client"))
+		return nil
+	}
+
 	// Publish the note to the MQTT broker.
 	// The detection is already saved to the database (this action is enqueued after the save).
 	// Transient connection errors are non-fatal: we log a warning and return nil to avoid
 	// failed jobs and noisy Sentry events (GitHub #2397).
-	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
+	err = client.Publish(ctx, s.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
 		sanitizedErr := privacy.WrapError(err)
 		isConnErr := mqtt.IsTransientConnectionError(err)
@@ -362,7 +382,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 				logger.Error(sanitizedErr),
 				logger.String("species", a.Result.Species.CommonName),
 				logger.Float64("confidence", a.Result.Confidence),
-				logger.String("topic", a.Settings.Realtime.MQTT.Topic),
+				logger.String("topic", s.Realtime.MQTT.Topic),
 				logger.String("operation", "mqtt_publish_transient_skip"))
 			return nil // Non-fatal: the detection is saved, so no retry
 		}
@@ -376,7 +396,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 			logger.String("scientific_name", a.Result.Species.ScientificName),
 			logger.Float64("confidence", a.Result.Confidence),
 			logger.String("clip_name", a.Result.ClipName),
-			logger.String("topic", a.Settings.Realtime.MQTT.Topic),
+			logger.String("topic", s.Realtime.MQTT.Topic),
 			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.String("operation", "mqtt_publish"))
 
@@ -384,7 +404,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 			ObjectType: alerting.ObjectTypeIntegration,
 			EventName:  alerting.EventMQTTPublishFailed,
 			Properties: map[string]any{
-				alerting.PropertyBroker: a.Settings.Realtime.MQTT.Broker,
+				alerting.PropertyBroker: s.Realtime.MQTT.Broker,
 				alerting.PropertyError:  sanitizedErr.Error(),
 			},
 		})
@@ -395,23 +415,23 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 			Context("operation", "mqtt_publish").
 			Context("species", a.Result.Species.CommonName).
 			Context("confidence", a.Result.Confidence).
-			Context("topic", a.Settings.Realtime.MQTT.Topic).
+			Context("topic", s.Realtime.MQTT.Topic).
 			Context("clip_name", a.Result.ClipName).
 			Context("integration", "mqtt").
 			Context("retryable", true).
 			Build()
 	}
 
-	a.publishSourceDetection(stepCtx, note.Source.ID, string(noteJson))
+	a.publishSourceDetection(stepCtx, s, client, note.Source.ID, string(noteJson))
 
-	if a.Settings.Debug {
+	if s.Debug {
 		GetLogger().Debug("Successfully published to MQTT",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
 			logger.String("species", a.Result.Species.CommonName),
 			logger.String("scientific_name", a.Result.Species.ScientificName),
 			logger.Float64("confidence", a.Result.Confidence),
-			logger.String("topic", a.Settings.Realtime.MQTT.Topic),
+			logger.String("topic", s.Realtime.MQTT.Topic),
 			logger.String("operation", "mqtt_publish_success"))
 	}
 	return nil
@@ -431,8 +451,11 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 //
 // Failure is logged and not returned: the detection already reached the shared
 // topic, and failing the action would make a retry publish it there twice.
-func (a *MqttAction) publishSourceDetection(parent context.Context, sourceID, payload string) {
-	if !mqtt.SourceTopicsEnabled(a.Settings) || sourceID == "" {
+//
+// s and client are the settings snapshot and client of the current attempt, so
+// the republish uses the same values as the shared publish before it.
+func (a *MqttAction) publishSourceDetection(parent context.Context, s *conf.Settings, client mqtt.Client, sourceID, payload string) {
+	if !mqtt.SourceTopicsEnabled(s) || sourceID == "" {
 		return
 	}
 
@@ -455,8 +478,8 @@ func (a *MqttAction) publishSourceDetection(parent context.Context, sourceID, pa
 	ctx, cancel := context.WithTimeout(parent, MQTTPublishTimeout)
 	defer cancel()
 
-	topic := mqtt.SourceDetectionTopic(a.Settings.Realtime.MQTT.Topic, sourceID)
-	if err := a.MqttClient.Publish(ctx, topic, payload); err != nil {
+	topic := mqtt.SourceDetectionTopic(s.Realtime.MQTT.Topic, sourceID)
+	if err := client.Publish(ctx, topic, payload); err != nil {
 		sanitizedErr := privacy.WrapError(err)
 		GetLogger().Warn("Failed to publish detection to per-source MQTT topic",
 			logger.String("component", "analysis.processor.actions"),
@@ -482,7 +505,7 @@ func (a *MqttAction) publishSourceDetection(parent context.Context, sourceID, pa
 				ObjectType: alerting.ObjectTypeIntegration,
 				EventName:  alerting.EventMQTTPublishFailed,
 				Properties: map[string]any{
-					alerting.PropertyBroker: a.Settings.Realtime.MQTT.Broker,
+					alerting.PropertyBroker: s.Realtime.MQTT.Broker,
 					alerting.PropertyError:  sanitizedErr.Error(),
 				},
 			})
