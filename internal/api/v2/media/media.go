@@ -2051,19 +2051,16 @@ func (c *Handler) handleUserRequestedMode(ctx echo.Context, noteID, clipPath str
 	relAudioPath, err := c.resolveClipRel(clipPath)
 
 	if err == nil {
-		// Build spectrogram path
-		_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
-
-		// Check if spectrogram already exists and is non-empty
-		if statInfo, statErr := c.SFS.StatRel(relSpectrogramPath); statErr == nil && statInfo.Size() > 0 {
+		servePath, exists := c.findExistingSpectrogram(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, params.overlayRate)
+		if exists {
 			// Spectrogram exists, serve it with cache headers
 			c.LogDebugIfEnabled("Serving existing spectrogram in user-requested mode",
 				logger.String("note_id", noteID),
-				logger.String("spectrogram_path", relSpectrogramPath),
+				logger.String("spectrogram_path", servePath),
 				logger.String("path", ctx.Request().URL.Path),
 				logger.String("ip", ctx.RealIP()))
 
-			if serveErr := c.serveSpectrogramFile(ctx, relSpectrogramPath); serveErr != nil {
+			if serveErr := c.serveSpectrogramFile(ctx, servePath); serveErr != nil {
 				return true, c.translateSecureFSError(ctx, serveErr, msgServeSpectrogramFailed)
 			}
 			return true, nil
@@ -2180,7 +2177,7 @@ func (c *Handler) handleAutoPreRenderMode(ctx echo.Context, noteID, clipPath str
 
 	// Auto or prerender mode - generate on-demand if needed
 	generationStart := time.Now()
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, extraOpts...)
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), clipPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, params.overlayRate, extraOpts...)
 	generationDuration := time.Since(generationStart)
 
 	if err != nil {
@@ -2446,7 +2443,7 @@ func (c *Handler) ServeSpectrogram(ctx echo.Context) error {
 	// Pass the request context for cancellation/timeout. This filename route has no
 	// note/model context, so it always renders with the default bird profile (empty
 	// frequency suffix).
-	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, params.width, params.raw, params.style, params.dynamicRange, "")
+	spectrogramPath, err := c.generateSpectrogram(ctx.Request().Context(), filename, params.width, params.raw, params.style, params.dynamicRange, "", params.overlayRate)
 	if err != nil {
 		return c.spectrogramHTTPError(ctx, err)
 	}
@@ -2578,10 +2575,9 @@ func (c *Handler) GetSpectrogramStatus(ctx echo.Context) error {
 		return c.writeProfileUnavailable(ctx, noteID, lookupErr)
 	}
 	freqSuffix := spectrogram.ProfileSuffix(profile)
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 
-	// Check if file exists and is non-empty
-	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil && statInfo.Size() > 0 {
+	// Check if file exists and is non-empty (including fallbacks to other standard sizes)
+	if _, exists := c.findExistingSpectrogram(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, params.overlayRate); exists {
 		return ctx.JSON(http.StatusOK, map[string]any{
 			"data": map[string]any{
 				"status":        spectrogramStatusExists,
@@ -2677,7 +2673,7 @@ func (c *Handler) runAsyncSpectrogramGeneration(noteID, clipPath, relAudioPath, 
 
 	profileOpt := spectrogram.WithFrequencyProfile(profile)
 
-	spectrogramPath, err := c.generateSpectrogramFromRel(bgCtx, relAudioPath, clipPath, queueKey, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, profileOpt)
+	spectrogramPath, err := c.generateSpectrogramFromRel(bgCtx, relAudioPath, clipPath, queueKey, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, params.overlayRate, profileOpt)
 	if err != nil {
 		if queueKey != "" {
 			c.failQueueStatus(queueKey, spectrogramFailureReason(err), "Generation failed")
@@ -2817,11 +2813,10 @@ func (c *Handler) GenerateSpectrogramByID(ctx echo.Context) error {
 	// queue key. The queue key is derived from the note ID and visual params, not the
 	// export-path-derived path, so GetSpectrogramStatus finds this in-flight job even
 	// if Realtime.Audio.Export.Path changes after enqueue.
-	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix)
 	queueKey := buildSpectrogramQueueKey(noteID, params.width, params.raw, params.style, params.dynamicRange)
 
-	// Check if file already exists on disk and is non-empty
-	if statInfo, err := c.SFS.StatRel(relSpectrogramPath); err == nil && statInfo.Size() > 0 {
+	// Check if file already exists on disk and is non-empty (including fallbacks to other standard sizes)
+	if _, exists := c.findExistingSpectrogram(relAudioPath, params.width, params.raw, params.style, params.dynamicRange, freqSuffix, params.overlayRate); exists {
 		// Already exists, return immediately with generated status
 		queryParams := url.Values{}
 		sizeParam := params.sizeStr
@@ -3092,6 +3087,46 @@ func buildSpectrogramPaths(relAudioPath string, width int, raw bool, style, dyna
 	relSpectrogramPath = filepath.Join(relAudioDir, spectrogramFilename)
 
 	return relBaseFilename, relAudioDir, spectrogramFilename, relSpectrogramPath
+}
+
+// findExistingSpectrogram checks if a spectrogram for the given audio clip already exists on disk.
+// It checks the exact requested width first, then falls back to any other standard width (sm, md, lg, xl),
+// and finally checks the legacy bare basename.png.
+func (c *Handler) findExistingSpectrogram(relAudioPath string, requestedWidth int, raw bool, style, dynamicRange, freqSuffix string, overlayRate int) (string, bool) {
+	// 1. Exact match for requested width
+	_, _, _, exactPath := buildSpectrogramPaths(relAudioPath, requestedWidth, raw, style, dynamicRange, freqSuffix)
+	if statInfo, err := c.SFS.StatRel(exactPath); err == nil && statInfo.Size() > 0 {
+		return exactPath, true
+	}
+
+	// When overlayRate > 0 (e.g. sr query parameter set for bat clips), the client draws its
+	// axis from the clip rate, so only the exact render may be served.
+	if overlayRate > 0 {
+		return "", false
+	}
+
+	// 2. Check larger standard widths (never serve a render smaller than requested)
+	standardWidths := []int{SpectrogramSizeSm, SpectrogramSizeMd, SpectrogramSizeLg, SpectrogramSizeXl}
+	for _, w := range standardWidths {
+		if w <= requestedWidth {
+			continue
+		}
+		_, _, _, fallbackPath := buildSpectrogramPaths(relAudioPath, w, raw, style, dynamicRange, freqSuffix)
+		if statInfo, err := c.SFS.StatRel(fallbackPath); err == nil && statInfo.Size() > 0 {
+			return fallbackPath, true
+		}
+	}
+
+	// 3. Fallback for pre-rendered spectrograms created as <basename>.png.
+	// Only permitted when requestedWidth <= SpectrogramSizeSm so we never serve a render smaller than requested.
+	if requestedWidth <= SpectrogramSizeSm && raw && buildStyleSuffix(style, dynamicRange) == "" && freqSuffix == "" {
+		barePath := strings.TrimSuffix(relAudioPath, filepath.Ext(relAudioPath)) + ".png"
+		if statInfo, err := c.SFS.StatRel(barePath); err == nil && statInfo.Size() > 0 {
+			return barePath, true
+		}
+	}
+
+	return "", false
 }
 
 // buildStyleSuffix returns a filename suffix encoding visual style settings.
@@ -3710,7 +3745,7 @@ func (c *Handler) renderSpectrogram(ctx context.Context, absAudioPath, absSpectr
 // the relative path at a request boundary (e.g. GenerateSpectrogramByID) must
 // call generateSpectrogramFromRel directly and thread that path in, so the queue
 // key cannot drift if Export.Path changes mid-flight.
-func (c *Handler) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange, freqSuffix string, extraOpts ...spectrogram.GenerateOption) (string, error) {
+func (c *Handler) generateSpectrogram(ctx context.Context, audioPath string, width int, raw bool, style, dynamicRange, freqSuffix string, overlayRate int, extraOpts ...spectrogram.GenerateOption) (string, error) {
 	// Step 1: Normalize and validate path
 	relAudioPath, err := c.normalizeAndValidatePath(audioPath)
 	if err != nil {
@@ -3720,7 +3755,7 @@ func (c *Handler) generateSpectrogram(ctx context.Context, audioPath string, wid
 	// falls back to the path-based key for both queue tracking and singleflight
 	// coalescing, so their failures (including a not-ready 503) never show as failed
 	// on the by-ID status, which reads only the note-ID-based key.
-	return c.generateSpectrogramFromRel(ctx, relAudioPath, audioPath, "", width, raw, style, dynamicRange, freqSuffix, extraOpts...)
+	return c.generateSpectrogramFromRel(ctx, relAudioPath, audioPath, "", width, raw, style, dynamicRange, freqSuffix, overlayRate, extraOpts...)
 }
 
 // generateSpectrogramFromRel generates a spectrogram for an already normalized,
@@ -3737,7 +3772,7 @@ func (c *Handler) generateSpectrogram(ctx context.Context, audioPath string, wid
 // audioPath is retained only for log and error context. After a fresh render with a
 // non-empty freqSuffix it also removes, best-effort, the default-profile file and the
 // files of any token that suffix supersedes (spectrogram.SupersededSuffixesForToken).
-func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, audioPath, queueKey string, width int, raw bool, style, dynamicRange, freqSuffix string, extraOpts ...spectrogram.GenerateOption) (string, error) {
+func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, audioPath, queueKey string, width int, raw bool, style, dynamicRange, freqSuffix string, overlayRate int, extraOpts ...spectrogram.GenerateOption) (string, error) {
 	start := time.Now()
 	getSpectrogramLogger().Debug("Spectrogram generation requested",
 		logger.String("audio_path", audioPath),
@@ -3777,6 +3812,13 @@ func (c *Handler) generateSpectrogramFromRel(ctx context.Context, relAudioPath, 
 	}
 	if exists {
 		return relSpectrogramPath, nil
+	}
+	// Fallback: check if another standard-size spectrogram already exists on disk before running SoX
+	if fallbackPath, exists := c.findExistingSpectrogram(relAudioPath, width, raw, style, dynamicRange, freqSuffix, overlayRate); exists {
+		getSpectrogramLogger().Debug("Fast path HIT via size fallback: existing spectrogram found",
+			logger.String("queue_key", queueKey),
+			logger.String("fallback_path", fallbackPath))
+		return fallbackPath, nil
 	}
 
 	// Absolute paths needed for generation
