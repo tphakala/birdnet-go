@@ -304,8 +304,8 @@ realtime:
       initialdelay: 5 # Initial delay before first retry in seconds
       maxdelay: 300 # Maximum delay between retries in seconds
       backoffmultiplier: 2.0 # Multiplier for exponential backoff
-      # Retries cover publishes that fail. Publishes are not queued while the
-      # broker is unreachable, so detections made during an outage are not sent later.
+      # Retries apply when a publish fails with an error. While the broker connection is down, publishes are skipped:
+      # they are not queued or retried, so detections made during an outage are not sent later.
 
   # Telemetry settings
   telemetry:
