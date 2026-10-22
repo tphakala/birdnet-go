@@ -861,12 +861,14 @@ func TestPatchYamlDashFieldsAreEitherBlockedOrRederived(t *testing.T) {
 // validateAudioSettings takes its success arm on every host, ffmpeg installed or
 // not: it keeps the path and then asks the file for its version. Running the stub
 // fails, which the version probe reports as an empty version and zero numbers
-// (conf.GetFfmpegVersionFromContext), so the expected result is the same on every
-// machine. Asserting that the path survived is what proves the success arm ran;
-// the failure arm clears the path along with the metadata, which would make the
-// metadata assertions pass without any re-derivation. The stub has no file
-// extension on purpose, so Windows has nothing to resolve it by; that behavior
-// is NOT MEASURED.
+// (conf.GetFfmpegVersionFromContext). Asserting that the path survived is what
+// proves the success arm ran; the failure arm clears the path along with the
+// metadata, which would make the metadata assertions pass without any
+// re-derivation. The stub has no file extension on purpose, so Windows has
+// nothing to resolve it by. The comment on ffmpegVersionDetector in conf records
+// that exec'ing such stubs concurrently crashed the Windows race detector, and
+// package api cannot replace that detector, so the behavior of this test on
+// Windows is NOT MEASURED.
 //
 // It asserts the value rather than the wiring, so renaming the json tag would
 // make the PATCH stop reaching the field and the test pass vacuously.
