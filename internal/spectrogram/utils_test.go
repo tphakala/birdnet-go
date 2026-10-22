@@ -331,6 +331,11 @@ func TestIsOperationalError(t *testing.T) {
 			want: true,
 		},
 		{
+			name: "process kill text is not operational",
+			err:  fmt.Errorf("exit status 137: signal: killed"),
+			want: false,
+		},
+		{
 			name: "generic error",
 			err:  fmt.Errorf("disk full"),
 			want: false,
