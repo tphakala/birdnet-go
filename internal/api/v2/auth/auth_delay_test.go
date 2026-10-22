@@ -12,7 +12,7 @@ import (
 
 // randomDelayDraws is how many delays each case draws, so a bound that is
 // off by one has many chances to show.
-const randomDelayDraws = 200
+const randomDelayDraws = 1000
 
 // TestRandomDelay_Bounds checks that randomDelay sleeps for a duration in
 // [minMs, maxMs), and that a range that is empty or reversed falls back to
