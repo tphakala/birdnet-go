@@ -233,6 +233,84 @@ logging:
 		"the standalone analysis module must not be damaged")
 }
 
+// TestLoad_DottedModuleNamesLeavePhantomPrefixOut pins that a dotted
+// logging.modules name does not leave the zero-value entry Unmarshal creates
+// under its first segment, unless something really sets that segment: a
+// sibling entry in the file, or a built-in default (audio, analysis,
+// spectrogram), which viper.IsSet reports for the exact path.
+func TestLoad_DottedModuleNamesLeavePhantomPrefixOut(t *testing.T) {
+	const cfg = `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+logging:
+  modules:
+    foo.bar:
+      level: warn
+      file_path: logs/foo.log
+    audiocore.x:
+      level: error
+    baz:
+      level: info
+    baz.qux:
+      level: warn
+    quux.scalar: true
+    audio.ffmpeg:
+      level: warn
+`
+	for i := range dottedKeyLoadIterations {
+		settings, _ := loadConfigFromYAML(t, cfg)
+		out := settings.Logging.ModuleOutputs
+
+		require.Contains(t, out, "foo.bar", "iteration %d", i)
+		assert.Equal(t, "warn", out["foo.bar"].Level, "iteration %d", i)
+		assert.Equal(t, "logs/foo.log", out["foo.bar"].FilePath, "iteration %d", i)
+		require.Contains(t, out, "audiocore.x", "iteration %d", i)
+
+		for _, phantom := range []string{"foo", "audiocore", "quux"} {
+			assert.NotContains(t, out, phantom,
+				"iteration %d: no phantom entry for the prefix of a dotted module name", i)
+		}
+
+		// A real parent next to a dotted child keeps both.
+		require.Contains(t, out, "baz", "iteration %d", i)
+		assert.Equal(t, "info", out["baz"].Level, "iteration %d", i)
+		require.Contains(t, out, "baz.qux", "iteration %d", i)
+		assert.Equal(t, "warn", out["baz.qux"].Level, "iteration %d", i)
+
+		// A built-in dotted module must not remove its built-in parent.
+		require.Contains(t, out, "audio", "iteration %d", i)
+		assert.True(t, out["audio"].Enabled, "iteration %d", i)
+		assert.Contains(t, out, "audio.ffmpeg", "iteration %d", i)
+	}
+}
+
+// TestLoad_DottedModuleNamesAreNotPersistedWithPhantomPrefix pins the visible
+// consequence: the file a migration rewrites during Load must not carry the
+// phantom prefix entry.
+func TestLoad_DottedModuleNamesAreNotPersistedWithPhantomPrefix(t *testing.T) {
+	const cfg = `
+security:
+  sessionsecret: "0123456789abcdef0123456789abcdef"
+logging:
+  modules:
+    foo.bar:
+      level: warn
+`
+	for range dottedKeyLoadIterations {
+		_, configPath := loadConfigFromYAML(t, cfg)
+
+		data, err := os.ReadFile(configPath) //nolint:gosec // test-controlled path
+		require.NoError(t, err)
+		require.NotEqual(t, cfg, string(data),
+			"the test config must trigger a migration save, otherwise the disk check proves nothing")
+
+		persisted := readPersistedSettings(t, configPath).Logging.ModuleOutputs
+		assert.Contains(t, persisted, "foo.bar")
+		assert.NotContains(t, persisted, "foo",
+			"the migration save must not write the phantom prefix entry")
+	}
+}
+
 // TestLoad_BadDottedModuleEntryNamesTheModule pins that a mapping entry with an
 // invalid field value fails Load with an error that names the module. The
 // decoder reports field paths relative to the entry, so without the module in

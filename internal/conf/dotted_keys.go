@@ -66,10 +66,17 @@ import (
 // only the dotted keys from the raw subtree and drops the phantom prefix entry
 // when no viper layer (file, defaults, environment, flags, overrides) really
 // sets that prefix, which viper.IsSet answers for the exact path.
+//
+// reDecodeModuleOutputs applies the same rule to the zero-value entry Unmarshal
+// leaves under the first segment of a dotted logging.modules name, so it is not
+// written back to config.yaml by a later save.
 
 const (
 	// viperKeyDelimiter is the key delimiter viper splits config paths on.
 	viperKeyDelimiter = "."
+
+	// loggingModulesViperPath is the viper path of Settings.Logging.ModuleOutputs.
+	loggingModulesViperPath = "logging.modules"
 
 	// speciesConfigViperPath is the viper path of Settings.Realtime.Species.Config.
 	speciesConfigViperPath = "realtime.species.config"
@@ -218,8 +225,9 @@ func reDecodeLoggingConfig(settings *Settings) error {
 // built-in default for that module instead of a zero value, so a partial
 // entry like "analysis.processor: {console_also: false}" keeps Enabled=true
 // and its default file path rather than silently disabling the module's log
-// file. Entries whose raw value is not a mapping are left as Unmarshal
-// produced them.
+// file. Entries whose raw value is not a mapping are not decoded. For every
+// dotted name the zero-value phantom entry Unmarshal left under its first
+// segment is deleted unless viper.IsSet reports that segment as set.
 func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 	rawModules, ok := section["modules"].(map[string]any)
 	if !ok {
@@ -229,11 +237,16 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 		settings.Logging.ModuleOutputs = make(map[string]logger.ModuleOutput, len(rawModules))
 	}
 	for name, rawValue := range rawModules {
+		// Unmarshal left a zero-value phantom under the first segment of a
+		// dotted name, even when the value is not a mapping, so the prefix is
+		// checked before the value is skipped. It is dropped unless viper
+		// reports the exact prefix path as set (a sibling entry in the file or
+		// a built-in default such as audio), same rule as reDecodeDottedMapKeys.
+		dropSplitPrefixEntry(settings.Logging.ModuleOutputs, loggingModulesViperPath, name)
 		// A module entry must be a mapping. A scalar or null under a dotted
 		// name was split by viper and ignored by Unmarshal, and a non-dotted
-		// scalar already fails Unmarshal, so skipping keeps the entry exactly
-		// as Unmarshal produced it and the logger's defaultModuleOutputs
-		// fills an absent known module.
+		// scalar already fails Unmarshal, so skipping leaves the entry out and
+		// the logger's defaultModuleOutputs fills an absent known module.
 		if _, isMap := rawValue.(map[string]any); !isMap {
 			continue
 		}
@@ -244,7 +257,7 @@ func reDecodeModuleOutputs(settings *Settings, section map[string]any) error {
 		if err := decodeRawEntry(&entry, rawValue); err != nil {
 			// The decoder reports field paths relative to this entry only, so
 			// name the module in the message as well as in the context.
-			return errors.Newf("logging.modules[%s]: %w", name, err).
+			return errors.Newf("%s[%s]: %w", loggingModulesViperPath, name, err).
 				Category(errors.CategoryConfiguration).
 				Context("operation", "decode-logging-modules").
 				Context("module", name).
@@ -280,6 +293,17 @@ func reDecodeModuleLevels(settings *Settings, section map[string]any) error {
 		settings.Logging.ModuleLevels[name] = level
 	}
 	return nil
+}
+
+// dropSplitPrefixEntry deletes the zero-value entry viper.Unmarshal left under
+// the first segment of a dotted key, unless viper.IsSet reports that exact
+// path as set (a sibling entry in the file or a default such as "audio"). A key
+// without a dot is left alone.
+func dropSplitPrefixEntry[V any](entries map[string]V, viperPath, key string) {
+	prefix, _, dotted := strings.Cut(key, viperKeyDelimiter)
+	if dotted && !viper.IsSet(viperPath+viperKeyDelimiter+prefix) {
+		delete(entries, prefix)
+	}
 }
 
 // reDecodeDottedStructMaps restores species config and season keys that contain
@@ -320,15 +344,12 @@ func reDecodeDottedMapKeys[V any](entries map[string]V, viperPath string) (map[s
 		return entries, nil
 	}
 	for key, rawValue := range raw {
-		prefix, _, dotted := strings.Cut(key, viperKeyDelimiter)
-		if !dotted {
+		if !strings.Contains(key, viperKeyDelimiter) {
 			continue
 		}
 		// Unmarshal left a phantom under the prefix even when the value is not
 		// a mapping, so the prefix is checked before the value is skipped.
-		if !viper.IsSet(viperPath + viperKeyDelimiter + prefix) {
-			delete(entries, prefix)
-		}
+		dropSplitPrefixEntry(entries, viperPath, key)
 		if _, isMap := rawValue.(map[string]any); !isMap {
 			continue
 		}
