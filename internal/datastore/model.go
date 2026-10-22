@@ -33,9 +33,12 @@ type Note struct {
 	// day's detections into one Note per species whose Time is the latest detection, and carry
 	// the earliest one here so the daily summary can report first heard and last heard apart.
 	// Empty on every other read path.
-	FirstTime          string                                  `gorm:"-" json:"-"`
-	Model              detection.ModelInfo                     `gorm:"-"`          // Runtime only: model that produced this detection
-	ModelContributions map[string]detection.ResultModelContrib `gorm:"-" json:"-"` // Runtime only: per-model contributions from cross-model consensus
+	FirstTime string              `gorm:"-" json:"-"`
+	Model     detection.ModelInfo `gorm:"-"` // Runtime only: model that produced this detection
+	// ModelContributions is runtime-only: the legacy notes schema has no column for it, so
+	// it is never persisted through this model. The v2 save paths read it to write the
+	// detection_model_contributions rows.
+	ModelContributions map[string]detection.ResultModelContrib `gorm:"-" json:"-"`
 	BeginTime          time.Time
 	EndTime            time.Time
 	SpeciesCode        string

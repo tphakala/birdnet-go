@@ -2337,3 +2337,39 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 	assert.Equal(t, 6, dupContribs[0].HitCount)
 	assert.InDelta(t, 0.93, dupContribs[0].MaxConfidence, 1e-9)
 }
+
+// TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail verifies that model
+// contributions are best-effort: a failure to persist them must not fail the save
+// or roll back the detection (#4648).
+func TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	// Make every contribution write fail while detections stay writable.
+	require.NoError(t, ds.manager.DB().Migrator().DropTable(&entities.DetectionModelContribution{}))
+
+	note := &datastore.Note{
+		ScientificName: "Poecile carolinensis",
+		CommonName:     "carolina chickadee",
+		Date:           "2026-10-17",
+		Time:           "12:00:00",
+		Confidence:     0.92,
+		ModelContributions: map[string]detection.ResultModelContrib{
+			"BirdNET_V2.4": {
+				Model:         detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
+				HitCount:      8,
+				MaxConfidence: 0.92,
+			},
+		},
+	}
+
+	require.NoError(t, ds.Save(note, nil), "a contribution failure must not fail the detection save")
+	require.NotZero(t, note.ID, "the detection ID must still be propagated to the note")
+
+	var count int64
+	require.NoError(t, ds.manager.DB().Model(&entities.Detection{}).
+		Where("id = ?", note.ID).Count(&count).Error)
+	assert.Equal(t, int64(1), count, "the detection row must survive a contribution failure")
+}

@@ -815,6 +815,8 @@ func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []data
 // Save saves a note with its results atomically.
 // The detection and its predictions are saved in a single transaction to prevent
 // partial writes (e.g., detection saved but predictions failed).
+// Model contributions are written after the transaction commits, on a best-effort
+// basis: a failure to resolve or persist them is logged and does not fail the save.
 func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) error {
 	ctx := context.Background()
 
@@ -924,10 +926,6 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 		}
 	}
 
-	// Pre-resolve contributing models before starting the transaction to avoid
-	// holding the transaction lock or deadlocking single-connection SQLite pools.
-	contribs := ds.resolveModelContributions(ctx, note.ModelContributions)
-
 	// Use timeout context for transaction to prevent indefinite lock holding.
 	txCtx, cancel := context.WithTimeout(ctx, saveTransactionTimeout)
 	defer cancel()
@@ -950,10 +948,6 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 			}
 		}
 
-		if err := saveModelContributionsInTx(tx, det.ID, contribs); err != nil {
-			return err
-		}
-
 		return nil
 	}); err != nil {
 		return err
@@ -964,7 +958,24 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// downstream actions (MQTT, SSE) publish detectionId=0 (GitHub #2453).
 	note.ID = det.ID
 
+	ds.saveModelContributionsBestEffort(txCtx, det.ID, note.ModelContributions)
+
 	return nil
+}
+
+// saveModelContributionsBestEffort resolves and persists model contributions for a
+// detection that has already committed. Contributions are supplementary metadata, so
+// a failure is logged and never rolls back or fails the detection save.
+func (ds *Datastore) saveModelContributionsBestEffort(ctx context.Context, detectionID uint, modelContribs map[string]detection.ResultModelContrib) {
+	contribs := ds.resolveModelContributions(ctx, modelContribs)
+	if len(contribs) == 0 {
+		return
+	}
+	if err := ds.detection.SaveModelContributions(ctx, detectionID, contribs); err != nil && ds.log != nil {
+		ds.log.Warn("v2 model contributions save failed",
+			logger.Uint64("detection_id", uint64(detectionID)),
+			logger.Error(err))
+	}
 }
 
 // buildDedupedPredictions deduplicates predictions by label_id, keeping the highest confidence
@@ -989,20 +1000,6 @@ func buildDedupedPredictions(detectionID uint, results []datastore.Results, pred
 		})
 	}
 	return preds
-}
-
-// saveModelContributionsInTx assigns the detection ID and inserts pre-resolved model contributions.
-func saveModelContributionsInTx(tx *gorm.DB, detectionID uint, contribs []*entities.DetectionModelContribution) error {
-	if len(contribs) == 0 {
-		return nil
-	}
-	for _, c := range contribs {
-		c.DetectionID = detectionID
-	}
-	if err := tx.Create(&contribs).Error; err != nil {
-		return fmt.Errorf("failed to save model contributions: %w", err)
-	}
-	return nil
 }
 
 // resolveModelContributions resolves each contributing AI model in the map and
