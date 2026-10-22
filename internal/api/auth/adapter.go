@@ -255,9 +255,7 @@ func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) string {
 
 	authCode := a.OAuth2Server.GenerateAuthCode()
 
-	log.Info("Basic authentication successful",
-		logger.Username(username),
-		logger.Bool("auth_code_generated", authCode != ""))
+	log.Info("Basic authentication successful", logger.Username(username))
 	return authCode
 }
 
