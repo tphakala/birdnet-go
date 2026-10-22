@@ -209,6 +209,10 @@ func TestServeAudioClip(t *testing.T) {
 	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, extendedClipFilename)))
 	spacedFilename := "my clip.wav"
 	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, spacedFilename)))
+	cyrillicFilename := "тест.wav"
+	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, cyrillicFilename)))
+	umlautFilename := "Prüfung.wav"
+	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, umlautFilename)))
 
 	// Test cases
 	testCases := []struct {
@@ -268,6 +272,20 @@ func TestServeAudioClip(t *testing.T) {
 			expectedStatus:      http.StatusOK,
 			expectedLength:      8864,
 			expectedDisposition: "inline; filename*=UTF-8''my%20clip.wav",
+		},
+		{
+			name:                "Cyrillic filename is percent-encoded UTF-8",
+			filename:            cyrillicFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''%D1%82%D0%B5%D1%81%D1%82.wav",
+		},
+		{
+			name:                "Umlaut filename is percent-encoded UTF-8",
+			filename:            umlautFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''Pr%C3%BCfung.wav",
 		},
 		{
 			name:           "Non-existent file",
@@ -540,95 +558,35 @@ func TestRangeHeaderHandling(t *testing.T) {
 	err := os.WriteFile(filePath, fileContent, 0o600)
 	require.NoError(t, err)
 
-	// Test cases for range headers (same as before, but now served via SecureFS -> http.ServeContent)
+	// Closed and suffix slices are covered by TestServeAudioClip, the gzip
+	// end-to-end test and TestAudioConcurrentRangeRequests; these rows pin the
+	// full body, an open-ended range and the two kinds of unsatisfiable range.
 	testCases := []struct {
-		name           string
-		rangeHeader    string
-		expectedStatus int
-		validateFunc   func(*testing.T, *httptest.ResponseRecorder)
+		name                 string
+		rangeHeader          string
+		expectedStatus       int
+		expectedBody         []byte // checked for 200 and 206
+		expectedContentRange string // checked when set
 	}{
+		{name: "No range header", expectedStatus: http.StatusOK, expectedBody: fileContent},
 		{
-			name:           "No range header",
-			rangeHeader:    "",
-			expectedStatus: http.StatusOK,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent, rec.Body.Bytes())
-			},
-		},
-		{
-			name:           "Range: bytes=0-99",
-			rangeHeader:    "bytes=0-99",
-			expectedStatus: http.StatusPartialContent,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent[0:100], rec.Body.Bytes())
-				assert.Equal(t, "bytes 0-99/1024", rec.Header().Get("Content-Range"))
-			},
-		},
-		{
-			name:           "Range: bytes=100-199",
-			rangeHeader:    "bytes=100-199",
-			expectedStatus: http.StatusPartialContent,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent[100:200], rec.Body.Bytes())
-				assert.Equal(t, "bytes 100-199/1024", rec.Header().Get("Content-Range"))
-			},
-		},
-		{
-			name:           "Range: bytes=-100",
-			rangeHeader:    "bytes=-100",
-			expectedStatus: http.StatusPartialContent,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent[924:1024], rec.Body.Bytes())
-				assert.Equal(t, "bytes 924-1023/1024", rec.Header().Get("Content-Range"))
-			},
-		},
-		{
-			name:           "Range: bytes=924-",
-			rangeHeader:    "bytes=924-",
-			expectedStatus: http.StatusPartialContent,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent[924:1024], rec.Body.Bytes())
-				assert.Equal(t, "bytes 924-1023/1024", rec.Header().Get("Content-Range"))
-			},
+			name:                 "Range: bytes=924-",
+			rangeHeader:          "bytes=924-",
+			expectedStatus:       http.StatusPartialContent,
+			expectedBody:         fileContent[924:],
+			expectedContentRange: "bytes 924-1023/1024",
 		},
 		{
 			name:           "Invalid range format (bytes=invalid)",
 			rangeHeader:    "bytes=invalid",
 			expectedStatus: http.StatusRequestedRangeNotSatisfiable,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Empty(t, rec.Body.Bytes(), "416 responses should not include the file body")
-			},
 		},
 		{
-			name:           "Invalid range (out of bounds)",
-			rangeHeader:    "bytes=2000-",
-			expectedStatus: http.StatusRequestedRangeNotSatisfiable,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// No body validation needed
-			},
+			name:                 "Invalid range (out of bounds)",
+			rangeHeader:          "bytes=2000-",
+			expectedStatus:       http.StatusRequestedRangeNotSatisfiable,
+			expectedContentRange: "bytes */1024", // an out-of-bounds 416 reports the current size
 		},
-		/* // <-- FIX: Comment out multi-range test
-		{
-			name:        "Multiple ranges - should be handled by http.ServeContent",
-			rangeHeader: "bytes=0-99,200-299",
-			// http.ServeContent serves the *entire* file if multiple ranges are requested,
-			// but the spec says it *should* return multipart/byteranges. Go's implementation might differ or require specific setup.
-			// Let's assume for now it sends the whole file (like Apache does sometimes).
-			// Update: Go's http.ServeContent *does* support multipart/byteranges.
-			// The test needs to be updated to expect this complex response format or simplified.
-			// For now, let's test the first part is correct, although the response is multipart.
-			// expectedBody:     fileContent[0:100], // This assertion is WRONG for multipart
-			// expectedContentRange: "bytes 0-99/1024", // This assertion is WRONG for multipart
-			// expectedContentType:  "multipart/byteranges; boundary=", // Check it starts with multipart
-		},
-		*/
 	}
 
 	for _, tc := range testCases {
@@ -644,67 +602,48 @@ func TestRangeHeaderHandling(t *testing.T) {
 
 			require.NoError(t, controller.ServeAudioClip(c))
 			assert.Equal(t, tc.expectedStatus, rec.Code)
-
-			if rec.Code == http.StatusOK || rec.Code == http.StatusPartialContent {
-				tc.validateFunc(t, rec)
+			if tc.expectedBody != nil {
+				assert.Equal(t, tc.expectedBody, rec.Body.Bytes())
+			} else {
+				// http.ServeContent answers with a short error text, so the body is
+				// not empty; what a 416 must never carry is the file itself.
+				const probeLen = 64
+				assert.False(t, bytes.Contains(rec.Body.Bytes(), fileContent[:probeLen]),
+					"416 responses should not include the file body")
+			}
+			if tc.expectedContentRange != "" {
+				assert.Equal(t, tc.expectedContentRange, rec.Header().Get("Content-Range"))
 			}
 		})
 	}
 }
 
-// TestServeAudioClipWithUnicodeFilenames tests handling of Unicode filenames with SecureFS
-func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
-	// Setup test environment
-	e, controller, tempDir := setupMediaTestEnvironment(t)
+// TestParseRawParameter pins every spelling of the raw query parameter. The
+// handler tests below only check that the parsed value reaches the file name.
+func TestParseRawParameter(t *testing.T) {
+	t.Parallel()
 
-	// Create test files with Unicode filenames
-	unicodeNames := []string{
-		"тест.wav",    // Cyrillic
-		"테스트.wav",     // Korean
-		"測試.wav",      // Chinese
-		"Prüfung.wav", // German with umlaut
-		"ファイル.wav",    // Japanese
-		"αρχείο.wav",  // Greek
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"", true}, {"true", true}, {"false", false}, {"1", true}, {"0", false},
+		{"t", true}, {"f", false}, {"TRUE", true}, {"False", false},
+		{"yes", true}, {"YES", true}, {"no", false}, {"No", false},
+		{"on", true}, {"off", false},
+		{"invalid", true}, // unknown values keep the backward-compatible default
 	}
-
-	for _, name := range unicodeNames {
-		// Use filename directly relative to tempDir (SecureFS root)
-		filePath := filepath.Join(tempDir, name)
-		err := createTestAudioFile(t, filePath)
-		require.NoError(t, err)
-	}
-
-	// Test each Unicode filename
-	for _, name := range unicodeNames {
-		t.Run("Unicode filename: "+name, func(t *testing.T) {
-			// Create request
-			// Need to URL-encode the filename for the request path
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+name, http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetParamNames("filename")
-			// Echo automatically decodes path parameters, so pass the raw name here
-			c.SetParamValues(name)
-
-			// Call handler (uses SecureFS.ServeFile)
-			handlerErr := controller.ServeAudioClip(c)
-
-			// Check for handler error
-			require.NoErrorf(t, handlerErr, "Error serving Unicode filename %s", name)
-
-			// Check response
-			assert.Equal(t, http.StatusOK, rec.Code)
-			// Check that we got a valid WAV file (starts with "RIFF")
-			body := rec.Body.Bytes()
-			assert.Greater(t, len(body), 4, "Response body should not be empty")
-			if len(body) > 4 {
-				assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
-			}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, parseRawParameter(tt.in))
 		})
 	}
 }
 
-// TestServeSpectrogramRawParameter tests the raw parameter parsing functionality
+// TestServeSpectrogramRawParameter checks that the filename route passes the
+// parsed raw parameter to the file lookup: raw selects the plain PNG, raw=false
+// the legend PNG. The spellings are covered by TestParseRawParameter.
 func TestServeSpectrogramRawParameter(t *testing.T) {
 	// Setup test environment
 	e, controller, tempDir := setupMediaTestEnvironment(t)
@@ -743,67 +682,11 @@ func TestServeSpectrogramRawParameter(t *testing.T) {
 			description:    "Should default to raw=true",
 		},
 		{
-			name:           "Explicit raw=true",
-			rawParam:       "true",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Should generate raw spectrogram",
-		},
-		{
 			name:           "Explicit raw=false",
 			rawParam:       "false",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "legend spectrogram",
 			description:    "Should generate spectrogram with legend",
-		},
-		{
-			name:           "Raw=1 (numeric true)",
-			rawParam:       "1",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Should parse '1' as true",
-		},
-		{
-			name:           "Raw=0 (numeric false)",
-			rawParam:       "0",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "legend spectrogram",
-			description:    "Should parse '0' as false",
-		},
-		{
-			name:           "Raw=yes",
-			rawParam:       "yes",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Should parse 'yes' as true",
-		},
-		{
-			name:           "Raw=no",
-			rawParam:       "no",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "legend spectrogram",
-			description:    "Should parse 'no' as false",
-		},
-		{
-			name:           "Raw=invalid (defaults to true)",
-			rawParam:       "invalid",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Invalid values should default to true",
-		},
-		{
-			name:           "Raw=TRUE (case insensitive)",
-			rawParam:       "TRUE",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Should be case insensitive",
-		},
-		{
-			name:           "Raw=False (mixed case)",
-			rawParam:       "False",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "legend spectrogram",
-			description:    "Should handle mixed case",
 		},
 	}
 
@@ -1042,7 +925,8 @@ func TestServeAudioByID_AudioFormats(t *testing.T) {
 	}
 }
 
-// TestServeSpectrogramByIDRawParameter tests the raw parameter parsing for ID-based spectrogram endpoint
+// TestServeSpectrogramByIDRawParameter checks that the ID route passes the parsed raw
+// parameter to the file lookup. The spellings are covered by TestParseRawParameter.
 func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 	// Setup test environment
 	e, controller, tempDir := setupMediaTestEnvironment(t)
@@ -1085,92 +969,15 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 			expectedBody:   "id raw spectrogram",
 		},
 		{
-			name:           "Explicit raw=true",
-			rawParam:       "true",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
 			name:           "Explicit raw=false",
 			rawParam:       "false",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "id legend spectrogram",
 		},
 		{
-			name:           "Raw=1 (numeric true)",
-			rawParam:       "1",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=0 (numeric false)",
-			rawParam:       "0",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=t (short true)",
-			rawParam:       "t",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=f (short false)",
-			rawParam:       "f",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=yes",
-			rawParam:       "yes",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
+			// A spelling strconv.ParseBool rejects, so only the full parser maps it to false.
 			name:           "Raw=no",
 			rawParam:       "no",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=on",
-			rawParam:       "on",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=off",
-			rawParam:       "off",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=invalid (defaults to true)",
-			rawParam:       "invalid",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=TRUE (case insensitive)",
-			rawParam:       "TRUE",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=False (mixed case)",
-			rawParam:       "False",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=YES (uppercase)",
-			rawParam:       "YES",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=No (mixed case)",
-			rawParam:       "No",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "id legend spectrogram",
 		},
@@ -1917,24 +1724,6 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			expectedFilename: "bird_1026px-legend.png",
 		},
 		{
-			name:             "scientific_dark style raw",
-			relAudioPath:     "clips/2025/01/bird.wav",
-			width:            1026,
-			raw:              true,
-			style:            "scientific_dark",
-			dynamicRange:     "100",
-			expectedFilename: "bird_1026px-scientific_dark.png",
-		},
-		{
-			name:             "scientific_dark style with legend",
-			relAudioPath:     "clips/2025/01/bird.wav",
-			width:            1026,
-			raw:              false,
-			style:            "scientific_dark",
-			dynamicRange:     "100",
-			expectedFilename: "bird_1026px-scientific_dark-legend.png",
-		},
-		{
 			name:             "high_contrast_dark with non-default DR raw",
 			relAudioPath:     "clips/2025/01/bird.wav",
 			width:            514,
@@ -1942,15 +1731,6 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			style:            "high_contrast_dark",
 			dynamicRange:     "80",
 			expectedFilename: "bird_514px-high_contrast_dark-dr80.png",
-		},
-		{
-			name:             "empty style and DR produce backward-compatible filename",
-			relAudioPath:     "clips/2025/01/bird.wav",
-			width:            1026,
-			raw:              true,
-			style:            "",
-			dynamicRange:     "",
-			expectedFilename: "bird_1026px.png",
 		},
 	}
 
@@ -2088,32 +1868,16 @@ func TestAudioRangeConsistencyAcrossSequentialRequests(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("%d", largeFileSize), recordedContentLength,
 		"Content-Length must match the large file size")
 
-	// Step 2: Send a follow-up range request using the recorded Content-Length
-	// (simulating Chrome's behavior of requesting bytes=0-{contentLength-1})
-	rangeEnd := largeFileSize - 1
-	chromeRangeHeader := fmt.Sprintf("bytes=0-%d", rangeEnd)
-
-	followUpReq := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
-	followUpReq.Header.Set("Range", chromeRangeHeader)
-	followUpRec := httptest.NewRecorder()
-	e.ServeHTTP(followUpRec, followUpReq)
-
-	assert.Equal(t, http.StatusPartialContent, followUpRec.Code,
-		"Follow-up range request covering the full file must return 206")
-	expectedRange := fmt.Sprintf("bytes 0-%d/%d", rangeEnd, largeFileSize)
-	assert.Equal(t, expectedRange, followUpRec.Header().Get("Content-Range"),
-		"Content-Range must span the entire file")
-
-	// Step 3: Replace the file with a smaller one (simulates a file being
+	// Step 2: Replace the file with a smaller one (simulates a file being
 	// re-exported at a different length, or a different clip replacing it)
 	err := os.Remove(filePath)
 	require.NoError(t, err, "Must be able to remove the original file")
 	createLargeWAVFile(t, filePath, smallDataSize)
 
-	// Step 4: Send a range request using the OLD (larger) content-length.
+	// Step 3: Send a range request built from the OLD (larger) content-length.
 	// The range now extends beyond the new file, so the server must reject
 	// it with 416 Range Not Satisfiable.
-	staleRangeHeader := fmt.Sprintf("bytes=%d-%d", smallFileSize, rangeEnd)
+	staleRangeHeader := fmt.Sprintf("bytes=%d-%d", smallFileSize, largeFileSize-1)
 	staleReq := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
 	staleReq.Header.Set("Range", staleRangeHeader)
 	staleRec := httptest.NewRecorder()

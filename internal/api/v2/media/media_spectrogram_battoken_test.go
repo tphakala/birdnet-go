@@ -282,9 +282,9 @@ func TestParseSpectrogramParameters_OverlayRate(t *testing.T) {
 		{"?sr=-5", 0},
 		{"?sr=1.5", 0},
 	}
+	h, e, _ := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
 	for _, tt := range tests {
 		t.Run(tt.query, func(t *testing.T) {
-			h, e, _ := newRetainedTestHandler(t, conf.SpectrogramModeAuto)
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/spectrogram/1"+tt.query, http.NoBody)
 			c := e.NewContext(req, nil)
 			params, err := h.parseSpectrogramParameters(c)
