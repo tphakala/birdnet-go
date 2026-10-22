@@ -58,6 +58,8 @@ const (
 	backupDiskBuffer      = 100 * 1024 * 1024 // 100MB buffer for disk space check
 	backupVacuumRetries   = 3                 // Number of retries for locked database
 	backupVacuumRetryWait = 2 * time.Second   // Wait between retries
+
+	backupJobIDRandomBytes = 4 // Random bytes in a backup job ID suffix
 )
 
 // BackupJob represents an async backup job.
@@ -205,7 +207,7 @@ func (m *BackupJobManager) cleanupExpiredJobs() {
 
 // generateJobID creates a unique job ID.
 func generateJobID(dbType string) string {
-	randomBytes := make([]byte, 4)
+	randomBytes := make([]byte, backupJobIDRandomBytes)
 	rand.Read(randomBytes)
 	return fmt.Sprintf("backup-%s-%d-%s", dbType, time.Now().UnixNano(), hex.EncodeToString(randomBytes))
 }

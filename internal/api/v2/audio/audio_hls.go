@@ -81,6 +81,10 @@ const (
 	// not downmix, so naming it gives the muxer configuration something to be
 	// checked against rather than a second bare literal.
 	hlsConsumerChannels = 1
+
+	// hlsStreamTokenBytes is the number of random bytes in a stream URL token;
+	// hex encoding makes the token twice as many characters.
+	hlsStreamTokenBytes = 16
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session.
@@ -253,7 +257,7 @@ func (c *Handler) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc {
 
 // generateStreamToken creates a crypto-random 32-character hex token for stream URL access.
 func generateStreamToken() string {
-	b := make([]byte, 16)
+	b := make([]byte, hlsStreamTokenBytes)
 	rand.Read(b)
 	return hex.EncodeToString(b)
 }

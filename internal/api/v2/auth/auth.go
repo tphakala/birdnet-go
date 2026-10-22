@@ -736,22 +736,13 @@ func ValidateAndSanitizeRedirect(redirect string) string {
 // It accepts a context to allow cancellation of the delay.
 func randomDelay(ctx context.Context, minMs, maxMs int64) {
 	if maxMs <= minMs {
-		minMs = 50  // Default min
-		maxMs = 150 // Default max
+		minMs = authDelayMinMs
+		maxMs = authDelayMaxMs
 	}
 	rangeSize := big.NewInt(maxMs - minMs)
-	n, err := rand.Int(rand.Reader, rangeSize)
-	var delayMs int64
-	if err != nil {
-		// Fallback to min delay if random generation fails
-		delayMs = minMs
-		// Optionally log the error
-		// log.Printf("Error generating random delay: %v, using fallback %dms", err, delayMs)
-	} else {
-		delayMs = n.Int64() + minMs
-	}
-
-	delayDuration := time.Duration(delayMs) * time.Millisecond
+	// rand.Int fails only when its reader does, and the default rand.Reader never returns an error.
+	n, _ := rand.Int(rand.Reader, rangeSize)
+	delayDuration := time.Duration(n.Int64()+minMs) * time.Millisecond
 
 	// Create a timer for the delay
 	timer := time.NewTimer(delayDuration)
