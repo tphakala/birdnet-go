@@ -37,7 +37,7 @@ type Note struct {
 	Model     detection.ModelInfo `gorm:"-"` // Runtime only: model that produced this detection
 	// ModelContributions is runtime-only: the legacy notes schema has no column for it, so
 	// it is never persisted through this model. v2only Save reads it to write the
-	// detection_model_contributions rows; the dual-write path takes them from detection.Result.
+	// detection_model_contributions rows.
 	ModelContributions map[string]detection.ResultModelContrib `gorm:"-" json:"-"`
 	BeginTime          time.Time
 	EndTime            time.Time
