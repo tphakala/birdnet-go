@@ -29,10 +29,13 @@ type MockMQTTClient struct {
 	publishedTopic   string
 	publishedPayload string
 	publishErr       error
-	connectErr       error
-	publishCalls     int
-	reconnectLoops   int
-	disconnectCalls  int
+	// failNextPublishes fails that many publishes with failNextErr, then succeeds.
+	failNextPublishes int
+	failNextErr       error
+	connectErr        error
+	publishCalls      int
+	reconnectLoops    int
+	disconnectCalls   int
 	// messages records every successful publish in order.
 	messages []publishedMessage
 	// topicErrs fails publishes to specific topics only.
@@ -73,6 +76,10 @@ func (m *MockMQTTClient) publish(ctx context.Context, topic, payload string, ret
 	m.publishCalls++
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if m.failNextPublishes > 0 {
+		m.failNextPublishes--
+		return m.failNextErr
 	}
 	if m.publishErr != nil {
 		return m.publishErr
@@ -166,6 +173,14 @@ func (m *MockMQTTClient) SetPublishError(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.publishErr = err
+}
+
+// FailNextPublishes makes the next n publishes return err, after which publishes succeed.
+func (m *MockMQTTClient) FailNextPublishes(n int, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.failNextPublishes = n
+	m.failNextErr = err
 }
 
 // SetTopicError makes publishes to topic fail with err; other topics succeed.
@@ -844,4 +859,42 @@ func TestMqttAction_Execute_SpeciesDetectionTimes_NilSource(t *testing.T) {
 	assert.True(t, present, "speciesFirstDetectedAt key must always be present (no omitempty)")
 	assert.Nil(t, jsonMap["speciesFirstDetectedAt"])
 	assert.Nil(t, jsonMap["speciesLastDetectedAt"])
+}
+
+// TestMqttAction_Execute_RetryReusesEventTrackerDecision verifies that a queue
+// retry of the same action reuses the first rate-limit decision: the retry
+// publishes (the tracker would otherwise suppress it inside the interval) and
+// does not re-stamp the tracker, while a different action for the same species
+// inside the interval is still suppressed.
+func TestMqttAction_Execute_RetryReusesEventTrackerDecision(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	mockClient.FailNextPublishes(1, fmt.Errorf("publish timeout"))
+
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(time.Hour)
+	det := testDetection()
+
+	newAction := func() *MqttAction {
+		return &MqttAction{
+			Settings:     settings,
+			Result:       det.Result,
+			MqttClient:   mockClient,
+			EventTracker: eventTracker,
+			DetectionCtx: &DetectionContext{},
+		}
+	}
+
+	first := newAction()
+	require.Error(t, first.Execute(t.Context(), nil), "first attempt fails")
+	require.NoError(t, first.Execute(t.Context(), nil), "retry succeeds")
+	assert.Len(t, mockClient.GetPublishedMessages(), 1, "the retry must publish")
+
+	require.NoError(t, newAction().Execute(t.Context(), nil))
+	assert.Len(t, mockClient.GetPublishedMessages(), 1,
+		"a second detection of the species inside the interval stays rate limited")
 }

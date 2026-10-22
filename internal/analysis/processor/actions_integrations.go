@@ -61,7 +61,10 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 	defer a.mu.Unlock()
 
 	// Check event frequency (supports scientific name lookup)
-	if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, BirdWeatherSubmit) {
+	// Decided once per detection so queue retries are neither suppressed nor re-stamped.
+	if !a.rateLimit.allow(func() bool {
+		return a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, BirdWeatherSubmit)
+	}) {
 		return nil
 	}
 
@@ -209,9 +212,11 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 }
 
 // Execute sends the note to the MQTT broker.
+// The job queue runs this action as its own job and retries it under
+// realtime.mqtt.retrysettings when it returns an error.
 // Transient connection errors (EOF, not connected) are logged as warnings and
-// do NOT fail the CompositeAction, the detection is already saved to the database.
-// This eliminates the TOCTOU race at Layer 2 (GitHub #2397).
+// are not returned, so they are not retried: the detection is already saved to
+// the database. This eliminates the TOCTOU race at Layer 2 (GitHub #2397).
 func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -221,8 +226,11 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	// Instead, we attempt the publish directly and handle errors gracefully.
 	// The Publish() method returns a clear error if the client is disconnected.
 
-	// Check event frequency (supports scientific name lookup)
-	if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, MQTTPublish) {
+	// Check event frequency (supports scientific name lookup). Decided once per
+	// detection: queue retries of this action reuse the first verdict.
+	if !a.rateLimit.allow(func() bool {
+		return a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, MQTTPublish)
+	}) {
 		return nil
 	}
 
@@ -254,7 +262,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	// reason it is unusable in a notification embed. Tracked separately along with
 	// the notification case.
 
-	// Get detection ID from shared context (set by DatabaseAction in CompositeAction sequence)
+	// Get detection ID from shared context (set by DatabaseAction, which runs before this action is enqueued)
 	var detectionID uint
 	if a.DetectionCtx != nil {
 		detectionID = uint(a.DetectionCtx.NoteID.Load())
@@ -270,15 +278,15 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 
 	// NOTE: ClipName is always included in the MQTT payload, even though the
 	// audio file may not be on disk yet. Audio export runs independently after
-	// the CompositeAction completes. Home Assistant and other MQTT consumers
+	// the composite that saves the detection completes. Home Assistant and other MQTT consumers
 	// that construct audio URLs from ClipName should handle 404/503 responses
 	// gracefully, or use the detection ID-based audio endpoint which has
 	// built-in wait-for-encoding support.
 
 	// Fetch the species' first-ever and most-recent previous detection times
 	// (all-time; the strict before bound in the query excludes the current
-	// detection, which DatabaseAction persisted earlier in the CompositeAction
-	// sequence). This must run before the publish-timeout context is created
+	// detection, which DatabaseAction persisted before this action was
+	// enqueued). This must run before the publish-timeout context is created
 	// below so it derives from the action's context. Non-fatal: on any failure
 	// the payload is published with null fields, matching this action's
 	// "transient errors are non-fatal" philosophy (GitHub #2397).
@@ -335,9 +343,9 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	defer cancel()
 
 	// Publish the note to the MQTT broker.
-	// The detection is already saved to the database (CompositeAction order: DB -> SSE -> MQTT).
+	// The detection is already saved to the database (this action is enqueued after the save).
 	// Transient connection errors are non-fatal: we log a warning and return nil to avoid
-	// failing the CompositeAction and generating noisy Sentry events (GitHub #2397).
+	// failed jobs and noisy Sentry events (GitHub #2397).
 	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
 		sanitizedErr := privacy.WrapError(err)
@@ -356,7 +364,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 				logger.Float64("confidence", a.Result.Confidence),
 				logger.String("topic", a.Settings.Realtime.MQTT.Topic),
 				logger.String("operation", "mqtt_publish_transient_skip"))
-			return nil // Non-fatal: don't fail the CompositeAction
+			return nil // Non-fatal: the detection is saved, so no retry
 		}
 
 		// Non-transient error (config issue, JSON error, etc.): this is a real problem
@@ -416,7 +424,7 @@ func (a *MqttAction) Execute(ctx context.Context, data any) error {
 // skipped.
 //
 // The publish is bounded by whatever remains of the action's step budget
-// (CompositeActionTimeout, via the parent context) and by MQTTPublishTimeout,
+// (the job execution timeout, via the parent context) and by MQTTPublishTimeout,
 // whichever is shorter; it does not always get the full MQTTPublishTimeout. An
 // already-expired step is skipped entirely so it does not start a publish that
 // can only fail with the step's own deadline.
@@ -442,7 +450,7 @@ func (a *MqttAction) publishSourceDetection(parent context.Context, sourceID, pa
 	}
 
 	// The publish is bounded by whatever remains of the action's step budget
-	// (CompositeActionTimeout) and by MQTTPublishTimeout, whichever is shorter; it
+	// (the job execution timeout) and by MQTTPublishTimeout, whichever is shorter; it
 	// does not always get the full MQTTPublishTimeout.
 	ctx, cancel := context.WithTimeout(parent, MQTTPublishTimeout)
 	defer cancel()
@@ -555,7 +563,7 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 		return nil
 	}
 
-	// Get detection ID from shared context (set by DatabaseAction in CompositeAction sequence).
+	// Get detection ID from shared context (set by DatabaseAction earlier in the same composite).
 	// DetectionContext provides the database ID without polling via atomic.Uint64.
 	var noteID uint
 	if a.DetectionCtx != nil {
@@ -575,7 +583,7 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 
 	// NOTE: ClipName is always included in the SSE payload, even though the audio
 	// file may not be on disk yet. Audio export runs as a separate independent
-	// action after the DB -> SSE -> MQTT composite completes. The media API
+	// action after the Database -> SSE composite completes. The media API
 	// handles this race gracefully: waitForAudioFile() polls for the file with
 	// retries, and returns 503 + Retry-After if it's still being encoded.
 	// This is better than clearing ClipName, which would prevent the frontend
@@ -583,7 +591,6 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 
 	// Broadcast the detection with error handling
 	if err := a.SSEBroadcaster(&note, &birdImage); err != nil {
-		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
 		sanitizedErr := privacy.WrapError(err)
 		GetLogger().Error("Failed to broadcast via SSE",
@@ -594,7 +601,6 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 			logger.String("scientific_name", a.Result.Species.ScientificName),
 			logger.Float64("confidence", a.Result.Confidence),
 			logger.String("clip_name", a.Result.ClipName),
-			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.String("operation", "sse_broadcast"))
 		return errors.New(err).
 			Component("analysis.processor").

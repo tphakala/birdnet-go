@@ -199,6 +199,12 @@ func TestGetJobQueueRetryConfig(t *testing.T) {
 			wantMaxRetries: 5,
 		},
 		{
+			name:           "CompositeAction",
+			action:         &CompositeAction{},
+			wantEnabled:    false,
+			wantMaxRetries: 0,
+		},
+		{
 			name:           "GenericAction",
 			action:         genericAction,
 			wantEnabled:    false,
@@ -1267,4 +1273,56 @@ func TestPrivacyScrubMessage(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestRetryConfigFromSettings_DisabledMeansNoRetries verifies that disabling
+// retries in the settings drops the retry count, not only the Enabled flag.
+func TestRetryConfigFromSettings_DisabledMeansNoRetries(t *testing.T) {
+	t.Parallel()
+
+	const (
+		staleMaxRetries = 5
+		delaySeconds    = 30
+	)
+	got := retryConfigFromSettings(conf.RetrySettings{
+		Enabled:           false,
+		MaxRetries:        staleMaxRetries,
+		InitialDelay:      delaySeconds,
+		MaxDelay:          delaySeconds,
+		BackoffMultiplier: 2,
+	})
+	assert.False(t, got.Enabled)
+	assert.Zero(t, got.MaxRetries)
+
+	enabled := retryConfigFromSettings(conf.RetrySettings{
+		Enabled:           true,
+		MaxRetries:        staleMaxRetries,
+		InitialDelay:      delaySeconds,
+		MaxDelay:          delaySeconds,
+		BackoffMultiplier: 2,
+	})
+	assert.True(t, enabled.Enabled)
+	assert.Equal(t, staleMaxRetries, enabled.MaxRetries)
+	assert.Equal(t, delaySeconds*time.Second, enabled.InitialDelay)
+}
+
+// TestBirdWeatherAction_Execute_RetryReusesEventTrackerDecision verifies that a
+// retry of the same action reaches the upload path again instead of being
+// swallowed by the species rate limit.
+func TestBirdWeatherAction_Execute_RetryReusesEventTrackerDecision(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.Birdweather.Enabled = true
+	det := testDetection()
+
+	action := &BirdWeatherAction{
+		Settings:     settings,
+		Result:       det.Result,
+		EventTracker: NewEventTracker(time.Hour),
+	}
+
+	// With no client the action returns an error after the rate limit check.
+	require.Error(t, action.Execute(t.Context(), nil), "first attempt reaches the client check")
+	require.Error(t, action.Execute(t.Context(), nil), "retry must reach the client check too")
 }

@@ -523,6 +523,43 @@ func TestRetryExhaustion(t *testing.T) {
 	assert.True(t, jobFailed, "Job should have failed permanently after exhausting retries")
 }
 
+// TestEnqueue_DisabledRetryMeansSingleAttempt verifies that a RetryConfig with
+// Enabled false never retries, even when MaxRetries is non-zero.
+func TestEnqueue_DisabledRetryMeansSingleAttempt(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	queue := setupTestQueue(t, 100, false)
+	defer teardownTestQueue(t, queue)
+
+	action := &MockAction{
+		ExecuteFunc: func(data any) error {
+			return errors.NewStd("simulated failure")
+		},
+	}
+
+	const staleMaxRetries = 5
+	config := RetryConfig{
+		Enabled:      false,
+		MaxRetries:   staleMaxRetries,
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     10 * time.Millisecond,
+		Multiplier:   1.2,
+	}
+
+	job, err := queue.Enqueue(ctx, action, &TestData{ID: "disabled-retry"}, config)
+	require.NoError(t, err)
+	assert.Equal(t, 1, job.MaxAttempts, "disabled retry must allow exactly one attempt")
+
+	require.Eventually(t, func() bool {
+		queue.ProcessImmediately(ctx)
+		return queue.GetStats().FailedJobs == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "job should fail after its single attempt")
+
+	assert.Equal(t, 1, action.GetExecuteCount(), "action must not be retried")
+	assert.Equal(t, 0, queue.GetStats().RetryAttempts, "no retry may be scheduled")
+}
+
 // TestRetryBackoff tests that the retry backoff mechanism works correctly
 func TestRetryBackoff(t *testing.T) {
 	// TODO: This test could be improved by using a mock clock implementation

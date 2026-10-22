@@ -242,11 +242,18 @@ func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config 
 
 	// Pre-allocate ID string to reduce memory allocations
 	now := q.clock.Now()
+
+	// A disabled retry config means one attempt, whatever MaxRetries holds.
+	maxAttempts := 1
+	if config.Enabled {
+		maxAttempts = config.MaxRetries + 1
+	}
+
 	job := &Job{
 		ID:          shortUUID,
 		Action:      action,
 		Data:        data,
-		MaxAttempts: config.MaxRetries + 1,
+		MaxAttempts: maxAttempts,
 		CreatedAt:   now,
 		NextRetryAt: now, // Ready to run immediately
 		Status:      JobStatusPending,

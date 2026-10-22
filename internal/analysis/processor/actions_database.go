@@ -222,7 +222,7 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 
 	// NOTE: Audio export is intentionally NOT performed here.
 	// It runs as a separate action (SaveAudioAction) outside the CompositeAction
-	// that contains Database -> SSE -> MQTT. This prevents slow clip encoding
+	// that contains the Database save and SSE. This prevents slow clip encoding
 	// (e.g., on a Raspberry Pi with an SD card) from blocking SSE/MQTT broadcasts and
 	// causing CompositeAction 30s timeouts (Sentry BIRDNET-GO-WD).
 	//
@@ -315,7 +315,7 @@ func (a *DatabaseAction) populateEventMetadata(detectionEvent events.DetectionEv
 	}
 
 	// Cached-only lookup. The previous BirdImageCache.Get here was a synchronous,
-	// uncancellable provider fetch inside the CompositeAction whose 30s timeout this
+	// uncancellable provider fetch inside the CompositeAction whose per-step timeout this
 	// file's own note (see the audio-export comment above) records as the reason slow
 	// work was moved out of it. A cold species could take minutes.
 	//
@@ -326,7 +326,7 @@ func (a *DatabaseAction) populateEventMetadata(detectionEvent events.DetectionEv
 	// unreachable from there for the typical home-LAN install, whether it is
 	// root-relative or an absolute one built from a private host. The provider URL is a
 	// public CDN address and is the only form that renders. Tracked separately.
-	// Shared with the SSE and MQTT actions of the same CompositeAction through the
+	// Shared with the SSE and MQTT actions of the same detection through the
 	// detection context, so one detection costs one lookup rather than three. The
 	// helper also schedules the prefetch when nothing is cached yet, so that this
 	// notification carries no image but the next detection of the species can.
@@ -364,9 +364,9 @@ func (a *DatabaseAction) recordNotificationSent(notificationTime time.Time) {
 }
 
 // newSpeciesImageWait bounds how long a new-species notification will wait for its
-// image to resolve. It is short relative to the enclosing CompositeAction's 30s
-// timeout, so a throttled provider degrades to a notification without an image
-// rather than putting the whole Database -> SSE -> MQTT chain at risk.
+// image to resolve. It is short relative to the enclosing CompositeAction's per-step
+// timeout (CompositeActionTimeout, 10s), so a throttled provider degrades to a
+// notification without an image rather than putting the Database -> SSE chain at risk.
 const newSpeciesImageWait = 3 * time.Second
 
 // clipRateCorrectionTimeout bounds the post-encode clip sample rate write. A stalled
@@ -427,7 +427,7 @@ func (a *DatabaseAction) publishDetectionEvent(ctx context.Context, isNewSpecies
 			// brief wait here the notification for the one detection users most
 			// want an image for would never carry one. Bounded so that a slow or
 			// throttled provider cannot push the surrounding CompositeAction
-			// towards its 30s timeout, and only on this branch: ordinary
+			// towards its step timeout, and only on this branch: ordinary
 			// detections stay entirely off the provider path.
 			a.warmSpeciesImage(ctx)
 
