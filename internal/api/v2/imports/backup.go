@@ -206,7 +206,7 @@ func (m *BackupJobManager) cleanupExpiredJobs() {
 // generateJobID creates a unique job ID.
 func generateJobID(dbType string) string {
 	randomBytes := make([]byte, 4)
-	_, _ = rand.Read(randomBytes)
+	rand.Read(randomBytes)
 	return fmt.Sprintf("backup-%s-%d-%s", dbType, time.Now().UnixNano(), hex.EncodeToString(randomBytes))
 }
 

@@ -353,12 +353,11 @@ func TestHLSHeartbeatRequest(t *testing.T) {
 // TestStreamTokenGeneration tests crypto-random token generation
 func TestStreamTokenGeneration(t *testing.T) {
 	t.Run("generates 32-character hex string", func(t *testing.T) {
-		token, err := generateStreamToken()
-		require.NoError(t, err)
+		token := generateStreamToken()
 		assert.Len(t, token, 32)
 
 		// Verify it's valid hex
-		_, err = hex.DecodeString(token)
+		_, err := hex.DecodeString(token)
 		assert.NoError(t, err)
 	})
 
@@ -367,8 +366,7 @@ func TestStreamTokenGeneration(t *testing.T) {
 		tokens := make(map[string]bool, tokenCount)
 
 		for range tokenCount {
-			token, err := generateStreamToken()
-			require.NoError(t, err)
+			token := generateStreamToken()
 			assert.False(t, tokens[token], "duplicate token generated: %s", token)
 			tokens[token] = true
 		}
@@ -395,8 +393,7 @@ func TestStreamTokenMapping(t *testing.T) {
 	})
 
 	t.Run("getOrCreate creates and returns token", func(t *testing.T) {
-		token, err := getOrCreateStreamToken("source_a")
-		require.NoError(t, err)
+		token := getOrCreateStreamToken("source_a")
 		assert.Len(t, token, 32)
 
 		// Verify resolve works
@@ -405,28 +402,21 @@ func TestStreamTokenMapping(t *testing.T) {
 	})
 
 	t.Run("getOrCreate is idempotent", func(t *testing.T) {
-		token1, err := getOrCreateStreamToken("source_a")
-		require.NoError(t, err)
-
-		token2, err := getOrCreateStreamToken("source_a")
-		require.NoError(t, err)
+		token1 := getOrCreateStreamToken("source_a")
+		token2 := getOrCreateStreamToken("source_a")
 
 		assert.Equal(t, token1, token2, "same sourceID should return same token")
 	})
 
 	t.Run("different sources get different tokens", func(t *testing.T) {
-		tokenA, err := getOrCreateStreamToken("source_a")
-		require.NoError(t, err)
-
-		tokenB, err := getOrCreateStreamToken("source_b")
-		require.NoError(t, err)
+		tokenA := getOrCreateStreamToken("source_a")
+		tokenB := getOrCreateStreamToken("source_b")
 
 		assert.NotEqual(t, tokenA, tokenB)
 	})
 
 	t.Run("remove clears both mappings", func(t *testing.T) {
-		token, err := getOrCreateStreamToken("source_c")
-		require.NoError(t, err)
+		token := getOrCreateStreamToken("source_c")
 
 		// Verify it exists
 		assert.Equal(t, "source_c", resolveStreamToken(token))
@@ -438,8 +428,7 @@ func TestStreamTokenMapping(t *testing.T) {
 		assert.Empty(t, resolveStreamToken(token))
 
 		// A new call should create a different token
-		newToken, err := getOrCreateStreamToken("source_c")
-		require.NoError(t, err)
+		newToken := getOrCreateStreamToken("source_c")
 		assert.NotEqual(t, token, newToken)
 	})
 
@@ -474,34 +463,28 @@ func TestGetOrCreateStreamTokenConcurrency(t *testing.T) {
 		})
 
 		const numGoroutines = 20
-		type result struct {
-			token string
-			err   error
-		}
-		results := make(chan result, numGoroutines)
+		results := make(chan string, numGoroutines)
 		var wg sync.WaitGroup
 		wg.Add(numGoroutines)
 
 		for range numGoroutines {
 			go func() {
 				defer wg.Done()
-				token, err := getOrCreateStreamToken("concurrent_source")
-				results <- result{token: token, err: err}
+				results <- getOrCreateStreamToken("concurrent_source")
 			}()
 		}
 
 		wg.Wait()
 		close(results)
 
-		// Verify all goroutines succeeded and got the same non-empty token
+		// Verify all goroutines got the same non-empty token
 		var firstToken string
-		for r := range results {
-			require.NoError(t, r.err)
+		for token := range results {
 			if firstToken == "" {
-				firstToken = r.token
+				firstToken = token
 				require.NotEmpty(t, firstToken, "token should not be empty")
 			}
-			assert.Equal(t, firstToken, r.token, "all concurrent requests should get same token")
+			assert.Equal(t, firstToken, token, "all concurrent requests should get same token")
 		}
 	})
 }

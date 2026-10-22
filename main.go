@@ -193,7 +193,7 @@ func mainWithExitCode() int {
 		mainLog.Warn("Failed to load system ID, using temporary ID",
 			logger.Error(err))
 		// Generate a temporary one for this session
-		systemID, _ = telemetry.GenerateSystemID()
+		systemID = telemetry.GenerateSystemID()
 	}
 	settings.SystemID = systemID
 

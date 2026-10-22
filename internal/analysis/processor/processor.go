@@ -2931,17 +2931,7 @@ func (p *Processor) generateCorrelationID(speciesName string, timestamp time.Tim
 // generateRandomHex generates a random hexadecimal string of specified length
 func generateRandomHex(length int) string {
 	bytes := make([]byte, (length+1)/2) // Round up for odd lengths
-	_, err := rand.Read(bytes)
-	if err != nil {
-		// Fallback to timestamp-based randomness if crypto/rand fails
-		// Build a hex string of exactly the requested length
-		fallback := fmt.Sprintf("%016x", time.Now().UnixNano())
-		// Repeat the fallback string if needed to ensure we have enough length
-		for len(fallback) < length {
-			fallback += fmt.Sprintf("%016x", time.Now().UnixNano())
-		}
-		return fallback[:length]
-	}
+	rand.Read(bytes)
 
 	hex := fmt.Sprintf("%x", bytes)
 	if len(hex) > length {
