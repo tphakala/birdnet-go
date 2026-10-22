@@ -546,8 +546,9 @@ func migrationPhaseForTransition(to entities.MigrationStatus) string {
 	}
 }
 
-// IsInDualWriteMode returns true if dual-write is active.
-// Dual-write is active during DUAL_WRITE, MIGRATING, VALIDATING, and CUTOVER states.
+// IsInDualWriteMode returns true if the migration state is DUAL_WRITE, MIGRATING,
+// VALIDATING, or CUTOVER. It only reports the persisted state: live saves go to the
+// legacy store and the migration worker copies them to V2.
 func (m *StateManager) IsInDualWriteMode() (bool, error) {
 	state, err := m.GetState()
 	if err != nil {
