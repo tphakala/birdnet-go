@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Najlepszy dla słabych sygnałów. Śpiew ptaków wyraźnie wyróżnia się z szumu tła. Zalecany dla stylów naukowych/skali szarości.",
                   "standard": "Domyślne zrównoważone ustawienie. Dobre dla większości zastosowań.",
-                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast. Domyślna wartość SoX."
+                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast."
                 }
               },
               "enabled": {
@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Przesyłaj detekcje do BirdWeather",
-        "ffmpegWarning": {
-          "title": "Nie wykryto FFmpeg",
-          "message": "Proszę zainstalować FFmpeg, aby włączyć obsługę kodowania FLAC, BirdWeather wycofuje przesyłanie WAV na rzecz skompresowanych plików audio FLAC."
-        },
         "enable": "Włącz Przesyłanie do BirdWeather",
         "token": {
           "label": "Token BirdWeather",

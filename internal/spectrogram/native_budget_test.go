@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
-	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 const (
@@ -152,7 +151,6 @@ func writeBudgetClip(t *testing.T, dir string) string {
 }
 
 func TestGenerateNativeFromFile_HoldsTheBudgetWhileRendering(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	synctest.Test(t, func(t *testing.T) {
 		g, env := newNativeGenerator(t)
 		g.setRenderBudget(testWorstCaseWeight)
@@ -179,7 +177,6 @@ func TestGenerateNativeFromFile_HoldsTheBudgetWhileRendering(t *testing.T) {
 }
 
 func TestGenerateNativeFromFile_ReleasesTheBudgetWhenDecodeFails(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	g, env := newNativeGenerator(t)
 	g.setRenderBudget(testWorstCaseWeight)
 

@@ -3,6 +3,7 @@
 package media
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -381,9 +382,8 @@ func TestServeAudioClip(t *testing.T) {
 	}
 }
 
-// TestServeSpectrogram tests the ServeSpectrogram handler using SecureFS
-// Note: This test verifies the handler logic calls SecureFS, but does not
-// guarantee actual spectrogram generation works if tools are missing.
+// TestServeSpectrogram tests the ServeSpectrogram handler using SecureFS,
+// including on-demand rendering by the built-in renderer.
 func TestServeSpectrogram(t *testing.T) {
 	// Setup test environment with SecureFS rooted in tempDir
 	e, controller, tempDir := setupMediaTestEnvironment(t)
@@ -395,7 +395,7 @@ func TestServeSpectrogram(t *testing.T) {
 	require.NoError(t, err)
 
 	// --- Simulate Spectrogram Generation (by creating the expected file) ---
-	// This allows testing the "file exists" path without running external tools.
+	// This allows testing the "file exists" path without rendering.
 	// Default is raw=true, so the filename format is audio_800px.png
 	spectrogramFilename := "audio_800px.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
@@ -410,6 +410,7 @@ func TestServeSpectrogram(t *testing.T) {
 		width          string
 		expectedStatus int
 		expectedBody   string
+		expectPNG      bool // body is a freshly rendered PNG, not a fixed string
 	}{
 		{
 			name:           "Spectrogram generated/exists",
@@ -419,12 +420,11 @@ func TestServeSpectrogram(t *testing.T) {
 			expectedBody:   spectrogramContent,
 		},
 		{
-			name:     "Spectrogram needs generation (file doesn't exist initially)",
-			filename: audioFilename,
-			width:    "1200", // Different width means different file
-			// Expect error because external tools likely won't run in test
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "",
+			name:           "Spectrogram renders on demand (file doesn't exist initially)",
+			filename:       audioFilename,
+			width:          "1200", // Different width means different file
+			expectedStatus: http.StatusOK,
+			expectPNG:      true,
 		},
 		{
 			name:           "Non-existent audio file",
@@ -462,7 +462,11 @@ func TestServeSpectrogram(t *testing.T) {
 
 			// For success cases, check response content
 			if tc.expectedStatus == http.StatusOK {
-				assert.Equal(t, tc.expectedBody, rec.Body.String())
+				if tc.expectPNG {
+					assert.True(t, bytes.HasPrefix(rec.Body.Bytes(), []byte(pngSignature)), "body must be a PNG")
+				} else {
+					assert.Equal(t, tc.expectedBody, rec.Body.String())
+				}
 				assert.Equal(t, "image/png", rec.Header().Get("Content-Type"))
 			}
 		})
@@ -561,6 +565,7 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 		expectedStatus int
 		expectedBody   string
 		isAudioFile    bool // Flag to indicate if this is an audio file that needs special handling
+		expectPNG      bool // body is a freshly rendered PNG, not a fixed string
 	}{
 		{
 			name:           "Audio endpoint",
@@ -577,11 +582,10 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 			isAudioFile:    false,
 		},
 		{
-			name:           "Spectrogram endpoint (needs generation - likely fails)",
+			name:           "Spectrogram endpoint (renders on demand)",
 			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=1200",
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "",
-			isAudioFile:    false,
+			expectedStatus: http.StatusOK,
+			expectPNG:      true,
 		},
 		{
 			name:           "Missing audio file",
@@ -609,6 +613,11 @@ func TestMediaEndpointsIntegration(t *testing.T) {
 			if tc.expectedStatus == http.StatusOK {
 				body, err := io.ReadAll(resp.Body)
 				require.NoError(t, err)
+				if tc.expectPNG {
+					assert.True(t, bytes.HasPrefix(body, []byte(pngSignature)), "body must be a PNG")
+					assert.Equal(t, "image/png", resp.Header.Get("Content-Type"))
+					return
+				}
 				assertMediaResponseBody(t, body, tc.expectedBody, tc.isAudioFile)
 			}
 		})
@@ -1882,7 +1891,7 @@ func TestIsRecentClipCompletion(t *testing.T) {
 // TestServeAudioByID_GraceSkippedForOldDetections verifies the defense-in-depth
 // grace-poll skip: a 404 for a detection whose capture completed long ago returns
 // immediately (no grace wait), while a recent detection still waits out the grace
-// period. Timing bounds around audioGracePeriod distinguish the two paths.
+// period and then answers 503 with Retry-After. Timing bounds around audioGracePeriod distinguish the two paths.
 func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 	// clipPath resolves but the file does not exist on disk, forcing the 404 path.
 	const missingClip = "2024/01/ghost_95p_20240101T000000Z.wav"
@@ -1890,17 +1899,20 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 	tests := []struct {
 		name       string
 		endTime    time.Time
+		wantStatus int
 		maxElapsed time.Duration // set: proves grace was skipped
 		minElapsed time.Duration // set: proves grace ran
 	}{
 		{
 			name:       "old detection skips grace and 404s immediately",
 			endTime:    time.Now().Add(-time.Hour),
+			wantStatus: http.StatusNotFound,
 			maxElapsed: audioGracePeriod,
 		},
 		{
-			name:       "recent detection still waits the grace period",
+			name:       "recent detection waits the grace period and answers 503 while the export may be queued",
 			endTime:    time.Now(),
+			wantStatus: http.StatusServiceUnavailable,
 			minElapsed: audioGracePeriod,
 		},
 	}
@@ -1924,12 +1936,19 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 			handlerErr := controller.ServeAudioByID(c)
 			elapsed := time.Since(start)
 
-			// The missing clip resolves to a 404, returned as an echo.HTTPError
-			// (the framework translates it to the HTTP response).
-			require.Error(t, handlerErr, "missing clip must error")
-			httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr)
-			require.True(t, ok, "expected an echo.HTTPError")
-			assert.Equal(t, http.StatusNotFound, httpErr.Code, "missing clip must 404")
+			if tc.wantStatus == http.StatusNotFound {
+				// The missing clip resolves to a 404, returned as an echo.HTTPError
+				// (the framework translates it to the HTTP response).
+				require.Error(t, handlerErr, "missing clip must error")
+				httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr)
+				require.True(t, ok, "expected an echo.HTTPError")
+				assert.Equal(t, http.StatusNotFound, httpErr.Code, "missing clip must 404")
+			} else {
+				// A pending answer is written directly with a Retry-After hint.
+				require.NoError(t, handlerErr)
+				assert.Equal(t, tc.wantStatus, rec.Code)
+				assert.NotEmpty(t, rec.Header().Get(echo.HeaderRetryAfter), "503 must carry Retry-After")
+			}
 			if tc.maxElapsed > 0 {
 				assert.Less(t, elapsed, tc.maxElapsed,
 					"old detection must skip the grace wait")
@@ -1946,7 +1965,7 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 // appears shortly after the initial request (no temp file visible), the
 // grace period wait catches it instead of returning 404. This covers the
 // race condition from issue #2355 where the detection DB record is committed
-// but FFmpeg hasn't created the temp file yet.
+// but the export hasn't created its temp file yet.
 func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 

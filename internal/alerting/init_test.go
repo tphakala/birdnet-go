@@ -1,8 +1,12 @@
 package alerting
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"maps"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
@@ -19,10 +24,17 @@ import (
 type initMockRepo struct {
 	rules   []entities.AlertRule
 	history []entities.AlertHistory
+	// updated holds the id of each UpdateRule call that stored a rule.
+	updated []uint
+	// updateErrs makes UpdateRule fail for the listed rule ids.
+	updateErrs map[uint]error
 }
 
+// ListRules returns a shallow copy, so assigning a field of a returned rule
+// reaches the stored rules only through UpdateRule, as it does with a real
+// repository. Slices inside a returned rule are shared with the stored rule.
 func (m *initMockRepo) ListRules(_ context.Context, _ repository.AlertRuleFilter) ([]entities.AlertRule, error) {
-	return m.rules, nil
+	return slices.Clone(m.rules), nil
 }
 
 func (m *initMockRepo) GetRule(_ context.Context, id uint) (*entities.AlertRule, error) {
@@ -41,9 +53,13 @@ func (m *initMockRepo) CreateRule(_ context.Context, rule *entities.AlertRule) e
 }
 
 func (m *initMockRepo) UpdateRule(_ context.Context, rule *entities.AlertRule) error {
+	if err, ok := m.updateErrs[rule.ID]; ok {
+		return err
+	}
 	for i := range m.rules {
 		if m.rules[i].ID == rule.ID {
 			m.rules[i] = *rule
+			m.updated = append(m.updated, rule.ID)
 			return nil
 		}
 	}
@@ -89,20 +105,47 @@ func TestSeedDefaultRules_EmptyRepo(t *testing.T) {
 	assert.Len(t, repo.rules, expectedCount)
 }
 
-func TestSeedDefaultRules_AlreadySeeded(t *testing.T) {
-	// Pre-populate with all default rules so seeding finds them by name
-	defaults := DefaultRules()
-	existing := make([]entities.AlertRule, len(defaults))
-	for i := range defaults {
-		existing[i] = defaults[i]
-		existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
-	}
-	repo := &initMockRepo{rules: existing}
-	err := seedDefaultRules(t.Context(), repo, initTestLogger())
-	require.NoError(t, err)
+// translatedLowDiskName stands for the name the settings editor stored for the
+// Low disk space default when the UI language was German.
+const translatedLowDiskName = "Wenig Speicherplatz"
 
-	// Should not add any new rules since all defaults already exist
-	assert.Len(t, repo.rules, len(defaults))
+func TestSeedDefaultRules_FindsStoredDefaults(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(rule *entities.AlertRule)
+	}{
+		{"every default stored under its name", func(*entities.AlertRule) {}},
+		{"a keyed default stored under a translated name", func(rule *entities.AlertRule) {
+			rule.Name = translatedLowDiskName
+		}},
+		{"a keyed default saved as a custom rule under a translated name", func(rule *entities.AlertRule) {
+			rule.Name = translatedLowDiskName
+			rule.BuiltIn = false
+			rule.EscalationSteps = nil
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defaults := DefaultRules()
+			existing := make([]entities.AlertRule, len(defaults))
+			for i := range defaults {
+				existing[i] = defaults[i]
+				existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
+				if existing[i].NameKey == RuleKeyLowDiskName {
+					tt.mutate(&existing[i])
+				}
+			}
+			repo := &initMockRepo{rules: existing}
+
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+			assert.Len(t, repo.rules, len(defaults), "first run creates nothing")
+
+			updatedAfterFirst := len(repo.updated)
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+			assert.Len(t, repo.rules, len(defaults), "second run creates nothing")
+			assert.Len(t, repo.updated, updatedAfterFirst, "second run writes nothing")
+		})
+	}
 }
 
 func TestInitialize_SeedsAndCreatesEngine(t *testing.T) {
@@ -148,30 +191,336 @@ func TestInitialize_SubscribesToEventBus(t *testing.T) {
 	assert.Equal(t, 1, handlerCount)
 }
 
-func TestSeedDefaultRules_MigratesEscalationSteps(t *testing.T) {
-	// Simulate existing installation: all default rules exist but the low disk
-	// rule has no escalation steps (pre-migration state).
-	defaults := DefaultRules()
-	existing := make([]entities.AlertRule, len(defaults))
-	copy(existing, defaults)
-	for i := range existing {
-		existing[i].ID = uint(i + 1)      //nolint:gosec // test, no overflow risk
-		existing[i].EscalationSteps = nil // pre-migration: no steps
+// lowDiskDefaultSteps are the escalation steps of the shipped "Low disk space" rule.
+var lowDiskDefaultSteps = []float64{85, 90, 95, 99}
+
+// customEscalationSteps are user-chosen steps that differ from the defaults.
+var customEscalationSteps = []float64{80, 90}
+
+// lowDiskShortenedSustainSec is a sustained duration, in seconds, shorter than
+// the shipped condition's.
+const lowDiskShortenedSustainSec = 60
+
+const (
+	// lowDiskLoweredThreshold is a threshold below the shipped "> 85" condition.
+	lowDiskLoweredThreshold = "80"
+	// lowDiskCustomCooldownSec is a cooldown, in seconds, different from the shipped one.
+	lowDiskCustomCooldownSec = 120
+	// unmatchedNameKey is a name key that no default rule carries.
+	unmatchedNameKey = "alerts.rules.unmatched.name"
+	// lowDiskTestUsage is a disk usage percentage above the first escalation step.
+	lowDiskTestUsage = 86.0
+	// highUsageTestValue is a CPU or memory percentage just above the shipped
+	// "> 90" condition.
+	highUsageTestValue = 91.0
+	// lowDiskSustainWindow is the sustained duration of the shipped condition.
+	lowDiskSustainWindow = 300 * time.Second
+	// lowDiskCooldownElapsed is longer than the shipped 1800 s cooldown.
+	lowDiskCooldownElapsed = 31 * time.Minute
+	// updateFailureMessage is the cause of a failed rule write in the tests.
+	updateFailureMessage = "rule store unavailable"
+	// migratedLogMessage is logged for each rule the migration wrote.
+	migratedLogMessage = "migrated escalation steps for built-in rule"
+	// failedLogMessage is logged for each rule the migration could not write.
+	failedLogMessage = "failed to migrate escalation steps for built-in rule"
+)
+
+// legacyRow wraps change so the row also looks like one seeded before name keys
+// existed: no NameKey and no DescriptionKey.
+func legacyRow(change func(rule *entities.AlertRule)) func(rule *entities.AlertRule) {
+	return func(r *entities.AlertRule) {
+		r.NameKey = ""
+		r.DescriptionKey = ""
+		change(r)
 	}
-	repo := &initMockRepo{rules: existing}
+}
 
-	err := seedDefaultRules(t.Context(), repo, initTestLogger())
-	require.NoError(t, err)
-
-	// Verify the low disk rule was updated with escalation steps.
-	for i := range repo.rules {
-		if repo.rules[i].NameKey == RuleKeyLowDiskName {
-			assert.Equal(t, []float64{85, 90, 95, 99}, repo.rules[i].EscalationSteps,
-				"existing low disk rule should get escalation steps from migration")
-			return
+// seedRulesWithoutSteps returns a repo holding every default rule, with the
+// rule that has the given name key stripped of its escalation steps (the
+// pre-migration state) and mutate applied to it, together with that row's ID.
+// The other rows keep their default steps, so the target is the only row the
+// migration can write.
+func seedRulesWithoutSteps(t *testing.T, nameKey string, mutate func(rule *entities.AlertRule)) (repo *initMockRepo, ruleID uint) {
+	t.Helper()
+	existing := DefaultRules()
+	for i := range existing {
+		existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
+		if existing[i].NameKey == nameKey {
+			ruleID = existing[i].ID
+			existing[i].EscalationSteps = nil
+			mutate(&existing[i])
 		}
 	}
-	t.Fatal("low disk rule not found after seeding")
+	require.NotZero(t, ruleID, "default rule %q not found", nameKey)
+	return &initMockRepo{rules: existing}, ruleID
+}
+
+// seedRulesWithLowDisk is seedRulesWithoutSteps for the "Low disk space" row.
+func seedRulesWithLowDisk(t *testing.T, mutate func(rule *entities.AlertRule)) (repo *initMockRepo, lowDiskID uint) {
+	t.Helper()
+	return seedRulesWithoutSteps(t, RuleKeyLowDiskName, mutate)
+}
+
+func TestSeedDefaultRules_EscalationStepMigration(t *testing.T) {
+	tests := []struct {
+		name   string
+		mutate func(rule *entities.AlertRule)
+		want   []float64
+		// wantWritten is whether the low disk row is written back.
+		wantWritten bool
+	}{
+		{
+			name:        "keyed built-in without steps gets default steps",
+			mutate:      func(_ *entities.AlertRule) {},
+			want:        lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+		{
+			// Rows seeded before name keys existed have an empty NameKey.
+			name:        "legacy built-in without name key gets default steps",
+			mutate:      legacyRow(func(_ *entities.AlertRule) {}),
+			want:        lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+		{
+			name:   "user-created rule sharing the built-in name is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.BuiltIn = false }),
+		},
+		{
+			// A rule with steps fires only at or above its lowest step, so default
+			// steps on a lowered threshold would suppress the samples below them.
+			name: "keyed built-in with changed threshold is untouched",
+			mutate: func(r *entities.AlertRule) {
+				r.Conditions[0].Value = lowDiskLoweredThreshold
+			},
+		},
+		{
+			name: "built-in with an unknown name key is untouched",
+			mutate: func(r *entities.AlertRule) {
+				r.NameKey = unmatchedNameKey
+			},
+		},
+		{
+			name:   "legacy built-in with changed threshold is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].Value = lowDiskLoweredThreshold }),
+		},
+		{
+			name:   "legacy built-in with changed metric is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.MetricName = MetricCPUUsage }),
+		},
+		{
+			name:   "legacy built-in with changed condition property is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].Property = PropertyPath }),
+		},
+		{
+			name:   "legacy built-in with changed operator is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].Operator = OperatorLessThan }),
+		},
+		{
+			name:   "legacy built-in with changed sustained duration is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions[0].DurationSec = lowDiskShortenedSustainSec }),
+		},
+		{
+			name:   "legacy built-in without its condition is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.Conditions = nil }),
+		},
+		{
+			name: "legacy built-in with an added condition is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) {
+				r.Conditions = append(r.Conditions, entities.AlertCondition{
+					Property: PropertyPath, Operator: OperatorIs, Value: "/",
+				})
+			}),
+		},
+		{
+			name:   "legacy built-in with changed object type is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.ObjectType = ObjectTypeStream }),
+		},
+		{
+			name:   "legacy built-in with changed trigger type is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.TriggerType = TriggerTypeEvent }),
+		},
+		{
+			name:   "legacy built-in with an event name is untouched",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.EventName = EventStreamDisconnected }),
+		},
+		{
+			name:   "existing steps are kept",
+			mutate: legacyRow(func(r *entities.AlertRule) { r.EscalationSteps = slices.Clone(customEscalationSteps) }),
+			want:   customEscalationSteps,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, id := seedRulesWithLowDisk(t, tt.mutate)
+			ruleCount := len(repo.rules)
+
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+
+			// seedRulesWithLowDisk leaves every other row with its default steps,
+			// so the low disk row is the only row that can be written back.
+			var wantUpdated []uint
+			if tt.wantWritten {
+				wantUpdated = []uint{id}
+			}
+
+			assert.Len(t, repo.rules, ruleCount, "no rule should be added or removed")
+			assert.Equal(t, wantUpdated, repo.updated)
+			rule, err := repo.GetRule(t.Context(), id)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, rule.EscalationSteps)
+
+			// A second startup finds the steps in place and changes nothing.
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+			assert.Len(t, repo.rules, ruleCount, "a second startup should not add or remove a rule")
+			assert.Equal(t, wantUpdated, repo.updated, "a second startup should not write a rule")
+		})
+	}
+}
+
+func TestSeedDefaultRules_EscalationStepMigrationKeepsUserSettings(t *testing.T) {
+	// Settings outside the trigger do not decide whether the default steps
+	// apply, and the write that adds them leaves those settings as the user set
+	// them.
+	repo, id := seedRulesWithLowDisk(t, func(r *entities.AlertRule) {
+		r.CooldownSec = lowDiskCustomCooldownSec
+		r.Enabled = false
+		r.Actions = []entities.AlertAction{{Target: TargetPush}}
+	})
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+
+	rule, err := repo.GetRule(t.Context(), id)
+	require.NoError(t, err)
+	assert.Equal(t, lowDiskDefaultSteps, rule.EscalationSteps)
+	assert.Equal(t, lowDiskCustomCooldownSec, rule.CooldownSec)
+	assert.False(t, rule.Enabled)
+	require.Len(t, rule.Actions, 1)
+	assert.Equal(t, TargetPush, rule.Actions[0].Target)
+}
+
+func TestSeedDefaultRules_FailedUpdateDoesNotStopMigration(t *testing.T) {
+	// Two stored rows match the low disk default, one keyed and one legacy. The
+	// write for the first fails; the second must still be migrated.
+	repo, failedID := seedRulesWithLowDisk(t, func(_ *entities.AlertRule) {})
+	second, _ := seedRulesWithLowDisk(t, legacyRow(func(_ *entities.AlertRule) {}))
+	secondRule := second.rules[failedID-1]
+	secondRule.ID = uint(len(repo.rules)) + 1 //nolint:gosec // test, no overflow risk
+	repo.rules = append(repo.rules, secondRule)
+	repo.updateErrs = map[uint]error{failedID: errors.NewStd(updateFailureMessage)}
+
+	var logOutput bytes.Buffer
+	log := logger.NewSlogLogger(&logOutput, logger.LogLevelInfo, nil)
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, log))
+
+	failed, err := repo.GetRule(t.Context(), failedID)
+	require.NoError(t, err)
+	assert.Empty(t, failed.EscalationSteps, "the row whose write failed is not stored with steps")
+	migrated, err := repo.GetRule(t.Context(), secondRule.ID)
+	require.NoError(t, err)
+	assert.Equal(t, lowDiskDefaultSteps, migrated.EscalationSteps, "the next row is still migrated")
+	assert.Equal(t, []uint{secondRule.ID}, repo.updated)
+	var warning string
+	for line := range strings.Lines(logOutput.String()) {
+		if strings.Contains(line, failedLogMessage) {
+			warning = line
+		}
+	}
+	require.NotEmpty(t, warning, "the failed write is logged")
+	assert.Contains(t, warning, failed.Name, "the warning names the rule")
+	assert.Contains(t, warning, updateFailureMessage, "the warning carries the cause")
+	assert.Equal(t, 1, strings.Count(logOutput.String(), migratedLogMessage), "only the written row is reported as migrated")
+}
+
+func TestSeedDefaultRules_MigratedRuleDoesNotRenotifySameStepAfterCooldown(t *testing.T) {
+	// A stored system metric row without steps re-notified on every cooldown
+	// expiry while usage stayed above the threshold. After migration the engine
+	// must stay quiet at the same step, including for a sample just above the
+	// rule's threshold.
+	tests := []struct {
+		name    string
+		nameKey string
+		mutate  func(rule *entities.AlertRule)
+		metric  string
+		usage   float64
+		props   map[string]any
+	}{
+		{
+			name:    "legacy low disk space",
+			nameKey: RuleKeyLowDiskName,
+			mutate:  legacyRow(func(_ *entities.AlertRule) {}),
+			metric:  MetricDiskUsage,
+			usage:   lowDiskTestUsage,
+			props:   map[string]any{PropertyPath: "/"},
+		},
+		{
+			name:    "keyed high CPU usage",
+			nameKey: RuleKeyHighCPUName,
+			mutate:  func(_ *entities.AlertRule) {},
+			metric:  MetricCPUUsage,
+			usage:   highUsageTestValue,
+		},
+		{
+			name:    "keyed high memory usage",
+			nameKey: RuleKeyHighMemoryName,
+			mutate:  func(_ *entities.AlertRule) {},
+			metric:  MetricMemoryUsage,
+			usage:   highUsageTestValue,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, _ := seedRulesWithoutSteps(t, tt.nameKey, tt.mutate)
+			require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+
+			var fired int
+			engine := NewEngine(repo, func(rule *entities.AlertRule, _ *AlertEvent) {
+				if rule.MetricName == tt.metric {
+					fired++
+				}
+			}, initTestLogger(), nil)
+			require.NoError(t, engine.RefreshRules(t.Context()))
+
+			base := time.Now().Add(-2 * lowDiskSustainWindow)
+			emit := func(offset time.Duration) {
+				props := map[string]any{PropertyValue: tt.usage}
+				maps.Copy(props, tt.props)
+				engine.HandleEvent(&AlertEvent{
+					ObjectType: ObjectTypeSystem,
+					MetricName: tt.metric,
+					Properties: props,
+					Timestamp:  base.Add(offset),
+				})
+			}
+			assertNoRenotifyAfterCooldown(t, engine, emit, &fired)
+		})
+	}
+}
+
+// assertNoRenotifyAfterCooldown feeds a sustained breach through emit, expects
+// one notification, then expires every cooldown and expects the same step to
+// stay quiet.
+func assertNoRenotifyAfterCooldown(t *testing.T, engine *Engine, emit func(offset time.Duration), fired *int) {
+	t.Helper()
+
+	// Samples covering the sustained window, dense enough that the window
+	// after the last emit below also starts within the grace period.
+	emit(0)
+	emit(lowDiskSustainWindow / 5)
+	emit(lowDiskSustainWindow / 2)
+	emit(lowDiskSustainWindow)
+	require.Equal(t, 1, *fired, "sustained breach should notify once")
+
+	// Expire the cooldown; the same step must not notify again.
+	engine.cooldownsMu.Lock()
+	for k := range engine.cooldowns {
+		engine.cooldowns[k] = time.Now().Add(-lowDiskCooldownElapsed)
+	}
+	engine.cooldownsMu.Unlock()
+	emit(lowDiskSustainWindow + lowDiskSustainWindow/10)
+	assert.Equal(t, 1, *fired, "same step must not re-notify after the cooldown expires")
 }
 
 func TestEnrichFromEventProps_DetectionNotification(t *testing.T) {
@@ -445,4 +794,398 @@ func TestNotificationAdapter_DispatchTemplateBehavior(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestSameThreshold(t *testing.T) {
+	defaults := DefaultRules()
+	i := slices.IndexFunc(defaults, func(rule entities.AlertRule) bool { return rule.NameKey == RuleKeyHighCPUName })
+	require.GreaterOrEqual(t, i, 0, "the High CPU usage default exists")
+	base := defaults[i]
+	require.Len(t, base.Conditions, 1, "precondition: one threshold condition")
+
+	// variant returns a copy of the base rule with change applied. The condition
+	// slice is cloned so a change to it does not reach the base.
+	variant := func(change func(rule *entities.AlertRule)) *entities.AlertRule {
+		rule := base
+		rule.Conditions = slices.Clone(base.Conditions)
+		change(&rule)
+		return &rule
+	}
+
+	tests := []struct {
+		name   string
+		change func(rule *entities.AlertRule)
+		want   bool
+	}{
+		{"identical", func(*entities.AlertRule) {}, true},
+		{"duration is not compared", func(r *entities.AlertRule) { r.Conditions[0].DurationSec++ }, true},
+		{"condition ids and sort order are not compared", func(r *entities.AlertRule) {
+			r.Conditions[0].ID++
+			r.Conditions[0].SortOrder++
+		}, true},
+		{"cooldown, enabled and actions are not compared", func(r *entities.AlertRule) {
+			r.CooldownSec++
+			r.Enabled = !r.Enabled
+			r.Actions = nil
+		}, true},
+		{"the same number written another way", func(r *entities.AlertRule) { r.Conditions[0].Value += ".0" }, true},
+		{"object type", func(r *entities.AlertRule) { r.ObjectType += "x" }, false},
+		{"trigger type", func(r *entities.AlertRule) { r.TriggerType += "x" }, false},
+		{"metric name", func(r *entities.AlertRule) { r.MetricName += "x" }, false},
+		{"event name", func(r *entities.AlertRule) { r.EventName += "x" }, false},
+		{"condition property", func(r *entities.AlertRule) { r.Conditions[0].Property += "x" }, false},
+		{"condition operator", func(r *entities.AlertRule) { r.Conditions[0].Operator += "x" }, false},
+		{"condition value", func(r *entities.AlertRule) { r.Conditions[0].Value += "1" }, false},
+		{"condition removed", func(r *entities.AlertRule) { r.Conditions = nil }, false},
+		{"condition added", func(r *entities.AlertRule) { r.Conditions = append(r.Conditions, r.Conditions[0]) }, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := SameThreshold(&base, variant(tt.change))
+
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestSameThreshold_ConditionOrder(t *testing.T) {
+	cond := func(value string, durationSec int) entities.AlertCondition {
+		return entities.AlertCondition{Property: PropertyValue, Operator: OperatorGreaterThan, Value: value, DurationSec: durationSec}
+	}
+	rule := func(conditions ...entities.AlertCondition) *entities.AlertRule {
+		return &entities.AlertRule{ObjectType: ObjectTypeSystem, TriggerType: TriggerTypeMetric, MetricName: MetricCPUUsage, Conditions: conditions}
+	}
+
+	tests := []struct {
+		name          string
+		a, b          *entities.AlertRule
+		wantThreshold bool
+		wantTrigger   bool
+	}{
+		{"same order", rule(cond("1", 5), cond("2", 6)), rule(cond("1", 5), cond("2", 6)), true, true},
+		{"reordered", rule(cond("1", 5), cond("2", 6)), rule(cond("2", 6), cond("1", 5)), true, true},
+		{"durations swapped between conditions", rule(cond("1", 5), cond("2", 6)), rule(cond("1", 6), cond("2", 5)), true, false},
+		{"a duplicate does not match a distinct condition", rule(cond("1", 5), cond("1", 5)), rule(cond("1", 5), cond("2", 5)), false, false},
+		{"one condition differs", rule(cond("1", 5), cond("2", 6)), rule(cond("1", 5), cond("3", 6)), false, false},
+		{"different counts", rule(cond("1", 5)), rule(cond("1", 5), cond("1", 5)), false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.wantThreshold, SameThreshold(tt.a, tt.b), "SameThreshold")
+			assert.Equal(t, tt.wantTrigger, sameTrigger(tt.a, tt.b), "sameTrigger")
+		})
+	}
+}
+
+func TestSameThreshold_NumbersEqualOnlyForNumericOperators(t *testing.T) {
+	rule := func(operator, value string) *entities.AlertRule {
+		return &entities.AlertRule{
+			ObjectType: ObjectTypeSystem, TriggerType: TriggerTypeMetric, MetricName: MetricCPUUsage,
+			Conditions: []entities.AlertCondition{{Property: PropertyValue, Operator: operator, Value: value}},
+		}
+	}
+
+	for _, operator := range numericOperators {
+		assert.True(t, SameThreshold(rule(operator, "90"), rule(operator, "90.0")), "%s compares numbers", operator)
+	}
+	assert.False(t, SameThreshold(rule(OperatorIs, "90"), rule(OperatorIs, "90.0")),
+		"a string operator compares the text, so 90 and 90.0 differ")
+}
+
+const (
+	// translatedLowDiskDescription stands for the description the settings
+	// editor stored for the Low disk space default under a German UI.
+	translatedLowDiskDescription = "Meldet, wenn die Festplattenbelegung 85 % uebersteigt"
+	// customDescription is a description the user typed over the default one.
+	customDescription = "my own description"
+)
+
+// editorSaved returns the damage the settings editor did before it kept the
+// built-in flag: the row is no longer built-in, has no escalation steps, and
+// holds the given name and description text. The name and description keys stay.
+func editorSaved(name, description string) func(rule *entities.AlertRule) {
+	return func(r *entities.AlertRule) {
+		r.BuiltIn = false
+		r.EscalationSteps = nil
+		r.Name = name
+		r.Description = description
+	}
+}
+
+// seedRulesWithDamagedDefault returns a repo holding every default rule, with
+// the rule that has the given name key damaged by damage, together with that
+// row's ID. The other rows are stock built-in rules.
+func seedRulesWithDamagedDefault(t *testing.T, nameKey string, damage func(rule *entities.AlertRule)) (repo *initMockRepo, ruleID uint) {
+	t.Helper()
+	existing := DefaultRules()
+	for i := range existing {
+		existing[i].ID = uint(i + 1) //nolint:gosec // test, no overflow risk
+		if existing[i].NameKey == nameKey {
+			ruleID = existing[i].ID
+			damage(&existing[i])
+		}
+	}
+	require.NotZero(t, ruleID, "default rule %q not found", nameKey)
+	return &initMockRepo{rules: existing}, ruleID
+}
+
+// defaultByKey returns a copy of the shipped default with the given name key.
+func defaultByKey(t *testing.T, nameKey string) entities.AlertRule {
+	t.Helper()
+	defaults := DefaultRules()
+	for i := range defaults {
+		if defaults[i].NameKey == nameKey {
+			return defaults[i]
+		}
+	}
+	require.FailNow(t, "default rule not found", nameKey)
+	return entities.AlertRule{}
+}
+
+func TestSeedDefaultRules_RepairsDamagedDefaults(t *testing.T) {
+	lowDisk := defaultByKey(t, RuleKeyLowDiskName)
+	newSpecies := defaultByKey(t, RuleKeyNewSpeciesName)
+
+	tests := []struct {
+		name    string
+		nameKey string
+		damage  func(rule *entities.AlertRule)
+		// extra returns rows to append next to the damaged one.
+		extra func(damaged *entities.AlertRule, nextID uint) []entities.AlertRule
+
+		wantBuiltIn bool
+		wantName    string
+		wantDesc    string
+		wantSteps   []float64
+		// wantWritten is whether the damaged row is written back.
+		wantWritten bool
+		// wantExtraBuiltIn is the built-in flag expected on the first extra row.
+		wantExtraBuiltIn bool
+	}{
+		{
+			name:    "Low disk saved under a translated name is repaired",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, translatedLowDiskDescription)(r)
+				r.CooldownSec = lowDiskCustomCooldownSec
+				r.Enabled = false
+				r.Actions = []entities.AlertAction{{Target: TargetPush}}
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    lowDisk.Description,
+			wantSteps:   lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+		{
+			name:    "a custom description is kept",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, customDescription)(r)
+				r.DescriptionKey = ""
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    customDescription,
+			wantSteps:   lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+		{
+			// No default has an empty key, so a keyless row can only match by name;
+			// the repair must not treat a rule the user created as a default.
+			name:    "a damaged row without a name key is untouched",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(lowDisk.Name, lowDisk.Description)(r)
+				r.NameKey = ""
+			},
+			wantName: lowDisk.Name,
+			wantDesc: lowDisk.Description,
+		},
+		{
+			name:    "existing steps are kept",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, translatedLowDiskDescription)(r)
+				r.EscalationSteps = slices.Clone(customEscalationSteps)
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    lowDisk.Description,
+			wantSteps:   customEscalationSteps,
+			wantWritten: true,
+		},
+		{
+			name:    "a changed description key keeps the description",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, customDescription)(r)
+				r.DescriptionKey = unmatchedNameKey
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    customDescription,
+			wantSteps:   lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+		{
+			name:        "an event default saved by the editor is repaired without steps",
+			nameKey:     RuleKeyNewSpeciesName,
+			damage:      editorSaved(translatedLowDiskName, translatedLowDiskDescription),
+			wantBuiltIn: true,
+			wantName:    newSpecies.Name,
+			wantDesc:    newSpecies.Description,
+			wantWritten: true,
+		},
+		{
+			name:    "a damaged row with a changed threshold is untouched",
+			nameKey: RuleKeyLowDiskName,
+			damage: func(r *entities.AlertRule) {
+				editorSaved(translatedLowDiskName, translatedLowDiskDescription)(r)
+				r.Conditions[0].Value = lowDiskLoweredThreshold
+			},
+			wantName: translatedLowDiskName,
+			wantDesc: translatedLowDiskDescription,
+		},
+		{
+			name:    "a damaged row next to a built-in copy is untouched",
+			nameKey: RuleKeyLowDiskName,
+			damage:  editorSaved(translatedLowDiskName, translatedLowDiskDescription),
+			extra: func(_ *entities.AlertRule, nextID uint) []entities.AlertRule {
+				copyRule := defaultByKey(t, RuleKeyLowDiskName)
+				copyRule.ID = nextID
+				return []entities.AlertRule{copyRule}
+			},
+			wantName:         translatedLowDiskName,
+			wantDesc:         translatedLowDiskDescription,
+			wantExtraBuiltIn: true,
+		},
+		{
+			name:    "two damaged copies: only the first is repaired",
+			nameKey: RuleKeyLowDiskName,
+			damage:  editorSaved(translatedLowDiskName, translatedLowDiskDescription),
+			extra: func(damaged *entities.AlertRule, nextID uint) []entities.AlertRule {
+				second := *damaged
+				second.ID = nextID
+				return []entities.AlertRule{second}
+			},
+			wantBuiltIn: true,
+			wantName:    lowDisk.Name,
+			wantDesc:    lowDisk.Description,
+			wantSteps:   lowDiskDefaultSteps,
+			wantWritten: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, id := seedRulesWithDamagedDefault(t, tt.nameKey, tt.damage)
+			var extraID uint
+			if tt.extra != nil {
+				extraID = uint(len(repo.rules)) + 1 //nolint:gosec // test, no overflow risk
+				repo.rules = append(repo.rules, tt.extra(&repo.rules[id-1], extraID)...)
+			}
+			ruleCount := len(repo.rules)
+			var wantUpdated []uint
+			if tt.wantWritten {
+				wantUpdated = []uint{id}
+			}
+
+			for run := range 2 {
+				require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+				assert.Len(t, repo.rules, ruleCount, "run %d adds or removes no rule", run+1)
+				assert.Equal(t, wantUpdated, repo.updated, "run %d writes the damaged row at most once in total", run+1)
+			}
+
+			rule, err := repo.GetRule(t.Context(), id)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantBuiltIn, rule.BuiltIn)
+			assert.Equal(t, tt.wantName, rule.Name)
+			assert.Equal(t, tt.wantDesc, rule.Description)
+			assert.Equal(t, tt.wantSteps, rule.EscalationSteps)
+
+			if extraID != 0 {
+				extra, err := repo.GetRule(t.Context(), extraID)
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantExtraBuiltIn, extra.BuiltIn, "the extra row keeps its flag")
+			}
+		})
+	}
+}
+
+func TestSeedDefaultRules_RepairKeepsUserSettings(t *testing.T) {
+	// The repair restores what the editor dropped and leaves the settings the
+	// user can change in the editor as they are stored.
+	repo, id := seedRulesWithDamagedDefault(t, RuleKeyLowDiskName, func(r *entities.AlertRule) {
+		editorSaved(translatedLowDiskName, translatedLowDiskDescription)(r)
+		r.CooldownSec = lowDiskCustomCooldownSec
+		r.Enabled = false
+		r.Actions = []entities.AlertAction{{Target: TargetPush}}
+	})
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+
+	rule, err := repo.GetRule(t.Context(), id)
+	require.NoError(t, err)
+	assert.Equal(t, lowDiskCustomCooldownSec, rule.CooldownSec)
+	assert.False(t, rule.Enabled)
+	require.Len(t, rule.Actions, 1)
+	assert.Equal(t, TargetPush, rule.Actions[0].Target)
+	assert.Equal(t, []uint{id}, repo.updated, "one write, not a repair plus a step migration")
+}
+
+func TestSeedDefaultRules_RepairsDamagedDefaultOnceCopyIsGone(t *testing.T) {
+	repo, damagedID := seedRulesWithDamagedDefault(t, RuleKeyLowDiskName,
+		editorSaved(translatedLowDiskName, translatedLowDiskDescription))
+	copyRule := defaultByKey(t, RuleKeyLowDiskName)
+	copyRule.ID = uint(len(repo.rules)) + 1 //nolint:gosec // test, no overflow risk
+	repo.rules = append(repo.rules, copyRule)
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+	assert.Empty(t, repo.updated, "the damaged row next to a built-in copy is left alone")
+
+	// The user deletes the built-in copy.
+	repo.rules = slices.DeleteFunc(repo.rules, func(r entities.AlertRule) bool { return r.ID == copyRule.ID })
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+	assert.Equal(t, []uint{damagedID}, repo.updated, "the surviving damaged row is repaired")
+	rule, err := repo.GetRule(t.Context(), damagedID)
+	require.NoError(t, err)
+	assert.True(t, rule.BuiltIn)
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, initTestLogger()))
+	assert.Equal(t, []uint{damagedID}, repo.updated, "the third start writes nothing")
+}
+
+func TestSeedDefaultRules_FailedRepairLeavesRowAndIsLogged(t *testing.T) {
+	repo, id := seedRulesWithDamagedDefault(t, RuleKeyLowDiskName,
+		editorSaved(translatedLowDiskName, translatedLowDiskDescription))
+	// A second damaged default, listed after Low disk, must still be repaired.
+	var laterID uint
+	for i := range repo.rules {
+		if repo.rules[i].NameKey == RuleKeyBirdWeatherName {
+			laterID = repo.rules[i].ID
+			editorSaved(translatedLowDiskName, translatedLowDiskDescription)(&repo.rules[i])
+		}
+	}
+	require.NotZero(t, laterID)
+	require.Greater(t, laterID, id, "the second damaged default is listed after the failing one")
+	repo.updateErrs = map[uint]error{id: errors.NewStd(updateFailureMessage)}
+
+	var logOutput bytes.Buffer
+	log := logger.NewSlogLogger(&logOutput, logger.LogLevelInfo, nil)
+
+	require.NoError(t, seedDefaultRules(t.Context(), repo, log))
+
+	rule, err := repo.GetRule(t.Context(), id)
+	require.NoError(t, err)
+	assert.False(t, rule.BuiltIn, "a failed write leaves the stored row as it was")
+	assert.Empty(t, rule.EscalationSteps)
+	later, err := repo.GetRule(t.Context(), laterID)
+	require.NoError(t, err)
+	assert.True(t, later.BuiltIn, "a failed write does not stop the repair of the next row")
+	assert.Equal(t, []uint{laterID}, repo.updated)
+	assert.Contains(t, logOutput.String(), "failed to repair built-in alert rule")
 }

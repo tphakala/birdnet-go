@@ -296,22 +296,6 @@ func TestResolveConfigDir_ExplicitConfigPathHonoredWhenMissing(t *testing.T) {
 	assert.Equal(t, tmpDir, dir, "ResolveConfigDir should return the explicit --config directory even when the file is absent")
 }
 
-func TestGetSoxFormats_WithExplicitPath(t *testing.T) {
-	soxPath, err := exec.LookPath(GetSoxBinaryName())
-	if err != nil {
-		t.Skip("SoX not available in PATH, skipping")
-	}
-
-	formats := GetSoxFormats(soxPath)
-	require.NotEmpty(t, formats, "SoX should report supported formats")
-	assert.Contains(t, formats, "wav")
-}
-
-func TestGetSoxFormats_WithInvalidPath(t *testing.T) {
-	formats := GetSoxFormats("/nonexistent/sox")
-	assert.Empty(t, formats)
-}
-
 func TestGetFfmpegVersionFrom_WithExplicitPath(t *testing.T) {
 	ffmpegPath, err := exec.LookPath(GetFfmpegBinaryName())
 	if err != nil {

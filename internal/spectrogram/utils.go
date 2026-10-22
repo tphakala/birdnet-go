@@ -3,10 +3,8 @@
 package spectrogram
 
 import (
-	"context"
 	"fmt"
 	"maps"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -15,9 +13,9 @@ import (
 )
 
 // Spectrogram size constants define pixel widths for different display contexts.
-// Heights are computed as 2^n + 1 to ensure sox uses fast FFT (O(n log n)) instead of
-// brute-force DFT (O(n²)). Sox DFT size = 2*(height-1), so height must be 2^n + 1
-// for the DFT size to be a power of 2. Widths are 2× height to maintain ~2:1 aspect ratio.
+// Heights are computed as 2^n + 1 so the analysis frame, 2*(height-1), is a power of 2
+// and the FFT takes its fast path (O(n log n)) instead of brute-force DFT (O(n²)).
+// Widths are 2× height to maintain ~2:1 aspect ratio.
 const (
 	// sizeSmallPx is the width for compact display in lists and dashboards (height=129, DFT=256)
 	sizeSmallPx = 258
@@ -30,15 +28,6 @@ const (
 
 	// sizeExtraLargePx is the width for maximum quality for expert review (height=1025, DFT=2048)
 	sizeExtraLargePx = 2050
-
-	// signalKilledMessage is the error message pattern for process termination
-	signalKilledMessage = "signal: killed"
-
-	// exitCodeSIGKILL is the exit code when a process is terminated by SIGKILL (128 + 9)
-	exitCodeSIGKILL = 137
-
-	// exitCodeSIGTERM is the exit code when a process is terminated by SIGTERM (128 + 15)
-	exitCodeSIGTERM = 143
 )
 
 // validSizes maps size strings to pixel widths (single source of truth).
@@ -120,73 +109,30 @@ func BuildSpectrogramPath(clipPath string) (string, error) {
 }
 
 // IsOperationalError checks if an error is an expected operational event rather than
-// a genuine failure. Operational errors include context cancellation, deadline exceeded,
-// and process kills (e.g. context-triggered SIGKILL/SIGTERM).
+// a genuine failure, such as a context cancellation, an expired deadline, or a render
+// interrupted by either.
 //
 // The function checks for operational errors in this order:
-//  1. Context errors (Canceled, DeadlineExceeded)
+//  1. Context errors (Canceled, DeadlineExceeded) anywhere in the error chain
 //  2. An operational classification already attached upstream: a CategorySystem
-//     EnhancedError tagged PriorityLow (set by the generator via isOperationalExecError)
-//  3. Process exit codes (SIGKILL=137, SIGTERM=143) - more reliable than string matching
-//  4. String matching for "signal: killed" - fallback for compatibility
+//     EnhancedError tagged PriorityLow (set by nativeError for context interruptions)
 func IsOperationalError(err error) bool {
 	if err == nil {
 		return false
 	}
 
-	// Check standard context errors
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if errors.IsContextCancellation(err) {
 		return true
 	}
 
-	// Honor an operational classification already attached upstream. The generator
+	// Honor an operational classification already attached upstream. nativeError
 	// tags context-driven interruptions as a CategorySystem error with PriorityLow
-	// using the governing context (see isOperationalExecError); that is the only
-	// reliable signal on Windows, where a context-killed process exits with status 1
-	// and never matches the signal-based checks below. Requiring CategorySystem (the
-	// category the generator pairs with these interruptions) keeps an unrelated
-	// PriorityLow error from being misread as operational. Downstream consumers
-	// (prerenderer, API media handlers) then get a consistent answer without
-	// re-deriving it from a platform-dependent surface error.
-	if enhanced, ok := errors.AsType[*errors.EnhancedError](err); ok && enhanced.GetPriority() == errors.PriorityLow &&
-		enhanced.Category == errors.CategorySystem {
-		return true
-	}
-
-	// Check for process termination via exit codes (more reliable than string matching)
-	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
-		code := exitErr.ExitCode()
-		if code == exitCodeSIGKILL || code == exitCodeSIGTERM {
-			return true
-		}
-	}
-
-	// Fallback to string matching for compatibility with other error types
-	return strings.Contains(err.Error(), signalKilledMessage)
-}
-
-// isOperationalExecError reports whether a failed external-process execution should
-// be treated as an expected operational event (context cancellation or deadline)
-// rather than a genuine failure. It checks the governing context first because the
-// surface error from an exec that was canceled, timed out, or skipped due to an
-// already-done context is platform-dependent and not always recognizable by
-// IsOperationalError:
-//
-//   - On Windows a context-killed process exits with status 1 (TerminateProcess),
-//     which has no Unix signal semantics, so it never matches the SIGKILL/SIGTERM
-//     exit codes or the "signal: killed" string that IsOperationalError looks for.
-//   - On Windows, Cmd.Start resolves the executable before it observes context
-//     cancellation, so an already-canceled context combined with a missing binary
-//     surfaces as "executable file not found" instead of context.Canceled.
-//
-// ctx.Err() is the reliable, platform-independent signal: if the context that
-// governed the exec is done, the failure is attributable to cancellation/timeout
-// regardless of how the OS reported it.
-func isOperationalExecError(ctx context.Context, err error) bool {
-	if ctx != nil && ctx.Err() != nil {
-		return true
-	}
-	return IsOperationalError(err)
+	// using the governing context. IsSuppressibleOperationalError is the shared
+	// definition the Sentry filter uses, so an unrelated PriorityLow error in
+	// another category is not misread as operational and downstream consumers
+	// (prerenderer, API media handlers) get the same answer.
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	return ok && errors.IsSuppressibleOperationalError(enhanced)
 }
 
 // BuildSpectrogramPathWithParams builds a spectrogram path with size/raw encoded in filename.

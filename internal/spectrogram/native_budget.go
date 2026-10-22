@@ -10,19 +10,22 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mempolicy"
 )
 
-// The native renderer holds a whole decoded clip in memory, up to
-// transcode.MaxDecodedPCMBytes, so the number of renders in flight is bounded by
-// a byte budget on the Generator rather than by a count: ordinary clips of a few
-// megabytes run together, while renders of the longest clips take turns.
+// A native render that has to decode into memory holds a whole decoded clip, up
+// to transcode.MaxDecodedPCMBytes. A streamed render holds far less, but every
+// render is still weighed by its decoded size, so the number of renders in flight
+// is bounded by a byte budget on the Generator rather than by a count: ordinary
+// clips of a few megabytes run together, while renders of the longest clips take
+// turns.
 const (
 	// nativeRenderBudgetDivisor is the share of detected memory, as 1/n, that
 	// in-flight native renders may account for.
 	nativeRenderBudgetDivisor = 8
 
 	// nativeDecodeGrowthFactor scales the decoded size to the peak heap one render
-	// needs. Measured on a 1200 s, 48 kHz mono clip (115.2 MB decoded): WAV, MP3
-	// and M4A peak at 1.0x, FLAC at 1.6x (the decode buffer doubles from a
-	// file-size estimate, so the old and new buffers coexist) and Opus at 2.0x.
+	// needs when it decodes into memory. Measured on a 1200 s, 48 kHz mono clip
+	// (115.2 MB decoded): WAV, MP3 and M4A peak at 1.0x, FLAC at 1.6x (the decode
+	// buffer doubles from a file-size estimate, so the old and new buffers
+	// coexist) and Opus at 2.0x.
 	nativeDecodeGrowthFactor = 2
 
 	// nativeRenderFixedBytes covers what a render holds besides the decoded clip:

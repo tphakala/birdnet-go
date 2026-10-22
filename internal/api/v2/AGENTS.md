@@ -19,7 +19,7 @@ internal/api (parent server.go)
         v
 internal/api/v2            package api  (the facade)
   Controller{ *apicore.Core; <domain>.Handler fields }
-  New / NewWithOptions / InitializeAPI, ordered initRoutes()
+  New / NewWithOptions, ordered initRoutes()
         |                         |                      |
         | imports                 | imports              | imports
         v                         v                      v
@@ -65,7 +65,7 @@ or the facade); it runs inside the normal `go test ./...` unit-test jobs.
   around `*apicore.Core`. Domain tests build their own handler:
   `h := weather.New(apitest.NewCore(t))`. `apitest` imports only `apicore`/`dto`.
 - **`api` (facade, directory root)**: `Controller` embeds `*apicore.Core` and holds
-  one field per domain Handler. `New`/`NewWithOptions`/`InitializeAPI` build the
+  one field per domain Handler. `New`/`NewWithOptions` build the
   single `Core`, construct each domain Handler around it, and `initRoutes` calls
   every `RegisterRoutes` in a deterministic ordered list. `settings.go` (and its
   large test suite) intentionally still lives here, as does the facade-owned

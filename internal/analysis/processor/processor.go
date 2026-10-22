@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -2353,7 +2352,7 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 	// - No polling needed (eliminates the old 5-second sleep hack in SSE)
 	//
 	// IMPORTANT: Audio export is NOT included in this CompositeAction. It runs as a
-	// separate independent action to prevent slow FFmpeg encoding (especially on
+	// separate independent action to prevent slow clip encoding (especially on
 	// Raspberry Pi) from blocking SSE/MQTT broadcasts. The media API handles the
 	// race where a client requests audio before export completes, using server-side
 	// wait with retries and 503 + Retry-After responses.
@@ -2387,9 +2386,9 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 	// Add SaveAudioAction if audio export is enabled.
 	// This runs as an INDEPENDENT action (not inside the CompositeAction) so that
 	// slow audio encoding does not block the Database -> SSE -> MQTT pipeline.
-	// On resource-constrained hardware (RPi with SD cards), FFmpeg encoding can
-	// take 10-30+ seconds, which previously caused CompositeAction 30s timeouts
-	// (Sentry BIRDNET-GO-WD), preventing SSE/MQTT from ever firing.
+	// On resource-constrained hardware (RPi with SD cards), clip export took
+	// 10-30+ seconds back when it ran on FFmpeg, which caused CompositeAction 30s
+	// timeouts (Sentry BIRDNET-GO-WD), preventing SSE/MQTT from ever firing.
 	if settings.Realtime.Audio.Export.Enabled && databaseAction != nil {
 		actions = append(actions, p.buildSaveAudioAction(det, detectionCtx, settings))
 	}
@@ -2932,17 +2931,7 @@ func (p *Processor) generateCorrelationID(speciesName string, timestamp time.Tim
 // generateRandomHex generates a random hexadecimal string of specified length
 func generateRandomHex(length int) string {
 	bytes := make([]byte, (length+1)/2) // Round up for odd lengths
-	_, err := rand.Read(bytes)
-	if err != nil {
-		// Fallback to timestamp-based randomness if crypto/rand fails
-		// Build a hex string of exactly the requested length
-		fallback := fmt.Sprintf("%016x", time.Now().UnixNano())
-		// Repeat the fallback string if needed to ensure we have enough length
-		for len(fallback) < length {
-			fallback += fmt.Sprintf("%016x", time.Now().UnixNano())
-		}
-		return fallback[:length]
-	}
+	rand.Read(bytes)
 
 	hex := fmt.Sprintf("%x", bytes)
 	if len(hex) > length {
@@ -2982,24 +2971,6 @@ func (p *Processor) initPreRenderer() {
 			return
 		}
 
-		// Validate Sox binary is configured and exists. The native renderer draws
-		// prerender PCM in Go (spectrogram generator.go GenerateFromPCM) and the gate
-		// cannot change while the process runs, so this prerenderer never reaches sox.
-		if !conf.NativeSpectrogramEnabled() {
-			if p.Settings.Realtime.Audio.SoxPath == "" {
-				GetLogger().Error("Sox binary not configured, disabling pre-rendering",
-					logger.String("operation", "prerenderer_init"))
-				return
-			}
-			if _, err := exec.LookPath(p.Settings.Realtime.Audio.SoxPath); err != nil {
-				GetLogger().Error("Sox binary not found, disabling pre-rendering",
-					logger.String("path", p.Settings.Realtime.Audio.SoxPath),
-					logger.Error(err),
-					logger.String("operation", "prerenderer_init"))
-				return
-			}
-		}
-
 		// Create SecureFS for path validation
 		sfs, err := securefs.New(p.Settings.Realtime.Audio.Export.Path)
 		if err != nil {
@@ -3023,7 +2994,6 @@ func (p *Processor) initPreRenderer() {
 		GetLogger().Info("Spectrogram pre-renderer initialized",
 			logger.String("size", p.Settings.Realtime.Dashboard.Spectrogram.Size),
 			logger.Bool("raw", p.Settings.Realtime.Dashboard.Spectrogram.Raw),
-			logger.Bool("native_renderer", conf.NativeSpectrogramEnabled()),
 			logger.String("operation", "prerenderer_init"))
 	})
 }

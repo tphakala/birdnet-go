@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Ideaal voor zwakke signalen. Vogelgeluiden komen duidelijk uit boven de achtergrondruis. Aanbevolen voor wetenschappelijke/grijstinten stijlen.",
                   "standard": "Standaard gebalanceerde instelling. Goed voor de meeste toepassingen.",
-                  "extended": "Meer detail zichtbaar maar lager contrast. SoX standaardwaarde."
+                  "extended": "Meer detail zichtbaar maar lager contrast."
                 }
               },
               "enabled": {
@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Upload herkenningen naar BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg niet gedetecteerd",
-          "message": "Installeer FFmpeg om FLAC encoding ondersteuning in te schakelen, BirdWeather stopt met WAV uploads ten gunste van gecomprimeerde FLAC audio bestanden."
-        },
         "enable": "Schakel BirdWeather Uploads in",
         "token": {
           "label": "BirdWeather-token",

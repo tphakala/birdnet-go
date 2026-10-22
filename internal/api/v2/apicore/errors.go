@@ -67,10 +67,7 @@ func GenerateCorrelationID() string {
 	const length = 8
 
 	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		// Fall back to a default ID if crypto/rand fails
-		return "ERR-RAND"
-	}
+	rand.Read(b)
 
 	// Map the random bytes to charset characters
 	for i := range b {

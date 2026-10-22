@@ -80,7 +80,6 @@ func newPopulatedSettings() *Settings {
 			},
 		},
 	}
-	s.Realtime.Audio.SoxAudioTypes = []string{"wav", "flac"}
 	s.Realtime.Audio.Equalizer.Filters = []EqualizerFilter{{Type: "HighPass", Frequency: 200}}
 
 	s.Realtime.Dashboard.CustomColors = &CustomColors{Primary: "#2563eb"}
@@ -212,7 +211,6 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.Realtime.Audio.Sources[0].Models[0] = mutated
 	dst.Realtime.Audio.Sources[0].Equalizer.Enabled = false
 	dst.Realtime.Audio.Sources[0].Equalizer.Filters[0].Type = mutated
-	dst.Realtime.Audio.SoxAudioTypes[0] = mutated
 	dst.Realtime.Audio.Equalizer.Filters[0].Type = mutated
 
 	dst.Realtime.Dashboard.CustomColors.Primary = mutated
@@ -337,7 +335,6 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 	assert.True(t, src.Realtime.Audio.Sources[0].Equalizer.Enabled)
 	require.Len(t, src.Realtime.Audio.Sources[0].Equalizer.Filters, 1)
 	assert.Equal(t, "LowPass", src.Realtime.Audio.Sources[0].Equalizer.Filters[0].Type)
-	assert.Equal(t, []string{"wav", "flac"}, src.Realtime.Audio.SoxAudioTypes)
 	require.Len(t, src.Realtime.Audio.Equalizer.Filters, 1)
 	assert.Equal(t, "HighPass", src.Realtime.Audio.Equalizer.Filters[0].Type)
 

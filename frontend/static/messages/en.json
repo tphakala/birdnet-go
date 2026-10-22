@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Best for weak signals. Bird calls stand out clearly from background noise. Recommended for scientific/grayscale styles.",
                   "standard": "Default balanced setting. Good for most use cases.",
-                  "extended": "More detail visible but lower contrast. SoX default value."
+                  "extended": "More detail visible but lower contrast."
                 }
               },
               "enabled": {
@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Upload detections to BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg not detected",
-          "message": "Please install FFmpeg to enable FLAC encoding support, BirdWeather is deprecating WAV uploads in favor of compressed FLAC audio files."
-        },
         "enable": "Enable BirdWeather Uploads",
         "token": {
           "label": "BirdWeather token",

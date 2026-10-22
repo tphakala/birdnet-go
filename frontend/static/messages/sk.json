@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Najlepšie pre slabé signály. Vtáčí spev jasne vyniká z hluku pozadia. Odporúča sa pre vedecké štýly/štýly v stupňoch sivej.",
                   "standard": "Predvolené vyvážené nastavenie. Dobré pre väčšinu prípadov použitia.",
-                  "extended": "Viditeľných viac detailov, ale nižší kontrast. Predvolená hodnota SoX."
+                  "extended": "Viditeľných viac detailov, ale nižší kontrast."
                 }
               },
               "enabled": {
@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Nahrať detekcie do BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg nebol nájdený",
-          "message": "Nainštalujte FFmpeg, aby ste povolili podporu kódovania FLAC. BirdWeather nahrádza nahrávanie WAV v prospech komprimovaných zvukových súborov FLAC."
-        },
         "enable": "Povoliť nahrávanie do BirdWeather",
         "token": {
           "label": "Token BirdWeather",

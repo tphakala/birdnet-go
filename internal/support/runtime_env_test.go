@@ -57,17 +57,6 @@ func TestCollectRuntimeEnvCapturesStreamIngestGate(t *testing.T) {
 	assert.Equal(t, "native", env[conf.EnvNativeStreamIngest])
 }
 
-// TestCollectRuntimeEnvCapturesSpectrogramRendererGate pins that the live native
-// spectrogram renderer gate is reported verbatim, since nothing in config.yaml
-// records it.
-func TestCollectRuntimeEnvCapturesSpectrogramRendererGate(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
-
-	env := newTestCollector().collectRuntimeEnv(conf.SupportEnvAllowlist())
-
-	assert.Equal(t, "native", env[conf.EnvNativeSpectrogramRenderer])
-}
-
 // TestCollectRuntimeEnvOmitsUnsetVariable pins that an unset allowlisted
 // variable is absent from the map rather than present with an empty value.
 func TestCollectRuntimeEnvOmitsUnsetVariable(t *testing.T) {

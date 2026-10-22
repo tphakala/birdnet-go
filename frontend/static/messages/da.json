@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Bedst til svage signaler. Fuglekald fremstår tydeligt fra baggrundsstøj. Anbefales til videnskabelige/gråtonestile.",
                   "standard": "Standard balanceret indstilling. God til de fleste anvendelser.",
-                  "extended": "Flere detaljer synlige, men lavere kontrast. SoX-standardværdi."
+                  "extended": "Flere detaljer synlige, men lavere kontrast."
                 }
               },
               "enabled": {
@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Upload detektioner til BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg ikke fundet",
-          "message": "Installér venligst FFmpeg for at aktivere FLAC-kodningssupport. BirdWeather udfaser WAV-uploads til fordel for komprimerede FLAC-lydfiler."
-        },
         "enable": "Aktivér BirdWeather-uploads",
         "token": {
           "label": "BirdWeather-token",

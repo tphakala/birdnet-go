@@ -26,6 +26,12 @@
   import { t } from '$lib/i18n';
   import { playButtonLabelKey } from '$lib/utils/audio';
   import { loggers } from '$lib/utils/logger';
+  import {
+    SPECTROGRAM_REASON,
+    fetchSpectrogramStatus,
+    isTerminalSpectrogramReason,
+    markSpectrogramSourceMissing,
+  } from '$lib/utils/spectrogramStatus';
 
   const logger = loggers.audio;
 
@@ -44,7 +50,7 @@
   // --- Audio engine (shared composable) ---
   // Initial values are intentionally captured here; audioUrl reactivity is
   // handled below via $effect calling audio.setAudioUrl(). The composable
-  // stores detectionId only for logging and callbacks are stable references.
+  // reads detectionId once, for logging and the known-missing check, and callbacks are stable references.
   // svelte-ignore state_referenced_locally
   const initialAudioUrl = audioUrl;
   // svelte-ignore state_referenced_locally
@@ -98,6 +104,50 @@
     )
   );
 
+  // The status is read once, at the first failure of an image: a terminal reason
+  // (the source clip is gone or cannot be rendered) ends the retries, which can
+  // only repeat the same answer.
+  let statusAbortController: AbortController | undefined;
+
+  function cancelStatusCheck() {
+    statusAbortController?.abort();
+    statusAbortController = undefined;
+  }
+
+  function clearRetryTimer() {
+    if (retryTimer) {
+      clearTimeout(retryTimer);
+      retryTimer = undefined;
+    }
+  }
+
+  async function endRetriesOnTerminalReason() {
+    cancelStatusCheck();
+    const controller = new AbortController();
+    statusAbortController = controller;
+    const checkedId = detectionId;
+    const status = await fetchSpectrogramStatus(
+      buildAppUrl(
+        `/api/v2/spectrogram/${encodeURIComponent(checkedId)}/status?size=${spectrogramSize}&raw=true`
+      ),
+      controller.signal
+    );
+    if (controller.signal.aborted || !status || !isTerminalSpectrogramReason(status.reason)) return;
+
+    logger.debug('Spectrogram cannot be rendered, ending retries', {
+      detectionId: checkedId,
+      reason: status.reason,
+    });
+    if (status.reason === SPECTROGRAM_REASON.sourceMissing) {
+      markSpectrogramSourceMissing(checkedId);
+    }
+    clearRetryTimer();
+    spectrogramLoader.setError();
+  }
+
+  // Ends a status check still in flight when the player is destroyed.
+  $effect(() => cancelStatusCheck);
+
   // Track previous detection ID to detect changes and reset spectrogram state.
   // Uses a non-reactive variable since we only compare inside the $effect.
   // svelte-ignore state_referenced_locally
@@ -110,10 +160,8 @@
       retryCount = 0;
       cacheKey = 0;
       spectrogramLoader.setLoading(true);
-      if (retryTimer) {
-        clearTimeout(retryTimer);
-        retryTimer = undefined;
-      }
+      cancelStatusCheck();
+      clearRetryTimer();
     }
   });
 
@@ -122,20 +170,17 @@
     if (spectrogramUrl) {
       spectrogramLoader.setLoading(true);
     }
-    return () => {
-      if (retryTimer) {
-        clearTimeout(retryTimer);
-        retryTimer = undefined;
-      }
-    };
+    return clearRetryTimer;
   });
 
   function handleSpectrogramLoad() {
     spectrogramLoader.setLoading(false);
     retryCount = 0;
+    cancelStatusCheck();
   }
 
   function handleSpectrogramError() {
+    if (retryCount === 0) void endRetriesOnTerminalReason();
     if (retryCount < MAX_RETRIES) {
       const delay = RETRY_DELAYS[Math.min(retryCount, RETRY_DELAYS.length - 1)];
       retryCount++;

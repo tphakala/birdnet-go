@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Best for svake signaler. Fuglekall fremheves tydelig fra bakgrunnsstøy. Anbefales for vitenskapelige/gråtone-stiler.",
                   "standard": "Standard balansert innstilling. God for de fleste brukstilfeller.",
-                  "extended": "Mer detalj synlig men lavere kontrast. SoX-standardverdi."
+                  "extended": "Mer detalj synlig men lavere kontrast."
                 }
               },
               "enabled": {
@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Last opp registreringer til BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg ikke funnet",
-          "message": "Installer FFmpeg for å aktivere FLAC-kodingsstøtte. BirdWeather avvikler WAV-opplastinger til fordel for komprimerte FLAC-lydfiler."
-        },
         "enable": "Aktiver BirdWeather-opplastinger",
         "token": {
           "label": "BirdWeather-token",

@@ -110,10 +110,7 @@ func BenchmarkGenerateSystemID(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		_, err := GenerateSystemID()
-		if err != nil {
-			b.Fatal(err)
-		}
+		GenerateSystemID()
 	}
 }
 

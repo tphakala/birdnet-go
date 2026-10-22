@@ -1,6 +1,8 @@
 package alerting
 
 import (
+	"slices"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -37,4 +39,26 @@ func TestDefaultRules_UniqueNames(t *testing.T) {
 		assert.False(t, names[rule.Name], "duplicate rule name: %s", rule.Name)
 		names[rule.Name] = true
 	}
+}
+
+func TestDefaultRules_MetricStepsStartAtThreshold(t *testing.T) {
+	// A rule with escalation steps fires only for a value at or above its lowest
+	// step, so a step above the condition threshold would drop the samples in
+	// between. The ladder re-arms only when a sample falls below the lowest step,
+	// so a step below the threshold would keep it armed through a dip under the
+	// threshold.
+	var checked []string
+	for _, rule := range DefaultRules() {
+		if rule.TriggerType != TriggerTypeMetric || len(rule.EscalationSteps) == 0 {
+			continue
+		}
+		checked = append(checked, rule.NameKey)
+
+		require.Len(t, rule.Conditions, 1, "%s: one threshold condition", rule.Name)
+		threshold, err := strconv.ParseFloat(rule.Conditions[0].Value, 64)
+		require.NoError(t, err, "%s: condition value is a number", rule.Name)
+		assert.InDelta(t, threshold, slices.Min(rule.EscalationSteps), 0, "%s: lowest step equals the condition threshold", rule.Name)
+	}
+	assert.Subset(t, checked, []string{RuleKeyHighCPUName, RuleKeyHighMemoryName, RuleKeyLowDiskName},
+		"the metric rules that ship with steps are all checked")
 }

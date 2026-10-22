@@ -53,12 +53,19 @@ func TestDecodeMono_TruncatedWAVIsReported(t *testing.T) {
 	assert.Equal(t, truncatedWAVFrames/2, pcm.Frames())
 }
 
-func TestDecode_TruncatedFLACIsTruncatedSource(t *testing.T) {
-	t.Parallel()
+// flacCut is a FLAC file cut inside its audio.
+type flacCut struct {
+	name string
+	data []byte
+}
 
-	dir := t.TempDir()
-	good := filepath.Join(dir, "good.flac")
-	writeEncoded(t, audioformat.FLAC, 0, good, tone(testRate, 1, 1, testToneHz, testAmp), testRate)
+// truncatedFLACCuts encodes a tone of the given length and returns two cuts of
+// it, one mid frame and one on a frame boundary. Both keep the STREAMINFO block,
+// so the header still declares the whole clip.
+func truncatedFLACCuts(t *testing.T, seconds float64) []flacCut {
+	t.Helper()
+	good := filepath.Join(t.TempDir(), "good.flac")
+	writeEncoded(t, audioformat.FLAC, 0, good, tone(testRate, 1, seconds, testToneHz, testAmp), testRate)
 	goodBytes := readFile(t, good)
 
 	// Locate the first two audio frames by scanning for the sync code. A cut
@@ -70,14 +77,16 @@ func TestDecode_TruncatedFLACIsTruncatedSource(t *testing.T) {
 	second := first + 2 + bytes.Index(goodBytes[first+2:], syncCode)
 	require.Greater(t, second, first+2, "fixture holds a second frame")
 
-	tests := []struct {
-		name string
-		data []byte
-	}{
+	return []flacCut{
 		{name: "mid frame", data: goodBytes[:(first+second)/2]},
 		{name: "on a frame boundary", data: goodBytes[:second]},
 	}
-	for _, tt := range tests {
+}
+
+func TestDecode_TruncatedFLACIsTruncatedSource(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range truncatedFLACCuts(t, 1) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			path := filepath.Join(t.TempDir(), "cut.flac")

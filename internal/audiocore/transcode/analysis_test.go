@@ -1,11 +1,14 @@
 package transcode
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -393,4 +396,297 @@ func TestMonoSource_CanceledOnLastChunkWhileResampling(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, context.Canceled)
+}
+
+const (
+	// streamTestSeconds gives 158,400 frames at testRate: three chunks of
+	// chunkFrames with a short last one, and not a multiple of any codec frame size.
+	streamTestSeconds = 3.3
+
+	// heapTestSeconds is 32 chunks at testRate, 4 MiB decoded.
+	heapTestSeconds = 44.0
+	// heapTestChunk is the chunk at which the heap is read, well into the stream.
+	heapTestChunk = 24
+
+	// xingSearchBytes bounds the search for the Xing or Info tag at the start of an
+	// MP3, and xingFramesOffset is where the frame count sits after the tag name
+	// and the flags word.
+	xingSearchBytes  = 400
+	xingFramesOffset = 8
+)
+
+// The file-backed source must deliver what the buffered decode of the same file
+// delivers, for every format BirdNET-Go writes and at the rate conversions the
+// native render uses. A difference would change cached spectrogram PNGs.
+func TestOpenMono_StreamsSameSamplesAsDecodeMono(t *testing.T) {
+	t.Parallel()
+
+	for _, fx := range fixtures() {
+		t.Run(fx.name, func(t *testing.T) {
+			t.Parallel()
+			path, _ := writeFixture(t, fx, testRate, streamTestSeconds)
+			for _, target := range []int{0, 24000, 32000} {
+				t.Run(fmt.Sprintf("to %d", target), func(t *testing.T) {
+					t.Parallel()
+					want, err := DecodeMono(t.Context(), path, target)
+					require.NoError(t, err)
+					got, err := OpenMono(t.Context(), path, 0)
+					require.NoError(t, err)
+					require.True(t, got.Streamed(), "a clip of several chunks streams")
+					if target > 0 {
+						got, err = got.WithRate(target)
+						require.NoError(t, err)
+					}
+
+					assert.Equal(t, want.SampleRate(), got.SampleRate())
+					assert.Equal(t, want.SpanSamples(), got.SpanSamples())
+					first := collectStream(t, got)
+					assert.Equal(t, collectStream(t, want), first)
+					assert.Equal(t, first, collectStream(t, got), "a second Stream delivers the same samples")
+				})
+			}
+		})
+	}
+}
+
+// A WAV or FLAC cut short must fail from Stream, before Render builds a picture.
+func TestOpenMono_TruncatedSourceFailsWhenStreamed(t *testing.T) {
+	t.Parallel()
+
+	const frames = 3 * chunkFrames
+	wav := wavBytes(t, testRate, 1, frames)
+	type cutFile struct {
+		name string
+		ext  string
+		data []byte
+	}
+	flacCuts := truncatedFLACCuts(t, streamTestSeconds)
+	tests := make([]cutFile, 0, 1+len(flacCuts))
+	tests = append(tests, cutFile{name: "WAV cut to half its data", ext: ".wav", data: wav[:wavHeaderBytes+frames/2*bytesPerSample]})
+	for _, cut := range flacCuts {
+		tests = append(tests, cutFile{name: "FLAC cut " + cut.name, ext: ".flac", data: cut.data})
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "cut"+tt.ext)
+			writeBytes(t, path, tt.data)
+
+			m, err := OpenMono(t.Context(), path, 0)
+			require.NoError(t, err)
+			require.True(t, m.Streamed())
+
+			err = m.Stream(t.Context(), func([]float32) error { return nil })
+			require.ErrorIs(t, err, ErrTruncatedSource)
+			require.ErrorIs(t, err, ErrUndecodableSource)
+		})
+	}
+}
+
+// A header that declares no usable length, or one outside the streaming bounds,
+// keeps the buffered decode, so those clips behave as they did.
+func TestOpenMono_FallsBackToBufferedDecode(t *testing.T) {
+	t.Parallel()
+
+	const frames = 2 * chunkFrames
+	wavWithSize := func(size uint32) []byte {
+		data := wavBytes(t, testRate, 1, frames)
+		binary.LittleEndian.PutUint32(data[wavDataSizeOffset:], size)
+		return data
+	}
+	unknownSize := wavBytes(t, testRate, 1, frames)
+	for _, off := range []int{wavRIFFSizeOffset, wavDataSizeOffset} {
+		copy(unknownSize[off:off+wavSizeFieldBytes], make([]byte, wavSizeFieldBytes))
+	}
+	flacPath := filepath.Join(t.TempDir(), "src.flac")
+	writeEncoded(t, audioformat.FLAC, 0, flacPath, tone(testRate, 1, streamTestSeconds, testToneHz, testAmp), testRate)
+	flacNoTotal := readFile(t, flacPath)
+	// STREAMINFO starts after the 4-byte marker and the 4-byte block header. The
+	// 36-bit total is the low nibble of the 14th byte and the four bytes after it.
+	const flacTotalHighByte = 8 + 13
+	flacNoTotal[flacTotalHighByte] &= 0xF0
+	clear(flacNoTotal[flacTotalHighByte+1 : flacTotalHighByte+5])
+
+	tests := []struct {
+		name     string
+		ext      string
+		data     []byte
+		maxBytes int
+	}{
+		{name: "WAV with a zero data size", ext: ".wav", data: unknownSize, maxBytes: math.MaxInt},
+		{name: "WAV with a data size of 0xFFFFFFFF", ext: ".wav", data: wavWithSize(math.MaxUint32), maxBytes: math.MaxInt},
+		{name: "FLAC with no total", ext: ".flac", data: flacNoTotal, maxBytes: math.MaxInt},
+		{name: "declared length above the ceiling", ext: ".wav", data: wavBytes(t, testRate, 1, frames), maxBytes: (frames - 1) * bytesPerSample},
+		{name: "shorter than one chunk", ext: ".wav", data: wavBytes(t, testRate, 1, chunkFrames-1), maxBytes: math.MaxInt},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "clip"+tt.ext)
+			writeBytes(t, path, tt.data)
+
+			m, err := openMono(t.Context(), path, 0, tt.maxBytes)
+			require.NoError(t, err)
+			assert.False(t, m.Streamed())
+
+			want, err := DecodeMono(t.Context(), path, 0)
+			require.NoError(t, err)
+			assert.Equal(t, want.SpanSamples(), m.SpanSamples())
+			assert.Equal(t, collectStream(t, want), collectStream(t, m))
+		})
+	}
+}
+
+// Cancelling inside a chunk must stop the file read, not let it run on.
+func TestMonoSource_FileStreamStopsOnCancel(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "long.wav")
+	writeBytes(t, path, wavBytes(t, testRate, 1, 3*chunkFrames+100))
+	m, err := OpenMono(t.Context(), path, 0)
+	require.NoError(t, err)
+	require.True(t, m.Streamed())
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	calls := 0
+
+	err = m.Stream(ctx, func([]float32) error {
+		calls++
+		cancel()
+		return nil
+	})
+
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, 1, calls)
+}
+
+// heapAlloc returns the live heap after a collection.
+func heapAlloc() uint64 {
+	runtime.GC()
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	return ms.HeapAlloc
+}
+
+// A streamed source must not hold the clip: the live heap part way through the
+// stream, against the heap before the source was opened, stays well below the
+// decoded size. Not parallel, since it reads the process-wide heap.
+func TestOpenMono_StreamHeapDoesNotGrowWithClipLength(t *testing.T) {
+	const decodedBytes = heapTestSeconds * testRate * bytesPerSample
+	for _, name := range []string{"wav", "m4a"} {
+		t.Run(name, func(t *testing.T) {
+			path, _ := writeFixture(t, fixtureNamed(t, name), testRate, heapTestSeconds)
+			before := heapAlloc()
+
+			m, err := OpenMono(t.Context(), path, 0)
+			require.NoError(t, err)
+			require.True(t, m.Streamed())
+			var during uint64
+			chunks := 0
+			require.NoError(t, m.Stream(t.Context(), func([]float32) error {
+				chunks++
+				if chunks == heapTestChunk {
+					during = heapAlloc()
+				}
+				return nil
+			}))
+
+			require.GreaterOrEqual(t, chunks, heapTestChunk)
+			assert.Less(t, int64(during)-int64(before), int64(decodedBytes/2), "heap before %d, during the stream %d", before, during)
+		})
+	}
+}
+
+// mp3WithDoubledFrameCount returns an MP3 whose Xing or Info tag declares twice
+// the frames the file holds.
+func mp3WithDoubledFrameCount(t *testing.T, data []byte) []byte {
+	t.Helper()
+	head := data[:min(len(data), xingSearchBytes)]
+	idx := bytes.Index(head, []byte("Xing"))
+	if idx < 0 {
+		idx = bytes.Index(head, []byte("Info"))
+	}
+	require.GreaterOrEqual(t, idx, 0, "the production encoder writes a length tag")
+	const flagsOffset = 4
+	require.NotZero(t, binary.BigEndian.Uint32(data[idx+flagsOffset:])&1, "the tag carries a frame count")
+	out := bytes.Clone(data)
+	frames := binary.BigEndian.Uint32(out[idx+xingFramesOffset:])
+	binary.BigEndian.PutUint32(out[idx+xingFramesOffset:], 2*frames)
+	return out
+}
+
+// A non-exact source whose header declares more than it delivers (a foreign MP3
+// with a wrong length tag) must report it, so the caller can render it buffered.
+func TestOpenMono_StreamReportsASourceShorterThanDeclared(t *testing.T) {
+	t.Parallel()
+
+	good, _ := writeFixture(t, fixtureNamed(t, "mp3"), testRate, streamTestSeconds)
+	path := filepath.Join(t.TempDir(), "doubled.mp3")
+	writeBytes(t, path, mp3WithDoubledFrameCount(t, readFile(t, good)))
+
+	m, err := OpenMono(t.Context(), path, 0)
+	require.NoError(t, err)
+	require.True(t, m.Streamed())
+
+	err = m.Stream(t.Context(), func([]float32) error { return nil })
+	require.ErrorIs(t, err, ErrShorterThanDeclared)
+	require.NotErrorIs(t, err, ErrUndecodableSource, "this is a signal to decode buffered, not a source fault")
+	_, enhanced := errors.AsType[*errors.EnhancedError](err)
+	assert.False(t, enhanced, "the signal is built without the errors builder, so it is not reported")
+
+	buffered, err := DecodeMono(t.Context(), path, 0)
+	require.NoError(t, err, "the buffered decode still renders what the file holds")
+	assert.Less(t, buffered.SpanSamples(), m.SpanSamples())
+}
+
+// A file replaced between OpenMono and Stream must not stream with the shape the
+// header declared at open: that would draw a span the audio does not have.
+func TestMonoSource_StreamRejectsAFileChangedSinceOpen(t *testing.T) {
+	t.Parallel()
+
+	const frames = 2 * chunkFrames
+	tests := []struct {
+		name        string
+		replacement []byte
+	}{
+		{name: "different sample rate", replacement: wavBytes(t, 44100, 1, frames)},
+		{name: "longer file", replacement: wavBytes(t, testRate, 1, frames+chunkFrames)},
+		{name: "shorter file", replacement: wavBytes(t, testRate, 1, chunkFrames)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "clip.wav")
+			writeBytes(t, path, wavBytes(t, testRate, 1, frames))
+			m, err := OpenMono(t.Context(), path, 0)
+			require.NoError(t, err)
+			require.True(t, m.Streamed())
+			writeBytes(t, path, tt.replacement)
+
+			err = m.Stream(t.Context(), func([]float32) error { return nil })
+
+			require.ErrorIs(t, err, ErrUndecodableSource)
+			require.NotErrorIs(t, err, ErrTruncatedSource, "the changed header is reported before any frame is read")
+		})
+	}
+}
+
+// A WAV whose header declares audio but whose body is empty has no audio to
+// draw: that is undecodable, not truncated, as the buffered decode reports it.
+func TestOpenMono_HeaderOnlyWAVHoldsNoAudio(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "empty.wav")
+	writeBytes(t, path, wavBytes(t, testRate, 1, 2*chunkFrames)[:wavHeaderBytes])
+	m, err := OpenMono(t.Context(), path, 0)
+	require.NoError(t, err)
+	require.True(t, m.Streamed())
+
+	err = m.Stream(t.Context(), func([]float32) error { return nil })
+
+	require.ErrorIs(t, err, ErrUndecodableSource)
+	require.NotErrorIs(t, err, ErrTruncatedSource)
+	_, bufferedErr := DecodeMono(t.Context(), path, 0)
+	require.ErrorIs(t, bufferedErr, ErrUndecodableSource)
+	require.NotErrorIs(t, bufferedErr, ErrTruncatedSource, "the streamed classification matches the buffered one")
 }

@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Legjobb gyenge jelekhez. A madárhangok tisztán kiemelkednek a háttérzajból. Ajánlott tudományos/szürkeárnyalatos stílusokhoz.",
                   "standard": "Alapértelmezett kiegyensúlyozott beállítás. A legtöbb felhasználási esethez jó.",
-                  "extended": "Több részlet látható, de alacsonyabb kontraszt. SoX alapértelmezett érték."
+                  "extended": "Több részlet látható, de alacsonyabb kontraszt."
                 }
               },
               "enabled": {
@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Észlelések feltöltése a BirdWeather-re",
-        "ffmpegWarning": {
-          "title": "FFmpeg nem észlelhető",
-          "message": "Kérjük, telepítse az FFmpeg-et a FLAC kódolás támogatásához, a BirdWeather megszünteti a WAV feltöltéseket a tömörített FLAC hangfájlok javára."
-        },
         "enable": "BirdWeather feltöltések engedélyezése",
         "token": {
           "label": "BirdWeather token",

@@ -298,10 +298,14 @@ func pendingPayloadForClient(pending any, authenticated bool) any {
 }
 
 // runSSEEventLoopMulti handles the SSE event loop for detection streams,
-// which receive both detection events and pending detection snapshots.
+// which receive both detection events and pending detection snapshots. It blocks
+// until an event, a heartbeat tick or a disconnect is ready, so an idle client
+// costs no wakeups between heartbeats.
 func (c *Handler) runSSEEventLoopMulti(ctx echo.Context, client *apicore.SSEClient, clientID, endpoint string) error {
 	ticker := time.NewTicker(apicore.SSEHeartbeatInterval)
 	defer ticker.Stop()
+
+	reqDone := ctx.Request().Context().Done()
 
 	for {
 		select {
@@ -312,70 +316,67 @@ func (c *Handler) runSSEEventLoopMulti(ctx echo.Context, client *apicore.SSEClie
 			}
 			c.RecordSSEMessage(endpoint, "heartbeat")
 
-		case <-ctx.Request().Context().Done():
+		case <-reqDone:
 			return nil
 
 		case <-client.Done:
 			return nil
 
-		default:
-			sent := false
-
-			// Check for detection data
-			select {
-			case detection, ok := <-client.Channel:
-				if !ok {
-					return nil
-				}
-				// Per-client send path: unauthenticated subscribers receive a copy
-				// with the source DisplayName stripped (only Source.ID exposed). The
-				// shared broadcast struct is never mutated; see
-				// sanitizeDetectionForUnauthenticated.
-				payload := detectionPayloadForClient(&detection, client.Authenticated)
-				if err := c.SendSSEMessage(ctx, "detection", payload); err != nil {
-					c.LogErrorIfEnabled("Failed to send SSE detection",
-						logger.String("client_id", clientID),
-						logger.String("endpoint", endpoint),
-						logger.Error(err),
-					)
-					c.RecordSSEError(endpoint, "send_failed")
-					return err
-				}
-				c.RecordSSEMessage(endpoint, "detection")
-				sent = true
-			default:
+		case detection, ok := <-client.Channel:
+			if !ok || streamEnded(reqDone, client.Done) {
+				return nil
 			}
-
-			// Check for pending data
-			if client.PendingChan != nil {
-				select {
-				case pending, ok := <-client.PendingChan:
-					if !ok {
-						return nil
-					}
-					// Same per-client anonymization as the detection path: the
-					// pending snapshot also carries the source display name, so
-					// unauthenticated subscribers receive a sanitized copy.
-					pending = pendingPayloadForClient(pending, client.Authenticated)
-					if err := c.SendSSEMessage(ctx, "pending", pending); err != nil {
-						c.LogErrorIfEnabled("Failed to send SSE pending",
-							logger.String("client_id", clientID),
-							logger.String("endpoint", endpoint),
-							logger.Error(err),
-						)
-						c.RecordSSEError(endpoint, "send_failed")
-						return err
-					}
-					c.RecordSSEMessage(endpoint, "pending")
-					sent = true
-				default:
-				}
+			// Per-client send path: unauthenticated subscribers receive a copy
+			// with the source DisplayName stripped (only Source.ID exposed). The
+			// shared broadcast struct is never mutated; see
+			// sanitizeDetectionForUnauthenticated.
+			payload := detectionPayloadForClient(&detection, client.Authenticated)
+			if err := c.SendSSEMessage(ctx, "detection", payload); err != nil {
+				c.LogErrorIfEnabled("Failed to send SSE detection",
+					logger.String("client_id", clientID),
+					logger.String("endpoint", endpoint),
+					logger.Error(err),
+				)
+				c.RecordSSEError(endpoint, "send_failed")
+				return err
 			}
+			c.RecordSSEMessage(endpoint, "detection")
 
-			if !sent {
-				time.Sleep(apicore.SSEEventLoopSleep)
+		// A nil PendingChan blocks forever, so this case is simply never ready.
+		case pending, ok := <-client.PendingChan:
+			if !ok || streamEnded(reqDone, client.Done) {
+				return nil
 			}
+			// Same per-client anonymization as the detection path: the
+			// pending snapshot also carries the source display name, so
+			// unauthenticated subscribers receive a sanitized copy.
+			pending = pendingPayloadForClient(pending, client.Authenticated)
+			if err := c.SendSSEMessage(ctx, "pending", pending); err != nil {
+				c.LogErrorIfEnabled("Failed to send SSE pending",
+					logger.String("client_id", clientID),
+					logger.String("endpoint", endpoint),
+					logger.Error(err),
+				)
+				c.RecordSSEError(endpoint, "send_failed")
+				return err
+			}
+			c.RecordSSEMessage(endpoint, "pending")
 		}
+	}
+}
+
+// streamEnded reports whether the request or the client has already ended. A
+// select picks among ready cases at random, so a data case can win even after a
+// disconnect; the event loops check this before writing an event so a pending
+// disconnect takes precedence over buffered events.
+func streamEnded(reqDone, clientDone <-chan struct{}) bool {
+	select {
+	case <-reqDone:
+		return true
+	case <-clientDone:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -408,17 +409,10 @@ func (c *Handler) StreamSoundLevels(ctx echo.Context) error {
 			client.Authenticated = c.clientAuthenticated(ctx)
 		},
 		func(ctx echo.Context, client *apicore.SSEClient, clientID string) error {
-			return c.runSSEEventLoop(ctx, client, clientID, soundLevelStreamEndpoint,
-				func() (any, bool) {
-					select {
-					case soundLevel, ok := <-client.SoundLevelChan:
-						if !ok {
-							return nil, false // Channel closed, no more data
-						}
-						return soundLevelPayloadForClient(&soundLevel, client.Authenticated), true
-					default:
-						return nil, false
-					}
+			return runSSEEventLoop(c, ctx, client, clientID, soundLevelStreamEndpoint,
+				client.SoundLevelChan,
+				func(soundLevel *apicore.SSESoundLevelData) any {
+					return soundLevelPayloadForClient(soundLevel, client.Authenticated)
 				},
 				"soundlevel",
 				apicore.StreamTypeSoundLevels,
@@ -426,12 +420,18 @@ func (c *Handler) StreamSoundLevels(ctx echo.Context) error {
 		})
 }
 
-// runSSEEventLoop handles the common SSE event loop pattern for all stream types
-func (c *Handler) runSSEEventLoop(ctx echo.Context, client *apicore.SSEClient, clientID string, endpoint string,
-	dataReceiver func() (any, bool), eventType string, heartbeatType string) error {
+// runSSEEventLoop handles the common SSE event loop pattern for single-channel
+// stream types: it writes each value received on data (converted by toPayload)
+// as an eventType event, and sends a heartbeat every SSEHeartbeatInterval. It
+// blocks until an event, a heartbeat tick or a disconnect is ready, so an idle
+// client costs no wakeups between heartbeats.
+func runSSEEventLoop[T any](c *Handler, ctx echo.Context, client *apicore.SSEClient, clientID, endpoint string,
+	data <-chan T, toPayload func(*T) any, eventType, heartbeatType string) error {
 
 	ticker := time.NewTicker(apicore.SSEHeartbeatInterval)
 	defer ticker.Stop()
+
+	reqDone := ctx.Request().Context().Done()
 
 	for {
 		select {
@@ -443,7 +443,7 @@ func (c *Handler) runSSEEventLoop(ctx echo.Context, client *apicore.SSEClient, c
 			}
 			c.RecordSSEMessage(endpoint, "heartbeat")
 
-		case <-ctx.Request().Context().Done():
+		case <-reqDone:
 			// Client disconnected
 			return nil
 
@@ -451,24 +451,23 @@ func (c *Handler) runSSEEventLoop(ctx echo.Context, client *apicore.SSEClient, c
 			// Client marked for removal
 			return nil
 
-		default:
-			// Check for data on the channel (non-blocking)
-			if data, hasData := dataReceiver(); hasData {
-				if err := c.SendSSEMessage(ctx, eventType, data); err != nil {
-					c.LogErrorIfEnabled("Failed to send SSE message",
-						logger.String("client_id", clientID),
-						logger.String("endpoint", endpoint),
-						logger.String("event_type", eventType),
-						logger.Error(err),
-					)
-					c.RecordSSEError(endpoint, "send_failed")
-					return err
-				}
-				c.RecordSSEMessage(endpoint, eventType)
-			} else {
-				// Small sleep to prevent busy-waiting when no data
-				time.Sleep(apicore.SSEEventLoopSleep)
+		case value, ok := <-data:
+			// A closed channel means the client was removed (RemoveClient closes
+			// it together with Done).
+			if !ok || streamEnded(reqDone, client.Done) {
+				return nil
 			}
+			if err := c.SendSSEMessage(ctx, eventType, toPayload(&value)); err != nil {
+				c.LogErrorIfEnabled("Failed to send SSE message",
+					logger.String("client_id", clientID),
+					logger.String("endpoint", endpoint),
+					logger.String("event_type", eventType),
+					logger.Error(err),
+				)
+				c.RecordSSEError(endpoint, "send_failed")
+				return err
+			}
+			c.RecordSSEMessage(endpoint, eventType)
 		}
 	}
 }

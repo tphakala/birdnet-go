@@ -809,16 +809,21 @@ func (r *detectionRepository) applySearchOrdering(query *gorm.DB, filters *Searc
 	return query
 }
 
+// searchQuery builds the filtered (but unordered and unpaginated) detections query
+// shared by Search and CountSearch, so both always agree on which rows match.
+func (r *detectionRepository) searchQuery(ctx context.Context, filters *SearchFilters) *gorm.DB {
+	query := r.db.WithContext(ctx).Table(r.tableName())
+	query = r.buildSearchFilters(query, filters)
+	return r.buildSearchJoins(query, filters)
+}
+
 // Search finds detections matching the given filters.
 func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters) ([]*entities.Detection, int64, error) {
 	if filters == nil {
 		filters = &SearchFilters{}
 	}
 
-	// Build query with filters
-	query := r.db.WithContext(ctx).Table(r.tableName())
-	query = r.buildSearchFilters(query, filters)
-	query = r.buildSearchJoins(query, filters)
+	query := r.searchQuery(ctx, filters)
 
 	// Count total before pagination
 	var total int64
@@ -837,6 +842,21 @@ func (r *detectionRepository) Search(ctx context.Context, filters *SearchFilters
 	}
 
 	return dets, total, nil
+}
+
+// CountSearch counts detections matching the given filters without loading them.
+// It runs only the COUNT that Search runs for its total, so callers that need just
+// the total avoid Search's unbounded row fetch when no Limit is set.
+func (r *detectionRepository) CountSearch(ctx context.Context, filters *SearchFilters) (int64, error) {
+	if filters == nil {
+		filters = &SearchFilters{}
+	}
+
+	var total int64
+	if err := r.searchQuery(ctx, filters).Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
 }
 
 // ============================================================================

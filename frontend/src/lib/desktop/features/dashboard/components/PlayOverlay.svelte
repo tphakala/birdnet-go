@@ -29,8 +29,11 @@
     PROGRESS_UPDATE_INTERVAL_MS,
     DASHBOARD_AUDIO_RETRY_DELAYS_MS,
     isPlayInterruptedError,
+    pendingRetryDelayMs,
     playButtonLabelKey,
+    probeAudioSource,
   } from '$lib/utils/audio';
+  import { isSpectrogramSourceKnownMissing } from '$lib/utils/spectrogramStatus';
   import {
     getAudioContext,
     isAudioContextSupported,
@@ -91,10 +94,15 @@
   let freezeActive = false;
 
   // Audio retry state (handles 503/404 while the clip is still being exported).
-  // The element cannot read the HTTP status, so every load failure is retried
-  // blind on DASHBOARD_AUDIO_RETRY_DELAYS_MS; that list's length is the limit.
+  // The element cannot read the HTTP status, so a load failure is retried on
+  // DASHBOARD_AUDIO_RETRY_DELAYS_MS (that list's length is the limit) while one
+  // ranged probe of the audio URL asks the server what the failure was: a 404
+  // ends the retries, a 503 delays the retry until Retry-After when that is longer
+  // than the scheduled delay.
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  // Aborts the probe that runs beside the first retry timer.
+  let audioProbeController: AbortController | undefined;
   // Whether the user asked to play, so a retry should start playback when it
   // fires. A background retry of a failed preload never plays on its own.
   let retryWithPlay = false;
@@ -198,7 +206,10 @@
     audioElement.load();
   });
 
+  // Also ends the probe: it only matters while the retry it may cancel is pending.
   function clearAudioRetryTimer() {
+    audioProbeController?.abort();
+    audioProbeController = undefined;
     if (audioRetryTimer !== undefined) {
       clearTimeout(audioRetryTimer);
       audioRetryTimer = undefined;
@@ -243,8 +254,14 @@
       delay,
     });
 
+    armRetryTimer(delay);
+  }
+
+  // Fire the reload after delay ms, replacing any timer already armed.
+  function armRetryTimer(delay: number) {
+    if (audioRetryTimer !== undefined) clearTimeout(audioRetryTimer);
     audioRetryTimer = setTimeout(() => {
-      audioRetryTimer = undefined;
+      clearAudioRetryTimer();
       if (!audioElement) return;
       markPlaybackStopped();
       if (retryWithPlay) isLoading = true;
@@ -254,6 +271,35 @@
         void audioElement.play().then(playStarted).catch(handlePlayRejection);
       }
     }, delay);
+  }
+
+  // Gives up without retrying: the clip is gone, so the error shows now.
+  function failLoadPermanently() {
+    clearAudioRetryTimer();
+    error = t('media.audio.error');
+    isLoading = false;
+    retryWithPlay = false;
+    markPlaybackStopped();
+  }
+
+  // On the first failure of a load, ask the server what the failure was. The retry is
+  // already scheduled, so a 404 only has to cancel it and a 503 to move it later;
+  // any other answer leaves the scheduled retry in place. Only the original clip is
+  // probed: an audible-bats source is a local blob URL.
+  function probeFailedLoad(scheduledDelay: number) {
+    if (audibleBatsSrc) return;
+    const controller = new AbortController();
+    audioProbeController = controller;
+    void probeAudioSource(audioUrl, controller.signal).then(outcome => {
+      if (controller.signal.aborted) return;
+      audioProbeController = undefined;
+      if (outcome.kind === 'missing') {
+        logger.debug('Audio probe: clip is gone, not retrying', { detectionId });
+        failLoadPermanently();
+      } else if (outcome.kind === 'pending') {
+        armRetryTimer(pendingRetryDelayMs(outcome, scheduledDelay));
+      }
+    });
   }
 
   // Handle a rejected play(). While a retry timer is pending the retry plays
@@ -550,11 +596,20 @@
       canplayTimeoutId = undefined;
     }
 
+    // The original clip, already reported gone for good, is not retried or probed. An
+    // audible-bats source is a local blob and keeps its retries.
+    if (!audibleBatsSrc && isSpectrogramSourceKnownMissing(detectionId)) {
+      failLoadPermanently();
+      return;
+    }
+
     // Retry every failure, including a background preload, until the budget is
     // spent. The retry plays only when the user asked to.
     const delay = DASHBOARD_AUDIO_RETRY_DELAYS_MS.at(audioRetryCount);
     if (delay !== undefined) {
+      const isFirstFailure = audioRetryCount === 0;
       scheduleRetry(delay);
+      if (isFirstFailure) probeFailedLoad(delay);
       return;
     }
 

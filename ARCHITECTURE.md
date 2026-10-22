@@ -145,8 +145,7 @@ gorm.io/driver/mysql
 github.com/stretchr/testify
 
 // Audio processing (external binaries)
-// - FFmpeg (audio format conversion, RTSP streams)
-// - SoX (spectrogram generation only)
+// - FFmpeg (RTSP and other network stream capture)
 ```
 
 ### AI Model Integration
@@ -547,7 +546,6 @@ internal/analysis/
 internal/myaudio/
 ├── capture.go          # Audio capture from devices (via malgo)
 ├── encode.go           # Audio encoding (PCM to WAV)
-├── ffmpeg_export.go    # FFmpeg-based audio export and conversion
 ├── ffmpeg_stream.go    # RTSP stream handling via FFmpeg
 ├── ffmpeg_manager.go   # FFmpeg process lifecycle management
 ├── resample.go         # Audio resampling (file analysis mode only)
@@ -588,7 +586,6 @@ Audio Source → Capture → Buffer → Analyze → Detect → Store → Notify
 FFmpeg is used for:
 
 - **RTSP Stream Ingestion**: Capturing audio from IP cameras and network streams
-- **Spectrograms**: Checking each clip with ffprobe before an on-demand spectrogram is drawn, and rendering clips in formats the installed SoX cannot read or when SoX fails
 
 On-demand clip downloads, the denoise, normalize and gain preview, and audible-bats playback in the web interface do not use FFmpeg. `internal/audiocore/transcode` decodes WAV, FLAC, MP3, AAC (M4A) and Opus natively, denoises with the go-audio-dsp `denoiser`, normalizes with the go-audio-dsp `loudnorm` package, applies gain with the go-audio-dsp `gain` package, and encodes WAV, FLAC, MP3, AAC and Opus with the same native encoders clip export uses. A clip whose sample rate the lossy encoder cannot carry is resampled to 48 kHz first.
 
@@ -600,22 +597,16 @@ Analysis inference input, the bat ultrasonic filter input and the voice activity
 
 Sound level monitoring (`internal/audiocore/soundlevel`) measures each source with the go-audio-dsp `octave` meter: 1/3-octave bands from 25 Hz to 20 kHz below 0.95 of Nyquist, one-second mean square per band. birdnet-go keeps only the interval min/max/mean aggregation, the band keys and the output type. The Prometheus sound level series are labelled with the source id in both the `source` and the `name` label, never the display name, because the metrics listener has no authentication.
 
-**SoX Integration:**
-
-SoX (Sound eXchange) is used exclusively for:
-
-- Spectrogram generation (visualization)
-
 **Spectrogram Generation:**
 
 ```
 internal/spectrogram/
-├── generator.go        # Spectrogram creation with SoX
+├── generator.go        # Native spectrogram generator
 ├── prerenderer.go      # Pre-rendering logic and queue management
 └── utils.go            # Utility functions for spectrogram operations
 ```
 
-Spectrograms are generated on-demand or pre-rendered for dashboard display using SoX.
+Spectrograms are generated on-demand or pre-rendered for dashboard display. They are drawn in Go by `internal/spectrogram`, with the `render` and `soxchrome` subpackages; `generator.go` is the generator. No external binary is involved. Clips in WAV, FLAC, MP3, M4A and Opus (`.opus`) are supported.
 
 **Async Task Processing System:**
 

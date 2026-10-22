@@ -150,8 +150,6 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.Audio.FfmpegVersion":        {categories: []hotReloadCategory{hotReloadRuntime}},
 	"Realtime.Audio.FfmpegMajor":          {categories: []hotReloadCategory{hotReloadRuntime}},
 	"Realtime.Audio.FfmpegMinor":          {categories: []hotReloadCategory{hotReloadRuntime}},
-	"Realtime.Audio.SoxPath":              {categories: []hotReloadCategory{hotReloadRuntime}},
-	"Realtime.Audio.SoxAudioTypes":        {categories: []hotReloadCategory{hotReloadRuntime}},
 	"Realtime.Audio.FfprobePath":          {categories: []hotReloadCategory{hotReloadRuntime}},
 	"Realtime.Audio.StreamTransport":      {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.Audio.Export":               {categories: []hotReloadCategory{hotReloadFresh}},

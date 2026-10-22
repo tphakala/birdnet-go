@@ -48,11 +48,6 @@ runs:
                 FAILED="$FAILED ffmpeg"
               fi
               ;;
-            sox)
-              if ! sox --version > /dev/null 2>&1; then
-                FAILED="$FAILED sox"
-              fi
-              ;;
           esac
         done
 

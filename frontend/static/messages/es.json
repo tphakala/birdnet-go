@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Ideal para señales débiles. Los cantos de aves destacan claramente del ruido de fondo. Recomendado para estilos científicos/escala de grises.",
                   "standard": "Configuración balanceada por defecto. Bueno para la mayoría de los casos.",
-                  "extended": "Más detalles visibles pero menor contraste. Valor predeterminado de SoX."
+                  "extended": "Más detalles visibles pero menor contraste."
                 }
               },
               "enabled": {
@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Subir detecciones a BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg no detectado",
-          "message": "Por favor instale FFmpeg para habilitar el soporte de codificación FLAC, BirdWeather está descontinuando las cargas WAV en favor de archivos de audio FLAC comprimidos."
-        },
         "enable": "Habilitar cargas a BirdWeather",
         "token": {
           "label": "Token de BirdWeather",

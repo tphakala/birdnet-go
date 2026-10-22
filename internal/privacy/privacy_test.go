@@ -338,8 +338,7 @@ func TestGenerateSystemID(t *testing.T) {
 	// Test multiple generations to ensure they're unique
 	ids := make(map[string]bool)
 	for range 100 {
-		id, err := GenerateSystemID()
-		require.NoError(t, err, "GenerateSystemID failed")
+		id := GenerateSystemID()
 
 		// Check format
 		assert.True(t, IsValidSystemID(id), "Generated ID %q is not valid", id)

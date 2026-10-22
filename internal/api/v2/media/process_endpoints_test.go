@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,7 +18,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
@@ -190,16 +188,8 @@ func TestProcessedSpectrogramByID_UndecodableSourceIs422(t *testing.T) {
 }
 
 func TestProcessedSpectrogramByID_Renders(t *testing.T) {
-	// Rendering belongs to the spectrogram generator, which still shells out to
-	// SoX and FFmpeg; only the processing step in front of it is native.
-	soxPath, soxErr := exec.LookPath("sox")
-	ffmpegPath, ffmpegErr := exec.LookPath("ffmpeg")
-	if soxErr != nil || ffmpegErr != nil {
-		t.Skip("sox and ffmpeg are required by the spectrogram renderer")
-	}
 	e, controller, tempDir := setupMediaTestEnvironment(t)
-	controller.Settings.Load().Realtime.Audio.SoxPath = soxPath
-	controller.Settings.Load().Realtime.Audio.FfmpegPath = ffmpegPath
+	clearBinaryEnvironment(t, controller.Settings.Load())
 
 	writeToneWAV(t, fixturePath(tempDir, "src.wav"), 48000, 1, fixtureToneHz)
 	mockDS := mocks.NewMockInterface(t)
@@ -216,23 +206,6 @@ func TestProcessedSpectrogramByID_Renders(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join(tempDir, ".tmp-processing"))
 	require.NoError(t, err)
 	assert.Empty(t, entries, "the processed WAV and the PNG are removed with the request")
-}
-
-func TestProcessedSpectrogramByID_NativeRendersWithoutBinaries(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
-	e, controller, tempDir := setupMediaTestEnvironment(t)
-	clearBinaryEnvironment(t, controller.Settings.Load())
-
-	writeToneWAV(t, fixturePath(tempDir, "src.wav"), 48000, 1, fixtureToneHz)
-	mockDS := mocks.NewMockInterface(t)
-	mockDS.On("GetNoteClipPath", "22").Return("src.wav", nil)
-	mockDS.On("GetNoteModelType", "22").Return("bird", nil).Maybe()
-	controller.DS = mockDS
-
-	rec := postJSON(e, "/api/v2/spectrogram/22/process", `{"normalize": true, "denoise": "light"}`)
-	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
-	assert.Equal(t, "image/png", rec.Header().Get("Content-Type"))
-	assert.True(t, bytes.HasPrefix(rec.Body.Bytes(), []byte("\x89PNG")))
 }
 
 func TestTranscodeStatus(t *testing.T) {
@@ -325,15 +298,6 @@ func TestProcessEndpoints_ForwardFilterFields(t *testing.T) {
 	})
 
 	t.Run("processed spectrogram", func(t *testing.T) {
-		// Rendering belongs to the spectrogram generator, which shells out to SoX
-		// and FFmpeg, so this check runs only where both are installed.
-		soxPath, soxErr := exec.LookPath("sox")
-		ffmpegPath, ffmpegErr := exec.LookPath("ffmpeg")
-		if soxErr != nil || ffmpegErr != nil {
-			t.Skip("sox and ffmpeg are required by the spectrogram renderer")
-		}
-		controller.Settings.Load().Realtime.Audio.SoxPath = soxPath
-		controller.Settings.Load().Realtime.Audio.FfmpegPath = ffmpegPath
 		mockDS.On("GetNoteModelType", "32").Return("bird", nil).Maybe()
 
 		plain := postJSON(e, "/api/v2/spectrogram/32/process", `{"gain_db": 0}`)

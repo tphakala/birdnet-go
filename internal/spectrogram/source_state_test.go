@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -39,7 +38,6 @@ func statSourceState(t *testing.T, path string) SourceState {
 }
 
 func TestGenerateFromFile_RefusesToPublishWhenSourceChanged(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 
 	appendBytes := func(t *testing.T, path string) {
 		t.Helper()
@@ -128,7 +126,6 @@ func TestGenerateFromFile_RefusesToPublishWhenSourceChanged(t *testing.T) {
 }
 
 func TestGenerateFromFile_ChangedSourceOutranksDecodeError(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	g, env := newNativeGenerator(t)
 
 	// A clip cut short decodes with an error; because the file also changed since

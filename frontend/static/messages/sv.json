@@ -2670,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Bäst för svaga signaler. Fågelläten framträder tydligt mot bakgrundsbruset. Rekommenderas för vetenskapliga/gråskalestilar.",
                   "standard": "Standardbalanserad inställning. Bra för de flesta användningsfall.",
-                  "extended": "Mer detaljer synliga men lägre kontrast. SoX standardvärde."
+                  "extended": "Mer detaljer synliga men lägre kontrast."
                 }
               },
               "enabled": {
@@ -3234,10 +3234,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Ladda upp detektioner till BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg inte detekterat",
-          "message": "Installera FFmpeg för att aktivera stöd för FLAC-kodning, BirdWeather fasar ut WAV-uppladdningar till förmån för komprimerade FLAC-ljudfiler."
-        },
         "enable": "Aktivera BirdWeather-uppladdningar",
         "token": {
           "label": "BirdWeather-token",

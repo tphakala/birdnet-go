@@ -4,7 +4,6 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
 	"github.com/tphakala/birdnet-go/internal/api/v2/analytics"
@@ -944,30 +942,4 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 		fullMessage = fmt.Sprintf("%s: %v", message, err)
 	}
 	return echo.NewHTTPError(code, fullMessage)
-}
-
-// InitializeAPI creates a new API controller and registers all routes.
-// Auth middleware and service should be passed via functional options.
-func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
-	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, proc *processor.Processor,
-	metrics *observability.Metrics, opts ...Option) *Controller {
-
-	// Create API controller with metrics and functional options
-	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, metrics, opts...)
-	if err != nil {
-		GetLogger().Error("Failed to initialize API", logger.Error(err))
-		os.Exit(1)
-	}
-
-	// Assign processor after initialization
-	apiController.Processor = proc
-
-	// Log initialization
-	apiController.LogInfoIfEnabled("API v2 initialized",
-		logger.String("version", settings.Version),
-		logger.String("build_date", settings.BuildDate),
-	)
-
-	return apiController
 }

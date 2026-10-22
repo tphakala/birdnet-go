@@ -12,7 +12,7 @@ import (
 
 // GenerateSystemID creates a unique system identifier
 // Delegates to the privacy package for consistent implementation
-func GenerateSystemID() (string, error) {
+func GenerateSystemID() string {
 	return privacy.GenerateSystemID()
 }
 
@@ -48,10 +48,7 @@ func LoadOrCreateSystemID(configDir string) (string, error) {
 	}
 
 	// Generate new ID
-	id, err := GenerateSystemID()
-	if err != nil {
-		return "", err
-	}
+	id := GenerateSystemID()
 
 	// Save to file with secure permissions
 	if err := os.WriteFile(idFile, []byte(id), filePermSecure); err != nil {

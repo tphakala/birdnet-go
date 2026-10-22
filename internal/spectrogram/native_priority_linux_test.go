@@ -11,8 +11,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 const (
@@ -83,7 +81,6 @@ func requireRenderRunsAtLowPriority(t *testing.T, render func() error) {
 }
 
 func TestNativeRenders_RunAtLowPriority(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	g, env := newNativeGenerator(t)
 	samples := toneSamples(nativeCodecRate, priorityClipSeconds, 2000)
 	temp := filepath.Join(env.TempDir, "out.png.temp")

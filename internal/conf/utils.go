@@ -537,14 +537,6 @@ func GetFfmpegBinaryName() string {
 	return "ffmpeg"
 }
 
-// GetSoxBinaryName returns the binary name for sox based on the current OS.
-func GetSoxBinaryName() string {
-	if runtime.GOOS == osWindows {
-		return "sox.exe"
-	}
-	return "sox"
-}
-
 // GetFfprobeBinaryName returns the binary name for ffprobe based on the current OS.
 func GetFfprobeBinaryName() string {
 	if runtime.GOOS == osWindows {
@@ -690,23 +682,6 @@ func parseLibavutilVersion(output string) (major, minor int) {
 		}
 	}
 	return major, minor
-}
-
-// GetSoxFormats returns the audio formats supported by the SoX binary at the
-// given path. Returns nil if SoX cannot be executed or reports no formats.
-func GetSoxFormats(soxPath string) []string {
-	cmd := exec.Command(soxPath, "-h") //nolint:gosec // G204: soxPath validated by ValidateToolPath before reaching here
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil
-	}
-
-	for line := range strings.SplitSeq(string(output), "\n") {
-		if formats, found := strings.CutPrefix(line, "AUDIO FILE FORMATS:"); found {
-			return strings.Fields(strings.TrimSpace(formats))
-		}
-	}
-	return nil
 }
 
 // redactedToolPath replaces a contaminated tool path in logs and error messages.
