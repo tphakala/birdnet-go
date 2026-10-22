@@ -1026,8 +1026,9 @@ func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		firstResult error // returned after lateReturn; ignored when neverReturns
+		firstResult error // returned after lateReturn; ignored when neverReturn
 		neverReturn bool
+		noRetry     bool          // retry disabled, so the overrunning attempt is the only one
 		retryDelay  time.Duration // InitialDelay; zero means time.Second
 		wantStarts  int
 		wantOK      int
@@ -1036,6 +1037,9 @@ func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
 		{name: "late success", wantStarts: 1, wantOK: 1},
 		{name: "late failure", firstResult: errors.NewStd("late failure"), wantStarts: 2, wantOK: 1},
 		{name: "never returns", neverReturn: true, wantStarts: 1, wantFailed: 1},
+		// The only attempt overruns, so the job fails at the timeout and a late
+		// success must not be credited.
+		{name: "only attempt returns late", noRetry: true, wantStarts: 1, wantFailed: 1},
 		// The retry is not due for 30 minutes, yet the ceiling still applies.
 		{name: "never returns with long backoff", neverReturn: true, retryDelay: 30 * time.Minute, wantStarts: 1, wantFailed: 1},
 	}
@@ -1043,8 +1047,8 @@ func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
-				release := make(chan struct{})
-				defer close(release) // lets a hung attempt exit so the bubble can end
+				release := make(chan struct{}, 1)
+				defer close(release) // lets a hung attempt exit even when an assertion aborts the test
 				action := &overrunAction{firstAttempt: func() error {
 					if tt.neverReturn {
 						<-release
@@ -1058,13 +1062,12 @@ func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
 				queue.SetProcessingInterval(tick)
 				queue.StartWithContext(t.Context())
 
-				began := time.Now()
 				retryDelay := tt.retryDelay
 				if retryDelay == 0 {
 					retryDelay = time.Second
 				}
 				_, err := queue.Enqueue(t.Context(), action, &TestData{ID: "overrun"}, RetryConfig{
-					Enabled:      true,
+					Enabled:      !tt.noRetry,
 					MaxRetries:   2,
 					InitialDelay: retryDelay,
 					MaxDelay:     max(time.Minute, retryDelay),
@@ -1080,7 +1083,7 @@ func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
 				starts := action.startTimes()
 				require.Len(t, starts, tt.wantStarts, "attempt starts")
 				if tt.wantStarts == 2 {
-					assert.GreaterOrEqual(t, starts[1].Sub(began), lateReturn,
+					assert.GreaterOrEqual(t, starts[1].Sub(starts[0]), lateReturn,
 						"second attempt must not start before the first returned")
 				}
 				stats := queue.GetStats()
@@ -1090,6 +1093,15 @@ func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
 
 				// A hung attempt must not block shutdown.
 				require.NoError(t, queue.StopWithTimeout(time.Second))
+
+				// An attempt that returns after its job already failed changes nothing.
+				if tt.neverReturn {
+					release <- struct{}{}
+					synctest.Wait()
+					after := queue.GetStats()
+					assert.Equal(t, tt.wantOK, after.SuccessfulJobs, "successful jobs after the late return")
+					assert.Equal(t, tt.wantFailed, after.FailedJobs, "failed jobs after the late return")
+				}
 			})
 		})
 	}
