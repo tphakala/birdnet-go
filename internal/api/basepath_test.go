@@ -428,6 +428,12 @@ func TestBasePathStripMiddleware_HotReload(t *testing.T) {
 		serveBasePathRequest(t, s, path, "", "")
 		return seen.path
 	}
+	// The context middleware reads the published settings on every request
+	// too, so handlers see the base path that is current for that request.
+	wantContextBasePath := func(want string) {
+		t.Helper()
+		assert.Equal(t, want, seen.basePath, "context basePath should follow published settings")
+	}
 	publish := func(bp string) {
 		next := conf.CloneSettings(conf.GetSettings())
 		next.WebServer.BasePath = bp
@@ -437,11 +443,13 @@ func TestBasePathStripMiddleware_HotReload(t *testing.T) {
 	// 1. No basepath configured: requests pass through untouched.
 	assert.Equal(t, "/birdnet/ui/dashboard", do("/birdnet/ui/dashboard"),
 		"no basepath should not strip anything")
+	wantContextBasePath("")
 
 	// 2. Basepath published at runtime: the middleware must pick it up.
 	publish("/birdnet")
 	assert.Equal(t, "/ui/dashboard", do("/birdnet/ui/dashboard"),
 		"strip should activate without restart after basepath is set")
+	wantContextBasePath("/birdnet")
 
 	// 3. Basepath changed to a different value at runtime.
 	publish("/apps/birdnet")
@@ -449,11 +457,13 @@ func TestBasePathStripMiddleware_HotReload(t *testing.T) {
 		"strip should follow runtime basepath changes")
 	assert.Equal(t, "/birdnet/ui/dashboard", do("/birdnet/ui/dashboard"),
 		"old basepath must no longer strip after change")
+	wantContextBasePath("/apps/birdnet")
 
 	// 4. Basepath cleared: strip must disable again without restart.
 	publish("")
 	assert.Equal(t, "/apps/birdnet/ui/dashboard", do("/apps/birdnet/ui/dashboard"),
 		"clearing basepath should restore pass-through behavior")
+	wantContextBasePath("")
 }
 
 // TestIsRewritableAsset tests the file extension check for CSS/JS rewriting.
