@@ -463,10 +463,8 @@ func TestEnqueue_DisabledRetryMeansSingleAttempt(t *testing.T) {
 
 // TestRetryBackoff tests that the retry backoff mechanism works correctly
 func TestRetryBackoff(t *testing.T) {
-	// TODO: This test could be improved by using a mock clock implementation
-	// that allows precise control over time, rather than relying on real time
-	// and sleep durations. This would make the test more reliable and faster.
-	// TestRetryBackoff_FollowsConfiguredSchedule pins the delays on virtual time.
+	// This test asserts counts and final stats only; the delays between
+	// executions are pinned by TestRetryBackoff_FollowsConfiguredSchedule.
 
 	// Create a context for manual control
 	ctx := t.Context()
@@ -652,6 +650,36 @@ func TestRetryBackoff_FollowsConfiguredSchedule(t *testing.T) {
 
 		require.NoError(t, queue.Stop())
 	})
+}
+
+// TestCalculateBackoffDelay_ExponentClamp pins that a non-positive failed
+// attempt count behaves like the first failure instead of shrinking the delay.
+func TestCalculateBackoffDelay_ExponentClamp(t *testing.T) {
+	const (
+		initialDelay = time.Second
+		maxDelay     = time.Hour
+		jitterLow    = 0.9
+		jitterHigh   = 1.1
+	)
+	config := RetryConfig{InitialDelay: initialDelay, MaxDelay: maxDelay, Multiplier: 2.0}
+
+	tests := []struct {
+		name          string
+		failedAttempt int
+		want          time.Duration
+	}{
+		{"negative", -1, initialDelay},
+		{"zero", 0, initialDelay},
+		{"first failure", 1, initialDelay},
+		{"second failure", 2, 2 * initialDelay},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateBackoffDelay(config, tt.failedAttempt, &RealClock{})
+			assert.GreaterOrEqual(t, got, time.Duration(jitterLow*float64(tt.want)))
+			assert.LessOrEqual(t, got, time.Duration(jitterHigh*float64(tt.want)))
+		})
+	}
 }
 
 // TestJobExpiration tests that completed and failed jobs are removed from the
