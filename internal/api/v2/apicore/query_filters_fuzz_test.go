@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // FuzzParseConfidenceFilter tests confidence filter parsing.
@@ -121,6 +122,16 @@ func FuzzParseHourFilter(f *testing.F) {
 
 			// Start must not be greater than End
 			assert.LessOrEqual(t, result.Start, result.End, "Start must be <= End")
+		}
+
+		// ParseHourFilter has no table test, so this is the only check that
+		// it returns the same result for the same input.
+		result2 := ParseHourFilter(input)
+		if result == nil {
+			assert.Nil(t, result2, "Inconsistent nil result")
+		} else {
+			require.NotNil(t, result2, "Inconsistent non-nil result")
+			assert.Equal(t, *result, *result2, "Inconsistent result")
 		}
 	})
 }
