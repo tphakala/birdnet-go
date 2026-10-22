@@ -208,6 +208,25 @@ func TestSSEContract_AllFieldValues_RoundTrip(t *testing.T) {
 			"daysSinceFirstSeen value mismatch")
 	})
 
+	// The fixture sets locked and unlikely to the same value, so a constructor
+	// that mixed the two up would pass the checks above.
+	t.Run("locked and unlikely follow their own note fields", func(t *testing.T) {
+		t.Parallel()
+
+		independentNote := createTestNoteWithAllFields()
+		independentNote.Locked = false
+		independentJSON, err := json.Marshal(apicore.NewSSEDetectionData(&independentNote, nil))
+		require.NoError(t, err)
+
+		var independentPayload map[string]any
+		require.NoError(t, json.Unmarshal(independentJSON, &independentPayload))
+
+		assert.Equal(t, false, independentPayload["locked"],
+			"locked must follow note.Locked, not note.Unlikely")
+		assert.Equal(t, true, independentPayload["unlikely"],
+			"unlikely must follow note.Unlikely, not note.Locked")
+	})
+
 	// ==========================================================================
 	// TIMESTAMP FIELD
 	// ==========================================================================
