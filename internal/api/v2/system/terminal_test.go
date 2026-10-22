@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // Compile-time interface check.
@@ -16,25 +15,13 @@ type mockPTY struct {
 	resizeRows uint16
 	resizeErr  error
 	resized    bool
-	written    []byte
-	readData   []byte
-	closed     bool
 }
 
-func (m *mockPTY) Read(p []byte) (int, error) {
-	n := copy(p, m.readData)
-	return n, nil
-}
+func (m *mockPTY) Read([]byte) (int, error) { return 0, nil }
 
-func (m *mockPTY) Write(p []byte) (int, error) {
-	m.written = append(m.written, p...)
-	return len(p), nil
-}
+func (m *mockPTY) Write(p []byte) (int, error) { return len(p), nil }
 
-func (m *mockPTY) Close() error {
-	m.closed = true
-	return nil
-}
+func (m *mockPTY) Close() error { return nil }
 
 func (m *mockPTY) Resize(cols, rows uint16) error {
 	m.resized = true
@@ -97,30 +84,4 @@ func TestHandleResizeMessage(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestPtyHandleInterface(t *testing.T) {
-	t.Parallel()
-
-	mock := &mockPTY{readData: []byte("hello")}
-
-	n, err := mock.Write([]byte("test"))
-	require.NoError(t, err)
-	assert.Equal(t, 4, n)
-	assert.Equal(t, []byte("test"), mock.written)
-
-	buf := make([]byte, 10)
-	n, err = mock.Read(buf)
-	require.NoError(t, err)
-	assert.Equal(t, 5, n)
-	assert.Equal(t, "hello", string(buf[:n]))
-
-	err = mock.Resize(80, 24)
-	require.NoError(t, err)
-	assert.Equal(t, uint16(80), mock.resizeCols)
-	assert.Equal(t, uint16(24), mock.resizeRows)
-
-	err = mock.Close()
-	require.NoError(t, err)
-	assert.True(t, mock.closed)
 }

