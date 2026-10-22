@@ -204,6 +204,13 @@ func TestInputValidation(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
 
+	// Search terms that must reach the datastore exactly as sent.
+	const (
+		scriptTagTerm = "<script>alert('XSS')</script>"
+		shellTerm     = "bird; rm -rf /"
+		nulByteTerm   = "bird\x00.mp3"
+	)
+
 	// Test cases for different API endpoints
 	testCases := []struct {
 		name                 string
@@ -238,12 +245,12 @@ func TestInputValidation(t *testing.T) {
 			path:   "/api/v2/detections",
 			queryParams: map[string]string{
 				"queryType": "search",
-				"search":    "<script>alert('XSS')</script>",
+				"search":    scriptTagTerm,
 			},
 			handler: func(c echo.Context) error {
 				return controller.detections.GetDetections(c)
 			},
-			mockSetup:      searchNotesExactMock("<script>alert('XSS')</script>"),
+			mockSetup:      searchNotesExactMock(scriptTagTerm),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -275,19 +282,18 @@ func TestInputValidation(t *testing.T) {
 			mockSetup:      reviewDetectionMock("1"),
 			expectedStatus: http.StatusOK,
 		},
-		// New security abuse test cases
 		{
 			name:   "Command injection attempt",
 			method: http.MethodGet,
 			path:   "/api/v2/detections",
 			queryParams: map[string]string{
 				"queryType": "search",
-				"search":    "bird; rm -rf /",
+				"search":    shellTerm,
 			},
 			handler: func(c echo.Context) error {
 				return controller.detections.GetDetections(c)
 			},
-			mockSetup:      searchNotesExactMock("bird; rm -rf /"),
+			mockSetup:      searchNotesExactMock(shellTerm),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -301,10 +307,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.detections.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				// Only mock what's actually being called
-				m.On("SearchNotes", "", false, defaultDetectionPageSize, 0).Return([]datastore.Note{}, int64(0), nil)
-			},
+			mockSetup:      searchNotesExactMock(""),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -329,12 +332,12 @@ func TestInputValidation(t *testing.T) {
 			path:   "/api/v2/detections",
 			queryParams: map[string]string{
 				"queryType": "search",
-				"search":    "bird\u0000.mp3", // NUL byte in the search text
+				"search":    nulByteTerm,
 			},
 			handler: func(c echo.Context) error {
 				return controller.detections.GetDetections(c)
 			},
-			mockSetup:      searchNotesExactMock("bird\x00.mp3"),
+			mockSetup:      searchNotesExactMock(nulByteTerm),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -358,7 +361,6 @@ func TestInputValidation(t *testing.T) {
 			// Based on the code, numResults validation comes first
 			expectedError: "Invalid detection query parameters",
 		},
-		// Advanced XSS test cases
 		{
 			name:   "XSS with attribute injection",
 			method: http.MethodPost,

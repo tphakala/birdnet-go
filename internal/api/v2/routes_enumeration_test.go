@@ -21,7 +21,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
-	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -196,12 +195,10 @@ func buildFullyRoutedController(t *testing.T, mutate func(*conf.Settings)) (*ech
 	}
 	apitest.PublishTestSettings(t, settings)
 
-	metrics, err := observability.NewMetrics()
-	require.NoError(t, err)
 	gate := newAuthGate()
 	c, err := NewWithOptions(e, mockDS, settings, &imageprovider.BirdImageCache{},
 		suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude),
-		make(chan string, testControlChannelBuf), metrics, true,
+		make(chan string, testControlChannelBuf), apitest.NewTestMetrics(t), true,
 		WithAuthMiddleware(gate.middleware), WithV2Manager(mgr))
 	require.NoError(t, err)
 	t.Cleanup(c.Shutdown)
@@ -234,12 +231,18 @@ func requiresAuth(method, path string) bool {
 	if publicReadRoutes[key] {
 		return false
 	}
+	_, ok := authOnlyPrefix(path)
+	return ok
+}
+
+// authOnlyPrefix returns the authOnlyPrefixes entry that path falls under.
+func authOnlyPrefix(path string) (string, bool) {
 	for _, prefix := range authOnlyPrefixes {
 		if hasPathPrefix(path, prefix) {
-			return true
+			return prefix, true
 		}
 	}
-	return false
+	return "", false
 }
 
 // registeredRoutes returns the registered routes keyed by "METHOD /template",
@@ -260,10 +263,7 @@ func registeredRoutes(e *echo.Echo) map[string]*echo.Route {
 func TestCriticalRoutesRegistered(t *testing.T) {
 	// NOT parallel: see buildFullyRoutedController.
 	e, _ := buildFullyRoutedController(t, nil)
-	reg := registeredRoutes(e)
-	for _, key := range criticalRoutes {
-		assert.Contains(t, reg, key, "critical route is not registered")
-	}
+	apitest.AssertRoutesRegistered(t, e, criticalRoutes)
 }
 
 // TestProtectedRoutesRequireAuth sends a request through every route that
@@ -288,10 +288,8 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 		if !requiresAuth(r.Method, r.Path) {
 			continue
 		}
-		for _, prefix := range authOnlyPrefixes {
-			if hasPathPrefix(r.Path, prefix) {
-				perPrefix[prefix]++
-			}
+		if prefix, ok := authOnlyPrefix(r.Path); ok {
+			perPrefix[prefix]++
 		}
 		checked++
 		requestRoute(t, e, r)

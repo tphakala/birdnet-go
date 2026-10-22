@@ -21,8 +21,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// healthResponse mirrors the fields HealthCheck emits. Pointer fields tell an
-// absent key from a zero value.
+// healthResponse mirrors the fields HealthCheck emits. CPUUsage is a pointer so
+// an absent key reads as nil rather than zero.
 type healthResponse struct {
 	Status         string `json:"status"`
 	Version        string `json:"version"`
@@ -82,10 +82,10 @@ func TestHealthCheck(t *testing.T) {
 			settings.Version = testVersion
 			settings.BuildDate = testBuildDate
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
+			req := httptest.NewRequest(http.MethodGet, apiV2Prefix+"/health", http.NoBody)
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/health")
+			c.SetPath(apiV2Prefix + "/health")
 
 			// Response time is deliberately not asserted: the system metrics come
 			// from gopsutil syscalls whose latency depends on the runner, so a
@@ -118,7 +118,7 @@ func TestHandleError(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 
 	// Create a request context
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, apiV2Prefix+"/health", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
