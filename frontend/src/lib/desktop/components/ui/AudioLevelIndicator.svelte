@@ -294,9 +294,10 @@
     }
   }
 
-  // Start heartbeat
+  // Start heartbeat. Clears any previous timer without sending a disconnect, which
+  // would target the stream this start just registered.
   function startHeartbeat() {
-    stopHeartbeat();
+    clearHeartbeatTimer();
 
     const sendHeartbeat = async () => {
       if (!isPlaying || !activeStreamToken) return;
@@ -315,12 +316,16 @@
     heartbeatTimer = globalThis.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
   }
 
-  // Stop heartbeat
-  function stopHeartbeat() {
+  function clearHeartbeatTimer() {
     if (heartbeatTimer) {
       globalThis.clearInterval(heartbeatTimer);
       heartbeatTimer = null;
     }
+  }
+
+  // Stop heartbeat and tell the server this client has left the stream.
+  function stopHeartbeat() {
+    clearHeartbeatTimer();
 
     // Send disconnect notification (keepalive ensures delivery during page unload)
     if (activeStreamToken) {
