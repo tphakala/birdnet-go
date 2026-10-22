@@ -198,10 +198,12 @@ The job queue uses a mutex (`sync.Mutex`) to protect shared state and ensure thr
 Failed jobs are retried with exponential backoff and jitter to prevent thundering herd problems:
 
 ```go
-backoff := initialDelay * math.Pow(multiplier, attemptNum)
+backoff := initialDelay * math.Pow(multiplier, retryNumber-1)
 jitterFactor := 0.9 + 0.2*rand
 backoff *= jitterFactor
 ```
+
+The first retry waits InitialDelay, the second InitialDelay*Multiplier, and so on, capped at MaxDelay.
 
 ### Memory Management
 

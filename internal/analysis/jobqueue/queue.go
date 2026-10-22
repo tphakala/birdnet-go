@@ -409,10 +409,14 @@ func (q *JobQueue) cleanupStaleJobs(ctx context.Context) {
 	q.stats.StaleJobs += staleCount
 }
 
-// calculateBackoffDelay calculates the delay before the next retry attempt
-func calculateBackoffDelay(config RetryConfig, attemptNum int, clock Clock) time.Duration {
-	// Calculate exponential backoff with jitter
-	backoff := float64(config.InitialDelay) * math.Pow(config.Multiplier, float64(attemptNum))
+// calculateBackoffDelay returns the wait before the retry that follows the
+// failedAttempt-th attempt (1-based): InitialDelay * Multiplier^(failedAttempt-1)
+// with +-10% jitter, capped at MaxDelay. The first retry therefore waits
+// InitialDelay.
+func calculateBackoffDelay(config RetryConfig, failedAttempt int, clock Clock) time.Duration {
+	// Calculate exponential backoff, starting at InitialDelay for the first retry
+	exponent := max(failedAttempt-1, 0)
+	backoff := float64(config.InitialDelay) * math.Pow(config.Multiplier, float64(exponent))
 
 	// Add some jitter (±10%)
 	jitterFactor := 0.9 + 0.2*float64(clock.Now().Nanosecond())/1e9

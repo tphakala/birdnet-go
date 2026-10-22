@@ -6,117 +6,18 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
-
-// MockClock is a mock implementation of the Clock interface for testing
-type MockClock struct {
-	mu            sync.Mutex
-	currentTime   time.Time
-	afterChannels []mockAfterChannel
-}
-
-type mockAfterChannel struct {
-	triggerTime time.Time
-	ch          chan time.Time
-}
-
-// NewMockClock creates a new MockClock with the specified initial time
-func NewMockClock(initialTime time.Time) *MockClock {
-	return &MockClock{
-		currentTime:   initialTime,
-		afterChannels: make([]mockAfterChannel, 0),
-	}
-}
-
-// Now returns the current mock time
-func (m *MockClock) Now() time.Time {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.currentTime
-}
-
-// Sleep is a no-op in the mock clock
-func (m *MockClock) Sleep(d time.Duration) {
-	// No-op in mock clock
-}
-
-// After returns a channel that will receive the current time after the specified duration
-func (m *MockClock) After(d time.Duration) <-chan time.Time {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	ch := make(chan time.Time, 1)
-	triggerTime := m.currentTime.Add(d)
-	m.afterChannels = append(m.afterChannels, mockAfterChannel{
-		triggerTime: triggerTime,
-		ch:          ch,
-	})
-
-	return ch
-}
-
-// Advance advances the mock clock by the specified duration and triggers any after channels
-func (m *MockClock) Advance(d time.Duration) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.currentTime = m.currentTime.Add(d)
-
-	// Trigger any after channels that have reached their time
-	var remainingChannels []mockAfterChannel
-	for _, ac := range m.afterChannels {
-		if !m.currentTime.Before(ac.triggerTime) {
-			// This channel should be triggered
-			select {
-			case ac.ch <- m.currentTime:
-				// Channel triggered
-			default:
-				// Channel already closed or full
-			}
-		} else {
-			// This channel should not be triggered yet
-			remainingChannels = append(remainingChannels, ac)
-		}
-	}
-
-	m.afterChannels = remainingChannels
-}
-
-// Set sets the mock clock to the specified time and triggers any after channels
-func (m *MockClock) Set(t time.Time) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.currentTime = t
-
-	// Trigger any after channels that have reached their time
-	var remainingChannels []mockAfterChannel
-	for _, ac := range m.afterChannels {
-		if !m.currentTime.Before(ac.triggerTime) {
-			// This channel should be triggered
-			select {
-			case ac.ch <- m.currentTime:
-				// Channel triggered
-			default:
-				// Channel already closed or full
-			}
-		} else {
-			// This channel should not be triggered yet
-			remainingChannels = append(remainingChannels, ac)
-		}
-	}
-
-	m.afterChannels = remainingChannels
-}
 
 // MockAction implements the Action interface for testing
 type MockAction struct {
@@ -565,7 +466,7 @@ func TestRetryBackoff(t *testing.T) {
 	// TODO: This test could be improved by using a mock clock implementation
 	// that allows precise control over time, rather than relying on real time
 	// and sleep durations. This would make the test more reliable and faster.
-	// See the Clock interface and MockClock implementation for a potential approach.
+	// TestRetryBackoff_FollowsConfiguredSchedule pins the delays on virtual time.
 
 	// Create a context for manual control
 	ctx := t.Context()
@@ -685,6 +586,72 @@ func TestRetryBackoff(t *testing.T) {
 		// Instead, just log them for information
 		t.Logf("Manual retry delays: %v", delays)
 	}
+}
+
+// TestRetryBackoff_FollowsConfiguredSchedule pins the wait before each retry:
+// the first retry waits InitialDelay, each later one multiplies by Multiplier
+// (with +-10% jitter), and MaxDelay caps the result. It runs on synctest virtual
+// time so the gaps are exact up to the processing tick.
+func TestRetryBackoff_FollowsConfiguredSchedule(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const (
+			tick         = 10 * time.Millisecond
+			initialDelay = time.Second
+			maxDelay     = 5 * time.Second
+			maxRetries   = 4
+			jitterLow    = 0.9
+			jitterHigh   = 1.1
+		)
+
+		queue := NewJobQueueWithOptions(100, false)
+		queue.SetProcessingInterval(tick)
+		queue.StartWithContext(t.Context())
+
+		var mu sync.Mutex
+		var executions []time.Time
+		action := &MockAction{
+			ExecuteFunc: func(data any) error {
+				mu.Lock()
+				executions = append(executions, time.Now())
+				mu.Unlock()
+				return errors.NewStd("simulated failure")
+			},
+		}
+
+		_, err := queue.Enqueue(t.Context(), action, &TestData{ID: "schedule"}, RetryConfig{
+			Enabled:      true,
+			MaxRetries:   maxRetries,
+			InitialDelay: initialDelay,
+			MaxDelay:     maxDelay,
+			Multiplier:   2.0,
+		})
+		require.NoError(t, err)
+
+		// Enough virtual time for 1s + 2s + 4s + 5s of retry waits plus jitter.
+		time.Sleep(30 * time.Second)
+		synctest.Wait()
+
+		mu.Lock()
+		got := slices.Clone(executions)
+		mu.Unlock()
+		require.Len(t, got, maxRetries+1, "initial attempt plus every retry")
+
+		// Gap k is the wait before retry k. The fourth raw delay (8s) exceeds
+		// MaxDelay even at the lowest jitter, so the cap always binds.
+		wantBase := []time.Duration{initialDelay, 2 * initialDelay, 4 * initialDelay}
+		for i, base := range wantBase {
+			gap := got[i+1].Sub(got[i])
+			assert.GreaterOrEqual(t, gap, time.Duration(jitterLow*float64(base)), "gap before retry %d", i+1)
+			assert.LessOrEqual(t, gap, time.Duration(jitterHigh*float64(base))+tick, "gap before retry %d", i+1)
+		}
+		cappedGap := got[maxRetries].Sub(got[maxRetries-1])
+		assert.GreaterOrEqual(t, cappedGap, maxDelay, "capped gap before retry %d", maxRetries)
+		assert.LessOrEqual(t, cappedGap, maxDelay+tick, "capped gap before retry %d", maxRetries)
+
+		assert.Equal(t, 1, queue.GetStats().FailedJobs)
+
+		require.NoError(t, queue.Stop())
+	})
 }
 
 // TestJobExpiration tests that completed and failed jobs are removed from the
