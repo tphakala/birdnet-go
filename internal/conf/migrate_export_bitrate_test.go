@@ -11,11 +11,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// loadConfigFromYAML writes cfg to a temp config.yaml, points the loader at it,
-// and returns the loaded settings. It restores the global loader state (ConfigPath,
-// viper, published settings) on cleanup so sequential tests do not leak into each
+// prepareConfigFromYAML writes cfg to a temp config.yaml and points the loader at
+// it, without loading. It restores the global loader state (ConfigPath, viper,
+// published settings) on cleanup so sequential tests do not leak into each
 // other. Not safe for t.Parallel().
-func loadConfigFromYAML(t *testing.T, cfg string) (settings *Settings, configPath string) {
+func prepareConfigFromYAML(t *testing.T, cfg string) (configPath string) {
 	t.Helper()
 	configPath = filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configPath, []byte(cfg), 0o600))
@@ -30,6 +30,15 @@ func loadConfigFromYAML(t *testing.T, cfg string) (settings *Settings, configPat
 
 	viper.Reset()
 	ConfigPath = configPath
+	return configPath
+}
+
+// loadConfigFromYAML writes cfg to a temp config.yaml, points the loader at it,
+// and returns the loaded settings. See prepareConfigFromYAML for the state it
+// restores on cleanup.
+func loadConfigFromYAML(t *testing.T, cfg string) (settings *Settings, configPath string) {
+	t.Helper()
+	configPath = prepareConfigFromYAML(t, cfg)
 
 	settings, err := Load()
 	require.NoError(t, err, "the test config must load")
