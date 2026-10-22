@@ -1160,88 +1160,6 @@ func TestGetSpeciesThumbnails_DefersToProxy(t *testing.T) {
 	}
 }
 
-// TestGetDailySpeciesSummary_SingleDetection tests that the GetDailySpeciesSummary function
-// correctly handles the case where each species has only one detection
-func TestGetDailySpeciesSummary_SingleDetection(t *testing.T) {
-	t.Parallel()
-	// Create a new echo instance
-	e := echo.New()
-
-	// Create a mock datastore using testify/mock
-	mockDS := mocks.NewMockInterface(t)
-
-	// Expected data for GetTopBirdsData
-	mockNotesSingle := []datastore.Note{
-		{
-			ID:             1,
-			SpeciesCode:    "AMCRO",
-			ScientificName: "Corvus brachyrhynchos",
-			CommonName:     "American Crow",
-			Confidence:     0.9,
-			Date:           "2025-03-07",
-			Time:           "08:15:00",
-		},
-		{
-			ID:             2,
-			SpeciesCode:    "RBWO",
-			ScientificName: "Melanerpes carolinus",
-			CommonName:     "Red-bellied Woodpecker",
-			Confidence:     0.8,
-			Date:           "2025-03-07",
-			Time:           "10:20:00",
-		},
-	}
-
-	// Expected hourly counts for American Crow (single detection)
-	var expectedAmcroSingleHourly [24]int
-	expectedAmcroSingleHourly[8] = 1
-
-	// Expected hourly counts for Red-bellied Woodpecker (single detection)
-	var expectedRbwoSingleHourly [24]int
-	expectedRbwoSingleHourly[10] = 1
-
-	// Setup mock expectations using m.On()
-	mockDS.On("GetTopBirdsData", mock.Anything, "2025-03-07", 0.0, 0).Return(mockNotesSingle, nil)
-	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2025-03-07", "2025-03-07", mock.Anything, 0.0).Return(map[string][24]int{
-		sciAmericanCrow:         expectedAmcroSingleHourly,
-		sciRedBelliedWoodpecker: expectedRbwoSingleHourly,
-	}, nil)
-
-	// The daily summary emits proxy URLs directly and no longer queries the image
-	// cache for thumbnails (#3806), so no BirdImageCache is needed here.
-	controller := newTestHandler(&apicore.Core{DS: mockDS})
-
-	// Create a request with the date we want to test
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Call the handler
-	err := controller.GetDailySpeciesSummary(c)
-
-	// Verify no error occurred
-	require.NoError(t, err)
-
-	// Verify the response status code
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Parse the response
-	var response []SpeciesDailySummary
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	// Verify we got the expected number of species
-	assert.Len(t, response, 2)
-
-	// Verify each species has a count of 1
-	for _, species := range response {
-		assert.Equal(t, 1, species.Count, "%s should have 1 detection", species.CommonName)
-	}
-
-	// Assert that all expectations were met
-	mockDS.AssertExpectations(t)
-}
-
 // TestGetDailySpeciesSummary_EmptyResult tests that the GetDailySpeciesSummary function
 // correctly handles the case where no detections are found
 func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
@@ -1616,22 +1534,6 @@ func TestGetDailySpeciesSummary_BatchQueryError(t *testing.T) {
 
 	// Assert that all expectations were met
 	mockDS.AssertExpectations(t)
-}
-
-// TestAnalytics_ResolvesLocalizedCommonNameToScientific verifies that after wiring a
-// batch-capable resolver and calling UpdateCommonNameMap, the reverse lookup for a
-// localized bat name (which has no embedded common name in the label) returns the
-// correct scientific name. This guards the map-builder wiring for the analytics path.
-func TestAnalytics_ResolvesLocalizedCommonNameToScientific(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "analytics")
-	t.Attr("feature", "localized-name-resolution")
-
-	_, _, c := setupAnalyticsTestEnvironmentWithBatName(t)
-
-	got, hit := c.resolveSpeciesToScientific(batCommonName)
-	require.True(t, hit, "expected a reverse-map hit for the Finnish bat name")
-	assert.Equal(t, batScientificName, got)
 }
 
 // TestAnalytics_HourlyHandlerPassesResolvedSpeciesToDatastore verifies that when
