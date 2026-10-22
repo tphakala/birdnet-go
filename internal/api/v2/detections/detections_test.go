@@ -68,7 +68,7 @@ func testRealtimeSource() datastore.AudioSource {
 	}
 }
 
-// invalidQueryParamsMessage is the message GetDetections answers a rejected query with.
+// invalidQueryParamsMessage is the message GetDetections answers a rejected query with, except for malformed date parameters, which carry their own.
 const invalidQueryParamsMessage = "Invalid detection query parameters"
 
 // TestGetDetections tests the GetDetections endpoint with various query types
