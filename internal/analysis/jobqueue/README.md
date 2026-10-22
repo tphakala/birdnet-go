@@ -14,7 +14,7 @@ The `jobqueue` package provides a job queue implementation with the following ke
 - **Comprehensive Statistics**: Track success, failure, and retry metrics per action type
 - **Type-Safe API**: Generic implementation for type safety
 - **Context Support**: Cancel jobs via context cancellation
-- **Timeout Handling**: Automatically timeout hanging jobs. A job never has two attempts running at once: an attempt that ignores its timeout is waited for before the next one starts, a late success completes the job, and a job whose attempt has not returned after 10 minutes fails without another attempt
+- **Timeout Handling**: Automatically timeout hanging jobs. A job never has two attempts running at once: an attempt that ignores its timeout is waited for before the next one starts, a late success completes the job while a retry is still pending (a timeout on the last allowed attempt fails the job at once), and a job whose attempt has not returned after 10 minutes fails without another attempt
 - **Action Description Tracking**: Track statistics based on both action type and description
 - **Unique Job IDs**: Uses UUID v4 (truncated to 12 characters) for job identifiers
 
