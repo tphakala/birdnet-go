@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { deferred } from '../../../../../test/async-helpers';
+import { waitForNextTick } from '../../../../../test/constants';
 import {
   installFakeMediaElement,
   type FakeMediaController,
@@ -164,7 +165,7 @@ describe('MiniSpectrogram HLS player availability', () => {
     await waitFor(() => expect(mocks.tryLoadHls).toHaveBeenCalledTimes(1));
     cleanup();
     load.resolve(null);
-    await new Promise(resolve => globalThis.setTimeout(resolve, 0));
+    await waitForNextTick();
 
     expect(startRequests()).toBe(0);
   });

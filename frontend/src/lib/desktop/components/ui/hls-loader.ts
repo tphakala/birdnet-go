@@ -16,9 +16,9 @@ let hlsModule: Promise<typeof Hls> | null = null;
 
 /**
  * Loads HLS.js once and returns its class. Concurrent and later calls share
- * the same import. A failed import is forgotten so a later call imports again,
- * which lets browsers that refetch a failed module (Firefox) recover; Chromium
- * keeps the failure until the page is reloaded.
+ * the same import. A failed import is forgotten so a later call imports again;
+ * browsers that refetch a failed module recover, while Chromium keeps the
+ * failure until the page is reloaded.
  */
 export function loadHls(): Promise<typeof Hls> {
   hlsModule ??= import('hls.js').then(

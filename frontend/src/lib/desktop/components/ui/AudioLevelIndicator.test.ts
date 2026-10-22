@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { deferred, type Deferred } from '../../../../test/async-helpers';
+import { waitForNextTick } from '../../../../test/constants';
 import { BUFFERING_STRATEGY } from './hls-config';
 
 // The global i18n mock returns the key for untranslated strings, so t() here
@@ -70,8 +71,6 @@ function heartbeatCalls(): number {
   return mocks.fetchWithCSRF.mock.calls.filter(([url]) => url === '/api/v2/streams/hls/heartbeat')
     .length;
 }
-// flush lets pending promise callbacks settle on the real timer.
-const flush = () => new Promise(resolve => globalThis.setTimeout(resolve, 0));
 
 class FakeHls {
   static Events = { ERROR: 'e', MEDIA_ATTACHED: 'a', MANIFEST_PARSED: 'm', FRAG_BUFFERED: 'f' };
@@ -280,7 +279,7 @@ describe('AudioLevelIndicator start and stop', () => {
     // the start resolves, because startHeartbeat() schedules the interval then.
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     startCalls[0].response.resolve(startResponse());
-    await flush();
+    await waitForNextTick();
     expect(hlsConstructed).toHaveBeenCalledTimes(1);
 
     for (let i = 1; i < BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY; i++) {
@@ -325,7 +324,7 @@ describe('AudioLevelIndicator start and stop', () => {
     expect(hlsConstructed).not.toHaveBeenCalled();
   });
 
-  it('starts again after an HLS check fails and keeps the newer message for its full delay', async () => {
+  it('a second HLS check failure replaces the first message and cancels its hide timer', async () => {
     mocks.tryLoadHls.mockResolvedValue(null);
     mocks.canPlayHls.mockReturnValue(false);
     await renderWithSources();
@@ -340,7 +339,7 @@ describe('AudioLevelIndicator start and stop', () => {
     await clickSourceButton(SOURCE_A);
     expect(await screen.findByText(HLS_NOT_SUPPORTED)).toBeInTheDocument();
 
-    // The first message's hide timer would fire here if it had not been cancelled.
+    // The first message's hide timer would have fired here if the second failure had not cancelled it.
     await vi.advanceTimersByTimeAsync(ERROR_STATUS_HIDE_DELAY_MS / 2);
     expect(screen.getByText(HLS_NOT_SUPPORTED)).toBeInTheDocument();
   });
@@ -365,7 +364,7 @@ describe('AudioLevelIndicator start and stop', () => {
     await clickSourceButton(SOURCE_A); // the stop icon shows while the start is loading
 
     load.resolve(FakeHls);
-    await flush();
+    await waitForNextTick();
 
     expect(startCalls).toHaveLength(0);
   });
