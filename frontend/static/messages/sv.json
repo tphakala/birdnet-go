@@ -1581,7 +1581,7 @@
           "restartTitle": "Omstart krävs",
           "restartBody": "Starta om applikationen för att byta till V2-databasen. Rensning av äldre databas blir tillgänglig efter omstart.",
           "fallbackError": "Antal poster stämmer inte mellan äldre och V2-databaser. Vissa poster kan ha migrerats felaktigt.",
-          "migrateInfo": "Migreringen kommer att överföra {count} poster från den äldre databasen till det nya V2-schemat. Dubbelskrivningsläge säkerställer noll dataförlust under migreringen.",
+          "migrateInfo": "Migreringen kommer att överföra {count} poster från den äldre databasen till det nya V2-schemat. Nya detektioner som sparas under migreringen kopieras också till den nya databasen.",
           "sourceLegacy": "Källa (Äldre)",
           "targetV2": "Mål (V2)",
           "recordsLabel": "Poster",
@@ -1633,7 +1633,7 @@
         },
         "notes": {
           "in_progress": "Du kan fortsätta använda systemet normalt medan migreringen körs i bakgrunden.",
-          "dual_write": "Migrering pågår. Din data är säker - alla nya detektioner sparas i båda databaserna.",
+          "dual_write": "Migrering pågår. Din data är säker - nya detektioner sparas i den nuvarande databasen och kopieras till den nya databasen under migreringen.",
           "migrating": "Kopierar dina befintliga detektioner till den nya databasen.",
           "validating": "Verifierar att alla poster kopierades korrekt. Nästan klart!",
           "cutover": "Byter till den nya databasen. Det tar bara ett ögonblick.",

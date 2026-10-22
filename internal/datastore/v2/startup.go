@@ -572,13 +572,14 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 // legacy records are not yet safely present in v2. This detects data loss from
 // hard crashes (kill -9, power loss, OOM) during the tail sync window, and (issue
 // #3991) distinguishes that genuine straggler case from the normal, harmless
-// dual-write residue that keeps legacy notes growing after completion.
+// residue: legacy notes keep growing after completion, because new detections
+// are still saved to the legacy database only until the install is promoted.
 //
 // It answers the question by primary key rather than by row count: because the v2
 // Detection.ID equals the originating legacy notes.id, a legacy tail record is
 // "unmigrated" only when it is actually absent from v2 (or still pending in the
-// dirty-ID set). A busy install that dual-wrote every tail record into v2 is
-// therefore reported as fully reconciled and free to promote this boot.
+// dirty-ID set). A busy install whose migration worker already tail-synced every
+// record into v2 is therefore reported as fully reconciled and free to promote this boot.
 //
 // When it returns true, the caller should:
 //  1. Skip database consolidation (keep files in place)
@@ -587,7 +588,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 // It only inspects a COMPLETED migration; every earlier state and every
 // missing-database case returns false (there is nothing to promote yet). Once the
 // COMPLETED marker is confirmed, verification failures fail CLOSED (return true)
-// so an unverifiable state keeps dual-write running rather than promoting blindly.
+// so an unverifiable state stays in tail-sync mode rather than promoting blindly.
 func HasUnmigratedLegacyRecords(settings *conf.Settings, log logger.Logger) bool {
 	if settings.Output.MySQL.Enabled {
 		return hasUnmigratedLegacyMySQL(settings, log)
@@ -660,13 +661,14 @@ func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) bool 
 	}
 	defer func() { _ = legacySQL.Close() }()
 
-	// A completed migration keeps dual-writing to legacy notes, so a raw count of
-	// notes.id > LastMigratedID is always non-zero on a busy install and is NOT a
-	// reliable signal of data loss (issue #3991). During dual-write every detection
-	// is written to BOTH legacy and v2, and the v2 Detection.ID equals the legacy
-	// notes.id, so the authoritative question is whether any legacy tail record is
-	// actually ABSENT from v2. Answer it with a targeted primary-key membership check
-	// plus the dirty-ID set. Only genuinely unreconciled records defer promotion.
+	// Until promotion, new detections are saved to legacy notes only and the
+	// migration worker's tail sync copies them to v2 afterwards, so a raw count of
+	// notes.id > LastMigratedID is routinely non-zero on a busy install and is NOT a
+	// reliable signal of data loss (issue #3991). The v2 Detection.ID equals the
+	// legacy notes.id, so the authoritative question is whether any legacy tail
+	// record is actually ABSENT from v2. Answer it with a targeted primary-key
+	// membership check plus the dirty-ID set. Only genuinely unreconciled records
+	// defer promotion.
 	dirtyTable := resolveSQLiteTableName(v2DB, "migration_dirty_ids", "migration_dirty_id")
 	return !legacyTailReconciledInV2(legacyDB, v2DB, state.LastMigratedID, "notes", "detections", dirtyTable, log)
 }
@@ -715,8 +717,8 @@ func hasUnmigratedLegacyMySQL(settings *conf.Settings, log logger.Logger) bool {
 		return false
 	}
 
-	// Same reasoning as the SQLite path (issue #3991): dual-write keeps legacy notes
-	// growing after completion, so a raw count is meaningless. Verify the legacy tail
+	// Same reasoning as the SQLite path (issue #3991): legacy notes keep growing
+	// until promotion, so a raw count is meaningless. Verify the legacy tail
 	// against v2 by primary key (v2 Detection.ID == legacy notes.id) and check the
 	// dirty-ID set. MySQL keeps both schemas in one database, so a single connection
 	// serves both the legacy and v2 queries; v2 tables carry the v2_ prefix.
@@ -736,28 +738,28 @@ const tailScanBatchSize = 500
 const tailScanMaxBatches = 100_000
 
 // legacyTailReconciledInV2 reports whether every legacy detection beyond the
-// migration watermark is already present in v2 AND no dual-write records are still
-// pending reconciliation. It is the safe precondition for ending dual-write and
+// migration watermark is already present in v2 AND no dirty IDs are still pending
+// reconciliation. It is the safe precondition for promoting to v2-only and
 // consolidating to v2 (issue #3991).
 //
 // legacyDB and v2DB may be the same handle (MySQL keeps both schemas in one
 // database) or two handles (SQLite keeps v2 in a separate file). dirtyTable may be
 // empty when the dirty-ID table does not exist (older schema), in which case only
 // the membership check applies. It fails CLOSED: any verification error returns
-// false so an unverifiable state keeps dual-write running rather than promoting.
+// false so an unverifiable state stays in tail-sync mode rather than promoting.
 func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, notesTable, detectionsTable, dirtyTable string, log logger.Logger) bool {
-	// Outstanding dirty IDs mean dual-write failed to sync some records to v2 and the
-	// worker has not reconciled them yet. Tail sync can advance LastMigratedID past a
+	// Outstanding dirty IDs mean the migration worker failed to sync some records to
+	// v2 and has not reconciled them yet. Tail sync can advance LastMigratedID past a
 	// record it failed to migrate, so the membership check below would not see those;
 	// the dirty-ID set catches them.
 	if dirtyTable != "" {
 		var dirty int64
 		if err := v2DB.Table(dirtyTable).Count(&dirty).Error; err != nil {
-			log.Warn("reconciliation: failed to count dirty IDs, keeping dual-write", logger.Error(err))
+			log.Warn("reconciliation: failed to count dirty IDs, deferring promotion", logger.Error(err))
 			return false
 		}
 		if dirty > 0 {
-			log.Warn("legacy tail not reconciled: dual-write records pending sync to v2",
+			log.Warn("legacy tail not reconciled: dirty IDs pending sync to v2",
 				logger.Int64("dirty_ids", dirty),
 				logger.Uint64("last_migrated_id", uint64(lastMigratedID)))
 			return false
@@ -766,7 +768,7 @@ func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, note
 
 	missing, err := legacyTailMissingFromV2(legacyDB, v2DB, lastMigratedID, notesTable, detectionsTable)
 	if err != nil {
-		log.Warn("reconciliation: failed to verify legacy tail against v2, keeping dual-write", logger.Error(err))
+		log.Warn("reconciliation: failed to verify legacy tail against v2, deferring promotion", logger.Error(err))
 		return false
 	}
 	if missing {
