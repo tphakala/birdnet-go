@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -1325,4 +1326,68 @@ func TestBirdWeatherAction_Execute_RetryReusesEventTrackerDecision(t *testing.T)
 	// With no client the action returns an error after the rate limit check.
 	require.Error(t, action.Execute(t.Context(), nil), "first attempt reaches the client check")
 	require.Error(t, action.Execute(t.Context(), nil), "retry must reach the client check too")
+}
+
+// TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild verifies that an
+// action built before a settings change or a client removal uses the settings
+// and client in effect when it executes, the way a queued retry does.
+// Not parallel: it publishes global settings.
+func TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
+	tests := []struct {
+		name    string
+		change  func(p *Processor, initial *conf.Settings)
+		wantErr bool
+	}{
+		{
+			name: "birdweather disabled",
+			change: func(_ *Processor, initial *conf.Settings) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.Birdweather.Enabled = false
+				conf.StoreSettings(updated)
+			},
+		},
+		{
+			name:    "client removed",
+			change:  func(p *Processor, _ *conf.Settings) { p.SetBwClient(nil) },
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prev := conf.GetSettings()
+			t.Cleanup(func() { conf.StoreSettings(prev) })
+
+			initial := &conf.Settings{}
+			initial.Realtime.Birdweather.Enabled = true
+			// Keep the once-per-day range filter gate closed so getDefaultActions
+			// does not publish a settings snapshot of its own.
+			initial.BirdNET.RangeFilter.LastUpdated = time.Now()
+			conf.StoreSettings(initial)
+
+			// A zero client rejects an upload without PCM before touching its settings.
+			p := &Processor{Settings: initial, EventTracker: NewEventTracker(time.Hour), BwClient: &birdweather.BwClient{}}
+
+			det := testDetection()
+			var action *BirdWeatherAction
+			for _, a := range p.getDefaultActions(&det, initial) {
+				if b, ok := a.(*BirdWeatherAction); ok {
+					action = b
+				}
+			}
+			require.NotNil(t, action, "BirdWeather action should be built while it is enabled")
+
+			tt.change(p, initial)
+
+			err := action.Execute(t.Context(), nil)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			// The nil-client branch is the only one that marks the error non-retryable
+			// with this message; the zero client fails with an empty-PCM validation error.
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "BirdWeather client is not initialized")
+		})
+	}
 }

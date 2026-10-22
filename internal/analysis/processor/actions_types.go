@@ -212,12 +212,24 @@ type PreRendererSubmit interface {
 }
 
 type BirdWeatherAction struct {
-	Settings      *conf.Settings
-	Result        detection.Result // Domain model (single source of truth)
-	pcmData       []byte
-	BwClient      *birdweather.BwClient
-	EventTracker  *EventTracker
-	RetryConfig   jobqueue.RetryConfig // Configuration for retry behavior
+	// Settings is the snapshot captured when the action was built; used only
+	// when liveSettings is nil.
+	Settings *conf.Settings
+	Result   detection.Result // Domain model (single source of truth)
+	pcmData  []byte
+	// BwClient is the client captured when the action was built; used only when
+	// liveClient is nil.
+	BwClient     *birdweather.BwClient
+	EventTracker *EventTracker
+	// RetryConfig is fixed for the life of the job; a settings change applies
+	// to detections made after it.
+	RetryConfig jobqueue.RetryConfig
+	// liveSettings returns the settings snapshot in effect when an attempt runs,
+	// so a queued retry follows settings changes; nil uses Settings.
+	liveSettings func() *conf.Settings
+	// liveClient returns the BirdWeather client in effect when an attempt runs,
+	// so a retry after a reconfigure uses the new client; nil uses BwClient.
+	liveClient    func() *birdweather.BwClient
 	Description   string
 	CorrelationID string            // Detection correlation ID for log tracking
 	mu            sync.Mutex        // Protect concurrent access to Result and pcmData
@@ -306,6 +318,26 @@ func (a *MqttAction) attemptClient() mqtt.Client {
 		return a.liveClient()
 	}
 	return a.MqttClient
+}
+
+// attemptSettings returns the settings snapshot for one attempt: the live
+// snapshot when a resolver is set and returns one, else the captured Settings.
+func (a *BirdWeatherAction) attemptSettings() *conf.Settings {
+	if a.liveSettings != nil {
+		if s := a.liveSettings(); s != nil {
+			return s
+		}
+	}
+	return a.Settings
+}
+
+// attemptClient returns the BirdWeather client for one attempt. A set resolver
+// is authoritative even when it returns nil (the client was removed).
+func (a *BirdWeatherAction) attemptClient() *birdweather.BwClient {
+	if a.liveClient != nil {
+		return a.liveClient()
+	}
+	return a.BwClient
 }
 
 type UpdateRangeFilterAction struct {

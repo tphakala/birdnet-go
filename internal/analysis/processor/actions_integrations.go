@@ -55,7 +55,9 @@ type NoteWithBirdImage struct {
 	SpeciesLastDetectedAt *time.Time `json:"speciesLastDetectedAt"`
 }
 
-// Execute sends the note to the BirdWeather API
+// Execute sends the note to the BirdWeather API.
+// The settings snapshot and the BirdWeather client are resolved once per
+// attempt, so a queued retry follows settings changes and client reconfiguration.
 func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -68,28 +70,34 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 		return nil
 	}
 
-	// Early check if BirdWeather is still enabled in settings
-	if !a.Settings.Realtime.Birdweather.Enabled {
+	// One settings snapshot for the whole attempt, so a reload mid-attempt cannot
+	// mix values from two versions.
+	s := a.attemptSettings()
+
+	// Early check if BirdWeather is still enabled in the settings of this attempt
+	if !s.Realtime.Birdweather.Enabled {
 		return nil // Silently exit if BirdWeather was disabled after this action was created
 	}
 
 	// Add threshold check here
-	if a.Result.Confidence < float64(a.Settings.Realtime.Birdweather.Threshold) {
-		if a.Settings.Debug {
+	if a.Result.Confidence < float64(s.Realtime.Birdweather.Threshold) {
+		if s.Debug {
 			// Add structured logging
 			GetLogger().Debug("Skipping BirdWeather upload due to low confidence",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
 				logger.String("species", a.Result.Species.CommonName),
 				logger.Float64("confidence", a.Result.Confidence),
-				logger.Float64("threshold", float64(a.Settings.Realtime.Birdweather.Threshold)),
+				logger.Float64("threshold", float64(s.Realtime.Birdweather.Threshold)),
 				logger.String("operation", "birdweather_threshold_check"))
 		}
 		return nil
 	}
 
-	// Safe check for nil BwClient
-	if a.BwClient == nil {
+	// The client in effect for this attempt; nil while BirdWeather is being
+	// reconfigured or after it was removed.
+	client := a.attemptClient()
+	if client == nil {
 		// Client initialization failures indicate configuration issues that require
 		// manual intervention (e.g., missing API keys, disabled service)
 		// Retrying won't fix these problems, so mark as non-retryable
@@ -108,7 +116,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 	pcmData := a.pcmData
 
 	// Try to publish with appropriate error handling
-	if err := a.BwClient.Publish(&note, pcmData); err != nil {
+	if err := client.Publish(&note, pcmData); err != nil {
 		// Check if this is a CategoryNotFound error (e.g., species not recognized by Birdweather)
 		// These are expected for non-bird species and should not be logged at error level
 		if errors.IsNotFound(err) {
@@ -198,7 +206,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 			Build()
 	}
 
-	if a.Settings.Debug {
+	if s.Debug {
 		GetLogger().Debug("Successfully uploaded to BirdWeather",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
