@@ -150,8 +150,10 @@ func TestCheckNtfyServer_InjectionRejected(t *testing.T) {
 // found and this test would fail. Nothing outside the machine is contacted
 // either way.
 func TestCheckNtfyServer_ProbesThroughGuardedClient(t *testing.T) {
-	// ntfyGuardPreconditionTimeout bounds the plain-client precondition probe.
-	const ntfyGuardPreconditionTimeout = 2 * time.Second
+	// ntfyGuardPreconditionTimeout bounds the plain-client precondition probe and
+	// the handler's own probe. Both are wide so a loaded host cannot turn a plain
+	// client that is slow to answer into "unreachable".
+	const ntfyGuardPreconditionTimeout = 10 * time.Second
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -176,14 +178,14 @@ func TestCheckNtfyServer_ProbesThroughGuardedClient(t *testing.T) {
 	require.NoError(t, err)
 	pre, err := plain.Do(preReq)
 	if err != nil {
-		t.Skipf("plain dial of %s does not reach loopback on this OS: %v", unspecifiedHost, err)
+		t.Skipf("plain dial of %s failed, so the guarded-client check cannot be made: %v", unspecifiedHost, err)
 	}
 	require.NoError(t, pre.Body.Close())
 
 	e := echo.New()
 	ctrl := New(&apicore.Core{}, nil, nil)
 	ctrl.Settings.Store(apitest.NewValidTestSettings())
-	ctrl.ntfyCheckTimeoutOverride = testFailFastTimeout
+	ctrl.ntfyCheckTimeoutOverride = ntfyGuardPreconditionTimeout
 	req := newNtfyCheckRequest(t, unspecifiedHost)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)

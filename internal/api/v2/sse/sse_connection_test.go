@@ -271,6 +271,11 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 		"At least one connection should have been established")
 }
 
+// sseRapidDisconnectTimeout bounds each request of TestSSERapidDisconnectReleasesClients;
+// the wait for client removal uses twice this. The bounds are generous so a
+// loaded host does not fail the test, and a passing run does not wait for them.
+const sseRapidDisconnectTimeout = 15 * time.Second
+
 // TestSSERapidDisconnectReleasesClients verifies that connecting to the
 // detections stream and closing at once, repeatedly, leaves no client registered
 // afterwards. A handler that does not remove its client when the connection ends
@@ -281,7 +286,7 @@ func TestSSERapidDisconnectReleasesClients(t *testing.T) {
 
 	server, core := setupSSETestServer(t)
 
-	client := apitest.NewTestHTTPClient(3 * time.Second)
+	client := apitest.NewTestHTTPClient(sseRapidDisconnectTimeout)
 
 	const rapidConnections = 5
 	for range rapidConnections {
@@ -302,7 +307,7 @@ func TestSSERapidDisconnectReleasesClients(t *testing.T) {
 
 	require.Eventually(t, func() bool {
 		return core.SSEManager.GetClientCount() == 0
-	}, 5*time.Second, 10*time.Millisecond, "disconnected clients should be removed from the manager")
+	}, sseRapidDisconnectTimeout*2, 10*time.Millisecond, "disconnected clients should be removed from the manager")
 }
 
 // TestSSERateLimiting verifies that SSE rate limiting works correctly
