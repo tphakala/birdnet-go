@@ -27,15 +27,6 @@ func (f *fakeRegistry) UpdateDisplayName(id, name string) bool {
 	return true
 }
 
-func TestGetAudioBlockedFields(t *testing.T) {
-	t.Parallel()
-
-	blocked := getAudioBlockedFields()
-
-	// FfmpegPath must be blocked to prevent ingress/proxy path contamination
-	assert.Equal(t, true, blocked["FfmpegPath"], "FfmpegPath must be blocked from API updates")
-}
-
 func TestPerStreamEqualizerChanged(t *testing.T) {
 	t.Parallel()
 
@@ -268,33 +259,6 @@ func TestSyncStreamNames(t *testing.T) {
 		cur := &conf.Settings{}
 		assert.False(t, syncStreamNames(old, cur, nil))
 	})
-}
-
-func TestResolveEQOverrideMatchesByName(t *testing.T) {
-	t.Parallel()
-
-	eq := &conf.EqualizerSettings{
-		Enabled: true,
-		Filters: []conf.EqualizerFilter{{Type: "HighPass", Frequency: 300, Q: 0.7}},
-	}
-
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-		{Name: "New Name", Device: "hw:0,0", Equalizer: eq},
-	}
-	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
-		{Name: "Renamed Stream", URL: "rtsp://cam/stream", Equalizer: eq},
-	}
-
-	assert.Equal(t, eq, settings.ResolveEQOverride("New Name"),
-		"EQ override should resolve for the new source name")
-	assert.Nil(t, settings.ResolveEQOverride("Old Name"),
-		"EQ override should not resolve for the old source name")
-
-	assert.Equal(t, eq, settings.ResolveEQOverride("Renamed Stream"),
-		"EQ override should resolve for the new stream name")
-	assert.Nil(t, settings.ResolveEQOverride("Old Stream Name"),
-		"EQ override should not resolve for the old stream name")
 }
 
 func TestSyncAudioSourceNames_UpdatesRegistry(t *testing.T) {

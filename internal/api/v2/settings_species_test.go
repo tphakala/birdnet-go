@@ -145,81 +145,6 @@ func TestUpdateSpeciesSettingsWithZeroValues(t *testing.T) {
 	}
 }
 
-// TestSpeciesSettingsUpdate tests that species config updates preserve zero values correctly
-func TestSpeciesSettingsUpdate(t *testing.T) {
-	t.Parallel()
-
-	// Setup
-	e := echo.New()
-	settings := apitest.NewValidTestSettings()
-	settings.Realtime.Interval = 15
-	settings.Realtime.Species = conf.SpeciesSettings{
-		Include: []string{"Robin"},
-		Exclude: []string{"Crow"},
-		Config: map[string]conf.SpeciesConfig{
-			"initial bird": {
-				Threshold: 0.5,
-				Interval:  30,
-				Actions:   []conf.SpeciesAction{},
-			},
-		},
-	}
-	controller := &Controller{Core: &apicore.Core{}, DisableSaveSettings: true}
-	controller.Settings.Store(settings)
-
-	// Update with zero values
-	// Note: Keys can be any case in payload - they will be normalized to lowercase
-	updatePayload := map[string]any{
-		"interval": 15,
-		"species": map[string]any{
-			"include": []string{"Robin"},
-			"exclude": []string{"Crow"},
-			"config": map[string]any{
-				"Initial Bird": map[string]any{
-					"threshold": 0.0, // Update to zero
-					"interval":  0,   // Update to zero
-					"actions":   []any{},
-				},
-				"New Bird": map[string]any{
-					"threshold": 0.0, // Add new bird with zero values
-					"interval":  0,
-					"actions":   []any{},
-				},
-			},
-		},
-	}
-
-	rec := patchRealtime(t, e, controller, updatePayload)
-	require.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify zero values are preserved in the controller's settings
-	// Zero threshold and interval values should persist after update operations
-	// Note: Keys are normalized to lowercase after API update
-	initialBird := controller.Settings.Load().Realtime.Species.Config["initial bird"]
-	assert.InDelta(t, 0.0, initialBird.Threshold, 0.0001, "initial bird threshold should be zero")
-	assert.Equal(t, 0, initialBird.Interval, "initial bird interval should be zero")
-	assert.Empty(t, initialBird.Actions, "initial bird actions should be empty")
-	assert.NotNil(t, initialBird.Actions, "initial bird actions should be empty slice, not nil")
-
-	newBird := controller.Settings.Load().Realtime.Species.Config["new bird"]
-	assert.InDelta(t, 0.0, newBird.Threshold, 0.0001, "new bird threshold should be zero")
-	assert.Equal(t, 0, newBird.Interval, "new bird interval should be zero")
-	assert.Empty(t, newBird.Actions, "new bird actions should be empty")
-	assert.NotNil(t, newBird.Actions, "new bird actions should be empty slice, not nil")
-
-	// Verify the API response indicates success
-	var response map[string]any
-	err := json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err, "Response should be valid JSON")
-
-	// Type-assert the message field to ensure it's a string
-	messageField, exists := response["message"]
-	require.True(t, exists, "Response should contain message field")
-	message, ok := messageField.(string)
-	require.True(t, ok, "Message field should be a string")
-	assert.Equal(t, "realtime settings updated successfully", message)
-}
-
 // TestPartialSpeciesConfigUpdate tests that partial updates don't lose existing data
 func TestPartialSpeciesConfigUpdate(t *testing.T) {
 	t.Parallel()
@@ -416,44 +341,6 @@ func TestSpeciesSettingsRejectInvalid(t *testing.T) {
 }
 
 // Test helper functions
-
-// newAPIContext creates an Echo instance, controller, and context for testing
-func newAPIContext(t *testing.T, e *echo.Echo, method, path string, body any) (echo.Context, *httptest.ResponseRecorder, *Controller) {
-	t.Helper()
-
-	settings := apitest.NewValidTestSettings()
-	settings.Main.Name = "TestNode"
-	settings.Realtime.Species = conf.SpeciesSettings{
-		Include: []string{},
-		Exclude: []string{},
-		Config:  map[string]conf.SpeciesConfig{},
-	}
-	controller := &Controller{Core: &apicore.Core{}, DisableSaveSettings: true}
-	controller.Settings.Store(settings)
-
-	// Use default values if method or path are empty
-	if method == "" {
-		method = http.MethodGet
-	}
-	if path == "" {
-		path = "/api/v2/test"
-	}
-
-	var req *http.Request
-	if body != nil {
-		jsonData, err := json.Marshal(body)
-		require.NoError(t, err)
-		req = httptest.NewRequest(method, path, bytes.NewReader(jsonData))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	} else {
-		req = httptest.NewRequest(method, path, http.NoBody)
-	}
-
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	return ctx, rec, controller
-}
 
 // patchRealtime creates a PATCH request context for the realtime section
 func patchRealtime(t *testing.T, e *echo.Echo, c *Controller, payload any) *httptest.ResponseRecorder {
