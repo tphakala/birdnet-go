@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
@@ -33,6 +34,9 @@ const (
 	// that should be gated is not and its handler blocks (an SSE stream, for
 	// example), so the failure is reported instead of hanging the run.
 	routeProbeTimeout = 5 * time.Second
+	// routeTestMetricsPoints sizes the in-memory metrics store the controller is
+	// given so the metrics history routes register.
+	routeTestMetricsPoints = 10
 	// routeTestV2DBName is the SQLite file the route tests create in a temp dir.
 	routeTestV2DBName = "routes_v2.db"
 )
@@ -40,8 +44,8 @@ const (
 var routeParamPattern = regexp.MustCompile(`:[A-Za-z_]+`)
 
 // criticalRoutes must stay registered: at least one route per initializer in
-// initRoutes, plus health, ping and the greedy audio route registered on the
-// Echo instance.
+// initRoutes, plus health and ping. The media initializer's entry is the greedy
+// audio route registered directly on the Echo instance.
 // initRoutes recovers a panicking initializer and carries on, so a broken
 // RegisterRoutes would otherwise drop its routes silently and the auth tests
 // below would simply have fewer routes to check. Prefer the last route an
@@ -54,7 +58,7 @@ var criticalRoutes = []string{
 	"GET /api/v2/app/config",
 	"POST /api/v2/search",
 	"GET /api/v2/detections/:id",
-	"GET /api/v2/analytics/species/summary",
+	"GET /api/v2/analytics/sources",
 	"GET /api/v2/weather/latest",
 	"POST /api/v2/system/database/legacy/cleanup",
 	"GET /api/v2/system/audio/devices",
@@ -72,10 +76,11 @@ var criticalRoutes = []string{
 	"POST /api/v2/auth/login",
 	"GET /api/v2/audio/:id",
 	"POST /api/v2/range/rebuild",
-	"GET /api/v2/analytics/time/heatmap",
+	"GET /api/v2/range/heatmap",
 	"GET /api/v2/detections/stream",
 	"POST /api/v2/system/diagnostics/run",
 	"GET /api/v2/system/events/operational",
+	"GET /api/v2/system/metrics/stream",
 	"GET /api/v2/notifications",
 	"POST /api/v2/support/generate",
 	"POST /api/v2/debug/trigger-error",
@@ -164,6 +169,7 @@ func buildFullyRoutedController(t *testing.T, mutate func(*conf.Settings)) (*ech
 
 	// The alerts routes answer 409 before auth unless a v2 manager is set and
 	// the enhanced-database flag is on, so both are needed to reach their gate.
+	// The metrics history routes register only when a metrics store is set.
 	// Cleanups run last-in first-out: reset the flag, shut the controller down,
 	// close the manager, then the temp dir is removed.
 	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
@@ -199,7 +205,8 @@ func buildFullyRoutedController(t *testing.T, mutate func(*conf.Settings)) (*ech
 	c, err := NewWithOptions(e, mockDS, settings, &imageprovider.BirdImageCache{},
 		suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude),
 		make(chan string, testControlChannelBuf), apitest.NewTestMetrics(t), true,
-		WithAuthMiddleware(gate.middleware), WithV2Manager(mgr))
+		WithAuthMiddleware(gate.middleware), WithV2Manager(mgr),
+		WithMetricsStore(observability.NewMemoryStore(routeTestMetricsPoints)))
 	require.NoError(t, err)
 	t.Cleanup(c.Shutdown)
 	return e, gate
