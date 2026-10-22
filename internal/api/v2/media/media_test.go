@@ -107,84 +107,29 @@ func requireAudioHandlerSuccess(t *testing.T, handlerErr <-chan error) {
 	}
 }
 
-// createLargeWAVFile creates a large WAV file for testing partial content responses.
+// Rate and silent-clip size of the default audio fixture: 0.1 s of 16-bit mono,
+// which with the 44-byte WAV header is 8864 bytes.
+const (
+	testAudioRate     = 44100
+	testAudioDataSize = testAudioRate / 10 * 2
+)
+
+// createLargeWAVFile creates a WAV file whose data chunk is a dataSize-byte
+// 0..255 ramp, for testing partial content responses.
 func createLargeWAVFile(t *testing.T, path string, dataSize int) {
 	t.Helper()
-	file, err := os.Create(path) //nolint:gosec // G304: path is from controlled test temp dir
-	require.NoError(t, err)
-	defer func() {
-		if err := file.Close(); err != nil {
-			t.Logf("Failed to close large file: %v", err)
-		}
-	}()
-
-	header := []byte{
-		'R', 'I', 'F', 'F',
-		byte(dataSize + 36), byte((dataSize + 36) >> 8), byte((dataSize + 36) >> 16), byte((dataSize + 36) >> 24),
-		'W', 'A', 'V', 'E', 'f', 'm', 't', ' ',
-		16, 0, 0, 0, 1, 0, 1, 0,
-		0x44, 0xAC, 0, 0, 0x88, 0x58, 0x01, 0, 2, 0, 16, 0,
-		'd', 'a', 't', 'a',
-		byte(dataSize), byte(dataSize >> 8), byte(dataSize >> 16), byte(dataSize >> 24),
+	ramp := make([]byte, dataSize)
+	for i := range ramp {
+		ramp[i] = byte(i % 256)
 	}
-	_, err = file.Write(header)
-	require.NoError(t, err)
-
-	content := make([]byte, dataSize)
-	for i := range content {
-		content[i] = byte(i % 256)
-	}
-	_, err = file.Write(content)
-	require.NoError(t, err)
+	writePCM16WAV(t, path, testAudioRate, ramp)
 }
 
-// createTestAudioFile creates a valid WAV file for testing that meets the minimum size requirements.
-// The file will be at least 1024 bytes to pass validation.
-func createTestAudioFile(t *testing.T, path string) error {
+// createTestAudioFile creates a valid, silent WAV file of testAudioDataSize PCM
+// bytes that meets the minimum size requirements.
+func createTestAudioFile(t *testing.T, path string) {
 	t.Helper()
-
-	// Create a 0.1 second WAV file (100ms) at 44100Hz, 16-bit, mono
-	// This results in a file size of approximately 8864 bytes (44 header + 8820 data)
-	durationSec := 0.1
-	sampleRate := 44100
-	numSamples := int(float64(sampleRate) * durationSec)
-	dataSize := numSamples * 2 // 16-bit = 2 bytes per sample
-
-	file, err := os.Create(path) //nolint:gosec // G304: path is constructed from controlled test temp dir
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			t.Logf("Failed to close test audio file: %v", err)
-		}
-	}()
-
-	// Write WAV header
-	header := []byte{
-		'R', 'I', 'F', 'F',
-		byte(dataSize + 36), byte((dataSize + 36) >> 8), byte((dataSize + 36) >> 16), byte((dataSize + 36) >> 24),
-		'W', 'A', 'V', 'E',
-		'f', 'm', 't', ' ',
-		16, 0, 0, 0, // Subchunk1Size
-		1, 0, // AudioFormat (PCM)
-		1, 0, // NumChannels (mono)
-		byte(sampleRate), byte(sampleRate >> 8), byte(sampleRate >> 16), byte(sampleRate >> 24), // SampleRate
-		byte(sampleRate * 2), byte((sampleRate * 2) >> 8), byte((sampleRate * 2) >> 16), byte((sampleRate * 2) >> 24), // ByteRate
-		2, 0, // BlockAlign
-		16, 0, // BitsPerSample
-		'd', 'a', 't', 'a',
-		byte(dataSize), byte(dataSize >> 8), byte(dataSize >> 16), byte(dataSize >> 24),
-	}
-
-	if _, err := file.Write(header); err != nil {
-		return err
-	}
-
-	// Write silence (zeros) as audio data
-	silence := make([]byte, dataSize)
-	_, err = file.Write(silence)
-	return err
+	writePCM16WAV(t, path, testAudioRate, make([]byte, testAudioDataSize))
 }
 
 // TestServeAudioClip tests the ServeAudioClip handler using SecureFS
@@ -195,8 +140,7 @@ func TestServeAudioClip(t *testing.T) {
 	// Create a small test audio file within the secure root
 	smallFilename := "small.wav"
 	smallFilePath := filepath.Join(tempDir, smallFilename)
-	err := createTestAudioFile(t, smallFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, smallFilePath)
 
 	// Create a large test audio file (over 1MB)
 	largeFilename := "large.wav"
@@ -204,15 +148,15 @@ func TestServeAudioClip(t *testing.T) {
 	createLargeWAVFile(t, largeFilePath, 1100*1024)
 
 	standardClipFilename := "corvus_corax_74p_20260724T132919Z.wav"
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, standardClipFilename)))
+	createTestAudioFile(t, filepath.Join(tempDir, standardClipFilename))
 	extendedClipFilename := "strix_uralensis_85p_20260724T231500Z_86s.wav"
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, extendedClipFilename)))
+	createTestAudioFile(t, filepath.Join(tempDir, extendedClipFilename))
 	spacedFilename := "my clip.wav"
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, spacedFilename)))
+	createTestAudioFile(t, filepath.Join(tempDir, spacedFilename))
 	cyrillicFilename := "тест.wav"
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, cyrillicFilename)))
+	createTestAudioFile(t, filepath.Join(tempDir, cyrillicFilename))
 	umlautFilename := "Prüfung.wav"
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, umlautFilename)))
+	createTestAudioFile(t, filepath.Join(tempDir, umlautFilename))
 
 	// Test cases
 	testCases := []struct {
@@ -336,8 +280,7 @@ func TestServeSpectrogram(t *testing.T) {
 	// Create a test audio file within the secure root
 	audioFilename := "audio.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := createTestAudioFile(t, audioFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, audioFilePath)
 
 	// --- Simulate Spectrogram Generation (by creating the expected file) ---
 	// This allows testing the "file exists" path without rendering.
@@ -345,7 +288,7 @@ func TestServeSpectrogram(t *testing.T) {
 	spectrogramFilename := "audio_800px.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
 	spectrogramContent := "simulated spectrogram content"
-	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
+	err := os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
 	require.NoError(t, err)
 
 	// Test cases
@@ -456,7 +399,7 @@ func TestServeAudio_AlternateExtensionFallback(t *testing.T) {
 
 	// The real file on disk is FLAC (createTestAudioFile writes valid audio bytes;
 	// the serve path only cares about the extension for labeling).
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, "drifted.flac")))
+	createTestAudioFile(t, filepath.Join(tempDir, "drifted.flac"))
 
 	server := httptest.NewServer(e)
 	defer server.Close()
@@ -496,8 +439,7 @@ func TestMediaSecurityScenarios(t *testing.T) {
 	// Create a test audio file within the secure root
 	secureFilename := "secure.wav"
 	secureFilePath := filepath.Join(tempDir, secureFilename)
-	err := createTestAudioFile(t, secureFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, secureFilePath)
 
 	// --- No need to create sensitive file outside tempDir, SecureFS prevents access ---
 
@@ -651,13 +593,12 @@ func TestServeSpectrogramRawParameter(t *testing.T) {
 	// Create a test audio file within the secure root
 	audioFilename := "rawtest.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := createTestAudioFile(t, audioFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, audioFilePath)
 
 	// Simulate raw spectrogram (default behavior)
 	rawSpectrogramFilename := "rawtest_800px.png"
 	rawSpectrogramPath := filepath.Join(tempDir, rawSpectrogramFilename)
-	err = os.WriteFile(rawSpectrogramPath, []byte("raw spectrogram"), 0o600)
+	err := os.WriteFile(rawSpectrogramPath, []byte("raw spectrogram"), 0o600)
 	require.NoError(t, err)
 
 	// Simulate spectrogram with legend
@@ -934,13 +875,12 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 	// Create a test audio file
 	testFilename := "test_raw_param.wav"
 	filePath := filepath.Join(tempDir, testFilename)
-	err := createTestAudioFile(t, filePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, filePath)
 
 	// Simulate raw spectrogram (default behavior) using lg size (1026px)
 	rawSpectrogramFilename := "test_raw_param_1026px.png"
 	rawSpectrogramPath := filepath.Join(tempDir, rawSpectrogramFilename)
-	err = os.WriteFile(rawSpectrogramPath, []byte("id raw spectrogram"), 0o600)
+	err := os.WriteFile(rawSpectrogramPath, []byte("id raw spectrogram"), 0o600)
 	require.NoError(t, err)
 
 	// Simulate spectrogram with legend
@@ -1370,7 +1310,7 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	}()
 
 	requireAudioWaitStarted(t, waitStarted, handlerErr)
-	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	createTestAudioFile(t, audioFilePath)
 	require.NoError(t, os.Remove(tempFilePath))
 	requireAudioHandlerSuccess(t, handlerErr)
 	assert.Equal(t, http.StatusOK, rec.Code,
@@ -1411,7 +1351,7 @@ func TestServeAudioByIDWaitsForEncodingPreservesHeaders(t *testing.T) {
 	}()
 
 	requireAudioWaitStarted(t, waitStarted, handlerErr)
-	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	createTestAudioFile(t, audioFilePath)
 	require.NoError(t, os.Remove(tempFilePath))
 	requireAudioHandlerSuccess(t, handlerErr)
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -1591,7 +1531,7 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	}()
 
 	requireAudioWaitStarted(t, waitStarted, handlerErr)
-	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	createTestAudioFile(t, audioFilePath)
 	requireAudioHandlerSuccess(t, handlerErr)
 	assert.Equal(t, http.StatusOK, rec.Code,
 		"Should serve the file successfully after grace wait")
@@ -1770,8 +1710,7 @@ func TestAudioRangeWithGzipMiddleware_EndToEnd(t *testing.T) {
 
 	audioFilename := "gzip-range-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := createTestAudioFile(t, audioFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, audioFilePath)
 
 	audioURL := "/api/v2/media/audio/" + audioFilename
 

@@ -32,12 +32,18 @@ func toneBytes(rate int, seconds, freq, amp float64) []byte {
 	return out
 }
 
+// writePCM16WAV writes mono 16-bit little-endian PCM as a WAV file at path.
+func writePCM16WAV(t *testing.T, path string, rate int, pcm []byte) {
+	t.Helper()
+	var buf bytes.Buffer
+	require.NoError(t, wavpcm.EncodeInterleaved(&buf, wavpcm.Config{SampleRate: rate, BitDepth: 16, Channels: 1}, pcm))
+	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
+}
+
 // writeToneWAV writes a mono 16-bit WAV tone at path.
 func writeToneWAV(t *testing.T, path string, rate int, seconds, freq float64) {
 	t.Helper()
-	var buf bytes.Buffer
-	require.NoError(t, wavpcm.EncodeInterleaved(&buf, wavpcm.Config{SampleRate: rate, BitDepth: 16, Channels: 1}, toneBytes(rate, seconds, freq, fixtureAmp)))
-	require.NoError(t, os.WriteFile(path, buf.Bytes(), 0o600))
+	writePCM16WAV(t, path, rate, toneBytes(rate, seconds, freq, fixtureAmp))
 }
 
 // writeToneFLAC writes a mono 16-bit FLAC tone at path.

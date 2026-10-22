@@ -403,7 +403,7 @@ func TestServeSpectrogramByID_SpectrogramOnly_ZeroByteExactRenderFallsThrough(t 
 func TestServeSpectrogramByID_UserRequestedModeWithAudioKeepsGenerateEnvelope(t *testing.T) {
 	h, e, root := newRetainedTestHandler(t, conf.SpectrogramModeUserRequested)
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "2026", "01"), 0o750))
-	require.NoError(t, createTestAudioFile(t, filepath.Join(root, "2026", "01", "a.wav")))
+	createTestAudioFile(t, filepath.Join(root, "2026", "01", "a.wav"))
 	// A render of another size exists, but the audio is present, so the user must be
 	// able to generate the size they asked for.
 	writeRetainedFile(t, root, "2026/01/a_1026px-legend.png", "legend")
