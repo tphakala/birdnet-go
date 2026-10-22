@@ -314,10 +314,11 @@ realtime:
     retain: false         # true to retain messages
     retrysettings:
       enabled: true       # enable retry for failed publications
-      maxretries: 3       # maximum number of retry attempts
-      initialdelay: 10    # initial delay before first retry in seconds
-      maxdelay: 300       # maximum delay between retries in seconds
+      maxretries: 5       # maximum number of retry attempts
+      initialdelay: 30    # initial delay before first retry in seconds
+      maxdelay: 3600      # maximum delay between retries in seconds
       backoffmultiplier: 2.0  # multiplier for exponential backoff
+      # retries apply to publish errors; while the broker is down, publishes are skipped, not queued or retried
     tls:
       insecureskipverify: false  # skip certificate verification (use with caution)
       cacert: ""          # path to CA certificate file
