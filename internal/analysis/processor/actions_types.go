@@ -28,7 +28,7 @@ const (
 
 	// CompositeActionTimeout is the default timeout for each action in a composite action.
 	// After audio export was decoupled, CompositeAction only runs the Database save, the
-	// step that enqueues MQTT and SSE
+	// step that enqueues MQTT, and SSE
 	// which are fast operations even on slow hardware.
 	CompositeActionTimeout = 10 * time.Second
 

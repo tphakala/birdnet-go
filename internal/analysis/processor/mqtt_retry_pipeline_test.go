@@ -126,8 +126,9 @@ func TestDefaultActions_MQTTPublishRetriedThroughQueue(t *testing.T) {
 			return p.JobQueue.GetStats().FailedJobs == 1
 		}, pipelineWaitTimeout, pipelineWaitTick, "the composite job should fail")
 
-		// Let any wrongly enqueued MQTT job run before asserting it did not.
-		time.Sleep(10 * pipelineQueueTick)
+		// The enqueue step runs inside the composite, so an MQTT job enqueued
+		// despite the failed save would already be counted here.
+		assert.Equal(t, 1, p.JobQueue.GetStats().TotalJobs, "only the composite job may be enqueued")
 		assert.Zero(t, mqttClient.GetPublishCalls(), "no publish for a detection whose save failed")
 	})
 }
