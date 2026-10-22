@@ -55,7 +55,7 @@ func TestProcessingCacheKey(t *testing.T) {
 
 	t.Run("detection id cannot add path elements", func(t *testing.T) {
 		t.Parallel()
-		assertKeyStaysInCacheDir(t, processingCacheKey("../../x/y", false, "", 0))
+		assertKeyStaysInCacheDir(t, processingCacheKey(`..\..\x/y`, false, "", 0))
 	})
 }
 
