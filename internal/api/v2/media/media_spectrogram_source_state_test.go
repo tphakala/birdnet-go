@@ -96,7 +96,7 @@ func TestGenerateSpectrogramFromRel_ClipChangedAfterReadinessIs503ThenRenders(t 
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			_, genErr = h.generateSpectrogramFromRel(t.Context(), sourceStateRelAudio, sourceStateRelAudio, "", width, true, "", "", "")
+			_, genErr = h.generateSpectrogramFromRel(t.Context(), sourceStateRelAudio, sourceStateRelAudio, "", width, true, "", "", "", 0)
 		}()
 		synctest.Wait() // readiness has passed and the render waits for a slot
 
@@ -116,7 +116,7 @@ func TestGenerateSpectrogramFromRel_ClipChangedAfterReadinessIs503ThenRenders(t 
 		for range maxConcurrentSpectrograms - 1 {
 			<-spectrogramSemaphore
 		}
-		got, err := h.generateSpectrogramFromRel(t.Context(), sourceStateRelAudio, sourceStateRelAudio, "", width, true, "", "", "")
+		got, err := h.generateSpectrogramFromRel(t.Context(), sourceStateRelAudio, sourceStateRelAudio, "", width, true, "", "", "", 0)
 		require.NoError(t, err)
 		assert.Equal(t, relSpec, got)
 		assert.FileExists(t, absSpec)
@@ -135,7 +135,7 @@ func TestGenerateSpectrogramFromRel_TruncatedWAVIs422AndNotCached(t *testing.T) 
 	_, _, _, relSpec := buildSpectrogramPaths(sourceStateRelAudio, width, true, "", "", "")
 	absSpec := filepath.Join(root, relSpec)
 	generate := func() error {
-		_, err := h.generateSpectrogramFromRel(t.Context(), sourceStateRelAudio, sourceStateRelAudio, "", width, true, "", "", "")
+		_, err := h.generateSpectrogramFromRel(t.Context(), sourceStateRelAudio, sourceStateRelAudio, "", width, true, "", "", "", 0)
 		return err
 	}
 
