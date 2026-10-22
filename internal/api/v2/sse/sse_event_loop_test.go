@@ -274,3 +274,76 @@ func TestEventLoopsPreferDisconnectOverBufferedEvents(t *testing.T) {
 		}
 	})
 }
+
+// TestEventLoopsExitOnClosedChannel checks that each loop returns when one of its
+// data channels is closed while Done is still open, which is how a removed
+// client looks to a loop that observes the channel before Done.
+func TestEventLoopsExitOnClosedChannel(t *testing.T) {
+	h, _ := newLoopTestHandler(t)
+
+	newEctx := func(w *recordingWriter) echo.Context {
+		req := httptest.NewRequest(http.MethodGet, detectionStreamEndpoint, http.NoBody).WithContext(t.Context())
+		return echo.New().NewContext(req, w)
+	}
+
+	t.Run("detection channel", func(t *testing.T) {
+		client := createSSEClient("closed-detection", apicore.StreamTypeDetections)
+		client.Channel = make(chan apicore.SSEDetectionData)
+		client.PendingChan = make(chan any)
+		close(client.Channel)
+
+		w := newRecordingWriter()
+		require.NoError(t, h.runSSEEventLoopMulti(newEctx(w), client, client.ID, detectionStreamEndpoint))
+		assert.Empty(t, w.writes)
+	})
+
+	t.Run("pending channel", func(t *testing.T) {
+		client := createSSEClient("closed-pending", apicore.StreamTypeDetections)
+		client.Channel = make(chan apicore.SSEDetectionData)
+		client.PendingChan = make(chan any)
+		close(client.PendingChan)
+
+		w := newRecordingWriter()
+		require.NoError(t, h.runSSEEventLoopMulti(newEctx(w), client, client.ID, detectionStreamEndpoint))
+		assert.Empty(t, w.writes)
+	})
+
+	t.Run("sound level channel", func(t *testing.T) {
+		client := createSSEClient("closed-soundlevel", apicore.StreamTypeSoundLevels)
+		client.SoundLevelChan = make(chan apicore.SSESoundLevelData)
+		close(client.SoundLevelChan)
+
+		w := newRecordingWriter()
+		err := runSSEEventLoop(h, newEctx(w), client, client.ID, soundLevelStreamEndpoint, client.SoundLevelChan,
+			func(v *apicore.SSESoundLevelData) any { return v }, "soundlevel", apicore.StreamTypeSoundLevels)
+		require.NoError(t, err)
+		assert.Empty(t, w.writes)
+	})
+}
+
+// TestDetectionLoopWithoutPendingChannel checks that a nil PendingChan, which a
+// select never picks, does not stop detections from being delivered.
+func TestDetectionLoopWithoutPendingChannel(t *testing.T) {
+	h, _ := newLoopTestHandler(t)
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		req := httptest.NewRequest(http.MethodGet, detectionStreamEndpoint, http.NoBody).WithContext(ctx)
+		w := newRecordingWriter()
+
+		client := createSSEClient("nil-pending", apicore.StreamTypeDetections)
+		client.Channel = make(chan apicore.SSEDetectionData, 1)
+		client.Channel <- apicore.SSEDetectionData{CommonName: "Eurasian Wren"}
+
+		done := make(chan error, 1)
+		go func() {
+			done <- h.runSSEEventLoopMulti(echo.New().NewContext(req, w), client, client.ID, detectionStreamEndpoint)
+		}()
+		synctest.Wait()
+		assert.Equal(t, 1, w.count(loopTestDetectionEvent), "detection must be written with no pending channel")
+
+		cancel()
+		synctest.Wait()
+		require.NoError(t, <-done)
+	})
+}
