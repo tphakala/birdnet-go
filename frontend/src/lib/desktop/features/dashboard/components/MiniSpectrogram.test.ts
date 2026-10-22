@@ -196,4 +196,35 @@ describe('MiniSpectrogram HLS player availability', () => {
     await fireEvent.click(await screen.findByRole('button', { name: STOP_LABEL }));
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
   });
+
+  it('clears the auto-start preference on a fatal HLS error', async () => {
+    const handlers = new Map<string, (event: unknown, data: unknown) => void>();
+    class FakeHls {
+      static Events = { MANIFEST_PARSED: 'm', ERROR: 'e' };
+      static isSupported = () => true;
+      on(event: string, handler: (event: unknown, data: unknown) => void) {
+        handlers.set(event, handler);
+      }
+      loadSource() {}
+      attachMedia() {}
+      destroy() {}
+    }
+    const controller = installFakeMediaElement();
+    media = controller;
+    mocks.tryLoadHls.mockResolvedValue(FakeHls);
+    mocks.canPlayHls.mockReturnValue(true);
+    mocks.fetchWithCSRF.mockResolvedValue({
+      stream_token: 'token',
+      playlist_url: '/playlist.m3u8',
+    });
+    render(MiniSpectrogram);
+    await fireEvent.click(screen.getByRole('button', { name: PLAY_LABEL }));
+    await waitFor(() => expect(handlers.has(FakeHls.Events.MANIFEST_PARSED)).toBe(true));
+    handlers.get(FakeHls.Events.MANIFEST_PARSED)?.({}, {});
+    await waitFor(() => expect(localStorage.getItem(STORAGE_KEY)).toBe('true'));
+
+    handlers.get(FakeHls.Events.ERROR)?.({}, { fatal: true, type: 'networkError', details: 'x' });
+
+    expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
 });
