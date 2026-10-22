@@ -2351,7 +2351,7 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 	//
 	// IMPORTANT: Audio export is NOT included in this CompositeAction. It runs as a
 	// separate independent action to prevent slow clip encoding (especially on
-	// Raspberry Pi) from blocking SSE/MQTT broadcasts. The media API handles the
+	// Raspberry Pi) from blocking the SSE broadcast. The media API handles the
 	// race where a client requests audio before export completes, using server-side
 	// wait with retries and 503 + Retry-After responses.
 	//
@@ -2456,7 +2456,7 @@ func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
 // It reads PCM data from the capture buffer eagerly (while the data is still
 // available) and returns an action that will encode and write the audio file
 // when executed by the job queue. This decouples the slower clip encoding
-// from the fast Database -> SSE -> MQTT pipeline. The action carries the planned
+// from the fast Database -> SSE pipeline. The action carries the planned
 // clip sample rate and, when the datastore can store one, a recorder to correct it.
 func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext, settings *conf.Settings) *SaveAudioAction {
 	// Derive the capture length and readiness time from the shared conf helper so this

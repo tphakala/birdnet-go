@@ -295,8 +295,10 @@ type enqueueAction struct {
 }
 
 // Execute enqueues the wrapped action. An enqueue failure is not returned:
-// EnqueueTaskCtx already logs it with the species, and returning it would stop
-// the composite and skip the later steps for a detection that is already saved.
+// EnqueueTaskCtx logs a full or stopped queue with the species; a context that
+// is already done returns without a log, and then the composite is being
+// abandoned. Returning the error would stop the composite and skip the later
+// steps for a detection that is already saved.
 func (a *enqueueAction) Execute(ctx context.Context, _ any) error {
 	task := &Task{Type: TaskTypeAction, Detection: a.detection, Action: a.action}
 	_ = a.enqueue(ctx, task)
