@@ -170,8 +170,8 @@ func buildFullyRoutedController(t *testing.T, mutate func(*conf.Settings)) (*ech
 	// The alerts routes answer 409 before auth unless a v2 manager is set and
 	// the enhanced-database flag is on, so both are needed to reach their gate.
 	// The metrics history routes register only when a metrics store is set.
-	// Cleanups run last-in first-out: reset the flag, shut the controller down,
-	// close the manager, then the temp dir is removed.
+	// Cleanups run last-in first-out, so the controller shuts down before the
+	// manager closes and the manager closes before its temp dir is removed.
 	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{
 		DirectPath: filepath.Join(t.TempDir(), routeTestV2DBName),
 	})
