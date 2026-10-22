@@ -346,17 +346,18 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
 	})
 
-	// Which origin a credentialed request is answered for depends on whether
-	// the configured list holds the wildcard; the rows pin the current answer.
+	// The exact Access-Control-Allow-Origin value a credentialed GET from
+	// another origin receives for each kind of origin list; the rows pin the
+	// current answers.
+	const requestOrigin = "https://other.example.com"
 	originRows := []struct {
-		name           string
-		allowedOrigins []string
-		origin         string
-		wantReflected  bool
+		name            string
+		allowedOrigins  []string
+		wantAllowOrigin string
 	}{
-		{"origin outside an explicit list is not answered", []string{"https://trusted.example.com"}, "https://other.example.com", false},
-		{"wildcard among explicit origins reflects any origin", []string{"https://trusted.example.com", "*"}, "https://other.example.com", true},
-		{"empty list does not reflect the origin", nil, "https://other.example.com", false},
+		{"origin outside an explicit list gets no allow-origin header", []string{"https://trusted.example.com"}, ""},
+		{"wildcard among explicit origins reflects the request origin", []string{"https://trusted.example.com", "*"}, requestOrigin},
+		{"empty list answers with the literal wildcard", nil, "*"},
 	}
 	for _, tt := range originRows {
 		t.Run(tt.name, func(t *testing.T) {
@@ -366,18 +367,13 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 				AllowedOrigins:   tt.allowedOrigins,
 				AllowCredentials: true,
 			})
-			c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", tt.origin)
+			c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", requestOrigin)
 			handler := corsMiddleware(func(c echo.Context) error {
 				return c.String(http.StatusOK, "ok")
 			})
 			require.NoError(t, handler(c))
 
-			allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
-			if tt.wantReflected {
-				assert.Equal(t, tt.origin, allowOrigin)
-			} else {
-				assert.NotEqual(t, tt.origin, allowOrigin)
-			}
+			assert.Equal(t, tt.wantAllowOrigin, rec.Header().Get(echo.HeaderAccessControlAllowOrigin))
 		})
 	}
 
