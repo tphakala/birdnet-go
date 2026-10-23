@@ -101,7 +101,7 @@ type Server struct {
 }
 
 // currentSettings returns the latest *conf.Settings snapshot published via
-// conf.StoreSettings, or the server's constructor-provided pointer when no
+// conf.UpdateSettings, or the server's constructor-provided pointer when no
 // snapshot has been published yet (test harnesses that skip the global
 // publish, or early startup before the first Load). Routing the hot-path
 // middleware through this helper keeps the basepath resolution race-free
@@ -369,7 +369,7 @@ func (s *Server) setupMiddleware() {
 	s.echo.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Read the current *conf.Settings through the atomic pointer so a
-			// settings hot-reload (CoW publish via conf.StoreSettings) takes
+			// settings hot-reload (CoW publish via conf.UpdateSettings) takes
 			// effect for the next request without restart, and so readers
 			// never observe a torn view of the basepath field. Fall back to
 			// the constructor-provided pointer if no snapshot has been

@@ -431,7 +431,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		return nil, err
 	}
 	// Force true: the pointer identity check in NewWithOptions can fail when
-	// an out-of-band StoreSettings call (range filter rebuild at startup)
+	// an out-of-band UpdateSettings call (range filter rebuild at startup)
 	// replaces the global pointer before this constructor runs.
 	c.isGlobalOwner = true
 	return c, nil
