@@ -14,8 +14,9 @@ import (
 
 // CloneSettings returns a deep copy of src that shares no slice or map backing
 // arrays with src. The returned pointer is safe to mutate before atomically
-// publishing via StoreSettings; readers holding the previous snapshot keep
-// seeing consistent values because src is never touched.
+// publishing (UpdateSettings hands its mutate function such a clone); readers
+// holding the previous snapshot keep seeing consistent values because src is
+// never touched.
 //
 // Every slice and map field reachable from the Settings struct must be cloned
 // here. TestCloneSettings_DeepIndependence is the primary guardrail: any

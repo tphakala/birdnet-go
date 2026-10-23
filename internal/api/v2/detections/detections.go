@@ -1683,35 +1683,35 @@ func (c *Handler) toggleSpeciesInIgnoredList(species string) (action string, isE
 		return "", false, nil
 	}
 
-	// Serialise this read-modify-write against concurrent settings saves so an
-	// out-of-band StoreSettings (range filter rebuild, etc.) cannot interleave
-	// between reading current and publishing the update.
+	// Serialise against concurrent settings handlers on this controller. The
+	// read-modify-write itself runs inside updateAndSaveSettings, which reads the
+	// baseline under the process-wide settings writer lock, so an out-of-band
+	// writer (range filter rebuild, model install) cannot publish between reading
+	// the exclude list and publishing the update.
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	// Read the latest snapshot; getSettingsOrFallback prefers the global when
-	// this controller owns it, so out-of-band StoreSettings calls are seen.
-	current := c.getSettingsOrFallback()
-
-	wasExcluded := slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
-		return c.excludeEntryMatches(s, species)
-	})
-
-	updated := conf.CloneSettings(current)
-	if wasExcluded {
-		updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
+	var wasExcluded bool
+	current, updated, err := c.updateAndSaveSettings(func(current, updated *conf.Settings) error {
+		wasExcluded = slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
 			return c.excludeEntryMatches(s, species)
 		})
-		action = "removed"
-		isExcluded = false
-	} else {
-		updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
-		action = "added"
-		isExcluded = true
-	}
 
-	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		if wasExcluded {
+			updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
+				return c.excludeEntryMatches(s, species)
+			})
+		} else {
+			updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
+		}
+		return nil
+	})
+	if err != nil {
 		return "", wasExcluded, err
+	}
+	action, isExcluded = "removed", false
+	if !wasExcluded {
+		action, isExcluded = "added", true
 	}
 
 	// Trigger side-effects (range filter rebuild, etc.) so the include list
@@ -1736,17 +1736,19 @@ func (c *Handler) addSpeciesToIgnoredList(species string) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	current := c.getSettingsOrFallback()
-	if slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
-		return c.excludeEntryMatches(s, species)
-	}) {
+	current, updated, err := c.updateAndSaveSettings(func(current, updated *conf.Settings) error {
+		if slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
+			return c.excludeEntryMatches(s, species)
+		}) {
+			return conf.ErrSettingsUnchanged
+		}
+		updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
+		return nil
+	})
+	if errors.Is(err, conf.ErrSettingsUnchanged) {
 		return nil
 	}
-
-	updated := conf.CloneSettings(current)
-	updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
-
-	if err := c.publishAndSaveSettings(current, updated); err != nil {
+	if err != nil {
 		return err
 	}
 

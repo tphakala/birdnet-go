@@ -210,6 +210,14 @@ unauthenticated clients (the audio domain does this with its local
   only API saves refresh and which goes stale after out-of-band updates (for
   example a model install), so use it only where per-controller isolation is
   intended. They are lock-free atomic loads, except the last-resort `conf.Setting()` fallback in `getSettingsOrFallback`, which can load settings from disk.
+  Settings writes never call `conf.StoreSettings`: the PUT and PATCH handlers
+  use `commitSettings`, and the TLS, MQTT TLS and species exclusion handlers use
+  `updateAndSaveSettings`. Both read the baseline and publish inside
+  `conf.UpdateSettings`, so a write cannot overwrite a model install or range
+  filter rebuild that published in between, and a lint rule rejects
+  `conf.StoreSettings` outside `internal/conf` and the test-support packages.
+  The mutate closure runs under the settings writer lock, so keep it short, and it must not call the
+  classifier, the model manager or `handleSettingsChanges`.
 - **Document in README.md** - update the endpoint table immediately.
 
 ## Future api/v3
