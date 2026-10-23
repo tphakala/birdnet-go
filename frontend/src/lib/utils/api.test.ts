@@ -290,12 +290,12 @@ describe('API utilities', () => {
 
       it('receives the response headers on success without reaching fetch', async () => {
         mockFetch.mockResolvedValueOnce(okResponse('"e-1"'));
-        const onHeaders = vi.fn();
+        const onHeaders = vi.fn<(headers: Headers) => void>();
 
         await fetchWithCSRF('/api/test', { onHeaders });
 
         expect(onHeaders).toHaveBeenCalledOnce();
-        expect((onHeaders.mock.calls[0][0] as Headers).get('ETag')).toBe('"e-1"');
+        expect(onHeaders.mock.calls[0][0].get('ETag')).toBe('"e-1"');
         const init = mockFetch.mock.calls[0][1] as Record<string, unknown>;
         expect(init).not.toHaveProperty('onHeaders');
       });
@@ -308,14 +308,14 @@ describe('API utilities', () => {
           headers: new Headers({ ETag: '"e-2"' }),
           json: () => Promise.resolve({ error: 'stale' }),
         });
-        const onHeaders = vi.fn();
+        const onHeaders = vi.fn<(headers: Headers) => void>();
 
         await expect(fetchWithCSRF('/api/test', { onHeaders })).rejects.toMatchObject({
           status: 412,
         });
 
         expect(onHeaders).toHaveBeenCalledOnce();
-        expect((onHeaders.mock.calls[0][0] as Headers).get('ETag')).toBe('"e-2"');
+        expect(onHeaders.mock.calls[0][0].get('ETag')).toBe('"e-2"');
       });
 
       it('is called once, for the response of a CSRF retry only', async () => {
@@ -329,13 +329,13 @@ describe('API utilities', () => {
           json: () => Promise.resolve({}),
         });
         mockFetch.mockResolvedValueOnce(okResponse('"from-retry"'));
-        const onHeaders = vi.fn();
+        const onHeaders = vi.fn<(headers: Headers) => void>();
 
         await fetchWithCSRF('/api/test', { method: 'PUT', body: {}, onHeaders });
 
         expect(mockFetch).toHaveBeenCalledTimes(2);
         expect(onHeaders).toHaveBeenCalledOnce();
-        expect((onHeaders.mock.calls[0][0] as Headers).get('ETag')).toBe('"from-retry"');
+        expect(onHeaders.mock.calls[0][0].get('ETag')).toBe('"from-retry"');
       });
     });
 
@@ -422,7 +422,7 @@ describe('API utilities', () => {
         statusText: 'Unauthorized',
         headers: new Headers(),
       });
-      const onHeaders = vi.fn();
+      const onHeaders = vi.fn<(headers: Headers) => void>();
 
       // The request hangs until the page navigates away; give it time to settle.
       await Promise.race([

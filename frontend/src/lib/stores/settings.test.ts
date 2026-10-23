@@ -1843,6 +1843,8 @@ describe('Settings Store - tab change markers agree with the toolbar after a sav
 });
 
 describe('Settings Store - save conflicts (If-Match)', () => {
+  // The fake server and the PUT body are JSON documents the tests read and edit by
+  // path, so they are typed as plain records and cast at the store boundary.
   type Body = Record<string, unknown>;
   type LoadOptions = { onETag?: (etag: string | null) => void };
   const CHANGED_ELSEWHERE_KEY = 'settings.errors.changedElsewhere';
@@ -1882,13 +1884,15 @@ describe('Settings Store - save conflicts (If-Match)', () => {
     settingsActions.updateSection('birdnet', { threshold: 0.55 });
     vi.mocked(settingsAPI.load).mockClear();
     vi.mocked(settingsAPI.save).mockRejectedValueOnce(conflict());
+    // The out-of-band change lands after the first snapshot is read and before the
+    // second, so only a rebase on the second snapshot can carry it into the resend.
     vi.mocked(settingsAPI.load).mockImplementationOnce((async (options?: LoadOptions) => {
       options?.onETag?.('"e-1"');
-      return JSON.parse(JSON.stringify(server));
+      const first = JSON.parse(JSON.stringify(server));
+      server.main = { name: 'Renamed elsewhere' };
+      etag = '"e-2"';
+      return first;
     }) as typeof settingsAPI.load);
-    // The out-of-band change lands before the second snapshot is read.
-    server.main = { name: 'Renamed elsewhere' };
-    etag = '"e-2"';
 
     await settingsActions.saveSettings({ notify: false });
 
@@ -1898,6 +1902,7 @@ describe('Settings Store - save conflicts (If-Match)', () => {
     const body = vi.mocked(settingsAPI.save).mock.calls[1][0] as unknown as Body;
     expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.55);
     expect(lookup(body, ['main', 'name'])).toBe('Renamed elsewhere');
+    expect(lookup(vi.mocked(settingsAPI.save).mock.calls[0][0], ['main', 'name'])).toBe('TestNode');
     expect(get(hasUnsavedChanges)).toBe(false);
     expect(get(settingsStore).error).toBeNull();
   });
@@ -1928,9 +1933,14 @@ describe('Settings Store - save conflicts (If-Match)', () => {
       Object.assign(new Error('boom'), { status: 500 })
     );
 
-    await expect(settingsActions.saveSettings({ notify: false })).rejects.toThrow('boom');
+    const { toastActions } = await import('./toast.js');
+
+    await expect(settingsActions.saveSettings()).rejects.toThrow('boom');
 
     expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+    expect(toastActions.error).toHaveBeenCalledExactlyOnceWith(
+      'notifications.content.settings.saveFailed'
+    );
   });
 
   it.each([
