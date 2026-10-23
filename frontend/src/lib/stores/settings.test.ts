@@ -3,6 +3,7 @@ import { get } from 'svelte/store';
 import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS } from './settings';
 import type {
   AudioSettings,
+  AudioSourceConfig,
   BirdNetSettings,
   EqualizerSettings,
   RealtimeSettings,
@@ -1805,14 +1806,10 @@ describe('Settings Store - tab change markers agree with the toolbar after a sav
   // `equalizer: undefined`, a present key whose value JSON drops. The toolbar
   // (hasUnsavedChanges) compares JSON; the Audio tab dots use hasSettingsChanged.
   it('reports a saved audio source with an undefined equalizer as unchanged', async () => {
-    const snapshot = {
-      main: { name: 'TestNode' },
-      birdnet: {},
-      realtime: { audio: { sources: [{ name: 'Mic', device: 'hw:0' }] } },
-    } as unknown as SettingsFormData;
+    const snapshot = serverSettings();
     settingsStore.set({
-      formData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
-      originalData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
+      formData: serverSettings(),
+      originalData: serverSettings(),
       isLoading: false,
       isSaving: false,
       activeSection: 'main',
@@ -1820,11 +1817,16 @@ describe('Settings Store - tab change markers agree with the toolbar after a sav
       dataLoaded: true,
     });
 
-    settingsActions.updateSection('realtime', {
-      audio: {
-        sources: [{ name: 'Mic', device: 'hw:1', equalizer: undefined }],
-      },
-    } as unknown as Partial<RealtimeSettings>);
+    const audio = snapshot.realtime?.audio;
+    if (!audio) throw new Error('fixture has no audio settings');
+    const source: AudioSourceConfig = {
+      name: 'Mic',
+      device: 'hw:1',
+      gain: 0,
+      models: ['birdnet'],
+      equalizer: undefined,
+    };
+    settingsActions.updateSection('realtime', { audio: { ...audio, sources: [source] } });
     await settingsActions.saveSettings({ notify: false });
 
     const state = get(settingsStore);
