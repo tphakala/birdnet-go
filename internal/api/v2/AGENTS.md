@@ -208,7 +208,7 @@ unauthenticated clients (the audio domain does this with its local
   process-wide snapshot. `c.ControllerSettings()` is Core's own snapshot, which
   only API saves refresh and which goes stale after out-of-band updates (for
   example a model install), so use it only where per-controller isolation is
-  intended. All three are lock-free atomic loads.
+  intended. They are lock-free atomic loads, except the last-resort `conf.Setting()` fallback in `getSettingsOrFallback`, which can load settings from disk.
 - **Document in README.md** - update the endpoint table immediately.
 
 ## Future api/v3
