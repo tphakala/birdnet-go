@@ -38,7 +38,7 @@ var ErrSettingsNotLoaded = errors.NewStd("settings not loaded")
 // published, ErrSettingsNotLoaded is returned and mutate is not called.
 //
 // Rules for mutate, because the settings writer lock is held while it runs:
-//   - Keep it pure: read its arguments and in-memory catalogs, and log, nothing
+//   - Take no other lock: read its arguments and in-memory catalogs, and log, nothing
 //     else. Do not call the classifier, the orchestrator, the model manager,
 //     the control channel or the API's handleSettingsChanges from it; those
 //     take locks (for example the model manager's mm.mu) whose holders call
@@ -46,8 +46,9 @@ var ErrSettingsNotLoaded = errors.NewStd("settings not loaded")
 //   - Do not call UpdateSettings, CompareAndStoreSettings or any function that
 //     does (UpdateIncludedSpecies, ResetRangeFilterUpdateFlag,
 //     ShouldUpdateRangeFilterToday) from it: the lock is not reentrant.
-//   - Do not do disk I/O in it. SaveSettings has its own lock and is called
-//     after UpdateSettings returns.
+//   - Do not write to disk or wait on unbounded I/O in it; settings validation
+//     is the one exception, and its ffmpeg probe has a timeout. SaveSettings has
+//     its own lock and is called after UpdateSettings returns.
 //
 // Lock order: the writer lock is acquired after the classifier model manager's
 // mm.mu (ModelManager.Uninstall holds mm.mu while its config writer calls

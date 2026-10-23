@@ -216,7 +216,7 @@ unauthenticated clients (the audio domain does this with its local
   `conf.UpdateSettings`, so a write cannot overwrite a model install or range
   filter rebuild that published in between, and a lint rule rejects
   `conf.StoreSettings` outside `internal/conf` and the test-support packages.
-  The mutate closure runs under the settings writer lock and must not call the
+  The mutate closure runs under the settings writer lock, so keep it short, and it must not call the
   classifier, the model manager or `handleSettingsChanges`.
 - **Document in README.md** - update the endpoint table immediately.
 

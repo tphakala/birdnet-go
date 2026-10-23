@@ -66,7 +66,7 @@ func (r *settingsRejection) rejected() bool {
 // only and never touches the global.
 //
 // Callers hold c.settingsMutex. mutate runs under the writer lock and must obey
-// the rules documented on conf.UpdateSettings: it may read and log, and must
+// the rules documented on conf.UpdateSettings: it may read, validate and log, and must
 // not call into the classifier, the orchestrator, the model manager or
 // handleSettingsChanges. Read the request body before calling this, not inside
 // mutate, so a slow client cannot hold the writer lock.
