@@ -543,7 +543,7 @@ type DaylightFilterSettings struct {
 // detection window. It applies only when two or more models analyzing the audio source can
 // identify the species. Whitelisted species keep normal single-model behavior.
 type FirstDailyConsensusSettings struct {
-	Enabled   bool     `yaml:"enabled" json:"enabled"`     // true to require two models to confirm a species' first detection of the day
+	Enabled   bool     `yaml:"enabled" json:"enabled"`     // true to require two models to confirm a species' first detection of the day, when at least two models analyzing its audio source can identify the species
 	Whitelist []string `yaml:"whitelist" json:"whitelist"` // species exempt from the rule, matched by common or scientific name
 }
 

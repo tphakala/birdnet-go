@@ -1035,7 +1035,7 @@
       "properties": {
         "enabled": {
           "type": "boolean",
-          "description": "true to require two models to confirm a species' first detection of the day"
+          "description": "true to require two models to confirm a species' first detection of the day, when at least two models analyzing its audio source can identify the species"
         },
         "whitelist": {
           "items": {
