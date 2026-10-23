@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -362,6 +363,9 @@ func TestHostProbes_NilSeams(t *testing.T) {
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, free+hostProbeDiskTolerance, min(diskBefore.Free, diskAfter.Free))
 	assert.LessOrEqual(t, free, max(diskBefore.Free, diskAfter.Free)+hostProbeDiskTolerance)
+	if diskBefore.Used > 0 {
+		assert.Less(t, free, diskBefore.Total, "free disk space must not be the filesystem total")
+	}
 
 	memBefore, err := mem.VirtualMemory()
 	require.NoError(t, err)
@@ -373,6 +377,7 @@ func TestHostProbes_NilSeams(t *testing.T) {
 	assert.Positive(t, available)
 	assert.GreaterOrEqual(t, available+memTolerance, min(memBefore.Available, memAfter.Available))
 	assert.LessOrEqual(t, available, max(memBefore.Available, memAfter.Available)+memTolerance)
+	assert.Less(t, available, memBefore.Total, "available memory must not be the total memory")
 }
 
 // TestCheckExistingV2Data_NilManager tests checkExistingV2Data when V2Manager is nil.
@@ -511,9 +516,14 @@ func TestCheckDiskSpace_Threshold(t *testing.T) {
 				assert.Empty(t, askedPath, "a remote database has no local disk to probe")
 				return
 			}
-			wantDir, err := controller.getDatabaseDirectoryResolved()
+			// Derived from the configured path, not from the resolver under test.
+			// Both sides go through EvalSymlinks because the temp dir can sit
+			// behind a symlink (macOS /var).
+			wantDir, err := filepath.EvalSymlinks(filepath.Dir(controller.CurrentSettings().Output.SQLite.Path))
 			require.NoError(t, err)
-			assert.Equal(t, wantDir, askedPath, "the free space of the database directory is checked")
+			gotDir, err := filepath.EvalSymlinks(askedPath)
+			require.NoError(t, err)
+			assert.Equal(t, wantDir, gotDir, "the free space of the database directory is checked")
 		})
 	}
 }
