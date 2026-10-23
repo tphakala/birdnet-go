@@ -61,6 +61,17 @@ func loadTestRangeFilter(t *testing.T) *RangeFilter {
 	return rf
 }
 
+func TestPredictBatchRaw_RejectsUnexpectedOutputShape(t *testing.T) {
+	rf := loadTestRangeFilter(t)
+
+	// The expected output width comes from the label count; dropping a label
+	// makes the model's real output shape differ from it.
+	rf.labels = rf.labels[:len(rf.labels)-1]
+	_, err := rf.PredictBatchRaw([]float32{60.1, 24.9, 20}, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "has shape")
+}
+
 func TestPredictBatchRaw_MatchesSinglePredict(t *testing.T) {
 	rf := loadTestRangeFilter(t)
 

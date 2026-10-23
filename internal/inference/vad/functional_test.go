@@ -503,3 +503,25 @@ func TestSession_BoundOutputsMatchFreshSessionAcrossHopCounts(t *testing.T) {
 		h, c = slices.Clone(gotH), slices.Clone(gotC)
 	}
 }
+
+// TestSession_CloseIsIdempotentAndRunAfterCloseFails pins the documented Close
+// contract of the bound session: a second Close is harmless and a Run after
+// Close reports ErrSessionClosed instead of touching released tensors.
+func TestSession_CloseIsIdempotentAndRunAfterCloseFails(t *testing.T) {
+	if !HasEmbeddedModel() {
+		t.Skip("no embedded model in this build")
+	}
+	sess, err := NewSession(Config{ModelData: EmbeddedModelData(), LibraryPath: os.Getenv("VAD_TEST_ORT_LIB")})
+	skipIfORTUnavailable(t, err)
+
+	h := make([]float32, stateWidth)
+	c := make([]float32, stateWidth)
+	_, _, _, err = sess.Run(make([]float32, modelInputSamples), h, c)
+	require.NoError(t, err)
+
+	require.NoError(t, sess.Close())
+	require.NoError(t, sess.Close(), "a second Close must be harmless")
+
+	_, _, _, err = sess.Run(make([]float32, modelInputSamples), h, c)
+	require.ErrorIs(t, err, ErrSessionClosed)
+}
