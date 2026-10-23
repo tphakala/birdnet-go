@@ -24,11 +24,13 @@ import (
 )
 
 // buildTestHandler builds a detections Handler around an apitest core with
-// in-memory test doubles for the facade-injected dependencies. The settings-save
-// doubles mirror the production behavior: getSettingsOrFallback reads the core's
-// atomic snapshot, publishAndSaveSettings stores the updated snapshot back (no disk
-// write, matching the original DisableSaveSettings=true), and handleSettingsChanges
-// is a no-op. isClientAuthenticated defaults to unauthenticated (the facade test
+// in-memory test doubles for the facade-injected dependencies. The settings
+// getter returns only the core's own atomic snapshot, like getSettingsOrFallback
+// for a controller that does not own the global singleton; it never reads the
+// process-global settings, so it does not exercise the global-owner path.
+// publishAndSaveSettings stores the updated snapshot back (no disk write,
+// matching the original DisableSaveSettings=true), and handleSettingsChanges is a
+// no-op. isClientAuthenticated defaults to unauthenticated (the facade test
 // controller never injected an auth service). The name-map accessors return the
 // supplied maps so a test can seed name resolution.
 func buildTestHandler(t *testing.T, core *apicore.Core, commonToSci, sciToCommon map[string]string) *Handler {

@@ -32,12 +32,14 @@ func generateTestCertKeyPair(t *testing.T) (certPEM, keyPEM string) {
 }
 
 // newTestHandler builds a TLS Handler around a *apicore.Core via apitest, with
-// in-memory test doubles for the facade's settings-save machinery. The doubles
-// mirror the production behavior the original tests asserted: getSettingsOrFallback
-// reads the core's atomic snapshot, publishAndSaveSettings stores the updated
-// snapshot back (no disk write, matching the original DisableSaveSettings=true),
-// and handleSettingsChanges is a no-op. They share the supplied mutex so the
-// handler serialises just as the facade does.
+// in-memory test doubles for the facade's settings-save machinery. The settings
+// getter returns only the core's own atomic snapshot, like getSettingsOrFallback
+// for a controller that does not own the global singleton; it never reads the
+// process-global settings, so it does not exercise the global-owner path.
+// publishAndSaveSettings stores the updated snapshot back (no disk write,
+// matching the original DisableSaveSettings=true), and handleSettingsChanges is a
+// no-op. They share the supplied mutex so the handler serialises just as the
+// facade does.
 func newTestHandler(t *testing.T, core *apicore.Core, mu *sync.RWMutex) *Handler {
 	t.Helper()
 	return New(core, mu,
