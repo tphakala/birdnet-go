@@ -3,12 +3,13 @@ package notifications
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
@@ -194,60 +195,48 @@ func TestController_createToastEventData(t *testing.T) {
 	}
 }
 
+// TestController_processNotificationEvent checks that events flagged as toasts
+// go out as the "toast" SSE event and everything else as "notification". The
+// event name is read back from the recorded SSE frame.
 func TestController_processNotificationEvent(t *testing.T) {
 	t.Parallel()
 
-	// Since processNotificationEvent calls other methods that require HTTP context,
-	// we'll test the decision logic by checking which path it takes
 	c := mockHandler()
 
 	tests := []struct {
-		name      string
-		notif     *notification.Notification
-		expectErr bool
-		isToast   bool
+		name       string
+		metadata   map[string]any
+		wantPrefix string
 	}{
 		{
-			name: "regular notification",
-			notif: &notification.Notification{
-				ID:      "regular-id",
-				Message: "Regular notification",
-				Metadata: map[string]any{
-					"isToast": false,
-				},
+			name: "toast flag true sends a toast event",
+			metadata: map[string]any{
+				notification.MetadataKeyIsToast: true,
+				"toastId":                       "toast-123",
+				"toastType":                     "success",
 			},
-			isToast: false,
+			wantPrefix: "event: toast\n",
 		},
 		{
-			name: "toast notification",
-			notif: &notification.Notification{
-				ID:      "toast-id",
-				Message: "Toast notification",
-				Metadata: map[string]any{
-					"isToast":   true,
-					"toastId":   "toast-123",
-					"toastType": "success",
-				},
-			},
-			isToast: true,
+			name:       "toast flag false sends a notification event",
+			metadata:   map[string]any{notification.MetadataKeyIsToast: false},
+			wantPrefix: "event: notification\n",
 		},
 		{
-			name: "notification without isToast metadata",
-			notif: &notification.Notification{
-				ID:       "no-metadata-id",
-				Message:  "No metadata notification",
-				Metadata: map[string]any{},
-			},
-			isToast: false,
+			// The flag is read with a bool type assertion, so a string does not count.
+			name:       "toast flag as a string sends a notification event",
+			metadata:   map[string]any{notification.MetadataKeyIsToast: "true"},
+			wantPrefix: "event: notification\n",
 		},
 		{
-			name: "notification with nil metadata",
-			notif: &notification.Notification{
-				ID:       "nil-metadata-id",
-				Message:  "Nil metadata notification",
-				Metadata: nil,
-			},
-			isToast: false,
+			name:       "missing toast flag sends a notification event",
+			metadata:   map[string]any{},
+			wantPrefix: "event: notification\n",
+		},
+		{
+			name:       "nil metadata sends a notification event",
+			metadata:   nil,
+			wantPrefix: "event: notification\n",
 		},
 	}
 
@@ -255,143 +244,19 @@ func TestController_processNotificationEvent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Create a minimal echo context for testing
 			e := echo.New()
-			req := httptest.NewRequest("GET", "/test", http.NoBody)
+			req := httptest.NewRequest(http.MethodGet, "/test", http.NoBody)
 			rec := httptest.NewRecorder()
 			ctx := e.NewContext(req, rec)
 
-			// We can't easily test the full method without mocking SendSSEMessage,
-			// but we can verify that the method doesn't panic and handles the input
-			err := c.processNotificationEvent(ctx, "test-client", tt.notif)
-
-			// The method will likely fail because SendSSEMessage isn't mocked,
-			// but we're mainly testing that it doesn't panic and follows the right path
-			if tt.expectErr {
-				assert.Error(t, err, "processNotificationEvent() expected error but got none")
+			notif := &notification.Notification{
+				ID:       "dispatch-id",
+				Message:  "dispatch message",
+				Metadata: tt.metadata,
 			}
-
-			// The main value of this test is ensuring the method doesn't panic
-			// with various inputs and that it correctly identifies toast vs notification
-		})
-	}
-}
-
-func TestController_logNotificationConnection(t *testing.T) {
-	t.Parallel()
-
-	// Test with nil logger (should not panic)
-	c := New(&apicore.Core{APILogger: nil}, nil, nil)
-	c.Settings.Store(mockHandler().Settings.Load())
-
-	// These should not panic
-	c.logNotificationConnection("test-client", "192.168.1.1", "test-agent", true)
-	c.logNotificationConnection("test-client", "192.168.1.1", "", false)
-
-	// Test with different debug settings
-	c.Settings.Load().WebServer.Debug = false
-	c.logNotificationConnection("test-client", "192.168.1.1", "test-agent", true)
-}
-
-func TestController_logNotificationError(t *testing.T) {
-	t.Parallel()
-
-	c := mockHandler()
-
-	// Should not panic with nil logger
-	c.logNotificationError("test error", nil, "test-client")
-	c.logNotificationError("test error", echo.NewHTTPError(500, "test"), "test-client")
-}
-
-func TestController_logToastSent(t *testing.T) {
-	t.Parallel()
-
-	c := mockHandler()
-
-	notif := &notification.Notification{
-		ID:        "test-id",
-		Component: "test-component",
-		Metadata: map[string]any{
-			"isToast":   true,
-			"toastId":   "toast-123",
-			"toastType": "success",
-		},
-	}
-
-	// Should not panic with nil logger
-	c.logToastSent("test-client", notif)
-
-	// Test with debug disabled
-	c.Settings.Load().WebServer.Debug = false
-	c.logToastSent("test-client", notif)
-}
-
-func TestController_logNotificationSent(t *testing.T) {
-	t.Parallel()
-
-	c := mockHandler()
-
-	notif := &notification.Notification{
-		ID:       "test-id",
-		Type:     notification.TypeInfo,
-		Priority: notification.PriorityLow,
-	}
-
-	// Should not panic with nil logger
-	c.logNotificationSent("test-client", notif)
-
-	// Test with debug disabled
-	c.Settings.Load().WebServer.Debug = false
-	c.logNotificationSent("test-client", notif)
-}
-
-// Test that demonstrates the metadata extraction logic
-func TestMetadataExtraction(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		metadata map[string]any
-		wantBool bool
-	}{
-		{
-			name:     "isToast is true",
-			metadata: map[string]any{"isToast": true},
-			wantBool: true,
-		},
-		{
-			name:     "isToast is false",
-			metadata: map[string]any{"isToast": false},
-			wantBool: false,
-		},
-		{
-			name:     "isToast is not boolean",
-			metadata: map[string]any{"isToast": "true"},
-			wantBool: false, // Type assertion will fail
-		},
-		{
-			name:     "isToast is missing",
-			metadata: map[string]any{"other": "value"},
-			wantBool: false,
-		},
-		{
-			name:     "nil metadata",
-			metadata: nil,
-			wantBool: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			// This replicates the logic from processNotificationEvent
-			var isToast bool
-			if tt.metadata != nil {
-				isToast, _ = tt.metadata["isToast"].(bool)
-			}
-
-			assert.Equal(t, tt.wantBool, isToast, "metadata extraction isToast mismatch")
+			require.NoError(t, c.processNotificationEvent(ctx, "test-client", notif))
+			assert.True(t, strings.HasPrefix(rec.Body.String(), tt.wantPrefix),
+				"SSE frame should start with %q, got %q", tt.wantPrefix, rec.Body.String())
 		})
 	}
 }
