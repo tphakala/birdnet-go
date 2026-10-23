@@ -159,3 +159,21 @@ func TestSettingsSave_AfterFreshGetKeepsOutOfBandModel(t *testing.T) {
 		"Subsequent settings save must not unload out-of-band installed model")
 	assert.Equal(t, 20, currentGlobal.Realtime.Interval)
 }
+
+// TestGetSettingsOrFallback_OwnerWithoutGlobalUsesControllerSnapshot pins the
+// source order of getSettingsOrFallback for a controller that owns the global
+// singleton before any global settings are published: it must serve its own
+// snapshot instead of falling through to conf.Setting().
+func TestGetSettingsOrFallback_OwnerWithoutGlobalUsesControllerSnapshot(t *testing.T) {
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prev) })
+	conf.StoreSettings(nil)
+
+	local := getTestSettings(t)
+	c := getTestController(t, echo.New())
+	c.isGlobalOwner = true
+	c.Settings.Store(local)
+
+	assert.Same(t, local, c.getSettingsOrFallback(),
+		"a global owner without published global settings must serve its own snapshot")
+}
