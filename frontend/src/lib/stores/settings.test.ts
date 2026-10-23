@@ -1756,6 +1756,28 @@ describe('Settings Store - saveSettings rebases on the server state', () => {
     expect(get(hasUnsavedChanges)).toBe(false);
   });
 
+  it('applies a load requested during a save only after the save completes', async () => {
+    const hold = deferred();
+    vi.mocked(settingsAPI.save).mockReturnValueOnce(hold.promise);
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.load).mockClear();
+
+    const saving = settingsActions.saveSettings({ notify: false });
+    await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+    // The server now holds the saved value, as it does once the PUT lands.
+    server.birdnet = { ...(server.birdnet as Body), threshold: 0.55 };
+    const loading = settingsActions.loadSettings();
+    await Promise.resolve();
+    expect(settingsAPI.load).toHaveBeenCalledTimes(1);
+
+    hold.resolve();
+    await Promise.all([saving, loading]);
+
+    expect(settingsAPI.load).toHaveBeenCalledTimes(2);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(get(settingsStore).formData.birdnet.threshold).toBe(0.55);
+  });
+
   it('drops a model the server removed from a source list the user edited', async () => {
     const sources = lookup(server, ['realtime', 'audio', 'sources']) as Body[];
     const audio = get(settingsStore).formData.realtime?.audio as AudioSettings;

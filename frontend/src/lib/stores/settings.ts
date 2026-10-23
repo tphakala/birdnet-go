@@ -1396,10 +1396,10 @@ let pendingFullSave: { done: Promise<void>; notify: boolean } | null = null;
 let serverSyncTail: Promise<void> = Promise.resolve();
 
 /**
- * Runs task after every earlier queued task has settled, so a refresh applies
- * wholly before or wholly after a full save and a GET issued before a PUT can
- * never land after it. Orders rebases and full saves only; section saves are
- * not queued.
+ * Runs task after every earlier queued task has settled, so a refresh or a load
+ * applies wholly before or wholly after a full save and a GET issued before a
+ * PUT can never land after it. Orders loads, rebases and full saves only;
+ * section saves are not queued.
  */
 function runSerialized<T>(task: () => Promise<T>): Promise<T> {
   const result = serverSyncTail.then(task);
@@ -1657,16 +1657,20 @@ export const settingsActions = {
   async loadSettings() {
     settingsStore.update(state => ({ ...state, isLoading: true, error: null }));
     try {
-      const data = await settingsAPI.load();
-      const coercedData = normalizeLoadedSettings(data);
+      // Queued with full saves and refreshes, so a load never lands between a
+      // save's rebase and the originalData write that ends it.
+      await runSerialized(async () => {
+        const data = await settingsAPI.load();
+        const coercedData = normalizeLoadedSettings(data);
 
-      settingsStore.update(state => ({
-        ...state,
-        formData: coercedData,
-        originalData: JSON.parse(JSON.stringify(coercedData)),
-        isLoading: false,
-        dataLoaded: true,
-      }));
+        settingsStore.update(state => ({
+          ...state,
+          formData: coercedData,
+          originalData: JSON.parse(JSON.stringify(coercedData)),
+          isLoading: false,
+          dataLoaded: true,
+        }));
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('settings.errors.loadFailed');
       settingsStore.update(state => ({
