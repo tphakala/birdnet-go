@@ -28,17 +28,18 @@ import (
 // getter returns only the core's own atomic snapshot, like getSettingsOrFallback
 // for a controller that does not own the global singleton; it never reads the
 // process-global settings, so it does not exercise the global-owner path.
-// publishAndSaveSettings stores the updated snapshot back (no disk write,
-// matching the original DisableSaveSettings=true), and handleSettingsChanges is a
-// no-op. isClientAuthenticated defaults to unauthenticated (the facade test
-// controller never injected an auth service). The name-map accessors return the
-// supplied maps so a test can seed name resolution.
+// updateAndSaveSettings clones the core snapshot, applies the mutation and stores
+// it back (no disk write, matching the original DisableSaveSettings=true), and
+// handleSettingsChanges is a no-op. isClientAuthenticated defaults to
+// unauthenticated (the facade test controller never injected an auth service).
+// The name-map accessors return the supplied maps so a test can seed name
+// resolution.
 func buildTestHandler(t *testing.T, core *apicore.Core, commonToSci, sciToCommon map[string]string) *Handler {
 	t.Helper()
 	var mu sync.RWMutex
 	return New(core, &mu,
 		func() *conf.Settings { return core.Settings.Load() },
-		func(_, updated *conf.Settings) error { core.Settings.Store(updated); return nil },
+		apitest.CoreSettingsUpdater(core),
 		func(_, _ *conf.Settings) error { return nil },
 		func(echo.Context) bool { return false },
 		func() map[string]string { return sciToCommon },

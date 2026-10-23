@@ -193,21 +193,22 @@ func (c *Handler) UploadMQTTTLSCertificate(ctx echo.Context) error {
 	}
 
 	// Stage 2: Apply settings atomically.
-	current := c.getSettingsOrFallback()
-	updated := conf.CloneSettings(current)
-	if update.caCert != "" {
-		updated.Realtime.MQTT.TLS.CACert = update.caCert
-	} else if update.clearCA {
-		updated.Realtime.MQTT.TLS.CACert = ""
-	}
-	if update.clientCert != "" {
-		updated.Realtime.MQTT.TLS.ClientCert = update.clientCert
-		updated.Realtime.MQTT.TLS.ClientKey = update.clientKey
-	} else if update.clearClient {
-		updated.Realtime.MQTT.TLS.ClientCert = ""
-		updated.Realtime.MQTT.TLS.ClientKey = ""
-	}
-	if err := c.publishAndSaveSettings(current, updated); err != nil {
+	current, updated, err := c.updateAndSaveSettings(func(_, updated *conf.Settings) error {
+		if update.caCert != "" {
+			updated.Realtime.MQTT.TLS.CACert = update.caCert
+		} else if update.clearCA {
+			updated.Realtime.MQTT.TLS.CACert = ""
+		}
+		if update.clientCert != "" {
+			updated.Realtime.MQTT.TLS.ClientCert = update.clientCert
+			updated.Realtime.MQTT.TLS.ClientKey = update.clientKey
+		} else if update.clearClient {
+			updated.Realtime.MQTT.TLS.ClientCert = ""
+			updated.Realtime.MQTT.TLS.ClientKey = ""
+		}
+		return nil
+	})
+	if err != nil {
 		if update.caCert != "" {
 			_ = tlsMgr.RemoveCertificate(mqttTLSServiceName, conf.TLSCertTypeCA)
 		}
@@ -261,12 +262,13 @@ func (c *Handler) DeleteMQTTTLSCertificate(ctx echo.Context) error {
 			http.StatusInternalServerError)
 	}
 
-	current := c.getSettingsOrFallback()
-	updated := conf.CloneSettings(current)
-	updated.Realtime.MQTT.TLS.CACert = ""
-	updated.Realtime.MQTT.TLS.ClientCert = ""
-	updated.Realtime.MQTT.TLS.ClientKey = ""
-	if err := c.publishAndSaveSettings(current, updated); err != nil {
+	current, updated, err := c.updateAndSaveSettings(func(_, updated *conf.Settings) error {
+		updated.Realtime.MQTT.TLS.CACert = ""
+		updated.Realtime.MQTT.TLS.ClientCert = ""
+		updated.Realtime.MQTT.TLS.ClientKey = ""
+		return nil
+	})
+	if err != nil {
 		tlsMgr.RestoreBackups(mqttTLSServiceName)
 		return c.HandleError(ctx, err, "Failed to save settings after MQTT TLS certificate deletion",
 			http.StatusInternalServerError)

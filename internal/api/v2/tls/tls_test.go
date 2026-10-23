@@ -36,15 +36,15 @@ func generateTestCertKeyPair(t *testing.T) (certPEM, keyPEM string) {
 // getter returns only the core's own atomic snapshot, like getSettingsOrFallback
 // for a controller that does not own the global singleton; it never reads the
 // process-global settings, so it does not exercise the global-owner path.
-// publishAndSaveSettings stores the updated snapshot back (no disk write,
-// matching the original DisableSaveSettings=true), and handleSettingsChanges is a
-// no-op. They share the supplied mutex so the handler serialises just as the
-// facade does.
+// updateAndSaveSettings clones the core snapshot, applies the mutation and stores
+// it back (no disk write, matching the original DisableSaveSettings=true), and
+// handleSettingsChanges is a no-op. They share the supplied mutex so the
+// handler serialises just as the facade does.
 func newTestHandler(t *testing.T, core *apicore.Core, mu *sync.RWMutex) *Handler {
 	t.Helper()
 	return New(core, mu,
 		func() *conf.Settings { return core.Settings.Load() },
-		func(_, updated *conf.Settings) error { core.Settings.Store(updated); return nil },
+		apitest.CoreSettingsUpdater(core),
 		func(_, _ *conf.Settings) error { return nil },
 	)
 }
