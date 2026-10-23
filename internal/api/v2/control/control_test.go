@@ -11,11 +11,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -44,10 +49,12 @@ func newControlTestHandler(t *testing.T) (*echo.Echo, *Handler, chan string) {
 }
 
 // newControlHandler builds a control Handler on the supplied Echo instance with a
-// buffered control channel the caller does not need to observe.
+// buffered control channel the caller does not need to observe. It is for
+// parallel tests, so it does not publish settings (a process-global); the
+// restart-source handler reads none.
 func newControlHandler(t *testing.T, e *echo.Echo) *Handler {
 	t.Helper()
-	core := apitest.NewCore(t, apitest.WithEcho(e))
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
 	return New(core, make(chan string, testControlChannelBuf))
 }
 
@@ -82,13 +89,10 @@ func runControlEndpointTest(t *testing.T, e *echo.Echo, controlChan chan string,
 		assert.Equal(t, expectedAction, result.Action)
 		assert.NotZero(t, result.Timestamp)
 
-		// Verify signal was sent to control channel
-		select {
-		case signal := <-controlChan:
-			assert.Equal(t, expectedSignal, signal)
-		case <-time.After(100 * time.Millisecond):
-			assert.Fail(t, "Control signal was not sent")
-		}
+		// The send completes before the handler returns, so the signal is
+		// already buffered and no wait is needed.
+		require.Len(t, controlChan, 1, "Control signal was not sent")
+		assert.Equal(t, expectedSignal, <-controlChan)
 	}
 }
 
@@ -140,135 +144,109 @@ func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controlChan ch
 	}
 }
 
-// runControlActionsWithBlockedChannelTest runs control endpoints test with a blocked channel
-func runControlActionsWithBlockedChannelTest(t *testing.T, handler func(echo.Context) error) {
-	t.Helper()
-	t.Attr("component", "control")
-	t.Attr("type", "blocked-channel")
+// TestGetAvailableActions tests the GetAvailableActions endpoint with the
+// container check replaced, so the restart_container action is checked both
+// offered and withheld on any host. Each element must carry exactly the
+// "action" and "description" keys (the ControlAction JSON tags).
+func TestGetAvailableActions(t *testing.T) {
+	baseActions := []string{
+		ActionRestartAnalysis,
+		ActionReloadModel,
+		ActionRebuildFilter,
+		ActionRestartServer,
+		ActionRestartAudioSource,
+	}
 
-	// Setup
-	e, h, _ := newControlTestHandler(t)
+	tests := []struct {
+		name        string
+		inContainer bool
+		want        []string
+	}{
+		{name: "outside a container", inContainer: false, want: baseActions},
+		{name: "inside a container", inContainer: true, want: append(slices.Clone(baseActions), ActionRestartContainer)},
+	}
 
-	// Save original channel and create a non-buffered channel that will block
-	originalChan := h.controlChan
-	controlChan := make(chan string)
-	h.controlChan = controlChan
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, h, _ := newControlTestHandler(t)
+			h.isContainer = func() bool { return tt.inContainer }
 
-	// Restore original channel after test
-	defer func() {
-		h.controlChan = originalChan
-	}()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/control/actions", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/control/actions")
 
-	// Start a goroutine that will eventually unblock the channel, but after the test timeout
-	go func() {
-		// Wait longer than the test will run to simulate a blocked receiver
-		time.Sleep(200 * time.Millisecond)
-		// Try to drain the channel if anything was sent
-		select {
-		case <-controlChan:
-			// Channel drained
-		default:
-			// Channel was empty
-		}
-	}()
+			require.NoError(t, h.GetAvailableActions(c))
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
-	// Create a context with timeout to ensure the test doesn't hang
-	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
-	defer cancel()
+			var actions []map[string]string
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &actions))
 
-	// Create a request with the timeout context
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart", http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Execute the handler with a separate goroutine and channel to detect completion
-	done := make(chan bool, 1)
-	go func() {
-		err := handler(c)
-		assert.NoError(t, err, "Handler should not return an error even with a blocked channel")
-		done <- true
-	}()
-
-	// Check if the handler completes within the timeout
-	select {
-	case <-done:
-		// Handler completed successfully without blocking indefinitely
-		// Note: With buffered channel in the test handler, the send won't block
-		// so we expect success (200) instead of timeout (408)
-		assert.Equal(t, http.StatusOK, rec.Code,
-			"Should return success with buffered channel")
-	case <-time.After(150 * time.Millisecond):
-		require.Fail(t, "Handler blocked indefinitely with a blocked channel")
+			ids := make([]string, 0, len(actions))
+			for _, action := range actions {
+				assert.ElementsMatch(t, []string{"action", "description"}, slices.Collect(maps.Keys(action)))
+				assert.NotEmpty(t, action["description"])
+				ids = append(ids, action["action"])
+			}
+			assert.ElementsMatch(t, tt.want, ids)
+		})
 	}
 }
 
-// TestGetAvailableActions tests the GetAvailableActions endpoint
-func TestGetAvailableActions(t *testing.T) {
-	// Setup
-	e, h, _ := newControlTestHandler(t)
+// TestNewWiresContainerCheck tests that New installs sysinfo.IsContainer itself.
+// Every other test replaces the field, so without this a New that left it nil
+// would pass them all and panic in production. The functions are compared by
+// identity because a constant check returns the same value as the real one on
+// any host that is not in a container.
+func TestNewWiresContainerCheck(t *testing.T) {
+	_, h, _ := newControlTestHandler(t)
 
-	// Create a request to the control actions endpoint
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/control/actions", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/control/actions")
+	require.NotNil(t, h.isContainer)
+	assert.Equal(t, reflect.ValueOf(sysinfo.IsContainer).Pointer(), reflect.ValueOf(h.isContainer).Pointer())
+}
 
-	// Test
-	require.NoError(t, h.GetAvailableActions(c))
-	{
-		// Check status code
-		assert.Equal(t, http.StatusOK, rec.Code)
+// testControlSendTimeout is the request deadline for the blocked-channel test.
+// It elapses in synctest virtual time, so it costs no wall-clock time.
+const testControlSendTimeout = time.Second
 
-		// Check content type
-		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+// TestControlSignalBlocked tests the two exits of the control-signal send when
+// nothing receives on the channel: the request deadline answers 408 and server
+// shutdown answers 503. Each runs inside a synctest bubble, with the core built
+// there, so the select blocks durably and virtual time advances to the deadline.
+// Only one of the two contexts is ended per row, because the select picks
+// randomly when both are ready.
+func TestControlSignalBlocked(t *testing.T) {
+	t.Run("request deadline answers 408", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			e := echo.New()
+			core := apitest.NewCore(t, apitest.WithEcho(e))
+			h := New(core, make(chan string))
 
-		// Parse response body
-		var actions []ControlAction
-		err := json.Unmarshal(rec.Body.Bytes(), &actions)
-		require.NoError(t, err)
+			ctx, cancel := context.WithTimeout(t.Context(), testControlSendTimeout)
+			defer cancel()
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart", http.NoBody).WithContext(ctx)
+			rec := httptest.NewRecorder()
 
-		// Expected action count depends on container environment
-		expectedCount := 5 // base actions + restart_server + restart_audio_source
-		if sysinfo.IsContainer() {
-			expectedCount = 6 // + restart_container
-		}
-		require.Len(t, actions, expectedCount, "Should have expected control actions")
+			err := h.RestartAnalysis(e.NewContext(req, rec))
+			apitest.AssertControllerError(t, err, rec, http.StatusRequestTimeout, "Request timeout while sending control signal")
+		})
+	})
 
-		// Verify actions include all expected types
-		var hasRestartAction, hasReloadAction, hasRebuildFilterAction, hasRestartServerAction, hasRestartContainerAction, hasRestartAudioSourceAction bool
-		for _, action := range actions {
-			switch action.Action {
-			case ActionRestartAnalysis:
-				hasRestartAction = true
-				assert.Contains(t, action.Description, "Restart")
-			case ActionReloadModel:
-				hasReloadAction = true
-				assert.Contains(t, action.Description, "Reload")
-			case ActionRebuildFilter:
-				hasRebuildFilterAction = true
-				assert.Contains(t, action.Description, "Rebuild")
-			case ActionRestartServer:
-				hasRestartServerAction = true
-				assert.Contains(t, action.Description, "Restart")
-			case ActionRestartContainer:
-				hasRestartContainerAction = true
-				assert.Contains(t, action.Description, "Restart")
-			case ActionRestartAudioSource:
-				hasRestartAudioSourceAction = true
-				assert.Contains(t, action.Description, "Restart")
-			}
-		}
+	t.Run("shutdown answers 503", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			e := echo.New()
+			core := apitest.NewCore(t, apitest.WithEcho(e))
+			h := New(core, make(chan string))
+			core.Cancel()
 
-		// Verify we found all expected action types
-		assert.True(t, hasRestartAction, "Missing restart_analysis action")
-		assert.True(t, hasReloadAction, "Missing reload_model action")
-		assert.True(t, hasRebuildFilterAction, "Missing rebuild_filter action")
-		assert.True(t, hasRestartServerAction, "Missing restart_server action")
-		assert.True(t, hasRestartAudioSourceAction, "Missing restart_audio_source action")
-		if sysinfo.IsContainer() {
-			assert.True(t, hasRestartContainerAction, "Missing restart_container action")
-		}
-	}
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart", http.NoBody)
+			rec := httptest.NewRecorder()
+
+			err := h.RestartAnalysis(e.NewContext(req, rec))
+			apitest.AssertControllerError(t, err, rec, http.StatusServiceUnavailable, "Server is shutting down")
+		})
+	})
 }
 
 // TestRestartAnalysis tests the RestartAnalysis endpoint
@@ -503,15 +481,6 @@ func TestControlEndpointsWithUserAuth(t *testing.T) {
 	}
 }
 
-// TestControlActionsWithBlockedChannel tests the control endpoints with a blocked channel
-// to ensure they don't hang indefinitely
-func TestControlActionsWithBlockedChannel(t *testing.T) {
-	// Setup
-	_, h, _ := newControlTestHandler(t)
-
-	runControlActionsWithBlockedChannelTest(t, h.RestartAnalysis)
-}
-
 // TestConcurrentControlRequests tests that multiple concurrent control requests
 // are handled properly
 func TestConcurrentControlRequests(t *testing.T) {
@@ -619,58 +588,85 @@ func TestInvalidPayloads(t *testing.T) {
 	}
 }
 
-// mockShutdownRequester is a test double for ShutdownRequester.
+// testFlushDelay is the flush delay the restart tests expect. It is a literal
+// rather than restartFlushDelay so that changing the production value fails
+// the tests instead of moving the expectation with it.
+const testFlushDelay = 500 * time.Millisecond
+
+// mockShutdownRequester is a test double for ShutdownRequester. The restart
+// goroutine writes called, so it is atomic.
 type mockShutdownRequester struct {
-	called bool
+	called atomic.Bool
 }
 
 // RequestShutdown records that shutdown was requested.
 func (m *mockShutdownRequester) RequestShutdown() {
-	m.called = true
+	m.called.Store(true)
 }
 
-// TestRestartServer tests the RestartServer endpoint with a valid shutdown requester.
+// TestRestartServer tests the RestartServer endpoint with a valid shutdown
+// requester: the binary restart type is recorded and shutdown is requested only
+// after the flush delay, not before the response is written.
 func TestRestartServer(t *testing.T) {
 	t.Cleanup(restart.Reset)
-	e, h, _ := newControlTestHandler(t)
+	synctest.Test(t, func(t *testing.T) {
+		e, h, _ := newControlTestHandler(t)
 
-	mock := &mockShutdownRequester{}
-	h.SetShutdownRequester(mock)
+		mock := &mockShutdownRequester{}
+		h.SetShutdownRequester(mock)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/control/restart-server")
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/control/restart-server")
 
-	require.NoError(t, h.RestartServer(c))
-	assert.Equal(t, http.StatusOK, rec.Code)
+		require.NoError(t, h.RestartServer(c))
+		assert.Equal(t, http.StatusOK, rec.Code)
 
-	var result ControlResult
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-	assert.True(t, result.Success)
-	assert.Equal(t, ActionRestartServer, result.Action)
+		var result ControlResult
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+		assert.True(t, result.Success)
+		assert.Equal(t, ActionRestartServer, result.Action)
+		assert.Equal(t, restart.RestartBinary, restart.Requested())
+
+		time.Sleep(testFlushDelay - time.Nanosecond)
+		synctest.Wait()
+		assert.False(t, mock.called.Load(), "shutdown must not be requested before the flush delay has elapsed")
+
+		time.Sleep(time.Nanosecond)
+		synctest.Wait()
+		assert.True(t, mock.called.Load(), "shutdown must be requested after the flush delay")
+	})
 }
 
 // TestRestartServerAlreadyInProgress tests that a second restart request returns 409 Conflict.
 func TestRestartServerAlreadyInProgress(t *testing.T) {
 	t.Cleanup(restart.Reset)
-	e, h, _ := newControlTestHandler(t)
-	mock := &mockShutdownRequester{}
-	h.SetShutdownRequester(mock)
+	synctest.Test(t, func(t *testing.T) {
+		e, h, _ := newControlTestHandler(t)
+		mock := &mockShutdownRequester{}
+		h.SetShutdownRequester(mock)
 
-	// First call succeeds
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	require.NoError(t, h.RestartServer(c))
-	assert.Equal(t, http.StatusOK, rec.Code)
+		// First call succeeds
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		require.NoError(t, h.RestartServer(c))
+		assert.Equal(t, http.StatusOK, rec.Code)
 
-	// Second call returns 409
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
-	rec2 := httptest.NewRecorder()
-	c2 := e.NewContext(req2, rec2)
-	require.NoError(t, h.RestartServer(c2))
-	assert.Equal(t, http.StatusConflict, rec2.Code)
+		// Second call returns 409
+		req2 := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-server", http.NoBody)
+		rec2 := httptest.NewRecorder()
+		c2 := e.NewContext(req2, rec2)
+		require.NoError(t, h.RestartServer(c2))
+		assert.Equal(t, http.StatusConflict, rec2.Code)
+
+		// Let the first request's delayed shutdown run, so no goroutine is left
+		// sleeping when the bubble ends.
+		time.Sleep(restartFlushDelay)
+		synctest.Wait()
+		assert.True(t, mock.called.Load())
+	})
 }
 
 // TestRestartServerNoShutdownRequester tests that RestartServer returns 500 when no shutdown requester is set.
@@ -685,96 +681,56 @@ func TestRestartServerNoShutdownRequester(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 }
 
-// TestRestartContainerNotInContainer tests that RestartContainer returns 400
-// when the detected environment is not a container.
-func TestRestartContainerNotInContainer(t *testing.T) {
-	t.Cleanup(restart.Reset)
-
-	envType, _ := sysinfo.GetEnvironment()
-	if sysinfo.IsContainer() {
-		t.Skipf("Skipping: detected container environment %q", envType)
+// TestRestartContainer tests RestartContainer with the container check replaced,
+// so both outcomes run on any host: outside a container it answers 400 and
+// requests nothing; inside one it answers 200, records the container restart
+// type (not the binary one), and requests shutdown after the flush delay.
+func TestRestartContainer(t *testing.T) {
+	tests := []struct {
+		name        string
+		inContainer bool
+	}{
+		{name: "not in a container answers 400", inContainer: false},
+		{name: "in a container answers 200", inContainer: true},
 	}
 
-	e, h, _ := newControlTestHandler(t)
-	mock := &mockShutdownRequester{}
-	h.SetShutdownRequester(mock)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Cleanup(restart.Reset)
+			synctest.Test(t, func(t *testing.T) {
+				e, h, _ := newControlTestHandler(t)
+				h.isContainer = func() bool { return tt.inContainer }
+				mock := &mockShutdownRequester{}
+				h.SetShutdownRequester(mock)
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	require.NoError(t, h.RestartContainer(c))
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
+				req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+				require.NoError(t, h.RestartContainer(c))
 
-// TestRestartContainerInContainer tests that RestartContainer returns 200
-// when the detected environment is a container.
-func TestRestartContainerInContainer(t *testing.T) {
-	t.Cleanup(restart.Reset)
+				if !tt.inContainer {
+					assert.Equal(t, http.StatusBadRequest, rec.Code)
+					assert.Equal(t, restart.RestartNone, restart.Requested())
+					synctest.Wait()
+					assert.False(t, mock.called.Load())
+					return
+				}
 
-	envType, _ := sysinfo.GetEnvironment()
-	if !sysinfo.IsContainer() {
-		t.Skipf("Skipping: detected non-container environment %q", envType)
+				assert.Equal(t, http.StatusOK, rec.Code)
+				var result ControlResult
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+				assert.True(t, result.Success)
+				assert.Equal(t, ActionRestartContainer, result.Action)
+				assert.Equal(t, restart.RestartContainer, restart.Requested())
+
+				time.Sleep(testFlushDelay - time.Nanosecond)
+				synctest.Wait()
+				assert.False(t, mock.called.Load(), "shutdown must not be requested before the flush delay has elapsed")
+
+				time.Sleep(time.Nanosecond)
+				synctest.Wait()
+				assert.True(t, mock.called.Load(), "shutdown must be requested after the flush delay")
+			})
+		})
 	}
-
-	e, h, _ := newControlTestHandler(t)
-	mock := &mockShutdownRequester{}
-	h.SetShutdownRequester(mock)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	require.NoError(t, h.RestartContainer(c))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var result ControlResult
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-	assert.True(t, result.Success)
-	assert.Equal(t, ActionRestartContainer, result.Action)
-}
-
-// TestRestartContainerNoShutdownRequester tests that RestartContainer returns 500
-// when no shutdown requester is set (and we are in a container).
-func TestRestartContainerNoShutdownRequester(t *testing.T) {
-	t.Cleanup(restart.Reset)
-
-	envType, _ := sysinfo.GetEnvironment()
-	if !sysinfo.IsContainer() {
-		t.Skipf("Skipping: detected non-container environment %q", envType)
-	}
-
-	e, h, _ := newControlTestHandler(t)
-
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	require.NoError(t, h.RestartContainer(c))
-	assert.Equal(t, http.StatusInternalServerError, rec.Code)
-}
-
-// TestRestartContainerAlreadyInProgress tests that a second container restart request returns 409.
-func TestRestartContainerAlreadyInProgress(t *testing.T) {
-	t.Cleanup(restart.Reset)
-
-	envType, _ := sysinfo.GetEnvironment()
-	if !sysinfo.IsContainer() {
-		t.Skipf("Skipping: detected non-container environment %q", envType)
-	}
-
-	e, h, _ := newControlTestHandler(t)
-	mock := &mockShutdownRequester{}
-	h.SetShutdownRequester(mock)
-
-	// First call succeeds
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	require.NoError(t, h.RestartContainer(c))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Second call returns 409
-	req2 := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart-container", http.NoBody)
-	rec2 := httptest.NewRecorder()
-	c2 := e.NewContext(req2, rec2)
-	require.NoError(t, h.RestartContainer(c2))
-	assert.Equal(t, http.StatusConflict, rec2.Code)
 }
