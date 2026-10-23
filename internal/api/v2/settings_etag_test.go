@@ -25,6 +25,9 @@ const (
 	etagTestSection           = "realtime"
 	etagTestPutBody           = `{"realtime":{"interval":20}}`
 	etagTestPatchBody         = `{"interval":20}`
+	// etagTestMinEpochLength is the shortest epoch that still carries enough
+	// randomness to tell two processes apart; crypto/rand.Text returns 26 characters.
+	etagTestMinEpochLength = 16
 )
 
 // etagResult is the part of a settings response the ETag tests assert on.
@@ -257,7 +260,7 @@ func TestSettingsETag_CarriesProcessEpoch(t *testing.T) {
 
 	assert.True(t, strings.HasPrefix(etag, `"`+settingsETagEpoch+"-"), "ETag %s must start with the process epoch", etag)
 	assert.True(t, strings.HasSuffix(etag, `"`))
-	assert.NotEmpty(t, settingsETagEpoch)
+	assert.GreaterOrEqual(t, len(settingsETagEpoch), etagTestMinEpochLength, "the epoch must be random enough to differ between processes")
 }
 
 // TestSettingsETag_SectionGetSendsNone pins that a successful section GET sends
