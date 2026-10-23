@@ -12,6 +12,7 @@ import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 import { deferred } from '../../test/async-helpers';
 import { lookup, serverSettings } from '../../test/settings-helpers';
+import { serveConfirmedSettings } from '../../test/settings-store-helpers';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -37,6 +38,10 @@ vi.mock('$lib/i18n/index.js', () => ({
   isValidLocale: vi.fn().mockReturnValue(true),
   t: vi.fn((key: string) => key),
 }));
+
+beforeEach(() => {
+  serveConfirmedSettings();
+});
 
 describe('Settings Store - Dynamic Threshold and Range Filter', () => {
   beforeEach(() => {
@@ -918,6 +923,7 @@ describe('Settings Store - saveSettings refuses before settings load', () => {
 
   beforeEach(async () => {
     vi.mocked(settingsAPI.save).mockClear();
+    vi.mocked(settingsAPI.load).mockClear();
     const { toastActions } = await import('./toast.js');
     vi.mocked(toastActions.success).mockClear();
     vi.mocked(toastActions.error).mockClear();
@@ -929,6 +935,7 @@ describe('Settings Store - saveSettings refuses before settings load', () => {
     await expect(settingsActions.saveSettings()).rejects.toThrow('settings.errors.loadFailed');
 
     expect(settingsAPI.save).not.toHaveBeenCalled();
+    expect(settingsAPI.load).not.toHaveBeenCalled();
     const state = get(settingsStore);
     expect(state.error).toBe('settings.errors.loadFailed');
     expect(state.isSaving).toBe(false);
@@ -991,6 +998,7 @@ describe('Settings Store - saveSection', () => {
     });
     vi.mocked(settingsAPI.load).mockResolvedValue(serverSettings());
     await settingsActions.loadSettings();
+    serveConfirmedSettings();
   };
 
   beforeEach(async () => {
@@ -1617,5 +1625,177 @@ describe('Settings Store - equalizer values the backend accepts', () => {
     await settingsActions.saveSection('audio', patch);
 
     expect(get(hasUnsavedChanges)).toBe(false);
+  });
+});
+
+describe('Settings Store - saveSettings rebases on the server state', () => {
+  // The fake server and the PUT body are JSON documents the tests read and edit by
+  // path, so they are typed as plain records and cast at the store boundary.
+  type Body = Record<string, unknown>;
+  let server: Record<string, unknown>;
+
+  const withModels = () => {
+    const data = serverSettings() as unknown as Record<string, unknown>;
+    data.models = { enabled: ['birdnet', 'perch'] };
+    const audio = lookup(data, ['realtime', 'audio']) as { sources: Record<string, unknown>[] };
+    audio.sources = [{ name: 'Card', device: 'hw:0', models: ['birdnet', 'perch'] }];
+    const rtsp = lookup(data, ['realtime', 'rtsp']) as { streams: Record<string, unknown>[] };
+    rtsp.streams = [{ name: 'Old', url: 'rtsp://old', models: ['birdnet', 'perch'] }];
+    return data;
+  };
+
+  const lastBody = (): Body =>
+    vi.mocked(settingsAPI.save).mock.calls.at(-1)?.[0] as unknown as Body;
+
+  beforeEach(async () => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    server = withModels();
+    vi.mocked(settingsAPI.load).mockImplementation(
+      async () => JSON.parse(JSON.stringify(server)) as SettingsFormData
+    );
+    settingsStore.set({
+      formData: { main: { name: '' } } as unknown as SettingsFormData,
+      originalData: { main: { name: '' } } as unknown as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    await settingsActions.loadSettings();
+  });
+
+  it('sends the server models and source lists with the unrelated edit and ends clean', async () => {
+    (server.models as { enabled: string[] }).enabled = ['birdnet', 'perch', 'extra'];
+    (lookup(server, ['realtime', 'audio', 'sources']) as { models: string[] }[])[0].models = [
+      'birdnet',
+    ];
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await settingsActions.saveSettings({ notify: false });
+
+    const body = lastBody();
+    expect(lookup(body, ['models', 'enabled'])).toEqual(['birdnet', 'perch', 'extra']);
+    expect(lookup(body, ['realtime', 'audio', 'sources', '0', 'models'])).toEqual(['birdnet']);
+    expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('fails without a PUT and keeps edits when the server state cannot be fetched', async () => {
+    vi.mocked(settingsAPI.load).mockRejectedValueOnce(new Error('offline'));
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await expect(settingsActions.saveSettings({ notify: false })).rejects.toThrow('offline');
+
+    expect(settingsAPI.save).not.toHaveBeenCalled();
+    const state = get(settingsStore);
+    expect(state.formData.birdnet.threshold).toBe(0.55);
+    expect(state.isSaving).toBe(false);
+    expect(state.error).toBe('offline');
+  });
+
+  it('keeps an edit typed while the PUT is in flight unsaved and sends it next time', async () => {
+    const hold = deferred();
+    vi.mocked(settingsAPI.save).mockReturnValueOnce(hold.promise);
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    const saving = settingsActions.saveSettings({ notify: false });
+    await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+    settingsActions.updateSection('main', { name: 'Typed meanwhile' });
+    hold.resolve();
+    await saving;
+
+    expect(get(hasUnsavedChanges)).toBe(true);
+    await settingsActions.saveSettings({ notify: false });
+    expect(lookup(lastBody(), ['main', 'name'])).toBe('Typed meanwhile');
+  });
+
+  it('refreshKeepingEdits keeps unsaved edits and takes server values elsewhere', async () => {
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    (server.models as { enabled: string[] }).enabled = ['birdnet'];
+    (server.main as { name: string }).name = 'Renamed on server';
+
+    await settingsActions.refreshKeepingEdits();
+
+    const state = get(settingsStore);
+    expect(state.formData.birdnet.threshold).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(true);
+    expect(state.formData.main.name).toBe('Renamed on server');
+    expect(lookup(state.formData, ['models', 'enabled'])).toEqual(['birdnet']);
+    expect(lookup(state.originalData, ['models', 'enabled'])).toEqual(['birdnet']);
+    expect(state.isSaving).toBe(false);
+    expect(state.error).toBeNull();
+  });
+
+  it('applies a refresh requested during a save only after the save completes', async () => {
+    const hold = deferred();
+    vi.mocked(settingsAPI.save).mockReturnValueOnce(hold.promise);
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.load).mockClear();
+
+    const saving = settingsActions.saveSettings({ notify: false });
+    await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+    const refreshing = settingsActions.refreshKeepingEdits();
+    await Promise.resolve();
+    expect(settingsAPI.load).toHaveBeenCalledTimes(1);
+
+    server.birdnet = { ...(server.birdnet as Body), threshold: 0.55 };
+    hold.resolve();
+    await Promise.all([saving, refreshing]);
+
+    expect(settingsAPI.load).toHaveBeenCalledTimes(2);
+    const state = get(settingsStore);
+    expect(state.formData.birdnet.threshold).toBe(0.55);
+    expect(state.originalData.birdnet.threshold).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('applies a load requested during a save only after the save completes', async () => {
+    const hold = deferred();
+    vi.mocked(settingsAPI.save).mockReturnValueOnce(hold.promise);
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.load).mockClear();
+
+    const saving = settingsActions.saveSettings({ notify: false });
+    await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+    // The server now holds the saved value, as it does once the PUT lands.
+    server.birdnet = { ...(server.birdnet as Body), threshold: 0.55 };
+    const loading = settingsActions.loadSettings();
+    await Promise.resolve();
+    expect(settingsAPI.load).toHaveBeenCalledTimes(1);
+
+    hold.resolve();
+    await Promise.all([saving, loading]);
+
+    expect(settingsAPI.load).toHaveBeenCalledTimes(2);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(get(settingsStore).formData.birdnet.threshold).toBe(0.55);
+  });
+
+  it('drops a model the server removed from edited source and stream lists, ignoring case', async () => {
+    const sources = lookup(server, ['realtime', 'audio', 'sources']) as Body[];
+    const streams = lookup(server, ['realtime', 'rtsp', 'streams']) as Body[];
+    const audio = get(settingsStore).formData.realtime?.audio as AudioSettings;
+    const rtsp = get(settingsStore).formData.realtime?.rtsp as NonNullable<
+      RealtimeSettings['rtsp']
+    >;
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...audio,
+        sources: [{ ...audio.sources[0], name: 'Renamed card', models: ['birdnet', 'Perch'] }],
+      },
+      rtsp: { ...rtsp, streams: [{ ...rtsp.streams[0], name: 'Renamed stream' }] },
+    });
+    (server.models as { enabled: string[] }).enabled = ['birdnet'];
+    sources[0].models = ['birdnet'];
+    streams[0].models = ['birdnet'];
+
+    await settingsActions.saveSettings({ notify: false });
+
+    const body = lastBody();
+    expect(lookup(body, ['realtime', 'audio', 'sources', '0', 'name'])).toBe('Renamed card');
+    expect(lookup(body, ['realtime', 'audio', 'sources', '0', 'models'])).toEqual(['birdnet']);
+    expect(lookup(body, ['realtime', 'rtsp', 'streams', '0', 'name'])).toBe('Renamed stream');
+    expect(lookup(body, ['realtime', 'rtsp', 'streams', '0', 'models'])).toEqual(['birdnet']);
   });
 });
