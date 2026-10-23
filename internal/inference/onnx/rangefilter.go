@@ -10,6 +10,15 @@ import (
 // DefaultRangeFilterThreshold is the minimum location score for a species to pass the range filter.
 const DefaultRangeFilterThreshold float32 = 0.03
 
+const (
+	// rangeFilterThreads is the intra-op and inter-op thread count of the range
+	// filter session; one inference per location batch does not need more.
+	rangeFilterThreads = 1
+	// rangeFilterInputWidth is the number of values per input row: latitude,
+	// longitude and week.
+	rangeFilterInputWidth = 3
+)
+
 // RangeFilter uses the BirdNET meta model to filter species by geographic location and date.
 type RangeFilter struct {
 	session    *ort.Session
@@ -37,10 +46,10 @@ func NewRangeFilter(modelPath string, opts ...RangeFilterOption) (*RangeFilter, 
 	}
 	defer func() { _ = sessOpts.Close() }()
 
-	if err := sessOpts.SetIntraOpNumThreads(1); err != nil {
+	if err := sessOpts.SetIntraOpNumThreads(rangeFilterThreads); err != nil {
 		return nil, fmt.Errorf("birdnet: failed to set intra-op threads: %w", err)
 	}
-	if err := sessOpts.SetInterOpNumThreads(1); err != nil {
+	if err := sessOpts.SetInterOpNumThreads(rangeFilterThreads); err != nil {
 		return nil, fmt.Errorf("birdnet: failed to set inter-op threads: %w", err)
 	}
 
@@ -117,14 +126,14 @@ func (r *RangeFilter) PredictBatchRaw(inputs []float32, batchSize int) ([]float3
 	if batchSize <= 0 {
 		return nil, ErrEmptyRangeFilterBatch
 	}
-	expected := batchSize * 3
+	expected := batchSize * rangeFilterInputWidth
 	if len(inputs) != expected {
 		return nil, &RangeFilterBatchInputError{Expected: expected, Got: len(inputs)}
 	}
 
 	numSpecies := len(r.labels)
 
-	inputTensor, err := ort.CreateTensor([]int64{int64(batchSize), 3}, inputs)
+	inputTensor, err := ort.CreateTensor([]int64{int64(batchSize), rangeFilterInputWidth}, inputs)
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: failed to create range filter batch input tensor: %w", err)
 	}
