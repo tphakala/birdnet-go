@@ -91,8 +91,10 @@ func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 
 	e, _, tempDir := setupFilesystemTestEnvironment(t)
 
-	// Create test structure
-	subDir := filepath.Join(tempDir, "subdir")
+	// Create test structure. The directory name has a space and a dash, so a
+	// handler that rewrites item names fails here.
+	const subDirName = "sub dir-1"
+	subDir := filepath.Join(tempDir, subDirName)
 	require.NoError(t, os.Mkdir(subDir, 0o750))
 
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -116,13 +118,13 @@ func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, tempDir, response.CurrentPath)
-	assert.Len(t, response.Items, 2) // subdir and test.txt
+	assert.Len(t, response.Items, 2) // the subdirectory and test.txt
 
 	// Find items by name
 	var foundDir, foundFile bool
 	for _, item := range response.Items {
 		switch item.Name {
-		case "subdir":
+		case subDirName:
 			assert.Equal(t, "folder", item.Type)
 			foundDir = true
 		case "test.txt":
@@ -131,7 +133,7 @@ func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 			foundFile = true
 		}
 	}
-	assert.True(t, foundDir, "Expected to find subdir")
+	assert.True(t, foundDir, "Expected to find %q", subDirName)
 	assert.True(t, foundFile, "Expected to find test.txt")
 }
 
