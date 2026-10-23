@@ -4841,7 +4841,11 @@
       },
       "appearance": {
         "title": "Vzhled",
-        "description": "Přizpůsobte vzhled svého rozhraní BirdNET-Go"
+        "description": "Přizpůsobte vzhled svého rozhraní BirdNET-Go",
+        "showAudioLevel": {
+          "label": "Zobrazit indikátor úrovně zvuku",
+          "helpText": "Zobrazit živý indikátor úrovně zvuku v záhlaví (otevírá nepřetržitý stream; vypněte pro snížení zatížení procesoru a sítě)"
+        }
       },
       "language": {
         "title": "Jazyk a region",

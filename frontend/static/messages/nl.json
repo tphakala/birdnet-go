@@ -4841,7 +4841,11 @@
       },
       "appearance": {
         "title": "Uiterlijk",
-        "description": "Pas het uiterlijk van uw BirdNET-Go-interface aan"
+        "description": "Pas het uiterlijk van uw BirdNET-Go-interface aan",
+        "showAudioLevel": {
+          "label": "Geluidsniveau-indicator weergeven",
+          "helpText": "Live geluidsniveau-indicator in de koptekst weergeven (opent een continue stream; uitschakelen om CPU- en netwerkgebruik te verminderen)"
+        }
       },
       "language": {
         "title": "Taal en regionaal",

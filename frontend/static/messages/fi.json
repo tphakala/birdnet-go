@@ -4841,7 +4841,11 @@
       },
       "appearance": {
         "title": "Ulkoasu",
-        "description": "Mukauta BirdNET-Go-käyttöliittymän ulkoasua"
+        "description": "Mukauta BirdNET-Go-käyttöliittymän ulkoasua",
+        "showAudioLevel": {
+          "label": "Näytä äänitason ilmaisin",
+          "helpText": "Näytä reaaliaikainen äänitason ilmaisin yläpalkissa (avaa jatkuvan tietovirran; poista käytöstä suorittimen ja verkon käytön vähentämiseksi)"
+        }
       },
       "language": {
         "title": "Kieli ja alue",

@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS } from './settings';
+import {
+  settingsStore,
+  settingsActions,
+  hasUnsavedChanges,
+  SECTION_STORE_PATHS,
+  createEmptySettings,
+} from './settings';
 import type {
   AudioSettings,
   BirdNetSettings,
@@ -1617,5 +1623,36 @@ describe('Settings Store - equalizer values the backend accepts', () => {
     await settingsActions.saveSection('audio', patch);
 
     expect(get(hasUnsavedChanges)).toBe(false);
+  });
+});
+
+describe('Settings Store - Dashboard showAudioLevel', () => {
+  it('defaults showAudioLevel to true in initial store state', () => {
+    const empty = createEmptySettings();
+    expect(empty.realtime?.dashboard?.showAudioLevel).toBe(true);
+  });
+
+  it('updates showAudioLevel via updateSection', () => {
+    settingsStore.set({
+      formData: createEmptySettings(),
+      originalData: createEmptySettings(),
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    const currentDashboard = get(settingsStore).formData.realtime?.dashboard;
+    expect(currentDashboard).toBeDefined();
+    if (currentDashboard) {
+      settingsActions.updateSection('realtime', {
+        dashboard: {
+          ...currentDashboard,
+          showAudioLevel: false,
+        },
+      });
+    }
+    const store = get(settingsStore);
+    expect(store.formData.realtime?.dashboard?.showAudioLevel).toBe(false);
   });
 });

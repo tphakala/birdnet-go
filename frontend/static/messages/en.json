@@ -4841,7 +4841,11 @@
       },
       "appearance": {
         "title": "Appearance",
-        "description": "Customize the look and feel of your BirdNET-Go interface"
+        "description": "Customize the look and feel of your BirdNET-Go interface",
+        "showAudioLevel": {
+          "label": "Show Audio Level Indicator",
+          "helpText": "Show live audio level indicator in the header (opens a continuous stream; disable to reduce CPU and network usage)"
+        }
       },
       "language": {
         "title": "Language & Regional",

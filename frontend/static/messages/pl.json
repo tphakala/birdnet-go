@@ -4841,7 +4841,11 @@
       },
       "appearance": {
         "title": "Wygląd",
-        "description": "Dostosuj wygląd interfejsu BirdNET-Go"
+        "description": "Dostosuj wygląd interfejsu BirdNET-Go",
+        "showAudioLevel": {
+          "label": "Pokaż wskaźnik poziomu dźwięku",
+          "helpText": "Pokaż wskaźnik poziomu dźwięku na żywo w nagłówku (otwiera ciągły strumień; wyłącz, aby zmniejszyć obciążenie procesora i sieci)"
+        }
       },
       "language": {
         "title": "Język i regionalne",

@@ -83,6 +83,8 @@ func newPopulatedSettings() *Settings {
 	s.Realtime.Audio.Equalizer.Filters = []EqualizerFilter{{Type: "HighPass", Frequency: 200}}
 
 	s.Realtime.Dashboard.CustomColors = &CustomColors{Primary: "#2563eb"}
+	showAudio := true
+	s.Realtime.Dashboard.ShowAudioLevel = &showAudio
 	s.Realtime.Dashboard.Layout.Elements = []DashboardElement{
 		{
 			ID:      "banner-0",
@@ -214,6 +216,9 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.Realtime.Audio.Equalizer.Filters[0].Type = mutated
 
 	dst.Realtime.Dashboard.CustomColors.Primary = mutated
+	if dst.Realtime.Dashboard.ShowAudioLevel != nil {
+		*dst.Realtime.Dashboard.ShowAudioLevel = false
+	}
 	dst.Realtime.Dashboard.Layout.Elements[0].Banner.Title = mutated
 	dst.Realtime.Dashboard.Layout.Elements[0].Video.URL = mutated
 	dst.Realtime.Dashboard.Layout.Elements[0].Summary.SummaryLimit = 0
@@ -282,6 +287,29 @@ func mutateCloneEverywhere(dst *Settings) {
 	dst.Notification.Push.Providers[0] = pp
 }
 
+// TestCloneSettings_ShowAudioLevelIndependence verifies that ShowAudioLevel is
+// deep-cloned so mutations on the pointed-to boolean do not affect the original.
+func TestCloneSettings_ShowAudioLevelIndependence(t *testing.T) {
+	t.Parallel()
+
+	show := true
+	src := &Settings{}
+	src.Realtime.Dashboard.ShowAudioLevel = &show
+
+	dst := CloneSettings(src)
+
+	require.NotNil(t, dst.Realtime.Dashboard.ShowAudioLevel)
+	require.NotSame(t, src.Realtime.Dashboard.ShowAudioLevel, dst.Realtime.Dashboard.ShowAudioLevel,
+		"ShowAudioLevel pointer must not be aliased between src and dst")
+	assert.True(t, *dst.Realtime.Dashboard.ShowAudioLevel)
+
+	*dst.Realtime.Dashboard.ShowAudioLevel = false
+
+	assert.True(t, *src.Realtime.Dashboard.ShowAudioLevel,
+		"source pointer must not be modified by mutation of clone")
+	assert.False(t, *dst.Realtime.Dashboard.ShowAudioLevel)
+}
+
 // TestCloneSettings_IncludedScientificNamesIndependence verifies that
 // IncludedScientificNames is deep-cloned so mutations on the copy do not
 // affect the original.
@@ -340,6 +368,8 @@ func assertSourceUnchanged(t *testing.T, src *Settings) {
 
 	require.NotNil(t, src.Realtime.Dashboard.CustomColors)
 	assert.Equal(t, "#2563eb", src.Realtime.Dashboard.CustomColors.Primary)
+	require.NotNil(t, src.Realtime.Dashboard.ShowAudioLevel)
+	assert.True(t, *src.Realtime.Dashboard.ShowAudioLevel)
 	require.Len(t, src.Realtime.Dashboard.Layout.Elements, 1)
 	elem := src.Realtime.Dashboard.Layout.Elements[0]
 	assert.Equal(t, "banner-0", elem.ID)

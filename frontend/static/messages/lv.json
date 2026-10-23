@@ -4841,7 +4841,11 @@
       },
       "appearance": {
         "title": "Izskats",
-        "description": "Pielāgojiet savas BirdNET-Go saskarnes izskatu un sajūtu"
+        "description": "Pielāgojiet savas BirdNET-Go saskarnes izskatu un sajūtu",
+        "showAudioLevel": {
+          "label": "Rādīt audio līmeņa indikatoru",
+          "helpText": "Rādīt tiešraides audio līmeņa indikatoru galvenē (atver nepārtrauktu straumi; atspējojiet, lai samazinātu procesora un tīkla noslodzi)"
+        }
       },
       "language": {
         "title": "Valoda un reģions",

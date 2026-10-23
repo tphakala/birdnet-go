@@ -3556,6 +3556,8 @@ export type TranslationKey =
   | 'settings.userInterface.tabs.audioPlayback'
   | 'settings.userInterface.appearance.title'
   | 'settings.userInterface.appearance.description'
+  | 'settings.userInterface.appearance.showAudioLevel.label'
+  | 'settings.userInterface.appearance.showAudioLevel.helpText'
   | 'settings.userInterface.language.title'
   | 'settings.userInterface.language.description'
   | 'settings.userInterface.visualContent.title'

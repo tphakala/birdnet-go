@@ -4841,7 +4841,11 @@
       },
       "appearance": {
         "title": "Erscheinungsbild",
-        "description": "Passen Sie das Aussehen Ihrer BirdNET-Go-Oberfläche an"
+        "description": "Passen Sie das Aussehen Ihrer BirdNET-Go-Oberfläche an",
+        "showAudioLevel": {
+          "label": "Audiopegelanzeige anzeigen",
+          "helpText": "Live-Audiopegelanzeige in der Kopfzeile anzeigen (öffnet einen fortlaufenden Stream; deaktivieren, um CPU- und Netzwerkauslastung zu verringern)"
+        }
       },
       "language": {
         "title": "Sprache & Region",

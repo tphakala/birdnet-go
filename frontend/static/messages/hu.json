@@ -4841,7 +4841,11 @@
       },
       "appearance": {
         "title": "Megjelenés",
-        "description": "A BirdNET-Go felület megjelenésének és hangulatának testreszabása"
+        "description": "A BirdNET-Go felület megjelenésének és hangulatának testreszabása",
+        "showAudioLevel": {
+          "label": "Hangszintjelző megjelenítése",
+          "helpText": "Élő hangszintjelző megjelenítése a fejlécben (folyamatos adatfolyamot nyit meg; kapcsolja ki a processzor- és hálózathasználat csökkentéséhez)"
+        }
       },
       "language": {
         "title": "Nyelv és terület",

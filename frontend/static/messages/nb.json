@@ -4841,7 +4841,11 @@
       },
       "appearance": {
         "title": "Utseende",
-        "description": "Tilpass utseendet på BirdNET-Go-grensesnittet"
+        "description": "Tilpass utseendet på BirdNET-Go-grensesnittet",
+        "showAudioLevel": {
+          "label": "Vis lydnivåindikator",
+          "helpText": "Vis direkte lydnivåindikator i toppteksten (åpner en kontinuerlig strøm; deaktiver for å redusere CPU- og nettverksbruk)"
+        }
       },
       "language": {
         "title": "Språk og region",
