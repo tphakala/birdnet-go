@@ -33,14 +33,8 @@ type Note struct {
 	// day's detections into one Note per species whose Time is the latest detection, and carry
 	// the earliest one here so the daily summary can report first heard and last heard apart.
 	// Empty on every other read path.
-	FirstTime   string              `gorm:"-" json:"-"`
-	Model       detection.ModelInfo `gorm:"-"` // Runtime only: model that produced this detection
-	BeginTime   time.Time
-	EndTime     time.Time
-	// TaxonomicClass is runtime-only: GetTopBirdsData fills it with the taxonomic class name
-	// of the species' label (for example "Aves" or "Chiroptera"), so the daily summary can
-	// group rows by taxon. Empty when the label has no class and on every other read path.
-	TaxonomicClass string `gorm:"-" json:"-"`
+	FirstTime string              `gorm:"-" json:"-"`
+	Model     detection.ModelInfo `gorm:"-"` // Runtime only: model that produced this detection
 	// ModelContributions is runtime-only: the legacy notes schema has no column for it, so
 	// it is never persisted through this model. v2only Save reads it to write the
 	// detection_model_contributions rows.

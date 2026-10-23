@@ -189,7 +189,6 @@ type aggregatedBirdInfo struct {
 	MaxConfidence  float64
 	First          string
 	Latest         string
-	TaxonomicClass string
 }
 
 // GetDailySpeciesSummary handles GET /api/v2/analytics/species/daily
@@ -245,6 +244,7 @@ func (c *Handler) GetDailySpeciesSummary(ctx echo.Context) error {
 		// Error logged in helper
 		return c.HandleError(ctx, err, "Failed to build response", http.StatusInternalServerError)
 	}
+	c.applyTaxonomicClasses(queryCtx, result)
 
 	// 5. Sort (limit already applied at database level)
 	sort.Slice(result, func(i, j int) bool {
@@ -387,9 +387,9 @@ func (c *Handler) processSingleDateForBatch(ctx context.Context, selectedDate st
 		)
 		return nil, err
 	}
-
 	// Sort and apply limit
 	result = sortAndLimitSpeciesSummary(result, limit)
+	c.applyTaxonomicClasses(ctx, result)
 
 	return result, nil
 }
@@ -494,7 +494,6 @@ func (c *Handler) updateAggregatedData(aggregatedData map[string]aggregatedBirdI
 			SpeciesCode:    note.SpeciesCode,
 			First:          noteFirstTime(note),
 			Latest:         note.Time,
-			TaxonomicClass: note.TaxonomicClass,
 		}
 	}
 
@@ -510,9 +509,6 @@ func (c *Handler) updateAggregatedData(aggregatedData map[string]aggregatedBirdI
 	}
 	if note.Time > data.Latest {
 		data.Latest = note.Time
-	}
-	if data.TaxonomicClass == "" {
-		data.TaxonomicClass = note.TaxonomicClass
 	}
 
 	aggregatedData[birdKey] = data
@@ -604,7 +600,6 @@ func buildSpeciesSummaryFromData(data *aggregatedBirdInfo, thumbnailURL string) 
 		FirstHeard:     data.First,
 		LatestHeard:    data.Latest,
 		ThumbnailURL:   thumbnailURL,
-		TaxonomicClass: data.TaxonomicClass,
 	}
 }
 

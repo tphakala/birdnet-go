@@ -1438,7 +1438,6 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 		MaxConfidence  float64 `gorm:"column:max_confidence"`
 		LatestTime     int64   `gorm:"column:latest_time"`
 		FirstTime      int64   `gorm:"column:first_time"`
-		TaxonomicClass string  `gorm:"column:taxonomic_class"`
 	}
 
 	var results []speciesAggregate
@@ -1448,8 +1447,6 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 	// detection_predictions table (which only stores secondary predictions).
 	// Secondary sort by scientific_name ensures deterministic results when counts are equal.
 	// Excludes detections marked as false_positive.
-	// taxonomic_class is the class of the species' label; a scientific name normally has one
-	// class across models, and MAX only picks deterministically if two models ever disagree.
 	prefix := ds.manager.TablePrefix()
 	db := ds.manager.DB()
 	err = db.WithContext(ctx).Table(prefix+"detections d").
@@ -1458,11 +1455,9 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 			COUNT(d.id) as count,
 			MAX(d.confidence) as max_confidence,
 			MAX(d.detected_at) as latest_time,
-			MIN(d.detected_at) as first_time,
-			COALESCE(MAX(tc.name), '') as taxonomic_class
+			MIN(d.detected_at) as first_time
 		`).
 		Joins(fmt.Sprintf("JOIN %slabels l ON d.label_id = l.id", prefix)).
-		Joins(fmt.Sprintf("LEFT JOIN %staxonomic_classes tc ON l.taxonomic_class_id = tc.id", prefix)).
 		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
 		Where("d.detected_at >= ? AND d.detected_at < ?", startTime, endTime).
 		Where("d.confidence >= ?", minConfidenceNormalized).
@@ -1498,7 +1493,6 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 			Date:           selectedDate,
 			Time:           latestTime.Format(time.TimeOnly),
 			FirstTime:      firstTime.Format(time.TimeOnly),
-			TaxonomicClass: r.TaxonomicClass,
 		}
 		notes = append(notes, note)
 	}
