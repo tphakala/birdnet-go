@@ -12,7 +12,7 @@
   import RestartBanner from '$lib/desktop/components/ui/RestartBanner.svelte';
   import { fetchRestartStatus } from '$lib/stores/restart.svelte';
   import { appState } from '$lib/stores/appState.svelte';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import { dashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
 
   interface Props {
     title?: string;
@@ -127,7 +127,9 @@
           {accessAllowed}
           showSidebarToggle={true}
           showSearch={currentPage === 'dashboard' || currentPage === 'detections'}
-          showAudioLevel={$dashboardSettings?.showAudioLevel ?? appState.showAudioLevel}
+          showAudioLevel={$settingsDataLoaded
+            ? ($dashboardSettings?.showAudioLevel ?? appState.showAudioLevel)
+            : appState.showAudioLevel}
           onSidebarToggle={handleSidebarToggle}
           onSearch={handleSearch}
           onNavigate={handleNavigate}
