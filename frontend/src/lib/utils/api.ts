@@ -345,8 +345,9 @@ interface FetchOptions extends Omit<RequestInit, 'body'> {
   _csrfRetried?: boolean;
   /**
    * Called with the headers of the final response, success or HTTP error, before
-   * the body is read. Not called for a 401 redirect to login; a CSRF retry calls
-   * it for the retry's response only.
+   * the body is read. Not called for any 401 (the redirect to login, and the
+   * guest and login-request cases that throw an ApiError); a CSRF retry calls it
+   * for the retry's response only.
    */
   onHeaders?: (headers: Headers) => void;
 }
