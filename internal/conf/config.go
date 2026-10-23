@@ -2009,7 +2009,26 @@ type Settings struct {
 	Notification NotificationConfig `yaml:"notification" json:"notification"` // Configuration for push notifications
 
 	Alerting AlertSettings `yaml:"alerting" json:"alerting"` // Alerting rules engine settings
+
+	// revision labels the client-writable state of this snapshot within one
+	// process. Unexported, so JSON, YAML, mapstructure and the schema generator
+	// ignore it, and CloneSettings copies it with the rest of the struct. It is
+	// stamped by UpdateSettings and CompareAndStoreSettings and is zero for a
+	// snapshot published by Load or StoreSettings. Read it through Revision.
+	revision uint64
 }
+
+// Revision identifies the client-writable state of this snapshot within one
+// process. It changes on every publish except the runtime-only range filter
+// writers (UpdateIncludedSpecies, ShouldUpdateRangeFilterToday and
+// ResetRangeFilterUpdateFlag), and a value handed out by a writer is never reused
+// by a later publish, so two snapshots published by a settings writer with the
+// same revision hold the same client-writable content. The range filter species
+// list and its update stamp are served to clients but cannot be written by them,
+// so they can differ between two snapshots that share a revision. Load and
+// StoreSettings do not stamp: a snapshot they publish keeps whatever revision it
+// carries (0 for a new one), so the guarantee above does not cover them.
+func (s *Settings) Revision() uint64 { return s.revision }
 
 // RangeFilterConfig returns a pointer to the range filter settings block. The block
 // is stored under birdnet.rangefilter for historical reasons; callers use this

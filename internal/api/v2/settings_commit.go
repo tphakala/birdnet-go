@@ -48,6 +48,24 @@ type rejectionError struct {
 	err     error
 	message string
 	status  int
+	// etag, when set, is sent as the ETag response header (the current settings
+	// ETag of a refused If-Match).
+	etag string
+}
+
+// errSettingsPreconditionFailed is the cause of a refused If-Match.
+var errSettingsPreconditionFailed = errors.NewStd("settings precondition failed")
+
+// newPreconditionRejection builds the rejection for an If-Match that does not
+// match the current settings; etag is the current ETag, returned to the client
+// so it can reload and retry.
+func newPreconditionRejection(etag string) error {
+	return &rejectionError{
+		err:     errSettingsPreconditionFailed,
+		message: msgSettingsPreconditionFailed,
+		status:  http.StatusPreconditionFailed,
+		etag:    etag,
+	}
 }
 
 // newRejection wraps err as a rejectionError with the given client message
@@ -109,6 +127,8 @@ func (c *Controller) commitSettings(mutate func(current, updated *conf.Settings)
 	if err := mutate(current, updated); err != nil {
 		return nil, nil, err
 	}
+	// No new revision here: only conf stamps one, so a write through a controller
+	// that does not own the global snapshot (tests) leaves its ETag unchanged.
 	c.Settings.Store(updated)
 	return current, updated, nil
 }
@@ -118,13 +138,21 @@ func (c *Controller) commitSettings(mutate func(current, updated *conf.Settings)
 // published snapshot; if another writer published since, that newer snapshot
 // stays (discarding it would lose an install or a species list rebuild), a
 // warning is logged, and errRollbackSuperseded is returned. The caller must then
-// tell the client the change was NOT rolled back. Callers hold c.settingsMutex.
+// tell the client the change was NOT rolled back. For the owner of the global
+// snapshot the restored snapshot carries a fresh revision (see
+// conf.CompareAndStoreSettings), so an ETag issued for the rolled-back snapshot
+// cannot match it; a controller that does not own it restores current as it was. Callers hold c.settingsMutex.
 func (c *Controller) rollbackSettings(current, updated *conf.Settings) error {
-	if c.isGlobalOwner && !conf.CompareAndStoreSettings(updated, current) {
-		apicore.GetLogger().Warn("Settings changed concurrently, leaving the newer snapshot in place instead of rolling back")
-		return errRollbackSuperseded
+	restored := current
+	if c.isGlobalOwner {
+		published, ok := conf.CompareAndStoreSettings(updated, current)
+		if !ok {
+			apicore.GetLogger().Warn("Settings changed concurrently, leaving the newer snapshot in place instead of rolling back")
+			return errRollbackSuperseded
+		}
+		restored = published
 	}
-	c.Settings.Store(current)
+	c.Settings.Store(restored)
 	return nil
 }
 
@@ -133,6 +161,9 @@ func (c *Controller) rollbackSettings(current, updated *conf.Settings) error {
 // snapshot is the usual "settings not initialized" 500; anything else is a 500.
 func (c *Controller) respondCommitError(ctx echo.Context, err error) error {
 	if rej, ok := errors.AsType[*rejectionError](err); ok {
+		if rej.etag != "" {
+			ctx.Response().Header().Set(apicore.HeaderETag, rej.etag)
+		}
 		return c.HandleError(ctx, rej.err, rej.message, rej.status)
 	}
 	if errors.Is(err, conf.ErrSettingsNotLoaded) {

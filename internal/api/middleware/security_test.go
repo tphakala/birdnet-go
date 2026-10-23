@@ -425,6 +425,37 @@ func TestNewCORS_AllowsCacheControlHeader(t *testing.T) {
 		"CORS preflight must allow the Cache-Control request header for cross-origin SSE")
 }
 
+// TestNewCORS_ConditionalWriteHeaders pins the CORS side of the settings
+// ETag and If-Match contract: a cross-origin preflight must allow the If-Match
+// request header, and a cross-origin response must expose ETag so the client can
+// read it.
+func TestNewCORS_ConditionalWriteHeaders(t *testing.T) {
+	t.Parallel()
+
+	corsMiddleware := NewCORS(&SecurityConfig{
+		AllowedOrigins: []string{"*"},
+	})
+	handler := corsMiddleware(func(c echo.Context) error {
+		return c.String(http.StatusOK, "ok")
+	})
+
+	t.Run("preflight allows If-Match", func(t *testing.T) {
+		t.Parallel()
+		c, rec := newCORSTestContext(t, http.MethodOptions, "/api/v2/settings", "https://example.com")
+		c.Request().Header.Set(echo.HeaderAccessControlRequestMethod, http.MethodPut)
+		c.Request().Header.Set(echo.HeaderAccessControlRequestHeaders, "If-Match")
+		require.NoError(t, handler(c))
+		assert.Contains(t, rec.Header().Get(echo.HeaderAccessControlAllowHeaders), "If-Match")
+	})
+
+	t.Run("response exposes ETag", func(t *testing.T) {
+		t.Parallel()
+		c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/settings", "https://example.com")
+		require.NoError(t, handler(c))
+		assert.Contains(t, rec.Header().Get(echo.HeaderAccessControlExposeHeaders), "ETag")
+	})
+}
+
 // TestNewSecureHeaders_HSTSFollowsEchoScheme pins that HSTS is decided by
 // Echo's Context.Scheme(), which Echo#SchemeExtractor controls.
 func TestNewSecureHeaders_HSTSFollowsEchoScheme(t *testing.T) {

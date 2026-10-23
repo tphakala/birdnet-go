@@ -116,6 +116,9 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 
 	// Return a sanitized copy with secrets redacted
 	sanitized := sanitizeSettingsForAPI(settings)
+	// The ETag comes from the same snapshot as the body, so a client that sends it
+	// back as If-Match is asking about exactly the state it was shown.
+	ctx.Response().Header().Set(apicore.HeaderETag, settingsETag(settings))
 	return ctx.JSON(http.StatusOK, sanitized)
 }
 
@@ -199,6 +202,11 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 // either the old snapshot or the new one, never a torn view. Rollback after a
 // side-effect or disk-write failure is a compare-and-swap back to the previous
 // snapshot (rollbackSettings).
+//
+// A request that sends If-Match is applied only if it matches the current
+// settings ETag (settingsETag); otherwise it answers 412 with the current ETag
+// and changes nothing. A request without If-Match is applied as before. The
+// success response carries the ETag of the published snapshot.
 func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Attempting to update settings")
 	// Serialise concurrent settings handlers on this controller. This does not
@@ -220,8 +228,16 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
+	ifMatch, ifMatchPresent := requestIfMatch(ctx.Request())
 	var skippedFields []string
 	current, updated, err := c.commitSettings(func(current, updated *conf.Settings) error {
+		// Refuse a write built on settings that have changed since the client loaded
+		// them. Checked against current inside the writer lock, so nothing can
+		// publish between the check and this write.
+		if err := checkSettingsPrecondition(ifMatch, ifMatchPresent, current); err != nil {
+			return err
+		}
+
 		// Deep-merge the incoming JSON into the clone, preserving keys absent from the
 		// request. This is the same omission-preserving merge PATCH uses per section,
 		// applied to the whole settings object; Go map-typed fields (species config,
@@ -317,6 +333,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			logger.Bool("disableSaveSettings", c.DisableSaveSettings))
 	}
 
+	// The ETag of the snapshot this write published, so the client can send it as
+	// the next If-Match without a GET. A writer that published since makes it stale,
+	// which is the point.
+	ctx.Response().Header().Set(apicore.HeaderETag, settingsETag(updated))
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":          "Settings updated successfully",
 		"skippedFields":    skippedFields,
@@ -388,6 +408,9 @@ func parseAndValidateJSON(ctx echo.Context) (json.RawMessage, error) {
 // (conf.UpdateSettings). Rollback on failure is a compare-and-swap back to the
 // previous snapshot. Keeps PATCH race-free against basepath middleware reads
 // and any other reader that goes through conf.GetSettings().
+//
+// If-Match and the ETag response header work as on UpdateSettings: the ETag is
+// the one for the whole settings, not for the section.
 func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
@@ -404,8 +427,14 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
+	ifMatch, ifMatchPresent := requestIfMatch(ctx.Request())
 	var skippedFields []string
 	current, updated, err := c.commitSettings(func(current, updated *conf.Settings) error {
+		// See UpdateSettings: the precondition is checked inside the writer lock.
+		if err := checkSettingsPrecondition(ifMatch, ifMatchPresent, current); err != nil {
+			return err
+		}
+
 		if err := updateSettingsSection(updated, section, requestBody); err != nil {
 			return newRejection(err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 		}
@@ -496,6 +525,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// Rebuild taxonomy synonym lookup cache if overrides changed
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
+	ctx.Response().Header().Set(apicore.HeaderETag, settingsETag(updated))
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":          fmt.Sprintf("%s settings updated successfully", section),
 		"skippedFields":    skippedFields,
@@ -1597,6 +1627,11 @@ func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 	//nolint:gocritic // Need index i for settingsValue.Field(i) call
 	for i := range settingsType.NumField() {
 		field := settingsType.Field(i)
+		// Unexported fields (the snapshot revision) are not sections, and calling
+		// Interface on one panics.
+		if !field.IsExported() {
+			continue
+		}
 		if strings.EqualFold(field.Name, section) {
 			return settingsValue.Field(i).Interface(), nil
 		}

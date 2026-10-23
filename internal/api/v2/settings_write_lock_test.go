@@ -165,8 +165,7 @@ func TestRollbackSettings(t *testing.T) {
 
 			if tt.wantRolledBack {
 				require.NoError(t, rbErr)
-				assert.Same(t, initial, conf.GetSettings())
-				assert.Same(t, initial, c.ControllerSettings())
+				assertRestoredContent(t, initial, c)
 				return
 			}
 			require.ErrorIs(t, rbErr, errRollbackSuperseded)
@@ -227,8 +226,7 @@ func TestUpdateSettings_SaveFailureRollsBack(t *testing.T) {
 
 			assert.Equal(t, http.StatusInternalServerError, rec.Code)
 			assert.Contains(t, rec.Body.String(), msgSaveFailedRolledBack)
-			assert.Same(t, initial, conf.GetSettings(), "a failed save must restore the previous snapshot")
-			assert.Same(t, initial, c.ControllerSettings())
+			assertRestoredContent(t, initial, c)
 		})
 	}
 }
@@ -260,8 +258,7 @@ func TestUpdateAndSaveSettings_SaveFailureRollsBack(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), msgSaveFailedRolledBack)
-	assert.Same(t, initial, conf.GetSettings(), "a failed save must restore the previous snapshot")
-	assert.Same(t, initial, c.ControllerSettings())
+	assertRestoredContent(t, initial, c)
 }
 
 // TestUpdateAndSaveSettings_MintsProfilingToken pins that the hand-off writer,
@@ -384,8 +381,7 @@ func TestFinishSettingsWrite_RollbackMessages(t *testing.T) {
 			assert.Equal(t, tt.wantMsg, msg)
 			final := conf.GetSettings()
 			if tt.wantRolledBack {
-				assert.Same(t, initial, final)
-				assert.Same(t, initial, c.ControllerSettings())
+				assertRestoredContent(t, initial, c)
 				if tt.failSave {
 					assert.Zero(t, runtime.SetMutexProfileFraction(-1),
 						"a rolled-back save must restore the profiling rate of the surviving config")
@@ -424,4 +420,17 @@ func TestUpdateSettings_OwnerWithoutGlobalFails(t *testing.T) {
 	assert.Equal(t, http.StatusInternalServerError, rec.Code)
 	assert.Contains(t, rec.Body.String(), "Failed to get settings")
 	assert.Nil(t, conf.GetSettings(), "nothing may be published as the global")
+}
+
+// assertRestoredContent pins that a rolled-back write left the published
+// snapshot holding the pre-write content. The rollback publishes a clone under a
+// fresh revision, so the pointer is not the original one; it must be the one the
+// controller serves.
+func assertRestoredContent(t *testing.T, initial *conf.Settings, c *Controller) {
+	t.Helper()
+	published := conf.GetSettings()
+	assert.Equal(t, initial.Realtime.Interval, published.Realtime.Interval, "a rollback must restore the previous interval")
+	assert.Equal(t, initial.Models.Enabled, published.Models.Enabled, "a rollback must restore the previous models")
+	assert.NotEqual(t, initial.Revision(), published.Revision(), "a rollback must publish under a fresh revision")
+	assert.Same(t, published, c.ControllerSettings())
 }
