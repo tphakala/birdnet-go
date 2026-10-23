@@ -128,6 +128,14 @@ describe('Species Settings Store', () => {
     beforeEach(() => {
       // saveSettings refuses until a load has succeeded
       settingsStore.update(state => ({ ...state, dataLoaded: true }));
+      // The server holds what the store last confirmed, which a save's rebase GET reads
+      vi.mocked(settingsAPI.load).mockImplementation(async () =>
+        JSON.parse(JSON.stringify(get(settingsStore).originalData))
+      );
+    });
+
+    afterEach(() => {
+      vi.mocked(settingsAPI.load).mockReset();
     });
 
     it('should send zero values to API when saving', async () => {
