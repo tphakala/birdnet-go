@@ -284,7 +284,6 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 			return newRejection(err, "Invalid settings", http.StatusBadRequest)
 		}
 
-		ensureProfilingTokenForSave(updated)
 		return nil
 	})
 	if err != nil {
@@ -299,30 +298,8 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// against the published pair. handleSettingsChanges is read-only on both, and
 	// it runs outside the settings writer lock because it reaches into the
 	// classifier, whose model manager lock is held by callers of that lock.
-	if err := c.handleSettingsChanges(current, updated); err != nil {
-		// Rollback: take back our own snapshot so in-memory state matches what is on
-		// disk (which was never overwritten), unless another writer published on top.
-		rbErr := c.rollbackSettings(current, updated)
-		msg := rollbackMessage(rbErr, msgApplyFailedRolledBack, msgApplyFailedNotRolledBack)
-		c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
+	if msg, err := c.finishSettingsWrite(current, updated, func() error { return c.handleSettingsChanges(current, updated) }); err != nil {
 		return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
-	}
-
-	// Persist to disk only when this controller owns the global snapshot
-	// (production path) AND DisableSaveSettings is not set. conf.SaveSettings
-	// reads conf.GetSettings internally; persisting from a test that stored a
-	// standalone snapshot via c.Settings.Store would save an unrelated snapshot.
-	if c.isGlobalOwner && !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			// Rollback in-memory; disk write never happened successfully.
-			rbErr := c.rollbackSettings(current, updated)
-			msg := rollbackMessage(rbErr, msgSaveFailedRolledBack, msgSaveFailedNotRolledBack)
-			if rbErr == nil {
-				restoreProfilingRates(current)
-			}
-			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
-			return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
-		}
 	}
 
 	// Emit settings_saved event with key-level diff (fire-and-forget).
@@ -331,7 +308,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	telemetry.UpdateTelemetryEnabled()
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
-	if c.isGlobalOwner && !c.DisableSaveSettings {
+	if c.persistsSettings() {
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Settings updated and saved successfully",
 			logger.Int("skipped_fields_count", len(skippedFields)))
 	} else {
@@ -353,13 +330,12 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 // runtime on an instance with no authentication provider yields a usable
 // credential rather than an endpoint that refuses every request until restart.
 //
-// It is called from each of the three commitSettings mutate functions rather
-// than from one shared save helper because the settings-write paths each build
-// their own publish-then-persist sequence. Hooking only one of them is exactly
-// how the first attempt at this shipped a dead feature: updateAndSaveSettings
-// is used by the TLS, integrations and detections writers, none of which can
-// carry a diagnostics change, so the two handlers that CAN (PUT /settings and
-// PATCH /settings/:section) never minted anything.
+// commitSettings calls it once, after the mutate function succeeds, so every
+// settings writer mints: PUT /settings, PATCH /settings/:section and the
+// updateAndSaveSettings hand-off alike. Hooking only some writers is how the
+// first attempt at this shipped a dead feature: the TLS, integrations and
+// detections writers cannot carry a diagnostics change, so the two handlers
+// that can never minted anything.
 //
 // EnsureProfilingToken is a no-op unless profiling is enabled, the token is
 // empty, and no auth provider is configured, so the normal save path pays a
@@ -491,37 +467,21 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			return newRejection(err, fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
 		}
 
-		ensureProfilingTokenForSave(updated)
 		return nil
 	})
 	if err != nil {
 		return c.respondCommitError(ctx, err)
 	}
 
-	if err := c.handleSettingsChanges(current, updated); err != nil {
-		rbErr := c.rollbackSettings(current, updated)
-		msg := rollbackMessage(rbErr, msgApplyFailedRolledBack, msgApplyFailedNotRolledBack)
+	if msg, err := c.finishSettingsWrite(current, updated, func() error { return c.handleSettingsChanges(current, updated) }); err != nil {
 		return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
 	}
-
-	// Persist to disk only when this controller owns the global snapshot
-	// AND the test did not disable save. conf.SaveSettings persists the
-	// conf.GetSettings value, which would be wrong under a standalone
-	// snapshot injected by a test that bypassed the global publish.
-	if c.isGlobalOwner && !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			rbErr := c.rollbackSettings(current, updated)
-			msg := rollbackMessage(rbErr, msgSaveFailedRolledBack, msgSaveFailedNotRolledBack)
-			if rbErr == nil {
-				restoreProfilingRates(current)
-			}
-			return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
-		}
+	if c.persistsSettings() {
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
 			logger.String("section", section))
 	}
 
-	if !c.isGlobalOwner || c.DisableSaveSettings {
+	if !c.persistsSettings() {
 		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Section settings updated (save to disk skipped)",
 			logger.String("section", section),
 			logger.Bool("publishGlobal", c.isGlobalOwner),

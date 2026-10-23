@@ -74,12 +74,24 @@ func (r *rejectionError) Unwrap() error { return r.err }
 // controller that does not own the global (tests) works on its own snapshot
 // only and never touches the global.
 //
+// Every write that goes through here also gets the profiling token minted (see
+// ensureProfilingTokenForSave) after mutate succeeds, so callers do not mint.
+//
 // Callers hold c.settingsMutex. mutate runs under the writer lock and must obey
 // the rules documented on conf.UpdateSettings: it may read, validate and log, and must
 // not call into the classifier, the orchestrator, the model manager or
 // handleSettingsChanges. Read the request body before calling this, not inside
 // mutate, so a slow client cannot hold the writer lock.
 func (c *Controller) commitSettings(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error) {
+	inner := mutate
+	mutate = func(cur, upd *conf.Settings) error {
+		if err := inner(cur, upd); err != nil {
+			return err
+		}
+		ensureProfilingTokenForSave(upd)
+		return nil
+	}
+
 	if c.isGlobalOwner {
 		current, updated, err = conf.UpdateSettings(mutate)
 		if err != nil {
@@ -130,6 +142,56 @@ func (c *Controller) respondCommitError(ctx echo.Context, err error) error {
 	return c.HandleError(ctx, err, "Failed to update settings", http.StatusInternalServerError)
 }
 
+// persistsSettings reports whether a settings write is saved to disk: only the
+// controller that owns the global snapshot persists, and tests can switch it off
+// with DisableSaveSettings.
+func (c *Controller) persistsSettings() bool {
+	return c.isGlobalOwner && !c.DisableSaveSettings
+}
+
+// finishSettingsWrite runs the steps that follow a commitSettings publish: the
+// optional apply step (handleSettingsChanges for the HTTP handlers) and, for the
+// owner of the global snapshot unless DisableSaveSettings is set, the disk save.
+// When either fails the published snapshot is taken back by rollbackSettings, and
+// the profiling sampling rates are restored after a rolled-back save failure. It
+// returns the client message that matches the outcome (a "not rolled back"
+// variant when another writer published on top, see rollbackMessage) together
+// with the failure, or "", nil on success. Each failure is logged through the
+// API logger when it is enabled. Callers hold c.settingsMutex.
+//
+// It runs outside the settings writer lock, because apply reaches into the
+// classifier; never call it from a commitSettings mutate.
+func (c *Controller) finishSettingsWrite(current, updated *conf.Settings, apply func() error) (clientMsg string, err error) {
+	if apply != nil {
+		if err := apply(); err != nil {
+			// Take back our own snapshot so in-memory state matches what is on disk
+			// (which was never overwritten), unless another writer published on top.
+			rbErr := c.rollbackSettings(current, updated)
+			c.LogErrorIfEnabled("Failed to apply settings changes, rolling back",
+				logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
+			return rollbackMessage(rbErr, msgApplyFailedRolledBack, msgApplyFailedNotRolledBack), err
+		}
+	}
+
+	// Persist to disk only when this controller owns the global snapshot
+	// (production path) AND DisableSaveSettings is not set. conf.SaveSettings
+	// reads conf.GetSettings internally; persisting from a test that stored a
+	// standalone snapshot via c.Settings.Store would save an unrelated snapshot.
+	if c.persistsSettings() {
+		if err := conf.SaveSettings(); err != nil {
+			// Roll back in-memory; the disk write never happened successfully.
+			rbErr := c.rollbackSettings(current, updated)
+			if rbErr == nil {
+				restoreProfilingRates(current)
+			}
+			c.LogErrorIfEnabled("Failed to save settings to disk, rolling back",
+				logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
+			return rollbackMessage(rbErr, msgSaveFailedRolledBack, msgSaveFailedNotRolledBack), err
+		}
+	}
+	return "", nil
+}
+
 // updateAndSaveSettings publishes a settings change built by mutate and
 // persists it to disk. It is the hand-off for the sub-package writers (TLS,
 // MQTT TLS, species exclusion) that read-modify-write settings. Must be called
@@ -141,24 +203,13 @@ func (c *Controller) respondCommitError(ctx echo.Context, err error) error {
 // writer published on top in the meantime the newer snapshot is kept and the
 // returned error says the change could not be rolled back.
 func (c *Controller) updateAndSaveSettings(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error) {
-	current, updated, err = c.commitSettings(func(cur, upd *conf.Settings) error {
-		if err := mutate(cur, upd); err != nil {
-			return err
-		}
-		ensureProfilingTokenForSave(upd)
-		return nil
-	})
+	current, updated, err = c.commitSettings(mutate)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	if c.isGlobalOwner && !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			msg := rollbackMessage(c.rollbackSettings(current, updated),
-				"failed to save settings",
-				"failed to save settings and the change could not be rolled back because settings changed at the same time")
-			return nil, nil, fmt.Errorf("%s: %w", msg, err)
-		}
+	if msg, err := c.finishSettingsWrite(current, updated, nil); err != nil {
+		return nil, nil, fmt.Errorf("%s: %w", msg, err)
 	}
 
 	c.emitSettingsSaved(current, updated)
