@@ -1431,11 +1431,11 @@ function normalizeLoadedSettings(data: SettingsFormData): SettingsFormData {
 
 /** Fetches the current server settings, normalized like a load. Throws on a malformed response. */
 async function fetchServerSnapshot(): Promise<SettingsFormData> {
-  const data: unknown = await settingsAPI.load();
+  const data = await settingsAPI.load();
   if (!isPlainObject(data)) {
     throw new Error(t('settings.errors.loadFailed'));
   }
-  return normalizeLoadedSettings(data as unknown as SettingsFormData);
+  return normalizeLoadedSettings(data);
 }
 
 /** Returns the lowercased model aliases of a models.enabled list, or null when it is not a list. */
