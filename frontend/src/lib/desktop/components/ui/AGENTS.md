@@ -10,7 +10,7 @@ There are dozens of primitives here; check before creating a new one, and
 prefer composition or a non-breaking extension over a near-duplicate.
 
 - Layout: `Card`, `CollapsibleCard`, `CollapsibleSection`
-- Forms: `Input`, `Select`, `DatePicker` (settings controls live in `../forms/`)
+- Forms: `Input`, `Select`, `DatePicker`, `RadioCardGroup` (settings controls live in `../forms/`)
 - Feedback: `Badge`, `ProgressBar`, `LoadingSpinner`, `ErrorAlert`, `EmptyState`
 - Navigation and overlays: `Modal`, `Pagination`, `ActionMenu`
 - Data display: `ProcessTable`, `SystemInfoCard`

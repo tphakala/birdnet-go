@@ -9,9 +9,18 @@
   interface Props {
     className?: string;
     id?: string;
+    /** Accessible name for the trigger when no `<label for>` points at `id` */
+    'aria-label'?: string;
+    /** Space-separated ids of elements that describe the selector */
+    'aria-describedby'?: string;
   }
 
-  let { className = '', id }: Props = $props();
+  let {
+    className = '',
+    id,
+    'aria-label': ariaLabel,
+    'aria-describedby': ariaDescribedBy,
+  }: Props = $props();
 
   // Extended option type for locale with typed locale code
   interface LocaleOption extends SelectOption {
@@ -52,6 +61,8 @@
   groupBy={false}
   {className}
   {id}
+  aria-label={ariaLabel}
+  aria-describedby={ariaDescribedBy}
   onChange={handleLanguageChange}
 >
   {#snippet renderOption(option)}

@@ -128,7 +128,7 @@ type ModelInfo struct {
 	DetectionVersion string        // Database model version (e.g., "2.4", "V2")
 	Description      string        // Description of the model
 	Spec             ModelSpec     // Audio requirements (sample rate, clip length)
-	Overlap          time.Duration // Resolved analysis-window overlap for this model under current settings. Stamped by the Orchestrator via ResolveModelOverlap; zero on the static registry template. Pass to Spec.BufferDimensions/BufferInterval.
+	Overlap          time.Duration // Resolved analysis-window overlap for this model under the effective base overlap (published cadence plan, else configured). Stamped by the Orchestrator via ResolveModelOverlap; zero on the static registry template. Pass to Spec.BufferDimensions/BufferInterval.
 	ConfigAliases    []string      // User-facing config IDs (e.g., ["birdnet"])
 	SupportedLocales []string      // List of supported locale codes
 	DefaultLocale    string        // Default locale if none is specified

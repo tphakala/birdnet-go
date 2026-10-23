@@ -9,7 +9,7 @@
 //   - Context-aware logging with automatic trace ID extraction
 //   - YAML-based configuration
 //   - Log rotation support via SIGHUP
-//   - Zero external dependencies (uses only Go standard library)
+//   - Built on log/slog with no third-party logging library; only the GORM and Echo adapters import third-party packages
 //
 // # Quick Start
 //

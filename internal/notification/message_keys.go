@@ -97,6 +97,9 @@ const (
 	MsgErrAlertInvalidEscalation = "errors.alert.invalidEscalation"
 	MsgErrAlertEngineUnavailable = "errors.alert.engineUnavailable"
 
+	// Insights errors
+	MsgErrInsightsV2Required = "errors.insights.v2Required"
+
 	// Detection errors
 	MsgErrDetectionInvalidDate = "errors.detection.invalidDate"
 
@@ -234,4 +237,20 @@ const (
 	MsgInferenceFailingTitle            = "notifications.content.inferenceFailing.title"
 	MsgInferenceFailingMessage          = "notifications.content.inferenceFailing.message"
 	MsgInferenceFailingNonFiniteMessage = "notifications.content.inferenceFailing.nonFiniteMessage"
+
+	// Analysis cadence notices: the first cadence plan of the process limits the
+	// analysis overlap to what the hardware sustains (capped), or even zero overlap
+	// exceeds it (overloaded).
+	MsgCadenceCappedTitle       = "notifications.content.analysis.cadenceCappedTitle"
+	MsgCadenceCappedMessage     = "notifications.content.analysis.cadenceCappedMessage"
+	MsgCadenceOverloadedTitle   = "notifications.content.analysis.cadenceOverloadedTitle"
+	MsgCadenceOverloadedMessage = "notifications.content.analysis.cadenceOverloadedMessage"
+
+	// Storage notices: key paths sit on a container's own layer or a memory
+	// filesystem (lost when the container is recreated), or in an anonymous volume
+	// (data that can seem lost after a fresh container start).
+	MsgStorageNotPersistentTitle     = "notifications.content.storage.notPersistentTitle"
+	MsgStorageNotPersistentMessage   = "notifications.content.storage.notPersistentMessage"
+	MsgStorageAnonymousVolumeTitle   = "notifications.content.storage.anonymousVolumeTitle"
+	MsgStorageAnonymousVolumeMessage = "notifications.content.storage.anonymousVolumeMessage"
 )

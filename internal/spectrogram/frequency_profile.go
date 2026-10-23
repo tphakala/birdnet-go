@@ -1,35 +1,53 @@
 package spectrogram
 
 // FrequencyProfile controls spectrogram frequency range and resampling per
-// detection. The gate is the detection's model type: bat models are resampled
-// to batResampleHz (Nyquist = 128 kHz) so the fixed 0-128 kHz axis in the UI
-// is always accurate regardless of the original capture rate; everything else
-// gets bird defaults (resample to birdResampleHz).
+// detection. The gate is the detection's model type: bat models keep the clip's
+// native capture rate, so the image spans 0 to half of that rate (a 384 kHz clip
+// shows 0-192 kHz, a 192 kHz clip 0-96 kHz); everything else gets bird defaults
+// (drawn for birdResampleHz, an axis of 0 to 12 kHz).
 type FrequencyProfile struct {
-	ResampleRate int    // Target sample rate in Hz; 0 means keep native rate
+	// ResampleRate is the rate in Hz the image is drawn for: the axis spans 0 to
+	// half of it. 0 keeps the clip's native rate. The renderer analyses a clip at an
+	// accepted multiple of it without resampling (see analysisSource) and resamples
+	// any other clip.
+	ResampleRate int
 	suffix       string // Cache-filename token identifying the profile; "" for the default bird render
 }
 
 const (
 	birdResampleHz  = 24000
-	batResampleHz   = 256000 // Nyquist = 128 kHz; matches the fixed 0-128 kHz overlay axis
-	modelTypeBatStr = "bat"  // ai_models.model_type value that selects the bat profile
+	modelTypeBatStr = "bat" // ai_models.model_type value that selects the bat profile
 
 	// batCacheSuffix is the cache-filename token for bat spectrograms (e.g.
-	// "<clip>_1026px-bat-v2.png"). It is intentionally separate from
+	// "<clip>_1026px-bat-v3.png"). It is intentionally separate from
 	// modelTypeBatStr (the stored model-type value) and carries a version marker:
 	// bumping it changes the on-disk filename, so a corrected render lands at a new
 	// path instead of colliding with a stale bat image cached by an older generator.
-	// Bumped to "-v2" alongside the FFmpeg-only fallback resample fix (#3689): bat
-	// clips rendered via the Sox-failure fallback before that fix carry a frequency
-	// axis that disagrees with the 0-128 kHz overlay, and would otherwise be served
-	// from cache indefinitely. Only bat files carry a suffix, so this invalidates
-	// just bat spectrograms; bird renders (empty suffix) are untouched. Pre-bump
-	// "-bat.png" files are left on disk (lazily superseded by the new "-bat-v2"
-	// render) and reaped when the detection is deleted (the delete scan matches any
-	// "<base>_<width>px-" prefix), so the only cost is a tiny transient orphan.
-	batCacheSuffix = "bat-v2"
+	// "-v3" marks the move from a fixed 256 kHz resample (0-128 kHz axis) to the
+	// clip's native rate, so every earlier bat render has a different frequency
+	// range and must not be served for a current request. Only bat files carry a
+	// suffix, so this invalidates just bat spectrograms; bird renders (empty
+	// suffix) are untouched. Earlier "-bat-v2" and "-bat" files are removed when a
+	// fresh "-bat-v3" render is written (see SupersededSuffixesForToken) and are
+	// otherwise reaped when the detection is deleted (the delete scan matches any
+	// "<base>_<width>px-" prefix).
+	batCacheSuffix = "bat-v3"
+
+	// batCacheSuffixV2 and batCacheSuffixLegacy are the earlier bat tokens whose
+	// renders batCacheSuffix supersedes. The legacy token predates versioning.
+	batCacheSuffixV2     = "bat-v2"
+	batCacheSuffixLegacy = "bat"
 )
+
+// SupersededSuffixesForToken returns the older cache tokens that the given
+// token replaces, newest first, or nil when it replaces none. The caller may
+// delete files carrying those tokens once a render with the current token exists.
+func SupersededSuffixesForToken(token string) []string {
+	if token == batCacheSuffix {
+		return []string{batCacheSuffixV2, batCacheSuffixLegacy}
+	}
+	return nil
+}
 
 // BirdProfile returns the default frequency profile for bird detections.
 func BirdProfile() FrequencyProfile {
@@ -38,14 +56,12 @@ func BirdProfile() FrequencyProfile {
 	}
 }
 
-// BatProfile returns the frequency profile for bat detections. The audio is
-// resampled to batResampleHz (256 kHz, Nyquist = 128 kHz) so the spectrogram
-// always spans the full 0-128 kHz range that the UI axis hardcodes,
-// regardless of the original capture rate (192/256/384 kHz are all supported).
+// BatProfile returns the frequency profile for bat detections. The audio keeps
+// the clip's native capture rate (ResampleRate 0), so the spectrogram spans 0 to
+// half of that rate whatever it is (192/256/384 kHz are all supported).
 func BatProfile() FrequencyProfile {
 	return FrequencyProfile{
-		ResampleRate: batResampleHz,
-		suffix:       batCacheSuffix,
+		suffix: batCacheSuffix,
 	}
 }
 

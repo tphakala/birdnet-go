@@ -1,0 +1,123 @@
+name: Build version string
+
+# Guards scripts/build-version.sh, the single source of the version string
+# baked into builds. It runs the script's unit tests, shellchecks it, fails when
+# another build file or script calls git describe, and (on the upstream
+# repository only) checks the script against the real tags: HEAD must print the
+# expected form, and the latest published release tag, checked out in a
+# worktree, must print exactly that tag. The daily schedule and the release
+# trigger catch tag-naming changes that no pull request would touch.
+
+on:
+  pull_request:
+    paths:
+      - 'Taskfile.yml'
+      - '.air.toml'
+      - 'Dockerfile'
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - '**.sh'
+  push:
+    branches:
+      - main
+    paths:
+      - 'Taskfile.yml'
+      - '.air.toml'
+      - 'Dockerfile'
+      - '.github/workflows/**'
+      - '.github/actions/**'
+      - '**.sh'
+  schedule:
+    - cron: '17 4 * * *'
+  release:
+    types: [published]
+  workflow_dispatch:
+
+concurrency:
+  group: build-version-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  script:
+    name: build-version.sh (shellcheck, unit tests, single source)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: ShellCheck
+        run: |
+          shellcheck --version
+          shellcheck -S warning scripts/build-version.sh scripts/build-version_test.sh
+
+      - name: Unit tests
+        run: bash scripts/build-version_test.sh
+
+      - name: Single source of truth
+        run: |
+          # Only scripts/build-version.sh may decide the version. This workflow
+          # is excluded because it has to name the pattern it searches for.
+          if git grep -nE 'git[[:space:]]+describe' -- '*.yml' '*.yaml' '*.toml' '*Dockerfile*' '*.sh' ':!.github/workflows/build-version.yml'; then
+            echo "::error::Derive versions with scripts/build-version.sh instead of git describe"
+            exit 1
+          fi
+
+  live:
+    name: build-version.sh against the real tags
+    # Forks have neither the upstream tags nor releases to compare with.
+    if: github.repository == 'tphakala/birdnet-go'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: HEAD prints the expected form
+        run: |
+          set -eu
+          actual=$(BUILD_VERSION='' sh scripts/build-version.sh)
+          # Computed with plain git, independently of the script's tag logic.
+          tags_on_head=$(git tag --points-at HEAD | grep -vx manifest || true)
+          if [ -n "$tags_on_head" ]; then
+            if ! printf '%s\n' "$tags_on_head" | grep -qxF "$actual"; then
+              echo "::error::HEAD carries tags [$tags_on_head] but the script printed $actual"
+              exit 1
+            fi
+            echo "OK: HEAD is on a release tag, script printed $actual"
+            exit 0
+          fi
+          expected="$(TZ=UTC0 git log -1 --date=format-local:%Y%m%d --format=%cd HEAD)-g$(git rev-parse --short=9 HEAD)-dev"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Expected $expected, script printed $actual"
+            exit 1
+          fi
+          echo "OK: $actual"
+
+      - name: Latest release tag prints as itself
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -eu
+          tag=$(gh api "repos/${REPO}/releases/latest" --jq .tag_name)
+          echo "Latest release tag: ${tag}"
+          git worktree add --no-checkout --detach "$RUNNER_TEMP/release-tree" "refs/tags/${tag}"
+          # Only the git metadata is needed, so skip the checkout (the release
+          # tree carries the models) and copy in the script under test.
+          mkdir -p "$RUNNER_TEMP/release-tree/scripts"
+          cp scripts/build-version.sh "$RUNNER_TEMP/release-tree/scripts/build-version.sh"
+          actual=$(cd "$RUNNER_TEMP/release-tree" && BUILD_VERSION='' sh scripts/build-version.sh)
+          git worktree remove --force "$RUNNER_TEMP/release-tree"
+          if [ "$actual" != "$tag" ]; then
+            echo "::error::Release tag ${tag} built as ${actual}"
+            exit 1
+          fi
+          echo "OK: ${actual}"

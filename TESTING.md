@@ -320,10 +320,9 @@ func TestMain(m *testing.M) {
 Start from an empty ignore list rather than copying one from another test, and
 never add a broad ignore that can hide real leaks (`sync.runtime_notifyListWait`
 hides any goroutine stuck in `sync.Cond.Wait`). Add an ignore only for a named goroutine
-you have seen in a failure and cannot stop, such as the go-cache janitor
-(`goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run")`),
-which has no Stop method and exits only when its cache is garbage collected,
-something goleak's retry cannot wait for. Do not ignore a goroutine you can
+you have seen in a failure and cannot stop, such as a third-party worker with
+no Stop method that exits only when it is garbage collected, something goleak's
+retry cannot wait for. Do not ignore a goroutine you can
 stop: `database/sql.(*DB).connectionOpener`, for example, exits when the
 database is closed, so close it in `t.Cleanup` instead. goleak already filters
 the test runner's own goroutines, so never add `testing.(*T).Run` or
@@ -401,10 +400,11 @@ regenerate every mock:
 go generate ./internal/datastore   # runs mockery over the whole .mockery.yaml
 ```
 
-Use mockery v2 (`.mockery.yaml` is in the v2 format), v2.53.7 or a later v2
-release: `go install github.com/vektra/mockery/v2@v2.53.7`. mockery is not a
+Use mockery v2 (`.mockery.yaml` is in the v2 format), v2.53.8 or a later v2
+release: `go install github.com/vektra/mockery/v2@v2.53.8`. mockery is not a
 `go.mod` tool. Older v2 releases such as v2.53.6 were built against an older
-`golang.org/x/tools` and fail to load this module's packages on Go 1.27.
+`golang.org/x/tools` and fail to load this module's packages on Go 1.27; v2.53.7
+fails on 1.27.2 with an export data version error.
 Regenerating with a newer version rewrites the version line in every mock
 header; commit that with your change. See
 `internal/datastore/mocks/README.md` for mock usage patterns.

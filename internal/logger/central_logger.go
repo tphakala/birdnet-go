@@ -54,7 +54,8 @@ func SetGlobal(cl *CentralLogger) {
 }
 
 // Global returns the global CentralLogger instance.
-// If no logger has been set via SetGlobal, it returns a fallback console logger.
+// If no logger has been set via SetGlobal, it returns a fallback console logger
+// whose output goes through the shared non-blocking stdout writer.
 func Global() *CentralLogger {
 	globalLoggerMu.Lock()
 	defer globalLoggerMu.Unlock()
@@ -76,9 +77,10 @@ func Global() *CentralLogger {
 		timezone:      time.Local,
 		moduleWriters: make(map[string]*BufferedFileWriter),
 		moduleLevels:  make(map[string]slog.Level),
+		console:       stdoutConsole,
 	}
 	// Create console-only base handler
-	globalLogger.baseHandler = newTextHandler(os.Stdout, slog.LevelInfo, time.Local)
+	globalLogger.baseHandler = newTextHandler(stdoutConsole, slog.LevelInfo, time.Local)
 
 	return globalLogger
 }
@@ -130,13 +132,22 @@ type CentralLogger struct {
 	moduleWriters map[string]*BufferedFileWriter // Per-module buffered writers
 	moduleLevels  map[string]slog.Level          // Per-module log levels
 	extraHandlers []slog.Handler                 // Additional handlers injected at construction
+	console       *nonBlockingWriter             // Shared console sink, set at construction and read-only afterwards so Module() needs no extra locking
 	mu            sync.RWMutex                   // Protects concurrent access
 }
 
 // NewCentralLogger creates a centralized logger with module routing.
 // Optional extraHandlers are appended to the base handler chain so they
 // receive every log record (e.g. a health-check error buffer handler).
+// Console output goes through the shared non-blocking stdout writer, so a
+// stalled stdout reader never blocks a log call.
 func NewCentralLogger(cfg *LoggingConfig, extraHandlers ...slog.Handler) (*CentralLogger, error) {
+	return newCentralLogger(cfg, stdoutConsole, extraHandlers...)
+}
+
+// newCentralLogger is NewCentralLogger with an injectable console sink, so
+// tests can substitute their own writer for the process-wide stdout one.
+func newCentralLogger(cfg *LoggingConfig, console *nonBlockingWriter, extraHandlers ...slog.Handler) (*CentralLogger, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("logging config cannot be nil")
 	}
@@ -167,6 +178,7 @@ func NewCentralLogger(cfg *LoggingConfig, extraHandlers ...slog.Handler) (*Centr
 		moduleWriters: make(map[string]*BufferedFileWriter),
 		moduleLevels:  make(map[string]slog.Level),
 		extraHandlers: extraHandlers,
+		console:       console,
 	}
 
 	// Parse module levels
@@ -219,7 +231,7 @@ func (cl *CentralLogger) createBaseHandler() error {
 	// Console handler - USE TEXT FORMAT for human-readable output
 	if cl.config.Console != nil && cl.config.Console.Enabled {
 		consoleLevel := parseLogLevel(cl.config.Console.Level)
-		handlers = append(handlers, newTextHandler(os.Stdout, consoleLevel, cl.timezone))
+		handlers = append(handlers, newTextHandler(cl.console, consoleLevel, cl.timezone))
 	}
 
 	// Main file handler - USE JSON FORMAT for machine parsing
@@ -255,7 +267,7 @@ func (cl *CentralLogger) createBaseHandler() error {
 
 	if len(handlers) == 0 {
 		// Fallback to stdout text handler if nothing is configured
-		handlers = append(handlers, newTextHandler(os.Stdout, parseLogLevel(cl.config.DefaultLevel), cl.timezone))
+		handlers = append(handlers, newTextHandler(cl.console, parseLogLevel(cl.config.DefaultLevel), cl.timezone))
 	}
 
 	// Append any extra handlers injected at construction (e.g. health error buffer)
@@ -310,7 +322,7 @@ func (cl *CentralLogger) Module(name string) Logger {
 		// modules with debug-level file output don't flood stdout.
 		if moduleConfig.ConsoleAlso && cl.config.Console != nil && cl.config.Console.Enabled {
 			consoleLevel := parseLogLevel(cl.config.Console.Level)
-			handlers = append(handlers, newTextHandler(os.Stdout, consoleLevel, cl.timezone))
+			handlers = append(handlers, newTextHandler(cl.console, consoleLevel, cl.timezone))
 		}
 
 		// Include extra handlers (e.g. health error buffer) so modules with
@@ -398,10 +410,20 @@ func (cl *CentralLogger) GetDefaultOutputPath() string {
 	return ""
 }
 
-// Close closes all buffered writers and their underlying files
+// Close closes all buffered writers and their underlying files. It first waits
+// up to consoleFlushTimeout for queued console output to be written, then
+// records any console drop count that is still pending in the main log file.
 func (cl *CentralLogger) Close() error {
 	if cl == nil {
 		return nil
+	}
+
+	// Outside cl.mu: the drainer's report path takes cl.mu.RLock. Report into
+	// this logger's own file rather than the global one, which may be another
+	// logger.
+	if cl.console != nil {
+		cl.console.flush(consoleFlushTimeout)
+		cl.console.reportDrops(cl.writeConsoleDropSummary)
 	}
 
 	cl.mu.Lock()
@@ -442,6 +464,7 @@ func (cl *CentralLogger) closeAllWritersLocked() error {
 // Flush ensures all buffered logs are written to OS buffers.
 // Note: This flushes to OS buffers but does not fsync to disk.
 // For critical sync to disk, Close() will perform full sync.
+// Console output is flushed by Close and FlushConsole, not here.
 func (cl *CentralLogger) Flush() error {
 	if cl == nil {
 		return nil

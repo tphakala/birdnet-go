@@ -269,7 +269,7 @@ Use these to filter findings during Phase 3. Do NOT flag these as issues:
 
 - **`math/rand` for non-security purposes**: jitter, backoff, load distribution are correct uses. Only flag for tokens, session IDs, CSRF nonces, or crypto.
 - **`template.HTML()` on hardcoded constants**: compile-time string constants are safe. Only flag when input comes from user data, DB fields, or HTTP params.
-- **`os.Exit` in unrecoverable startup**: acceptable when the app genuinely cannot continue (embedded config unreadable, crypto/rand unavailable). Flag in request handlers or background goroutines.
+- **`os.Exit` in unrecoverable startup**: acceptable when the app genuinely cannot continue (embedded config unreadable). Flag in request handlers or background goroutines.
 - **Short variable names in domain math**: `r`, `g`, `b` in color math, `s` in sRGB linearization, `t` in PRNG state are standard in their domains.
 - **Empty slice literals in tests**: `[]T{}` vs `var s []T` is intentional for JSON serialization and assert.Equal comparisons.
 - **Cyclomatic complexity in config validation**: config/settings validation functions are inherently branchy. High complexity is expected, not a design problem.

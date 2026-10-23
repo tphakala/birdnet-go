@@ -490,7 +490,7 @@
       ...(showTransportInAdd ? { transport: newTransport } : {}),
       gain: newGain,
       quietHours: newQuietHours,
-    } as StreamConfig;
+    };
 
     // Add the new stream
     const updatedStreams = [...streams, newStream];

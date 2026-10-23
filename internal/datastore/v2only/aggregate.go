@@ -29,7 +29,9 @@ const hoursPerDay = 24
 // positives from its own ranking, so this is a defensive guard rather than the common case: it still
 // catches a species whose ranked labels carry no hourly rows in this window, and rendering it as an
 // empty "0 detections" ridge would be misleading. The result is always non-nil.
-func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel map[uint][24]int) []datastore.SpeciesHourlyDistribution {
+//
+// nameOf resolves each returned species' common name (the datastore passes resolveCommonName).
+func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel map[uint][24]int, nameOf func(string) string) []datastore.SpeciesHourlyDistribution {
 	// Merge label rows that share a scientific name, preserving first-seen (descending-volume)
 	// order. Each distinct species accumulates the hourly counts of all its label IDs.
 	order := make([]string, 0, len(top))
@@ -58,7 +60,7 @@ func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel
 		if total == 0 {
 			continue // ranked by raw volume but no FP-excluded detections; skip the empty ridge
 		}
-		dist := datastore.SpeciesHourlyDistribution{ScientificName: name, Total: total}
+		dist := datastore.SpeciesHourlyDistribution{ScientificName: name, CommonName: nameOf(name), Total: total}
 		for h := range hoursPerDay {
 			dist.Buckets[h] = float64(acc[h]) / float64(total)
 		}
@@ -81,7 +83,9 @@ func buildSpeciesHourlyDistribution(top []repository.SpeciesCount, hourlyByLabel
 // positives from its own ranking, so this is a defensive guard rather than the common case: it still
 // catches a species whose ranked labels carry no hourly rows in this window, and stacking an empty
 // band would add a flat, meaningless layer. The result is always non-nil.
-func buildAcousticSuccession(top []repository.SpeciesCount, hourlyByLabel map[uint][24]int) []datastore.SpeciesHourlyCounts {
+//
+// nameOf resolves each returned species' common name (the datastore passes resolveCommonName).
+func buildAcousticSuccession(top []repository.SpeciesCount, hourlyByLabel map[uint][24]int, nameOf func(string) string) []datastore.SpeciesHourlyCounts {
 	// Merge label rows that share a scientific name, preserving first-seen (descending-volume)
 	// order. Each distinct species accumulates the hourly counts of all its label IDs.
 	order := make([]string, 0, len(top))
@@ -110,7 +114,7 @@ func buildAcousticSuccession(top []repository.SpeciesCount, hourlyByLabel map[ui
 		if total == 0 {
 			continue // ranked by raw volume but no FP-excluded detections; skip the empty band
 		}
-		result = append(result, datastore.SpeciesHourlyCounts{ScientificName: name, Counts: *acc, Total: total})
+		result = append(result, datastore.SpeciesHourlyCounts{ScientificName: name, CommonName: nameOf(name), Counts: *acc, Total: total})
 	}
 	return result
 }
@@ -129,7 +133,9 @@ const minConfidenceHistogramDetections = 20
 // fewer than minCount detections are dropped as noisy. Total is the species' detection count (false
 // positives already excluded upstream), surfaced in the tooltip. Returns a non-nil empty slice when
 // no species qualifies, or when bins is non-positive.
-func buildSpeciesConfidenceHistogram(species []repository.SpeciesCount, confByLabel map[uint][]float64, bins, minCount int) []datastore.SpeciesConfidenceHistogram {
+//
+// nameOf resolves each returned species' common name (the datastore passes resolveCommonName).
+func buildSpeciesConfidenceHistogram(species []repository.SpeciesCount, confByLabel map[uint][]float64, bins, minCount int, nameOf func(string) string) []datastore.SpeciesConfidenceHistogram {
 	if bins <= 0 {
 		return []datastore.SpeciesConfidenceHistogram{}
 	}
@@ -161,6 +167,7 @@ func buildSpeciesConfidenceHistogram(species []repository.SpeciesCount, confByLa
 		}
 		dist := datastore.SpeciesConfidenceHistogram{
 			ScientificName: name,
+			CommonName:     nameOf(name),
 			Bins:           make([]float64, bins),
 			Total:          total,
 		}
@@ -652,7 +659,9 @@ func bucketByMonthDay(ts []int64, loc *time.Location) map[monthDay]int {
 // The input rows are top-N by volume (the query's ORDER BY count DESC); this re-sorts the returned
 // rows by arrival (FirstSeen asc, then LastSeen asc, then ScientificName asc) so the Gantt reads
 // top-to-bottom in arrival order, deterministically. The result is always non-nil.
-func buildSpeciesPhenology(rows []repository.SpeciesPhenology, loc *time.Location) []datastore.SpeciesPhenologyPoint {
+//
+// nameOf resolves each returned species' common name (the datastore passes resolveCommonName).
+func buildSpeciesPhenology(rows []repository.SpeciesPhenology, loc *time.Location, nameOf func(string) string) []datastore.SpeciesPhenologyPoint {
 	if loc == nil {
 		loc = time.UTC
 	}
@@ -663,6 +672,7 @@ func buildSpeciesPhenology(rows []repository.SpeciesPhenology, loc *time.Locatio
 		last := time.Unix(rows[i].LastDetected, 0).In(loc).Format(time.DateOnly)
 		result = append(result, datastore.SpeciesPhenologyPoint{
 			ScientificName: rows[i].ScientificName,
+			CommonName:     nameOf(rows[i].ScientificName),
 			FirstSeen:      first,
 			LastSeen:       last,
 			Count:          rows[i].Count,

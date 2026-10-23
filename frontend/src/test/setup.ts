@@ -147,8 +147,8 @@ const translations: Record<string, string> = {
     'Browser location detected.',
   'settings.main.sections.rangeFilter.stationLocation.geolocationUnsupported':
     'Device location is unsupported.',
-  'settings.main.sections.rangeFilter.stationLocation.geolocationRequiresHttps':
-    'Browser location requires HTTPS or localhost.',
+  'settings.main.sections.rangeFilter.stationLocation.geolocationInsecureHelp':
+    'Needs HTTPS or localhost. Search for a place or use the map instead.',
   'settings.main.sections.rangeFilter.stationLocation.geolocationDenied':
     'Location permission was denied.',
   'settings.main.sections.rangeFilter.stationLocation.geolocationUnavailable':
@@ -237,6 +237,7 @@ const translations: Record<string, string> = {
   'notifications.timeAgo.minutesAgo': '{minutes}m ago',
   'notifications.timeAgo.hoursAgo': '{hours}h ago',
   'notifications.timeAgo.daysAgo': '{days}d ago',
+  'forms.networkAddressList.remove': 'Remove {address}',
 };
 
 vi.mock('$lib/i18n', () => ({
@@ -429,6 +430,7 @@ vi.mock('$lib/utils/settingsApi.js', () => {
     settingsAPI: {
       load: vi.fn().mockResolvedValue(defaultSettings),
       save: vi.fn().mockResolvedValue({ success: true }),
+      patchSection: vi.fn().mockResolvedValue({}),
       test: {
         birdweather: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
         mqtt: vi.fn().mockResolvedValue({ success: true, message: 'Test successful' }),
@@ -443,10 +445,19 @@ vi.mock('$lib/utils/settingsApi.js', () => {
         rangeFilter: vi.fn().mockResolvedValue([]),
         all: vi.fn().mockResolvedValue([]),
       },
+      security: {
+        getConnection: vi.fn().mockResolvedValue({
+          status: 'direct',
+          peerAddress: '192.168.1.20',
+          hasForwardedHeaders: false,
+          peerIsTrustedProxy: false,
+          verifiedClientAddress: '192.168.1.20',
+          peerIsCloudflareEdge: false,
+          cloudflarePresetWouldVerify: false,
+        }),
+      },
       system: {
         audioDevices: vi.fn().mockResolvedValue([]),
-        ffmpegVersion: vi.fn().mockResolvedValue({ version: '5.0.0', available: true }),
-        soxVersion: vi.fn().mockResolvedValue({ version: '14.4.2', available: true }),
       },
     },
   };
@@ -500,40 +511,53 @@ vi.mock('$app/stores', () => ({
 
 // Mock MapLibre GL - provide both default and named exports
 vi.mock('maplibre-gl', () => {
-  const MockMap = vi.fn(() => ({
-    // Add methods that are used in the components
-    getZoom: vi.fn(() => 10),
-    setZoom: vi.fn(),
-    getCenter: vi.fn(() => ({ lng: 0, lat: 0 })),
-    setCenter: vi.fn(),
-    easeTo: vi.fn(),
-    flyTo: vi.fn(),
-    remove: vi.fn(),
-    on: vi.fn(),
-    off: vi.fn(),
-    once: vi.fn(),
-    addControl: vi.fn(),
-    removeControl: vi.fn(),
-    resize: vi.fn(),
-    getBounds: vi.fn(),
-    fitBounds: vi.fn(),
-    setPadding: vi.fn(),
-    project: vi.fn(),
-    unproject: vi.fn(),
-  }));
+  // `function` implementations, not arrows: `new MockMap()` runs the
+  // implementation with Reflect.construct, which rejects arrow functions.
+  const MockMap = vi.fn(function () {
+    return {
+      // Add methods that are used in the components
+      getZoom: vi.fn(() => 10),
+      setZoom: vi.fn(),
+      getCenter: vi.fn(() => ({ lng: 0, lat: 0 })),
+      setCenter: vi.fn(),
+      easeTo: vi.fn(),
+      flyTo: vi.fn(),
+      remove: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+      once: vi.fn(),
+      addControl: vi.fn(),
+      removeControl: vi.fn(),
+      resize: vi.fn(),
+      getBounds: vi.fn(),
+      fitBounds: vi.fn(),
+      setPadding: vi.fn(),
+      project: vi.fn(),
+      unproject: vi.fn(),
+      zoomIn: vi.fn(),
+      zoomOut: vi.fn(),
+      scrollZoom: { enable: vi.fn(), disable: vi.fn() },
+      touchZoomRotate: { enable: vi.fn(), disable: vi.fn(), disableRotation: vi.fn() },
+      doubleClickZoom: { enable: vi.fn(), disable: vi.fn() },
+    };
+  });
 
-  const MockMarker = vi.fn(() => ({
-    setLngLat: vi.fn().mockReturnThis(),
-    addTo: vi.fn().mockReturnThis(),
-    remove: vi.fn().mockReturnThis(),
-    getLngLat: vi.fn(() => ({ lng: 0, lat: 0 })),
-    setPopup: vi.fn().mockReturnThis(),
-    togglePopup: vi.fn().mockReturnThis(),
-    getPopup: vi.fn(),
-    setDraggable: vi.fn().mockReturnThis(),
-    isDraggable: vi.fn(() => false),
-    getElement: vi.fn(() => document.createElement('div')),
-  }));
+  const MockMarker = vi.fn(function () {
+    return {
+      on: vi.fn().mockReturnThis(),
+      off: vi.fn().mockReturnThis(),
+      setLngLat: vi.fn().mockReturnThis(),
+      addTo: vi.fn().mockReturnThis(),
+      remove: vi.fn().mockReturnThis(),
+      getLngLat: vi.fn(() => ({ lng: 0, lat: 0 })),
+      setPopup: vi.fn().mockReturnThis(),
+      togglePopup: vi.fn().mockReturnThis(),
+      getPopup: vi.fn(),
+      setDraggable: vi.fn().mockReturnThis(),
+      isDraggable: vi.fn(() => false),
+      getElement: vi.fn(() => document.createElement('div')),
+    };
+  });
 
   return {
     default: {
@@ -606,7 +630,7 @@ class MockResizeObserver {
   unobserve = vi.fn();
   disconnect = vi.fn();
 }
-globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver = MockResizeObserver;
 
 // Mock HTMLCanvasElement.getContext for axe-core accessibility tests
 HTMLCanvasElement.prototype.getContext = vi.fn().mockImplementation(function (contextType: string) {
@@ -662,7 +686,7 @@ window.getComputedStyle = vi.fn().mockImplementation(function () {
   const style = {
     ...DEFAULT_COMPUTED_STYLES,
     getPropertyValue: vi.fn().mockImplementation(function (property: string) {
-      const computedStyle = { ...DEFAULT_COMPUTED_STYLES } as Record<string, string>;
+      const computedStyle: Record<string, string> = { ...DEFAULT_COMPUTED_STYLES };
       return (
         // eslint-disable-next-line security/detect-object-injection -- intentional property access in test mock
         computedStyle[property] ||
@@ -791,15 +815,12 @@ vi.mock('$lib/utils/security', async importOriginal => ({
   // Mock safeSpread to just spread objects without security validation for tests
   safeSpread: vi.fn(
     (...objects: Array<Record<string, unknown> | null | undefined>): Record<string, unknown> => {
-      return objects.reduce(
-        (result: Record<string, unknown>, obj) => {
-          if (obj != null && typeof obj === 'object') {
-            return { ...result, ...obj };
-          }
-          return result;
-        },
-        {} as Record<string, unknown>
-      );
+      return objects.reduce<Record<string, unknown>>((result, obj) => {
+        if (obj != null && typeof obj === 'object') {
+          return { ...result, ...obj };
+        }
+        return result;
+      }, {});
     }
   ),
   // Mock URL validation for RTSP and other protocols
@@ -820,23 +841,6 @@ vi.mock('$lib/utils/security', async importOriginal => ({
       }
     }
   ),
-  // Mock CIDR validation
-  validateCIDR: vi.fn(cidr => {
-    if (!cidr || typeof cidr !== 'string' || cidr.length > 18) return false;
-    const parts = cidr.split('/');
-    if (parts.length !== 2) return false;
-    const [ip, mask] = parts;
-    const octets = ip.split('.');
-    if (octets.length !== 4) return false;
-    for (const octet of octets) {
-      if (!/^\d{1,3}$/.test(octet)) return false;
-      const num = parseInt(octet, 10);
-      if (num > 255) return false;
-    }
-    if (!/^\d{1,2}$/.test(mask)) return false;
-    const maskNum = parseInt(mask, 10);
-    return maskNum >= 0 && maskNum <= 32;
-  }),
   // Mock other security utilities with basic implementations for tests
   safeLookup: vi.fn((lookupTable, key, allowedKeys, defaultValue) => {
     if (Array.isArray(allowedKeys) && !allowedKeys.includes(key)) {
@@ -914,17 +918,6 @@ vi.mock('$lib/utils/security', async importOriginal => ({
     if (!element) return undefined;
     if (elementType && !(element instanceof elementType)) return undefined;
     return element;
-  }),
-  numberToStringKey: vi.fn(key => key.toString()),
-  createIndexMap: vi.fn(() => new Map()),
-  IndexMap: vi.fn().mockImplementation(function () {
-    const map = new Map();
-    return Object.assign(map, {
-      setByIndex: vi.fn((index, value) => map.set(index.toString(), value)),
-      getByIndex: vi.fn(index => map.get(index.toString())),
-      deleteByIndex: vi.fn(index => map.delete(index.toString())),
-      hasByIndex: vi.fn(index => map.has(index.toString())),
-    });
   }),
   safePropertyAccess: vi.fn((obj, key) => {
     if (obj == null) return undefined;

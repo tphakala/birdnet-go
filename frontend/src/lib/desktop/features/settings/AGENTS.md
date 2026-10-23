@@ -63,20 +63,34 @@ can produce an incomplete object when the section has not loaded yet.
 `section` is typed as `keyof SettingsFormData`, so a wrong section name is a
 type error; do not cast around it.
 
+For flows that save outside the Settings form (the onboarding wizard),
+`settingsActions.saveSection(section, partial)` persists one backend section
+with `PATCH /api/v2/settings/:section` and, only after the server accepts it,
+deep-merges `partial` into `originalData` and into `formData`, where a pending
+edit to a patched key is kept and still counts as unsaved. Objects merge key by
+key and arrays replace, as on the server, so `partial` carries only the keys it
+changes, with each nested value typed as a complete object and each array sent
+whole; a failed request leaves the store untouched. It shows no toast and does
+not touch `isSaving`, so the caller owns busy and error UI. Like `saveSettings`
+it refreshes the restart status and applies a changed dashboard locale to the
+UI. `section` is the lowercase backend section name from
+`SettingsSectionPayloads` (for example `privacyfilter`, `rtsp`), not a store
+key such as `realtime` or `privacyFilter`.
+
 ## Form Controls
 
 Settings controls (in `$lib/desktop/components/forms/`) are used as controlled
 components: pass the current value one way and write changes back through the
 store in the callback. This is the pattern the existing pages use:
 
-| Component        | Pattern                |
-| ---------------- | ---------------------- |
-| `NumberField`    | `value` + `onUpdate`   |
-| `PasswordField`  | `value` + `onUpdate`   |
-| `SubnetInput`    | `subnets` + `onUpdate` |
-| `TextInput`      | `value` + `onchange`   |
-| `Checkbox`       | `checked` + `onchange` |
-| `SelectDropdown` | `value` + `onChange`   |
+| Component                 | Pattern                |
+| ------------------------- | ---------------------- |
+| `NumberField`             | `value` + `onUpdate`   |
+| `PasswordField`           | `value` + `onUpdate`   |
+| `NetworkAddressListInput` | `values` + `onUpdate`  |
+| `TextInput`               | `value` + `onchange`   |
+| `Checkbox`                | `checked` + `onchange` |
+| `SelectDropdown`          | `value` + `onChange`   |
 
 Avoid combining `bind:value` with an update callback on the same control: the
 value is then written twice, and the store update in the callback is the one

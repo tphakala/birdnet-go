@@ -32,6 +32,7 @@
   import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import SourceBadge from '$lib/desktop/features/dashboard/components/SourceBadge.svelte';
   import SpectrogramPlayer from '$lib/desktop/components/media/SpectrogramPlayer.svelte';
+  import SpectrogramImage from '$lib/desktop/components/media/SpectrogramImage.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils.js';
   import { t } from '$lib/i18n';
@@ -52,8 +53,9 @@
     detection: Detection;
     /**
      * Whether the Recording column exists in this table. The parent shows it when
-     * audio export is enabled or any visible row has a clip. The cell content is
-     * gated per-detection on detection.clipName, so rows without a clip render an
+     * audio export is enabled or any visible row has a clip or a kept spectrogram.
+     * The cell content is gated per-detection: a clip renders the player, a kept
+     * spectrogram without audio renders a plain image, and other rows render an
      * empty cell to keep the table columns aligned.
      */
     showRecordingColumn?: boolean;
@@ -291,8 +293,9 @@
 </td>
 
 <!-- Recording/Spectrogram column. The column is omitted entirely when no visible
-     row has a clip and export is disabled; within a shown column, the player is
-     rendered only for detections that actually have a clip. -->
+     row has a clip or a kept spectrogram and export is disabled; within a shown column, the player is
+     rendered only for detections that actually have a clip, and a plain image for
+     those whose audio was removed by retention but whose spectrogram was kept. -->
 {#if showRecordingColumn}
   <td class="hidden md:table-cell">
     {#if detection.clipName}
@@ -300,6 +303,14 @@
         audioUrl={buildAppUrl(`/api/v2/audio/${detection.id}`)}
         detectionId={detection.id.toString()}
         spectrogramSize="md"
+      />
+    {:else if detection.spectrogramOnly}
+      <!-- Retention removed the audio but kept the image: no player, no download. -->
+      <SpectrogramImage
+        detectionId={detection.id.toString()}
+        size="md"
+        raw={true}
+        className="max-w-[200px]"
       />
     {/if}
   </td>

@@ -1,7 +1,7 @@
 <script lang="ts">
   /* global AnalyserNode, ResizeObserver, ResizeObserverEntry, performance, requestAnimationFrame, cancelAnimationFrame */
   /**
-   * SpectrogramCanvas — Pure waterfall spectrogram renderer
+   * SpectrogramCanvas: Pure waterfall spectrogram renderer
    *
    * Owns the requestAnimationFrame loop. Reads frequency data from the
    * AnalyserNode each frame and renders a scrolling waterfall using the
@@ -57,7 +57,7 @@
     overlayFontSize?: number;
     /** Enable debug overlay: time markers + label timestamps */
     debug?: boolean;
-    /** Current wall-clock time at playhead (Unix seconds) — used for debug time markers */
+    /** Current wall-clock time at playhead (Unix seconds), used for debug time markers */
     wallClockAtPlayhead?: number;
   }
 
@@ -151,7 +151,7 @@
 
   // Update canvas buffer dimensions when size or DPR changes.
   // Snapshot existing content before resize, restore after (stretched to fit).
-  // Setting canvas.width/height always clears the buffer — this preserves it.
+  // Setting canvas.width/height always clears the buffer, this preserves it.
   $effect(() => {
     if (!canvasEl) return;
     const newW = deviceWidth;
@@ -281,7 +281,7 @@
 
         if (w > 0 && h > 0 && w <= MAX_CANVAS_DIM && h <= MAX_CANVAS_DIM) {
           // Self-blit: shift existing content left (GPU-composited)
-          ctx.drawImage(canvasEl!, -pixelsToScroll, 0);
+          ctx.drawImage(ctx.canvas, -pixelsToScroll, 0);
 
           // Draw new column(s) at right edge using device pixel dimensions
           const imgData = ctx.createImageData(pixelsToScroll, h);

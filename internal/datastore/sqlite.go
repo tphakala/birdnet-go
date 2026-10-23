@@ -52,12 +52,6 @@ type SQLiteStore struct {
 // overwritten with an empty string by a later settings save.
 const defaultSQLitePath = "birdnet.db"
 
-func validateSQLiteConfig() error {
-	// Add validation logic for SQLite configuration
-	// Return an error if the configuration is invalid
-	return nil
-}
-
 // resolveSQLitePath returns the configured SQLite database path, falling back to
 // defaultSQLitePath when the configured value is blank. A blank path would
 // otherwise flow into buildSQLiteDSN and produce a bare "?<pragmas>" DSN; the
@@ -69,6 +63,13 @@ func resolveSQLitePath(configured string) string {
 		return defaultSQLitePath
 	}
 	return configured
+}
+
+// ResolveSQLitePath returns the database file the datastore opens for a
+// configured SQLite path: the path itself, or the default database file when it
+// is blank.
+func ResolveSQLitePath(configured string) string {
+	return resolveSQLitePath(configured)
 }
 
 // getDiskSpace returns available disk space for the given path using diskmanager

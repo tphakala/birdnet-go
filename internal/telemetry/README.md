@@ -291,6 +291,8 @@ telemetry.FastCaptureMessage("Important event occurred")
 
 ### 4. Graceful Degradation
 
+- Builds older than about six months (183 days after their build date) send no telemetry, even when enabled. The frontend gets no Sentry config either. Support dump uploads are exempt. A `BIRDNET_GO_SENTRY_DSN` override does not bypass the check.
+
 - Circuit breaker prevents cascade failures
 - Rate limiting protects Sentry quota
 - Event dropping with metrics

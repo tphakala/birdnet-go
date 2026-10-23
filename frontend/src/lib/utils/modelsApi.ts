@@ -18,6 +18,12 @@ const logger = getLogger('modelsApi');
 
 const BASE = '/api/v2/models';
 
+/**
+ * The error_key of the 409 the install, reinstall and remove endpoints return while
+ * another model operation runs.
+ */
+export const MODEL_OPERATION_IN_PROGRESS_KEY = 'analysis.gallery.errors.operationInProgress';
+
 /** Fetch the full model catalog with install/compatibility status. */
 export async function fetchCatalog(): Promise<CatalogResponse> {
   return api.get<CatalogResponse>(`${BASE}/catalog`);

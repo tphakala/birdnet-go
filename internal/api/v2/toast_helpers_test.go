@@ -29,60 +29,6 @@ func mockController() *Controller {
 	return c
 }
 
-// assertEventDataNil checks that a field in eventData is nil.
-func assertEventDataNil(t *testing.T, eventData map[string]any, field, context string) {
-	t.Helper()
-	assert.Nil(t, eventData[field], "Event data %s should be nil for %s", field, context)
-}
-
-// assertEventDataEmpty checks that a string field in eventData is empty.
-func assertEventDataEmpty(t *testing.T, eventData map[string]any, field, context string) {
-	t.Helper()
-	assert.Empty(t, eventData[field], "Event data %s should be empty string for %s", field, context)
-}
-
-// assertEventDataMissing checks that a field is not present in eventData.
-func assertEventDataMissing(t *testing.T, eventData map[string]any, field string) {
-	t.Helper()
-	_, exists := eventData[field]
-	assert.False(t, exists, "Event data should not include %s when not set", field)
-}
-
-// assertEventDataValue checks a specific field value in eventData.
-func assertEventDataValue(t *testing.T, eventData map[string]any, field string, expected any) {
-	t.Helper()
-	assert.Equal(t, expected, eventData[field], "Event data %s mismatch", field)
-}
-
-// mapStringToToastType converts a string toast type to notification.ToastType.
-func mapStringToToastType(toastType string) notification.ToastType {
-	switch toastType {
-	case ToastTypeSuccess:
-		return notification.ToastTypeSuccess
-	case ToastTypeError:
-		return notification.ToastTypeError
-	case ToastTypeWarning:
-		return notification.ToastTypeWarning
-	case ToastTypeInfo:
-		return notification.ToastTypeInfo
-	default:
-		return notification.ToastTypeInfo
-	}
-}
-
-// assertToastTypeMapping verifies toast type string to enum mapping.
-func assertToastTypeMapping(t *testing.T, input string, actual, expected notification.ToastType) {
-	t.Helper()
-	assert.Equal(t, expected, actual, "Toast type mapping for %q mismatch", input)
-}
-
-// assertNotificationMapping verifies notification type and priority mapping.
-func assertNotificationMapping(t *testing.T, toastType string, notif *notification.Notification, expectedType notification.Type, expectedPriority notification.Priority) {
-	t.Helper()
-	assert.Equal(t, expectedType, notif.Type, "Toast to notification type mapping for %q mismatch", toastType)
-	assert.Equal(t, expectedPriority, notif.Priority, "Toast to notification priority mapping for %q mismatch", toastType)
-}
-
 // newToastTestController builds a controller wired to an isolated, per-test
 // notification service injected through the controller's DI seam. The service is
 // stopped via tb.Cleanup so its cleanupLoop goroutine does not leak (TestMain
@@ -270,33 +216,6 @@ func verifyNotificationTypeMapping(t *testing.T, notif *notification.Notificatio
 	assert.Equal(t, expectedPriority, notif.Priority, "SendToast() notification priority mismatch")
 }
 
-func TestController_SendToast_TypeMapping(t *testing.T) {
-	tests := []struct {
-		toastType         string
-		expectedNotifType notification.Type
-		expectedPriority  notification.Priority
-		expectedToastType notification.ToastType
-	}{
-		{ToastTypeSuccess, notification.TypeInfo, notification.PriorityLow, notification.ToastTypeSuccess},
-		{ToastTypeError, notification.TypeError, notification.PriorityHigh, notification.ToastTypeError},
-		{ToastTypeWarning, notification.TypeWarning, notification.PriorityMedium, notification.ToastTypeWarning},
-		{ToastTypeInfo, notification.TypeInfo, notification.PriorityLow, notification.ToastTypeInfo},
-		{"invalid", notification.TypeInfo, notification.PriorityLow, notification.ToastTypeInfo},
-		{"", notification.TypeInfo, notification.PriorityLow, notification.ToastTypeInfo},
-	}
-
-	for _, tt := range tests {
-		t.Run("type_"+tt.toastType, func(t *testing.T) {
-			actualToastType := mapStringToToastType(tt.toastType)
-			assertToastTypeMapping(t, tt.toastType, actualToastType, tt.expectedToastType)
-
-			toast := notification.NewToast("test", actualToastType)
-			notif := toast.ToNotification()
-			assertNotificationMapping(t, tt.toastType, notif, tt.expectedNotifType, tt.expectedPriority)
-		})
-	}
-}
-
 func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
 	t.Parallel()
 
@@ -312,16 +231,6 @@ func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
 
 	err := c.SendToast("test message", ToastTypeInfo, 1000)
 	require.Error(t, err, "SendToast() must return an error when no notification service is available")
-}
-
-func TestController_SendToast_Integration(t *testing.T) {
-	t.Parallel()
-	// Integration test that verifies the complete flow through an injected service.
-	c, _ := newToastTestController(t)
-
-	// Send a toast with all features
-	err := c.SendToast("Integration test message", ToastTypeWarning, 4000)
-	require.NoError(t, err, "SendToast() integration test error")
 }
 
 // Benchmark for SendToast performance

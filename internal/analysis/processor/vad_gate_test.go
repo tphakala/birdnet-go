@@ -22,6 +22,40 @@ const (
 	testVADHalfSecond = testVADRate * vadBytesPerSample / 2 // 48000 = 0.5 s
 )
 
+// testVADModel is the model ID used by the single-model gate tests.
+const testVADModel = "BirdNET_V2.4"
+
+// chunkWith builds a gap-free chunk of model for source whose audio ends at end.
+func chunkWith(source, model string, pcm []byte, rate int, end time.Time) *chunkAudio {
+	return &chunkAudio{
+		key:        vadStreamKey{source: source, model: model},
+		pcm:        pcm,
+		sampleRate: rate,
+		span:       audioSpan{from: end.Add(-pcmChunkDuration(len(pcm), rate)), to: end},
+	}
+}
+
+// testChunk is chunkWith for the single-model gate tests (testVADModel).
+func testChunk(source string, pcm []byte, end time.Time, rate int) *chunkAudio {
+	return chunkWith(source, testVADModel, pcm, rate, end)
+}
+
+// modelChunk builds a silent chunk with model's registry geometry (clip length
+// and effective sample rate) ending at end.
+func modelChunk(source, model string, end time.Time) *chunkAudio {
+	spec := classifier.ModelRegistry[model].Spec
+	rate := spec.EffectiveSampleRate()
+	return chunkWith(source, model, make([]byte, int(spec.ClipLength.Seconds())*rate*vadBytesPerSample), rate, end)
+}
+
+// scoreChunk scores ch with model source key "k", requiring no error.
+func scoreChunk(t *testing.T, g *vadGate, ch *chunkAudio) (vadScore, bool) {
+	t.Helper()
+	result, ran, err := g.score(&vad.Config{}, "k", ch)
+	require.NoError(t, err)
+	return result, ran
+}
+
 // fakeSession is a vad.SpeechSession test double. The fake streamer never calls
 // Run, so it only needs to satisfy the interface and record Close.
 type fakeSession struct {
@@ -84,7 +118,7 @@ func newTestGate(st vad.Streamer, sess vad.SpeechSession, builds *int) *vadGate 
 	return &vadGate{
 		newSession:  sessionFactory(sess, nil, builds),
 		newStreamer: func() vad.Streamer { return st },
-		streams:     map[string]*sourceStream{},
+		streams:     map[vadStreamKey]*sourceStream{},
 	}
 }
 
@@ -119,17 +153,15 @@ func TestVADGate_LazyLoadAndReuse(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
 	// First chunk builds the session, appends the whole chunk, and flushes.
-	prob, ran, _, err := g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
-	require.NoError(t, err)
+	sc, ran := scoreChunk(t, g, testChunk("s1", make([]byte, testVADChunkBytes), base, testVADRate))
 	assert.True(t, ran)
-	assert.InDelta(t, 0.9, prob, 1e-6)
+	assert.InDelta(t, 0.9, sc.prob, 1e-6)
 	assert.Equal(t, 1, builds)
 	assert.Equal(t, []int{testVADChunkBytes}, st.appends)
 	assert.Equal(t, 1, st.flushes)
 
 	// A later chunk (past the throttle) reuses the same session.
-	_, ran, _, err = g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base.Add(2*time.Second), testVADRate)
-	require.NoError(t, err)
+	_, ran = scoreChunk(t, g, testChunk("s1", make([]byte, testVADChunkBytes), base.Add(2*time.Second), testVADRate))
 	assert.True(t, ran)
 	assert.Equal(t, 1, builds, "the shared session must not be rebuilt")
 	assert.Equal(t, 2, st.flushes)
@@ -145,14 +177,11 @@ func TestVADGate_FreshTailSlicing(t *testing.T) {
 	pcm := make([]byte, testVADChunkBytes)
 
 	// t0: whole 3 s chunk is fresh.
-	_, _, _, err := g.score(&vad.Config{}, "k", pcm, "s1", base, testVADRate)
-	require.NoError(t, err)
+	scoreChunk(t, g, testChunk("s1", pcm, base, testVADRate))
 	// t0+0.5s: 0.5 s of fresh audio (the tail).
-	_, _, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(500*time.Millisecond), testVADRate)
-	require.NoError(t, err)
-	// t0+1.0s: another 0.5 s tail (delta from the previous chunk's start).
-	_, _, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(1*time.Second), testVADRate)
-	require.NoError(t, err)
+	scoreChunk(t, g, testChunk("s1", pcm, base.Add(500*time.Millisecond), testVADRate))
+	// t0+1.0s: another 0.5 s tail (delta from the previous chunk's audio end).
+	scoreChunk(t, g, testChunk("s1", pcm, base.Add(1*time.Second), testVADRate))
 
 	assert.Equal(t, []int{testVADChunkBytes, testVADHalfSecond, testVADHalfSecond}, st.appends,
 		"only the non-overlapped tail of each chunk may be appended")
@@ -170,11 +199,9 @@ func TestVADGate_ContiguousChunksDoNotReset(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 	pcm := make([]byte, testVADChunkBytes) // 3 s
 
-	_, _, _, err := g.score(&vad.Config{}, "k", pcm, "s1", base, testVADRate)
-	require.NoError(t, err)
+	scoreChunk(t, g, testChunk("s1", pcm, base, testVADRate))
 	// Exactly one chunk later: perfectly contiguous, no overlap and no gap.
-	_, _, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(3*time.Second), testVADRate)
-	require.NoError(t, err)
+	scoreChunk(t, g, testChunk("s1", pcm, base.Add(3*time.Second), testVADRate))
 
 	assert.Equal(t, []int{testVADChunkBytes, testVADChunkBytes}, st.appends,
 		"a contiguous chunk is wholly fresh")
@@ -191,18 +218,16 @@ func TestVADGate_GapResetsStreamer(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 	pcm := make([]byte, testVADChunkBytes)
 
-	_, _, _, err := g.score(&vad.Config{}, "k", pcm, "s1", base, testVADRate)
-	require.NoError(t, err)
+	scoreChunk(t, g, testChunk("s1", pcm, base, testVADRate))
 	// 6 s later (>> 3 s chunk + 1 s tolerance): a genuine coverage gap.
-	_, _, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(6*time.Second), testVADRate)
-	require.NoError(t, err)
+	scoreChunk(t, g, testChunk("s1", pcm, base.Add(6*time.Second), testVADRate))
 
 	assert.Equal(t, 1, st.resets, "a gap well beyond one chunk must reset the streamer")
 	assert.Equal(t, []int{testVADChunkBytes, testVADChunkBytes}, st.appends)
 }
 
 // TestVADGate_JitterWithinToleranceDoesNotReset guards against wall-clock jitter
-// pushing a contiguous chunk's start-time delta just past chunkDur: a delta
+// pushing a contiguous chunk's audio-end delta just past chunkDur: a delta
 // within the vadResetGap tolerance must be treated as a whole fresh chunk with
 // the LSTM state preserved, not a discontinuity (Agent 6 finding).
 func TestVADGate_JitterWithinToleranceDoesNotReset(t *testing.T) {
@@ -212,12 +237,10 @@ func TestVADGate_JitterWithinToleranceDoesNotReset(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 	pcm := make([]byte, testVADChunkBytes) // 3 s
 
-	_, _, _, err := g.score(&vad.Config{}, "k", pcm, "s1", base, testVADRate)
-	require.NoError(t, err)
+	scoreChunk(t, g, testChunk("s1", pcm, base, testVADRate))
 	// 3.3 s later: a contiguous overlap=0 boundary jittered 0.3 s past chunkDur,
 	// still inside the 1 s tolerance.
-	_, _, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(3300*time.Millisecond), testVADRate)
-	require.NoError(t, err)
+	scoreChunk(t, g, testChunk("s1", pcm, base.Add(3300*time.Millisecond), testVADRate))
 
 	assert.Zero(t, st.resets, "jitter within tolerance must not reset the streamer")
 	assert.Equal(t, []int{testVADChunkBytes, testVADChunkBytes}, st.appends,
@@ -232,10 +255,8 @@ func TestVADGate_SampleRateChangeResets(t *testing.T) {
 	g := newTestGate(st, &fakeSession{}, nil)
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, _, _, err := g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
-	require.NoError(t, err)
-	_, _, _, err = g.score(&vad.Config{}, "k", make([]byte, 16000*vadBytesPerSample), "s1", base.Add(500*time.Millisecond), 16000)
-	require.NoError(t, err)
+	scoreChunk(t, g, testChunk("s1", make([]byte, testVADChunkBytes), base, testVADRate))
+	scoreChunk(t, g, testChunk("s1", make([]byte, 16000*vadBytesPerSample), base.Add(500*time.Millisecond), 16000))
 
 	assert.Equal(t, 1, st.resets, "a sample-rate change must reset the streamer")
 	assert.Equal(t, []int{16000}, st.rates[1:], "the new rate must be used after the reset")
@@ -251,28 +272,24 @@ func TestVADGate_FlushCadence(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 	pcm := make([]byte, testVADChunkBytes)
 
-	_, ran, _, err := g.score(&vad.Config{}, "k", pcm, "s1", base, testVADRate)
-	require.NoError(t, err)
+	_, ran := scoreChunk(t, g, testChunk("s1", pcm, base, testVADRate))
 	assert.True(t, ran, "first chunk must produce a decision")
 
 	// 0.5 s later: buffered but not flushed (within the cadence).
-	_, ran, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(500*time.Millisecond), testVADRate)
-	require.NoError(t, err)
+	_, ran = scoreChunk(t, g, testChunk("s1", pcm, base.Add(500*time.Millisecond), testVADRate))
 	assert.False(t, ran, "within the flush cadence: buffer only")
 	assert.Equal(t, 1, st.flushes)
 	assert.Len(t, st.appends, 2, "the fresh tail must still be appended")
 
 	// 1.0 s after the last flush: flush again.
-	_, ran, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(1*time.Second), testVADRate)
-	require.NoError(t, err)
+	_, ran = scoreChunk(t, g, testChunk("s1", pcm, base.Add(1*time.Second), testVADRate))
 	assert.True(t, ran)
 	assert.Equal(t, 2, st.flushes)
 
 	// A different source has its own streamer and cadence, flushing immediately.
 	st2 := &fakeStreamer{prob: 0.9, flushOK: true}
 	g.newStreamer = func() vad.Streamer { return st2 }
-	_, ran, _, err = g.score(&vad.Config{}, "k", pcm, "s2", base.Add(1*time.Second), testVADRate)
-	require.NoError(t, err)
+	_, ran = scoreChunk(t, g, testChunk("s2", pcm, base.Add(1*time.Second), testVADRate))
 	assert.True(t, ran, "a new source flushes immediately")
 	assert.Equal(t, 1, st2.flushes)
 }
@@ -285,15 +302,13 @@ func TestVADGate_FlushNotOKIsNotADecision(t *testing.T) {
 	g := newTestGate(st, &fakeSession{}, nil)
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, ran, _, err := g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
-	require.NoError(t, err)
+	_, ran := scoreChunk(t, g, testChunk("s1", make([]byte, testVADChunkBytes), base, testVADRate))
 	assert.False(t, ran)
 
 	// The next chunk may flush immediately (the cadence clock did not advance).
 	st.flushOK = true
 	st.prob = 0.9
-	_, ran, _, err = g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base.Add(500*time.Millisecond), testVADRate)
-	require.NoError(t, err)
+	_, ran = scoreChunk(t, g, testChunk("s1", make([]byte, testVADChunkBytes), base.Add(500*time.Millisecond), testVADRate))
 	assert.True(t, ran, "a not-ok flush must not consume the cadence slot")
 }
 
@@ -306,14 +321,12 @@ func TestVADGate_OutOfOrderChunkIsSkipped(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 	pcm := make([]byte, testVADChunkBytes)
 
-	_, ran, _, err := g.score(&vad.Config{}, "k", pcm, "s1", base.Add(2*time.Second), testVADRate)
-	require.NoError(t, err)
+	_, ran := scoreChunk(t, g, testChunk("s1", pcm, base.Add(2*time.Second), testVADRate))
 	assert.True(t, ran)
 	require.Len(t, st.appends, 1)
 
 	// An earlier chunk: delta <= 0, skipped without append or flush.
-	_, ran, _, err = g.score(&vad.Config{}, "k", pcm, "s1", base.Add(500*time.Millisecond), testVADRate)
-	require.NoError(t, err)
+	_, ran = scoreChunk(t, g, testChunk("s1", pcm, base.Add(500*time.Millisecond), testVADRate))
 	assert.False(t, ran, "out-of-order chunk must be skipped")
 	assert.Len(t, st.appends, 1, "no fresh audio must be appended for an out-of-order chunk")
 	assert.Equal(t, 1, st.flushes)
@@ -334,13 +347,13 @@ func TestVADGate_ModelChangeRebuilds(t *testing.T) {
 			return sess2, nil
 		},
 		newStreamer: func() vad.Streamer { return st },
-		streams:     map[string]*sourceStream{},
+		streams:     map[vadStreamKey]*sourceStream{},
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, _, _, err := g.score(&vad.Config{}, "a", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
+	_, _, err := g.score(&vad.Config{}, "a", testChunk("s1", make([]byte, testVADChunkBytes), base, testVADRate))
 	require.NoError(t, err)
-	_, _, _, err = g.score(&vad.Config{}, "b", make([]byte, testVADChunkBytes), "s1", base.Add(2*time.Second), testVADRate)
+	_, _, err = g.score(&vad.Config{}, "b", testChunk("s1", make([]byte, testVADChunkBytes), base.Add(2*time.Second), testVADRate))
 	require.NoError(t, err)
 
 	assert.Equal(t, 2, builds, "changing the model source must rebuild the session")
@@ -354,12 +367,11 @@ func TestVADGate_EmptyPathUnloads(t *testing.T) {
 	g := newTestGate(st, sess, nil)
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, ran, _, err := g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
-	require.NoError(t, err)
+	_, ran := scoreChunk(t, g, testChunk("s1", make([]byte, testVADChunkBytes), base, testVADRate))
 	assert.True(t, ran)
 
 	// Empty key (uninstalled): session dropped, streamers cleared, no scoring.
-	_, ran, _, err = g.score(&vad.Config{}, "", make([]byte, testVADChunkBytes), "s1", base.Add(2*time.Second), testVADRate)
+	_, ran, err := g.score(&vad.Config{}, "", testChunk("s1", make([]byte, testVADChunkBytes), base.Add(2*time.Second), testVADRate))
 	require.NoError(t, err)
 	assert.False(t, ran)
 	assert.True(t, sess.closed, "the session must be closed when the model source is cleared")
@@ -372,18 +384,17 @@ func TestVADGate_LoadFailureBacksOff(t *testing.T) {
 	g := &vadGate{
 		newSession:  sessionFactory(nil, errors.NewStd("load failed"), &builds),
 		newStreamer: func() vad.Streamer { return &fakeStreamer{} },
-		streams:     map[string]*sourceStream{},
+		streams:     map[vadStreamKey]*sourceStream{},
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, ran, _, err := g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
+	_, ran, err := g.score(&vad.Config{}, "k", testChunk("s1", make([]byte, testVADChunkBytes), base, testVADRate))
 	require.Error(t, err)
 	assert.False(t, ran)
 	assert.Equal(t, 1, builds)
 
 	// Immediately after a failure, a different source does not re-attempt (backoff).
-	_, ran, _, err = g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s2", base.Add(2*time.Second), testVADRate)
-	require.NoError(t, err)
+	_, ran = scoreChunk(t, g, testChunk("s2", make([]byte, testVADChunkBytes), base.Add(2*time.Second), testVADRate))
 	assert.False(t, ran)
 	assert.Equal(t, 1, builds, "load must not be retried within the backoff window")
 }
@@ -400,15 +411,14 @@ func TestVADGate_FlushErrorBacksOff(t *testing.T) {
 	g := newTestGate(st, sess, &builds)
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, ran, _, err := g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
+	_, ran, err := g.score(&vad.Config{}, "k", testChunk("s1", make([]byte, testVADChunkBytes), base, testVADRate))
 	require.Error(t, err)
 	assert.False(t, ran)
 	assert.True(t, sess.closed, "an ONNX inference failure must drop the shared session")
 	assert.Empty(t, g.streams)
 
 	// A later chunk within the backoff must NOT rebuild or flush.
-	_, ran, _, err = g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s2", base.Add(2*time.Second), testVADRate)
-	require.NoError(t, err)
+	_, ran = scoreChunk(t, g, testChunk("s2", make([]byte, testVADChunkBytes), base.Add(2*time.Second), testVADRate))
 	assert.False(t, ran, "flush failure must back off, not retry every chunk")
 	assert.Equal(t, 1, builds, "no rebuild within the backoff window")
 }
@@ -426,19 +436,18 @@ func TestVADGate_DataErrorDropsStreamerNotSession(t *testing.T) {
 	g := newTestGate(st, sess, &builds)
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, ran, _, err := g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
+	_, ran, err := g.score(&vad.Config{}, "k", testChunk("s1", make([]byte, testVADChunkBytes), base, testVADRate))
 	require.Error(t, err)
 	assert.False(t, ran)
 	assert.False(t, sess.closed, "a data error must NOT tear down the shared session")
 	assert.Equal(t, 1, st.resets, "the offending streamer is reset")
-	_, held := g.streams["s1"]
+	_, held := g.streams[vadStreamKey{source: "s1", model: testVADModel}]
 	assert.False(t, held, "the offending source's streamer is dropped")
 
 	// The session stays healthy: another source scores immediately, no backoff.
 	st2 := &fakeStreamer{prob: 0.9, flushOK: true}
 	g.newStreamer = func() vad.Streamer { return st2 }
-	_, ran, _, err = g.score(&vad.Config{}, "k", make([]byte, testVADChunkBytes), "s2", base.Add(2*time.Second), testVADRate)
-	require.NoError(t, err)
+	_, ran = scoreChunk(t, g, testChunk("s2", make([]byte, testVADChunkBytes), base.Add(2*time.Second), testVADRate))
 	assert.True(t, ran, "the shared session stays healthy for other sources")
 	assert.Equal(t, 1, builds, "the session is not rebuilt (no teardown occurred)")
 }
@@ -459,28 +468,39 @@ func TestVADGate_ConfigChangeClearsBackoff(t *testing.T) {
 			return good, nil
 		},
 		newStreamer: func() vad.Streamer { return &fakeStreamer{prob: 0.9, flushOK: true} },
-		streams:     map[string]*sourceStream{},
+		streams:     map[vadStreamKey]*sourceStream{},
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	_, ran, _, err := g.score(&vad.Config{}, "path:/bad.onnx", make([]byte, testVADChunkBytes), "s1", base, testVADRate)
+	_, ran, err := g.score(&vad.Config{}, "path:/bad.onnx", testChunk("s1", make([]byte, testVADChunkBytes), base, testVADRate))
 	require.Error(t, err)
 	assert.False(t, ran)
 
-	_, ran, _, err = g.score(&vad.Config{}, "path:/good.onnx", make([]byte, testVADChunkBytes), "s1", base.Add(2*time.Second), testVADRate)
+	_, ran, err = g.score(&vad.Config{}, "path:/good.onnx", testChunk("s1", make([]byte, testVADChunkBytes), base.Add(2*time.Second), testVADRate))
 	require.NoError(t, err)
 	assert.True(t, ran, "a corrected model source must be retried immediately")
 	assert.Equal(t, 2, builds)
 }
 
 // makeVADItem builds a minimal results item for the given source and chunk.
-func makeVADItem(modelID, source string, start time.Time, pcmLen int) *classifier.Results {
+func makeVADItem(modelID, source string, audioEnd time.Time, pcmLen int) *classifier.Results {
 	return &classifier.Results{
-		ModelID:   modelID,
-		PCMdata:   make([]byte, pcmLen),
-		Source:    datastore.AudioSource{ID: source},
-		StartTime: start,
+		ModelID: modelID,
+		PCMdata: make([]byte, pcmLen),
+		Source:  datastore.AudioSource{ID: source},
+		Audio:   classifier.AudioTiming{EndAt: audioEnd},
 	}
+}
+
+// runGate builds the chunk for item as processDetections does and runs the VAD
+// gate on it; a chunk the privacy detectors cannot hear (bat, no PCM) never
+// reaches the gate.
+func runGate(p *Processor, settings *conf.Settings, item *classifier.Results) (audioSpan, bool) {
+	chunk, ok := newChunkAudio(item)
+	if !ok {
+		return audioSpan{}, false
+	}
+	return p.runVADGate(settings, &chunk)
 }
 
 func vadSettings(enabled bool, threshold float64) *conf.Settings {
@@ -502,7 +522,7 @@ func TestRunVADGate_SpeechWritesLastHumanDetection(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 	item := makeVADItem("BirdNET_V2.4", "src1", base, testVADChunkBytes)
 
-	p.runVADGate(vadSettings(true, 0.35), item)
+	runGate(p, vadSettings(true, 0.35), item)
 
 	got, ok := p.LastHumanDetection["src1"]
 	require.True(t, ok, "speech hit must record LastHumanDetection")
@@ -519,7 +539,7 @@ func TestRunVADGate_BelowThresholdDoesNotWrite(t *testing.T) {
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	p.runVADGate(vadSettings(true, 0.35), makeVADItem("BirdNET_V2.4", "src1", base, testVADChunkBytes))
+	runGate(p, vadSettings(true, 0.35), makeVADItem("BirdNET_V2.4", "src1", base, testVADChunkBytes))
 
 	_, ok := p.LastHumanDetection["src1"]
 	assert.False(t, ok, "below-threshold speech must not record a human detection")
@@ -539,7 +559,7 @@ func TestRunVADGate_AtThresholdWrites(t *testing.T) {
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	p.runVADGate(vadSettings(true, 0.5), makeVADItem("BirdNET_V2.4", "src1", base, testVADChunkBytes))
+	runGate(p, vadSettings(true, 0.5), makeVADItem("BirdNET_V2.4", "src1", base, testVADChunkBytes))
 
 	got, ok := p.LastHumanDetection["src1"]
 	require.True(t, ok, "prob == threshold must record a human detection (>= comparison)")
@@ -556,7 +576,7 @@ func TestRunVADGate_DisabledIsInert(t *testing.T) {
 	}
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
-	p.runVADGate(vadSettings(false, 0.35), makeVADItem("BirdNET_V2.4", "src1", base, testVADChunkBytes))
+	runGate(p, vadSettings(false, 0.35), makeVADItem("BirdNET_V2.4", "src1", base, testVADChunkBytes))
 
 	assert.Empty(t, p.LastHumanDetection, "disabled VAD must not write")
 	assert.Equal(t, 0, builds, "disabled VAD must not build a session")
@@ -572,9 +592,9 @@ func TestRunVADGate_SkipsBatAndEmptyPCM(t *testing.T) {
 	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
 
 	// Ultrasonic bat chunk: skipped.
-	p.runVADGate(vadSettings(true, 0.35), makeVADItem(classifier.RegistryIDBat, "src1", base, testVADChunkBytes))
+	runGate(p, vadSettings(true, 0.35), makeVADItem(classifier.RegistryIDBat, "src1", base, testVADChunkBytes))
 	// Empty PCM: skipped.
-	p.runVADGate(vadSettings(true, 0.35), makeVADItem("BirdNET_V2.4", "src2", base, 0))
+	runGate(p, vadSettings(true, 0.35), makeVADItem("BirdNET_V2.4", "src2", base, 0))
 
 	assert.Empty(t, p.LastHumanDetection)
 	assert.Empty(t, st.appends, "bat and empty-PCM chunks must not be buffered")

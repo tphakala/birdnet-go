@@ -17,8 +17,6 @@ import (
 func TestApplyRangeFilterConfigForInstall_ClearsStaleOppositePath(t *testing.T) {
 	t.Parallel()
 	const (
-		staleModelPath  = "/stale/previous-model.onnx"
-		staleLabelsPath = "/stale/previous-labels.txt"
 		modelLocalName  = "geomodel-v3-model.onnx"
 		labelsLocalName = "geomodel-v3-labels.txt"
 	)
@@ -61,9 +59,10 @@ func TestApplyRangeFilterConfigForInstall_ClearsStaleOppositePath(t *testing.T) 
 
 			updated := conftest.GetTestSettings()
 			rf := updated.RangeFilterConfig()
-			// Simulate a full-tuple config left over from an earlier install.
-			rf.ModelPath = staleModelPath
-			rf.LabelsPath = staleLabelsPath
+			// Simulate a full-tuple config left over from an earlier install. The stale
+			// paths are the shipped catalog's gallery-managed shared files, so the
+			// custom range-filter guard lets the install rewrite them.
+			rf.ModelPath, rf.LabelsPath = sharedGeomodelExpectedPaths(modelsDir)
 
 			entry := &CatalogEntry{GeomodelVersion: geomodelRangeFilterVersion, Files: tt.files}
 			mm.applyRangeFilterConfigForInstall(updated, entry)
@@ -93,14 +92,21 @@ func TestApplyRangeFilterConfigForInstall_NonGeomodelEntryIsNoop(t *testing.T) {
 	// matching what an erroneous overwrite would set.
 	const existingRangeFilterVersion = "existing-range-filter-version"
 	rf.Model = existingRangeFilterVersion
-	rf.ModelPath = "/existing/geomodel.onnx"
-	rf.LabelsPath = "/existing/geomodel-labels.txt"
+	// Gallery-managed shared paths, so the custom range-filter guard would let a write
+	// through and only the no-geomodel-files early return keeps the config untouched.
+	existingModelPath, existingLabelsPath := sharedGeomodelExpectedPaths(modelsDir)
+	rf.ModelPath = existingModelPath
+	rf.LabelsPath = existingLabelsPath
 
-	// A plain acoustic-model entry: a classifier model role, no geomodel files.
-	entry := &CatalogEntry{Files: []CatalogFile{{Role: RoleModel, LocalName: "classifier.onnx"}}}
+	// A plain acoustic-model entry: a classifier model role, no geomodel files. It carries
+	// a geomodel version so the version check cannot mask a missing files check.
+	entry := &CatalogEntry{
+		GeomodelVersion: geomodelRangeFilterVersion,
+		Files:           []CatalogFile{{Role: RoleModel, LocalName: "classifier.onnx"}},
+	}
 	mm.applyRangeFilterConfigForInstall(updated, entry)
 
 	assert.Equal(t, existingRangeFilterVersion, rf.Model, "a non-geomodel install must not touch the range-filter version")
-	assert.Equal(t, "/existing/geomodel.onnx", rf.ModelPath, "a non-geomodel install must not touch the model path")
-	assert.Equal(t, "/existing/geomodel-labels.txt", rf.LabelsPath, "a non-geomodel install must not touch the labels path")
+	assert.Equal(t, existingModelPath, rf.ModelPath, "a non-geomodel install must not touch the model path")
+	assert.Equal(t, existingLabelsPath, rf.LabelsPath, "a non-geomodel install must not touch the labels path")
 }

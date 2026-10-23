@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/profiling"
 	"github.com/tphakala/birdnet-go/internal/restart"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -46,7 +47,8 @@ func splitValidationWarning(warning string) (component, message string) {
 // buildTime is the time when the binary was built.
 var buildDate string
 
-// version holds the Git version tag
+// version holds the build version from scripts/build-version.sh (a release
+// tag, <date>-g<hash>-dev, or unknown), injected with -ldflags.
 var version string
 
 //go:embed internal/imageprovider/data/latest.json
@@ -82,6 +84,11 @@ func main() {
 func mainWithExitCode() int {
 	// Create bootstrap logger for pre-initialization messages
 	bootLog := logger.NewConsoleLogger("main", logger.LogLevelInfo)
+
+	// Deferred first so it runs last, after logger and telemetry shutdown. It
+	// also covers the early return paths whose bootLog line would otherwise
+	// still be queued when main calls os.Exit.
+	defer logger.FlushConsole()
 
 	// Ensure all systems are properly shut down on exit
 	defer func() {
@@ -187,7 +194,7 @@ func mainWithExitCode() int {
 		mainLog.Warn("Failed to load system ID, using temporary ID",
 			logger.Error(err))
 		// Generate a temporary one for this session
-		systemID, _ = telemetry.GenerateSystemID()
+		systemID = privacy.GenerateSystemID()
 	}
 	settings.SystemID = systemID
 

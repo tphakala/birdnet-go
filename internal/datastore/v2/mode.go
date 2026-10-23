@@ -23,7 +23,8 @@ func SetEnhancedDatabaseMode() {
 //
 // This is false for:
 //   - Legacy database mode
-//   - During active migration (dual-write mode)
+//   - During active migration (new detections go to the legacy database and
+//     the migration worker copies them to v2)
 func IsEnhancedDatabase() bool {
 	return databaseMode.Load()
 }

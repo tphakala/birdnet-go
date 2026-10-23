@@ -56,8 +56,10 @@ export function createComponentTestFactory<TComponent extends Component<any>>(
         renderOptions = options;
       }
 
+      // Merged props are only as complete as defaultProps plus the caller's props;
+      // each test supplies whatever required props its component needs.
       const result = renderTyped(Component, {
-        props: { ...defaultProps, ...props } as ComponentProps<TComponent>,
+        props: { ...defaultProps, ...props } as unknown as ComponentProps<TComponent>,
         ...renderOptions,
       });
 
@@ -70,7 +72,7 @@ export function createComponentTestFactory<TComponent extends Component<any>>(
           await (result as any).rerender({
             ...defaultProps,
             ...newProps,
-          } as ComponentProps<TComponent>);
+          });
         },
       };
     },
@@ -79,7 +81,7 @@ export function createComponentTestFactory<TComponent extends Component<any>>(
     renderWithProps: (...propVariants: Partial<ComponentProps<TComponent>>[]) => {
       return propVariants.map(props =>
         renderTyped(Component, {
-          props: { ...defaultProps, ...props } as ComponentProps<TComponent>,
+          props: { ...defaultProps, ...props } as unknown as ComponentProps<TComponent>,
         })
       );
     },
@@ -92,11 +94,12 @@ export function createComponentTestFactory<TComponent extends Component<any>>(
 export function createMockHandlers<T extends Record<string, (...args: unknown[]) => unknown>>(
   handlers: T
 ): T {
-  const mocked = {} as T;
+  const mocked: Partial<T> = {};
   for (const [key, handler] of Object.entries(handlers)) {
     mocked[key as keyof T] = vi.fn(handler) as unknown as T[keyof T];
   }
-  return mocked;
+  // Every key of handlers was filled in above
+  return mocked as T;
 }
 
 /**

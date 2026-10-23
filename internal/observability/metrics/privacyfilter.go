@@ -29,6 +29,10 @@ type PrivacyFilterMetrics struct {
 	vadInferenceDuration prometheus.Histogram
 	// vadLastSpeechProbability is the most recent VAD speech probability [0,1].
 	vadLastSpeechProbability prometheus.Gauge
+	// unscannedSavesTotal counts detections approved for saving although no
+	// speech detector had scored their whole clip span within the coverage wait
+	// (the privacy filter fails open there).
+	unscannedSavesTotal prometheus.Counter
 }
 
 // NewPrivacyFilterMetrics creates and registers new privacy-filter metrics.
@@ -75,6 +79,13 @@ func (m *PrivacyFilterMetrics) initMetrics() error {
 		},
 	)
 
+	m.unscannedSavesTotal = prometheus.NewCounter(
+		prometheus.CounterOpts{
+			Name: "privacy_filter_unscanned_saves_total",
+			Help: "Total detections approved for saving whose clip span was not fully scanned for speech before the coverage wait expired",
+		},
+	)
+
 	return nil
 }
 
@@ -84,6 +95,7 @@ func (m *PrivacyFilterMetrics) Describe(ch chan<- *prometheus.Desc) {
 	m.vadSpeechHitsTotal.Describe(ch)
 	m.vadInferenceDuration.Describe(ch)
 	m.vadLastSpeechProbability.Describe(ch)
+	m.unscannedSavesTotal.Describe(ch)
 }
 
 // Collect implements the Collector interface.
@@ -92,6 +104,7 @@ func (m *PrivacyFilterMetrics) Collect(ch chan<- prometheus.Metric) {
 	m.vadSpeechHitsTotal.Collect(ch)
 	m.vadInferenceDuration.Collect(ch)
 	m.vadLastSpeechProbability.Collect(ch)
+	m.unscannedSavesTotal.Collect(ch)
 }
 
 // Recording methods. All are nil-safe so callers need only guard on the group
@@ -128,4 +141,13 @@ func (m *PrivacyFilterMetrics) SetVADLastSpeechProbability(prob float64) {
 		return
 	}
 	m.vadLastSpeechProbability.Set(prob)
+}
+
+// RecordUnscannedSave increments the counter of detections approved although
+// their clip span was not fully scanned for speech within the coverage wait.
+func (m *PrivacyFilterMetrics) RecordUnscannedSave() {
+	if m == nil {
+		return
+	}
+	m.unscannedSavesTotal.Inc()
 }

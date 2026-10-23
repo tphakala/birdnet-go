@@ -23,6 +23,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/health"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
@@ -78,6 +79,17 @@ type Handler struct {
 	// sample and requests may run concurrently.
 	procSamples   map[int32]*procSample
 	procSamplesMu sync.Mutex
+
+	// notices is the injected notification service for the storage notices (nil
+	// means the process-wide service). See SetNotificationService.
+	notices notification.NoticeService
+
+	// storage owns the persistent storage bell notices and their debounce timer.
+	storage storageNotice
+
+	// storageDeps are the environment reads behind the storage persistence
+	// report; the zero value uses the real ones.
+	storageDeps storageDeps
 }
 
 // procSample is a retained per-PID CPU sampler plus the create time that identifies

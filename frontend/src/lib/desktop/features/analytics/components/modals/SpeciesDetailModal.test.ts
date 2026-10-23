@@ -55,6 +55,18 @@ describe('SpeciesDetailModal', () => {
     expect(screen.getByText('House Sparrow')).toBeInTheDocument();
   });
 
+  it('names the dialog with the species name', () => {
+    modalTest.render({
+      props: {
+        isOpen: true,
+        species: mockSpecies,
+      },
+    });
+
+    expect(screen.getByRole('dialog', { name: 'House Sparrow' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog')).not.toHaveAttribute('aria-describedby');
+  });
+
   it('is not visible when isOpen is false', () => {
     modalTest.render({
       props: {

@@ -139,6 +139,8 @@ func TestGenerateSpectrogramFromRelRetainsFailedStatusForPolling(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, spectrogramStatusFailed, status.GetStatus(),
 		"the retained queue entry must report failed status, not be silently deleted")
+	assert.Equal(t, spectrogramReasonBusy, status.Get()["reason"],
+		"the failed write classifies the error: the cancelled context is an operational interruption")
 }
 
 // TestDeleteFailedStatusIfUnchangedPreservesRetryEntry pins that the failed-status

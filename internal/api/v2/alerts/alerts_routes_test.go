@@ -82,6 +82,7 @@ func TestAlertRoutesRegisteredWithoutV2(t *testing.T) {
 		"GET /api/v2/alerts/rules",
 		"GET /api/v2/alerts/rules/:id",
 		"GET /api/v2/alerts/history",
+		"GET /api/v2/alerts/status",
 		"GET /api/v2/alerts/rules/export",
 		"POST /api/v2/alerts/rules",
 		"PUT /api/v2/alerts/rules/:id",
@@ -235,4 +236,39 @@ func TestMutatingHandlerReturns503WhenEngineInitFailed(t *testing.T) {
 
 	apitest.AssertControllerError(t, err, rec, http.StatusServiceUnavailable, "Alerting engine is unavailable")
 	assert.Equal(t, notification.MsgErrAlertEngineUnavailable, decodeErrorKey(t, rec.Body.Bytes()))
+}
+
+// TestGetAlertStatusReportsEngineFlag verifies GET /alerts/status reports the
+// process flag the legacy detection consumer branches on, not v2 availability or
+// the handler's own engine fields. A fresh handler has no engine and no init
+// error, so a handler that derived the answer from either would fail one row.
+func TestGetAlertStatusReportsEngineFlag(t *testing.T) {
+	// NOT parallel: the engine flag is process-global, and apitest.NewCore
+	// publishes to the process-global settings snapshot.
+	cases := []struct {
+		name   string
+		active bool
+	}{
+		{"engine inactive", false},
+		{"engine active", true},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			notification.SetAlertEngineActive(tc.active)
+			t.Cleanup(func() { notification.SetAlertEngineActive(false) })
+
+			h := New(apitest.NewCore(t))
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/alerts/status", http.NoBody)
+			rec := httptest.NewRecorder()
+
+			require.NoError(t, h.GetAlertStatus(e.NewContext(req, rec)))
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var resp map[string]bool
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, map[string]bool{"engine_active": tc.active}, resp)
+		})
+	}
 }

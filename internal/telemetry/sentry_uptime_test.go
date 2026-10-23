@@ -221,3 +221,20 @@ func TestCreateBeforeSendHook_EnrichesEvent(t *testing.T) {
 	require.NotNil(t, got.Contexts)
 	assert.Contains(t, got.Contexts, uptimeContextKey, "hook must attach runtime_state context")
 }
+
+// TestCreateBeforeSendHook_OldBuildDropsAllButSupportDumps verifies that a build
+// past its telemetry age drops every event except user-requested support dumps.
+func TestCreateBeforeSendHook_OldBuildDropsAllButSupportDumps(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{
+		BuildDate: expiredBuildDate(),
+	}
+	hook := createBeforeSendHook(settings)
+
+	assert.Nil(t, hook(sentry.NewEvent(), nil), "plain events from an expired build must be dropped")
+
+	dump := sentry.NewEvent()
+	dump.Tags = map[string]string{eventTypeTagKey: supportDumpEventType}
+	assert.NotNil(t, hook(dump, nil), "support dump events must pass on an expired build")
+}

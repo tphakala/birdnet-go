@@ -53,18 +53,19 @@ If you're using Docker Compose with BirdNET-Go, setting up Cloudflare Tunnel is 
        depends_on:
          - birdnet-go
      ```
-   - Alternatively, use the [premade docker-compose.yml](../../Docker/docker-compose.yml) which already includes this configuration (commented out)
+   - With the host networking file ([docker-compose.host.yml](../../Docker/docker-compose.host.yml), recommended for new installs), add `network_mode: host` to the cloudflared service and use `http://localhost:<WEB_PORT>` as the service URL in step 5. A container on a bridge network cannot reach a host-network service by name. The host file already includes a cloudflared service set up this way (commented out).
+   - With the bridge file ([docker-compose.yml](../../Docker/docker-compose.yml)), the snippet above works as is, and the file already includes it (commented out)
 
 4. **Start the Services**:
 
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
 
 5. **Configure Public Hostname in Cloudflare Dashboard**:
    - Go back to your tunnel in the Cloudflare Zero Trust dashboard
    - Add a public hostname (e.g., `birdnet.yourdomain.com`)
-   - Set the service to `http://birdnet-go:8080`
+   - Set the service to `http://localhost:<WEB_PORT>` (host networking) or `http://birdnet-go:8080` (bridge networking)
    - Save the configuration
 
 Your BirdNET-Go instance will now be accessible at `https://birdnet.yourdomain.com` from anywhere.
@@ -90,6 +91,8 @@ If you're using the standard Docker installation method:
    ```
 
 3. **Configure Public Hostname** (same as above)
+
+If BirdNET-Go runs with host networking (`--network host`), add `--network host` to the cloudflared command as well and use `http://localhost:<BIRDNET_WEBSERVER_PORT>` as the service URL.
 
 ### Using Binary Installation (Non-Docker)
 
@@ -249,6 +252,7 @@ For more advanced setups, you can use a config file instead of a token:
 3. **Add credentials file** obtained from Cloudflare dashboard to `~/cloudflared/credentials.json`
 
 4. **Run with Docker Compose**:
+
    ```yaml
    cloudflared:
      image: cloudflare/cloudflared:latest
@@ -260,6 +264,8 @@ For more advanced setups, you can use a config file instead of a token:
      depends_on:
        - birdnet-go
    ```
+
+   With the host networking Compose file, add `network_mode: host` to this cloudflared service and use `service: http://localhost:<WEB_PORT>` in `config.yml` instead of `http://birdnet-go:8080`.
 
 ### Securing Multiple Services
 
@@ -277,7 +283,7 @@ If you run multiple services on your network, you can expose them all through a 
 
 ## Troubleshooting
 
-- **Connection refused errors**: Verify that the BirdNET-Go container is accessible from the cloudflared container. They should be on the same Docker network.
+- **Connection refused errors**: Verify that the BirdNET-Go container is accessible from the cloudflared container. They should be on the same Docker network, or, with host networking, both use the host network and the service URL is `http://localhost:<WEB_PORT>`.
 - **Tunnel not connecting**: Check logs with `docker logs birdnet-cloudflared` to ensure the token is valid.
 - **Cannot access web interface**: Verify that your DNS settings in Cloudflare are properly configured for your domain.
 - **Authentication issues**: If using OAuth, ensure the `security.host` matches your public domain exactly.

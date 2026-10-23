@@ -3,6 +3,7 @@ package apicore
 import (
 	"context"
 	"crypto/rand"
+	"math"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -66,17 +67,23 @@ func GenerateCorrelationID() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	const length = 8
 
-	b := make([]byte, length)
-	if _, err := rand.Read(b); err != nil {
-		// Fall back to a default ID if crypto/rand fails
-		return "ERR-RAND"
-	}
+	// byteLimit is the largest multiple of len(charset) that fits in a byte.
+	// Bytes at or above it are redrawn, so every character is equally likely.
+	const byteLimit = (math.MaxUint8 + 1) / len(charset) * len(charset)
 
-	// Map the random bytes to charset characters
-	for i := range b {
-		b[i] = charset[int(b[i])%len(charset)]
+	// buf[:n] holds the characters accepted so far; each pass draws bytes for
+	// the rest and keeps the ones below byteLimit.
+	buf := make([]byte, length)
+	for n := 0; n < length; {
+		rand.Read(buf[n:])
+		for _, v := range buf[n:] {
+			if int(v) < byteLimit {
+				buf[n] = charset[int(v)%len(charset)]
+				n++
+			}
+		}
 	}
-	return string(b)
+	return string(buf)
 }
 
 // handleErrorInternal is the shared implementation for HandleError and HandleErrorWithKey.

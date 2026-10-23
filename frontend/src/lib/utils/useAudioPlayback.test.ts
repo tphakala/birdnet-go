@@ -6,8 +6,6 @@
  * established in AudioPlayer.test.ts.
  */
 
-/* global Audio */
-
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { waitFor, cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../test/render-helpers';
@@ -71,14 +69,14 @@ describe('useAudioPlayback', () => {
    */
   function getState(): AudioPlaybackState {
     if (capturedState === null) {
-      throw new Error('capturedState is null — did you forget to await waitFor?');
+      throw new Error('capturedState is null, did you forget to await waitFor?');
     }
     return capturedState;
   }
 
   /** Helper to fire a synthetic event on the mock audio element */
   function fireAudioEvent(eventName: string) {
-    const handlers = safeGet(eventHandlers, eventName, []) as EventListener[];
+    const handlers = safeGet(eventHandlers, eventName, []);
     handlers.forEach(handler => {
       handler.call(mockAudioInstance, new Event(eventName));
     });
@@ -128,17 +126,17 @@ describe('useAudioPlayback', () => {
     // Store event handlers so tests can fire synthetic events
     window.HTMLMediaElement.prototype.addEventListener = vi.fn(
       (event: string, handler: EventListener) => {
-        const handlers = safeGet(eventHandlers, event, []) as EventListener[];
+        const handlers = safeGet(eventHandlers, event, []);
         if (handlers.length === 0) {
           Object.assign(eventHandlers, { [event]: [] });
         }
-        (safeGet(eventHandlers, event, []) as EventListener[]).push(handler);
+        safeGet(eventHandlers, event, []).push(handler);
       }
     );
 
     window.HTMLMediaElement.prototype.removeEventListener = vi.fn(
       (event: string, handler: EventListener) => {
-        const handlers = safeGet(eventHandlers, event, []) as EventListener[];
+        const handlers = safeGet(eventHandlers, event, []);
         if (handlers.length > 0) {
           const index = handlers.indexOf(handler);
           if (index > -1) {
@@ -166,10 +164,10 @@ describe('useAudioPlayback', () => {
     });
 
     // Mock Audio constructor to return our controlled instance
-    mockAudioInstance = document.createElement('audio') as HTMLAudioElement;
+    mockAudioInstance = document.createElement('audio');
     vi.spyOn(window, 'Audio').mockImplementation(function (this: HTMLAudioElement) {
       return mockAudioInstance;
-    } as unknown as typeof Audio);
+    });
   });
 
   afterEach(() => {
@@ -329,7 +327,7 @@ describe('useAudioPlayback', () => {
     // Initially duration should be 0
     expect(getState().duration).toBe(0);
 
-    // Fire loadedmetadata — the mock returns 120 for duration
+    // Fire loadedmetadata, the mock returns 120 for duration
     fireAudioEvent('loadedmetadata');
 
     await waitFor(() => {
@@ -392,7 +390,7 @@ describe('useAudioPlayback', () => {
       await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS + 100);
     }
 
-    // Fire one more error — this one exceeds the retry count
+    // Fire one more error, this one exceeds the retry count
     fireAudioEvent('error');
 
     await waitFor(() => {
@@ -471,15 +469,15 @@ describe('useAudioPlayback', () => {
       expect(getState().duration).toBe(120);
     });
 
-    // Seek beyond duration — should clamp to duration
+    // Seek beyond duration, should clamp to duration
     getState().seek(200);
     expect(setCurrentTime).toHaveBeenCalledWith(120);
 
-    // Seek to negative — should clamp to 0
+    // Seek to negative, should clamp to 0
     getState().seek(-10);
     expect(setCurrentTime).toHaveBeenCalledWith(0);
 
-    // Seek within range — should use exact value
+    // Seek within range, should use exact value
     getState().seek(60);
     expect(setCurrentTime).toHaveBeenCalledWith(60);
   });

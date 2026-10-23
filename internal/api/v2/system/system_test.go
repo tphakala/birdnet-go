@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/labstack/echo/v4"
+	gopsdisk "github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/process"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,7 +71,12 @@ func TestGetDeviceBaseName(t *testing.T) {
 		{
 			name:     "NVMe device with partition",
 			device:   "/dev/nvme0n1p1",
-			expected: "nvme0n1p",
+			expected: "nvme0n1",
+		},
+		{
+			name:     "NVMe whole disk",
+			device:   "/dev/nvme0n1",
+			expected: "nvme0n1",
 		},
 		{
 			name:     "Simple device name",
@@ -85,12 +91,72 @@ func TestGetDeviceBaseName(t *testing.T) {
 		{
 			name:     "MMC device with partition",
 			device:   "/dev/mmcblk0p1",
-			expected: "mmcblk0p",
+			expected: "mmcblk0",
 		},
 		{
-			name:     "Loop device",
+			name:     "MMC whole disk",
+			device:   "/dev/mmcblk0",
+			expected: "mmcblk0",
+		},
+		{
+			name:     "Loop whole device is kept as is",
 			device:   "/dev/loop0",
-			expected: "loop",
+			expected: "loop0",
+		},
+		{
+			name:     "Software RAID partition",
+			device:   "/dev/md0p1",
+			expected: "md0",
+		},
+		{
+			name:     "Software RAID whole device",
+			device:   "/dev/md0",
+			expected: "md0",
+		},
+		{
+			name:     "Device mapper device keeps its digit",
+			device:   "/dev/dm-0",
+			expected: "dm-0",
+		},
+		{
+			name:     "Two-letter SCSI disk partition",
+			device:   "/dev/sdaa1",
+			expected: "sdaa",
+		},
+		{
+			name:     "Xen virtual disk partition",
+			device:   "/dev/xvda1",
+			expected: "xvda",
+		},
+		{
+			name:     "VirtIO disk partition",
+			device:   "/dev/vda1",
+			expected: "vda",
+		},
+		{
+			name:     "IDE disk partition",
+			device:   "/dev/hda1",
+			expected: "hda",
+		},
+		{
+			name:     "macOS APFS snapshot slice",
+			device:   "/dev/disk3s1s1",
+			expected: "disk3",
+		},
+		{
+			name:     "macOS slice",
+			device:   "/dev/disk3s1",
+			expected: "disk3",
+		},
+		{
+			name:     "macOS whole disk",
+			device:   "/dev/disk0",
+			expected: "disk0",
+		},
+		{
+			name:     "Windows drive letter is its own key",
+			device:   "C:",
+			expected: "C:",
 		},
 	}
 
@@ -99,6 +165,75 @@ func TestGetDeviceBaseName(t *testing.T) {
 			t.Parallel()
 			result := getDeviceBaseName(tt.device)
 			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestPopulateIOMetrics tests that partitions are matched to the IO counters of
+// the right device, including the exact-name fallback.
+func TestPopulateIOMetrics(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "system")
+	t.Attr("type", "unit")
+	t.Attr("feature", "disk-io-metrics")
+
+	const uptimeMs = 1000
+	counters := map[string]gopsdisk.IOCountersStat{
+		"mmcblk0":   {ReadBytes: 1000, WriteBytes: 2000, ReadCount: 10, WriteCount: 20, ReadTime: 30, WriteTime: 40, IoTime: 500},
+		"mmcblk0p1": {ReadBytes: 7, WriteBytes: 8, ReadCount: 1, WriteCount: 2, ReadTime: 3, WriteTime: 4, IoTime: 100},
+		"loop0":     {ReadBytes: 300, WriteBytes: 400, ReadCount: 5, WriteCount: 6, ReadTime: 7, WriteTime: 8, IoTime: 250},
+		"sdb1":      {ReadBytes: 900, WriteBytes: 800, ReadCount: 70, WriteCount: 60, ReadTime: 50, WriteTime: 40, IoTime: 200},
+	}
+
+	tests := []struct {
+		name     string
+		device   string
+		expected DiskInfo
+		busyPerc float64
+	}{
+		{
+			name:   "SD card partition reports the whole disk counters",
+			device: "/dev/mmcblk0p1",
+			expected: DiskInfo{
+				ReadBytes: 1000, WriteBytes: 2000, ReadCount: 10, WriteCount: 20,
+				ReadTime: 30, WriteTime: 40, IOTime: 500,
+			},
+			busyPerc: 50,
+		},
+		{
+			name:   "loop device finds its own counters",
+			device: "/dev/loop0",
+			expected: DiskInfo{
+				ReadBytes: 300, WriteBytes: 400, ReadCount: 5, WriteCount: 6,
+				ReadTime: 7, WriteTime: 8, IOTime: 250,
+			},
+			busyPerc: 25,
+		},
+		{
+			name:   "partition falls back to its own counters when the whole disk is absent",
+			device: "/dev/sdb1",
+			expected: DiskInfo{
+				ReadBytes: 900, WriteBytes: 800, ReadCount: 70, WriteCount: 60,
+				ReadTime: 50, WriteTime: 40, IOTime: 200,
+			},
+			busyPerc: 20,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var info DiskInfo
+			(&Handler{}).populateIOMetrics(&info, tt.device, counters, uptimeMs)
+
+			assert.Equal(t, tt.expected.ReadBytes, info.ReadBytes)
+			assert.Equal(t, tt.expected.WriteBytes, info.WriteBytes)
+			assert.Equal(t, tt.expected.ReadCount, info.ReadCount)
+			assert.Equal(t, tt.expected.WriteCount, info.WriteCount)
+			assert.Equal(t, tt.expected.ReadTime, info.ReadTime)
+			assert.Equal(t, tt.expected.WriteTime, info.WriteTime)
+			assert.Equal(t, tt.expected.IOTime, info.IOTime)
+			assert.InDelta(t, tt.busyPerc, info.IOBusyPerc, 0.001)
 		})
 	}
 }

@@ -237,11 +237,7 @@ func newCSRFTestServer() *echo.Echo {
 	})
 	// Non-skipped token-provider route (mirrors /api/v2/app/config).
 	e.GET("/api/v2/app/config", func(c echo.Context) error {
-		token, err := EnsureCSRFToken(c)
-		if err != nil {
-			return err
-		}
-		return c.String(http.StatusOK, token)
+		return c.String(http.StatusOK, EnsureCSRFToken(c))
 	})
 	// Skipper-exempt route (login must work before a CSRF token exists).
 	e.POST("/api/v2/auth/login", func(c echo.Context) error {
@@ -390,8 +386,7 @@ func TestEnsureCSRFToken_IgnoresSentinel(t *testing.T) {
 	c, rec := newTestContext(t, http.MethodGet, "/api/v2/app/config")
 	c.Set(CSRFContextKey, middleware.CSRFUsingSecFetchSite)
 
-	token, err := EnsureCSRFToken(c)
-	require.NoError(t, err)
+	token := EnsureCSRFToken(c)
 	assert.NotEqual(t, middleware.CSRFUsingSecFetchSite, token)
 	assert.NotEmpty(t, token)
 

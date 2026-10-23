@@ -329,3 +329,19 @@ func TestDetectionRepository_ConversionFunctions(t *testing.T) {
 		assert.Nil(t, results)
 	})
 }
+
+// TestNoteResultConversion_CarriesClipSampleRate verifies the clip sample rate
+// survives both directions of the Result and Note conversion: it is the only link
+// between the planned rate on a Result and the Note the datastore saves.
+func TestNoteResultConversion_CarriesClipSampleRate(t *testing.T) {
+	t.Parallel()
+
+	const rate = 384000
+	note := NoteFromResult(&detection.Result{Timestamp: time.Now(), ClipName: "a.flac", ClipSampleRate: rate})
+	assert.Equal(t, rate, note.ClipSampleRate)
+
+	repo := &detectionRepository{tz: time.UTC}
+	back, err := repo.noteToResult(&Note{Date: "2026-01-02", Time: "03:04:05", ClipName: "a.flac", ClipSampleRate: rate})
+	require.NoError(t, err)
+	assert.Equal(t, rate, back.ClipSampleRate)
+}

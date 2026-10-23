@@ -50,6 +50,11 @@ type InferenceStatusResponse struct {
 	// The empty string ("") is an API-only sentinel meaning "unavailable": no processor
 	// or orchestrator is wired yet, so the classifier has produced no verdict.
 	AcousticModelsState string `json:"acousticModelsState"`
+	// AnalysisCadence reports the planned analysis cadence: configured versus
+	// effective overlap and the confirmation counts they imply. Omitted when no
+	// cadence plan has been published (no orchestrator wired, or before the audio
+	// pipeline starts).
+	AnalysisCadence *AnalysisCadenceInfo `json:"analysisCadence,omitempty"`
 }
 
 // VADStatusInfo reports the privacy-filter Silero VAD speech gate for the
@@ -126,7 +131,7 @@ type HardwareInfo struct {
 	// can use them, so the UI can explain an unusable one instead of hiding it.
 	Accelerators []AcceleratorInfo `json:"accelerators,omitempty"`
 	// TotalRamBytes is the effective memory ceiling, host RAM clamped by any
-	// cgroup limit.
+	// cgroup limit. Omitted when the limit could not be determined exactly.
 	TotalRAMBytes int64 `json:"totalRamBytes,omitempty"`
 	// PhysicalCores is the physical core count.
 	PhysicalCores int `json:"physicalCores,omitempty"`
@@ -711,6 +716,10 @@ func (c *Handler) GetInferenceStatus(ctx echo.Context) error {
 			info.RecentHits = []VADHitInfo{}
 		}
 		resp.VAD = info
+	}
+
+	if orch != nil {
+		resp.AnalysisCadence = buildAnalysisCadence(orch.CadencePlan(), infos, settings)
 	}
 
 	resp.Models = make([]InferenceModelStatus, 0, len(infos))

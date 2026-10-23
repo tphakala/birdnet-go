@@ -45,10 +45,6 @@
           "type": "string",
           "description": "path to ffmpeg, runtime value"
         },
-        "soxpath": {
-          "type": "string",
-          "description": "path to sox, runtime value"
-        },
         "streamtransport": {
           "type": "string",
           "description": "preferred transport for audio streaming: \"auto\", \"sse\", or \"ws\""
@@ -892,7 +888,7 @@
         },
         "passes": {
           "type": "integer",
-          "description": "Filter passes for added attenuation or gain"
+          "description": "Cascaded filter sections: 0 turns the filter off, and so does a config.yaml entry with no passes key; 1 or more applies it that many times (at most 16); each pass adds 12 dB/oct for LowPass and HighPass"
         }
       },
       "additionalProperties": false,
@@ -1822,18 +1818,18 @@
             "$ref": "#/$defs/StreamConfig"
           },
           "type": "array",
-          "description": "Stream configurations"
+          "description": "Streams to analyze. Each entry has name (required, unique), url (required), enabled, type (rtsp, http, hls, rtmp or udp), transport (tcp or udp, RTSP and RTMP only; empty uses the global transport), mediaMode (auto, audio-only or full-stream, RTSP only; default full-stream), channelMode (downmix, left or right; default downmix) and gain (dB)"
         },
         "urls": {
           "items": {
             "type": "string"
           },
           "type": "array",
-          "description": "Legacy: accepts old format, migrated on load"
+          "description": "Legacy: a urls list in an older config is converted to streams on startup and saved; not read once streams has entries"
         },
         "transport": {
           "type": "string",
-          "description": "Legacy: global default, migrated on load"
+          "description": "Global default transport (tcp or udp): read as the engine-wide default and copied into streams that set none; kept after the urls migration"
         },
         "health": {
           "$ref": "#/$defs/RTSPHealthSettings",
@@ -2160,11 +2156,18 @@
             "type": "string"
           },
           "type": "array",
-          "description": "TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose\nforwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP)\nmay be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always\ntrusted in addition to these, so a default port-forwarded install and the\ncommon local cloudflared topology work without configuration. When the\nimmediate peer is not trusted, forwarded headers are ignored and the real\nconnection address is used, preventing source-IP spoofing on a directly\nexposed instance. The reserved value \"cloudflare\" (TrustedProxyCloudflarePreset)\nexpands to Cloudflare's published edge ranges. Hot-reloadable."
+          "description": "TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose\nforwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP)\nmay be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always\ntrusted in addition to these, so a default port-forwarded install and the\ncommon local cloudflared topology work without configuration. When the\nimmediate peer is not trusted, forwarded headers are ignored and the real\nconnection address is used, preventing source-IP spoofing on a directly\nexposed instance. The reserved value \"cloudflare\" (TrustedProxyCloudflarePreset)\nexpands to Cloudflare's published edge ranges. The same trust decides whether\nX-Forwarded-Proto (and X-Forwarded-Ssl, X-Forwarded-Protocol, X-Url-Scheme)\nis honored when deciding whether to send the HSTS header, so a proxy on a\npublic or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address must be listed here\nfor HSTS to be sent. Other HTTPS checks, such as the COOP header and the\nCSRF cookie Secure flag, do not consult this list. The subnet bypass\n(AllowSubnetBypass) is stricter: it honors a forwarded client address only\nfrom a proxy listed here, even one on a private or loopback address, and a\nrequest that carries any client-IP header (CF-Connecting-IP, X-Forwarded-For, X-Real-IP, True-Client-IP or Forwarded) from any other peer gets no bypass.\nFor the bypass, list each proxy's own address rather than a range that also\nholds clients: a client inside a listed range is trusted as a proxy, so its\nown forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite\nX-Real-IP; the client-IP headers it forwards must all name the same client,\nand a Forwarded header is not accepted. Hot-reloadable."
         },
         "publicaccess": {
           "$ref": "#/$defs/PublicAccess",
           "description": "features accessible without authentication"
+        },
+        "plainhttpsessionclients": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "PlainHTTPSessionClients lists the IP addresses of clients that reach the\napp directly over plain HTTP, for example another container calling\nhttp://birdnet-go:8080 while browsers use an HTTPS reverse proxy. Session\ncookies issued to these clients omit the Secure attribute so the clients can\nsend them back; every other client keeps Secure whenever HTTPS is\nconfigured. Only exact addresses are accepted, not ranges. The match uses\nthe connection's peer address, never forwarded headers, and applies only to\nrequests that arrive without TLS and without reverse-proxy headers. Never\nlist the address a reverse proxy or tunnel (such as cloudflared) connects\nfrom. With host networking or a native install, a proxy on the same host\nconnects from loopback (127.0.0.1, ::1) or the host's own address, so do\nnot list those when one runs there; with bridge networking and the proxy\non the host, do not list the container network gateway. Give listed\nclients a fixed address so it cannot be reassigned: browser sessions\nthrough a proxy that terminates TLS without sending forwarding headers\nwould otherwise lose Secure. Not shown in the web UI. Empty by default.\nHot-reloadable."
         },
         "privatemode": {
           "type": "boolean",
@@ -2687,11 +2690,11 @@
         },
         "fftsize": {
           "type": "integer",
-          "description": "FFT window size in samples (must be power of 2)"
+          "description": "FFT window size in samples (a power of 2, at least 2)"
         },
         "hopsize": {
           "type": "integer",
-          "description": "STFT hop size in samples"
+          "description": "STFT hop size in samples, 1 to fftsize"
         },
         "frequencysplithz": {
           "type": "integer",
@@ -2710,7 +2713,7 @@
         },
         "threshold": {
           "type": "number",
-          "description": "speech-probability gate in (0,1]; default 0.35"
+          "description": "speech-probability gate in (0,1]; default 0.6"
         },
         "modelpath": {
           "type": "string",

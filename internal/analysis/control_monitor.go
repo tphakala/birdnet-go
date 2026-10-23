@@ -58,6 +58,15 @@ type ControlMonitor struct {
 	// duplicating source setup logic.
 	reconfigureSourcesFn func()
 
+	// updateSourceGainsFn applies the configured gain of every running source to
+	// its live routes without a reconfigure or a stream probe. Set by
+	// AudioPipelineService after construction; nil skips it.
+	updateSourceGainsFn func()
+
+	// replanCadenceFn re-plans the analysis cadence without probing or diffing
+	// sources. Set by AudioPipelineService after construction; nil skips it.
+	replanCadenceFn func()
+
 	// reconfigureSoundLevelFn reconciles the sound level DSP pipeline (router
 	// routes, per-source Processor, bridge goroutines) with the current
 	// Realtime.Audio.SoundLevel.Enabled value. Provided by AudioPipelineService
@@ -301,6 +310,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleRebuildExtendedCapture()
 	case "reconfigure_audio_sources":
 		cm.handleReconfigureAudioSources()
+	case "update_source_gains":
+		cm.handleUpdateSourceGains()
 	case "restart_audio_capture":
 		cm.handleRestartAudioCapture()
 	case "reconfigure_dynamic_thresholds":
@@ -323,6 +334,19 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 	default:
 		GetLogger().Warn("Received unknown control signal", logger.String("signal", signal))
 	}
+}
+
+// handleUpdateSourceGains applies changed sound card and stream gains to the
+// running sources' live routes. Unlike handleReconfigureAudioSources it does not
+// diff or probe sources, restart anything, or rebuild the routes of a healthy
+// source; it only re-wires a source whose analysis route failed on the previous
+// pass, as every reconfigure does.
+func (cm *ControlMonitor) handleUpdateSourceGains() {
+	if cm.updateSourceGainsFn == nil {
+		return
+	}
+	cm.updateSourceGainsFn()
+	emitHotReload("source_gain")
 }
 
 // handleReconfigureLogDeduplication reinitializes the log deduplicator from current settings.
@@ -428,6 +452,13 @@ func (cm *ControlMonitor) handleReloadBirdnet() {
 	if err := cm.bn.ReloadSecondaryModels(); err != nil {
 		GetLogger().Error("Failed to reload secondary models", logger.Error(err))
 		cm.notifyError("Failed to reload secondary models", err)
+	}
+
+	// A thread or backend change reloads the models and re-probes their latency,
+	// so re-plan the analysis cadence (restarts capture only if the step changes).
+	// The sources did not change, so no stream is probed or reconfigured.
+	if cm.replanCadenceFn != nil {
+		cm.replanCadenceFn()
 	}
 
 	emitHotReload("birdnet_model")
@@ -1079,10 +1110,9 @@ func (cm *ControlMonitor) handleReconfigureQuietHours() {
 func (cm *ControlMonitor) handleRestartAudioCapture() {
 	GetLogger().Info("Restarting audio capture to apply analysis buffer changes")
 	ResetOverrunTrackers()
-	select {
-	case cm.restartChan <- struct{}{}:
+	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("audio capture restart signal sent")
-	default:
+	} else {
 		GetLogger().Warn("restart channel full, could not signal audio capture restart")
 	}
 }
@@ -1093,10 +1123,9 @@ func (cm *ControlMonitor) handleQuietHoursStopSoundCard() {
 
 	// Signal the audio capture goroutine to restart - when it restarts,
 	// CaptureAudio will check IsSoundCardInQuietHours() and skip the sound card.
-	select {
-	case cm.restartChan <- struct{}{}:
+	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("Quiet hours: sound card stop signal sent")
-	default:
+	} else {
 		GetLogger().Warn("Quiet hours: restart channel full, could not signal sound card stop")
 	}
 }
@@ -1107,10 +1136,9 @@ func (cm *ControlMonitor) handleQuietHoursStartSoundCard() {
 
 	// Signal the audio capture goroutine to restart - when it restarts,
 	// CaptureAudio will check IsSoundCardInQuietHours() and start the sound card normally.
-	select {
-	case cm.restartChan <- struct{}{}:
+	if trySignalCaptureRestart(cm.restartChan) {
 		GetLogger().Info("Quiet hours: sound card restart signal sent")
-	default:
+	} else {
 		GetLogger().Warn("Quiet hours: restart channel full, could not signal sound card restart")
 	}
 }

@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/patrickmn/go-cache"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
@@ -31,9 +30,7 @@ import (
 
 // Cache tuning constants for the shared detection caches owned by Core.
 const (
-	detectionCacheExpiry  = 5 * time.Minute  // Default detection-query cache expiration
-	detectionCacheCleanup = 10 * time.Minute // Detection-query cache cleanup interval
-	detectionRateCacheTTL = 5 * time.Minute  // Detection-rate cache TTL (database overview)
+	detectionRateCacheTTL = 5 * time.Minute // Detection-rate cache TTL (database overview)
 )
 
 // Default path and permission constants used while resolving the media export root.
@@ -92,8 +89,9 @@ type Core struct {
 	// inference-topology broadcast (BroadcastInferenceTopologyChanged).
 	MetricsStore observability.MetricsStore
 
-	// DetectionCache caches detection queries.
-	DetectionCache *cache.Cache
+	// DetectionCache caches detection list pages. It is nil-safe (a nil cache
+	// loads every page directly) and owns no goroutine.
+	DetectionCache *DetectionPageCache
 	// DetectionRateCache caches detection rate results for the database overview endpoint.
 	DetectionRateCache *datastore.DetectionRateCache
 
@@ -135,10 +133,10 @@ type Core struct {
 
 // NewCore builds the shared API v2 substrate. It resolves the media export root,
 // creates the SecureFS sandbox and the cancellation context, wires the
-// trusted-proxy IP extractor, loads the taxonomy database, initializes the eBird
-// client (when enabled) and the SSE manager. The functional options (auth
-// middleware, audio engine, etc.) and the echo Group + group middleware are
-// applied by the facade after construction.
+// trusted-proxy IP and scheme extractors, loads the taxonomy database,
+// initializes the eBird client (when enabled) and the SSE manager. The
+// functional options (auth middleware, audio engine, etc.) and the echo Group +
+// group middleware are applied by the facade after construction.
 func NewCore(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	metrics *observability.Metrics,
@@ -171,7 +169,7 @@ func NewCore(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		Repo:               repo, // Bridge to new domain model (nil if datastore disabled)
 		BirdImageCache:     birdImageCache,
 		SunCalc:            sunCalc,
-		DetectionCache:     cache.New(detectionCacheExpiry, detectionCacheCleanup),
+		DetectionCache:     NewDetectionPageCache(),
 		SFS:                sfs, // Assign SecureFS instance
 		Metrics:            metrics,
 		ctx:                ctx,
@@ -184,15 +182,20 @@ func NewCore(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	// field doc and the settings update handlers.
 	c.Settings.Store(settings)
 
-	// Configure the trusted-proxy-gated IP extractor. Forwarded client-IP headers
-	// (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) are honored only when the
-	// connection peer is a trusted proxy (loopback/link-local/private by default,
-	// plus Security.TrustedProxies); otherwise the real peer address is used. It
-	// reads this controller's own settings snapshot per request (published above
-	// and on every save), so it honors the controller's TrustedProxies and
-	// hot-reloads without a restart.
+	// Configure the trusted-proxy-gated IP and scheme extractors. Forwarded
+	// client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) and
+	// forwarded scheme headers (X-Forwarded-Proto and siblings) are honored only
+	// when the connection peer is a trusted proxy (loopback/link-local/private by
+	// default, plus Security.TrustedProxies); otherwise the real peer address and
+	// connection scheme are used. The scheme extractor is needed because Echo
+	// v4.16 otherwise trusts scheme headers from loopback/link-local/private
+	// peers only, so a proxy on a public or CGNAT address would lose HSTS. Both
+	// read this controller's own settings snapshot per request (published above
+	// and on every save), so they honor the controller's TrustedProxies and
+	// hot-reload without a restart.
 	e.IPExtractor = newTrustedProxyIPExtractor(c.ControllerSettings)
-	GetLogger().Info("Configured trusted-proxy-gated IP extractor (forwarded client IP honored only from trusted proxies)")
+	e.SchemeExtractor = newTrustedProxySchemeExtractor(c.ControllerSettings)
+	GetLogger().Info("Configured trusted-proxy-gated IP and scheme extractors (forwarded client IP and scheme honored only from trusted proxies)")
 
 	// Propagate the derived FFprobe path from config validation to the
 	// ffmpeg package so executeFFprobe can find it without PATH lookup.

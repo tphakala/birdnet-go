@@ -266,6 +266,7 @@ func TestOpenVINOProbeDevicesDoesNotCacheTimeout(t *testing.T) {
 	// Nothing cached, so readers see the pre-probe state rather than a verdict.
 	_, status, _ := cachedOVProbeDevices()
 	assert.Equal(t, ovProbeNotRun, status)
+	assert.Equal(t, OVProbeStatusNotRun, OpenVINORuntimeSnapshot().ProbeStatus)
 }
 
 func TestOpenVINOProbeDevicesCachesPerLibraryPath(t *testing.T) {
@@ -285,6 +286,7 @@ func TestOpenVINOProbeDevicesCachesPerLibraryPath(t *testing.T) {
 	require.NoError(t, errB)
 	require.NoError(t, errA2)
 	assert.Equal(t, 2, calls.count(), "A -> B -> A must probe each path once")
+	assert.Equal(t, OVProbeStatusCached, OpenVINORuntimeSnapshot().ProbeStatus)
 }
 
 func TestOpenVINOHasDeviceDoesNotBlockOnInFlightProbe(t *testing.T) {
@@ -308,6 +310,7 @@ func TestOpenVINOHasDeviceDoesNotBlockOnInFlightProbe(t *testing.T) {
 		_, status, _ := cachedOVProbeDevices()
 		return status == ovProbeInFlight
 	}, time.Second, 10*time.Millisecond)
+	assert.Equal(t, OVProbeStatusInFlight, OpenVINORuntimeSnapshot().ProbeStatus)
 
 	// A status reader must answer immediately, and answer false, while the
 	// probe child is still running.

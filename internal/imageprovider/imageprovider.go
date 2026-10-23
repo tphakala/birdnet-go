@@ -426,8 +426,10 @@ var nonAvianClasses = map[string]bool{
 // have images available from bird image providers.
 // It checks two sources:
 //   - nonAvianClasses: legacy BirdNET v2.x Title-case-with-spaces split names.
-//   - nonbird.IsNonBirdName: Perch v2 (FSD50K) classes and their underscore-split
-//     first tokens (e.g. "Power" from "power_tool", "speech"). Case-insensitive.
+//   - nonbird.IsNonBirdName: Perch v2 (FSD50K) classes by full label for new
+//     detections, and by underscore-split first token (e.g. "Power" from
+//     "power_tool") for names stored before full labels were kept whole.
+//     Case-insensitive.
 func isNonAvianClass(scientificName string) bool {
 	return nonAvianClasses[scientificName] || nonbird.IsNonBirdName(scientificName)
 }
@@ -457,14 +459,19 @@ func (c *BirdImageCache) getProvider() (ImageProvider, error) {
 // isCacheEntryStale checks if a cache entry has exceeded its TTL.
 // Negative entries (not found) have a shorter TTL than positive entries.
 func isCacheEntryStale(cachedAt time.Time, isNegative bool) bool {
+	return isCacheEntryStaleAt(cachedAt, isNegative, time.Now())
+}
+
+// isCacheEntryStaleAt reports whether a cache entry is past its TTL at the
+// given instant. An entry exactly one TTL old is still fresh.
+func isCacheEntryStaleAt(cachedAt time.Time, isNegative bool, now time.Time) bool {
 	var ttl time.Duration
 	if isNegative {
 		ttl = negativeCacheTTL
 	} else {
 		ttl = defaultCacheTTL
 	}
-	cutoff := time.Now().Add(-ttl)
-	return cachedAt.Before(cutoff)
+	return cachedAt.Before(now.Add(-ttl))
 }
 
 // dbEntryToBirdImage converts a database cache entry to a BirdImage struct.

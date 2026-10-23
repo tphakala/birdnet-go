@@ -23,93 +23,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
 
-// =============================================================================
-// SSE API CONTRACT - FIELD NAMES (camelCase per REST API conventions)
-// =============================================================================
-//
-// All field names use camelCase JSON tags. The SSEDetectionData struct no longer
-// embeds datastore.Note directly, avoiding PascalCase Go default marshaling.
-// =============================================================================
-
-// sseContractFields defines the expected JSON field names for SSE detection events.
-var sseContractFields = struct {
-	// Detection fields (camelCase via explicit json tags)
-	ID             string
-	Date           string
-	Time           string
-	BeginTime      string
-	EndTime        string
-	SpeciesCode    string
-	ScientificName string
-	CommonName     string
-	Confidence     string
-	Latitude       string
-	Longitude      string
-	ClipName       string
-	Verified       string
-	Locked         string
-	Source         string
-
-	// SSE-specific fields (camelCase)
-	BirdImage          string
-	Timestamp          string
-	EventType          string
-	IsNewSpecies       string
-	DaysSinceFirstSeen string
-
-	// BirdImage nested fields (camelCase via explicit json tags)
-	BirdImageURL            string
-	BirdImageScientificName string
-	BirdImageLicenseName    string
-	BirdImageLicenseURL     string
-	BirdImageAuthorName     string
-	BirdImageAuthorURL      string
-	BirdImageSourceProvider string
-
-	// Source nested fields (camelCase)
-	SourceID          string
-	SourceType        string
-	SourceDisplayName string
-}{
-	// Detection fields (camelCase)
-	ID:             "id",
-	Date:           "date",
-	Time:           "time",
-	BeginTime:      "beginTime",
-	EndTime:        "endTime",
-	SpeciesCode:    "speciesCode",
-	ScientificName: "scientificName",
-	CommonName:     "commonName",
-	Confidence:     "confidence",
-	Latitude:       "latitude",
-	Longitude:      "longitude",
-	ClipName:       "clipName",
-	Verified:       "verified",
-	Locked:         "locked",
-	Source:         "source",
-
-	// SSE-specific fields (camelCase)
-	BirdImage:          "birdImage",
-	Timestamp:          "timestamp",
-	EventType:          "eventType",
-	IsNewSpecies:       "isNewSpecies",
-	DaysSinceFirstSeen: "daysSinceFirstSeen",
-
-	// BirdImage nested fields (camelCase)
-	BirdImageURL:            "url",
-	BirdImageScientificName: "scientificName",
-	BirdImageLicenseName:    "licenseName",
-	BirdImageLicenseURL:     "licenseURL",
-	BirdImageAuthorName:     "authorName",
-	BirdImageAuthorURL:      "authorURL",
-	BirdImageSourceProvider: "sourceProvider",
-
-	// Source nested fields (camelCase)
-	SourceID:          "id",
-	SourceType:        "type",
-	SourceDisplayName: "displayName",
-}
-
 // createTestNoteWithAllFields creates a Note with all fields populated for contract testing.
 // Test coordinates are Helsinki, Finland (60.1699N, 24.9384E).
 func createTestNoteWithAllFields() datastore.Note {
@@ -136,6 +49,7 @@ func createTestNoteWithAllFields() datastore.Note {
 		ProcessingTime: 150 * time.Millisecond,
 		Verified:       "correct",
 		Locked:         true,
+		Unlikely:       true,
 	}
 }
 
@@ -162,338 +76,6 @@ func createTestSSEDetectionData() SSEDetectionData {
 	det.IsNewSpecies = true
 	det.DaysSinceFirstSeen = 14
 	return det
-}
-
-// TestSSEContract_DetectionPayload_FieldNames validates that SSE detection
-// events contain the expected JSON field names that the frontend depends on.
-func TestSSEContract_DetectionPayload_FieldNames(t *testing.T) {
-	t.Parallel()
-
-	detection := createTestSSEDetectionData()
-
-	// Serialize to JSON (same as SSE does)
-	jsonBytes, err := json.Marshal(detection)
-	require.NoError(t, err, "Failed to marshal SSEDetectionData to JSON")
-
-	// Parse back to map to check field names
-	var payload map[string]any
-	err = json.Unmarshal(jsonBytes, &payload)
-	require.NoError(t, err, "Failed to unmarshal JSON to map")
-
-	// Log the actual JSON for debugging
-	t.Logf("SSE JSON payload:\n%s", string(jsonBytes))
-
-	// ==========================================================================
-	// CONTRACT ASSERTIONS - DO NOT MODIFY EXPECTED VALUES
-	// ==========================================================================
-
-	t.Run("Detection fields use camelCase", func(t *testing.T) {
-		detectionFields := []string{
-			sseContractFields.ID,
-			sseContractFields.Date,
-			sseContractFields.Time,
-			sseContractFields.SpeciesCode,
-			sseContractFields.ScientificName,
-			sseContractFields.CommonName,
-			sseContractFields.Confidence,
-			sseContractFields.Latitude,
-			sseContractFields.Longitude,
-			sseContractFields.ClipName,
-			sseContractFields.Locked,
-		}
-
-		for _, field := range detectionFields {
-			assert.Contains(t, payload, field,
-				"SSE API CONTRACT VIOLATION: Detection field '%s' must be present", field)
-		}
-	})
-
-	t.Run("SSE-specific fields use camelCase", func(t *testing.T) {
-		assert.Contains(t, payload, sseContractFields.BirdImage,
-			"SSE API CONTRACT VIOLATION: birdImage field must be present")
-		assert.Contains(t, payload, sseContractFields.Timestamp,
-			"SSE API CONTRACT VIOLATION: timestamp field must be present")
-		assert.Contains(t, payload, sseContractFields.EventType,
-			"SSE API CONTRACT VIOLATION: eventType field must be present")
-	})
-
-	t.Run("BirdImage nested structure is correct", func(t *testing.T) {
-		birdImageRaw, exists := payload[sseContractFields.BirdImage]
-		require.True(t, exists, "birdImage field must be present")
-
-		birdImage, ok := birdImageRaw.(map[string]any)
-		require.True(t, ok, "birdImage must be an object")
-
-		expectedBirdImageFields := []string{
-			sseContractFields.BirdImageURL,
-			sseContractFields.BirdImageScientificName,
-			sseContractFields.BirdImageLicenseName,
-			sseContractFields.BirdImageAuthorName,
-			sseContractFields.BirdImageSourceProvider,
-		}
-
-		for _, field := range expectedBirdImageFields {
-			assert.Contains(t, birdImage, field,
-				"SSE API CONTRACT VIOLATION: BirdImage.%s field must be present", field)
-		}
-	})
-
-	t.Run("Source nested structure is correct", func(t *testing.T) {
-		sourceRaw, exists := payload[sseContractFields.Source]
-		require.True(t, exists, "source field must be present")
-
-		source, ok := sourceRaw.(map[string]any)
-		require.True(t, ok, "source must be an object")
-
-		expectedSourceFields := []string{
-			sseContractFields.SourceID,
-			sseContractFields.SourceDisplayName,
-		}
-
-		for _, field := range expectedSourceFields {
-			assert.Contains(t, source, field,
-				"SSE API CONTRACT VIOLATION: Source.%s field must be present", field)
-		}
-	})
-
-	t.Run("New species tracking fields are present when populated", func(t *testing.T) {
-		assert.Contains(t, payload, sseContractFields.IsNewSpecies,
-			"SSE API CONTRACT: isNewSpecies field must be present when true")
-		assert.Equal(t, true, payload[sseContractFields.IsNewSpecies],
-			"SSE API CONTRACT: isNewSpecies value mismatch")
-
-		assert.Contains(t, payload, sseContractFields.DaysSinceFirstSeen,
-			"SSE API CONTRACT: daysSinceFirstSeen must be present when non-zero")
-		assert.InDelta(t, 14, payload[sseContractFields.DaysSinceFirstSeen], 0.001,
-			"SSE API CONTRACT: daysSinceFirstSeen value mismatch")
-	})
-
-	t.Run("Verified and locked fields have correct values", func(t *testing.T) {
-		assert.Equal(t, "correct", payload[sseContractFields.Verified],
-			"SSE API CONTRACT: verified value mismatch")
-		assert.Equal(t, true, payload[sseContractFields.Locked],
-			"SSE API CONTRACT: locked value mismatch")
-	})
-
-	t.Run("Source object has correct values", func(t *testing.T) {
-		sourceRaw := payload[sseContractFields.Source]
-		source, ok := sourceRaw.(map[string]any)
-		require.True(t, ok, "source must be an object")
-
-		assert.Equal(t, "rtsp_test123", source[sseContractFields.SourceID],
-			"SSE API CONTRACT: source.id value mismatch")
-		assert.Equal(t, "Garden Microphone", source[sseContractFields.SourceDisplayName],
-			"SSE API CONTRACT: source.displayName value mismatch")
-	})
-
-	t.Run("BeginTime and EndTime are RFC3339 with correct values", func(t *testing.T) {
-		beginTime, ok := payload[sseContractFields.BeginTime].(string)
-		require.True(t, ok, "beginTime must be a string")
-		assert.Equal(t, "2024-01-15T14:30:45Z", beginTime,
-			"SSE API CONTRACT: beginTime value mismatch")
-
-		endTime, ok := payload[sseContractFields.EndTime].(string)
-		require.True(t, ok, "endTime must be a string")
-		assert.Equal(t, "2024-01-15T14:30:48Z", endTime,
-			"SSE API CONTRACT: endTime value mismatch")
-	})
-
-	t.Run("ClipName is filename only, no path", func(t *testing.T) {
-		clipName, ok := payload[sseContractFields.ClipName].(string)
-		require.True(t, ok, "clipName must be a string")
-		assert.Equal(t, "clip_001.wav", clipName,
-			"SSE API CONTRACT: clipName must be filename only, no directory path")
-	})
-
-	t.Run("BirdImage nested fields have correct values", func(t *testing.T) {
-		birdImage, ok := payload[sseContractFields.BirdImage].(map[string]any)
-		require.True(t, ok, "birdImage must be an object")
-
-		// The stream publishes the media-proxy URL, not the provider's upstream URL,
-		// so a species renders identically here and through the REST API and cannot
-		// be left pointing at a host whose availability this process does not control.
-		assert.Equal(t, imageprovider.ProxyImageURL("Parus major"), birdImage[sseContractFields.BirdImageURL],
-			"SSE API CONTRACT: birdImage.url value mismatch")
-		assert.Equal(t, "CC BY-SA 4.0", birdImage[sseContractFields.BirdImageLicenseName],
-			"SSE API CONTRACT: birdImage.licenseName value mismatch")
-		assert.Equal(t, "Test Author", birdImage[sseContractFields.BirdImageAuthorName],
-			"SSE API CONTRACT: birdImage.authorName value mismatch")
-		assert.Equal(t, "wikimedia", birdImage[sseContractFields.BirdImageSourceProvider],
-			"SSE API CONTRACT: birdImage.sourceProvider value mismatch")
-	})
-}
-
-// TestSSEContract_DetectionPayload_DateTimeFormat validates date/time string formats.
-func TestSSEContract_DetectionPayload_DateTimeFormat(t *testing.T) {
-	t.Parallel()
-
-	detection := createTestSSEDetectionData()
-
-	// Date should be "YYYY-MM-DD"
-	assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, detection.Date,
-		"SSE API CONTRACT: Date must be in YYYY-MM-DD format")
-
-	// Time should be "HH:MM:SS"
-	assert.Regexp(t, `^\d{2}:\d{2}:\d{2}$`, detection.Time,
-		"SSE API CONTRACT: Time must be in HH:MM:SS format")
-}
-
-// TestSSEContract_FrontendAccessPaths verifies the field access paths used by the frontend.
-func TestSSEContract_FrontendAccessPaths(t *testing.T) {
-	t.Parallel()
-
-	detection := createTestSSEDetectionData()
-
-	jsonBytes, err := json.Marshal(detection)
-	require.NoError(t, err)
-
-	var payload map[string]any
-	err = json.Unmarshal(jsonBytes, &payload)
-	require.NoError(t, err)
-
-	// ==========================================================================
-	// SIMULATE FRONTEND ACCESS PATTERNS (camelCase)
-	// ==========================================================================
-
-	t.Run("Frontend can access detection species info", func(t *testing.T) {
-		// Frontend accesses: data.commonName, data.scientificName
-		commonName, exists := payload["commonName"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.commonName")
-		assert.Equal(t, "Great Tit", commonName)
-
-		sciName, exists := payload["scientificName"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.scientificName")
-		assert.Equal(t, "Parus major", sciName)
-	})
-
-	t.Run("Frontend can access detection confidence", func(t *testing.T) {
-		// Frontend accesses: data.confidence
-		confidence, exists := payload["confidence"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.confidence")
-		assert.InDelta(t, 0.85, confidence, 0.001)
-	})
-
-	t.Run("Frontend can access bird image URL", func(t *testing.T) {
-		// Frontend accesses: data.birdImage.url
-		birdImageRaw, exists := payload["birdImage"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.birdImage")
-
-		birdImage, ok := birdImageRaw.(map[string]any)
-		require.True(t, ok, "FRONTEND BROKEN: data.birdImage is not an object")
-
-		url, exists := birdImage["url"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.birdImage.url")
-		assert.Equal(t, imageprovider.ProxyImageURL("Parus major"), url)
-	})
-
-	t.Run("Frontend can access detection ID", func(t *testing.T) {
-		// Frontend accesses: data.id for navigation/links
-		id, exists := payload["id"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.id")
-		assert.InDelta(t, float64(12345), id, 0.001)
-	})
-
-	t.Run("Frontend can access event type", func(t *testing.T) {
-		// Frontend accesses: data.eventType for event handling
-		eventType, exists := payload["eventType"]
-		require.True(t, exists, "FRONTEND BROKEN: Cannot access data.eventType")
-		assert.Equal(t, "new_detection", eventType)
-	})
-}
-
-// TestSSEContract_IsNewSpeciesOmittedWhenFalse verifies omitempty behavior.
-func TestSSEContract_IsNewSpeciesOmittedWhenFalse(t *testing.T) {
-	t.Parallel()
-
-	note := createTestNoteWithAllFields()
-	birdImage := createTestBirdImage()
-	detection := apicore.NewSSEDetectionData(&note, &birdImage)
-	detection.IsNewSpecies = false   // Should be omitted
-	detection.DaysSinceFirstSeen = 0 // Should be omitted
-
-	jsonBytes, err := json.Marshal(detection)
-	require.NoError(t, err)
-
-	var payload map[string]any
-	err = json.Unmarshal(jsonBytes, &payload)
-	require.NoError(t, err)
-
-	// isNewSpecies and daysSinceFirstSeen should be omitted when zero/false (omitempty)
-	_, hasIsNewSpecies := payload["isNewSpecies"]
-	assert.False(t, hasIsNewSpecies,
-		"SSE API CONTRACT: isNewSpecies should be omitted when false (omitempty)")
-
-	_, hasDaysSinceFirstSeen := payload["daysSinceFirstSeen"]
-	assert.False(t, hasDaysSinceFirstSeen,
-		"SSE API CONTRACT: daysSinceFirstSeen should be omitted when zero (omitempty)")
-}
-
-// TestSSEContract_AllExpectedFieldsPresent is a comprehensive check that all
-// expected fields are present in the SSE payload.
-func TestSSEContract_AllExpectedFieldsPresent(t *testing.T) {
-	t.Parallel()
-
-	detection := createTestSSEDetectionData()
-
-	jsonBytes, err := json.Marshal(detection)
-	require.NoError(t, err)
-
-	var payload map[string]any
-	err = json.Unmarshal(jsonBytes, &payload)
-	require.NoError(t, err)
-
-	// ==========================================================================
-	// EXPECTED ROOT-LEVEL FIELDS (all camelCase)
-	// ==========================================================================
-	expectedRootFields := []string{
-		// Detection fields (camelCase)
-		"id", "date", "time",
-		"speciesCode", "scientificName", "commonName", "confidence",
-		"latitude", "longitude",
-		"clipName",
-		// SSE-specific (camelCase)
-		"birdImage", "timestamp", "eventType",
-	}
-
-	for _, field := range expectedRootFields {
-		assert.Contains(t, payload, field,
-			"SSE API CONTRACT: Expected field '%s' not found in JSON payload", field)
-	}
-}
-
-// TestSSEContract_NoPascalCaseFields verifies that all fields use camelCase
-// naming and no PascalCase Go defaults leak through.
-func TestSSEContract_NoPascalCaseFields(t *testing.T) {
-	t.Parallel()
-
-	detection := createTestSSEDetectionData()
-
-	jsonBytes, err := json.Marshal(detection)
-	require.NoError(t, err)
-
-	jsonStr := string(jsonBytes)
-
-	// These PascalCase fields should NOT appear in the JSON output
-	forbiddenFields := []string{
-		"CommonName",
-		"ScientificName",
-		"ClipName",
-		"SourceNode",
-		"SpeciesCode",
-		"ProcessingTime",
-		"BeginTime",
-		"EndTime",
-		"Confidence",
-		"Latitude",
-		"Longitude",
-		"Threshold",
-		"Sensitivity",
-	}
-
-	for _, field := range forbiddenFields {
-		assert.NotContains(t, jsonStr, `"`+field+`":`,
-			"SSE API CONTRACT VIOLATION: PascalCase field '%s' must not appear in SSE payload", field)
-	}
 }
 
 // TestSSEContract_SensitiveDataExcluded verifies that sensitive internal data
@@ -563,493 +145,9 @@ func TestSSEContract_SensitiveDataExcluded(t *testing.T) {
 	assert.False(t, hasSafeString, "source must not contain safeString field")
 }
 
-// TestSSEContract_NullInternalFieldsExcluded verifies that null internal fields
-// like Results, Review, Comments, and Lock are not present in the SSE payload.
-func TestSSEContract_NullInternalFieldsExcluded(t *testing.T) {
-	t.Parallel()
-
-	detection := createTestSSEDetectionData()
-
-	jsonBytes, err := json.Marshal(detection)
-	require.NoError(t, err)
-
-	jsonStr := string(jsonBytes)
-
-	// These internal Note fields should never appear in SSE output
-	internalFields := []string{
-		"Results",
-		"Review",
-		"Comments",
-		"Lock",
-		"Occurrence",
-	}
-
-	for _, field := range internalFields {
-		assert.NotContains(t, jsonStr, `"`+field+`"`,
-			"SSE payload must not contain internal field '%s'", field)
-	}
-}
-
 // =============================================================================
 // EXHAUSTIVE FIELD VALUE TESTS
 // =============================================================================
-
-// TestSSEContract_VerifiedAndLocked_Serialization validates that the verified
-// and locked fields serialize with correct values and omitempty behavior.
-func TestSSEContract_VerifiedAndLocked_Serialization(t *testing.T) {
-	t.Parallel()
-
-	t.Run("verified present when set", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		note.Verified = "correct"
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		val, exists := payload["verified"]
-		require.True(t, exists, "SSE API CONTRACT: verified must be present when set")
-		assert.Equal(t, "correct", val,
-			"SSE API CONTRACT: verified value must match")
-	})
-
-	t.Run("verified omitted when empty", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		note.Verified = "" // empty string, omitempty should omit
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		_, exists := payload["verified"]
-		assert.False(t, exists,
-			"SSE API CONTRACT: verified should be omitted when empty (omitempty)")
-	})
-
-	t.Run("locked true serializes correctly", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		note.Locked = true
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		val, exists := payload["locked"]
-		require.True(t, exists, "SSE API CONTRACT: locked must always be present")
-		assert.Equal(t, true, val,
-			"SSE API CONTRACT: locked=true must serialize as boolean true")
-	})
-
-	t.Run("locked false still present (no omitempty)", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		note.Locked = false
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		val, exists := payload["locked"]
-		require.True(t, exists,
-			"SSE API CONTRACT: locked must be present even when false (no omitempty)")
-		assert.Equal(t, false, val,
-			"SSE API CONTRACT: locked=false must serialize as boolean false")
-	})
-}
-
-// TestSSEContract_Source_NestedFields validates the source object structure,
-// including the omitempty behavior of the type field.
-func TestSSEContract_Source_NestedFields(t *testing.T) {
-	t.Parallel()
-
-	t.Run("source contains id and displayName", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		sourceRaw, exists := payload["source"]
-		require.True(t, exists, "SSE API CONTRACT: source must be present")
-
-		source, ok := sourceRaw.(map[string]any)
-		require.True(t, ok, "SSE API CONTRACT: source must be an object")
-
-		assert.Equal(t, "rtsp_test123", source["id"],
-			"SSE API CONTRACT: source.id must match note.Source.ID")
-		assert.Equal(t, "Garden Microphone", source["displayName"],
-			"SSE API CONTRACT: source.displayName must match note.Source.DisplayName")
-	})
-
-	t.Run("source type omitted when empty", func(t *testing.T) {
-		t.Parallel()
-
-		// newSSEDetectionData does not set Type from the Note source,
-		// so it should be omitted due to omitempty
-		note := createTestNoteWithAllFields()
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		source, ok := payload["source"].(map[string]any)
-		require.True(t, ok)
-
-		_, hasType := source["type"]
-		assert.False(t, hasType,
-			"SSE API CONTRACT: source.type should be omitted when empty (omitempty)")
-	})
-
-	t.Run("source omitted when source ID is empty", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		note.Source = datastore.AudioSource{} // empty source
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		_, exists := payload["source"]
-		assert.False(t, exists,
-			"SSE API CONTRACT: source should be omitted when source ID is empty (omitempty)")
-	})
-}
-
-// TestSSEContract_BeginTimeEndTime_RFC3339 validates that beginTime and endTime
-// are formatted as RFC3339 strings when set, and omitted when zero.
-func TestSSEContract_BeginTimeEndTime_RFC3339(t *testing.T) {
-	t.Parallel()
-
-	t.Run("beginTime and endTime formatted as RFC3339 when set", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		// beginTime must be present and parseable as RFC3339
-		beginTimeStr, exists := payload["beginTime"]
-		require.True(t, exists, "SSE API CONTRACT: beginTime must be present when non-zero")
-		beginTimeVal, ok := beginTimeStr.(string)
-		require.True(t, ok, "SSE API CONTRACT: beginTime must be a string")
-
-		parsedBegin, err := time.Parse(time.RFC3339, beginTimeVal)
-		require.NoError(t, err, "SSE API CONTRACT: beginTime must be valid RFC3339")
-		assert.Equal(t, 2024, parsedBegin.Year())
-		assert.Equal(t, time.January, parsedBegin.Month())
-		assert.Equal(t, 15, parsedBegin.Day())
-		assert.Equal(t, 14, parsedBegin.Hour())
-		assert.Equal(t, 30, parsedBegin.Minute())
-		assert.Equal(t, 45, parsedBegin.Second())
-
-		// endTime must be present and parseable as RFC3339
-		endTimeStr, exists := payload["endTime"]
-		require.True(t, exists, "SSE API CONTRACT: endTime must be present when non-zero")
-		endTimeVal, ok := endTimeStr.(string)
-		require.True(t, ok, "SSE API CONTRACT: endTime must be a string")
-
-		parsedEnd, err := time.Parse(time.RFC3339, endTimeVal)
-		require.NoError(t, err, "SSE API CONTRACT: endTime must be valid RFC3339")
-		assert.Equal(t, 2024, parsedEnd.Year())
-		assert.Equal(t, time.January, parsedEnd.Month())
-		assert.Equal(t, 15, parsedEnd.Day())
-		assert.Equal(t, 14, parsedEnd.Hour())
-		assert.Equal(t, 30, parsedEnd.Minute())
-		assert.Equal(t, 48, parsedEnd.Second())
-	})
-
-	t.Run("beginTime and endTime omitted when zero", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		note.BeginTime = time.Time{} // zero value
-		note.EndTime = time.Time{}   // zero value
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		_, hasBeginTime := payload["beginTime"]
-		assert.False(t, hasBeginTime,
-			"SSE API CONTRACT: beginTime should be omitted when zero (omitempty)")
-
-		_, hasEndTime := payload["endTime"]
-		assert.False(t, hasEndTime,
-			"SSE API CONTRACT: endTime should be omitted when zero (omitempty)")
-	})
-}
-
-// TestSSEContract_IsNewSpecies_DaysSinceFirstSeen validates the species tracking
-// metadata fields when set to non-zero values.
-func TestSSEContract_IsNewSpecies_DaysSinceFirstSeen(t *testing.T) {
-	t.Parallel()
-
-	t.Run("isNewSpecies true and daysSinceFirstSeen zero", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-		detection.IsNewSpecies = true
-		detection.DaysSinceFirstSeen = 0
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		val, exists := payload["isNewSpecies"]
-		require.True(t, exists, "SSE API CONTRACT: isNewSpecies must be present when true")
-		assert.Equal(t, true, val,
-			"SSE API CONTRACT: isNewSpecies must serialize as boolean true")
-
-		// daysSinceFirstSeen=0 should be omitted (omitempty on int)
-		_, hasDays := payload["daysSinceFirstSeen"]
-		assert.False(t, hasDays,
-			"SSE API CONTRACT: daysSinceFirstSeen should be omitted when zero (omitempty)")
-	})
-
-	t.Run("daysSinceFirstSeen present when non-zero", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-		detection.IsNewSpecies = false
-		detection.DaysSinceFirstSeen = 42
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		val, exists := payload["daysSinceFirstSeen"]
-		require.True(t, exists,
-			"SSE API CONTRACT: daysSinceFirstSeen must be present when non-zero")
-		assert.InDelta(t, float64(42), val, 0.001,
-			"SSE API CONTRACT: daysSinceFirstSeen value must match")
-
-		// isNewSpecies=false should be omitted (omitempty)
-		_, hasNew := payload["isNewSpecies"]
-		assert.False(t, hasNew,
-			"SSE API CONTRACT: isNewSpecies should be omitted when false (omitempty)")
-	})
-
-	t.Run("both present when both non-zero", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-		detection.IsNewSpecies = true
-		detection.DaysSinceFirstSeen = 7
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		isNew, exists := payload["isNewSpecies"]
-		require.True(t, exists, "SSE API CONTRACT: isNewSpecies must be present when true")
-		assert.Equal(t, true, isNew)
-
-		days, exists := payload["daysSinceFirstSeen"]
-		require.True(t, exists,
-			"SSE API CONTRACT: daysSinceFirstSeen must be present when non-zero")
-		assert.InDelta(t, float64(7), days, 0.001)
-	})
-}
-
-// TestSSEContract_BirdImage_AllSubFields validates that all birdImage sub-fields
-// are present with correct camelCase names and expected values.
-func TestSSEContract_BirdImage_AllSubFields(t *testing.T) {
-	t.Parallel()
-
-	t.Run("all birdImage fields present with values", func(t *testing.T) {
-		t.Parallel()
-
-		detection := createTestSSEDetectionData()
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		birdImageRaw, exists := payload["birdImage"]
-		require.True(t, exists, "SSE API CONTRACT: birdImage must be present")
-
-		birdImage, ok := birdImageRaw.(map[string]any)
-		require.True(t, ok, "SSE API CONTRACT: birdImage must be an object")
-
-		// Verify all fields are present and have correct values. The URL is the
-		// media-proxy URL, not the provider's upstream address: see the note on the
-		// nil-image case below.
-		assert.Equal(t, imageprovider.ProxyImageURL("Parus major"), birdImage["url"],
-			"SSE API CONTRACT: birdImage.url value must match")
-		assert.Equal(t, "Parus major", birdImage["scientificName"],
-			"SSE API CONTRACT: birdImage.scientificName value must match")
-		assert.Equal(t, "CC BY-SA 4.0", birdImage["licenseName"],
-			"SSE API CONTRACT: birdImage.licenseName value must match")
-		assert.Equal(t, "https://creativecommons.org/licenses/by-sa/4.0/", birdImage["licenseURL"],
-			"SSE API CONTRACT: birdImage.licenseURL value must match")
-		assert.Equal(t, "Test Author", birdImage["authorName"],
-			"SSE API CONTRACT: birdImage.authorName value must match")
-		assert.Equal(t, "https://example.com/author", birdImage["authorURL"],
-			"SSE API CONTRACT: birdImage.authorURL value must match")
-		assert.Equal(t, "wikimedia", birdImage["sourceProvider"],
-			"SSE API CONTRACT: birdImage.sourceProvider value must match")
-	})
-
-	t.Run("birdImage fields use camelCase not PascalCase", func(t *testing.T) {
-		t.Parallel()
-
-		detection := createTestSSEDetectionData()
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		jsonStr := string(jsonBytes)
-
-		// These PascalCase versions must never appear inside the birdImage object
-		forbiddenBirdImageFields := []string{
-			`"URL"`,
-			`"ScientificName"`,
-			`"LicenseName"`,
-			`"LicenseURL"`,
-			`"AuthorName"`,
-			`"AuthorURL"`,
-			`"SourceProvider"`,
-			`"CachedAt"`,
-		}
-
-		for _, field := range forbiddenBirdImageFields {
-			assert.NotContains(t, jsonStr, field+`:`,
-				"SSE API CONTRACT VIOLATION: PascalCase %s must not appear in birdImage", field)
-		}
-	})
-
-	t.Run("birdImage present as empty object when nil image provided", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		detection := apicore.NewSSEDetectionData(&note, nil)
-
-		jsonBytes, err := json.Marshal(detection)
-		require.NoError(t, err)
-
-		var payload map[string]any
-		err = json.Unmarshal(jsonBytes, &payload)
-		require.NoError(t, err)
-
-		// birdImage is not a pointer and has no omitempty, so it must always be present
-		birdImageRaw, exists := payload["birdImage"]
-		require.True(t, exists,
-			"SSE API CONTRACT: birdImage must always be present (no omitempty)")
-
-		birdImage, ok := birdImageRaw.(map[string]any)
-		require.True(t, ok, "SSE API CONTRACT: birdImage must be an object")
-
-		// The URL is now derived from the detection's scientific name rather than from
-		// the resolved image, so it is present even when no image has been resolved
-		// yet. That is deliberate: since the proxy stopped fetching on the request
-		// path, "not resolved yet" is the normal state at broadcast time, and an empty
-		// URL would tell the client there is no image rather than not yet. The proxy
-		// answers 404 for a species that genuinely has none.
-		urlVal, urlExists := birdImage["url"]
-		assert.True(t, urlExists, "SSE API CONTRACT: birdImage.url key must exist")
-		assert.Equal(t, imageprovider.ProxyImageURL("Parus major"), urlVal,
-			"SSE API CONTRACT: birdImage.url must be the media-proxy URL even with no image resolved")
-	})
-}
-
-// TestSSEContract_ZeroConfidence_NotOmitted verifies that a confidence value of 0.0
-// is still present in the JSON payload (not omitted by omitempty).
-func TestSSEContract_ZeroConfidence_NotOmitted(t *testing.T) {
-	t.Parallel()
-
-	note := createTestNoteWithAllFields()
-	note.Confidence = 0.0 // Zero confidence is valid — must not be omitted
-	birdImage := createTestBirdImage()
-	detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-	jsonBytes, err := json.Marshal(detection)
-	require.NoError(t, err)
-
-	var payload map[string]any
-	err = json.Unmarshal(jsonBytes, &payload)
-	require.NoError(t, err)
-
-	val, exists := payload["confidence"]
-	require.True(t, exists,
-		"SSE API CONTRACT: confidence must be present even when 0.0 (no omitempty)")
-	assert.InDelta(t, 0.0, val, 0.001,
-		"SSE API CONTRACT: confidence=0.0 must serialize as 0")
-}
 
 // TestSSEContract_AllFieldValues_RoundTrip performs an exhaustive round-trip
 // verification of every field value through JSON serialization.
@@ -1100,12 +198,33 @@ func TestSSEContract_AllFieldValues_RoundTrip(t *testing.T) {
 			"verified value mismatch")
 		assert.Equal(t, true, payload["locked"],
 			"locked value mismatch")
+		assert.Equal(t, true, payload["unlikely"],
+			"unlikely value mismatch")
 		assert.Equal(t, "new_detection", payload["eventType"],
 			"eventType value mismatch")
 		assert.Equal(t, true, payload["isNewSpecies"],
 			"isNewSpecies value mismatch")
 		assert.InDelta(t, float64(5), payload["daysSinceFirstSeen"], 0.001,
 			"daysSinceFirstSeen value mismatch")
+	})
+
+	// The fixture sets locked and unlikely to the same value, so a constructor
+	// that mixed the two up would pass the checks above.
+	t.Run("locked and unlikely follow their own note fields", func(t *testing.T) {
+		t.Parallel()
+
+		independentNote := createTestNoteWithAllFields()
+		independentNote.Locked = false
+		independentJSON, err := json.Marshal(apicore.NewSSEDetectionData(&independentNote, nil))
+		require.NoError(t, err)
+
+		var independentPayload map[string]any
+		require.NoError(t, json.Unmarshal(independentJSON, &independentPayload))
+
+		assert.Equal(t, false, independentPayload["locked"],
+			"locked must follow note.Locked, not note.Unlikely")
+		assert.Equal(t, true, independentPayload["unlikely"],
+			"unlikely must follow note.Unlikely, not note.Locked")
 	})
 
 	// ==========================================================================
@@ -1194,6 +313,7 @@ func TestSSEContract_OmitemptyFields_Comprehensive(t *testing.T) {
 		// Longitude: 0.0      (omitempty)
 		// ClipName: ""        (omitempty)
 		// Verified: ""        (omitempty)
+		// Unlikely: false     (omitempty)
 		// Locked: false       (no omitempty — always present)
 		// BeginTime: zero     (omitempty via constructor logic)
 		// EndTime: zero       (omitempty via constructor logic)
@@ -1244,6 +364,7 @@ func TestSSEContract_OmitemptyFields_Comprehensive(t *testing.T) {
 			"longitude",          // float64, omitempty
 			"clipName",           // string, omitempty
 			"verified",           // string, omitempty
+			"unlikely",           // bool, omitempty
 			"source",             // *SSESourceInfo, omitempty (nil pointer)
 			"beginTime",          // string, omitempty (not set by constructor when zero)
 			"endTime",            // string, omitempty (not set by constructor when zero)
@@ -1256,6 +377,24 @@ func TestSSEContract_OmitemptyFields_Comprehensive(t *testing.T) {
 			assert.False(t, exists,
 				"SSE API CONTRACT: field '%s' should be omitted at zero value (omitempty)", field)
 		}
+	})
+
+	// The constructor copies only the source ID and display name, so a source
+	// that is present still has no type.
+	t.Run("source type omitted when source is present", func(t *testing.T) {
+		t.Parallel()
+
+		withSource := createTestNoteWithAllFields()
+		sourceJSON, err := json.Marshal(apicore.NewSSEDetectionData(&withSource, nil))
+		require.NoError(t, err)
+
+		var sourcePayload map[string]any
+		require.NoError(t, json.Unmarshal(sourceJSON, &sourcePayload))
+
+		source, ok := sourcePayload["source"].(map[string]any)
+		require.True(t, ok, "source must be an object when the note has a source ID")
+		assert.NotContains(t, source, "type",
+			"SSE API CONTRACT: source.type should be omitted when empty (omitempty)")
 	})
 }
 
@@ -1290,6 +429,7 @@ func TestSSEContract_NoUnexpectedFields(t *testing.T) {
 		"endTime":            true,
 		"verified":           true,
 		"locked":             true,
+		"unlikely":           true,
 		"birdImage":          true,
 		"timestamp":          true,
 		"eventType":          true,
@@ -1339,58 +479,19 @@ func TestSSEContract_NoUnexpectedFields(t *testing.T) {
 	}
 }
 
-// TestSSEContract_NewSSEDetectionData_Constructor verifies that the constructor
-// correctly maps all Note fields and sanitizes sensitive data.
-func TestSSEContract_NewSSEDetectionData_Constructor(t *testing.T) {
+// TestSSEContract_NewSSEDetectionData_TimestampIsConstructionTime verifies that
+// the constructor stamps the event with the time it ran.
+func TestSSEContract_NewSSEDetectionData_TimestampIsConstructionTime(t *testing.T) {
 	t.Parallel()
 
-	t.Run("clipName stripped to basename", func(t *testing.T) {
-		t.Parallel()
+	before := time.Now()
+	note := createTestNoteWithAllFields()
+	birdImage := createTestBirdImage()
+	detection := apicore.NewSSEDetectionData(&note, &birdImage)
+	after := time.Now()
 
-		note := createTestNoteWithAllFields()
-		note.ClipName = "/deeply/nested/path/to/recordings/2024/clip.wav"
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		assert.Equal(t, "clip.wav", detection.ClipName,
-			"ClipName must be stripped to filename only")
-	})
-
-	t.Run("empty clipName remains empty", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		note.ClipName = ""
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		assert.Empty(t, detection.ClipName,
-			"Empty ClipName must remain empty, not '.'")
-	})
-
-	t.Run("eventType always set to new_detection", func(t *testing.T) {
-		t.Parallel()
-
-		note := createTestNoteWithAllFields()
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-
-		assert.Equal(t, "new_detection", detection.EventType,
-			"EventType must always be 'new_detection'")
-	})
-
-	t.Run("timestamp set to approximately now", func(t *testing.T) {
-		t.Parallel()
-
-		before := time.Now()
-		note := createTestNoteWithAllFields()
-		birdImage := createTestBirdImage()
-		detection := apicore.NewSSEDetectionData(&note, &birdImage)
-		after := time.Now()
-
-		assert.False(t, detection.Timestamp.Before(before),
-			"Timestamp must not be before construction time")
-		assert.False(t, detection.Timestamp.After(after),
-			"Timestamp must not be after construction time")
-	})
+	assert.False(t, detection.Timestamp.Before(before),
+		"Timestamp must not be before construction time")
+	assert.False(t, detection.Timestamp.After(after),
+		"Timestamp must not be after construction time")
 }

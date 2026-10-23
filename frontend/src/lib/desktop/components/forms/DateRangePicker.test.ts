@@ -93,8 +93,8 @@ describe('DateRangePicker', () => {
       endDate: parseLocalDateString('2024-01-31'),
     });
 
-    const startInput = screen.getByLabelText('Start Date') as HTMLInputElement;
-    const endInput = screen.getByLabelText('End Date') as HTMLInputElement;
+    const startInput = screen.getByLabelText<HTMLInputElement>('Start Date');
+    const endInput = screen.getByLabelText<HTMLInputElement>('End Date');
 
     expect(startInput.value).toBe('2024-01-01');
     expect(endInput.value).toBe('2024-01-31');
@@ -148,8 +148,8 @@ describe('DateRangePicker', () => {
       maxDate: parseLocalDateString('2024-12-31'),
     });
 
-    const startInput = screen.getByLabelText('Start Date') as HTMLInputElement;
-    const endInput = screen.getByLabelText('End Date') as HTMLInputElement;
+    const startInput = screen.getByLabelText<HTMLInputElement>('Start Date');
+    const endInput = screen.getByLabelText<HTMLInputElement>('End Date');
 
     expect(startInput.min).toBe('2024-01-01');
     expect(startInput.max).toBe('2024-12-31');
@@ -163,7 +163,7 @@ describe('DateRangePicker', () => {
     dateRangeTest.render({});
 
     const startInput = screen.getByLabelText('Start Date');
-    const endInput = screen.getByLabelText('End Date') as HTMLInputElement;
+    const endInput = screen.getByLabelText<HTMLInputElement>('End Date');
 
     await user.type(startInput, '2024-01-15');
 

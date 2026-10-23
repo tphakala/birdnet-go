@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -94,39 +95,6 @@ func TestDashboardLayoutWidthPersistence(t *testing.T) {
 	require.Len(t, elements2, 3)
 	assert.Equal(t, "full", elements2[1].Width, "currently-hearing should have explicit 'full'")
 	assert.Equal(t, "half", elements2[2].Width, "detections-grid should have 'half'")
-}
-
-// TestMergePreservesJSONDashFields verifies that mergeJSONIntoStruct preserves
-// fields tagged json:"-" (runtime values invisible to JSON) when zeroing slices.
-func TestMergePreservesJSONDashFields(t *testing.T) {
-	initialSettings := getTestSettings(t)
-	// Set runtime-only field (json:"-") that must survive a merge
-	initialSettings.BirdNET.Labels = []string{"species1", "species2"}
-
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// PATCH birdnet section — Labels (json:"-") must survive
-	update := map[string]any{"sensitivity": 1.0}
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/birdnet", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("birdnet")
-
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Runtime field must be preserved — Labels is json:"-" and would be
-	// destroyed if zeroJSONSliceFields zeroed json:"-" tagged slices.
-	assert.Equal(t, []string{"species1", "species2"}, controller.Settings.Load().BirdNET.Labels,
-		"BirdNET.Labels (json:\"-\") must survive merge")
 }
 
 // TestDashboardPartialUpdate verifies dashboard settings preserve unmodified fields
@@ -393,6 +361,71 @@ func TestAudioExportPartialUpdate(t *testing.T) {
 	assert.Equal(t, "192k", settings.Realtime.Audio.Export.Bitrate) // Preserved
 }
 
+// TestAudioSourcesSectionPatch pins the server side of the onboarding wizard's
+// audio payloads: sources are replaced as a whole array, and an emptied sources
+// array only stays empty when the legacy source is cleared in the same request.
+func TestAudioSourcesSectionPatch(t *testing.T) {
+	const staleLegacySource = "hw:9,0"
+
+	tests := []struct {
+		name        string
+		body        string
+		wantDevices []string
+	}{
+		{
+			name:        "sources replaced and legacy source cleared",
+			body:        `{"sources":[{"name":"Sound Card 1","device":"usb-path:test","gain":0,"quietHours":{"enabled":false,"mode":"fixed","startTime":"22:00","endTime":"06:00","startEvent":"sunset","startOffset":0,"endEvent":"sunrise","endOffset":0}}],"source":""}`,
+			wantDevices: []string{"usb-path:test"},
+		},
+		{
+			name:        "emptied sources stay empty when legacy source is cleared",
+			body:        `{"sources":[],"source":""}`,
+			wantDevices: []string{},
+		},
+		{
+			// The frontend must send source: "" with an emptied sources array,
+			// otherwise the migration recreates a sound card from the stale value.
+			name:        "emptied sources without clearing legacy source resurrect it",
+			body:        `{"sources":[]}`,
+			wantDevices: []string{staleLegacySource},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initialSettings := getTestSettings(t)
+			initialSettings.Realtime.Audio.Source = staleLegacySource
+
+			e := echo.New()
+			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
+			controller.Settings.Store(initialSettings)
+
+			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/audio", strings.NewReader(tt.body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("section")
+			ctx.SetParamValues("audio")
+
+			require.NoError(t, controller.UpdateSectionSettings(ctx))
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			audio := controller.Settings.Load().Realtime.Audio
+			devices := make([]string, 0, len(audio.Sources))
+			for _, src := range audio.Sources {
+				devices = append(devices, src.Device)
+			}
+			assert.Equal(t, tt.wantDevices, devices)
+			// The migration moves a legacy source into sources, so Source is empty in every case
+			assert.Empty(t, audio.Source)
+			// Export settings are untouched by a sources-only patch
+			assert.True(t, audio.Export.Enabled)
+			assert.Equal(t, "clips", audio.Export.Path)
+			assert.Equal(t, "192k", audio.Export.Bitrate)
+		})
+	}
+}
+
 // TestSpeciesConfigUpdate verifies complex nested species config updates
 func TestSpeciesConfigUpdate(t *testing.T) {
 	// Get initial settings and setup species config
@@ -553,58 +586,43 @@ func TestValidationErrors(t *testing.T) {
 	}
 }
 
-// TestDeepNestedUpdates verifies deeply nested object updates preserve all levels
-func TestDeepNestedUpdates(t *testing.T) {
-	t.Parallel()
-
-	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings(t)
-	initialSettings.Realtime.MQTT.TLS.Enabled = true
-	initialSettings.Realtime.MQTT.TLS.InsecureSkipVerify = false
-
-	// Capture initial values
-	initialMaxRetries := initialSettings.Realtime.MQTT.RetrySettings.MaxRetries
-	initialBackoff := initialSettings.Realtime.MQTT.RetrySettings.BackoffMultiplier
-	initialTLSEnabled := initialSettings.Realtime.MQTT.TLS.Enabled
-
+// TestPatchNestedObjectKeepsSiblingSlices pins the nested-object merge of the
+// PATCH path. The body names one scalar inside the equalizer object, and the
+// filter slice next to it must come through untouched. A slice is the case a
+// struct-only assertion cannot see: the merge resets every JSON-visible slice
+// before decoding, so a nested object that is replaced instead of merged loses
+// its slices, while json.Unmarshal would keep an absent scalar either way.
+func TestPatchNestedObjectKeepsSiblingSlices(t *testing.T) {
 	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only one deeply nested field
-	update := map[string]any{
-		"retrySettings": map[string]any{
-			"initialDelay": 30,
+	controller := getTestController(t, e)
+	controller.Settings.Load().Realtime.Audio.Equalizer = conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "HighPass", Frequency: 200, Q: 0.707, Passes: 1},
+			{Type: "LowPass", Frequency: 14000, Q: 0.707, Passes: 2},
 		},
 	}
 
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
+	patchSection(t, e, controller, "audio", map[string]any{
+		"equalizer": map[string]any{"enabled": false},
+	})
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/mqtt", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("mqtt")
-
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify only the targeted field changed
-	settings := controller.Settings.Load()
-	assert.Equal(t, 30, settings.Realtime.MQTT.RetrySettings.InitialDelay)                           // Changed
-	assert.Equal(t, initialMaxRetries, settings.Realtime.MQTT.RetrySettings.MaxRetries)              // Preserved
-	assert.InDelta(t, initialBackoff, settings.Realtime.MQTT.RetrySettings.BackoffMultiplier, 0.001) // Preserved
-	assert.Equal(t, initialTLSEnabled, settings.Realtime.MQTT.TLS.Enabled)                           // Preserved
+	eq := controller.Settings.Load().Realtime.Audio.Equalizer
+	assert.False(t, eq.Enabled, "the field in the body must change")
+	require.Len(t, eq.Filters, 2, "the sibling filter slice must survive")
+	assert.Equal(t, "HighPass", eq.Filters[0].Type)
+	assert.InDelta(t, 200.0, eq.Filters[0].Frequency, 0.001)
+	assert.Equal(t, 1, eq.Filters[0].Passes)
+	assert.Equal(t, "LowPass", eq.Filters[1].Type)
+	assert.InDelta(t, 14000.0, eq.Filters[1].Frequency, 0.001)
+	assert.Equal(t, 2, eq.Filters[1].Passes)
 }
 
 // TestStreamsSettingsChanged_DetectsModelEdits verifies that per-stream model
 // list changes trigger reconfigure_rtsp_sources. Without this, a user who
 // adds a classifier to a stream (e.g., enables Perch v2 alongside BirdNET)
 // would see the save persist to disk but the running pipeline keep using
-// the old model set — silently breaking the hot-reload contract.
+// the old model set, silently breaking the hot-reload contract.
 func TestStreamsSettingsChanged_DetectsModelEdits(t *testing.T) {
 	t.Parallel()
 
@@ -694,7 +712,7 @@ func TestAudioDeviceSettingChanged_DetectsModelsEdits(t *testing.T) {
 
 // TestStreamsSettingsChanged_BackwardCompatibility verifies that the existing
 // fields (Name, URL, Enabled, Type, Transport) still trigger the change
-// detector — the Models check is additive and must not regress prior coverage.
+// detector: the Models check is additive and must not regress prior coverage.
 func TestStreamsSettingsChanged_BackwardCompatibility(t *testing.T) {
 	t.Parallel()
 

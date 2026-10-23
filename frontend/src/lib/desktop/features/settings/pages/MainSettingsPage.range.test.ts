@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { get } from 'svelte/store';
 import { settingsStore, settingsActions } from '$lib/stores/settings';
-import type { BirdNetSettings, SettingsFormData } from '$lib/stores/settings';
+import type { SettingsFormData } from '$lib/stores/settings';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 
 // Mock API module
@@ -67,7 +67,8 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     settingsStore.set({
       formData,
-      originalData: {} as SettingsFormData,
+      // Deliberately empty baseline, not a complete SettingsFormData
+      originalData: {} as unknown as SettingsFormData,
       isLoading: false,
       isSaving: false,
       activeSection: 'main',
@@ -172,7 +173,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     // Verify all updates were applied
     const finalState = get(settingsStore);
-    const birdnet = finalState.formData.birdnet as BirdNetSettings;
+    const birdnet = finalState.formData.birdnet;
 
     expect(birdnet.latitude).toBe(48.8566);
     expect(birdnet.longitude).toBe(2.3522);
@@ -206,7 +207,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     // Verify range filter data was preserved
     const updatedState = get(settingsStore);
-    const birdnet = updatedState.formData.birdnet as BirdNetSettings;
+    const birdnet = updatedState.formData.birdnet;
 
     expect(birdnet.latitude).toBe(35.6762);
     expect(birdnet.longitude).toBe(139.6503);
@@ -233,7 +234,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     // Verify only range filter changed
     const updatedState = get(settingsStore);
-    const birdnet = updatedState.formData.birdnet as BirdNetSettings;
+    const birdnet = updatedState.formData.birdnet;
 
     expect(birdnet.rangeFilter.threshold).toBe(0.08);
     expect(birdnet.sensitivity).toBe(initialSensitivity);
@@ -278,7 +279,7 @@ describe('Settings Store - Range Filter Dynamic Updates', () => {
 
     // Verify final state has all changes
     const finalState = get(settingsStore);
-    const birdnet = finalState.formData.birdnet as BirdNetSettings;
+    const birdnet = finalState.formData.birdnet;
 
     expect(birdnet.latitude).toBe(51.5074);
     expect(birdnet.longitude).toBe(-0.1278);
@@ -329,7 +330,8 @@ describe('Range Filter - View Species uses filtered threshold (#2393)', () => {
 
     settingsStore.set({
       formData,
-      originalData: {} as SettingsFormData,
+      // Deliberately empty baseline, not a complete SettingsFormData
+      originalData: {} as unknown as SettingsFormData,
       isLoading: false,
       isSaving: false,
       activeSection: 'main',

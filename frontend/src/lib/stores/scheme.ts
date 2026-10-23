@@ -71,6 +71,11 @@ function getContrastColor(hex: string): string {
   return luminance > 0.179 ? '#020617' : '#ffffff';
 }
 
+/** Hover and pressed fills move away from the content colour so they keep its contrast. */
+function shadeAwayFrom(content: string): 'black' | 'white' {
+  return content === '#ffffff' ? 'black' : 'white';
+}
+
 function applyScheme(scheme: SchemeId): void {
   if (typeof window === 'undefined') return;
   document.documentElement.setAttribute('data-scheme', scheme);
@@ -80,10 +85,14 @@ function applyScheme(scheme: SchemeId): void {
 function applyCustomColors(colors: CustomColors): void {
   if (typeof window === 'undefined') return;
   const root = document.documentElement.style;
+  const primaryContent = getContrastColor(colors.primary);
+  const accentContent = getContrastColor(colors.accent);
   root.setProperty('--custom-primary', colors.primary);
-  root.setProperty('--custom-primary-content', getContrastColor(colors.primary));
+  root.setProperty('--custom-primary-content', primaryContent);
+  root.setProperty('--custom-primary-shade', shadeAwayFrom(primaryContent));
   root.setProperty('--custom-accent', colors.accent);
-  root.setProperty('--custom-accent-content', getContrastColor(colors.accent));
+  root.setProperty('--custom-accent-content', accentContent);
+  root.setProperty('--custom-accent-shade', shadeAwayFrom(accentContent));
   setStoredValue(CUSTOM_COLORS_KEY, colors);
 }
 

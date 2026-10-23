@@ -24,11 +24,13 @@ export interface Detection {
   commonName: string;
   confidence: number;
   modelType?: string; // AI model type (e.g. 'bird', 'bat'); drives the spectrogram frequency range
+  clipSampleRate?: number; // Sample rate of the saved clip in Hz; omitted by the API when unknown
   verified: 'correct' | 'false_positive' | 'unverified';
   locked: boolean;
   unlikely?: boolean;
   comments?: Comment[];
   clipName?: string;
+  spectrogramOnly?: boolean; // audio removed by retention, spectrogram image kept
   weather?: Weather;
   timeOfDay?: string;
   // Species tracking metadata

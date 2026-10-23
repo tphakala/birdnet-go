@@ -94,13 +94,15 @@
       />
     {/if}
 
-    <span class="min-w-0">
+    <!-- A div, not a span, so children may hold block content (lists, buttons
+         on their own line). As a flex item it lays out the same either way. -->
+    <div class="min-w-0">
       {#if children}
         {@render children()}
       {:else}
         {message}
       {/if}
-    </span>
+    </div>
 
     {#if dismissible}
       <button

@@ -17,10 +17,9 @@ const testCleanupGracePeriod = 100 * time.Millisecond
 
 // TestMain runs a package-wide goroutine-leak gate after all tests complete so
 // the system domain gets its own isolated -race test binary, matching the
-// package-api harness this domain was extracted from. The ignore list mirrors
-// package api's TestMain: only the process-lifetime go-cache janitor started by
-// the core's DetectionCache, which cannot be stopped (goleak already filters the
-// test runner's own goroutines).
+// package-api harness this domain was extracted from. Like package api's
+// TestMain, the gate runs with no ignores (goleak already filters the test
+// runner's own goroutines).
 func TestMain(m *testing.M) {
 	testResult := m.Run()
 
@@ -28,11 +27,7 @@ func TestMain(m *testing.M) {
 	time.Sleep(testCleanupGracePeriod)
 
 	if testResult == 0 {
-		opts := []goleak.Option{
-			goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-		}
-
-		if err := goleak.Find(opts...); err != nil {
+		if err := goleak.Find(); err != nil {
 			fmt.Fprintf(os.Stderr, "FAIL: Goroutine leak detected after all tests:\n%v\n", err)
 			os.Exit(1)
 		}

@@ -1,4 +1,9 @@
 version: "2"
+run:
+  # Let several golangci-lint runs (task lint, the pre-commit hook, editor
+  # integrations) work at the same time instead of failing with "parallel
+  # golangci-lint is running".
+  allow-parallel-runners: true
 output:
   sort-order:
     - linter

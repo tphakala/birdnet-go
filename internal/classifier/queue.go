@@ -16,6 +16,43 @@ type Results struct {
 	ClipName        string                // Name of the audio clip
 	Source          datastore.AudioSource // Audio source with ID, SafeString, and DisplayName
 	ModelID         string                // identifies which model produced these results
+	// Audio describes the timing of PCMdata on the producer's audio timeline.
+	Audio AudioTiming
+}
+
+// AudioTiming describes where one analysis window sits on its source's audio
+// timeline. The zero value means the producer does not know: speech hits are then
+// stamped at processing time and no coverage is claimed for the window.
+type AudioTiming struct {
+	// EndAt is the capture time of the last sample of the window, corrected for
+	// the analysis backlog (the ring is FIFO, so a lagging monitor reads old audio).
+	EndAt time.Time
+	// Gap reports that the window is not contiguous with the previous window of
+	// the same (source, model): the producer lost or spliced audio at or inside
+	// its fresh part, this is the first window of a buffer or stream, or the
+	// previous window was never analyzed (skipped, failed, or its result dropped
+	// by a full results queue).
+	Gap bool
+	// FreshBytes is the producer's count of bytes at the end of the window that
+	// are new audio, not repeated from the previous window: one step of the
+	// analysis buffer, or the whole window when its overlap head is zero filled.
+	// A Gap caused by lost audio still reports one step; consumers treat any gap
+	// window as wholly fresh. Zero when unknown.
+	FreshBytes int
+	// ContiguousBytes is how many bytes at the end of the window are genuine
+	// audio adjacent in time, with no loss, splice or zero fill; a window after a
+	// loss still has a contiguous tail. Zero when the producer reports no
+	// positions, in which case the whole window is assumed genuine.
+	ContiguousBytes int
+	// EndPos is the producer's stream position just after the window's last byte
+	// (audio refused before it still counts toward it, so a loss leaves a hole),
+	// and Generation identifies the stretch of stream it belongs to (unique per
+	// buffer instance and per buffer Reset, never shared by a rebuilt buffer). EndPos minus
+	// ContiguousBytes is where the contiguous tail starts. Two windows of the same
+	// Generation are adjacent when the later tail starts at or before the earlier
+	// EndPos, whatever their timestamps say. Generation zero means no positions.
+	EndPos     int64
+	Generation uint64
 }
 
 // Default buffer size for the results queue
@@ -32,15 +69,7 @@ var ResultsQueue = make(chan Results, DefaultQueueSize)
 // audio processing pipeline. The ownership model has been updated so that data
 // ownership transfers through the ResultsQueue without requiring copies.
 func (r Results) Copy() Results { //nolint:gocritic // This is a copy function, avoid warning about heavy parameters
-	// Create a new Results struct with simple field copies
-	newCopy := Results{
-		StartTime:       r.StartTime,
-		AudioCapturedAt: r.AudioCapturedAt,
-		ElapsedTime:     r.ElapsedTime,
-		ClipName:        r.ClipName,
-		Source:          r.Source,
-		ModelID:         r.ModelID,
-	}
+	newCopy := r
 
 	// Deep copy PCMdata
 	if r.PCMdata != nil {

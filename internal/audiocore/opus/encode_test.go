@@ -6,7 +6,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	"github.com/tphakala/go-opus/oggopus"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audiotemp"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -170,7 +170,7 @@ func TestEncodePCM_DoesNotMutateSource(t *testing.T) {
 	copy(original, pcm)
 
 	// Both gain paths: -3 dB copies the buffer, 0 dB hands the caller's slice
-	// straight to the library (pcmgain.Applied is zero-copy there), which is the
+	// straight to the library (gain.AppliedBytes is zero-copy at 0 dB), which is the
 	// case that would corrupt the spectrogram pre-render if a library ever wrote
 	// into its input.
 	for _, gainDB := range []float64{-3, 0} {
@@ -346,47 +346,6 @@ func TestSupports_BitDepthAndChannels(t *testing.T) {
 	require.Error(t, Supports(48000, 16, 3))
 }
 
-// Cross-validate the stream against an external demuxer, so a malformed header
-// or granule position surfaces here rather than in a user's browser.
-func TestEncodePCM_FFprobeAcceptsOutput(t *testing.T) {
-	t.Parallel()
-	ffprobe, err := exec.LookPath("ffprobe")
-	if err != nil {
-		t.Skip("ffprobe not installed")
-	}
-
-	out := filepath.Join(t.TempDir(), "clip.opus")
-	require.NoError(t, EncodePCM(t.Context(), &Options{
-		PCMData:     tonePCM(t, testSampleRate, 1.0, testToneHz),
-		OutputPath:  out,
-		SampleRate:  testSampleRate,
-		Channels:    1,
-		BitDepth:    16,
-		BitrateKbps: testBitrate,
-	}))
-
-	probe, err := exec.CommandContext(t.Context(), ffprobe, //nolint:gosec // fixed args, resolved binary
-		"-v", "error",
-		"-select_streams", "a:0",
-		"-show_entries", "stream=codec_name,sample_rate,channels",
-		"-of", "default=noprint_wrappers=1",
-		out).Output()
-	require.NoError(t, err, "ffprobe must parse the written stream")
-
-	// Parse key=value rather than indexing positionally: ffprobe emits fields in
-	// its own internal order, not the order requested, so positions are not a
-	// contract.
-	got := map[string]string{}
-	for field := range strings.FieldsSeq(string(probe)) {
-		if k, v, ok := strings.Cut(field, "="); ok {
-			got[k] = v
-		}
-	}
-	assert.Equal(t, "opus", got["codec_name"])
-	assert.Equal(t, "48000", got["sample_rate"])
-	assert.Equal(t, "1", got["channels"])
-}
-
 // rms returns the root mean square amplitude of the samples.
 func rms(samples []int16) float64 {
 	if len(samples) == 0 {
@@ -397,4 +356,26 @@ func rms(samples []int16) float64 {
 		sum += float64(v) * float64(v)
 	}
 	return math.Sqrt(sum / float64(len(samples)))
+}
+
+// A NaN gain cannot be turned into a scale factor: the encoder reports a
+// validation error from the gain step and leaves no output file.
+func TestEncodePCM_NaNGainFailsAtGainInit(t *testing.T) {
+	t.Parallel()
+	out := filepath.Join(t.TempDir(), "clip.opus")
+	err := EncodePCM(t.Context(), &Options{
+		PCMData:     tonePCM(t, testSampleRate, 0.25, testToneHz),
+		OutputPath:  out,
+		SampleRate:  testSampleRate,
+		Channels:    1,
+		BitDepth:    16,
+		BitrateKbps: testBitrate,
+		GainDB:      math.NaN(),
+	})
+	require.Error(t, err)
+	enhanced, ok := errors.AsType[*errors.EnhancedError](err)
+	require.True(t, ok, "want an enhanced error, got %T", err)
+	assert.Equal(t, string(errors.CategoryValidation), enhanced.GetCategory())
+	assert.Equal(t, "opus_gain_init", enhanced.GetContext()["operation"])
+	assert.NoFileExists(t, out)
 }

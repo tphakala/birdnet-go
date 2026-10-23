@@ -20,16 +20,24 @@
   - variant: Button style variant (primary, secondary, ghost)
   - className: Additional CSS classes
   - children: Button content snippet
+  - any other button attribute (aria-describedby, aria-label, ...) is passed
+    through to the button. aria-disabled marks it unavailable but keeps it in
+    the tab order, so its description is still announced; clicks, Enter and
+    Space then do nothing.
 
   @component
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
+  import type { HTMLButtonAttributes } from 'svelte/elements';
 
   type ButtonVariant = 'primary' | 'secondary' | 'ghost';
 
-  interface Props {
+  interface Props extends Omit<
+    HTMLButtonAttributes,
+    'onclick' | 'disabled' | 'class' | 'type' | 'children' | 'aria-busy'
+  > {
     onclick?: () => void;
     disabled?: boolean;
     loading?: boolean;
@@ -47,7 +55,11 @@
     variant = 'primary',
     className = '',
     children,
+    ...rest
   }: Props = $props();
+
+  // An aria-disabled button stays focusable, so it must ignore activation itself
+  let ariaDisabled = $derived(rest['aria-disabled'] === true || rest['aria-disabled'] === 'true');
 
   // PERFORMANCE OPTIMIZATION: Use $derived for reactive default loading text
   let defaultLoadingText = $derived(loadingText || t('common.loading'));
@@ -71,9 +83,14 @@
 </script>
 
 <button
+  {...rest}
   type="button"
-  class={cn('btn btn-sm gap-2', variantClass, className)}
-  onclick={() => !isDisabled && onclick?.()}
+  class={cn(
+    'btn btn-sm gap-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:focus-visible:opacity-75',
+    variantClass,
+    className
+  )}
+  onclick={() => !isDisabled && !ariaDisabled && onclick?.()}
   disabled={isDisabled}
   aria-busy={loading}
 >

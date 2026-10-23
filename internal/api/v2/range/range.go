@@ -44,7 +44,9 @@ func New(core *apicore.Core) *Handler {
 
 // RegisterRoutes registers all range-filter related API endpoints on the
 // supplied API v2 group, preserving the exact routes and order the facade used
-// before the range domain was extracted.
+// before the range domain was extracted. The read routes are public (subject
+// only to the group-level private mode gate); the POST routes additionally
+// require the core's AuthMiddleware.
 func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Range filter status and scores
 	g.GET("/range/status", c.GetRangeFilterStatus)
@@ -54,8 +56,8 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	g.GET("/range/species/count", c.GetRangeFilterSpeciesCount)
 	g.GET("/range/species/list", c.GetRangeFilterSpeciesList)
 	g.GET("/range/species/csv", c.GetRangeFilterSpeciesCSV)
-	g.POST("/range/species/test", c.TestRangeFilter)
-	g.POST("/range/rebuild", c.RebuildRangeFilter)
+	g.POST("/range/species/test", c.TestRangeFilter, c.AuthMiddleware)
+	g.POST("/range/rebuild", c.RebuildRangeFilter, c.AuthMiddleware)
 }
 
 // validateRangeFilterRequest validates the range filter test request parameters.

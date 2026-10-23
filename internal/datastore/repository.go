@@ -64,6 +64,16 @@ type DetectionRepository interface {
 	// GetAdditionalResults returns the secondary predictions for a detection.
 	GetAdditionalResults(ctx context.Context, id string) ([]detection.AdditionalResult, error)
 
+	// RecordClipSampleRate sets the clip sample rate (Hz) of the detection while its
+	// clip_name still equals clipName, overwriting any stored value. The legacy
+	// store ignores the call.
+	RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error
+
+	// FillClipSampleRate sets the clip sample rate (Hz) only while it is NULL and
+	// clip_name still equals clipName. It reports whether a row changed. The
+	// legacy store ignores the call and reports false.
+	FillClipSampleRate(ctx context.Context, id uint, clipName string, rate int) (bool, error)
+
 	// CountAll returns the total count of all detections.
 	// This is a lightweight count operation that doesn't load any data.
 	CountAll(ctx context.Context) (int64, error)

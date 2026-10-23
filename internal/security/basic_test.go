@@ -955,3 +955,58 @@ func TestValidateRedirectURI(t *testing.T) {
 		})
 	}
 }
+
+// TestHandleBasicAuthTokenLocalCookieRelaxationUsesVerifiedAddress verifies the
+// non-HTTPS cookie relaxation for local-network clients is decided on the
+// verified client address: a forged forwarded header from a peer that is not on
+// the host's network must leave the session cookie options untouched.
+func TestHandleBasicAuthTokenLocalCookieRelaxationUsesVerifiedAddress(t *testing.T) {
+	localIP := pickLocalSubnetIPv4(t)
+	if localIP == "" {
+		t.Skip("Skipping: no non-loopback IPv4 interface found for local network test")
+	}
+	const remotePeer = "10.255.255.9"
+	if IsInLocalSubnet(net.ParseIP(remotePeer)) {
+		t.Skipf("Skipping: %s is on a local network of this host", remotePeer)
+	}
+
+	settings := &conf.Settings{}
+	settings.Security.BasicAuth.ClientID = "validClientID"
+	settings.Security.BasicAuth.ClientSecret = "validClientSecret"
+	settings.Security.AllowSubnetBypass.Enabled = true
+	settings.Security.AllowSubnetBypass.Subnet = "192.0.2.0/24"
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	s := &OAuth2Server{
+		settings:     settings,
+		authCodes:    make(map[string]AuthCode),
+		accessTokens: make(map[string]AccessToken),
+	}
+
+	previousStore := gothic.Store
+	t.Cleanup(func() { gothic.Store = previousStore })
+
+	run := func(remoteAddr, forwardedFor string) *sessions.Options {
+		store := sessions.NewCookieStore([]byte("secret-key"))
+		original := store.Options
+		gothic.Store = store
+
+		e := echo.New()
+		e.IPExtractor = echo.ExtractIPFromXFFHeader()
+		req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+		req.RemoteAddr = net.JoinHostPort(remoteAddr, "12345")
+		req.Header.Set(echo.HeaderAuthorization, "Basic "+base64.StdEncoding.EncodeToString([]byte("validClientID:validClientSecret")))
+		if forwardedFor != "" {
+			req.Header.Set(echo.HeaderXForwardedFor, forwardedFor)
+		}
+		require.NoError(t, s.HandleBasicAuthToken(e.NewContext(req, httptest.NewRecorder())))
+		if store.Options == original {
+			return nil
+		}
+		return store.Options
+	}
+
+	assert.Nil(t, run(remotePeer, localIP), "a forged header must not relax cookie options")
+	assert.NotNil(t, run(localIP, ""), "a direct local-network client relaxes cookie options")
+}

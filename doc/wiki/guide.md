@@ -78,7 +78,7 @@ The installation script includes several features:
 
 For users who prefer Docker Compose for container management, BirdNET-Go can also be set up using this approach. Docker Compose offers more flexibility and makes it easier to manage container configurations.
 
-A [premade docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) file is available in the repository. This file includes:
+Two premade files are available in the repository: [docker-compose.host.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.host.yml) (host networking, recommended for new installs) and [docker-compose.yml](https://github.com/tphakala/birdnet-go/blob/main/Docker/docker-compose.yml) (bridge networking, remains supported). See [Choosing a Network Mode](docker_compose_guide.md#choosing-a-network-mode). Both files include:
 
 - The BirdNET-Go container configuration with the latest nightly image
 - Environment variables for customization (timezone, user permissions, etc.)
@@ -97,11 +97,9 @@ Pre-compiled BirdNET-Go executables are also available at https://github.com/tph
 BirdNET-Go has minimal external dependencies, but requires a few specific tools for certain features:
 
 - **TensorFlow Lite C library**: Required for the core audio analysis functionality
-- **FFmpeg**: Required for RTSP stream capture and on-demand clip transcoding in the web interface. WAV, FLAC and Opus are encoded natively and do not need FFmpeg. AAC and MP3 export use FFmpeg by default, but each has a native encoder available as an opt-in preview via the `BIRDNET_AAC_ENCODER=native` and `BIRDNET_MP3_ENCODER=native` environment variables. The HLS live stream is now encoded natively and no longer uses FFmpeg. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
+- **FFmpeg**: Required for RTSP and other network stream capture. Saved clips in every export format (WAV, FLAC, Opus, AAC and MP3) are encoded natively and do not need FFmpeg. Clip downloads in every format, the denoise, normalize and gain previews, and audible-bats playback are also processed natively. The HLS live stream is now encoded natively and no longer uses FFmpeg. Loudness normalization of saved clips is done natively for every format and no longer needs FFmpeg.
 
   The HLS live stream is encoded in-process and served from memory, so nothing is written to the HLS directory. Its output sample rate is fixed at 48 kHz, so `webserver.livestream.samplerate` has no effect (a warning is logged if it is set to anything else), and `webserver.livestream.ffmpegloglevel` no longer applies since there is no FFmpeg process to configure.
-
-- **SoX**: Required for rendering spectrograms in the web interface
 
 > **Note**: When using the Docker installation method, all these dependencies are already included in the Docker image, so you don't need to install them separately. This is one of the major advantages of using the Docker-based installation.
 
@@ -149,12 +147,21 @@ debug: false # Enable debug messages for troubleshooting
 main:
   name: BirdNET-Go # Name of this node, used to identify the source of notes
   timeas24h: true # true for 24-hour time format, false for 12-hour time format
-  log:
-    enabled: false # Enable main application logging
-    path: logs/birdnet.log # Path to log file
-    rotation: daily # Log rotation type: daily, weekly, or size
-    maxsize: 10485760 # Maximum log size in bytes for size rotation (10MB)
-    rotationday: Sunday # Day of the week for weekly rotation
+
+# Application logging settings
+logging:
+  default_level: info # Default log level for all modules: debug, info, warn, error
+  console:
+    enabled: true # Enable console output
+    level: info # Log level for console output
+  file_output:
+    enabled: true # Enable file output
+    path: logs/application.log # Path to log file
+    level: info # Log level for file output
+    max_size: 100 # Maximum size in MB before rotation (0 = disabled)
+    max_age: 30 # Maximum age in days to keep rotated logs (0 = no limit)
+    max_rotated_files: 10 # Maximum number of rotated log files to keep (0 = no limit)
+    compress: false # Compress rotated logs with gzip
 
 # BirdNET model specific settings
 birdnet:
@@ -188,7 +195,6 @@ realtime:
   audio:
     source: "" # Audio source to use for analysis
     ffmpegpath: "" # Path to ffmpeg (runtime value)
-    soxpath: "" # Path to sox (runtime value)
     streamtransport: auto # Preferred transport for audio streaming: auto, sse, or ws
     soundlevel:
       enabled: false # Enable sound level monitoring in 1/3rd octave bands
@@ -214,7 +220,7 @@ realtime:
           q: 0.7 # Filter Q factor
           gain: 0 # Filter gain (only for certain types)
           width: 0 # Filter width (only for BandPass and BandReject)
-          passes: 1 # Filter passes for added attenuation or gain
+          passes: 1 # Filter passes: 0 or no passes line turns the filter off, each pass adds 12 dB/oct (LowPass, HighPass)
 
   # Web dashboard settings
   dashboard:
@@ -246,9 +252,9 @@ realtime:
     locationaccuracy: 10 # Accuracy of location in meters
     retrysettings:
       enabled: true # Enable retry mechanism
-      maxretries: 5 # Maximum number of retry attempts
-      initialdelay: 5 # Initial delay before first retry in seconds
-      maxdelay: 300 # Maximum delay between retries in seconds
+      maxretries: 3 # Maximum number of retry attempts
+      initialdelay: 30 # Initial delay before first retry in seconds
+      maxdelay: 600 # Maximum delay between retries in seconds
       backoffmultiplier: 2.0 # Multiplier for exponential backoff
 
   # Weather integration settings
@@ -276,10 +282,13 @@ realtime:
     remember: 60 # How long to remember barks for filtering (in seconds)
     species: ["Eurasian Eagle-Owl", "Hooded Crow"] # Species prone to dog bark confusion
 
-  # RTSP streaming settings
+  # RTSP and other network audio streams
   rtsp:
-    transport: "tcp" # RTSP Transport Protocol: tcp or udp
-    urls: [] # RTSP stream URLs
+    # Each entry needs a name, a url and a type (rtsp, http, hls, rtmp or udp). Optional
+    # fields: enabled, transport (tcp or udp), mediaMode, channelMode and gain.
+    # A legacy `urls` list in an older config is converted to streams on startup.
+    streams: []
+    transport: "tcp" # Default transport (tcp or udp) for RTSP and RTMP streams that do not set their own
 
   # MQTT integration
   mqtt:
@@ -292,9 +301,11 @@ realtime:
     retrysettings:
       enabled: true # Enable retry mechanism
       maxretries: 5 # Maximum number of retry attempts
-      initialdelay: 5 # Initial delay before first retry in seconds
-      maxdelay: 300 # Maximum delay between retries in seconds
+      initialdelay: 30 # Initial delay before first retry in seconds
+      maxdelay: 3600 # Maximum delay between retries in seconds
       backoffmultiplier: 2.0 # Multiplier for exponential backoff
+      # Retries apply when a publish fails with an error. While the broker connection is down, publishes are skipped:
+      # they are not queued or retried, so detections made during an outage are not sent later.
 
   # Telemetry settings
   telemetry:
@@ -351,12 +362,6 @@ webserver:
   debug: false # Enable debug mode for web server
   enabled: true # Enable web server
   port: "8080" # Port for web server
-  log:
-    enabled: false # Enable web server logging
-    path: logs/webserver.log # Path to log file
-    rotation: daily # Log rotation type: daily, weekly, or size
-    maxsize: 10485760 # Maximum log size in bytes for size rotation (10MB)
-    rotationday: Sunday # Day of the week for weekly rotation
 
 # Security settings
 security:
@@ -556,6 +561,7 @@ sudo journalctl -fu birdnet-go
    - Verify the service is running: `sudo systemctl status birdnet-go`
    - Check that port 8080 (or your configured port) is not blocked by a firewall
    - Confirm the port binding in the Docker container: `docker ps | grep birdnet-go`
+   - With host networking (Compose, Portainer or `docker run --network host`), `docker ps` shows no port mapping: the app listens on `WEB_PORT` (`BIRDNET_WEBSERVER_PORT`) directly, and the host firewall applies to it. See [Host Networking Notes](docker_compose_guide.md#host-networking-notes)
 
 3. **Container exits immediately after starting**:
    - Check logs for errors: `sudo journalctl -u birdnet-go -n 100`
@@ -567,8 +573,8 @@ sudo journalctl -fu birdnet-go
    - Check if audio device is working properly: `arecord -d 5 -f S16_LE -r 48000 test.wav`
    - Adjust sensitivity and threshold settings in the configuration file
 
-5. **Constant 'WARNING: BirdNET processing time exceeded buffer length' messages:**
-   - If you have enabled Deep Detection (by setting a high `birdnet.overlap` value, e.g., 2.7), your system might not be powerful enough to keep up with the increased analysis rate. Consider reducing the `birdnet.overlap` value or using more powerful hardware (RPi 4/5 or better recommended for Deep Detection).
+5. **'processing time exceeded buffer interval' or 'analysis is not keeping up with incoming audio' warnings:**
+   - The first warning means one model's own inference takes longer than its analysis step. The second means audio is being dropped before it is analyzed, often because several models or several audio sources share the CPU. Consider reducing the `birdnet.overlap` value, disabling extra models, or using more powerful hardware.
 
 #### Updating a Docker Installation (`install.sh` method)
 
@@ -1060,8 +1066,10 @@ realtime:
     confidence: 0.05 # Sensitivity to human voices
 ```
 
-- Discards bird detections if human speech is detected after the initial detection
+- Discards a bird detection when human speech is heard anywhere in its saved clip, including the pre-capture part, and also when speech is heard after the clip while the detection is still waiting. A detection waits until its whole clip has been scanned. Only a detection whose clip is never fully scanned within 30 seconds after the clip end is saved and counted as unscanned
 - Protects privacy by preventing recordings during conversations
+- Among Perch V2 labels, only voiced human sounds trigger it: speech, conversation, whispering, shouting, singing, laughter, crying and cheering (Perch V2 labels such as `Speech`, `Human_voice`, `Conversation`, `Laughter`, `Singing`), plus the `Homo sapiens` taxon. BirdNET's `Human` classes (`Human vocal`, `Human non-vocal`, `Human whistle`) are matched by prefix and all trigger it. These non-voiced Perch V2 body and action labels do not trigger it: `Cough`, `Sneeze`, `Breathing`, `Respiratory_sounds`, `Sigh`, `Gasp`, `Hands`, `Clapping`, `Applause`, `Finger_snapping`, `Chewing_and_mastication`, `Fart`, `Burping_and_eructation`, `Walk_and_footsteps`, `Run`, `Crowd` and `Human_group_actions`. These are still never saved as bird detections
+- When `birdnet.overlap` is above 1.5 (as applied after any cadence cap), a human voice label match is held until a second match from the same audio source arrives within 15 seconds: another label match from any model, or a VAD speech hit. A held match that is not confirmed in time is ignored. At 1.5 or below, and for VAD speech hits on their own, a single match counts
 
 #### Dog Bark Filter
 
@@ -1571,7 +1579,7 @@ graph TD
 
 - **CPU Load**: Significantly increases processing requirements due to higher analysis frequency
 - **Recommended Hardware**: Raspberry Pi 4/5 or more powerful systems
-- **Performance Monitoring**: Watch for `WARNING: BirdNET processing time exceeded buffer length` messages indicating the system cannot keep up
+- **Performance Monitoring**: Watch for `processing time exceeded buffer interval` (one model is too slow for its step) and `analysis is not keeping up with incoming audio` (audio is being lost) warnings
 
 #### Configuration
 
@@ -1619,20 +1627,17 @@ BirdNET-Go includes an advanced sound level monitoring feature that provides det
 The sound level monitoring system:
 
 1. **Analyzes audio in 1/3rd octave bands** following the ISO 266 standard (25 Hz to 20 kHz)
-2. **Aggregates measurements over 10-second windows** to provide stable readings
+2. **Aggregates measurements over a configurable interval** (default 10 seconds, minimum 5 seconds) to provide stable readings
 3. **Calculates min/max/mean values** for each frequency band within the window
 4. **Publishes data via multiple channels**: MQTT, SSE, and Prometheus metrics
 
 ##### Audio Processing Architecture
 
-The sound level measurement system reads the raw audio directly from the source without any equalization or filtering applied. This ensures that measurements reflect the actual acoustic environment:
+Sound level is measured after the source's gain and equalizer settings are applied, so the readings follow the audio the rest of BirdNET-Go sees. With the default settings (no gain, no equalizer) the measurement is of the unmodified signal.
 
-- **Raw Audio Input**: Audio samples are processed directly as received from the audio source (internal/myaudio/soundlevel.go:268-271)
-- **Direct Band Analysis**: Raw samples are passed through octave band filters without any pre-processing or equalization (internal/myaudio/soundlevel.go:308-310)
-- **Pure Measurement**: The octave band filters isolate specific frequency bands for measurement but do not apply any equalization - they simply measure the energy present in each frequency band (internal/myaudio/soundlevel.go:143-220)
-- **Unmodified Output**: Sound level data is sanitized for JSON compatibility and published without any acoustic modifications (internal/analysis/sound_level.go)
-
-This approach ensures that sound level measurements represent the true acoustic conditions at the monitoring location, which is essential for environmental monitoring, research applications, and compliance with acoustic measurement standards.
+- **Band filters**: One second-order band-pass filter per 1/3rd octave band from the go-audio-dsp `octave` package, tuned to the exact base-10 centre frequency and labelled with the nominal frequency. The filters measure the energy present in each band and do not equalize the audio.
+- **Bands**: 30 bands from 25 Hz to 20 kHz at 48 kHz and above. Bands whose upper edge reaches 0.95 of the Nyquist frequency are left out.
+- **Unmodified output**: Sound level data is sanitized for JSON compatibility and published without any acoustic modification (internal/analysis/sound_level.go).
 
 #### Configuration
 
@@ -1645,7 +1650,7 @@ realtime:
       enabled: true # Enable sound level monitoring (default: false)
       interval: 10 # Measurement interval in seconds (default: 10)
       debug: false # Enable debug logging (default: false)
-      debug_realtime_logging: false # Enable per-sample debug logs (default: false)
+      debug_realtime_logging: false # Enable per-band debug logs for every interval (default: false)
 ```
 
 > **Note**: Sound level monitoring is disabled by default to avoid performance overhead. Enable it only if you need this functionality.
@@ -1657,7 +1662,7 @@ Sound level data is published as JSON with the following structure:
 ```json
 {
   "timestamp": "2024-01-15T08:30:45Z",
-  "source": "USB Audio Device",
+  "source": "rtsp_65c31a0b",
   "name": "Primary Microphone",
   "duration_seconds": 10,
   "octave_bands": {
@@ -1693,6 +1698,7 @@ The MQTT message uses a compact JSON format to minimize payload size:
 ```json
 {
   "ts": "2024-01-15T08:30:45Z",
+  "node": "Bird Station",
   "src": "rtsp_65c31a0b",
   "nm": "Primary Microphone",
   "dur": 10,
@@ -1799,7 +1805,7 @@ The MQTT message uses a compact JSON format to minimize payload size:
       "x": -35.8,
       "m": -39.9
     },
-    "1.25_kHz": {
+    "1.2_kHz": {
       "f": 1250.0,
       "n": -39.7,
       "x": -32.2,
@@ -1823,7 +1829,7 @@ The MQTT message uses a compact JSON format to minimize payload size:
       "x": -20.8,
       "m": -24.9
     },
-    "3.15_kHz": {
+    "3.1_kHz": {
       "f": 3150.0,
       "n": -24.2,
       "x": -16.7,
@@ -1884,6 +1890,7 @@ The MQTT message uses a compact JSON format to minimize payload size:
 **Field Reference:**
 
 - `ts`: ISO8601 timestamp
+- `node`: Name of this BirdNET-Go instance
 - `src`: Audio source identifier
 - `nm`: Human-readable name of the source
 - `dur`: Measurement duration in seconds
@@ -1937,14 +1944,17 @@ GET /api/v2/soundlevels/stream
 
 Sound level data is exposed as Prometheus metrics:
 
-- `birdnet_sound_level_db`: Current sound level for each octave band
-- `birdnet_sound_level_processing_duration_seconds`: Processing time histogram
-- `birdnet_sound_level_publishing_total`: Publishing success/error counters
+- `myaudio_octave_band_level_db`, `myaudio_octave_band_min_db`, `myaudio_octave_band_max_db`, `myaudio_octave_band_mean_db`: Level of each 1/3rd octave band, labelled by `source`, `name` and `frequency_band`
+- `myaudio_sound_level_db`: Overall sound level of a source (`measurement_type="overall"`), the mean of the band powers
+- `myaudio_sound_level_processing_duration_seconds`: Processing time histogram
+- `myaudio_sound_level_publishing_total`: Publishing success/error counters
+
+Every sound level series carries the source ID in both the `source` and the `name` label. The display name is not used, because the metrics listener has no authentication. A dashboard that wants the display name can map it from the source ID with relabeling.
 
 #### Performance Considerations
 
-- **CPU Usage**: Sound level analysis adds approximately 5-10% CPU overhead on a Raspberry Pi 4
-- **Memory**: Minimal additional memory usage (< 10MB)
+- **CPU Usage**: About 7 ms of CPU per second of 48 kHz audio on a Raspberry Pi 5 (0.7% of one core) and 37 ms per second at 256 kHz
+- **Memory**: Under 100 KB per source
 - **Network**: Each 10-second measurement produces ~2KB of JSON data per source
 
 #### Use Cases
@@ -1958,25 +1968,29 @@ Sound level data is exposed as Prometheus metrics:
 
 ##### Digital Signal Processing
 
-The sound level monitoring system implements professional-grade signal processing:
+Band levels are measured with the go-audio-dsp `octave` package:
 
 1. **1/3rd Octave Band Filtering**:
-   - Implements 30 frequency bands according to ISO 266 standard
-   - Center frequencies: 25 Hz to 20 kHz in standard 1/3rd octave steps
-   - Uses 2nd order IIR biquad filters based on Robert Bristow-Johnson's audio EQ cookbook
-   - Q factor calculation: `Q = f_center / (f_high - f_low)` ≈ 4.318 for 1/3rd octave bands
-   - Includes stability checks and numerical overflow protection
+   - 30 frequency bands according to the ISO 266 preferred series
+   - Centre frequencies: 25 Hz to 20 kHz in 1/3rd octave steps; the filters are tuned to the exact base-10 centres `1000 * 10^(n/10)` Hz and the bands are labelled with the nominal frequency
+   - One 2nd order IIR band-pass filter per band (RBJ design with bandwidth prewarping), with a width of log2(10^0.1) octaves
+   - Non-finite input samples count as 0, so they cannot disturb the filter state
 
-2. **RMS and dB Calculation**:
-   - RMS (Root Mean Square) calculation over 1-second windows
-   - dB conversion: `20 * log10(RMS)` relative to digital full scale
-   - Range clamping: -200 dB to +20 dB
-   - Non-finite value protection (NaN/Inf handling)
+2. **Level Calculation**:
+   - Mean square of each band's output over 1-second periods
+   - dB conversion: `10 * log10(mean square)` relative to a digital full scale amplitude of 1.0 (a full scale sine reads -3.01 dB)
+   - Range: -200 dB to +20 dB
 
 3. **Data Aggregation**:
-   - Two-stage aggregation: 1-second measurements → 10-second statistics
-   - Provides min/max/mean for each frequency band
-   - Continuous processing with sample overflow handling
+   - Two-stage aggregation: 1-second levels, then interval statistics
+   - Min, max and arithmetic mean of the 1-second dB values for each frequency band
+
+4. **Accuracy**:
+   - A steady tone at a band's centre frequency reads its true level
+   - White noise reads 1 to 2 dB above an ideal rectangular band, because the noise bandwidth of a second-order band-pass is pi/2 times its 3 dB bandwidth
+   - Near the Nyquist frequency the 20 kHz band at 48 kHz is about 3 dB off at its upper edge
+   - The first second after a start or a settings change includes the filter start-up transient
+   - This is not an IEC 61260-1 class compliant meter
 
 ##### Implementation Architecture
 
@@ -2000,10 +2014,9 @@ The sound level monitoring system implements professional-grade signal processin
    - No A-weighting or C-weighting curves implemented
    - May not correlate directly with perceived loudness
 
-3. **Fixed Aggregation Windows**:
-   - Hardcoded 10-second measurement periods
-   - Cannot adjust for different temporal resolutions
-   - The `interval` setting validates but doesn't change window size
+3. **Aggregation Interval**:
+   - The `interval` setting sets the number of seconds per published measurement (minimum 5, default 10)
+   - The underlying levels are always measured over 1-second periods
 
 4. **Limited Statistical Analysis**:
    - Only provides min/max/mean values
@@ -2012,8 +2025,9 @@ The sound level monitoring system implements professional-grade signal processin
 
 5. **Hardware Dependencies**:
    - Assumes 16-bit audio at system sample rate (typically 48 kHz)
-   - Frequency bands above Nyquist frequency (sample_rate/2) are automatically excluded
+   - Bands whose upper edge reaches 0.95 of the Nyquist frequency (sample_rate/2) are automatically excluded
    - No compensation for microphone frequency response
+   - Not an IEC 61260-1 class meter
 
 ##### Debug Options
 
@@ -2024,10 +2038,10 @@ realtime:
   audio:
     soundlevel:
       debug: true # Enable debug logging
-      debug_realtime_logging: true # Enable per-sample logging (very verbose!)
+      debug_realtime_logging: true # Enable per-band logging for every interval (verbose!)
 ```
 
-Debug logs are written to `logs/soundlevel.log`. Use `debug_realtime_logging` sparingly as it generates high log volume.
+Debug logs are written by the `analysis.soundlevel` logger module, and its `analysis.soundlevel.metrics` child for the per-band metric updates. No dedicated log file is configured for it by default, so they go to the application log unless you add a file for that module under `logging.modules`. Use `debug_realtime_logging` sparingly as it logs every band of every interval.
 
 ##### Extending the System
 
@@ -2036,10 +2050,17 @@ Advanced users interested in extending the sound level monitoring capabilities s
 1. **Adding Frequency Weighting**: Could be implemented as post-RMS filter curves
 2. **Calibration Support**: Would require known reference signals and microphone sensitivity data
 3. **Additional Statistics**: Percentile tracking could be added to the aggregation system
-4. **Variable Time Windows**: The 10-second window is currently hardcoded but could be made configurable
-5. **Peak Detection**: True peak tracking would require additional buffer management
+4. **Peak Detection**: True peak tracking would require additional buffer management
 
 The implementation provides a solid foundation for environmental sound monitoring with robust signal processing and comprehensive error handling. While it cannot provide absolute SPL measurements, it excels at relative sound level monitoring and frequency analysis for research and environmental assessment purposes.
+
+##### Changes in this release
+
+Sound level monitoring now uses the go-audio-dsp octave band meter. The previous filters were too narrow near the Nyquist frequency, so the high bands read too low on broadband sound. The high bands now read higher: at 48 kHz by about +6.4 dB in the 20 kHz band, +3.3 dB at 16 kHz, +1.9 dB at 12.5 kHz, +1.2 dB at 10 kHz and +0.7 dB at 8 kHz, with smaller changes down to 2.5 kHz. Bands up to 2 kHz, including the 1 kHz band that the Home Assistant Sound Level sensor shows, change by 0.06 dB or less. At 96 kHz the top band moves by about +1.2 dB and at 256 kHz by +0.1 dB. A steady tone at a band's centre reads the same as before. This affects the MQTT sound level topics, the SSE stream and the Prometheus band gauges. The Prometheus overall sound level, which averages the band powers, rises with broadband high-frequency sound: about +1.8 dB for white noise, +0.3 dB for pink noise and close to 0 dB for typical outdoor sound dominated by low frequencies. Dashboards or automations with thresholds on high bands or on the overall level may need adjusting. Band names and the message format are unchanged. Each source now uses under 100 KB of memory instead of about 11 MB at 48 kHz, and half the CPU on a Raspberry Pi 5.
+
+The `nm` field of the MQTT messages and the `name` field of the SSE stream for signed-in users now show the source name instead of the source ID. The SSE stream sends the source ID as `name` to clients that are not signed in. The `source` field, the per-source MQTT topic and the Home Assistant sensor still use the source ID. The Prometheus sound level series are labelled with the source ID, as before, in both the `source` and the `name` label.
+
+MQTT, SSE and Prometheus each receive every measurement now. Before, with all three enabled, each one received only about a third of them.
 
 ### Push Notifications
 
@@ -2232,7 +2253,7 @@ This produces Discord messages with:
 - Green color bar (color code `3066993` = green; use `15158332` for red, `3447003` for blue)
 - Species name, confidence, and location as inline fields
 
-> **Note**: The `bg_*` metadata fields (bird image URL, confidence, location, etc.) are populated for detection notifications. See [template variables](#available-template-fields) below for the full list.
+> **Note**: The `bg_*` metadata fields (bird image URL, confidence, location, etc.) are populated for detection notifications. See the detection metadata fields in the [Webhook section](#2-webhook-custom-http) below for the full list.
 
 **Troubleshooting Discord**
 
@@ -3516,10 +3537,6 @@ realtime:
 
 ## Log Rotation
 
-The application supports several log rotation strategies:
-
-- Daily rotation
-- Weekly rotation (on a specified day)
-- Size-based rotation (with configurable maximum size)
+Rotation is based on file size only. Once the active log file grows past `logging.file_output.max_size` (megabytes), it is rotated out. The `max_age` (days), `max_rotated_files` (count) and `compress` (gzip) options under `logging.file_output` decide how long rotated files are kept and whether they are compressed. The [Configuration Reference](configuration-reference.md) lists every option in the `logging` section.
 
 This helps manage log files for long-running installations.

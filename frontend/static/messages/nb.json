@@ -515,6 +515,18 @@
         "title": "{modelName} feiler i hver analyse",
         "message": "{modelName} er lastet inn, men de siste {failures} analysene på rad feilet på {runtime}: inferensen returnerte en feil. Lyd tas opp, men denne modellen oppdager ingenting. Sjekk modellen på siden System > AI-modeller.",
         "nonFiniteMessage": "{modelName} er lastet inn, men de siste {failures} analysene på rad feilet på {runtime}: modellen returnerte ugyldige poeng (NaN eller uendelige). Lyd tas opp, men denne modellen oppdager ingenting. Sjekk modellen på siden System > AI-modeller."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analyseoverlapp begrenset for denne enheten",
+        "cadenceCappedMessage": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med den innstilte overlappen på {configured} s overstiger den målte kapasiteten til denne enheten, så lyden analyseres med {effective} s overlapp. Falsk positiv-filteret kan derfor kreve færre bekreftelser. De lagrede innstillingene dine er uendret; se Innstillinger > Analyse.",
+        "cadenceOverloadedTitle": "Denne enheten klarer ikke å holde tritt med lydanalysen",
+        "cadenceOverloadedMessage": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger den målte kapasiteten til denne enheten selv uten overlapp, så analysen kan komme på etterskudd, og deteksjoner kan gå tapt. Aktiver færre modeller eller lydkilder, eller velg en raskere modellvariant."
+      },
+      "storage": {
+        "notPersistentTitle": "Data går tapt når containeren gjenopprettes",
+        "notPersistentMessage": "Disse banene ligger på lagring som slettes når containeren gjenopprettes, for eksempel ved en oppdatering av imaget: {paths}. Knytt et volum eller en vertsmappe til dem i containerkonfigurasjonen din.",
+        "anonymousVolumeTitle": "Data lagres i et anonymt containervolum",
+        "anonymousVolumeMessage": "Disse banene ligger i anonyme volumer som container-kjøretiden opprettet fordi ingen volum var knyttet til dem: {paths}. En container som startes på nytt, for eksempel med docker run etter en oppdatering av imaget, får nye tomme volumer, så dataene ser ut til å være tapt. Knytt et navngitt volum eller en vertsmappe til dem."
       }
     },
     "loading": "Laster varsler..."
@@ -1043,7 +1055,8 @@
       "error": "Feil ved lasting av registrering: {error}",
       "loadingResults": "Laster {count} resultater...",
       "thumbnailLoading": "Laster miniatyrbilde for {species}...",
-      "thumbnailLoaded": "Miniatyrbilde for {species} lastet"
+      "thumbnailLoaded": "Miniatyrbilde for {species} lastet",
+      "resultsPerPage": "Resultater per side"
     },
     "errors": {
       "notFound": "Registrering ikke funnet. Den kan ha blitt slettet eller ID-en er feil.",
@@ -1568,7 +1581,7 @@
           "restartTitle": "Omstart kreves",
           "restartBody": "Start applikasjonen på nytt for å bytte til V2-databasen. Opprydding av eldre database vil være tilgjengelig etter omstart.",
           "fallbackError": "Antall poster stemmer ikke mellom eldre og V2-database. Noen poster kan ikke ha migrert korrekt.",
-          "migrateInfo": "Migreringen vil overføre {count} poster fra den eldre databasen til det nye V2-skjemaet. Dobbeltskrivemodus sikrer nulldatatap under migrering.",
+          "migrateInfo": "Migreringen vil overføre {count} poster fra den eldre databasen til det nye V2-skjemaet. Nye registreringer som lagres under migreringen kopieres også til den nye databasen.",
           "sourceLegacy": "Kilde (eldre)",
           "targetV2": "Mål (V2)",
           "recordsLabel": "Poster",
@@ -1620,7 +1633,7 @@
         },
         "notes": {
           "in_progress": "Du kan fortsette å bruke systemet normalt mens migreringen kjører i bakgrunnen.",
-          "dual_write": "Migrering pågår. Dataene dine er trygge - alle nye registreringer lagres i begge databaser.",
+          "dual_write": "Migrering pågår. Dataene dine er trygge - nye registreringer lagres i den gjeldende databasen og kopieres til den nye databasen under migreringen.",
           "migrating": "Kopierer eksisterende registreringer til den nye databasen.",
           "validating": "Verifiserer at alle poster er kopiert korrekt. Nesten ferdig!",
           "cutover": "Bytter til den nye databasen. Dette tar bare et øyeblikk.",
@@ -2303,7 +2316,9 @@
       "saveAriaLabel": "Lagre endringer",
       "savingAriaLabel": "Lagrer endringer...",
       "unsavedChanges": "Ulagrede endringer",
-      "toolbar": "Innstillingshandlinger"
+      "toolbar": "Innstillingshandlinger",
+      "validationBlocked": "Noen felt trenger oppmerksomhet før du kan lagre.",
+      "noChangesToSave": "Ingen endringer å lagre."
     },
     "errors": {
       "loadFailed": "Innlasting av innstillinger mislyktes",
@@ -2387,10 +2402,9 @@
             "lenient": "For lyd av lav kvalitet (RTSP-kameraer, webkammikrofoner)",
             "moderate": "Balansert for typiske hobbyoppsett",
             "balanced": "Original oppførsel fra før september 2025",
-            "strict": "Krever RPi 4+. For mikrofoner av høy kvalitet",
-            "maximum": "Krever RPi 4+. For mikrofoner av profesjonell kvalitet"
+            "strict": "For mikrofoner av høy kvalitet",
+            "maximum": "For mikrofoner av profesjonell kvalitet"
           },
-          "hardwareNote": "Strenge og maksimale nivåer krever høyere overlappinnstillinger og mer CPU-ressurser. RPi 4 eller bedre maskinvare er nødvendig for disse nivåene.",
           "overlapAdjusted": "Overlappinnstilling automatisk justert til {overlap}s for å oppfylle filterkrav",
           "overlapReduced": "Overlappinnstilling redusert til {overlap}s for å matche filternivå",
           "levelNames": {
@@ -2402,7 +2416,19 @@
             "maximum": "Maksimum",
             "unknown": "Ukjent"
           },
-          "warningOff": "Med filtrering deaktivert godtas enhver registrering over sikkerhetsterskel umiddelbart. Dette gir typisk flere falske positive per dag. Selv mild filtrering forbedrer resultatkvaliteten betydelig."
+          "warningOff": "Med filtrering deaktivert godtas enhver registrering over sikkerhetsterskel umiddelbart. Dette gir typisk flere falske positive per dag. Selv mild filtrering forbedrer resultatkvaliteten betydelig.",
+          "readoutTitle": "Påkrevde bekreftelser nå",
+          "readoutPreviewTitle": "Påkrevde bekreftelser etter lagring (anslag)",
+          "readoutIntro": "En deteksjon godtas når nok analysevinduer innenfor {seconds} sekunder er enige.",
+          "readoutLine": "{model}: {count} av {windows} vinduer, et nytt vindu hvert {step} s",
+          "readoutPreview": "Anslått ut fra endringene du ikke har lagret. Grensen for enheten kontrolleres på nytt etter lagring.",
+          "readoutPending": "De lagrede innstillingene tas i bruk. Verdiene er anslag til de oppdaterte antallene er lastet inn.",
+          "capNoticeTitle": "Overlapp begrenset til det denne enheten klarer",
+          "capNotice": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med den innstilte overlappen på {configured} s overstiger den målte kapasiteten til denne enheten, så lyden analyseres med {effective} s overlapp. Filteret kan derfor kreve færre bekreftelser. De lagrede innstillingene dine er uendret.",
+          "overloadedNoticeTitle": "Denne enheten klarer ikke å holde tritt med analysen",
+          "overloadedNotice": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger den målte kapasiteten til denne enheten selv uten overlapp. Analysen kan komme på etterskudd, og deteksjoner kan gå tapt. Aktiver færre modeller eller lydkilder, eller velg en raskere modellvariant.",
+          "unknownLatency": "Behandlingstiden kunne ikke måles for {models}, så den regnes ikke med når overlappen begrenses. Analysen kan likevel komme på etterskudd.",
+          "cpuNote": "En høyere styrke analyserer overlappende lyd oftere, noe som koster CPU-tid for hver aktiverte modell og lydkilde. BirdNET-Go begrenser overlappen automatisk til det denne enheten klarer å behandle."
         },
         "rangeFilter": {
           "title": "Utvalgsfilter",
@@ -2417,7 +2443,7 @@
             "accuracy": "Anslått nøyaktighet: innenfor {accuracy} m",
             "locationDetected": "Nettleserens posisjon ble funnet.",
             "geolocationUnsupported": "Denne nettleseren støtter ikke enhetsposisjon. Skriv inn koordinater manuelt eller bruk kartet.",
-            "geolocationRequiresHttps": "Nettleserposisjon krever HTTPS eller localhost. Skriv inn koordinater manuelt eller bruk kartet.",
+            "geolocationInsecureHelp": "Krever HTTPS eller localhost. Søk etter et sted eller bruk kartet i stedet.",
             "geolocationDenied": "Posisjonstillatelse ble avvist. Skriv inn koordinater manuelt eller bruk kartet.",
             "geolocationUnavailable": "Enheten kunne ikke bestemme posisjonen sin. Skriv inn koordinater manuelt eller bruk kartet.",
             "geolocationTimedOut": "Posisjonsforespørselen fikk tidsavbrudd. Prøv igjen, skriv inn koordinater manuelt eller bruk kartet.",
@@ -2644,7 +2670,7 @@
                 "descriptions": {
                   "highContrast": "Best for svake signaler. Fuglekall fremheves tydelig fra bakgrunnsstøy. Anbefales for vitenskapelige/gråtone-stiler.",
                   "standard": "Standard balansert innstilling. God for de fleste brukstilfeller.",
-                  "extended": "Mer detalj synlig men lavere kontrast. SoX-standardverdi."
+                  "extended": "Mer detalj synlig men lavere kontrast."
                 }
               },
               "enabled": {
@@ -2746,7 +2772,7 @@
           "title": "Hva er inkludert i rapporten:",
           "applicationLogs": "**Applikasjonslogger** - Nylige feil og feilsøkingsinformasjon",
           "configuration": "**Konfigurasjon** - Innstillingene dine med sensitiv data fjernet",
-          "systemInfo": "**Systeminformasjon** - OS-versjon, minne og kjøretidsdetaljer",
+          "systemInfo": "**Systeminformasjon** - OS-versjon, minne, maskinvare, tilkoblede USB-enheter og lydkort, og kjøretidsdetaljer",
           "notIncluded": "**IKKE inkludert** - Lydfiler, fugleregistreringer eller personlige data"
         },
         "userMessage": {
@@ -2899,6 +2925,11 @@
             "unit": "min",
             "helpText": "Forhindre gjentatte varsler for samme art innen dette tidsvinduet. Sett til 0 for å deaktivere."
           }
+        },
+        "rulesNotice": {
+          "message": "Push-varsler om registreringer kommer fra varselregler på fanen Regler. De innebygde registreringsreglene varsler bare i appen. For å få push-varsler legger du til handlingen {pushAction} i regelen {ruleName}, eller oppretter en regel for hendelsen {eventName} med en sikkerhetsbetingelse og en nedkjøling.",
+          "previousFilters": "Innstillingene Minimum sikkerhet ({confidence}%) og Artsnedkjøling ({minutes} min) her brukes ikke av varselregler.",
+          "openRules": "Åpne Regler"
         },
         "noProviders": "Ingen leverandører konfigurert",
         "noProvidersDescription": "Legg til en leverandør for å begynne å motta push-varsler",
@@ -3166,7 +3197,7 @@
         "vadEnable": "Aktiver personvernbeskyttelse (Silero VAD)",
         "vadHelp": "Kjører en dedikert nevral taledeteksjonsmodell ved siden av klassifisereren for robust talefiltrering. Forbruker ekstra systemressurser (ca. 20-30 MB RAM og CPU-inferens per segment).",
         "vadThresholdLabel": "Terskel for personvernbeskyttelse",
-        "vadThresholdHelp": "Følsomhetsterskel for taleaktivitetsdetektoren (standard 0,35). Lavere verdier gjør filteret mer følsomt for lav eller fjern tale."
+        "vadThresholdHelp": "Følsomhetsterskel for taleaktivitetsdetektoren (standard 0,6). Lavere verdier gjør filteret mer følsomt for lav eller fjern tale."
       },
       "falsePositivePrevention": {
         "title": "Forebygging av falske positive",
@@ -3212,14 +3243,14 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Last opp registreringer til BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg ikke funnet",
-          "message": "Installer FFmpeg for å aktivere FLAC-kodingsstøtte. BirdWeather avvikler WAV-opplastinger til fordel for komprimerte FLAC-lydfiler."
-        },
         "enable": "Aktiver BirdWeather-opplastinger",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Din unike BirdWeather-token."
+          "helpText": "Din unike BirdWeather-token.",
+          "errors": {
+            "required": "Skriv inn BirdWeather-tokenet ditt, eller slå av BirdWeather.",
+            "format": "Et BirdWeather-token har 24 bokstaver og sifre."
+          }
         },
         "threshold": {
           "label": "Opplastingsterskel",
@@ -3723,6 +3754,8 @@
         "frequencyResponse": "Frekvensrespons",
         "cutoffFrequency": "Knekkfrekvens",
         "cutoffFrequencyHelp": "Frekvensen der filteret begynner å dempe signaler. Fuglekall er typisk mellom 1-10 kHz.",
+        "centerFrequency": "Senterfrekvens",
+        "bandwidth": "Båndbredde",
         "qFactor": "Q-faktor",
         "qFactorHelp": "Kvalitetsfaktoren styrer filterets skarphet. Lave verdier (0,1-1) gir mykere helninger, høyere verdier (1-10) gir brattere avkuttinger.",
         "gain": "Forsterkning",
@@ -3730,17 +3763,31 @@
         "attenuation": "Demping",
         "attenuationHelp": "Filteravtagshastighet. Høyere verdier gir brattere demping av filtrerte frekvenser.",
         "attenuationLevels": {
-          "0db": "0 dB",
+          "off": "Av",
           "12db": "12 dB",
           "24db": "24 dB",
           "36db": "36 dB",
-          "48db": "48 dB"
+          "48db": "48 dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Legg til flere filtre for å forme frekvensresponsen for optimal fugledeteksjon i ditt miljø.",
+        "emptyEntryRestored": "Skriv inn et tall. Den forrige verdien ble beholdt.",
         "graph": {
           "flatResponse": "Flat respons (ingen filtre brukt)",
           "frequency": "Frekvens (Hz)",
-          "gain": "Forsterkning (dB)"
+          "gain": "Forsterkning (dB)",
+          "loading": "Beregner frekvensresponsen...",
+          "updating": "Oppdaterer frekvensresponsen...",
+          "error": "Kunne ikke beregne frekvensresponsen. Den oppdateres når du endrer et filter, eller når du velger Prøv igjen.",
+          "sampleRate": "Beregnet for en samplingsfrekvens på {rate} Hz.",
+          "clipped": "Responsen topper på {peak} dB, over toppen av grafen.",
+          "skippedHeading": "{count, plural, one {# filter brukes ikke på lyden} other {# filtre brukes ikke på lyden}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) hoppes over: denne filtertypen støttes ikke.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) hoppes over: innstillingene er ikke gyldige ved {rate} Hz.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) hoppes over: det kunne ikke legges til i filterkjeden.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) hoppes over."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3909,7 +3956,7 @@
       "allowSubnetBypassLabel": "Tillat tilgang fra subnett for å omgå autentisering",
       "subnetBypassLocalNote": "Når aktivert, kan klienter på samme lokale nettverk omgå autentisering.",
       "allowedSubnetsLabel": "Tillatte subnett",
-      "allowedSubnetsHelp": "Tillatte nettverksområder for å omgå innlogging (CIDR-notasjon, kommaseparert liste)",
+      "allowedSubnetsHelp": "Ytterligere nettverksområder som kan omgå innloggingen, i tillegg til serverens eget lokale nettverk. Bruk CIDR-notasjon, for eksempel 192.168.10.0/24.",
       "securityWarningTitle": "Sikkerhetsadvarsel:",
       "subnetWarningText": "Enheter fra disse subnettene vil ha ubegrenset tilgang. Inkluder kun betrodde interne nettverk.",
       "httpsSettingsTitle": "HTTPS-innstillinger",
@@ -4137,6 +4184,77 @@
         "downloadCertificate": "Last ned sertifikat",
         "downloadCertificateHelp": "Installer dette sertifikatet i operativsystemets tillitsarkiv for å unngå nettlesersikkerhetsadvarsler.",
         "fileReadError": "Lesing av valgt fil mislyktes"
+      },
+      "reverseProxy": {
+        "title": "Omvendt proxy",
+        "description": "For tilgang via nginx, Caddy, Traefik, Cloudflare eller en annen proxy",
+        "listLabel": "Betrodde proxyer",
+        "listHelp": "Legg til adressen til hver proxy foran BirdNET-Go. Med Docker er dette ofte gateway-adressen til Docker, som f.eks. 172.17.0.1.",
+        "placeholder": "For eksempel 172.17.0.1",
+        "emptyState": "Ingen betrodde proxyer. BirdNET-Go bruker adressen som kobler seg til.",
+        "emptyStateCloudflareOnly": "Bare Cloudflares publiserte edge-adresser er betrodd. Ingen andre proxyer er oppført.",
+        "rangeBadge": "Område",
+        "ruleOwnAddress": "Oppgi hver proxys egen adresse. Oppgi aldri et område som også inneholder datamaskinene du surfer fra.",
+        "ruleHeaders": "Proxyen må legge til klientadressen i X-Forwarded-For eller overskrive X-Real-IP.",
+        "cloudflareLabel": "Stol på Cloudflare",
+        "cloudflareHelp": "Slå på dette når nettstedet ditt leveres gjennom Cloudflare. BirdNET-Go stoler da på Cloudflares publiserte edge-adresser.",
+        "check": {
+          "title": "Tilkoblingen din",
+          "recheck": "Sjekk igjen",
+          "checking": "Sjekker tilkoblingen din",
+          "error": "Kunne ikke sjekke tilkoblingen din.",
+          "stale": "Denne sjekken viser de lagrede innstillingene. Lagre for å sjekke endringene dine.",
+          "trust": "Stol på {peer}",
+          "trustWarning": "Stol kun på {peer} hvis det er din omvendte proxy, og ikke datamaskinen du surfer fra.",
+          "trustWithCloudflare": "Stol på {peer} og Cloudflare",
+          "cloudflareInFront": "Cloudflare sitter foran {peer}. Stol på begge for å bekrefte adressen din.",
+          "cloudflareEdge": "{peer} tilhører Cloudflare. Slå på Stol på Cloudflare nedenfor.",
+          "chainHint": "Hvis en annen proxy sitter foran {peer}, oppgi den også.",
+          "added": "Lagt til i listen. Lagre for å ta i bruk.",
+          "coveredBy": "Allerede dekket av {range} i listen. Lagre for å ta i bruk.",
+          "selfClientCause": "Proxyen kan sende sin egen adresse videre som klient, ofte fordi portpubliseringen til containeren skjuler den egentlige klienten. Rett dette i nettverksoppsettet for containeren eller proxyen."
+        },
+        "status": {
+          "direct": {
+            "title": "Tilkoblet direkte",
+            "body": "Nettleseren din kobler seg til BirdNET-Go direkte fra {peer}.",
+            "bodyNoPeer": "Nettleseren din kobler seg til BirdNET-Go direkte.",
+            "hint": "Hvis du bruker en omvendt proxy og {peer} er dens adresse, konfigurer proxyen til å sende X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Tilkoblet via en betrodd proxy",
+            "body": "Tilkoblingen din kommer gjennom {peer}, som er betrodd. Adressen din {client} ble bekreftet.",
+            "hint": "Hvis {client} er en annen proxy i stedet for datamaskinen din, oppgi den proxyen også."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Adressen din kunne ikke bekreftes",
+            "body": "{peer} er betrodd, men adressen den videresender kunne ikke bekreftes. Vanlige årsaker:",
+            "causeRange": "Et oppgitt område inneholder også datamaskinen din, så ingen adresse i kjeden regnes som din.",
+            "causeHeaders": "Proxyen legger ikke til X-Forwarded-For eller overskriver ikke X-Real-IP.",
+            "causeConflict": "Proxyen sender motstridende eller gjentatte adresse-headere, eller bare en Forwarded-header."
+          },
+          "untrusted_public_proxy": {
+            "title": "Tilkoblet via en offentlig proxy",
+            "body": "Tilkoblingen din kommer gjennom {peer}, en offentlig adresse. Offentlige adresser tilbys aldri for ett-klikks tillit. Legg til manuelt kun hvis du er sikker på at det er din proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Tilkoblet via en ubetrodd proxy",
+            "body": "Tilkoblingen din kommer gjennom en proxy på {peer} som ikke er betrodd, så BirdNET-Go kan ikke bekrefte adressen din."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Proxy-headere kan ikke bekreftes",
+            "body": "Tilkoblingen din kommer gjennom {peer}, men adresse-headerne den sender kunne ikke bekreftes selv om den var betrodd.",
+            "bodyNoPeer": "Tilkoblingen din kommer gjennom en proxy, men adressen kunne ikke leses.",
+            "fix": "Konfigurer proxyen til å legge til X-Forwarded-For eller overskrive X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Bak en omvendt proxy fungerer denne omgåelsen bare når proxyen er oppført som betrodd.",
+      "bypassProxyLink": "Sett opp betrodde proxyer",
+      "allowedSubnetsEmpty": "Ingen ytterligere subnett. Kun serverens eget lokale nettverk kan omgå innloggingen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} har en oppføring som ikke er gyldig.",
+        "pendingEntry": "{tab}: {field} har tekst som ikke ble lagt til. Trykk Enter eller Legg til, eller tøm feltet."
       }
     },
     "species": {
@@ -4896,6 +5014,28 @@
         "edit": "Rediger art",
         "remove": "Fjern art"
       }
+    },
+    "networkAddressList": {
+      "add": "Legg til",
+      "remove": "Fjern {address}",
+      "empty": "Ingen adresser er lagt til ennå.",
+      "pendingHint": "Trykk Enter eller Legg til for å legge til denne adressen.",
+      "limitReached": "Listen er full ({max} oppføringer).",
+      "rowDuplicate": "Duplikat",
+      "rowInvalid": {
+        "cidr": "Ikke et gyldig område",
+        "ip": "Ikke en gyldig IP-adresse",
+        "ipOrCidr": "Ikke en gyldig adresse eller et gyldig område"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Ikke et gyldig område: {values}. Bruk et område som f.eks. 192.168.1.0/24.",
+          "ip": "Ikke en gyldig IP-adresse: {values}. Bruk en adresse som f.eks. 192.168.1.10.",
+          "ipOrCidr": "Ikke en gyldig adresse eller et gyldig område: {values}. Bruk en adresse som f.eks. 192.168.1.10 eller et område som f.eks. 192.168.1.0/24."
+        },
+        "duplicate": "Finnes allerede i listen: {values}.",
+        "limit": "Listen rommer maksimalt {max} oppføringer. Ikke lagt til: {values}."
+      }
     }
   },
   "media": {
@@ -4922,6 +5062,7 @@
       "loop": "Veksle sløyfe",
       "player": "Lydspiller",
       "autoplayBlocked": "Klikk for å spille av (autoavspilling blokkert)",
+      "hlsLoadFailed": "Kunne ikke laste lydspilleren, last siden på nytt og prøv igjen",
       "hlsNotSupported": "HLS-avspilling støttes ikke i denne nettleseren",
       "streamStarting": "Starter lydstrøm...",
       "levelFor": "Lydnivå for {source}",
@@ -5090,6 +5231,33 @@
       "viewDetections": "Se {name}-deteksjoner",
       "largeView": "Stor visning av {name}",
       "clickToView": "Klikk for å se deteksjoner"
+    },
+    "locationMap": {
+      "mapLabel": "Kart for å velge stasjonsposisjon",
+      "expandedMapLabel": "Fullskjermkart for å velge stasjonsposisjon",
+      "zoomIn": "Zoom inn",
+      "zoomOut": "Zoom ut",
+      "expand": "Utvid kartet til fullskjerm",
+      "search": {
+        "label": "Søk etter et sted",
+        "placeholder": "Sted eller adresse",
+        "submit": "Søk",
+        "disclosure": "Søk sendes til Photon (photon.komoot.io), som bruker OpenStreetMap-data.",
+        "openPhoton": "Åpne Photon i en ny fane",
+        "searching": "Søker...",
+        "results": "{count, plural, one {# sted funnet} other {# steder funnet}}",
+        "noResults": "Fant ingen steder. Prøv et annet navn, eller klikk på kartet.",
+        "errorNetwork": "Stedssøk er ikke tilgjengelig. Sjekk internettforbindelsen. Du kan fortsatt klikke på kartet eller skrive inn koordinater.",
+        "errorRateLimited": "For mange søk. Vent litt og prøv igjen.",
+        "errorUnavailable": "Søketjenesten svarte ikke. Du kan fortsatt klikke på kartet eller skrive inn koordinater.",
+        "kind": {
+          "city": "By",
+          "town": "Tettsted",
+          "village": "Landsby",
+          "station": "Stasjon",
+          "airport": "Flyplass"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5129,6 +5297,9 @@
       "invalidJSON": "Ugyldig JSON",
       "invalidEscalation": "Eskaleringstrinn er ugyldige",
       "engineUnavailable": "Varslingsmotoren er utilgjengelig"
+    },
+    "insights": {
+      "v2Required": "Innsikt krever den forbedrede (v2) databasen"
     },
     "detection": {
       "invalidDate": "Ugyldig {paramName}-format, bruk ÅÅÅÅ-MM-DD"
@@ -5241,12 +5412,37 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Last siden på nytt"
+    },
     "skip": "Hopp over",
     "back": "Tilbake",
     "next": "Neste",
     "done": "Ferdig",
     "progress": "Steg {current} av {total}",
     "progressLabel": "Veiviserfremdrift",
+    "status": {
+      "saving": "Lagrer...",
+      "loadingStep": "Laster trinn..."
+    },
+    "errors": {
+      "saveFailed": "Dette trinnet kunne ikke lagres. Sjekk tilkoblingen og prøv igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
+      "saveRejected": "Innstillingene i dette trinnet ble ikke godtatt. Sjekk verdiene og prøv igjen, eller hopp over oppsettet og endre det senere i Innstillinger.",
+      "stepLoadFailed": "Dette trinnet kunne ikke lastes. Trykk på Prøv igjen, eller last siden på nytt.",
+      "stepLoadFailedReload": "Dette trinnet kunne fortsatt ikke lastes. Last siden på nytt for å prøve igjen; valg som er lagret i tidligere trinn beholdes.",
+      "audioSourceSaveUnfinished": "Endringen av lydkilde ble ikke fullført. Sjekk lydkildene under Innstillinger > Lyd.",
+      "saveUnfinished": "Noen endringer fra oppsettet ble ikke lagret. Sjekk dem i Innstillinger."
+    },
+    "reasons": {
+      "completeStep": "Fullfør dette trinnet for å fortsette."
+    },
+    "leaveConfirm": {
+      "title": "Forlate oppsettet?",
+      "message": "Oppsettet åpnes ikke igjen. Valg som er lagret i tidligere trinn beholdes; endringer i dette trinnet lagres ikke. Du kan endre alt senere i Innstillinger.",
+      "messageSaving": "Oppsettet åpnes ikke igjen. Valg som er lagret i tidligere trinn beholdes. Dette trinnet lagres fortsatt, og noen av eller alle endringene beholdes kanskje ikke. Du kan endre alt senere i Innstillinger.",
+      "stay": "Fortsett oppsettet",
+      "leave": "Forlat oppsettet"
+    },
     "whatsNew": {
       "title": "Nyheter i {version}"
     },
@@ -5269,13 +5465,6 @@
         "locationHelp": "Posisjonen din hjelper med å filtrere arter til de som sannsynligvis finnes i ditt område",
         "latitudeLabel": "Breddegrad",
         "longitudeLabel": "Lengdegrad",
-        "useMyLocation": "Bruk min posisjon",
-        "locationDetected": "Posisjon registrert",
-        "locationError": "Kunne ikke registrere posisjon. Skriv inn koordinater manuelt.",
-        "locationDenied": "Posisjonstilgang avvist. Skriv inn koordinater manuelt.",
-        "geolocationRequiresHttps": "Nettleserposisjon krever HTTPS. Skriv inn koordinater manuelt eller bruk kartet.",
-        "geolocationDenied": "Posisjonstillatelse ble avvist. Skriv inn koordinater manuelt eller bruk kartet.",
-        "geolocationFailed": "Kunne ikke bestemme posisjonen din. Skriv inn koordinater manuelt eller bruk kartet.",
         "localesLoading": "Laster språk...",
         "localesLoadFailed": "Kunne ikke laste språkalternativer. Engelsk er valgt som standard."
       },
@@ -5291,7 +5480,19 @@
         "rtspUrlPlaceholder": "rtsp://bruker:passord@vert:port/strøm",
         "rtspUrlHelp": "Skriv inn URL-en til din RTSP-lydstrøm",
         "additionalSourcesHint": "Du kan legge til flere lydkilder senere i Innstillinger.",
-        "configureLater": "Hopp over - konfigurer senere"
+        "devicesLoadFailed": "Kunne ikke liste lydenhetene på dette systemet.",
+        "useStreamInstead": "Bruk en RTSP-strøm i stedet",
+        "setUpLater": "Konfigurer lyd senere",
+        "setUpLaterChosen": "Lyd blir ikke konfigurert nå. Legg til et lydkort eller en strøm senere i Innstillinger.",
+        "streamReplacesSoundCards": "Lydkort slutter å ta opp når du bruker en strøm. Du kan legge dem til igjen i Innstillinger.",
+        "soundCardReplacesStream": "Strømmen som vises under strømvalget, slås av når du bruker et lydkort. Du kan slå den på igjen i Innstillinger.",
+        "reasons": {
+          "chooseDevice": "Velg en lydenhet, eller konfigurer lyd senere.",
+          "devicesFailed": "Lydenhetene kunne ikke listes. Prøv igjen, bruk en strøm, eller konfigurer lyd senere.",
+          "noDevices": "Ingen lydenhet funnet. Bruk en strøm, eller konfigurer lyd senere.",
+          "enterUrl": "Skriv inn strøm-URL-en, eller konfigurer lyd senere.",
+          "urlScheme": "Skriv inn en komplett strøm-URL som starter med rtsp:// eller rtsps:// og ikke har mellomrom."
+        }
       },
       "detection": {
         "title": "Deteksjonsterskel",
@@ -5303,6 +5504,7 @@
         "highAccuracyDesc": "Færre falske positive, kan gå glipp av noen fugler",
         "highSensitivity": "Høy følsomhet",
         "highSensitivityDesc": "Flere registreringer, flere falske positive",
+        "descriptionStored": "Velg hvor streng fugleidentifikasjonen skal være. Gjeldende: {threshold}, ingen forhåndsvalg.",
         "threshold": "Sikkerhetsterskel",
         "fpFilterNote": "Når systemet er i gang og har vist seg pålitelig, kan du aktivere falsk positiv-filteret i Innstillinger for å redusere feilaktige registreringer ytterligere."
       },
@@ -5312,10 +5514,12 @@
         "privacyFilterHelp": "Filtrerer ut registreringer når menneskestemmer oppdages nær mikrofonen",
         "birdweatherLabel": "Del registreringer med BirdWeather",
         "birdweatherHelp": "Bidra med fugleregistreringene dine til BirdWeather-fellesskapsnettet",
-        "birdweatherIdLabel": "BirdWeather-stasjon-ID",
-        "birdweatherIdPlaceholder": "Skriv inn din BirdWeather-stasjon-ID",
         "errorReportingLabel": "Send anonyme feilrapporter",
-        "errorReportingHelp": "Hjelp med å forbedre BirdNET-Go ved å sende anonyme feilrapporter når noe går galt"
+        "errorReportingHelp": "Hjelp med å forbedre BirdNET-Go ved å sende anonyme feilrapporter når noe går galt",
+        "reasons": {
+          "enterToken": "Skriv inn BirdWeather-tokenet ditt, eller slå av deling med BirdWeather.",
+          "tokenFormat": "Et BirdWeather-token har 24 bokstaver og sifre."
+        }
       },
       "responsibleUse": {
         "title": "Ansvarlig bruk av BirdNET-Go",
@@ -5554,6 +5758,8 @@
         "catalogLoadFailed": "Innlasting av modellkatalog mislyktes",
         "installFailed": "Oppstart av modellinstallasjon mislyktes",
         "removeFailed": "Fjerning av modell mislyktes",
+        "removeHasDependents": "{name} brukes av {models}. Fjern disse modellene først.",
+        "operationInProgress": "En installasjon, reinstallasjon eller fjerning av en modell pågår allerede ({name}). Prøv igjen når den er ferdig.",
         "actionFailed": "Det oppsto et problem med {name}",
         "downloadSourceHint": "Hvis huggingface.co er blokkert eller tregt på nettverket ditt, kan du angi en speilserver i seksjonen Nedlastingskilde nedenfor.",
         "goToDownloadSource": "Gå til Nedlastingskilde",

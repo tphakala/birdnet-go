@@ -47,24 +47,19 @@ jobs:
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
           # Keep in sync with GOLANGCI_LINT_VERSION in Taskfile.yml, which lists every copy.
-          version: v2.14.0
+          version: v2.15.0
           # Show only new issues by default
           only-new-issues: false
           # Additional args for better output (v2.5.0+ syntax). noembed,skipfrontend skip
           # the model/frontend go:embed requirement; integration,pebble_e2e additionally
           # lint the integration-tagged test files and the AutoTLS Pebble ACME e2e helpers
           # (which the default tag set never compiles, so they had accumulated lint debt).
-          # normcompare covers the loudness comparison harness in
-          # internal/audiocore/normbench, which is never run in CI (it needs an ffmpeg
-          # binary and a recording corpus) but must still COMPILE there: it mirrors
-          # production normalization internals, so it silently rots whenever those
-          # change. Linting only compiles, so the missing ffmpeg is irrelevant here.
           # No non-test file is gated on !integration, so this stays a strict superset of
           # the plain noembed,skipfrontend view and reports into the same summary below.
           # `task lint` in the Taskfile uses only noembed,skipfrontend, so this lane
           # compiles more files than a plain local lint. To reproduce it locally, run
-          # `task lint BASE_BUILD_TAGS=integration,pebble_e2e,normcompare`.
-          args: --build-tags=integration,pebble_e2e,noembed,skipfrontend,normcompare --output.checkstyle.path=golangci-lint-report.xml
+          # `task lint BASE_BUILD_TAGS=integration,pebble_e2e`.
+          args: --build-tags=integration,pebble_e2e,noembed,skipfrontend --output.checkstyle.path=golangci-lint-report.xml
 
       - name: Generate lint summary
         if: always()

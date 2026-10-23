@@ -83,7 +83,7 @@ func buildSessionOptions(secure bool, maxAge int) *sessions.Options {
 func (s *OAuth2Server) configureLocalNetworkCookieStore(settings *conf.Settings) {
 	GetLogger().Info("Configuring cookie store for local network access (allowing non-HTTPS cookies)")
 	// Configure session options based on store type
-	switch store := gothic.Store.(type) {
+	switch store := unwrapSessionStore(gothic.Store).(type) {
 	case *sessions.CookieStore:
 		// For CookieStore, use default session duration (session cookie if 0)
 		store.Options = buildSessionOptions(false, 0)
@@ -130,11 +130,7 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 
 	// Generate an auth code
 	secLog.Debug("Generating authorization code")
-	authCode, err := s.GenerateAuthCode()
-	if err != nil {
-		secLog.Error("Failed to generate authorization code", logger.Error(err))
-		return c.String(http.StatusInternalServerError, "Error generating auth code")
-	}
+	authCode := s.GenerateAuthCode()
 
 	// DO NOT log the authCode itself
 	secLog.Info("Authorization code generated successfully, redirecting user")
@@ -175,12 +171,10 @@ func (s *OAuth2Server) HandleBasicAuthToken(c echo.Context) error {
 
 	// Check if client is in local subnet and configure cookie store accordingly
 	// Only relax cookie security when subnet bypass is explicitly enabled
-	if settings.Security.AllowSubnetBypass.Enabled {
-		if clientIP := parseIPWithZone(c.RealIP()); IsInLocalSubnet(clientIP) {
-			// For clients in the local subnet, allow non-HTTPS cookies
-			secLog.Info("Client is in local subnet, configuring cookie store for non-HTTPS")
-			s.configureLocalNetworkCookieStore(settings)
-		}
+	if _, ok := s.isLocalSubnetBypass(settings, c.Request()); ok {
+		// For clients in the local subnet, allow non-HTTPS cookies
+		secLog.Info("Client is in local subnet, configuring cookie store for non-HTTPS")
+		s.configureLocalNetworkCookieStore(settings)
 	}
 
 	grantType := c.FormValue("grant_type")

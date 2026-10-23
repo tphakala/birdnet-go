@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CHART_REGISTRY } from './charts';
-import type { AnalyticsParams } from './types';
+import { makeAnalyticsParams, stubFetchJson } from './__tests__/registryFixtures';
 import { finalCumulative, type AccumulationData } from '../components/charts/d3/utils/accumulation';
 
 // Verifies the species-accumulation registry entry: its placement/flags, the custom countDataPoints
@@ -15,18 +15,6 @@ if (!def) {
   throw new Error('species-accumulation chart def is required');
 }
 const chartDef = def;
-
-function makeParams(): AnalyticsParams {
-  return {
-    range: 'month',
-    start: '2026-03-01',
-    end: '2026-03-31',
-    species: [],
-    source: '',
-    startDate: new Date('2026-03-01T00:00:00'),
-    endDate: new Date('2026-03-31T00:00:00'),
-  };
-}
 
 describe('species-accumulation chart def', () => {
   beforeEach(() => {
@@ -77,15 +65,9 @@ describe('species-accumulation chart def', () => {
       { cumulativeSpecies: 5, newSpecies: 1 }, // missing date -> dropped
       { date: '2026-03-03', cumulativeSpecies: 'x', newSpecies: Number.NaN }, // non-finite -> 0
     ];
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      statusText: 'OK',
-      json: () => Promise.resolve(payload),
-    });
-    vi.stubGlobal('fetch', fetchMock);
+    const fetchMock = stubFetchJson(payload);
 
-    const result = (await chartDef.fetch(makeParams())) as AccumulationData;
+    const result = (await chartDef.fetch(makeAnalyticsParams())) as AccumulationData;
     expect(fetchMock).toHaveBeenCalledOnce();
     const url = fetchMock.mock.calls[0][0] as string;
     expect(url).toContain('/api/v2/analytics/species/accumulation');
@@ -100,15 +82,7 @@ describe('species-accumulation chart def', () => {
   });
 
   it('throws when the payload is not an array', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        statusText: 'OK',
-        json: () => Promise.resolve({ not: 'an array' }),
-      })
-    );
-    await expect(chartDef.fetch(makeParams())).rejects.toThrow();
+    stubFetchJson({ not: 'an array' });
+    await expect(chartDef.fetch(makeAnalyticsParams())).rejects.toThrow();
   });
 });

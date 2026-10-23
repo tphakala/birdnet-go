@@ -83,8 +83,18 @@ export interface AnalyticsControls {
   readonly loadingSources: boolean;
   /** Merge partial params, resolve dates, and push/replace the URL. */
   applyParams(partial: Partial<AnalyticsParams>, mode?: 'push' | 'replace'): void;
-  /** Fetch species for the current date range (cached by range key). */
+  /**
+   * Fetch the species list for the current date range (cached by range key). It does not select
+   * species itself; the only URL write is the auto-select step, see enableAutoSelect, which runs
+   * when a holder is active and the settled list matches the current range.
+   */
   ensureSpecies(): void;
+  /**
+   * Register interest in the top-species auto-select (a species-filtered tab is mounted). While at
+   * least one holder is active, a fetched list with an empty selection writes the top species once
+   * per list via a replace. Returns an idempotent release function.
+   */
+  enableAutoSelect(): () => void;
   /** Fetch audio sources once per session. */
   ensureSources(): void;
   /** Re-parse filter state from window.location.search (called on popstate). */
@@ -111,6 +121,11 @@ export function createAnalyticsControls(): AnalyticsControls {
   let speciesController: AbortController | null = null;
   let sourcesController: AbortController | null = null;
   let speciesKey = ''; // rangeKey the current availableSpecies were fetched for
+  // Auto-select bookkeeping (plain vars: only read imperatively, never by templates).
+  let loadedKey = ''; // rangeKey of the list currently held in availableSpecies
+  let listGeneration = 0; // bumped each time a list lands
+  let autoSelectedGeneration = 0; // listGeneration already consumed by an auto-select
+  let autoSelectHolders = 0;
   let sourcesRequested = false;
   let popstateRefCount = 0;
   const onPop = (): void => syncFromUrl();
@@ -149,9 +164,19 @@ export function createAnalyticsControls(): AnalyticsControls {
     applyParams({ species: top }, 'replace');
   }
 
+  // Auto-select at most once per fetched list, only while a holder is active, the list is settled,
+  // and it was fetched for the current range (a stale list must not select species for a new range).
+  function tryAutoSelect(): void {
+    if (autoSelectHolders === 0 || loadingSpecies) return;
+    if (loadedKey !== rangeKey(params) || autoSelectedGeneration === listGeneration) return;
+    autoSelectedGeneration = listGeneration;
+    maybeAutoSelectSpecies();
+  }
+
   // The untrack(() => params) snapshot was dropped: this function is called
   // imperatively (not inside an effect), so reading params directly is safe.
   async function fetchAvailableSpecies(): Promise<void> {
+    const key = rangeKey(params);
     speciesController?.abort();
     const ac = new AbortController();
     speciesController = ac;
@@ -188,8 +213,12 @@ export function createAnalyticsControls(): AnalyticsControls {
               };
             })
         : [];
-
-      maybeAutoSelectSpecies();
+      loadedKey = key;
+      listGeneration++;
+      // Settle loading and auto-select in one synchronous block so charts never see an empty
+      // selection with loading already false (which would flash the empty state).
+      loadingSpecies = false;
+      tryAutoSelect();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return;
       logger.error('Failed to fetch available species', err);
@@ -228,6 +257,17 @@ export function createAnalyticsControls(): AnalyticsControls {
     if (key === speciesKey && (availableSpecies.length > 0 || loadingSpecies)) return;
     speciesKey = key;
     void fetchAvailableSpecies();
+  }
+
+  function enableAutoSelect(): () => void {
+    autoSelectHolders++;
+    tryAutoSelect();
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      autoSelectHolders--;
+    };
   }
 
   function ensureSources(): void {
@@ -277,6 +317,7 @@ export function createAnalyticsControls(): AnalyticsControls {
     },
     applyParams,
     ensureSpecies,
+    enableAutoSelect,
     ensureSources,
     syncFromUrl,
     init,

@@ -283,11 +283,13 @@
   {#if noteKey && rows.length > 0}
     <p class="ridgeline-note">{t(noteKey, { count: rows.length })}</p>
   {/if}
-  <BaseChart {width} {height} margin={MARGIN} responsive={true} ariaLabel={t(ariaLabelKey)}>
-    {#snippet children(context)}
-      {((chartContext = context), '')}
-    {/snippet}
-  </BaseChart>
+  <div class="ridgeline-plot">
+    <BaseChart {width} {height} margin={MARGIN} responsive={true} ariaLabel={t(ariaLabelKey)}>
+      {#snippet children(context)}
+        {((chartContext = context), '')}
+      {/snippet}
+    </BaseChart>
+  </div>
   {#if summary}
     <p class="sr-only" data-testid="ridgeline-summary">{summary}</p>
   {/if}
@@ -295,12 +297,21 @@
 
 <style>
   .species-ridgeline-chart {
+    display: flex;
+    flex-direction: column;
     width: 100%;
     height: 100%;
-    min-height: 400px;
+    min-height: 280px;
+  }
+
+  /* The plot fills what the note leaves so both fit the card's fixed height. */
+  .ridgeline-plot {
+    flex: 1 1 0;
+    min-height: 0;
   }
 
   .ridgeline-note {
+    flex: none;
     margin: 0 0 0.25rem;
     font-size: 0.75rem;
     color: var(--text-muted, rgba(0, 0, 0, 0.6));

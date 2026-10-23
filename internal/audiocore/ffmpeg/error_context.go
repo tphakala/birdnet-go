@@ -25,6 +25,9 @@ var (
 	// Pattern: "Connection to tcp://..." - captures everything after "Connection to ".
 	reConnectionToTCP = regexp.MustCompile(`Connection to (tcp://\S+)`)
 	reSSLError        = regexp.MustCompile(`SSL.*error|TLS.*error|certificate.*error`)
+	// reFailedToResolve matches FFmpeg's own resolver line, independent of protocol
+	// (so http(s):// sources get a host too). The capture is a bare hostname.
+	reFailedToResolve = regexp.MustCompile(`Failed to resolve hostname (\S+?):`)
 )
 
 // extractHostWithoutCredentials safely extracts hostname from a URL string,
@@ -586,10 +589,22 @@ func extractDNSError(ctx *audiocore.StreamErrorContext, output string) {
 		}
 	}
 
+	// Protocol-independent fallback for sources the patterns above do not cover
+	// (for example http(s):// URLs).
+	if ctx.TargetHost == "" {
+		if matches := reFailedToResolve.FindStringSubmatch(output); len(matches) == 2 {
+			ctx.TargetHost = matches[1]
+		}
+	}
+
 	ctx.PrimaryMessage = "DNS resolution failed"
 }
 
+// buildDNSErrorMessage fills the user-facing message and troubleshooting steps for
+// a DNS failure. For a .local host it prepends mDNS-specific steps and leaves out
+// the nslookup step, which is unicast only.
 func buildDNSErrorMessage(ctx *audiocore.StreamErrorContext) {
+	isMDNS := isMDNSHost(ctx.TargetHost)
 	hostInfo := "the hostname"
 	if ctx.TargetHost != "" {
 		hostInfo = fmt.Sprintf("'%s'", ctx.TargetHost)
@@ -602,16 +617,21 @@ func buildDNSErrorMessage(ctx *audiocore.StreamErrorContext) {
 		hostInfo,
 	)
 
-	troubleshooting := []string{
+	var troubleshooting []string
+	if isMDNS {
+		troubleshooting = mdnsTroubleshooting(ctx.TargetHost, detectEnv())
+	}
+	troubleshooting = append(troubleshooting,
 		"Double-check the hostname for typos (common with FQDNs)",
 		"Verify the hostname is correct and exists",
-	}
+	)
 
 	if ctx.TargetHost != "" {
-		troubleshooting = append(troubleshooting,
-			fmt.Sprintf("Test DNS resolution: nslookup %s", ctx.TargetHost),
-			fmt.Sprintf("Try ping: ping %s", ctx.TargetHost),
-		)
+		if !isMDNS {
+			// nslookup is unicast only and cannot resolve .local names.
+			troubleshooting = append(troubleshooting, fmt.Sprintf("Test DNS resolution: nslookup %s", ctx.TargetHost))
+		}
+		troubleshooting = append(troubleshooting, fmt.Sprintf("Try ping: ping %s", ctx.TargetHost))
 	}
 
 	troubleshooting = append(troubleshooting,

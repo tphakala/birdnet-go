@@ -267,8 +267,7 @@ func TestEngine_AddSource_Device(t *testing.T) {
 		Channels:         1,
 	}
 
-	// Device capture will likely fail without hardware, but the source
-	// should still be registered and buffers allocated up to that point.
+	// Device capture will likely fail without hardware.
 	_, err := eng.AddSource(cfg)
 
 	// On a machine without audio hardware, StartCapture fails, which causes
@@ -285,6 +284,7 @@ func TestEngine_AddSource_Device(t *testing.T) {
 	src, ok := eng.Registry().Get("test_audio_001")
 	require.True(t, ok)
 	assert.Equal(t, audiocore.SourceTypeAudioCard, src.Type)
+	assert.Equal(t, audiocore.SourceRunning, src.State)
 
 	// Clean up the capture.
 	require.NoError(t, eng.RemoveSource("test_audio_001"))

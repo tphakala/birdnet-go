@@ -85,8 +85,8 @@ sqliteLogger.Info("Query executed")
 
 ```yaml
 logging:
-  default_level: "info"  # trace, debug, info, warn, error
-  timezone: "Local"      # "Local", "UTC", or IANA name like "Europe/Helsinki"
+  default_level: "info" # trace, debug, info, warn, error
+  timezone: "Local" # "Local", "UTC", or IANA name like "Europe/Helsinki"
 
   # Console: text format, no timestamps (journald/Docker adds them)
   console:
@@ -100,13 +100,13 @@ logging:
     level: "debug"
 
   module_levels:
-    storage: "debug"  # Per-module level override
+    storage: "debug" # Per-module level override
     auth: "info"
 
   modules:
     auth:
       enabled: true
-      file_path: "logs/auth.log"  # Dedicated file
+      file_path: "logs/auth.log" # Dedicated file
       level: "info"
       console_also: false
 ```
@@ -134,7 +134,7 @@ type MyComponent struct {
 
 func NewMyComponent(log logger.Logger) (*MyComponent, error) {
     if log == nil {
-        return nil, errors.New("logger is required")
+        return nil, errors.NewStd("logger is required")
     }
 
     log.Info("Initializing component")
@@ -186,6 +186,7 @@ handler := NewHandler(mockLogger)
 ## Common Patterns
 
 ### HTTP Handler Logging
+
 ```go
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     start := time.Now()
@@ -204,6 +205,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 ```
 
 ### Error Handling
+
 ```go
 if err := operation(); err != nil {
     logger.Error("Operation failed",
@@ -216,6 +218,7 @@ if err := operation(); err != nil {
 ```
 
 ### Event Logging
+
 ```go
 const (
     EventUserLogin = "user_login"
@@ -229,6 +232,7 @@ logger.Info("User event",
 ```
 
 ### Performance Metrics
+
 ```go
 func (s *Service) Process() error {
     start := time.Now()
@@ -252,6 +256,7 @@ func (s *Service) Process() error {
 ## Best Practices
 
 ✅ **DO**
+
 - Inject `logger.Logger` interface, not concrete types
 - Use structured fields, not string concatenation
 - Create module-scoped loggers for each package
@@ -261,6 +266,7 @@ func (s *Service) Process() error {
 - Flush and close logger on shutdown
 
 ❌ **DON'T**
+
 - Don't use `fmt.Sprintf()` for log messages
 - Don't log sensitive data (passwords, tokens, PII)
 - Don't use string concatenation in log messages
@@ -271,18 +277,21 @@ func (s *Service) Process() error {
 ## Troubleshooting
 
 **Logs not appearing?**
+
 - Check log level (might be filtering out messages)
 - Verify console/file enabled in config
 - Call `logger.Flush()` before exiting
 - Check file permissions for log directory
 
 **Performance issues?**
+
 - Reduce log level in production
 - Avoid logging in tight loops
 - Check file I/O isn't blocking
 - Consider async logging for high throughput
 
 **Missing trace IDs?**
+
 - Ensure context has "trace_id" value
 - Use `logger.WithContext(ctx)` to extract
 - Check middleware sets trace_id in context
@@ -290,6 +299,7 @@ func (s *Service) Process() error {
 ## Output Examples
 
 **JSON (Production)**
+
 ```json
 {
   "time": "2025-01-12T10:30:00Z",
@@ -303,6 +313,7 @@ func (s *Service) Process() error {
 ```
 
 **Pretty (Development)**
+
 ```
 2025-01-12 10:30:00 INFO  [auth] User logged in user_id=user-123 ip=192.168.1.1 trace_id=abc-123
 ```

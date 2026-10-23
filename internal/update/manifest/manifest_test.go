@@ -28,11 +28,21 @@ func TestClassifyTag(t *testing.T) {
 		{name: "nightly suffixed retry", tag: "nightly-20260622-414", wantChannel: ChannelNightly, wantOK: true},
 		{name: "nightly git-describe suffix", tag: "nightly-20251025-1-gec0f78e", wantChannel: ChannelNightly, wantOK: true},
 		{name: "manifest tag ignored", tag: "manifest", wantChannel: "", wantOK: false},
-		{name: "plain date tag ignored", tag: "20240215", wantChannel: "", wantOK: false},
+		{name: "date release is stable", tag: "20260823", wantChannel: ChannelStable, wantOK: true},
+		{name: "historical date snapshot is stable", tag: "20240215", wantChannel: ChannelStable, wantOK: true},
+		{name: "nightly dated stays nightly", tag: "nightly-20260823", wantChannel: ChannelNightly, wantOK: true},
+		{name: "dev build rejected", tag: "20261002-gabc123-dev", wantChannel: "", wantOK: false},
+		{name: "nine digit date rejected", tag: "202608230", wantChannel: "", wantOK: false},
+		{name: "v prefixed date rejected", tag: "v20260823", wantChannel: "", wantOK: false},
+		{name: "date with dash suffix rejected", tag: "20260823-1", wantChannel: "", wantOK: false},
+		{name: "date with trailing newline rejected", tag: "20260823\n", wantChannel: "", wantOK: false},
+		{name: "invalid month rejected", tag: "20261399", wantChannel: "", wantOK: false},
 		{name: "two-part version rejected", tag: "v1.2", wantChannel: "", wantOK: false},
 		{name: "four-part version rejected", tag: "v1.2.3.4", wantChannel: "", wantOK: false},
 		{name: "nightly too short rejected", tag: "nightly-2026", wantChannel: "", wantOK: false},
 		{name: "uppercase nightly rejected", tag: "NIGHTLY-20260622", wantChannel: "", wantOK: false},
+		{name: "nightly with arbitrary suffix rejected", tag: "nightly-20260823garbage", wantChannel: "", wantOK: false},
+		{name: "nightly with non-numeric retry rejected", tag: "nightly-20260823-x", wantChannel: "", wantOK: false},
 		{name: "leading whitespace rejected", tag: " v0.6.4", wantChannel: "", wantOK: false},
 		{name: "trailing whitespace rejected", tag: "v0.6.4 ", wantChannel: "", wantOK: false},
 		{name: "empty ignored", tag: "", wantChannel: "", wantOK: false},
@@ -43,6 +53,56 @@ func TestClassifyTag(t *testing.T) {
 			gotChannel, gotOK := ClassifyTag(tt.tag)
 			assert.Equal(t, tt.wantOK, gotOK)
 			assert.Equal(t, tt.wantChannel, gotChannel)
+		})
+	}
+}
+
+func TestIsDateTag(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		tag  string
+		want bool
+	}{
+		{name: "date release", tag: "20260823", want: true},
+		{name: "leap day", tag: "20240229", want: true},
+		{name: "leap day in common year", tag: "20250229", want: false},
+		{name: "day 31 in 30-day month", tag: "20260431", want: false},
+		{name: "month zero", tag: "20260001", want: false},
+		{name: "day zero", tag: "20260100", want: false},
+		{name: "seven digits", tag: "2026082", want: false},
+		{name: "date before 2000", tag: "19991231", want: false},
+		{name: "leading space", tag: " 20260823", want: false},
+		{name: "trailing space", tag: "20260823 ", want: false},
+		{name: "dot suffix", tag: "20260823.1", want: false},
+		{name: "empty", tag: "", want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isDateTag(tt.tag))
+		})
+	}
+}
+
+func TestReleaseChannels(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		tag  string
+		want []string
+	}{
+		{name: "date release feeds stable and nightly", tag: "20260823", want: []string{ChannelStable, ChannelNightly}},
+		{name: "historical stable", tag: "v0.6.4", want: []string{ChannelStable}},
+		{name: "historical nightly", tag: "nightly-20260615", want: []string{ChannelNightly}},
+		{name: "historical beta", tag: "v0.7.0-rc2", want: []string{ChannelBeta}},
+		{name: "dev build", tag: "20261002-gabc123-dev", want: nil},
+		{name: "manifest", tag: "manifest", want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ReleaseChannels(tt.tag))
 		})
 	}
 }
@@ -169,11 +229,15 @@ func TestExtractMinUpgradeFrom(t *testing.T) {
 // repo's parsers).
 
 func FuzzClassifyTag(f *testing.F) {
-	for _, s := range []string{"v0.6.4", "nightly-20260622", "v0.7.0-beta.1", "manifest", "", "v1.2.3-beta"} {
+	for _, s := range []string{"v0.6.4", "nightly-20260622", "v0.7.0-beta.1", "manifest", "", "v1.2.3-beta", "20260823", "20261002-gabc123-dev", "20240229"} {
 		f.Add(s)
 	}
 	f.Fuzz(func(t *testing.T, tag string) {
 		channel, ok := ClassifyTag(tag) // must never panic
+		if isDateTag(tag) {
+			assert.True(t, ok, "a date tag must classify")
+			assert.Equal(t, ChannelStable, channel, "a date tag must be stable")
+		}
 		if ok {
 			assert.Contains(t, []string{ChannelStable, ChannelNightly, ChannelBeta}, channel)
 		} else {

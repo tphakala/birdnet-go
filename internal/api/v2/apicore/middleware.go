@@ -9,6 +9,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 // tunnelProviderUnknown is the tunnel provider label for unknown providers.
@@ -67,9 +68,9 @@ func (c *Core) TunnelDetectionMiddleware() echo.MiddlewareFunc {
 			// the immediate connection peer. That happens only for a trusted proxy,
 			// so a directly-connected client cannot spoof a "tunneled" label by
 			// sending forwarded headers from an untrusted address.
-			if peerIP, _ := peerAddrFromRequest(req); peerIP != nil && peerIP.String() != ctx.RealIP() {
+			if peerIP, _ := proxytrust.PeerAddr(req); peerIP != nil && peerIP.String() != ctx.RealIP() {
 				switch {
-				case req.Header.Get(headerCFConnectingIP) != "":
+				case req.Header.Get(proxytrust.HeaderCFConnectingIP) != "":
 					tunneled = true
 					provider = "cloudflare"
 				case req.Header.Get(echo.HeaderXForwardedFor) != "" || req.Header.Get(echo.HeaderXRealIP) != "":

@@ -19,6 +19,7 @@
   } from '@lucide/svelte';
   import { dropdown } from '$lib/utils/transitions';
   import { t } from '$lib/i18n';
+  import { playButtonLabelKey } from '$lib/utils/audio';
 
   interface Props {
     // Playback state
@@ -120,7 +121,6 @@
     { id: 'mp3', label: 'MP3' },
     { id: 'aac', label: 'AAC' },
     { id: 'opus', label: 'Opus' },
-    { id: 'alac', label: 'ALAC' },
   ];
 
   function formatSelectionTime(seconds: number | null): string {
@@ -182,7 +182,7 @@
       class="toolbar-btn play-btn"
       onclick={handlePlay}
       disabled={isLoading}
-      aria-label={isCurrentlyPlaying ? t('media.audio.pause') : t('media.audio.play')}
+      aria-label={t(playButtonLabelKey(isLoading, isCurrentlyPlaying))}
     >
       {#if isLoading}
         <Loader2 size={14} class="animate-spin" />
@@ -229,7 +229,7 @@
           e.preventDefault();
           const rect = progressBarEl.getBoundingClientRect();
           const centerX = rect.left + rect.width / 2;
-          onSeek({ clientX: centerX } as MouseEvent);
+          onSeek(new MouseEvent('click', { clientX: centerX }));
         }
       }}
     >
@@ -240,7 +240,7 @@
   <!-- Selection range display -->
   <div class="toolbar-group selection-controls">
     <span class="time-range" class:dimmed={!hasSelection}>
-      {formatSelectionTime(selectionStart)} – {formatSelectionTime(selectionEnd)}
+      {formatSelectionTime(selectionStart)} - {formatSelectionTime(selectionEnd)}
     </span>
     <button
       class="toolbar-btn"
@@ -476,7 +476,7 @@
 
   .toolbar-btn.error {
     border-color: var(--color-error, #ef4444);
-    color: var(--color-error, #ef4444);
+    color: var(--text-error);
   }
 
   .toolbar-control {
@@ -582,7 +582,7 @@
 
   .export-error {
     font-size: 0.6875rem;
-    color: var(--color-error, #ef4444);
+    color: var(--text-error);
     max-width: 12rem;
     overflow: hidden;
     text-overflow: ellipsis;

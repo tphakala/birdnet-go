@@ -114,7 +114,7 @@ describe('FormField', () => {
         max: 120,
       });
 
-      const input = screen.getByLabelText('Age') as HTMLInputElement;
+      const input = screen.getByLabelText<HTMLInputElement>('Age');
       expect(input.type).toBe('number');
       expect(input.min).toBe('0');
       expect(input.max).toBe('120');
@@ -170,7 +170,7 @@ describe('FormField', () => {
         rows: 5,
       });
 
-      const textarea = screen.getByLabelText('Description') as HTMLTextAreaElement;
+      const textarea = screen.getByLabelText<HTMLTextAreaElement>('Description');
       expect(textarea.rows).toBe(5);
     });
   });

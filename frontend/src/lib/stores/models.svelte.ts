@@ -83,47 +83,64 @@ export function invalidateModels(): void {
   fetchState = 'idle';
 }
 
+/**
+ * Fetch the model list unless it is loaded or a fetch is already in flight.
+ * Reads and writes `fetchState`, so it must run untracked (see fetchModels).
+ */
+function startFetchIfNeeded(): void {
+  if (fetchState === 'loaded' || activeFetch) return;
+
+  const controller = new AbortController();
+  activeFetch = controller;
+  fetchState = 'loading';
+  void loadModels(controller);
+}
+
+async function loadModels(controller: AbortController): Promise<void> {
+  try {
+    const data = await api.get<BackendModel[]>('/api/v2/models', {
+      signal: controller.signal,
+    });
+    if (controller.signal.aborted) return;
+    if (Array.isArray(data)) {
+      fetchedModels = data;
+      fetchState = 'loaded';
+    } else {
+      logger.warn('Fetched models response is not an array', {
+        component: 'modelsStore',
+      });
+      fetchState = 'error';
+    }
+  } catch (err: unknown) {
+    if (controller.signal.aborted) return;
+    if (err instanceof Error && err.name !== 'AbortError') {
+      logger.error('Failed to fetch models', err, {
+        component: 'modelsStore',
+        action: 'fetchModels',
+      });
+    }
+    fetchState = 'error';
+  } finally {
+    if (activeFetch === controller) {
+      activeFetch = null;
+    }
+  }
+}
+
+/**
+ * Register an interest in the model list: fetches it unless it is loaded or a
+ * fetch is in flight. Returns the unsubscribe, which aborts an in-flight fetch
+ * when the last subscriber leaves.
+ *
+ * Callers subscribe from `$effect`, so the fetch decision runs untracked. A
+ * tracked read of `fetchState` would make the effect depend on the state this
+ * call writes: the effect would rerun at once, its cleanup would abort the
+ * request and reset the state, and the loop would end only in
+ * effect_update_depth_exceeded.
+ */
 export function fetchModels(): () => void {
   subscribers++;
-
-  if (fetchState !== 'loaded' && !activeFetch) {
-    const controller = new AbortController();
-    activeFetch = controller;
-    fetchState = 'loading';
-
-    untrack(() => {
-      void (async () => {
-        try {
-          const data = await api.get<BackendModel[]>('/api/v2/models', {
-            signal: controller.signal,
-          });
-          if (controller.signal.aborted) return;
-          if (Array.isArray(data)) {
-            fetchedModels = data;
-            fetchState = 'loaded';
-          } else {
-            logger.warn('Fetched models response is not an array', {
-              component: 'modelsStore',
-            });
-            fetchState = 'error';
-          }
-        } catch (err: unknown) {
-          if (controller.signal.aborted) return;
-          if (err instanceof Error && err.name !== 'AbortError') {
-            logger.error('Failed to fetch models', err, {
-              component: 'modelsStore',
-              action: 'fetchModels',
-            });
-          }
-          fetchState = 'error';
-        } finally {
-          if (activeFetch === controller) {
-            activeFetch = null;
-          }
-        }
-      })();
-    });
-  }
+  untrack(startFetchIfNeeded);
 
   return () => {
     subscribers--;

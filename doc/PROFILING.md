@@ -149,7 +149,7 @@ If that prints nothing, or prints an empty string, no token has been minted yet.
 Check that `diagnostics.profiling.enabled` is `true`, that the instance has been
 restarted since, and that it has no authentication provider configured (with one,
 no token is generated because none is needed). If all three hold and there is
-still no `token:` line, generation or persistence failed: the startup log carries
+still no `token:` line, persistence failed: the startup log carries
 the reason, and a config file the process cannot write is the usual cause.
 
 Every example below assumes the token is in a shell variable. This is the same
@@ -655,9 +655,9 @@ If the profiling endpoints are not behaving:
    `Accept: text/html`, so it was redirected rather than refused.
 5. **The token command prints nothing, or an empty string** - No token has been
    minted. Either an authentication provider is configured (in which case none is
-   needed), or profiling was never enabled and restarted, or generation or
-   persistence failed. The last case is usually a config file the process cannot
-   write, and the startup log says so.
+   needed), or profiling was never enabled and restarted, or persistence failed.
+   The last case is usually a config file the process cannot write, and the
+   startup log says so.
 6. **`410`** - You are talking to the telemetry listener (default port 8090). The
    endpoints moved to the web server port (default 8080). The telemetry listener
    now serves Prometheus metrics only.

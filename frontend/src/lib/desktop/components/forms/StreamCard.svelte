@@ -20,7 +20,6 @@
 -->
 <script lang="ts">
   import { getContext } from 'svelte';
-  import { generateId } from '$lib/utils/uuid';
   import {
     Settings,
     Trash2,
@@ -75,7 +74,6 @@
   interface LocalEqualizerSettings {
     enabled: boolean;
     filters: Array<{
-      id?: string;
       type: EqualizerFilterType;
       frequency: number;
       q?: number;
@@ -386,10 +384,7 @@
         editEqualizer.enabled || editEqualizer.filters.length > 0
           ? {
               enabled: editEqualizer.enabled,
-              filters: editEqualizer.filters.map(f => ({
-                ...f,
-                id: f.id || generateId(),
-              })),
+              filters: editEqualizer.filters,
             }
           : undefined;
 
@@ -407,7 +402,7 @@
         gain: editGain,
         equalizer: transformedEqualizer,
         quietHours: editQuietHours,
-      } as StreamConfig);
+      });
       if (success) {
         isEditing = false;
       }
@@ -513,7 +508,7 @@
           </button>
           <button
             type="button"
-            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:opacity-90 transition-colors"
+            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)] transition-colors"
             onclick={executeDelete}
           >
             {t('common.delete')}
@@ -685,6 +680,10 @@
           </button>
           {#if showEqualizer}
             <div id="stream-eq-{index}" class="mt-3" transition:slide={{ duration: 200 }}>
+              <!-- No sampleRate: a stream's EQ chain runs at the pipeline output rate,
+                   which is the server's configured rate (the preview default) for
+                   every stream except a bat stream with a higher native rate. The
+                   probed stream rate is not that rate, so it is not sent. -->
               <AudioEqualizerSettings
                 equalizerSettings={editEqualizer}
                 {disabled}
@@ -715,7 +714,7 @@
           <span title={needsTest ? t('settings.audio.streams.testRequired') : undefined}>
             <button
               type="button"
-              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={saveEdit}
               disabled={!editName.trim() || !editUrl.trim() || needsTest}
             >

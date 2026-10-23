@@ -289,22 +289,12 @@ func (c *Handler) registerHealthChecks() {
 
 		// Config checks
 		checks.NewToolAvailabilityCheck(func() []checks.ToolInfo {
-			s := c.CurrentSettings()
-			return []checks.ToolInfo{
-				{
-					Name:    "FFmpeg",
-					Path:    s.Realtime.Audio.FfmpegPath,
-					Version: s.Realtime.Audio.FfmpegVersion,
-				},
-				{
-					Name: "Sox",
-					Path: s.Realtime.Audio.SoxPath,
-				},
-			}
+			return requiredTools(c.CurrentSettings())
 		}),
 		checks.NewPathAccessCheck(map[string]string{
 			"data": filepath.Dir(c.CurrentSettings().Output.SQLite.Path),
 		}),
+		checks.NewStoragePersistenceCheck(c.storagePersistenceReport),
 		checks.NewConfigConsistencyCheck(func() []string { return nil }),
 		checks.NewDiskBudgetCheck(
 			func() bool { return false }, // TODO: wire when disk budget feature exists
@@ -838,4 +828,16 @@ func (c *Handler) GetRecentErrors(ctx echo.Context) error {
 
 	entries := c.healthErrors.Recent(limit)
 	return ctx.JSON(http.StatusOK, entries)
+}
+
+// requiredTools lists the external binaries the health check expects: FFmpeg,
+// used for network stream capture.
+func requiredTools(s *conf.Settings) []checks.ToolInfo {
+	return []checks.ToolInfo{
+		{
+			Name:    "FFmpeg",
+			Path:    s.Realtime.Audio.FfmpegPath,
+			Version: s.Realtime.Audio.FfmpegVersion,
+		},
+	}
 }

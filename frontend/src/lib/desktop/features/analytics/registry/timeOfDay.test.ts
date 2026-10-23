@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import { CHART_REGISTRY } from './charts';
-import type { AnalyticsParams } from './types';
+import { makeAnalyticsParams, stubFetchJson } from './__tests__/registryFixtures';
 
 // Verifies the time-of-day registry entry requests the whole selected date range (it used to ask
 // for a single day - the range's start - so a long range rendered one day from months ago) and
@@ -21,29 +21,6 @@ interface TimeOfDayRow {
 }
 
 // 2026-03-01 .. 2026-03-31 inclusive is 31 days, so a total of 62 averages to exactly 2/day.
-function makeParams(species: string[] = ['Turdus merula']): AnalyticsParams {
-  return {
-    range: 'month',
-    start: '2026-03-01',
-    end: '2026-03-31',
-    species,
-    source: '',
-    startDate: new Date('2026-03-01T00:00:00'),
-    endDate: new Date('2026-03-31T00:00:00'),
-  };
-}
-
-function stubFetch(payload: unknown) {
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    status: 200,
-    statusText: 'OK',
-    json: () => Promise.resolve(payload),
-  });
-  vi.stubGlobal('fetch', fetchMock);
-  return fetchMock;
-}
-
 describe('time-of-day chart def', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -54,8 +31,8 @@ describe('time-of-day chart def', () => {
   });
 
   it('requests the full selected date range, not a single day', async () => {
-    const fetchMock = stubFetch({});
-    await chartDef.fetch(makeParams());
+    const fetchMock = stubFetchJson({});
+    await chartDef.fetch(makeAnalyticsParams({ species: ['Turdus merula'] }));
 
     const url = new URL(fetchMock.mock.calls[0][0] as string, 'http://localhost');
     expect(url.pathname).toContain('/api/v2/analytics/time/hourly/batch');
@@ -72,9 +49,11 @@ describe('time-of-day chart def', () => {
       hour,
       count: hour === 12 ? 62 : 0,
     }));
-    stubFetch({ 'Turdus merula': hourly });
+    stubFetchJson({ 'Turdus merula': hourly });
 
-    const rows = (await chartDef.fetch(makeParams())) as TimeOfDayRow[];
+    const rows = (await chartDef.fetch(
+      makeAnalyticsParams({ species: ['Turdus merula'] })
+    )) as TimeOfDayRow[];
     expect(rows).toHaveLength(1);
 
     const noon = rows[0].data.find(d => d.hour === 12);
@@ -84,8 +63,8 @@ describe('time-of-day chart def', () => {
   });
 
   it('returns empty without a request when no species are selected', async () => {
-    const fetchMock = stubFetch({});
-    const result = await chartDef.fetch(makeParams([]));
+    const fetchMock = stubFetchJson({});
+    const result = await chartDef.fetch(makeAnalyticsParams({ species: [] }));
 
     expect(result).toEqual([]);
     expect(fetchMock).not.toHaveBeenCalled();

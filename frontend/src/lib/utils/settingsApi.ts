@@ -1,8 +1,19 @@
 import { api } from './api.js';
+import {
+  withoutServerOwnedKeys,
+  type AudioServerOwnedKey,
+  type BirdNetServerOwnedKey,
+} from './settingsSections';
 import type {
   SettingsFormData,
   TestResult,
   BirdWeatherSettings,
+  BirdNetSettings,
+  Dashboard,
+  AudioSettings,
+  RTSPSettings,
+  PrivacyFilterSettings,
+  SentrySettings,
   MQTTSettings,
   RangeFilterSpeciesEntry,
 } from '$lib/stores/settings.js';
@@ -18,6 +29,43 @@ export interface TLSCertificateInfo {
   sans?: string[];
   serialNumber?: string;
   fingerprint?: string;
+}
+
+/**
+ * How the requester's own connection relates to security.trustedProxies, as
+ * reported by GET /api/v2/settings/connection:
+ * - `direct`: no client-IP header, the peer is the client.
+ * - `trusted_proxy`: the peer is a listed proxy and one client address was verified.
+ * - `trusted_proxy_unverified`: the peer is listed but its headers could not be verified.
+ * - `untrusted_public_proxy`: a public peer sent client-IP headers; never offered for trust.
+ * - `untrusted_proxy`: a local (loopback, link-local, private, CGNAT) peer sent client-IP
+ *   headers and listing it would verify them.
+ * - `untrusted_proxy_unverifiable`: headers were sent that listing the peer would not
+ *   verify, or the peer address was unparseable.
+ */
+export type ConnectionStatus =
+  | 'direct'
+  | 'trusted_proxy'
+  | 'trusted_proxy_unverified'
+  | 'untrusted_public_proxy'
+  | 'untrusted_proxy'
+  | 'untrusted_proxy_unverifiable';
+
+/** Response of GET /api/v2/settings/connection; describes the saved settings and the current request only. */
+export interface ConnectionCheckResult {
+  status: ConnectionStatus;
+  /** The connection peer, or an empty string when it could not be parsed. */
+  peerAddress: string;
+  /** Whether the request carries any client-IP header. */
+  hasForwardedHeaders: boolean;
+  /** Whether the peer is inside a saved trusted proxy range. */
+  peerIsTrustedProxy: boolean;
+  /** The client address the authentication decision uses, or an empty string when none was verified. */
+  verifiedClientAddress: string;
+  /** Whether the peer is inside Cloudflare's published edge ranges, whatever the saved list says. */
+  peerIsCloudflareEdge: boolean;
+  /** Whether listing the peer together with the `cloudflare` preset would verify the headers that do not verify now. */
+  cloudflarePresetWouldVerify: boolean;
 }
 
 export interface TLSCertificateUpload {
@@ -42,6 +90,36 @@ export interface MQTTTLSCertificateUpload {
   clientKey?: string;
 }
 
+/** Base endpoint for the settings API. */
+const SETTINGS_ENDPOINT = '/api/v2/settings';
+
+/**
+ * Request bodies for the per-section settings update, keyed by the lowercase
+ * backend section name. Partial is shallow, so a nested value is typed as a
+ * complete object; the backend itself merges nested objects key by key and only
+ * replaces arrays. Extend this when another caller needs a section; the
+ * backend accepts more sections than are listed here. Keys the server owns
+ * are left out (see settingsSections.ts).
+ */
+export interface SettingsSectionPayloads {
+  birdnet: Partial<Omit<BirdNetSettings, BirdNetServerOwnedKey>>;
+  dashboard: Partial<Dashboard>;
+  audio: Partial<Omit<AudioSettings, AudioServerOwnedKey>>;
+  rtsp: Partial<RTSPSettings>;
+  privacyfilter: Partial<PrivacyFilterSettings>;
+  birdweather: Partial<BirdWeatherSettings>;
+  sentry: Partial<SentrySettings>;
+}
+
+/** Backend section names accepted by settingsAPI.patchSection. */
+export type SettingsSectionName = keyof SettingsSectionPayloads;
+
+/** The fields of the section PATCH response that the store reads. */
+export interface SettingsSectionPatchResponse {
+  /** Fields in the request that the backend refused to change. */
+  skippedFields?: string[] | null;
+}
+
 /**
  * Settings API client extending the base API client
  */
@@ -50,14 +128,30 @@ export const settingsAPI = {
    * Load all settings from the server
    */
   load: (): Promise<SettingsFormData> => {
-    return api.get<SettingsFormData>('/api/v2/settings');
+    return api.get<SettingsFormData>(SETTINGS_ENDPOINT);
   },
 
   /**
    * Save all settings to the server
    */
   save: (data: SettingsFormData): Promise<unknown> => {
-    return api.put<unknown>('/api/v2/settings', data);
+    return api.put<unknown>(SETTINGS_ENDPOINT, data);
+  },
+
+  /**
+   * Save a single backend section with PATCH /api/v2/settings/:section. The
+   * backend merges the body into the stored section, so keys the body omits keep
+   * their saved values and no other section is touched. Keys the server owns
+   * are dropped before sending.
+   */
+  patchSection: <S extends SettingsSectionName>(
+    section: S,
+    body: SettingsSectionPayloads[S]
+  ): Promise<SettingsSectionPatchResponse | null> => {
+    return api.patch<SettingsSectionPatchResponse | null>(
+      `${SETTINGS_ENDPOINT}/${section}`,
+      withoutServerOwnedKeys(section, body)
+    );
   },
 
   /**
@@ -153,13 +247,18 @@ export const settingsAPI = {
     audioDevices: (): Promise<Array<{ id: string; name: string }>> => {
       return api.get('/api/v2/system/audio-devices');
     },
+  },
 
+  /**
+   * Security helpers that are not part of a settings section
+   */
+  security: {
     /**
-     * Check FFmpeg availability
+     * Classify the requester's own connection against the saved trusted proxy
+     * list. Read-only; reflects the saved settings, not unsaved form edits.
      */
-    ffmpegStatus: (): Promise<{ available: boolean; version?: string }> => {
-      return api.get('/api/v2/system/ffmpeg');
-    },
+    getConnection: (): Promise<ConnectionCheckResult> =>
+      api.get<ConnectionCheckResult>('/api/v2/settings/connection'),
   },
 
   /**

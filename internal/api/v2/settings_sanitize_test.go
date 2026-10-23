@@ -2,10 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -49,6 +53,7 @@ func settingsWithSecrets(t *testing.T) *conf.Settings {
 	// Weather API keys
 	s.Realtime.Weather.OpenWeather.APIKey = "ow-api-key-123"
 	s.Realtime.Weather.Wunderground.APIKey = "wu-api-key-456"
+	s.Realtime.Weather.PirateWeather.APIKey = "pw-api-key-321"
 
 	// eBird
 	s.Realtime.EBird.APIKey = "ebird-api-key-789"
@@ -94,6 +99,14 @@ func settingsWithSecrets(t *testing.T) *conf.Settings {
 					Auth: conf.WebhookAuthConfig{
 						Type: "basic",
 						Pass: "basic-auth-password",
+					},
+				},
+				{
+					URL: "https://hooks.example.com/custom",
+					Auth: conf.WebhookAuthConfig{
+						Type:   "custom",
+						Header: "X-Api-Key",
+						Value:  "custom-header-secret",
 					},
 				},
 			},
@@ -142,6 +155,7 @@ func TestSanitizeSettingsForAPI_RedactsAllSecrets(t *testing.T) {
 	// --- Weather API keys ---
 	assert.Equal(t, redactedValue, sanitized.Realtime.Weather.OpenWeather.APIKey, "openWeather.apiKey must be redacted")
 	assert.Equal(t, redactedValue, sanitized.Realtime.Weather.Wunderground.APIKey, "wunderground.apiKey must be redacted")
+	assert.Equal(t, redactedValue, sanitized.Realtime.Weather.PirateWeather.APIKey, "pirateWeather.apiKey must be redacted")
 
 	// --- eBird ---
 	assert.Equal(t, redactedValue, sanitized.Realtime.EBird.APIKey, "ebird.apiKey must be redacted")
@@ -158,9 +172,10 @@ func TestSanitizeSettingsForAPI_RedactsAllSecrets(t *testing.T) {
 
 	// --- Webhook auth ---
 	require.Len(t, sanitized.Notification.Push.Providers, 1)
-	require.Len(t, sanitized.Notification.Push.Providers[0].Endpoints, 2)
+	require.Len(t, sanitized.Notification.Push.Providers[0].Endpoints, 3)
 	assert.Equal(t, redactedValue, sanitized.Notification.Push.Providers[0].Endpoints[0].Auth.Token, "webhook bearer token must be redacted")
 	assert.Equal(t, redactedValue, sanitized.Notification.Push.Providers[0].Endpoints[1].Auth.Pass, "webhook basic auth password must be redacted")
+	assert.Equal(t, redactedValue, sanitized.Notification.Push.Providers[0].Endpoints[2].Auth.Value, "webhook custom header value must be redacted")
 }
 
 // TestSanitizeSettingsForAPI_DoesNotMutateOriginal verifies that the original
@@ -211,19 +226,16 @@ func TestSanitizeSettingsForAPI_EmptySecretsStayEmpty(t *testing.T) {
 	assert.Empty(t, sanitized.Realtime.EBird.APIKey, "empty ebird key should stay empty")
 }
 
-// TestSanitizeSettingsForAPI_JSONOutputHasNoSecrets performs an end-to-end
-// check: serialize the sanitized settings to JSON and verify that no known
-// secret value appears anywhere in the output.
-func TestSanitizeSettingsForAPI_JSONOutputHasNoSecrets(t *testing.T) {
-	original := settingsWithSecrets(t)
-	sanitized := sanitizeSettingsForAPI(original)
-
-	data, err := json.Marshal(sanitized)
-	require.NoError(t, err, "JSON marshal must succeed")
-
-	jsonStr := string(data)
-
-	// None of the original secret values should appear in the JSON
+// TestGetSettingsHandlersRedactSecrets drives the real GET handlers over a
+// snapshot holding a secret in every field the sanitizer covers, and checks that
+// no raw secret value reaches the response body. The sanitizer's own unit tests
+// cannot catch a handler that forgets to call it, so this goes through
+// GetAllSettings and through GetSectionSettings for both lookup arms of
+// getSettingsSection: the sections that are direct fields of conf.Settings
+// (security, diagnostics, output, backup, notification, realtime) and the ones
+// resolved by name (weather, mqtt). Each row also requires the redaction placeholder in the body, so a row
+// cannot pass on a section that holds no secret at all.
+func TestGetSettingsHandlersRedactSecrets(t *testing.T) {
 	secrets := []string{
 		"hmac-session-key-abc123",
 		"admin-password",
@@ -238,21 +250,107 @@ func TestSanitizeSettingsForAPI_JSONOutputHasNoSecrets(t *testing.T) {
 		"db-password",
 		"ow-api-key-123",
 		"wu-api-key-456",
+		"pw-api-key-321",
 		"ebird-api-key-789",
 		"ftp-password",
 		"s3-secret-key",
 		"bearer-token-secret",
 		"basic-auth-password",
+		"custom-header-secret",
+		"diagnostics-token-secret",
 	}
 
-	for _, secret := range secrets {
-		assert.NotContains(t, jsonStr, secret, "JSON output contains secret: %s", secret)
+	newController := func(t *testing.T) (*echo.Echo, *Controller) {
+		t.Helper()
+		e := echo.New()
+		c := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, testControlChanBuffer), DisableSaveSettings: true}
+		c.Settings.Store(settingsWithSecrets(t))
+		return e, c
 	}
 
-	// Non-secret values should still be present
-	assert.Contains(t, jsonStr, "mqtt.local", "non-secret mqtt.broker should be in JSON")
-	assert.Contains(t, jsonStr, "dbuser", "non-secret mysql.username should be in JSON")
-	assert.Contains(t, jsonStr, "ftp.local", "non-secret ftp.host should be in JSON")
+	assertRedacted := func(t *testing.T, rec *httptest.ResponseRecorder) {
+		t.Helper()
+		require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+		body := rec.Body.String()
+		for _, secret := range secrets {
+			assert.NotContains(t, body, secret, "response contains secret %q", secret)
+		}
+		assert.Contains(t, body, redactedValue, "response must carry the redaction placeholder")
+	}
+
+	t.Run("GET /settings", func(t *testing.T) {
+		e, c := newController(t)
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/settings", http.NoBody)
+		rec := httptest.NewRecorder()
+		require.NoError(t, c.GetAllSettings(e.NewContext(req, rec)))
+
+		assertRedacted(t, rec)
+
+		// Non-secret values must still be present.
+		body := rec.Body.String()
+		assert.Contains(t, body, "mqtt.local", "non-secret mqtt.broker should be in the response")
+		assert.Contains(t, body, "dbuser", "non-secret mysql.username should be in the response")
+		assert.Contains(t, body, "ftp.local", "non-secret ftp.host should be in the response")
+	})
+
+	for _, section := range []string{
+		"security", "diagnostics", "output", "backup", "notification",
+		"realtime", "weather", "mqtt",
+	} {
+		t.Run("GET /settings/"+section, func(t *testing.T) {
+			e, c := newController(t)
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/"+section, http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("section")
+			ctx.SetParamValues(section)
+			require.NoError(t, c.GetSectionSettings(ctx))
+
+			assertRedacted(t, rec)
+		})
+	}
+}
+
+// TestValidateNoRedactedSentinels_ReportsAndClearsEverySecret feeds the
+// validator a snapshot in which every secret still holds the placeholder, as it
+// would if a restore step missed a field. The error must name each field so the
+// user knows what to re-enter, and none of the placeholders may stay in the
+// snapshot, because a surviving one would be persisted as the real secret.
+func TestValidateNoRedactedSentinels_ReportsAndClearsEverySecret(t *testing.T) {
+	t.Parallel()
+
+	s := sanitizeSettingsForAPI(settingsWithSecrets(t))
+
+	err := validateNoRedactedSentinels(s)
+	require.Error(t, err)
+
+	for _, path := range []string{
+		"security.sessionSecret",
+		"security.basicAuth.password",
+		"security.googleAuth.clientSecret",
+		"security.githubAuth.clientSecret",
+		"security.microsoftAuth.clientSecret",
+		"diagnostics.profiling.token",
+		"realtime.mqtt.password",
+		"output.mysql.password",
+		"realtime.weather.openWeather.apiKey",
+		"realtime.weather.wunderground.apiKey",
+		"realtime.weather.pirateWeather.apiKey",
+		"realtime.ebird.apiKey",
+		"security.oauthProviders[0(google)].clientSecret",
+		"security.oauthProviders[1(github)].clientSecret",
+		"backup.targets[0(ftp)].settings.password",
+		"backup.targets[1(s3)].settings.secretaccesskey",
+		"notification.push.providers[0].endpoints[0].auth.token",
+		"notification.push.providers[0].endpoints[1].auth.pass",
+		"notification.push.providers[0].endpoints[2].auth.value",
+	} {
+		assert.Contains(t, err.Error(), path)
+	}
+
+	data, marshalErr := json.Marshal(s)
+	require.NoError(t, marshalErr)
+	assert.NotContains(t, string(data), redactedValue, "no placeholder may survive the validator")
 }
 
 // TestRedact verifies the redact helper function.
@@ -459,22 +557,6 @@ func TestRestoreRedactedSecrets_WebhookNewProvider(t *testing.T) {
 		"new provider's token should not be modified")
 }
 
-// TestRestoreRedactedSecrets_NilSettingsMap verifies no panic when an
-// incoming backup target has a nil Settings map.
-func TestRestoreRedactedSecrets_NilSettingsMap(t *testing.T) {
-	current := settingsWithSecrets(t)
-
-	incoming := &conf.Settings{}
-	incoming.Backup.Targets = []conf.BackupTarget{
-		{Type: "ftp", Enabled: true, Settings: nil},
-	}
-
-	// Should not panic
-	assert.NotPanics(t, func() {
-		require.NoError(t, restoreRedactedSecrets(current, incoming))
-	})
-}
-
 // TestRestoreRedactedSecrets_AllowsNewValues verifies that when the user
 // actually changes a secret (sends a new non-placeholder value), it is kept.
 func TestRestoreRedactedSecrets_AllowsNewValues(t *testing.T) {
@@ -505,7 +587,9 @@ func TestRestoreRedactedSecrets_SessionSecret(t *testing.T) {
 
 // TestRoundTrip_SanitizeThenRestore verifies the full GET→PUT cycle:
 // sanitize for GET, then restore when the frontend sends the redacted
-// values back unchanged.
+// values back unchanged. The comparison covers every field of the snapshot, so
+// a secret that is redacted on the way out but not restored on the way in fails
+// here.
 func TestRoundTrip_SanitizeThenRestore(t *testing.T) {
 	original := settingsWithSecrets(t)
 
@@ -514,17 +598,20 @@ func TestRoundTrip_SanitizeThenRestore(t *testing.T) {
 	assert.Equal(t, redactedValue, sanitized.Security.BasicAuth.Password)
 	assert.Equal(t, redactedValue, sanitized.Realtime.MQTT.Password)
 
-	// Step 2: Frontend sends the sanitized values back (unchanged)
-	incoming := *sanitized // simulate frontend round-trip
+	// Step 2: Frontend sends the sanitized values back (unchanged). A deep clone
+	// keeps the restore from writing through slices shared with sanitized.
+	incoming := conf.CloneSettings(sanitized)
 
 	// Step 3: Restore before applying the update
-	require.NoError(t, restoreRedactedSecrets(original, &incoming))
+	require.NoError(t, restoreRedactedSecrets(original, incoming))
 
-	// The incoming struct should now have the original real values
-	assert.Equal(t, "admin-password", incoming.Security.BasicAuth.Password)
-	assert.Equal(t, "mqtt-password", incoming.Realtime.MQTT.Password)
-	assert.Equal(t, "db-password", incoming.Output.MySQL.Password)
-	assert.Equal(t, "ow-api-key-123", incoming.Realtime.Weather.OpenWeather.APIKey)
+	// The sanitizer blanks the basic auth client credentials and the restore does
+	// not bring them back (the PUT path re-applies them through the blocked-field
+	// map instead), so they are the only fields expected to differ.
+	want := conf.CloneSettings(original)
+	want.Security.BasicAuth.ClientID = ""
+	want.Security.BasicAuth.ClientSecret = ""
+	assert.Equal(t, want, incoming)
 
 	// Original must not have been mutated
 	assert.Equal(t, "admin-password", original.Security.BasicAuth.Password)

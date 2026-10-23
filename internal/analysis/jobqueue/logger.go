@@ -56,9 +56,10 @@ func LogJobCompleted(ctx context.Context, jobID, actionType string, duration tim
 
 // LogJobFailed logs a job's final, permanent failure.
 //
-// It is only ever reached once a job's attempts are exhausted: the sole caller
-// is handleJobFailure (queue.go), inside its job.Attempts >= job.MaxAttempts
-// branch. A retryable failure goes to LogJobRetryScheduled instead, so this
+// It is reached once a job's attempts are exhausted, from handleJobFailure
+// (queue.go) inside its job.Attempts >= job.MaxAttempts branch, and when a job
+// is failed after waiting too long for an abandoned attempt
+// (holdForAbandonedAttemptLocked). A retryable failure goes to LogJobRetryScheduled instead, so this
 // function does not need, and must not have, a "will retry" level. The two
 // counters stay in the signature because they say how many attempts were spent
 // before giving up, which is the useful part of the record.
@@ -171,6 +172,22 @@ func LogJobRetryScheduled(ctx context.Context, jobID, actionDesc string, attempt
 		return
 	}
 	log.Warn("Job scheduled for retry after failure", fields...)
+}
+
+// LogAbandonedAttemptReturned logs the late result of an attempt that overran
+// its timeout and was abandoned, when that result does not complete the job
+// (a late failure, or the job already failed).
+func LogAbandonedAttemptReturned(ctx context.Context, jobID, actionDesc string, attempt int, err error) {
+	fields := []logger.Field{
+		logger.String("job_id", jobID),
+		logger.String("action_type", actionDesc),
+		logger.Int("attempt", attempt),
+		logger.Error(err),
+	}
+	if traceID := extractTraceID(ctx); traceID != "" {
+		fields = append(fields, logger.String("trace_id", traceID))
+	}
+	getLog().WithContext(ctx).Debug("Abandoned job attempt returned late", fields...)
 }
 
 // LogJobSuccess logs when a job completes successfully

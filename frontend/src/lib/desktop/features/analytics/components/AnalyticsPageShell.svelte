@@ -45,6 +45,13 @@
       if (reqSource) analyticsControls.ensureSources();
     });
   });
+
+  // Only species-filtered tabs auto-select top species into the URL; the release on teardown keeps
+  // a late list from writing into another tab's URL.
+  $effect(() => {
+    if (!speciesApplicable) return;
+    return untrack(() => analyticsControls.enableAutoSelect());
+  });
 </script>
 
 <section class="col-span-12 flex flex-col gap-4" aria-label={t(titleKey)}>

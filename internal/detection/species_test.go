@@ -26,6 +26,14 @@ func TestExtractScientificName(t *testing.T) {
 		{"leading whitespace", "  Turdus merula_Common Blackbird", "Turdus merula"},
 		{"trailing whitespace scientific only", "Turdus merula  ", "Turdus merula"},
 		{"carriage return scientific only", "Turdus merula\r", "Turdus merula"},
+		{"Perch binomial", "Glaucidium passerinum", "Glaucidium passerinum"},
+		{"Perch single-token class", "Dog", "Dog"},
+		{"Perch one-underscore class", "Power_tool", "Power_tool"},
+		{"Perch two-word class", "Car_passing_by", "Car_passing_by"},
+		{"Perch domestic sounds class", "Domestic_sounds_and_home_sounds", "Domestic_sounds_and_home_sounds"},
+		{"Perch domestic animals class", "Domestic_animals_and_pets", "Domestic_animals_and_pets"},
+		{"Perch class with CRLF", "Power_tool\r", "Power_tool"},
+		{"legacy stored fragment", "Domestic", "Domestic"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -164,6 +172,72 @@ func TestSpeciesString(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tt.expected, tt.species.String())
+		})
+	}
+}
+
+func TestExtractScientificName_Idempotent(t *testing.T) {
+	t.Parallel()
+	inputs := []string{
+		"Turdus merula_Common Blackbird",
+		"Parus major_Great Tit_gretit1",
+		"Glaucidium passerinum",
+		"Dog",
+		"Power_tool",
+		"Domestic_sounds_and_home_sounds",
+		"Bathtub_(filling_or_washing)",
+		"Domestic",
+		"dog_bark",
+		"",
+	}
+	for _, in := range inputs {
+		once := ExtractScientificName(in)
+		assert.Equal(t, once, ExtractScientificName(once), "input %q", in)
+	}
+}
+
+func TestParseSpeciesString_PerchSoundClass(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		input    string
+		expected Species
+	}{
+		{"domestic sounds", "Domestic_sounds_and_home_sounds", Species{ScientificName: "Domestic_sounds_and_home_sounds", CommonName: "Domestic sounds and home sounds"}},
+		{"car passing by", "Car_passing_by", Species{ScientificName: "Car_passing_by", CommonName: "Car passing by"}},
+		{"power tool", "Power_tool", Species{ScientificName: "Power_tool", CommonName: "Power tool"}},
+		{"BirdNET three-part unchanged", "Turdus merula_Common Blackbird_eurbla", Species{ScientificName: "Turdus merula", CommonName: "Common Blackbird", Code: "eurbla"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.expected, ParseSpeciesString(tt.input))
+		})
+	}
+}
+
+func TestSpecies_StoredLabel(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		in   Species
+		want string
+	}{
+		{"BirdNET two parts", Species{ScientificName: "Turdus merula", CommonName: "Common Blackbird"}, "Turdus merula_Common Blackbird"},
+		{"BirdNET with code", Species{ScientificName: "Turdus merula", CommonName: "Common Blackbird", Code: "eurbla"}, "Turdus merula_Common Blackbird_eurbla"},
+		{"Perch multi-word class", Species{ScientificName: "Domestic_sounds_and_home_sounds", CommonName: "Domestic sounds and home sounds"}, "Domestic_sounds_and_home_sounds"},
+		{"Perch class with placeholder code", Species{ScientificName: "Domestic_sounds_and_home_sounds", CommonName: "Domestic sounds and home sounds", Code: "DO1a2b3c"}, "Domestic_sounds_and_home_sounds"},
+		{"Perch class with localized common name", Species{ScientificName: "Power_tool", CommonName: "Sähkötyökalu"}, "Power_tool"},
+		{"Perch class with empty common name", Species{ScientificName: "Power_tool"}, "Power_tool"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := tt.in.StoredLabel()
+			assert.Equal(t, tt.want, got)
+			// The stored form must parse back to the same identity.
+			assert.Equal(t, tt.in.ScientificName, ParseSpeciesString(got).ScientificName)
+			assert.Equal(t, tt.in.ScientificName, ExtractScientificName(got))
 		})
 	}
 }

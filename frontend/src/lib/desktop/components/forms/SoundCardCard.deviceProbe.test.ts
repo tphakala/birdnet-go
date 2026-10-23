@@ -102,7 +102,7 @@ describe('SoundCardCard device capability probe (issue #3593, edit form)', () =>
   });
 
   function rateSelect() {
-    return screen.getByTestId(SAMPLE_RATE_SELECT_TESTID) as HTMLSelectElement;
+    return screen.getByTestId<HTMLSelectElement>(SAMPLE_RATE_SELECT_TESTID);
   }
 
   function hasRate(value: string) {
