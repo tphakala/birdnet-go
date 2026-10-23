@@ -201,10 +201,14 @@ unauthenticated clients (the audio domain does this with its local
 - **Follow the error format** - `return c.HandleError(ctx, err, "message", statusCode)`
   (or `c.HandleErrorWithKey(...)` for an i18n key). The `ErrorResponse` shape and
   correlation-id behavior live in `apicore`.
-- **Hot-reload** - read settings per request via `c.CurrentSettings()` (the
-  process-wide settings snapshot, falling back to Core's) or
-  `c.ControllerSettings()` (Core's own snapshot); both are lock-free atomic loads.
-  Never branch on settings captured at startup.
+- **Hot-reload** - read settings per request, never branch on settings captured
+  at startup. In facade handlers that return settings to a client or merge into
+  them, use `c.getSettingsOrFallback()`: it reads the live process-wide snapshot
+  when this controller owns it. `c.CurrentSettings()` also prefers the
+  process-wide snapshot. `c.ControllerSettings()` is Core's own snapshot, which
+  only API saves refresh and which goes stale after out-of-band updates (for
+  example a model install), so use it only where per-controller isolation is
+  intended. They are lock-free atomic loads, except the last-resort `conf.Setting()` fallback in `getSettingsOrFallback`, which can load settings from disk.
 - **Document in README.md** - update the endpoint table immediately.
 
 ## Future api/v3

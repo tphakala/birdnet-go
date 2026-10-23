@@ -100,18 +100,15 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Read the controller's lock-free settings snapshot.
-	settings := c.ControllerSettings()
+	// Read the live settings snapshot so out-of-band updates (such as gallery
+	// model installations) are immediately visible.
+	settings := c.getSettingsOrFallback()
 	if settings == nil {
-		// Fallback to global settings if controller settings not set
-		settings = conf.Setting()
-		if settings == nil {
-			c.LogErrorIfEnabled("Settings not initialized when trying to get all settings",
-				logger.String("path", ctx.Request().URL.Path),
-				logger.String("ip", ctx.RealIP()),
-			)
-			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
-		}
+		c.LogErrorIfEnabled("Settings not initialized when trying to get all settings",
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
+		)
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	c.LogInfoIfEnabled("Retrieved all settings successfully",
@@ -139,17 +136,12 @@ const dashboardSectionName = "dashboard"
 func (c *Controller) GetDashboardSettings(ctx echo.Context) error {
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting public dashboard settings")
 
-	// Read the controller's lock-free settings snapshot.
-	settings := c.ControllerSettings()
+	settings := c.getSettingsOrFallback()
 	if settings == nil {
-		// Fallback to global settings if controller settings not set.
-		settings = conf.Setting()
-		if settings == nil {
-			c.LogAPIRequest(ctx, logger.LogLevelError,
-				"Settings not initialized when trying to get dashboard settings")
-			return c.HandleError(ctx, fmt.Errorf("settings not initialized"),
-				"Failed to get settings", http.StatusInternalServerError)
-		}
+		c.LogAPIRequest(ctx, logger.LogLevelError,
+			"Settings not initialized when trying to get dashboard settings")
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"),
+			"Failed to get settings", http.StatusInternalServerError)
 	}
 
 	// Sanitize first, then extract the dashboard section from the sanitized
@@ -178,15 +170,10 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
-	// Read the controller's lock-free settings snapshot.
-	settings := c.ControllerSettings()
+	settings := c.getSettingsOrFallback()
 	if settings == nil {
-		// Fallback to global settings if controller settings not set
-		settings = conf.Setting()
-		if settings == nil {
-			c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get section settings", logger.String("section", section))
-			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
-		}
+		c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get section settings", logger.String("section", section))
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	// Sanitize first, then extract the section from the sanitized copy
@@ -217,10 +204,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	// Read the controller's own snapshot when set (tests inject this
-	// directly); fall back to the global publisher. In production these are
-	// the same pointer at boot and stay in sync because every successful
-	// publish below updates both the atomic Settings pointer and conf.settingsInstance.
+	// Baseline: the live global snapshot when this controller owns it, else the
+	// controller's own snapshot (tests inject this directly). Only an owning
+	// controller publishes to both below; out-of-band writers (model install,
+	// range filter) update only the global, so the controller's snapshot can lag.
 	current := c.getSettingsOrFallback()
 	if current == nil {
 		c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized during update attempt")
@@ -433,12 +420,15 @@ func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) err
 	return nil
 }
 
-// getSettingsOrFallback returns the current settings snapshot for write handlers.
+// getSettingsOrFallback returns the current settings snapshot for any handler
+// that returns settings to a client or merges into them.
 // When this controller owns the global singleton (production), it reads from
-// conf.GetSettings() so that out-of-band publishers (range filter rebuild,
-// ShouldUpdateRangeFilterToday, etc.) are not silently overwritten by a stale
+// conf.GetSettings() so that out-of-band publishers (model manager, range filter rebuild,
+// ShouldUpdateRangeFilterToday, etc.) are not silently overwritten or missed by a stale
 // per-controller pointer. For test controllers that inject a standalone *Settings,
-// the controller's own atomic snapshot is returned as-is.
+// the controller's own atomic snapshot is returned as-is, which keeps tests
+// isolated from the global even when one is set. conf.Setting() is the last
+// resort when neither is available.
 func (c *Controller) getSettingsOrFallback() *conf.Settings {
 	if c.isGlobalOwner {
 		if s := conf.GetSettings(); s != nil {
@@ -3330,15 +3320,10 @@ func (c *Controller) GetImageProviders(ctx echo.Context) error {
 func (c *Controller) GetSystemID(ctx echo.Context) error {
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting system ID")
 
-	// Read the controller's lock-free settings snapshot.
-	settings := c.ControllerSettings()
+	settings := c.getSettingsOrFallback()
 	if settings == nil {
-		// Fallback to global settings if controller settings not set
-		settings = conf.Setting()
-		if settings == nil {
-			c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get system ID", logger.String("endpoint", "GetSystemID"))
-			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
-		}
+		c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get system ID", logger.String("endpoint", "GetSystemID"))
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Retrieved system ID successfully", logger.String("system_id", settings.SystemID))
