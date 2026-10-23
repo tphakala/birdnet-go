@@ -12,10 +12,11 @@ import (
 
 // blockedProbeYields is how many times AssertStillBlocked yields the processor
 // while watching a goroutine that should be waiting on the settings writer
-// lock. A writer that is not waiting finishes within a few yields (its work is
-// a clone and a store), so this bound only decides how long the passing case
-// takes; it never decides correctness, and no wall-clock sleep is involved.
-const blockedProbeYields = 20_000
+// lock. A writer that is not waiting finishes within the bound (a clone and a
+// store), so this bound sets how long the passing case takes; a lock-skipping
+// writer is caught only when it finishes within the bound, and a correct writer
+// never fails it. No wall-clock sleep is involved.
+const blockedProbeYields = 100_000
 
 // HoldSettingsWriter takes the process-wide settings writer lock through
 // conf.UpdateSettings and keeps holding it until the returned release function
