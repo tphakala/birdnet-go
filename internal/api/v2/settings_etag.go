@@ -2,7 +2,9 @@ package api
 
 import (
 	"crypto/rand"
+	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -42,4 +44,11 @@ func checkSettingsPrecondition(ifMatch string, current *conf.Settings) error {
 		return nil
 	}
 	return newPreconditionRejection(etag)
+}
+
+// requestIfMatch returns the If-Match value of a request: every If-Match header
+// line joined into one comma-separated list (RFC 9110 section 5.3), or "" when
+// the request sent none. Header.Get would return only the first line.
+func requestIfMatch(r *http.Request) string {
+	return strings.Join(r.Header.Values(apicore.HeaderIfMatch), ",")
 }
