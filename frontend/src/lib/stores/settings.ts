@@ -45,6 +45,7 @@ import type {
 } from '$lib/desktop/features/settings/pages/audioExportFormat';
 import { t } from '$lib/i18n';
 import { getLogger } from '$lib/utils/logger';
+import { pruneRemovedModelAliases } from '$lib/utils/modelAliases';
 import { isPlainObject, safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import type { SettingsSectionName, SettingsSectionPayloads } from '$lib/utils/settingsApi.js';
@@ -1389,11 +1390,8 @@ const inFlightSectionSaves = new Set<Promise<void>>();
  */
 let pendingFullSave: { done: Promise<void>; notify: boolean } | null = null;
 
-/**
- * Tail of the queue that orders operations reading the server state and writing
- * the store from it: a full save and a gallery refresh. Never rejects.
- */
 let serverSyncTail: Promise<void> = Promise.resolve();
+const ignoreOutcome = () => undefined;
 
 /**
  * Runs task after every earlier queued task has settled, so a refresh or a load
@@ -1403,11 +1401,23 @@ let serverSyncTail: Promise<void> = Promise.resolve();
  */
 function runSerialized<T>(task: () => Promise<T>): Promise<T> {
   const result = serverSyncTail.then(task);
-  serverSyncTail = result.then(
-    () => undefined,
-    () => undefined
-  );
+  serverSyncTail = result.then(ignoreOutcome, ignoreOutcome);
   return result;
+}
+
+/** Applies the per-section coercion to every object section. Keys without a coercion rule pass through. */
+function coerceAllSections(data: SettingsFormData): SettingsFormData {
+  const coerced = { ...data };
+  for (const [section, sectionData] of Object.entries(data)) {
+    if (sectionData && typeof sectionData === 'object') {
+      // eslint-disable-next-line security/detect-object-injection -- Safe: section from Object.entries of known object
+      (coerced as unknown as Record<string, unknown>)[section] = coerceSettings(
+        section,
+        sectionData as Record<string, unknown>
+      );
+    }
+  }
+  return coerced;
 }
 
 /**
@@ -1415,18 +1425,7 @@ function runSerialized<T>(task: () => Promise<T>): Promise<T> {
  * Keys the interfaces do not declare (for example models) are kept as received.
  */
 function normalizeLoadedSettings(data: SettingsFormData): SettingsFormData {
-  const mergedData = { ...createEmptySettings(), ...data };
-
-  // Apply coercion to each section
-  const coercedData = { ...mergedData };
-  for (const [section, sectionData] of Object.entries(mergedData)) {
-    if (sectionData && typeof sectionData === 'object') {
-      const coercedSection = coerceSettings(section, sectionData as Record<string, unknown>);
-      // eslint-disable-next-line security/detect-object-injection -- Safe: section from Object.entries of known object
-      (coercedData as unknown as Record<string, unknown>)[section] = coercedSection;
-    }
-  }
-  return coercedData;
+  return coerceAllSections({ ...createEmptySettings(), ...data });
 }
 
 /** Fetches the current server settings, normalized like a load. Throws on a malformed response. */
@@ -1436,55 +1435,6 @@ async function fetchServerSnapshot(): Promise<SettingsFormData> {
     throw new Error(t('settings.errors.loadFailed'));
   }
   return normalizeLoadedSettings(data);
-}
-
-/** Returns the lowercased model aliases of a models.enabled list, or null when it is not a list. */
-function enabledModelAliases(settings: Record<string, unknown>): Set<string> | null {
-  const models = asRecord(settings.models);
-  const enabled = models?.enabled;
-  if (!Array.isArray(enabled)) return null;
-  return new Set(
-    enabled.filter((v): v is string => typeof v === 'string').map(v => v.toLowerCase())
-  );
-}
-
-/**
- * Removes from every source and stream model list the aliases the server dropped
- * from models.enabled since base (an uninstall). Without this an edited list
- * would win the rebase and write the removed alias back. The server compares
- * aliases case-insensitively, so this does too.
- */
-function pruneRemovedModelAliases(
-  form: SettingsFormData,
-  base: SettingsFormData,
-  fresh: SettingsFormData
-): SettingsFormData {
-  const baseEnabled = enabledModelAliases({ ...base });
-  const freshEnabled = enabledModelAliases({ ...fresh });
-  if (!baseEnabled || !freshEnabled) return form;
-  const removed = new Set([...baseEnabled].filter(alias => !freshEnabled.has(alias)));
-  if (removed.size === 0) return form;
-
-  const prune = <T extends { models?: string[] }>(items: T[]): T[] =>
-    Array.isArray(items)
-      ? items.map(item =>
-          Array.isArray(item.models)
-            ? { ...item, models: item.models.filter(alias => !removed.has(alias.toLowerCase())) }
-            : item
-        )
-      : items;
-  const realtime = form.realtime;
-  if (!realtime) return form;
-  return {
-    ...form,
-    realtime: {
-      ...realtime,
-      ...(realtime.audio && {
-        audio: { ...realtime.audio, sources: prune(realtime.audio.sources) },
-      }),
-      ...(realtime.rtsp && { rtsp: { ...realtime.rtsp, streams: prune(realtime.rtsp.streams) } }),
-    },
-  };
 }
 
 /**
@@ -1524,19 +1474,7 @@ async function persistFormData(notify: boolean): Promise<void> {
       const sent: SettingsFormData = JSON.parse(JSON.stringify(rebased.formData));
       const loadedLocale = rebased.originalData.realtime?.dashboard?.locale;
 
-      // Apply coercion to all sections before saving
-      const coercedFormData = { ...sent };
-      for (const [section, data] of Object.entries(coercedFormData)) {
-        if (data && typeof data === 'object') {
-          const key = section as keyof SettingsFormData;
-          // Use a type assertion to handle the assignment
-          // eslint-disable-next-line security/detect-object-injection -- key is from controlled source
-          (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
-            section,
-            data as Record<string, unknown>
-          );
-        }
-      }
+      const coercedFormData = coerceAllSections(sent);
 
       // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
       // This ensures the config file is properly cleaned when users clear these fields
@@ -1554,11 +1492,10 @@ async function persistFormData(notify: boolean): Promise<void> {
       // and compare to originalData (the snapshot rebased on the backend).
       await afterSettingsPersisted(coercedFormData.realtime?.dashboard?.locale, loadedLocale);
 
-      // Mark exactly what was sent as saved, not formData as it is now: an edit
-      // typed while the request was in flight must stay unsaved, or the next
-      // rebase would take it for unedited and discard it. Restart-required
-      // state is owned by the backend (refreshed in afterSettingsPersisted) and
-      // surfaced by the global RestartBanner, so it is not tracked client-side.
+      // Mark what was sent as saved, not formData as it is now, so an edit typed
+      // while the request was in flight stays unsaved. Restart-required state is
+      // owned by the backend (refreshed in afterSettingsPersisted) and surfaced
+      // by the global RestartBanner, so it is not tracked client-side.
       settingsStore.update(state => ({ ...state, originalData: sent, isSaving: false }));
     });
 
@@ -1694,7 +1631,6 @@ export const settingsActions = {
     if (!get(settingsStore).dataLoaded) return;
     await runSerialized(async () => {
       const fresh = await fetchServerSnapshot();
-      if (!get(settingsStore).dataLoaded) return;
       settingsStore.update(state => rebaseState(state, fresh));
     });
   },

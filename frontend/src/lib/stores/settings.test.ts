@@ -12,6 +12,7 @@ import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 import { deferred } from '../../test/async-helpers';
 import { lookup, serverSettings } from '../../test/settings-helpers';
+import { serveConfirmedSettings } from '../../test/settings-store-helpers';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -37,17 +38,6 @@ vi.mock('$lib/i18n/index.js', () => ({
   isValidLocale: vi.fn().mockReturnValue(true),
   t: vi.fn((key: string) => key),
 }));
-
-/**
- * Makes the mocked server hold what the store last confirmed, so a save's
- * rebase GET returns the store's own baseline. Tests that exercise a changing
- * server install their own load implementation.
- */
-function serveConfirmedSettings() {
-  vi.mocked(settingsAPI.load).mockImplementation(async () =>
-    JSON.parse(JSON.stringify(get(settingsStore).originalData))
-  );
-}
 
 beforeEach(() => {
   serveConfirmedSettings();

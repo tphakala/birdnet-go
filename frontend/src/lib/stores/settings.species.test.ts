@@ -4,6 +4,7 @@ import { settingsStore, settingsActions, type SpeciesConfig } from './settings';
 import { settingsAPI } from '$lib/utils/settingsApi';
 import { toastActions } from './toast';
 import { createEmptySettings } from '../../types/test-helpers';
+import { serveConfirmedSettings } from '../../test/settings-store-helpers';
 
 // Mock the settingsAPI
 vi.mock('$lib/utils/settingsApi', () => ({
@@ -129,9 +130,7 @@ describe('Species Settings Store', () => {
       // saveSettings refuses until a load has succeeded
       settingsStore.update(state => ({ ...state, dataLoaded: true }));
       // The server holds what the store last confirmed, which a save's rebase GET reads
-      vi.mocked(settingsAPI.load).mockImplementation(async () =>
-        JSON.parse(JSON.stringify(get(settingsStore).originalData))
-      );
+      serveConfirmedSettings();
     });
 
     afterEach(() => {

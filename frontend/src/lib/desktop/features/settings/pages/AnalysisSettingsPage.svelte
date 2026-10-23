@@ -1342,11 +1342,9 @@
     startInstall(modelId, modelName, variantId);
   }
 
-  // The server persists model config changes (models.enabled, source and stream
-  // model lists, model paths) outside the settings form. Rebase the store on the
-  // server so the form shows them and the next save does not write load-time values
-  // back. Fire and forget: a failure is logged and must not turn a successful
-  // gallery action into a failed one; the next save rebases again.
+  // Rebase the settings store on the server after a gallery action changed model
+  // config outside the form. Call it before the completion timer, which unmount
+  // cancels. A failure is only logged; the next save rebases again.
   function refreshSettingsAfterGalleryChange() {
     settingsActions.refreshKeepingEdits().catch((e: unknown) => {
       logger.error('Failed to refresh settings after a model gallery change:', e);
@@ -1382,8 +1380,6 @@
             totalFiles: 0,
           };
           progressCleanup = null;
-          // Before the timer: unmount cancels it, and the server has already
-          // written the model config by the time it reports completion.
           refreshSettingsAfterGalleryChange();
           clearTimeout(completionTimer);
           completionTimer = setTimeout(() => {
@@ -1517,8 +1513,6 @@
             totalFiles: 0,
           };
           progressCleanup = null;
-          // Before the timer: unmount cancels it, and the server has already
-          // written the model config by the time it reports completion.
           refreshSettingsAfterGalleryChange();
           clearTimeout(completionTimer);
           completionTimer = setTimeout(() => {
