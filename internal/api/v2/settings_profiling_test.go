@@ -29,9 +29,9 @@ func newProfilingTestController(t *testing.T) *Controller {
 // TestEnablingProfilingThroughSettingsMintsToken pins that switching profiling
 // on through either settings write path leaves a usable token in the published
 // snapshot when no auth provider is configured (the only case in which
-// conf.EnsureProfilingToken mints one). Both paths publish on their own (see the note on
-// ensureProfilingTokenForSave), so a mint wired into only one of them leaves the
-// other enabling pprof with an empty token that the gate then refuses until a
+// conf.EnsureProfilingToken mints one). Both go through commitSettings, which mints (see the note on
+// ensureProfilingTokenForSave), so a mint that stops covering one of them leaves
+// it enabling pprof with an empty token that the gate then refuses until a
 // restart.
 //
 // The PATCH row also pins that the diagnostics section is writable. It was
