@@ -1799,3 +1799,41 @@ describe('Settings Store - saveSettings rebases on the server state', () => {
     expect(lookup(body, ['realtime', 'rtsp', 'streams', '0', 'models'])).toEqual(['birdnet']);
   });
 });
+
+describe('Settings Store - tab change markers agree with the toolbar after a save', () => {
+  // SoundCardManager and StreamCard store a source without an equalizer as
+  // `equalizer: undefined`, a present key whose value JSON drops. The toolbar
+  // (hasUnsavedChanges) compares JSON; the Audio tab dots use hasSettingsChanged.
+  it('reports a saved audio source with an undefined equalizer as unchanged', async () => {
+    const snapshot = {
+      main: { name: 'TestNode' },
+      birdnet: {},
+      realtime: { audio: { sources: [{ name: 'Mic', device: 'hw:0' }] } },
+    } as unknown as SettingsFormData;
+    settingsStore.set({
+      formData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
+      originalData: JSON.parse(JSON.stringify(snapshot)) as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: true,
+    });
+
+    settingsActions.updateSection('realtime', {
+      audio: {
+        sources: [{ name: 'Mic', device: 'hw:1', equalizer: undefined }],
+      },
+    } as unknown as Partial<RealtimeSettings>);
+    await settingsActions.saveSettings({ notify: false });
+
+    const state = get(settingsStore);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(
+      hasSettingsChanged(
+        state.originalData.realtime?.audio?.sources,
+        state.formData.realtime?.audio?.sources
+      )
+    ).toBe(false);
+  });
+});

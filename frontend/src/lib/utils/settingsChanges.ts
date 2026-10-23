@@ -7,6 +7,11 @@
 
 import { safeGet, safeArrayAccess } from './security';
 
+/** Own enumerable keys of an object whose value is not undefined. */
+function definedKeys(obj: Record<string, unknown>): string[] {
+  return Object.keys(obj).filter(key => safeGet(obj, key) !== undefined);
+}
+
 /**
  * Deep compare two values to detect changes
  *
@@ -16,6 +21,8 @@ import { safeGet, safeArrayAccess } from './security';
  * - Efficient array and object iteration
  * - No JSON.stringify overhead
  * - Handles circular references gracefully
+ * - Ignores object keys whose value is undefined, matching JSON.stringify, which
+ *   the save toolbar uses
  *
  * @param a First value to compare
  * @param b Second value to compare
@@ -59,9 +66,9 @@ export function deepEqual(a: unknown, b: unknown, seen = new WeakSet()): boolean
     return true;
   }
 
-  // Objects
-  const keysA = Object.keys(objA);
-  const keysB = Object.keys(objB);
+  // Objects: keys whose value is undefined count as absent, as they do in JSON
+  const keysA = definedKeys(objA);
+  const keysB = definedKeys(objB);
 
   if (keysA.length !== keysB.length) return false;
 
