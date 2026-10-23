@@ -308,7 +308,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	telemetry.UpdateTelemetryEnabled()
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
-	if c.isGlobalOwner && !c.DisableSaveSettings {
+	if c.persistsSettings() {
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Settings updated and saved successfully",
 			logger.Int("skipped_fields_count", len(skippedFields)))
 	} else {
@@ -476,12 +476,12 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	if msg, err := c.finishSettingsWrite(current, updated, func() error { return c.handleSettingsChanges(current, updated) }); err != nil {
 		return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
 	}
-	if c.isGlobalOwner && !c.DisableSaveSettings {
+	if c.persistsSettings() {
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
 			logger.String("section", section))
 	}
 
-	if !c.isGlobalOwner || c.DisableSaveSettings {
+	if !c.persistsSettings() {
 		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Section settings updated (save to disk skipped)",
 			logger.String("section", section),
 			logger.Bool("publishGlobal", c.isGlobalOwner),
