@@ -64,8 +64,9 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Handler, *conf.Setting
 	oauth2Server := createTestOAuth2Server(t, settings)
 	authService := auth.NewSecurityAdapter(oauth2Server)
 
-	// Initialize gothic session store for testing (required for session operations)
-	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+	// Initialize gothic session store for testing (required for session
+	// operations). It is process-global, so restore it after the test.
+	setTestGothicStore(t, settings.Security.SessionSecret)
 
 	// Build the shared core (the auth handlers reach the logging helpers through
 	// it) and construct the auth Handler exactly as the facade does.
@@ -73,6 +74,15 @@ func setupAuthIntegrationTest(t *testing.T) (*echo.Echo, *Handler, *conf.Setting
 	h := New(core, authService)
 
 	return e, h, settings
+}
+
+// setTestGothicStore installs a cookie session store as the process-global
+// gothic.Store and restores the previous store on cleanup.
+func setTestGothicStore(t *testing.T, secret string) {
+	t.Helper()
+	prev := gothic.Store
+	t.Cleanup(func() { gothic.Store = prev })
+	gothic.Store = sessions.NewCookieStore([]byte(secret))
 }
 
 // createTestOAuth2Server creates an OAuth2Server with the provided settings for testing.
@@ -83,7 +93,7 @@ func createTestOAuth2Server(tb testing.TB, settings *conf.Settings) *security.OA
 
 // TestV2AuthFlow_CompleteLogin tests the complete V2 login flow end-to-end.
 func TestV2AuthFlow_CompleteLogin(t *testing.T) {
-	e, h, settings := setupAuthIntegrationTest(t)
+	e, h, _ := setupAuthIntegrationTest(t)
 
 	t.Run("complete login flow with V2 callback", func(t *testing.T) {
 		// Step 1: POST /api/v2/auth/login with valid credentials
@@ -135,15 +145,23 @@ func TestV2AuthFlow_CompleteLogin(t *testing.T) {
 		assert.NotEmpty(t, location)
 		t.Logf("Callback redirected to: %s", location)
 
-		// Verify session cookie was set
-		cookies := callbackRec.Result().Cookies()
-		t.Logf("Cookies set: %d", len(cookies))
-		for _, cookie := range cookies {
-			t.Logf("Cookie: %s = %s", cookie.Name, cookie.Value[:min(len(cookie.Value), 20)]+"...")
+		// The callback must establish a session: the response sets a live
+		// session cookie (the regenerated session also sends an expired one)
+		// whose session carries the access token.
+		var session *http.Cookie
+		for _, cookie := range callbackRec.Result().Cookies() {
+			if cookie.Name == gothic.SessionName && cookie.MaxAge > 0 {
+				session = cookie
+			}
 		}
+		require.NotNil(t, session, "the callback must set a live session cookie")
+		replay := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		replay.AddCookie(session)
+		token, err := gothic.GetFromSession("access_token", replay)
+		require.NoError(t, err, "the session cookie must carry the access token")
+		assert.NotEmpty(t, token)
+		require.NoError(t, h.authService.ValidateToken(token), "the stored token must be one the auth service accepts")
 	})
-
-	_ = settings // Use settings if needed for additional assertions
 }
 
 // TestV2AuthFlow_FilterQueryRedirectSurvives verifies that a post-login redirect
@@ -285,7 +303,7 @@ func TestV2AuthFlow_EmptyClientID_V1Compatible(t *testing.T) {
 
 	oauth2Server := createTestOAuth2Server(t, settings)
 	authService := auth.NewSecurityAdapter(oauth2Server)
-	gothic.Store = sessions.NewCookieStore([]byte(settings.Security.SessionSecret))
+	setTestGothicStore(t, settings.Security.SessionSecret)
 
 	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithSettings(settings))
 	h := New(core, authService)

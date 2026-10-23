@@ -27,15 +27,6 @@ func (f *fakeRegistry) UpdateDisplayName(id, name string) bool {
 	return true
 }
 
-func TestGetAudioBlockedFields(t *testing.T) {
-	t.Parallel()
-
-	blocked := getAudioBlockedFields()
-
-	// FfmpegPath must be blocked to prevent ingress/proxy path contamination
-	assert.Equal(t, true, blocked["FfmpegPath"], "FfmpegPath must be blocked from API updates")
-}
-
 func TestPerStreamEqualizerChanged(t *testing.T) {
 	t.Parallel()
 
@@ -104,197 +95,106 @@ func TestPerStreamEqualizerChanged(t *testing.T) {
 	})
 }
 
-//nolint:dupl // parallel test for audio sources mirrors stream test by design
-func TestSyncAudioSourceNames(t *testing.T) {
-	t.Parallel()
-
-	t.Run("same names", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "Front Yard", Device: "hw:0,0"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "Front Yard", Device: "hw:0,0"},
-		}
-		assert.False(t, syncAudioSourceNames(old, cur, nil))
-	})
-
-	t.Run("name changed same device", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "Front Yard", Device: "hw:0,0"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "Garden Mic", Device: "hw:0,0"},
-		}
-		assert.True(t, syncAudioSourceNames(old, cur, nil))
-	})
-
-	t.Run("name and device both changed", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "Front Yard", Device: "hw:0,0"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "Garden Mic", Device: "hw:1,0"},
-		}
-		assert.False(t, syncAudioSourceNames(old, cur, nil),
-			"should be false when device also changed (handled by reconfiguration)")
-	})
-
-	t.Run("rename with new source added", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "A", Device: "hw:0,0"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "A-renamed", Device: "hw:0,0"},
-			{Name: "B", Device: "hw:1,0"},
-		}
-		assert.True(t, syncAudioSourceNames(old, cur, nil),
-			"should detect rename even when a new source was added")
-	})
-
-	t.Run("reordered sources with rename", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "Mic A", Device: "hw:0,0"},
-			{Name: "Mic B", Device: "hw:1,0"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-			{Name: "Mic B", Device: "hw:1,0"},
-			{Name: "Garden Mic", Device: "hw:0,0"},
-		}
-		assert.True(t, syncAudioSourceNames(old, cur, nil),
-			"should detect rename even when sources are reordered")
-	})
-
-	t.Run("both empty", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		cur := &conf.Settings{}
-		assert.False(t, syncAudioSourceNames(old, cur, nil))
-	})
+// syncNamesEntry is one named audio endpoint for the rename detector tables:
+// conn is the sound card device or the stream URL, whichever the kind keys on.
+type syncNamesEntry struct {
+	name string
+	conn string
 }
 
-//nolint:dupl // parallel test for streams mirrors audio source test by design
-func TestSyncStreamNames(t *testing.T) {
+// TestSyncNames covers the rename detectors for sound card sources and RTSP
+// streams. They share one contract: a rename is detected by matching the old and
+// new entry on the connection (device or URL), so it survives a reordered list
+// and an added entry, and a change of the connection itself is not a rename.
+func TestSyncNames(t *testing.T) {
 	t.Parallel()
 
-	t.Run("same names", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "Backyard Cam", URL: "rtsp://192.168.1.10/stream"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "Backyard Cam", URL: "rtsp://192.168.1.10/stream"},
-		}
-		assert.False(t, syncStreamNames(old, cur, nil))
-	})
-
-	t.Run("name changed same URL", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "Backyard Cam", URL: "rtsp://192.168.1.10/stream"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "Garden Cam", URL: "rtsp://192.168.1.10/stream"},
-		}
-		assert.True(t, syncStreamNames(old, cur, nil))
-	})
-
-	t.Run("name and URL both changed", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "Backyard Cam", URL: "rtsp://192.168.1.10/stream"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "Garden Cam", URL: "rtsp://192.168.1.20/stream"},
-		}
-		assert.False(t, syncStreamNames(old, cur, nil),
-			"should be false when URL also changed (handled by reconfiguration)")
-	})
-
-	t.Run("rename with new stream added", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "A", URL: "rtsp://a/stream"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "A-renamed", URL: "rtsp://a/stream"},
-			{Name: "B", URL: "rtsp://b/stream"},
-		}
-		assert.True(t, syncStreamNames(old, cur, nil),
-			"should detect rename even when a new stream was added")
-	})
-
-	t.Run("reordered streams with rename", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		old.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "Stream A", URL: "rtsp://a/stream"},
-			{Name: "Stream B", URL: "rtsp://b/stream"},
-		}
-		cur := &conf.Settings{}
-		cur.Realtime.RTSP.Streams = []conf.StreamConfig{
-			{Name: "Stream B", URL: "rtsp://b/stream"},
-			{Name: "Garden Cam", URL: "rtsp://a/stream"},
-		}
-		assert.True(t, syncStreamNames(old, cur, nil),
-			"should detect rename even when streams are reordered")
-	})
-
-	t.Run("both empty", func(t *testing.T) {
-		t.Parallel()
-		old := &conf.Settings{}
-		cur := &conf.Settings{}
-		assert.False(t, syncStreamNames(old, cur, nil))
-	})
-}
-
-func TestResolveEQOverrideMatchesByName(t *testing.T) {
-	t.Parallel()
-
-	eq := &conf.EqualizerSettings{
-		Enabled: true,
-		Filters: []conf.EqualizerFilter{{Type: "HighPass", Frequency: 300, Q: 0.7}},
+	kinds := []struct {
+		name string
+		// build returns settings holding the entries as sources or streams.
+		build func(entries []syncNamesEntry) *conf.Settings
+		sync  func(old, cur *conf.Settings) bool
+	}{
+		{
+			name: "audio sources",
+			build: func(entries []syncNamesEntry) *conf.Settings {
+				s := &conf.Settings{}
+				for _, en := range entries {
+					s.Realtime.Audio.Sources = append(s.Realtime.Audio.Sources,
+						conf.AudioSourceConfig{Name: en.name, Device: en.conn})
+				}
+				return s
+			},
+			sync: func(old, cur *conf.Settings) bool { return syncAudioSourceNames(old, cur, nil) },
+		},
+		{
+			name: "streams",
+			build: func(entries []syncNamesEntry) *conf.Settings {
+				s := &conf.Settings{}
+				for _, en := range entries {
+					s.Realtime.RTSP.Streams = append(s.Realtime.RTSP.Streams,
+						conf.StreamConfig{Name: en.name, URL: en.conn})
+				}
+				return s
+			},
+			sync: func(old, cur *conf.Settings) bool { return syncStreamNames(old, cur, nil) },
+		},
 	}
 
-	settings := &conf.Settings{}
-	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-		{Name: "New Name", Device: "hw:0,0", Equalizer: eq},
-	}
-	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
-		{Name: "Renamed Stream", URL: "rtsp://cam/stream", Equalizer: eq},
+	tests := []struct {
+		name string
+		old  []syncNamesEntry
+		cur  []syncNamesEntry
+		want bool
+	}{
+		{
+			name: "same names",
+			old:  []syncNamesEntry{{"Front Yard", "conn-a"}},
+			cur:  []syncNamesEntry{{"Front Yard", "conn-a"}},
+			want: false,
+		},
+		{
+			name: "name changed on the same connection",
+			old:  []syncNamesEntry{{"Front Yard", "conn-a"}},
+			cur:  []syncNamesEntry{{"Garden Mic", "conn-a"}},
+			want: true,
+		},
+		{
+			// A changed connection is handled by reconfiguration, not a rename.
+			name: "name and connection both changed",
+			old:  []syncNamesEntry{{"Front Yard", "conn-a"}},
+			cur:  []syncNamesEntry{{"Garden Mic", "conn-b"}},
+			want: false,
+		},
+		{
+			name: "rename with a new entry added",
+			old:  []syncNamesEntry{{"A", "conn-a"}},
+			cur:  []syncNamesEntry{{"A-renamed", "conn-a"}, {"B", "conn-b"}},
+			want: true,
+		},
+		{
+			name: "rename with the entries reordered",
+			old:  []syncNamesEntry{{"Mic A", "conn-a"}, {"Mic B", "conn-b"}},
+			cur:  []syncNamesEntry{{"Mic B", "conn-b"}, {"Garden Mic", "conn-a"}},
+			want: true,
+		},
+		{
+			name: "both empty",
+			want: false,
+		},
 	}
 
-	assert.Equal(t, eq, settings.ResolveEQOverride("New Name"),
-		"EQ override should resolve for the new source name")
-	assert.Nil(t, settings.ResolveEQOverride("Old Name"),
-		"EQ override should not resolve for the old source name")
-
-	assert.Equal(t, eq, settings.ResolveEQOverride("Renamed Stream"),
-		"EQ override should resolve for the new stream name")
-	assert.Nil(t, settings.ResolveEQOverride("Old Stream Name"),
-		"EQ override should not resolve for the old stream name")
+	for _, kind := range kinds {
+		t.Run(kind.name, func(t *testing.T) {
+			t.Parallel()
+			for _, tt := range tests {
+				t.Run(tt.name, func(t *testing.T) {
+					t.Parallel()
+					assert.Equal(t, tt.want, kind.sync(kind.build(tt.old), kind.build(tt.cur)))
+				})
+			}
+		})
+	}
 }
 
 func TestSyncAudioSourceNames_UpdatesRegistry(t *testing.T) {

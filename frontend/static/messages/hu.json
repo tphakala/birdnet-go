@@ -2385,6 +2385,7 @@
     "errors": {
       "loadFailed": "A beállítások betöltése sikertelen",
       "saveFailed": "A beállítások mentése sikertelen",
+      "changedElsewhere": "A beállításokat máshol módosították. Ellenőrizze őket, és mentse újra.",
       "databaseStatsFailed": "Az adatbázis statisztikák betöltése sikertelen",
       "csvDownloadFailed": "A CSV letöltése sikertelen"
     },

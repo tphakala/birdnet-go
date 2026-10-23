@@ -1,6 +1,7 @@
 // ingress_test.go: Tests for the requestBasePath helper in the auth package
-// that resolves the reverse proxy base path from request headers.
-// This version only reads headers (no config fallback).
+// that resolves the reverse proxy base path: the value the server's context
+// middleware already stored, else the proxy request headers (no config
+// fallback).
 
 package auth
 
@@ -22,6 +23,7 @@ func TestRequestBasePath(t *testing.T) {
 		name             string
 		xIngressPath     string
 		xForwardedPrefix string
+		ctxBasePath      string // basePath set in the Echo context by the server's middleware
 		expected         string
 	}{
 		{
@@ -91,6 +93,40 @@ func TestRequestBasePath(t *testing.T) {
 			xIngressPath: "relative/path",
 			expected:     "",
 		},
+		// One rejected sequence per row, so dropping any entry other than "://"
+		// (subsumed by "//") from this package's isSafePathPrefix fails a row.
+		{
+			name:         "Path traversal in X-Ingress-Path rejected",
+			xIngressPath: "/ingress/../admin",
+			expected:     "",
+		},
+		{
+			name:         "Backslash in X-Ingress-Path rejected",
+			xIngressPath: `/ingress\evil.com`,
+			expected:     "",
+		},
+		{
+			name:         "Newline in X-Ingress-Path rejected",
+			xIngressPath: "/ingress\nX-Injected: 1",
+			expected:     "",
+		},
+		{
+			name:         "Carriage return in X-Ingress-Path rejected",
+			xIngressPath: "/ingress\rX-Injected: 1",
+			expected:     "",
+		},
+		{
+			name:         "NUL in X-Ingress-Path rejected",
+			xIngressPath: "/ingress\x00evil",
+			expected:     "",
+		},
+		// The server's context middleware has already resolved the base path.
+		{
+			name:         "Context basePath wins over headers",
+			ctxBasePath:  "/configured",
+			xIngressPath: "/ingress/token",
+			expected:     "/configured",
+		},
 	}
 
 	for _, tt := range tests {
@@ -107,6 +143,9 @@ func TestRequestBasePath(t *testing.T) {
 			}
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
+			if tt.ctxBasePath != "" {
+				c.Set("basePath", tt.ctxBasePath)
+			}
 
 			result := requestBasePath(c)
 			assert.Equal(t, tt.expected, result)

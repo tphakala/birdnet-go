@@ -1,11 +1,11 @@
-// settings_race_test.go: shared settings-snapshot race-test helper for the
-// api/v2 package.
+// global_settings_helpers_test.go: test helper for the api/v2 package that
+// protects the process-global settings pointer.
 //
 // The GetAppConfig live-snapshot and concurrent-save race regression tests moved
-// with the app domain to internal/api/v2/app. The shared helper below remains
-// here because the package-api race tests (api_error_response_race_test.go,
-// api_datastore_guard_test.go) still use it to snapshot and restore the
-// process-global settings pointer around a test that publishes its own snapshot.
+// with the app domain to internal/api/v2/app. The helper below remains here
+// because api_error_response_race_test.go still uses it to snapshot and restore
+// the process-global settings pointer around a test that publishes its own
+// snapshot.
 package api
 
 import (

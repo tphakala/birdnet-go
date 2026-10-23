@@ -2385,6 +2385,7 @@
     "errors": {
       "loadFailed": "Neizdevās ielādēt iestatījumus",
       "saveFailed": "Neizdevās saglabāt iestatījumus",
+      "changedElsewhere": "Iestatījumi tika mainīti citur. Pārskatiet tos un saglabājiet vēlreiz.",
       "databaseStatsFailed": "Neizdevās ielādēt datubāzes statistiku",
       "csvDownloadFailed": "Neizdevās lejupielādēt CSV"
     },

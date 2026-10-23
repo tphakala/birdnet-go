@@ -2385,6 +2385,7 @@
     "errors": {
       "loadFailed": "Error al cargar la configuración",
       "saveFailed": "Error al guardar la configuración",
+      "changedElsewhere": "La configuración se modificó en otro lugar. Revísala y vuelve a guardar.",
       "databaseStatsFailed": "Error al cargar las estadísticas de la base de datos",
       "csvDownloadFailed": "Error al descargar el CSV"
     },

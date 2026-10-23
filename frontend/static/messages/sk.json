@@ -2385,6 +2385,7 @@
     "errors": {
       "loadFailed": "Nepodarilo sa načítať nastavenia",
       "saveFailed": "Nepodarilo sa uložiť nastavenia",
+      "changedElsewhere": "Nastavenia boli zmenené inde. Skontrolujte ich a uložte znova.",
       "databaseStatsFailed": "Nepodarilo sa načítať štatistiky databázy",
       "csvDownloadFailed": "Nepodarilo sa stiahnuť CSV"
     },

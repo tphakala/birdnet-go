@@ -61,7 +61,7 @@ func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Cont
 	sunCalc := suncalc.NewSunCalc(testHelsinkiLatitude, testHelsinkiLongitude)
 
 	// Buffered control channel to prevent blocking in tests. Size 10 is sufficient
-	// for concurrent test scenarios (e.g., TestConcurrentControlRequests uses 5).
+	// for concurrent test scenarios.
 	controlChan := make(chan string, testControlChannelBuf)
 
 	// Mock metrics for testing

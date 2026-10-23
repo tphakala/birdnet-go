@@ -91,6 +91,15 @@ type Handler struct {
 	// directory the service user cannot swap. Defaults to the platform
 	// assertTrustedBase; tests override it (a test cannot create a root-owned dir).
 	verifyTrustedBase func(path string) error
+	// diskFreeFn reports the free bytes on the filesystem holding path for the
+	// migration disk_space prerequisite. nil means gopsutil disk.Usage; tests
+	// inject a fixed value so the check does not depend on the host disk. It is
+	// separate from freeBytesFn, which serves the Linux-only import staging check.
+	diskFreeFn func(path string) (uint64, error)
+	// availableMemoryFn reports the available memory in bytes for the
+	// memory_available prerequisite. nil means gopsutil mem.VirtualMemory; tests
+	// inject a fixed value.
+	availableMemoryFn func() (uint64, error)
 
 	// cleanupStatus tracks the state of legacy database cleanup. It is initialized
 	// lazily in RegisterLegacyCleanupRoutes; the migration status handler reads it

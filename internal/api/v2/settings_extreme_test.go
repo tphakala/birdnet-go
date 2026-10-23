@@ -1,230 +1,157 @@
 package api
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// TestExtremeValues verifies the system handles extreme values appropriately
-func TestExtremeValues(t *testing.T) {
-	t.Parallel()
+// summaryLimitReset is the value an out-of-range dashboard summaryLimit is reset
+// to (internal/conf/validate_realtime.go:169-172).
+const summaryLimitReset = 10
 
+// summaryLimitIsReset asserts the dashboard summaryLimit was reset, not stored.
+func summaryLimitIsReset(t *testing.T, s *conf.Settings) {
+	t.Helper()
+	assert.Equal(t, summaryLimitReset, s.Realtime.Dashboard.SummaryLimit)
+}
+
+// TestPatchNumericBounds pins the numeric limits a section PATCH enforces.
+// Rejected rows must answer 400 and publish nothing. Accepted rows must answer
+// 200 and store the value, which an out-of-range value that is clamped instead
+// of rejected (summaryLimit) shows as the clamped result.
+//
+// Every row sits on a limit that a validator checks (conf.ValidateBirdNETSettings
+// and conf.ValidateWebServerSettings in internal/conf/validate_services.go,
+// validateDashboardSettings in internal/conf/validate_realtime.go). A value no
+// validator bounds would only prove that encoding/json round-trips it, so there
+// are no such rows.
+//
+// Not parallel: see the note in settings_blocked_fields_test.go.
+func TestPatchNumericBounds(t *testing.T) {
 	tests := []struct {
-		name          string
-		section       string
-		extremeData   any
-		expectedError bool
-		description   string
+		name    string
+		section string
+		body    map[string]any
+		// accepted is nil for a row that must be rejected with 400.
+		accepted func(t *testing.T, s *conf.Settings)
 	}{
 		{
-			name:    "Maximum integer values",
-			section: "dashboard",
-			extremeData: map[string]any{
-				"summaryLimit": 2147483647, // Max int32 - exceeds valid range 10-1000
-			},
-			expectedError: false, // ValidateSettings auto-corrects to 10, returns success
-			description:   "Should auto-correct summaryLimit exceeding valid range",
-		},
-		{
-			name:    "Negative values where not allowed",
-			section: "dashboard",
-			extremeData: map[string]any{
-				"summaryLimit": -100,
-			},
-			expectedError: false, // ValidateSettings auto-corrects to 10, returns success
-			description:   "Should auto-correct negative summaryLimit",
-		},
-		{
-			name:    "Extreme coordinates",
+			name:    "coordinates beyond the globe are rejected",
 			section: "birdnet",
-			extremeData: map[string]any{
-				"latitude":  91.0,  // Invalid latitude
-				"longitude": 181.0, // Invalid longitude
-			},
-			expectedError: true, // Implementation rejects out-of-range coordinates
-			description:   "Should reject invalid coordinates",
+			body:    map[string]any{"latitude": 91.0, "longitude": 181.0},
 		},
 		{
-			name:    "Very small float values",
+			name:    "sensitivity near the float maximum is rejected",
 			section: "birdnet",
-			extremeData: map[string]any{
-				"threshold": 0.0000000001,
-			},
-			expectedError: false,
-			description:   "Should handle very small floats",
+			body:    map[string]any{"sensitivity": 1.7976931348623157e+308},
 		},
 		{
-			name:    "Empty arrays",
-			section: "species",
-			extremeData: map[string]any{
-				"include": []string{},
-				"exclude": []string{},
-			},
-			expectedError: false,
-			description:   "Should handle empty arrays",
-		},
-		{
-			name:    "Very large arrays",
-			section: "species",
-			extremeData: map[string]any{
-				"include": generateLargeStringArray(1000),
-			},
-			expectedError: false,
-			description:   "Should handle large arrays",
-		},
-		{
-			name:    "Zero values",
-			section: "birdnet",
-			extremeData: map[string]any{
-				"sensitivity": 0.0,
-				"threshold":   0.0,
-				"overlap":     0.0,
-			},
-			expectedError: false,
-			description:   "Should handle zero values",
-		},
-		{
-			name:    "Maximum float values",
-			section: "birdnet",
-			extremeData: map[string]any{
-				"sensitivity": 1.7976931348623157e+308, // Close to max float64 - exceeds valid range 0-1.5
-			},
-			expectedError: true,
-			description:   "Should reject sensitivity exceeding valid range",
-		},
-		{
-			name:    "Minimum positive float",
-			section: "birdnet",
-			extremeData: map[string]any{
-				"threshold": 5e-324, // Smallest positive float64
-			},
-			expectedError: false,
-			description:   "Should handle minimum positive float",
-		},
-		{
-			name:    "Negative zero",
-			section: "birdnet",
-			extremeData: map[string]any{
-				"overlap": 0.0,
-			},
-			expectedError: false,
-			description:   "Should handle zero",
-		},
-		{
-			name:    "Unicode in string fields",
-			section: "species",
-			extremeData: map[string]any{
-				"include": []string{"🦅 Eagle", "🦉 Owl", "🦆 Duck"},
-			},
-			expectedError: false,
-			description:   "Should handle Unicode characters",
-		},
-		{
-			name:    "Very long species names",
-			section: "species",
-			extremeData: map[string]any{
-				"config": map[string]any{
-					generateLongString(500): map[string]any{
-						"threshold": 0.8,
-					},
-				},
-			},
-			expectedError: false,
-			description:   "Should handle very long species names",
-		},
-		{
-			name:    "Port number edge cases",
+			name:    "port one above the maximum is rejected",
 			section: "webserver",
-			extremeData: map[string]any{
-				"port": "65535", // Maximum valid port
-			},
-			expectedError: false,
-			description:   "Should handle maximum port number",
+			body:    map[string]any{"port": "65536"},
 		},
 		{
-			name:    "Invalid port number",
+			name:    "coordinates at the minimum are accepted",
+			section: "birdnet",
+			body:    map[string]any{"latitude": -90.0, "longitude": -180.0},
+			accepted: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.InDelta(t, -90.0, s.BirdNET.Latitude, 0.0001)
+				assert.InDelta(t, -180.0, s.BirdNET.Longitude, 0.0001)
+			},
+		},
+		{
+			name:    "coordinates at the maximum are accepted",
+			section: "birdnet",
+			body:    map[string]any{"latitude": 90.0, "longitude": 180.0},
+			accepted: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.InDelta(t, 90.0, s.BirdNET.Latitude, 0.0001)
+				assert.InDelta(t, 180.0, s.BirdNET.Longitude, 0.0001)
+			},
+		},
+		{
+			name:    "sensitivity, threshold and overlap at their lower bounds are accepted",
+			section: "birdnet",
+			body:    map[string]any{"sensitivity": 0.0, "threshold": 0.0, "overlap": 0.0},
+			accepted: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.InDelta(t, 0.0, s.BirdNET.Sensitivity, 0.0001)
+				assert.InDelta(t, 0.0, s.BirdNET.Threshold, 0.0001)
+				assert.InDelta(t, 0.0, s.BirdNET.Overlap, 0.0001)
+			},
+		},
+		{
+			name:    "sensitivity, threshold and overlap at their upper bounds are accepted",
+			section: "birdnet",
+			body:    map[string]any{"sensitivity": 1.5, "threshold": 1.0, "overlap": 2.99},
+			accepted: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.InDelta(t, 1.5, s.BirdNET.Sensitivity, 0.0001)
+				assert.InDelta(t, 1.0, s.BirdNET.Threshold, 0.0001)
+				assert.InDelta(t, 2.99, s.BirdNET.Overlap, 0.0001)
+			},
+		},
+		{
+			name:    "minimum port is accepted",
 			section: "webserver",
-			extremeData: map[string]any{
-				"port": "65536", // One above maximum
+			body:    map[string]any{"port": "1"},
+			accepted: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, "1", s.WebServer.Port)
 			},
-			expectedError: true, // Implementation rejects invalid port numbers
-			description:   "Should reject invalid port number",
 		},
 		{
-			name:    "Time duration extremes",
-			section: "mqtt",
-			extremeData: map[string]any{
-				"retrySettings": map[string]any{
-					"maxRetries":   2147483647,
-					"initialDelay": 2147483647,
-					"maxDelay":     2147483647,
-				},
+			name:    "maximum port is accepted",
+			section: "webserver",
+			body:    map[string]any{"port": "65535"},
+			accepted: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, "65535", s.WebServer.Port)
 			},
-			expectedError: false,
-			description:   "Should handle extreme time durations",
+		},
+		// An out-of-range summaryLimit is reset instead of rejected
+		// (internal/conf/validate_realtime.go:169-172).
+		{
+			name:     "summaryLimit above the maximum is reset to the minimum",
+			section:  "dashboard",
+			body:     map[string]any{"summaryLimit": 2147483647},
+			accepted: summaryLimitIsReset,
+		},
+		{
+			name:     "negative summaryLimit is reset to the minimum",
+			section:  "dashboard",
+			body:     map[string]any{"summaryLimit": -100},
+			accepted: summaryLimitIsReset,
+		},
+		{
+			name:     "summaryLimit below the minimum is reset to the minimum",
+			section:  "dashboard",
+			body:     map[string]any{"summaryLimit": 5},
+			accepted: summaryLimitIsReset,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := echo.New()
 			controller := getTestController(t, e)
+			before := controller.Settings.Load()
 
-			body, err := json.Marshal(tt.extremeData)
-			require.NoError(t, err)
+			rec := sendSectionPatch(t, e, controller, tt.section, tt.body)
 
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
-				bytes.NewReader(body))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			rec := httptest.NewRecorder()
-			ctx := e.NewContext(req, rec)
-			ctx.SetParamNames("section")
-			ctx.SetParamValues(tt.section)
-
-			err = controller.UpdateSectionSettings(ctx)
-
-			if tt.expectedError {
-				// Use helper function to assert error response (expects BadRequest for extreme values)
-				apitest.AssertControllerError(t, err, rec, http.StatusBadRequest, "")
-				t.Logf("Extreme value properly rejected: %s", tt.description)
-			} else {
-				if err != nil {
-					t.Logf("Update failed (might be expected): %v", err)
-				} else {
-					assert.Equal(t, http.StatusOK, rec.Code, tt.description)
-				}
+			if tt.accepted == nil {
+				assert.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+				assert.Same(t, before, controller.Settings.Load(), "a rejected value must not be published")
+				return
 			}
+			require.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+			tt.accepted(t, controller.Settings.Load())
 		})
 	}
-}
-
-// Helper functions
-
-// generateLargeStringArray generates an array of strings for testing
-func generateLargeStringArray(size int) []string {
-	result := make([]string, size)
-	for i := range size {
-		result[i] = fmt.Sprintf("species_%d", i)
-	}
-	return result
-}
-
-// generateLongString generates a long string for testing
-func generateLongString(length int) string {
-	result := make([]byte, length)
-	for i := range result {
-		result[i] = byte('A' + (i % 26))
-	}
-	return string(result)
 }

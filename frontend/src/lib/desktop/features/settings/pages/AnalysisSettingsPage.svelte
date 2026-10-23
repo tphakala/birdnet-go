@@ -1342,6 +1342,15 @@
     startInstall(modelId, modelName, variantId);
   }
 
+  // Rebase the settings store on the server after a gallery action changed model
+  // config outside the form. Call it before the completion timer, which unmount
+  // cancels. A failure is only logged; the next save rebases again.
+  function refreshSettingsAfterGalleryChange() {
+    settingsActions.refreshKeepingEdits().catch((e: unknown) => {
+      logger.error('Failed to refresh settings after a model gallery change:', e);
+    });
+  }
+
   // The install body, extracted so a failed install's Retry can re-run it without
   // reopening the license dialog (the license was accepted this session).
   async function startInstall(modelId: string, modelName: string, variantId: string | undefined) {
@@ -1371,6 +1380,7 @@
             totalFiles: 0,
           };
           progressCleanup = null;
+          refreshSettingsAfterGalleryChange();
           clearTimeout(completionTimer);
           completionTimer = setTimeout(() => {
             if (installingId === modelId) {
@@ -1454,6 +1464,7 @@
 
     try {
       await uninstallModel(modelId);
+      refreshSettingsAfterGalleryChange();
       invalidateModels();
       await loadCatalog();
       toastActions.success(t('analysis.gallery.removeSuccess', { name: modelName }));
@@ -1502,6 +1513,7 @@
             totalFiles: 0,
           };
           progressCleanup = null;
+          refreshSettingsAfterGalleryChange();
           clearTimeout(completionTimer);
           completionTimer = setTimeout(() => {
             if (reinstallingId === modelId) {

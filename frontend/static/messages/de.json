@@ -2385,6 +2385,7 @@
     "errors": {
       "loadFailed": "Einstellungen konnten nicht geladen werden",
       "saveFailed": "Einstellungen konnten nicht gespeichert werden",
+      "changedElsewhere": "Die Einstellungen wurden an anderer Stelle geändert. Bitte prüfen Sie sie und speichern Sie erneut.",
       "databaseStatsFailed": "Datenbankstatistiken konnten nicht geladen werden",
       "csvDownloadFailed": "CSV-Download fehlgeschlagen"
     },

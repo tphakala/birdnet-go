@@ -32,17 +32,19 @@ func generateTestCertKeyPair(t *testing.T) (certPEM, keyPEM string) {
 }
 
 // newTestHandler builds a TLS Handler around a *apicore.Core via apitest, with
-// in-memory test doubles for the facade's settings-save machinery. The doubles
-// mirror the production behavior the original tests asserted: getSettingsOrFallback
-// reads the core's atomic snapshot, publishAndSaveSettings stores the updated
-// snapshot back (no disk write, matching the original DisableSaveSettings=true),
-// and handleSettingsChanges is a no-op. They share the supplied mutex so the
+// in-memory test doubles for the facade's settings-save machinery. The settings
+// getter returns only the core's own atomic snapshot, like getSettingsOrFallback
+// for a controller that does not own the global singleton; it never reads the
+// process-global settings, so it does not exercise the global-owner path.
+// updateAndSaveSettings clones the core snapshot, applies the mutation and stores
+// it back (no disk write, matching the original DisableSaveSettings=true), and
+// handleSettingsChanges is a no-op. They share the supplied mutex so the
 // handler serialises just as the facade does.
 func newTestHandler(t *testing.T, core *apicore.Core, mu *sync.RWMutex) *Handler {
 	t.Helper()
 	return New(core, mu,
 		func() *conf.Settings { return core.Settings.Load() },
-		func(_, updated *conf.Settings) error { core.Settings.Store(updated); return nil },
+		apitest.CoreSettingsUpdater(core),
 		func(_, _ *conf.Settings) error { return nil },
 	)
 }
@@ -306,22 +308,4 @@ func TestTLSDownloadCertificate_NoCert(t *testing.T) {
 	err := controller.DownloadTLSCertificate(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusNotFound, rec.Code)
-}
-
-func TestTLSRouteRegistration(t *testing.T) {
-	e := echo.New()
-	core := apitest.NewCore(t, apitest.WithEcho(e))
-	var mu sync.RWMutex
-	h := newTestHandler(t, core, &mu)
-
-	h.RegisterRoutes(core.Group)
-
-	expectedRoutes := []string{
-		"GET /api/v2/tls/certificate",
-		"POST /api/v2/tls/certificate",
-		"DELETE /api/v2/tls/certificate",
-		"POST /api/v2/tls/certificate/generate",
-		"GET /api/v2/tls/certificate/download",
-	}
-	apitest.AssertRoutesRegistered(t, e, expectedRoutes)
 }

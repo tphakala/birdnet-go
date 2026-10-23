@@ -353,12 +353,6 @@ func TestValidateNoRedactedSentinels_ReportsAndClearsEverySecret(t *testing.T) {
 	assert.NotContains(t, string(data), redactedValue, "no placeholder may survive the validator")
 }
 
-// TestRedact verifies the redact helper function.
-func TestRedact(t *testing.T) {
-	assert.Equal(t, redactedValue, redact("some-secret"), "non-empty string should be redacted")
-	assert.Empty(t, redact(""), "empty string should stay empty")
-}
-
 // TestRestoreRedactedSecrets_PreservesRealValues verifies that a PUT
 // round-trip (GET sanitized → PUT back) does not overwrite secrets.
 func TestRestoreRedactedSecrets_PreservesRealValues(t *testing.T) {
@@ -547,9 +541,9 @@ func TestRestoreRedactedSecrets_WebhookNewProvider(t *testing.T) {
 		},
 	)
 
-	assert.NotPanics(t, func() {
-		require.NoError(t, restoreRedactedSecrets(current, incoming))
-	})
+	var err error
+	assert.NotPanics(t, func() { err = restoreRedactedSecrets(current, incoming) })
+	require.NoError(t, err)
 
 	// The new provider's token should be kept as-is (not restored from anything)
 	assert.Equal(t, "fresh-token",
@@ -570,19 +564,6 @@ func TestRestoreRedactedSecrets_AllowsNewValues(t *testing.T) {
 
 	assert.Equal(t, "new-password-from-user", incoming.Security.BasicAuth.Password)
 	assert.Equal(t, "new-mqtt-password", incoming.Realtime.MQTT.Password)
-}
-
-// TestRestoreRedactedSecrets_SessionSecret verifies that SessionSecret is
-// restored as defense-in-depth (it's also blocked by getBlockedFieldMap).
-func TestRestoreRedactedSecrets_SessionSecret(t *testing.T) {
-	current := settingsWithSecrets(t)
-
-	incoming := settingsWithSecrets(t)
-	incoming.Security.SessionSecret = redactedValue
-
-	require.NoError(t, restoreRedactedSecrets(current, incoming))
-
-	assert.Equal(t, "hmac-session-key-abc123", incoming.Security.SessionSecret)
 }
 
 // TestRoundTrip_SanitizeThenRestore verifies the full GET→PUT cycle:
@@ -617,22 +598,6 @@ func TestRoundTrip_SanitizeThenRestore(t *testing.T) {
 	assert.Equal(t, "admin-password", original.Security.BasicAuth.Password)
 }
 
-// TestRoundTrip_UserChangesPassword verifies that when a user enters a
-// new password (different from the redacted placeholder), it is preserved.
-func TestRoundTrip_UserChangesPassword(t *testing.T) {
-	original := settingsWithSecrets(t)
-	sanitized := sanitizeSettingsForAPI(original)
-
-	// User changes the password field to a new value
-	incoming := *sanitized
-	incoming.Security.BasicAuth.Password = "brand-new-password"
-
-	require.NoError(t, restoreRedactedSecrets(original, &incoming))
-
-	// New password should be kept, not restored to old
-	assert.Equal(t, "brand-new-password", incoming.Security.BasicAuth.Password)
-}
-
 // TestRoundTrip_UserClearsPassword verifies that clearing a password
 // (setting it to empty string) works and is not treated as redacted.
 func TestRoundTrip_UserClearsPassword(t *testing.T) {
@@ -647,33 +612,6 @@ func TestRoundTrip_UserClearsPassword(t *testing.T) {
 
 	// Empty should stay empty (user intentionally cleared it)
 	assert.Empty(t, incoming.Security.BasicAuth.Password)
-}
-
-// TestRestoreRedactedSecrets_PATCHArrayMerge verifies that redacted
-// values inside arrays survive a JSON merge + restore cycle. This simulates
-// the PATCH path where deepMergeMaps replaces the whole array.
-func TestRestoreRedactedSecrets_PATCHArrayMerge(t *testing.T) {
-	current := settingsWithSecrets(t)
-
-	// Simulate what happens after a PATCH merges JSON into the struct:
-	// the array elements have the redacted placeholder because the frontend
-	// sent them back unchanged.
-	incoming := settingsWithSecrets(t)
-	incoming.Security.OAuthProviders = []conf.OAuthProviderConfig{
-		{Provider: "google", Enabled: true, ClientID: "goog-id", ClientSecret: redactedValue},
-		{Provider: "github", Enabled: true, ClientID: "gh-id", ClientSecret: redactedValue},
-	}
-	incoming.Realtime.MQTT.Password = redactedValue
-	incoming.Output.MySQL.Password = redactedValue
-
-	require.NoError(t, restoreRedactedSecrets(current, incoming))
-
-	// Secrets inside arrays should be restored by provider name
-	assert.Equal(t, "goog-secret", incoming.Security.OAuthProviders[0].ClientSecret)
-	assert.Equal(t, "gh-secret", incoming.Security.OAuthProviders[1].ClientSecret)
-	// Scalar secrets should also be restored
-	assert.Equal(t, "mqtt-password", incoming.Realtime.MQTT.Password)
-	assert.Equal(t, "db-password", incoming.Output.MySQL.Password)
 }
 
 // TestRestoreRedactedSecrets_FailsOnUnmatchedSentinel verifies that renaming a

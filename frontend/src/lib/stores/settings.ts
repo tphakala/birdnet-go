@@ -45,12 +45,17 @@ import type {
 } from '$lib/desktop/features/settings/pages/audioExportFormat';
 import { t } from '$lib/i18n';
 import { getLogger } from '$lib/utils/logger';
+import { pruneRemovedModelAliases } from '$lib/utils/modelAliases';
 import { isPlainObject, safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import type { SettingsSectionName, SettingsSectionPayloads } from '$lib/utils/settingsApi.js';
 import { withoutServerOwnedKeys } from '$lib/utils/settingsSections';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
-import { mergeSettingsPatch, mergeSettingsPatchKeepingEdits } from '$lib/utils/settingsMerge';
+import {
+  mergeSettingsPatch,
+  mergeSettingsPatchKeepingEdits,
+  rebaseSettingsKeepingEdits,
+} from '$lib/utils/settingsMerge';
 import { SPECIES_GUIDE_DEFAULT_WARM_TOP_N } from '$lib/utils/speciesGuideLimits';
 import { DEFAULT_REGION_MODE } from '$lib/utils/variantSelection';
 import { weatherDefaults } from '$lib/utils/weatherDefaults';
@@ -1435,61 +1440,185 @@ const inFlightSectionSaves = new Set<Promise<void>>();
  */
 let pendingFullSave: { done: Promise<void>; notify: boolean } | null = null;
 
+let serverSyncTail: Promise<void> = Promise.resolve();
+const ignoreOutcome = () => undefined;
+
 /**
- * Snapshots formData and sends it to the backend, then marks it saved. Resets isSaving
- * and rethrows on every failure path, including the refusal before a load.
+ * Runs task after every earlier queued task has settled, so a refresh or a load
+ * applies wholly before or wholly after a full save and a GET issued before a
+ * PUT can never land after it. Orders loads, rebases and full saves only;
+ * section saves are not queued.
+ */
+function runSerialized<T>(task: () => Promise<T>): Promise<T> {
+  const result = serverSyncTail.then(task);
+  serverSyncTail = result.then(ignoreOutcome, ignoreOutcome);
+  return result;
+}
+
+/** Applies the per-section coercion to every object section. Keys without a coercion rule pass through. */
+function coerceAllSections(data: SettingsFormData): SettingsFormData {
+  const coerced = { ...data };
+  for (const [section, sectionData] of Object.entries(data)) {
+    if (sectionData && typeof sectionData === 'object') {
+      // eslint-disable-next-line security/detect-object-injection -- Safe: section from Object.entries of known object
+      (coerced as unknown as Record<string, unknown>)[section] = coerceSettings(
+        section,
+        sectionData as Record<string, unknown>
+      );
+    }
+  }
+  return coerced;
+}
+
+/**
+ * Spreads a settings response over the defaults and coerces each object section.
+ * Keys the interfaces do not declare (for example models) are kept as received.
+ */
+function normalizeLoadedSettings(data: SettingsFormData): SettingsFormData {
+  return coerceAllSections({ ...createEmptySettings(), ...data });
+}
+
+/** HTTP status the backend answers a stale If-Match with. */
+const HTTP_PRECONDITION_FAILED = 412;
+
+/** Tries a full save makes: one send plus one resend after a 412 and a rebase. */
+const MAX_SETTINGS_SAVE_ATTEMPTS = 2;
+
+/** Prefix of a weak entity tag; the backend compares If-Match strongly, so a weak tag never matches. */
+const WEAK_ETAG_PREFIX = 'W/';
+
+/** Thrown when every save attempt got a 412: the settings keep changing under the form. */
+class SettingsChangedElsewhereError extends Error {
+  /** The status of the conflict it reports, so telemetry filters it like the 412 itself. */
+  readonly status = HTTP_PRECONDITION_FAILED;
+
+  constructor() {
+    super(t('settings.errors.changedElsewhere'));
+    this.name = 'SettingsChangedElsewhereError';
+  }
+}
+
+/**
+ * True for a 412 from the backend. Duck-typed on status: the store does not
+ * import the api module's ApiError, and tests mock settingsApi only.
+ */
+function isPreconditionFailed(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    error.status === HTTP_PRECONDITION_FAILED
+  );
+}
+
+/**
+ * The If-Match value to send for an ETag from the pre-save GET: only a strong
+ * ETag. Absent (an older backend) or weak (a proxy weakened it) means no
+ * protection, which is how saves worked before If-Match, rather than a save
+ * that can never match.
+ */
+function usableIfMatch(etag: string | null): string | undefined {
+  return etag && !etag.startsWith(WEAK_ETAG_PREFIX) ? etag : undefined;
+}
+
+/**
+ * Fetches the current server settings, normalized like a load, with the ETag
+ * the response carried (null when absent). Throws on a malformed response.
+ */
+async function fetchServerSnapshot(): Promise<{
+  snapshot: SettingsFormData;
+  etag: string | null;
+}> {
+  let etag: string | null = null;
+  const data = await settingsAPI.load({
+    onETag: value => {
+      etag = value;
+    },
+  });
+  if (!isPlainObject(data)) {
+    throw new Error(t('settings.errors.loadFailed'));
+  }
+  return { snapshot: normalizeLoadedSettings(data), etag };
+}
+
+/**
+ * Rebases the state on a fresh server snapshot: pending edits are kept, every
+ * other path takes the server value, and originalData becomes the snapshot.
+ */
+function rebaseState(state: GlobalSettingsState, fresh: SettingsFormData): GlobalSettingsState {
+  const merged = rebaseSettingsKeepingEdits(
+    { ...state.formData },
+    { ...state.originalData },
+    { ...fresh }
+  );
+  const formData = pruneRemovedModelAliases({ ...fresh, ...merged }, state.originalData, fresh);
+  return { ...state, formData, originalData: JSON.parse(JSON.stringify(fresh)) };
+}
+
+/**
+ * Rebases the store on the current server state, then sends the whole form to
+ * the backend and marks exactly what was sent as saved. The PUT carries the
+ * snapshot's strong ETag as If-Match; on a 412 (the settings changed between the
+ * GET and the PUT) the rebase and send run once more on a fresh snapshot, and a
+ * second 412 fails the save with SettingsChangedElsewhereError, edits kept.
+ * Resets isSaving and rethrows on every failure path, including the refusal
+ * before a load. A failed fetch of the server state fails the save before any
+ * request is sent.
  */
 async function persistFormData(notify: boolean): Promise<void> {
   try {
-    const currentState = get(settingsStore);
-    if (!currentState.dataLoaded) {
+    if (!get(settingsStore).dataLoaded) {
       logger.warn('Refusing to save settings before they have been loaded');
       throw new Error(t('settings.errors.loadFailed'));
     }
     settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
 
-    // Apply coercion to all sections before saving
-    const coercedFormData = { ...currentState.formData };
-    for (const [section, data] of Object.entries(coercedFormData)) {
-      if (data && typeof data === 'object') {
-        const key = section as keyof SettingsFormData;
-        // Use a type assertion to handle the assignment
-        // eslint-disable-next-line security/detect-object-injection -- key is from controlled source
-        (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
-          section,
-          data as Record<string, unknown>
-        );
+    await runSerialized(async () => {
+      for (let attempt = 1; ; attempt++) {
+        // Rebase first so a change made on the server since the load (a model
+        // gallery action) is not overwritten by load-time values.
+        const { snapshot, etag } = await fetchServerSnapshot();
+        settingsStore.update(state => rebaseState(state, snapshot));
+        const rebased = get(settingsStore);
+        const sent: SettingsFormData = JSON.parse(JSON.stringify(rebased.formData));
+        const loadedLocale = rebased.originalData.realtime?.dashboard?.locale;
+
+        const coercedFormData = coerceAllSections(sent);
+
+        // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
+        // This ensures the config file is properly cleaned when users clear these fields
+        // Trim whitespace to handle cases like "   " which should also be treated as empty
+        if (coercedFormData.birdnet.modelPath?.trim() === '') {
+          coercedFormData.birdnet.modelPath = null;
+        }
+        if (coercedFormData.birdnet.labelPath?.trim() === '') {
+          coercedFormData.birdnet.labelPath = null;
+        }
+
+        // Only pass options when there is an If-Match, so a bare save() call stays as before.
+        const ifMatch = usableIfMatch(etag);
+        try {
+          await (ifMatch
+            ? settingsAPI.save(coercedFormData, { ifMatch })
+            : settingsAPI.save(coercedFormData));
+        } catch (error) {
+          if (!isPreconditionFailed(error)) throw error;
+          if (attempt >= MAX_SETTINGS_SAVE_ATTEMPTS) throw new SettingsChangedElsewhereError();
+          continue;
+        }
+
+        // Read newLocale from coercedFormData (the value we actually persisted)
+        // and compare to originalData (the snapshot rebased on the backend).
+        await afterSettingsPersisted(coercedFormData.realtime?.dashboard?.locale, loadedLocale);
+
+        // Mark what was sent as saved, not formData as it is now, so an edit typed
+        // while the request was in flight stays unsaved. Restart-required state is
+        // owned by the backend (refreshed in afterSettingsPersisted) and surfaced
+        // by the global RestartBanner, so it is not tracked client-side.
+        settingsStore.update(state => ({ ...state, originalData: sent, isSaving: false }));
+        return;
       }
-    }
-
-    // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
-    // This ensures the config file is properly cleaned when users clear these fields
-    // Trim whitespace to handle cases like "   " which should also be treated as empty
-    if (coercedFormData.birdnet.modelPath?.trim() === '') {
-      coercedFormData.birdnet.modelPath = null;
-    }
-    if (coercedFormData.birdnet.labelPath?.trim() === '') {
-      coercedFormData.birdnet.labelPath = null;
-    }
-
-    await settingsAPI.save(coercedFormData);
-
-    // Read newLocale from coercedFormData (the value we actually persisted)
-    // and compare to originalData (the snapshot loaded from the backend).
-    await afterSettingsPersisted(
-      coercedFormData.realtime?.dashboard?.locale,
-      currentState.originalData.realtime?.dashboard?.locale
-    );
-
-    // Update originalData to match the saved formData (no reload needed).
-    // Restart-required state is owned by the backend (refreshed in
-    // afterSettingsPersisted) and surfaced by the global RestartBanner, so
-    // it is no longer tracked client-side here.
-    settingsStore.update(state => ({
-      ...state,
-      originalData: JSON.parse(JSON.stringify(state.formData)),
-      isSaving: false,
-    }));
+    });
 
     if (notify) {
       toastActions.success(t('notifications.content.settings.savedSuccessfully'));
@@ -1503,7 +1632,11 @@ async function persistFormData(notify: boolean): Promise<void> {
     }));
 
     if (notify) {
-      toastActions.error(t('notifications.content.settings.saveFailed'));
+      toastActions.error(
+        error instanceof SettingsChangedElsewhereError
+          ? error.message
+          : t('notifications.content.settings.saveFailed')
+      );
     }
 
     throw error;
@@ -1586,26 +1719,20 @@ export const settingsActions = {
   async loadSettings() {
     settingsStore.update(state => ({ ...state, isLoading: true, error: null }));
     try {
-      const data = await settingsAPI.load();
-      const mergedData = { ...createEmptySettings(), ...data };
+      // Queued with full saves and refreshes, so a load never lands between a
+      // save's rebase and the originalData write that ends it.
+      await runSerialized(async () => {
+        const data = await settingsAPI.load();
+        const coercedData = normalizeLoadedSettings(data);
 
-      // Apply coercion to each section
-      const coercedData = { ...mergedData };
-      for (const [section, sectionData] of Object.entries(mergedData)) {
-        if (sectionData && typeof sectionData === 'object') {
-          const coercedSection = coerceSettings(section, sectionData as Record<string, unknown>);
-          // eslint-disable-next-line security/detect-object-injection -- Safe: section from Object.entries of known object
-          (coercedData as unknown as Record<string, unknown>)[section] = coercedSection;
-        }
-      }
-
-      settingsStore.update(state => ({
-        ...state,
-        formData: coercedData,
-        originalData: JSON.parse(JSON.stringify(coercedData)),
-        isLoading: false,
-        dataLoaded: true,
-      }));
+        settingsStore.update(state => ({
+          ...state,
+          formData: coercedData,
+          originalData: JSON.parse(JSON.stringify(coercedData)),
+          isLoading: false,
+          dataLoaded: true,
+        }));
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('settings.errors.loadFailed');
       settingsStore.update(state => ({
@@ -1615,6 +1742,22 @@ export const settingsActions = {
       }));
       throw error;
     }
+  },
+
+  /**
+   * Rebases the store on the current server settings without losing unsaved
+   * edits. For actions the server persists outside the form (the model
+   * gallery): unedited paths take the server value, edited paths keep the form
+   * value. Returns at once before a load has succeeded. Does not touch
+   * isLoading, isSaving or error, and rejects on failure so the caller decides
+   * how to report it. Runs in order with full saves.
+   */
+  async refreshKeepingEdits(): Promise<void> {
+    if (!get(settingsStore).dataLoaded) return;
+    await runSerialized(async () => {
+      const { snapshot } = await fetchServerSnapshot();
+      settingsStore.update(state => rebaseState(state, snapshot));
+    });
   },
 
   updateSection<K extends keyof SettingsFormData>(section: K, data: Partial<SettingsFormData[K]>) {
@@ -1727,7 +1870,10 @@ export const settingsActions = {
    * Saves the whole formData to the backend. Refuses (throws before any network
    * call) while no settings load has succeeded, because formData would then hold
    * empty defaults that the backend deep-merges over the real configuration.
-   * Pass `{ notify: false }` to suppress the success and failure toasts.
+   * It first fetches the server settings and merges the unsaved edits onto them,
+   * so changes made on the server since the load (a model gallery install) are
+   * not reverted; a failed fetch fails the save with no PUT, and every full save
+   * costs one extra GET. Pass `{ notify: false }` to suppress the success and failure toasts.
    *
    * A call made while an earlier call still waits for section saves joins it:
    * one request, one result, and the success or failure toast if any joined call

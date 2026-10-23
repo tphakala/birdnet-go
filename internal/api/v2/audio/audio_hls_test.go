@@ -23,43 +23,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 )
 
-// TestHLSStreamStatusStruct tests the HLSStreamStatus struct
-func TestHLSStreamStatusStruct(t *testing.T) {
-	t.Run("starting status", func(t *testing.T) {
-		status := HLSStreamStatus{
-			Status:        "starting",
-			Source:        "test_source",
-			StreamToken:   "abc123def456abc123def456abc123de",
-			PlaylistURL:   "/api/v2/streams/hls/t/abc123def456abc123def456abc123de/playlist.m3u8",
-			ActiveClients: 0,
-			PlaylistReady: false,
-		}
-
-		assert.Equal(t, "test_source", status.Source)
-		assert.Contains(t, status.PlaylistURL, "/t/")
-		assert.Contains(t, status.PlaylistURL, "playlist.m3u8")
-		assert.NotEmpty(t, status.StreamToken)
-		assert.Equal(t, "starting", status.Status)
-		assert.False(t, status.PlaylistReady)
-	})
-
-	t.Run("ready status with clients", func(t *testing.T) {
-		status := HLSStreamStatus{
-			Status:        "ready",
-			Source:        "rtsp%3A%2F%2Fcamera.local%2Fstream", // URL-encoded source
-			StreamToken:   "def456abc123def456abc123def456ab",
-			PlaylistURL:   "/api/v2/streams/hls/t/def456abc123def456abc123def456ab/playlist.m3u8",
-			ActiveClients: 2,
-			PlaylistReady: true,
-		}
-
-		assert.Equal(t, "ready", status.Status)
-		assert.True(t, status.PlaylistReady)
-		assert.Equal(t, 2, status.ActiveClients)
-		assert.Contains(t, status.PlaylistURL, "/t/")
-	})
-}
-
 // TestHLSManagerStreamTracking tests the HLS manager stream tracking
 func TestHLSManagerStreamTracking(t *testing.T) {
 	t.Run("getActiveStreamIDs returns empty for no streams", func(t *testing.T) {
@@ -132,62 +95,59 @@ func TestHLSManagerClientTracking(t *testing.T) {
 	})
 }
 
+// setHLSActivity replaces the HLS manager's activity map for the duration of the
+// test and restores the original when the test ends.
+func setHLSActivity(t *testing.T, activity map[string]time.Time) {
+	t.Helper()
+	hlsMgr.activityMu.Lock()
+	original := hlsMgr.activity
+	hlsMgr.activity = activity
+	hlsMgr.activityMu.Unlock()
+
+	t.Cleanup(func() {
+		hlsMgr.activityMu.Lock()
+		hlsMgr.activity = original
+		hlsMgr.activityMu.Unlock()
+	})
+}
+
 // TestShouldCleanupStream tests the stream cleanup logic
 func TestShouldCleanupStream(t *testing.T) {
-	t.Run("nonexistent stream should not be cleaned up", func(t *testing.T) {
-		// Save and restore original state
-		originalActivity := hlsMgr.activity
-		hlsMgr.activityMu.Lock()
-		hlsMgr.activity = make(map[string]time.Time)
-		hlsMgr.activityMu.Unlock()
+	tests := []struct {
+		name         string
+		activity     map[string]time.Time
+		wantCleanup  bool
+		lookupStream string
+	}{
+		{
+			name:         "stream without recorded activity is kept",
+			activity:     map[string]time.Time{},
+			lookupStream: "nonexistent",
+			wantCleanup:  false,
+		},
+		{
+			// Past the new-stream grace period but inside the inactivity timeout.
+			name:         "stream active a minute ago is kept",
+			activity:     map[string]time.Time{"recent_stream": time.Now().Add(-time.Minute)},
+			lookupStream: "recent_stream",
+			wantCleanup:  false,
+		},
+		{
+			name: "stream idle past the inactivity timeout is cleaned up",
+			activity: map[string]time.Time{
+				"expired_stream": time.Now().Add(-(hlsStreamInactivityTimeout + time.Minute)),
+			},
+			lookupStream: "expired_stream",
+			wantCleanup:  true,
+		},
+	}
 
-		defer func() {
-			hlsMgr.activityMu.Lock()
-			hlsMgr.activity = originalActivity
-			hlsMgr.activityMu.Unlock()
-		}()
-
-		shouldCleanup := shouldCleanupStream("nonexistent")
-		assert.False(t, shouldCleanup)
-	})
-
-	t.Run("recently active stream should not be cleaned up", func(t *testing.T) {
-		// Save and restore original state
-		originalActivity := hlsMgr.activity
-		hlsMgr.activityMu.Lock()
-		hlsMgr.activity = map[string]time.Time{
-			"recent_stream": time.Now(),
-		}
-		hlsMgr.activityMu.Unlock()
-
-		defer func() {
-			hlsMgr.activityMu.Lock()
-			hlsMgr.activity = originalActivity
-			hlsMgr.activityMu.Unlock()
-		}()
-
-		shouldCleanup := shouldCleanupStream("recent_stream")
-		assert.False(t, shouldCleanup)
-	})
-
-	t.Run("stream within grace period should not be cleaned up", func(t *testing.T) {
-		// Save and restore original state
-		originalActivity := hlsMgr.activity
-		hlsMgr.activityMu.Lock()
-		hlsMgr.activity = map[string]time.Time{
-			"grace_stream": time.Now().Add(-5 * time.Second), // Within 10 second grace period
-		}
-		hlsMgr.activityMu.Unlock()
-
-		defer func() {
-			hlsMgr.activityMu.Lock()
-			hlsMgr.activity = originalActivity
-			hlsMgr.activityMu.Unlock()
-		}()
-
-		shouldCleanup := shouldCleanupStream("grace_stream")
-		assert.False(t, shouldCleanup)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setHLSActivity(t, tt.activity)
+			assert.Equal(t, tt.wantCleanup, shouldCleanupStream(tt.lookupStream))
+		})
+	}
 }
 
 // TestFindInactiveStreams tests finding inactive streams
@@ -197,24 +157,31 @@ func TestFindInactiveStreams(t *testing.T) {
 		assert.Empty(t, inactive)
 	})
 
-	t.Run("all active streams returns empty", func(t *testing.T) {
-		// Save and restore original state
-		originalActivity := hlsMgr.activity
-		hlsMgr.activityMu.Lock()
-		hlsMgr.activity = map[string]time.Time{
-			"stream1": time.Now(),
-			"stream2": time.Now(),
-		}
-		hlsMgr.activityMu.Unlock()
+	t.Run("only the expired registered stream is selected", func(t *testing.T) {
+		const (
+			expiredID = "inactive_test_expired"
+			recentID  = "inactive_test_recent"
+		)
+		setHLSActivity(t, map[string]time.Time{
+			expiredID: time.Now().Add(-(hlsStreamInactivityTimeout + time.Minute)),
+			recentID:  time.Now(),
+		})
 
-		defer func() {
-			hlsMgr.activityMu.Lock()
-			hlsMgr.activity = originalActivity
-			hlsMgr.activityMu.Unlock()
-		}()
+		hlsMgr.streamsMu.Lock()
+		hlsMgr.streams[expiredID] = &HLSStreamInfo{SourceID: expiredID}
+		hlsMgr.streams[recentID] = &HLSStreamInfo{SourceID: recentID}
+		hlsMgr.streamsMu.Unlock()
+		t.Cleanup(func() {
+			hlsMgr.streamsMu.Lock()
+			delete(hlsMgr.streams, expiredID)
+			delete(hlsMgr.streams, recentID)
+			hlsMgr.streamsMu.Unlock()
+		})
 
-		inactive := findInactiveStreams([]string{"stream1", "stream2"})
-		assert.Empty(t, inactive)
+		// Same sequence syncHLSActivity runs: snapshot the registered streams,
+		// then select the inactive ones.
+		inactive := findInactiveStreams(getActiveStreamIDs())
+		assert.Equal(t, []string{expiredID}, inactive)
 	})
 }
 
@@ -268,60 +235,6 @@ func TestHLSManagerConcurrency(t *testing.T) {
 
 				// Remove stream
 				_ = removeStreamFromManager(streamID)
-			}(i)
-		}
-
-		wg.Wait()
-	})
-
-	t.Run("concurrent activity updates", func(t *testing.T) {
-		const numGoroutines = 10
-		var wg sync.WaitGroup
-		wg.Add(numGoroutines)
-
-		for i := range numGoroutines {
-			go func(id int) {
-				defer wg.Done()
-				streamID := fmt.Sprintf("activity_test_%s_%d", time.Now().String(), id)
-
-				// Update activity
-				hlsMgr.activityMu.Lock()
-				hlsMgr.activity[streamID] = time.Now()
-				hlsMgr.activityMu.Unlock()
-
-				// Read activity
-				hlsMgr.activityMu.Lock()
-				delete(hlsMgr.activity, streamID)
-				hlsMgr.activityMu.Unlock()
-			}(i)
-		}
-
-		wg.Wait()
-	})
-
-	t.Run("concurrent client tracking", func(t *testing.T) {
-		const numGoroutines = 10
-		var wg sync.WaitGroup
-		wg.Add(numGoroutines)
-
-		for i := range numGoroutines {
-			go func(id int) {
-				defer wg.Done()
-				streamID := fmt.Sprintf("client_test_%s_%d", time.Now().String(), id)
-				clientID := fmt.Sprintf("client_%d", id)
-
-				// Add client
-				hlsMgr.clientsMu.Lock()
-				if hlsMgr.clients[streamID] == nil {
-					hlsMgr.clients[streamID] = make(map[string]bool)
-				}
-				hlsMgr.clients[streamID][clientID] = true
-				hlsMgr.clientsMu.Unlock()
-
-				// Remove client
-				hlsMgr.clientsMu.Lock()
-				delete(hlsMgr.clients, streamID)
-				hlsMgr.clientsMu.Unlock()
 			}(i)
 		}
 

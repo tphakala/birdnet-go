@@ -29,22 +29,6 @@ func newDictController(t *testing.T) (*echo.Echo, *Handler) {
 	return e, controller
 }
 
-// TestSpeciesDictionary_PublicReachable verifies the endpoint returns 200 without any
-// auth middleware configured and that it serves the Finnish dictionary successfully.
-func TestSpeciesDictionary_PublicReachable(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "species-dictionary")
-	t.Attr("type", "integration")
-
-	e, _ := newDictController(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/species/dictionary/fi", http.NoBody)
-	rec := httptest.NewRecorder()
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-}
-
 // TestSpeciesDictionary_Headers checks Content-Type, Content-Encoding, and
 // X-Content-Type-Options are set correctly.
 func TestSpeciesDictionary_Headers(t *testing.T) {

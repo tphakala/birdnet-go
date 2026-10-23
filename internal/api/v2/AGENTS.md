@@ -167,7 +167,8 @@ original per-route registration order across the split.
   `publicMutationRoutes` or `publicReadRoutes` with a reason. With PrivateMode on,
   every route outside `isPrivateModeExempt` must reach it too. A new mutating
   route needs no test edit; a route that is meant to be public needs an
-  allow-list entry.
+  allow-list entry. A GET outside the auth-only prefixes that must be
+  protected needs a `protectedReadRoutes` entry.
 
 ## Route namespace guide
 
@@ -201,10 +202,28 @@ unauthenticated clients (the audio domain does this with its local
 - **Follow the error format** - `return c.HandleError(ctx, err, "message", statusCode)`
   (or `c.HandleErrorWithKey(...)` for an i18n key). The `ErrorResponse` shape and
   correlation-id behavior live in `apicore`.
-- **Hot-reload** - read settings per request via `c.CurrentSettings()` (the
-  process-wide settings snapshot, falling back to Core's) or
-  `c.ControllerSettings()` (Core's own snapshot); both are lock-free atomic loads.
-  Never branch on settings captured at startup.
+- **Hot-reload** - read settings per request, never branch on settings captured
+  at startup. In facade handlers that return settings to a client or merge into
+  them, use `c.getSettingsOrFallback()`: it reads the live process-wide snapshot
+  when this controller owns it. `c.CurrentSettings()` also prefers the
+  process-wide snapshot. `c.ControllerSettings()` is Core's own snapshot, which
+  only API saves refresh and which goes stale after out-of-band updates (for
+  example a model install), so use it only where per-controller isolation is
+  intended. They are lock-free atomic loads, except the last-resort `conf.Setting()` fallback in `getSettingsOrFallback`, which can load settings from disk.
+  Settings writes never call `conf.StoreSettings`: the PUT and PATCH handlers
+  use `commitSettings`, and the TLS, MQTT TLS and species exclusion handlers use
+  `updateAndSaveSettings`. Both read the baseline and publish inside
+  `conf.UpdateSettings`, so a write cannot overwrite a model install or range
+  filter rebuild that published in between, and a lint rule rejects
+  `conf.StoreSettings` outside `internal/conf` and the test-support packages.
+  The mutate closure runs under the settings writer lock, so keep it short, and it must not call the
+  classifier, the model manager or `handleSettingsChanges`.
+  `conf.UpdateSettings` also stamps the snapshot's `Revision`, which the settings
+  ETag and `If-Match` check are built on; only the range filter writers inside
+  `internal/conf` publish without bumping it (`updateRuntimeSettings`), because they
+  write fields no client can write. Every other writer must bump. `Load` and
+  `conf.StoreSettings` do not stamp a revision (startup and tests only), and a
+  controller that does not own the global snapshot (tests) never bumps its own.
 - **Document in README.md** - update the endpoint table immediately.
 
 ## Future api/v3

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { mergeSettingsPatch, mergeSettingsPatchKeepingEdits } from './settingsMerge';
+import {
+  mergeSettingsPatch,
+  mergeSettingsPatchKeepingEdits,
+  rebaseSettingsKeepingEdits,
+} from './settingsMerge';
 
 describe('mergeSettingsPatch', () => {
   it('merges nested objects key by key and keeps omitted keys', () => {
@@ -98,5 +102,80 @@ describe('mergeSettingsPatchKeepingEdits', () => {
     expect(result).toEqual({ a: 2 });
     expect(form).toEqual({ a: 1 });
     expect(base).toEqual({ a: 1 });
+  });
+});
+
+describe('rebaseSettingsKeepingEdits', () => {
+  type Case = {
+    name: string;
+    form: Record<string, unknown>;
+    base: Record<string, unknown>;
+    fresh: Record<string, unknown>;
+    expected: Record<string, unknown>;
+  };
+
+  it.each<Case>([
+    {
+      name: 'an unedited leaf takes the server value while an edited sibling keeps the form value',
+      form: { a: { x: 1, y: 'edited' } },
+      base: { a: { x: 1, y: 'orig' } },
+      fresh: { a: { x: 2, y: 'server' } },
+      expected: { a: { x: 2, y: 'edited' } },
+    },
+    {
+      name: 'an unedited key the server removed is dropped and an edited one is kept',
+      form: { a: { path: 'old', note: 'mine' } },
+      base: { a: { path: 'old', note: 'orig' } },
+      fresh: { a: {} },
+      expected: { a: { note: 'mine' } },
+    },
+    {
+      name: 'a key the user deleted stays deleted',
+      form: { map: { keep: 1 } },
+      base: { map: { keep: 1, gone: 2 } },
+      fresh: { map: { keep: 1, gone: 2 } },
+      expected: { map: { keep: 1 } },
+    },
+    {
+      name: 'an edited array is kept whole and an unedited array takes the server value',
+      form: { edited: [1, 2], same: ['a'] },
+      base: { edited: [1], same: ['a'] },
+      fresh: { edited: [9], same: ['a', 'b'] },
+      expected: { edited: [1, 2], same: ['a', 'b'] },
+    },
+  ])('$name', ({ form, base, fresh, expected }) => {
+    expect(rebaseSettingsKeepingEdits(form, base, fresh)).toEqual(expected);
+  });
+
+  it('follows the server key order for unedited subtrees', () => {
+    const base = { a: { x: 1, y: 2 } };
+    const fresh = { a: { z: 3, y: 2, x: 1 } };
+    const result = rebaseSettingsKeepingEdits({ a: { x: 1, y: 2 } }, base, fresh);
+    expect(JSON.stringify(result)).toBe(JSON.stringify(fresh));
+  });
+
+  it('converges across successive server changes', () => {
+    const base0 = { a: { edit: 0, one: 0, two: 0, gone: 'x' }, list: [1] };
+    const form0 = { a: { edit: 5, one: 0, two: 0, gone: 'x' }, list: [1] };
+    const fresh1 = { a: { edit: 0, one: 1, two: 0, gone: 'x' }, list: [1] };
+    const r1 = rebaseSettingsKeepingEdits(form0, base0, fresh1);
+    const fresh2 = { a: { edit: 0, one: 1, two: 2 }, list: [1, 2] };
+    const r2 = rebaseSettingsKeepingEdits(r1, fresh1, fresh2);
+    expect(r2).toEqual({ a: { edit: 5, one: 1, two: 2 }, list: [1, 2] });
+    expect(rebaseSettingsKeepingEdits(r2, fresh2, fresh2)).toEqual(r2);
+  });
+
+  it('does not mutate its inputs or copy unsafe keys', () => {
+    const form = { a: { x: 1 } };
+    const base = { a: { x: 1 } };
+    const fresh = JSON.parse('{"a":{"x":2,"list":[1]},"__proto__":{"polluted":true}}');
+    const snapshot = JSON.stringify([form, base, fresh]);
+    const result = rebaseSettingsKeepingEdits(form, base, fresh);
+    expect(JSON.stringify([form, base, fresh])).toBe(snapshot);
+    expect(Object.hasOwn(result, '__proto__')).toBe(false);
+    // Assigning __proto__ on a plain object swaps its prototype instead of adding a key.
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect((result as Record<string, unknown>).polluted).toBeUndefined();
+    expect((result.a as { list: number[] }).list).not.toBe(fresh.a.list);
   });
 });

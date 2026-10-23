@@ -56,15 +56,6 @@ const failedStateRetention = 30 * time.Second
 // 38 MB (int8-arm v2.4) to 557 MB (global v3.0 fp32) against Pi storage.
 const diskSpaceMarginBytes int64 = 64 << 20 // 64 MiB
 
-// settingsWriteMu serializes clone-mutate-publish cycles on the global conf
-// settings across the whole classifier package. Every writer reads
-// conf.GetSettings(), mutates a clone, and publishes it with conf.StoreSettings.
-// Without one shared lock two such cycles interleave and the second clobbers the
-// first's write. It is package-level rather than a ModelManager field because
-// the Orchestrator's stale-path repair (applyPathCorrection) is a writer too and
-// must serialize against ModelManager's install/uninstall config writers.
-var settingsWriteMu sync.Mutex
-
 // ModelManager handles the lifecycle of downloadable models.
 type ModelManager struct {
 	modelsDir    string
@@ -382,56 +373,54 @@ func (mm *ModelManager) ScanInstalled() {
 // never persists, so the capture re-runs in memory each start, reproducing the pre-Phase-4
 // behavior. installedIDs must be sorted so the appended aliases are deterministic.
 func (mm *ModelManager) captureLegacyAutoEnableOnce(log logger.Logger, installedIDs []string) {
-	settingsWriteMu.Lock()
-	defer settingsWriteMu.Unlock()
+	// A missing snapshot should not happen at startup (ScanInstalled runs after conf.Load
+	// publishes the global snapshot); UpdateSettings reports it and this degrades to a no-op
+	// instead of panicking.
+	_, _, err := conf.UpdateSettings(func(_, updated *conf.Settings) error {
+		if updated.Models.AutoEnableMigrated {
+			return conf.ErrSettingsUnchanged
+		}
 
-	updated := conf.CloneSettings(conf.GetSettings())
-	if updated == nil {
-		// No published settings snapshot yet. This should not happen at startup (ScanInstalled
-		// runs after conf.Load publishes the global snapshot), but guard against a nil deref so a
-		// caller without published settings degrades to a no-op instead of panicking.
-		return
-	}
-	if updated.Models.AutoEnableMigrated {
-		return
-	}
-
-	if !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
-		return strings.EqualFold(id, conf.ModelIDBirdNET)
-	}) {
-		updated.Models.Enabled = append([]string{conf.ModelIDBirdNET}, updated.Models.Enabled...)
-	}
-	addIfMissing := func(alias string) {
-		if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
-			return strings.EqualFold(id, alias)
+		if !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
+			return strings.EqualFold(id, conf.ModelIDBirdNET)
 		}) {
-			updated.Models.Enabled = append(updated.Models.Enabled, alias)
+			updated.Models.Enabled = append([]string{conf.ModelIDBirdNET}, updated.Models.Enabled...)
 		}
-	}
-
-	for _, catalogID := range installedIDs {
-		entry, found := GetCatalogEntry(catalogID)
-		if !found {
-			continue
+		addIfMissing := func(alias string) {
+			if alias != "" && !slices.ContainsFunc(updated.Models.Enabled, func(id string) bool {
+				return strings.EqualFold(id, alias)
+			}) {
+				updated.Models.Enabled = append(updated.Models.Enabled, alias)
+			}
 		}
-		addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
-	}
 
-	if updated.Bat.ClassifierModel != "" {
-		addIfMissing(conf.ModelIDBat)
-	}
-	if updated.Perch.ModelPath != "" {
-		addIfMissing(conf.ModelIDPerchV2)
-	}
-	if updated.BSG.ModelPath != "" {
-		addIfMissing(conf.ModelIDBSG)
-	}
+		for _, catalogID := range installedIDs {
+			entry, found := GetCatalogEntry(catalogID)
+			if !found {
+				continue
+			}
+			addIfMissing(ConfigAliasForRegistry(entry.RegistryID))
+		}
 
-	// Record that the capture has run so it never re-runs on a writable config. The marker
-	// change is itself a change, so this always persists. On a read-only config SaveSettings
-	// fails and the capture re-runs in memory on the next start.
-	updated.Models.AutoEnableMigrated = true
-	conf.StoreSettings(updated)
+		if updated.Bat.ClassifierModel != "" {
+			addIfMissing(conf.ModelIDBat)
+		}
+		if updated.Perch.ModelPath != "" {
+			addIfMissing(conf.ModelIDPerchV2)
+		}
+		if updated.BSG.ModelPath != "" {
+			addIfMissing(conf.ModelIDBSG)
+		}
+
+		// Record that the capture has run so it never re-runs on a writable config. The marker
+		// change is itself a change, so this always persists. On a read-only config SaveSettings
+		// fails and the capture re-runs in memory on the next start.
+		updated.Models.AutoEnableMigrated = true
+		return nil
+	})
+	if err != nil {
+		return
+	}
 	if err := conf.SaveSettings(); err != nil {
 		log.Warn("Failed to persist the one-shot models.enabled auto-enable capture; it will re-run in memory next start",
 			logger.Error(err))
@@ -776,45 +765,47 @@ func (mm *ModelManager) applyInstalledGeomodelConfig(log logger.Logger, entry *C
 		}
 	}
 
-	// Decide and write under settingsWriteMu so the already-matches check and the
-	// store operate on one consistent snapshot. Reading outside the lock would
-	// let a concurrent install/uninstall publish a newer config between the
+	// Decide and write inside conf.UpdateSettings so the already-matches check and the
+	// store operate on one consistent snapshot. Reading outside it would let a
+	// concurrent install/uninstall or settings save publish a newer config between the
 	// check and the store, overwriting it with stale data.
-	settingsWriteMu.Lock()
-	current := conf.GetSettings()
-	rf := current.RangeFilterConfig()
-	if !mm.rangeFilterGalleryManaged(rf) {
-		// A custom range filter is the user's choice; never replace it.
-		settingsWriteMu.Unlock()
-		log.Debug("Keeping custom range filter model path",
-			logger.String("catalog_id", catalogID))
+	customRangeFilter := false
+	_, _, err := conf.UpdateSettings(func(_, updated *conf.Settings) error {
+		urf := updated.RangeFilterConfig()
+		if !mm.rangeFilterGalleryManaged(urf) {
+			// A custom range filter is the user's choice; never replace it.
+			customRangeFilter = true
+			return conf.ErrSettingsUnchanged
+		}
+		if urf.Model == entry.GeomodelVersion &&
+			urf.ModelPath == expectedModelPath &&
+			urf.LabelsPath == expectedLabelsPath {
+			// Config already set; initializeMetaModel handled it at startup.
+			return conf.ErrSettingsUnchanged
+		}
+
+		// Config is stale or missing; update it.
+		log.Info("Applying geomodel config for installed model",
+			logger.String("catalog_id", catalogID),
+			logger.String("geomodel_version", entry.GeomodelVersion))
+
+		urf.Model = entry.GeomodelVersion
+		urf.ModelPath = expectedModelPath
+		urf.LabelsPath = expectedLabelsPath
+		return nil
+	})
+	if err != nil {
+		if customRangeFilter {
+			log.Debug("Keeping custom range filter model path",
+				logger.String("catalog_id", catalogID))
+		}
 		return
 	}
-	if rf.Model == entry.GeomodelVersion &&
-		rf.ModelPath == expectedModelPath &&
-		rf.LabelsPath == expectedLabelsPath {
-		// Config already set; initializeMetaModel handled it at startup.
-		settingsWriteMu.Unlock()
-		return
-	}
-
-	// Config is stale or missing; update it.
-	log.Info("Applying geomodel config for installed model",
-		logger.String("catalog_id", catalogID),
-		logger.String("geomodel_version", entry.GeomodelVersion))
-
-	updated := conf.CloneSettings(current)
-	urf := updated.RangeFilterConfig()
-	urf.Model = entry.GeomodelVersion
-	urf.ModelPath = expectedModelPath
-	urf.LabelsPath = expectedLabelsPath
-	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
 		log.Warn("Failed to persist geomodel config",
 			logger.String("catalog_id", catalogID),
 			logger.Error(err))
 	}
-	settingsWriteMu.Unlock()
 
 	if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
 		log.Warn("Failed to reload range filter after geomodel config update",
@@ -848,41 +839,36 @@ func (mm *ModelManager) healOrphanGeomodelConfig(log logger.Logger) {
 		}
 	}
 
-	// Decide and write under settingsWriteMu so the decision and the store operate on
-	// one consistent snapshot. Reading the config outside the lock would let a
+	// Decide and write inside conf.UpdateSettings so the decision and the store operate on
+	// one consistent snapshot. Reading the config outside it would let a
 	// concurrent install publish a valid geomodel config between the decision
 	// and the store, after which a stale "clear" would wipe it. The filesystem
-	// check above is independent of settings, so it stays outside the lock.
-	settingsWriteMu.Lock()
-	current := conf.GetSettings()
-	rf := current.RangeFilterConfig()
-	action := decideGeomodelOrphanAction(rf, expectedModelPath, expectedLabelsPath, filesPresent)
-	if action == geomodelOrphanNone {
-		settingsWriteMu.Unlock()
+	// check above is independent of settings, so it stays outside.
+	_, _, err := conf.UpdateSettings(func(_, updated *conf.Settings) error {
+		urf := updated.RangeFilterConfig()
+		action := decideGeomodelOrphanAction(urf, expectedModelPath, expectedLabelsPath, filesPresent)
+		switch action {
+		case geomodelOrphanPromote:
+			log.Info("Promoting orphaned geomodel range filter config to v3 (shared files present)")
+			urf.Model = geomodelRangeFilterVersion
+		case geomodelOrphanClear:
+			log.Info("Clearing orphaned geomodel range filter config (shared files absent)")
+			urf.Model = ""
+			urf.ModelPath = ""
+			urf.LabelsPath = ""
+			urf.PassUnmappedSpecies = false
+		case geomodelOrphanNone:
+			return conf.ErrSettingsUnchanged
+		}
+		return nil
+	})
+	if err != nil {
 		return
 	}
-
-	updated := conf.CloneSettings(current)
-	urf := updated.RangeFilterConfig()
-	switch action {
-	case geomodelOrphanPromote:
-		log.Info("Promoting orphaned geomodel range filter config to v3 (shared files present)")
-		urf.Model = geomodelRangeFilterVersion
-	case geomodelOrphanClear:
-		log.Info("Clearing orphaned geomodel range filter config (shared files absent)")
-		urf.Model = ""
-		urf.ModelPath = ""
-		urf.LabelsPath = ""
-		urf.PassUnmappedSpecies = false
-	case geomodelOrphanNone:
-		// Unreachable: handled by the early return above.
-	}
-	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
 		log.Warn("Failed to persist orphan geomodel config self-heal",
 			logger.Error(err))
 	}
-	settingsWriteMu.Unlock()
 
 	if err := mm.orchestrator.ReloadRangeFilter(); err != nil {
 		log.Warn("Failed to reload range filter after orphan geomodel self-heal",
@@ -1771,32 +1757,32 @@ func ensureModelEnabled(s *conf.Settings, registryID string) bool {
 // built-in/default source (for the primary, the embedded BuiltIn baseline). When
 // rangeFilter is non-nil (the geomodel dependency of the new variant) the gallery-managed
 // range-filter config is re-pointed at its files in the same clone and save; a custom
-// range filter is kept. Uses clone-mutate-publish + SaveSettings so the change survives
-// restarts and is visible to concurrent readers. A nil settings receiver or an unknown
-// registry ID is a no-op (nothing stored, nothing saved).
+// range filter is kept. It publishes through conf.UpdateSettings, then saves. A nil
+// settings receiver or an unknown registry ID is a no-op (nothing stored, nothing saved).
 func (mm *ModelManager) applyConfigForVariantSwap(registryID, modelPath string, rangeFilter *CatalogEntry) {
 	if mm.settings == nil {
 		return
 	}
-	settingsWriteMu.Lock()
-	defer settingsWriteMu.Unlock()
-
-	updated := conf.CloneSettings(conf.GetSettings())
-	fs, ok := familyFields(updated, registryID)
-	if !ok {
+	_, _, err := conf.UpdateSettings(func(_, updated *conf.Settings) error {
+		fs, ok := familyFields(updated, registryID)
+		if !ok {
+			return conf.ErrSettingsUnchanged
+		}
+		*fs.Model = modelPath
+		if rangeFilter != nil {
+			mm.applyRangeFilterConfigForInstall(updated, rangeFilter)
+		}
+		// Since models.enabled became authoritative (Phase 4), a variant install on an instance
+		// where the model is not enabled (reachable at N=0) must persist the enable, or the
+		// freshly installed variant would not load. This also runs on the rollback path
+		// (persistVariantConfig), which is intended: a rollback restores the model the user asked
+		// for, so it must stay enabled.
+		ensureModelEnabled(updated, registryID)
+		return nil
+	})
+	if err != nil {
 		return
 	}
-	*fs.Model = modelPath
-	if rangeFilter != nil {
-		mm.applyRangeFilterConfigForInstall(updated, rangeFilter)
-	}
-	// Since models.enabled became authoritative (Phase 4), a variant install on an instance
-	// where the model is not enabled (reachable at N=0) must persist the enable, or the
-	// freshly installed variant would not load. This also runs on the rollback path
-	// (persistVariantConfig), which is intended: a rollback restores the model the user asked
-	// for, so it must stay enabled.
-	ensureModelEnabled(updated, registryID)
-	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after variant swap",
 			logger.String("registry_id", registryID),
@@ -2269,7 +2255,7 @@ func (mm *ModelManager) removeDownloading(catalogID string) {
 // directory named like the models directory (the same layout test, and rationale, as
 // Orchestrator.isGalleryManagedPath). Install, startup promote and uninstall leave
 // any other path untouched as a custom range filter. Reads only the catalog snapshot,
-// so it is safe under settingsWriteMu and mm.mu.
+// so it is safe inside a conf.UpdateSettings mutate function and under mm.mu.
 func (mm *ModelManager) rangeFilterGalleryManaged(rf *conf.RangeFilterSettings) bool {
 	if rf.ModelPath == "" {
 		return true
@@ -2397,55 +2383,52 @@ func (mm *ModelManager) survivingGeomodelEntry() (CatalogEntry, bool) {
 
 // applyConfigForInstall updates settings to reflect a newly installed model.
 // Only fields with non-empty paths are set. The caller must hold no locks
-// other than settingsWriteMu (acquired internally).
-// Uses clone-mutate-publish so the shared settings snapshot is never mutated
-// in place. Settings are persisted to disk via conf.SaveSettings so changes
-// survive restarts and are visible to concurrent readers through conf.Setting().
+// (the settings writer lock is acquired inside conf.UpdateSettings).
+// It publishes through conf.UpdateSettings, then saves.
 func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, labelsPath, embeddingsPath string) {
 	if mm.settings == nil {
 		return
 	}
 
-	settingsWriteMu.Lock()
-	defer settingsWriteMu.Unlock()
+	_, _, err := conf.UpdateSettings(func(_, updated *conf.Settings) error {
+		// Set only the non-empty paths, and only fields the family actually carries
+		// (familyFields yields a nil pointer for a family's absent labels/embeddings). The
+		// primary reaches this path only via Reinstall; InstallOrReplace routes its variant
+		// swap to replaceVariant, which writes the primary's config via applyConfigForVariantSwap
+		// (model-only) instead. The primary's label set is embedded, so a
+		// primary variant never ships a labels file (labelsPath is always "" for it), but
+		// familyFields now exposes the primary's Labels pointer, so guard the Labels write
+		// on RegistryIDBirdNETV24 as well to keep a user's custom BirdNET.LabelPath
+		// structurally protected even if that ever changes.
+		if fs, ok := familyFields(updated, entry.RegistryID); ok {
+			if modelPath != "" {
+				*fs.Model = modelPath
+			}
+			if fs.Labels != nil && labelsPath != "" && entry.RegistryID != RegistryIDBirdNETV24 {
+				*fs.Labels = labelsPath
+			}
+			if fs.Embeddings != nil && embeddingsPath != "" {
+				*fs.Embeddings = embeddingsPath
+			}
+		}
 
-	updated := conf.CloneSettings(conf.GetSettings())
+		// Apply geomodel range filter config if this entry includes geomodel files and the
+		// range filter is not custom. An entry without inline geomodel files takes it from
+		// its geomodel dependency, if the installed variant has one.
+		mm.applyRangeFilterConfigForInstall(updated, entry)
+		if !hasGeomodelTuple(entry) {
+			if dep, ok := geomodelDependency(entry); ok {
+				mm.applyRangeFilterConfigForInstall(updated, dep)
+			}
+		}
 
-	// Set only the non-empty paths, and only fields the family actually carries
-	// (familyFields yields a nil pointer for a family's absent labels/embeddings). The
-	// primary reaches this path only via Reinstall; InstallOrReplace routes its variant
-	// swap to replaceVariant, which writes the primary's config via applyConfigForVariantSwap
-	// (model-only) instead. The primary's label set is embedded, so a
-	// primary variant never ships a labels file (labelsPath is always "" for it), but
-	// familyFields now exposes the primary's Labels pointer, so guard the Labels write
-	// on RegistryIDBirdNETV24 as well to keep a user's custom BirdNET.LabelPath
-	// structurally protected even if that ever changes.
-	if fs, ok := familyFields(updated, entry.RegistryID); ok {
-		if modelPath != "" {
-			*fs.Model = modelPath
-		}
-		if fs.Labels != nil && labelsPath != "" && entry.RegistryID != RegistryIDBirdNETV24 {
-			*fs.Labels = labelsPath
-		}
-		if fs.Embeddings != nil && embeddingsPath != "" {
-			*fs.Embeddings = embeddingsPath
-		}
+		// Add the config alias to Models.Enabled so the installed model is loaded.
+		ensureModelEnabled(updated, entry.RegistryID)
+		return nil
+	})
+	if err != nil {
+		return
 	}
-
-	// Apply geomodel range filter config if this entry includes geomodel files and the
-	// range filter is not custom. An entry without inline geomodel files takes it from
-	// its geomodel dependency, if the installed variant has one.
-	mm.applyRangeFilterConfigForInstall(updated, entry)
-	if !hasGeomodelTuple(entry) {
-		if dep, ok := geomodelDependency(entry); ok {
-			mm.applyRangeFilterConfigForInstall(updated, dep)
-		}
-	}
-
-	// Add the config alias to Models.Enabled so the installed model is loaded.
-	ensureModelEnabled(updated, entry.RegistryID)
-
-	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after model install",
 			logger.String("catalog_id", entry.ID),
@@ -2490,85 +2473,86 @@ func (mm *ModelManager) sharedFilePathForRole(entry *CatalogEntry, role string) 
 // For bat models, Enabled is only set to false when no other bat models
 // remain installed; if another bat model exists, config is re-pointed to it.
 // The caller must hold mm.mu for writing; the uninstalled entry must already
-// be deleted from mm.installed so the geomodel and bat searches skip it.
-// Uses clone-mutate-publish so the shared settings snapshot is never mutated
-// in place. Settings are persisted to disk via conf.SaveSettings so changes
-// survive restarts and are visible to concurrent readers through conf.Setting().
+// be deleted from mm.installed so the geomodel and bat searches skip it. That is
+// the permitted lock order: mm.mu is taken before the settings writer lock that
+// conf.UpdateSettings acquires, and the mutate function reads mm.installed
+// without locking because the caller already holds mm.mu.
+// It publishes through conf.UpdateSettings, then saves.
 func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	if mm.settings == nil {
 		return
 	}
 
-	settingsWriteMu.Lock()
-	defer settingsWriteMu.Unlock()
+	_, _, err := conf.UpdateSettings(func(_, updated *conf.Settings) error {
+		retainAlias := false
 
-	updated := conf.CloneSettings(conf.GetSettings())
-	retainAlias := false
-
-	// Re-point or clear the uninstalled family's settings. familyFields is the
-	// single family-to-settings-field mapping. When another installed catalog entry
-	// writes the SAME family (same RegistryID) it takes over the paths and the config
-	// alias is retained; otherwise the family's fields are cleared. Keying on
-	// RegistryID (not Category) is required: birdnet-v3.0 and perch-v2 are both
-	// CategoryWildlife but write different families, so a category-keyed rule would
-	// re-point one family's config onto the other. Today the only multi-entry family
-	// is bat, so for every other family this degenerates to "clear". The primary is
-	// never uninstalled (Uninstall refuses RegistryIDBirdNETV24) and an unknown
-	// registry ID yields ok=false, so both are safe no-ops here.
-	if fs, ok := familyFields(updated, entry.RegistryID); ok {
-		if repl, replEntry, found := mm.replacementInstall(entry); found {
-			retainAlias = true
-			*fs.Model = repl.ModelPath
-			if fs.Labels != nil {
-				*fs.Labels = repl.LabelsPath
-			}
-			if fs.Embeddings != nil {
-				*fs.Embeddings = mm.sharedFilePathForRole(&replEntry, RoleEmbeddings)
-			}
-		} else {
-			*fs.Model = ""
-			if fs.Labels != nil {
-				*fs.Labels = ""
-			}
-			if fs.Embeddings != nil {
-				*fs.Embeddings = ""
+		// Re-point or clear the uninstalled family's settings. familyFields is the
+		// single family-to-settings-field mapping. When another installed catalog entry
+		// writes the SAME family (same RegistryID) it takes over the paths and the config
+		// alias is retained; otherwise the family's fields are cleared. Keying on
+		// RegistryID (not Category) is required: birdnet-v3.0 and perch-v2 are both
+		// CategoryWildlife but write different families, so a category-keyed rule would
+		// re-point one family's config onto the other. Today the only multi-entry family
+		// is bat, so for every other family this degenerates to "clear". The primary is
+		// never uninstalled (Uninstall refuses RegistryIDBirdNETV24) and an unknown
+		// registry ID yields ok=false, so both are safe no-ops here.
+		if fs, ok := familyFields(updated, entry.RegistryID); ok {
+			if repl, replEntry, found := mm.replacementInstall(entry); found {
+				retainAlias = true
+				*fs.Model = repl.ModelPath
+				if fs.Labels != nil {
+					*fs.Labels = repl.LabelsPath
+				}
+				if fs.Embeddings != nil {
+					*fs.Embeddings = mm.sharedFilePathForRole(&replEntry, RoleEmbeddings)
+				}
+			} else {
+				*fs.Model = ""
+				if fs.Labels != nil {
+					*fs.Labels = ""
+				}
+				if fs.Embeddings != nil {
+					*fs.Embeddings = ""
+				}
 			}
 		}
-	}
 
-	// Re-point or reset a gallery-managed geomodel range filter config (a custom one is
-	// kept); it is reset only when no other geomodel-dependent model remains.
-	// mm.installed no longer contains the uninstalled entry (deleted by caller).
-	mm.applyRangeFilterConfigForUninstall(updated, entry)
+		// Re-point or reset a gallery-managed geomodel range filter config (a custom one is
+		// kept); it is reset only when no other geomodel-dependent model remains.
+		// mm.installed no longer contains the uninstalled entry (deleted by caller).
+		mm.applyRangeFilterConfigForUninstall(updated, entry)
 
-	// Remove the config alias from Models.Enabled and from every source and stream
-	// that names it, but only when no replacement model of the same category exists. A
-	// list left empty by this removal means the orchestrator's default targets
-	// (DefaultTargets); it is not re-pinned to birdnet (model de-privilege epic, Phase 4).
-	alias := ConfigAliasForRegistry(entry.RegistryID)
-	if alias != "" && !retainAlias {
-		updated.Models.Enabled = slices.DeleteFunc(updated.Models.Enabled, func(id string) bool {
-			return strings.EqualFold(id, alias)
-		})
-
-		// Remove from sound card sources. An emptied list means the default targets.
-		for i := range updated.Realtime.Audio.Sources {
-			src := &updated.Realtime.Audio.Sources[i]
-			src.Models = slices.DeleteFunc(src.Models, func(id string) bool {
+		// Remove the config alias from Models.Enabled and from every source and stream
+		// that names it, but only when no replacement model of the same category exists. A
+		// list left empty by this removal means the orchestrator's default targets
+		// (DefaultTargets); it is not re-pinned to birdnet (model de-privilege epic, Phase 4).
+		alias := ConfigAliasForRegistry(entry.RegistryID)
+		if alias != "" && !retainAlias {
+			updated.Models.Enabled = slices.DeleteFunc(updated.Models.Enabled, func(id string) bool {
 				return strings.EqualFold(id, alias)
 			})
-		}
 
-		// Remove from RTSP/stream sources. An emptied list means the default targets.
-		for i := range updated.Realtime.RTSP.Streams {
-			stream := &updated.Realtime.RTSP.Streams[i]
-			stream.Models = slices.DeleteFunc(stream.Models, func(id string) bool {
-				return strings.EqualFold(id, alias)
-			})
+			// Remove from sound card sources. An emptied list means the default targets.
+			for i := range updated.Realtime.Audio.Sources {
+				src := &updated.Realtime.Audio.Sources[i]
+				src.Models = slices.DeleteFunc(src.Models, func(id string) bool {
+					return strings.EqualFold(id, alias)
+				})
+			}
+
+			// Remove from RTSP/stream sources. An emptied list means the default targets.
+			for i := range updated.Realtime.RTSP.Streams {
+				stream := &updated.Realtime.RTSP.Streams[i]
+				stream.Models = slices.DeleteFunc(stream.Models, func(id string) bool {
+					return strings.EqualFold(id, alias)
+				})
+			}
 		}
+		return nil
+	})
+	if err != nil {
+		return
 	}
-
-	conf.StoreSettings(updated)
 	if err := conf.SaveSettings(); err != nil {
 		GetLogger().Warn("Failed to persist settings after model uninstall",
 			logger.String("catalog_id", entry.ID),

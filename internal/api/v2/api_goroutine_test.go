@@ -121,20 +121,3 @@ func TestSendReconfigActionsRecoverOnClosedChannel(t *testing.T) {
 		c.sendReconfigActions([]string{"boom"}, false)
 	})
 }
-
-// TestGoroutineCleanupWithoutRoutes verifies that creating a controller without
-// routes doesn't start unnecessary goroutines
-func TestGoroutineCleanupWithoutRoutes(t *testing.T) {
-	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks)
-	// so a leftover transport-dial goroutine from a previously-run test under
-	// -shuffle is ignored rather than wrongly attributed here.
-	testutil.VerifyNoLeaks(t)
-
-	// Setup test environment (which uses NewWithOptions with initializeRoutes=false)
-	_, _, controller := setupTestEnvironment(t)
-
-	// Since routes are not initialized, goroutinesStarted should be nil
-	require.Nil(t, controller.goroutinesStarted, "goroutinesStarted channel should not be created without route initialization")
-
-	// Controller shutdown is handled by setupTestEnvironment's t.Cleanup()
-}

@@ -192,3 +192,21 @@ func NewCore(t *testing.T, opts ...CoreOption) *apicore.Core {
 
 	return core
 }
+
+// CoreSettingsUpdater returns a test double for the facade's updateAndSaveSettings
+// that matches a controller which does not own the global settings: it clones the
+// core's own snapshot, runs mutate on the clone, and stores the result back on the
+// core (no global publish, no disk write, matching DisableSaveSettings=true). A
+// mutate error, including conf.ErrSettingsUnchanged, stores nothing and is
+// returned as is, like the facade's.
+func CoreSettingsUpdater(core *apicore.Core) apicore.SettingsUpdater {
+	return func(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error) {
+		current = core.Settings.Load()
+		updated = conf.CloneSettings(current)
+		if err := mutate(current, updated); err != nil {
+			return nil, nil, err
+		}
+		core.Settings.Store(updated)
+		return current, updated, nil
+	}
+}

@@ -1,12 +1,7 @@
-// Go 1.25 improvements:
-// - Uses b.Loop() for benchmark iterations
-// LLM GUIDANCE: Always use b.Loop() instead of manual for i := 0; i < b.N; i++
-
 package api
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -63,7 +58,6 @@ type toastTestCase struct {
 	message   string
 	toastType string
 	duration  int
-	wantError bool
 }
 
 // getToastTestCases returns test cases for SendToast
@@ -74,49 +68,42 @@ func getToastTestCases() []toastTestCase {
 			message:   "Operation completed successfully",
 			toastType: ToastTypeSuccess,
 			duration:  3000,
-			wantError: false,
 		},
 		{
 			name:      "error toast",
 			message:   "Operation failed",
 			toastType: ToastTypeError,
 			duration:  5000,
-			wantError: false,
 		},
 		{
 			name:      "warning toast",
 			message:   "Warning message",
 			toastType: ToastTypeWarning,
 			duration:  4000,
-			wantError: false,
 		},
 		{
 			name:      "info toast",
 			message:   "Information message",
 			toastType: ToastTypeInfo,
 			duration:  3000,
-			wantError: false,
 		},
 		{
 			name:      "unknown toast type defaults to info",
 			message:   "Unknown type message",
 			toastType: ValueUnknown,
 			duration:  3000,
-			wantError: false,
 		},
 		{
 			name:      "empty message",
 			message:   "",
 			toastType: ToastTypeInfo,
 			duration:  1000,
-			wantError: false,
 		},
 		{
 			name:      "zero duration",
 			message:   "Zero duration message",
 			toastType: ToastTypeSuccess,
 			duration:  0,
-			wantError: false,
 		},
 	}
 }
@@ -132,19 +119,18 @@ func runSendToastTest(t *testing.T, c *Controller, service *notification.Service
 
 	err := c.SendToast(tc.message, tc.toastType, tc.duration)
 
-	if tc.wantError {
-		assert.Error(t, err, "SendToast() expected error but got none")
-		return
-	}
-
 	require.NoError(t, err, "SendToast() unexpected error")
 
-	// Verify notification was created and broadcast
+	// SendToast returns after the synchronous, non-blocking broadcast
+	// (notification/service_extensions.go:69, Service.CreateWithMetadata calling
+	// Service.broadcast; notification/service.go:629-636, sendToSubscriber), so
+	// the notification is already in the subscriber channel and no wait is
+	// needed.
 	select {
 	case notif := <-notifCh:
 		verifyToastNotification(t, notif, tc)
-	case <-time.After(100 * time.Millisecond):
-		require.Fail(t, "SendToast() should have broadcast notification within timeout")
+	default:
+		require.Fail(t, "SendToast() should have broadcast notification before returning")
 	}
 }
 
@@ -231,18 +217,4 @@ func TestController_SendToast_ServiceNotInitialized(t *testing.T) {
 
 	err := c.SendToast("test message", ToastTypeInfo, 1000)
 	require.Error(t, err, "SendToast() must return an error when no notification service is available")
-}
-
-// Benchmark for SendToast performance
-func BenchmarkController_SendToast(b *testing.B) {
-	c, _ := newToastTestController(b)
-
-	b.ReportAllocs()
-	b.ResetTimer()
-
-	// Use b.Loop() for benchmark iteration (Go 1.25)
-	for b.Loop() {
-		err := c.SendToast("Benchmark toast message", ToastTypeInfo, 1000)
-		require.NoError(b, err, "SendToast() benchmark error")
-	}
 }

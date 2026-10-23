@@ -39,72 +39,21 @@ func TestAnalysisOverlapDispatchesRestart(t *testing.T) {
 	assert.False(t, entry.changed(base, conf.CloneSettings(base)), "identical settings must not fire")
 }
 
-// TestAnalysisOverlapChanged verifies the birdnet.overlap change detector. Overlap
-// drives the realtime analysis-buffer cadence, so a change must be detected to
-// trigger restart_audio_capture (a full teardown that reallocates the buffers
-// with new dimensions); an unrelated save must not, so buffers are not needlessly
-// rebuilt.
-func TestAnalysisOverlapChanged(t *testing.T) {
+// TestAnalysisOverlapChangedIgnoresOtherBirdNETFields verifies that a save that
+// touches an unrelated birdnet field does not look like an overlap change, so the
+// analysis buffers are not rebuilt (a full restart_audio_capture) needlessly.
+// That an overlap change is detected is pinned by
+// TestAnalysisOverlapDispatchesRestart.
+func TestAnalysisOverlapChangedIgnoresOtherBirdNETFields(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name    string
-		mutate  func(s *conf.Settings)
-		changed bool
-	}{
-		{
-			name:    "overlap change is detected",
-			mutate:  func(s *conf.Settings) { s.BirdNET.Overlap += 0.5 },
-			changed: true,
-		},
-		{
-			name:    "overlap set to a new value is detected",
-			mutate:  func(s *conf.Settings) { s.BirdNET.Overlap = 2.4 },
-			changed: true,
-		},
-		{
-			name:    "unrelated birdnet field is not an overlap change",
-			mutate:  func(s *conf.Settings) { s.BirdNET.Sensitivity += 0.1 },
-			changed: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			base := apitest.NewValidTestSettings()
-			base.BirdNET.Overlap = 0.0
-			updated := conf.CloneSettings(base)
-			tt.mutate(updated)
 
-			assert.Equal(t, tt.changed, analysisOverlapChanged(base, updated),
-				"detector result mismatch for %q", tt.name)
-			assert.False(t, analysisOverlapChanged(base, conf.CloneSettings(base)),
-				"detector reported a change for identical settings in %q", tt.name)
-		})
-	}
-}
+	base := apitest.NewValidTestSettings()
+	base.BirdNET.Overlap = 0.0
+	updated := conf.CloneSettings(base)
+	updated.BirdNET.Sensitivity += 0.1
 
-func TestFalsePositiveFilterActiveChanged(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name     string
-		from, to int
-		changed  bool
-	}{
-		{"off to on", 0, 3, true},
-		{"on to off", 2, 0, true},
-		{"on to on", 1, 5, false},
-		{"off to off", 0, 0, false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			oldS := apitest.NewValidTestSettings()
-			oldS.Realtime.FalsePositiveFilter.Level = tt.from
-			newS := conf.CloneSettings(oldS)
-			newS.Realtime.FalsePositiveFilter.Level = tt.to
-			assert.Equal(t, tt.changed, falsePositiveFilterActiveChanged(oldS, newS))
-		})
-	}
+	assert.False(t, analysisOverlapChanged(base, updated),
+		"a sensitivity change must not count as an overlap change")
 }
 
 // TestFalsePositiveFilterCrossingDispatchesReconfigure guards the table row that

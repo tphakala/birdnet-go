@@ -262,7 +262,7 @@ type pendingWarmup struct {
 }
 
 // CurrentSettings returns the latest settings snapshot published via
-// conf.StoreSettings, or the Orchestrator's constructor-provided settings when none
+// conf.UpdateSettings, or the Orchestrator's constructor-provided settings when none
 // has been published.
 func (o *Orchestrator) CurrentSettings() *conf.Settings {
 	if s := o.settingsAtomic.Load(); s != nil {

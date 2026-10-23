@@ -21,7 +21,8 @@ var ConfigPath string
 
 // settingsInstance holds the current *Settings snapshot. Published via
 // atomic.Pointer.Store and never mutated in place; writers produce a new
-// snapshot via CloneSettings + StoreSettings.
+// snapshot via UpdateSettings, which clones the current snapshot, lets the
+// writer mutate the clone and publishes it under the settings writer lock.
 //
 // loadMu guards the on-demand Load() that Setting() performs when
 // settingsInstance is nil. A plain sync.Mutex is used rather than sync.Once
@@ -480,7 +481,7 @@ func getDefaultConfig() (string, error) {
 
 // GetSettings returns the current settings snapshot. Safe for concurrent use;
 // the returned pointer is published via atomic.Pointer.Store and never mutated
-// in place. Writers produce a new snapshot via CloneSettings + StoreSettings.
+// in place. Writers produce a new snapshot via UpdateSettings.
 func GetSettings() *Settings {
 	return settingsInstance.Load()
 }
@@ -500,14 +501,18 @@ func CurrentOrFallback(fallback *Settings) *Settings {
 	return fallback
 }
 
-// StoreSettings publishes a new *Settings snapshot atomically. Callers must
-// not mutate the pointee after calling StoreSettings; readers may observe the
-// snapshot concurrently through GetSettings. The canonical writer pattern is:
-//
-//	current := conf.GetSettings()
-//	updated := conf.CloneSettings(current)
-//	// ... mutate updated ...
-//	conf.StoreSettings(updated)
+// StoreSettings publishes a new *Settings snapshot atomically and without
+// taking the settings writer lock. It exists for Load, for tests and for test
+// helpers that seed or clear the snapshot (conftest, securitytest). Production
+// code that changes a setting at runtime must use UpdateSettings, which reads
+// its baseline under the writer lock; a bare clone-mutate-StoreSettings can
+// publish over another writer's change, and the SettingsPublishThroughWriter
+// ruleguard rule rejects it outside this package. It does not stamp a Revision
+// (the snapshot keeps whatever it carries, 0 for a new one), so a test that needs
+// ETag or If-Match behaviour to change publishes through UpdateSettings. Callers
+// must not mutate the
+// pointee after calling StoreSettings; readers may observe the snapshot
+// concurrently through GetSettings.
 //
 // Passing nil is valid and clears the stored settings (mostly useful in tests).
 func StoreSettings(s *Settings) {
@@ -566,9 +571,20 @@ func prepareSettingsForSave(s *Settings, latitude float64) Settings {
 	return settingsCopy
 }
 
+// saveMu serializes SaveSettings. Each save loads the published snapshot after
+// taking it, so the save that finishes last persists a snapshot at least as new
+// as every earlier save's, and disk cannot end up older than memory because a
+// slower save renamed its older snapshot over a newer one. It is a leaf lock:
+// nothing else is acquired while it is held, and in particular not
+// settingsWriteMu, so callers may hold any other settings lock.
+var saveMu sync.Mutex
+
 // SaveSettings saves the current settings to the configuration file.
 // It uses UpdateYAMLConfig to handle the atomic write process.
 func SaveSettings() error {
+	saveMu.Lock()
+	defer saveMu.Unlock()
+
 	// Load the current snapshot through the atomic pointer; the pointee is
 	// immutable after publication so reading fields off it is race-free.
 	current := settingsInstance.Load()
@@ -580,8 +596,8 @@ func SaveSettings() error {
 	}
 
 	// Deep-clone the published snapshot before mutating it in
-	// prepareSettingsForSave. The snapshot is immutable (range filter
-	// writers use clone-mutate-publish), so CloneSettings captures a
+	// prepareSettingsForSave. The snapshot is immutable (writers
+	// publish a clone through UpdateSettings), so CloneSettings captures a
 	// consistent point-in-time copy without additional locking.
 	settingsCopy := *CloneSettings(current)
 

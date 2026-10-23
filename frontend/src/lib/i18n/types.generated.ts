@@ -1856,6 +1856,7 @@ export type TranslationKey =
   | 'settings.actions.noChangesToSave'
   | 'settings.errors.loadFailed'
   | 'settings.errors.saveFailed'
+  | 'settings.errors.changedElsewhere'
   | 'settings.errors.databaseStatsFailed'
   | 'settings.errors.csvDownloadFailed'
   | 'settings.card.changed'

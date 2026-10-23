@@ -18,6 +18,12 @@ func GetLogger() logger.Logger {
 
 // Security configuration constants.
 const (
+	// corsHeaderIfMatch and corsHeaderETag are the conditional-write headers the
+	// settings API uses (apicore.HeaderIfMatch and apicore.HeaderETag; this package
+	// does not import apicore).
+	corsHeaderIfMatch = "If-Match"
+	corsHeaderETag    = "ETag"
+
 	// HSTSMaxAge is the max-age value for HSTS header (1 year in seconds).
 	HSTSMaxAge = 31536000
 )
@@ -104,7 +110,11 @@ func NewCORS(config *SecurityConfig) echo.MiddlewareFunc {
 			echo.HeaderCacheControl,
 			"X-Requested-With",
 			"X-CSRF-Token",
+			corsHeaderIfMatch,
 		},
+		// ETag is not a CORS-safelisted response header; cross-origin clients need
+		// it to send a settings If-Match.
+		ExposeHeaders:    []string{corsHeaderETag},
 		AllowCredentials: config.AllowCredentials,
 	}
 
