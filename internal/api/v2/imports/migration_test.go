@@ -119,6 +119,7 @@ func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Handler, *datasto
 	}
 
 	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: testDS, Repo: mockRepo}}
+	controller.diskFreeFn = stubDiskFree
 	controller.Settings.Store(getTestSettings(t))
 	apitest.PublishTestSettings(t, controller.Settings.Load())
 

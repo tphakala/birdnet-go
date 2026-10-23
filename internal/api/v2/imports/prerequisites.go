@@ -229,17 +229,17 @@ func (c *Handler) checkDiskSpace() PrerequisiteCheck {
 		}
 	}
 
-	usage, err := disk.Usage(diskPath)
+	free, err := c.diskFree(diskPath)
 	if err != nil {
 		check.Status = CheckStatusError
 		check.Message = fmt.Sprintf("Failed to check disk space on %s: %v", diskPath, err)
 		return check
 	}
 
-	freeGB := float64(usage.Free) / (1024 * 1024 * 1024)
+	freeGB := float64(free) / (1024 * 1024 * 1024)
 	requiredGB := float64(requiredSpace) / (1024 * 1024 * 1024)
 
-	if usage.Free >= requiredSpace {
+	if free >= requiredSpace {
 		check.Status = CheckStatusPassed
 		check.Message = fmt.Sprintf("%.1fGB available (need %.1fGB)%s", freeGB, requiredGB, dbSizeInfo)
 	} else {
@@ -669,15 +669,15 @@ func (c *Handler) checkMemoryAvailable() PrerequisiteCheck {
 		Severity:    CheckSeverityWarning,
 	}
 
-	v, err := mem.VirtualMemory()
+	available, err := c.availableMemory()
 	if err != nil {
 		check.Status = CheckStatusSkipped
 		check.Message = "Could not check memory"
 		return check
 	}
 
-	availableMB := v.Available / (1024 * 1024)
-	if v.Available >= MinMemoryBytes {
+	availableMB := available / (1024 * 1024)
+	if available >= MinMemoryBytes {
 		check.Status = CheckStatusPassed
 		check.Message = fmt.Sprintf("%dMB available", availableMB)
 	} else {
@@ -700,4 +700,30 @@ func (c *Handler) getLegacyGormDB() *gorm.DB {
 	}
 
 	return nil
+}
+
+// diskFree returns the free bytes on the filesystem holding path through the
+// diskFreeFn seam, falling back to gopsutil disk.Usage.
+func (c *Handler) diskFree(path string) (uint64, error) {
+	if c.diskFreeFn != nil {
+		return c.diskFreeFn(path)
+	}
+	usage, err := disk.Usage(path)
+	if err != nil {
+		return 0, err
+	}
+	return usage.Free, nil
+}
+
+// availableMemory returns the available memory in bytes through the
+// availableMemoryFn seam, falling back to gopsutil mem.VirtualMemory.
+func (c *Handler) availableMemory() (uint64, error) {
+	if c.availableMemoryFn != nil {
+		return c.availableMemoryFn()
+	}
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return 0, err
+	}
+	return v.Available, nil
 }
