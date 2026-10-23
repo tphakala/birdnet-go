@@ -1907,7 +1907,11 @@ describe('Settings Store - save conflicts (If-Match)', () => {
     vi.mocked(settingsAPI.save).mockReset().mockRejectedValue(conflict());
     const { toastActions } = await import('./toast.js');
 
-    await expect(settingsActions.saveSettings()).rejects.toThrow(CHANGED_ELSEWHERE_KEY);
+    await expect(settingsActions.saveSettings()).rejects.toMatchObject({
+      message: CHANGED_ELSEWHERE_KEY,
+      // Carries the 412 so telemetry treats it as the expected conflict it is.
+      status: 412,
+    });
 
     expect(settingsAPI.save).toHaveBeenCalledTimes(2);
     const state = get(settingsStore);

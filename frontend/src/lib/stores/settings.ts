@@ -1439,6 +1439,9 @@ const WEAK_ETAG_PREFIX = 'W/';
 
 /** Thrown when every save attempt got a 412: the settings keep changing under the form. */
 class SettingsChangedElsewhereError extends Error {
+  /** The status of the conflict it reports, so telemetry filters it like the 412 itself. */
+  readonly status = HTTP_PRECONDITION_FAILED;
+
   constructor() {
     super(t('settings.errors.changedElsewhere'));
     this.name = 'SettingsChangedElsewhereError';
@@ -1453,7 +1456,8 @@ function isPreconditionFailed(error: unknown): boolean {
   return (
     typeof error === 'object' &&
     error !== null &&
-    (error as { status?: unknown }).status === HTTP_PRECONDITION_FAILED
+    'status' in error &&
+    error.status === HTTP_PRECONDITION_FAILED
   );
 }
 
