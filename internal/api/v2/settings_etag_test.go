@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 )
 
 // etagTestIntervalOutOfBand and etagTestIntervalRequested are realtime.interval
@@ -243,4 +245,94 @@ func TestGetSectionSettings_UnexportedFieldIsNotASection(t *testing.T) {
 	require.NotPanics(t, func() { require.NoError(t, c.GetSectionSettings(ctx)) })
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 	assert.Empty(t, rec.Header().Get(apicore.HeaderETag), "section GETs carry no ETag")
+}
+
+// TestSettingsETag_CarriesProcessEpoch pins that the ETag starts with the
+// per-process epoch, which is what keeps an ETag issued before a restart from
+// matching one issued after it (the revision counter starts over).
+func TestSettingsETag_CarriesProcessEpoch(t *testing.T) {
+	t.Parallel()
+
+	etag := settingsETag(&conf.Settings{})
+
+	assert.True(t, strings.HasPrefix(etag, `"`+settingsETagEpoch+"-"), "ETag %s must start with the process epoch", etag)
+	assert.True(t, strings.HasSuffix(etag, `"`))
+	assert.NotEmpty(t, settingsETagEpoch)
+}
+
+// TestSettingsETag_SectionGetSendsNone pins that a successful section GET sends
+// no ETag: the revision covers all settings, so a section ETag would go stale on
+// any unrelated change.
+func TestSettingsETag_SectionGetSendsNone(t *testing.T) {
+	e := echo.New()
+	c := newGlobalOwnerController(t, e, getTestSettings(t))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/"+etagTestSection, http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	ctx.SetParamNames("section")
+	ctx.SetParamValues(etagTestSection)
+
+	require.NoError(t, c.GetSectionSettings(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Empty(t, rec.Header().Get(apicore.HeaderETag))
+}
+
+// TestSettingsETag_MultipleIfMatchLines pins that several If-Match header lines
+// are read as one comma-separated list (RFC 9110 section 5.3), so a matching tag
+// on a later line is honoured.
+func TestSettingsETag_MultipleIfMatchLines(t *testing.T) {
+	e := echo.New()
+	c := newGlobalOwnerController(t, e, getTestSettings(t))
+	publishInterval(t, etagTestIntervalOutOfBand)
+	current := etagGetAll(t, e, c).etag
+	require.NotEmpty(t, current)
+
+	req := httptest.NewRequest(http.MethodPut, "/api/v2/settings", bytes.NewReader([]byte(etagTestPutBody)))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	req.Header.Add(apicore.HeaderIfMatch, `"stale-0"`)
+	req.Header.Add(apicore.HeaderIfMatch, current)
+	rec := httptest.NewRecorder()
+	require.NoError(t, c.UpdateSettings(e.NewContext(req, rec)))
+
+	assert.Equal(t, http.StatusOK, rec.Code, "body: %s", rec.Body.String())
+	assert.Equal(t, etagTestIntervalRequested, conf.GetSettings().Realtime.Interval)
+}
+
+// TestSettingsETag_PreconditionIsCheckedUnderTheWriterLock pins that the If-Match
+// comparison is made against the snapshot the write is applied to, inside the
+// settings writer lock: a PUT that waits behind another writer must see that
+// writer's publish and answer 412 rather than overwrite it.
+func TestSettingsETag_PreconditionIsCheckedUnderTheWriterLock(t *testing.T) {
+	e := echo.New()
+	c := newGlobalOwnerController(t, e, getTestSettings(t))
+	publishInterval(t, etagTestIntervalOutOfBand)
+	current := etagGetAll(t, e, c).etag
+	require.NotEmpty(t, current)
+
+	release := conftest.HoldSettingsWriter(t, func(updated *conf.Settings) {
+		updated.Models.Enabled = stalenessInstalledModels()
+	})
+
+	done := make(chan struct{})
+	var res etagResult
+	go func() {
+		defer close(done)
+		req := httptest.NewRequest(http.MethodPut, "/api/v2/settings", bytes.NewReader([]byte(etagTestPutBody)))
+		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+		req.Header.Set(apicore.HeaderIfMatch, current)
+		rec := httptest.NewRecorder()
+		if err := c.UpdateSettings(e.NewContext(req, rec)); err == nil {
+			res = etagResult{code: rec.Code, etag: rec.Header().Get(apicore.HeaderETag), body: rec.Body.String()}
+		}
+	}()
+
+	conftest.AssertStillBlocked(t, done, "PUT with If-Match")
+	release()
+	<-done
+
+	assert.Equal(t, http.StatusPreconditionFailed, res.code, "body: %s", res.body)
+	final := conf.GetSettings()
+	assert.Equal(t, stalenessInstalledModels(), final.Models.Enabled, "the writer that held the lock must survive")
+	assert.Equal(t, etagTestIntervalOutOfBand, final.Realtime.Interval, "the refused PUT must not be applied")
 }
