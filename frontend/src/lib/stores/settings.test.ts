@@ -3,6 +3,7 @@ import { get } from 'svelte/store';
 import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS } from './settings';
 import type {
   AudioSettings,
+  AudioSourceConfig,
   BirdNetSettings,
   EqualizerSettings,
   RealtimeSettings,
@@ -1797,5 +1798,46 @@ describe('Settings Store - saveSettings rebases on the server state', () => {
     expect(lookup(body, ['realtime', 'audio', 'sources', '0', 'models'])).toEqual(['birdnet']);
     expect(lookup(body, ['realtime', 'rtsp', 'streams', '0', 'name'])).toBe('Renamed stream');
     expect(lookup(body, ['realtime', 'rtsp', 'streams', '0', 'models'])).toEqual(['birdnet']);
+  });
+});
+
+describe('Settings Store - tab change markers agree with the toolbar after a save', () => {
+  // SoundCardManager and StreamCard store a source without an equalizer as
+  // `equalizer: undefined`, a present key whose value JSON drops. The toolbar
+  // (hasUnsavedChanges) compares JSON; the Audio tab dots use hasSettingsChanged.
+  it('reports a saved audio source with an undefined equalizer as unchanged', async () => {
+    const snapshot = serverSettings();
+    settingsStore.set({
+      formData: serverSettings(),
+      originalData: serverSettings(),
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: true,
+    });
+
+    const audio = snapshot.realtime?.audio;
+    if (!audio) throw new Error('fixture has no audio settings');
+    const source: AudioSourceConfig = {
+      name: 'Mic',
+      device: 'hw:1',
+      gain: 0,
+      models: ['birdnet'],
+      equalizer: undefined,
+    };
+    settingsActions.updateSection('realtime', { audio: { ...audio, sources: [source] } });
+    await settingsActions.saveSettings({ notify: false });
+
+    const state = get(settingsStore);
+    // The key must survive the store round trip, or the comparison below proves nothing.
+    expect(state.formData.realtime?.audio?.sources[0]).toHaveProperty('equalizer', undefined);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(
+      hasSettingsChanged(
+        state.originalData.realtime?.audio?.sources,
+        state.formData.realtime?.audio?.sources
+      )
+    ).toBe(false);
   });
 });
