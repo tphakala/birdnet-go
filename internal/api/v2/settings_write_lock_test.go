@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -241,6 +242,72 @@ func failSettingsSave(t *testing.T) {
 	t.Cleanup(func() { conf.ConfigPath = prevPath })
 }
 
+// TestUpdateAndSaveSettings_SaveFailureRollsBack pins that the hand-off writer
+// reports a failed save with the shared rollback message and restores the
+// previous snapshot.
+func TestUpdateAndSaveSettings_SaveFailureRollsBack(t *testing.T) {
+	initial := getTestSettings(t)
+	c := newGlobalOwnerController(t, echo.New(), initial)
+	c.DisableSaveSettings = false
+	failSettingsSave(t)
+
+	c.settingsMutex.Lock()
+	defer c.settingsMutex.Unlock()
+	_, _, err := c.updateAndSaveSettings(func(_, updated *conf.Settings) error {
+		updated.Realtime.Interval = writeLockTestInterval
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), msgSaveFailedRolledBack)
+	assert.Same(t, initial, conf.GetSettings(), "a failed save must restore the previous snapshot")
+	assert.Same(t, initial, c.ControllerSettings())
+}
+
+// TestUpdateAndSaveSettings_MintsProfilingToken pins that the hand-off writer,
+// on the controller that owns the global snapshot, mints the profiling token
+// through commitSettings after a successful mutate, and mints nothing into the
+// clone when the mutate returns an error. Profiling is already enabled in the
+// seeded snapshot, so a mint that ran before the mutate result was checked
+// would leave a token in the clone.
+func TestUpdateAndSaveSettings_MintsProfilingToken(t *testing.T) {
+	tests := []struct {
+		name      string
+		err       error
+		wantToken bool
+	}{
+		{name: "mutate succeeds", wantToken: true},
+		{name: "mutate publishes nothing", err: conf.ErrSettingsUnchanged},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial := getTestSettings(t)
+			initial.Diagnostics.Profiling.Enabled = true
+			c := newGlobalOwnerController(t, echo.New(), initial)
+			c.DisableSaveSettings = true
+
+			var clone *conf.Settings
+			c.settingsMutex.Lock()
+			defer c.settingsMutex.Unlock()
+			_, _, err := c.updateAndSaveSettings(func(_, updated *conf.Settings) error {
+				clone = updated
+				updated.Realtime.Interval = writeLockTestInterval
+				return tt.err
+			})
+
+			require.NotNil(t, clone)
+			if tt.wantToken {
+				require.NoError(t, err)
+				assert.NotEmpty(t, conf.GetSettings().Diagnostics.Profiling.Token)
+				return
+			}
+			require.ErrorIs(t, err, tt.err)
+			assert.Empty(t, clone.Diagnostics.Profiling.Token, "a failed mutate must not leave a minted token")
+			assert.Same(t, initial, conf.GetSettings())
+		})
+	}
+}
+
 // TestFinishSettingsWrite_RollbackMessages pins which client message
 // finishSettingsWrite picks for each failure and outcome pair. The "not rolled
 // back" rows are the ones no handler test reached before: a writer (here a model
@@ -255,6 +322,11 @@ func TestFinishSettingsWrite_RollbackMessages(t *testing.T) {
 		})
 		require.NoError(t, err)
 	}
+
+	resetProfileRates(t)
+	// applyRate stands in for handleSettingsChanges applying a profiling rate
+	// that the saved config does not carry.
+	applyRate := func() { runtime.SetMutexProfileFraction(conf.RecommendedMutexProfileFraction) }
 
 	tests := []struct {
 		name string
@@ -277,13 +349,14 @@ func TestFinishSettingsWrite_RollbackMessages(t *testing.T) {
 		},
 		{
 			name:           "save fails, nothing published since",
+			apply:          func() error { applyRate(); return nil },
 			failSave:       true,
 			wantMsg:        msgSaveFailedRolledBack,
 			wantRolledBack: true,
 		},
 		{
 			name:     "apply publishes, save fails",
-			apply:    func() error { publishInstall(); return nil },
+			apply:    func() error { publishInstall(); applyRate(); return nil },
 			failSave: true,
 			wantMsg:  msgSaveFailedNotRolledBack,
 		},
@@ -313,7 +386,15 @@ func TestFinishSettingsWrite_RollbackMessages(t *testing.T) {
 			if tt.wantRolledBack {
 				assert.Same(t, initial, final)
 				assert.Same(t, initial, c.ControllerSettings())
+				if tt.failSave {
+					assert.Zero(t, runtime.SetMutexProfileFraction(-1),
+						"a rolled-back save must restore the profiling rate of the surviving config")
+				}
 				return
+			}
+			if tt.failSave {
+				assert.Equal(t, conf.RecommendedMutexProfileFraction, runtime.SetMutexProfileFraction(-1),
+					"a superseded rollback keeps the newer snapshot, so its rate must stay")
 			}
 			assert.Equal(t, stalenessInstalledModels(), final.Models.Enabled, "the newer writer's change must stay")
 			assert.Equal(t, writeLockTestInterval, final.Realtime.Interval, "the newer snapshot is left as published")
