@@ -569,8 +569,9 @@ func boundedFfmpegVersion(ffmpegPath string) (version string, major, minor int) 
 
 // ffmpegProbeWaitDelay is how long the version probe waits for the ffmpeg
 // output pipes to close once the process has exited or been killed, before it
-// stops waiting. A probe whose child keeps a pipe open past that point reports
-// no version, even if the process printed one.
+// stops waiting. A probe whose process exited successfully still reports the
+// version it printed when a child keeps a pipe open past that point; a probe
+// that was killed or failed reports none.
 const ffmpegProbeWaitDelay = 2 * time.Second
 
 // GetFfmpegVersionFromContext is like GetFfmpegVersionFrom but bounds the
@@ -584,10 +585,11 @@ func GetFfmpegVersionFromContext(ctx context.Context, ffmpegPath string) (versio
 	cmd := exec.CommandContext(ctx, ffmpegPath, "-version") //nolint:gosec // G204: ffmpegPath validated by ValidateToolPath before reaching here
 	// A wrapper script can leave a child holding the output pipe after the process
 	// exits or is killed; without a wait delay CombinedOutput would keep waiting
-	// for it.
+	// for it. When the process itself exited successfully, CombinedOutput returns
+	// exec.ErrWaitDelay together with the complete output, which is still valid.
 	cmd.WaitDelay = ffmpegProbeWaitDelay
 	output, err := cmd.CombinedOutput()
-	if err != nil {
+	if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
 		return "", 0, 0
 	}
 	return ParseFfmpegVersion(string(output))
