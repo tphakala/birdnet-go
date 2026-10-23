@@ -10,13 +10,26 @@ import (
 
 	ort "github.com/tphakala/birdnet-go/internal/inference/onnx"
 	"github.com/tphakala/birdnet-go/internal/logger"
-	ortlib "github.com/yalue/onnxruntime_go"
 )
 
 var (
 	ortInitMu      sync.Mutex
 	ortInitialized bool
+	// ortRejected records a library that loaded but is below the supported
+	// minimum. The binding keeps a successful load for the life of the process
+	// and ignores later library paths, so the rejection is sticky: every later
+	// InitONNXRuntime returns the same error without calling the binding.
+	// Guarded by ortInitMu.
+	ortRejected *ortRejection
 )
+
+// ortRejection describes a loaded ONNX Runtime library that was rejected for
+// being older than the supported minimum.
+type ortRejection struct {
+	version string
+	path    string
+	err     error
+}
 
 // IsORTInitialized reports whether the ONNX Runtime has been successfully initialized. Thread-safe.
 func IsORTInitialized() bool {
@@ -63,7 +76,7 @@ func NewONNXClassifier(modelPath string, opts ONNXClassifierOptions) (Classifier
 		threads = runtime.NumCPU()
 	}
 	var configErr error
-	classifierOpts = append(classifierOpts, ort.WithSessionOptions(func(so *ortlib.SessionOptions) {
+	classifierOpts = append(classifierOpts, ort.WithSessionOptions(func(so *ort.SessionOptions) {
 		if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
 			configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
 		}
@@ -166,7 +179,7 @@ func NewONNXCustomClassifier(modelPath string, opts ONNXCustomClassifierOptions)
 		threads = runtime.NumCPU()
 	}
 	var configErr error
-	builder = builder.SessionOptions(func(so *ortlib.SessionOptions) {
+	builder = builder.SessionOptions(func(so *ort.SessionOptions) {
 		if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
 			configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)
 		}
@@ -295,13 +308,19 @@ func (r *onnxRangeFilter) Close() {
 // When libraryPath is empty, searches standard system library paths for
 // libonnxruntime.so (Linux) or onnxruntime.dll (Windows).
 // Safe to call multiple times; skips if already initialized successfully.
-// On failure, allows retry with a corrected path (supports hot-reload recovery).
+// A failed load (missing file, wrong path) stays retryable with a corrected
+// path. A library that loads but is older than the supported minimum stays
+// rejected until the process restarts, because the binding keeps the first
+// successful load. Do not call it after DestroyONNXRuntime, which is terminal.
 func InitONNXRuntime(libraryPath string) (err error) {
 	ortInitMu.Lock()
 	defer ortInitMu.Unlock()
 
 	if ortInitialized {
 		return nil
+	}
+	if ortRejected != nil {
+		return ortRejected.err
 	}
 
 	configured := libraryPath != ""
@@ -319,20 +338,53 @@ func InitONNXRuntime(libraryPath string) (err error) {
 	if initErr != nil {
 		return describeORTInitError(libraryPath, initErr)
 	}
+	if version := ort.Version(); belowORTMinimum(version) {
+		ortRejected = &ortRejection{
+			version: version,
+			path:    libraryPath,
+			err:     rejectedORTError(libraryPath, version),
+		}
+		return ortRejected.err
+	}
 	ortInitialized = true
 	publishORTRuntime(libraryPath, configured)
-	logORTInitialized(ortlib.GetVersion(), libraryPath, optOut)
+	logORTInitialized(ort.Version(), libraryPath, optOut)
 	return nil
 }
 
-// ortAPIBaseTooOldMarker is the text yalue/onnxruntime_go v1.36.0 returns when
-// the loaded library cannot serve the C API level it requests: code 2 means
-// GetApi(29) returned NULL (setup_env.go:87, setup_env_windows.go:56).
-const ortAPIBaseTooOldMarker = "Error setting ORT API base: 2"
+// ortAPIBaseTooOldMarker is part of the text the official binding returns when
+// the loaded library cannot serve even its lowest C API level (17): "ort: init
+// api: GetApi failed; ORT library may be too old (need API >= 17)" (ort.go:67-69
+// in github.com/microsoft/onnxruntime/go at the pinned commit). It fires only
+// below ONNX Runtime 1.17; the 1.29 floor is enforced after load.
+const ortAPIBaseTooOldMarker = "ORT library may be too old"
+
+// belowORTMinimum reports whether version parses and is older than the
+// supported minimum. An unparseable version is accepted, matching the
+// optimistic rule in CheckORTAvailability.
+func belowORTMinimum(version string) bool {
+	meets, known := ortVersionMeetsMinimum(version)
+	return known && !meets
+}
+
+// rejectedORTError is the error for a library that loaded but is older than
+// the supported minimum. The binding cannot load a second library in the same
+// process, so the user has to restart after installing a newer one.
+func rejectedORTError(path, version string) error {
+	return fmt.Errorf("ONNX Runtime library %q is version %s, older than the supported minimum (%s required); restart BirdNET-Go after installing a newer library, because the loaded one cannot be replaced while the process runs; install guide: %s",
+		path, version, ORTRequiredVersion(), ORTInstallGuideURL)
+}
+
+// rejectedORT returns the recorded rejection, or nil when none happened.
+func rejectedORT() *ortRejection {
+	ortInitMu.Lock()
+	defer ortInitMu.Unlock()
+	return ortRejected
+}
 
 // describeORTInitError turns an InitORT failure into a user-facing error. The
 // cryptic "too old" failure gets a readable message; any other failure keeps
-// the generic wording. It must not call ortlib.GetVersion: after a failed init
+// the generic wording. It must not call ort.Version: after a failed init
 // that points into an unloaded library.
 func describeORTInitError(path string, err error) error {
 	if !strings.Contains(err.Error(), ortAPIBaseTooOldMarker) {
@@ -400,11 +452,14 @@ func findONNXRuntimeLibrary() string {
 	return "onnxruntime"
 }
 
-// DestroyONNXRuntime tears down the ONNX Runtime environment.
-// Resets initialization state so InitONNXRuntime can be called again. It is a
-// no-op (returns nil) when the runtime was never initialized, mirroring
-// DestroyOpenVINO, so a shutdown teardown can call it unconditionally without
-// ort.DestroyORT reporting "InitializeRuntime has not been called".
+// DestroyONNXRuntime tears down the ONNX Runtime environment. The teardown is
+// terminal: the official binding cannot initialize again afterwards, so
+// InitONNXRuntime must not be called after it in the same process. It fails
+// while any session is still open (the error says how many) and then leaves
+// the state unchanged. It clears the initialization state and the runtime
+// snapshot on success. It is a no-op (returns nil) when the runtime was never
+// initialized, mirroring DestroyOpenVINO, so a shutdown teardown can call it
+// unconditionally.
 func DestroyONNXRuntime() error {
 	ortInitMu.Lock()
 	defer ortInitMu.Unlock()

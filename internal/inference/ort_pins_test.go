@@ -10,15 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// expectedYalueSeries is the onnxruntime_go series minORTMinor was derived from;
-// move both together.
-const expectedYalueSeries = "v1.36."
+// expectedBindingCommit is the commit suffix of the github.com/microsoft/onnxruntime/go
+// pseudo-version that minORTMinor was last reviewed against (the ONNX Runtime
+// v1.31.0 tag commit). Moving the binding means re-reading ORT_GO_API_VERSION_MIN
+// in its cshim.h and this file together with minORTMinor.
+const expectedBindingCommit = "402979ac1bef"
 
 var (
 	taskfilePinRe   = regexp.MustCompile(`(?m)^\s*ONNXRUNTIME_VERSION:\s*'([^']+)'`)
 	dockerfilePinRe = regexp.MustCompile(`(?m)^ARG ONNXRUNTIME_VERSION=(\S+)`)
 	actionPinRe     = regexp.MustCompile(`(?s)onnxruntime-version:.*?default:\s*'([^']+)'`)
-	goModBindingRe  = regexp.MustCompile(`(?m)github\.com/yalue/onnxruntime_go\s+(v\S+)`)
+	goModBindingRe  = regexp.MustCompile(`(?m)github\.com/microsoft/onnxruntime/go\s+(v\S+)`)
 )
 
 // firstGroup returns the first capture group of re in the file at path.
@@ -48,6 +50,6 @@ func TestORTPinsAndBindingAgreeAndMeetMinimum(t *testing.T) {
 	assert.True(t, known, "pin %q must parse", taskfile)
 	assert.True(t, meets, "pin %q must meet the minimum %s", taskfile, ORTMinimumVersion())
 
-	assert.True(t, strings.HasPrefix(binding, expectedYalueSeries),
-		"onnxruntime_go %s is outside the %s series the minimum was derived from", binding, expectedYalueSeries)
+	assert.True(t, strings.HasSuffix(binding, "-"+expectedBindingCommit),
+		"onnxruntime/go %s is not the commit %s the minimum was reviewed against", binding, expectedBindingCommit)
 }

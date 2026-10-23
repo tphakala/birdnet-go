@@ -3,11 +3,27 @@
 //
 // The caller is responsible for initializing the ONNX Runtime environment
 // before creating any Classifier or RangeFilter instances. Use InitORT (or
-// MustInitORT in tests and small tools). Do not call ort.SetSharedLibraryPath
-// and ort.InitializeEnvironment directly: that skips the telemetry opt-out.
+// MustInitORT in tests and small tools). Do not call the binding's
+// SetSharedLibraryPath and Init directly: that skips the telemetry opt-out.
 package onnx
 
-import ort "github.com/yalue/onnxruntime_go"
+import ort "github.com/microsoft/onnxruntime/go/onnxruntime"
+
+// SessionOptions is the binding's session options type. Callers that tune a
+// session (thread counts, execution providers) take it through this alias so
+// that callers outside the session owners (the VAD session and the heatmap
+// service import the binding themselves) need not import it.
+type SessionOptions = ort.SessionOptions
+
+// Version returns the version string of the loaded ONNX Runtime library, or
+// an empty string when the library is not initialized.
+func Version() string {
+	v, err := ort.GetVersion()
+	if err != nil {
+		return ""
+	}
+	return v
+}
 
 // InitORT initializes the ONNX Runtime with the given shared library path.
 // It switches ONNX Runtime telemetry off first, unless the user set
@@ -19,7 +35,7 @@ func InitORT(libraryPath string) (TelemetryOptOut, error) {
 		return optOut, err
 	}
 	ort.SetSharedLibraryPath(libraryPath)
-	if err := ort.InitializeEnvironment(); err != nil {
+	if err := ort.Init(); err != nil {
 		return optOut, err
 	}
 	// Windows official builds use ETW TraceLogging, which ignores the variable;
@@ -39,8 +55,10 @@ func MustInitORT(libraryPath string) {
 	}
 }
 
-// DestroyORT tears down the ONNX Runtime environment.
-// Call this when completely done with all classifiers and range filters.
+// DestroyORT tears down the ONNX Runtime environment. The teardown is terminal
+// for the process: the binding refuses to initialize again afterwards. It
+// fails while any session is still open, so close every session first
+// (classifiers, range filter, VAD and the heatmap service).
 func DestroyORT() error {
-	return ort.DestroyEnvironment()
+	return ort.Shutdown()
 }

@@ -3,7 +3,7 @@ package onnx
 import (
 	"testing"
 
-	ort "github.com/yalue/onnxruntime_go"
+	ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,7 +14,7 @@ import (
 func newTestRangeFilter(t *testing.T, numLabels int) *RangeFilter {
 	t.Helper()
 	return &RangeFilter{
-		session: &ort.DynamicAdvancedSession{},
+		session: &ort.Session{},
 		labels:  make([]string, numLabels),
 	}
 }

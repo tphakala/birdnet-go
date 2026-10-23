@@ -1,15 +1,17 @@
 package onnx
 
 import (
+	"context"
 	"fmt"
+	"slices"
 
-	ort "github.com/yalue/onnxruntime_go"
+	ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 )
 
 // Classifier runs bird species classification inference on audio segments.
 // It is safe for concurrent use from multiple goroutines.
 type Classifier struct {
-	session     *ort.DynamicAdvancedSession
+	session     *ort.Session
 	config      ModelConfig
 	labels      []string
 	topK        int
@@ -27,7 +29,7 @@ type classifierConfig struct {
 	labelsPath          string
 	topK                int
 	minConf             float32
-	sessionOptsFn       func(*ort.SessionOptions)
+	sessionOptsFn       func(*SessionOptions)
 	skipLabelValidation bool
 }
 
@@ -74,7 +76,7 @@ func WithSkipLabelValidation() ClassifierOption {
 // The callback receives the options after defaults (IntraOpNumThreads=1, InterOpNumThreads=1,
 // thread-pool spinning disabled) have been set, allowing the caller to override or add
 // execution providers.
-func WithSessionOptions(fn func(*ort.SessionOptions)) ClassifierOption {
+func WithSessionOptions(fn func(*SessionOptions)) ClassifierOption {
 	return func(c *classifierConfig) { c.sessionOptsFn = fn }
 }
 
@@ -91,8 +93,26 @@ func NewClassifier(modelPath string, opts ...ClassifierOption) (*Classifier, err
 		opt(cfg)
 	}
 
-	// Load model metadata and extract tensor info
-	inputNames, inputShapes, outputNames, outputInfos, err := loadModelMetadata(modelPath)
+	// Create the ONNX session first: it carries the model's tensor metadata,
+	// so the model is loaded once. Every later error closes it again.
+	session, err := createSession(modelPath, cfg.sessionOptsFn)
+	if err != nil {
+		return nil, err
+	}
+
+	classifier, err := newClassifierFromSession(session, cfg)
+	if err != nil {
+		_ = session.Close()
+		return nil, err
+	}
+	return classifier, nil
+}
+
+// newClassifierFromSession derives the model configuration and labels for an
+// open session. It does not close the session on error; the caller does.
+func newClassifierFromSession(session *ort.Session, cfg *classifierConfig) (*Classifier, error) {
+	outputInfos := session.Outputs()
+	inputNames, inputShapes, outputNames, err := modelMetadata(session.Inputs(), outputInfos)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +126,7 @@ func NewClassifier(modelPath string, opts ...ClassifierOption) (*Classifier, err
 	// Build model config and load labels
 	outputShapes := make([][]int64, len(outputInfos))
 	for i := range outputInfos {
-		outputShapes[i] = outputInfos[i].Dimensions
+		outputShapes[i] = outputInfos[i].Shape
 	}
 	modelCfg := buildModelConfig(mt, inputShapes[0], outputShapes)
 
@@ -121,12 +141,6 @@ func NewClassifier(modelPath string, opts ...ClassifierOption) (*Classifier, err
 		}
 	}
 
-	// Create ONNX session
-	session, err := createSession(modelPath, inputNames, outputNames, cfg.sessionOptsFn)
-	if err != nil {
-		return nil, err
-	}
-
 	return &Classifier{
 		session:     session,
 		config:      modelCfg,
@@ -138,26 +152,21 @@ func NewClassifier(modelPath string, opts ...ClassifierOption) (*Classifier, err
 	}, nil
 }
 
-// loadModelMetadata reads input/output tensor names and shapes from the model file.
-func loadModelMetadata(modelPath string) (
+// modelMetadata extracts input/output tensor names and shapes from the
+// metadata of an open session.
+func modelMetadata(inputInfos, outputInfos []ort.IOInfo) (
 	inputNames []string, inputShapes [][]int64,
-	outputNames []string, outputInfos []ort.InputOutputInfo,
-	err error,
+	outputNames []string, err error,
 ) {
-	inputInfos, outputInfos, err := ort.GetInputOutputInfo(modelPath)
-	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("birdnet: failed to load model metadata: %w", err)
-	}
-
 	if len(inputInfos) == 0 {
-		return nil, nil, nil, nil, &ModelDetectionError{Reason: "model has no input tensors"}
+		return nil, nil, nil, &ModelDetectionError{Reason: "model has no input tensors"}
 	}
 
 	inputNames = make([]string, len(inputInfos))
 	inputShapes = make([][]int64, len(inputInfos))
 	for i := range inputInfos {
 		inputNames[i] = inputInfos[i].Name
-		inputShapes[i] = inputInfos[i].Dimensions
+		inputShapes[i] = inputInfos[i].Shape
 	}
 
 	outputNames = make([]string, len(outputInfos))
@@ -166,12 +175,12 @@ func loadModelMetadata(modelPath string) (
 	}
 
 	if len(inputShapes[0]) < 2 {
-		return nil, nil, nil, nil, &ModelDetectionError{
+		return nil, nil, nil, &ModelDetectionError{
 			Reason: fmt.Sprintf("input shape has %d dimensions, expected at least 2", len(inputShapes[0])),
 		}
 	}
 
-	return inputNames, inputShapes, outputNames, outputInfos, nil
+	return inputNames, inputShapes, outputNames, nil
 }
 
 // resolveModelType returns the model type from config or auto-detects from shapes.
@@ -183,7 +192,7 @@ func resolveModelType(cfg *classifierConfig, inputShapes [][]int64, numOutputs i
 }
 
 // validateLabelCount checks that the label count matches the model's logits output dimension.
-func validateLabelCount(modelCfg *ModelConfig, outputInfos []ort.InputOutputInfo, labelCount int) error {
+func validateLabelCount(modelCfg *ModelConfig, outputInfos []ort.IOInfo, labelCount int) error {
 	// An embedding-only model (LogitsIndex < 0) produces no logits, so it cannot serve
 	// the provided species labels. Reject it here so a model misconfigured as a
 	// label-validated classifier fails at construction with a clear message rather than
@@ -195,7 +204,7 @@ func validateLabelCount(modelCfg *ModelConfig, outputInfos []ort.InputOutputInfo
 	if modelCfg.LogitsIndex >= len(outputInfos) {
 		return fmt.Errorf("birdnet: LogitsIndex %d is out of range for model with %d outputs", modelCfg.LogitsIndex, len(outputInfos))
 	}
-	logitsDims := outputInfos[modelCfg.LogitsIndex].Dimensions
+	logitsDims := outputInfos[modelCfg.LogitsIndex].Shape
 	if len(logitsDims) < 2 {
 		return nil
 	}
@@ -206,13 +215,13 @@ func validateLabelCount(modelCfg *ModelConfig, outputInfos []ort.InputOutputInfo
 	return nil
 }
 
-// sessionOptionSetter is the subset of *ort.SessionOptions that
+// sessionOptionSetter is the subset of *SessionOptions that
 // applySessionDefaults configures, so the defaults can be tested without
 // loading the ONNX Runtime library.
 type sessionOptionSetter interface {
 	SetIntraOpNumThreads(n int) error
 	SetInterOpNumThreads(n int) error
-	AddSessionConfigEntry(key, value string) error
+	AddConfigEntry(key, value string) error
 }
 
 // ONNX Runtime session config keys (onnxruntime_session_options_config_keys.h)
@@ -240,22 +249,22 @@ func applySessionDefaults(so sessionOptionSetter) error {
 	if err := so.SetInterOpNumThreads(1); err != nil {
 		return fmt.Errorf("birdnet: failed to set inter-op threads: %w", err)
 	}
-	if err := so.AddSessionConfigEntry(ortConfigAllowIntraOpSpinning, ortConfigValueDisabled); err != nil {
+	if err := so.AddConfigEntry(ortConfigAllowIntraOpSpinning, ortConfigValueDisabled); err != nil {
 		return fmt.Errorf("birdnet: failed to disable intra-op spinning: %w", err)
 	}
-	if err := so.AddSessionConfigEntry(ortConfigAllowInterOpSpinning, ortConfigValueDisabled); err != nil {
+	if err := so.AddConfigEntry(ortConfigAllowInterOpSpinning, ortConfigValueDisabled); err != nil {
 		return fmt.Errorf("birdnet: failed to disable inter-op spinning: %w", err)
 	}
 	return nil
 }
 
 // createSession builds an ONNX Runtime session with default options.
-func createSession(modelPath string, inputNames, outputNames []string, sessionOptsFn func(*ort.SessionOptions)) (*ort.DynamicAdvancedSession, error) {
+func createSession(modelPath string, sessionOptsFn func(*SessionOptions)) (*ort.Session, error) {
 	sessOpts, err := ort.NewSessionOptions()
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: failed to create session options: %w", err)
 	}
-	defer func() { _ = sessOpts.Destroy() }()
+	defer func() { _ = sessOpts.Close() }()
 
 	if err := applySessionDefaults(sessOpts); err != nil {
 		return nil, err
@@ -265,7 +274,7 @@ func createSession(modelPath string, inputNames, outputNames []string, sessionOp
 		sessionOptsFn(sessOpts)
 	}
 
-	session, err := ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, sessOpts)
+	session, err := ort.NewSession(modelPath, sessOpts)
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: failed to create ONNX session: %w", err)
 	}
@@ -315,31 +324,25 @@ func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddin
 	}
 
 	inputShape := makeBatchInputShape(c.config.InputShape, 1)
-	inputTensor, err := ort.NewTensor(ort.NewShape(inputShape...), audio)
+	inputTensor, err := ort.CreateTensor(inputShape, audio)
 	if err != nil {
 		return nil, nil, fmt.Errorf("birdnet: failed to create input tensor: %w", err)
 	}
-	defer func() { _ = inputTensor.Destroy() }()
+	defer func() { _ = inputTensor.Close() }()
 
-	outputs, err := c.createOutputTensors(1)
+	outputs, release, err := c.run(inputTensor, 1, "inference failed")
 	if err != nil {
 		return nil, nil, err
 	}
-	defer destroyTensors(outputs)
-
-	err = c.session.Run([]ort.Value{inputTensor}, outputs)
-	if err != nil {
-		return nil, nil, fmt.Errorf("birdnet: inference failed: %w", err)
-	}
+	defer release()
 
 	// Embedding-only models (LogitsIndex < 0, e.g. the head-pruned bat backbone)
 	// produce no logits; skip logits extraction and return nil logits.
 	if c.config.LogitsIndex >= 0 {
-		logitsTensor, ok := outputs[c.config.LogitsIndex].(*ort.Tensor[float32])
-		if !ok {
-			return nil, nil, fmt.Errorf("birdnet: logits tensor has unexpected type")
+		allLogits, err := ort.TensorData[float32](outputs[c.config.LogitsIndex])
+		if err != nil {
+			return nil, nil, fmt.Errorf("birdnet: logits tensor has unexpected type: %w", err)
 		}
-		allLogits := logitsTensor.GetData()
 		logitsSize := c.config.LogitsSize
 		if logitsSize <= 0 {
 			return nil, nil, fmt.Errorf("birdnet: invalid logits size %d", logitsSize)
@@ -352,11 +355,10 @@ func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddin
 	}
 
 	if c.config.EmbeddingIndex >= 0 {
-		embTensor, ok := outputs[c.config.EmbeddingIndex].(*ort.Tensor[float32])
-		if !ok {
-			return nil, nil, fmt.Errorf("birdnet: embedding tensor has unexpected type")
+		allEmb, err := ort.TensorData[float32](outputs[c.config.EmbeddingIndex])
+		if err != nil {
+			return nil, nil, fmt.Errorf("birdnet: embedding tensor has unexpected type: %w", err)
 		}
-		allEmb := embTensor.GetData()
 		if c.config.EmbeddingSize > len(allEmb) {
 			return nil, nil, fmt.Errorf("birdnet: embedding tensor too small: need %d, have %d", c.config.EmbeddingSize, len(allEmb))
 		}
@@ -382,27 +384,18 @@ func (c *Classifier) Predict(audio []float32) (*Result, error) {
 	inputShape := makeBatchInputShape(c.config.InputShape, 1)
 
 	// Create input tensor (wraps Go slice, no copy)
-	inputTensor, err := ort.NewTensor(ort.NewShape(inputShape...), audio)
+	inputTensor, err := ort.CreateTensor(inputShape, audio)
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: failed to create input tensor: %w", err)
 	}
-	defer func() { _ = inputTensor.Destroy() }()
+	defer func() { _ = inputTensor.Close() }()
 
-	// Create output tensors
-	outputs, err := c.createOutputTensors(1)
+	// Run inference; ONNX Runtime allocates the outputs
+	outputs, release, err := c.run(inputTensor, 1, "inference failed")
 	if err != nil {
 		return nil, err
 	}
-	defer destroyTensors(outputs)
-
-	// Run inference
-	err = c.session.Run(
-		[]ort.Value{inputTensor},
-		outputs,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("birdnet: inference failed: %w", err)
-	}
+	defer release()
 
 	// Process results
 	return c.processOutput(outputs, 0)
@@ -437,27 +430,18 @@ func (c *Classifier) PredictBatch(segments [][]float32) ([]*Result, error) {
 	inputShape := makeBatchInputShape(c.config.InputShape, int64(batchSize))
 
 	// Create input tensor
-	inputTensor, err := ort.NewTensor(ort.NewShape(inputShape...), flat)
+	inputTensor, err := ort.CreateTensor(inputShape, flat)
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: failed to create batch input tensor: %w", err)
 	}
-	defer func() { _ = inputTensor.Destroy() }()
+	defer func() { _ = inputTensor.Close() }()
 
-	// Create output tensors
-	outputs, err := c.createOutputTensors(batchSize)
+	// Run inference; ONNX Runtime allocates the outputs
+	outputs, release, err := c.run(inputTensor, batchSize, "batch inference failed")
 	if err != nil {
 		return nil, err
 	}
-	defer destroyTensors(outputs)
-
-	// Run inference
-	err = c.session.Run(
-		[]ort.Value{inputTensor},
-		outputs,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("birdnet: batch inference failed: %w", err)
-	}
+	defer release()
 
 	// Process results for each segment in the batch
 	results := make([]*Result, batchSize)
@@ -473,7 +457,7 @@ func (c *Classifier) PredictBatch(segments [][]float32) ([]*Result, error) {
 // Close releases the ONNX session and associated resources.
 func (c *Classifier) Close() error {
 	if c.session != nil {
-		err := c.session.Destroy()
+		err := c.session.Close()
 		c.session = nil
 		return err
 	}
@@ -488,23 +472,49 @@ func makeBatchInputShape(modelShape []int64, batchSize int64) []int64 {
 	return shape
 }
 
-// createOutputTensors creates pre-sized output tensors based on model config.
-func (c *Classifier) createOutputTensors(batchSize int) ([]ort.Value, error) {
-	outputs := make([]ort.Value, c.config.NumOutputs)
-	for i := range c.config.NumOutputs {
-		shape, err := c.outputShape(i, batchSize)
-		if err != nil {
-			destroyTensors(outputs)
-			return nil, err
-		}
-		t, err := ort.NewEmptyTensor[float32](ort.NewShape(shape...))
-		if err != nil {
-			destroyTensors(outputs)
-			return nil, fmt.Errorf("birdnet: failed to create output tensor %d: %w", i, err)
-		}
-		outputs[i] = t
+// run executes the model on input and returns the outputs in model output
+// order, so LogitsIndex and EmbeddingIndex keep their meaning. The outputs
+// live in ONNX Runtime memory: the caller must call release once it has copied
+// what it needs, and must not keep any slice that points into them.
+// failure is the message prefix for an inference error.
+func (c *Classifier) run(input *ort.Tensor, batchSize int, failure string) (outputs []*ort.Tensor, release func(), err error) {
+	named, err := c.session.Run(context.Background(), map[string]*ort.Tensor{c.inputName: input}, c.outputNames)
+	if err != nil {
+		return nil, nil, fmt.Errorf("birdnet: %s: %w", failure, err)
 	}
-	return outputs, nil
+	release = func() { closeTensors(named) }
+
+	outputs = make([]*ort.Tensor, len(c.outputNames))
+	for i, name := range c.outputNames {
+		outputs[i] = named[name]
+	}
+	if err := c.validateOutputShapes(outputs, batchSize); err != nil {
+		release()
+		return nil, nil, err
+	}
+	return outputs, release, nil
+}
+
+// validateOutputShapes checks that every output has the shape the model
+// configuration expects for batchSize. ONNX Runtime allocates the outputs, so
+// this replaces the check that preallocated output tensors gave implicitly.
+func (c *Classifier) validateOutputShapes(outputs []*ort.Tensor, batchSize int) error {
+	if len(outputs) != c.config.NumOutputs {
+		return fmt.Errorf("birdnet: model returned %d outputs, expected %d", len(outputs), c.config.NumOutputs)
+	}
+	for i, out := range outputs {
+		if out == nil {
+			return fmt.Errorf("birdnet: output %d (%s) missing from the inference result", i, c.outputNames[i])
+		}
+		want, err := c.outputShape(i, batchSize)
+		if err != nil {
+			return err
+		}
+		if got := out.Shape(); !slices.Equal(got, want) {
+			return fmt.Errorf("birdnet: output %d (%s) has shape %v, expected %v", i, c.outputNames[i], got, want)
+		}
+	}
+	return nil
 }
 
 // outputShape returns the expected shape for a given output tensor index.
@@ -549,17 +559,16 @@ func (c *Classifier) outputShape(outputIdx, batchSize int) ([]int64, error) {
 }
 
 // processOutput extracts predictions and embeddings from output tensors for a given batch index.
-func (c *Classifier) processOutput(outputs []ort.Value, batchIdx int) (*Result, error) {
+func (c *Classifier) processOutput(outputs []*ort.Tensor, batchIdx int) (*Result, error) {
 	// An embedding-only model produces no logits and therefore no species
 	// predictions; callers that need embeddings must use PredictRawWithEmbeddings.
 	if c.config.LogitsIndex < 0 {
 		return nil, fmt.Errorf("birdnet: model has no logits output; use PredictRawWithEmbeddings for embedding extraction")
 	}
-	logitsTensor, ok := outputs[c.config.LogitsIndex].(*ort.Tensor[float32])
-	if !ok {
-		return nil, fmt.Errorf("birdnet: logits tensor has unexpected type")
+	allLogits, err := ort.TensorData[float32](outputs[c.config.LogitsIndex])
+	if err != nil {
+		return nil, fmt.Errorf("birdnet: logits tensor has unexpected type: %w", err)
 	}
-	allLogits := logitsTensor.GetData()
 	stride := c.config.LogitsSize
 	if stride <= 0 {
 		return nil, fmt.Errorf("birdnet: invalid logits size %d", stride)
@@ -575,11 +584,10 @@ func (c *Classifier) processOutput(outputs []ort.Value, batchIdx int) (*Result, 
 
 	var embeddings []float32
 	if c.config.EmbeddingIndex >= 0 {
-		embTensor, ok := outputs[c.config.EmbeddingIndex].(*ort.Tensor[float32])
-		if !ok {
-			return nil, fmt.Errorf("birdnet: embedding tensor has unexpected type")
+		allEmb, err := ort.TensorData[float32](outputs[c.config.EmbeddingIndex])
+		if err != nil {
+			return nil, fmt.Errorf("birdnet: embedding tensor has unexpected type: %w", err)
 		}
-		allEmb := embTensor.GetData()
 		embStart := batchIdx * c.config.EmbeddingSize
 		embEnd := embStart + c.config.EmbeddingSize
 		if embEnd > len(allEmb) {
@@ -599,11 +607,36 @@ func (c *Classifier) processOutput(outputs []ort.Value, batchIdx int) (*Result, 
 	}, nil
 }
 
-// destroyTensors destroys all non-nil tensors in the slice.
-func destroyTensors(tensors []ort.Value) {
+// runSingleOutput runs a one-input session and returns the float32 data of the
+// named output after checking its shape. The data points into ONNX Runtime
+// memory: the caller must copy what it needs and then call release, and must
+// not keep the slice.
+func runSingleOutput(session *ort.Session, inputName string, input *ort.Tensor, outputName string, wantShape []int64) (data []float32, release func(), err error) {
+	outs, err := session.Run(context.Background(), map[string]*ort.Tensor{inputName: input}, []string{outputName})
+	if err != nil {
+		return nil, nil, err
+	}
+	release = func() { closeTensors(outs) }
+	out := outs[outputName]
+	if out == nil {
+		release()
+		return nil, nil, fmt.Errorf("output %q missing from the inference result", outputName)
+	}
+	if got := out.Shape(); !slices.Equal(got, wantShape) {
+		release()
+		return nil, nil, fmt.Errorf("output %q has shape %v, expected %v", outputName, got, wantShape)
+	}
+	data, err = ort.TensorData[float32](out)
+	if err != nil {
+		release()
+		return nil, nil, err
+	}
+	return data, release, nil
+}
+
+// closeTensors closes every tensor in the result map of a session run.
+func closeTensors(tensors map[string]*ort.Tensor) {
 	for _, t := range tensors {
-		if t != nil {
-			_ = t.Destroy()
-		}
+		_ = t.Close()
 	}
 }

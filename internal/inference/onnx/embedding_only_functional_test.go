@@ -4,9 +4,9 @@ import (
 	"os"
 	"testing"
 
+	ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	ort "github.com/yalue/onnxruntime_go"
 )
 
 // TestClassifierEmbeddingOnly_Functional loads a real head-pruned, 1-output BirdNET
@@ -62,4 +62,11 @@ func TestClassifierEmbeddingOnly_Functional(t *testing.T) {
 
 	_, err = c.PredictBatch([][]float32{samples})
 	require.Error(t, err, "PredictBatch must error on an embedding-only model")
+
+	// e3: ONNX Runtime allocates the outputs, so a returned shape that differs from
+	// the configured one must be rejected before any data is read.
+	c.config.EmbeddingSize = embeddingSizeV24 / 2
+	_, _, err = c.PredictRawWithEmbeddings(samples)
+	require.Error(t, err, "a configured size that differs from the model output must be rejected")
+	assert.Contains(t, err.Error(), "has shape")
 }

@@ -4,17 +4,28 @@ import (
 	"fmt"
 	"slices"
 
-	ort "github.com/yalue/onnxruntime_go"
+	ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 )
 
 // DefaultRangeFilterThreshold is the minimum location score for a species to pass the range filter.
 const DefaultRangeFilterThreshold float32 = 0.03
 
+const (
+	// rangeFilterThreads is the intra-op and inter-op thread count of the range
+	// filter session; one inference per location batch does not need more.
+	rangeFilterThreads = 1
+	// rangeFilterInputWidth is the number of values per input row: latitude,
+	// longitude and week.
+	rangeFilterInputWidth = 3
+)
+
 // RangeFilter uses the BirdNET meta model to filter species by geographic location and date.
 type RangeFilter struct {
-	session   *ort.DynamicAdvancedSession
-	labels    []string
-	threshold float32
+	session    *ort.Session
+	labels     []string
+	threshold  float32
+	inputName  string
+	outputName string
 }
 
 // NewRangeFilter creates a new RangeFilter from a BirdNET meta model ONNX file.
@@ -28,23 +39,40 @@ func NewRangeFilter(modelPath string, opts ...RangeFilterOption) (*RangeFilter, 
 		opt(cfg)
 	}
 
-	// Load model metadata
-	inputInfos, outputInfos, err := ort.GetInputOutputInfo(modelPath)
+	// Create session options
+	sessOpts, err := ort.NewSessionOptions()
 	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to load range filter model metadata: %w", err)
+		return nil, fmt.Errorf("birdnet: failed to create session options: %w", err)
+	}
+	defer func() { _ = sessOpts.Close() }()
+
+	if err := sessOpts.SetIntraOpNumThreads(rangeFilterThreads); err != nil {
+		return nil, fmt.Errorf("birdnet: failed to set intra-op threads: %w", err)
+	}
+	if err := sessOpts.SetInterOpNumThreads(rangeFilterThreads); err != nil {
+		return nil, fmt.Errorf("birdnet: failed to set inter-op threads: %w", err)
 	}
 
+	// The session carries the model metadata, so the model is loaded once.
+	session, err := ort.NewSession(modelPath, sessOpts)
+	if err != nil {
+		return nil, fmt.Errorf("birdnet: failed to create range filter session: %w", err)
+	}
+
+	filter, err := newRangeFilterFromSession(session, cfg)
+	if err != nil {
+		_ = session.Close()
+		return nil, err
+	}
+	return filter, nil
+}
+
+// newRangeFilterFromSession validates the labels against an open session. It
+// does not close the session on error; the caller does.
+func newRangeFilterFromSession(session *ort.Session, cfg *rangeFilterConfig) (*RangeFilter, error) {
+	inputInfos, outputInfos := session.Inputs(), session.Outputs()
 	if len(inputInfos) == 0 || len(outputInfos) == 0 {
 		return nil, &ModelDetectionError{Reason: "range filter model has no input or output tensors"}
-	}
-
-	inputNames := make([]string, len(inputInfos))
-	for i := range inputInfos {
-		inputNames[i] = inputInfos[i].Name
-	}
-	outputNames := make([]string, len(outputInfos))
-	for i := range outputInfos {
-		outputNames[i] = outputInfos[i].Name
 	}
 
 	// Resolve labels
@@ -54,39 +82,20 @@ func NewRangeFilter(modelPath string, opts ...RangeFilterOption) (*RangeFilter, 
 	}
 
 	// Validate label count against model output dimension
-	if len(outputInfos) > 0 {
-		outDims := outputInfos[0].Dimensions
-		if len(outDims) >= 2 {
-			modelSpecies := int(outDims[len(outDims)-1])
-			if modelSpecies > 0 && len(labels) != modelSpecies {
-				return nil, &LabelCountError{Expected: modelSpecies, Got: len(labels)}
-			}
+	outDims := outputInfos[0].Shape
+	if len(outDims) >= 2 {
+		modelSpecies := int(outDims[len(outDims)-1])
+		if modelSpecies > 0 && len(labels) != modelSpecies {
+			return nil, &LabelCountError{Expected: modelSpecies, Got: len(labels)}
 		}
 	}
 
-	// Create session options
-	sessOpts, err := ort.NewSessionOptions()
-	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create session options: %w", err)
-	}
-	defer func() { _ = sessOpts.Destroy() }()
-
-	if err := sessOpts.SetIntraOpNumThreads(1); err != nil {
-		return nil, fmt.Errorf("birdnet: failed to set intra-op threads: %w", err)
-	}
-	if err := sessOpts.SetInterOpNumThreads(1); err != nil {
-		return nil, fmt.Errorf("birdnet: failed to set inter-op threads: %w", err)
-	}
-
-	session, err := ort.NewDynamicAdvancedSession(modelPath, inputNames, outputNames, sessOpts)
-	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create range filter session: %w", err)
-	}
-
 	return &RangeFilter{
-		session:   session,
-		labels:    labels,
-		threshold: cfg.threshold,
+		session:    session,
+		labels:     labels,
+		threshold:  cfg.threshold,
+		inputName:  inputInfos[0].Name,
+		outputName: outputInfos[0].Name,
 	}, nil
 }
 
@@ -117,30 +126,26 @@ func (r *RangeFilter) PredictBatchRaw(inputs []float32, batchSize int) ([]float3
 	if batchSize <= 0 {
 		return nil, ErrEmptyRangeFilterBatch
 	}
-	expected := batchSize * 3
+	expected := batchSize * rangeFilterInputWidth
 	if len(inputs) != expected {
 		return nil, &RangeFilterBatchInputError{Expected: expected, Got: len(inputs)}
 	}
 
 	numSpecies := len(r.labels)
 
-	inputTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), 3), inputs)
+	inputTensor, err := ort.CreateTensor([]int64{int64(batchSize), rangeFilterInputWidth}, inputs)
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: failed to create range filter batch input tensor: %w", err)
 	}
-	defer func() { _ = inputTensor.Destroy() }()
+	defer func() { _ = inputTensor.Close() }()
 
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(int64(batchSize), int64(numSpecies)))
+	data, release, err := runSingleOutput(r.session, r.inputName, inputTensor, r.outputName, []int64{int64(batchSize), int64(numSpecies)})
 	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create range filter batch output tensor: %w", err)
-	}
-	defer func() { _ = outputTensor.Destroy() }()
-
-	if err := r.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor}); err != nil {
 		return nil, fmt.Errorf("birdnet: range filter batch inference failed: %w", err)
 	}
+	defer release()
 
-	data := outputTensor.GetData()
+	// Copy out: data points into ONNX Runtime memory that release frees.
 	totalScores := batchSize * numSpecies
 	if len(data) < totalScores {
 		return nil, fmt.Errorf("birdnet: range filter batch output has %d values, expected %d", len(data), totalScores)
@@ -191,7 +196,7 @@ func (r *RangeFilter) FilterBatch(batches [][]Prediction, scores []LocationScore
 // Close releases the ONNX session and associated resources.
 func (r *RangeFilter) Close() error {
 	if r.session != nil {
-		err := r.session.Destroy()
+		err := r.session.Close()
 		r.session = nil
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"os"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -455,4 +456,74 @@ func TestVAD_EmbeddedStreamingParity(t *testing.T) {
 				"streaming must reach a comparable peak confidence to the full-chunk path")
 		})
 	}
+}
+
+// TestSession_BoundOutputsMatchFreshSessionAcrossHopCounts runs one session
+// through changing hop counts with the LSTM state threaded through, and checks
+// every step against a fresh session given the same frames and input state. The
+// session binds its state tensors once and rebinds speech_probs only when the hop
+// count changes, so this catches a stale probability binding or buffer after a
+// change, state outputs that are not written to the bound buffers, and an input
+// binding that is not replaced between runs.
+func TestSession_BoundOutputsMatchFreshSessionAcrossHopCounts(t *testing.T) {
+	if !HasEmbeddedModel() {
+		t.Skip("no embedded model in this build")
+	}
+	cfg := Config{ModelData: EmbeddedModelData(), LibraryPath: os.Getenv("VAD_TEST_ORT_LIB")}
+	threaded, err := NewSession(cfg)
+	skipIfORTUnavailable(t, err)
+	t.Cleanup(func() { assert.NoError(t, threaded.Close()) })
+
+	rng := rand.New(rand.NewPCG(7, 11))
+	h := make([]float32, stateWidth)
+	c := make([]float32, stateWidth)
+	// Repeats and a drop to one hop exercise rebinding, an unchanged count and
+	// the buffer shrinking and growing again.
+	for step, n := range []int{31, 20, 31, 32, 32, 1, 31} {
+		frames := make([]float32, n*modelInputSamples)
+		for i := range frames {
+			frames[i] = rng.Float32() - 0.5
+		}
+
+		fresh, err := NewSession(cfg)
+		require.NoError(t, err)
+		wantProbs, wantH, wantC, err := fresh.Run(frames, h, c)
+		require.NoError(t, err)
+		// The returned slices alias the fresh session's buffers.
+		wantProbs, wantH, wantC = slices.Clone(wantProbs), slices.Clone(wantH), slices.Clone(wantC)
+		require.NoError(t, fresh.Close())
+
+		gotProbs, gotH, gotC, err := threaded.Run(frames, h, c)
+		require.NoError(t, err)
+		require.Equal(t, wantProbs, gotProbs, "step %d (n=%d): probabilities", step, n)
+		require.Equal(t, wantH, gotH, "step %d (n=%d): hidden state", step, n)
+		require.Equal(t, wantC, gotC, "step %d (n=%d): cell state", step, n)
+
+		// Run's returned state aliases session buffers; copy it out before the next call.
+		h, c = slices.Clone(gotH), slices.Clone(gotC)
+	}
+}
+
+// TestSession_CloseIsIdempotentAndRunAfterCloseFails pins the documented Close
+// contract of the bound session: a second Close is harmless and a Run after
+// Close reports ErrSessionClosed instead of touching released tensors.
+func TestSession_CloseIsIdempotentAndRunAfterCloseFails(t *testing.T) {
+	if !HasEmbeddedModel() {
+		t.Skip("no embedded model in this build")
+	}
+	sess, err := NewSession(Config{ModelData: EmbeddedModelData(), LibraryPath: os.Getenv("VAD_TEST_ORT_LIB")})
+	skipIfORTUnavailable(t, err)
+	// Close is idempotent, so this only matters when an assertion below fails first.
+	t.Cleanup(func() { _ = sess.Close() })
+
+	h := make([]float32, stateWidth)
+	c := make([]float32, stateWidth)
+	_, _, _, err = sess.Run(make([]float32, modelInputSamples), h, c)
+	require.NoError(t, err)
+
+	require.NoError(t, sess.Close())
+	require.NoError(t, sess.Close(), "a second Close must be harmless")
+
+	_, _, _, err = sess.Run(make([]float32, modelInputSamples), h, c)
+	require.ErrorIs(t, err, ErrSessionClosed)
 }
