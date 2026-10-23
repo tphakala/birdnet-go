@@ -20,6 +20,11 @@ const (
 	minORTMajor = 1
 	minORTMinor = 29
 
+	// ortRestartHint is appended to the status of a rejected library: the
+	// binding keeps the first loaded library, so a replacement only takes
+	// effect after a restart.
+	ortRestartHint = "; restart BirdNET-Go after installing a newer library"
+
 	// ortOrNewerSuffix turns the minimum version into the user-facing
 	// requirement text.
 	ortOrNewerSuffix = " or newer"
@@ -56,7 +61,7 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 		return ORTStatus{
 			LibraryPath: rej.path,
 			Version:     rej.version,
-			Error:       versionError(rej.version),
+			Error:       versionError(rej.version) + ortRestartHint,
 		}
 	}
 

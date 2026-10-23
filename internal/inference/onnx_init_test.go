@@ -130,6 +130,10 @@ func TestInitONNXRuntime_LibraryBelowMinimumStaysRejected(t *testing.T) {
 		t.Skip("ORT already initialized in this process")
 	}
 
+	// The binding keeps this library for the life of the process; clear the
+	// rejection record so a later test does not read it. Run this test alone.
+	t.Cleanup(func() { setRejectedORT(nil) })
+
 	for range 2 {
 		err := InitONNXRuntime(oldLib)
 		require.Error(t, err)
@@ -142,4 +146,42 @@ func TestInitONNXRuntime_LibraryBelowMinimumStaysRejected(t *testing.T) {
 	assert.False(t, status.Available)
 	assert.NotEmpty(t, status.Version)
 	assert.Contains(t, status.Error, "older than the minimum supported version")
+}
+
+// setRejectedORT replaces the recorded rejection under the init lock.
+func setRejectedORT(rej *ortRejection) {
+	ortInitMu.Lock()
+	defer ortInitMu.Unlock()
+	ortRejected = rej
+}
+
+// TestRejectedLibrary_StaysRejectedAndReportsRestart records a rejection
+// directly, so it runs without an old native library: every later init returns
+// the stored error without reading its path, and the availability status names
+// the loaded version and says a restart is needed.
+func TestRejectedLibrary_StaysRejectedAndReportsRestart(t *testing.T) {
+	// Not parallel: touches the package-level init state.
+	if IsORTInitialized() {
+		t.Skip("ORT already initialized in this process")
+	}
+	const loadedVersion = "1.25.1"
+	rej := &ortRejection{
+		version: loadedVersion,
+		path:    "/opt/ort/libonnxruntime.so." + loadedVersion,
+		err:     rejectedORTError("/opt/ort/libonnxruntime.so."+loadedVersion, loadedVersion),
+	}
+	setRejectedORT(rej)
+	t.Cleanup(func() { setRejectedORT(nil) })
+
+	otherPath := filepath.Join(t.TempDir(), "libonnxruntime.so")
+	err := InitONNXRuntime(otherPath)
+	require.Error(t, err)
+	assert.Same(t, rej.err, err, "a later init must return the stored error, not try the new path")
+	assert.False(t, IsORTInitialized())
+
+	status := CheckORTAvailability("")
+	assert.False(t, status.Available)
+	assert.Equal(t, loadedVersion, status.Version)
+	assert.Equal(t, rej.path, status.LibraryPath)
+	assert.Contains(t, status.Error, "restart")
 }
