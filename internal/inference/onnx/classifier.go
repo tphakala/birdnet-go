@@ -482,11 +482,7 @@ func (c *Classifier) run(input *ort.Tensor, batchSize int, failure string) (outp
 	if err != nil {
 		return nil, nil, fmt.Errorf("birdnet: %s: %w", failure, err)
 	}
-	release = func() {
-		for _, t := range named {
-			_ = t.Close()
-		}
-	}
+	release = func() { closeTensors(named) }
 
 	outputs = make([]*ort.Tensor, len(c.outputNames))
 	for i, name := range c.outputNames {
@@ -620,11 +616,7 @@ func runSingleOutput(session *ort.Session, inputName string, input *ort.Tensor, 
 	if err != nil {
 		return nil, nil, err
 	}
-	release = func() {
-		for _, t := range outs {
-			_ = t.Close()
-		}
-	}
+	release = func() { closeTensors(outs) }
 	out := outs[outputName]
 	if out == nil {
 		release()
@@ -640,4 +632,11 @@ func runSingleOutput(session *ort.Session, inputName string, input *ort.Tensor, 
 		return nil, nil, err
 	}
 	return data, release, nil
+}
+
+// closeTensors closes every tensor in the result map of a session run.
+func closeTensors(tensors map[string]*ort.Tensor) {
+	for _, t := range tensors {
+		_ = t.Close()
+	}
 }
