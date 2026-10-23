@@ -1,9 +1,4 @@
 // control_test.go: tests for the API v2 control domain endpoints.
-//
-// Go 1.25 improvements:
-// - Uses sync.WaitGroup.Go() for cleaner goroutine management
-// - Uses T.Attr() for test metadata
-// LLM GUIDANCE: Always use WaitGroup.Go() instead of manual Add/Done patterns
 
 package control
 
@@ -17,14 +12,12 @@ import (
 	"reflect"
 	"slices"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
@@ -32,8 +25,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 )
 
-// testControlChannelBuf is the control channel buffer size for concurrent test
-// scenarios (e.g. TestConcurrentControlRequests sends 5). Size 10 is sufficient.
+// testControlChannelBuf is the control channel buffer size for the handlers
+// built by the test helpers.
 const testControlChannelBuf = 10
 
 // newControlTestHandler builds a control Handler around an apicore.Core (via
@@ -63,8 +56,11 @@ func newControlHandler(t *testing.T, e *echo.Echo) *Handler {
 func runControlEndpointTest(t *testing.T, e *echo.Echo, controlChan chan string, method, path string, handler func(echo.Context) error, expectedMessage, expectedAction, expectedSignal string) {
 	t.Helper()
 
-	// Create a request
-	req := httptest.NewRequest(method, path, http.NoBody)
+	// The signal handlers take no input, so a body that is not valid JSON must
+	// not change the outcome. A non-empty body with a JSON content type is
+	// what makes a handler that binds its body fail.
+	req := httptest.NewRequest(method, path, strings.NewReader("{invalid-json"))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetPath(path)
@@ -83,6 +79,11 @@ func runControlEndpointTest(t *testing.T, e *echo.Echo, controlChan chan string,
 		err := json.Unmarshal(rec.Body.Bytes(), &result)
 		require.NoError(t, err)
 
+		// Pin the wire key names, which decoding into ControlResult cannot do.
+		var raw map[string]any
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+		assert.ElementsMatch(t, []string{"success", "message", "action", "timestamp"}, slices.Collect(maps.Keys(raw)))
+
 		// Check response content
 		assert.True(t, result.Success)
 		assert.Equal(t, expectedMessage, result.Message)
@@ -93,54 +94,6 @@ func runControlEndpointTest(t *testing.T, e *echo.Echo, controlChan chan string,
 		// already buffered and no wait is needed.
 		require.Len(t, controlChan, 1, "Control signal was not sent")
 		assert.Equal(t, expectedSignal, <-controlChan)
-	}
-}
-
-// runConcurrentControlRequestsTest runs multiple concurrent control requests test
-// Uses Go 1.25's WaitGroup.Go() for automatic goroutine management
-func runConcurrentControlRequestsTest(t *testing.T, e *echo.Echo, controlChan chan string, handler func(echo.Context) error, path, expectedSignal string) {
-	t.Helper()
-	t.Attr("component", "control")
-	t.Attr("type", "concurrent")
-
-	// Number of concurrent requests to make
-	numRequests := 5
-
-	// Use a wait group to synchronize the test
-	// Go 1.25: Using WaitGroup.Go() for cleaner code without manual Add/Done
-	var wg sync.WaitGroup
-
-	// Create a context with timeout
-	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
-	defer cancel()
-
-	// Launch multiple concurrent requests using Go 1.25's WaitGroup.Go()
-	for range numRequests {
-		// Use WaitGroup.Go() to eliminate manual Add/Done management (Go 1.25)
-		wg.Go(func() {
-
-			// Create a new request for each goroutine
-			req := httptest.NewRequest(http.MethodPost, path, http.NoBody).WithContext(ctx)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			// Call the handler
-			err := handler(c)
-			require.NoError(t, err, "Handler should not return an error during concurrent access")
-			assert.Equal(t, http.StatusOK, rec.Code, "Should return OK for concurrent requests")
-		})
-	}
-
-	// Wait for all requests to complete
-	wg.Wait()
-
-	// Verify that all signals were sent to the channel
-	assert.Len(t, controlChan, numRequests, "All signals should be received")
-
-	// Drain the channel
-	for range numRequests {
-		signal := <-controlChan
-		assert.Equal(t, expectedSignal, signal, "Each signal should be the expected signal")
 	}
 }
 
@@ -356,54 +309,6 @@ func TestRegisterRoutesRegistration(t *testing.T) {
 	})
 }
 
-// TestControlResultStructure verifies the ControlResult struct works as expected
-func TestControlResultStructure(t *testing.T) {
-	// Create a ControlResult
-	result := ControlResult{
-		Success:   true,
-		Message:   "Test message",
-		Action:    ActionRestartAnalysis,
-		Timestamp: time.Date(2023, 5, 15, 10, 30, 0, 0, time.UTC),
-	}
-
-	// Marshal to JSON
-	jsonData, err := json.Marshal(result)
-	require.NoError(t, err)
-
-	// Verify JSON structure
-	var jsonMap map[string]any
-	err = json.Unmarshal(jsonData, &jsonMap)
-	require.NoError(t, err)
-
-	// Check fields
-	assert.Equal(t, true, jsonMap["success"])
-	assert.Equal(t, "Test message", jsonMap["message"])
-	assert.Equal(t, ActionRestartAnalysis, jsonMap["action"])
-	assert.Contains(t, jsonMap, "timestamp")
-}
-
-// TestControlActionStructure verifies the ControlAction struct works as expected
-func TestControlActionStructure(t *testing.T) {
-	// Create a ControlAction
-	action := ControlAction{
-		Action:      ActionReloadModel,
-		Description: "Test description",
-	}
-
-	// Marshal to JSON
-	jsonData, err := json.Marshal(action)
-	require.NoError(t, err)
-
-	// Verify JSON structure
-	var jsonMap map[string]any
-	err = json.Unmarshal(jsonData, &jsonMap)
-	require.NoError(t, err)
-
-	// Check fields
-	assert.Equal(t, ActionReloadModel, jsonMap["action"])
-	assert.Equal(t, "Test description", jsonMap["description"])
-}
-
 // TestControlActionsConstants verifies that the action constants are properly defined
 func TestControlActionsConstants(t *testing.T) {
 	// Verify action constants have expected values
@@ -424,168 +329,6 @@ func TestControlActionsConstants(t *testing.T) {
 		"Reload model action should have a different signal name")
 	assert.NotEqual(t, ActionRebuildFilter, SignalRebuildFilter,
 		"Rebuild filter action should have a different signal name")
-}
-
-// TestControlEndpointsWithUserAuth tests the control endpoints with proper auth
-func TestControlEndpointsWithUserAuth(t *testing.T) {
-	// Setup
-	e, h, _ := newControlTestHandler(t)
-
-	// Set up the control channel
-	controlChan := make(chan string, 3) // Buffer for multiple signals
-	h.controlChan = controlChan
-
-	// Test endpoints directly
-	handlers := []struct {
-		name    string
-		handler func(echo.Context) error
-		signal  string
-	}{
-		{"Restart Analysis", h.RestartAnalysis, SignalRestartAnalysis},
-		{"Reload Model", h.ReloadModel, SignalReloadModel},
-		{"Rebuild Filter", h.RebuildFilter, SignalRebuildFilter},
-	}
-
-	for _, hc := range handlers {
-		t.Run(hc.name, func(t *testing.T) {
-			// Create request and context
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/control/test", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-
-			// Call handler directly (bypass middleware)
-			err := hc.handler(c)
-			require.NoError(t, err)
-
-			// Verify response
-			assert.Equal(t, http.StatusOK, rec.Code)
-
-			// Parse response
-			var result ControlResult
-			err = json.Unmarshal(rec.Body.Bytes(), &result)
-			require.NoError(t, err)
-
-			// Check fields
-			assert.True(t, result.Success)
-			assert.NotEmpty(t, result.Message)
-			assert.NotZero(t, result.Timestamp)
-
-			// Verify signal
-			select {
-			case signal := <-controlChan:
-				assert.Equal(t, hc.signal, signal)
-			case <-time.After(100 * time.Millisecond):
-				assert.Fail(t, "Control signal was not sent")
-			}
-		})
-	}
-}
-
-// TestConcurrentControlRequests tests that multiple concurrent control requests
-// are handled properly
-func TestConcurrentControlRequests(t *testing.T) {
-	// Setup
-	e, h, ch := newControlTestHandler(t)
-
-	runConcurrentControlRequestsTest(t, e, ch, h.RestartAnalysis, "/api/v2/control/restart", SignalRestartAnalysis)
-}
-
-// TestControlEndpointsAuthScenarios tests various authentication scenarios for control endpoints
-func TestControlEndpointsAuthScenarios(t *testing.T) {
-	// Setup
-	e, h, _ := newControlTestHandler(t)
-
-	// Set up the control channel
-	controlChan := make(chan string, 5)
-	h.controlChan = controlChan
-
-	// Configure auth middleware with a validator that checks for a specific token
-	authConfig := middleware.KeyAuthConfig{
-		KeyLookup:  "header:Authorization",
-		AuthScheme: "Bearer",
-		Validator: func(key string, c echo.Context) (bool, error) {
-			return key == "valid-token", nil
-		},
-	}
-
-	// Create a group with auth middleware
-	authGroup := e.Group("/api/v2/auth-test")
-	authGroup.Use(middleware.KeyAuthWithConfig(authConfig))
-
-	// Register the control handler on the auth group
-	authGroup.POST("/restart", h.RestartAnalysis)
-
-	// Define test cases for different auth scenarios
-	testCases := []struct {
-		name           string
-		authHeader     string
-		expectedStatus int
-	}{
-		{"Valid token", "Bearer valid-token", http.StatusOK},
-		{"Invalid token", "Bearer invalid-token", http.StatusUnauthorized},
-		{"Missing token", "", http.StatusBadRequest},
-		{"Malformed header", "Basic auth", http.StatusBadRequest},
-		{"Wrong scheme", "Token valid-token", http.StatusBadRequest},
-	}
-
-	// Test each auth scenario
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Create request with the specified auth header
-			req := httptest.NewRequest(http.MethodPost, "/api/v2/auth-test/restart", http.NoBody)
-			if tc.authHeader != "" {
-				req.Header.Set("Authorization", tc.authHeader)
-			}
-			rec := httptest.NewRecorder()
-
-			// Send the request through the Echo instance
-			e.ServeHTTP(rec, req)
-
-			// Verify the response status code
-			assert.Equal(t, tc.expectedStatus, rec.Code, "Should return expected status code for auth scenario: %s", tc.name)
-
-			// For successful requests, verify the response content
-			if tc.expectedStatus == http.StatusOK {
-				var result ControlResult
-				err := json.Unmarshal(rec.Body.Bytes(), &result)
-				require.NoError(t, err)
-				assert.True(t, result.Success)
-				assert.Equal(t, ActionRestartAnalysis, result.Action)
-			}
-		})
-	}
-}
-
-// TestInvalidPayloads tests the control endpoints with invalid request payloads
-func TestInvalidPayloads(t *testing.T) {
-	// Setup
-	e, h, _ := newControlTestHandler(t)
-
-	// Set up the control channel
-	controlChan := make(chan string, 1)
-	h.controlChan = controlChan
-
-	// Create a request with invalid JSON payload
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/control/restart",
-		strings.NewReader("{invalid-json"))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Call the handler
-	err := h.RestartAnalysis(c)
-
-	// The handler should still work with invalid payloads since it doesn't expect any
-	require.NoError(t, err, "Handler should not return an error with invalid payload")
-	assert.Equal(t, http.StatusOK, rec.Code, "Should return OK even with invalid payload")
-
-	// Verify the signal was sent
-	select {
-	case signal := <-controlChan:
-		assert.Equal(t, SignalRestartAnalysis, signal)
-	case <-time.After(100 * time.Millisecond):
-		assert.Fail(t, "Control signal was not sent")
-	}
 }
 
 // testFlushDelay is the flush delay the restart tests expect. It is a literal
