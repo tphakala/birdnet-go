@@ -161,11 +161,8 @@ func settingsYAML(t *testing.T, s *conf.Settings) string {
 // wizard PATCH changes only its own keys: the YAML of the stored settings equals
 // the YAML of the fixture with just the expected change applied.
 func TestWizardSectionPatchesLeaveOtherSectionsByteIdentical(t *testing.T) {
-	t.Parallel()
-
 	for _, tc := range wizardPatches() {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			c := newWizardController(t)
 			want := conf.CloneSettings(c.Settings.Load())
 			tc.expect(want)
@@ -189,8 +186,6 @@ func TestWizardSectionPatchesLeaveOtherSectionsByteIdentical(t *testing.T) {
 // TestWizardSectionPatchSequenceIsIdempotent verifies that running the whole
 // wizard twice, as a rerun on a configured install does, gives the same config.
 func TestWizardSectionPatchSequenceIsIdempotent(t *testing.T) {
-	t.Parallel()
-
 	c := newWizardController(t)
 	runAll := func() {
 		for _, tc := range wizardPatches() {
@@ -208,8 +203,6 @@ func TestWizardSectionPatchSequenceIsIdempotent(t *testing.T) {
 // TestWizardInvalidBirdWeatherPatchChangesNothing verifies that a rejected
 // BirdWeather token returns 400 and leaves the stored settings untouched.
 func TestWizardInvalidBirdWeatherPatchChangesNothing(t *testing.T) {
-	t.Parallel()
-
 	c := newWizardController(t)
 	before := settingsYAML(t, c.Settings.Load())
 
