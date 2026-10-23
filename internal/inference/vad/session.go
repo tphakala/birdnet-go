@@ -1,7 +1,7 @@
 package vad
 
 import (
-	ort "github.com/yalue/onnxruntime_go"
+	ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
@@ -50,7 +50,7 @@ var (
 
 // hcStateShape is the fixed ONNX shape of each LSTM state tensor (h and c):
 // one layer, batch 1, stateWidth values.
-func hcStateShape() ort.Shape { return ort.NewShape(1, 1, stateWidth) }
+func hcStateShape() []int64 { return []int64{1, 1, stateWidth} }
 
 // SpeechSession is a loaded Silero VAD sequence-model ONNX session. One session
 // is shared across every per-source Streamer and the stateless Detector: the
@@ -75,31 +75,47 @@ type SpeechSession interface {
 
 // session wraps a Silero VAD sequence-model ONNX Runtime session.
 //
-// The fixed-shape h and c input tensors are allocated once and reused across Run
-// calls (their backing buffers are mutated in place), keeping the LSTM state
-// path zero-alloc. The input tensor's sequence dimension is dynamic, so it is
-// created per Run directly over the caller's flat frames slice (no data copy;
-// one small tensor-object allocation per Run, roughly once per second per
-// source, negligible next to the inference it dispatches, matching the
-// resampling path's stated philosophy). Outputs are auto-allocated by ONNX
-// Runtime (nil entries passed to DynamicAdvancedSession.Run; verified against
-// yalue/onnxruntime_go v1.30.1, whose RunWithOptions replaces each nil entry
-// with a Go-managed tensor that this session copies out of and destroys before
-// returning). A session is NOT safe for concurrent use.
+// Everything except the stacked input is bound once through an IOBinding. The
+// h and c inputs and the hn and cn outputs are fixed-shape tensors created over
+// reused Go buffers (hBuf, cBuf, hOutBuf, cOutBuf); each Run copies the carried
+// state into hBuf and cBuf, and ONNX Runtime writes the next state straight into
+// hOutBuf and cOutBuf. The speech_probs output has a dynamic length, so it is
+// bound over probsBuf[:n] and rebound only when the hop count n changes.
+//
+// The stacked input has a dynamic first dimension, so each Run creates its
+// input tensor over the caller's flat frames slice (no data copy) and binds it
+// under the input name. The previous input tensor is closed only after the new
+// one is bound, and the new one stays open until the next Run or Close: the
+// binding references the OrtValue, which points at the caller's Go memory, and
+// closing the tensor would unpin that memory while C still holds the pointer.
+// The cost is one retained frames buffer (about 72 KB at 31 hops). The measured
+// per-Run cost is one tensor object and one BindInput, 5 Go allocations. A
+// session is NOT safe for concurrent use.
 type session struct {
-	sess *ort.DynamicAdvancedSession
+	sess    *ort.Session
+	binding *ort.IOBinding
 
-	// Reused input buffers backing the h/c tensors (mutated per run).
-	hBuf []float32 // len = stateWidth
-	cBuf []float32 // len = stateWidth
+	// Reused buffers backing the bound state tensors (mutated per run).
+	hBuf    []float32 // input h, len = stateWidth
+	cBuf    []float32 // input c, len = stateWidth
+	hOutBuf []float32 // output hn, len = stateWidth, returned (aliased) by Run
+	cOutBuf []float32 // output cn, len = stateWidth, returned (aliased) by Run
 
-	hTensor *ort.Tensor[float32] // input h [1, 1, stateWidth], reused
-	cTensor *ort.Tensor[float32] // input c [1, 1, stateWidth], reused
+	// probsBuf backs the speech_probs output, grown to the largest sequence
+	// length seen; Run returns probsBuf[:n] (aliased).
+	probsBuf []float32
 
-	// Reused output copy buffers returned (aliased) by Run.
-	probsBuf []float32 // grown to the largest sequence length seen
-	hOutBuf  []float32 // len = stateWidth
-	cOutBuf  []float32 // len = stateWidth
+	// Bound once at construction.
+	hTensor  *ort.Tensor // input h [1, 1, stateWidth]
+	cTensor  *ort.Tensor // input c [1, 1, stateWidth]
+	hnTensor *ort.Tensor // output hn [1, 1, stateWidth]
+	cnTensor *ort.Tensor // output cn [1, 1, stateWidth]
+
+	// Replaced as the stream goes: the stacked input of the latest Run, and the
+	// speech_probs output tensor currently bound, which covers boundHops hops.
+	inputTensor *ort.Tensor
+	probsTensor *ort.Tensor
+	boundHops   int
 }
 
 // NewSession initialises the ONNX Runtime library if needed and loads the Silero
@@ -133,7 +149,7 @@ func newSession(modelPath string, modelData []byte, sessionOptsFn func(*ort.Sess
 			Context("stage", "session_options").
 			Build()
 	}
-	defer func() { _ = sessOpts.Destroy() }()
+	defer func() { _ = sessOpts.Close() }()
 
 	if err = sessOpts.SetIntraOpNumThreads(1); err != nil {
 		return nil, errors.New(err).Component("inference/vad").Category(errors.CategoryModelInit).Build()
@@ -145,11 +161,11 @@ func newSession(modelPath string, modelData []byte, sessionOptsFn func(*ort.Sess
 		sessionOptsFn(sessOpts)
 	}
 
-	var ortSess *ort.DynamicAdvancedSession
+	var ortSess *ort.Session
 	if len(modelData) > 0 {
-		ortSess, err = ort.NewDynamicAdvancedSessionWithONNXData(modelData, vadInputNames, vadOutputNames, sessOpts)
+		ortSess, err = ort.NewSessionFromBytes(modelData, sessOpts)
 	} else {
-		ortSess, err = ort.NewDynamicAdvancedSession(modelPath, vadInputNames, vadOutputNames, sessOpts)
+		ortSess, err = ort.NewSession(modelPath, sessOpts)
 	}
 	if err != nil {
 		return nil, errors.New(err).
@@ -160,13 +176,6 @@ func newSession(modelPath string, modelData []byte, sessionOptsFn func(*ort.Sess
 			Build()
 	}
 
-	// From here on, clean up the ORT session if tensor allocation fails.
-	defer func() {
-		if err != nil && ortSess != nil {
-			_ = ortSess.Destroy()
-		}
-	}()
-
 	s = &session{
 		sess:    ortSess,
 		hBuf:    make([]float32, stateWidth),
@@ -175,20 +184,51 @@ func newSession(modelPath string, modelData []byte, sessionOptsFn func(*ort.Sess
 		cOutBuf: make([]float32, stateWidth),
 	}
 
-	s.hTensor, err = ort.NewTensor(hcStateShape(), s.hBuf)
-	if err != nil {
-		return nil, s.wrapAllocErr(err, "h")
-	}
-	s.cTensor, err = ort.NewTensor(hcStateShape(), s.cBuf)
-	if err != nil {
-		return nil, s.wrapAllocErr(err, "c")
+	// Release the binding, tensors and ORT session if the binding setup fails.
+	if bindErr := s.bindState(); bindErr != nil {
+		_ = s.Close()
+		return nil, bindErr
 	}
 	return s, nil
 }
 
-// wrapAllocErr destroys any partially-allocated tensors and wraps the error.
-func (s *session) wrapAllocErr(err error, tensor string) error {
-	s.destroyTensors()
+// bindState creates the binding and the fixed-shape h, c, hn and cn tensors and
+// binds them under the model's tensor names. On error the caller closes the
+// session, which releases whatever was created.
+func (s *session) bindState() error {
+	var err error
+	if s.binding, err = ort.NewIOBinding(s.sess); err != nil {
+		return stateAllocErr(err, "io_binding")
+	}
+	fixed := []struct {
+		name   string
+		buf    []float32
+		tensor **ort.Tensor
+		input  bool
+	}{
+		{vadInputNames[1], s.hBuf, &s.hTensor, true},
+		{vadInputNames[2], s.cBuf, &s.cTensor, true},
+		{vadOutputNames[1], s.hOutBuf, &s.hnTensor, false},
+		{vadOutputNames[2], s.cOutBuf, &s.cnTensor, false},
+	}
+	for _, f := range fixed {
+		if *f.tensor, err = ort.CreateTensor(hcStateShape(), f.buf); err != nil {
+			return stateAllocErr(err, f.name)
+		}
+		if f.input {
+			err = s.binding.BindInput(f.name, *f.tensor)
+		} else {
+			err = s.binding.BindOutput(f.name, *f.tensor)
+		}
+		if err != nil {
+			return stateAllocErr(err, f.name)
+		}
+	}
+	return nil
+}
+
+// stateAllocErr wraps a tensor or binding setup error.
+func stateAllocErr(err error, tensor string) error {
 	return errors.New(err).
 		Component("inference/vad").
 		Category(errors.CategoryModelInit).
@@ -217,87 +257,98 @@ func (s *session) Run(frames, hIn, cIn []float32) (probs, hOut, cOut []float32, 
 	copy(s.hBuf, hIn)
 	copy(s.cBuf, cIn)
 
-	// The sequence dimension is dynamic, so the input tensor is created per Run
-	// over the caller's flat slice (NewTensor wraps the Go slice; no data copy).
-	inputTensor, err := ort.NewTensor(ort.NewShape(int64(n), modelInputSamples), frames)
-	if err != nil {
-		return nil, nil, nil, errors.New(err).
-			Component("inference/vad").Category(errors.CategoryModelLoad).
-			Context("tensor", "input").Build()
+	if bindErr := s.bindInput(frames, n); bindErr != nil {
+		return nil, nil, nil, bindErr
 	}
-	defer func() { _ = inputTensor.Destroy() }()
+	if n != s.boundHops {
+		if bindErr := s.bindProbs(n); bindErr != nil {
+			return nil, nil, nil, bindErr
+		}
+	}
 
-	// nil entries ask ONNX Runtime to allocate the outputs; Run replaces them
-	// with Go-managed tensors that must be destroyed after copying out. The defer
-	// is registered BEFORE Run so a partially-allocated output set cannot leak on
-	// an inference error.
-	outputs := make([]ort.Value, len(vadOutputNames))
-	defer destroyValues(outputs)
-	if err = s.sess.Run([]ort.Value{inputTensor, s.hTensor, s.cTensor}, outputs); err != nil {
+	if err = s.binding.Run(nil); err != nil {
 		return nil, nil, nil, errors.New(err).
 			Component("inference/vad").
 			Category(errors.CategoryModelLoad).
 			Context("operation", "vad_inference").
 			Build()
 	}
-
-	probsT, ok1 := outputs[0].(*ort.Tensor[float32])
-	hnT, ok2 := outputs[1].(*ort.Tensor[float32])
-	cnT, ok3 := outputs[2].(*ort.Tensor[float32])
-	if !ok1 || !ok2 || !ok3 {
-		return nil, nil, nil, errors.Newf("vad: unexpected output tensor types (probs=%T hn=%T cn=%T)", outputs[0], outputs[1], outputs[2]).
-			Component("inference/vad").Category(errors.CategoryModelLoad).Build()
-	}
-	got := probsT.GetData()
-	hn := hnT.GetData()
-	cn := cnT.GetData()
-	if len(got) != n || len(hn) != stateWidth || len(cn) != stateWidth {
-		return nil, nil, nil, errors.Newf("vad: output shapes probs=%d hn=%d cn=%d, want %d/%d/%d", len(got), len(hn), len(cn), n, stateWidth, stateWidth).
-			Component("inference/vad").Category(errors.CategoryModelLoad).Build()
-	}
-
-	if cap(s.probsBuf) < n {
-		s.probsBuf = make([]float32, n)
-	}
-	s.probsBuf = s.probsBuf[:n]
-	copy(s.probsBuf, got)
-	copy(s.hOutBuf, hn)
-	copy(s.cOutBuf, cn)
-	return s.probsBuf, s.hOutBuf, s.cOutBuf, nil
+	return s.probsBuf[:n], s.hOutBuf, s.cOutBuf, nil
 }
 
-// destroyValues destroys every non-nil ORT value in vals.
-func destroyValues(vals []ort.Value) {
-	for _, v := range vals {
-		if v != nil {
-			_ = v.Destroy()
-		}
+// bindInput creates the stacked input tensor over frames and binds it, then
+// closes the previous one. The new tensor stays open until the next call so
+// the memory the binding points at stays pinned (see the session comment).
+func (s *session) bindInput(frames []float32, n int) error {
+	t, err := ort.CreateTensor([]int64{int64(n), modelInputSamples}, frames)
+	if err != nil {
+		return errors.New(err).
+			Component("inference/vad").Category(errors.CategoryModelLoad).
+			Context("tensor", vadInputNames[0]).Build()
 	}
+	if err := s.binding.BindInput(vadInputNames[0], t); err != nil {
+		_ = t.Close()
+		return errors.New(err).
+			Component("inference/vad").Category(errors.CategoryModelLoad).
+			Context("tensor", vadInputNames[0]).Build()
+	}
+	if s.inputTensor != nil {
+		_ = s.inputTensor.Close()
+	}
+	s.inputTensor = t
+	return nil
 }
 
-// Close implements SpeechSession. It is idempotent.
+// bindProbs binds the speech_probs output over probsBuf[:n], growing probsBuf
+// when needed, then closes the previously bound output tensor. Binding by name
+// replaces the earlier binding.
+func (s *session) bindProbs(n int) error {
+	// A grown buffer replaces probsBuf only once it is bound: until then the
+	// bound tensor still points at the old one.
+	buf := s.probsBuf
+	if len(buf) < n {
+		buf = make([]float32, n)
+	}
+	t, err := ort.CreateTensor([]int64{int64(n)}, buf[:n])
+	if err != nil {
+		return errors.New(err).
+			Component("inference/vad").Category(errors.CategoryModelLoad).
+			Context("tensor", vadOutputNames[0]).Build()
+	}
+	if err := s.binding.BindOutput(vadOutputNames[0], t); err != nil {
+		_ = t.Close()
+		return errors.New(err).
+			Component("inference/vad").Category(errors.CategoryModelLoad).
+			Context("tensor", vadOutputNames[0]).Build()
+	}
+	if s.probsTensor != nil {
+		_ = s.probsTensor.Close()
+	}
+	s.probsTensor = t
+	s.probsBuf = buf
+	s.boundHops = n
+	return nil
+}
+
+// Close implements SpeechSession. It is idempotent. It closes the binding
+// first, then every tensor it referenced, then the session.
 func (s *session) Close() error {
 	if s == nil {
 		return nil
 	}
-	s.destroyTensors()
+	_ = s.binding.Close()
+	s.binding = nil
+	for _, t := range []**ort.Tensor{&s.hTensor, &s.cTensor, &s.hnTensor, &s.cnTensor, &s.inputTensor, &s.probsTensor} {
+		if *t != nil {
+			_ = (*t).Close()
+			*t = nil
+		}
+	}
+	s.boundHops = 0
 	if s.sess != nil {
-		err := s.sess.Destroy()
+		err := s.sess.Close()
 		s.sess = nil
 		return err
 	}
 	return nil
-}
-
-// destroyTensors destroys the reused h/c input tensors and nils the references.
-// Per-Run tensors (input and auto-allocated outputs) are destroyed in Run.
-func (s *session) destroyTensors() {
-	if s.hTensor != nil {
-		_ = s.hTensor.Destroy()
-		s.hTensor = nil
-	}
-	if s.cTensor != nil {
-		_ = s.cTensor.Destroy()
-		s.cTensor = nil
-	}
 }

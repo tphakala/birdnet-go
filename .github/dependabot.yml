@@ -11,14 +11,14 @@ updates:
       prefix: "build(deps)"
     open-pull-requests-limit: 5
     ignore:
-      # onnxruntime_go v1.36.x is built for ONNX Runtime C API 29 and needs
-      # native ONNX Runtime 1.29 or newer. A binding release that raises the API
-      # level needs the native pin (Dockerfile, Taskfile.yml, setup-onnxruntime
-      # action), minORTMinor in internal/inference/ort_status.go and
-      # expectedYalueSeries in internal/inference/ort_pins_test.go moved with it,
-      # so newer bindings are held for a manual lockstep upgrade.
-      - dependency-name: "github.com/yalue/onnxruntime_go"
-        versions: [">=1.37.0"]
+      # github.com/microsoft/onnxruntime/go is pinned to a pseudo-version of an
+      # ONNX Runtime release tag commit (the module has no go/vX.Y.Z tags). A
+      # binding move needs the native pin (Dockerfile, Taskfile.yml,
+      # setup-onnxruntime action), minORTMinor in
+      # internal/inference/ort_status.go and expectedBindingCommit in
+      # internal/inference/ort_pins_test.go reviewed with it, so it is bumped
+      # by hand.
+      - dependency-name: "github.com/microsoft/onnxruntime/go"
     groups:
       go-minor-patch:
         patterns:

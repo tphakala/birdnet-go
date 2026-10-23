@@ -3,9 +3,9 @@ package onnx
 import (
 	"testing"
 
+	ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	ort "github.com/yalue/onnxruntime_go"
 )
 
 // v24LogitsSize is the BirdNET v2.4 species-logits dimension, used here to build
@@ -87,29 +87,29 @@ func TestValidateLabelCount(t *testing.T) {
 	t.Run("matching label count passes", func(t *testing.T) {
 		t.Parallel()
 		cfg := &ModelConfig{LogitsIndex: 0}
-		outputs := []ort.InputOutputInfo{{Dimensions: ort.NewShape(1, v24LogitsSize)}}
+		outputs := []ort.IOInfo{{Shape: []int64{1, v24LogitsSize}}}
 		require.NoError(t, validateLabelCount(cfg, outputs, v24LogitsSize))
 	})
 
 	t.Run("mismatched label count errors", func(t *testing.T) {
 		t.Parallel()
 		cfg := &ModelConfig{LogitsIndex: 0}
-		outputs := []ort.InputOutputInfo{{Dimensions: ort.NewShape(1, v24LogitsSize)}}
+		outputs := []ort.IOInfo{{Shape: []int64{1, v24LogitsSize}}}
 		require.Error(t, validateLabelCount(cfg, outputs, v24LogitsSize-1))
 	})
 
 	t.Run("logits index out of range errors", func(t *testing.T) {
 		t.Parallel()
 		cfg := &ModelConfig{LogitsIndex: 2}
-		outputs := []ort.InputOutputInfo{{Dimensions: ort.NewShape(1, v24LogitsSize)}}
+		outputs := []ort.IOInfo{{Shape: []int64{1, v24LogitsSize}}}
 		require.Error(t, validateLabelCount(cfg, outputs, v24LogitsSize))
 	})
 }
 
-// TestOutputShape_BirdNETv24 verifies createOutputTensors gets correctly-sized output
-// shapes for each v2.4 layout. The critical case is the head-pruned model, whose only
+// TestOutputShape_BirdNETv24 verifies outputShape returns the expected output
+// shapes (used to validate what ONNX Runtime returns) for each v2.4 layout. The critical case is the head-pruned model, whose only
 // output (index 0) is the [.,1024] embedding rather than logits: a wrong size here
-// would allocate a zero- or mis-sized tensor and fail inference.
+// would reject a valid inference result.
 func TestOutputShape_BirdNETv24(t *testing.T) {
 	t.Parallel()
 
@@ -161,26 +161,26 @@ func TestSelectEmbeddingOutput(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name      string
-		outputs   []ort.InputOutputInfo
+		outputs   []ort.IOInfo
 		wantIndex int
 		wantSize  int
 		wantErr   bool
 	}{
 		{
 			name:      "two-output backbone: embedding at index 1",
-			outputs:   []ort.InputOutputInfo{{Dimensions: ort.NewShape(1, v24LogitsSize)}, {Dimensions: ort.NewShape(1, embeddingSizeV24)}},
+			outputs:   []ort.IOInfo{{Shape: []int64{1, v24LogitsSize}}, {Shape: []int64{1, embeddingSizeV24}}},
 			wantIndex: 1,
 			wantSize:  embeddingSizeV24,
 		},
 		{
 			name:      "head-pruned: embedding at index 0",
-			outputs:   []ort.InputOutputInfo{{Dimensions: ort.NewShape(1, embeddingSizeV24)}},
+			outputs:   []ort.IOInfo{{Shape: []int64{1, embeddingSizeV24}}},
 			wantIndex: 0,
 			wantSize:  embeddingSizeV24,
 		},
 		{
 			name:    "no 1024-dim output errors",
-			outputs: []ort.InputOutputInfo{{Dimensions: ort.NewShape(1, v24LogitsSize)}},
+			outputs: []ort.IOInfo{{Shape: []int64{1, v24LogitsSize}}},
 			wantErr: true,
 		},
 		{
@@ -248,7 +248,7 @@ func TestBuildModelConfig_BirdNETv30(t *testing.T) {
 	}
 }
 
-// TestOutputShape_BirdNETv30 verifies createOutputTensors sizes each v3.0 output
+// TestOutputShape_BirdNETv30 verifies outputShape returns the expected shape of each v3.0 output
 // correctly for both export orderings (index-aware, driven by the resolved ports).
 func TestOutputShape_BirdNETv30(t *testing.T) {
 	t.Parallel()
@@ -277,26 +277,26 @@ func TestSelectPredictionsOutput(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
 		name       string
-		outputs    []ort.InputOutputInfo
+		outputs    []ort.IOInfo
 		numClasses int
 		wantIndex  int
 		wantErr    bool
 	}{
 		{
 			name:       "predictions at index 1 (embeddings-first)",
-			outputs:    []ort.InputOutputInfo{{Dimensions: ort.NewShape(1, embeddingSizeV30)}, {Dimensions: ort.NewShape(1, v30LogitsSize)}},
+			outputs:    []ort.IOInfo{{Shape: []int64{1, embeddingSizeV30}}, {Shape: []int64{1, v30LogitsSize}}},
 			numClasses: v30LogitsSize,
 			wantIndex:  1,
 		},
 		{
 			name:       "predictions at index 0 (predictions-first)",
-			outputs:    []ort.InputOutputInfo{{Dimensions: ort.NewShape(1, v30LogitsSize)}, {Dimensions: ort.NewShape(1, embeddingSizeV30)}},
+			outputs:    []ort.IOInfo{{Shape: []int64{1, v30LogitsSize}}, {Shape: []int64{1, embeddingSizeV30}}},
 			numClasses: v30LogitsSize,
 			wantIndex:  0,
 		},
 		{
 			name:       "no matching output errors",
-			outputs:    []ort.InputOutputInfo{{Dimensions: ort.NewShape(1, embeddingSizeV30)}},
+			outputs:    []ort.IOInfo{{Shape: []int64{1, embeddingSizeV30}}},
 			numClasses: v30LogitsSize,
 			wantErr:    true,
 		},

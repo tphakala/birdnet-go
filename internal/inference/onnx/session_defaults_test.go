@@ -8,7 +8,7 @@ import (
 )
 
 // recordingSessionOptions records the config entries applySessionDefaults sets,
-// standing in for *ort.SessionOptions so the test runs without the ONNX Runtime
+// standing in for *SessionOptions so the test runs without the ONNX Runtime
 // library.
 type recordingSessionOptions struct {
 	configEntries map[string]string
@@ -18,7 +18,7 @@ func (r *recordingSessionOptions) SetIntraOpNumThreads(int) error { return nil }
 
 func (r *recordingSessionOptions) SetInterOpNumThreads(int) error { return nil }
 
-func (r *recordingSessionOptions) AddSessionConfigEntry(key, value string) error {
+func (r *recordingSessionOptions) AddConfigEntry(key, value string) error {
 	if r.configEntries == nil {
 		r.configEntries = make(map[string]string)
 	}

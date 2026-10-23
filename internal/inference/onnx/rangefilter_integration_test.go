@@ -52,7 +52,6 @@ func loadTestRangeFilter(t *testing.T) *RangeFilter {
 	skipIfNoModel(t)
 
 	MustInitORT("")
-	t.Cleanup(func() { _ = DestroyORT() })
 
 	rf, err := NewRangeFilter(geomodelPath(t),
 		WithRangeFilterLabelsPath(labelsPath(t)),
@@ -170,7 +169,6 @@ func BenchmarkPredictBatchRaw(b *testing.B) {
 	}
 
 	MustInitORT("")
-	b.Cleanup(func() { _ = DestroyORT() })
 
 	rf, err := NewRangeFilter(path, WithRangeFilterLabelsPath(lpath))
 	require.NoError(b, err)

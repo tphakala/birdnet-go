@@ -3,15 +3,17 @@ package onnx
 import (
 	"fmt"
 
-	ort "github.com/yalue/onnxruntime_go"
+	ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 )
 
 // CustomClassifier runs secondary classification on embedding vectors from a primary model.
 // Used for custom classification heads (e.g., bat species detection from BirdNET embeddings).
 // It is safe for concurrent use from multiple goroutines.
 type CustomClassifier struct {
-	session    *ort.DynamicAdvancedSession
+	session    *ort.Session
 	labels     []string
+	inputName  string
+	outputName string
 	inputDim   int
 	numClasses int
 	topK       int
@@ -25,7 +27,7 @@ type CustomClassifierBuilder struct {
 	labels        []string
 	topK          int
 	minConf       float32
-	sessionOptsFn func(*ort.SessionOptions)
+	sessionOptsFn func(*SessionOptions)
 }
 
 // NewCustomClassifierBuilder creates a new builder.
@@ -64,7 +66,7 @@ func (b *CustomClassifierBuilder) MinConfidence(threshold float32) *CustomClassi
 }
 
 // SessionOptions provides a callback to configure the ONNX Runtime session options.
-func (b *CustomClassifierBuilder) SessionOptions(fn func(*ort.SessionOptions)) *CustomClassifierBuilder {
+func (b *CustomClassifierBuilder) SessionOptions(fn func(*SessionOptions)) *CustomClassifierBuilder {
 	b.sessionOptsFn = fn
 	return b
 }
@@ -76,21 +78,34 @@ func (b *CustomClassifierBuilder) Build() (*CustomClassifier, error) {
 		return nil, ErrModelPathRequired
 	}
 
-	inputInfos, outputInfos, err := ort.GetInputOutputInfo(b.modelPath)
+	// The session carries the model metadata, so the model is loaded once.
+	session, err := createSession(b.modelPath, b.sessionOptsFn)
 	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to load custom model metadata: %w", err)
+		return nil, err
 	}
 
+	classifier, err := b.newFromSession(session)
+	if err != nil {
+		_ = session.Close()
+		return nil, err
+	}
+	return classifier, nil
+}
+
+// newFromSession validates the model and labels against an open session. It
+// does not close the session on error; the caller does.
+func (b *CustomClassifierBuilder) newFromSession(session *ort.Session) (*CustomClassifier, error) {
+	inputInfos, outputInfos := session.Inputs(), session.Outputs()
 	if len(inputInfos) == 0 || len(outputInfos) == 0 {
 		return nil, &ModelDetectionError{Reason: "custom model must have at least one input and one output"}
 	}
 
-	inputDim := lastDim(inputInfos[0].Dimensions)
+	inputDim := lastDim(inputInfos[0].Shape)
 	if inputDim <= 0 {
 		return nil, &ModelDetectionError{Reason: "custom model input has dynamic or missing dimensions"}
 	}
 
-	numClasses := lastDim(outputInfos[0].Dimensions)
+	numClasses := lastDim(outputInfos[0].Shape)
 	if numClasses <= 0 {
 		return nil, &ModelDetectionError{Reason: "custom model output has dynamic or missing dimensions"}
 	}
@@ -100,6 +115,7 @@ func (b *CustomClassifierBuilder) Build() (*CustomClassifier, error) {
 	case len(b.labels) > 0:
 		labels = b.labels
 	case b.labelsPath != "":
+		var err error
 		labels, err = LoadLabels(b.labelsPath)
 		if err != nil {
 			return nil, err
@@ -112,13 +128,6 @@ func (b *CustomClassifierBuilder) Build() (*CustomClassifier, error) {
 		return nil, &LabelCountError{Expected: numClasses, Got: len(labels)}
 	}
 
-	inputNames := []string{inputInfos[0].Name}
-	outputNames := []string{outputInfos[0].Name}
-	session, err := createSession(b.modelPath, inputNames, outputNames, b.sessionOptsFn)
-	if err != nil {
-		return nil, err
-	}
-
 	topK := b.topK
 	if topK == 0 {
 		topK = numClasses
@@ -127,6 +136,8 @@ func (b *CustomClassifierBuilder) Build() (*CustomClassifier, error) {
 	return &CustomClassifier{
 		session:    session,
 		labels:     labels,
+		inputName:  inputInfos[0].Name,
+		outputName: outputInfos[0].Name,
 		inputDim:   inputDim,
 		numClasses: numClasses,
 		topK:       topK,
@@ -153,24 +164,21 @@ func (c *CustomClassifier) PredictRaw(embeddings []float32) ([]float32, error) {
 		return nil, &EmbeddingDimMismatchError{Expected: c.inputDim, Got: len(embeddings)}
 	}
 
-	inputTensor, err := ort.NewTensor(ort.NewShape(1, int64(c.inputDim)), embeddings)
+	inputTensor, err := ort.CreateTensor([]int64{1, int64(c.inputDim)}, embeddings)
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: failed to create embedding tensor: %w", err)
 	}
-	defer func() { _ = inputTensor.Destroy() }()
+	defer func() { _ = inputTensor.Close() }()
 
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(1, int64(c.numClasses)))
-	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create output tensor: %w", err)
-	}
-	defer func() { _ = outputTensor.Destroy() }()
-
-	err = c.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor})
+	logits, release, err := runSingleOutput(c.session, c.inputName, inputTensor, c.outputName, []int64{1, int64(c.numClasses)})
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: custom classifier inference failed: %w", err)
 	}
+	defer release()
 
-	return sigmoidSlice(outputTensor.GetData()), nil
+	// sigmoidSlice returns a fresh slice, so nothing points into ONNX Runtime
+	// memory once release runs.
+	return sigmoidSlice(logits), nil
 }
 
 // PredictBatch runs inference on multiple embedding vectors in a single batch.
@@ -193,24 +201,18 @@ func (c *CustomClassifier) PredictBatch(embeddings [][]float32) ([][]Prediction,
 		flat = append(flat, emb...)
 	}
 
-	inputTensor, err := ort.NewTensor(ort.NewShape(int64(batchSize), int64(c.inputDim)), flat)
+	inputTensor, err := ort.CreateTensor([]int64{int64(batchSize), int64(c.inputDim)}, flat)
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: failed to create batch embedding tensor: %w", err)
 	}
-	defer func() { _ = inputTensor.Destroy() }()
+	defer func() { _ = inputTensor.Close() }()
 
-	outputTensor, err := ort.NewEmptyTensor[float32](ort.NewShape(int64(batchSize), int64(c.numClasses)))
-	if err != nil {
-		return nil, fmt.Errorf("birdnet: failed to create batch output tensor: %w", err)
-	}
-	defer func() { _ = outputTensor.Destroy() }()
-
-	err = c.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor})
+	allLogits, release, err := runSingleOutput(c.session, c.inputName, inputTensor, c.outputName, []int64{int64(batchSize), int64(c.numClasses)})
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: custom classifier batch inference failed: %w", err)
 	}
+	defer release()
 
-	allLogits := outputTensor.GetData()
 	results := make([][]Prediction, batchSize)
 	for i := range batchSize {
 		start := i * c.numClasses
@@ -244,7 +246,7 @@ func (c *CustomClassifier) Labels() []string {
 // Close releases the ONNX session and associated resources.
 func (c *CustomClassifier) Close() error {
 	if c.session != nil {
-		err := c.session.Destroy()
+		err := c.session.Close()
 		c.session = nil
 		return err
 	}

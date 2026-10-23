@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	ort "github.com/yalue/onnxruntime_go"
 )
 
 // TestInitORT_AppliesTelemetryOptOutBeforeLoading checks InitORT itself, not

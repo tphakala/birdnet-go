@@ -3,7 +3,7 @@ package onnx
 import (
 	"fmt"
 
-	ort "github.com/yalue/onnxruntime_go"
+	ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 )
 
 // Known model sample counts and output counts for auto-detection.
@@ -121,13 +121,39 @@ func lastDim(shape []int64) int {
 	return int(shape[len(shape)-1])
 }
 
+// metadataThreads is the thread count of the temporary session that reads a
+// model's tensor metadata; the session never runs inference.
+const metadataThreads = 1
+
+// loadIOInfo reads a model's input and output tensor metadata through a
+// temporary single-thread session. It needs ONNX Runtime to be initialized.
+func loadIOInfo(modelPath string) (inputs, outputs []ort.IOInfo, err error) {
+	opts, err := ort.NewSessionOptions()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = opts.Close() }()
+	if err := opts.SetIntraOpNumThreads(metadataThreads); err != nil {
+		return nil, nil, err
+	}
+	if err := opts.SetInterOpNumThreads(metadataThreads); err != nil {
+		return nil, nil, err
+	}
+	session, err := ort.NewSession(modelPath, opts)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = session.Close() }()
+	return session.Inputs(), session.Outputs(), nil
+}
+
 // DetectEmbeddingOutput inspects an ONNX model's output tensors and returns the
 // index and size of its BirdNET v2.4 embedding output (the [.,1024] tensor). The
 // bat OpenVINO path uses this to bind the extractor to the correct output port up
 // front, before inference. Returns a ModelDetectionError when the model has no
 // 1024-dim output.
 func DetectEmbeddingOutput(modelPath string) (index, size int, err error) {
-	_, outputInfos, err := ort.GetInputOutputInfo(modelPath)
+	_, outputInfos, err := loadIOInfo(modelPath)
 	if err != nil {
 		return -1, 0, fmt.Errorf("birdnet: failed to load model metadata: %w", err)
 	}
@@ -141,7 +167,7 @@ func DetectEmbeddingOutput(modelPath string) (index, size int, err error) {
 // the classifier to the correct port before inference. Returns a
 // ModelDetectionError when no output matches numClasses.
 func DetectPredictionsOutput(modelPath string, numClasses int) (index int, err error) {
-	_, outputInfos, err := ort.GetInputOutputInfo(modelPath)
+	_, outputInfos, err := loadIOInfo(modelPath)
 	if err != nil {
 		return -1, fmt.Errorf("birdnet: failed to load model metadata: %w", err)
 	}
@@ -152,9 +178,9 @@ func DetectPredictionsOutput(modelPath string, numClasses int) (index int, err e
 // among a model's output tensors: the first output whose last dimension equals
 // numClasses. Split out so the port-selection logic is unit-testable without a
 // real ONNX model. Returns a ModelDetectionError when no output matches.
-func selectPredictionsOutput(outputInfos []ort.InputOutputInfo, numClasses int) (index int, err error) {
+func selectPredictionsOutput(outputInfos []ort.IOInfo, numClasses int) (index int, err error) {
 	for i := range outputInfos {
-		if lastDim(outputInfos[i].Dimensions) == numClasses {
+		if lastDim(outputInfos[i].Shape) == numClasses {
 			return i, nil
 		}
 	}
@@ -168,9 +194,9 @@ func selectPredictionsOutput(outputInfos []ort.InputOutputInfo, numClasses int) 
 // (logits@0 + embedding@1), index 0 for the head-pruned, embedding-only model. Returns
 // a ModelDetectionError when no 1024-dim output exists. Split out so the port-selection
 // logic is unit-testable without a real ONNX model.
-func selectEmbeddingOutput(outputInfos []ort.InputOutputInfo) (index, size int, err error) {
+func selectEmbeddingOutput(outputInfos []ort.IOInfo) (index, size int, err error) {
 	for i := range outputInfos {
-		if lastDim(outputInfos[i].Dimensions) == embeddingSizeV24 {
+		if lastDim(outputInfos[i].Shape) == embeddingSizeV24 {
 			return i, embeddingSizeV24, nil
 		}
 	}

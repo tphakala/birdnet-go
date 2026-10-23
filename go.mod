@@ -21,6 +21,7 @@ require (
 	github.com/labstack/gommon v0.5.0
 	github.com/markbates/goth v1.82.0
 	github.com/mattn/go-sqlite3 v1.14.52
+	github.com/microsoft/onnxruntime/go v0.0.0-20261008210605-402979ac1bef
 	github.com/moby/moby/api v1.56.1
 	github.com/nicholas-fedor/shoutrrr v0.22.0
 	github.com/pkg/sftp v1.13.11
@@ -48,7 +49,6 @@ require (
 	github.com/tphakala/go-opus v1.3.0
 	github.com/tphakala/go-tflite v0.2.2-0.20260514101223-29408e53fff7
 	github.com/tphakala/go-wav v1.1.0
-	github.com/yalue/onnxruntime_go v1.36.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/image v0.47.0

@@ -3,8 +3,8 @@ package inference
 import (
 	"sync/atomic"
 
+	ort "github.com/tphakala/birdnet-go/internal/inference/onnx"
 	ov "github.com/tphakala/birdnet-go/internal/inference/openvino"
-	ortlib "github.com/yalue/onnxruntime_go"
 )
 
 // Probe cache states reported in OpenVINORuntime.ProbeStatus.
@@ -67,7 +67,7 @@ var (
 func publishORTRuntime(libraryPath string, configured bool) {
 	ortRuntimeSnap.Store(&ORTRuntime{
 		Initialized:       true,
-		Version:           ortlib.GetVersion(),
+		Version:           ort.Version(),
 		LibraryPath:       libraryPath,
 		LibraryConfigured: configured,
 	})

@@ -7,15 +7,15 @@ import (
 	"strings"
 
 	ort "github.com/tphakala/birdnet-go/internal/inference/onnx"
-	ortlib "github.com/yalue/onnxruntime_go"
 )
 
-// minORTMajor and minORTMinor are the oldest native ONNX Runtime release the
-// binding can load. yalue/onnxruntime_go v1.36.x calls GetApi(29) (header
-// ORT_API_VERSION 29). ONNX Runtime 1.N serves API N and all older tables, so
-// a library below 1.29 returns NULL and init fails with "Error setting ORT API
-// base: 2". Keep these in step with the Dependabot ignore rule and
-// ort_pins_test.go.
+// minORTMajor and minORTMinor are the oldest native ONNX Runtime release
+// BirdNET-Go supports. The official binding negotiates the C API level down
+// from 27 to 17 (cshim.h:8-9 in github.com/microsoft/onnxruntime/go at the
+// pinned commit), so it no longer forces this floor. It is BirdNET-Go policy:
+// the tested pin, and keeping the pre-1.27 KleidiAI memory leak out of reach.
+// InitONNXRuntime enforces it after the library loads. Keep these in step with
+// the Dependabot ignore rule and ort_pins_test.go.
 const (
 	minORTMajor = 1
 	minORTMinor = 29
@@ -50,10 +50,20 @@ type ORTStatus struct {
 // configuredPath is the user-configured library path (may be empty).
 // The function never mutates global ORT state.
 func CheckORTAvailability(configuredPath string) ORTStatus {
+	// A library that loaded but is below the minimum cannot be replaced in
+	// this process; report it until the process restarts.
+	if rej := rejectedORT(); rej != nil {
+		return ORTStatus{
+			LibraryPath: rej.path,
+			Version:     rej.version,
+			Error:       versionError(rej.version),
+		}
+	}
+
 	// Fast path: ORT is already loaded and running. Trust the init even if
 	// GetVersion returns empty (it succeeded, so the library is compatible).
 	if IsORTInitialized() {
-		version := ortlib.GetVersion()
+		version := ort.Version()
 		status := ORTStatus{
 			Available:   true,
 			Initialized: true,

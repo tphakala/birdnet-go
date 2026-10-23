@@ -23,7 +23,6 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/inference"
 	"github.com/tphakala/birdnet-go/internal/inference/onnx"
-	ortlib "github.com/yalue/onnxruntime_go"
 )
 
 const (
@@ -325,7 +324,7 @@ func createClassifier(modelPath string, labels []string, threads int, useXNNPACK
 		onnx.WithSkipLabelValidation(),
 	)
 	var configErr error
-	opts = append(opts, onnx.WithSessionOptions(func(so *ortlib.SessionOptions) {
+	opts = append(opts, onnx.WithSessionOptions(func(so *onnx.SessionOptions) {
 		if threads > 0 {
 			if err := so.SetIntraOpNumThreads(threads); err != nil && configErr == nil {
 				configErr = fmt.Errorf("failed to set IntraOpNumThreads to %d: %w", threads, err)

@@ -8,11 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestORTRuntimeSnapshot_TracksInitAndDestroy pins that the snapshot is stored
-// after a successful init with the library handed to the binding, and cleared
-// after a successful destroy. It needs a real ONNX Runtime library, so it is
-// opt-in through OV_TEST_ORT_LIB like the other library-backed tests.
-func TestORTRuntimeSnapshot_TracksInitAndDestroy(t *testing.T) {
+// TestORTRuntimeSnapshot_TracksInit pins that the snapshot is stored after a
+// successful init with the library handed to the binding. It does not destroy
+// the runtime afterwards: the official binding cannot initialize again after a
+// shutdown, which would break every later test in the process. It needs a real
+// ONNX Runtime library, so it is opt-in through OV_TEST_ORT_LIB like the other
+// library-backed tests.
+func TestORTRuntimeSnapshot_TracksInit(t *testing.T) {
 	lib := os.Getenv("OV_TEST_ORT_LIB")
 	if lib == "" {
 		t.Skip("set OV_TEST_ORT_LIB to a libonnxruntime path to run")
@@ -25,9 +27,6 @@ func TestORTRuntimeSnapshot_TracksInitAndDestroy(t *testing.T) {
 	assert.NotEmpty(t, snap.Version)
 	assert.Equal(t, lib, snap.LibraryPath)
 	assert.True(t, snap.LibraryConfigured)
-
-	require.NoError(t, DestroyONNXRuntime())
-	assert.Equal(t, ORTRuntime{}, ORTRuntimeSnapshot())
 }
 
 // TestProbeStatusName pins the mapping from the probe cache state to the status
