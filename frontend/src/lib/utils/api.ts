@@ -354,6 +354,10 @@ interface FetchOptions extends Omit<RequestInit, 'body'> {
 
 /**
  * SECURITY: Enhanced fetch with comprehensive protection
+ *
+ * Headers in options.headers are merged over the defaults (including the CSRF
+ * token) for each request, and options is never modified, so the retry after a
+ * 403 merges them again over the refreshed token.
  */
 export async function fetchWithCSRF<T = unknown>(
   url: string,
@@ -435,8 +439,6 @@ export async function fetchWithCSRF<T = unknown>(
       }
       defaultHeaders.set(key, value);
     }
-
-    options.headers = defaultHeaders;
   }
 
   // SECURITY: Validate and sanitize body
@@ -461,10 +463,13 @@ export async function fetchWithCSRF<T = unknown>(
   }
 
   // Strip signal from options so caller's signal doesn't overwrite the internal one
-  // onHeaders is likewise ours, not fetch's.
-  const { signal: _ignored, onHeaders: _onHeaders, ...restOptions } = options;
+  // onHeaders is likewise ours, not fetch's. headers are already merged into
+  // defaultOptions.headers above; leaving the caller's copy in the spread would
+  // replace the merged set (and its CSRF token) with only the custom headers.
+  const { signal: _ignored, onHeaders: _onHeaders, headers: _headers, ...restOptions } = options;
   void _ignored; // Consumed via addEventListener above; destructured only to exclude from spread
   void _onHeaders; // Called below; destructured only to exclude from spread
+  void _headers; // Merged into defaultOptions.headers above; destructured only to exclude from spread
 
   const finalOptions: RequestInit = {
     ...defaultOptions,

@@ -339,6 +339,41 @@ describe('API utilities', () => {
       });
     });
 
+    it('retries a request that carries custom headers with the refreshed CSRF token', async () => {
+      mockCsrfToken = 'stale-csrf-token';
+      const appState = await import('$lib/stores/appState.svelte');
+      vi.mocked(appState.refreshCsrfToken).mockImplementationOnce(() => {
+        mockCsrfToken = 'fresh-csrf-token';
+        return Promise.resolve(true);
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        headers: new Headers(),
+        json: () => Promise.resolve({}),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: () => Promise.resolve({}),
+      });
+
+      await fetchWithCSRF('/api/test', {
+        method: 'PUT',
+        body: {},
+        headers: { 'If-Match': '"etag-1"' },
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      const [, first] = mockFetch.mock.calls[0];
+      const [, retry] = mockFetch.mock.calls[1];
+      expect(first.headers.get('X-CSRF-Token')).toBe('stale-csrf-token');
+      expect(retry.headers.get('X-CSRF-Token')).toBe('fresh-csrf-token');
+      expect(retry.headers.get('If-Match')).toBe('"etag-1"');
+    });
+
     it('returns text for non-JSON responses', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
