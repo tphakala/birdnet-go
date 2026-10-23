@@ -204,10 +204,10 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	// Read the controller's own snapshot when set (tests inject this
-	// directly); fall back to the global publisher. In production these are
-	// the same pointer at boot and stay in sync because every successful
-	// publish below updates both the atomic Settings pointer and conf.settingsInstance.
+	// Baseline: the live global snapshot when this controller owns it, else the
+	// controller's own snapshot (tests inject this directly). Only an owning
+	// controller publishes to both below; out-of-band writers (model install,
+	// range filter) update only the global, so the controller's snapshot can lag.
 	current := c.getSettingsOrFallback()
 	if current == nil {
 		c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized during update attempt")
