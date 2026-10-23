@@ -100,9 +100,8 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Read the live settings snapshot, preferring the process-global singleton
-	// when this controller owns it (production) so out-of-band updates (such as
-	// gallery model installations) are immediately visible.
+	// Read the live settings snapshot so out-of-band updates (such as gallery
+	// model installations) are immediately visible.
 	settings := c.getSettingsOrFallback()
 	if settings == nil {
 		c.LogErrorIfEnabled("Settings not initialized when trying to get all settings",
@@ -137,8 +136,6 @@ const dashboardSectionName = "dashboard"
 func (c *Controller) GetDashboardSettings(ctx echo.Context) error {
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting public dashboard settings")
 
-	// Read the live settings snapshot, preferring the process-global singleton
-	// when this controller owns it (production) so out-of-band updates are visible.
 	settings := c.getSettingsOrFallback()
 	if settings == nil {
 		c.LogAPIRequest(ctx, logger.LogLevelError,
@@ -173,8 +170,6 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
-	// Read the live settings snapshot, preferring the process-global singleton
-	// when this controller owns it (production) so out-of-band updates are visible.
 	settings := c.getSettingsOrFallback()
 	if settings == nil {
 		c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get section settings", logger.String("section", section))
@@ -425,12 +420,15 @@ func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) err
 	return nil
 }
 
-// getSettingsOrFallback returns the current settings snapshot for settings handlers.
+// getSettingsOrFallback returns the current settings snapshot for any handler
+// that returns settings to a client or merges into them.
 // When this controller owns the global singleton (production), it reads from
 // conf.GetSettings() so that out-of-band publishers (model manager, range filter rebuild,
 // ShouldUpdateRangeFilterToday, etc.) are not silently overwritten or missed by a stale
 // per-controller pointer. For test controllers that inject a standalone *Settings,
-// the controller's own atomic snapshot is returned as-is.
+// the controller's own atomic snapshot is returned as-is, which keeps tests
+// isolated from the global even when one is set. conf.Setting() is the last
+// resort when neither is available.
 func (c *Controller) getSettingsOrFallback() *conf.Settings {
 	if c.isGlobalOwner {
 		if s := conf.GetSettings(); s != nil {
@@ -3322,8 +3320,6 @@ func (c *Controller) GetImageProviders(ctx echo.Context) error {
 func (c *Controller) GetSystemID(ctx echo.Context) error {
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting system ID")
 
-	// Read the live settings snapshot, preferring the process-global singleton
-	// when this controller owns it (production) so out-of-band updates are visible.
 	settings := c.getSettingsOrFallback()
 	if settings == nil {
 		c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get system ID", logger.String("endpoint", "GetSystemID"))

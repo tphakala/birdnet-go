@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -13,74 +12,87 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// installedModelID is the model a gallery install adds to models.enabled in
+// the staleness tests below.
+const installedModelID = "birdnet_v3.0"
+
+// stalenessBaseModels returns the models.enabled list before the simulated install.
+func stalenessBaseModels() []string { return []string{"birdnet", "perch_v2"} }
+
+// stalenessInstalledModels returns the models.enabled list after the simulated install.
+func stalenessInstalledModels() []string {
+	return append(stalenessBaseModels(), installedModelID)
+}
+
+// newGlobalOwnerController stores initial as the process-global settings and
+// returns a controller that owns the global singleton, as in production. The
+// previous global settings are restored when the test ends.
+func newGlobalOwnerController(t *testing.T, e *echo.Echo, initial *conf.Settings) *Controller {
+	t.Helper()
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prev) })
+	conf.StoreSettings(initial)
+
+	c := getTestController(t, e)
+	c.isGlobalOwner = true
+	c.Settings.Store(initial)
+	return c
+}
+
+// getJSON calls a settings GET handler and decodes the 200 response into T.
+// A non-empty section is passed as the "section" path parameter.
+func getJSON[T any](t *testing.T, e *echo.Echo, handler echo.HandlerFunc, path, section string) T {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+	if section != "" {
+		ctx.SetParamNames("section")
+		ctx.SetParamValues(section)
+	}
+	require.NoError(t, handler(ctx))
+	require.Equal(t, http.StatusOK, rec.Code, "GET %s must succeed; body: %s", path, rec.Body.String())
+
+	var out T
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &out))
+	return out
+}
+
 // TestSettingsReadEndpoints_ReflectOutOfBandUpdates reproduces issue #4764:
 // When an out-of-band writer (such as ModelManager gallery install) updates
 // global settings via conf.StoreSettings, the read handlers (GetAllSettings,
 // GetSectionSettings, GetDashboardSettings, and GetSystemID) must return the
 // updated settings rather than the stale startup snapshot when isGlobalOwner is true.
 func TestSettingsReadEndpoints_ReflectOutOfBandUpdates(t *testing.T) {
-	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.StoreSettings(prev) })
-
 	initial := getTestSettings(t)
-	initial.Models.Enabled = []string{"birdnet", "perch_v2"}
+	initial.Models.Enabled = stalenessBaseModels()
 	initial.Realtime.Dashboard.Locale = "en"
 	initial.SystemID = "sys-initial"
-	conf.StoreSettings(initial)
 
 	e := echo.New()
-	c := getTestController(t, e)
-	c.isGlobalOwner = true
-	c.Settings.Store(initial)
+	c := newGlobalOwnerController(t, e, initial)
 
 	// Simulate out-of-band update (e.g. gallery install of birdnet_v3.0)
 	updated := conf.CloneSettings(initial)
-	updated.Models.Enabled = []string{"birdnet", "perch_v2", "birdnet_v3.0"}
+	updated.Models.Enabled = stalenessInstalledModels()
 	updated.Realtime.Dashboard.Locale = "fi"
 	updated.SystemID = "sys-updated"
 	conf.StoreSettings(updated)
 
-	// 1. GET /api/v2/settings (GetAllSettings)
-	reqAll := httptest.NewRequest(http.MethodGet, "/api/v2/settings", http.NoBody)
-	recAll := httptest.NewRecorder()
-	require.NoError(t, c.GetAllSettings(e.NewContext(reqAll, recAll)))
-	require.Equal(t, http.StatusOK, recAll.Code)
-	var respAll conf.Settings
-	require.NoError(t, json.Unmarshal(recAll.Body.Bytes(), &respAll))
-	assert.Equal(t, []string{"birdnet", "perch_v2", "birdnet_v3.0"}, respAll.Models.Enabled,
+	all := getJSON[conf.Settings](t, e, c.GetAllSettings, "/api/v2/settings", "")
+	assert.Equal(t, stalenessInstalledModels(), all.Models.Enabled,
 		"GetAllSettings must reflect out-of-band models.enabled update")
 
-	// 2. GET /api/v2/settings/models (GetSectionSettings)
-	reqSec := httptest.NewRequest(http.MethodGet, "/api/v2/settings/models", http.NoBody)
-	recSec := httptest.NewRecorder()
-	ctxSec := e.NewContext(reqSec, recSec)
-	ctxSec.SetParamNames("section")
-	ctxSec.SetParamValues("models")
-	require.NoError(t, c.GetSectionSettings(ctxSec))
-	require.Equal(t, http.StatusOK, recSec.Code)
-	var respSec conf.ModelsConfig
-	require.NoError(t, json.Unmarshal(recSec.Body.Bytes(), &respSec))
-	assert.Equal(t, []string{"birdnet", "perch_v2", "birdnet_v3.0"}, respSec.Enabled,
+	models := getJSON[conf.ModelsConfig](t, e, c.GetSectionSettings, "/api/v2/settings/models", "models")
+	assert.Equal(t, stalenessInstalledModels(), models.Enabled,
 		"GetSectionSettings must reflect out-of-band models.enabled update")
 
-	// 3. GET /api/v2/settings/dashboard (GetDashboardSettings)
-	reqDash := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
-	recDash := httptest.NewRecorder()
-	require.NoError(t, c.GetDashboardSettings(e.NewContext(reqDash, recDash)))
-	require.Equal(t, http.StatusOK, recDash.Code)
-	var respDash conf.Dashboard
-	require.NoError(t, json.Unmarshal(recDash.Body.Bytes(), &respDash))
-	assert.Equal(t, "fi", respDash.Locale,
+	dashboard := getJSON[conf.Dashboard](t, e, c.GetDashboardSettings, "/api/v2/settings/dashboard", "")
+	assert.Equal(t, "fi", dashboard.Locale,
 		"GetDashboardSettings must reflect out-of-band dashboard update")
 
-	// 4. GET /api/v2/settings/systemid (GetSystemID)
-	reqSys := httptest.NewRequest(http.MethodGet, "/api/v2/settings/systemid", http.NoBody)
-	recSys := httptest.NewRecorder()
-	require.NoError(t, c.GetSystemID(e.NewContext(reqSys, recSys)))
-	require.Equal(t, http.StatusOK, recSys.Code)
-	var respSys map[string]string
-	require.NoError(t, json.Unmarshal(recSys.Body.Bytes(), &respSys))
-	assert.Equal(t, "sys-updated", respSys["systemID"],
+	systemID := getJSON[map[string]string](t, e, c.GetSystemID, "/api/v2/settings/systemid", "")
+	assert.Equal(t, "sys-updated", systemID["systemID"],
 		"GetSystemID must reflect out-of-band system ID update")
 }
 
@@ -103,65 +115,47 @@ func TestSettingsReadEndpoints_PreserveTestIsolationWhenNotGlobalOwner(t *testin
 	c.isGlobalOwner = false
 	c.Settings.Store(localSettings)
 
-	reqSys := httptest.NewRequest(http.MethodGet, "/api/v2/settings/systemid", http.NoBody)
-	recSys := httptest.NewRecorder()
-	require.NoError(t, c.GetSystemID(e.NewContext(reqSys, recSys)))
-	require.Equal(t, http.StatusOK, recSys.Code)
-	var respSys map[string]string
-	require.NoError(t, json.Unmarshal(recSys.Body.Bytes(), &respSys))
-	assert.Equal(t, "local-test-id", respSys["systemID"],
+	systemID := getJSON[map[string]string](t, e, c.GetSystemID, "/api/v2/settings/systemid", "")
+	assert.Equal(t, "local-test-id", systemID["systemID"],
 		"Standalone controller must read isolated settings when isGlobalOwner is false")
 }
 
-// TestSettingsSave_DoesNotRevertOutOfBandModel reproduces the full end-to-end bug:
-// UI fetches settings via GetAllSettings, modifies an unrelated setting, and saves
-// via UpdateSettings. The out-of-band installed model must not be reverted.
-func TestSettingsSave_DoesNotRevertOutOfBandModel(t *testing.T) {
-	prev := conf.GetSettings()
-	t.Cleanup(func() { conf.StoreSettings(prev) })
-
+// TestSettingsSave_AfterFreshGetKeepsOutOfBandModel covers the server side of
+// issue #4764: a client that fetches settings after an out-of-band update via
+// GetAllSettings, changes an unrelated setting and sends the result back via
+// UpdateSettings must not revert the out-of-band model. It does not cover a
+// client that fetched settings before the update and kept using that copy.
+func TestSettingsSave_AfterFreshGetKeepsOutOfBandModel(t *testing.T) {
 	initial := getTestSettings(t)
-	initial.Models.Enabled = []string{"birdnet", "perch_v2"}
+	initial.Models.Enabled = stalenessBaseModels()
 	initial.Realtime.Interval = 15
-	conf.StoreSettings(initial)
 
 	e := echo.New()
-	c := getTestController(t, e)
+	c := newGlobalOwnerController(t, e, initial)
 	c.SetTestContext(t.Context(), func() {})
-	c.isGlobalOwner = true
 	c.DisableSaveSettings = true // don't write to disk in unit test
-	c.Settings.Store(initial)
 
 	// Out-of-band install occurs
 	installed := conf.CloneSettings(initial)
-	installed.Models.Enabled = []string{"birdnet", "perch_v2", "birdnet_v3.0"}
+	installed.Models.Enabled = stalenessInstalledModels()
 	conf.StoreSettings(installed)
 
-	// UI loads the settings page: GET /api/v2/settings
-	reqGet := httptest.NewRequest(http.MethodGet, "/api/v2/settings", http.NoBody)
-	recGet := httptest.NewRecorder()
-	require.NoError(t, c.GetAllSettings(e.NewContext(reqGet, recGet)))
-	require.Equal(t, http.StatusOK, recGet.Code)
+	// Client fetches settings after the install: GET /api/v2/settings
+	payload := getJSON[map[string]any](t, e, c.GetAllSettings, "/api/v2/settings", "")
 
-	// UI changes an unrelated setting (realtime.interval: 15 -> 20) and sends PUT /api/v2/settings
-	var uiPayload map[string]any
-	require.NoError(t, json.Unmarshal(recGet.Body.Bytes(), &uiPayload))
-	realtimeMap, ok := uiPayload["realtime"].(map[string]any)
+	// Client changes an unrelated setting (realtime.interval: 15 -> 20) and sends PUT /api/v2/settings
+	realtimeMap, ok := payload["realtime"].(map[string]any)
 	require.True(t, ok)
 	realtimeMap["interval"] = 20
 
-	bodyBytes, err := json.Marshal(uiPayload)
+	bodyBytes, err := json.Marshal(payload)
 	require.NoError(t, err)
 
-	reqPut := httptest.NewRequest(http.MethodPut, "/api/v2/settings", bytes.NewReader(bodyBytes))
-	reqPut.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	recPut := httptest.NewRecorder()
-	require.NoError(t, c.UpdateSettings(e.NewContext(reqPut, recPut)))
-	require.Equal(t, http.StatusOK, recPut.Code)
+	putRawSettings(t, e, c, string(bodyBytes))
 
-	// Verify that models.enabled was NOT reverted to ["birdnet", "perch_v2"]
+	// Verify that models.enabled was NOT reverted to the pre-install list
 	currentGlobal := conf.GetSettings()
-	assert.Contains(t, currentGlobal.Models.Enabled, "birdnet_v3.0",
-		"Subsequent UI settings save must not unload out-of-band installed model")
+	assert.Contains(t, currentGlobal.Models.Enabled, installedModelID,
+		"Subsequent settings save must not unload out-of-band installed model")
 	assert.Equal(t, 20, currentGlobal.Realtime.Interval)
 }
