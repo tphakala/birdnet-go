@@ -149,7 +149,8 @@ func (c *Controller) respondCommitError(ctx echo.Context, err error) error {
 // the profiling sampling rates are restored after a rolled-back save failure. It
 // returns the client message that matches the outcome (a "not rolled back"
 // variant when another writer published on top, see rollbackMessage) together
-// with the failure, or "", nil on success. Callers hold c.settingsMutex.
+// with the failure, or "", nil on success. Each failure is logged through the
+// API logger when it is enabled. Callers hold c.settingsMutex.
 //
 // It runs outside the settings writer lock, because apply reaches into the
 // classifier; never call it from a commitSettings mutate.
@@ -159,7 +160,7 @@ func (c *Controller) finishSettingsWrite(current, updated *conf.Settings, apply 
 			// Take back our own snapshot so in-memory state matches what is on disk
 			// (which was never overwritten), unless another writer published on top.
 			rbErr := c.rollbackSettings(current, updated)
-			apicore.GetLogger().Error("Failed to apply settings changes, rolling back",
+			c.LogErrorIfEnabled("Failed to apply settings changes, rolling back",
 				logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
 			return rollbackMessage(rbErr, msgApplyFailedRolledBack, msgApplyFailedNotRolledBack), err
 		}
@@ -176,7 +177,7 @@ func (c *Controller) finishSettingsWrite(current, updated *conf.Settings, apply 
 			if rbErr == nil {
 				restoreProfilingRates(current)
 			}
-			apicore.GetLogger().Error("Failed to save settings to disk, rolling back",
+			c.LogErrorIfEnabled("Failed to save settings to disk, rolling back",
 				logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
 			return rollbackMessage(rbErr, msgSaveFailedRolledBack, msgSaveFailedNotRolledBack), err
 		}
