@@ -110,7 +110,8 @@ func TestSettingsWriters_WaitForHeldWriterLock(t *testing.T) {
 		{
 			name: "CompareAndStoreSettings",
 			write: func(seeded *conf.Settings) bool {
-				return conf.CompareAndStoreSettings(seeded, conf.CloneSettings(seeded))
+				_, swapped := conf.CompareAndStoreSettings(seeded, conf.CloneSettings(seeded))
+				return swapped
 			},
 			check: func(t *testing.T, final *conf.Settings, swapped bool) {
 				t.Helper()
@@ -219,10 +220,22 @@ func TestCompareAndStoreSettings(t *testing.T) {
 				wantCurrent = theirs
 			}
 
-			swapped := conf.CompareAndStoreSettings(mine, before)
+			published, swapped := conf.CompareAndStoreSettings(mine, before)
 
 			assert.Equal(t, tt.wantSwapped, swapped)
-			assert.Same(t, wantCurrent, conf.GetSettings())
+			if !tt.wantSwapped {
+				assert.Nil(t, published)
+				assert.Same(t, wantCurrent, conf.GetSettings())
+				return
+			}
+			// A rollback publishes a clone of the old content under a fresh
+			// revision, so an ETag issued for either snapshot can never match it.
+			require.NotNil(t, published)
+			assert.Same(t, published, conf.GetSettings())
+			assert.NotSame(t, before, published, "the restored snapshot is a clone")
+			assert.InDelta(t, before.BirdNET.Longitude, published.BirdNET.Longitude, 0)
+			assert.NotEqual(t, mine.Revision(), published.Revision())
+			assert.Greater(t, published.Revision(), mine.Revision())
 		})
 	}
 }
@@ -301,5 +314,157 @@ func TestShouldUpdateRangeFilterToday_StampedDayDoesNotWaitForWriterLock(t *test
 	case <-time.After(fastPathGiveUp):
 		release()
 		t.Fatal("ShouldUpdateRangeFilterToday waited for the settings writer lock on an already stamped day")
+	}
+}
+
+// revisionStep is one operation in a TestSettingsRevision_Transitions sequence.
+type revisionStep struct {
+	name string
+	// run performs the operation; snaps holds the snapshot published after each
+	// earlier step, oldest first.
+	run func(t *testing.T, snaps []*conf.Settings)
+	// want is whether the step must bump the revision or leave it unchanged.
+	want revisionOutcome
+}
+
+// revisionOutcome is the expected effect of a step on the published revision.
+type revisionOutcome int
+
+const (
+	// revisionBumps: the revision is greater than every value seen before.
+	revisionBumps revisionOutcome = iota
+	// revisionKept: the revision equals the one before the step.
+	revisionKept
+)
+
+// bumpStep publishes a client-writable change (a unique longitude) through
+// UpdateSettings.
+func bumpStep(name string, longitude float64) revisionStep {
+	return revisionStep{
+		name: name,
+		run: func(t *testing.T, _ []*conf.Settings) {
+			t.Helper()
+			_, _, err := conf.UpdateSettings(func(_, updated *conf.Settings) error {
+				updated.BirdNET.Longitude = longitude
+				return nil
+			})
+			require.NoError(t, err)
+		},
+		want: revisionBumps,
+	}
+}
+
+// TestSettingsRevision_Transitions pins the revision contract that the API's
+// If-Match check relies on: every client-writable publish (including a rollback)
+// gets a revision greater than any seen before, runtime-only range filter
+// publishes and unpublished writes keep it, and one revision never labels two
+// different contents.
+func TestSettingsRevision_Transitions(t *testing.T) {
+	const (
+		firstLongitude  = 1.0
+		secondLongitude = 2.0
+		thirdLongitude  = 3.0
+		staleHours      = 48
+	)
+
+	rollbackLast := revisionStep{
+		name: "rollback the last publish",
+		run: func(t *testing.T, snaps []*conf.Settings) {
+			t.Helper()
+			require.GreaterOrEqual(t, len(snaps), 2)
+			_, ok := conf.CompareAndStoreSettings(snaps[len(snaps)-1], snaps[len(snaps)-2])
+			require.True(t, ok)
+		},
+		want: revisionBumps,
+	}
+
+	tests := []struct {
+		name  string
+		steps []revisionStep
+	}{
+		{name: "UpdateSettings bumps each time", steps: []revisionStep{
+			bumpStep("first", firstLongitude), bumpStep("second", secondLongitude),
+		}},
+		{name: "UpdateIncludedSpecies keeps the revision", steps: []revisionStep{
+			bumpStep("first", firstLongitude),
+			{name: "included species", want: revisionKept, run: func(*testing.T, []*conf.Settings) {
+				conf.UpdateIncludedSpecies([]string{"Parus major_Great Tit"})
+			}},
+		}},
+		{name: "ShouldUpdateRangeFilterToday keeps the revision", steps: []revisionStep{
+			{name: "stale stamp", want: revisionBumps, run: func(t *testing.T, _ []*conf.Settings) {
+				t.Helper()
+				_, _, err := conf.UpdateSettings(func(_, updated *conf.Settings) error {
+					updated.BirdNET.RangeFilter.LastUpdated = time.Now().Add(-staleHours * time.Hour)
+					return nil
+				})
+				require.NoError(t, err)
+			}},
+			{name: "daily stamp", want: revisionKept, run: func(t *testing.T, _ []*conf.Settings) {
+				t.Helper()
+				require.True(t, conf.ShouldUpdateRangeFilterToday(), "the stale stamp must trigger the daily update")
+			}},
+		}},
+		{name: "ResetRangeFilterUpdateFlag keeps the revision", steps: []revisionStep{
+			bumpStep("first", firstLongitude),
+			{name: "reset flag", want: revisionKept, run: func(*testing.T, []*conf.Settings) {
+				conf.ResetRangeFilterUpdateFlag()
+			}},
+		}},
+		{name: "unchanged mutate publishes nothing", steps: []revisionStep{
+			bumpStep("first", firstLongitude),
+			{name: "unchanged", want: revisionKept, run: func(t *testing.T, _ []*conf.Settings) {
+				t.Helper()
+				_, _, err := conf.UpdateSettings(func(_, _ *conf.Settings) error { return conf.ErrSettingsUnchanged })
+				require.ErrorIs(t, err, conf.ErrSettingsUnchanged)
+			}},
+		}},
+		{name: "mutate that overwrites the clone still bumps", steps: []revisionStep{
+			bumpStep("first", firstLongitude),
+			{name: "overwrite", want: revisionBumps, run: func(t *testing.T, _ []*conf.Settings) {
+				t.Helper()
+				_, _, err := conf.UpdateSettings(func(current, updated *conf.Settings) error {
+					*updated = *conf.CloneSettings(current)
+					updated.BirdNET.Longitude = secondLongitude
+					return nil
+				})
+				require.NoError(t, err)
+			}},
+		}},
+		{name: "rollback gets a fresh revision", steps: []revisionStep{
+			bumpStep("first", firstLongitude), bumpStep("second", secondLongitude), rollbackLast,
+		}},
+		{name: "a publish after a rollback never reuses a revision", steps: []revisionStep{
+			bumpStep("first", firstLongitude), bumpStep("second", secondLongitude), rollbackLast,
+			bumpStep("third", thirdLongitude),
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seeded := seedGlobalSettings(t, nil)
+			snaps := []*conf.Settings{seeded}
+			// byRevision maps every revision seen to the longitude it labelled.
+			byRevision := map[uint64]float64{seeded.Revision(): seeded.BirdNET.Longitude}
+			maxSeen := seeded.Revision()
+
+			for _, step := range tt.steps {
+				before := conf.GetSettings().Revision()
+				step.run(t, snaps)
+				got := conf.GetSettings()
+				switch step.want {
+				case revisionBumps:
+					assert.Greater(t, got.Revision(), maxSeen, "%s: a client-writable publish must take a new revision", step.name)
+				case revisionKept:
+					assert.Equal(t, before, got.Revision(), "%s: must not change the revision", step.name)
+				}
+				if longitude, seen := byRevision[got.Revision()]; seen {
+					assert.InDelta(t, longitude, got.BirdNET.Longitude, 0, "%s: revision %d labels two different contents", step.name, got.Revision())
+				}
+				byRevision[got.Revision()] = got.BirdNET.Longitude
+				maxSeen = max(maxSeen, got.Revision())
+				snaps = append(snaps, got)
+			}
+		})
 	}
 }

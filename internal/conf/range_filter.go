@@ -43,8 +43,10 @@ func canonicalSci(label string) string {
 
 // UpdateIncludedSpecies replaces the species list, builds the O(1) scientific
 // name lookup map, and publishes a new immutable snapshot. It publishes through
-// UpdateSettings, so it builds on the snapshot that is current when it
-// publishes and cannot discard a concurrent settings save or model change.
+// the settings writer lock (updateRuntimeSettings), so it builds on the snapshot
+// that is current when it publishes and cannot discard a concurrent settings save
+// or model change. It does not change the snapshot's Revision: the fields it
+// writes are server-owned, so a client that missed them loses nothing.
 func UpdateIncludedSpecies(species []string) {
 	// Build the list copy and the lookup map before taking the settings writer
 	// lock: canonicalizing every label of a geomodel list is the slow part, it
@@ -56,7 +58,7 @@ func UpdateIncludedSpecies(species []string) {
 		sciNames[canonicalSci(label)] = struct{}{}
 	}
 
-	_, _, err := UpdateSettings(func(_, updated *Settings) error {
+	_, _, err := updateRuntimeSettings(func(_, updated *Settings) error {
 		updated.BirdNET.RangeFilter.Species = speciesCopy
 		updated.BirdNET.RangeFilter.IncludedScientificNames = sciNames
 		updated.BirdNET.RangeFilter.LastUpdated = time.Now()
@@ -115,8 +117,9 @@ func LocalNoon(t time.Time) time.Time {
 //
 // The processor calls this for every detection, so the common "already stamped
 // today" case is answered from a lock-free snapshot read. Only a caller that
-// sees a stale stamp goes through UpdateSettings, where the check is repeated
-// against the current snapshot before stamping, so that exactly one of
+// sees a stale stamp goes through the settings writer lock
+// (updateRuntimeSettings, which keeps the snapshot's Revision), where the check is
+// repeated against the current snapshot before stamping, so that exactly one of
 // several racing callers publishes and gets true.
 func ShouldUpdateRangeFilterToday() bool {
 	today := LocalNoon(time.Now())
@@ -125,7 +128,7 @@ func ShouldUpdateRangeFilterToday() bool {
 	}
 
 	var previous time.Time
-	_, updated, err := UpdateSettings(func(current, updated *Settings) error {
+	_, updated, err := updateRuntimeSettings(func(current, updated *Settings) error {
 		if !rangeFilterStale(current, today) {
 			return ErrSettingsUnchanged
 		}
@@ -172,7 +175,7 @@ func (s *Settings) GetLastRangeFilterUpdate() time.Time {
 // ResetRangeFilterUpdateFlag zeros the LastUpdated timestamp to allow retry of
 // failed updates, and publishes a new immutable snapshot.
 func ResetRangeFilterUpdateFlag() {
-	_, _, err := UpdateSettings(func(_, updated *Settings) error {
+	_, _, err := updateRuntimeSettings(func(_, updated *Settings) error {
 		updated.BirdNET.RangeFilter.LastUpdated = time.Time{}
 		return nil
 	})

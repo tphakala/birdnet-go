@@ -507,7 +507,10 @@ func CurrentOrFallback(fallback *Settings) *Settings {
 // code that changes a setting at runtime must use UpdateSettings, which reads
 // its baseline under the writer lock; a bare clone-mutate-StoreSettings can
 // publish over another writer's change, and the SettingsPublishThroughWriter
-// ruleguard rule rejects it outside this package. Callers must not mutate the
+// ruleguard rule rejects it outside this package. It does not stamp a Revision
+// (the snapshot keeps whatever it carries, 0 for a new one), so a test that needs
+// ETag or If-Match behaviour to change publishes through UpdateSettings. Callers
+// must not mutate the
 // pointee after calling StoreSettings; readers may observe the snapshot
 // concurrently through GetSettings.
 //

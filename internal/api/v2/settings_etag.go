@@ -1,0 +1,45 @@
+package api
+
+import (
+	"crypto/rand"
+	"strconv"
+
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/conf"
+)
+
+// msgSettingsPreconditionFailed is the client message for a settings write whose
+// If-Match no longer matches the current settings.
+const msgSettingsPreconditionFailed = "Settings changed since they were loaded; reload them and try again"
+
+// settingsETagEpoch identifies this process. It is part of every settings ETag,
+// so an ETag issued before a restart never matches one issued after it, when the
+// revision counter starts over. crypto/rand.Text uses an alphabet without quotes
+// or commas, so it is safe inside an ETag.
+var settingsETagEpoch = rand.Text()
+
+// settingsETag returns the strong ETag of a settings snapshot, in the form
+// "<process epoch>-<revision>". It names the client-writable state of the
+// snapshot (see conf.Settings.Revision). The runtime range filter fields keep the
+// same ETag when they change, because clients cannot write them.
+func settingsETag(s *conf.Settings) string {
+	return `"` + settingsETagEpoch + "-" + strconv.FormatUint(s.Revision(), 10) + `"`
+}
+
+// checkSettingsPrecondition returns nil when the request carried no If-Match
+// header or its If-Match matches the ETag of current, and a 412 rejection
+// carrying the current ETag otherwise. It is meant to be the first statement of a
+// commitSettings mutate function, where current is the snapshot the write is
+// applied to, so the check is atomic with the publish. ifMatch is read from the
+// request before commitSettings so the mutate does no request I/O under the
+// writer lock.
+func checkSettingsPrecondition(ifMatch string, current *conf.Settings) error {
+	if ifMatch == "" {
+		return nil
+	}
+	etag := settingsETag(current)
+	if apicore.MatchIfMatch(ifMatch, etag) {
+		return nil
+	}
+	return newPreconditionRejection(etag)
+}

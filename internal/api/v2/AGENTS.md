@@ -218,6 +218,10 @@ unauthenticated clients (the audio domain does this with its local
   `conf.StoreSettings` outside `internal/conf` and the test-support packages.
   The mutate closure runs under the settings writer lock, so keep it short, and it must not call the
   classifier, the model manager or `handleSettingsChanges`.
+  `conf.UpdateSettings` also stamps the snapshot's `Revision`, which the settings
+  ETag and `If-Match` check are built on; only the range filter writers inside
+  `internal/conf` publish without bumping it (`updateRuntimeSettings`), because they
+  write fields no client can write. Every other writer must bump.
 - **Document in README.md** - update the endpoint table immediately.
 
 ## Future api/v3
