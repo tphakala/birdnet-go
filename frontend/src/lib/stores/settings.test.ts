@@ -1639,6 +1639,8 @@ describe('Settings Store - equalizer values the backend accepts', () => {
 });
 
 describe('Settings Store - saveSettings rebases on the server state', () => {
+  // The fake server and the PUT body are JSON documents the tests read and edit by
+  // path, so they are typed as plain records and cast at the store boundary.
   type Body = Record<string, unknown>;
   let server: Record<string, unknown>;
 
@@ -1647,6 +1649,8 @@ describe('Settings Store - saveSettings rebases on the server state', () => {
     data.models = { enabled: ['birdnet', 'perch'] };
     const audio = lookup(data, ['realtime', 'audio']) as { sources: Record<string, unknown>[] };
     audio.sources = [{ name: 'Card', device: 'hw:0', models: ['birdnet', 'perch'] }];
+    const rtsp = lookup(data, ['realtime', 'rtsp']) as { streams: Record<string, unknown>[] };
+    rtsp.streams = [{ name: 'Old', url: 'rtsp://old', models: ['birdnet', 'perch'] }];
     return data;
   };
 
@@ -1778,19 +1782,30 @@ describe('Settings Store - saveSettings rebases on the server state', () => {
     expect(get(settingsStore).formData.birdnet.threshold).toBe(0.55);
   });
 
-  it('drops a model the server removed from a source list the user edited', async () => {
+  it('drops a model the server removed from edited source and stream lists, ignoring case', async () => {
     const sources = lookup(server, ['realtime', 'audio', 'sources']) as Body[];
+    const streams = lookup(server, ['realtime', 'rtsp', 'streams']) as Body[];
     const audio = get(settingsStore).formData.realtime?.audio as AudioSettings;
+    const rtsp = get(settingsStore).formData.realtime?.rtsp as NonNullable<
+      RealtimeSettings['rtsp']
+    >;
     settingsActions.updateSection('realtime', {
-      audio: { ...audio, sources: [{ ...audio.sources[0], name: 'Renamed card' }] },
+      audio: {
+        ...audio,
+        sources: [{ ...audio.sources[0], name: 'Renamed card', models: ['birdnet', 'Perch'] }],
+      },
+      rtsp: { ...rtsp, streams: [{ ...rtsp.streams[0], name: 'Renamed stream' }] },
     });
     (server.models as { enabled: string[] }).enabled = ['birdnet'];
     sources[0].models = ['birdnet'];
+    streams[0].models = ['birdnet'];
 
     await settingsActions.saveSettings({ notify: false });
 
     const body = lastBody();
     expect(lookup(body, ['realtime', 'audio', 'sources', '0', 'name'])).toBe('Renamed card');
     expect(lookup(body, ['realtime', 'audio', 'sources', '0', 'models'])).toEqual(['birdnet']);
+    expect(lookup(body, ['realtime', 'rtsp', 'streams', '0', 'name'])).toBe('Renamed stream');
+    expect(lookup(body, ['realtime', 'rtsp', 'streams', '0', 'models'])).toEqual(['birdnet']);
   });
 });

@@ -173,8 +173,9 @@ describe('rebaseSettingsKeepingEdits', () => {
     const result = rebaseSettingsKeepingEdits(form, base, fresh);
     expect(JSON.stringify([form, base, fresh])).toBe(snapshot);
     expect(Object.hasOwn(result, '__proto__')).toBe(false);
-    const probe: Record<string, unknown> = {};
-    expect(probe.polluted).toBeUndefined();
+    // Assigning __proto__ on a plain object swaps its prototype instead of adding a key.
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect((result as Record<string, unknown>).polluted).toBeUndefined();
     expect((result.a as { list: number[] }).list).not.toBe(fresh.a.list);
   });
 });
