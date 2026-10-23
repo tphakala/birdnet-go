@@ -56,7 +56,22 @@ func TestSSESkipper(t *testing.T) {
 func TestMediaPathSkipper_SkipsBinaryRoutes(t *testing.T) {
 	t.Parallel()
 
-	for route := range binaryMediaRoutes {
+	// Hardcoded route templates (NOT derived from binaryMediaRoutes) so that
+	// dropping or renaming an entry in the production map fails this test.
+	routes := []string{
+		"/api/v2/audio/:id",
+		"/api/v2/audio/:id/clip",
+		"/api/v2/audio/:id/process",
+		"/api/v2/media/audio/:filename",
+		"/api/v2/media/audio",
+		"/api/v2/spectrogram/:id",
+		"/api/v2/spectrogram/:id/process",
+		"/api/v2/media/spectrogram/:filename",
+		"/api/v2/media/species-image",
+		"/api/v2/media/image/:scientific_name",
+		"/api/v2/media/bird-image/:scientific_name",
+	}
+	for _, route := range routes {
 		t.Run(route, func(t *testing.T) {
 			t.Parallel()
 			c, _ := newTestContext(t, http.MethodGet, "/irrelevant")

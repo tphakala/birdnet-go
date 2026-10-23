@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -88,6 +89,9 @@ type secondaryBackendKey struct {
 //  4. inferenceMu (Mutex) - serializes inference across all models
 //  5. entry.mu (Mutex) - per-model; guards instance lifecycle
 //  6. bn.mu (Mutex) - per-*BirdNET; guards its classifier/identity internals
+//
+// runtimeSnapMu is a leaf outside this order: it is taken only by the writers of the
+// diagnostic runtime snapshots, with nothing acquired while it is held.
 //
 // Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu or reloadMu.
 type Orchestrator struct {
@@ -177,6 +181,15 @@ type Orchestrator struct {
 	ovLoadable   func(libraryPath string) bool
 	modelsDir    string // base directory for gallery-installed models
 
+	// Runtime snapshots for diagnostics (see orchestrator_runtime_snapshot.go).
+	// runtimeSnaps is copy-on-write and read lock-free; runtimeSnapMu serializes
+	// only its writers. It is a LEAF lock: nothing is acquired while it is held,
+	// and readers never take it. modelsDirSnap mirrors modelsDir for readers that
+	// must not take o.mu.
+	runtimeSnapMu sync.Mutex
+	runtimeSnaps  atomic.Pointer[map[string]*publishedModel]
+	modelsDirSnap atomic.Pointer[string]
+
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
 	scheduler atomic.Pointer[nighttimeScheduler]
@@ -186,6 +199,13 @@ type Orchestrator struct {
 	modelRSS         map[string]int64
 	runtimeBaseline  int64
 	baselineCaptured bool
+
+	// cadencePlan is the published analysis cadence plan (see orchestrator_cadence.go).
+	// Nil until the audio pipeline publishes one. probedLatency holds the per-model
+	// probed inference latency, guarded by probeMu.
+	cadencePlan   atomic.Pointer[cadence.Plan]
+	probeMu       sync.Mutex
+	probedLatency map[string]time.Duration
 
 	// modelLoadFailures tracks how many times LoadModel has failed per registry
 	// ID. Uses sync.Map to avoid holding o.mu for reads (see LoadFailures).
@@ -242,7 +262,7 @@ type pendingWarmup struct {
 }
 
 // CurrentSettings returns the latest settings snapshot published via
-// conf.StoreSettings, or the Orchestrator's constructor-provided settings when none
+// conf.UpdateSettings, or the Orchestrator's constructor-provided settings when none
 // has been published.
 func (o *Orchestrator) CurrentSettings() *conf.Settings {
 	if s := o.settingsAtomic.Load(); s != nil {
@@ -275,6 +295,8 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 		Settings: settings,
 		models:   map[string]*modelEntry{},
 		modelRSS: make(map[string]int64),
+
+		probedLatency: make(map[string]time.Duration),
 	}
 	o.settingsAtomic.Store(settings)
 
@@ -286,6 +308,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// SetModelsDir, whose resolver wiring the constructor overwrites below anyway.
 	if modelsDir, ok := settings.ResolveModelsDir(); ok {
 		o.modelsDir = modelsDir
+		o.storeModelsDir(modelsDir)
 	}
 
 	// Fix the process-wide RSS baseline before the first model allocates its arena.
@@ -395,6 +418,7 @@ func (o *Orchestrator) SetModelsDir(dir string) {
 	// holding o.mu here would self-deadlock (the RWMutex is not reentrant).
 	o.mu.Lock()
 	o.modelsDir = dir
+	o.storeModelsDir(dir)
 	o.mu.Unlock()
 
 	o.registerTaxonomyResolver(dir)
@@ -696,14 +720,36 @@ func (o *Orchestrator) resolveInstalledPaths(registryID string) (modelPath, labe
 	return "", "", ""
 }
 
-// PredictModel runs inference on a specific model identified by modelID.
+// PredictTiming splits the wall time of one PredictModelTimed call into the part
+// spent waiting for locks and the part spent in the model itself.
+type PredictTiming struct {
+	// LockWait is the time from before inferenceMu.Lock to after entry.mu.Lock:
+	// waiting for other inferences (other models, or other sources running this
+	// model) and for lifecycle work on this model.
+	LockWait time.Duration
+	// Predict is the model's own inference time, the same value recorded in the
+	// per-model inference counters.
+	Predict time.Duration
+}
+
+// PredictModel runs inference on a specific model identified by modelID and
+// discards the timing breakdown; see PredictModelTimed.
+func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error) {
+	results, _, err := o.PredictModelTimed(ctx, modelID, sample)
+	return results, err
+}
+
+// PredictModelTimed runs inference on a specific model identified by modelID and
+// reports how long the call waited for locks and how long the model itself ran.
+// The timing is zero when the model is not loaded.
 // It uses a three-level locking protocol: a read lock on the models map to
 // fetch the entry (fast), then inferenceMu to serialize inference across all
 // models (only one model runs at a time), then entry.mu for instance lifecycle.
 // The map lock is released before acquiring inference/model locks to prevent
 // deadlocks with ReloadModel and Delete.
-func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, error) {
+func (o *Orchestrator) PredictModelTimed(ctx context.Context, modelID string, sample [][]float32) ([]datastore.Results, PredictTiming, error) {
 	log := GetLogger()
+	var timing PredictTiming
 
 	o.mu.RLock()
 	entry, ok := o.models[modelID]
@@ -714,20 +760,22 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 		log.Error("PredictModel model not loaded",
 			logger.String("model_id", modelID),
 			logger.String("reason", reason))
-		return nil, errors.Newf("%w: %s (%s)", ErrModelNotLoaded, modelID, reason).
+		return nil, timing, errors.Newf("%w: %s (%s)", ErrModelNotLoaded, modelID, reason).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Context("model_id", modelID).
 			Build()
 	}
 
+	waitStart := time.Now()
 	o.inferenceMu.Lock()
 	defer o.inferenceMu.Unlock()
 
 	entry.mu.Lock()
 	defer entry.mu.Unlock()
+	timing.LockWait = time.Since(waitStart)
 	if entry.instance == nil {
-		return nil, errors.Newf("model %s has been closed", modelID).
+		return nil, timing, errors.Newf("model %s has been closed", modelID).
 			Component("classifier.orchestrator").
 			Category(errors.CategoryValidation).
 			Context("model_id", modelID).
@@ -747,6 +795,7 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 	results, err := entry.instance.Predict(ctx, sample)
 	end := time.Now()
 	duration := end.Sub(start)
+	timing.Predict = duration
 
 	switch {
 	case err != nil && isCancellation(ctx, err):
@@ -783,10 +832,11 @@ func (o *Orchestrator) PredictModel(ctx context.Context, modelID string, sample 
 		log.Debug("PredictModel complete",
 			logger.String("model_id", modelID),
 			logger.Int("result_count", len(results)),
-			logger.Duration("duration", duration))
+			logger.Duration("duration", duration),
+			logger.Duration("lock_wait", timing.LockWait))
 	}
 
-	return results, err
+	return results, timing, err
 }
 
 // ResolveName walks the resolver chain and returns the first non-empty
@@ -855,7 +905,8 @@ func (o *Orchestrator) RebuildNameResolver(includedSpecies []string) error {
 }
 
 // scientificNamesFromLabels extracts the scientific-name portion of each
-// "Scientific_Common" label (Perch labels are scientific-only and pass through).
+// "Scientific_Common" label (Perch binomial labels are scientific-only and pass
+// through; a Perch multi-word sound class is kept whole, see SplitSpeciesName).
 func scientificNamesFromLabels(labels []string) []string {
 	out := make([]string, 0, len(labels))
 	for _, label := range labels {
@@ -1790,6 +1841,7 @@ func (o *Orchestrator) Delete() {
 	o.rssMu.Lock()
 	o.modelRSS = make(map[string]int64)
 	o.rssMu.Unlock()
+	o.clearProbedLatencies()
 
 	for id, entry := range models {
 		entry.mu.Lock()
@@ -1801,6 +1853,9 @@ func (o *Orchestrator) Delete() {
 			}
 			entry.instance = nil // nil out to signal closed state to PredictModel
 		}
+		// Drop the record under the same entry.mu as the reload swap, so a swap
+		// that landed after o.models was cleared cannot leave a record behind.
+		o.dropModelRuntime(id, entry)
 		// Drop the model's global inference counters while still holding entry.mu,
 		// mirroring UnloadModel: this prevents an in-flight RecordInvoke from
 		// re-creating the entry after deletion, and stops a teardown-then-recreate
@@ -1982,6 +2037,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			o.recordLoadFailure(registryID, err)
 			return err
 		}
+		o.publishLoadedModelLocked(registryID, o.currentSettings(), dynamicThreads)
 		// The model registered successfully; clear any stale unload tombstone and the
 		// stored load error so a later not-loaded diagnosis reports the model's actual
 		// current state rather than a now-superseded unload or failure. The cumulative
@@ -2323,6 +2379,8 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 		o.rssMu.Lock()
 		delete(o.modelRSS, registryID)
 		o.rssMu.Unlock()
+		o.dropProbedLatency(registryID)
+		o.dropModelRuntime(registryID, entry)
 
 		if entry.instance != nil {
 			modelID := entry.instance.ModelID()
@@ -2571,10 +2629,10 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 	}
 	o.mu.RUnlock()
 
-	// Resolve overlap against the live settings snapshot (independently
-	// synchronized), so every returned ModelInfo carries the effective overlap
-	// used for buffer allocation and cadence.
-	settings := o.CurrentSettings()
+	// Resolve overlap against the published cadence plan (else the configured
+	// overlap), so every returned ModelInfo carries the effective overlap used for
+	// buffer allocation and cadence.
+	base := o.EffectiveBaseOverlap()
 
 	infos := make([]ModelInfo, 0, len(refs))
 	for _, ref := range refs {
@@ -2615,7 +2673,7 @@ func (o *Orchestrator) ModelInfos() []ModelInfo {
 		// carries the stock catalog count, so source it from the live instance to
 		// report what is actually loaded.
 		info.NumSpecies = instance.NumSpecies()
-		info.Overlap = ResolveModelOverlap(info.ID, info.Spec, settings)
+		info.Overlap = ResolveModelOverlap(info.ID, info.Spec, base)
 		infos = append(infos, info)
 	}
 	return infos
@@ -2690,8 +2748,8 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings) map[stri
 }
 
 // loadEnabledModels iterates models.enabled in config order (authoritative since Phase 4)
-// and loads each one in that order. Each loaded model is registered in the models map; an
-// already-registered model is skipped.
+// and loads each one in that order. Each loaded model is registered in the models map and
+// its runtime snapshot is published; an already-registered model is skipped.
 // threadAlloc provides the pre-computed thread count for each model. No load failure is
 // fatal now that models.enabled is authoritative and N=0 is a supported runtime state
 // (model de-privilege epic, Phase 4): every failure (v2.4 included) is recorded and the
@@ -2744,6 +2802,7 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) {
 			if err := loader(o, threadAlloc[registryID]); err != nil {
 				return err
 			}
+			o.publishLoadedModelLocked(registryID, settings, threadAlloc[registryID])
 			// The model registered; clear any stale unload tombstone and stored load
 			// error (the cumulative failure count is kept for the LoadFailures metric).
 			o.modelUnloaded.Delete(registryID)

@@ -109,10 +109,7 @@ func WithoutSettingsPublish() CoreOption { return func(c *coreConfig) { c.publis
 // second's. Build the second with WithoutSettingsPublish, and a test that publishes
 // must not call t.Parallel.
 //
-// The core's DetectionCache (a patrickmn/go-cache) starts a janitor goroutine that
-// cannot be stopped (cleanup only flushes it). A domain test package that adds a
-// goleak gate must ignore "github.com/patrickmn/go-cache.(*janitor).Run", the same
-// way package api's TestMain does.
+// The core starts no cache goroutines, so goleak gates need no cache ignores.
 func NewCore(t *testing.T, opts ...CoreOption) *apicore.Core {
 	t.Helper()
 
@@ -191,10 +188,25 @@ func NewCore(t *testing.T, opts ...CoreOption) *apicore.Core {
 		if core.SFS != nil {
 			_ = core.SFS.Close()
 		}
-		if core.DetectionCache != nil {
-			core.DetectionCache.Flush()
-		}
 	})
 
 	return core
+}
+
+// CoreSettingsUpdater returns a test double for the facade's updateAndSaveSettings
+// that matches a controller which does not own the global settings: it clones the
+// core's own snapshot, runs mutate on the clone, and stores the result back on the
+// core (no global publish, no disk write, matching DisableSaveSettings=true). A
+// mutate error, including conf.ErrSettingsUnchanged, stores nothing and is
+// returned as is, like the facade's.
+func CoreSettingsUpdater(core *apicore.Core) apicore.SettingsUpdater {
+	return func(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error) {
+		current = core.Settings.Load()
+		updated = conf.CloneSettings(current)
+		if err := mutate(current, updated); err != nil {
+			return nil, nil, err
+		}
+		core.Settings.Store(updated)
+		return current, updated, nil
+	}
 }

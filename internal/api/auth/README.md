@@ -1,82 +1,80 @@
-# Authentication Package (`internal/api/v2/auth`)
+# Authentication Package (`internal/api/auth`)
 
-This package handles authentication and authorization for the API v2 endpoints. It defines a common interface for authentication services, provides an adapter for the underlying security implementation, and includes middleware for enforcing authentication checks.
+This package provides the authentication middleware and the authentication service interface used by the API. It defines the `Service` interface, an adapter that implements it on top of `internal/security`, and an Echo middleware that enforces authentication on routes.
+
+The login, callback, logout and status endpoints are not in this package. They live in `internal/api/v2/auth`, which calls the `Service` methods defined here.
 
 ## Overview
 
-The package aims to decouple authentication logic from the specific API route handlers. It supports various authentication methods and allows for configuration-based enabling/disabling of authentication, including bypass for specific IP subnets.
+The package decouples authentication logic from the route handlers. Whether authentication is required for a request is decided per request by the security layer, so a request from an allowed subnet (subnet bypass) or an instance with no authentication provider enabled passes through without credentials.
 
 ## Key Components
 
-1.  **`Service` Interface (`service.go`)**:
-    - Defines the contract for any authentication service used by the API.
-    - Methods include checking access (`CheckAccess`), determining if auth is required (`IsAuthRequired`), retrieving username (`GetUsername`), getting the auth method (`GetAuthMethod`), validating tokens (`ValidateToken`), handling basic auth (`AuthenticateBasic`), and logging out (`Logout`).
-    - Defines sentinel errors (`ErrInvalidCredentials`, `ErrInvalidToken`, `ErrSessionNotFound`, `ErrLogoutFailed`, `ErrBasicAuthDisabled`) for common authentication failure scenarios.
+1.  **`Service` interface (`service.go`)**:
+    - The contract for the authentication service used by the API.
+    - Request checks: `CheckAccess` (session), `IsAuthRequired`, `IsAuthenticated` (bypass, token or session), `ValidateToken`.
+    - Identity: `GetUsername` and `GetAuthMethod`.
+    - Login and logout: `AuthenticateBasic`, `ExchangeAuthCode`, `EstablishSession`, `Logout` and `GetProviderLogoutURL` (the provider's end-session URL for RP-Initiated Logout, empty when unsupported).
+    - Sentinel errors: `ErrInvalidCredentials`, `ErrInvalidToken`, `ErrSessionNotFound`, `ErrLogoutFailed` and `ErrBasicAuthDisabled`.
+    - `GetLogger` returns the logger for this package. It writes to the `security` log module, next to the OAuth and OIDC logging.
 
-2.  **`AuthMethod` Enum (`service.go`, `authmethod_string.go`)**:
-    - An `int`-based enum representing the different authentication methods detected or used (e.g., `AuthMethodToken`, `AuthMethodBrowserSession`, `AuthMethodBasicAuth`, `AuthMethodLocalSubnet`, `AuthMethodNone`).
-    - Uses `go generate` with `stringer` to automatically create the `String()` method for readable representations. Remember to run `go generate ./...` in the package directory after adding or modifying `AuthMethod` values.
+2.  **`AuthMethod` enum (`service.go`, `authmethod_string.go`)**:
+    - An `int` enum: `AuthMethodUnknown`, `AuthMethodNone`, `AuthMethodBasicAuth`, `AuthMethodToken`, `AuthMethodOAuth2`, `AuthMethodBrowserSession`, `AuthMethodAPIKey` and `AuthMethodLocalSubnet`.
+    - `String()` is generated with `stringer` through `go generate`. Run `go generate` in the package directory after adding or changing a value.
+    - Only some values are ever set. The middleware sets `AuthMethodNone` (bypass) and `AuthMethodToken` itself, and for a session it records what `GetAuthMethod` returns, which is `AuthMethodBrowserSession` (or `AuthMethodLocalSubnet` when the request comes from an allowed subnet). `AuthMethodBasicAuth`, `AuthMethodOAuth2` and `AuthMethodAPIKey` are declared and can be parsed by `AuthMethodFromString`, but no code assigns them.
 
 3.  **`SecurityAdapter` (`adapter.go`)**:
-    - An implementation of the `Service` interface.
-    - Adapts the functionality of the `internal/security` package, specifically using `security.OAuth2Server` for core authentication logic (session checks, token validation, subnet bypass, basic auth credential verification).
-    - Provides logic to retrieve username and determine the authentication method, often relying on context values set by the middleware.
-    - Includes `AuthMethodFromString` helper to convert string representations back to `AuthMethod` constants.
+    - The `Service` implementation. It wraps a `*security.OAuth2Server`, which does the work: session checks, access token validation, subnet bypass and auth code exchange.
+    - `GetUsername` prefers the value the middleware stored in the context and falls back to the `userId` in the session. `GetAuthMethod` prefers the context value, then checks subnet bypass, then the session.
+    - `AuthMethodFromString` converts a string back to an `AuthMethod` and returns `AuthMethodUnknown` for anything it does not recognize.
+    - The server creates the adapter in `initAuth` (`internal/api/server.go`) with `NewSecurityAdapter(oauth2Server)`.
 
 4.  **`Middleware` (`middleware.go`)**:
-    - An Echo middleware struct that utilizes an instance of the `Service` interface.
-    - The `Authenticate` method wraps API handlers to enforce authentication.
-    - Checks if authentication is required based on the client IP (`IsAuthRequired`).
-    - Attempts authentication in the following order:
-      1.  Bearer Token (`Authorization: Bearer <token>`) via `ValidateToken`.
-      2.  Session-based authentication via `CheckAccess`.
-    - Sets context values (`isAuthenticated`, `username`, `authMethod`) upon successful authentication.
-    - Handles unauthenticated requests:
-      - Redirects browser clients (HTML `Accept` header) to `/login` with a `redirect` query parameter.
-      - Returns a `401 Unauthorized` JSON response for API clients.
+    - Created with `NewMiddleware(service)`. Its `Authenticate` method is an Echo middleware (`func(echo.HandlerFunc) echo.HandlerFunc`) that the server applies to the routes that need authentication.
+    - On success it stores `CtxKeyIsAuthenticated`, `CtxKeyAuthMethod` and `CtxKeyUsername` (`auth:isAuthenticated`, `auth:authMethod`, `auth:username`) in the Echo context.
 
 ## Authentication Flow
 
-1.  The `Middleware` intercepts an incoming request.
-2.  It checks if auth is required using `AuthService.IsAuthRequired`. If not (e.g., local subnet bypass), it sets `authMethod` to `AuthMethodNone` and proceeds.
-3.  If auth is required, it looks for a `Bearer` token in the `Authorization` header. If found, it validates it using `AuthService.ValidateToken`. On success, it sets context (`isAuthenticated=true`, `authMethod=AuthMethodToken`, `username`) and proceeds.
-4.  If no valid token is found, it checks for an existing session using `AuthService.CheckAccess`. On success, it sets context (`isAuthenticated=true`, `authMethod` via `GetAuthMethod`, `username`) and proceeds.
-5.  If neither token nor session authentication succeeds, the `handleUnauthenticated` function is called to either redirect the client (browsers) or return a 401 error (API clients).
+`Authenticate` handles a request in this order:
+
+1.  **No service**: if the `Service` is nil, it logs an error and returns `500` with a JSON error.
+2.  **Bypass**: if `IsAuthRequired` is false, it sets `isAuthenticated` to true and `authMethod` to `AuthMethodNone`, and calls the next handler.
+3.  **Bearer token**: if the request has an `Authorization` header, it is handled here and never falls through to the session.
+    - A header that is not `Bearer <token>` gets `401` with `Invalid Authorization header` and a `WWW-Authenticate: Bearer realm="api"` header.
+    - A token that `ValidateToken` rejects gets `401` with `Invalid or expired token` and a `WWW-Authenticate` header carrying `error="invalid_token"`.
+    - A valid token sets `isAuthenticated`, `authMethod` to `AuthMethodToken` and an empty `username` (tokens carry no user identity), then calls the next handler.
+4.  **Session**: with no `Authorization` header, it calls `CheckAccess`. On success it sets `isAuthenticated`, and `authMethod` and `username` from `GetAuthMethod` and `GetUsername`, then calls the next handler.
+5.  **Unauthenticated**: if the request has no usable credentials, it responds based on the `Accept` header.
+    - If `Accept` contains `text/html`, it redirects (`302`) to `<basepath>/login?redirect=<path>`. The redirect target is the original path and query string, checked with `security.IsValidRedirect`. A path that is empty, starts with `/login` or fails the check becomes `/`. The base path comes from the `basePath` context value, then the `X-Ingress-Path` and `X-Forwarded-Prefix` headers, when they pass a safety check.
+    - Otherwise it returns `401` with the JSON body `{"error": "Authentication required"}`.
+
+After any response the middleware has written itself (the cases above that return an error status or a redirect), it does not call the next handler.
 
 ## Basic Authentication
 
-- Handled by `SecurityAdapter.AuthenticateBasic`.
-- Relies on a _single_, fixed username/password combination configured in settings (`Security.BasicAuth.ClientID` and `Security.BasicAuth.Password`).
-- The provided username must match the configured `ClientID`.
-- Uses constant-time comparison for security.
-- If basic auth is disabled in the configuration, it returns `ErrBasicAuthDisabled`.
-- On successful basic auth, it stores the username (`userId`) in the session.
+- Handled by `SecurityAdapter.AuthenticateBasic`, which returns an auth code that the callback handler exchanges for an access token.
+- It uses a single, fixed credential pair from the settings (`Security.BasicAuth.ClientID` and `Security.BasicAuth.Password`), read from the live settings on each call so changes take effect without a restart.
+- If `Security.BasicAuth.Enabled` is false, it returns `ErrBasicAuthDisabled`.
+- If `ClientID` is set, the username must match it. If `ClientID` is empty, the username check is skipped.
+- Comparisons are constant time (SHA-256 digests compared with `subtle.ConstantTimeCompare`). A mismatch returns `ErrInvalidCredentials`.
 
 ## Usage
 
-1.  Create an instance of the `SecurityAdapter` (or another `Service` implementation), providing the necessary dependencies (like `security.OAuth2Server` and a `*slog.Logger`).
-2.  Create an instance of the `Middleware`, passing the `Service` instance and a logger.
-3.  Apply the `Middleware.Authenticate` function to the Echo routes or groups that require authentication.
-
 ```go
-// Example (simplified setup)
-// Note: auth package accepts *slog.Logger for compatibility with security package
-slogLogger := slog.Default()
-oauthServer := security.NewOAuth2Server(...) // Initialize your security server
-authService := auth.NewSecurityAdapter(oauthServer, slogLogger)
-authMiddleware := auth.NewMiddleware(authService, slogLogger)
+authService := auth.NewSecurityAdapter(oauth2Server) // *security.OAuth2Server
+authMiddleware := auth.NewMiddleware(authService)
 
 apiGroup := e.Group("/api/v2")
-apiGroup.Use(authMiddleware.Authenticate) // Apply middleware
+apiGroup.Use(authMiddleware.Authenticate)
 
-// Routes within this group are now protected
+// Routes in this group now require authentication.
 apiGroup.GET("/protected/resource", handlerFunc)
 ```
 
 ## Dependencies
 
-- `github.com/labstack/echo/v4`: Web framework.
-- `github.com/markbates/goth/gothic`: Session management, particularly for OAuth and storing user IDs post-login.
-- `github.com/tphakala/birdnet-go/internal/security`: Provides the underlying authentication logic adapted by `SecurityAdapter`.
-- `log/slog`: Structured logging (used for compatibility with security package).
-- `golang.org/x/tools/cmd/stringer`: Used via `go generate` for `AuthMethod`.
+- `github.com/labstack/echo/v4`: web framework.
+- `github.com/markbates/goth` and `github.com/markbates/goth/gothic`: session storage and provider logout URLs.
+- `github.com/tphakala/birdnet-go/internal/security`: the underlying authentication logic, redirect validation and session keys.
+- `github.com/tphakala/birdnet-go/internal/logger` and `internal/errors`: logging and the sentinel errors.
+- `golang.org/x/tools/cmd/stringer`: run through `go generate` for `AuthMethod`.

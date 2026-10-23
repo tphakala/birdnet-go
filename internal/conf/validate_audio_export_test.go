@@ -40,12 +40,8 @@ func fakeFFmpegPath(t *testing.T) string {
 	return path
 }
 
-// The "missing ffmpeg forces wav" branch is not covered here because
-// validateAudioSettings calls ValidateToolPath, which falls back to
-// exec.LookPath("ffmpeg") when the configured FfmpegPath is empty.
-// In any CI environment with ffmpeg on PATH the branch is unreachable
-// without mocking exec.LookPath. Behaviour is exercised by the
-// existing integration test suite in internal/analysis.
+// TestValidateAudioSettings_NormalizesEmptyExportType checks that an empty export
+// type heals to WAV, an unknown type is rejected, and lossy bitrates are validated.
 func TestValidateAudioSettings_NormalizesEmptyExportType(t *testing.T) {
 	t.Parallel()
 	ffmpegPath := fakeFFmpegPath(t)

@@ -4,7 +4,7 @@ on:
   workflow_call:
     inputs:
       tag-strategy:
-        description: "Tagging strategy: nightly, release, or dev"
+        description: "Tagging strategy: nightly, release, dev, or testing"
         required: true
         type: string
       version:
@@ -98,11 +98,11 @@ jobs:
           STRATEGY: ${{ inputs.tag-strategy }}
         run: |
           # Dev images get the same <date>-g<hash>-dev string as local builds
-          # instead of the full commit SHA the dev caller passes as
+          # instead of the full commit SHA the dev and testing callers pass as
           # inputs.version (release callers pass the tag, used as is). Image
           # tags, OCI labels and job outputs keep inputs.version. An empty
           # BUILD_VERSION disables any pin inherited from the environment.
-          if [ "${STRATEGY}" = "dev" ]; then
+          if [ "${STRATEGY}" = "dev" ] || [ "${STRATEGY}" = "testing" ]; then
             APP_VERSION=$(BUILD_VERSION='' sh scripts/build-version.sh)
           else
             APP_VERSION="${VERSION}"
@@ -218,6 +218,14 @@ jobs:
               emit "${repo}:dev"
               emit "${repo}:${VERSION}"
               emit "${repo}:podman-dev"
+              emit "${repo}:podman-${VERSION}"
+            elif [ "$STRATEGY" = "testing" ]; then
+              # Manual branch builds handed to users for testing: a floating
+              # :testing alias and the immutable commit SHA. Leaves :dev,
+              # :nightly and :latest untouched.
+              emit "${repo}:testing"
+              emit "${repo}:${VERSION}"
+              emit "${repo}:podman-testing"
               emit "${repo}:podman-${VERSION}"
             fi
             if [ "$WANT_LATEST" = "true" ]; then

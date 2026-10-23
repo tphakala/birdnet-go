@@ -21,8 +21,8 @@ const testCleanupGracePeriod = 100 * time.Millisecond
 // package-wide goroutine-leak gate after all tests complete. The SSE stream
 // endpoints spawn a long-lived event-loop goroutine per HTTP request; the gate
 // verifies those loops exit when the client disconnects, guarding against the
-// memory-leak regressions the connection-cleanup tests were written for. The
-// ignore list mirrors package api's TestMain.
+// memory-leak regressions the connection-cleanup tests were written for. Like
+// package api's TestMain, the gate runs with no ignores.
 func TestMain(m *testing.M) {
 	apitest.DisableHTTPKeepAlivesForTesting()
 
@@ -33,15 +33,9 @@ func TestMain(m *testing.M) {
 	time.Sleep(testCleanupGracePeriod)
 
 	if testResult == 0 {
-		// goleak already filters the test runner's own goroutines, so only
-		// non-stoppable third-party workers are listed here.
-		opts := []goleak.Option{
-			// Process-lifetime third-party worker that cannot be stopped: the
-			// go-cache janitor (started by the core's DetectionCache).
-			goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-		}
-
-		if err := goleak.Find(opts...); err != nil {
+		// goleak already filters the test runner's own goroutines. The gate runs
+		// with no ignores.
+		if err := goleak.Find(); err != nil {
 			fmt.Fprintf(os.Stderr, "FAIL: Goroutine leak detected after all tests:\n%v\n", err)
 			os.Exit(1)
 		}

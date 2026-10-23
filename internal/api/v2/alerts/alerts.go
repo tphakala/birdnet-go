@@ -85,6 +85,7 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 
 	// Public read endpoints
 	alerts.GET("/schema", c.GetAlertSchema)
+	alerts.GET("/status", c.GetAlertStatus)
 	alerts.GET("/rules", c.ListAlertRules)
 	alerts.GET("/rules/:id", c.GetAlertRule)
 	alerts.GET("/history", c.ListAlertHistory)
@@ -246,6 +247,47 @@ func (c *Handler) GetAlertSchema(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, alerting.GetSchema())
 }
 
+// alertStatusResponse is the body of GET /alerts/status.
+type alertStatusResponse struct {
+	// EngineActive is true when the alert rules engine handles detection
+	// notifications in this process.
+	EngineActive bool `json:"engine_active"`
+}
+
+// resetDefaultsStatus is the status reported by a completed reset of the default rules.
+const resetDefaultsStatus = "defaults reset"
+
+// resetDefaultsResponse is the body of POST /alerts/rules/reset-defaults.
+type resetDefaultsResponse struct {
+	// Status is always resetDefaultsStatus.
+	Status string `json:"status"`
+	// Created is the number of default rules created.
+	Created int `json:"created"`
+	// Skipped lists the names of the defaults not created because a remaining
+	// rule has the same name or name key.
+	Skipped []string `json:"skipped"`
+}
+
+// importRulesResponse is the body of POST /alerts/rules/import.
+type importRulesResponse struct {
+	// Imported is the number of rules created.
+	Imported int `json:"imported"`
+	// Total is the number of rules in the request.
+	Total int `json:"total"`
+	// Skipped lists the names of the rules not created because a stored rule,
+	// or a rule imported earlier in the same request, has the same name or name key.
+	Skipped []string `json:"skipped"`
+}
+
+// GetAlertStatus reports whether the alert rules engine handles detection
+// notifications in this process. It returns the flag that
+// notification.DetectionNotificationConsumer.ProcessDetectionEvent checks: when
+// it is false, the legacy push filters in Notification.Push still apply. v2
+// availability is enforced by requireV2Middleware on the alert route group.
+func (c *Handler) GetAlertStatus(ctx echo.Context) error {
+	return ctx.JSON(http.StatusOK, alertStatusResponse{EngineActive: notification.IsAlertEngineActive()})
+}
+
 // ListAlertRules returns all alert rules, optionally filtered.
 func (c *Handler) ListAlertRules(ctx echo.Context) error {
 	filter := repository.AlertRuleFilter{
@@ -329,7 +371,55 @@ func (c *Handler) CreateAlertRule(ctx echo.Context) error {
 	return ctx.JSON(http.StatusCreated, rule)
 }
 
-// UpdateAlertRule replaces an existing alert rule.
+// keepServerOwnedFields adjusts an updated rule for the fields a request does
+// not control.
+//
+// BuiltIn marks a rule as owned by the shipped defaults, so an update keeps the
+// stored flag. A rename ends the ownership: the editor clears the name key when
+// the user edits the name, and startup seeds a default that no stored rule holds
+// by name or name key, and a renamed rule has lost both, so a renamed rule that
+// stayed built-in would be joined by a second built-in default that neither
+// could be deleted in the UI.
+//
+// For the same reason a rule that has a name key keeps its stored Name while the
+// request sends the same key. The editor sends the translated text there, and
+// storing it would make the stored name depend on the editor's language, which
+// API clients, exports and the create-time name check read. The description
+// follows its own key.
+//
+// A stepped rule fires only at or above its lowest step, so escalation steps
+// must not outlive a change of thresholds, or alerts between the new threshold
+// and the first step are lost. Steps that the request omits, or sends equal to
+// the stored ones (a client that reads, edits and writes back), therefore stay
+// while the rule fires at the same values and are removed once it does not. The
+// editor sends no steps, and without this a save would turn a notify-once rule
+// back into one that repeats on every cooldown. Different steps in the body are
+// the client's choice and are saved as sent.
+func keepServerOwnedFields(rule, existing *entities.AlertRule) {
+	if existing.NameKey != "" && rule.NameKey == existing.NameKey {
+		rule.Name = existing.Name
+	}
+	if existing.DescriptionKey != "" && rule.DescriptionKey == existing.DescriptionKey {
+		rule.Description = existing.Description
+	}
+
+	renamed := rule.NameKey != existing.NameKey ||
+		(existing.NameKey == "" && rule.Name != existing.Name)
+	rule.BuiltIn = existing.BuiltIn && !renamed
+
+	if rule.EscalationSteps != nil && !slices.Equal(rule.EscalationSteps, existing.EscalationSteps) {
+		return
+	}
+	if alerting.SameThreshold(rule, existing) {
+		rule.EscalationSteps = existing.EscalationSteps
+	} else {
+		rule.EscalationSteps = nil
+	}
+}
+
+// UpdateAlertRule replaces an existing alert rule. built_in, the stored name and
+// description of a keyed rule, and unchanged escalation_steps are handled as
+// keepServerOwnedFields describes.
 func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
 	// The updated rule must be refreshed into the engine; refuse with 503 if the
 	// engine failed to initialize rather than silently persisting an inert change.
@@ -358,6 +448,7 @@ func (c *Handler) UpdateAlertRule(ctx echo.Context) error {
 
 	rule.ID = existing.ID
 	rule.CreatedAt = existing.CreatedAt
+	keepServerOwnedFields(rule, existing)
 
 	if err := c.alertRuleRepo.UpdateRule(ctx.Request().Context(), rule); err != nil {
 		c.LogErrorIfEnabled("failed to update alert rule", logger.Error(err))
@@ -462,7 +553,9 @@ func (c *Handler) TestAlertRule(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, map[string]string{"status": "test fired"})
 }
 
-// ResetDefaultAlertRules deletes all built-in rules and re-seeds them.
+// ResetDefaultAlertRules deletes all built-in rules and creates each default
+// again, unless a remaining rule already has the default's name or name key. A
+// default skipped for that reason is listed in the response.
 func (c *Handler) ResetDefaultAlertRules(ctx echo.Context) error {
 	// Re-seeded defaults must be refreshed into the engine; refuse with 503 if the
 	// engine failed to initialize rather than leaving the engine cache stale.
@@ -472,24 +565,42 @@ func (c *Handler) ResetDefaultAlertRules(ctx echo.Context) error {
 
 	reqCtx := ctx.Request().Context()
 
-	_, err := c.alertRuleRepo.DeleteBuiltInRules(reqCtx)
+	// List the rules that survive the reset before deleting anything, so a
+	// failure leaves the table untouched.
+	notBuiltIn := false
+	remaining, err := c.alertRuleRepo.ListRules(reqCtx, repository.AlertRuleFilter{BuiltIn: &notBuiltIn})
 	if err != nil {
+		c.LogErrorIfEnabled("failed to list rules before reset", logger.Error(err))
+		return c.HandleError(ctx, err, "Failed to reset default rules", http.StatusInternalServerError)
+	}
+
+	if _, err := c.alertRuleRepo.DeleteBuiltInRules(reqCtx); err != nil {
 		c.LogErrorIfEnabled("failed to delete built-in rules", logger.Error(err))
 		return c.HandleError(ctx, err, "Failed to reset default rules", http.StatusInternalServerError)
 	}
 
 	// Re-seed defaults
+	kept := alerting.NewRuleNameIndex(remaining)
+	resp := resetDefaultsResponse{Status: resetDefaultsStatus, Skipped: make([]string, 0)}
 	defaults := alerting.DefaultRules()
 	for i := range defaults {
+		if kept.Has(&defaults[i]) {
+			resp.Skipped = append(resp.Skipped, defaults[i].Name)
+			c.LogInfoIfEnabled("default alert rule not created, a rule with its name or name key exists",
+				logger.String("name", defaults[i].Name))
+			continue
+		}
 		if err := c.alertRuleRepo.CreateRule(reqCtx, &defaults[i]); err != nil {
 			c.LogErrorIfEnabled("failed to seed default rule",
 				logger.String("name", defaults[i].Name), logger.Error(err))
+			continue
 		}
+		resp.Created++
 	}
 
 	c.refreshAlertEngine(ctx)
 
-	return ctx.JSON(http.StatusOK, map[string]string{"status": "defaults reset"})
+	return ctx.JSON(http.StatusOK, resp)
 }
 
 // ListAlertHistory returns paginated alert firing history.
@@ -561,7 +672,9 @@ func (c *Handler) ExportAlertRules(ctx echo.Context) error {
 	})
 }
 
-// ImportAlertRules imports rules from JSON.
+// ImportAlertRules imports rules from JSON. A rule whose name, or non-empty name
+// key, matches a stored rule or a rule imported earlier in the same request is
+// not created; its name is listed in the response.
 func (c *Handler) ImportAlertRules(ctx echo.Context) error {
 	// Imported rules must be refreshed into the engine; refuse with 503 if the
 	// engine failed to initialize rather than importing inert rules.
@@ -578,6 +691,16 @@ func (c *Handler) ImportAlertRules(ctx echo.Context) error {
 	}
 
 	reqCtx := ctx.Request().Context()
+
+	// Refuse rather than risk duplicates when the stored rules cannot be read.
+	stored, err := c.alertRuleRepo.ListRules(reqCtx, repository.AlertRuleFilter{})
+	if err != nil {
+		c.LogErrorIfEnabled("failed to list rules before import", logger.Error(err))
+		return c.HandleError(ctx, err, "Failed to import alert rules", http.StatusInternalServerError)
+	}
+	known := alerting.NewRuleNameIndex(stored)
+
+	skipped := make([]string, 0)
 	var imported int
 	for i := range payload.Rules {
 		rule := &payload.Rules[i]
@@ -598,19 +721,28 @@ func (c *Handler) ImportAlertRules(ctx echo.Context) error {
 			continue
 		}
 
+		if known.Has(rule) {
+			skipped = append(skipped, rule.Name)
+			c.LogInfoIfEnabled("skipping imported rule, a rule with its name or name key exists",
+				logger.String("name", rule.Name))
+			continue
+		}
+
 		if err := c.alertRuleRepo.CreateRule(reqCtx, rule); err != nil {
 			c.LogErrorIfEnabled("failed to import rule",
 				logger.String("name", rule.Name), logger.Error(err))
 			continue
 		}
+		known.Add(rule)
 		imported++
 	}
 
 	c.refreshAlertEngine(ctx)
 
-	return ctx.JSON(http.StatusOK, map[string]any{
-		"imported": imported,
-		"total":    len(payload.Rules),
+	return ctx.JSON(http.StatusOK, importRulesResponse{
+		Imported: imported,
+		Total:    len(payload.Rules),
+		Skipped:  skipped,
 	})
 }
 

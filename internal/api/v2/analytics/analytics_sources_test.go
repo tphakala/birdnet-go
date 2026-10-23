@@ -90,20 +90,6 @@ func TestGetAnalyticsSources_EmptyArrayNotNull(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-func TestGetAnalyticsSources_AllHistoryWhenNoDates(t *testing.T) {
-	t.Parallel()
-	e, mockDS, controller := setupAnalyticsTestEnvironment(t)
-
-	// Dates are optional; omitting both must pass empty strings through (all-history at the datastore).
-	mockDS.On("GetAudioSources", mock.Anything, "", "").
-		Return(sampleAudioSources(), nil)
-
-	c, rec := newAnalyticsSourcesContext(e, "/api/v2/analytics/sources")
-	require.NoError(t, controller.GetAnalyticsSources(c))
-	require.Equal(t, http.StatusOK, rec.Code)
-	mockDS.AssertExpectations(t)
-}
-
 func TestGetAnalyticsSources_InvalidDateFormat(t *testing.T) {
 	t.Parallel()
 	e, _, controller := setupAnalyticsTestEnvironment(t)

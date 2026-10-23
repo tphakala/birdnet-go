@@ -27,8 +27,8 @@ function detectionMessages(locale: string): DetectionMessages {
   return file.wizard.steps.detection;
 }
 
-// The stored-value intro replaces the normal intro in the fixed-height wizard
-// step, so it must never be longer than it or the step overflows.
+// The stored-value intro replaces the normal intro in the wizard step, so it
+// must never be longer than it or the step grows taller.
 describe('wizard detection intro variants', () => {
   it('covers all 16 locales', () => {
     expect(locales).toHaveLength(16);

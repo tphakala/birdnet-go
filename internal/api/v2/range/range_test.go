@@ -17,37 +17,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
-	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
-
-// MockBirdNET is a mock implementation of BirdNET for testing
-type MockBirdNET struct {
-	GetProbableSpeciesFunc func(date time.Time, week float32) ([]classifier.SpeciesScore, error)
-}
-
-func (m *MockBirdNET) GetProbableSpecies(date time.Time, week float32) ([]classifier.SpeciesScore, error) {
-	if m.GetProbableSpeciesFunc != nil {
-		return m.GetProbableSpeciesFunc(date, week)
-	}
-	// Default mock response
-	return []classifier.SpeciesScore{
-		{Label: "Turdus merula_Eurasian Blackbird", Score: 0.85},
-		{Label: "Parus major_Great Tit", Score: 0.72},
-	}, nil
-}
-
-// MockProcessor is a mock implementation of the processor for testing
-type MockProcessor struct {
-	BirdNETInstance *MockBirdNET
-}
-
-func (m *MockProcessor) GetBirdNET() *classifier.Orchestrator {
-	// Since we can't easily mock the actual BirdNET struct, we'll return nil
-	// and handle this in the test setup
-	return nil
-}
 
 // setupRangeTestEnvironment creates a test environment with Echo, a mock
 // datastore, and a range Handler built from a *apicore.Core via apitest. The

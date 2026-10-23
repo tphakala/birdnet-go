@@ -61,3 +61,18 @@ func TestInitOpenVINO_GuardWithoutTag(t *testing.T) {
 	assert.False(t, IsOpenVINOInitialized())
 	assert.NoError(t, DestroyOpenVINO()) // no-op when never initialized
 }
+
+// TestOpenVINORuntimeSnapshot_NotCompiledIn verifies the snapshot of a build
+// without the openvino tag reports nothing loaded and no probe result, which is
+// what a support dump from such a build must say.
+func TestOpenVINORuntimeSnapshot_NotCompiledIn(t *testing.T) {
+	t.Parallel()
+	snap := OpenVINORuntimeSnapshot()
+	assert.False(t, snap.CompiledIn)
+	assert.False(t, snap.Initialized)
+	assert.False(t, snap.Active)
+	assert.False(t, snap.LibraryLoaded)
+	assert.Equal(t, OVProbeStatusNotRun, snap.ProbeStatus)
+	assert.Empty(t, snap.ProbeDevices)
+	assert.False(t, snap.ProbeFailed)
+}

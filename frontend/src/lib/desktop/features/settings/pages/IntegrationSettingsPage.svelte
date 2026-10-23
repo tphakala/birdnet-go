@@ -230,9 +230,6 @@
     ebird: { stages: [], isRunning: false, showSuccessNote: false },
   });
 
-  // FFmpeg availability check
-  let ffmpegAvailable = $state(true);
-
   // Tab state
   let activeTab = $state('birdweather');
 
@@ -1162,20 +1159,6 @@
       currentData={(store.formData as SettingsFormData)?.realtime?.birdweather}
     >
       <div class="space-y-4">
-        <!-- FFmpeg Warning -->
-        {#if !ffmpegAvailable}
-          <ErrorAlert type="warning">
-            {#snippet children()}
-              <div>
-                <h3 class="font-bold">
-                  {t('settings.integration.birdweather.ffmpegWarning.title')}
-                </h3>
-                <p>{t('settings.integration.birdweather.ffmpegWarning.message')}</p>
-              </div>
-            {/snippet}
-          </ErrorAlert>
-        {/if}
-
         <Checkbox
           checked={settings.birdweather.enabled}
           label={t('settings.integration.birdweather.enable')}

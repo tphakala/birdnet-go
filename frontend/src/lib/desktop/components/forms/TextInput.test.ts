@@ -422,3 +422,58 @@ describe('TextInput Accessibility error styling', () => {
     expect(screen.getByRole('textbox')).not.toHaveClass('input-error');
   });
 });
+
+describe('TextInput error region and autocomplete', () => {
+  it('renders no alert region unless an error is set or space is reserved', () => {
+    render(TextInput, { props: { value: '', label: 'Token', id: 'tok' } });
+
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('forwards autocomplete to the native input', () => {
+    render(TextInput, { props: { value: '', autocomplete: 'off' } });
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('autocomplete', 'off');
+  });
+
+  it('shows the error in one alert region, marks the input invalid and describes it by the error', () => {
+    render(TextInput, {
+      props: { value: '', label: 'Token', id: 'tok', error: 'Token is wrong' },
+    });
+
+    const input = screen.getByRole('textbox');
+    const alert = screen.getByRole('alert');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(alert).toHaveTextContent('Token is wrong');
+    expect(alert).toHaveAttribute('id', 'tok-error');
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+    expect(input).toHaveAttribute('aria-describedby', 'tok-error');
+    expect(input).toHaveClass('input-error');
+  });
+
+  it('joins an external description with the error id', () => {
+    render(TextInput, {
+      props: { value: '', id: 'tok', error: 'Bad', 'aria-describedby': 'hint' },
+    });
+
+    expect(screen.getByRole('textbox')).toHaveAttribute('aria-describedby', 'hint tok-error');
+  });
+
+  it('reserveErrorSpace keeps one two-line alert region whether or not an error is shown', async () => {
+    const { rerender } = render(TextInput, {
+      props: { value: '', id: 'tok', reserveErrorSpace: true },
+    });
+    const region = screen.getByRole('alert');
+    expect(region).toHaveClass('min-h-10', 'text-sm');
+    expect(region.textContent.trim()).toBe('');
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-describedby');
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
+
+    await rerender({ value: '', id: 'tok', reserveErrorSpace: true, error: 'Token is wrong' });
+
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('alert')).toBe(region);
+    expect(region).toHaveClass('min-h-10', 'text-sm');
+    expect(region).toHaveTextContent('Token is wrong');
+  });
+});

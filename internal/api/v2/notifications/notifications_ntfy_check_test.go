@@ -4,9 +4,11 @@ package notifications
 import (
 	"bytes"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -70,29 +72,33 @@ func TestCheckNtfyServer_MissingHost(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-func TestCheckNtfyServer_InvalidHost_Unreachable(t *testing.T) {
+// TestCheckNtfyServer_ClosedPortUnreachable pins the dial-failure path: a host
+// that refuses the connection is answered with 200 and "unreachable", not an
+// error status. The port belongs to a listener that was just closed, so nothing
+// leaves the machine.
+func TestCheckNtfyServer_ClosedPortUnreachable(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	closedAddr := ln.Addr().String()
+	require.NoError(t, ln.Close())
+
 	e := echo.New()
 	ctrl := New(&apicore.Core{}, nil, nil)
 	ctrl.Settings.Store(apitest.NewValidTestSettings())
-	// Inject a short per-scheme probe timeout so the unreachable-host path returns
-	// quickly. 192.0.2.1 never responds, so the result is deterministically
-	// "unreachable" regardless of the timeout; the override only bounds the wait
-	// (default would be ntfyServerCheckTimeout for HTTPS plus HTTP).
 	ctrl.ntfyCheckTimeoutOverride = testFailFastTimeout
-	// Use a reserved/invalid IP that will not respond (TEST-NET-1, RFC 5737). The
-	// SSRF guard permits it (not link-local/metadata), so the request is dialed
-	// and times out rather than being refused.
-	req := newNtfyCheckRequest(t, "192.0.2.1")
+	req := newNtfyCheckRequest(t, closedAddr)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	err := ctrl.CheckNtfyServer(ctx)
+	err = ctrl.CheckNtfyServer(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp map[string]any
+	var resp NtfyServerCheckResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, "unreachable", resp["recommended"])
+	assert.Equal(t, "unreachable", resp.Recommended)
+	assert.False(t, resp.HTTP)
+	assert.False(t, resp.HTTPS)
 }
 
 func TestCheckNtfyServer_NonNtfyServerNotFalsePositive(t *testing.T) {
@@ -135,50 +141,64 @@ func TestCheckNtfyServer_InjectionRejected(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, rec.Code)
 }
 
-func TestCheckNtfyServer_CloudMetadataBlocked(t *testing.T) {
+// TestCheckNtfyServer_ProbesThroughGuardedClient checks that the ntfy
+// connectivity check uses the guarded outbound client. The server listens on
+// loopback, and the probe addresses it as 0.0.0.0:<port>. A plain HTTP client
+// reaches the server through that address (the precondition below), while the
+// guarded client refuses it at dial time, so the answer is "unreachable". If
+// probeNtfyServer switched to a plain or default client the server would be
+// found and this test would fail. Nothing outside the machine is contacted
+// either way.
+func TestCheckNtfyServer_ProbesThroughGuardedClient(t *testing.T) {
+	// ntfyGuardPreconditionTimeout bounds the plain-client precondition probe and
+	// the handler's own probe. Both are wide so a loaded host cannot turn a plain
+	// client that is slow to answer into "unreachable".
+	const ntfyGuardPreconditionTimeout = 10 * time.Second
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"healthy":true}`))
+	}))
+	t.Cleanup(ts.Close)
+
+	_, port, err := net.SplitHostPort(ts.Listener.Addr().String())
+	require.NoError(t, err)
+	unspecifiedHost := net.JoinHostPort("0.0.0.0", port)
+
+	// Precondition: a proxy-less plain client must reach the server through the
+	// unspecified address, otherwise the assertion below proves nothing. A
+	// transport without a proxy keeps an HTTP_PROXY environment from hijacking it.
+	plain := &http.Client{
+		Transport: &http.Transport{Proxy: nil},
+		Timeout:   ntfyGuardPreconditionTimeout,
+	}
+	t.Cleanup(plain.CloseIdleConnections)
+	preReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+unspecifiedHost+"/v1/health", http.NoBody)
+	require.NoError(t, err)
+	pre, err := plain.Do(preReq)
+	if err != nil {
+		t.Skipf("plain dial of %s failed, so the guarded-client check cannot be made: %v", unspecifiedHost, err)
+	}
+	require.NoError(t, pre.Body.Close())
+
 	e := echo.New()
 	ctrl := New(&apicore.Core{}, nil, nil)
 	ctrl.Settings.Store(apitest.NewValidTestSettings())
-	// A metadata IP literal is now syntactically valid, so it reaches the probe.
-	// This asserts the handler returns 200 + "unreachable" for it (no 400/500, no
-	// panic, no relayed response). Note this alone does not prove the guard is what
-	// refused it: a plain dial failure also yields "unreachable". The guard's actual
-	// block is proven in httpclient/ssrf_test.go
-	// (TestNewGuardedHTTPClient_BlocksMetadataLiteral) and TestIsBlockedTargetIP.
-	ctrl.ntfyCheckTimeoutOverride = testFailFastTimeout
-	req := newNtfyCheckRequest(t, "169.254.169.254")
+	ctrl.ntfyCheckTimeoutOverride = ntfyGuardPreconditionTimeout
+	req := newNtfyCheckRequest(t, unspecifiedHost)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	err := ctrl.CheckNtfyServer(ctx)
+	err = ctrl.CheckNtfyServer(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var resp map[string]any
+	var resp NtfyServerCheckResponse
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, "unreachable", resp["recommended"], "cloud metadata IP must be refused by the SSRF guard")
-}
-
-func TestCheckNtfyServer_IPv6MetadataBlocked(t *testing.T) {
-	e := echo.New()
-	ctrl := New(&apicore.Core{}, nil, nil)
-	ctrl.Settings.Store(apitest.NewValidTestSettings())
-	// AWS IMDS over IPv6 (fd00:ec2::254) sits in an otherwise-allowed ULA range.
-	// Same caveat as TestCheckNtfyServer_CloudMetadataBlocked: this asserts the
-	// handler safely returns 200 + "unreachable" for it; the guard's actual block
-	// is proven in httpclient/ssrf_test.go and TestIsBlockedTargetIP.
-	ctrl.ntfyCheckTimeoutOverride = testFailFastTimeout
-	req := newNtfyCheckRequest(t, "fd00:ec2::254")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err := ctrl.CheckNtfyServer(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var resp map[string]any
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.Equal(t, "unreachable", resp["recommended"], "IPv6 cloud metadata IP must be refused by the SSRF guard")
+	assert.Equal(t, "unreachable", resp.Recommended)
+	assert.False(t, resp.HTTP)
+	assert.False(t, resp.HTTPS)
 }
 
 func TestIsValidNtfyHost(t *testing.T) {

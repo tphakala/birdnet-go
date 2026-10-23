@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -18,8 +17,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ultrasonic"
 	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/classifier"
@@ -37,6 +36,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/securefs"
 	"github.com/tphakala/birdnet-go/internal/spectrogram"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 )
 
 // Compile-time assertion to ensure *spectrogram.PreRenderer implements PreRendererSubmit
@@ -73,7 +73,7 @@ type Processor struct {
 	syncMutex              sync.Mutex                // Mutex to protect sync operations
 	syncInProgress         atomic.Bool               // Flag to prevent overlapping syncs
 	LastDogDetection       map[string]time.Time      // keep track of dog barks per audio source
-	LastHumanDetection     map[string]HumanDetection // keep track of human vocal per audio source, with the trigger that flagged it
+	LastHumanDetection     map[string]HumanDetection // latest speech hit per audio source, see HumanDetection
 	Metrics                *observability.Metrics
 	DynamicThresholds      map[string]*DynamicThreshold
 	thresholdsMutex        sync.RWMutex        // Mutex to protect access to DynamicThresholds
@@ -84,16 +84,28 @@ type Processor struct {
 	dogDetectionMutex      sync.Mutex
 	detectionMutex         sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
 	vadGate                *vadGate     // Lazily-loaded Silero VAD speech gate for the privacy filter
-	controlChan            chan string
-	JobQueue               *jobqueue.JobQueue // Queue for managing job retries
-	workerCancel           context.CancelFunc // Function to cancel worker goroutines
-	thresholdsCtx          context.Context    // Context for threshold persistence/cleanup goroutines
-	thresholdsCancel       context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
-	flusherCtx             context.Context    // Context for pending detections flusher goroutine
-	flusherCancel          context.CancelFunc // Function to cancel flusher goroutine
-	preRenderer            PreRendererSubmit  // Spectrogram pre-renderer for background generation
-	preRendererOnce        sync.Once          // Ensures pre-renderer is initialized only once
-	startOnce              sync.Once          // Ensures Start() is called only once
+	// privacyCoverage lists the audio spans each (source, model, detector) has
+	// scored for speech, guarded by detectionMutex. The privacy coverage gate
+	// defers a pending detection until its saved clip span is inside one of them.
+	privacyCoverage map[coverageKey][]audioSpan
+	// heldLabelHits holds the label hit of each source waiting for a second hit
+	// (see recordLabelHit), guarded by detectionMutex and created lazily.
+	heldLabelHits map[string]heldLabelHit
+	// humanHits lists the counted speech hits of each source with the model or
+	// VAD gate that produced them (see appendHumanHitLocked), guarded by
+	// detectionMutex and created lazily. The discard log reads it to name every
+	// contributor to a verdict.
+	humanHits        map[string][]humanHit
+	controlChan      chan string
+	JobQueue         *jobqueue.JobQueue // Queue for managing job retries
+	workerCancel     context.CancelFunc // Function to cancel worker goroutines
+	thresholdsCtx    context.Context    // Context for threshold persistence/cleanup goroutines
+	thresholdsCancel context.CancelFunc // Function to cancel threshold persistence/cleanup goroutines
+	flusherCtx       context.Context    // Context for pending detections flusher goroutine
+	flusherCancel    context.CancelFunc // Function to cancel flusher goroutine
+	preRenderer      PreRendererSubmit  // Spectrogram pre-renderer for background generation
+	preRendererOnce  sync.Once          // Ensures pre-renderer is initialized only once
+	startOnce        sync.Once          // Ensures Start() is called only once
 	// SSE related fields
 	SSEBroadcaster      func(note *datastore.Note, birdImage *imageprovider.BirdImage) error // Function to broadcast detection via SSE
 	sseBroadcasterMutex sync.RWMutex                                                         // Mutex to protect SSE broadcaster access
@@ -213,6 +225,14 @@ func (p *Processor) currentSettings() *conf.Settings {
 	return conf.CurrentOrFallback(p.Settings)
 }
 
+// normalDetectionWindow is how long a detection's clip runs past its first
+// detection chunk: the export length minus the pre-capture, never negative.
+func normalDetectionWindow(settings *conf.Settings) time.Duration {
+	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
+	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
+	return max(time.Duration(0), captureLength-preCaptureLength)
+}
+
 type Detections struct {
 	CorrelationID string                       // Unique detection identifier for log correlation
 	pcmData3s     []byte                       // 3s PCM data containing the detection
@@ -241,7 +261,7 @@ type PendingDetection struct {
 	FlushDeadline   time.Time  // Deadline by which the detection must be processed
 	Count           int        // Total detection count across all models
 	ExtendedCapture bool       // Whether this detection uses extended capture
-	MaxDeadline     time.Time  // Absolute max flush time (FirstDetected + maxDuration)
+	MaxDeadline     time.Time  // Absolute max flush time (FirstDetected + maxDuration); the privacy filter can hold a detection past it until its clip is scanned. Also caps the clip EndTime (see detectionEndTime); the saved clip ends PreCapture after it
 
 	ModelContributions map[string]ModelContribution // Per-model detection data, keyed by model ID
 }
@@ -295,6 +315,9 @@ func suggestLevelForDisabledFilter(overlap float64) {
 
 // validateOverlapForLevel checks if the current overlap is sufficient for the
 // configured filter level and provides warnings/recommendations if not optimal.
+// minDetections is the count at the configured overlap; it is logged as
+// configured_min_detections because the analysis cadence cap can lower the
+// overlap in use, and with it the count the filter applies.
 func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetections int) {
 	if overlap < minOverlap {
 		// Overlap is too low for this level
@@ -303,9 +326,8 @@ func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetectio
 			logger.Int("level", level),
 			logger.String("level_name", getLevelName(level)),
 			logger.Float64("min_overlap", minOverlap),
-			logger.Float64("current_overlap", overlap),
-			logger.Int("min_detections", minDetections),
-			logger.String("hardware_req", getHardwareRequirementForLevel(level)),
+			logger.Float64("configured_overlap", overlap),
+			logger.Int("configured_min_detections", minDetections),
 			logger.Int("recommended_level_for_overlap", recommendedForCurrent),
 			logger.String("operation", "false_positive_filter_config"))
 
@@ -323,30 +345,8 @@ func validateOverlapForLevel(level int, overlap, minOverlap float64, minDetectio
 			logger.String("level_name", getLevelName(level)),
 			logger.Float64("overlap", overlap),
 			logger.Float64("min_overlap", minOverlap),
-			logger.Int("min_detections", minDetections),
-			logger.String("hardware_req", getHardwareRequirementForLevel(level)),
+			logger.Int("configured_min_detections", minDetections),
 			logger.String("operation", "false_positive_filter_config"))
-	}
-}
-
-// warnAboutHardwareRequirements checks if high filter levels (4-5) have
-// sufficient hardware performance based on overlap settings and inference time.
-func warnAboutHardwareRequirements(level int, overlap float64) {
-	if level >= 4 {
-		// Check if overlap is within valid range for calculation
-		if overlap >= 3.0 {
-			GetLogger().Warn("Overlap value too high for hardware calculation",
-				logger.Float64("overlap", overlap),
-				logger.Float64("max_valid", 2.9),
-				logger.String("operation", "false_positive_filter_config"))
-		} else {
-			stepSize := 3.0 - overlap
-			maxInferenceTime := stepSize * 1000 // Convert to ms
-			GetLogger().Warn("High filtering level requires fast hardware",
-				logger.Int("level", level),
-				logger.Float64("required_inference_ms", maxInferenceTime),
-				logger.String("operation", "false_positive_filter_config"))
-		}
 	}
 }
 
@@ -368,16 +368,18 @@ func validateAndLogFilterConfig(settings *conf.Settings) {
 	overlap := settings.BirdNET.Overlap
 	minOverlap := getMinimumOverlapForLevel(level)
 
-	// Calculate what minDetections will be with current settings
-	minDetections := calculateMinDetectionsFromSettings(settings)
+	// minDetections at the configured overlap. No cadence plan exists yet at
+	// startup; under the cap the filter applies the count at the effective overlap.
+	minDetections := calculateMinDetectionsFromSettings(settings, classifier.ConfiguredBaseOverlap(settings))
 
 	if level == 0 {
 		// Smart migration: suggest a level based on current overlap
 		suggestLevelForDisabledFilter(overlap)
 	} else {
-		// Filtering is enabled - validate overlap and warn about hardware if needed
+		// Filtering is enabled - validate the configured overlap against the level.
+		// Whether the hardware sustains that overlap is decided by the analysis
+		// cadence cap, which logs the cadence it plans.
 		validateOverlapForLevel(level, overlap, minOverlap, minDetections)
-		warnAboutHardwareRequirements(level, overlap)
 	}
 }
 
@@ -543,17 +545,15 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 	p.pipelineStats = NewPipelineStats(p.getDisplayNameForSource)
 
 	// Validate detection window configuration
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+	detectionWindow := normalDetectionWindow(settings)
 
 	// Warn if detection window is very short (may affect overlap-based filtering)
 	minRecommendedWindow := 3 * time.Second
 	if detectionWindow < minRecommendedWindow {
 		GetLogger().Warn("Detection window very short, may affect accuracy",
 			logger.Float64("window_seconds", detectionWindow.Seconds()),
-			logger.Float64("capture_length_seconds", captureLength.Seconds()),
-			logger.Float64("pre_capture_seconds", preCaptureLength.Seconds()),
+			logger.Int("capture_length_seconds", settings.Realtime.Audio.Export.Length),
+			logger.Int("pre_capture_seconds", settings.Realtime.Audio.Export.PreCapture),
 			logger.Float64("min_recommended_seconds", minRecommendedWindow.Seconds()),
 			logger.String("operation", "config_validation"))
 	}
@@ -690,6 +690,9 @@ func (p *Processor) startDetectionProcessor() {
 
 // processDetections examines each detection from the queue, updating held detections
 // with new or higher-confidence instances and setting an appropriate flush deadline.
+// It also runs the VAD speech gate on the chunk and, once the chunk's speech hits
+// are written, publishes the audio the chunk's detectors scored as privacy
+// coverage.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) processDetections(item classifier.Results) {
@@ -708,22 +711,34 @@ func (p *Processor) processDetections(item classifier.Results) {
 
 	// Run the dedicated Silero VAD speech gate before per-result processing. It
 	// scores the raw chunk independently of what the bird model ranked and, on a
-	// speech hit, records it in LastHumanDetection so the privacy filter discards
-	// this window's detections regardless of the top-K label truncation.
-	p.runVADGate(settings, &item)
+	// speech hit, records it in LastHumanDetection (stamped with the end of the
+	// audio it scored) so the privacy filter discards detections whose saved clip
+	// reaches that audio, regardless of the top-K label truncation. The span it
+	// returns is published as coverage after the label hits are written.
+	chunk, hasChunk := newChunkAudio(&item)
+	var vadCoverage audioSpan
+	var vadRan bool
+	if hasChunk {
+		vadCoverage, vadRan = p.runVADGate(settings, &chunk)
+	}
 
 	// Detection window sets wait time before a detection is considered final and is flushed.
 	// This represents the duration to wait from NOW (detection creation time) before flushing,
 	// allowing overlapping analyses to accumulate confirmations for false positive filtering.
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	// Ensure detectionWindow is non-negative to prevent early flushes
-	detectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+	// The window is never negative, which would flush early.
+	detectionWindow := normalDetectionWindow(settings)
 
 	// processResults() returns a slice of detections, we iterate through each and process them
 	// detections are put into pendingDetections map where they are held until flush deadline is reached
 	// once deadline is reached detections are delivered to workers for actions (save to db etc) processing
 	detectionResults := p.processResults(settings, item)
+
+	// Publish what this chunk scored only now, after both the VAD hit and the label
+	// hits for it are written, so the coverage gate never sees audio whose hits
+	// are still outstanding.
+	if hasChunk {
+		p.publishPrivacyCoverage(settings, &chunk, vadCoverage, vadRan)
+	}
 
 	// Log processing results with deduplication to prevent spam
 	p.logDetectionResults(item.Source.ID, len(item.Results), len(detectionResults))
@@ -917,10 +932,16 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 	return detections
 }
 
+// bytesPerPCM16Sample is the size of one 16-bit PCM sample in bytes.
+const bytesPerPCM16Sample = 2
+
 // applyUltrasonicFilter runs the ultrasonic validation filter on a batch of bat detections.
 // It computes the US frame CV once from the shared PCM audio and tags all detections
 // as unlikely when the CV falls below the configured threshold. The PCM data is at
 // the source sample rate (e.g., 256kHz), not the model's internal 48kHz rate.
+// It does nothing when the filter is disabled, when the source rate leaves no
+// band above the split, when the STFT settings are invalid, or when the PCM
+// cannot be decoded (a half sample) or holds too few frames.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional for item
 func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifier.Results, detections []Detections) {
@@ -931,7 +952,16 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 
 	resolved := p.resolveAudioSource(item.Source)
 	sourceRate := resolved.SampleRate
-	if sourceRate <= 0 || sourceRate <= filterCfg.FrequencySplitHz*2 {
+	if !ultrasonic.HasUltrasonicBand(sourceRate, filterCfg.FrequencySplitHz) {
+		return
+	}
+
+	// Settings that never went through load or the API can carry an STFT
+	// configuration the filter refuses; say so before decoding the chunk.
+	if err := filterCfg.ValidateSTFT(); err != nil {
+		GetLogger().Debug("ultrasonic filter: invalid STFT settings, skipping",
+			logger.String("source", resolved.DisplayName),
+			logger.Error(err))
 		return
 	}
 
@@ -939,9 +969,17 @@ func (p *Processor) applyUltrasonicFilter(settings *conf.Settings, item classifi
 		return
 	}
 
-	samples := convert.BytesToFloat64PCM16(item.PCMdata)
-	cv, ok := ultrasonic.ComputeUSFrameCV(samples, sourceRate, filterCfg)
 	sourceName := resolved.DisplayName
+	samples := make([]float32, len(item.PCMdata)/bytesPerPCM16Sample)
+	if _, err := dsppcm.BytesToFloat32(samples, item.PCMdata); err != nil {
+		GetLogger().Debug("ultrasonic filter: PCM data cannot be decoded",
+			logger.String("source", sourceName),
+			logger.Int("sample_count", len(samples)),
+			logger.Int("sample_rate", sourceRate),
+			logger.Error(err))
+		return
+	}
+	cv, ok := ultrasonic.ComputeUSFrameCV(samples, sourceRate, filterCfg)
 	if !ok {
 		GetLogger().Debug("ultrasonic filter: insufficient data for CV computation",
 			logger.String("source", sourceName),
@@ -1087,9 +1125,12 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		return true, 0
 	}
 
-	// Check human detection privacy filter. Match the raw label so Perch v2's
-	// FSD50K human classes are caught too, not just BirdNET's "Human *" classes.
-	if isHumanVocalization(result.Species) && result.Confidence > baseThreshold {
+	// Drop human sounds from the saved detections. Match the raw label so Perch
+	// v2's FSD50K human classes are caught too, not just BirdNET's "Human *"
+	// classes. This uses the broad human-sound check, not the privacy filter's
+	// narrower set (which leaves out Perch body and action classes), so those
+	// classes (Hands, Crowd, ...) are still dropped as non-bird detections.
+	if isHumanSoundLabel(result.Species) && result.Confidence > baseThreshold {
 		return true, 0 // Filter out human detections for privacy
 	}
 
@@ -1168,7 +1209,9 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 	return false
 }
 
-// createDetection creates a detection object with all necessary information
+// createDetection creates a detection object with all necessary information.
+// Its ClipName is chosen from the Result's own model and sample rate, the fields
+// the audio exporter reads.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) createDetection(settings *conf.Settings, item classifier.Results, result datastore.Results, scientificName, commonName, speciesCode, rawScientificName string) Detections {
@@ -1177,15 +1220,13 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	// is or will be written, so nothing must reference one. The media API and
 	// the UI gate on a non-empty ClipName, and no SaveAudioAction is scheduled
 	// when export is off, so there is no async-export race to preserve here.
-	clipName := p.resolveClipName(settings, &item, scientificName, result.Confidence)
+	// The name is set below, once the Result exists, so it is chosen from the
+	// Result's own model and sample rate.
 
 	// Get capture length and pre-capture length for detection end time calculation
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-
 	// Set begin and end time for note
 	beginTime := item.StartTime
-	endTime := item.StartTime.Add(captureLength - preCaptureLength)
+	endTime := item.StartTime.Add(normalDetectionWindow(settings))
 
 	// Get occurrence probability for this species at detection time
 	occurrence := p.Bn.GetSpeciesOccurrenceAtTime(result.Species, item.StartTime)
@@ -1200,10 +1241,14 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 		beginTime, endTime,
 		scientificName, commonName, speciesCode, rawScientificName,
 		float64(result.Confidence),
-		item.Source, clipName,
+		item.Source, "",
 		item.ElapsedTime, occurrence,
 		item.ModelID,
 		result.Species)
+	detectionResult.ClipName = p.resolveClipName(settings, &detectionResult, scientificName, result.Confidence)
+	// The planned rate depends on the container the clip name carries, so it is
+	// planned only now (0 when export is off and the name is empty).
+	detectionResult.ClipSampleRate = plannedClipSampleRate(&detectionResult, &settings.Realtime.Audio.Export)
 
 	// Convert additional results from datastore.Results to detection.AdditionalResult.
 	// Exclude the primary species since it's already stored as Detection.LabelID.
@@ -1230,6 +1275,8 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 // createDetectionResult creates a detection.Result from the given parameters.
 // detectionTime should be pre-computed by the caller to ensure timestamp consistency
 // with other detection artifacts (e.g., Note) created from the same analysis.
+// The result carries no clip name or ClipSampleRate; createDetection sets both once the
+// clip name is resolved, because the planned rate depends on the name.
 func (p *Processor) createDetectionResult(settings *conf.Settings,
 	detectionTime time.Time,
 	beginTime, endTime time.Time,
@@ -1243,7 +1290,7 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 	// Resolve audio source info from registry
 	audioSource := p.resolveAudioSource(source)
 
-	return detection.Result{
+	result := detection.Result{
 		Timestamp:   detectionTime,
 		SourceNode:  settings.Main.Name,
 		AudioSource: audioSource,
@@ -1266,6 +1313,7 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 		Model:          classifier.DetectionModelInfoForID(modelID),
 		RawLabel:       rawLabel,
 	}
+	return result
 }
 
 // resolveAudioSource resolves the audio source details from the registry.
@@ -1398,23 +1446,27 @@ func (p *Processor) handleDogDetection(settings *conf.Settings, item classifier.
 	}
 }
 
-// handleHumanDetection handles the detection of human vocalizations and updates the last detection timestamp.
+// handleHumanDetection handles the detection of human vocalizations and records
+// the hit in LastHumanDetection, stamped with the end of the chunk's audio (the
+// processing time when the producer gave none) and never moving the stored time
+// backward. The hit carries the model that scored it (item.ModelID) and its
+// confidence, so logs and the discard summary can name it. When the effective
+// base overlap is above labelConfirmMinBaseOverlap a hit counts only once a
+// second hit confirms it, see recordLabelHit.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifier.Results, result datastore.Results) {
 	// only check this if privacy filter is enabled
 	if settings.Realtime.PrivacyFilter.Enabled && isHumanVocalization(result.Species) &&
 		result.Confidence > settings.Realtime.PrivacyFilter.Confidence {
-		GetLogger().Info("human detection filtered",
-			logger.Float32("confidence", result.Confidence),
-			logger.Float32("threshold", float32(settings.Realtime.PrivacyFilter.Confidence)),
-			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
-			logger.String("operation", "privacy_filter"))
-		// put human detection timestamp into LastHumanDetection map. This is used to discard
-		// bird detections if a human vocalization is detected after the first detection
-		p.detectionMutex.Lock()
-		p.LastHumanDetection[item.Source.ID] = HumanDetection{Time: item.StartTime, Trigger: metrics.TriggerLabel}
-		p.detectionMutex.Unlock()
+		// Stamp the hit with the end of the audio this label scored (not the
+		// back-dated chunk start); the discard check compares it with the saved
+		// clip. Above the confirmation overlap a lone hit is held (see
+		// recordLabelHit) and counts only when a second hit confirms it.
+		end, _ := audioEndOrNow(&item)
+		hit := heldLabelHit{at: end, confidence: result.Confidence, modelID: item.ModelID}
+		d := p.recordLabelHit(settings, item.Source.ID, hit)
+		p.logLabelHitDecision(settings, item.Source.ID, &hit, &d)
 	}
 }
 
@@ -1466,34 +1518,35 @@ func modelGlobalConfidenceThreshold(settings *conf.Settings, modelID string) flo
 // export is off makes it a truthful per-detection signal (no clip exists or is
 // being encoded), which the media endpoint and the frontend rely on to gate
 // audio playback per detection under runtime toggling of the export setting.
-func (p *Processor) resolveClipName(settings *conf.Settings, item *classifier.Results, scientificName string, confidence float32) string {
+// res supplies the model and sample rate the name's container is chosen from.
+func (p *Processor) resolveClipName(settings *conf.Settings, res *detection.Result, scientificName string, confidence float32) string {
 	if !settings.Realtime.Audio.Export.Enabled {
 		return ""
 	}
 
 	clipName := p.generateClipName(settings, scientificName, confidence)
-	return p.applyExportFormatExtension(settings, clipName, item.ModelID, item.Source)
+	return p.applyExportFormatExtension(settings, clipName, res)
 }
 
-// applyExportFormatExtension overrides a clip name's extension to match the
-// container the exporter will actually write, keeping the persisted ClipName in
-// lockstep with the on-disk file. buildClipPath derives the extension from
-// Export.Type; a bat/ultrasonic capture above the analysis rate is stored in the
-// dedicated Export.UltrasonicType instead (resolveExportFormat), so its extension
-// must be rewritten here. Shared by the createDetection and extended-capture paths
-// so both persist the same extension. An empty clip name is returned unchanged.
-func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
+// applyExportFormatExtension sets a clip name's extension to the container the
+// detection is stored in. buildClipPath derives the extension from Export.Type; a
+// bat/ultrasonic capture above the analysis rate is named in the dedicated
+// Export.UltrasonicType instead (resolveExportFormat), so its extension is
+// rewritten here. The model and sample rate are read from res, the same
+// detection.Result fields buildSaveAudioAction hands the encoder, so naming and
+// encoding decide from the same inputs. The exporter then writes the stored name
+// as it is (resolveExportParams). Shared by the createDetection and
+// extended-capture paths. An empty clip name is returned unchanged.
+func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName string, res *detection.Result) string {
 	if clipName == "" {
 		return clipName
 	}
-	mInfo := classifier.DetectionModelInfoForID(modelID)
-	sourceRate := p.resolveAudioSource(source).SampleRate
-	format := exportFormatForModel(mInfo.Name, mInfo.Version, sourceRate, &settings.Realtime.Audio.Export)
-	// GetFileExtension returns the extension WITHOUT a leading dot; replaceExtension
+	format := exportFormatForModel(res.Model.Name, res.Model.Version, res.AudioSource.SampleRate, &settings.Realtime.Audio.Export)
+	// audioformat.FileExtension returns the extension WITHOUT a leading dot; replaceExtension
 	// expects the dot. Guard against an empty extension (only reachable with an
 	// unvalidated empty format) so buildClipPath's own extension is preserved rather
 	// than clobbered to a trailing dot (GitHub #2810/#2814).
-	ext := convert.GetFileExtension(format)
+	ext := audioformat.FileExtension(format)
 	if ext == "" {
 		return clipName
 	}
@@ -1519,7 +1572,7 @@ func (p *Processor) generateClipNameWithDuration(settings *conf.Settings, scient
 // Export.Type.
 //
 // buildClipPath falls back to a wav extension when Export.Type produces an
-// empty GetFileExtension result. Post fix this branch should be unreachable -
+// empty audioformat.FileExtension result. Post fix this branch should be unreachable -
 // the WARN exists purely as a defense-in-depth signal that a previously unknown
 // code path is writing extension-less clip paths to the DB (see GitHub #2810,
 // #2814).
@@ -1542,9 +1595,9 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 	month := t.Format("01")
 
 	rawExportType := settings.Realtime.Audio.Export.Type
-	// GetFileExtension is a passthrough for unknown formats, so a whitespace-
+	// audioformat.FileExtension is a passthrough for unknown formats, so a whitespace-
 	// only Type would otherwise leak into the filename as a ". " suffix.
-	fileType := convert.GetFileExtension(strings.TrimSpace(rawExportType))
+	fileType := audioformat.FileExtension(strings.TrimSpace(rawExportType))
 	if fileType == "" {
 		// Stored outside the guard: onceByKey marks the key BEFORE running emit,
 		// so a concurrent second caller returns while the first is still inside
@@ -1572,9 +1625,15 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 
 // shouldDiscardDetection checks if a detection should be discarded based on various criteria.
 // The caller provides a settings snapshot and the precomputed minDetections (from
-// calculateMinDetectionsForModel) to avoid redundant settings fetches and ensure
-// consistency within a single flush cycle.
-func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int) (shouldDiscard bool, reason string) {
+// MinDetectionsForModel) to avoid redundant settings fetches and ensure
+// consistency within a single flush cycle. priv is the detection's privacyCheck
+// for that cycle; the privacy filter discards a detection when the source's
+// latest speech hit in it is at or after the saved clip's begin less
+// privacyClipGuard. A discard logs the model and score of that hit and, with
+// privacyfilter.debug on, a summary of the detectors that counted hits
+// reaching the clip (priv.contributions); the counts are lower bounds once the
+// attribution list is full (humanHitMaxPerSource).
+func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
 		GetLogger().Debug("Detection discarded due to insufficient count",
@@ -1588,22 +1647,42 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 
 	// Check privacy filter
 	if settings.Realtime.PrivacyFilter.Enabled {
-		p.detectionMutex.RLock()
-		lastHumanDetection, exists := p.LastHumanDetection[item.Source]
-		p.detectionMutex.RUnlock()
-		// Discard when a human voice was detected at or after the bird detection
-		// started. Using !Before (>=) rather than After (>) so a human and a bird
-		// sharing the exact same audio chunk (equal timestamps) still trips the
-		// privacy filter instead of leaking the detection.
-		if exists && !lastHumanDetection.Time.Before(item.FirstDetected) {
+		lastHumanDetection, exists := priv.hit, priv.hasHit
+		// Discard when speech was detected at or after the start of the bird's saved
+		// clip. Hit times are the capture time of the end of the audio that produced
+		// the hit, so a hit at or after the clip begin means the clip may contain
+		// that speech (including the pre-capture part, which precedes the detecting
+		// chunk). The comparison is padded by privacyClipGuard and uses !Before (>=)
+		// so a hit stamped exactly at the clip begin still discards.
+		if exists && !lastHumanDetection.Time.Before(priv.clip.from.Add(-privacyClipGuard)) {
 			// Add structured logging for privacy filter
 			GetLogger().Debug("Detection discarded by privacy filter",
 				logger.String("species", item.Detection.Result.Species.CommonName),
 				logger.Time("detection_time", item.FirstDetected),
 				logger.Time("last_human_detection", lastHumanDetection.Time),
 				logger.String("trigger", lastHumanDetection.Trigger),
+				logger.String("hit_model_id", lastHumanDetection.ModelID),
+				logger.Float64("hit_score", lastHumanDetection.Score),
 				logger.String("source", p.getDisplayNameForSource(item.Source)),
-				logger.String("operation", "privacy_filter"))
+				logger.String("operation", privacyFilterOperation))
+			if settings.Realtime.PrivacyFilter.Debug {
+				// With privacyfilter.debug on, say who decided: the detectors that
+				// counted hits reaching the saved clip, with hit counts and best
+				// scores (lower bounds once the attribution list is full), next to
+				// the detection that was dropped.
+				GetLogger().Info("privacy filter dropped detection",
+					logger.String("species", item.Detection.Result.Species.CommonName),
+					logger.String("detection_model_id", item.BestModelID),
+					logger.Time("clip_begin", priv.clip.from),
+					logger.Time("clip_end", priv.clip.to),
+					logger.Duration("clip_guard", privacyClipGuard),
+					logger.Time("last_hit_time", lastHumanDetection.Time),
+					logger.String("last_hit_model_id", lastHumanDetection.ModelID),
+					logger.String("last_hit_trigger", lastHumanDetection.Trigger),
+					logger.String("contributors", formatHitContributions(priv.contributions)),
+					logger.String("source", p.getDisplayNameForSource(item.Source)),
+					logger.String("operation", privacyFilterDiscardOperation))
+			}
 			// Attribute the discard to the trigger that flagged the human voice
 			// (label match vs VAD speech gate), when telemetry is enabled.
 			if settings.Realtime.Telemetry.Enabled && p.Metrics != nil {
@@ -1670,10 +1749,27 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 	return false, ""
 }
 
-// processApprovedDetection handles an approved detection by sending it to the worker queue
-func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string) {
-	settings := p.currentSettings()
+// recordUnscannedSave logs and counts a detection approved although a speech
+// detector never scored its whole clip within privacyCoverageMaxWait (the privacy
+// filter fails open rather than losing the detection).
+func (p *Processor) recordUnscannedSave(settings *conf.Settings, item *PendingDetection, clip audioSpan, speciesName string) {
+	GetLogger().Info("privacy filter: clip not fully scanned for speech before the wait expired, approving detection",
+		logger.String("species", speciesName),
+		logger.String("source", p.getDisplayNameForSource(item.Source)),
+		logger.Time("clip_begin", clip.from),
+		logger.Time("clip_end", clip.to),
+		logger.Duration("max_wait", privacyCoverageMaxWait),
+		logger.String("operation", "privacy_filter_coverage"))
+	if settings.Realtime.Telemetry.Enabled && p.Metrics != nil {
+		p.Metrics.PrivacyFilter.RecordUnscannedSave()
+	}
+}
 
+// processApprovedDetection handles an approved detection by sending it to the worker queue
+//
+// settings is the snapshot the privacy check used for this detection, so the saved
+// clip is built from the same configuration that was checked.
+func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName string, settings *conf.Settings) {
 	GetLogger().Info("approving detection",
 		logger.String("species", speciesName),
 		logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -1694,7 +1790,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		}
 	}
 
-	p.normalizeDetectionTimes(item)
+	p.normalizeDetectionTimes(item, settings)
 
 	// Populate model contributions on the Result for downstream persistence
 	if len(item.ModelContributions) > 0 {
@@ -1708,7 +1804,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 		}
 	}
 
-	actionList := p.getActionsForItem(&item.Detection)
+	actionList := p.getActionsForItem(&item.Detection, settings)
 	for _, action := range actionList {
 		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
 		if err := p.EnqueueTask(task); err != nil {
@@ -1756,8 +1852,8 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 //	Level 1: Lenient (20% threshold, ~2 detections)
 //	Level 2: Moderate (30% threshold, ~3 detections)
 //	Level 3: Balanced (50% threshold, ~5 detections - original pre-Sept 2025 behavior)
-//	Level 4: Strict (60% threshold, ~12 detections - requires RPi 4+)
-//	Level 5: Maximum (70% threshold, ~21 detections - requires RPi 4+)
+//	Level 4: Strict (60% threshold, ~12 detections)
+//	Level 5: Maximum (70% threshold, ~21 detections)
 //
 // Note: Audio clip length (captureLength/preCapture) does NOT affect this calculation.
 // Those settings control saved audio length, not detection sensitivity.
@@ -1770,15 +1866,20 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 //
 // calculateMinDetectionsFromSettings computes minimum detections from settings alone.
 // This is a standalone function that doesn't require a Processor instance.
-func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
+//
+// baseOverlap is the effective base overlap, which the cadence cap may hold below
+// settings.BirdNET.Overlap; the step is derived from it so the count matches the
+// buffer's real cadence.
+func calculateMinDetectionsFromSettings(settings *conf.Settings, baseOverlap time.Duration) int {
 	// BirdNET uses 3-second chunks for analysis. Since Option A (issue #4096) the
-	// realtime buffer honors birdnet.overlap, so the analysis step is
-	// chunkDurationSeconds - overlap, matching the buffer's BufferInterval.
-	const chunkDurationSeconds = 3.0
+	// realtime buffer follows the effective base overlap (baseOverlap), so the
+	// analysis step is chunkDurationSeconds - overlap, matching the buffer's
+	// BufferInterval.
+	chunkDurationSeconds := classifier.AnalysisBaseClipLength.Seconds()
 
 	// Get filtering level from settings
 	level := settings.Realtime.FalsePositiveFilter.Level
-	overlap := settings.BirdNET.Overlap
+	overlap := baseOverlap.Seconds()
 
 	// Level 0: no filtering
 	if level == 0 {
@@ -1794,18 +1895,6 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 		// Continue with safe fallback (segment length is floored in the helper)
 	}
 
-	// Validate overlap meets minimum for level (warning only, don't block)
-	minOverlap := getMinimumOverlapForLevel(level)
-	if overlap < minOverlap {
-		GetLogger().Warn("Overlap too low for filtering level",
-			logger.Int("level", level),
-			logger.String("level_name", getLevelName(level)),
-			logger.Float64("min_overlap", minOverlap),
-			logger.Float64("current_overlap", overlap),
-			logger.String("operation", "calculate_min_detections"))
-		// Continue with calculation - system will work but may not achieve target filtering
-	}
-
 	// The analysis step (how often a new window is produced) is chunk - overlap.
 	return minDetectionsForSegment(chunkDurationSeconds-overlap, level)
 }
@@ -1813,17 +1902,34 @@ func calculateMinDetectionsFromSettings(settings *conf.Settings) int {
 // calculateMinDetections is a convenience method that calls calculateMinDetectionsFromSettings
 // with the processor's settings.
 func (p *Processor) calculateMinDetections() int {
-	return calculateMinDetectionsFromSettings(p.currentSettings())
+	settings := p.currentSettings()
+	return calculateMinDetectionsFromSettings(settings, p.effectiveBaseOverlap(settings))
+}
+
+// effectiveBaseOverlap returns the base overlap the analysis buffers actually
+// use: the published cadence plan's effective overlap when a backend is attached,
+// else the configured birdnet.overlap.
+func (p *Processor) effectiveBaseOverlap(settings *conf.Settings) time.Duration {
+	if p.Bn != nil {
+		return p.Bn.EffectiveBaseOverlap()
+	}
+	return classifier.ConfiguredBaseOverlap(settings)
 }
 
 // flushPendingDetections processes one flush cycle, flushing eligible detections.
 // minDetections is computed per-item using the item's BestModelID so that bat
 // and bird models each apply their own false positive filter configuration.
-// Returns the count of pending and flushed detections for logging.
+// Each pending detection's privacy state is read once per tick (see
+// privacyCheck): the discard checks compare its speech hit, and a detection that
+// passes them is approved only when the coverage gate allows it, otherwise it
+// stays pending and is re-checked on the next tick. An approved detection is built
+// from the same settings snapshot the check used. Returns the count of pending and
+// flushed detections for logging.
 func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
 	settings := p.currentSettings()
-	visThresholds := precomputeVisibilityThresholds(settings)
+	baseOverlap := p.effectiveBaseOverlap(settings)
+	visThresholds := precomputeVisibilityThresholds(settings, baseOverlap)
 
 	var terminalNotifs []SSEPendingDetection
 	var broadcastSnapshot []SSEPendingDetection
@@ -1839,9 +1945,14 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 		}
 
 		speciesName := strings.ToLower(item.Detection.Result.Species.CommonName)
-		itemMinDetections := calculateMinDetectionsForModel(settings, item.BestModelID)
+		itemMinDetections := MinDetectionsForModel(settings, item.BestModelID, baseOverlap)
 
-		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections); shouldDiscard {
+		// One consistent read of the clip span, the source's latest speech hit and
+		// the privacy coverage: a chunk writes its hit before it publishes the
+		// coverage that includes it, so coverage seen here never lacks its hits.
+		priv := p.checkPrivacy(settings, &item, now)
+
+		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections, &priv); shouldDiscard {
 			// Aggregate daylight-filter discards into the periodic pipeline-stats
 			// summary so a user who sees zero saved detections has an at-a-glance
 			// signal that a filter is eating them. The per-detection log stays at
@@ -1869,6 +1980,16 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			continue
 		}
 
+		switch priv.verdict {
+		case coverageDefer:
+			// A speech detector has not yet scored the whole saved clip. Leave the
+			// detection pending; the next tick re-runs the discard check and this one.
+			continue
+		case coverageTimedOut:
+			p.recordUnscannedSave(settings, &item, priv.clip, speciesName)
+		case coverageKeep:
+		}
+
 		GetLogger().Info("Flushing detection",
 			logger.String("species", speciesName),
 			logger.String("source", p.getDisplayNameForSource(item.Source)),
@@ -1879,7 +2000,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			logger.Int("required", itemMinDetections),
 			logger.String("operation", "flush_detection"))
 
-		p.processApprovedDetection(&item, speciesName)
+		p.processApprovedDetection(&item, speciesName, settings)
 		delete(p.pendingDetections, mapKey)
 		flushedCount++
 
@@ -1914,8 +2035,8 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 // logMinDetectionsChanges logs when bird or bat minDetections values change
 // due to a config hot-reload, helping operators verify that FP filter
 // adjustments took effect.
-func logMinDetectionsChanges(settings *conf.Settings, lastBird, lastBat *int) {
-	bird := calculateMinDetectionsFromSettings(settings)
+func logMinDetectionsChanges(settings *conf.Settings, baseOverlap time.Duration, lastBird, lastBat *int) {
+	bird := calculateMinDetectionsFromSettings(settings, baseOverlap)
 	bat := calculateBatMinDetections(settings)
 	if *lastBird != -1 && bird != *lastBird {
 		GetLogger().Info("bird minDetections updated due to config change",
@@ -1949,7 +2070,8 @@ func (p *Processor) pendingDetectionsFlusher() {
 		for {
 			select {
 			case <-ticker.C:
-				logMinDetectionsChanges(p.currentSettings(), &lastBirdMinDet, &lastBatMinDet)
+				settings := p.currentSettings()
+				logMinDetectionsChanges(settings, p.effectiveBaseOverlap(settings), &lastBirdMinDet, &lastBatMinDet)
 				pendingCount, flushedCount := p.flushPendingDetections()
 
 				if pendingCount > 0 || flushedCount > 0 {
@@ -1970,9 +2092,9 @@ func (p *Processor) pendingDetectionsFlusher() {
 }
 
 // getActionsForItem determines the actions to be taken for a given detection.
-func (p *Processor) getActionsForItem(det *Detections) []Action {
-	settings := p.currentSettings()
-
+//
+// settings is the configuration snapshot the actions are built from.
+func (p *Processor) getActionsForItem(det *Detections, settings *conf.Settings) []Action {
 	// Check if species has custom configuration using both common and scientific name lookup
 	if speciesConfig, exists := lookupSpeciesConfig(settings.Realtime.Species.Config, det.Result.Species.CommonName, det.Result.Species.ScientificName); exists {
 		if settings.Debug {
@@ -2063,7 +2185,7 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 
 		// If executeDefaults is true, combine custom and default actions
 		if len(actions) > 0 && executeDefaults {
-			defaultActions := p.getDefaultActions(det)
+			defaultActions := p.getDefaultActions(det, settings)
 			return append(actions, defaultActions...)
 		}
 
@@ -2092,7 +2214,7 @@ func (p *Processor) getActionsForItem(det *Detections) []Action {
 	}
 
 	// Fall back to default actions if no custom actions or if custom actions should be combined
-	defaultActions := p.getDefaultActions(det)
+	defaultActions := p.getDefaultActions(det, settings)
 	// Add structured logging for default actions
 	GetLogger().Debug("Using default actions for detection",
 		logger.String("species", strings.ToLower(det.Result.Species.CommonName)),
@@ -2118,9 +2240,7 @@ func parseCommandParams(params []string, det *Detections) map[string]any {
 }
 
 // getDefaultActions returns the default actions to be taken for a given detection.
-func (p *Processor) getDefaultActions(det *Detections) []Action {
-	settings := p.currentSettings()
-
+func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) []Action {
 	var actions []Action
 	var databaseAction *DatabaseAction
 	var sseAction *SSEAction
@@ -2163,22 +2283,12 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 
 	// Create SSE action if broadcaster is available (enabled when SSE API is configured)
 	if sseBroadcaster := p.GetSSEBroadcaster(); sseBroadcaster != nil {
-		// Create SSE retry config - use sensible defaults since SSE should be reliable
-		sseRetryConfig := jobqueue.RetryConfig{
-			Enabled:      true, // Enable retries for SSE to improve reliability
-			MaxRetries:   3,    // Conservative retry count for real-time streaming
-			InitialDelay: 1 * time.Second,
-			MaxDelay:     5 * time.Second,
-			Multiplier:   2.0,
-		}
-
 		sseAction = &SSEAction{
 			Settings:       settings,
 			Result:         det.Result, // Domain model (single source of truth)
 			BirdImageCache: p.BirdImageCache,
 			EventTracker:   p.GetEventTracker(),
 			DetectionCtx:   detectionCtx, // Share context from DatabaseAction (provides database ID)
-			RetryConfig:    sseRetryConfig,
 			SSEBroadcaster: sseBroadcaster,
 			CorrelationID:  det.CorrelationID,
 		}
@@ -2212,65 +2322,83 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 				RetryConfig:       mqttRetryConfig,
 				CorrelationID:     det.CorrelationID,
 				SpeciesTimeSource: speciesTimeSource,
+				liveSettings:      p.currentSettings,
+				liveClient:        p.GetMQTTClient,
 			}
 		}
 	}
 
 	// CRITICAL FIX for GitHub issue #1158 and #1748: Race condition and data visibility
 	//
-	// Problem: When database, SSE, and MQTT are enabled, they execute concurrently via the job queue.
-	// SSE and MQTT need the database-assigned Note.ID, but each action holds a VALUE COPY of Note.
-	// CompositeAction ensures sequential execution (timing), but doesn't share data between copies.
+	// Problem: SSE and MQTT need the database-assigned Note.ID, but each action holds
+	// a VALUE COPY of the result and the actions would otherwise run concurrently via
+	// the job queue.
 	//
-	// Solution: Combine DatabaseAction, SSEAction, and MqttAction into a CompositeAction that:
-	// 1. Executes them sequentially (Database → SSE → MQTT)
-	// 2. Uses DetectionContext to share the database ID atomically between actions
+	// Solution: when the database is enabled, a CompositeAction runs sequentially:
+	// 1. DatabaseAction saves the detection and stores the ID in the shared DetectionContext.
+	// 2. An enqueueAction hands MqttAction to the job queue as its own job. The queue
+	//    picks the retry policy per job (getJobQueueRetryConfig), so MQTT gets
+	//    realtime.mqtt.retrysettings, which a step inside the composite cannot have.
+	//    The job starts after the save, so it still reads the database ID.
+	// 3. SSEAction broadcasts inline.
+	// The composite itself must never be retried: a retry would run DatabaseAction
+	// again and store a duplicate row. Without a database there is no ID to wait
+	// for, so SSE and MQTT are queued as independent actions.
 	//
 	// This ensures:
 	// - Database save completes before downstream actions
 	// - SSE/MQTT receive the correct detection ID for URL construction
 	// - No polling needed (eliminates the old 5-second sleep hack in SSE)
+	// - A failed MQTT publish is retried without re-running the database save
 	//
 	// IMPORTANT: Audio export is NOT included in this CompositeAction. It runs as a
-	// separate independent action to prevent slow FFmpeg encoding (especially on
-	// Raspberry Pi) from blocking SSE/MQTT broadcasts. The media API handles the
+	// separate independent action to prevent slow clip encoding (especially on
+	// Raspberry Pi) from blocking the SSE broadcast. The media API handles the
 	// race where a client requests audio before export completes, using server-side
 	// wait with retries and 503 + Retry-After responses.
 	//
 	// See: https://github.com/tphakala/birdnet-go/issues/1158 (race condition)
 	// See: https://github.com/tphakala/birdnet-go/issues/1748 (detection ID in MQTT)
-	var sequentialActions []Action
 	if databaseAction != nil {
-		sequentialActions = append(sequentialActions, databaseAction)
-	}
-	if sseAction != nil {
-		sequentialActions = append(sequentialActions, sseAction)
-	}
-	if mqttAction != nil {
-		sequentialActions = append(sequentialActions, mqttAction)
-	}
-
-	if len(sequentialActions) > 1 {
-		// Create composite action for sequential execution with shared context
-		compositeAction := &CompositeAction{
-			Actions:       sequentialActions,
-			Description:   "Database save, SSE broadcast, and MQTT publish (sequential)",
-			CorrelationID: det.CorrelationID,
+		sequentialActions := []Action{databaseAction}
+		if mqttAction != nil {
+			sequentialActions = append(sequentialActions, &enqueueAction{
+				action: mqttAction,
+				// No PCM data: a retrying MQTT job must not pin the audio.
+				detection: Detections{CorrelationID: det.CorrelationID, Result: det.Result},
+				enqueue:   p.EnqueueTaskCtx,
+			})
 		}
-		actions = append(actions, compositeAction)
-	} else if len(sequentialActions) == 1 {
-		// Only one action enabled, add it directly
-		actions = append(actions, sequentialActions[0])
+		if sseAction != nil {
+			sequentialActions = append(sequentialActions, sseAction)
+		}
+
+		if len(sequentialActions) > 1 {
+			actions = append(actions, &CompositeAction{
+				Actions:       sequentialActions,
+				Description:   "Database save, MQTT enqueue, and SSE broadcast (sequential)",
+				CorrelationID: det.CorrelationID,
+			})
+		} else {
+			actions = append(actions, databaseAction)
+		}
+	} else {
+		if sseAction != nil {
+			actions = append(actions, sseAction)
+		}
+		if mqttAction != nil {
+			actions = append(actions, mqttAction)
+		}
 	}
 
 	// Add SaveAudioAction if audio export is enabled.
 	// This runs as an INDEPENDENT action (not inside the CompositeAction) so that
-	// slow audio encoding does not block the Database -> SSE -> MQTT pipeline.
-	// On resource-constrained hardware (RPi with SD cards), FFmpeg encoding can
-	// take 10-30+ seconds, which previously caused CompositeAction 30s timeouts
+	// slow audio encoding does not block the Database -> SSE pipeline.
+	// On resource-constrained hardware (RPi with SD cards), clip export took
+	// 10-30+ seconds back when it ran on FFmpeg, which timed out the CompositeAction
 	// (Sentry BIRDNET-GO-WD), preventing SSE/MQTT from ever firing.
 	if settings.Realtime.Audio.Export.Enabled && databaseAction != nil {
-		actions = append(actions, p.buildSaveAudioAction(det, detectionCtx))
+		actions = append(actions, p.buildSaveAudioAction(det, detectionCtx, settings))
 	}
 
 	// Add BirdWeatherAction if enabled and client is initialized
@@ -2288,6 +2416,8 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 				pcmData:       det.pcmData3s,
 				RetryConfig:   bwRetryConfig,
 				CorrelationID: det.CorrelationID,
+				liveSettings:  p.currentSettings,
+				liveClient:    p.GetBwClient,
 			})
 		}
 	}
@@ -2311,7 +2441,11 @@ func (p *Processor) getDefaultActions(det *Detections) []Action {
 }
 
 // retryConfigFromSettings converts user-facing retry settings into a jobqueue RetryConfig.
+// Disabled settings yield a zero config, whatever retry counts the user left behind.
 func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
+	if !rs.Enabled {
+		return jobqueue.RetryConfig{Enabled: false}
+	}
 	return jobqueue.RetryConfig{
 		Enabled:      rs.Enabled,
 		MaxRetries:   rs.MaxRetries,
@@ -2321,14 +2455,14 @@ func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
 	}
 }
 
-// buildSaveAudioAction creates a SaveAudioAction for the given detection.
+// buildSaveAudioAction creates a SaveAudioAction for the given detection from the
+// given settings snapshot.
 // It reads PCM data from the capture buffer eagerly (while the data is still
 // available) and returns an action that will encode and write the audio file
-// when executed by the job queue. This decouples the slow FFmpeg encoding
-// from the fast Database -> SSE -> MQTT pipeline.
-func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext) *SaveAudioAction {
-	settings := p.currentSettings()
-
+// when executed by the job queue. This decouples the slower clip encoding
+// from the fast Database -> SSE pipeline. The action carries the planned
+// clip sample rate and, when the datastore can store one, a recorder to correct it.
+func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext, settings *conf.Settings) *SaveAudioAction {
 	// Derive the capture length and readiness time from the shared conf helper so this
 	// scheduler and the media API (which decides whether a not-yet-written clip is still
 	// legitimately pending) never compute the window differently. The two log lines are
@@ -2366,12 +2500,15 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	// missed on one branch is invisible until that branch is exercised.
 	base := func() *SaveAudioAction {
 		return &SaveAudioAction{
+			clipRates:        p.Repo,
+			plannedRate:      det.Result.ClipSampleRate,
 			Settings:         settings,
 			ClipName:         det.Result.ClipName,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
 			modelName:        det.Result.Model.Name,
 			modelVersion:     det.Result.Model.Version,
 			species:          strings.ToLower(det.Result.Species.CommonName),
+			clipTags:         newClipTagMeta(&det.Result),
 			NoteID:           det.Result.ID, // May be 0 here; updated after DB save via DetectionCtx
 			PreRenderer:      p.preRenderer,
 			DetectionCtx:     detectionCtx,
@@ -2808,17 +2945,7 @@ func (p *Processor) generateCorrelationID(speciesName string, timestamp time.Tim
 // generateRandomHex generates a random hexadecimal string of specified length
 func generateRandomHex(length int) string {
 	bytes := make([]byte, (length+1)/2) // Round up for odd lengths
-	_, err := rand.Read(bytes)
-	if err != nil {
-		// Fallback to timestamp-based randomness if crypto/rand fails
-		// Build a hex string of exactly the requested length
-		fallback := fmt.Sprintf("%016x", time.Now().UnixNano())
-		// Repeat the fallback string if needed to ensure we have enough length
-		for len(fallback) < length {
-			fallback += fmt.Sprintf("%016x", time.Now().UnixNano())
-		}
-		return fallback[:length]
-	}
+	rand.Read(bytes)
 
 	hex := fmt.Sprintf("%x", bytes)
 	if len(hex) > length {
@@ -2854,20 +2981,6 @@ func (p *Processor) initPreRenderer() {
 			GetLogger().Error("Invalid spectrogram size, disabling pre-rendering",
 				logger.String("size", size),
 				logger.Any("valid_sizes", validSizesList),
-				logger.String("operation", "prerenderer_init"))
-			return
-		}
-
-		// Validate Sox binary is configured and exists
-		if p.Settings.Realtime.Audio.SoxPath == "" {
-			GetLogger().Error("Sox binary not configured, disabling pre-rendering",
-				logger.String("operation", "prerenderer_init"))
-			return
-		}
-		if _, err := exec.LookPath(p.Settings.Realtime.Audio.SoxPath); err != nil {
-			GetLogger().Error("Sox binary not found, disabling pre-rendering",
-				logger.String("path", p.Settings.Realtime.Audio.SoxPath),
-				logger.Error(err),
 				logger.String("operation", "prerenderer_init"))
 			return
 		}

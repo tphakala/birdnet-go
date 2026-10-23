@@ -173,6 +173,42 @@ func TestNoteFromResult_CarriesRawLabel(t *testing.T) {
 	assert.Equal(t, "power_tool", note.RawLabel)
 }
 
+func TestNoteFromResult_CarriesModelContributions(t *testing.T) {
+	t.Parallel()
+
+	contribs := map[string]detection.ResultModelContrib{
+		"BirdNET_V2.4": {
+			Model:         detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
+			HitCount:      10,
+			MaxConfidence: 0.92,
+		},
+		"Perch_V2": {
+			Model:         detection.ModelInfo{Name: "Perch", Version: "2", Variant: "default"},
+			HitCount:      4,
+			MaxConfidence: 0.88,
+		},
+	}
+
+	result := detection.Result{
+		Timestamp: time.Date(2024, 6, 15, 14, 30, 45, 0, time.UTC),
+		Species: detection.Species{
+			ScientificName: "Poecile carolinensis",
+			CommonName:     "Carolina Chickadee",
+		},
+		ModelContributions: contribs,
+	}
+
+	note := datastore.NoteFromResult(&result)
+
+	require.Len(t, note.ModelContributions, 2)
+	assert.Equal(t, detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"}, note.ModelContributions["BirdNET_V2.4"].Model)
+	assert.Equal(t, 10, note.ModelContributions["BirdNET_V2.4"].HitCount)
+	assert.InDelta(t, 0.92, note.ModelContributions["BirdNET_V2.4"].MaxConfidence, 1e-9)
+	assert.Equal(t, detection.ModelInfo{Name: "Perch", Version: "2", Variant: "default"}, note.ModelContributions["Perch_V2"].Model)
+	assert.Equal(t, 4, note.ModelContributions["Perch_V2"].HitCount)
+	assert.InDelta(t, 0.88, note.ModelContributions["Perch_V2"].MaxConfidence, 1e-9)
+}
+
 func TestAdditionalResultsToDatastoreResults_CarriesRawLabel(t *testing.T) {
 	t.Parallel()
 
@@ -201,4 +237,18 @@ func TestAdditionalResultsToDatastoreResults_CarriesRawLabel(t *testing.T) {
 	require.Len(t, result, 2)
 	assert.Equal(t, "speech", result[0].RawLabel)
 	assert.Equal(t, "male_speech_and_man_speaking", result[1].RawLabel)
+}
+
+func TestAdditionalResultsToDatastoreResults_PerchSoundClass(t *testing.T) {
+	input := []detection.AdditionalResult{{
+		Species:    detection.ParseSpeciesString("Domestic_animals_and_pets"),
+		Confidence: 0.5,
+		RawLabel:   "Domestic_animals_and_pets",
+	}}
+
+	got := datastore.AdditionalResultsToDatastoreResults(input)
+
+	require.Len(t, got, 1)
+	assert.Equal(t, "Domestic_animals_and_pets", got[0].Species)
+	assert.Equal(t, "Domestic_animals_and_pets", detection.ExtractScientificName(got[0].Species))
 }

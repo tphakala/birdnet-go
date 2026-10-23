@@ -74,6 +74,7 @@
     spectrogramOnly?: boolean; // audio removed by retention, spectrogram image kept
     source?: string;
     modelType?: string;
+    clipSampleRate?: number; // Hz; omitted when the server does not know it yet
   }
 
   interface AudioSourceOption {
@@ -231,6 +232,7 @@
   let selectedSpeciesName = $state('');
   let selectedDetectionId = $state<string | undefined>(undefined);
   let selectedModelType = $state('');
+  let selectedClipSampleRate = $state<number | undefined>(undefined);
 
   function openMobilePlayer(result: SearchResult) {
     if (!result?.id) return;
@@ -238,6 +240,7 @@
     selectedSpeciesName = localizeSpeciesName(result.scientificName, result.commonName);
     selectedDetectionId = result.id;
     selectedModelType = result.modelType ?? '';
+    selectedClipSampleRate = result.clipSampleRate;
     showMobilePlayer = true;
   }
 
@@ -247,6 +250,7 @@
     selectedSpeciesName = '';
     selectedDetectionId = undefined;
     selectedModelType = '';
+    selectedClipSampleRate = undefined;
   }
 
   // Form validation
@@ -1151,6 +1155,7 @@
                                 enableClipExtraction={clipExtractionEnabled}
                                 clipLabel={`${result.commonName}_${result.timestamp.replace(/[: ]/g, '-')}`}
                                 modelType={result.modelType}
+                                clipSampleRate={result.clipSampleRate}
                               />
                             </div>
                           {:else if result.spectrogramOnly}
@@ -1341,6 +1346,7 @@
                 speciesName={selectedSpeciesName}
                 detectionId={selectedDetectionId}
                 modelType={selectedModelType}
+                clipSampleRate={selectedClipSampleRate}
                 onClose={closeMobilePlayer}
               />
             </div>
@@ -1423,13 +1429,13 @@
   }
 
   .status-badge.correct {
-    background-color: #10b981;
-    color: white;
+    background-color: var(--color-success);
+    color: var(--color-success-content);
   }
 
   .status-badge.false {
-    background-color: #ef4444;
-    color: white;
+    background-color: var(--color-error);
+    color: var(--color-error-content);
   }
 
   .status-badge.unverified {
@@ -1438,8 +1444,8 @@
   }
 
   .status-badge.locked {
-    background-color: #f59e0b;
-    color: white;
+    background-color: var(--color-warning);
+    color: var(--color-warning-content);
   }
 
   .expanded-row td {
@@ -1541,6 +1547,6 @@
 
   .review-dropdown-item.false-positive:hover {
     background-color: color-mix(in srgb, var(--color-error) 15%, transparent);
-    color: var(--color-error);
+    color: var(--text-error);
   }
 </style>

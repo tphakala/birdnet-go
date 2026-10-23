@@ -44,7 +44,7 @@ func (a *SecurityAdapter) CheckAccess(c echo.Context) error {
 
 // IsAuthRequired checks if authentication is required for this request
 func (a *SecurityAdapter) IsAuthRequired(c echo.Context) bool {
-	return a.OAuth2Server.IsAuthenticationEnabled(c.RealIP())
+	return a.OAuth2Server.IsAuthenticationEnabled(c.Request())
 }
 
 // GetUsername retrieves the username of the authenticated user (if available)
@@ -103,7 +103,7 @@ func (a *SecurityAdapter) GetAuthMethod(c echo.Context) AuthMethod {
 	}
 
 	// 2. Check subnet bypass (if context wasn't set or middleware didn't handle)
-	if a.OAuth2Server.IsRequestFromAllowedSubnet(c.RealIP()) {
+	if a.OAuth2Server.IsRequestFromAllowedSubnet(c.Request()) {
 		return AuthMethodLocalSubnet // Changed from AuthMethodUnknown
 	}
 
@@ -193,7 +193,7 @@ func (a *SecurityAdapter) AuthenticateBasic(c echo.Context, username, password s
 		return "", a.handleAuthFailure(userMatch, username)
 	}
 
-	return a.generateAuthCodeOnSuccess(username)
+	return a.generateAuthCodeOnSuccess(username), nil
 }
 
 // validateBasicAuthEnabled checks if basic auth is enabled. The enabled flag is
@@ -249,22 +249,14 @@ func (a *SecurityAdapter) handleAuthFailure(userMatch bool, username string) err
 }
 
 // generateAuthCodeOnSuccess generates an auth code after successful authentication.
-func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) (string, error) {
+func (a *SecurityAdapter) generateAuthCodeOnSuccess(username string) string {
 	log := a.log()
 	log.Info("Credentials validated successfully", logger.Username(username))
 
-	authCode, err := a.OAuth2Server.GenerateAuthCode()
-	if err != nil {
-		log.Error("Failed to generate auth code during basic auth",
-			logger.Username(username),
-			logger.Error(err))
-		return "", ErrAuthCodeGeneration
-	}
+	authCode := a.OAuth2Server.GenerateAuthCode()
 
-	log.Info("Basic authentication successful",
-		logger.Username(username),
-		logger.Bool("auth_code_generated", authCode != ""))
-	return authCode, nil
+	log.Info("Basic authentication successful", logger.Username(username))
+	return authCode
 }
 
 // Logout invalidates the current session/token

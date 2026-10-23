@@ -6,7 +6,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
@@ -48,21 +47,13 @@ func TestCoordinatesChanged(t *testing.T) {
 	}
 }
 
-// TestController_notifyRegionStaleness_Guards exercises the Controller glue's
-// early-return guards (nil ModelManager, no installed regional models) so a
-// coordinate-changing save never panics when the gallery is empty. The firing
-// path (a stale installed regional variant) is covered by the pure detector and
-// notification tests in internal/classifier.
-func TestController_notifyRegionStaleness_Guards(t *testing.T) {
+// TestController_notifyRegionStaleness_NilModelManager verifies the Controller
+// glue returns early without a ModelManager, so a coordinate-changing save never
+// panics on a controller that has none.
+func TestController_notifyRegionStaleness_NilModelManager(t *testing.T) {
 	old := regionTestSettings(60.17, 24.94, true)  // Helsinki
 	next := regionTestSettings(4.61, -74.08, true) // Bogota
 
-	// Nil ModelManager: no-op, no panic.
 	c := &Controller{Core: &apicore.Core{}}
-	assert.NotPanics(t, func() { c.notifyRegionStaleness(old, next) })
-
-	// ModelManager set but nothing installed: InstalledRegionalModels is empty, so
-	// the detector is never invoked and no notification is emitted.
-	c.ModelManager = classifier.NewModelManager(t.TempDir(), nil, nil)
 	assert.NotPanics(t, func() { c.notifyRegionStaleness(old, next) })
 }

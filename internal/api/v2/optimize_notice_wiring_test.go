@@ -13,7 +13,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/testutil"
-	"go.uber.org/goleak"
 )
 
 // TestOptimizeNoticeInputsChanged covers the settings gate that re-evaluates the
@@ -120,9 +119,7 @@ func (r *recordingScheduler) counts() (schedules, stops int) {
 // the topology hook, the settings hook and Shutdown drive it: a recorder swapped
 // into the slot counts each call.
 func TestOptimizeNoticeWiring(t *testing.T) {
-	testutil.VerifyNoLeaks(t,
-		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	unrouted := newOptimizeWiringController(t, false)
 	assert.Nil(t, unrouted.optimizeNotices.Load(), "no background evaluation without routes (tests)")

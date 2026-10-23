@@ -1,20 +1,18 @@
 // Package ffmpeg provides utilities for working with the FFmpeg binary,
-// including path validation, audio format helpers, and duration queries.
+// including path validation and audio format helpers.
 package ffmpeg
 
 import (
-	"bytes"
-	"context"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
-	"strings"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// osWindows is runtime.GOOS on Windows, where the ffprobe binary carries a .exe
+// suffix (see getFfprobeBinaryName).
+const osWindows = "windows"
 
 // ValidateFFmpegPath checks if the FFmpeg path is valid for execution.
 // It rejects empty paths, relative paths, and paths that appear to be
@@ -51,45 +49,6 @@ func ValidateFFmpegPath(ffmpegPath string) error {
 			Category(errors.CategoryValidation).
 			Context("operation", "validate_ffmpeg_path").
 			Context("path", safeFFmpegPath).
-			Build()
-	}
-
-	return nil
-}
-
-// ValidateSoxPath checks if the Sox path is valid for execution.
-// It rejects empty paths, relative paths, and paths that appear to be
-// HTTP/proxy URL prefixes rather than filesystem paths (e.g., ingress path contamination).
-func ValidateSoxPath(soxPath string) error {
-	if soxPath == "" {
-		return errors.Newf("Sox is not available").
-			Component("audiocore").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sox_path").
-			Build()
-	}
-
-	safeSoxPath := conf.RedactToolPath(soxPath)
-
-	if !filepath.IsAbs(soxPath) {
-		return errors.Newf("Sox path must be absolute, got: %s", safeSoxPath).
-			Component("audiocore").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sox_path").
-			Context("path", safeSoxPath).
-			Build()
-	}
-
-	// Reject paths contaminated by HTTP proxy/ingress prefixes.
-	// A valid Sox binary path should be a clean filesystem path,
-	// not contain URL-like segments such as "/api/", "/ingress/", "/proxy/",
-	// or "/hassio/". Shares the canonical check with config-time validation.
-	if conf.IsContaminatedToolPath(soxPath) {
-		return errors.Newf("Sox path appears contaminated by proxy/ingress prefix: %s", safeSoxPath).
-			Component("audiocore").
-			Category(errors.CategoryValidation).
-			Context("operation", "validate_sox_path").
-			Context("path", safeSoxPath).
 			Build()
 	}
 
@@ -133,122 +92,4 @@ func GetFFmpegFormat(sampleRate, numChannels, bitDepth int) (sampleRateStr, chan
 	}
 
 	return
-}
-
-// getSoxBinaryName returns the platform-appropriate sox binary name.
-func getSoxBinaryName() string {
-	if runtime.GOOS == osWindows {
-		return "sox.exe"
-	}
-
-	return "sox"
-}
-
-// GetAudioDuration uses sox --info -D to get the duration of an audio file in seconds.
-// This is approximately 30x faster than ffprobe for duration queries.
-// Returns the duration in seconds as a float64, or an error if sox fails.
-// The context allows for cancellation and timeout to prevent hanging.
-// If ctx is nil, a 5-second timeout is applied automatically.
-func GetAudioDuration(ctx context.Context, audioPath string) (float64, error) {
-	if audioPath == "" {
-		return 0, errors.Newf("audio path cannot be empty").
-			Component("audiocore").
-			Category(errors.CategoryValidation).
-			Context("operation", "get_audio_duration").
-			Build()
-	}
-
-	// Track the actual timeout/deadline for accurate error messages.
-	var timeoutDuration time.Duration
-
-	if ctx == nil {
-		var cancel context.CancelFunc
-		timeoutDuration = 5 * time.Second
-		ctx, cancel = context.WithTimeout(context.Background(), timeoutDuration)
-		defer cancel()
-	} else if deadline, ok := ctx.Deadline(); ok {
-		timeoutDuration = time.Until(deadline)
-	}
-
-	soxBinary := getSoxBinaryName()
-
-	// --info -D: output only duration in seconds.
-	cmd := exec.CommandContext(ctx, soxBinary, "--info", "-D", audioPath) //nolint:gosec // G204: soxBinary is a fixed platform constant, audioPath validated by caller
-
-	var out bytes.Buffer
-	var stderr bytes.Buffer
-	cmd.Stdout = &out
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		if ctx.Err() != nil {
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-				if timeoutDuration > 0 {
-					return 0, errors.Newf("sox --info timed out after %v for file %s: %w", timeoutDuration, audioPath, ctx.Err()).
-						Component("audiocore").
-						Category(errors.CategoryAudio).
-						Context("operation", "get_audio_duration").
-						Context("path", audioPath).
-						Build()
-				}
-
-				return 0, errors.Newf("sox --info timed out for file %s: %w", audioPath, ctx.Err()).
-					Component("audiocore").
-					Category(errors.CategoryAudio).
-					Context("operation", "get_audio_duration").
-					Context("path", audioPath).
-					Build()
-			}
-
-			return 0, errors.Newf("sox --info canceled: %w", ctx.Err()).
-				Component("audiocore").
-				Category(errors.CategoryAudio).
-				Context("operation", "get_audio_duration").
-				Context("path", audioPath).
-				Build()
-		}
-
-		errMsg := stderr.String()
-		if errMsg == "" {
-			errMsg = err.Error()
-		}
-
-		return 0, errors.Newf("sox --info failed: %s", errMsg).
-			Component("audiocore").
-			Category(errors.CategoryAudio).
-			Context("operation", "get_audio_duration").
-			Context("path", audioPath).
-			Build()
-	}
-
-	durationStr := strings.TrimSpace(out.String())
-	if durationStr == "" {
-		return 0, errors.Newf("sox --info could not determine duration for file: %s", audioPath).
-			Component("audiocore").
-			Category(errors.CategoryAudio).
-			Context("operation", "get_audio_duration").
-			Context("path", audioPath).
-			Build()
-	}
-
-	duration, err := strconv.ParseFloat(durationStr, 64)
-	if err != nil {
-		return 0, errors.Newf("failed to parse duration '%s': %w", durationStr, err).
-			Component("audiocore").
-			Category(errors.CategoryAudio).
-			Context("operation", "get_audio_duration").
-			Context("path", audioPath).
-			Build()
-	}
-
-	if duration <= 0 {
-		return 0, errors.Newf("invalid duration %f for file: %s", duration, audioPath).
-			Component("audiocore").
-			Category(errors.CategoryAudio).
-			Context("operation", "get_audio_duration").
-			Context("path", audioPath).
-			Build()
-	}
-
-	return duration, nil
 }

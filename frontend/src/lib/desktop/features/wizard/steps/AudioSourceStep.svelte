@@ -7,9 +7,11 @@
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { Mic, Video } from '@lucide/svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
+  import RadioCardGroup from '$lib/desktop/components/ui/RadioCardGroup.svelte';
+  import type { RadioCardOption } from '$lib/desktop/components/ui/RadioCardGroup.types';
   import SettingsNote from '$lib/desktop/features/settings/components/SettingsNote.svelte';
   import type { WizardStepProps } from '../types';
-  import { SECONDARY_BUTTON_CLASS } from '../styles';
   import { getLogger } from '$lib/utils/logger';
   import type { SettingsSectionPayloads } from '$lib/utils/settingsApi';
   import { generateId } from '$lib/utils/uuid';
@@ -17,7 +19,6 @@
   import {
     findDevice,
     initialAudioChoice,
-    isMalformedRtspUrl,
     isRtspUrl,
     soundCardPayloads,
     streamPayloads,
@@ -107,10 +108,15 @@
     if (rtspUrl.trim() === '') return 'wizard.steps.audioSource.reasons.enterUrl';
     return isRtspUrl(rtspUrl) ? undefined : 'wizard.steps.audioSource.reasons.urlScheme';
   });
-  // Set when the user leaves the URL field and on open for a saved URL; cleared by
-  // every edit. Display only: Next's reason does not depend on it.
-  let urlLeft = $state(initial.primaryStreamUrl !== null);
-  let showUrlError = $derived(urlLeft && sourceType === 'rtsp' && isMalformedRtspUrl(rtspUrl));
+  // Primitives, so the effect below runs only when one of them changes
+  let valid = $derived(skipped || incompleteReason === undefined);
+  let reason = $derived(skipped ? undefined : incompleteReason);
+  // Set when the user leaves the URL field and on open for a saved non-empty URL;
+  // cleared by every edit. Display only: Next's reason does not depend on it.
+  let urlLeft = $state((initial.primaryStreamUrl ?? '').trim() !== '');
+  // Once the field is left, the error names the reason Next shows, and it stays
+  // hidden while Set up later is chosen, when reason is undefined
+  let showUrlError = $derived(urlLeft && sourceType === 'rtsp' && reason !== undefined);
   // The URL input is described by its help, the error while it shows, and the note
   // that sound cards stop once a stream is chosen over a saved sound card
   let urlDescribedBy = $derived(
@@ -122,9 +128,6 @@
       .filter(Boolean)
       .join(' ')
   );
-  // Primitives, so the effect below runs only when one of them changes
-  let valid = $derived(skipped || incompleteReason === undefined);
-  let reason = $derived(skipped ? undefined : incompleteReason);
 
   $effect(() => {
     // Read validity (tracked), but untrack the callback to avoid re-run if parent recreates it
@@ -208,6 +211,11 @@
     markEdited();
   }
 
+  let sourceOptions = $derived<RadioCardOption<AudioSourceType>[]>([
+    { value: 'soundcard', label: t('wizard.steps.audioSource.soundcard'), icon: Mic },
+    { value: 'rtsp', label: t('wizard.steps.audioSource.rtspStream'), icon: Video },
+  ]);
+
   function setDevice(value: string | string[]) {
     if (typeof value === 'string') {
       selectedDevice = value;
@@ -237,8 +245,8 @@
   // differs. Each choice writes the new source first and removes the old one
   // last, so a failure in between never leaves the station without a source. A
   // commit that has started is not abandoned when the wizard closes (Skip); if
-  // its second write then fails, the old source stays enabled and the error is
-  // only logged.
+  // its second write then fails, the old source stays enabled and the wizard
+  // reports the failure in an error toast that points to Settings > Audio.
   async function commit(): Promise<void> {
     if (!dirty || skipped || incompleteReason !== undefined) return;
     const realtime = storedRealtime();
@@ -273,47 +281,13 @@
     <span class="mb-2 block text-sm font-medium text-[var(--color-base-content)]">
       {t('wizard.steps.audioSource.sourceTypeLabel')}
     </span>
-    <div
-      class="grid grid-cols-2 gap-3"
-      role="radiogroup"
+    <RadioCardGroup
+      options={sourceOptions}
+      value={sourceType}
+      onChange={setSourceType}
+      columns={2}
       aria-label={t('wizard.steps.audioSource.sourceTypeLabel')}
-    >
-      <button
-        type="button"
-        role="radio"
-        aria-checked={sourceType === 'soundcard'}
-        class="flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-colors {sourceType ===
-        'soundcard'
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-          : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-        onclick={() => setSourceType('soundcard')}
-      >
-        <Mic class="size-5 shrink-0 text-[var(--color-base-content)]" />
-        <span class="text-sm font-medium text-[var(--color-base-content)]">
-          {t('wizard.steps.audioSource.soundcard')}
-        </span>
-      </button>
-
-      <button
-        type="button"
-        role="radio"
-        aria-checked={sourceType === 'rtsp'}
-        class="flex items-center gap-3 rounded-lg border-2 p-3 text-left transition-colors {sourceType ===
-        'rtsp'
-          ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-          : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-        onclick={() => setSourceType('rtsp')}
-      >
-        <Video
-          class="size-5 shrink-0 {sourceType === 'rtsp'
-            ? 'text-[var(--color-primary)]'
-            : 'text-[var(--color-base-content)] opacity-70'}"
-        />
-        <span class="text-sm font-medium text-[var(--color-base-content)]">
-          {t('wizard.steps.audioSource.rtspStream')}
-        </span>
-      </button>
-    </div>
+    />
   </div>
 
   {#if sourceType === 'soundcard'}
@@ -342,21 +316,17 @@
               <p>{t(DEVICE_NOTICES.empty.text)}</p>
             {/if}
             <div class="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                class={SECONDARY_BUTTON_CLASS}
-                bind:this={retryButtonRef}
+              <Button
+                variant="default"
+                size="md"
+                bind:ref={retryButtonRef}
                 onclick={() => void retryDevices()}
               >
                 {t('common.retry')}
-              </button>
-              <button
-                type="button"
-                class={SECONDARY_BUTTON_CLASS}
-                onclick={() => void switchToStream()}
-              >
+              </Button>
+              <Button variant="default" size="md" onclick={() => void switchToStream()}>
                 {t('wizard.steps.audioSource.useStreamInstead')}
-              </button>
+              </Button>
             </div>
           </SettingsNote>
         {/if}
@@ -403,7 +373,7 @@
            a longer one would still grow the line): the alert is announced when it fills,
            and showing it does not move the controls below -->
       <p id={URL_ERROR_ID} role="alert" class="mt-1 min-h-10 text-sm text-[var(--text-error)]">
-        {showUrlError ? t('wizard.steps.audioSource.reasons.urlScheme') : ''}
+        {showUrlError && reason ? t(reason) : ''}
       </p>
       {#if initial.savedDevice !== ''}
         <SettingsNote className="mt-3">
@@ -426,13 +396,14 @@
     <span role="status" class="sr-only">
       {skipped ? t('wizard.steps.audioSource.setUpLaterChosen') : ''}
     </span>
-    <button
-      type="button"
-      class="{SECONDARY_BUTTON_CLASS} shrink-0 {skipped ? 'border-[var(--color-primary)]' : ''}"
+    <Button
+      variant="default"
+      size="md"
+      className="shrink-0 aria-pressed:border-[var(--color-primary)]"
       aria-pressed={skipped}
       onclick={() => (skipped = true)}
     >
       {t('wizard.steps.audioSource.setUpLater')}
-    </button>
+    </Button>
   </div>
 </div>

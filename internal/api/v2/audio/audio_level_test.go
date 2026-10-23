@@ -3,7 +3,6 @@
 package audio
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -12,59 +11,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 )
-
-// TestAudioLevelSSEDataFormat tests the AudioLevelSSEData struct marshaling
-func TestAudioLevelSSEDataFormat(t *testing.T) {
-	t.Run("empty levels map", func(t *testing.T) {
-		data := AudioLevelSSEData{
-			Type:   "audio-level",
-			Levels: make(map[string]audiocore.AudioLevelData),
-		}
-
-		assert.Equal(t, "audio-level", data.Type)
-		assert.Empty(t, data.Levels)
-	})
-
-	t.Run("single source", func(t *testing.T) {
-		data := AudioLevelSSEData{
-			Type: "audio-level",
-			Levels: map[string]audiocore.AudioLevelData{
-				"source1": {
-					Level:  45,
-					Name:   "Test Source",
-					Source: "source1",
-				},
-			},
-		}
-
-		assert.Equal(t, "audio-level", data.Type)
-		assert.Len(t, data.Levels, 1)
-		assert.Equal(t, 45, data.Levels["source1"].Level)
-		assert.Equal(t, "Test Source", data.Levels["source1"].Name)
-	})
-
-	t.Run("multiple sources", func(t *testing.T) {
-		data := AudioLevelSSEData{
-			Type: "audio-level",
-			Levels: map[string]audiocore.AudioLevelData{
-				"audio_card_1": {
-					Level:  50,
-					Name:   "Audio Card",
-					Source: "audio_card_1",
-				},
-				"rtsp_camera1": {
-					Level:  75,
-					Name:   "Camera 1",
-					Source: "rtsp_camera1",
-				},
-			},
-		}
-
-		assert.Len(t, data.Levels, 2)
-		assert.Equal(t, 50, data.Levels["audio_card_1"].Level)
-		assert.Equal(t, 75, data.Levels["rtsp_camera1"].Level)
-	})
-}
 
 // TestIsSourceInactive tests the source inactivity detection logic
 func TestIsSourceInactive(t *testing.T) {
@@ -201,31 +147,5 @@ func TestGetAnonymizedSourceNameFallback(t *testing.T) {
 	t.Run("unknown source", func(t *testing.T) {
 		name := controller.getAnonymizedSourceNameFallback("unknown_source")
 		assert.Equal(t, "unknown-source", name)
-	})
-}
-
-// TestAudioLevelManagerConcurrency tests concurrent access to the audio level manager
-func TestAudioLevelManagerConcurrency(t *testing.T) {
-	t.Run("concurrent connection tracking", func(t *testing.T) {
-		// Simulate concurrent connection attempts using unique IPs
-		const numGoroutines = 10
-		done := make(chan bool, numGoroutines)
-
-		for i := range numGoroutines {
-			go func(id int) {
-				// Use unique IP for each goroutine to avoid conflicts
-				clientIP := fmt.Sprintf("test-%s-%d", time.Now().String(), id)
-				_, loaded := audioLevelMgr.activeConnections.LoadOrStore(clientIP, time.Now())
-				if !loaded {
-					audioLevelMgr.activeConnections.Delete(clientIP)
-				}
-				done <- true
-			}(i)
-		}
-
-		// Wait for all goroutines
-		for range numGoroutines {
-			<-done
-		}
 	})
 }

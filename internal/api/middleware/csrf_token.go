@@ -32,12 +32,10 @@ func setCSRFCookie(ctx echo.Context, token string) {
 
 // GenerateCSRFToken creates a cryptographically secure CSRF token.
 // Returns a base64-encoded random token suitable for use as a CSRF token.
-func GenerateCSRFToken() (string, error) {
+func GenerateCSRFToken() string {
 	bytes := make([]byte, csrfTokenLength)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(bytes), nil
+	rand.Read(bytes)
+	return base64.StdEncoding.EncodeToString(bytes)
 }
 
 // EnsureCSRFToken checks if a CSRF token exists in context/cookie,
@@ -54,14 +52,14 @@ func GenerateCSRFToken() (string, error) {
 //  1. Use token from Echo context (set by CSRF middleware)
 //  2. Use token from existing CSRF cookie
 //  3. Generate a new token and set the cookie
-func EnsureCSRFToken(ctx echo.Context) (string, error) {
+func EnsureCSRFToken(ctx echo.Context) string {
 	// First, check if middleware already set a real token. Echo v4.15 stores the
 	// sentinel middleware.CSRFUsingSecFetchSite in this key when it accepts a
 	// request via Sec-Fetch-Site without minting a token. NewCSRF strips that
 	// header so the sentinel should never reach here, but guard against handing it
 	// to the SPA as if it were a usable token (GHSA-9fhj-f35q-w532).
 	if token, ok := ctx.Get(CSRFContextKey).(string); ok && token != "" && token != middleware.CSRFUsingSecFetchSite {
-		return token, nil
+		return token
 	}
 
 	// Check if there's an existing cookie we can use
@@ -76,14 +74,11 @@ func EnsureCSRFToken(ctx echo.Context) (string, error) {
 		GetLogger().Debug("CSRF cookie expiration refreshed",
 			logger.String("source", "EnsureCSRFToken"))
 
-		return cookie.Value, nil
+		return cookie.Value
 	}
 
 	// Generate a new token
-	token, err := GenerateCSRFToken()
-	if err != nil {
-		return "", err
-	}
+	token := GenerateCSRFToken()
 
 	// Set the cookie and context
 	setCSRFCookie(ctx, token)
@@ -93,5 +88,5 @@ func EnsureCSRFToken(ctx echo.Context) (string, error) {
 		logger.String("source", "EnsureCSRFToken"),
 		logger.Bool("secure_cookie", IsSecureRequest(ctx.Request())))
 
-	return token, nil
+	return token
 }

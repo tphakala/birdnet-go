@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	aacpcm "github.com/tphakala/go-aac/pcm"
+	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 	audiostream "github.com/tphakala/go-audio-stream"
 	mp3 "github.com/tphakala/go-mp3"
 	"github.com/tphakala/go-opus/opus"
@@ -159,21 +160,6 @@ func TestPassthroughDecoder_returnsInputAndGeometry(t *testing.T) {
 	assert.Equal(t, 1, ch)
 }
 
-func TestFloat32ToS16LE_scalesRoundsAndClamps(t *testing.T) {
-	dst := make([]byte, 4*2)
-	float32ToS16LE(dst, []float32{0, 1.0, -1.0, 2.0})
-	got := []int16{
-		int16(binary.LittleEndian.Uint16(dst[0:])),
-		int16(binary.LittleEndian.Uint16(dst[2:])),
-		int16(binary.LittleEndian.Uint16(dst[4:])),
-		int16(binary.LittleEndian.Uint16(dst[6:])),
-	}
-	assert.Equal(t, int16(0), got[0], "silence")
-	assert.Equal(t, int16(32767), got[1], "full-scale positive")
-	assert.Equal(t, int16(-32767), got[2], "full-scale negative")
-	assert.Equal(t, int16(32767), got[3], "clamps above +1.0")
-}
-
 // TestOpusDecodeRoundTrip encodes a mono 48 kHz tone with go-opus and decodes it
 // back through the stream's opusFrameDecoder, asserting geometry and that the
 // tone survives. Standalone (no MediaMTX); complements the integration-tagged
@@ -234,6 +220,42 @@ func TestMP3DecodeRoundTrip(t *testing.T) {
 	assert.Equal(t, rate, gotRate)
 	assert.Equal(t, ch, gotCh)
 	assert.Positive(t, energy, "decoded mp3 must carry the tone after priming")
+}
+
+// TestMP3FrameDecoder_EncodesWithPCMPackage pins the float32 to s16le encoding of
+// the MP3 path: an independent go-mp3 decoder runs the same frames and its
+// float32 output is encoded with go-audio-dsp pcm (x32768, round half to even,
+// saturating). The stream decoder's bytes must equal that, frame by frame.
+func TestMP3FrameDecoder_EncodesWithPCMPackage(t *testing.T) {
+	t.Parallel()
+	const rate, ch, frame = 48000, 1, 1152 // MPEG-1 samples per frame
+
+	enc, err := mp3.NewEncoder(mp3.EncoderConfig{SampleRate: rate, Channels: ch, Bitrate: 128000})
+	require.NoError(t, err)
+	dec := newMP3FrameDecoder()
+	ref := mp3.NewDecoder()
+	refF32 := make([]float32, mp3MaxInterleaved)
+
+	checked := 0
+	for f := range 12 {
+		mp3Frame, encErr := enc.EncodeFrame(nil, [][]float32{toneFloat32(frame, rate, 440, f*frame)})
+		require.NoError(t, encErr)
+		if len(mp3Frame) == 0 {
+			continue
+		}
+		got, _, _, decErr := dec.decodeFrame(mp3Frame)
+		require.NoError(t, decErr)
+
+		n, _, refErr := ref.DecodeFrame(mp3Frame, refF32)
+		require.NoError(t, refErr)
+		want := make([]byte, n*2)
+		_, encErr = dsppcm.Float32ToBytes(want, refF32[:n])
+		require.NoError(t, encErr)
+
+		assert.True(t, bytes.Equal(want, got), "frame %d: stream decoder bytes differ from pcm.Float32ToBytes", f)
+		checked += n
+	}
+	assert.Positive(t, checked, "at least one frame must decode samples")
 }
 
 // TestAACDecodeRoundTrip encodes a mono 48 kHz tone to an AAC-LC ADTS stream with

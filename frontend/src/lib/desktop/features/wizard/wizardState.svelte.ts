@@ -1,6 +1,7 @@
 import { api, ApiError } from '$lib/utils/api';
 import { loggers } from '$lib/utils/logger';
-import type { TranslationKey } from '$lib/i18n';
+import { t, type TranslationKey } from '$lib/i18n';
+import { toastActions } from '$lib/stores/toast';
 import type {
   StepLeaveHandler,
   StepStatus,
@@ -49,6 +50,7 @@ let session = 0;
 
 const SAVE_FAILED_KEY: TranslationKey = 'wizard.errors.saveFailed';
 const SAVE_REJECTED_KEY: TranslationKey = 'wizard.errors.saveRejected';
+const SAVE_UNFINISHED_KEY: TranslationKey = 'wizard.errors.saveUnfinished';
 const HTTP_STATUS_BAD_REQUEST = 400;
 const HTTP_STATUS_UNPROCESSABLE = 422;
 
@@ -211,14 +213,30 @@ function setStepValid(
   }
 }
 
+/**
+ * Tells the user that a step save which was still running when the wizard closed
+ * failed. The step is gone by then, so the failure is shown in a toast that stays
+ * until dismissed (a null duration), with the message of the step that started
+ * the save, or the generic one.
+ */
+function reportUnfinishedSave(step: WizardStep | null): void {
+  const key =
+    step?.type === 'component' && step.unfinishedSaveKey
+      ? step.unfinishedSaveKey
+      : SAVE_UNFINISHED_KEY;
+  toastActions.error(t(key), { duration: null });
+}
+
 // Runs the current step's leave handler, then move() if the wizard is still on
 // the same session and step. isSaving is set before the first await so a second
 // click in the same tick is refused; it stays true until move() runs, and move()
-// clears it in the same synchronous block that moves the step. A result that
-// belongs to another session or step never touches state.
+// clears it in the same synchronous block that moves the step. A failure that
+// belongs to another session or step is reported in a toast, for the step that
+// started the save, and never touches state.
 async function runLeave(move: () => void): Promise<void> {
   const startSession = session;
   const startIndex = currentStepIndex;
+  const startStep = currentStep;
   isSaving = true;
   stepError = null;
   const isStale = () => startSession !== session || startIndex !== currentStepIndex;
@@ -226,7 +244,9 @@ async function runLeave(move: () => void): Promise<void> {
     await leaveHandler?.();
   } catch (err) {
     loggers.ui.error('Wizard step save failed', err);
-    if (!isStale()) {
+    if (isStale()) {
+      reportUnfinishedSave(startStep);
+    } else {
       stepError = saveErrorKey(err);
       isSaving = false;
     }

@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import { screen } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 import type { Component } from 'svelte';
 import type { SettingsFormData } from '$lib/stores/settings';
@@ -79,3 +80,6 @@ export function createSettingsMock(formData: unknown) {
     },
   };
 }
+
+/** The step's option card with the given accessible name. */
+export const radio = (name: RegExp) => screen.getByRole('radio', { name });

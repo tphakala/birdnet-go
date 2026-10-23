@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/svelte';
+import userEvent from '@testing-library/user-event';
 import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 import { deferred } from '../../../../../test/async-helpers';
 
@@ -25,7 +26,7 @@ import AudioSourceStep from './AudioSourceStep.svelte';
 import { settingsActions, settingsStore } from '$lib/stores/settings';
 import type { SettingsFormData } from '$lib/stores/settings';
 import { api, ApiError } from '$lib/utils/api';
-import { flushAsync, renderStep } from './stepTestUtils';
+import { flushAsync, radio, renderStep } from './stepTestUtils';
 import { renderTyped } from '../../../../../test/render-helpers';
 
 const RTSP_URL = 'rtsp://camera.example/stream';
@@ -44,8 +45,6 @@ function seed(audio: Record<string, unknown>, streams: unknown[] = []) {
     formData: { realtime } as unknown as SettingsFormData,
   }));
 }
-
-const radio = (name: RegExp) => screen.getByRole('radio', { name });
 
 const urlInput = () => screen.getByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
 const urlAlert = () => screen.getByRole('alert');
@@ -268,6 +267,53 @@ describe('AudioSourceStep - leave handler', () => {
     expect(settingsActions.saveSection).not.toHaveBeenCalled();
   });
 
+  it('Set up later carries the pressed border variant and toggles aria-pressed', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    const button = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+    // The border is a CSS variant keyed on aria-pressed, so the attribute is what switches it
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+
+    await fireEvent.click(button);
+
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+    expect(button).toHaveClass('aria-pressed:border-[var(--color-primary)]');
+  });
+
+  it('arrow keys switch the source type and the leave handler saves the stream', async () => {
+    const { leave } = renderStep(AudioSourceStep);
+    await flushAsync();
+    const user = userEvent.setup();
+    radio(/wizard\.steps\.audioSource\.soundcard/).focus();
+
+    await user.keyboard('{ArrowRight}');
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(radio(/wizard\.steps\.audioSource\.rtspStream/))
+    );
+    expect(radio(/wizard\.steps\.audioSource\.rtspStream/)).toHaveAttribute('aria-checked', 'true');
+    await typeUrl(RTSP_URL);
+
+    await leave();
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual([
+      'rtsp',
+      'audio',
+    ]);
+  });
+
+  it('clicking the checked source type after set up later clears it', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    const button = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+    await fireEvent.click(button);
+    expect(button).toHaveAttribute('aria-pressed', 'true');
+
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
+
+    expect(button).toHaveAttribute('aria-pressed', 'false');
+  });
+
   it('set up later after an edit discards the edit and sends nothing', async () => {
     const { leave } = renderStep(AudioSourceStep);
     await flushAsync();
@@ -385,6 +431,32 @@ describe('AudioSourceStep - leave handler', () => {
     expect(await failure).toEqual(new Error('save rtsp failed'));
 
     expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual(['rtsp']);
+  });
+
+  it('rejects when the second write fails after unmount, so the wizard can report it', async () => {
+    const secondSave = deferred();
+    vi.mocked(settingsActions.saveSection).mockImplementation(section =>
+      section === 'audio' ? secondSave.promise : Promise.resolve()
+    );
+    const { leave, unmount } = renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream();
+
+    const leaving = leave();
+    // Attach the handler before the rejection so it is never reported as unhandled
+    const failure = leaving.then(
+      () => undefined,
+      (error: unknown) => error
+    );
+    await flushAsync();
+    unmount();
+    secondSave.reject(new Error('save audio failed'));
+    expect(await failure).toEqual(new Error('save audio failed'));
+
+    expect(vi.mocked(settingsActions.saveSection).mock.calls.map(c => c[0])).toEqual([
+      'rtsp',
+      'audio',
+    ]);
   });
 
   it('retry after a failed second section re-sends only that section when nothing was edited', async () => {
@@ -595,21 +667,23 @@ describe('AudioSourceStep - device state reasons', () => {
   });
 });
 
-// What the URL field exposes: the alert text, aria-invalid and what aria-describedby points at (the help text, plus the alert while it shows)
-function expectUrlError(shown: boolean) {
+// What the URL field exposes: the alert text (the reason named, or empty), aria-invalid and what aria-describedby points at (the help text, plus the alert while it shows)
+function expectUrlError(reason: 'urlScheme' | 'enterUrl' | null) {
   const alert = urlAlert();
   const input = urlInput();
   const help = screen.getByText(`${KEY}.rtspUrlHelp`);
-  expect(alert.textContent.trim()).toBe(shown ? `${KEY}.reasons.urlScheme` : '');
+  expect(alert.textContent.trim()).toBe(reason === null ? '' : `${KEY}.reasons.${reason}`);
   // The help text is always linked; the error is added while it shows, then the note
   // that sound cards stop (present when the seed has a saved sound card)
   const note = screen.queryByText(`${KEY}.streamReplacesSoundCards`);
-  const expected = [help.id, shown ? alert.id : '', note?.id ?? ''].filter(Boolean).join(' ');
+  const expected = [help.id, reason === null ? '' : alert.id, note?.id ?? '']
+    .filter(Boolean)
+    .join(' ');
   expect(input).toHaveAttribute('aria-describedby', expected);
-  if (shown) {
-    expect(input).toHaveAttribute('aria-invalid', 'true');
-  } else {
+  if (reason === null) {
     expect(input).not.toHaveAttribute('aria-invalid');
+  } else {
+    expect(input).toHaveAttribute('aria-invalid', 'true');
   }
 }
 
@@ -628,10 +702,10 @@ describe('AudioSourceStep - URL error timing', () => {
     await waitFor(() =>
       expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.urlScheme`)
     );
-    expectUrlError(false);
+    expectUrlError(null);
 
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
     expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.urlScheme`);
   });
 
@@ -640,25 +714,26 @@ describe('AudioSourceStep - URL error timing', () => {
     await flushAsync();
     await chooseStream('http://x');
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
 
     await typeUrl(RTSP_URL);
-    expectUrlError(false);
+    expectUrlError(null);
     await leaveUrl();
-    expectUrlError(false);
+    expectUrlError(null);
 
     await typeUrl('rtsp://');
-    expectUrlError(false);
+    expectUrlError(null);
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
 
     await typeUrl('');
+    expectUrlError(null);
     await leaveUrl();
-    expectUrlError(false);
+    expectUrlError('enterUrl');
     await typeUrl('h');
-    expectUrlError(false);
+    expectUrlError(null);
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
     expect(urlInput()).toHaveValue('h');
   });
 
@@ -667,13 +742,13 @@ describe('AudioSourceStep - URL error timing', () => {
     await flushAsync();
     await chooseStream('http://x');
     await leaveUrl();
-    expectUrlError(true);
+    expectUrlError('urlScheme');
 
     await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
     await deviceTrigger();
     await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
 
-    expectUrlError(true);
+    expectUrlError('urlScheme');
     expect(urlInput()).toHaveValue('http://x');
   });
 
@@ -683,7 +758,109 @@ describe('AudioSourceStep - URL error timing', () => {
     await flushAsync();
 
     expect(await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`)).toHaveValue('rtsp://');
-    expectUrlError(true);
+    expectUrlError('urlScheme');
+  });
+
+  it('shows the enter URL error once an empty field is left, while Next names the same reason', async () => {
+    const onValidChange = vi.fn();
+    renderTyped(AudioSourceStep, { props: { onValidChange } });
+    await flushAsync();
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
+    await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
+    expect(urlInput()).toHaveValue('');
+
+    await leaveUrl();
+
+    expectUrlError('enterUrl');
+    expect(onValidChange).toHaveBeenLastCalledWith(false, `${KEY}.reasons.enterUrl`);
+  });
+
+  it('keeps the empty URL error hidden until the field is left', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
+    await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`);
+    expect(urlInput()).toHaveValue('');
+    expectUrlError(null);
+
+    await typeUrl('h');
+    await typeUrl('');
+
+    expectUrlError(null);
+  });
+
+  it('clears the empty URL error when a valid URL is typed', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('');
+    await leaveUrl();
+    expectUrlError('enterUrl');
+
+    await typeUrl(RTSP_URL);
+    expectUrlError(null);
+    await leaveUrl();
+    expectUrlError(null);
+    expect(urlInput()).toHaveValue(RTSP_URL);
+  });
+
+  it('switches the message from enter URL to the scheme reason as the field is filled', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('');
+    await leaveUrl();
+    expectUrlError('enterUrl');
+
+    await typeUrl('http://x');
+    expectUrlError(null);
+    await leaveUrl();
+    expectUrlError('urlScheme');
+    expect(urlInput()).toHaveValue('http://x');
+  });
+
+  it('shows no scheme error while set up later is chosen', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('http://x');
+    await leaveUrl();
+    expectUrlError('urlScheme');
+
+    const setUpLater = screen.getByRole('button', { name: `${KEY}.setUpLater` });
+    await fireEvent.click(setUpLater);
+
+    expectUrlError(null);
+    expect(setUpLater).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('shows no empty URL error while set up later is chosen', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    await chooseStream('');
+    await leaveUrl();
+    expectUrlError('enterUrl');
+
+    await fireEvent.click(screen.getByRole('button', { name: `${KEY}.setUpLater` }));
+    expectUrlError(null);
+
+    await typeUrl('h');
+    expectUrlError(null);
+    await leaveUrl();
+    expectUrlError('urlScheme');
+    expect(screen.getByRole('button', { name: `${KEY}.setUpLater` })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  it.each([
+    { label: 'empty', url: '' },
+    { label: 'blank', url: '   ' },
+  ])('shows no URL error on open for a saved stream with a $label URL', async ({ url }) => {
+    seed({ sources: [] }, [{ name: 'Old', url, enabled: true, type: 'rtsp' }]);
+    renderStep(AudioSourceStep);
+    await flushAsync();
+
+    expect(await screen.findByPlaceholderText(`${KEY}.rtspUrlPlaceholder`)).toHaveValue(url);
+    expectUrlError(null);
   });
 
   it('reserves the URL error line so showing it moves nothing', async () => {
@@ -788,6 +965,33 @@ describe('AudioSourceStep Accessibility', () => {
     resetStore();
   });
 
+  it('makes the source type group one Tab stop', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+
+    expect(radio(/wizard\.steps\.audioSource\.soundcard/)).toHaveAttribute('tabindex', '0');
+    expect(radio(/wizard\.steps\.audioSource\.rtspStream/)).toHaveAttribute('tabindex', '-1');
+    await fireEvent.click(radio(/wizard\.steps\.audioSource\.rtspStream/));
+    expect(radio(/wizard\.steps\.audioSource\.soundcard/)).toHaveAttribute('tabindex', '-1');
+    expect(radio(/wizard\.steps\.audioSource\.rtspStream/)).toHaveAttribute('tabindex', '0');
+  });
+
+  it('colours the checked source type icon with the primary colour', async () => {
+    renderStep(AudioSourceStep);
+    await flushAsync();
+    const icon = (name: RegExp) => radio(name).querySelector('svg');
+    const soundcard = /wizard\.steps\.audioSource\.soundcard/;
+    const stream = /wizard\.steps\.audioSource\.rtspStream/;
+
+    expect(icon(soundcard)).toHaveClass('text-[var(--color-primary)]');
+    expect(icon(stream)).not.toHaveClass('text-[var(--color-primary)]');
+
+    await fireEvent.click(radio(stream));
+
+    expect(icon(stream)).toHaveClass('text-[var(--color-primary)]');
+    expect(icon(soundcard)).not.toHaveClass('text-[var(--color-primary)]');
+  });
+
   it.each([
     {
       name: 'with devices listed',
@@ -828,6 +1032,15 @@ describe('AudioSourceStep Accessibility', () => {
       prepare: () => {},
       ready: async () => {
         await chooseStream('http://x');
+      },
+    },
+    {
+      name: 'with the empty URL error shown',
+      prepare: () => {},
+      ready: async () => {
+        await chooseStream('');
+        await leaveUrl();
+        expect(urlAlert()).toHaveTextContent(`${KEY}.reasons.enterUrl`);
       },
     },
     {
@@ -909,7 +1122,10 @@ describe('AudioSourceStep Accessibility', () => {
     await fireEvent.click(radio(/wizard\.steps\.audioSource\.soundcard/));
     await chooseUsbDevice();
 
-    expect(await deviceTrigger()).toHaveAccessibleDescription(`${KEY}.soundCardReplacesStream`);
+    const trigger = await deviceTrigger();
+    // The chosen device is the combobox value, so the description is the note alone
+    expect(trigger).toHaveTextContent('USB Mic');
+    expect(trigger).toHaveAccessibleDescription(`${KEY}.soundCardReplacesStream`);
   });
 
   it('describes the URL input with the note that sound cards stop', async () => {
@@ -941,6 +1157,11 @@ describe('AudioSourceStep Accessibility', () => {
 
     await typeUrl(RTSP_URL);
     expect(urlInput()).not.toHaveClass('input-error');
+
+    await typeUrl('');
+    expect(urlInput()).not.toHaveClass('input-error');
+    await leaveUrl();
+    expect(urlInput()).toHaveClass('input-error');
   });
 
   it('names the open device listbox with the field label', async () => {

@@ -19,9 +19,20 @@ import { settingsActions, settingsStore } from '$lib/stores/settings';
 import { ApiError } from '$lib/utils/api';
 import { get } from 'svelte/store';
 import { flushAsync, renderStep } from './stepTestUtils';
+import { expectNoA11yViolations } from '$lib/utils/axe-utils';
 
 // Any 24 ASCII letters and digits
 const VALID_TOKEN = 'aB3dEf6hIj9lMn2pQr5tUv8x';
+
+// The token is a plain text input, so a browser does not offer to save it as a password
+const TOKEN_LABEL = 'settings.integration.birdweather.token.label';
+const tokenInput = () => screen.getByRole('textbox', { name: TOKEN_LABEL });
+const findTokenInput = () => screen.findByRole('textbox', { name: TOKEN_LABEL });
+
+// The accessible names of the three cards
+const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
+const BIRDWEATHER = /wizard\.steps\.integration\.birdweatherLabel/;
+const SENTRY = /wizard\.steps\.integration\.errorReportingLabel/;
 
 // The leave handler contract shared by every step is in stepContract.test.ts
 describe('IntegrationStep - leave handler', () => {
@@ -29,15 +40,12 @@ describe('IntegrationStep - leave handler', () => {
     vi.mocked(settingsActions.saveSection).mockClear().mockResolvedValue(undefined);
   });
 
-  const clickByName = (name: RegExp) => fireEvent.click(screen.getByRole('button', { name }));
-  const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
-  const BIRDWEATHER = /wizard\.steps\.integration\.birdweatherLabel/;
-  const SENTRY = /wizard\.steps\.integration\.errorReportingLabel/;
+  const clickByName = (name: RegExp) => fireEvent.click(screen.getByRole('checkbox', { name }));
 
   async function changeAll() {
     await clickByName(PRIVACY);
     await clickByName(BIRDWEATHER);
-    const input = await screen.findByRole('textbox');
+    const input = await findTokenInput();
     await fireEvent.input(input, { target: { value: VALID_TOKEN } });
     await clickByName(SENTRY);
   }
@@ -117,9 +125,9 @@ describe('IntegrationStep - leave handler', () => {
     await expect(leave()).rejects.toBe(refusal);
 
     expect(settingsActions.saveSection).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('button', { name: PRIVACY })).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByRole('button', { name: SENTRY })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('textbox')).toHaveValue(VALID_TOKEN);
+    expect(screen.getByRole('checkbox', { name: PRIVACY })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: SENTRY })).toBeChecked();
+    expect(tokenInput()).toHaveValue(VALID_TOKEN);
 
     vi.mocked(settingsActions.saveSection).mockClear();
     await leave();
@@ -136,7 +144,7 @@ describe('IntegrationStep - leave handler', () => {
       await clickByName(PRIVACY);
       await clickByName(SENTRY);
       await clickByName(BIRDWEATHER);
-      await fireEvent.input(await screen.findByRole('textbox'), { target: { value: 'abc' } });
+      await fireEvent.input(await findTokenInput(), { target: { value: 'abc' } });
     }
 
     it('Back with a malformed token saves privacy and error reporting and not BirdWeather', async () => {
@@ -159,7 +167,7 @@ describe('IntegrationStep - leave handler', () => {
       await leave();
       vi.mocked(settingsActions.saveSection).mockClear();
 
-      await fireEvent.input(screen.getByRole('textbox'), { target: { value: VALID_TOKEN } });
+      await fireEvent.input(tokenInput(), { target: { value: VALID_TOKEN } });
       await leave();
 
       expect(vi.mocked(settingsActions.saveSection).mock.calls).toEqual([
@@ -202,14 +210,12 @@ describe('IntegrationStep - leave handler', () => {
 describe('IntegrationStep - BirdWeather token', () => {
   const TOKEN_FORMAT = 'wizard.steps.integration.reasons.tokenFormat';
   const ENTER_TOKEN = 'wizard.steps.integration.reasons.enterToken';
-  const BIRDWEATHER = /wizard\.steps\.integration\.birdweatherLabel/;
   const initialForm = JSON.stringify(get(settingsStore).formData);
 
   const toggleBirdweather = () =>
-    fireEvent.click(screen.getByRole('button', { name: BIRDWEATHER }));
-  const typeToken = (value: string) =>
-    fireEvent.input(screen.getByRole('textbox'), { target: { value } });
-  const leaveField = () => fireEvent.blur(screen.getByRole('textbox'));
+    fireEvent.click(screen.getByRole('checkbox', { name: BIRDWEATHER }));
+  const typeToken = (value: string) => fireEvent.input(tokenInput(), { target: { value } });
+  const leaveField = () => fireEvent.blur(tokenInput());
   const alertText = () => screen.getByRole('alert').textContent;
 
   function seed(birdweather: { enabled: boolean; id: string }) {
@@ -260,12 +266,12 @@ describe('IntegrationStep - BirdWeather token', () => {
     await toggleBirdweather();
 
     expect(lastReport(onValidChange)).toEqual([false, ENTER_TOKEN]);
-    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
+    expect(tokenInput()).not.toHaveAttribute('aria-invalid');
     expect(alertText()).toBe('');
 
     await leaveField();
 
-    expect(screen.getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
+    expect(tokenInput()).toHaveAttribute('aria-invalid', 'true');
     expect(alertText()).toBe(ENTER_TOKEN);
   });
 
@@ -278,12 +284,12 @@ describe('IntegrationStep - BirdWeather token', () => {
     await typeToken('TESTID123');
 
     expect(lastReport(onValidChange)).toEqual([false, TOKEN_FORMAT]);
-    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
+    expect(tokenInput()).not.toHaveAttribute('aria-invalid');
     expect(alertText()).toBe('');
 
     await leaveField();
 
-    const input = screen.getByRole('textbox');
+    const input = tokenInput();
     expect(input).toHaveAttribute('aria-invalid', 'true');
     expect(alertText()).toBe(TOKEN_FORMAT);
     expect(input.getAttribute('aria-describedby')).toContain(screen.getByRole('alert').id);
@@ -304,7 +310,7 @@ describe('IntegrationStep - BirdWeather token', () => {
     await leaveField();
 
     expect(lastReport(onValidChange)).toEqual([true, undefined]);
-    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
+    expect(tokenInput()).not.toHaveAttribute('aria-invalid');
     expect(alertText()).toBe('');
   });
 
@@ -328,9 +334,115 @@ describe('IntegrationStep - BirdWeather token', () => {
     await flushAsync();
     await toggleBirdweather();
 
-    expect(screen.getByLabelText('settings.integration.birdweather.token.label')).toBe(
-      screen.getByRole('textbox')
-    );
+    const input = tokenInput();
+    expect(input).toBeInstanceOf(HTMLInputElement);
+    expect(input).toHaveAttribute('type', 'text');
+  });
+
+  it('the token field is a plain text input with no reveal button, so no browser offers to save it as a password', async () => {
+    renderStep(IntegrationStep);
+    await flushAsync();
+    await toggleBirdweather();
+    await typeToken(VALID_TOKEN);
+
+    expect(tokenInput()).toHaveAttribute('type', 'text');
+    expect(tokenInput()).toHaveValue(VALID_TOKEN);
+    expect(screen.queryByRole('button', { name: 'forms.labels.showPassword' })).toBeNull();
+  });
+
+  it('typing in or clicking the token does not toggle BirdWeather', async () => {
+    renderStep(IntegrationStep);
+    await flushAsync();
+    await toggleBirdweather();
+
+    await fireEvent.input(tokenInput(), { target: { value: 'abc' } });
+    await fireEvent.click(tokenInput());
+
+    expect(screen.getByRole('checkbox', { name: BIRDWEATHER })).toBeChecked();
+    expect(tokenInput()).toHaveValue('abc');
+  });
+
+  it('the token field and its label are outside the BirdWeather card', async () => {
+    renderStep(IntegrationStep);
+    await flushAsync();
+    await toggleBirdweather();
+
+    const card = screen.getByRole('checkbox', { name: BIRDWEATHER }).closest('label');
+    expect(card).not.toBeNull();
+    expect(card).not.toContainElement(tokenInput());
+
+    await fireEvent.click(screen.getByText(TOKEN_LABEL));
+
+    expect(screen.getByRole('checkbox', { name: BIRDWEATHER })).toBeChecked();
+  });
+
+  it('the token alert keeps its reserved height before and after the error appears', async () => {
+    renderStep(IntegrationStep);
+    await flushAsync();
+    await toggleBirdweather();
+
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveClass('min-h-10');
+    expect(alertText()).toBe('');
+
+    await typeToken('TESTID123');
+    await leaveField();
+
+    expect(alertText()).toBe(TOKEN_FORMAT);
+    expect(screen.getByRole('alert')).toBe(alert);
+    expect(alert).toHaveClass('min-h-10');
+  });
+
+  it('renders exactly one alert while BirdWeather is on, with and without an error', async () => {
+    renderStep(IntegrationStep);
+    await flushAsync();
+    expect(screen.queryAllByRole('alert')).toHaveLength(0);
+
+    await toggleBirdweather();
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+
+    await leaveField();
+    expect(alertText()).toBe(ENTER_TOKEN);
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+  });
+
+  it('the token field does not offer saved logins', async () => {
+    renderStep(IntegrationStep);
+    await flushAsync();
+    await toggleBirdweather();
+
+    expect(tokenInput()).toHaveAttribute('autocomplete', 'off');
+  });
+
+  it('each card colours its icon primary only while on', async () => {
+    renderStep(IntegrationStep);
+    await flushAsync();
+    const icon = (name: RegExp) =>
+      screen.getByRole('checkbox', { name }).closest('label')?.querySelector('svg');
+    const primary = 'text-[var(--color-primary)]';
+
+    expect(icon(PRIVACY)).toHaveClass(primary);
+    expect(icon(BIRDWEATHER)).not.toHaveClass(primary);
+    expect(icon(SENTRY)).not.toHaveClass(primary);
+
+    await toggleBirdweather();
+    await fireEvent.click(screen.getByRole('checkbox', { name: PRIVACY }));
+    await fireEvent.click(screen.getByRole('checkbox', { name: SENTRY }));
+
+    expect(icon(PRIVACY)).not.toHaveClass(primary);
+    expect(icon(BIRDWEATHER)).toHaveClass(primary);
+    expect(icon(SENTRY)).toHaveClass(primary);
+  });
+
+  it.each([
+    [PRIVACY, 'wizard.steps.integration.privacyFilterHelp'],
+    [BIRDWEATHER, 'wizard.steps.integration.birdweatherHelp'],
+    [SENTRY, 'wizard.steps.integration.errorReportingHelp'],
+  ])('describes the card %s by its help text, not by a dangling id', async (name, help) => {
+    renderStep(IntegrationStep);
+    await flushAsync();
+
+    expect(screen.getByRole('checkbox', { name })).toHaveAccessibleDescription(help);
   });
 
   type Action = ['toggle'] | ['type', string] | ['blur'];
@@ -387,7 +499,7 @@ describe('IntegrationStep - BirdWeather token', () => {
     await toggleBirdweather();
     await toggleBirdweather();
 
-    expect(screen.getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
+    expect(tokenInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('a saved valid token keeps the step valid and the leave handler sends nothing', async () => {
@@ -412,7 +524,7 @@ describe('IntegrationStep - BirdWeather token', () => {
     await toggleBirdweather();
 
     expect(lastReport(onValidChange)).toEqual([false, TOKEN_FORMAT]);
-    expect(screen.getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
+    expect(tokenInput()).toHaveAttribute('aria-invalid', 'true');
   });
 
   it('the first validity report already reflects the saved settings', async () => {
@@ -430,7 +542,6 @@ describe('IntegrationStep - BirdWeather token', () => {
     expect(invalidSpy.mock.calls.map(call => call[0])).not.toContain(true);
   });
   describe('with BirdWeather off', () => {
-    const PRIVACY = /wizard\.steps\.integration\.privacyFilterLabel/;
     const savedCalls = () => vi.mocked(settingsActions.saveSection).mock.calls;
 
     it('BirdWeather off with a malformed token sends nothing', async () => {
@@ -453,7 +564,7 @@ describe('IntegrationStep - BirdWeather token', () => {
       await toggleBirdweather();
       await typeToken('abc');
       await toggleBirdweather();
-      await fireEvent.click(screen.getByRole('button', { name: PRIVACY }));
+      await fireEvent.click(screen.getByRole('checkbox', { name: PRIVACY }));
 
       await leave();
 
@@ -516,11 +627,40 @@ describe('IntegrationStep - BirdWeather token', () => {
       expect(settingsActions.saveSection).not.toHaveBeenCalled();
 
       await toggleBirdweather();
-      expect(screen.getByRole('textbox')).toHaveValue('abc');
+      expect(tokenInput()).toHaveValue('abc');
       expect(lastReport(onValidChange)).toEqual([false, TOKEN_FORMAT]);
       await leave();
 
       expect(settingsActions.saveSection).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('IntegrationStep Accessibility', () => {
+  it('has no axe violations with BirdWeather off', async () => {
+    const { container } = renderStep(IntegrationStep);
+    await flushAsync();
+
+    await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
+  });
+
+  it('has no axe violations with BirdWeather on and no error', async () => {
+    const { container } = renderStep(IntegrationStep);
+    await flushAsync();
+    await fireEvent.click(screen.getByRole('checkbox', { name: BIRDWEATHER }));
+
+    await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
+  });
+
+  it('has no axe violations with the token error shown', async () => {
+    const { container } = renderStep(IntegrationStep);
+    await flushAsync();
+    await fireEvent.click(screen.getByRole('checkbox', { name: BIRDWEATHER }));
+    await fireEvent.blur(tokenInput());
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'wizard.steps.integration.reasons.enterToken'
+    );
+
+    await expect(expectNoA11yViolations(container)).resolves.toBeUndefined();
   });
 });

@@ -13,12 +13,18 @@ describe('LanguageSelector Accessibility', () => {
       'aria-describedby',
       'language-help'
     );
-    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getAllByRole('combobox')).toHaveLength(1);
   });
 
-  it('adds no aria-describedby without the prop', () => {
+  it('has no description without the prop, since the selected language is the combobox value', () => {
     renderTyped(LanguageSelector, { props: { id: 'language-field' } });
 
     expect(document.getElementById('language-field')).not.toHaveAttribute('aria-describedby');
+  });
+
+  it('names the trigger from the aria-label prop instead of the selected language', () => {
+    renderTyped(LanguageSelector, { props: { 'aria-label': 'Interface language' } });
+
+    expect(screen.getByRole('combobox', { name: 'Interface language' })).toBeInTheDocument();
   });
 });

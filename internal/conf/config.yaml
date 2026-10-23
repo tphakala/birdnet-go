@@ -217,9 +217,9 @@ realtime:
       enabled: true       # true to export audio clips containing indentified bird calls
       debug: false        # true to enable audio export debug messages
       path: clips/        # path to audio clip export directory
-      type: wav           # wav, flac, aac, opus, mp3. Formats other than wav and flac require ffmpeg.
+      type: wav           # wav, flac, aac, opus, mp3. All formats are encoded natively; ffmpeg is not required.
       ultrasonictype: flac # wav or flac only; used for bat/ultrasonic captures above 48 kHz (stored losslessly at full source rate)
-      bitrate: 96k        # bitrate for aac and opus exports
+      bitrate: 96k        # bitrate for aac, mp3 and opus exports
       retention:
         policy: usage     # retention policy: none, age or usage
         maxage: 30d       # age policy: maximum age of clips to keep before starting evictions
@@ -314,10 +314,11 @@ realtime:
     retain: false         # true to retain messages
     retrysettings:
       enabled: true       # enable retry for failed publications
-      maxretries: 3       # maximum number of retry attempts
-      initialdelay: 10    # initial delay before first retry in seconds
-      maxdelay: 300       # maximum delay between retries in seconds
+      maxretries: 5       # maximum number of retry attempts
+      initialdelay: 30    # initial delay before first retry in seconds
+      maxdelay: 3600      # maximum delay between retries in seconds
       backoffmultiplier: 2.0  # multiplier for exponential backoff
+      # retries apply to publish errors; while the broker is down, publishes are skipped, not queued or retried
     tls:
       insecureskipverify: false  # skip certificate verification (use with caution)
       cacert: ""          # path to CA certificate file
@@ -417,7 +418,7 @@ security:
   # CIDR ranges of reverse proxies whose forwarded client-IP headers
   # (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) may be trusted. Loopback,
   # link-local, and private addresses are always trusted, so a local cloudflared
-  # or same-host reverse proxy needs no entry here. Add a proxy that connects
+  # or same-host reverse proxy needs no entry here (subnet bypass is stricter, see below). Add a proxy that connects
   # from a PUBLIC IP (e.g. Cloudflare's edge in front of a directly-exposed
   # instance, or an external load balancer) so its headers are honored. The
   # special value "cloudflare" expands to Cloudflare's published edge ranges.
@@ -426,7 +427,23 @@ security:
   # X-Forwarded-For (including private ones). Only explicitly listed hops are
   # skipped when resolving the real client; otherwise the request is attributed
   # to the nearest unlisted hop.
+  # Subnet bypass (allowsubnetbypass) honors a forwarded client address only from
+  # a proxy listed here, even a local or private one: list your reverse proxy's
+  # own address (not a range that also holds clients, since a client inside a
+  # listed range is trusted as a proxy and can name any address) if clients
+  # reach BirdNET-Go through it and should skip login. The proxy must append
+  # X-Forwarded-For or overwrite X-Real-IP, all client-IP headers it forwards (including True-Client-IP)
+  # must name the same client, and a Forwarded header is not accepted.
   trustedproxies: []         # e.g. ["cloudflare"], ["203.0.113.0/24"] or a bare IP ["203.0.113.5"]
+  # Exact IP addresses of clients that reach BirdNET-Go directly over plain HTTP
+  # (for example another container calling http://birdnet-go:8080) and therefore
+  # need session cookies without the Secure attribute. Matched by connection
+  # address only; ranges are not accepted. Never list the address your reverse
+  # proxy or tunnel (such as cloudflared) connects from: with host networking or
+  # a native install a proxy on the same host connects from 127.0.0.1, ::1 or
+  # the host's own address, and with bridge networking from the container
+  # network gateway. Give the listed clients fixed addresses.
+  plainhttpsessionclients: [] # e.g. ["172.18.0.5"]
   basicauth:
     enabled: false           # true to enable basic auth
     password: ""             # password hash for the settings interface

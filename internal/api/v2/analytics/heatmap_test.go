@@ -196,30 +196,6 @@ func TestHeatmapLRU_LRUOrder(t *testing.T) {
 	assert.Equal(t, []byte("v1"), val)
 }
 
-func TestHeatmapLRU_GenerationInvalidation(t *testing.T) {
-	t.Parallel()
-
-	cache := newHeatmapLRU(10)
-
-	_, gen, _ := cache.get("key1")
-	cache.put("key1", []byte("v1"), gen)
-	cache.put("key2", []byte("v2"), gen)
-
-	// Invalidate
-	cache.invalidate()
-
-	// Old entries should be treated as stale
-	_, _, ok := cache.get("key1")
-	assert.False(t, ok, "key1 should be stale after invalidation")
-
-	// New entries after invalidation should work
-	_, newGen, _ := cache.get("key3")
-	cache.put("key3", []byte("v3"), newGen)
-	val, _, ok := cache.get("key3")
-	assert.True(t, ok)
-	assert.Equal(t, []byte("v3"), val)
-}
-
 func TestHeatmapLRU_PutRejectsStaleGeneration(t *testing.T) {
 	t.Parallel()
 

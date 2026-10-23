@@ -34,6 +34,7 @@ func (c *Handler) RegisterAudioDeviceRoutes(g *echo.Group) {
 	audioGroup.GET("/devices/capabilities", c.GetDeviceCapabilities)
 	audioGroup.GET("/active", c.GetActiveAudioDevice)
 	audioGroup.GET("/equalizer/config", c.GetEqualizerConfig)
+	audioGroup.POST("/equalizer/response", c.ComputeEqualizerResponse)
 	audioGroup.GET("/sources", c.ListAudioSources)
 }
 
@@ -70,6 +71,15 @@ type ActiveAudioDevice struct {
 	Channels   int    `json:"channels"`
 }
 
+// captureDevices lists the capture devices through the listCaptureDevices seam
+// when one is set, and through audiocore.ListCaptureDevices otherwise.
+func (c *Handler) captureDevices() ([]audiocore.DeviceInfo, error) {
+	if c.listCaptureDevices != nil {
+		return c.listCaptureDevices()
+	}
+	return audiocore.ListCaptureDevices()
+}
+
 // GetAudioDevices handles GET /api/v2/system/audio/devices
 func (c *Handler) GetAudioDevices(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Getting audio devices",
@@ -78,7 +88,7 @@ func (c *Handler) GetAudioDevices(ctx echo.Context) error {
 	)
 
 	// Get audio devices
-	devices, err := audiocore.ListCaptureDevices()
+	devices, err := c.captureDevices()
 	if err != nil {
 		c.LogErrorIfEnabled("Failed to list audio devices",
 			logger.Error(err),
@@ -210,7 +220,7 @@ func (c *Handler) GetActiveAudioDevice(ctx echo.Context) error {
 	}
 
 	// Try to get additional device info and validate the device exists
-	devices, err := audiocore.ListCaptureDevices()
+	devices, err := c.captureDevices()
 	if err != nil {
 		errorMsg := fmt.Sprintf("Failed to list audio devices: %v", err)
 		c.Debug("%s", errorMsg)

@@ -431,6 +431,14 @@ func (r *testDetectionRepo) CountAll(_ context.Context) (int64, error) {
 	return count, err
 }
 
+func (r *testDetectionRepo) RecordClipSampleRate(_ context.Context, _ uint, _ string, _ int) error {
+	return nil
+}
+
+func (r *testDetectionRepo) FillClipSampleRate(_ context.Context, _ uint, _ string, _ int) (bool, error) {
+	return false, nil
+}
+
 // Search finds detections matching the given filters.
 func (r *testDetectionRepo) Search(_ context.Context, filters *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
 	var notes []datastore.Note
@@ -692,6 +700,14 @@ func (s *testLegacyInterface) GetNoteClipPath(_ string) (string, error)  { retur
 func (s *testLegacyInterface) GetNoteModelType(_ string) (string, error) { return "bird", nil }
 func (s *testLegacyInterface) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
 	return "", "bird", nil
+}
+
+func (s *testLegacyInterface) RecordClipSampleRate(_ context.Context, _ uint, _ string, _ int) error {
+	return nil
+}
+
+func (s *testLegacyInterface) FillClipSampleRate(_ context.Context, _ uint, _ string, _ int) (bool, error) {
+	return false, nil
 }
 func (s *testLegacyInterface) DeleteNoteClipPath(_ string) error                     { return nil }
 func (s *testLegacyInterface) GetNoteReview(_ string) (*datastore.NoteReview, error) { return nil, nil } //nolint:nilnil // stub

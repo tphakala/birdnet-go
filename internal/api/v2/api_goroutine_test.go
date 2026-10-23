@@ -16,7 +16,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/testutil"
-	"go.uber.org/goleak"
 )
 
 // TestControllerShutdownCleansUpGoroutines verifies that background goroutines
@@ -26,10 +25,7 @@ func TestControllerShutdownCleansUpGoroutines(t *testing.T) {
 	// end. Captured here so a leftover transport-dial goroutine from a
 	// previously-run test (shuffle order) is ignored, not attributed to this
 	// test; see testutil.VerifyNoLeaks for the full rationale.
-	testutil.VerifyNoLeaks(t,
-		// Ignore the go-cache janitor which we can't control
-		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-	)
+	testutil.VerifyNoLeaks(t)
 
 	// Create Echo instance
 	e := echo.New()
@@ -124,24 +120,4 @@ func TestSendReconfigActionsRecoverOnClosedChannel(t *testing.T) {
 	assert.NotPanics(t, func() {
 		c.sendReconfigActions([]string{"boom"}, false)
 	})
-}
-
-// TestGoroutineCleanupWithoutRoutes verifies that creating a controller without
-// routes doesn't start unnecessary goroutines
-func TestGoroutineCleanupWithoutRoutes(t *testing.T) {
-	// Snapshot existing goroutines at test start (see testutil.VerifyNoLeaks)
-	// so a leftover transport-dial goroutine from a previously-run test under
-	// -shuffle is ignored rather than wrongly attributed here.
-	testutil.VerifyNoLeaks(t,
-		// Ignore the go-cache janitor which we can't control
-		goleak.IgnoreTopFunction("github.com/patrickmn/go-cache.(*janitor).Run"),
-	)
-
-	// Setup test environment (which uses NewWithOptions with initializeRoutes=false)
-	_, _, controller := setupTestEnvironment(t)
-
-	// Since routes are not initialized, goroutinesStarted should be nil
-	require.Nil(t, controller.goroutinesStarted, "goroutinesStarted channel should not be created without route initialization")
-
-	// Controller shutdown is handled by setupTestEnvironment's t.Cleanup()
 }

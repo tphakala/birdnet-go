@@ -19,7 +19,7 @@ internal/api (parent server.go)
         v
 internal/api/v2            package api  (the facade)
   Controller{ *apicore.Core; <domain>.Handler fields }
-  New / NewWithOptions / InitializeAPI, ordered initRoutes()
+  New / NewWithOptions, ordered initRoutes()
         |                         |                      |
         | imports                 | imports              | imports
         v                         v                      v
@@ -65,7 +65,7 @@ or the facade); it runs inside the normal `go test ./...` unit-test jobs.
   around `*apicore.Core`. Domain tests build their own handler:
   `h := weather.New(apitest.NewCore(t))`. `apitest` imports only `apicore`/`dto`.
 - **`api` (facade, directory root)**: `Controller` embeds `*apicore.Core` and holds
-  one field per domain Handler. `New`/`NewWithOptions`/`InitializeAPI` build the
+  one field per domain Handler. `New`/`NewWithOptions` build the
   single `Core`, construct each domain Handler around it, and `initRoutes` calls
   every `RegisterRoutes` in a deterministic ordered list. `settings.go` (and its
   large test suite) intentionally still lives here, as does the facade-owned
@@ -100,8 +100,13 @@ or the facade); it runs inside the normal `go test ./...` unit-test jobs.
    }
    ```
 
-   For detection CRUD use `c.Repo` (`datastore.DetectionRepository`); `c.DS` is
-   deprecated for new detection code.
+   **HARD RULE:** the legacy database is deprecated and is going away; never
+   expand it. Use `c.Repo` (`datastore.DetectionRepository` and the v2
+   repositories) for every detection read and write. Do not add new code that
+   calls `c.DS` or `datastore.Interface` for persistence, and do not add
+   methods, optional interfaces or type assertions on them. If the repository
+   lacks an operation, add it to the repository (with `context.Context` first),
+   not to `c.DS`. See `internal/datastore/AGENTS.md`.
 
 2. Add the route line to that domain's `RegisterRoutes(g *echo.Group)`:
 
@@ -122,7 +127,10 @@ or the facade); it runs inside the normal `go test ./...` unit-test jobs.
    entry `{"<domain> routes", func() { c.<domain>.RegisterRoutes(c.Group) }}` in
    `initRoutes`. Registration is explicit (not `init()`-based) so order stays
    deterministic; preserve the existing ordering.
-3. New domains are subpackages of `api/v2`, so the "all new endpoints stay under
+3. Add one of the domain's routes to `criticalRoutes` in
+   `routes_enumeration_test.go`. `initRoutes` recovers a panicking initializer
+   and carries on, so only that list notices a domain whose routes vanished.
+4. New domains are subpackages of `api/v2`, so the "all new endpoints stay under
    api/v2" rule holds.
 
 A single `RegisterRoutes` is the norm, but a larger domain may expose several named
@@ -152,6 +160,15 @@ original per-route registration order across the split.
 - PrivateMode: all endpoints are gated by `apicore.PrivateModeAuth` group
   middleware; the bootstrap/login/live-audio carve-outs are listed in the facade's
   `isPrivateModeExempt` allow-list (keyed on method + path, fail-closed).
+- Route wiring is tested in `routes_enumeration_test.go`, which sends a request
+  through every registered route with a stand-in for `AuthMiddleware`. Every
+  route that is not a GET or HEAD, and every route under the auth-only prefixes
+  (`authOnlyPrefixes`), must reach the stand-in unless it is listed in
+  `publicMutationRoutes` or `publicReadRoutes` with a reason. With PrivateMode on,
+  every route outside `isPrivateModeExempt` must reach it too. A new mutating
+  route needs no test edit; a route that is meant to be public needs an
+  allow-list entry. A GET outside the auth-only prefixes that must be
+  protected needs a `protectedReadRoutes` entry.
 
 ## Route namespace guide
 
@@ -185,10 +202,28 @@ unauthenticated clients (the audio domain does this with its local
 - **Follow the error format** - `return c.HandleError(ctx, err, "message", statusCode)`
   (or `c.HandleErrorWithKey(...)` for an i18n key). The `ErrorResponse` shape and
   correlation-id behavior live in `apicore`.
-- **Hot-reload** - read settings per request via `c.CurrentSettings()` (the
-  process-wide settings snapshot, falling back to Core's) or
-  `c.ControllerSettings()` (Core's own snapshot); both are lock-free atomic loads.
-  Never branch on settings captured at startup.
+- **Hot-reload** - read settings per request, never branch on settings captured
+  at startup. In facade handlers that return settings to a client or merge into
+  them, use `c.getSettingsOrFallback()`: it reads the live process-wide snapshot
+  when this controller owns it. `c.CurrentSettings()` also prefers the
+  process-wide snapshot. `c.ControllerSettings()` is Core's own snapshot, which
+  only API saves refresh and which goes stale after out-of-band updates (for
+  example a model install), so use it only where per-controller isolation is
+  intended. They are lock-free atomic loads, except the last-resort `conf.Setting()` fallback in `getSettingsOrFallback`, which can load settings from disk.
+  Settings writes never call `conf.StoreSettings`: the PUT and PATCH handlers
+  use `commitSettings`, and the TLS, MQTT TLS and species exclusion handlers use
+  `updateAndSaveSettings`. Both read the baseline and publish inside
+  `conf.UpdateSettings`, so a write cannot overwrite a model install or range
+  filter rebuild that published in between, and a lint rule rejects
+  `conf.StoreSettings` outside `internal/conf` and the test-support packages.
+  The mutate closure runs under the settings writer lock, so keep it short, and it must not call the
+  classifier, the model manager or `handleSettingsChanges`.
+  `conf.UpdateSettings` also stamps the snapshot's `Revision`, which the settings
+  ETag and `If-Match` check are built on; only the range filter writers inside
+  `internal/conf` publish without bumping it (`updateRuntimeSettings`), because they
+  write fields no client can write. Every other writer must bump. `Load` and
+  `conf.StoreSettings` do not stamp a revision (startup and tests only), and a
+  controller that does not own the global snapshot (tests) never bumps its own.
 - **Document in README.md** - update the endpoint table immediately.
 
 ## Future api/v3

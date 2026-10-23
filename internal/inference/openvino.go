@@ -286,6 +286,7 @@ func InitOpenVINO(libraryPath string) error {
 		return err
 	}
 	ovInitialized = true
+	ovInitializedSnap.Store(true)
 	ovInitPath = libraryPath
 	return nil
 }
@@ -301,6 +302,7 @@ func DestroyOpenVINO() error {
 		return err
 	}
 	ovInitialized = false
+	ovInitializedSnap.Store(false)
 	ovInitPath = ""
 	return nil
 }

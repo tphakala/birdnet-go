@@ -1,17 +1,14 @@
 package vad
 
 import (
-	"encoding/binary"
-
 	"github.com/tphakala/birdnet-go/internal/audiocore/resample"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 )
 
 const (
 	// bytesPerSample is the size of one 16-bit PCM sample.
 	bytesPerSample = 2
-	// pcm16Scale normalises int16 to [-1.0, 1.0]; 32768 maps -32768 to -1.0.
-	pcm16Scale = 32768.0
 )
 
 // to16k converts a chunk of 16-bit little-endian mono PCM at sampleRate into
@@ -39,7 +36,9 @@ func to16k(pcm []byte, sampleRate int) ([]float32, error) {
 	// Already at the target rate: convert PCM16 -> float32 directly.
 	if sampleRate == sampleRate16k {
 		out := make([]float32, len(pcm)/bytesPerSample)
-		pcm16ToFloat32(pcm, out)
+		if _, err := dsppcm.BytesToFloat32(out, pcm); err != nil {
+			return nil, err
+		}
 		return out, nil
 	}
 
@@ -59,13 +58,4 @@ func to16k(pcm []byte, sampleRate int) ([]float32, error) {
 	out := make([]float32, len(aliased))
 	copy(out, aliased)
 	return out, nil
-}
-
-// pcm16ToFloat32 decodes 16-bit little-endian PCM bytes into normalised float32
-// samples in dst. dst must have len(pcm)/bytesPerSample elements.
-func pcm16ToFloat32(pcm []byte, dst []float32) {
-	for i := range dst {
-		sample := int16(binary.LittleEndian.Uint16(pcm[i*bytesPerSample:])) //nolint:gosec // G115: intentional uint16->int16 bit reinterpretation for PCM audio
-		dst[i] = float32(sample) / pcm16Scale
-	}
 }

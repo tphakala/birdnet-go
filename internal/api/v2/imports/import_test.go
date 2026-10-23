@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -517,13 +518,18 @@ func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
 	assert.Equal(t, clipContent, copied, "copied clip content must match the source")
 }
 
-// TestStartBirdNETPiImport_UnknownMode_Returns400 verifies unknown modes are rejected.
+// TestStartBirdNETPiImport_UnknownMode_Returns400 verifies unknown modes are rejected
+// by the mode check itself. The source file exists and the source factory would
+// accept it, so without the mode check the request would be launched.
 func TestStartBirdNETPiImport_UnknownMode_Returns400(t *testing.T) {
 	_, c := newImportHandler(t)
 	mockDS := mocks.NewMockInterface(t)
 	c.DS = mockDS
 	c.Repo = mocks.NewMockDetectionRepository(t)
-	c.importSourceRoot = t.TempDir()
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600))
+	c.importSourceRoot = dir
+	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
 
 	for _, mode := range []string{"", "csv", "xml"} {
 		body := fmt.Sprintf(`{"mode":%q,"source_path":"birds.db"}`, mode)
@@ -534,6 +540,9 @@ func TestStartBirdNETPiImport_UnknownMode_Returns400(t *testing.T) {
 		ctx := e.NewContext(req, rec)
 		require.NoError(t, c.StartBirdNETPiImport(ctx))
 		assert.Equal(t, http.StatusBadRequest, rec.Code, "mode %q should be rejected", mode)
+		var resp apicore.ErrorResponse
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+		assert.Equal(t, "unsupported import mode", resp.Message, "mode %q should be rejected by the mode check", mode)
 	}
 }
 
@@ -794,20 +803,22 @@ func TestStreamImportProgress_JobNotFound_Returns404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-// TestStreamImportProgress_DoneJob_EmitsCompleteEvent verifies complete event is emitted.
+// TestStreamImportProgress_DoneJob_EmitsCompleteEvent covers the connect-after-done
+// path: a finished job answers with exactly one terminal event whose id is the
+// job's latest sequence number, complementing TestStreamImportProgress_LiveStreaming
+// which covers the live multi-event path and the monotonic ids across events.
 func TestStreamImportProgress_DoneJob_EmitsCompleteEvent(t *testing.T) {
 	_, c := newImportHandler(t)
 
-	jobCtx, jobCancel := context.WithCancel(t.Context())
-	jobCancel()
-	job := newImportJob("testjob", jobCancel)
+	job := newImportJob("testjob", func() {})
 	require.True(t, c.importMgr.start(job))
 	job.Report(imports.ImportStats{Total: 5, Processed: 5, Inserted: 5, Phase: "import"})
 	job.finish(imports.ImportStats{Total: 5, Processed: 5, Inserted: 5, Phase: "done"}, nil)
+	_, wantSeq, done, _, _ := job.snapshot()
+	require.True(t, done)
 
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	req = req.WithContext(jobCtx)
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 	ctx.SetParamNames("jobId")
@@ -815,74 +826,18 @@ func TestStreamImportProgress_DoneJob_EmitsCompleteEvent(t *testing.T) {
 
 	require.NoError(t, c.StreamImportProgress(ctx))
 
-	body := rec.Body.String()
-	events := parseImportSSEEvents(body)
-	require.NotEmpty(t, events, "expected at least one SSE event")
+	events := parseImportSSEEvents(rec.Body.String())
+	require.Len(t, events, 1, "a finished job emits only its terminal event")
+	ev := events[0]
+	assert.Equal(t, importEventComplete, ev.event)
+	assert.Equal(t, strconv.FormatUint(wantSeq, 10), ev.id, "terminal event carries the job's latest sequence number")
 
-	var found bool
-	for _, ev := range events {
-		if ev.event == importEventComplete {
-			found = true
-			var prog importProgress
-			require.NoError(t, json.Unmarshal([]byte(ev.data), &prog))
-			assert.Equal(t, "done", prog.Phase)
-		}
+	var fields map[string]any
+	require.NoError(t, json.Unmarshal([]byte(ev.data), &fields))
+	for key := range fields {
+		assert.Equal(t, strings.ToLower(key), key, "JSON key %q should be lowercase/snake_case", key)
 	}
-	assert.True(t, found, "expected a complete event")
-}
-
-// TestStreamImportProgress_EventIDsMonotonic verifies SSE event IDs are monotonically increasing.
-// This test covers the connect-after-done path (terminal-only event), complementing
-// TestStreamImportProgress_LiveStreaming which covers the live multi-event path.
-func TestStreamImportProgress_EventIDsMonotonic(t *testing.T) {
-	_, c := newImportHandler(t)
-
-	_, jobCancel := context.WithCancel(t.Context())
-	defer jobCancel()
-	job := newImportJob("monotone", jobCancel)
-	require.True(t, c.importMgr.start(job))
-
-	for i := range 3 {
-		job.Report(imports.ImportStats{Total: 10, Processed: i + 1, Phase: "import"})
-	}
-	job.finish(imports.ImportStats{Total: 10, Processed: 10, Inserted: 10, Phase: "done"}, nil)
-
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	req = req.WithContext(t.Context())
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("jobId")
-	ctx.SetParamValues("monotone")
-
-	require.NoError(t, c.StreamImportProgress(ctx))
-
-	body := rec.Body.String()
-	events := parseImportSSEEvents(body)
-	require.NotEmpty(t, events)
-
-	var prevID int64 = -1
-	for _, ev := range events {
-		if ev.event == importEventHeartbeat {
-			continue
-		}
-		require.NotEmpty(t, ev.id, "event %q must have an id", ev.event)
-		id, err := strconv.ParseInt(ev.id, 10, 64)
-		require.NoError(t, err, "id must be numeric, got %q", ev.id)
-		assert.Greater(t, id, prevID, "ids must be strictly increasing")
-		prevID = id
-	}
-
-	for _, ev := range events {
-		if ev.event != importEventProgress && ev.event != importEventComplete {
-			continue
-		}
-		var m map[string]any
-		require.NoError(t, json.Unmarshal([]byte(ev.data), &m))
-		for key := range m {
-			assert.Equal(t, strings.ToLower(key), key, "JSON key %q should be lowercase/snake_case", key)
-		}
-	}
+	assert.Equal(t, "done", fields["phase"])
 }
 
 // TestCancelImport_JobNotFound_Returns404 verifies 404 for unknown job.
@@ -899,61 +854,44 @@ func TestCancelImport_JobNotFound_Returns404(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, rec.Code)
 }
 
-// TestCancelImport_RunningJob_Returns200Cancelling verifies cancel returns 200 with cancelling status.
-func TestCancelImport_RunningJob_Returns200Cancelling(t *testing.T) {
-	testutil.VerifyNoLeaks(t)
-	_, c := newImportHandler(t)
-	mockDS := mocks.NewMockInterface(t)
-	c.DS = mockDS
-	mockRepo := mocks.NewMockDetectionRepository(t)
-	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).
-		Return(nil, int64(0), nil).Maybe()
-	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
-	c.Repo = mockRepo
-
-	blockCh := make(chan struct{})
-	det := imports.SourceDetection{
-		Date: "2024-01-01", Time: "10:00:00",
-		ScientificName: "Corvus cornix", CommonName: "Hooded Crow",
-		Confidence: 0.85,
-	}
-	c.importSourceFactory = func(_ string) (imports.Source, error) {
-		return &fakeSource{
-			batches: [][]imports.SourceDetection{{det}},
-			block:   blockCh,
-		}, nil
+// TestCancelImport_ReportsJobState verifies the cancel endpoint calls the job's cancel
+// function and answers 200 with "cancelling" for a running job or "done" for a
+// finished one.
+func TestCancelImport_ReportsJobState(t *testing.T) {
+	tests := []struct {
+		name       string
+		finished   bool
+		wantStatus string
+	}{
+		{name: "running job is cancelling", wantStatus: importStatusCancelling},
+		{name: "finished job is done", finished: true, wantStatus: importStatusDone},
 	}
 
-	dir := t.TempDir()
-	_ = os.WriteFile(filepath.Join(dir, "birds.db"), []byte{}, 0o600)
-	c.importSourceRoot = dir
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, c := newImportHandler(t)
+			var cancelled atomic.Bool
+			job := newImportJob("job1", func() { cancelled.Store(true) })
+			require.True(t, c.importMgr.start(job))
+			if tt.finished {
+				job.finish(imports.ImportStats{Phase: "done"}, nil)
+			}
 
-	body := testDBOnlyBody
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	startCtx := e.NewContext(req, rec)
-	require.NoError(t, c.StartBirdNETPiImport(startCtx))
-	assert.Equal(t, http.StatusAccepted, rec.Code)
+			e := echo.New()
+			req := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			ctx.SetParamNames("jobId")
+			ctx.SetParamValues("job1")
+			require.NoError(t, c.CancelImport(ctx))
 
-	var startResp startImportResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &startResp))
-	jobID := startResp.JobID
-
-	req2 := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
-	rec2 := httptest.NewRecorder()
-	cancelCtx := e.NewContext(req2, rec2)
-	cancelCtx.SetParamNames("jobId")
-	cancelCtx.SetParamValues(jobID)
-	require.NoError(t, c.CancelImport(cancelCtx))
-	assert.Equal(t, http.StatusOK, rec2.Code)
-
-	var cancelResp cancelImportResponse
-	require.NoError(t, json.Unmarshal(rec2.Body.Bytes(), &cancelResp))
-	assert.Contains(t, []string{importStatusCancelling, importStatusDone}, cancelResp.Status)
-
-	close(blockCh)
+			assert.Equal(t, http.StatusOK, rec.Code)
+			var resp cancelImportResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			assert.Equal(t, tt.wantStatus, resp.Status)
+			assert.True(t, cancelled.Load(), "the job's cancel function must be called")
+		})
+	}
 }
 
 // TestGetImportStatus_NoJob_ReturnsIdle verifies idle status when no job exists.

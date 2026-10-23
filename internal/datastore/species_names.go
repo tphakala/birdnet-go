@@ -1,6 +1,10 @@
 package datastore
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+)
 
 // SpeciesName is one resolved model label: its scientific name and the localized
 // common name to display and search for it.
@@ -20,7 +24,9 @@ type batchLocalizer interface {
 }
 
 // ResolveLabelNames splits each "Scientific_Common" (or scientific-only) label and
-// resolves a localized common name for it. Scientific-only secondary-model labels
+// resolves a localized common name for it. A full Perch multi-word sound class
+// (see nonbird.MultiWordLabelNames) is kept whole as the scientific key, with the
+// spaced label as its common name. Scientific-only secondary-model labels
 // that the working-set resolver (ResolveLocal) does not cover are batched into a
 // single cold-path dataset pass via batchLocalizer, so they become searchable without
 // a per-label scan. The returned slice preserves label order; labels with no
@@ -40,7 +46,10 @@ func ResolveLabelNames(labels []string, resolver SpeciesNameResolver) []SpeciesN
 		// A scientific-only label (no separator, for example Perch v2 / bat labels)
 		// has no embedded common name; treat the whole label as the scientific name.
 		sci, common, found := strings.Cut(label, "_")
-		if !found {
+		if id, display, ok := nonbird.MultiWordLabelNames(label); ok {
+			// Perch v2 multi-word sound class: keep the whole label as the key.
+			sci, common = id, display
+		} else if !found {
 			sci, common = label, ""
 		}
 		sci = strings.TrimSpace(sci)

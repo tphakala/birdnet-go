@@ -94,15 +94,6 @@ If you prefer to use an RTSP stream instead of a sound card:
 3. Comment out the sound card source and uncomment the RTSP section
 4. Add your RTSP URL(s)
 
-### HLS Streaming Performance Optimization
-
-The configuration includes a RAM disk (tmpfs) mount for the HLS streaming segments directory:
-
-- The `/config/hls` directory is mounted as a 50MB RAM disk
-- This improves streaming performance by storing temporary stream segments in memory
-- The RAM disk is automatically configured with the same UID/GID as your BirdNET-Go user
-- This temporary storage is cleared on container restart (which is expected for stream segments)
-
 ## Internet Access Using Cloudflare Tunnel
 
 The Docker Compose configuration includes an option to use Cloudflare Tunnel (cloudflared) to securely expose your BirdNET-Go instance to the internet without opening ports on your router/firewall.
@@ -157,7 +148,7 @@ With the bridge file, you can change the port by:
 - **Host firewall:** Docker no longer inserts firewall rules for a published port, so ufw or firewalld now apply. Open `WEB_PORT` (for example `sudo ufw allow 8080/tcp`).
 - **Prometheus telemetry:** if you enable it, it listens on every host interface on port 8090 (in bridge mode it stayed inside the container, because the Compose file does not publish it). Set its listen address to `127.0.0.1:8090` or a LAN IP in Settings.
 - **No localhost-only web interface:** the web interface always listens on all interfaces in host mode. To limit it to localhost, use the bridge file with a `127.0.0.1:` port mapping.
-- **Reverse proxy:** a proxy on the same host reaches the app on `localhost:<WEB_PORT>` and should send `X-Forwarded-For`.
+- **Reverse proxy:** a proxy on the same host reaches the app on `localhost:<WEB_PORT>` and should send `X-Forwarded-For` and `X-Forwarded-Proto`. Subnet bypass honors the client address it forwards only when the address the app sees the proxy connect from is listed in `security.trustedproxies`: `127.0.0.1` when the proxy reaches `localhost` over IPv4, `::1` over IPv6.
 - **Subnet bypass and IPv6:** with subnet bypass enabled, IPv6 clients are now seen by their real address. If you rely on bypass for IPv6 clients, add your IPv6 prefix to the subnet list.
 - **Sound card:** on a host without one (RTSP streams only), remove the `/dev/snd` line from the Compose file, or `docker compose up` fails.
 - **Cloudflare Tunnel:** the cloudflared service must also use `network_mode: host`, and the tunnel's service URL is `http://localhost:<WEB_PORT>`.

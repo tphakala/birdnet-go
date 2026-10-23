@@ -228,7 +228,9 @@ type Recommendation struct {
 type Input struct {
 	// Capabilities are the host capability tokens (hwprofile.Profile.Capabilities()).
 	Capabilities []string
-	// TotalRAMBytes is the effective memory ceiling, 0 when unknown.
+	// TotalRAMBytes is an upper bound on the memory ceiling (the exact ceiling
+	// when it is known), 0 when unknown. Because it may be only a bound, use it
+	// for "at most N" checks, never to prove a host has at least N.
 	TotalRAMBytes int64
 	// DeviceClass is the benchmark device identifier for this host, "" when the
 	// host maps to no benchmarked class.
@@ -361,7 +363,9 @@ func evaluateVariant(entry *classifier.CatalogEntry, v *classifier.CatalogVarian
 	// deliberately treated as "do not block", because hiding a model from a user
 	// whose RAM probe failed is worse than optimistically offering it. The low-RAM
 	// score bonus is likewise inert on unknown RAM, since its CapLowRAM token is
-	// only emitted when TotalRAMBytes is both known and below the threshold.
+	// only emitted when memory is provably below the threshold. The figure may be
+	// an upper bound when a cgroup limit was unreadable, which keeps this "below
+	// N" check sound.
 	if v.Requirements.MinRAMMB > 0 && in.TotalRAMBytes > 0 && in.TotalRAMBytes < int64(v.Requirements.MinRAMMB)*bytesPerMB {
 		blockers = append(blockers, Reason{Code: BlockerRAMInsufficient, Args: map[string]string{"requiredMb": strconv.Itoa(v.Requirements.MinRAMMB)}})
 	}

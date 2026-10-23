@@ -5,7 +5,6 @@ import {
   firstFreeStreamName,
   findDevice,
   initialAudioChoice,
-  isMalformedRtspUrl,
   isRtspUrl,
   soundCardPayloads,
   streamPayloads,
@@ -50,20 +49,6 @@ describe('isRtspUrl', () => {
     ['', false],
   ])('%j gives %s', (url, expected) => {
     expect(isRtspUrl(url)).toBe(expected);
-  });
-});
-
-describe('isMalformedRtspUrl', () => {
-  it.each([
-    { url: '', expected: false },
-    { url: '   ', expected: false },
-    { url: 'r', expected: true },
-    { url: 'http://x', expected: true },
-    { url: 'rtsp://', expected: true },
-    { url: 'rtsp://camera.example/stream', expected: false },
-    { url: '  rtsps://h  ', expected: false },
-  ])('returns $expected for "$url"', ({ url, expected }) => {
-    expect(isMalformedRtspUrl(url)).toBe(expected);
   });
 });
 

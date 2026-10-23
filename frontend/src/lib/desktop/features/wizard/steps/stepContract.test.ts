@@ -17,8 +17,8 @@ vi.mock('$lib/utils/api', () => ({
   },
 }));
 
-// LocationPickerMap relies on maplibre-gl; LanguageSelector is not under test
-vi.mock('../components/LocationPickerMap.svelte');
+// LocationMap relies on maplibre-gl; LanguageSelector is not under test
+vi.mock('$lib/desktop/components/forms/LocationMap.svelte');
 vi.mock('$lib/desktop/components/ui/LanguageSelector.svelte');
 
 vi.mock('$lib/stores/settings', async () => {
@@ -92,14 +92,19 @@ const stepCases: StepCase[] = [
     component: IntegrationStep,
     edit: async () => {
       await fireEvent.click(
-        screen.getByRole('button', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
+        screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.errorReportingLabel/ })
       );
     },
     invalidEdit: async () => {
       await fireEvent.click(
-        screen.getByRole('button', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
+        screen.getByRole('checkbox', { name: /wizard\.steps\.integration\.birdweatherLabel/ })
       );
-      await fireEvent.input(await screen.findByRole('textbox'), { target: { value: 'abc' } });
+      await fireEvent.input(
+        await screen.findByRole('textbox', {
+          name: 'settings.integration.birdweather.token.label',
+        }),
+        { target: { value: 'abc' } }
+      );
     },
     invalidSections: ['birdweather'],
   },

@@ -25,6 +25,7 @@ func TestIsRenderFor(t *testing.T) {
 		{"sized raw", "b_1026px.png", "b", true},
 		{"sized legend", "b_514px-legend.png", "b", true},
 		{"sized style dr profile legend", "b_1026px-scientific_dark-dr80-bat-v2-legend.png", "b", true},
+		{"sized style dr profile v3 legend", "b_1026px-scientific_dark-dr80-bat-v3-legend.png", "b", true},
 		{"short width", "b_123px.png", "b", true},
 		{"extended capture sibling", "b_15s_1026px.png", "b", false},
 		{"longer base", "bx_1026px.png", "b", false},

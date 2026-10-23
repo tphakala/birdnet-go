@@ -434,9 +434,6 @@
     })()
   );
 
-  // Check if ffmpeg is available
-  let ffmpegAvailable = $state(true); // Assume true for now
-
   // Bitrate slider configuration based on format
   let bitrateConfig = $derived(getBitrateConfig(settings.audio.export.type));
 
@@ -617,11 +614,9 @@
   }
 
   // Handle equalizer updates from the AudioEqualizerSettings component
-  // Note: Filter type matches component's local interface with optional id
   function handleEqualizerUpdate(equalizerSettings: {
     enabled: boolean;
     filters: Array<{
-      id?: string;
       type: EqualizerFilterType;
       frequency: number;
       q?: number;
@@ -630,19 +625,10 @@
       passes?: number;
     }>;
   }) {
-    // Transform filters to ensure all have an id (required by store type)
-    const transformedSettings = {
-      enabled: equalizerSettings.enabled,
-      filters: equalizerSettings.filters.map((filter, index) => ({
-        ...filter,
-        id: filter.id || `filter-${Date.now()}-${index}`,
-      })),
-    };
-
     settingsActions.updateSection('realtime', {
       audio: {
         ...settings.audio,
-        equalizer: transformedSettings,
+        equalizer: { enabled: equalizerSettings.enabled, filters: equalizerSettings.filters },
       },
     });
   }
@@ -1020,7 +1006,7 @@
                 </li>
                 <li>
                   {t('settings.audio.soundLevelMonitoring.prometheusMetrics')}
-                  <code>birdnet_sound_level_db</code>
+                  <code>myaudio_sound_level_db</code>
                 </li>
               </ul>
             </SettingsNote>
@@ -1348,10 +1334,7 @@
                 step={bitrateConfig.step}
                 size="sm"
                 unit="k"
-                disabled={!settings.audio.export.enabled ||
-                  store.isLoading ||
-                  store.isSaving ||
-                  !ffmpegAvailable}
+                disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
                 formatValue={(v: number) => `${v}k`}
                 helpText={t('settings.audio.fileSettings.bitrateHelp', {
                   min: bitrateConfig.min,

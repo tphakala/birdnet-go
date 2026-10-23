@@ -12,13 +12,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
 const keptClipName = "2026/01/a.wav"
 
 func TestNoteToDetectionResponse_SpectrogramOnly(t *testing.T) {
-	_, _, h := setupTestEnvironment(t)
+	_, _, h := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
 
 	tests := []struct {
 		name string

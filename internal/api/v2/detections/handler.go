@@ -10,7 +10,7 @@
 //
 // Eight members are injected from the facade because they live on facade-owned
 // subsystems that have not been extracted into their own domains yet:
-//   - settingsMutex / getSettingsOrFallback / publishAndSaveSettings /
+//   - settingsMutex / getSettingsOrFallback / updateAndSaveSettings /
 //     handleSettingsChanges: the facade settings-save machinery, used by the
 //     review/ignore exclude-list mutation (toggleSpeciesInIgnoredList,
 //     addSpeciesToIgnoredList). settingsMutex MUST be the same *sync.RWMutex the
@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -65,12 +66,22 @@ type Handler struct {
 
 	settingsMutex             *sync.RWMutex
 	getSettingsOrFallback     func() *conf.Settings
-	publishAndSaveSettings    func(current, updated *conf.Settings) error
+	updateAndSaveSettings     apicore.SettingsUpdater
 	handleSettingsChanges     func(oldSettings, currentSettings *conf.Settings) error
 	isClientAuthenticated     func(ctx echo.Context) bool
 	loadCommonNameMap         func() map[string]string
 	loadFoldedCommonNameMap   func() map[string]string
 	loadCommonToScientificMap func() map[string]string
+
+	// probeClipRate reads a clip's sample rate from its header for the lazy fill
+	// (clip_rate_fill.go). New sets the production probe; tests replace it.
+	probeClipRate clipRateProbe
+	// clipRateWait is how long GetDetection waits for the lazy fill. New sets
+	// clipRateResponseBudget; tests replace it.
+	clipRateWait time.Duration
+	// clipRateGroup de-duplicates the lazy fill per row while it is in flight. It
+	// holds no result afterwards, so the fill is stateless.
+	clipRateGroup singleflight.Group
 }
 
 // New constructs the detections domain handler around the shared core and the
@@ -84,7 +95,7 @@ func New(
 	core *apicore.Core,
 	settingsMutex *sync.RWMutex,
 	getSettingsOrFallback func() *conf.Settings,
-	publishAndSaveSettings func(current, updated *conf.Settings) error,
+	updateAndSaveSettings apicore.SettingsUpdater,
 	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
 	isClientAuthenticated func(ctx echo.Context) bool,
 	loadCommonNameMap func() map[string]string,
@@ -95,12 +106,14 @@ func New(
 		Core:                      core,
 		settingsMutex:             settingsMutex,
 		getSettingsOrFallback:     getSettingsOrFallback,
-		publishAndSaveSettings:    publishAndSaveSettings,
+		updateAndSaveSettings:     updateAndSaveSettings,
 		handleSettingsChanges:     handleSettingsChanges,
 		isClientAuthenticated:     isClientAuthenticated,
 		loadCommonNameMap:         loadCommonNameMap,
 		loadFoldedCommonNameMap:   loadFoldedCommonNameMap,
 		loadCommonToScientificMap: loadCommonToScientificMap,
+		probeClipRate:             probeClipFileRate,
+		clipRateWait:              clipRateResponseBudget,
 	}
 }
 
@@ -137,8 +150,8 @@ func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
 		return
 	}
 
-	// DetectionCache is already initialized by the constructor (NewWithOptions); do not
-	// re-create it here, which would orphan the constructor's cache (and its janitor).
+	// DetectionCache is initialized by the constructor (NewWithOptions); do not
+	// re-create it here, which would split invalidation between two caches.
 
 	// Detection endpoints - publicly accessible
 	//

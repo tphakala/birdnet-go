@@ -515,6 +515,18 @@
         "title": "{modelName} epäonnistuu jokaisessa analyysissä",
         "message": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: päättely palautti virheen. Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit.",
         "nonFiniteMessage": "{modelName} on ladattu, mutta sen viimeiset {failures} analyysiä peräkkäin epäonnistuivat taustajärjestelmällä {runtime}: malli palautti virheellisiä pisteitä (NaN tai äärettömiä). Ääntä tallennetaan, mutta tämä malli ei tunnista mitään. Tarkista malli sivulla Järjestelmä > Tekoälymallit."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analyysin päällekkäisyys rajoitettu tälle laitteelle",
+        "cadenceCappedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi väärien positiivisten suodatin voi vaatia vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu; katso Asetukset > Analyysi.",
+        "cadenceOverloadedTitle": "Laite ei pysy äänianalyysin tahdissa",
+        "cadenceOverloadedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä, joten analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä, tai valitse nopeampi mallivariantti."
+      },
+      "storage": {
+        "notPersistentTitle": "Tiedot menetetään, kun kontti luodaan uudelleen",
+        "notPersistentMessage": "Nämä polut ovat tallennustilassa, joka poistetaan, kun kontti luodaan uudelleen, esimerkiksi image-päivityksen yhteydessä: {paths}. Yhdistä niihin taltio tai isäntäkoneen hakemisto konttisi asetuksissa.",
+        "anonymousVolumeTitle": "Tiedot tallennetaan nimettömälle konttitaltiolle",
+        "anonymousVolumeMessage": "Nämä polut ovat nimettömillä taltioilla, jotka konttiympäristö loi, koska taltiota ei ollut yhdistetty: {paths}. Uudelleen käynnistetty kontti, esimerkiksi docker run -komennolla image-päivityksen jälkeen, saa uudet tyhjät taltiot, joten tiedot näyttävät kadonneen. Yhdistä niihin nimetty taltio tai isäntäkoneen hakemisto."
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -1069,7 +1081,8 @@
       "error": "Virhe havainnon latauksessa: {error}",
       "loadingResults": "Ladataan {count} tulosta...",
       "thumbnailLoading": "Ladataan {species} pikkukuvaa...",
-      "thumbnailLoaded": "Pikkukuva {species} ladattu"
+      "thumbnailLoaded": "Pikkukuva {species} ladattu",
+      "resultsPerPage": "Tuloksia sivulla"
     },
     "errors": {
       "notFound": "Havaintoa ei löytynyt. Se on ehkä poistettu tai tunniste on virheellinen.",
@@ -1594,7 +1607,7 @@
           "restartTitle": "Uudelleenkäynnistys vaaditaan",
           "restartBody": "Käynnistä sovellus uudelleen vaihtaaksesi V2-tietokantaan. Vanhan tietokannan siivous on käytettävissä uudelleenkäynnistyksen jälkeen.",
           "fallbackError": "Tietuemäärä ei täsmää vanhan ja V2-tietokannan välillä. Joitain tietueita ei ehkä ole siirretty oikein.",
-          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Kaksoistallennustila varmistaa, ettei tietoja menetetä siirron aikana.",
+          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Siirron aikana tallennetut uudet havainnot kopioidaan myös uuteen tietokantaan.",
           "sourceLegacy": "Lähde (vanha)",
           "targetV2": "Kohde (V2)",
           "recordsLabel": "Tietueet",
@@ -1646,7 +1659,7 @@
         },
         "notes": {
           "in_progress": "Voit jatkaa järjestelmän normaalia käyttöä migraation suorittaessa taustalla.",
-          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
+          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - uudet havainnot tallennetaan nykyiseen tietokantaan ja kopioidaan uuteen tietokantaan siirron aikana. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
           "migrating": "Kopioidaan olemassa olevia havaintojasi uuteen tietokantaan. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen. Voit keskeyttää ja jatkaa milloin tahansa.",
           "validating": "Tarkistetaan, että kaikki tietueet kopioitiin oikein. Melkein valmis!",
           "cutover": "Vaihdetaan uuteen tietokantaan. Tämä kestää vain hetken.",
@@ -2329,11 +2342,14 @@
       "saveAriaLabel": "Tallenna muutokset",
       "savingAriaLabel": "Tallennetaan muutoksia...",
       "unsavedChanges": "Tallentamattomat muutokset",
-      "toolbar": "Asetusten toiminnot"
+      "toolbar": "Asetusten toiminnot",
+      "validationBlocked": "Joihinkin kenttiin täytyy kiinnittää huomiota ennen tallennusta.",
+      "noChangesToSave": "Ei tallennettavia muutoksia."
     },
     "errors": {
       "loadFailed": "Asetusten lataaminen epäonnistui",
       "saveFailed": "Asetusten tallentaminen epäonnistui",
+      "changedElsewhere": "Asetuksia muutettiin muualla. Tarkista ne ja tallenna uudelleen.",
       "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
       "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
     },
@@ -2413,10 +2429,9 @@
             "lenient": "Heikkolaatuiselle äänelle (RTSP-kamerat, web-kameramikrofonit)",
             "moderate": "Tasapainoinen tyypillisille harrastusasetuksille",
             "balanced": "Alkuperäinen toiminta ennen syyskuuta 2025",
-            "strict": "RPi 4+ vaaditaan. Laadukkaille mikrofoneille",
-            "maximum": "RPi 4+ vaaditaan. Ammattitason mikrofoneille"
+            "strict": "Laadukkaille mikrofoneille",
+            "maximum": "Ammattitason mikrofoneille"
           },
-          "hardwareNote": "Tiukka- ja maksimitasot vaativat korkeampia päällekkäisyysasetuksia ja enemmän prosessoritehoa. RPi 4 tai parempi laitteisto vaaditaan näille tasoille.",
           "overlapAdjusted": "Päällekkäisyysasetus säädetty automaattisesti arvoon {overlap}s suodatinvaatimusten täyttämiseksi",
           "overlapReduced": "Päällekkäisyysasetus pienennetty arvoon {overlap}s vastaamaan suodatustasoa",
           "levelNames": {
@@ -2428,7 +2443,19 @@
             "maximum": "Maksimi",
             "unknown": "Tuntematon"
           },
-          "warningOff": "Ilman suodatusta jokainen luottamuskynnyksen ylittävä havainto hyväksytään välittömästi. Tämä tuottaa tyypillisesti useita vääriä positiivisia päivässä. Jo matala suodatus parantaa tulosten laatua merkittävästi."
+          "warningOff": "Ilman suodatusta jokainen luottamuskynnyksen ylittävä havainto hyväksytään välittömästi. Tämä tuottaa tyypillisesti useita vääriä positiivisia päivässä. Jo matala suodatus parantaa tulosten laatua merkittävästi.",
+          "readoutTitle": "Vaaditut vahvistukset nyt",
+          "readoutPreviewTitle": "Vaaditut vahvistukset tallennuksen jälkeen (arvio)",
+          "readoutIntro": "Havainto hyväksytään, kun riittävän moni analyysi-ikkuna {seconds} sekunnin jaksolla vahvistaa sen.",
+          "readoutLine": "{model}: {count}/{windows} ikkunaa, uusi ikkuna {step} s välein",
+          "readoutPreview": "Arvio tallentamattomien muutosten perusteella. Laitteen raja tarkistetaan uudelleen tallennuksen jälkeen.",
+          "readoutPending": "Tallennettuja asetuksia otetaan käyttöön. Arvot ovat arvioita, kunnes päivitetyt määrät on ladattu.",
+          "capNoticeTitle": "Päällekkäisyys rajoitettu laitteen suorituskykyyn",
+          "capNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi suodatin voi vaatia vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu.",
+          "overloadedNoticeTitle": "Laite ei pysy analyysin tahdissa",
+          "overloadedNotice": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä. Analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä, tai valitse nopeampi mallivariantti.",
+          "unknownLatency": "Käsittelyaikaa ei voitu mitata malleille {models}, joten sitä ei huomioida päällekkäisyyttä rajoitettaessa. Analyysi voi silti jäädä jälkeen.",
+          "cpuNote": "Voimakkaampi taso analysoi päällekkäistä ääntä useammin, mikä kuluttaa suoritinaikaa jokaista käytössä olevaa mallia ja äänilähdettä kohden. BirdNET-Go rajoittaa päällekkäisyyden automaattisesti siihen, minkä tämä laite pystyy käsittelemään."
         },
         "rangeFilter": {
           "title": "Aluesuodatin",
@@ -2443,7 +2470,7 @@
             "accuracy": "Arvioitu tarkkuus: {accuracy} m:n sisällä",
             "locationDetected": "Selaimen sijainti havaittu.",
             "geolocationUnsupported": "Tämä selain ei tue laitteen paikannusta. Anna koordinaatit manuaalisesti tai käytä karttaa.",
-            "geolocationRequiresHttps": "Selaimen paikannus vaatii HTTPS-yhteyden tai localhostin. Anna koordinaatit manuaalisesti tai käytä karttaa.",
+            "geolocationInsecureHelp": "Vaatii HTTPS-yhteyden tai localhostin. Hae paikkaa tai käytä karttaa.",
             "geolocationDenied": "Sijaintilupa evättiin. Anna koordinaatit manuaalisesti tai käytä karttaa.",
             "geolocationUnavailable": "Laite ei pystynyt määrittämään sijaintiaan. Anna koordinaatit manuaalisesti tai käytä karttaa.",
             "geolocationTimedOut": "Sijaintipyyntö aikakatkaistiin. Yritä uudelleen, anna koordinaatit manuaalisesti tai käytä karttaa.",
@@ -2670,7 +2697,7 @@
                 "descriptions": {
                   "highContrast": "Paras heikoille signaaleille. Lintujen äänet erottuvat selvästi taustakohinasta. Suositellaan tieteellisille/harmaasävytyyleille.",
                   "standard": "Oletusarvoinen tasapainotettu asetus. Sopii useimpiin käyttötarkoituksiin.",
-                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti. SoX-oletusarvo."
+                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti."
                 }
               },
               "enabled": {
@@ -2772,7 +2799,7 @@
           "title": "Mitä raportti sisältää:",
           "applicationLogs": "**Sovelluslokit** - Viimeisimmät virheet ja virheenkorjaustiedot",
           "configuration": "**Kokoonpano** - Asetuksesi arkaluonteiset tiedot poistettuina",
-          "systemInfo": "**Järjestelmätiedot** - Käyttöjärjestelmän versio, muisti ja suoritusympäristön tiedot",
+          "systemInfo": "**Järjestelmätiedot** - Käyttöjärjestelmän versio, muisti, laitteisto, yhdistetyt USB-laitteet ja äänikortit sekä suoritusympäristön tiedot",
           "notIncluded": "**EI sisälly** - Äänitiedostoja, lintuhavaintoja tai henkilökohtaisia tietoja"
         },
         "userMessage": {
@@ -2925,6 +2952,11 @@
             "unit": "min",
             "helpText": "Estää toistuvat ilmoitukset samasta lajista tämän aikavälin sisällä. Aseta 0 poistaaksesi käytöstä."
           }
+        },
+        "rulesNotice": {
+          "message": "Havaintojen push-ilmoitukset tulevat Säännöt-välilehden hälytyssäännöistä. Sisäänrakennetut havaintosäännöt ilmoittavat vain sovelluksessa. Saat push-ilmoitukset lisäämällä toiminnon {pushAction} sääntöön {ruleName} tai luomalla tapahtumalle {eventName} säännön, jossa on luottamusehto ja odotusaika.",
+          "previousFilters": "Hälytyssäännöt eivät käytä tässä asettamiasi arvoja Vähimmäisluottamus ({confidence} %) ja Lajikohtainen odotusaika ({minutes} min).",
+          "openRules": "Avaa Säännöt"
         },
         "noProviders": "Ei määritettyjä palveluntarjoajia",
         "noProvidersDescription": "Lisää palveluntarjoaja aloittaaksesi push-ilmoitusten vastaanottamisen",
@@ -3192,7 +3224,7 @@
         "vadEnable": "Ota käyttöön Yksityisyyssuoja (Silero VAD)",
         "vadHelp": "Käyttää erillistä neuroverkkomallia ihmispuheen tunnistamiseen luokittelijan rinnalla. Kuluttaa ylimääräisiä järjestelmäresursseja (n. 20-30 Mt RAM-muistia ja suoritinpäättelyä per segmentti).",
         "vadThresholdLabel": "Yksityisyyssuojan kynnysarvo",
-        "vadThresholdHelp": "Yksityisyyssuojan puheentunnistimen herkkyyskynnys (oletus 0.35). Pienempi arvo tekee suodattimesta herkemmän hiljaiselle tai kaukaiselle puheelle."
+        "vadThresholdHelp": "Yksityisyyssuojan puheentunnistimen herkkyyskynnys (oletus 0.6). Pienempi arvo tekee suodattimesta herkemmän hiljaiselle tai kaukaiselle puheelle."
       },
       "falsePositivePrevention": {
         "title": "Väärien positiivisten ehkäisy",
@@ -3229,10 +3261,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Lähetä havainnot BirdWeatheriin",
-        "ffmpegWarning": {
-          "title": "FFmpeg ei havaittu",
-          "message": "Asenna FFmpeg ottaaksesi käyttöön FLAC-koodauksen tuen, BirdWeather on lopettamassa WAV-tiedostojen tuen pakattujen FLAC-äänitiedostojen hyväksi."
-        },
         "enable": "Ota käyttöön BirdWeather-lähetykset",
         "token": {
           "label": "BirdWeather-tunnus",
@@ -3744,6 +3772,8 @@
         "frequencyResponse": "Taajuusvaste",
         "cutoffFrequency": "Rajataajuus",
         "cutoffFrequencyHelp": "Taajuus, jossa suodatin alkaa vaimentaa signaaleja. Lintuäänten taajuudet ovat tyypillisesti 1-10 kHz välillä.",
+        "centerFrequency": "Keskitaajuus",
+        "bandwidth": "Kaistanleveys",
         "qFactor": "Q-kerroin",
         "qFactorHelp": "Laatukerroin ohjaa suodattimen terävyyttä. Matalat arvot (0.1-1) luovat loivempia kaarevia, korkeammat arvot (1-10) luovat jyrkempiä katkoja.",
         "gain": "Vahvistus",
@@ -3751,17 +3781,31 @@
         "attenuation": "Vaimennus",
         "attenuationHelp": "Suodattimen vaimennusnopeus. Korkeammat arvot tarjoavat jyrkemmän suodatettujen taajuuksien vaimentamisen.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Pois",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Lisää useita suodattimia muodostaaksesi taajuusvasteen optimaaliseen lintujen tunnistukseen ympäristössäsi.",
+        "emptyEntryRestored": "Anna numero. Edellinen arvo säilytettiin.",
         "graph": {
           "flatResponse": "Tasainen vaste (Ei suodattimia käytössä)",
           "frequency": "Taajuus (Hz)",
-          "gain": "Vahvistus (dB)"
+          "gain": "Vahvistus (dB)",
+          "loading": "Lasketaan taajuusvastetta...",
+          "updating": "Päivitetään taajuusvastetta...",
+          "error": "Taajuusvastetta ei voitu laskea. Se päivittyy, kun muutat suodatinta tai valitset Yritä uudelleen.",
+          "sampleRate": "Laskettu {rate} Hz:n näytteenottotaajuudelle.",
+          "clipped": "Vaste yltää huippuun {peak} dB, joka on kaavion yläreunan yläpuolella.",
+          "skippedHeading": "{count, plural, one {# suodatin ei ole käytössä äänessä} other {# suodatinta ei käytetä ääneen}}",
+          "skippedReasons": {
+            "unknown_type": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: tätä suodatintyyppiä ei tueta.",
+            "invalid_parameters": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: sen asetukset eivät kelpaa {rate} Hz:n taajuudella.",
+            "add_failed": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan: sitä ei voitu lisätä suodatinketjuun.",
+            "unknown": "Suodatin {number} ({type}, {frequency} Hz) ohitetaan."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3930,7 +3974,7 @@
       "allowSubnetBypassLabel": "Salli aliverkon käyttää ohitustunnistautumista",
       "subnetBypassLocalNote": "Kun tämä on käytössä, tämän palvelimen kanssa samassa paikallisverkossa olevat asiakaslaitteet katsotaan automaattisesti luotettaviksi ja ne ohittavat kirjautumisen. Käytä alla olevaa kenttää vain laajentaaksesi tämän luottamuksen muihin verkkoihin (esimerkiksi erilliseen VLANiin tai reititettyyn aliverkkoon).",
       "allowedSubnetsLabel": "Sallitut aliverkot",
-      "allowedSubnetsHelp": "Lisäverkkoalueet, jotka voivat ohittaa kirjautumisen, tämän palvelimen oman paikallisverkon lisäksi. CIDR-merkintä, pilkuilla eroteltuna.",
+      "allowedSubnetsHelp": "Muut osoitealueet, jotka voivat ohittaa kirjautumisen tämän palvelimen oman paikallisverkon lisäksi. Käytä CIDR-merkintää, kuten 192.168.10.0/24.",
       "securityWarningTitle": "Turvallisuusvaroitus:",
       "subnetWarningText": "Tämän palvelimen paikallisverkko ja kaikki tässä luetellut aliverkot saavat täyden pääsyn ilman kirjautumista. Sisällytä vain verkkoja, joihin luotat täysin.",
       "httpsSettingsTitle": "HTTPS-asetukset",
@@ -4158,6 +4202,77 @@
         "downloadCertificate": "Lataa sertifikaatti",
         "downloadCertificateHelp": "Asenna tämä sertifikaatti käyttöjärjestelmäsi luottamusvarastoon välttääksesi selaimen turvallisuusvaroitukset.",
         "fileReadError": "Valitun tiedoston lukeminen epäonnistui"
+      },
+      "reverseProxy": {
+        "title": "Käänteinen välityspalvelin",
+        "description": "Pääsyyn nginxin, Caddyn, Traefikin, Cloudflaren tai muun välityspalvelimen kautta",
+        "listLabel": "Luotetut välityspalvelimet",
+        "listHelp": "Lisää jokaisen BirdNET-Gon edessä olevan välityspalvelimen osoite. Dockerin kanssa tämä on usein Dockerin yhdyskäytäväosoite, kuten 172.17.0.1.",
+        "placeholder": "Esimerkiksi 172.17.0.1",
+        "emptyState": "Ei luotettuja välityspalvelimia. BirdNET-Go käyttää siihen yhdistävää osoitetta.",
+        "emptyStateCloudflareOnly": "Vain Cloudflaren julkaistut reunaosoitteet ovat luotettuja. Muita välityspalvelimia ei ole listattu.",
+        "rangeBadge": "Osoitealue",
+        "ruleOwnAddress": "Määritä kunkin välityspalvelimen oma osoite. Älä koskaan lisää osoitealuetta, joka sisältää myös tietokoneet, joilta selaat.",
+        "ruleHeaders": "Välityspalvelimen on lisättävä asiakkaan osoite otsakkeeseen X-Forwarded-For tai korvattava otsake X-Real-IP.",
+        "cloudflareLabel": "Luota Cloudflareen",
+        "cloudflareHelp": "Ota tämä käyttöön, kun sivustosi toimii Cloudflaren kautta. BirdNET-Go luottaa silloin Cloudflaren julkaisemiin reunapalvelinosoitteisiin.",
+        "check": {
+          "title": "Yhteytesi",
+          "recheck": "Tarkista uudelleen",
+          "checking": "Tarkistetaan yhteyttäsi",
+          "error": "Yhteyttäsi ei voitu tarkistaa.",
+          "stale": "Tämä tarkistus näyttää tallennetut asetukset. Tallenna tarkistaaksesi muutokset.",
+          "trust": "Luota osoitteeseen {peer}",
+          "trustWarning": "Luota osoitteeseen {peer} vain, jos se on käänteinen välityspalvelimesi eikä tietokone, jolta selaat.",
+          "trustWithCloudflare": "Luota osoitteeseen {peer} ja Cloudflareen",
+          "cloudflareInFront": "Cloudflare on osoitteen {peer} edessä. Luota molempiin vahvistaaksesi osoitteesi.",
+          "cloudflareEdge": "{peer} kuuluu Cloudflarelle. Ota alla käyttöön Luota Cloudflareen.",
+          "chainHint": "Jos osoitteen {peer} edessä on toinen välityspalvelin, lisää myös se luetteloon.",
+          "added": "Lisätty luetteloon. Ota käyttöön tallentamalla.",
+          "coveredBy": "Luettelon osoitealue {range} kattaa jo tämän. Ota käyttöön tallentamalla.",
+          "selfClientCause": "Välityspalvelin saattaa välittää oman osoitteensa asiakkaan osoitteena, usein koska kontin porttien julkaisu piilottaa todellisen asiakkaan. Korjaa tämä kontin tai välityspalvelimen verkkoasetuksissa."
+        },
+        "status": {
+          "direct": {
+            "title": "Yhdistetty suoraan",
+            "body": "Selaimesi yhdistää suoraan BirdNET-Gohon osoitteesta {peer}.",
+            "bodyNoPeer": "Selaimesi yhdistää suoraan BirdNET-Gohon.",
+            "hint": "Jos käytät käänteistä välityspalvelinta ja {peer} on sen osoite, aseta välityspalvelin lähettämään X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Yhdistetty luotetun välityspalvelimen kautta",
+            "body": "Yhteytesi tulee luotetun osoitteen {peer} kautta. Osoitteesi {client} on vahvistettu.",
+            "hint": "Jos {client} on toinen välityspalvelin eikä tietokoneesi, lisää myös kyseinen välityspalvelin luetteloon."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Osoitettasi ei voitu vahvistaa",
+            "body": "{peer} on luotettu, mutta sen välittämää osoitetta ei voitu vahvistaa. Yleisiä syitä:",
+            "causeRange": "Luettelossa oleva osoitealue sisältää myös tietokoneesi, joten mitään ketjun osoitetta ei katsota omaksesi.",
+            "causeHeaders": "Välityspalvelin ei lisää otsaketta X-Forwarded-For tai korvaa otsaketta X-Real-IP.",
+            "causeConflict": "Välityspalvelin lähettää ristiriitaisia tai toistuvia osoiteotsakkeita tai vain Forwarded-otsakkeen."
+          },
+          "untrusted_public_proxy": {
+            "title": "Yhdistetty julkisen välityspalvelimen kautta",
+            "body": "Yhteytesi tulee julkisen osoitteen {peer} kautta. Julkisille osoitteille ei koskaan tarjota yhden napsautuksen luottamusta. Lisää se käsin vain, jos olet varma, että se on välityspalvelimesi."
+          },
+          "untrusted_proxy": {
+            "title": "Yhdistetty ei-luotetun välityspalvelimen kautta",
+            "body": "Yhteytesi tulee osoitteessa {peer} olevan välityspalvelimen kautta, johon ei luoteta, joten BirdNET-Go ei voi vahvistaa osoitettasi."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Välityspalvelimen otsakkeita ei voida vahvistaa",
+            "body": "Yhteytesi tulee osoitteen {peer} kautta, mutta sen lähettämiä osoiteotsakkeita ei voitaisi vahvistaa, vaikka se olisi luotettu.",
+            "bodyNoPeer": "Yhteytesi tulee välityspalvelimen kautta, mutta sen osoitetta ei voitu lukea.",
+            "fix": "Määritä välityspalvelin lisäämään otsake X-Forwarded-For tai korvaamaan otsake X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Käänteisen välityspalvelimen takana tämä ohitus toimii vain, kun välityspalvelin on merkitty luotetuksi.",
+      "bypassProxyLink": "Määritä luotetut välityspalvelimet",
+      "allowedSubnetsEmpty": "Ei lisäaliverkkoja. Vain tämän palvelimen oma paikallisverkko voi ohittaa kirjautumisen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} sisältää virheellisen merkinnän.",
+        "pendingEntry": "{tab}: {field} sisältää tekstiä, jota ei lisätty. Paina Enter tai Lisää, tai tyhjennä kenttä."
       }
     },
     "species": {
@@ -4917,6 +5032,28 @@
         "edit": "Muokkaa lajia",
         "remove": "Poista laji"
       }
+    },
+    "networkAddressList": {
+      "add": "Lisää",
+      "remove": "Poista {address}",
+      "empty": "Osoitteita ei ole vielä lisätty.",
+      "pendingHint": "Paina Enter tai Lisää lisätäksesi tämän osoitteen.",
+      "limitReached": "Luettelo on täynnä ({max} kohdetta).",
+      "rowDuplicate": "Kaksoiskappale",
+      "rowInvalid": {
+        "cidr": "Virheellinen osoitealue",
+        "ip": "Virheellinen IP-osoite",
+        "ipOrCidr": "Virheellinen osoite tai osoitealue"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Virheellinen osoitealue: {values}. Käytä osoitealuetta kuten 192.168.1.0/24.",
+          "ip": "Virheellinen IP-osoite: {values}. Käytä osoitetta kuten 192.168.1.10.",
+          "ipOrCidr": "Virheellinen osoite tai osoitealue: {values}. Käytä osoitetta kuten 192.168.1.10 tai osoitealuetta kuten 192.168.1.0/24."
+        },
+        "duplicate": "On jo luettelossa: {values}.",
+        "limit": "Luetteloon mahtuu enintään {max} kohdetta. Ei lisätty: {values}."
+      }
     }
   },
   "media": {
@@ -4943,6 +5080,7 @@
       "loop": "Vaihda silmukka",
       "player": "Äänisoitin",
       "autoplayBlocked": "Klikkaa toistaaksesi (automaattinen toisto estetty)",
+      "hlsLoadFailed": "Äänisoittimen lataaminen epäonnistui, lataa sivu uudelleen ja yritä uudestaan",
       "hlsNotSupported": "HLS-toisto ei ole tuettu tässä selaimessa",
       "streamStarting": "Käynnistetään äänistriimi...",
       "levelFor": "Äänitaso lähteelle {source}",
@@ -5111,6 +5249,33 @@
       "viewDetections": "Näytä lajin {name} havainnot",
       "largeView": "Suuri kuva lajista {name}",
       "clickToView": "Napsauta nähdäksesi havainnot"
+    },
+    "locationMap": {
+      "mapLabel": "Kartta aseman sijainnin valitsemiseen",
+      "expandedMapLabel": "Koko näytön kartta aseman sijainnin valitsemiseen",
+      "zoomIn": "Lähennä",
+      "zoomOut": "Loitonna",
+      "expand": "Laajenna kartta koko näytölle",
+      "search": {
+        "label": "Hae paikkaa",
+        "placeholder": "Paikkakunta tai osoite",
+        "submit": "Hae",
+        "disclosure": "Haut lähetetään Photon-palveluun (photon.komoot.io), joka käyttää OpenStreetMap-dataa.",
+        "openPhoton": "Avaa Photon uudessa välilehdessä",
+        "searching": "Haetaan...",
+        "results": "{count, plural, one {# paikka löytyi} other {# paikkaa löytyi}}",
+        "noResults": "Paikkoja ei löytynyt. Kokeile toista nimeä tai napsauta karttaa.",
+        "errorNetwork": "Paikkahaku ei ole käytettävissä. Tarkista internetyhteys. Voit silti napsauttaa karttaa tai syöttää koordinaatit.",
+        "errorRateLimited": "Liian monta hakua. Odota hetki ja yritä uudelleen.",
+        "errorUnavailable": "Hakupalvelu ei vastannut. Voit silti napsauttaa karttaa tai syöttää koordinaatit.",
+        "kind": {
+          "city": "Kaupunki",
+          "town": "Taajama",
+          "village": "Kylä",
+          "station": "Asema",
+          "airport": "Lentokenttä"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5150,6 +5315,9 @@
       "invalidJSON": "Virheellinen JSON",
       "invalidEscalation": "Eskalaatioaskeleet ovat virheellisiä",
       "engineUnavailable": "Hälytysjärjestelmä ei ole käytettävissä"
+    },
+    "insights": {
+      "v2Required": "Analyysit vaativat laajennetun (v2) tietokannan"
     },
     "detection": {
       "invalidDate": "Virheellinen {paramName}-muoto, käytä VVVV-KK-PP"
@@ -5279,7 +5447,9 @@
       "saveFailed": "Tämän vaiheen tallennus epäonnistui. Tarkista yhteys ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
       "saveRejected": "Tämän vaiheen asetuksia ei hyväksytty. Tarkista arvot ja yritä uudelleen tai ohita käyttöönotto ja muuta asia myöhemmin Asetuksissa.",
       "stepLoadFailed": "Tämän vaiheen lataus epäonnistui. Paina Yritä uudelleen tai lataa sivu uudelleen.",
-      "stepLoadFailedReload": "Tämän vaiheen lataus epäonnistui edelleen. Lataa sivu uudelleen ja yritä uudestaan; aiemmissa vaiheissa tallennetut valinnat säilyvät."
+      "stepLoadFailedReload": "Tämän vaiheen lataus epäonnistui edelleen. Lataa sivu uudelleen ja yritä uudestaan; aiemmissa vaiheissa tallennetut valinnat säilyvät.",
+      "audioSourceSaveUnfinished": "Äänilähteen vaihto ei valmistunut. Tarkista äänilähteet kohdasta Asetukset > Ääni.",
+      "saveUnfinished": "Osa käyttöönoton muutoksista ei tallentunut. Tarkista ne Asetuksissa."
     },
     "reasons": {
       "completeStep": "Suorita tämä vaihe loppuun jatkaaksesi."
@@ -5287,6 +5457,7 @@
     "leaveConfirm": {
       "title": "Poistutaanko käyttöönotosta?",
       "message": "Käyttöönotto ei avaudu uudelleen. Aiemmissa vaiheissa tallennetut valinnat säilyvät; tämän vaiheen muutoksia ei tallenneta. Voit muuttaa kaiken myöhemmin Asetuksissa.",
+      "messageSaving": "Käyttöönotto ei avaudu uudelleen. Aiemmissa vaiheissa tallennetut valinnat säilyvät. Tämän vaiheen tallennus on vielä kesken, ja osa sen muutoksista tai kaikki ne eivät välttämättä säily. Voit muuttaa kaiken myöhemmin Asetuksissa.",
       "stay": "Jatka käyttöönottoa",
       "leave": "Poistu käyttöönotosta"
     },
@@ -5312,13 +5483,6 @@
         "locationHelp": "Sijaintisi auttaa suodattamaan alueellasi todennäköiset lajit",
         "latitudeLabel": "Leveysaste",
         "longitudeLabel": "Pituusaste",
-        "useMyLocation": "Käytä sijaintiani",
-        "locationDetected": "Sijainti havaittu",
-        "locationError": "Sijaintia ei voitu havaita. Syötä koordinaatit manuaalisesti.",
-        "locationDenied": "Sijainnin käyttö estetty. Syötä koordinaatit manuaalisesti.",
-        "geolocationRequiresHttps": "Selaimen paikannus vaatii HTTPS-yhteyden. Syötä koordinaatit manuaalisesti tai käytä karttaa.",
-        "geolocationDenied": "Sijaintilupa evättiin. Syötä koordinaatit manuaalisesti tai käytä karttaa.",
-        "geolocationFailed": "Sijaintiasi ei voitu määrittää. Syötä koordinaatit manuaalisesti tai käytä karttaa.",
         "localesLoading": "Ladataan kieliä...",
         "localesLoadFailed": "Kielivaihtoehtoja ei voitu ladata. Oletuskieleksi on valittu englanti."
       },

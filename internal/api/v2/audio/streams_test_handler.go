@@ -6,14 +6,17 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/httpclient"
 )
 
 type testStreamRequest struct {
@@ -54,6 +57,24 @@ var blockedHosts = map[string]bool{
 	"metadata.google.internal": true,
 	"metadata.internal":        true,
 	"localhost":                true,
+	"ip6-localhost":            true,
+	"ip6-loopback":             true,
+}
+
+// localhostSuffix marks names that resolvers commonly map to loopback
+// (RFC 6761), such as cam.localhost.
+const localhostSuffix = ".localhost"
+
+// streamHostLookupTimeout bounds DNS resolution of a stream test host.
+const streamHostLookupTimeout = 3 * time.Second
+
+// lookupHostFunc resolves a hostname to its IP addresses. Handler.lookupStreamHost
+// defaults to the system resolver (used when the field is nil) and is overridden
+// in tests so they never touch real DNS.
+type lookupHostFunc func(ctx context.Context, host string) ([]netip.Addr, error)
+
+func defaultLookupHost(ctx context.Context, host string) ([]netip.Addr, error) {
+	return net.DefaultResolver.LookupNetIP(ctx, "ip", host)
 }
 
 // probeStreamInfoFunc probes a live stream for its audio characteristics.
@@ -67,7 +88,10 @@ func (c *Handler) RegisterStreamTestRoutes(g *echo.Group) {
 	g.POST("/streams/analyze-channels", c.AnalyzeChannels, c.AuthMiddleware)
 }
 
-// TestStream tests a stream URL to discover its audio properties.
+// TestStream tests a stream URL to discover its audio properties. The URL host
+// is validated and resolved first (see validateStreamTestURL); blocked targets
+// are refused before any probe runs, and a resolver failure is logged as the
+// cause of the error response.
 // Used by the frontend to verify connectivity and check model compatibility
 // before saving a stream configuration.
 func (c *Handler) TestStream(ctx echo.Context) error {
@@ -77,8 +101,8 @@ func (c *Handler) TestStream(ctx echo.Context) error {
 			http.StatusBadRequest, "errors.streams.test.invalidBody", nil)
 	}
 
-	if vErr := validateStreamTestURL(req.URL); vErr != nil {
-		return c.HandleErrorWithKey(ctx, nil, vErr.message,
+	if vErr := validateStreamTestURL(ctx.Request().Context(), req.URL, c.lookupStreamHost); vErr != nil {
+		return c.HandleErrorWithKey(ctx, vErr.err, vErr.message,
 			vErr.status, vErr.errorKey, vErr.params)
 	}
 
@@ -131,7 +155,9 @@ func (c *Handler) TestStream(ctx echo.Context) error {
 }
 
 // AnalyzeChannels captures a short stereo sample and returns per-channel
-// energy levels with a recommendation for which channel to use.
+// energy levels with a recommendation for which channel to use. The URL goes
+// through the same host validation as TestStream before any capture starts,
+// with the same error handling.
 func (c *Handler) AnalyzeChannels(ctx echo.Context) error {
 	var req analyzeChannelsRequest
 	if err := ctx.Bind(&req); err != nil {
@@ -139,8 +165,8 @@ func (c *Handler) AnalyzeChannels(ctx echo.Context) error {
 			http.StatusBadRequest, "errors.streams.test.invalidBody", nil)
 	}
 
-	if vErr := validateStreamTestURL(req.URL); vErr != nil {
-		return c.HandleErrorWithKey(ctx, nil, vErr.message,
+	if vErr := validateStreamTestURL(ctx.Request().Context(), req.URL, c.lookupStreamHost); vErr != nil {
+		return c.HandleErrorWithKey(ctx, vErr.err, vErr.message,
 			vErr.status, vErr.errorKey, vErr.params)
 	}
 
@@ -162,12 +188,70 @@ type streamTestValidationError struct {
 	errorKey string
 	params   map[string]any
 	status   int
+	err      error // underlying cause, such as a resolver failure; logged, and in the response only with webserver debug on
 }
 
-// validateStreamTestURL checks that the URL uses an allowed scheme and does not
-// target cloud metadata or loopback endpoints. Private RFC1918 IPs are
-// allowed since BirdNET-Go runs on home networks.
-func validateStreamTestURL(rawURL string) *streamTestValidationError {
+// blockedDestinationError is the validation error for a refused target.
+func blockedDestinationError() *streamTestValidationError {
+	return &streamTestValidationError{
+		message:  "blocked destination",
+		errorKey: "errors.streams.test.blockedDestination",
+		status:   http.StatusForbidden,
+	}
+}
+
+// isNumericHostForm reports whether every dot-separated label of host is a
+// decimal, octal or 0x-prefixed hex number. Such hosts are legacy inet_aton
+// spellings of an IPv4 address (2130706433, 0x7f000001, 0177.0.0.1, 127.1)
+// that ffmpeg's resolver accepts but netip.ParseAddr does not, so they are
+// rejected rather than interpreted. Ordinary hostnames always contain a label
+// that is not purely numeric.
+func isNumericHostForm(host string) bool {
+	if host == "" {
+		return false
+	}
+	for label := range strings.SplitSeq(host, ".") {
+		if label == "" {
+			return false
+		}
+		digits := label
+		if len(label) > 2 && label[0] == '0' && (label[1] == 'x' || label[1] == 'X') {
+			digits = label[2:]
+			for _, r := range digits {
+				if (r < '0' || r > '9') && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
+					return false
+				}
+			}
+			continue
+		}
+		for _, r := range digits {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// validateStreamTestURL checks that the URL uses an allowed scheme and that its
+// host is not a cloud metadata, loopback, link-local or unspecified endpoint.
+// IP literals are checked directly, legacy numeric spellings of an IPv4 address
+// are refused, and any other hostname is resolved with lookup, as written in
+// the URL so a trailing dot keeps it absolute, and refused when any returned
+// address is blocked. A name that does not resolve fails with the resolver error
+// as the cause. The address policy is
+// httpclient.IsBlockedStreamTarget. Private RFC1918 and ULA addresses are
+// allowed since BirdNET-Go runs on home networks. A nil lookup uses the system
+// resolver.
+//
+// Residual risk: this is a pre-flight check, not a connection guard. ffmpeg
+// resolves the host again when it connects (so DNS rebinding between this check
+// and the probe is possible) and follows HTTP redirects, so a permitted URL can
+// still reach a blocked address. The check narrows the endpoint's use as a
+// probe of local services but cannot eliminate it; the endpoint requires
+// authentication, and an authenticated admin can already configure any stream
+// URL.
+func validateStreamTestURL(ctx context.Context, rawURL string, lookup lookupHostFunc) *streamTestValidationError {
 	if rawURL == "" {
 		return &streamTestValidationError{
 			message:  "URL is required",
@@ -198,23 +282,48 @@ func validateStreamTestURL(rawURL string) *streamTestValidationError {
 		}
 	}
 
-	host := parsed.Hostname()
-	if blockedHosts[strings.ToLower(host)] {
+	host := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	if host == "" {
 		return &streamTestValidationError{
-			message:  "blocked destination",
-			errorKey: "errors.streams.test.blockedDestination",
-			status:   http.StatusForbidden,
+			message:  "invalid URL format",
+			errorKey: "errors.streams.test.invalidUrl",
+			status:   http.StatusBadRequest,
 		}
 	}
+	if blockedHosts[host] || strings.HasSuffix(host, localhostSuffix) {
+		return blockedDestinationError()
+	}
 
-	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
-			return &streamTestValidationError{
-				message:  "blocked destination",
-				errorKey: "errors.streams.test.blockedDestination",
-				status:   http.StatusForbidden,
-			}
+	if addr, perr := netip.ParseAddr(host); perr == nil {
+		if httpclient.IsBlockedStreamTarget(addr) {
+			return blockedDestinationError()
 		}
+		return nil
+	}
+
+	if isNumericHostForm(host) {
+		return blockedDestinationError()
+	}
+
+	if lookup == nil {
+		lookup = defaultLookupHost
+	}
+	lookupCtx, cancel := context.WithTimeout(ctx, streamHostLookupTimeout)
+	defer cancel()
+	// Resolve the name as the probe will: a trailing dot marks it absolute,
+	// so it must not be stripped here or the resolver could apply search
+	// domains and check a different address than the one the probe reaches.
+	addrs, err := lookup(lookupCtx, strings.ToLower(parsed.Hostname()))
+	if err != nil || len(addrs) == 0 {
+		return &streamTestValidationError{
+			message:  "stream host could not be resolved",
+			errorKey: "errors.streams.test.connectionFailed",
+			status:   http.StatusBadGateway,
+			err:      err,
+		}
+	}
+	if slices.ContainsFunc(addrs, httpclient.IsBlockedStreamTarget) {
+		return blockedDestinationError()
 	}
 
 	return nil

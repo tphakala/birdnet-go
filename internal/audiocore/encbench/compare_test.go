@@ -3,12 +3,14 @@
 package encbench
 
 import (
+	"bytes"
 	"fmt"
 	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -16,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/aac"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	"github.com/tphakala/birdnet-go/internal/audiocore/flac"
 	"github.com/tphakala/birdnet-go/internal/audiocore/opus"
 )
@@ -115,6 +117,18 @@ func pcmClip() []byte {
 	return b
 }
 
+// ffmpegEncoderFor returns the FFmpeg encoder and container for a format.
+func ffmpegEncoderFor(format string) (encoder, container string) {
+	switch format {
+	case audioformat.AAC:
+		return "aac", "mp4"
+	case audioformat.Opus:
+		return "libopus", "opus"
+	default:
+		return format, format
+	}
+}
+
 func fileSize(t *testing.T, path string) int64 {
 	t.Helper()
 	st, err := os.Stat(path)
@@ -135,18 +149,29 @@ func TestCompareEncoders(t *testing.T) {
 	dir := t.TempDir()
 	ctx := t.Context()
 
+	// ffmpegEncode feeds the raw PCM to the ffmpeg binary on stdin, with the
+	// encoder and container FFmpeg used for clip exports before they went native.
 	ffmpegEncode := func(format, out string, bitrate string) func() error {
 		return func() error {
-			return ffmpeg.ExportAudio(ctx, &ffmpeg.ExportOptions{
-				PCMData:    pcm,
-				OutputPath: out,
-				Format:     format,
-				Bitrate:    bitrate,
-				SampleRate: sampleRate,
-				Channels:   channels,
-				BitDepth:   bitDepth,
-				FFmpegPath: ffmpegPath,
-			})
+			encoder, container := ffmpegEncoderFor(format)
+			args := []string{
+				"-hide_banner", "-loglevel", "error",
+				"-f", "s16le", "-ar", strconv.Itoa(sampleRate), "-ac", strconv.Itoa(channels),
+				"-i", "-",
+				"-c:a", encoder,
+			}
+			if bitrate != "" {
+				args = append(args, "-b:a", bitrate)
+			}
+			args = append(args, "-f", container, "-y", out)
+
+			cmd := exec.CommandContext(ctx, ffmpegPath, args...) //nolint:gosec // G204: test-controlled binary and arguments
+			cmd.Stdin = bytes.NewReader(pcm)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				return fmt.Errorf("ffmpeg %s: %w: %s", format, err, output)
+			}
+			return nil
 		}
 	}
 
@@ -177,7 +202,7 @@ func TestCompareEncoders(t *testing.T) {
 					Channels: channels, BitDepth: bitDepth, BitrateKbps: 96,
 				})
 			}},
-			ff: contender{label: "ffmpeg", out: aacOutFF, encode: ffmpegEncode(ffmpeg.FormatAAC, aacOutFF, "96k")},
+			ff: contender{label: "ffmpeg", out: aacOutFF, encode: ffmpegEncode(audioformat.AAC, aacOutFF, "96k")},
 		},
 		{
 			format: "opus (.opus) @64k",
@@ -187,7 +212,7 @@ func TestCompareEncoders(t *testing.T) {
 					Channels: channels, BitDepth: bitDepth, BitrateKbps: 64,
 				})
 			}},
-			ff: contender{label: "ffmpeg", out: opusOutFF, encode: ffmpegEncode(ffmpeg.FormatOpus, opusOutFF, "64k")},
+			ff: contender{label: "ffmpeg", out: opusOutFF, encode: ffmpegEncode(audioformat.Opus, opusOutFF, "64k")},
 		},
 		{
 			// FLAC is already native in production; included as a control, since
@@ -199,7 +224,7 @@ func TestCompareEncoders(t *testing.T) {
 					Channels: channels, BitDepth: bitDepth,
 				})
 			}},
-			ff: contender{label: "ffmpeg", out: flacOutFF, encode: ffmpegEncode(ffmpeg.FormatFLAC, flacOutFF, "")},
+			ff: contender{label: "ffmpeg", out: flacOutFF, encode: ffmpegEncode(audioformat.FLAC, flacOutFF, "")},
 		},
 	}
 

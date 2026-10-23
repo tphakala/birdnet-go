@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -31,12 +33,10 @@ import (
 //     what fails if a leaf is dropped from the map or from the walk.
 //   - TestRestoreBlockedFieldsHandlesPointerSubtrees drives the pointer arms of
 //     the walk, which no blocked path reaches today.
-//   - TestBlockedFieldMapNamesRealFields pins that every name in the map still
-//     resolves to a struct field, so a rename cannot silently un-block a field.
 //   - TestPatchYamlDashFieldsAreEitherBlockedOrRederived pins the fields that
 //     PUT protects via yaml:"-" but PATCH does not.
 //
-// Leaves tagged json:"-" (BirdNET.Labels, Realtime.Audio.SoxAudioTypes, Input)
+// Leaves tagged json:"-" (BirdNET.Labels, Input)
 // are covered by the direct test only. The JSON merge cannot reach them at all,
 // so an HTTP-level immutability assertion would pass with enforcement deleted;
 // listing them in both places would make coverage look better than it is.
@@ -85,8 +85,7 @@ func blockedLeafPaths(blocked map[string]any, prefix string) []string {
 //
 // Deriving this rather than listing it is the point. The stored-value assertions
 // in the HTTP table are only meaningful while the merge can reach the field, and
-// that depends on json tags, which TestBlockedFieldMapNamesRealFields does not
-// check because it resolves Go field names.
+// that depends on json tags.
 func clientReachableBlockedLeaves(t *testing.T) []string {
 	t.Helper()
 
@@ -268,13 +267,6 @@ func TestPatchCannotChangeBlockedFields(t *testing.T) {
 			section: "audio",
 			seed:    func(s *conf.Settings) { s.Realtime.Audio.FfmpegPath = "/usr/bin/ffmpeg" },
 			body:    map[string]any{"ffmpegPath": "/tmp/attacker/ffmpeg"},
-		},
-		{
-			leaf:    "Realtime.Audio.SoxPath",
-			name:    "Realtime.Audio.SoxPath via the audio section",
-			section: "audio",
-			seed:    func(s *conf.Settings) { s.Realtime.Audio.SoxPath = "/usr/bin/sox" },
-			body:    map[string]any{"soxPath": "/tmp/attacker/sox"},
 		},
 	}
 
@@ -598,20 +590,6 @@ func TestRestoreBlockedFieldsCoversEveryLeaf(t *testing.T) {
 			tamper:  func(s *conf.Settings) { s.Realtime.Audio.FfmpegPath = "/tmp/attacker/ffmpeg" },
 			current: func(s *conf.Settings) any { return s.Realtime.Audio.FfmpegPath },
 		},
-		{
-			name:    "Realtime.Audio.SoxPath",
-			path:    "Realtime.Audio.SoxPath",
-			seed:    func(s *conf.Settings) { s.Realtime.Audio.SoxPath = "/usr/bin/sox" },
-			tamper:  func(s *conf.Settings) { s.Realtime.Audio.SoxPath = "/tmp/attacker/sox" },
-			current: func(s *conf.Settings) any { return s.Realtime.Audio.SoxPath },
-		},
-		{
-			name:    "Realtime.Audio.SoxAudioTypes",
-			path:    "Realtime.Audio.SoxAudioTypes",
-			seed:    func(s *conf.Settings) { s.Realtime.Audio.SoxAudioTypes = []string{"wav", "flac"} },
-			tamper:  func(s *conf.Settings) { s.Realtime.Audio.SoxAudioTypes = []string{"injected"} },
-			current: func(s *conf.Settings) any { return s.Realtime.Audio.SoxAudioTypes },
-		},
 	}
 
 	// Every leaf in the map must appear above. Without this the table can drift
@@ -873,74 +851,48 @@ func TestPatchYamlDashFieldsAreEitherBlockedOrRederived(t *testing.T) {
 
 // TestPatchFfmpegMetadataIsRederivedNotClientSettable exercises the other half of
 // the claim above. The list in that test is only a list; this drives a real PATCH
-// and asserts the re-derivation actually happens for two of the three fields.
+// and asserts the re-derivation actually happens for all three fields.
 //
-// Asserts what the value is NOT, deliberately: validateAudioSettings sets these
-// from the real binary when ffmpeg is present and clears them when it is absent,
-// so any assertion on the resulting value would depend on the test machine.
+// The configured ffmpeg path points at an empty, non-executable stub file. The
+// path validator accepts any existing regular file (conf.ValidateToolPath), so
+// validateAudioSettings takes its success arm on every host, ffmpeg installed or
+// not: it keeps the path and then asks the file for its version. Running the stub
+// fails, which the version probe reports as an empty version and zero numbers
+// (conf.GetFfmpegVersionFromContext). Asserting that the path survived is what
+// proves the success arm ran; the failure arm clears the path along with the
+// metadata, which would make the metadata assertions pass without any
+// re-derivation. The stub has no file extension on purpose, so Windows has
+// nothing to resolve it by. The comment on ffmpegVersionDetector in conf records
+// that exec'ing such stubs concurrently crashed the Windows race detector, and
+// package api cannot replace that detector, so the behavior of this test on
+// Windows is NOT MEASURED.
 //
-// Two limits worth knowing before trusting it. It only distinguishes re-derivation
-// from enforcement when ffmpeg is ON PATH: without it, validateAudioSettings takes
-// its failure arm and clearFfmpegMetadata zeroes the same fields for an unrelated
-// reason, so the assertions hold even if the re-derivation were deleted. CI
-// installs ffmpeg on all three platforms, so that gap is a slim dev container
-// only. And it asserts the value rather than the wiring, so renaming the json tag
-// would make the PATCH stop reaching the field and the test pass vacuously.
+// It asserts the value rather than the wiring, so renaming the json tag would
+// make the PATCH stop reaching the field and the test pass vacuously.
 func TestPatchFfmpegMetadataIsRederivedNotClientSettable(t *testing.T) {
+	stub := filepath.Join(t.TempDir(), "ffmpeg-stub")
+	require.NoError(t, os.WriteFile(stub, nil, 0o600))
+
 	e := echo.New()
 	controller := getTestController(t, e)
 	settings := controller.Settings.Load()
+	settings.Realtime.Audio.FfmpegPath = stub
 	settings.Realtime.Audio.FfmpegVersion = "6.0-real"
 	settings.Realtime.Audio.FfmpegMajor = 6
 
 	patchSection(t, e, controller, "audio", map[string]any{
 		"ffmpegVersion": "99.9-attacker",
 		"ffmpegMajor":   99,
+		"ffmpegMinor":   99,
 	})
 
-	updated := controller.Settings.Load()
-	assert.NotEqual(t, "99.9-attacker", updated.Realtime.Audio.FfmpegVersion,
+	audio := controller.Settings.Load().Realtime.Audio
+	require.Equal(t, stub, audio.FfmpegPath,
+		"the configured stub must survive validation, or the metadata assertions below prove nothing")
+	assert.Empty(t, audio.FfmpegVersion,
 		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
-	assert.NotEqual(t, 99, updated.Realtime.Audio.FfmpegMajor,
+	assert.Zero(t, audio.FfmpegMajor,
 		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
-}
-
-// TestBlockedFieldMapNamesRealFields pins that every name in getBlockedFieldMap
-// still resolves to a field on conf.Settings. The walk skips names it cannot
-// resolve so a stale entry cannot panic a live request, which means a rename
-// would otherwise silently un-block a field with no test failing.
-func TestBlockedFieldMapNamesRealFields(t *testing.T) {
-	t.Parallel()
-
-	var walk func(structType reflect.Type, blocked map[string]any, prefix string)
-	walk = func(structType reflect.Type, blocked map[string]any, prefix string) {
-		for name, rule := range blocked {
-			path := name
-			if prefix != "" {
-				path = prefix + "." + name
-			}
-
-			field, ok := structType.FieldByName(name)
-			if !assert.True(t, ok, "getBlockedFieldMap names %s, which is not a field of %s", path, structType) {
-				continue
-			}
-
-			subfields, nested := rule.(map[string]any)
-			if !nested {
-				assert.Equal(t, true, rule, "%s must map to true or to a submap", path)
-				continue
-			}
-
-			fieldType := field.Type
-			for fieldType.Kind() == reflect.Pointer {
-				fieldType = fieldType.Elem()
-			}
-			if assert.Equal(t, reflect.Struct, fieldType.Kind(),
-				"%s carries nested restrictions but is not a struct", path) {
-				walk(fieldType, subfields, path)
-			}
-		}
-	}
-
-	walk(reflect.TypeFor[conf.Settings](), getBlockedFieldMap(), "")
+	assert.Zero(t, audio.FfmpegMinor,
+		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
 }

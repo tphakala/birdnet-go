@@ -101,7 +101,7 @@ type Server struct {
 }
 
 // currentSettings returns the latest *conf.Settings snapshot published via
-// conf.StoreSettings, or the server's constructor-provided pointer when no
+// conf.UpdateSettings, or the server's constructor-provided pointer when no
 // snapshot has been published yet (test harnesses that skip the global
 // publish, or early startup before the first Load). Routing the hot-path
 // middleware through this helper keeps the basepath resolution race-free
@@ -369,7 +369,7 @@ func (s *Server) setupMiddleware() {
 	s.echo.Pre(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			// Read the current *conf.Settings through the atomic pointer so a
-			// settings hot-reload (CoW publish via conf.StoreSettings) takes
+			// settings hot-reload (CoW publish via conf.UpdateSettings) takes
 			// effect for the next request without restart, and so readers
 			// never observe a torn view of the basepath field. Fall back to
 			// the constructor-provided pointer if no snapshot has been
@@ -914,14 +914,14 @@ func (s *Server) IsDevMode() bool {
 
 // registerSPARoutes registers all frontend SPA routes.
 // These routes serve the HTML shell that loads the Svelte application.
-// All SPA routes are public so the SPA can bootstrap and render the login
+// Most SPA routes are public so the SPA can bootstrap and render the login
 // form when Security.PrivateMode is enabled. The data layer (v2 API
 // endpoints) is the actual security boundary: it is gated by
 // privateModeAuth in api/v2/api.go and returns 401 to unauthenticated
 // requests in private mode, prompting the SPA to render the login form.
-// Settings and system routes remain auth-gated at this layer too so deep
-// links to those pages still server-side redirect to /login for unauth
-// browser navigations.
+// Settings and system routes (including the /ui/settings/* and /ui/system/*
+// sub-paths) remain auth-gated at this layer too so deep links to those pages
+// still server-side redirect to /login for unauth browser navigations.
 func (s *Server) registerSPARoutes() {
 	// Redirect root path to dashboard
 	s.echo.GET("/", func(c echo.Context) error {
@@ -974,6 +974,12 @@ func (s *Server) registerSPARoutes() {
 		"/ui/settings/species",
 		"/ui/settings/support",
 		"/ui/settings/userinterface",
+		// Catch-alls for the sub-paths, so deep links such as
+		// /ui/system/database or /ui/system/health redirect unauthenticated
+		// browsers to /login. Echo prefers them over the public /ui/*
+		// catch-all because they are more specific.
+		"/ui/settings/*",
+		"/ui/system/*",
 	}
 	for _, route := range protectedRoutes {
 		if authMiddleware != nil {
@@ -981,13 +987,6 @@ func (s *Server) registerSPARoutes() {
 		} else {
 			s.echo.GET(route, s.spaHandler.ServeApp)
 		}
-	}
-
-	// Protected catch-all for settings routes
-	if authMiddleware != nil {
-		s.echo.GET("/ui/settings/*", s.spaHandler.ServeApp, authMiddleware)
-	} else {
-		s.echo.GET("/ui/settings/*", s.spaHandler.ServeApp)
 	}
 
 	// Public catch-all for any other unmatched /ui/* paths so the SPA can

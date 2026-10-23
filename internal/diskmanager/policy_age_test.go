@@ -647,10 +647,10 @@ func TestProcessAgeBasedDeletionLoopStats(t *testing.T) {
 		files := []FileInfo{lockedA, lockedB, oldestOfA, newerOfA, tooNew1, tooNew2, tooNew3}
 		speciesTotalCount := buildSpeciesTotalCountMap(files)
 
-		quitChan := make(chan struct{})
+		run, _ := newTestRun(t)
 		const minClipsPerSpecies = 1
 		deletedCount, deletedNames, stats, loopErr := processAgeBasedDeletionLoop(
-			files, speciesTotalCount, minClipsPerSpecies, maxDeletionsPerRun, false, quitChan, retentionCutoffUnix)
+			files, speciesTotalCount, minClipsPerSpecies, false, run, retentionCutoffUnix)
 
 		require.NoError(t, loopErr)
 		assert.Equal(t, 1, deletedCount, "only the oldest of species_a should be deleted")
@@ -664,6 +664,7 @@ func TestProcessAgeBasedDeletionLoopStats(t *testing.T) {
 			NotEligible:     3,
 			Errors:          0,
 			BytesFreed:      5, // one 5-byte file deleted
+			StopReason:      stopExhausted,
 		}, stats)
 
 		assert.NoFileExists(t, oldestOfA.Path, "oldest species_a file should be deleted")
@@ -678,100 +679,74 @@ func TestProcessAgeBasedDeletionLoopStats(t *testing.T) {
 		testDir := t.TempDir()
 		retentionCutoffUnix := time.Now().Add(-168 * time.Hour).Unix()
 
-		// missingFile references a path that was never created on disk, so
-		// os.Remove fails inside deleteFileAndOptionalSpectrogram, simulating
-		// a file removed out from under the cleanup pass (e.g. by an external
-		// process) between the directory scan and the deletion attempt.
-		missingFile := FileInfo{
-			Path:      filepath.Join(testDir, "ghost_species_80p_20200102T150405Z.wav"),
-			Species:   "ghost_species",
+		// blockedFile is a non-empty directory named like a clip: os.Remove
+		// fails on it (the path exists, so it is a real error, not a vanished
+		// file) inside deleteFileAndOptionalSpectrogram.
+		blockedPath := filepath.Join(testDir, "blocked_species_80p_20200102T150405Z.wav")
+		require.NoError(t, os.MkdirAll(blockedPath, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(blockedPath, "inner"), []byte("x"), 0o644)) //nolint:gosec // G306: test file
+		blockedFile := FileInfo{
+			Path:      blockedPath,
+			Species:   "blocked_species",
 			Timestamp: time.Now().Add(-200 * time.Hour),
 			Size:      5,
 			Locked:    false,
 		}
 		survivingFile := makeAgeTestFile(t, testDir, "surviving_species", 200*time.Hour, false)
 
-		files := []FileInfo{missingFile, survivingFile}
+		files := []FileInfo{blockedFile, survivingFile}
 		speciesTotalCount := buildSpeciesTotalCountMap(files)
 
-		quitChan := make(chan struct{})
+		run, _ := newTestRun(t)
 		const minClipsPerSpecies = 0
 		deletedCount, deletedNames, stats, loopErr := processAgeBasedDeletionLoop(
-			files, speciesTotalCount, minClipsPerSpecies, maxDeletionsPerRun, false, quitChan, retentionCutoffUnix)
+			files, speciesTotalCount, minClipsPerSpecies, false, run, retentionCutoffUnix)
 
 		require.NoError(t, loopErr, "a single deletion error stays below the stop threshold")
 		assert.Equal(t, 1, deletedCount)
 		assert.Equal(t, []string{survivingFile.Path}, deletedNames)
 
 		assert.Equal(t, cleanupStats{
-			Scanned:         2,
-			Deleted:         1,
-			LockedSkipped:   0,
-			MinClipsBlocked: 0,
-			NotEligible:     0,
-			Errors:          1,
-			BytesFreed:      5, // the one surviving file (5 bytes) deleted; the ghost errored
+			Scanned:    2,
+			Deleted:    1,
+			Errors:     1,
+			BytesFreed: 5, // the one surviving file (5 bytes) deleted; the blocked one errored
+			StopReason: stopExhausted,
 		}, stats)
 	})
 
-	t.Run("deletion cap sets CapHit with candidates remaining", func(t *testing.T) {
+	t.Run("a file already gone is tallied, lowers the species count and is not an error", func(t *testing.T) {
 		t.Parallel()
 		testDir := t.TempDir()
-		retentionCutoffUnix := time.Now().Add(-168 * time.Hour).Unix() // 7 days
+		retentionCutoffUnix := time.Now().Add(-168 * time.Hour).Unix()
 
-		// Three eligible old files, but a per-run cap of 2. The loop deletes 2
-		// and then, with a third candidate still to examine, hits the cap and
-		// must flag the run as rate-limited (GitHub #4059 signal).
-		f1 := makeAgeTestFile(t, testDir, "species_a", 300*time.Hour, false)
-		f2 := makeAgeTestFile(t, testDir, "species_a", 290*time.Hour, false)
-		f3 := makeAgeTestFile(t, testDir, "species_a", 280*time.Hour, false)
-		files := []FileInfo{f1, f2, f3}
+		// ghost references a path that was never created, simulating a clip
+		// removed elsewhere (for example from the UI) after the scan. It counts
+		// toward species_a until the loop reaches it.
+		ghost := FileInfo{
+			Path:      filepath.Join(testDir, "species_a_80p_ghost.wav"),
+			Species:   "species_a",
+			Timestamp: time.Now().Add(-300 * time.Hour),
+			Size:      5,
+		}
+		keepOne := makeAgeTestFile(t, testDir, "species_a", 290*time.Hour, false)
+		files := []FileInfo{ghost, keepOne}
 		speciesTotalCount := buildSpeciesTotalCountMap(files)
+		require.Equal(t, 2, speciesTotalCount["species_a"])
 
-		quitChan := make(chan struct{})
-		const (
-			minClipsPerSpecies = 0
-			maxDeletions       = 2
-		)
-		deletedCount, deletedNames, stats, loopErr := processAgeBasedDeletionLoop(
-			files, speciesTotalCount, minClipsPerSpecies, maxDeletions, false, quitChan, retentionCutoffUnix)
-
-		require.NoError(t, loopErr)
-		assert.Equal(t, 2, deletedCount, "only maxDeletions files should be deleted")
-		assert.Len(t, deletedNames, 2)
-		assert.True(t, stats.CapHit, "hitting the per-run cap with a candidate remaining must set CapHit")
-		assert.Equal(t, int64(10), stats.BytesFreed, "two 5-byte files deleted")
-		assert.Equal(t, 2, stats.Deleted)
-	})
-
-	t.Run("deletion cap does not set CapHit when the remaining file is too new", func(t *testing.T) {
-		t.Parallel()
-		testDir := t.TempDir()
-		retentionCutoffUnix := time.Now().Add(-168 * time.Hour).Unix() // 7 days
-
-		// Two deletable old files and one too-new file, with a cap of 2. The
-		// loop deletes both old files, then hits the cap at the third (newer
-		// than the cutoff). Because files are sorted oldest-first, that newer
-		// file means no age-eligible work remains, so CapHit must stay false:
-		// this exercises the guard that avoids a spurious cap WARN when the
-		// eligible count happens to equal maxDeletions.
-		old1 := makeAgeTestFile(t, testDir, "species_a", 300*time.Hour, false)
-		old2 := makeAgeTestFile(t, testDir, "species_a", 290*time.Hour, false)
-		tooNew := makeAgeTestFile(t, testDir, "species_a", 1*time.Hour, false)
-		files := []FileInfo{old1, old2, tooNew}
-		speciesTotalCount := buildSpeciesTotalCountMap(files)
-
-		quitChan := make(chan struct{})
-		const (
-			minClipsPerSpecies = 0
-			maxDeletions       = 2
-		)
+		run, env := newTestRun(t)
+		const minClipsPerSpecies = 1
 		deletedCount, _, stats, loopErr := processAgeBasedDeletionLoop(
-			files, speciesTotalCount, minClipsPerSpecies, maxDeletions, false, quitChan, retentionCutoffUnix)
+			files, speciesTotalCount, minClipsPerSpecies, false, run, retentionCutoffUnix)
 
 		require.NoError(t, loopErr)
-		assert.Equal(t, 2, deletedCount, "both old files deleted, cap reached")
-		assert.False(t, stats.CapHit, "the remaining file is too new, so the cap did not cut eligible work short")
+		assert.Equal(t, 0, deletedCount)
+		assert.Equal(t, 1, stats.AlreadyGone)
+		assert.Equal(t, 0, stats.Errors, "a vanished file is not an error")
+		assert.Equal(t, 1, speciesTotalCount["species_a"], "the vanished clip no longer counts toward the species")
+		assert.Equal(t, 1, stats.MinClipsBlocked, "the surviving clip is now the species minimum")
+		assert.FileExists(t, keepOne.Path)
+		assert.Empty(t, env.sleeps, "nothing was written, so no pacing wait")
 	})
 
 	t.Run("BytesFreed counts audio only, not the deleted spectrogram", func(t *testing.T) {
@@ -790,10 +765,10 @@ func TestProcessAgeBasedDeletionLoopStats(t *testing.T) {
 
 		files := []FileInfo{audio}
 		speciesTotalCount := buildSpeciesTotalCountMap(files)
-		quitChan := make(chan struct{})
+		run, _ := newTestRun(t)
 		const minClipsPerSpecies = 0
 		deletedCount, _, stats, loopErr := processAgeBasedDeletionLoop(
-			files, speciesTotalCount, minClipsPerSpecies, maxDeletionsPerRun, false /* keepSpectrograms */, quitChan, retentionCutoffUnix)
+			files, speciesTotalCount, minClipsPerSpecies, false /* keepSpectrograms */, run, retentionCutoffUnix)
 
 		require.NoError(t, loopErr)
 		assert.Equal(t, 1, deletedCount)

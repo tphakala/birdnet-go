@@ -30,9 +30,6 @@ services:
       # See doc/wiki/rtsp-troubleshooting.md (Using .local (mDNS) hostnames in containers).
       - /run/avahi-daemon:/run/avahi-daemon:ro
       - /run/dbus:/run/dbus:ro
-    # Mount HLS stream segment files directory as tmpfs (RAM disk)
-    tmpfs:
-      - /config/hls:exec,size=50M,uid=${BIRDNET_UID:-1000},gid=${BIRDNET_GID:-1000},mode=0755
     # For ALSA audio input (sound card)
     devices:
       - /dev/snd:/dev/snd

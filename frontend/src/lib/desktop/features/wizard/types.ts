@@ -7,11 +7,21 @@ export type WizardStatus = 'idle' | 'active' | 'completed';
 /** Load status of the current step, set by the dialog. */
 export type StepStatus = 'loading' | 'ready' | 'failed';
 
+/** Dialog width of a step: `wide` for steps with a map or a long list. */
+export type WizardStepSize = 'default' | 'wide';
+
 export interface ComponentStep {
   id: string;
   type: 'component';
   titleKey: string; // i18n key
   component: () => Promise<{ default: Component<WizardStepProps> }>;
+  /**
+   * i18n key of the error toast shown when this step's save fails after the wizard
+   * closed (Skip, Leave setup, relaunch). The generic message is used when unset.
+   */
+  unfinishedSaveKey?: TranslationKey;
+  /** Dialog width for this step: 'wide' for steps with a map or a long list. Default when unset. */
+  size?: WizardStepSize;
 }
 
 export interface ContentStep {
@@ -26,7 +36,8 @@ export type WizardStep = ComponentStep | ContentStep;
 
 /**
  * Saves a step's pending edits. Rejects when the save fails; the wizard then
- * stays on the step and shows an error.
+ * stays on the step and shows an error. A rejection that arrives after the wizard
+ * closed is reported as an error toast instead.
  */
 export type StepLeaveHandler = () => Promise<void>;
 

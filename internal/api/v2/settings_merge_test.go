@@ -204,3 +204,36 @@ func TestDeepMergeMaps(t *testing.T) {
 		})
 	}
 }
+
+// TestMergeJSONIntoStructKeepsJSONDashSlices pins the PATCH-path rule that a
+// slice tagged json:"-" is a runtime value the merged JSON can never carry, so
+// the pre-merge slice reset must leave it alone, at the top level and inside a
+// nested struct, while still replacing the JSON-visible slice beside it. The
+// target is a purpose-built struct because conf has no unblocked json:"-" slice
+// to drive through the handler.
+func TestMergeJSONIntoStructKeepsJSONDashSlices(t *testing.T) {
+	t.Parallel()
+
+	type nested struct {
+		Runtime []string `json:"-"`
+		Keep    string   `json:"keep"`
+	}
+	type holder struct {
+		Visible []string `json:"visible"`
+		Runtime []string `json:"-"`
+		Nested  nested   `json:"nested"`
+	}
+
+	h := holder{
+		Visible: []string{"a"},
+		Runtime: []string{"top-runtime"},
+		Nested:  nested{Runtime: []string{"nested-runtime"}},
+	}
+
+	require.NoError(t, mergeJSONIntoStruct(json.RawMessage(`{"visible":["b"],"nested":{"keep":"k"}}`), &h))
+
+	assert.Equal(t, []string{"b"}, h.Visible, "the JSON-visible slice must be replaced")
+	assert.Equal(t, "k", h.Nested.Keep, "the JSON-visible nested field must be applied")
+	assert.Equal(t, []string{"top-runtime"}, h.Runtime, "a top-level json:\"-\" slice must survive")
+	assert.Equal(t, []string{"nested-runtime"}, h.Nested.Runtime, "a nested json:\"-\" slice must survive")
+}

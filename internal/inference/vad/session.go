@@ -5,6 +5,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference"
+	"github.com/tphakala/birdnet-go/internal/inference/onnx"
 )
 
 // Silero VAD sequence-model tensor contract (the official
@@ -140,6 +141,13 @@ func newSession(modelPath string, modelData []byte, sessionOptsFn func(*ort.Sess
 	}
 	if err = sessOpts.SetInterOpNumThreads(1); err != nil {
 		return nil, errors.New(err).Component("inference/vad").Category(errors.CategoryModelInit).Build()
+	}
+	if err = onnx.DisableKleidiAIIfNeeded(sessOpts); err != nil {
+		return nil, errors.New(err).
+			Component("inference/vad").
+			Category(errors.CategoryModelInit).
+			Context("stage", "session_options").
+			Build()
 	}
 	if sessionOptsFn != nil {
 		sessionOptsFn(sessOpts)

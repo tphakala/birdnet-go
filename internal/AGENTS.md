@@ -52,8 +52,10 @@ the job:
 
 - **Files** named by untrusted input: go through SecureFS (`internal/securefs`,
   `c.SFS` in API handlers). Its relative-path methods (`StatRel`,
-  `ReadDirRel`, `ServeRelativeFile`) give containment: they resolve inside an
-  `os.Root`, so neither `..` nor a symlink can escape. `ValidateRelativePath`
+  `ReadDirRel`, `ServeRelativeFile`, `OpenRegularRel`) give containment: they
+  resolve inside an `os.Root`, so neither `..` nor a symlink can escape. To read
+  a file, open it with `OpenRegularRel` (it never blocks on a FIFO and checks the
+  opened handle, not the path) and use the handle. `ValidateRelativePath`
   is only a lexical check (it cleans the path and rejects absolute and upward
   paths) and does not stop a symlink, so pass its result to those methods and
   never join it onto a directory for an `os.*` call. Some existing handlers in
@@ -108,6 +110,17 @@ while `IsLocal("")` is false.
   failing item and continue, then report the aggregate. All-or-nothing work
   (a database transaction, a migration, a config write, a backup restore)
   aborts and rolls back on the first error instead.
+
+## Database access (HARD RULE)
+
+The legacy database is deprecated and is going away; never expand it. New
+persistence is written for the v2 schema only and goes through the repository
+interfaces (`datastore.DetectionRepository` and the v2 repositories), not
+through `datastore.Interface` or the `c.DS` accessor in API code. Do not add
+columns, models, methods, optional interfaces, dual-write paths, shims or
+fallbacks to the legacy store. The full rule, what is still allowed, and how to
+add v2 persistence are in `internal/datastore/AGENTS.md`; read it before
+touching anything under `internal/datastore/` or adding a database write.
 
 ## Security
 

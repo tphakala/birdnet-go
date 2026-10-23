@@ -37,11 +37,17 @@ type Note struct {
 	Model       detection.ModelInfo `gorm:"-"` // Runtime only: model that produced this detection
 	BeginTime   time.Time
 	EndTime     time.Time
-	SpeciesCode string
 	// TaxonomicClass is runtime-only: GetTopBirdsData fills it with the taxonomic class name
 	// of the species' label (for example "Aves" or "Chiroptera"), so the daily summary can
 	// group rows by taxon. Empty when the label has no class and on every other read path.
 	TaxonomicClass string `gorm:"-" json:"-"`
+	// ModelContributions is runtime-only: the legacy notes schema has no column for it, so
+	// it is never persisted through this model. v2only Save reads it to write the
+	// detection_model_contributions rows.
+	ModelContributions map[string]detection.ResultModelContrib `gorm:"-" json:"-"`
+	BeginTime          time.Time
+	EndTime            time.Time
+	SpeciesCode        string
 	// ScientificName includes optimized index (scientific_name, date) for new species tracking performance
 	ScientificName string `gorm:"index:idx_notes_sciname;index:idx_notes_sciname_date;index:idx_notes_sciname_date_optimized,priority:1"`
 	CommonName     string `gorm:"index:idx_notes_comname;index:idx_notes_date_commonname_confidence"`
@@ -64,9 +70,13 @@ type Note struct {
 	// SpectrogramClipName is the clip name of a spectrogram render that outlived the audio
 	// (v2 store only); runtime-only on Note, never serialized.
 	SpectrogramClipName string `gorm:"-" json:"-"`
-	ProcessingTime      time.Duration
-	Unlikely            bool    `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
-	Occurrence          float64 `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
+	// ClipSampleRate is the sample rate in Hz of the saved clip file (v2 store only);
+	// 0 when unknown. Runtime-only on Note: the legacy table gets no column and the
+	// frozen v1 output does not carry it.
+	ClipSampleRate int `gorm:"-" json:"-"`
+	ProcessingTime time.Duration
+	Unlikely       bool    `gorm:"default:false"`                 // Tagged by ultrasonic validation filter
+	Occurrence     float64 `gorm:"-" json:"occurrence,omitempty"` // Runtime only, occurrence probability (0-1) based on location/time
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
 	// not persisted. Used at Save time to classify non-bird sound classes correctly.
 	RawLabel string        `gorm:"-"`
@@ -228,11 +238,13 @@ type DetectionRecord struct {
 	Unlikely       bool      `json:"unlikely,omitempty"`
 	HasAudio       bool      `json:"hasAudio,omitempty"`
 	// SpectrogramOnly is true when retention removed the audio but a spectrogram image was kept.
-	SpectrogramOnly bool   `json:"spectrogramOnly,omitempty"`
-	Device          string `json:"device,omitempty"`
-	Source          string `json:"source,omitempty"`
-	TimeOfDay       string `json:"timeOfDay,omitempty"`
-	ModelType       string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
+	SpectrogramOnly bool `json:"spectrogramOnly,omitempty"`
+	// ClipSampleRate is the sample rate in Hz of the detection's original audio clip (omitted when unknown); bat spectrograms span 0 to half of it.
+	ClipSampleRate int    `json:"clipSampleRate,omitempty"`
+	Device         string `json:"device,omitempty"`
+	Source         string `json:"source,omitempty"`
+	TimeOfDay      string `json:"timeOfDay,omitempty"`
+	ModelType      string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 }
 
 // DynamicThreshold represents a persisted dynamic threshold for a species

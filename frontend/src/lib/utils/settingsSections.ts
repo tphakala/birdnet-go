@@ -9,7 +9,7 @@
 import { isPlainObject } from './security';
 
 const BIRDNET_SERVER_OWNED_KEYS = ['rangeFilter'] as const;
-const AUDIO_SERVER_OWNED_KEYS = ['ffmpegPath', 'soxPath'] as const;
+const AUDIO_SERVER_OWNED_KEYS = ['ffmpegPath'] as const;
 
 /** Server-owned keys of the birdnet section payload. */
 export type BirdNetServerOwnedKey = (typeof BIRDNET_SERVER_OWNED_KEYS)[number];

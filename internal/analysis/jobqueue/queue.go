@@ -20,6 +20,12 @@ const (
 	// DefaultJobExecutionTimeout is the default timeout for job execution
 	DefaultJobExecutionTimeout = 30 * time.Second
 
+	// abandonedAttemptCeiling is how long a job waits for an attempt that
+	// overran its timeout before it fails without starting another attempt.
+	// It is well above the slowest bounded action (BirdWeather: a 60s encode
+	// plus two 45s requests).
+	abandonedAttemptCeiling = 10 * time.Minute
+
 	// MaxActionStatsEntries is the maximum number of action stats to keep in memory
 	// Older entries will be removed to prevent unbounded memory growth
 	MaxActionStatsEntries = 1000
@@ -242,11 +248,18 @@ func (q *JobQueue) Enqueue(ctx context.Context, action Action, data any, config 
 
 	// Pre-allocate ID string to reduce memory allocations
 	now := q.clock.Now()
+
+	// A disabled retry config means one attempt, whatever MaxRetries holds.
+	maxAttempts := 1
+	if config.Enabled {
+		maxAttempts = config.MaxRetries + 1
+	}
+
 	job := &Job{
 		ID:          shortUUID,
 		Action:      action,
 		Data:        data,
-		MaxAttempts: config.MaxRetries + 1,
+		MaxAttempts: maxAttempts,
 		CreatedAt:   now,
 		NextRetryAt: now, // Ready to run immediately
 		Status:      JobStatusPending,
@@ -402,10 +415,14 @@ func (q *JobQueue) cleanupStaleJobs(ctx context.Context) {
 	q.stats.StaleJobs += staleCount
 }
 
-// calculateBackoffDelay calculates the delay before the next retry attempt
-func calculateBackoffDelay(config RetryConfig, attemptNum int, clock Clock) time.Duration {
-	// Calculate exponential backoff with jitter
-	backoff := float64(config.InitialDelay) * math.Pow(config.Multiplier, float64(attemptNum))
+// calculateBackoffDelay returns the wait before the retry that follows the
+// failedAttempt-th attempt (1-based): InitialDelay * Multiplier^(failedAttempt-1)
+// with +-10% jitter, capped at MaxDelay. The first retry therefore waits
+// InitialDelay.
+func calculateBackoffDelay(config RetryConfig, failedAttempt int, clock Clock) time.Duration {
+	// Calculate exponential backoff, starting at InitialDelay for the first retry
+	exponent := max(failedAttempt-1, 0)
+	backoff := float64(config.InitialDelay) * math.Pow(config.Multiplier, float64(exponent))
 
 	// Add some jitter (±10%)
 	jitterFactor := 0.9 + 0.2*float64(clock.Now().Nanosecond())/1e9
@@ -446,7 +463,15 @@ func (q *JobQueue) processDueJobs(ctx context.Context) {
 	now := q.clock.Now()
 
 	for _, job := range q.jobs {
-		if (job.Status == JobStatusPending || job.Status == JobStatusRetrying) && !job.NextRetryAt.After(now) {
+		if job.Status != JobStatusPending && job.Status != JobStatusRetrying {
+			continue
+		}
+		// Checked before the due test so the ceiling applies even while a
+		// long backoff delay is still running.
+		if q.holdForAbandonedAttemptLocked(ctx, job, now) {
+			continue
+		}
+		if !job.NextRetryAt.After(now) {
 			dueJobs = append(dueJobs, job)
 			job.Status = JobStatusRunning
 		}
@@ -473,6 +498,41 @@ func (q *JobQueue) processDueJobs(ctx context.Context) {
 			q.executeJob(ctx, j)
 		}(job)
 	}
+}
+
+// holdForAbandonedAttemptLocked reports whether a pending or retrying job must
+// not start a new attempt because an earlier attempt that overran its timeout
+// is still running. Once the attempt has been abandoned for abandonedAttemptCeiling the
+// job is failed instead, without starting another attempt.
+// IMPORTANT: Caller must hold q.mu lock.
+func (q *JobQueue) holdForAbandonedAttemptLocked(ctx context.Context, job *Job, now time.Time) bool {
+	if job.abandonedAt.IsZero() {
+		return false
+	}
+	if now.Sub(job.abandonedAt) < abandonedAttemptCeiling {
+		return true
+	}
+
+	err := errors.Newf("job attempt did not return within %s after its timeout", abandonedAttemptCeiling).
+		Component("analysis.jobqueue").
+		Category(errors.CategoryTimeout).
+		Context("operation", "wait_abandoned_attempt").
+		Context("job_id", job.ID).
+		Context("action_type", fmt.Sprintf("%T", job.Action)).
+		Context("attempt", job.Attempts).
+		Build()
+	actionDesc := job.Action.GetDescription()
+	actionKey, stats := q.getOrInitActionStatsLocked(job.Action, actionDesc)
+
+	job.Status = JobStatusFailed
+	job.LastError = err
+	q.stats.FailedJobs++
+	stats.Failed++
+	stats.LastFailedTime = now
+	stats.LastErrorMessage = sanitizeErrorMessage(err)
+	q.stats.ActionStats[actionKey] = stats
+	LogJobFailed(ctx, job.ID, actionDesc, job.Attempts, job.MaxAttempts, err)
+	return true
 }
 
 // sanitizeErrorMessage returns a sanitized version of the error message
@@ -604,7 +664,7 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 	}
 
 	// Execute with timeout
-	err := q.executeJobWithTimeout(ctx, job)
+	abandoned, err := q.executeJobWithTimeout(ctx, job)
 
 	// Calculate execution duration
 	executionEndTime := q.clock.Now()
@@ -623,25 +683,56 @@ func (q *JobQueue) executeJob(ctx context.Context, job *Job) {
 
 	if err != nil {
 		q.handleJobFailure(ctx, job, &stats, actionKey, actionDesc, executionEndTime, err)
+		// Set up the guard in the same critical section as handleJobFailure so
+		// the waiter observes the post-failure status. A terminal job has no
+		// next attempt to guard.
+		if abandoned != nil && job.Status == JobStatusRetrying {
+			job.abandonedAt = executionEndTime
+			go q.awaitAbandonedAttempt(ctx, job, abandoned, actionDesc)
+		}
 	} else {
 		q.handleJobSuccess(ctx, job, &stats, actionKey, actionDesc, executionEndTime)
 	}
 }
 
+// attemptResult is the outcome of one execution of a job's action.
+type attemptResult struct {
+	err error
+}
+
+// awaitAbandonedAttempt waits for an attempt that overran its timeout and then
+// releases the job's guard. A late success completes the job; a late failure
+// leaves the scheduled retry to run. The goroutine lives exactly as long as the
+// abandoned attempt and is deliberately not tracked in runningJobs, so a hung
+// action cannot block shutdown.
+func (q *JobQueue) awaitAbandonedAttempt(ctx context.Context, job *Job, abandoned <-chan attemptResult, actionDesc string) {
+	res := <-abandoned
+
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job.abandonedAt = time.Time{}
+	if res.err != nil || job.Status != JobStatusRetrying {
+		LogAbandonedAttemptReturned(ctx, job.ID, actionDesc, job.Attempts, res.err)
+		return
+	}
+	actionKey, stats := q.getOrInitActionStatsLocked(job.Action, actionDesc)
+	q.handleJobSuccess(ctx, job, &stats, actionKey, actionDesc, q.clock.Now())
+}
+
 // executeJobWithTimeout runs the job action with timeout and panic recovery.
 //
-// IMPORTANT: Action implementations MUST respect context cancellation by checking
-// ctx.Done() periodically, especially in long-running operations. If an action
-// ignores context cancellation, the goroutine will leak when the timeout expires
-// because Go does not support forcibly terminating goroutines.
-func (q *JobQueue) executeJobWithTimeout(ctx context.Context, job *Job) error {
+// When the timeout expires the attempt is abandoned, not stopped: Go cannot
+// terminate a goroutine, and an action that ignores context cancellation keeps
+// running. In that case the returned channel delivers the attempt's eventual
+// result (it is nil when the attempt returned within the timeout). The caller
+// must not start the job's next attempt until that result arrives, so a job
+// never has two attempts running at once.
+func (q *JobQueue) executeJobWithTimeout(ctx context.Context, job *Job) (abandoned <-chan attemptResult, err error) {
 	execCtx, cancel := context.WithTimeout(ctx, DefaultJobExecutionTimeout)
 	defer cancel()
 
-	type result struct {
-		err error
-	}
-	resultChan := make(chan result, 1)
+	resultChan := make(chan attemptResult, 1)
 
 	go func() {
 		defer func() {
@@ -654,19 +745,19 @@ func (q *JobQueue) executeJobWithTimeout(ctx context.Context, job *Job) error {
 					Context("action_type", fmt.Sprintf("%T", job.Action)).
 					Context("panic_value", fmt.Sprintf("%v", r)).
 					Build()
-				resultChan <- result{err: panicErr}
+				resultChan <- attemptResult{err: panicErr}
 			}
 		}()
 
 		err := job.Action.Execute(execCtx, job.Data)
-		resultChan <- result{err: err}
+		resultChan <- attemptResult{err: err}
 	}()
 
 	select {
 	case res := <-resultChan:
-		return res.err
+		return nil, res.err
 	case <-execCtx.Done():
-		return handleExecutionTimeout(execCtx.Err(), job)
+		return resultChan, handleExecutionTimeout(execCtx.Err(), job)
 	}
 }
 

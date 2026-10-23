@@ -172,6 +172,22 @@ describe('ConfirmModal', () => {
     expect(dialog).toHaveAttribute('aria-modal', 'true');
   });
 
+  it('describes the dialog with the message', () => {
+    render(ConfirmModal, {
+      props: {
+        isOpen: true,
+        title: 'Delete Item?',
+        message: 'This cannot be undone.',
+        onClose: vi.fn(),
+        onConfirm: vi.fn(),
+      },
+    });
+
+    expect(screen.getByRole('dialog', { name: 'Delete Item?' })).toHaveAccessibleDescription(
+      'This cannot be undone.'
+    );
+  });
+
   it('handles async onConfirm', async () => {
     const onConfirm = vi.fn(() => new Promise<void>(resolve => setTimeout(resolve, 50)));
 

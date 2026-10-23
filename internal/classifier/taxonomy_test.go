@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
 // TestGeneratePlaceholderCode_MultibyteSingleWordScientificName guards against
@@ -96,7 +98,10 @@ func TestSplitSpeciesName(t *testing.T) {
 		{"Perch binomial scientific name", "Glaucidium passerinum", "Glaucidium passerinum", ""},
 		{"Perch binomial Turdus merula", "Turdus merula", "Turdus merula", ""},
 		{"Perch binomial Parus major", "Parus major", "Parus major", ""},
-		{"Perch sound event underscore", "dog_bark", "dog", "bark"},
+		{"unknown underscore label splits as BirdNET format", "dog_bark", "dog", "bark"},
+		{"Perch single-token class", "Dog", "Dog", ""},
+		{"Perch multi-word class", "Domestic_sounds_and_home_sounds", "Domestic_sounds_and_home_sounds", "Domestic sounds and home sounds"},
+		{"Perch one-underscore class", "Power_tool", "Power_tool", "Power tool"},
 		{"common name only", "Eurasian Pygmy-Owl", "", "Eurasian Pygmy-Owl"},
 		{"single word", "unknown", "unknown", ""},
 		{"empty string", "", "", ""},
@@ -149,4 +154,43 @@ func TestGetSpeciesCodeFromName_NonLegacyUnchanged(t *testing.T) {
 	code, found := GetSpeciesCodeFromName(taxonomyMap, scientificIndex, "Turdus migratorius_American Robin")
 	require.True(t, found, "American Robin should exist in taxonomy")
 	assert.Equal(t, "amerob", code, "non-legacy code should be returned unchanged")
+}
+
+// TestLabelSplitters_AgreeOnScientificName pins that every label splitter keys a
+// label identically, so the primary detection, additional results and stored
+// names agree.
+func TestLabelSplitters_AgreeOnScientificName(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		label       string
+		classCommon bool
+	}{
+		{"BirdNET two-part", "Turdus merula_Common Blackbird", false},
+		{"BirdNET three-part", "Turdus merula_Common Blackbird_eurbla", false},
+		{"Perch binomial", "Glaucidium passerinum", false},
+		{"single token", "Dog", false},
+		{"one underscore class", "Power_tool", true},
+		{"two underscore class", "Car_passing_by", true},
+		{"many underscore class", "Male_speech_and_man_speaking", true},
+		{"domestic sounds", "Domestic_sounds_and_home_sounds", true},
+		{"domestic animals", "Domestic_animals_and_pets", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sci, common := SplitSpeciesName(tt.label)
+			parsed := detection.ParseSpeciesString(tt.label)
+			assert.Equal(t, sci, parsed.ScientificName)
+			assert.Equal(t, sci, detection.ExtractScientificName(tt.label))
+			if tt.classCommon {
+				assert.Equal(t, common, parsed.CommonName)
+			}
+		})
+	}
+
+	sciA, _ := SplitSpeciesName("Domestic_sounds_and_home_sounds")
+	sciB, _ := SplitSpeciesName("Domestic_animals_and_pets")
+	assert.NotEqual(t, sciA, sciB)
 }

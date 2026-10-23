@@ -1,16 +1,14 @@
 // Package api v2 settings concurrent tests - leverages Go 1.25 features:
-// - testing/synctest for deterministic concurrent testing
 // - sync.WaitGroup.Go() for cleaner goroutine management
-// - T.Attr() and T.Output() for enhanced test metadata and reporting
+// - T.Attr() for enhanced test metadata
 //
 // LLM GUIDANCE for updating concurrent tests:
 //  1. Use sync.WaitGroup.Go(func()) instead of wg.Add(1) + go func() + defer wg.Done()
 //     Example: wg.Go(func() { /* work */ })
 //  2. Add test metadata with T.Attr("component", "name") and T.Attr("type", "test-type")
-//  3. Use T.Output() for structured logging: fmt.Fprintf(t.Output(), "message")
-//  4. testing/synctest.Test() creates deterministic "bubbles" but can deadlock with background
+//  3. testing/synctest.Test() creates deterministic "bubbles" but can deadlock with background
 //     goroutines that use time.Sleep() - avoid using it with code that spawns such goroutines
-//  5. For simple concurrent tests, prefer regular WaitGroup.Go() over synctest
+//  4. For simple concurrent tests, prefer regular WaitGroup.Go() over synctest
 package api
 
 import (
@@ -26,222 +24,103 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// TestConcurrentUpdates verifies the system handles concurrent updates safely
-func TestConcurrentUpdates(t *testing.T) {
-	t.Parallel()
+// readDuringWriteSummaryLimit is the summaryLimit written while readers run in
+// the "Read during write" race scenario. It differs from the baseline that
+// getTestSettings sets.
+const readDuringWriteSummaryLimit = 999
+
+// TestConcurrentSectionPatchesAllLand sends one PATCH per section at the same
+// time and requires every one to succeed and to be visible afterwards. The
+// handler holds settingsMutex (settings.go:475) for its whole read-modify-write,
+// so a writer that skipped the lock could publish a clone taken before another
+// writer's change. Each section gets its own value, so a lost update shows as
+// that section still holding its baseline.
+//
+// Not parallel: see the note in settings_blocked_fields_test.go.
+func TestConcurrentSectionPatchesAllLand(t *testing.T) {
 	t.Attr("component", "settings")
 	t.Attr("type", "concurrent")
 
-	tests := []struct {
-		name        string
-		concurrency int
-		scenario    string
+	patches := []struct {
+		section string
+		body    map[string]any
+		landed  func(t *testing.T, s *conf.Settings)
 	}{
 		{
-			name:        "Multiple updates to same section",
-			concurrency: 10,
-			scenario:    "same-section",
+			section: "dashboard",
+			body:    map[string]any{"summaryLimit": 200},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, 200, s.Realtime.Dashboard.SummaryLimit)
+			},
 		},
 		{
-			name:        "Updates to different sections",
-			concurrency: 5,
-			scenario:    "different-sections",
+			section: "mqtt",
+			body:    map[string]any{"topic": "concurrent/topic"},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, "concurrent/topic", s.Realtime.MQTT.Topic)
+			},
 		},
 		{
-			name:        "Mixed reads and writes",
-			concurrency: 10,
-			scenario:    "read-write",
+			section: "birdnet",
+			body:    map[string]any{"threshold": 0.55},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.InDelta(t, 0.55, s.BirdNET.Threshold, 0.0001)
+			},
 		},
 		{
-			name:        "Rapid sequential updates",
-			concurrency: 20,
-			scenario:    "rapid-sequential",
+			section: "weather",
+			body:    map[string]any{"pollInterval": 90},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, 90, s.Realtime.Weather.PollInterval)
+			},
 		},
 		{
-			name:        "Concurrent saves to disk",
-			concurrency: 5,
-			scenario:    "save-disk",
+			section: "audio",
+			body:    map[string]any{"export": map[string]any{"bitrate": "96k"}},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, "96k", s.Realtime.Audio.Export.Bitrate)
+			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	e := echo.New()
+	controller := getTestController(t, e)
+	baseline := controller.Settings.Load()
 
-			// Initialize test settings with known values
-
-			e := echo.New()
-			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 100), DisableSaveSettings: true}
-			controller.Settings.Store(getTestSettings(t))
-
-			var wg sync.WaitGroup
-			errorsChan := make(chan error, tt.concurrency)
-			successCount := 0
-			var successMutex sync.Mutex
-
-			// Use Go 1.25 WaitGroup.Go() for cleaner goroutine management
-			// Note: synctest.Test() can cause deadlocks with background goroutines that use time.Sleep
-			// so we use regular concurrent testing with WaitGroup.Go() improvements
-			for i := range tt.concurrency {
-				goroutineID := i
-				// Use WaitGroup.Go() for automatic Add/Done management (Go 1.25)
-				// This eliminates the need for manual wg.Add(1) and defer wg.Done()
-				wg.Go(func() {
-					_ = runConcurrentScenario(t, tt.scenario, goroutineID, controller, e, errorsChan, &successMutex, &successCount)
-				})
-			}
-			wg.Wait()
-			close(errorsChan)
-
-			// Check for any errors
-			var errors []error
-			for err := range errorsChan {
-				errors = append(errors, err)
-			}
-
-			assert.Empty(t, errors, "Concurrent operations should not produce errors")
-
-			// Verify final state is consistent
-			settings := controller.Settings.Load()
-			assert.NotNil(t, settings)
-
-			// For same-section updates, verify one of the values "won"
-			if tt.scenario == "same-section" {
-				limit := settings.Realtime.Dashboard.SummaryLimit
-				assert.True(t, limit >= 100 && limit < 100+tt.concurrency,
-					"Final value should be one of the concurrent updates")
-			}
-
-			// Use T.Output() for structured logging
-			output := t.Output()
-			_, _ = fmt.Fprintf(output, "Scenario %s: %d successful operations\n", tt.scenario, successCount)
+	// Workers write their own slot and nothing else; assertions run on the test
+	// goroutine after Wait.
+	results := make([]error, len(patches))
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range patches {
+		wg.Go(func() {
+			<-start
+			results[i] = makeSettingsUpdate(t, controller, patches[i].section, patches[i].body)
 		})
 	}
-}
+	close(start)
+	wg.Wait()
 
-// runConcurrentScenario executes a specific concurrent test scenario
-func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, controller *Controller, e *echo.Echo, errorsChan chan error, successMutex *sync.Mutex, successCount *int) error {
-	t.Helper()
-	switch scenario {
-	case "same-section":
-		return runSameSectionScenario(t, goroutineID, controller, errorsChan, successMutex, successCount)
-	case "different-sections":
-		return runDifferentSectionsScenario(t, goroutineID, controller, errorsChan, successMutex, successCount)
-	case "read-write":
-		return runReadWriteScenario(t, goroutineID, controller, e, errorsChan)
-	case "rapid-sequential":
-		return runRapidSequentialScenario(t, goroutineID, controller, errorsChan)
-	case "save-disk":
-		return runSaveLogicScenario(t, goroutineID, controller, errorsChan)
-	default:
-		return fmt.Errorf("unknown scenario: %s", scenario)
+	for i, p := range patches {
+		require.NoError(t, results[i], "PATCH %s must succeed", p.section)
 	}
-}
-
-// runSameSectionScenario handles concurrent updates to the same section
-func runSameSectionScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error, successMutex *sync.Mutex, successCount *int) error {
-	t.Helper()
-	update := map[string]any{
-		"summaryLimit": 100 + goroutineID,
+	final := controller.Settings.Load()
+	require.NotSame(t, baseline, final, "the patches must publish a new snapshot")
+	for _, p := range patches {
+		p.landed(t, final)
 	}
-	err := makeSettingsUpdate(t, controller, "dashboard", update)
-	if err != nil {
-		errorsChan <- err
-	} else {
-		successMutex.Lock()
-		*successCount++
-		successMutex.Unlock()
-	}
-	return err
-}
-
-// runDifferentSectionsScenario handles updates to different sections
-func runDifferentSectionsScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error, successMutex *sync.Mutex, successCount *int) error {
-	t.Helper()
-	sections := []string{"dashboard", "mqtt", "birdnet", "weather", "audio"}
-	section := sections[goroutineID%len(sections)]
-
-	updates := map[string]any{
-		"dashboard": map[string]any{"summaryLimit": 100 + goroutineID},
-		"mqtt":      map[string]any{"topic": fmt.Sprintf("topic-%d", goroutineID)},
-		"birdnet":   map[string]any{"threshold": 0.1 + float64(goroutineID)*0.01},
-		"weather":   map[string]any{"pollInterval": 60 + goroutineID},
-		"audio":     map[string]any{"export": map[string]any{"bitrate": fmt.Sprintf("%dk", 96+goroutineID)}},
-	}
-
-	err := makeSettingsUpdate(t, controller, section, updates[section])
-	if err != nil {
-		errorsChan <- err
-	} else {
-		successMutex.Lock()
-		*successCount++
-		successMutex.Unlock()
-	}
-	return err
-}
-
-// runReadWriteScenario handles mixed read and write operations
-func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller, e *echo.Echo, errorsChan chan error) error {
-	t.Helper()
-	if goroutineID%2 == 0 {
-		// Write operation
-		update := map[string]any{
-			"summaryLimit": 100 + goroutineID,
-		}
-		err := makeSettingsUpdate(t, controller, "dashboard", update)
-		if err != nil {
-			errorsChan <- err
-		}
-		return err
-	}
-	// Read operation
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("dashboard")
-
-	err := controller.GetSectionSettings(ctx)
-	if err != nil {
-		errorsChan <- err
-	}
-	return err
-}
-
-// runRapidSequentialScenario handles rapid sequential updates
-func runRapidSequentialScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
-	t.Helper()
-	for j := range 3 {
-		update := map[string]any{
-			"summaryLimit": 100 + goroutineID*10 + j,
-		}
-		err := makeSettingsUpdate(t, controller, "dashboard", update)
-		if err != nil {
-			errorsChan <- err
-			return err
-		}
-	}
-	return nil
-}
-
-// runSaveLogicScenario tests save logic without actual disk I/O (DisableSaveSettings prevents disk writes)
-func runSaveLogicScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
-	t.Helper()
-	update := map[string]any{
-		"summaryLimit": 100 + goroutineID,
-	}
-	err := makeSettingsUpdate(t, controller, "dashboard", update)
-	if err != nil {
-		errorsChan <- err
-	}
-	return err
 }
 
 // TestRaceConditionScenarios tests specific race condition scenarios
 func TestRaceConditionScenarios(t *testing.T) {
-	t.Parallel()
 	t.Attr("component", "settings")
 	t.Attr("type", "race-detection")
 
@@ -258,34 +137,32 @@ func TestRaceConditionScenarios(t *testing.T) {
 				// Cannot use synctest.Test here: handleSettingsChanges spawns a
 				// background goroutine with time.Sleep that outlives the test
 				// function, causing synctest's deadlock detector to fire.
+				const readers = 10
 				var wg sync.WaitGroup
+				// Workers report through errs; assertions run on the test goroutine.
+				errs := make(chan error, readers+1)
 
 				wg.Go(func() {
 					update := map[string]any{
-						"summaryLimit": 999,
+						"summaryLimit": readDuringWriteSummaryLimit,
 					}
-					_ = makeSettingsUpdate(t, controller, "dashboard", update)
+					errs <- makeSettingsUpdate(t, controller, "dashboard", update)
 				})
 
-				for range 10 {
+				for range readers {
 					wg.Go(func() {
-						req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/dashboard", http.NoBody)
-						rec := httptest.NewRecorder()
-						ctx := controller.Echo.NewContext(req, rec)
-						ctx.SetParamNames("section")
-						ctx.SetParamValues("dashboard")
-
-						err := controller.GetSectionSettings(ctx)
-						require.NoError(t, err)
-						assert.Equal(t, http.StatusOK, rec.Code)
-
-						var response map[string]any
-						err = json.Unmarshal(rec.Body.Bytes(), &response)
-						require.NoError(t, err)
+						errs <- readSectionSettings(controller, "dashboard")
 					})
 				}
 
 				wg.Wait()
+				close(errs)
+				for err := range errs {
+					require.NoError(t, err)
+				}
+
+				// The write must have landed, not just returned without a handler error.
+				assert.Equal(t, readDuringWriteSummaryLimit, controller.Settings.Load().Realtime.Dashboard.SummaryLimit)
 			},
 		},
 		{
@@ -293,7 +170,18 @@ func TestRaceConditionScenarios(t *testing.T) {
 			description: "Verify nested field updates don't corrupt parent objects",
 			scenario: func(t *testing.T, controller *Controller) {
 				t.Helper()
+				// Start with both flags false so a rejected write, or a merge that
+				// resets a sibling field, leaves a flag false after both writes set true.
+				baseline := getTestSettings(t)
+				baseline.Realtime.Dashboard.Thumbnails.Summary = false
+				baseline.Realtime.Dashboard.Thumbnails.Recent = false
+				controller.Settings.Store(baseline)
+				wantProvider := baseline.Realtime.Dashboard.Thumbnails.ImageProvider
+
+				const writers = 2
 				var wg sync.WaitGroup
+				// Workers report through errs; assertions run on the test goroutine.
+				errs := make(chan error, writers)
 
 				wg.Go(func() {
 					update := map[string]any{
@@ -301,31 +189,35 @@ func TestRaceConditionScenarios(t *testing.T) {
 							"summary": true,
 						},
 					}
-					_ = makeSettingsUpdate(t, controller, "dashboard", update)
+					errs <- makeSettingsUpdate(t, controller, "dashboard", update)
 				})
 
 				wg.Go(func() {
 					update := map[string]any{
 						"thumbnails": map[string]any{
-							"recent": false,
+							"recent": true,
 						},
 					}
-					_ = makeSettingsUpdate(t, controller, "dashboard", update)
+					errs <- makeSettingsUpdate(t, controller, "dashboard", update)
 				})
 
 				wg.Wait()
+				close(errs)
+				for err := range errs {
+					require.NoError(t, err)
+				}
 
-				// Verify both fields were updated
-				settings := controller.Settings.Load()
-				assert.NotNil(t, settings.Realtime.Dashboard.Thumbnails)
+				// Both writes must have landed and the untouched sibling must be intact
+				thumbnails := controller.Settings.Load().Realtime.Dashboard.Thumbnails
+				assert.True(t, thumbnails.Summary)
+				assert.True(t, thumbnails.Recent)
+				assert.Equal(t, wantProvider, thumbnails.ImageProvider)
 			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := echo.New()
 			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 100), DisableSaveSettings: true}
 			controller.Settings.Store(getTestSettings(t))
@@ -335,7 +227,10 @@ func TestRaceConditionScenarios(t *testing.T) {
 	}
 }
 
-// Helper function for making settings updates
+// makeSettingsUpdate sends a PATCH to the section and returns an error when the
+// handler returns one or the response status is not 200. HandleError writes a
+// 4xx/5xx response and returns nil (internal/api/v2/apicore/errors.go:131,
+// 182-184), so the status must be checked as well.
 func makeSettingsUpdate(t *testing.T, controller *Controller, section string, update any) error {
 	t.Helper()
 
@@ -352,5 +247,33 @@ func makeSettingsUpdate(t *testing.T, controller *Controller, section string, up
 	ctx.SetParamNames("section")
 	ctx.SetParamValues(section)
 
-	return controller.UpdateSectionSettings(ctx)
+	if err := controller.UpdateSectionSettings(ctx); err != nil {
+		return err
+	}
+	if rec.Code != http.StatusOK {
+		return fmt.Errorf("PATCH %s: status %d: %s", section, rec.Code, rec.Body.String())
+	}
+	return nil
+}
+
+// readSectionSettings sends a GET for the section and returns an error when the
+// handler returns one, the response status is not 200, or the body is not JSON.
+func readSectionSettings(controller *Controller, section string) error {
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/"+section, http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := controller.Echo.NewContext(req, rec)
+	ctx.SetParamNames("section")
+	ctx.SetParamValues(section)
+
+	if err := controller.GetSectionSettings(ctx); err != nil {
+		return err
+	}
+	if rec.Code != http.StatusOK {
+		return fmt.Errorf("GET %s: status %d: %s", section, rec.Code, rec.Body.String())
+	}
+	var response map[string]any
+	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+		return fmt.Errorf("GET %s: decode response: %w", section, err)
+	}
+	return nil
 }

@@ -80,6 +80,18 @@
     error: 'bg-[var(--color-error)]',
   };
 
+  // The label is drawn twice at the same position, each copy clipped to the part of the bar it
+  // sits on: base-content on the track, the content color of the fill on the fill.
+  const labelOnFillClasses: Record<ProgressVariant, string> = {
+    primary: 'text-[var(--color-primary-content)]',
+    secondary: 'text-[var(--color-secondary-content)]',
+    accent: 'text-[var(--color-accent-content)]',
+    info: 'text-[var(--color-info-content)]',
+    success: 'text-[var(--color-success-content)]',
+    warning: 'text-[var(--color-warning-content)]',
+    error: 'text-[var(--color-error-content)]',
+  };
+
   const containerClasses = $derived(
     cn(
       'w-full bg-[var(--color-base-300)] rounded-full overflow-hidden relative',
@@ -100,11 +112,14 @@
     )
   );
 
-  let labelClasses = $derived(
-    cn('absolute inset-0 flex items-center justify-center text-xs font-medium', {
-      'text-white mix-blend-difference': percentage > 50,
-      'text-[var(--color-base-content)]': percentage <= 50,
-    })
+  const labelBaseClasses =
+    'absolute inset-0 flex items-center justify-center text-xs font-medium transition-[clip-path] duration-300 ease-out';
+
+  let fillLabelClasses = $derived(
+    cn(
+      labelBaseClasses,
+      safeGet(labelOnFillClasses, currentVariant, 'text-[var(--color-primary-content)]')
+    )
   );
 </script>
 
@@ -119,7 +134,19 @@
 >
   <div class={progressBarClasses} style:width="{percentage}%"></div>
   {#if showLabel}
-    <div class={labelClasses}>
+    <div
+      class={cn(labelBaseClasses, 'text-[var(--color-base-content)]')}
+      data-label-part="track"
+      style:clip-path="inset(0 0 0 {percentage}%)"
+    >
+      {labelFormat(value, max)}
+    </div>
+    <div
+      class={fillLabelClasses}
+      data-label-part="fill"
+      aria-hidden="true"
+      style:clip-path="inset(0 {100 - percentage}% 0 0)"
+    >
       {labelFormat(value, max)}
     </div>
   {/if}

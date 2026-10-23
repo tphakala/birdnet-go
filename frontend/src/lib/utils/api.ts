@@ -343,10 +343,21 @@ interface FetchOptions extends Omit<RequestInit, 'body'> {
   timeout?: number;
   /** Internal flag to prevent infinite CSRF retry loops */
   _csrfRetried?: boolean;
+  /**
+   * Called with the headers of the final response, success or HTTP error, before
+   * the body is read. Not called for any 401 (the redirect to login, and the
+   * guest and login-request cases that throw an ApiError); a CSRF retry calls it
+   * for the retry's response only.
+   */
+  onHeaders?: (headers: Headers) => void;
 }
 
 /**
  * SECURITY: Enhanced fetch with comprehensive protection
+ *
+ * Headers in options.headers are merged over the defaults (including the CSRF
+ * token) for each request, and options is never modified, so the retry after a
+ * 403 merges them again over the refreshed token.
  */
 export async function fetchWithCSRF<T = unknown>(
   url: string,
@@ -428,8 +439,6 @@ export async function fetchWithCSRF<T = unknown>(
       }
       defaultHeaders.set(key, value);
     }
-
-    options.headers = defaultHeaders;
   }
 
   // SECURITY: Validate and sanitize body
@@ -454,8 +463,13 @@ export async function fetchWithCSRF<T = unknown>(
   }
 
   // Strip signal from options so caller's signal doesn't overwrite the internal one
-  const { signal: _ignored, ...restOptions } = options;
+  // onHeaders is likewise ours, not fetch's. headers are already merged into
+  // defaultOptions.headers above; leaving the caller's copy in the spread would
+  // replace the merged set (and its CSRF token) with only the custom headers.
+  const { signal: _ignored, onHeaders: _onHeaders, headers: _headers, ...restOptions } = options;
   void _ignored; // Consumed via addEventListener above; destructured only to exclude from spread
+  void _onHeaders; // Called below; destructured only to exclude from spread
+  void _headers; // Merged into defaultOptions.headers above; destructured only to exclude from spread
 
   const finalOptions: RequestInit = {
     ...defaultOptions,
@@ -505,6 +519,8 @@ export async function fetchWithCSRF<T = unknown>(
         return fetchWithCSRF<T>(url, { ...options, _csrfRetried: true });
       }
     }
+
+    options.onHeaders?.(response.headers);
 
     const result = await handleResponse<T>(response);
     logger.debug(`Response from ${url} received successfully`);

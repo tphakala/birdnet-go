@@ -77,20 +77,27 @@ UI. `section` is the lowercase backend section name from
 `SettingsSectionPayloads` (for example `privacyfilter`, `rtsp`), not a store
 key such as `realtime` or `privacyFilter`.
 
+`settingsActions.saveSettings()` fetches the server settings first and merges
+the unsaved edits onto them before it sends the whole form, so a change the
+server made since the page loaded is not reverted. A flow that changes settings
+on the server outside the form (the model gallery installs, reinstalls,
+swaps and removes models) calls `settingsActions.refreshKeepingEdits()`
+afterwards, so the form shows the server values without losing unsaved edits.
+
 ## Form Controls
 
 Settings controls (in `$lib/desktop/components/forms/`) are used as controlled
 components: pass the current value one way and write changes back through the
 store in the callback. This is the pattern the existing pages use:
 
-| Component        | Pattern                |
-| ---------------- | ---------------------- |
-| `NumberField`    | `value` + `onUpdate`   |
-| `PasswordField`  | `value` + `onUpdate`   |
-| `SubnetInput`    | `subnets` + `onUpdate` |
-| `TextInput`      | `value` + `onchange`   |
-| `Checkbox`       | `checked` + `onchange` |
-| `SelectDropdown` | `value` + `onChange`   |
+| Component                 | Pattern                |
+| ------------------------- | ---------------------- |
+| `NumberField`             | `value` + `onUpdate`   |
+| `PasswordField`           | `value` + `onUpdate`   |
+| `NetworkAddressListInput` | `values` + `onUpdate`  |
+| `TextInput`               | `value` + `onchange`   |
+| `Checkbox`                | `checked` + `onchange` |
+| `SelectDropdown`          | `value` + `onChange`   |
 
 Avoid combining `bind:value` with an update callback on the same control: the
 value is then written twice, and the store update in the callback is the one

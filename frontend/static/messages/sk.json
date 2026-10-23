@@ -515,6 +515,18 @@
         "title": "{modelName} zlyháva pri každej analýze",
         "message": "{modelName} je načítaný, ale jeho posledných {failures} analýz za sebou zlyhalo na {runtime}: inferencia vrátila chybu. Zvuk sa zaznamenáva, ale tento model nič nedeteguje. Skontrolujte model na stránke Systém > Modely AI.",
         "nonFiniteMessage": "{modelName} je načítaný, ale jeho posledných {failures} analýz za sebou zlyhalo na {runtime}: model vrátil neplatné skóre (NaN alebo nekonečné). Zvuk sa zaznamenáva, ale tento model nič nedeteguje. Skontrolujte model na stránke Systém > Modely AI."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Prekrytie analýzy obmedzené pre toto zariadenie",
+        "cadenceCappedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter falošne pozitívnych výsledkov preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia; pozrite Nastavenia > Analýza.",
+        "cadenceOverloadedTitle": "Toto zariadenie nestíha analýzu zvuku",
+        "cadenceOverloadedMessage": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia, preto môže analýza zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov, alebo zvoľte rýchlejší variant modelu."
+      },
+      "storage": {
+        "notPersistentTitle": "Dáta sa stratia pri opätovnom vytvorení kontajnera",
+        "notPersistentMessage": "Tieto cesty sú v úložisku, ktoré sa pri opätovnom vytvorení kontajnera odstráni, napríklad pri aktualizácii obrazu: {paths}. Namapujte na ne zväzok alebo adresár hostiteľa v konfigurácii kontajnera.",
+        "anonymousVolumeTitle": "Dáta sú uložené v anonymnom zväzku kontajnera",
+        "anonymousVolumeMessage": "Tieto cesty sú v anonymných zväzkoch, ktoré vytvorilo prostredie kontajnera, pretože nebol namapovaný žiadny zväzok: {paths}. Kontajner spustený odznova, napríklad príkazom docker run po aktualizácii obrazu, dostane nové prázdne zväzky, takže dáta vyzerajú stratené. Namapujte na ne pomenovaný zväzok alebo adresár hostiteľa."
       }
     },
     "loading": "Načítavam upozornenia..."
@@ -1069,7 +1081,8 @@
       "error": "Chyba pri načítaní detekcie: {error}",
       "loadingResults": "Načítava sa {count} výsledkov...",
       "thumbnailLoading": "Načítava sa náhľad {species}...",
-      "thumbnailLoaded": "Náhľad {species} načítaný"
+      "thumbnailLoaded": "Náhľad {species} načítaný",
+      "resultsPerPage": "Počet výsledkov na stranu"
     },
     "errors": {
       "notFound": "Detekcia sa nenašla. Možno bola odstránená alebo je ID nesprávne.",
@@ -1594,7 +1607,7 @@
           "restartTitle": "Vyžaduje sa reštart",
           "restartBody": "Reštartujte aplikáciu pre prepnutie na databázu V2. Vyčistenie starej databázy bude dostupné po reštarte.",
           "fallbackError": "Nesúlad počtu záznamov medzi starou a V2 databázou. Niektoré záznamy sa možno nemigrovali správne.",
-          "migrateInfo": "Migrácia prenesie {count} záznamov zo starej databázy do nového schémy V2. Režim dvojitého zápisu zabezpečuje nulovú stratu dát počas migrácie.",
+          "migrateInfo": "Migrácia prenesie {count} záznamov zo starej databázy do nového schémy V2. Nové detekcie uložené počas migrácie sa tiež skopírujú do novej databázy.",
           "sourceLegacy": "Zdroj (Legacy)",
           "targetV2": "Cieľ (V2)",
           "recordsLabel": "Záznamy",
@@ -1646,7 +1659,7 @@
         },
         "notes": {
           "in_progress": "Systém môžete naďalej normálne používať, kým migrácia prebieha na pozadí.",
-          "dual_write": "Migrácia prebieha. Vaše dáta sú v bezpečí - všetky nové detekcie sa ukladajú do oboch databáz.",
+          "dual_write": "Migrácia prebieha. Vaše dáta sú v bezpečí - nové detekcie sa ukladajú do aktuálnej databázy a počas migrácie sa kopírujú do novej databázy.",
           "migrating": "Kopírujú sa vaše existujúce detekcie do novej databázy.",
           "validating": "Overuje sa, či boli všetky záznamy skopírované správne. Skoro hotovo!",
           "cutover": "Prepína sa na novú databázu. To trvá len chvíľu.",
@@ -2329,11 +2342,14 @@
       "saveAriaLabel": "Uložiť zmeny",
       "savingAriaLabel": "Ukladajú sa zmeny...",
       "unsavedChanges": "Neuložené zmeny",
-      "toolbar": "Akcie nastavení"
+      "toolbar": "Akcie nastavení",
+      "validationBlocked": "Niektoré polia vyžadujú pozornosť, kým budete môcť uložiť.",
+      "noChangesToSave": "Žiadne zmeny na uloženie."
     },
     "errors": {
       "loadFailed": "Nepodarilo sa načítať nastavenia",
       "saveFailed": "Nepodarilo sa uložiť nastavenia",
+      "changedElsewhere": "Nastavenia boli zmenené inde. Skontrolujte ich a uložte znova.",
       "databaseStatsFailed": "Nepodarilo sa načítať štatistiky databázy",
       "csvDownloadFailed": "Nepodarilo sa stiahnuť CSV"
     },
@@ -2413,10 +2429,9 @@
             "lenient": "Pre nízku kvalitu zvuku (RTSP kamery, mikrofóny webkamier)",
             "moderate": "Vyvážené pre typické hobby konfigurácie",
             "balanced": "Pôvodné správanie pred septembrom 2025",
-            "strict": "Vyžaduje sa RPi 4+. Pre vysokokvalitné mikrofóny",
-            "maximum": "Vyžaduje sa RPi 4+. Pre mikrofóny profesionálnej triedy"
+            "strict": "Pre vysokokvalitné mikrofóny",
+            "maximum": "Pre mikrofóny profesionálnej triedy"
           },
-          "hardwareNote": "Prísne a maximálne úrovne vyžadujú vyššie nastavenia prekrytia a viac prostriedkov CPU. Pre tieto úrovne sa vyžaduje hardvér RPi 4 alebo lepší.",
           "overlapAdjusted": "Nastavenie prekrytia bolo automaticky upravené na {overlap}s, aby spĺňalo požiadavky filtra",
           "overlapReduced": "Nastavenie prekrytia bolo znížené na {overlap}s, aby zodpovedalo úrovni filtra",
           "levelNames": {
@@ -2428,7 +2443,19 @@
             "maximum": "Maximum",
             "unknown": "Neznámy"
           },
-          "warningOff": "Bez filtrovania sa každá detekcia nad prahom spoľahlivosti ihneď akceptuje. To zvyčajne spôsobuje niekoľko falošných pozitív denne. Aj nízke filtrovanie výrazne zlepšuje kvalitu výsledkov."
+          "warningOff": "Bez filtrovania sa každá detekcia nad prahom spoľahlivosti ihneď akceptuje. To zvyčajne spôsobuje niekoľko falošných pozitív denne. Aj nízke filtrovanie výrazne zlepšuje kvalitu výsledkov.",
+          "readoutTitle": "Aktuálne požadované potvrdenia",
+          "readoutPreviewTitle": "Požadované potvrdenia po uložení (odhad)",
+          "readoutIntro": "Detekcia sa prijme, keď sa zhoduje dostatok analytických okien v rámci {seconds} sekúnd.",
+          "readoutLine": "{model}: {count} z {windows} okien, nové okno každých {step} s",
+          "readoutPreview": "Odhad podľa neuložených zmien. Limit zariadenia sa po uložení znova overí.",
+          "readoutPending": "Uložené nastavenia sa práve uplatňujú. Kým sa nenačítajú aktualizované počty, sú tieto hodnoty odhadom.",
+          "capNoticeTitle": "Prekrytie obmedzené na výkon tohto zariadenia",
+          "capNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} pri nastavenom prekrytí {configured} s prekračuje nameranú kapacitu tohto zariadenia, preto sa zvuk analyzuje s prekrytím {effective} s. Filter preto môže vyžadovať menej potvrdení. Vaše uložené nastavenia sa nemenia.",
+          "overloadedNoticeTitle": "Toto zariadenie nestíha analýzu",
+          "overloadedNotice": "Spustenie {models, plural, one {# modelu} few {# modelov} many {# modelu} other {# modelov}} na {sources, plural, one {# zvukovom zdroji} few {# zvukových zdrojoch} many {# zvukového zdroja} other {# zvukových zdrojoch}} prekračuje nameranú kapacitu tohto zariadenia aj bez prekrytia. Analýza môže zaostávať a detekcie môžu byť vynechané. Povoľte menej modelov alebo zvukových zdrojov, alebo zvoľte rýchlejší variant modelu.",
+          "unknownLatency": "Čas spracovania sa nepodarilo zmerať pre {models}, preto sa pri obmedzovaní prekrytia nezapočítava. Analýza môže napriek tomu zaostávať.",
+          "cpuNote": "Vyššia sila analyzuje prekrývajúci sa zvuk častejšie, čo stojí čas CPU pre každý povolený model a zvukový zdroj. BirdNET-Go automaticky obmedzí prekrytie na to, čo toto zariadenie dokáže spracovať."
         },
         "rangeFilter": {
           "title": "Filter rozsahu",
@@ -2443,7 +2470,7 @@
             "accuracy": "Odhadovaná presnosť: do {accuracy} m",
             "locationDetected": "Poloha prehliadača bola zistená.",
             "geolocationUnsupported": "Tento prehliadač nepodporuje určovanie polohy zariadenia. Zadajte súradnice ručne alebo použite mapu.",
-            "geolocationRequiresHttps": "Určovanie polohy prehliadača vyžaduje HTTPS alebo localhost. Zadajte súradnice ručne alebo použite mapu.",
+            "geolocationInsecureHelp": "Vyžaduje HTTPS alebo localhost. Namiesto toho vyhľadajte miesto alebo použite mapu.",
             "geolocationDenied": "Prístup k polohe bol zamietnutý. Zadajte súradnice ručne alebo použite mapu.",
             "geolocationUnavailable": "Zariadenie nedokázalo určiť svoju polohu. Zadajte súradnice ručne alebo použite mapu.",
             "geolocationTimedOut": "Vypršal časový limit požiadavky na polohu. Skúste to znova, zadajte súradnice ručne alebo použite mapu.",
@@ -2670,7 +2697,7 @@
                 "descriptions": {
                   "highContrast": "Najlepšie pre slabé signály. Vtáčí spev jasne vyniká z hluku pozadia. Odporúča sa pre vedecké štýly/štýly v stupňoch sivej.",
                   "standard": "Predvolené vyvážené nastavenie. Dobré pre väčšinu prípadov použitia.",
-                  "extended": "Viditeľných viac detailov, ale nižší kontrast. Predvolená hodnota SoX."
+                  "extended": "Viditeľných viac detailov, ale nižší kontrast."
                 }
               },
               "enabled": {
@@ -2772,7 +2799,7 @@
           "title": "Čo je zahrnuté v správe:",
           "applicationLogs": "**Logy aplikácie** - Nedávne chyby a ladiace informácie",
           "configuration": "**Konfigurácia** - Vaše nastavenia s odstránenými citlivými údajmi",
-          "systemInfo": "**Informácie o systéme** - Verzia OS, pamäť a podrobnosti o runtime",
+          "systemInfo": "**Informácie o systéme** - Verzia OS, pamäť, hardvér, pripojené zariadenia USB a zvukové karty a podrobnosti o runtime",
           "notIncluded": "**NIE JE zahrnuté** - Audio súbory, detekcie vtákov alebo osobné údaje"
         },
         "userMessage": {
@@ -2925,6 +2952,11 @@
             "unit": "min",
             "helpText": "Zabrániť opakovaným upozorneniam na rovnaký druh v rámci tohto časového okna. Nastavte na 0 pre deaktiváciu."
           }
+        },
+        "rulesNotice": {
+          "message": "Push upozornenia na detekcie vytvárajú pravidlá upozornení na karte Pravidlá. Vstavané pravidlá detekcie upozorňujú iba v aplikácii. Ak chcete dostávať push upozornenia, pridajte akciu {pushAction} do pravidla {ruleName} alebo vytvorte pravidlo pre udalosť {eventName} s podmienkou istoty a dobou čakania.",
+          "previousFilters": "Vaše nastavenia Minimálna istota ({confidence} %) a Cooldown druhu ({minutes} min) tu pravidlá upozornení nepoužívajú.",
+          "openRules": "Otvoriť Pravidlá"
         },
         "noProviders": "Žiadni nakonfigurovaní poskytovatelia",
         "noProvidersDescription": "Pridajte poskytovateľa, aby ste začali dostávať push upozornenia",
@@ -3192,7 +3224,7 @@
         "vadEnable": "Povoliť Ochranu Súkromia (Silero VAD)",
         "vadHelp": "Spúšťa vyhradený neurónový model detekcie reči popri klasifikátore pre spoľahlivé filtrovanie hlasu. Spotrebováva ďalšie systémové prostriedky (cca 20-30 MB RAM a inferenciu procesora na segment).",
         "vadThresholdLabel": "Prah Ochrany Súkromia",
-        "vadThresholdHelp": "Prah citlivosti pre detektor hlasovej aktivity (predvolené 0.35). Nižšie hodnoty robia filter citlivejším na tichú alebo vzdialenú reč."
+        "vadThresholdHelp": "Prah citlivosti pre detektor hlasovej aktivity (predvolené 0.6). Nižšie hodnoty robia filter citlivejším na tichú alebo vzdialenú reč."
       },
       "falsePositivePrevention": {
         "title": "Prevencia falošne pozitívnych výsledkov",
@@ -3229,10 +3261,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Nahrať detekcie do BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg nebol nájdený",
-          "message": "Nainštalujte FFmpeg, aby ste povolili podporu kódovania FLAC. BirdWeather nahrádza nahrávanie WAV v prospech komprimovaných zvukových súborov FLAC."
-        },
         "enable": "Povoliť nahrávanie do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
@@ -3744,6 +3772,8 @@
         "frequencyResponse": "Frekvenčná odozva",
         "cutoffFrequency": "Deliaca frekvencia",
         "cutoffFrequencyHelp": "Frekvencia, pri ktorej filter začína tlmíť signály. Vtáčí spev sa zvyčajne pohybuje v rozmedzí 1-10 kHz.",
+        "centerFrequency": "Stredná frekvencia",
+        "bandwidth": "Šírka pásma",
         "qFactor": "Q faktor",
         "qFactorHelp": "Činiteľ akosti (Q faktor) riadi ostrosť filtra. Nižšie hodnoty (0.1-1) vytvárajú jemnejšie sklony, vyššie hodnoty (1-10) vytvárajú strmšie rezy.",
         "gain": "Zisk",
@@ -3751,17 +3781,31 @@
         "attenuation": "Útlm",
         "attenuationHelp": "Rýchlosť poklesu filtra. Vyššie hodnoty poskytujú strmšie tlmenie filtrovaných frekvencií.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Vypnutý",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Pridajte viacero filtrov na tvarovanie frekvenčnej odozvy pre optimálnu detekciu vtákov vo vašom prostredí.",
+        "emptyEntryRestored": "Zadajte číslo. Predchádzajúca hodnota bola zachovaná.",
         "graph": {
           "flatResponse": "Plochá odozva (Žiadne filtre nie sú použité)",
           "frequency": "Frekvencia (Hz)",
-          "gain": "Zisk (dB)"
+          "gain": "Zisk (dB)",
+          "loading": "Výpočet frekvenčnej odozvy...",
+          "updating": "Aktualizácia frekvenčnej odozvy...",
+          "error": "Frekvenčnú odozvu sa nepodarilo vypočítať. Aktualizuje sa pri zmene filtra alebo po výbere možnosti Skúsiť znova.",
+          "sampleRate": "Vypočítané pre vzorkovaciu frekvenciu {rate} Hz.",
+          "clipped": "Odozva dosahuje maximum {peak} dB, čo je nad horným okrajom grafu.",
+          "skippedHeading": "{count, plural, one {# filter sa na zvuk nepoužije} few {# filtre sa na zvuk nepoužijú} many {# filtra sa na zvuk nepoužije} other {# filtrov sa na zvuk nepoužije}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) sa preskočí: tento typ filtra nie je podporovaný.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) sa preskočí: jeho nastavenia nie sú platné pri {rate} Hz.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) sa preskočí: nepodarilo sa ho pridať do reťazca filtrov.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) sa preskočí."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3930,7 +3974,7 @@
       "allowSubnetBypassLabel": "Povoliť prístup zo subnetu na obídenie autentifikácie",
       "subnetBypassLocalNote": "Keď je táto možnosť zapnutá, klienti v rovnakej lokálnej sieti ako tento server sú automaticky dôveryhodní a preskočia prihlásenie. Pole nižšie použite iba na rozšírenie tejto dôvery na ďalšie siete (napríklad samostatnú VLAN alebo smerovanú podsieť).",
       "allowedSubnetsLabel": "Povolené subnety",
-      "allowedSubnetsHelp": "Ďalšie sieťové rozsahy, ktoré môžu obísť prihlásenie, nad rámec vlastnej lokálnej siete tohto servera. Notácia CIDR, oddelené čiarkami.",
+      "allowedSubnetsHelp": "Ďalšie sieťové rozsahy, ktoré môžu obísť prihlásenie, nad rámec vlastnej lokálnej siete tohto servera. Použite notáciu CIDR, napríklad 192.168.10.0/24.",
       "securityWarningTitle": "Bezpečnostné varovanie:",
       "subnetWarningText": "Lokálna sieť tohto servera a všetky tu uvedené podsiete získajú plný prístup bez prihlásenia. Zahrňte iba siete, ktorým plne dôverujete.",
       "httpsSettingsTitle": "Nastavenia HTTPS",
@@ -4158,6 +4202,77 @@
         "downloadCertificate": "Stiahnuť certifikát",
         "downloadCertificateHelp": "Nainštalujte tento certifikát do úložiska dôveryhodných certifikátov vášho operačného systému, aby ste sa vyhli bezpečnostným upozorneniam prehliadača.",
         "fileReadError": "Nepodarilo sa prečítať vybraný súbor"
+      },
+      "reverseProxy": {
+        "title": "Reverzný proxy",
+        "description": "Pre prístup cez nginx, Caddy, Traefik, Cloudflare alebo iný proxy",
+        "listLabel": "Dôveryhodné proxy",
+        "listHelp": "Pridajte adresu každého proxy pred BirdNET-Go. Pri Dockeri je to často adresa brány Dockeru, napríklad 172.17.0.1.",
+        "placeholder": "Napríklad 172.17.0.1",
+        "emptyState": "Žiadne dôveryhodné proxy. BirdNET-Go používa adresu, ktorá sa k nemu pripája.",
+        "emptyStateCloudflareOnly": "Dôveryhodné sú iba zverejnené okrajové adresy Cloudflare. Nie sú uvedené žiadne iné proxy.",
+        "rangeBadge": "Rozsah",
+        "ruleOwnAddress": "Uveďte vlastnú adresu každého proxy. Nikdy neuvádzajte rozsah, ktorý obsahuje aj počítače, z ktorých prehliadate.",
+        "ruleHeaders": "Proxy musí pridať adresu klienta do X-Forwarded-For alebo prepísať X-Real-IP.",
+        "cloudflareLabel": "Dôverovať Cloudflare",
+        "cloudflareHelp": "Zapnite túto možnosť, keď je vaša stránka poskytovaná cez Cloudflare. BirdNET-Go potom dôveruje publikovaným edge adresám Cloudflare.",
+        "check": {
+          "title": "Vaše pripojenie",
+          "recheck": "Znova skontrolovať",
+          "checking": "Kontroluje sa vaše pripojenie",
+          "error": "Nepodarilo sa skontrolovať vaše pripojenie.",
+          "stale": "Táto kontrola zobrazuje uložené nastavenia. Uložte pre kontrolu zmien.",
+          "trust": "Dôverovať {peer}",
+          "trustWarning": "Dôverujte {peer} iba vtedy, ak je to váš reverzný proxy, nie počítač, z ktorého prehliadate.",
+          "trustWithCloudflare": "Dôverovať {peer} a Cloudflare",
+          "cloudflareInFront": "Cloudflare je pred {peer}. Dôverujte obom na overenie vašej adresy.",
+          "cloudflareEdge": "{peer} patrí pod Cloudflare. Zapnite možnosť Dôverovať Cloudflare nižšie.",
+          "chainHint": "Ak je pred {peer} ďalší proxy, uveďte ho tiež.",
+          "added": "Pridané do zoznamu. Uložte pre aplikovanie.",
+          "coveredBy": "Už pokryté rozsahom {range} v zozname. Uložte na použitie.",
+          "selfClientCause": "Proxy môže ako klienta odovzdávať svoju vlastnú adresu, často preto, že publikovanie portov kontajnera skrýva skutočného klienta. Opravte to v nastavení siete kontajnera alebo proxy."
+        },
+        "status": {
+          "direct": {
+            "title": "Pripojené priamo",
+            "body": "Váš prehliadač sa pripája k BirdNET-Go priamo z {peer}.",
+            "bodyNoPeer": "Váš prehliadač sa pripája k BirdNET-Go priamo.",
+            "hint": "Ak používate reverzný proxy a {peer} je jeho adresa, nastavte proxy tak, aby odosielal X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Pripojené cez dôveryhodný proxy",
+            "body": "Vaše pripojenie prechádza cez {peer}, ktorý je dôveryhodný. Vaša adresa {client} bola overená.",
+            "hint": "Ak je {client} ďalší proxy a nie váš počítač, uveďte aj tento proxy."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Vašu adresu sa nepodarilo overiť",
+            "body": "{peer} je dôveryhodný, ale adresu, ktorú odovzdáva, nebolo možné overiť. Časté príčiny:",
+            "causeRange": "Uvedený rozsah obsahuje aj váš počítač, takže žiadna adresa v reťazci sa nepovažuje za vašu.",
+            "causeHeaders": "Proxy nepridáva X-Forwarded-For ani neprepisuje X-Real-IP.",
+            "causeConflict": "Proxy odosiela konfliktné alebo opakované hlavičky adries, alebo iba hlavičku Forwarded."
+          },
+          "untrusted_public_proxy": {
+            "title": "Pripojené cez verejný proxy",
+            "body": "Vaše pripojenie prechádza cez {peer}, verejnú adresu. Verejné adresy sa nikdy neponúkajú na dôverovanie jedným kliknutím. Pridajte ju manuálne iba vtedy, ak ste si istí, že je to váš proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Pripojené cez nedôveryhodný proxy",
+            "body": "Vaše pripojenie prechádza cez proxy na adrese {peer}, ktorý nie je dôveryhodný, takže BirdNET-Go nemôže overiť vašu adresu."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Hlavičky proxy nie je možné overiť",
+            "body": "Vaše pripojenie prechádza cez {peer}, ale odosielané hlavičky adries nebolo možné overiť, aj keby bol dôveryhodný.",
+            "bodyNoPeer": "Vaše pripojenie prechádza cez proxy, ale jeho adresu sa nepodarilo prečítať.",
+            "fix": "Nastavte proxy tak, aby pridával X-Forwarded-For alebo prepisoval X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Za reverzným proxy toto obídenie funguje iba vtedy, keď je proxy uvedený ako dôveryhodný.",
+      "bypassProxyLink": "Nastaviť dôveryhodné proxy",
+      "allowedSubnetsEmpty": "Žiadne ďalšie podsiete. Iba vlastná lokálna sieť tohto servera môže obísť prihlásenie.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} obsahuje neplatnú položku.",
+        "pendingEntry": "{tab}: {field} obsahuje text, ktorý nebol pridaný. Stlačte Enter alebo Pridať, alebo ho vymažte."
       }
     },
     "species": {
@@ -4917,6 +5032,28 @@
         "edit": "Upraviť druh",
         "remove": "Odstrániť druh"
       }
+    },
+    "networkAddressList": {
+      "add": "Pridať",
+      "remove": "Odstrániť {address}",
+      "empty": "Zatiaľ neboli pridané žiadne adresy.",
+      "pendingHint": "Stlačte Enter alebo Pridať pre pridanie tejto adresy.",
+      "limitReached": "Zoznam je plný ({max} položiek).",
+      "rowDuplicate": "Duplikát",
+      "rowInvalid": {
+        "cidr": "Neplatný rozsah",
+        "ip": "Neplatná IP adresa",
+        "ipOrCidr": "Neplatná adresa alebo rozsah"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Neplatný rozsah: {values}. Použite rozsah ako 192.168.1.0/24.",
+          "ip": "Neplatná IP adresa: {values}. Použite adresu ako 192.168.1.10.",
+          "ipOrCidr": "Neplatná adresa alebo rozsah: {values}. Použite adresu ako 192.168.1.10 alebo rozsah ako 192.168.1.0/24."
+        },
+        "duplicate": "Už je v zozname: {values}.",
+        "limit": "Zoznam môže obsahovať maximálne {max} položiek. Nepridané: {values}."
+      }
     }
   },
   "media": {
@@ -4943,6 +5080,7 @@
       "loop": "Prepnúť opakovanie",
       "player": "Prehrávač zvuku",
       "autoplayBlocked": "Kliknutím spustíte prehrávanie (automatické prehrávanie blokované)",
+      "hlsLoadFailed": "Prehrávač zvuku sa nepodarilo načítať, obnovte stránku a skúste to znova",
       "hlsNotSupported": "Prehrávanie HLS nie je v tomto prehliadači podporované",
       "streamStarting": "Spúšťa sa audio stream...",
       "levelFor": "Úroveň zvuku pre {source}",
@@ -5111,6 +5249,33 @@
       "viewDetections": "Zobraziť detekcie druhu {name}",
       "largeView": "Veľké zobrazenie druhu {name}",
       "clickToView": "Kliknite pre zobrazenie detekcií"
+    },
+    "locationMap": {
+      "mapLabel": "Mapa na výber polohy stanice",
+      "expandedMapLabel": "Mapa na celú obrazovku na výber polohy stanice",
+      "zoomIn": "Priblížiť",
+      "zoomOut": "Oddialiť",
+      "expand": "Rozbaliť mapu na celú obrazovku",
+      "search": {
+        "label": "Hľadať miesto",
+        "placeholder": "Mesto alebo adresa",
+        "submit": "Hľadať",
+        "disclosure": "Vyhľadávania sa odosielajú službe Photon (photon.komoot.io), ktorá používa údaje OpenStreetMap.",
+        "openPhoton": "Otvoriť Photon na novej karte",
+        "searching": "Hľadá sa...",
+        "results": "{count, plural, one {Nájdené # miesto} few {Nájdené # miesta} other {Nájdených # miest}}",
+        "noResults": "Nenašli sa žiadne miesta. Skúste iný názov alebo kliknite na mapu.",
+        "errorNetwork": "Vyhľadávanie miest nie je dostupné. Skontrolujte internetové pripojenie. Stále môžete kliknúť na mapu alebo zadať súradnice.",
+        "errorRateLimited": "Príliš veľa vyhľadávaní. Chvíľu počkajte a skúste to znova.",
+        "errorUnavailable": "Vyhľadávacia služba neodpovedala. Stále môžete kliknúť na mapu alebo zadať súradnice.",
+        "kind": {
+          "city": "Mesto",
+          "town": "Mestečko",
+          "village": "Dedina",
+          "station": "Stanica",
+          "airport": "Letisko"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5150,6 +5315,9 @@
       "invalidJSON": "Neplatný JSON",
       "invalidEscalation": "Eskalačné kroky sú neplatné",
       "engineUnavailable": "Správca výstrah nie je dostupný"
+    },
+    "insights": {
+      "v2Required": "Prehľady vyžadujú rozšírenú databázu (v2)"
     },
     "detection": {
       "invalidDate": "Neplatný formát {paramName}, použite RRRR-MM-DD"
@@ -5279,7 +5447,9 @@
       "saveFailed": "Tento krok sa nepodarilo uložiť. Skontrolujte pripojenie a skúste to znova, alebo preskočte nastavenie a zmeňte to neskôr v Nastaveniach.",
       "saveRejected": "Nastavenia v tomto kroku neboli prijaté. Skontrolujte hodnoty a skúste to znova, alebo preskočte nastavenie a zmeňte to neskôr v Nastaveniach.",
       "stepLoadFailed": "Tento krok sa nepodarilo načítať. Stlačte Skúsiť znova alebo obnovte stránku.",
-      "stepLoadFailedReload": "Tento krok sa stále nepodarilo načítať. Obnovte stránku a skúste to znova; voľby uložené v predchádzajúcich krokoch zostanú zachované."
+      "stepLoadFailedReload": "Tento krok sa stále nepodarilo načítať. Obnovte stránku a skúste to znova; voľby uložené v predchádzajúcich krokoch zostanú zachované.",
+      "audioSourceSaveUnfinished": "Zmena zdroja zvuku sa nedokončila. Skontrolujte zdroje zvuku v sekcii Nastavenia > Zvuk.",
+      "saveUnfinished": "Niektoré zmeny z nastavenia sa neuložili. Skontrolujte ich v Nastaveniach."
     },
     "reasons": {
       "completeStep": "Na pokračovanie dokončite tento krok."
@@ -5287,6 +5457,7 @@
     "leaveConfirm": {
       "title": "Opustiť nastavenie?",
       "message": "Nastavenie sa znova neotvorí. Voľby uložené v predchádzajúcich krokoch zostanú zachované; zmeny v tomto kroku sa neuložia. Všetko môžete neskôr zmeniť v Nastaveniach.",
+      "messageSaving": "Nastavenie sa znova neotvorí. Voľby uložené v predchádzajúcich krokoch zostanú zachované. Tento krok sa ešte ukladá a niektoré alebo všetky jeho zmeny sa nemusia zachovať. Všetko môžete neskôr zmeniť v Nastaveniach.",
       "stay": "Pokračovať v nastavení",
       "leave": "Opustiť nastavenie"
     },
@@ -5312,13 +5483,6 @@
         "locationHelp": "Vaša poloha pomáha filtrovať druhy na tie, ktoré sú pravdepodobné vo vašej oblasti",
         "latitudeLabel": "Zemepisná šírka",
         "longitudeLabel": "Zemepisná dĺžka",
-        "useMyLocation": "Použiť moju polohu",
-        "locationDetected": "Poloha zistená",
-        "locationError": "Nepodarilo sa zistiť polohu. Zadajte súradnice ručne.",
-        "locationDenied": "Prístup k polohe zamietnutý. Zadajte súradnice ručne.",
-        "geolocationRequiresHttps": "Poloha prehliadača vyžaduje HTTPS. Zadajte súradnice manuálne alebo použite mapu.",
-        "geolocationDenied": "Povolenie polohy bolo zamietnuté. Zadajte súradnice manuálne alebo použite mapu.",
-        "geolocationFailed": "Vašu polohu sa nepodarilo určiť. Zadajte súradnice manuálne alebo použite mapu.",
         "localesLoading": "Načítavanie jazykov...",
         "localesLoadFailed": "Nepodarilo sa načítať jazykové možnosti. Angličtina bola zvolená ako predvolená."
       },

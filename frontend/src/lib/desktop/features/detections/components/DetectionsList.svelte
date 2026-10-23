@@ -477,6 +477,7 @@
 
         <SelectDropdown
           options={RESULTS_OPTIONS}
+          aria-label={t('detections.aria.resultsPerPage')}
           value={selectedNumResults}
           size="sm"
           menuSize="sm"

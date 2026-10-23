@@ -76,8 +76,8 @@ type Result struct {
 // and applies it using the real runtime/native setters. Call this once, early in
 // startup, before inference threads spin up.
 func Configure(mode string) Result {
-	total := DetectTotalMemory()
-	d := Decide(total, runtime.NumCPU(), mode)
+	total, exact := DetectTotalMemory()
+	d := decide(total, exact, runtime.NumCPU(), mode)
 	a := Apply(d, Setters{
 		CurrentMemLimit:  func() int64 { return debug.SetMemoryLimit(-1) },
 		GoMemLimitEnvSet: func() bool { _, ok := os.LookupEnv("GOMEMLIMIT"); return ok },

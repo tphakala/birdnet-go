@@ -498,3 +498,21 @@ func TestResetAndCheckInterleaved(t *testing.T) {
 
 	wg.Wait()
 }
+
+// TestIsSpeciesIncluded_PerchSoundClass verifies that a Perch multi-word sound
+// class keys by its full label in the inclusion set, so two classes sharing a
+// first token do not collide.
+func TestIsSpeciesIncluded_PerchSoundClass(t *testing.T) {
+	t.Parallel()
+
+	settings := &Settings{}
+	settings.BirdNET.RangeFilter.IncludedScientificNames = map[string]struct{}{}
+	for _, l := range []string{"Domestic_sounds_and_home_sounds", "Turdus merula_Common Blackbird"} {
+		settings.BirdNET.RangeFilter.IncludedScientificNames[canonicalSci(l)] = struct{}{}
+	}
+
+	assert.True(t, settings.IsSpeciesIncluded("Domestic_sounds_and_home_sounds"))
+	assert.False(t, settings.IsSpeciesIncluded("Domestic_animals_and_pets"))
+	assert.True(t, settings.IsSpeciesIncluded("Turdus merula_Common Blackbird"))
+	assert.False(t, settings.IsSpeciesIncluded("Parus major_Great Tit"))
+}

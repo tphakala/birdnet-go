@@ -237,18 +237,18 @@ func TestManager_HasAnalysis(t *testing.T) {
 
 	m := buffer.NewManager(newTestLogger())
 
-	// Before allocation — should return false.
+	// Before allocation - should return false.
 	assert.False(t, m.HasAnalysis("source-1", "birdnet"))
 
-	// Allocate and check — should return true.
+	// Allocate and check - should return true.
 	err := m.AllocateAnalysis("source-1", "birdnet", managerTestCapacity, managerTestOverlapSize, managerTestReadSize)
 	require.NoError(t, err)
 	assert.True(t, m.HasAnalysis("source-1", "birdnet"))
 
-	// Different model — should return false.
+	// Different model - should return false.
 	assert.False(t, m.HasAnalysis("source-1", "perch_v2"))
 
-	// Different source — should return false.
+	// Different source - should return false.
 	assert.False(t, m.HasAnalysis("source-2", "birdnet"))
 }
 
@@ -331,36 +331,6 @@ func TestManager_BytePoolFor_NonPositiveReturnsNil(t *testing.T) {
 	m := buffer.NewManager(newTestLogger())
 	assert.Nil(t, m.BytePoolFor(0))
 	assert.Nil(t, m.BytePoolFor(-1))
-}
-
-// ---------------------------------------------------------------------------
-// Per-size Float64Pool tests
-// ---------------------------------------------------------------------------
-
-// TestManager_Float64PoolFor_LazyPerSize verifies that Float64PoolFor returns
-// distinct pools for different sizes and the same pool for the same size.
-func TestManager_Float64PoolFor_LazyPerSize(t *testing.T) {
-	t.Parallel()
-	m := buffer.NewManager(newTestLogger())
-
-	pool1 := m.Float64PoolFor(72192)
-	require.NotNil(t, pool1)
-
-	pool2 := m.Float64PoolFor(80000)
-	require.NotNil(t, pool2)
-	assert.NotSame(t, pool1, pool2, "different sizes must yield different pools")
-
-	pool1Again := m.Float64PoolFor(72192)
-	assert.Same(t, pool1, pool1Again, "same size must yield same pool")
-}
-
-// TestManager_Float64PoolFor_NonPositiveReturnsNil verifies that Float64PoolFor
-// returns nil for zero and negative sizes.
-func TestManager_Float64PoolFor_NonPositiveReturnsNil(t *testing.T) {
-	t.Parallel()
-	m := buffer.NewManager(newTestLogger())
-	assert.Nil(t, m.Float64PoolFor(0))
-	assert.Nil(t, m.Float64PoolFor(-1))
 }
 
 // TestManager_AllocateAnalysis_HighOverlap reproduces the exact dimensions the

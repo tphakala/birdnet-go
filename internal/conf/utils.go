@@ -537,14 +537,6 @@ func GetFfmpegBinaryName() string {
 	return "ffmpeg"
 }
 
-// GetSoxBinaryName returns the binary name for sox based on the current OS.
-func GetSoxBinaryName() string {
-	if runtime.GOOS == osWindows {
-		return "sox.exe"
-	}
-	return "sox"
-}
-
 // GetFfprobeBinaryName returns the binary name for ffprobe based on the current OS.
 func GetFfprobeBinaryName() string {
 	if runtime.GOOS == osWindows {
@@ -559,17 +551,50 @@ func GetFfmpegVersionFrom(ffmpegPath string) (version string, major, minor int) 
 	return GetFfmpegVersionFromContext(context.Background(), ffmpegPath)
 }
 
+// ffmpegVersionProbeTimeout is how long the ffmpeg version probe may run.
+// Settings validation runs the probe inside settings writes, which hold the
+// process-wide settings writer lock, so a hung ffmpeg must not hold it forever.
+// The limit is generous so a cold first start from slow storage still finishes.
+// A killed probe can take up to ffmpegProbeWaitDelay longer to return.
+// It is a variable so that it can be tuned without changing the probe.
+var ffmpegVersionProbeTimeout = 30 * time.Second
+
+// boundedFfmpegVersion is the production ffmpegVersionDetector: it detects the
+// version like GetFfmpegVersionFrom but gives up after ffmpegVersionProbeTimeout
+// (plus up to ffmpegProbeWaitDelay for the output pipe to close), returning the
+// same empty result as any other failed probe.
+func boundedFfmpegVersion(ffmpegPath string) (version string, major, minor int) {
+	ctx, cancel := context.WithTimeout(context.Background(), ffmpegVersionProbeTimeout)
+	defer cancel()
+	return GetFfmpegVersionFromContext(ctx, ffmpegPath)
+}
+
+// ffmpegProbeWaitDelay is how long the version probe waits for the ffmpeg
+// output pipes to close once the process has exited or been killed, before it
+// stops waiting. A probe whose process exited successfully still reports the
+// version it printed when a child keeps a pipe open past that point; a probe
+// that was killed or failed reports none.
+const ffmpegProbeWaitDelay = 2 * time.Second
+
 // GetFfmpegVersionFromContext is like GetFfmpegVersionFrom but bounds the
 // `ffmpeg -version` probe with the supplied context, so a hung or wrapped
 // binary cannot block the caller indefinitely. Returns empty string and 0,0
-// if detection fails or the context is cancelled.
+// if detection fails or the context is cancelled. A process that exited
+// successfully still yields its version when a child holds the output pipe past
+// ffmpegProbeWaitDelay.
 func GetFfmpegVersionFromContext(ctx context.Context, ffmpegPath string) (version string, major, minor int) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	cmd := exec.CommandContext(ctx, ffmpegPath, "-version") //nolint:gosec // G204: ffmpegPath validated by ValidateToolPath before reaching here
+	// A wrapper script can leave a child holding the output pipe after the process
+	// exits or is killed; without a wait delay CombinedOutput would keep waiting
+	// for it. When the process itself exited successfully, CombinedOutput returns
+	// exec.ErrWaitDelay together with the output captured so far; it may be partial,
+	// so ParseFfmpegVersion below decides whether it holds a version.
+	cmd.WaitDelay = ffmpegProbeWaitDelay
 	output, err := cmd.CombinedOutput()
-	if err != nil {
+	if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
 		return "", 0, 0
 	}
 	return ParseFfmpegVersion(string(output))
@@ -690,23 +715,6 @@ func parseLibavutilVersion(output string) (major, minor int) {
 		}
 	}
 	return major, minor
-}
-
-// GetSoxFormats returns the audio formats supported by the SoX binary at the
-// given path. Returns nil if SoX cannot be executed or reports no formats.
-func GetSoxFormats(soxPath string) []string {
-	cmd := exec.Command(soxPath, "-h") //nolint:gosec // G204: soxPath validated by ValidateToolPath before reaching here
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return nil
-	}
-
-	for line := range strings.SplitSeq(string(output), "\n") {
-		if formats, found := strings.CutPrefix(line, "AUDIO FILE FORMATS:"); found {
-			return strings.Fields(strings.TrimSpace(formats))
-		}
-	}
-	return nil
 }
 
 // redactedToolPath replaces a contaminated tool path in logs and error messages.

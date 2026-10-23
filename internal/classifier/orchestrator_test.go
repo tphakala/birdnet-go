@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -1190,4 +1192,140 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 	assert.Contains(t, err.Error(), notLoadedReasonUnloaded)
 	assert.NotContains(t, err.Error(), "failed to load",
 		"a model that recovered from an earlier failure and was then unloaded must report unloaded, not the stale failure")
+}
+
+// predictTimingHold is how long the lock-wait test holds inferenceMu. That test
+// asserts lower bounds only so it stays stable under -race and loaded CI
+// machines.
+const predictTimingHold = 50 * time.Millisecond
+
+// TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately verifies that time
+// spent waiting for the shared inference lock lands in LockWait and not in Predict.
+func TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately(t *testing.T) {
+	// Not parallel: it holds this orchestrator's inferenceMu for a real-time
+	// interval. The stack probe matches only the predicting goroutine, so other
+	// tests blocked on a mutex cannot satisfy it.
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})
+	o.inferenceMu.Lock()
+	released := false
+	t.Cleanup(func() {
+		if !released {
+			o.inferenceMu.Unlock() // lets the goroutine below finish if the probe fails
+		}
+	})
+
+	type outcome struct {
+		timing PredictTiming
+		err    error
+	}
+	done := make(chan outcome, 1)
+	gid := make(chan string, 1)
+	go func() {
+		gid <- currentGoroutineHeader()
+		_, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+		done <- outcome{timing, err}
+	}()
+
+	waitUntilBlockedInPredictModelTimed(t, <-gid)
+	time.Sleep(predictTimingHold)
+	released = true
+	o.inferenceMu.Unlock()
+
+	got := <-done
+	require.NoError(t, got.err)
+	assert.GreaterOrEqual(t, got.timing.LockWait, predictTimingHold)
+	assert.Less(t, got.timing.Predict, got.timing.LockWait)
+}
+
+// currentGoroutineHeader returns the "goroutine N " prefix that starts the
+// calling goroutine's block in a runtime.Stack dump. Only the id is kept: with
+// GOTRACEBACK=system or crash the rest of the header line names the goroutine's
+// current M, which differs once it is parked.
+func currentGoroutineHeader() string {
+	const (
+		goroutinePrefix = "goroutine "
+		// headerBufBytes holds "goroutine " plus any goroutine id and the rest
+		// of the first header line; only the id is kept.
+		headerBufBytes = 64
+	)
+	buf := make([]byte, headerBufBytes)
+	rest := strings.TrimPrefix(string(buf[:runtime.Stack(buf, false)]), goroutinePrefix)
+	id, _, _ := strings.Cut(rest, " ")
+	return goroutinePrefix + id + " "
+}
+
+// waitUntilBlockedInPredictModelTimed returns once the goroutine whose stack
+// block starts with header is parked on a mutex inside PredictModelTimed, so a
+// hold measured from here is a lower bound of that call's lock wait whatever
+// the scheduler does.
+func waitUntilBlockedInPredictModelTimed(t *testing.T, header string) {
+	t.Helper()
+	const (
+		stackBufBytes = 1 << 20
+		probeInterval = time.Millisecond
+		probeTimeout  = 10 * time.Second
+	)
+	deadline := time.Now().Add(probeTimeout)
+	buf := make([]byte, stackBufBytes)
+	for time.Now().Before(deadline) {
+		stacks := string(buf[:runtime.Stack(buf, true)])
+		for g := range strings.SplitSeq(stacks, "\n\n") {
+			if strings.HasPrefix(g, header) && strings.Contains(g, "PredictModelTimed") && strings.Contains(g, "sync.(*Mutex).Lock") {
+				return
+			}
+		}
+		time.Sleep(probeInterval)
+	}
+	t.Fatal("the predicting goroutine never blocked on the inference lock inside PredictModelTimed")
+}
+
+// TestOrchestrator_PredictModelTimed_PredictMatchesModelTime verifies that Predict
+// reports the model's own inference time. It runs on synctest's fake clock, so
+// the model's time is exact.
+func TestOrchestrator_PredictModelTimed_PredictMatchesModelTime(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		const modelTime = 30 * time.Millisecond
+		o := newTestOrchestrator(t, &mockModelInstance{
+			id: "m1",
+			predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+				time.Sleep(modelTime)
+				return []datastore.Results{{Species: "Turdus merula", Confidence: 0.9}}, nil
+			},
+		})
+
+		results, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		assert.Equal(t, modelTime, timing.Predict)
+		assert.Zero(t, timing.LockWait)
+	})
+}
+
+// TestOrchestrator_PredictModelTimed_NotLoadedHasZeroTiming verifies the not-loaded
+// early return reports a zero timing.
+func TestOrchestrator_PredictModelTimed_NotLoadedHasZeroTiming(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t)
+	results, timing, err := o.PredictModelTimed(t.Context(), "nonexistent", [][]float32{{0.1}})
+	require.ErrorIs(t, err, ErrModelNotLoaded)
+	assert.Nil(t, results)
+	assert.Equal(t, PredictTiming{}, timing)
+}
+
+// TestOrchestrator_PredictModelTimed_ClosedModelHasZeroPredict verifies a closed
+// model fails and reports no inference time.
+func TestOrchestrator_PredictModelTimed_ClosedModelHasZeroPredict(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})
+	o.models["m1"].instance = nil
+
+	results, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+	require.Error(t, err)
+	assert.Nil(t, results)
+	assert.Zero(t, timing.Predict)
 }

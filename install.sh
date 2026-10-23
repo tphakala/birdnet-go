@@ -19,7 +19,7 @@ EOF
 
 
 # Default version (will be set by parse_arguments function)
-BIRDNET_GO_VERSION="nightly"
+BIRDNET_GO_VERSION="latest"
 BIRDNET_GO_IMAGE=""
 
 # Silent mode for non-interactive installation (set via --silent flag)
@@ -3408,7 +3408,8 @@ update_paths_in_config() {
     fi
 }
 
-# Helper function to clean up HLS tmpfs mount
+# Helper function to clean up the HLS tmpfs mount. Legacy only: installs before
+# native HLS mounted a tmpfs here, and current installs mount nothing.
 cleanup_hls_mount() {
     local hls_mount="${CONFIG_DIR}/hls"
     local mount_unit # Declare separately
@@ -3430,39 +3431,29 @@ cleanup_hls_mount() {
                 print_message "⚠️ Failed to stop mount unit, trying manual unmount..." "$YELLOW"
             else
                 print_message "✅ Successfully stopped systemd mount unit" "$GREEN"
-                return 0
+                # Stopping the unit can leave lower layers mounted; return only once the path is clear.
+                if ! mountpoint -q "$hls_mount" 2>/dev/null; then
+                    return 0
+                fi
             fi
         else
             print_message "Found tmpfs mount at $hls_mount, attempting to unmount..." "$YELLOW"
         fi
         
-        # Try regular unmount approaches as fallback
-        # Try regular unmount first
-        umount "$hls_mount" 2>/dev/null
-        
-        # If still mounted, try with force flag
-        if mount | grep -q "$hls_mount"; then
-            umount -f "$hls_mount" 2>/dev/null
-        fi
-        
-        # If still mounted, try with sudo
-        if mount | grep -q "$hls_mount"; then
-            sudo umount "$hls_mount" 2>/dev/null
-        fi
-        
-        # If still mounted, try sudo with force flag
-        if mount | grep -q "$hls_mount"; then
-            sudo umount -f "$hls_mount" 2>/dev/null
-        fi
-        
-        # If still mounted, try with lazy unmount as last resort
-        if mount | grep -q "$hls_mount"; then
-            print_message "⚠️ Regular unmount failed, trying lazy unmount..." "$YELLOW"
-            sudo umount -l "$hls_mount" 2>/dev/null
-        fi
-        
+        # Unmount every layer. Earlier units mounted a new tmpfs on each service
+        # start and could leave many stacked, and one umount removes only the top.
+        local layers=0
+        local max_layers=2000
+        while mountpoint -q "$hls_mount" 2>/dev/null && [ "$layers" -lt "$max_layers" ]; do
+            umount "$hls_mount" 2>/dev/null \
+                || sudo umount "$hls_mount" 2>/dev/null \
+                || sudo umount -l "$hls_mount" 2>/dev/null \
+                || break
+            layers=$((layers + 1))
+        done
+
         # Final check
-        if mount | grep -q "$hls_mount"; then
+        if mountpoint -q "$hls_mount" 2>/dev/null; then
             print_message "❌ Failed to unmount $hls_mount" "$RED"
             print_message "You may need to reboot the system to fully remove it" "$YELLOW"
         else
@@ -5246,16 +5237,12 @@ ExecStartPre=/bin/bash -c 'for interface in /sys/class/net/wlan* /sys/class/net/
 Description=BirdNET-Go
 After=docker.service
 Requires=docker.service
-RequiresMountsFor=${CONFIG_DIR}/hls
+RequiresMountsFor=${CONFIG_DIR}
 
 [Service]
 Restart=always
 # Remove any existing birdnet-go container to prevent name conflicts
 ExecStartPre=-/usr/bin/docker rm -f birdnet-go
-# Create tmpfs mount for HLS segments
-ExecStartPre=/bin/mkdir -p ${CONFIG_DIR}/hls
-# Mount tmpfs, the '|| true' ensures it doesn't fail if already mounted
-ExecStartPre=/bin/sh -c 'mount -t tmpfs -o size=50M,mode=0755,uid=${HOST_UID},gid=${HOST_GID},noexec,nosuid,nodev tmpfs ${CONFIG_DIR}/hls || true'
 # Prepare external media mount point and ensure shared propagation for hot-plug.
 # These steps are best-effort (prefixed with '-'): the service still starts if
 # they fail; only hot-plug sub-mount propagation is affected.
@@ -5287,7 +5274,6 @@ ${thermal_volume_line:+    ${thermal_volume_line} \\
 }    ${external_media_line} \\
     ${BIRDNET_GO_IMAGE}
 # Cleanup tasks on stop
-ExecStopPost=/bin/sh -c 'umount -f ${CONFIG_DIR}/hls || true'
 ExecStopPost=-/usr/bin/docker rm -f birdnet-go
 
 [Install]
@@ -6728,7 +6714,7 @@ show_usage() {
     echo ""
     echo "OPTIONS:"
     echo "  -v, --version VERSION    Specify container image version (tag or hash)"
-    echo "                          Default: nightly"
+    echo "                          Default: latest"
     echo "                          Examples: latest, nightly, 20260716 (a dated release), sha256:abc123..."
     echo "  --silent                Non-interactive install using environment variables"
     echo "  --migrate               Migrate an existing install from another host over SSH"
@@ -6750,10 +6736,10 @@ show_usage() {
     echo "  BIRDNET_ENABLE_METRICS  Publish Prometheus metrics on port 8090: true/false (default: false)"
     echo ""
     echo "EXAMPLES:"
-    echo "  $0                      # Install using nightly version (default)"
-    echo "  $0 -v latest           # Install using latest stable version"
+    echo "  $0                      # Install using latest stable version (default)"
+    echo "  $0 -v nightly          # Install using nightly version"
     echo "  $0 -v 20260716         # Install a specific dated release (YYYYMMDD tag)"
-    echo "  $0 --version nightly   # Explicitly use nightly version"
+    echo "  $0 --version latest    # Explicitly use latest stable version"
     echo "  BIRDNET_RTSP_URL=rtsp://cam:8554/live BIRDNET_LATITUDE=60.17 \\"
     echo "    BIRDNET_LONGITUDE=24.94 $0 --silent  # Silent RTSP install"
     echo ""

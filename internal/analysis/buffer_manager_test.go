@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"testing"
 	"time"
@@ -11,6 +12,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/conf/conftest"
+	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -43,7 +47,7 @@ func TestProcessMonitorTick_SkipsWhenModelNotLoaded(t *testing.T) {
 
 	cfg := &monitorConfig{sourceID: sourceID, modelID: modelID, readSize: readSize}
 	quit := make(chan struct{})
-	state := &monitorTickState{}
+	state := &monitorTickState{lastWindowAnalyzed: true}
 
 	keepRunning := bm.processMonitorTick(quit, cfg, readSize, 0, state, 1)
 	require.True(t, keepRunning, "the monitor keeps running so a reinstall can resume it")
@@ -51,6 +55,7 @@ func TestProcessMonitorTick_SkipsWhenModelNotLoaded(t *testing.T) {
 	assert.NotContains(t, logBuf.String(), "error processing data",
 		"a not-loaded model must not reach ProcessData")
 	assert.True(t, state.notLoadedWarned, "the warn-once latch is set after the first skip")
+	assert.False(t, state.lastWindowAnalyzed, "an unanalyzed window makes the next one report a gap")
 
 	// A second full window on the next tick must not repeat the warning and must
 	// still never dispatch to ProcessData.
@@ -505,4 +510,318 @@ func TestDetectionOffset_DerivedFromClipLength(t *testing.T) {
 				"latest bird position must fit within capture length")
 		})
 	}
+}
+
+// Fixture identifiers shared by the monitor timing tests.
+const (
+	timingSourceID = "timing-src"
+	timingModelID  = "timing-model"
+	forwardSource  = "timing-forward-src"
+	forwardModelID = classifier.RegistryIDBirdNETV24
+)
+
+// registrySpecBackend is a classifierBackend fake base that answers ModelSpecFor
+// from the model registry; tests embed it and override what they drive.
+type registrySpecBackend struct{ classifierBackend }
+
+func (registrySpecBackend) ModelSpecFor(id string) (classifier.ModelSpec, bool) {
+	info, ok := classifier.ModelRegistry[id]
+	return info.Spec, ok
+}
+
+// drainResultsQueue empties the shared results queue when the test ends, so a
+// failed run leaves nothing for another test to pick up. Callers must not run in
+// parallel with other users of the queue.
+func drainResultsQueue(t *testing.T) {
+	t.Helper()
+	t.Cleanup(func() {
+		for {
+			select {
+			case <-classifier.ResultsQueue:
+			default:
+				return
+			}
+		}
+	})
+}
+
+// timingTestBuffer allocates an analysis buffer for the window timing tests.
+func timingTestBuffer(t *testing.T, capacity, readSize int) (*buffer.Manager, *buffer.AnalysisBuffer) {
+	t.Helper()
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(timingSourceID, timingModelID, capacity, 0, readSize))
+	ab, err := mgr.AnalysisBuffer(timingSourceID, timingModelID)
+	require.NoError(t, err)
+	return mgr, ab
+}
+
+// readInfo reads one window from ab and returns its info.
+func readInfo(t *testing.T, ab *buffer.AnalysisBuffer) buffer.WindowInfo {
+	t.Helper()
+	w, info, release, err := ab.ReadWindow()
+	require.NoError(t, err)
+	require.NotNil(t, w)
+	release()
+	return info
+}
+
+// TestMonitorTickState_WindowAudioSubtractsBacklog pins the audio end: the time
+// of the last write minus the duration of the audio still unread in the ring.
+func TestMonitorTickState_WindowAudioSubtractsBacklog(t *testing.T) {
+	t.Parallel()
+	const (
+		readSize       = 1000
+		bytesPerSecond = 2000
+	)
+	_, ab := timingTestBuffer(t, readSize*10, readSize)
+	for range 3 {
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+	}
+	info := readInfo(t, ab)
+
+	audio := (&monitorTickState{}).windowAudio(info, bytesPerSecond)
+	// Two of three chunks (2000 bytes = 1 s) are still unread.
+	assert.Equal(t, info.LastWriteAt.Add(-time.Second), audio.EndAt)
+	assert.Equal(t, info.FreshBytes, audio.FreshBytes)
+}
+
+// TestMonitorTickState_WindowAudioGapFlag pins when Gap is raised: the first
+// window, a window read but not analyzed, overwrite loss and buffer reallocation.
+func TestMonitorTickState_WindowAudioGapFlag(t *testing.T) {
+	t.Parallel()
+	const (
+		readSize       = 1000
+		bytesPerSecond = 2000
+	)
+	mgr, ab := timingTestBuffer(t, readSize*2, readSize)
+	state := &monitorTickState{}
+
+	// next reads one window and, like a successful dispatch, marks it analyzed.
+	next := func(buf *buffer.AnalysisBuffer) bool {
+		t.Helper()
+		require.NoError(t, buf.Write(make([]byte, readSize)))
+		gap := state.windowAudio(readInfo(t, buf), bytesPerSecond).Gap
+		state.lastWindowAnalyzed = true
+		return gap
+	}
+
+	assert.True(t, next(ab), "first window of a buffer")
+	assert.False(t, next(ab), "contiguous window")
+
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+	state.windowAudio(readInfo(t, ab), bytesPerSecond) // read but never marked analyzed
+	assert.True(t, next(ab), "a window read but not analyzed precedes this one")
+	assert.False(t, next(ab), "the gap is reported once")
+
+	// Overwrite loss: fill the 2-chunk ring beyond capacity before the next read.
+	for range 3 {
+		require.NoError(t, ab.Write(make([]byte, readSize)))
+	}
+	assert.True(t, state.windowAudio(readInfo(t, ab), bytesPerSecond).Gap, "overwritten audio before this window")
+	state.lastWindowAnalyzed = true
+	assert.False(t, next(ab))
+
+	mgr.DeallocateAnalysis(timingSourceID, timingModelID)
+	require.NoError(t, mgr.AllocateAnalysis(timingSourceID, timingModelID, readSize*2, 0, readSize))
+	ab2, err := mgr.AnalysisBuffer(timingSourceID, timingModelID)
+	require.NoError(t, err)
+	require.NotSame(t, ab, ab2, "reallocation must give a new buffer")
+	assert.True(t, next(ab2), "reallocated buffer")
+}
+
+// TestProcessMonitorTick_InactiveModelLeavesWindowUnanalyzed pins that a window
+// read but not analyzed (inactive model) makes the next window report a gap.
+func TestProcessMonitorTick_InactiveModelLeavesWindowUnanalyzed(t *testing.T) {
+	t.Parallel()
+	const readSize = 480
+	mgr, ab := timingTestBuffer(t, readSize*2, readSize)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+
+	bm := &BufferManager{
+		bn:        &scriptedModelState{loaded: []bool{true}, active: false},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: timingSourceID, modelID: timingModelID, readSize: readSize}
+	state := &monitorTickState{lastWindowAnalyzed: true}
+	require.True(t, bm.processMonitorTick(make(chan struct{}), cfg, readSize, 0, state, 1))
+	assert.False(t, state.lastWindowAnalyzed)
+}
+
+// dispatchBackend is a classifierBackend fake for driving processMonitorTick all
+// the way through ProcessData: the model is loaded and active, and inference
+// returns no results (or predictErr).
+type dispatchBackend struct {
+	registrySpecBackend
+	predictErr error
+}
+
+func (dispatchBackend) IsModelLoaded(string) bool { return true }
+func (dispatchBackend) IsModelActive(string) bool { return true }
+
+func (b dispatchBackend) PredictModelTimed(context.Context, string, [][]float32) ([]datastore.Results, classifier.PredictTiming, error) {
+	return nil, classifier.PredictTiming{}, b.predictErr
+}
+
+func (dispatchBackend) EffectiveBaseOverlap() time.Duration { return 0 }
+
+// nextQueuedResult waits for the queued result of source on the shared results queue.
+func nextQueuedResult(t *testing.T, source string) classifier.Results {
+	t.Helper()
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case r := <-classifier.ResultsQueue:
+			if r.Source.ID == source {
+				return r
+			}
+		case <-deadline:
+			require.FailNow(t, "no queued result for source "+source)
+		}
+	}
+}
+
+// TestProcessMonitorTick_ForwardsAudioTimingToResults pins the whole producer
+// chain: the backlog-corrected audio end, the gap flag and the fresh byte count
+// computed for a window reach the queued classifier.Results, and a window whose
+// inference failed makes the next one report a gap.
+func TestProcessMonitorTick_ForwardsAudioTimingToResults(t *testing.T) {
+	// Not parallel: ProcessData reads the global settings and queues to the shared
+	// results queue.
+	conftest.SetTestSettings(conftest.GetTestSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+	drainResultsQueue(t)
+	t.Cleanup(func() { RemoveOverrunTrackers(forwardSource) })
+
+	spec := classifier.ModelRegistry[forwardModelID].Spec
+	window := spec.ClipSizeBytes()
+	bytesPerSecond := spec.EffectiveSampleRate() * conf.BytesPerSample * conf.NumChannels
+
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(forwardSource, forwardModelID, window*4, 0, window))
+	ab, err := mgr.AnalysisBuffer(forwardSource, forwardModelID)
+	require.NoError(t, err)
+
+	backend := &dispatchBackend{}
+	bm := &BufferManager{bn: backend, bufferMgr: mgr, logger: logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)}
+	cfg := &monitorConfig{sourceID: forwardSource, modelID: forwardModelID, spec: spec, readSize: window}
+	state := &monitorTickState{}
+	quit := make(chan struct{})
+	tick := func(n int64) classifier.Results {
+		t.Helper()
+		require.True(t, bm.processMonitorTick(quit, cfg, window, 0, state, n))
+		return nextQueuedResult(t, forwardSource)
+	}
+
+	// Two windows are buffered, so one full window of audio is still unread when
+	// the first is read.
+	beforeWrites := time.Now()
+	require.NoError(t, ab.Write(make([]byte, window)))
+	require.NoError(t, ab.Write(make([]byte, window)))
+	afterWrites := time.Now()
+
+	first := tick(1)
+	assert.True(t, first.Audio.Gap, "the first window of a buffer is a gap")
+	assert.Equal(t, window, first.Audio.FreshBytes, "a window with no overlap carry is all fresh")
+	// The unread backlog is one window; the last write is not later than now.
+	backlog := time.Duration(window) * time.Second / time.Duration(bytesPerSecond)
+	assert.False(t, first.Audio.EndAt.Before(beforeWrites.Add(-backlog)), "audio end is the last write minus the backlog")
+	assert.False(t, first.Audio.EndAt.After(afterWrites.Add(-backlog)), "audio end is the last write minus the backlog")
+
+	second := tick(2)
+	assert.False(t, second.Audio.Gap, "a contiguous, analyzed window is not a gap")
+	assert.GreaterOrEqual(t, second.Audio.EndAt.Sub(first.Audio.EndAt), backlog-time.Millisecond,
+		"with the backlog drained the audio end moves up to the last write")
+
+	// An inference failure leaves the window unanalyzed, so the next one is a gap.
+	backend.predictErr = errors.NewStd("predict failed")
+	require.NoError(t, ab.Write(make([]byte, window)))
+	require.True(t, bm.processMonitorTick(quit, cfg, window, 0, state, 3))
+	assert.False(t, state.lastWindowAnalyzed, "a failed ProcessData leaves the window unanalyzed")
+	backend.predictErr = nil
+	require.NoError(t, ab.Write(make([]byte, window)))
+	assert.True(t, tick(4).Audio.Gap, "the window after an unanalyzed one is a gap")
+}
+
+// TestProcessMonitorTick_MismatchedWindowLeavesWindowUnanalyzed: a window that was
+// consumed but does not match the monitor's expected size is not analyzed, so the
+// next window reports a gap.
+func TestProcessMonitorTick_MismatchedWindowLeavesWindowUnanalyzed(t *testing.T) {
+	t.Parallel()
+	const readSize = 480
+	mgr, ab := timingTestBuffer(t, readSize*2, readSize)
+	require.NoError(t, ab.Write(make([]byte, readSize)))
+
+	bm := &BufferManager{
+		bn:        &scriptedModelState{loaded: []bool{true}, active: true},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: timingSourceID, modelID: timingModelID, readSize: readSize}
+	state := &monitorTickState{lastWindowAnalyzed: true}
+	require.True(t, bm.processMonitorTick(make(chan struct{}), cfg, readSize*2, 0, state, 1))
+	assert.False(t, state.lastWindowAnalyzed)
+}
+
+// TestProcessMonitorTick_ResultsDropMakesNextWindowADiscontinuity: a window whose
+// result the full results queue drops was never analyzed, so the next window
+// must not claim to be contiguous with it.
+func TestProcessMonitorTick_ResultsDropMakesNextWindowADiscontinuity(t *testing.T) {
+	// Not parallel: the results queue is shared and is filled to capacity here.
+	conftest.SetTestSettings(conftest.GetTestSettings())
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+	drainResultsQueue(t)
+
+	const source = "drop-src"
+	t.Cleanup(func() { RemoveOverrunTrackers(source) })
+	spec := classifier.ModelRegistry[forwardModelID].Spec
+	window := spec.ClipSizeBytes()
+	mgr := buffer.NewManager(logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC))
+	require.NoError(t, mgr.AllocateAnalysis(source, forwardModelID, window*4, 0, window))
+	ab, err := mgr.AnalysisBuffer(source, forwardModelID)
+	require.NoError(t, err)
+	bm := &BufferManager{bn: &dispatchBackend{}, bufferMgr: mgr, logger: logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)}
+	cfg := &monitorConfig{sourceID: source, modelID: forwardModelID, spec: spec, readSize: window}
+	state := &monitorTickState{}
+	quit := make(chan struct{})
+	tick := func(n int64) {
+		t.Helper()
+		require.NoError(t, ab.Write(make([]byte, window)))
+		require.True(t, bm.processMonitorTick(quit, cfg, window, 0, state, n))
+	}
+
+	tick(1)
+	nextQueuedResult(t, source) // the first window is a gap by construction
+	tick(2)
+	assert.False(t, nextQueuedResult(t, source).Audio.Gap, "an analyzed, contiguous window is not a gap")
+
+	// Fill the queue so the next result is dropped.
+	for len(classifier.ResultsQueue) < cap(classifier.ResultsQueue) {
+		classifier.ResultsQueue <- classifier.Results{Source: datastore.AudioSource{ID: "filler"}}
+	}
+	tick(3)
+	assert.False(t, state.lastWindowAnalyzed, "a dropped result leaves the window unanalyzed")
+	for len(classifier.ResultsQueue) > 0 {
+		<-classifier.ResultsQueue
+	}
+	tick(4)
+	assert.True(t, nextQueuedResult(t, source).Audio.Gap, "the window after a dropped result is not contiguous with an analyzed one")
+}
+
+// TestProcessMonitorTick_EmptyPollKeepsTheAnalyzedLatch: most ticks find no full
+// window. They must not clear the analyzed latch, or every real window would
+// report a gap.
+func TestProcessMonitorTick_EmptyPollKeepsTheAnalyzedLatch(t *testing.T) {
+	t.Parallel()
+	const readSize = 480
+	mgr, _ := timingTestBuffer(t, readSize*2, readSize) // nothing written
+	bm := &BufferManager{
+		bn:        &scriptedModelState{loaded: []bool{true}, active: true},
+		bufferMgr: mgr,
+		logger:    logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC),
+	}
+	cfg := &monitorConfig{sourceID: timingSourceID, modelID: timingModelID, readSize: readSize}
+	state := &monitorTickState{lastWindowAnalyzed: true}
+	require.True(t, bm.processMonitorTick(make(chan struct{}), cfg, readSize, 0, state, 1))
+	assert.True(t, state.lastWindowAnalyzed)
 }

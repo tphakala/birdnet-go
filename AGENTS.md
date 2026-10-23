@@ -22,20 +22,21 @@ Guidance is split by area. Tools that support nested `AGENTS.md` files load the
 matching file when you work in that directory; if yours does not, read it
 yourself before touching code in that area.
 
-| Working on                                  | Read first                                                                                   |
-| ------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Any Go code, including `cmd/` and `main.go` | `internal/AGENTS.md` (nested loading does not reach it from `cmd/` or the root)              |
-| API v2 endpoints (`internal/api/v2/`)       | `internal/api/v2/AGENTS.md`, which sends you to its `README.md` endpoint catalog             |
-| Error handling (`internal/errors/`)         | `internal/errors/AGENTS.md`                                                                  |
-| Frontend (Svelte 5, TypeScript)             | `frontend/AGENTS.md`                                                                         |
-| Desktop UI (tablet and desktop only)        | `frontend/src/lib/desktop/AGENTS.md`                                                         |
-| Desktop UI components                       | `frontend/src/lib/desktop/components/AGENTS.md`                                              |
-| Generic UI primitives                       | `frontend/src/lib/desktop/components/ui/AGENTS.md`                                           |
-| Settings pages                              | `frontend/src/lib/desktop/features/settings/AGENTS.md`                                       |
-| Translations (`frontend/static/messages/`)  | `frontend/static/messages/AGENTS.md`                                                         |
-| Screenshot tooling                          | `frontend/tools/AGENTS.md`                                                                   |
-| Writing or changing Go tests                | `TESTING.md` and the Testing section of `internal/AGENTS.md` (all Go tests MUST use testify) |
-| Writing or changing frontend tests          | the Testing section of `frontend/AGENTS.md`                                                  |
+| Working on                                       | Read first                                                                                   |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| Any Go code, including `cmd/` and `main.go`      | `internal/AGENTS.md` (nested loading does not reach it from `cmd/` or the root)              |
+| API v2 endpoints (`internal/api/v2/`)            | `internal/api/v2/AGENTS.md`, which sends you to its `README.md` endpoint catalog             |
+| Error handling (`internal/errors/`)              | `internal/errors/AGENTS.md`                                                                  |
+| Database and persistence (`internal/datastore/`) | `internal/datastore/AGENTS.md` (the legacy database is deprecated, never expand it)          |
+| Frontend (Svelte 5, TypeScript)                  | `frontend/AGENTS.md`                                                                         |
+| Desktop UI (tablet and desktop only)             | `frontend/src/lib/desktop/AGENTS.md`                                                         |
+| Desktop UI components                            | `frontend/src/lib/desktop/components/AGENTS.md`                                              |
+| Generic UI primitives                            | `frontend/src/lib/desktop/components/ui/AGENTS.md`                                           |
+| Settings pages                                   | `frontend/src/lib/desktop/features/settings/AGENTS.md`                                       |
+| Translations (`frontend/static/messages/`)       | `frontend/static/messages/AGENTS.md`                                                         |
+| Screenshot tooling                               | `frontend/tools/AGENTS.md`                                                                   |
+| Writing or changing Go tests                     | `TESTING.md` and the Testing section of `internal/AGENTS.md` (all Go tests MUST use testify) |
+| Writing or changing frontend tests               | the Testing section of `frontend/AGENTS.md`                                                  |
 
 ## Project Context
 
@@ -56,6 +57,19 @@ yourself before touching code in that area.
 
 - **API v1 is frozen.** Never add or extend v1 endpoints; all new endpoints go
   in `internal/api/v2/`.
+- **HARD RULE: the legacy database is deprecated and is going away. Never
+  expand it.** The pre-v2 database (the `notes` schema and its GORM models, the
+  legacy `DataStore`, `SQLiteStore` and `MySQLStore` in `internal/datastore`, the
+  legacy and dual-write modes, and the `datastore.Interface` API shaped around
+  them) will be removed completely. A PR must not add to it: no new columns,
+  tables, models, fields, methods, optional interfaces, mock methods, dual-write
+  paths or new callers of `c.DS` or `datastore.Interface` for persistence, and no
+  shims, adapters or fallbacks for it. Write persistence code for the v2 schema
+  only and go through the repository interfaces (`datastore.DetectionRepository`
+  and the v2 repositories). Bug fixes that keep behavior, code that removes
+  legacy code or moves callers to the repositories, and the legacy to v2
+  migration code are allowed. If a change seems to need the legacy store, stop
+  and ask the maintainer. Details: `internal/datastore/AGENTS.md`.
 - **The frontend is for desktop and tablet only; mobile is out of scope.** Do
   not optimize, fix, test or file issues for phone viewports or phone layouts
   (about 640 px wide and below), and do not add phone-specific workarounds.
@@ -73,6 +87,10 @@ yourself before touching code in that area.
   standard `errors.New`, which is `errors.NewStd` there (its `errors.New` wraps
   an existing error; see `internal/errors/AGENTS.md`). `depguard` rejects the
   standard import.
+- **Ultrasonic (bat) captures are always lossless.** Captures above 48 kHz are
+  exported only as WAV or FLAC (`Export.UltrasonicType`, default FLAC), never as
+  AAC, MP3 or Opus: lossy encoders cannot carry ultrasonic content. Do not add
+  lossy handling, fallbacks or defensive branches for it.
 - **Never log secrets or PII.** Use the typed sensitive-field helpers in
   `internal/logger` (a `forbidigo` lint rule enforces this for credential and
   token field names).

@@ -1,15 +1,29 @@
 package processor
 
 import (
+	"fmt"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/diskmanager"
 )
+
+// noLockedClipsDB is a diskmanager.Interface with no locked clips.
+type noLockedClipsDB struct{}
+
+func (noLockedClipsDB) GetLockedNotesClipPaths() ([]string, error)        { return nil, nil }
+func (noLockedClipsDB) ClearNoteClipPathsByNames([]string) (int64, error) { return 0, nil }
+func (noLockedClipsDB) RetainNoteSpectrogramsByClipNames([]string) (int64, error) {
+	return 0, nil
+}
 
 // newProcessorWithExportType returns a minimal Processor suitable for
 // exercising buildClipPath in isolation. Only the fields buildClipPath
@@ -86,4 +100,39 @@ func TestBuildClipPath_FallbackWarnsOnlyOnce(t *testing.T) {
 	// once under concurrent load. Exact-once is a stdlib invariant.
 	assert.True(t, buildClipPathFallbackWarned(),
 		"expected sync.Once to have fired after empty-Type calls")
+}
+
+// TestBuildClipPath_PerchSoundClassRoundTrip proves that a clip path built for a
+// full Perch sound-class label (underscores and parentheses) is read back by the
+// diskmanager scanner with the same species stem, confidence and extension.
+func TestBuildClipPath_PerchSoundClassRoundTrip(t *testing.T) {
+	tests := []struct {
+		name  string
+		label string
+		want  string
+	}{
+		{"parentheses", "Bathtub_(filling_or_washing)", "bathtub_(filling_or_washing)"},
+		{"many underscores", "Domestic_sounds_and_home_sounds", "domestic_sounds_and_home_sounds"},
+		{"single underscore", "Power_tool", "power_tool"},
+	}
+	ts := time.Date(2026, 3, 14, 9, 37, 1, 0, time.UTC)
+	for _, tt := range tests {
+		for _, duration := range []int{0, 15} {
+			t.Run(fmt.Sprintf("%s/duration=%d", tt.name, duration), func(t *testing.T) {
+				p := newProcessorWithExportType(t, "wav")
+				rel := p.buildClipPath(p.Settings, tt.label, 0.94, duration, ts)
+
+				dir := t.TempDir()
+				full := filepath.Join(dir, filepath.FromSlash(rel))
+				require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o750))
+				require.NoError(t, os.WriteFile(full, []byte("x"), 0o600))
+
+				files, err := diskmanager.GetAudioFiles(dir, []string{".wav"}, noLockedClipsDB{})
+				require.NoError(t, err)
+				require.Len(t, files, 1)
+				assert.Equal(t, tt.want, files[0].Species)
+				assert.Equal(t, 94, files[0].Confidence)
+			})
+		}
+	}
 }

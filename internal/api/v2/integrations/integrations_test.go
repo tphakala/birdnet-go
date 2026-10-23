@@ -9,8 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -22,18 +23,23 @@ import (
 )
 
 // Test constants for integration tests
-const (
-	testBirdNetName = "TestBirdNet"
-	testMQTTBroker  = "tcp://mqtt.example.com:1883"
-)
+const testBirdNetName = "TestBirdNet"
 
-// runIntegrationConnectionHandlerTest runs table-driven tests for integration connection handlers
-func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Handler, echo.Context) error, endpoint string, testCases []struct {
+// connectionHandlerCase is one row of runIntegrationConnectionHandlerTest.
+// Every request is sent with an already-cancelled context, so a valid
+// configuration reaches the streaming entry without any network stage running.
+// expectedType, when set, is compared with the response Content-Type and the
+// response must also carry the streaming Cache-Control header.
+type connectionHandlerCase struct {
 	name           string
 	setupSettings  func(*Handler)
 	expectedStatus int
 	expectedBody   string
-}) {
+	expectedType   string
+}
+
+// runIntegrationConnectionHandlerTest runs table-driven tests for integration connection handlers
+func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Handler, echo.Context) error, endpoint string, testCases []connectionHandlerCase) {
 	t.Helper()
 
 	// Run test cases
@@ -57,6 +63,7 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Handler
 			} else {
 				req = httptest.NewRequest(http.MethodPost, endpoint, http.NoBody)
 			}
+			req = req.WithContext(cancelledContext(t))
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
 
@@ -66,6 +73,10 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Handler
 
 			// Check status code
 			assert.Equal(t, tc.expectedStatus, rec.Code)
+			if tc.expectedType != "" {
+				assert.Equal(t, tc.expectedType, rec.Header().Get(echo.HeaderContentType))
+				assert.Equal(t, "no-cache", rec.Header().Get(echo.HeaderCacheControl))
+			}
 
 			// Check response body
 			if tc.expectedBody != "" {
@@ -75,52 +86,10 @@ func runIntegrationConnectionHandlerTest(t *testing.T, handlerFunc func(*Handler
 	}
 }
 
-// runIntegrationConnectionWithDisconnectionTest runs integration connection handlers test with client disconnection.
-// This helper is preserved for future use when mock injection becomes available in the test framework.
-// Currently skipped because it requires mocking package-level functions for network operations.
-func runIntegrationConnectionWithDisconnectionTest(t *testing.T, handlerFunc func(*Handler, echo.Context) error, endpoint string, setupSettings func(*Handler)) {
-	t.Helper()
-
-	// Skip this test since we can't override package-level functions in our test environment
-	t.Skip("This test requires mocking package-level functions - preserved for future implementation")
-
-	// Setup
-	e, controller := newIntegrationsTestHandler(t)
-
-	// Configure settings
-	setupSettings(controller)
-
-	// Create a cancellable context
-	ctx, cancel := context.WithCancel(t.Context())
-
-	// Create request with the cancellable context
-	req := httptest.NewRequest(http.MethodPost, endpoint, http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	// Start the handler in a goroutine
-	errChan := make(chan error, 1)
-	go func() {
-		// Cancel the context after a short delay to simulate client disconnection
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-
-		errChan <- handlerFunc(controller, c)
-	}()
-
-	// Wait for the handler to complete
-	select {
-	case err := <-errChan:
-		require.NoError(t, err)
-	case <-time.After(500 * time.Millisecond):
-		require.Fail(t, "Handler took too long to complete")
-	}
-
-	// Verify the handler completed gracefully despite the client disconnection
-}
-
 // TestGetMQTTStatus tests the GetMQTTStatus handler
 func TestGetMQTTStatus(t *testing.T) {
+	refusingBroker := newRefusingMQTTBroker(t)
+
 	// Define test cases
 	testCases := []struct {
 		name           string
@@ -133,13 +102,13 @@ func TestGetMQTTStatus(t *testing.T) {
 		{
 			name:           "MQTT Disabled",
 			mqttEnabled:    false,
-			mqttBroker:     testMQTTBroker,
+			mqttBroker:     refusingBroker,
 			mqttTopic:      "birdnet/detections",
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT is disabled")
-				assert.Equal(t, testMQTTBroker, result["broker"], "Broker should match configuration")
+				assert.Equal(t, refusingBroker, result["broker"], "Broker should match configuration")
 				assert.Equal(t, "birdnet/detections", result["topic"], "Topic should match configuration")
 				_, hasLastError := result["last_error"]
 				assert.False(t, hasLastError, "There should be no error when MQTT is disabled")
@@ -148,7 +117,7 @@ func TestGetMQTTStatus(t *testing.T) {
 		{
 			name:           "MQTT Enabled but Not Connected",
 			mqttEnabled:    true,
-			mqttBroker:     testMQTTBroker,
+			mqttBroker:     refusingBroker,
 			mqttTopic:      "birdnet/detections",
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]any) {
@@ -274,18 +243,15 @@ func TestGetBirdWeatherStatus(t *testing.T) {
 
 // TestTestMQTTConnection tests the TestMQTTConnection handler
 func TestTestMQTTConnection(t *testing.T) {
+	refusingBroker := newRefusingMQTTBroker(t)
+
 	// Define test cases
-	testCases := []struct {
-		name           string
-		setupSettings  func(*Handler)
-		expectedStatus int
-		expectedBody   string
-	}{
+	testCases := []connectionHandlerCase{
 		{
 			name: "MQTT Not Enabled",
 			setupSettings: func(controller *Handler) {
 				controller.Settings.Load().Realtime.MQTT.Enabled = false
-				controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
+				controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
 			},
 			expectedStatus: http.StatusOK,
 			expectedBody:   `{"success":false,"message":"MQTT is not enabled in settings"}`,
@@ -299,6 +265,15 @@ func TestTestMQTTConnection(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   `{"success":false,"message":"MQTT broker not configured"}`,
 		},
+		{
+			name: "Valid Config Sets Streaming Headers",
+			setupSettings: func(controller *Handler) {
+				controller.Settings.Load().Realtime.MQTT.Enabled = true
+				controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
+			},
+			expectedStatus: http.StatusOK,
+			expectedType:   echo.MIMEApplicationJSON,
+		},
 	}
 
 	runIntegrationConnectionHandlerTest(t, (*Handler).TestMQTTConnection, "/api/v2/integrations/mqtt/test", testCases)
@@ -307,12 +282,7 @@ func TestTestMQTTConnection(t *testing.T) {
 // TestTestBirdWeatherConnection tests the TestBirdWeatherConnection handler
 func TestTestBirdWeatherConnection(t *testing.T) {
 	// Define test cases
-	testCases := []struct {
-		name           string
-		setupSettings  func(*Handler)
-		expectedStatus int
-		expectedBody   string
-	}{
+	testCases := []connectionHandlerCase{
 		{
 			name: "BirdWeather Not Enabled",
 			setupSettings: func(controller *Handler) {
@@ -331,6 +301,15 @@ func TestTestBirdWeatherConnection(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedBody:   `{"success":false,"message":"BirdWeather station ID not configured","state":"failed"}`,
 		},
+		{
+			name: "Valid Config Sets Streaming Headers",
+			setupSettings: func(controller *Handler) {
+				controller.Settings.Load().Realtime.Birdweather.Enabled = true
+				controller.Settings.Load().Realtime.Birdweather.ID = "ABC123"
+			},
+			expectedStatus: http.StatusOK,
+			expectedType:   echo.MIMEApplicationJSON,
+		},
 	}
 
 	runIntegrationConnectionHandlerTest(t, (*Handler).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", testCases)
@@ -342,6 +321,7 @@ func TestTestEBirdConnection(t *testing.T) {
 		name           string
 		requestBody    string
 		expectedStatus int
+		expectedType   string
 		expectError    bool
 		validateResult func(*testing.T, string)
 	}{
@@ -379,9 +359,14 @@ func TestTestEBirdConnection(t *testing.T) {
 			name:           "Valid Request Enters Streaming",
 			requestBody:    `{"enabled":true,"apiKey":"test-key-123","locale":"en"}`,
 			expectedStatus: http.StatusOK,
+			expectedType:   mimeNDJSON,
 			validateResult: func(t *testing.T, body string) {
 				t.Helper()
-				assert.NotEmpty(t, body, "Response body should not be empty")
+				firstLine, _, _ := strings.Cut(body, "\n")
+				var stage WeatherTestStage
+				require.NoError(t, json.Unmarshal([]byte(firstLine), &stage), "first NDJSON line: %q", firstLine)
+				assert.Equal(t, "connectivity", stage.ID)
+				assert.Equal(t, "in_progress", stage.Status)
 			},
 		},
 	}
@@ -390,8 +375,10 @@ func TestTestEBirdConnection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e, controller := newIntegrationsTestHandler(t)
 
+			// The request context is already cancelled, so a valid request reaches
+			// the streaming stages but no HTTP request leaves the process.
 			req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/ebird/test",
-				strings.NewReader(tc.requestBody))
+				strings.NewReader(tc.requestBody)).WithContext(cancelledContext(t))
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
 			c := e.NewContext(req, rec)
@@ -407,6 +394,9 @@ func TestTestEBirdConnection(t *testing.T) {
 			}
 
 			assert.Equal(t, tc.expectedStatus, rec.Code)
+			if tc.expectedType != "" {
+				assert.Equal(t, tc.expectedType, rec.Header().Get(echo.HeaderContentType))
+			}
 
 			tc.validateResult(t, strings.TrimSpace(rec.Body.String()))
 		})
@@ -455,32 +445,100 @@ func TestWriteJSONResponse(t *testing.T) {
 	assert.Equal(t, "nested_value", nestedMap["nested_key"])
 }
 
-// Advanced test for MQTT connection with client disconnection
-func TestMQTTConnectionWithClientDisconnection(t *testing.T) {
-	runIntegrationConnectionWithDisconnectionTest(t, (*Handler).TestMQTTConnection, "/api/v2/integrations/mqtt/test", func(controller *Handler) {
-		controller.Settings.Load().Realtime.MQTT.Enabled = true
-		controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
-	})
+// fakeStageResult is the result type streamed by fakeIntegrationClient.
+type fakeStageResult struct {
+	Stage string `json:"stage"`
 }
 
-// Advanced test for BirdWeather connection with client disconnection
-func TestBirdWeatherConnectionWithClientDisconnection(t *testing.T) {
-	runIntegrationConnectionWithDisconnectionTest(t, (*Handler).TestBirdWeatherConnection, "/api/v2/integrations/birdweather/test", func(controller *Handler) {
-		controller.Settings.Load().Realtime.Birdweather.Enabled = true
-		controller.Settings.Load().Realtime.Birdweather.ID = "ABC123"
-	})
+// fakeIntegrationClient is an IntegrationTestClient that sends one result. When
+// cancelRequest is set it then cancels the HTTP request context, as a departing
+// client would, and waits for the test context to end before returning.
+type fakeIntegrationClient struct {
+	result        fakeStageResult
+	cancelRequest context.CancelFunc
+	cleanups      atomic.Int32
+}
+
+func (f *fakeIntegrationClient) TestConnection(ctx context.Context, resultChan chan<- fakeStageResult) {
+	resultChan <- f.result
+	if f.cancelRequest != nil {
+		f.cancelRequest()
+		<-ctx.Done()
+	}
+}
+
+func (f *fakeIntegrationClient) Cleanup() { f.cleanups.Add(1) }
+
+// TestRunStreamingIntegrationTest verifies the shared streaming runner: it
+// streams client results, writes one final "completed" line when the test
+// finishes, writes nothing more once the HTTP client has gone, and cleans the
+// client up exactly once. Lines are checked without relying on their order.
+func TestRunStreamingIntegrationTest(t *testing.T) {
+	const streamTimeout = 20 * time.Second
+
+	tests := []struct {
+		name          string
+		clientGone    bool
+		wantCompleted int
+	}{
+		{name: "completes", wantCompleted: 1},
+		{name: "client gone", clientGone: true, wantCompleted: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// The handler is built outside the bubble.
+			e, controller := newIntegrationsTestHandler(t)
+
+			synctest.Test(t, func(t *testing.T) {
+				reqCtx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/fake/test", http.NoBody).WithContext(reqCtx)
+				rec := httptest.NewRecorder()
+
+				client := &fakeIntegrationClient{result: fakeStageResult{Stage: "connect"}}
+				if tt.clientGone {
+					client.cancelRequest = cancel
+				}
+
+				err := runStreamingIntegrationTest(controller, e.NewContext(req, rec),
+					make(chan fakeStageResult), client, streamTimeout, "fake")
+				require.NoError(t, err)
+				synctest.Wait()
+
+				var results, completed int
+				for line := range strings.SplitSeq(strings.TrimSpace(rec.Body.String()), "\n") {
+					var decoded map[string]any
+					require.NoError(t, json.Unmarshal([]byte(line), &decoded), "line: %q", line)
+					switch {
+					case decoded["stage"] == "connect":
+						results++
+					case decoded["state"] == "completed":
+						completed++
+					default:
+						assert.Fail(t, "unexpected line", "line: %q", line)
+					}
+				}
+				assert.Equal(t, 1, results, "the client result is streamed once")
+				assert.Equal(t, tt.wantCompleted, completed, "completed lines in %q", rec.Body.String())
+				assert.Equal(t, int32(1), client.cleanups.Load(), "client is cleaned up once")
+			})
+		})
+	}
 }
 
 // TestGetMQTTStatusEnabled exercises GetMQTTStatus with MQTT enabled and verifies
-// the broker/topic are reported back. The connection check runs against an
-// unreachable broker, so connected stays false.
+// the broker/topic are reported back. The connection check runs against a local
+// broker that drops every connection, so connected stays false.
 func TestGetMQTTStatusEnabled(t *testing.T) {
+	refusingBroker := newRefusingMQTTBroker(t)
+
 	// Setup
 	e, controller := newIntegrationsTestHandler(t)
 
 	// Configure settings
 	controller.Settings.Load().Realtime.MQTT.Enabled = true
-	controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
+	controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
 	controller.Settings.Load().Realtime.MQTT.Topic = "birdnet/detections"
 	controller.Settings.Load().Main.Name = testBirdNetName
 
@@ -503,138 +561,20 @@ func TestGetMQTTStatusEnabled(t *testing.T) {
 
 	// Basic validation since we can't mock the MQTT client creation directly
 	assert.Contains(t, result, "connected")
-	assert.Equal(t, testMQTTBroker, result["broker"])
+	assert.Equal(t, refusingBroker, result["broker"])
 	assert.Equal(t, "birdnet/detections", result["topic"])
 }
 
-// TestErrorHandlingForIntegrations tests error handling for both MQTT and BirdWeather integrations
+// TestErrorHandlingForIntegrations checks that GetMQTTStatus reports a failed broker connection in last_error.
 func TestErrorHandlingForIntegrations(t *testing.T) {
-	// Test error handling for MQTT and BirdWeather integrations
-	t.Run("MQTT Client Creation Error", func(t *testing.T) {
-		// Setup
-		e, controller := newIntegrationsTestHandler(t)
-
-		// Configure settings to enable MQTT
-		controller.Settings.Load().Realtime.MQTT.Enabled = true
-		controller.Settings.Load().Realtime.MQTT.Broker = "tcp://invalid-broker.example.com:1883"
-
-		// Create a test HTTP request
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/test", http.NoBody)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		// Call handler
-		err := controller.TestMQTTConnection(c)
-
-		// For streaming responses, we verify that the handler completes without error
-		require.NoError(t, err, "Handler should not return an error")
-
-		// And that the HTTP status is set correctly
-		assert.Equal(t, http.StatusOK, rec.Code, "HTTP status should be OK")
-	})
-
-	t.Run("BirdWeather Client Creation Error", func(t *testing.T) {
-		// Setup
-		e, controller := newIntegrationsTestHandler(t)
-
-		// Configure settings to enable BirdWeather but with invalid configuration
-		controller.Settings.Load().Realtime.Birdweather.Enabled = true
-		controller.Settings.Load().Realtime.Birdweather.ID = "INVALID_ID"
-
-		// Create JSON request body for BirdWeather test
-		requestBody := `{
-			"enabled": true,
-			"id": "INVALID_ID",
-			"threshold": 0.8,
-			"locationAccuracy": 50.0,
-			"debug": false
-		}`
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/birdweather/test", strings.NewReader(requestBody))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		// Call handler
-		err := controller.TestBirdWeatherConnection(c)
-
-		// For streaming responses, we verify that the handler completes without error
-		require.NoError(t, err, "Handler should not return an error")
-
-		// And that the HTTP status is set correctly
-		assert.Equal(t, http.StatusOK, rec.Code, "HTTP status should be OK")
-	})
-
-	t.Run("MQTT Connection Context Cancellation", func(t *testing.T) {
-		// Setup
-		e, controller := newIntegrationsTestHandler(t)
-
-		// Configure settings to enable MQTT
-		controller.Settings.Load().Realtime.MQTT.Enabled = true
-		controller.Settings.Load().Realtime.MQTT.Broker = testMQTTBroker
-
-		// Create a cancellable context
-		ctx, cancel := context.WithCancel(t.Context())
-		defer cancel()
-
-		// Create a test HTTP request with the cancellable context
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/mqtt/test", http.NoBody).WithContext(ctx)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		// Cancel the context after a very short delay
-		go func() {
-			time.Sleep(50 * time.Millisecond)
-			cancel()
-		}()
-
-		// Call handler - should return no error even when context is cancelled
-		err := controller.TestMQTTConnection(c)
-		require.NoError(t, err, "Handler should not return an error")
-	})
-
-	t.Run("BirdWeather Connection Context Cancellation", func(t *testing.T) {
-		// Setup
-		e, controller := newIntegrationsTestHandler(t)
-
-		// Configure settings to enable BirdWeather
-		controller.Settings.Load().Realtime.Birdweather.Enabled = true
-		controller.Settings.Load().Realtime.Birdweather.ID = "VALID_ID" // Use a valid-looking ID
-
-		// Create a cancellable context
-		ctx, cancel := context.WithCancel(t.Context())
-		defer cancel()
-
-		// Create JSON request body for BirdWeather test
-		requestBody := `{
-			"enabled": true,
-			"id": "VALID_ID",
-			"threshold": 0.8,
-			"locationAccuracy": 50.0,
-			"debug": false
-		}`
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/birdweather/test", strings.NewReader(requestBody)).WithContext(ctx)
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		// Cancel the context after a very short delay
-		go func() {
-			time.Sleep(50 * time.Millisecond)
-			cancel()
-		}()
-
-		// Call handler - should return no error even when context is cancelled
-		err := controller.TestBirdWeatherConnection(c)
-		require.NoError(t, err, "Handler should not return an error")
-	})
-
 	t.Run("MQTT Status Error Handling", func(t *testing.T) {
 		// Setup
 		e, controller := newIntegrationsTestHandler(t)
+		refusingBroker := newRefusingMQTTBroker(t)
 
-		// Configure settings to enable MQTT with an invalid broker
+		// Configure settings to enable MQTT with a broker that drops the connection
 		controller.Settings.Load().Realtime.MQTT.Enabled = true
-		controller.Settings.Load().Realtime.MQTT.Broker = "tcp://nonexistent.broker:1883"
+		controller.Settings.Load().Realtime.MQTT.Broker = refusingBroker
 		controller.Settings.Load().Realtime.MQTT.Topic = "birdnet/detections"
 		controller.Settings.Load().Main.Name = testBirdNetName
 
@@ -731,125 +671,133 @@ func publishWeatherTestSettings(t *testing.T, mutate func(*conf.Settings)) (*ech
 
 // TestTestWeatherConnection_RestoresRedactedAPIKey verifies the weather
 // test-connection handler restores redacted API-key placeholders from the saved
-// settings before running the test, fixing the bug where clicking "Test" after
-// saving (without re-entering the key) failed with a bogus authentication error.
+// settings before validating the request, fixing the bug where clicking "Test"
+// after saving (without re-entering the key) failed with a bogus authentication
+// error. Each case sends the placeholder through the handler. With a saved key
+// the request passes validation and starts streaming; with none it fails
+// validation. The request context is already cancelled, so a request that
+// reaches the streaming stages stops at the first network stage without any
+// HTTP request leaving the process.
 func TestTestWeatherConnection_RestoresRedactedAPIKey(t *testing.T) {
-	// Negative path: a redacted placeholder with NO saved key must restore to
-	// the empty string and fail validation with "API key is required". On the
-	// buggy code (no restore) the non-empty placeholder slips past validation
-	// and the handler proceeds to stream, so this case fails on main.
-	t.Run("placeholder without saved key fails validation", func(t *testing.T) {
-		e, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
-			s.Realtime.Weather.OpenWeather.APIKey = "" // nothing saved
-		})
+	const savedKey = "real-saved-key-123"
 
-		body := fmt.Sprintf(`{"provider":%q,"openWeather":{"apiKey":%q}}`,
-			WeatherProviderOpenWeather, redactedSecretPlaceholder)
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/weather/test",
-			strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
+	providers := []struct {
+		name      string
+		provider  string
+		bodyField string
+		saveKey   func(s *conf.Settings, key string)
+	}{
+		{
+			name:      "OpenWeather",
+			provider:  WeatherProviderOpenWeather,
+			bodyField: "openWeather",
+			saveKey:   func(s *conf.Settings, key string) { s.Realtime.Weather.OpenWeather.APIKey = key },
+		},
+		{
+			name:      "PirateWeather",
+			provider:  WeatherProviderPirateWeather,
+			bodyField: "pirateWeather",
+			saveKey:   func(s *conf.Settings, key string) { s.Realtime.Weather.PirateWeather.APIKey = key },
+		},
+	}
 
-		err := controller.TestWeatherConnection(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code,
-			"placeholder restored to empty key must fail the required-key validation")
-		assert.Contains(t, rec.Body.String(), "API key is required")
-	})
+	for _, p := range providers {
+		for _, saved := range []string{"", savedKey} {
+			t.Run(fmt.Sprintf("%s saved key %q", p.name, saved), func(t *testing.T) {
+				e, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
+					p.saveKey(s, saved)
+				})
 
-	// Positive path (hermetic): with a real saved key, the handler's restore
-	// sequence must make the OpenWeather authentication stage send the REAL key
-	// (not the placeholder) to the API endpoint. We exercise the exact restore
-	// the handler runs and the production auth stage against a local server.
-	t.Run("placeholder is restored to real saved key at auth stage", func(t *testing.T) {
-		const realKey = "real-openweather-key-123"
+				body := fmt.Sprintf(`{"provider":%q,%q:{"apiKey":%q}}`,
+					p.provider, p.bodyField, redactedSecretPlaceholder)
+				req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/weather/test",
+					strings.NewReader(body)).WithContext(cancelledContext(t))
+				req.Header.Set("Content-Type", "application/json")
+				rec := httptest.NewRecorder()
 
-		var gotAppID string
-		var gotAppIDOnce sync.Once
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			gotAppIDOnce.Do(func() { gotAppID = r.URL.Query().Get("appid") })
-			w.WriteHeader(http.StatusOK)
-		}))
-		t.Cleanup(server.Close)
-
-		_, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
-			s.Realtime.Weather.OpenWeather.APIKey = realKey
-			s.Realtime.Weather.OpenWeather.Endpoint = server.URL
-		})
-
-		// The client echoes back the saved provider config (endpoint included) but
-		// with the API key as the redacted placeholder, because the user did not
-		// re-type the key on the settings page.
-		request := WeatherTestRequest{
-			Provider: WeatherProviderOpenWeather,
-			OpenWeather: conf.OpenWeatherSettings{
-				APIKey:   redactedSecretPlaceholder,
-				Endpoint: server.URL,
-			},
+				require.NoError(t, controller.TestWeatherConnection(e.NewContext(req, rec)))
+				assertRestoredKeyOutcome(t, rec, saved)
+			})
 		}
+	}
+}
 
-		// Reproduce the handler's restore sequence using the production helper.
-		current := controller.CurrentSettings()
-		apicore.RestoreRedactedSecret(current.Realtime.Weather.OpenWeather.APIKey, &request.OpenWeather.APIKey)
-		apicore.RestoreRedactedSecret(current.Realtime.Weather.Wunderground.APIKey, &request.Wunderground.APIKey)
+// assertRestoredKeyOutcome checks the result of sending the redacted placeholder
+// to a test-connection handler: with no saved key the restored value is empty
+// and validation fails with 400; with a saved key validation passes and the
+// handler starts streaming with 200.
+func assertRestoredKeyOutcome(t *testing.T, rec *httptest.ResponseRecorder, savedKey string) {
+	t.Helper()
+	if savedKey == "" {
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Contains(t, rec.Body.String(), "API key is required",
+			"placeholder restored to an empty key must fail the required-key validation")
+		return
+	}
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.NotContains(t, rec.Body.String(), "API key is required",
+		"placeholder restored to the saved key must pass the required-key validation")
+}
 
-		testSettings := conf.CloneSettings(current)
-		testSettings.Realtime.Weather = conf.WeatherSettings{
-			Provider:     request.Provider,
-			OpenWeather:  request.OpenWeather,
-			Wunderground: request.Wunderground,
+// TestTestWeatherAuthentication_OpenWeatherSendsConfiguredKey verifies the
+// OpenWeather authentication stage sends the configured API key as the appid
+// query parameter to the configured endpoint.
+func TestTestWeatherAuthentication_OpenWeatherSendsConfiguredKey(t *testing.T) {
+	const apiKey = "real-openweather-key-123"
+
+	gotAppID := make(chan string, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case gotAppID <- r.URL.Query().Get("appid"):
+		default:
 		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
 
-		msg, err := controller.testWeatherAuthentication(t.Context(), testSettings)
-		require.NoError(t, err)
-		assert.Contains(t, msg, "Successfully authenticated")
-		assert.Equal(t, realKey, gotAppID,
-			"auth stage must use the real saved key, not the redacted placeholder")
-		assert.NotEqual(t, redactedSecretPlaceholder, gotAppID)
-	})
+	_, controller := newIntegrationsTestHandler(t)
+	testSettings := conf.CloneSettings(controller.CurrentSettings())
+	testSettings.Realtime.Weather = conf.WeatherSettings{
+		Provider: WeatherProviderOpenWeather,
+		OpenWeather: conf.OpenWeatherSettings{
+			APIKey:   apiKey,
+			Endpoint: server.URL,
+		},
+	}
+
+	msg, err := controller.testWeatherAuthentication(t.Context(), testSettings)
+	require.NoError(t, err)
+	assert.Contains(t, msg, "Successfully authenticated")
+	select {
+	case got := <-gotAppID:
+		assert.Equal(t, apiKey, got)
+	default:
+		require.Fail(t, "the authentication stage sent no request")
+	}
 }
 
 // TestTestEBirdConnection_RestoresRedactedAPIKey verifies the eBird
 // test-connection handler restores the redacted API-key placeholder from the
-// saved settings before running the test.
+// saved settings before validating the request. The request context is already
+// cancelled, so a request that reaches the streaming stages stops at the first
+// network stage without any HTTP request leaving the process.
 func TestTestEBirdConnection_RestoresRedactedAPIKey(t *testing.T) {
-	// Negative path: placeholder with NO saved key restores to empty and fails
-	// the required-key validation. On the buggy code the non-empty placeholder
-	// passes validation, so this case fails on main.
-	t.Run("placeholder without saved key fails validation", func(t *testing.T) {
-		e, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
-			s.Realtime.EBird.APIKey = "" // nothing saved
+	for _, saved := range []string{"", "real-ebird-key-456"} {
+		t.Run(fmt.Sprintf("saved key %q", saved), func(t *testing.T) {
+			e, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
+				s.Realtime.EBird.APIKey = saved
+			})
+
+			body := fmt.Sprintf(`{"enabled":true,"apiKey":%q,"locale":"en"}`, redactedSecretPlaceholder)
+			req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/ebird/test",
+				strings.NewReader(body)).WithContext(cancelledContext(t))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			require.NoError(t, controller.TestEBirdConnection(e.NewContext(req, rec)))
+			assertRestoredKeyOutcome(t, rec, saved)
 		})
-
-		body := fmt.Sprintf(`{"enabled":true,"apiKey":%q,"locale":"en"}`, redactedSecretPlaceholder)
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/integrations/ebird/test",
-			strings.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err := controller.TestEBirdConnection(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusBadRequest, rec.Code,
-			"placeholder restored to empty key must fail the required-key validation")
-		assert.Contains(t, rec.Body.String(), "API key is required")
-	})
-
-	// Positive path: with a real saved key, a placeholder request restores to the
-	// real key so the value handed to the auth stage is the real key.
-	t.Run("placeholder is restored to real saved key", func(t *testing.T) {
-		const realKey = "real-ebird-key-456"
-
-		_, controller := publishWeatherTestSettings(t, func(s *conf.Settings) {
-			s.Realtime.EBird.APIKey = realKey
-		})
-
-		apiKey := redactedSecretPlaceholder
-		apicore.RestoreRedactedSecret(controller.CurrentSettings().Realtime.EBird.APIKey, &apiKey)
-		assert.Equal(t, realKey, apiKey,
-			"eBird test must use the real saved key, not the redacted placeholder")
-	})
+	}
 }
 
 // TestSetStreamingHeaders verifies the shared streaming-response header helper

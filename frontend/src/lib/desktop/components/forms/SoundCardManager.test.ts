@@ -1,6 +1,10 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from 'vitest';
 import { screen, cleanup, fireEvent, waitFor } from '@testing-library/svelte';
 import { renderTyped } from '../../../../test/render-helpers';
+import {
+  restoreElementAnimate,
+  stubElementAnimate,
+} from '../../../../test/fixtures/elementAnimate';
 import SoundCardManager from './SoundCardManager.svelte';
 import type { AudioSourceConfig } from '$lib/stores/settings';
 import {
@@ -41,7 +45,7 @@ vi.mock('./QuietHoursEditor.svelte', async () => ({
   default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
 }));
 vi.mock('$lib/desktop/features/settings/components/AudioEqualizerSettings.svelte', async () => ({
-  default: (await import('../../../../test/fixtures/MockEmpty.svelte')).default,
+  default: (await import('../../../../test/fixtures/MockAudioEqualizerSettings.svelte')).default,
 }));
 
 // Avoid the models store touching the network during mount.
@@ -149,6 +153,26 @@ describe('SoundCardManager sample rate probe (issue #3593)', () => {
       expect(rateSelect().querySelector(`option[value="${RATE_96K.value}"]`)).not.toBeNull();
     });
     expect(rateSelect().querySelector(`option[value="${RATE_192K.value}"]`)).not.toBeNull();
+  });
+
+  it('passes the selected sample rate to the equalizer preview', async () => {
+    stubElementAnimate();
+    onTestFinished(restoreElementAnimate);
+    renderManager([{ index: 0, name: 'USB Mic', id: USB_MIC }]);
+    await openAddForm();
+    await fireEvent.click(
+      screen.getByRole('button', { name: 'settings.audio.audioFilters.title' })
+    );
+    expect(screen.getByTestId('audio-equalizer-settings')).toHaveTextContent('48000');
+
+    const deviceSelect = await screen.findByTestId(DEVICE_SELECT_TESTID);
+    await fireEvent.change(deviceSelect, { target: { value: USB_MIC } });
+    await waitFor(() => {
+      expect(rateSelect().querySelector(`option[value="${RATE_96K.value}"]`)).not.toBeNull();
+    });
+    await fireEvent.change(rateSelect(), { target: { value: RATE_96K.value } });
+
+    expect(screen.getByTestId('audio-equalizer-settings')).toHaveTextContent('96000');
   });
 
   it('persists the stable USB token, not the unstable ALSA index (GH #3651)', async () => {

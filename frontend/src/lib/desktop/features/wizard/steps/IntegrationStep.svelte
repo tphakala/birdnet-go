@@ -2,6 +2,7 @@
   import { onDestroy, onMount, untrack } from 'svelte';
   import { t, type TranslationKey } from '$lib/i18n';
   import TextInput from '$lib/desktop/components/forms/TextInput.svelte';
+  import ToggleField from '$lib/desktop/components/forms/ToggleField.svelte';
   import { settingsActions, settingsStore } from '$lib/stores/settings';
   import { get } from 'svelte/store';
   import { ShieldCheck, Cloud, HeartHandshake } from '@lucide/svelte';
@@ -13,7 +14,11 @@
   let { onValidChange, registerLeaveHandler }: WizardStepProps = $props();
 
   const TOKEN_FIELD_ID = generateId('wizard-birdweather-token');
-  const TOKEN_ERROR_ID = generateId('wizard-birdweather-token-error');
+  // The token is a plain text input, not a masked one: a password input makes browsers
+  // offer to save it as a site password after Next and fill a saved password into it,
+  // which would pass the format check and be saved as the station id. 'off' keeps
+  // autofill away from it.
+  const TOKEN_AUTOCOMPLETE = 'off';
 
   // Read synchronously so the first validity report already reflects the saved settings
   const store = get(settingsStore);
@@ -77,7 +82,8 @@
   let tokenLeft = $state(initial.birdweatherId.trim() !== '');
   let showTokenError = $derived(tokenLeft && blockedReason !== undefined);
 
-  function onTokenInput() {
+  function onTokenUpdate(value: string) {
+    birdweatherId = value;
     tokenLeft = false;
   }
 
@@ -91,18 +97,6 @@
     const why = blockedReason;
     untrack(() => onValidChange?.(valid, why));
   });
-
-  function togglePrivacy() {
-    privacyEnabled = !privacyEnabled;
-  }
-
-  function toggleBirdweather() {
-    birdweatherEnabled = !birdweatherEnabled;
-  }
-
-  function toggleSentry() {
-    sentryEnabled = !sentryEnabled;
-  }
 
   // Next, Back and Done await the commit; it never runs on Skip or Leave setup.
   onMount(() => registerLeaveHandler?.(commit));
@@ -138,127 +132,47 @@
 </script>
 
 <div class="space-y-3">
-  <button
-    type="button"
-    class="flex w-full cursor-pointer items-start gap-3 rounded-lg border-2 p-4 text-left transition-colors {privacyEnabled
-      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-      : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-    onclick={togglePrivacy}
-    aria-pressed={privacyEnabled}
-  >
-    <ShieldCheck class="mt-0.5 size-5 shrink-0 text-[var(--color-base-content)]" />
-    <div class="flex-1">
-      <span class="text-sm font-medium text-[var(--color-base-content)]">
-        {t('wizard.steps.integration.privacyFilterLabel')}
-      </span>
-      <p class="mt-0.5 text-sm text-[var(--color-base-content)] opacity-80">
-        {t('wizard.steps.integration.privacyFilterHelp')}
-      </p>
-    </div>
-    <span
-      class="mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors {privacyEnabled
-        ? 'bg-[var(--color-primary)]'
-        : 'bg-[var(--color-base-300)]'}"
-      aria-hidden="true"
-    >
-      <span
-        class="inline-block size-3.5 rounded-full bg-white shadow transition-transform {privacyEnabled
-          ? 'translate-x-5'
-          : 'translate-x-0.5'}"
-      ></span>
-    </span>
-  </button>
+  <ToggleField
+    variant="card"
+    icon={ShieldCheck}
+    label={t('wizard.steps.integration.privacyFilterLabel')}
+    description={t('wizard.steps.integration.privacyFilterHelp')}
+    value={privacyEnabled}
+    onUpdate={value => (privacyEnabled = value)}
+  />
 
-  <button
-    type="button"
-    class="flex w-full cursor-pointer items-start gap-3 rounded-lg border-2 p-4 text-left transition-colors {birdweatherEnabled
-      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-      : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-    onclick={toggleBirdweather}
-    aria-pressed={birdweatherEnabled}
-  >
-    <Cloud
-      class="mt-0.5 size-5 shrink-0 {birdweatherEnabled
-        ? 'text-[var(--color-primary)]'
-        : 'text-[var(--color-base-content)] opacity-70'}"
-    />
-    <div class="flex-1">
-      <span class="text-sm font-medium text-[var(--color-base-content)]">
-        {t('wizard.steps.integration.birdweatherLabel')}
-      </span>
-      <p class="mt-0.5 text-sm text-[var(--color-base-content)] opacity-80">
-        {t('wizard.steps.integration.birdweatherHelp')}
-      </p>
-    </div>
-    <span
-      class="mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors {birdweatherEnabled
-        ? 'bg-[var(--color-primary)]'
-        : 'bg-[var(--color-base-300)]'}"
-      aria-hidden="true"
-    >
-      <span
-        class="inline-block size-3.5 rounded-full bg-white shadow transition-transform {birdweatherEnabled
-          ? 'translate-x-5'
-          : 'translate-x-0.5'}"
-      ></span>
-    </span>
-  </button>
+  <ToggleField
+    variant="card"
+    icon={Cloud}
+    label={t('wizard.steps.integration.birdweatherLabel')}
+    description={t('wizard.steps.integration.birdweatherHelp')}
+    value={birdweatherEnabled}
+    onUpdate={value => (birdweatherEnabled = value)}
+  />
+  <!-- A sibling after the BirdWeather card, never inside it: clicks in the field must not
+       toggle BirdWeather. The field keeps two error lines reserved, so showing the error
+       does not move the card below. -->
   {#if birdweatherEnabled}
     <div class="ml-12 mt-[-0.25rem]">
-      <label
-        for={TOKEN_FIELD_ID}
-        class="mb-1 block text-sm text-[var(--color-base-content)] opacity-80"
-      >
-        {t('settings.integration.birdweather.token.label')}
-      </label>
-      <!-- svelte-ignore a11y_click_events_have_key_events -->
-      <!-- svelte-ignore a11y_no_static_element_interactions -->
-      <div onclick={(e: MouseEvent) => e.stopPropagation()}>
-        <TextInput
-          id={TOKEN_FIELD_ID}
-          bind:value={birdweatherId}
-          aria-invalid={showTokenError ? 'true' : undefined}
-          aria-describedby={showTokenError ? TOKEN_ERROR_ID : undefined}
-          oninput={onTokenInput}
-          onblur={onTokenBlur}
-        />
-      </div>
-      <!-- Always rendered with two lines reserved: the alert is announced when it fills,
-           and showing it does not move the controls below -->
-      <p id={TOKEN_ERROR_ID} role="alert" class="mt-1 min-h-10 text-sm text-[var(--text-error)]">
-        {showTokenError && blockedReason ? t(blockedReason) : ''}
-      </p>
+      <TextInput
+        id={TOKEN_FIELD_ID}
+        label={t('settings.integration.birdweather.token.label')}
+        value={birdweatherId}
+        oninput={onTokenUpdate}
+        onblur={onTokenBlur}
+        error={showTokenError && blockedReason ? t(blockedReason) : undefined}
+        reserveErrorSpace
+        autocomplete={TOKEN_AUTOCOMPLETE}
+      />
     </div>
   {/if}
 
-  <button
-    type="button"
-    class="flex w-full cursor-pointer items-start gap-3 rounded-lg border-2 p-4 text-left transition-colors {sentryEnabled
-      ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
-      : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
-    onclick={toggleSentry}
-    aria-pressed={sentryEnabled}
-  >
-    <HeartHandshake class="mt-0.5 size-5 shrink-0 text-[var(--color-base-content)]" />
-    <div class="flex-1">
-      <span class="text-sm font-medium text-[var(--color-base-content)]">
-        {t('wizard.steps.integration.errorReportingLabel')}
-      </span>
-      <p class="mt-0.5 text-sm text-[var(--color-base-content)] opacity-80">
-        {t('wizard.steps.integration.errorReportingHelp')}
-      </p>
-    </div>
-    <span
-      class="mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors {sentryEnabled
-        ? 'bg-[var(--color-primary)]'
-        : 'bg-[var(--color-base-300)]'}"
-      aria-hidden="true"
-    >
-      <span
-        class="inline-block size-3.5 rounded-full bg-white shadow transition-transform {sentryEnabled
-          ? 'translate-x-5'
-          : 'translate-x-0.5'}"
-      ></span>
-    </span>
-  </button>
+  <ToggleField
+    variant="card"
+    icon={HeartHandshake}
+    label={t('wizard.steps.integration.errorReportingLabel')}
+    description={t('wizard.steps.integration.errorReportingHelp')}
+    value={sentryEnabled}
+    onUpdate={value => (sentryEnabled = value)}
+  />
 </div>
