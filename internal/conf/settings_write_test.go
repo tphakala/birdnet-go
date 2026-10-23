@@ -278,3 +278,28 @@ func TestUpdateSettings_NotLoaded(t *testing.T) {
 	assert.False(t, called, "mutate must not run without a baseline")
 	assert.Nil(t, conf.GetSettings())
 }
+
+// fastPathGiveUp is how long TestShouldUpdateRangeFilterToday_StampedDayDoesNotWaitForWriterLock
+// waits for a call that should not block. It only elapses when the fast path is
+// missing, so it never delays a passing run.
+const fastPathGiveUp = 20 * time.Second
+
+// TestShouldUpdateRangeFilterToday_StampedDayDoesNotWaitForWriterLock pins that the
+// per-detection call answers an already stamped day from the published snapshot
+// without taking the settings writer lock, so a long settings write cannot stall
+// detection processing.
+func TestShouldUpdateRangeFilterToday_StampedDayDoesNotWaitForWriterLock(t *testing.T) {
+	seedGlobalSettings(t, func(s *conf.Settings) { s.BirdNET.RangeFilter.LastUpdated = time.Now() })
+	release := conftest.HoldSettingsWriter(t, nil)
+
+	done := make(chan bool, 1)
+	go func() { done <- conf.ShouldUpdateRangeFilterToday() }()
+
+	select {
+	case got := <-done:
+		assert.False(t, got, "a day that is already stamped must not schedule another update")
+	case <-time.After(fastPathGiveUp):
+		release()
+		t.Fatal("ShouldUpdateRangeFilterToday waited for the settings writer lock on an already stamped day")
+	}
+}
