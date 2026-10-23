@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Nie udało się załadować ustawień",
       "saveFailed": "Nie udało się zapisać ustawień",
+      "changedElsewhere": "Ustawienia zostały zmienione gdzie indziej. Sprawdź je i zapisz ponownie.",
       "databaseStatsFailed": "Nie udało się załadować statystyk bazy danych",
       "csvDownloadFailed": "Nie udało się pobrać pliku CSV"
     },

@@ -164,7 +164,7 @@ func (c *Core) PrivateModeAuth(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		// Read the live global snapshot (race-free, hot-reloading) via
 		// CurrentSettings() to match the sibling publicLiveAudioAuth middleware; the
-		// per-controller snapshot would miss out-of-band StoreSettings republishes.
+		// per-controller snapshot would miss out-of-band UpdateSettings republishes.
 		privateMode := c.CurrentSettings().Security.PrivateMode
 
 		if !privateMode {

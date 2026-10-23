@@ -49,7 +49,10 @@ vi.mock('$lib/stores/settings', async () => {
   });
   return {
     settingsStore,
-    settingsActions: { updateSection: vi.fn() },
+    settingsActions: {
+      updateSection: vi.fn(),
+      refreshKeepingEdits: vi.fn().mockResolvedValue(undefined),
+    },
     hasUnsavedChanges: writable(false),
     birdnetSettings: writable({
       huggingFaceEndpoint: '',
@@ -84,7 +87,8 @@ vi.mock('$lib/utils/api', async () => {
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
 import { MODEL_OPERATION_IN_PROGRESS_KEY } from '$lib/utils/modelsApi';
-import { settingsStore } from '$lib/stores/settings';
+import { settingsStore, settingsActions } from '$lib/stores/settings';
+import { invalidateModels } from '$lib/stores/models.svelte';
 import { toastActions } from '$lib/stores/toast';
 import { t } from '$lib/i18n';
 import { navigation } from '$lib/stores/navigation.svelte';
@@ -280,6 +284,38 @@ describe('AnalysisSettingsPage model gallery error handling', () => {
     expect(alert).not.toHaveTextContent('analysis.gallery.errors.details');
     expect(screen.getByRole('button', { name: /analysis\.gallery\.retry/ })).toBeInTheDocument();
   });
+
+  it.each(['install', 'reinstall'] as const)(
+    'refreshes the settings store as soon as a %s completes, before the completion timer',
+    async action => {
+      vi.mocked(modelsApi.subscribeInstallProgress).mockImplementation(
+        (_id, _onProgress, onComplete) => {
+          onComplete();
+          return () => {};
+        }
+      );
+      vi.mocked(modelsApi.reinstallModel).mockResolvedValue(undefined);
+
+      if (action === 'install') {
+        await startTestBirdInstall();
+      } else {
+        vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
+          catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
+        });
+        render(AnalysisSettingsPage);
+        await fireEvent.click(await screen.findByRole('tab', { name: /analysis\.tabs\.models/ }));
+        await fireEvent.click(
+          await screen.findByRole('button', {
+            name: /analysis\.gallery\.reinstall.*Installed Model/,
+          })
+        );
+      }
+
+      await waitFor(() => expect(settingsActions.refreshKeepingEdits).toHaveBeenCalledTimes(1));
+      // invalidateModels runs inside the 2 s completion timer, which unmount cancels.
+      expect(invalidateModels).not.toHaveBeenCalled();
+    }
+  );
 });
 
 describe('AnalysisSettingsPage model gallery in-flight guard and region refetch', () => {
@@ -397,11 +433,12 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
     await waitFor(() => expect(modelsApi.fetchCatalog).toHaveBeenCalledTimes(3));
   });
 
-  it('shows a success toast after a model is removed', async () => {
+  it('shows a success toast after a model is removed even when the settings refresh fails', async () => {
     vi.mocked(modelsApi.fetchCatalog).mockResolvedValue({
       catalog: [birdEntry({ id: 'inst', name: 'Installed Model', installed: true })],
     });
     vi.mocked(modelsApi.uninstallModel).mockResolvedValue(undefined);
+    vi.mocked(settingsActions.refreshKeepingEdits).mockRejectedValueOnce(new Error('offline'));
 
     render(AnalysisSettingsPage);
     // Installed is the default gallery sub-tab, so the card Remove is reachable directly.
@@ -415,6 +452,7 @@ describe('AnalysisSettingsPage model gallery in-flight guard and region refetch'
     await fireEvent.click(screen.getByRole('button', { name: 'analysis.gallery.remove' }));
 
     await waitFor(() => expect(modelsApi.uninstallModel).toHaveBeenCalledWith('inst'));
+    expect(settingsActions.refreshKeepingEdits).toHaveBeenCalledTimes(1);
     // The toast fires only after the post-remove catalog reload resolves, so wait
     // for it rather than asserting synchronously on the uninstall call.
     await waitFor(() =>

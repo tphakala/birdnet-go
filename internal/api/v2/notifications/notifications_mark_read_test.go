@@ -82,6 +82,10 @@ func TestMarkNotificationRead_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, http.StatusOK, rec.Code, "expected 200 for successful mark-as-read")
+
+	got, err := service.Get(notif.ID)
+	require.NoError(t, err)
+	assert.Equal(t, notification.StatusRead, got.Status, "notification should be read after the call")
 }
 
 func TestMarkNotificationAcknowledged_NotFound(t *testing.T) {

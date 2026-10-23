@@ -83,30 +83,30 @@ type generateRequest struct {
 type Handler struct {
 	*apicore.Core
 
-	settingsMutex          *sync.RWMutex
-	getSettingsOrFallback  func() *conf.Settings
-	publishAndSaveSettings func(current, updated *conf.Settings) error
-	handleSettingsChanges  func(oldSettings, currentSettings *conf.Settings) error
+	settingsMutex         *sync.RWMutex
+	getSettingsOrFallback func() *conf.Settings
+	updateAndSaveSettings apicore.SettingsUpdater
+	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error
 }
 
 // New builds a TLS Handler around the shared core and the facade's settings-save
 // machinery. settingsMutex MUST be the same *sync.RWMutex the settings update
 // handlers lock, so TLS certificate writes serialize against them; the function
-// arguments are the facade's getSettingsOrFallback/publishAndSaveSettings/
+// arguments are the facade's getSettingsOrFallback/updateAndSaveSettings/
 // handleSettingsChanges method values.
 func New(
 	core *apicore.Core,
 	settingsMutex *sync.RWMutex,
 	getSettingsOrFallback func() *conf.Settings,
-	publishAndSaveSettings func(current, updated *conf.Settings) error,
+	updateAndSaveSettings apicore.SettingsUpdater,
 	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
 ) *Handler {
 	return &Handler{
-		Core:                   core,
-		settingsMutex:          settingsMutex,
-		getSettingsOrFallback:  getSettingsOrFallback,
-		publishAndSaveSettings: publishAndSaveSettings,
-		handleSettingsChanges:  handleSettingsChanges,
+		Core:                  core,
+		settingsMutex:         settingsMutex,
+		getSettingsOrFallback: getSettingsOrFallback,
+		updateAndSaveSettings: updateAndSaveSettings,
+		handleSettingsChanges: handleSettingsChanges,
 	}
 }
 
@@ -198,10 +198,11 @@ func (c *Handler) UploadTLSCertificate(ctx echo.Context) error {
 	}
 
 	// Update TLS mode to manual
-	current := c.getSettingsOrFallback()
-	updated := conf.CloneSettings(current)
-	updated.Security.TLSMode = conf.TLSModeManual
-	if err := c.publishAndSaveSettings(current, updated); err != nil {
+	current, updated, err := c.updateAndSaveSettings(func(_, updated *conf.Settings) error {
+		updated.Security.TLSMode = conf.TLSModeManual
+		return nil
+	})
+	if err != nil {
 		tlsMgr.RestoreBackups(tlsServiceName)
 		return c.HandleError(ctx, err, "Failed to save settings after TLS certificate upload",
 			http.StatusInternalServerError)
@@ -249,10 +250,11 @@ func (c *Handler) DeleteTLSCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to remove TLS certificates", http.StatusInternalServerError)
 	}
 
-	current := c.getSettingsOrFallback()
-	updated := conf.CloneSettings(current)
-	updated.Security.TLSMode = conf.TLSModeNone
-	if err := c.publishAndSaveSettings(current, updated); err != nil {
+	current, updated, err := c.updateAndSaveSettings(func(_, updated *conf.Settings) error {
+		updated.Security.TLSMode = conf.TLSModeNone
+		return nil
+	})
+	if err != nil {
 		tlsMgr.RestoreBackups(tlsServiceName)
 		return c.HandleError(ctx, err, "Failed to save settings after TLS certificate deletion",
 			http.StatusInternalServerError)
@@ -331,10 +333,11 @@ func (c *Handler) GenerateSelfSignedCertificate(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to save generated private key", http.StatusInternalServerError)
 	}
 
-	current := c.getSettingsOrFallback()
-	updated := conf.CloneSettings(current)
-	updated.Security.TLSMode = conf.TLSModeSelfSigned
-	if err := c.publishAndSaveSettings(current, updated); err != nil {
+	current, updated, err := c.updateAndSaveSettings(func(_, updated *conf.Settings) error {
+		updated.Security.TLSMode = conf.TLSModeSelfSigned
+		return nil
+	})
+	if err != nil {
 		tlsMgr.RestoreBackups(tlsServiceName)
 		return c.HandleError(ctx, err, "Failed to save settings after self-signed certificate generation",
 			http.StatusInternalServerError)

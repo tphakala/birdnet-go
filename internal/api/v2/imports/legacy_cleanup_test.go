@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -430,8 +432,39 @@ func TestStartLegacyCleanup_MySQL_NoDBProvider(t *testing.T) {
 	assert.Contains(t, errMsg, "cannot access database connection")
 }
 
-// TestCleanupStatus_ThreadSafety tests that CleanupStatus operations are thread-safe.
-func TestCleanupStatus_ThreadSafety(t *testing.T) {
+// cleanupContenders is the number of goroutines racing for TryStart.
+const cleanupContenders = 16
+
+// TestCleanupStatus_TryStartHasOneWinner verifies that of many concurrent TryStart
+// calls exactly one wins and the state becomes in_progress. Without the lock,
+// -race reports the concurrent state access.
+func TestCleanupStatus_TryStartHasOneWinner(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	cs := NewCleanupStatus()
+
+	var winners atomic.Int32
+	var wg sync.WaitGroup
+	begin := make(chan struct{})
+	for range cleanupContenders {
+		wg.Go(func() {
+			<-begin
+			if cs.TryStart() {
+				winners.Add(1)
+			}
+		})
+	}
+	close(begin)
+	wg.Wait()
+
+	assert.Equal(t, int32(1), winners.Load(), "exactly one TryStart may win")
+	state, _, _, _ := cs.Get()
+	assert.Equal(t, CleanupStateInProgress, state)
+}
+
+// TestCleanupStatus_SetGetReset verifies the Set, Get and Reset round trip.
+func TestCleanupStatus_SetGetReset(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
@@ -443,14 +476,6 @@ func TestCleanupStatus_ThreadSafety(t *testing.T) {
 	assert.Empty(t, errMsg)
 	assert.Nil(t, remaining)
 	assert.Equal(t, int64(0), reclaimed)
-
-	// Test TryStart
-	assert.True(t, cs.TryStart(), "First TryStart should succeed")
-	state, _, _, _ = cs.Get()
-	assert.Equal(t, CleanupStateInProgress, state)
-
-	// Second TryStart should fail
-	assert.False(t, cs.TryStart(), "Second TryStart should fail when already in progress")
 
 	// Test Set
 	cs.Set(CleanupStateCompleted, "", nil, 12345)

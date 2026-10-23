@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Asetusten lataaminen epäonnistui",
       "saveFailed": "Asetusten tallentaminen epäonnistui",
+      "changedElsewhere": "Asetuksia muutettiin muualla. Tarkista ne ja tallenna uudelleen.",
       "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
       "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
     },

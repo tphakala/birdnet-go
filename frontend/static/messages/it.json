@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Caricamento delle impostazioni non riuscito",
       "saveFailed": "Salvataggio delle impostazioni non riuscito",
+      "changedElsewhere": "Le impostazioni sono state modificate altrove. Controllale e salva di nuovo.",
       "databaseStatsFailed": "Caricamento delle statistiche del database non riuscito",
       "csvDownloadFailed": "Download del CSV non riuscito"
     },

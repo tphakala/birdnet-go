@@ -91,6 +91,12 @@ var criticalRoutes = []string{
 	"GET /api/v2/insights/migration",
 	"POST /api/v2/tls/certificate",
 	"POST /api/v2/import/birdnet-pi",
+	"GET /api/v2/auth/callback",
+	"POST /api/v2/auth/logout",
+	"GET /api/v2/tls/certificate",
+	"DELETE /api/v2/tls/certificate",
+	"POST /api/v2/tls/certificate/generate",
+	"GET /api/v2/tls/certificate/download",
 }
 
 // publicMutationRoutes lists the routes that change state (any method other
@@ -126,6 +132,13 @@ var authOnlyPrefixes = []string{
 var publicReadRoutes = map[string]bool{
 	// Display preferences the SPA needs before login (settings.go, "/settings/dashboard").
 	"GET /api/v2/settings/dashboard": true,
+}
+
+// protectedReadRoutes lists the GET routes outside authOnlyPrefixes that
+// require authentication, with where each is registered.
+var protectedReadRoutes = map[string]bool{
+	// Registered in the auth domain's protected group (auth/auth.go, RegisterRoutes).
+	"GET /api/v2/auth/status": true,
 }
 
 // authGate stands in for the real auth middleware. It records the matched
@@ -228,12 +241,16 @@ func hasPathPrefix(path, prefix string) bool {
 }
 
 // requiresAuth is the rule the route tests enforce: a route requires auth when
-// it is not a GET or HEAD and is not a listed public mutation, or when it sits
-// under an authOnlyPrefixes entry and is not a listed public read.
+// it is not a GET or HEAD and is not a listed public mutation, when it is a
+// listed protected read (protectedReadRoutes), or when it sits under an
+// authOnlyPrefixes entry and is not a listed public read.
 func requiresAuth(method, path string) bool {
 	key := method + " " + path
 	if method != http.MethodGet && method != http.MethodHead {
 		return !publicMutationRoutes[key]
+	}
+	if protectedReadRoutes[key] {
+		return true
 	}
 	if publicReadRoutes[key] {
 		return false
@@ -287,6 +304,9 @@ func TestProtectedRoutesRequireAuth(t *testing.T) {
 	}
 	for key := range publicReadRoutes {
 		assert.Contains(t, reg, key, "stale publicReadRoutes entry")
+	}
+	for key := range protectedReadRoutes {
+		assert.Contains(t, reg, key, "stale protectedReadRoutes entry")
 	}
 
 	perPrefix := map[string]int{}

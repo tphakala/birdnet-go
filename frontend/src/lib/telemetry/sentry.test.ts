@@ -352,6 +352,17 @@ describe('captureApiError', () => {
     expect(Sentry.captureException).not.toHaveBeenCalled();
   });
 
+  it('skips 412 precondition failed errors', () => {
+    const error = new Error('Precondition Failed') as Error & {
+      status: number;
+      isNetworkError: boolean;
+    };
+    error.status = 412;
+    error.isNetworkError = false;
+    captureApiError(error);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
   it('captures 500 errors with error severity', () => {
     const error = new Error('Server Error') as Error & { status: number; isNetworkError: boolean };
     error.status = 500;

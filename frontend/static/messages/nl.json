@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Instellingen konden niet worden geladen",
       "saveFailed": "Instellingen konden niet worden opgeslagen",
+      "changedElsewhere": "De instellingen zijn elders gewijzigd. Controleer ze en sla opnieuw op.",
       "databaseStatsFailed": "Databasestatistieken konden niet worden geladen",
       "csvDownloadFailed": "CSV-download mislukt"
     },

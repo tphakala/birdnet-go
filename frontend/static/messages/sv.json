@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Kunde inte ladda inställningar",
       "saveFailed": "Kunde inte spara inställningar",
+      "changedElsewhere": "Inställningarna ändrades på annat håll. Granska dem och spara igen.",
       "databaseStatsFailed": "Kunde inte ladda databasstatistik",
       "csvDownloadFailed": "Kunde inte ladda ner CSV"
     },

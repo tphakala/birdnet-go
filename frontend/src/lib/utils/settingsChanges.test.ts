@@ -49,6 +49,20 @@ describe('settingsChanges', () => {
       expect(hasSettingsChanged(123, 123)).toBe(false);
       expect(hasSettingsChanged(123, 456)).toBe(true);
     });
+
+    // JSON drops undefined-valued keys, and the save toolbar compares JSON, so
+    // the tab markers must treat an absent key and an undefined one as equal.
+    it.each([
+      ['undefined key only on the current side', { a: 1 }, { a: 1, b: undefined }, false],
+      ['undefined key only on the original side', { a: 1, b: undefined }, { a: 1 }, false],
+      ['undefined key nested in an array', [{ a: 1 }], [{ a: 1, b: undefined }], false],
+      ['key set where the other side is undefined', { a: 1, b: undefined }, { a: 1, b: 2 }, true],
+      ['key set where the other side is absent', { a: 1 }, { a: 1, b: 2 }, true],
+      ['different keys at the same defined count', { a: 1, b: undefined }, { c: 2 }, true],
+      ['null value where the other side is absent', { a: 1 }, { a: 1, b: null }, true],
+    ])('%s', (_name, original, current, expected) => {
+      expect(hasSettingsChanged(original, current)).toBe(expected);
+    });
   });
 
   describe('extractSettingsSection', () => {

@@ -10,7 +10,7 @@
 //
 // Eight members are injected from the facade because they live on facade-owned
 // subsystems that have not been extracted into their own domains yet:
-//   - settingsMutex / getSettingsOrFallback / publishAndSaveSettings /
+//   - settingsMutex / getSettingsOrFallback / updateAndSaveSettings /
 //     handleSettingsChanges: the facade settings-save machinery, used by the
 //     review/ignore exclude-list mutation (toggleSpeciesInIgnoredList,
 //     addSpeciesToIgnoredList). settingsMutex MUST be the same *sync.RWMutex the
@@ -66,7 +66,7 @@ type Handler struct {
 
 	settingsMutex             *sync.RWMutex
 	getSettingsOrFallback     func() *conf.Settings
-	publishAndSaveSettings    func(current, updated *conf.Settings) error
+	updateAndSaveSettings     apicore.SettingsUpdater
 	handleSettingsChanges     func(oldSettings, currentSettings *conf.Settings) error
 	isClientAuthenticated     func(ctx echo.Context) bool
 	loadCommonNameMap         func() map[string]string
@@ -95,7 +95,7 @@ func New(
 	core *apicore.Core,
 	settingsMutex *sync.RWMutex,
 	getSettingsOrFallback func() *conf.Settings,
-	publishAndSaveSettings func(current, updated *conf.Settings) error,
+	updateAndSaveSettings apicore.SettingsUpdater,
 	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
 	isClientAuthenticated func(ctx echo.Context) bool,
 	loadCommonNameMap func() map[string]string,
@@ -106,7 +106,7 @@ func New(
 		Core:                      core,
 		settingsMutex:             settingsMutex,
 		getSettingsOrFallback:     getSettingsOrFallback,
-		publishAndSaveSettings:    publishAndSaveSettings,
+		updateAndSaveSettings:     updateAndSaveSettings,
 		handleSettingsChanges:     handleSettingsChanges,
 		isClientAuthenticated:     isClientAuthenticated,
 		loadCommonNameMap:         loadCommonNameMap,

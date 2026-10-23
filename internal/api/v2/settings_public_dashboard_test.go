@@ -11,7 +11,6 @@
 package api
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -204,66 +203,37 @@ func TestGetDashboardSettings_DoesNotLeakSecrets(t *testing.T) {
 	}
 }
 
-// TestPatchDashboardSettings_RequiresAuth verifies that mutating the dashboard
-// section still requires authentication even though reads are public.
-func TestPatchDashboardSettings_RequiresAuth(t *testing.T) {
+// TestProtectedSettingsRoutesRequireAuth verifies that the settings routes other
+// than the public dashboard read stay inside the authenticated group, so
+// exposing GET /settings/dashboard did not open anything else. A single /:section
+// route serves every PATCH (see the route registration in settings.go), so the
+// dashboard PATCH row guards PATCH on every section; PUT and the two reads are
+// registered separately and each needs its own row. The requests go through the
+// real authentication middleware.
+func TestProtectedSettingsRoutesRequireAuth(t *testing.T) {
 	e := newSettingsAuthTestEnv(t)
 
-	body := bytes.NewBufferString(`{"summaryLimit": 99}`)
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/dashboard", body)
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
+	tests := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"PATCH dashboard", http.MethodPatch, "/api/v2/settings/dashboard", `{"summaryLimit": 99}`},
+		{"PUT full settings", http.MethodPut, "/api/v2/settings", `{"main":{"name":"x"}}`},
+		{"GET birdnet section", http.MethodGet, "/api/v2/settings/birdnet", ""},
+		{"GET full settings", http.MethodGet, "/api/v2/settings", ""},
+	}
 
-	e.ServeHTTP(rec, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, tt.path, strings.NewReader(tt.body))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
 
-	assert.Equal(t, http.StatusUnauthorized, rec.Code,
-		"PATCH /settings/dashboard must remain auth-protected")
-}
+			e.ServeHTTP(rec, req)
 
-// TestPutSettings_RequiresAuth verifies that the full-settings PUT is inside the
-// authenticated route group. A single /:section route serves every PATCH (see
-// the route registration in settings.go), so
-// TestPatchDashboardSettings_RequiresAuth already guards PATCH on every
-// section; PUT is registered separately and needs its own check.
-func TestPutSettings_RequiresAuth(t *testing.T) {
-	e := newSettingsAuthTestEnv(t)
-
-	body := bytes.NewBufferString(`{"main":{"name":"x"}}`)
-	req := httptest.NewRequest(http.MethodPut, "/api/v2/settings", body)
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Code,
-		"PUT /settings must require auth")
-}
-
-// TestGetBirdnetSettings_StillRequiresAuth is a regression guard ensuring that
-// exposing /settings/dashboard publicly did not accidentally expose other
-// settings sections. /settings/birdnet remains auth-protected.
-func TestGetBirdnetSettings_StillRequiresAuth(t *testing.T) {
-	e := newSettingsAuthTestEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings/birdnet", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Code,
-		"GET /settings/birdnet must still require auth")
-}
-
-// TestGetAllSettings_StillRequiresAuth guards that the full /settings endpoint
-// (which returns potentially-sensitive data) remains auth-protected.
-func TestGetAllSettings_StillRequiresAuth(t *testing.T) {
-	e := newSettingsAuthTestEnv(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/settings", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	e.ServeHTTP(rec, req)
-
-	assert.Equal(t, http.StatusUnauthorized, rec.Code,
-		"GET /settings must still require auth")
+			assert.Equal(t, http.StatusUnauthorized, rec.Code, "%s %s must require auth", tt.method, tt.path)
+		})
+	}
 }

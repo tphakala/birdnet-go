@@ -9,7 +9,7 @@
 // 3. Documentation in release notes
 //
 // Breaking changes to these field names will break the frontend silently.
-package api
+package apicore
 
 import (
 	"encoding/json"
@@ -18,7 +18,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 )
@@ -68,11 +67,11 @@ func createTestBirdImage() imageprovider.BirdImage {
 }
 
 // createTestSSEDetectionData creates an SSEDetectionData with all fields populated
-// using the newSSEDetectionData constructor (same code path as production).
+// using the NewSSEDetectionData constructor (same code path as production).
 func createTestSSEDetectionData() SSEDetectionData {
 	note := createTestNoteWithAllFields()
 	birdImage := createTestBirdImage()
-	det := apicore.NewSSEDetectionData(&note, &birdImage)
+	det := NewSSEDetectionData(&note, &birdImage)
 	det.IsNewSpecies = true
 	det.DaysSinceFirstSeen = 14
 	return det
@@ -94,7 +93,7 @@ func TestSSEContract_SensitiveDataExcluded(t *testing.T) {
 	}
 
 	birdImage := createTestBirdImage()
-	detection := apicore.NewSSEDetectionData(&note, &birdImage)
+	detection := NewSSEDetectionData(&note, &birdImage)
 
 	jsonBytes, err := json.Marshal(detection)
 	require.NoError(t, err)
@@ -156,7 +155,7 @@ func TestSSEContract_AllFieldValues_RoundTrip(t *testing.T) {
 
 	note := createTestNoteWithAllFields()
 	birdImage := createTestBirdImage()
-	detection := apicore.NewSSEDetectionData(&note, &birdImage)
+	detection := NewSSEDetectionData(&note, &birdImage)
 	detection.IsNewSpecies = true
 	detection.DaysSinceFirstSeen = 5
 
@@ -215,7 +214,7 @@ func TestSSEContract_AllFieldValues_RoundTrip(t *testing.T) {
 
 		independentNote := createTestNoteWithAllFields()
 		independentNote.Locked = false
-		independentJSON, err := json.Marshal(apicore.NewSSEDetectionData(&independentNote, nil))
+		independentJSON, err := json.Marshal(NewSSEDetectionData(&independentNote, nil))
 		require.NoError(t, err)
 
 		var independentPayload map[string]any
@@ -320,7 +319,7 @@ func TestSSEContract_OmitemptyFields_Comprehensive(t *testing.T) {
 		// Source.ID: ""       (omitempty on Source pointer)
 	}
 
-	detection := apicore.NewSSEDetectionData(&note, nil)
+	detection := NewSSEDetectionData(&note, nil)
 	// IsNewSpecies: false    (omitempty)
 	// DaysSinceFirstSeen: 0  (omitempty)
 
@@ -385,7 +384,7 @@ func TestSSEContract_OmitemptyFields_Comprehensive(t *testing.T) {
 		t.Parallel()
 
 		withSource := createTestNoteWithAllFields()
-		sourceJSON, err := json.Marshal(apicore.NewSSEDetectionData(&withSource, nil))
+		sourceJSON, err := json.Marshal(NewSSEDetectionData(&withSource, nil))
 		require.NoError(t, err)
 
 		var sourcePayload map[string]any
@@ -487,7 +486,7 @@ func TestSSEContract_NewSSEDetectionData_TimestampIsConstructionTime(t *testing.
 	before := time.Now()
 	note := createTestNoteWithAllFields()
 	birdImage := createTestBirdImage()
-	detection := apicore.NewSSEDetectionData(&note, &birdImage)
+	detection := NewSSEDetectionData(&note, &birdImage)
 	after := time.Now()
 
 	assert.False(t, detection.Timestamp.Before(before),

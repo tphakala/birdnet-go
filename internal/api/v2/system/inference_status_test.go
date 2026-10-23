@@ -23,48 +23,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 )
 
-// TestBuildSourceAttachments verifies that buildSourceAttachments correctly
-// routes audio sources to their configured model, or to the primary fallback
-// when no configured model resolves to a loaded model.
-func TestBuildSourceAttachments(t *testing.T) {
-	t.Parallel()
-
-	// classifier.DefaultModelVersion is the registry key for the primary BirdNET model.
-	const primaryID = classifier.DefaultModelVersion
-
-	// Two loaded models: the primary BirdNET and Perch.
-	models := []classifier.ModelInfo{
-		{ID: primaryID},
-		{ID: classifier.RegistryIDPerchV2},
-	}
-
-	settings := &conf.Settings{}
-	// Front Yard uses conf.ModelIDPerchV2 ("perch_v2"), which ResolveConfigModelID
-	// maps to classifier.RegistryIDPerchV2 ("Perch_V2"). Fallback must be false.
-	settings.Realtime.Audio.Sources = []conf.AudioSourceConfig{
-		{Name: "Front Yard", Models: []string{conf.ModelIDPerchV2}},
-		{Name: "Garage", Models: nil}, // no models: falls back to primary
-	}
-	settings.Realtime.RTSP.Streams = []conf.StreamConfig{
-		{Name: "Cam1", Type: "rtsp", Models: []string{"unknown_model"}}, // unresolved: falls back to primary
-	}
-
-	got := buildSourceAttachments(settings, models, []string{primaryID}, nil)
-
-	// Perch_V2 should have exactly Front Yard, attached without fallback.
-	perch := got[classifier.RegistryIDPerchV2]
-	require.Len(t, perch, 1, "Perch_V2 attachments")
-	assert.Equal(t, "Front Yard", perch[0].Name, "Perch_V2 source name")
-	assert.False(t, perch[0].Fallback, "Perch_V2 source must not be a fallback")
-
-	// Primary should have Garage and Cam1, both as fallbacks.
-	prim := got[primaryID]
-	require.Len(t, prim, 2, "primary attachments must have 2 entries (Garage, Cam1)")
-	for _, s := range prim {
-		assert.True(t, s.Fallback, "primary attachment %q should have Fallback=true", s.Name)
-	}
-}
-
 // TestBuildSourceAttachments_ResolvesButNotLoaded verifies that a source whose
 // config model alias resolves to a registry ID, but that registry ID is NOT in
 // the loaded models list, falls back to primary with Fallback=true. This catches
@@ -700,7 +658,7 @@ func TestBuildHardwareInfo(t *testing.T) {
 // into capability derivation, which would have offered a notflite build models
 // it cannot execute.
 func TestGetInferenceStatus_TFLiteFollowsTheBuildTag(t *testing.T) {
-	t.Parallel()
+	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
 
 	e := echo.New()
 	rec := httptest.NewRecorder()

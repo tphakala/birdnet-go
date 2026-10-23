@@ -24,230 +24,103 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-const (
-	// concurrentSummaryLimitBase is the base for every summaryLimit that the
-	// TestConcurrentUpdates scenarios send. It must differ from the baseline
-	// summaryLimit that getTestSettings sets, so a rejected update leaves a value
-	// outside the range the same-section check accepts, and base plus the largest
-	// offset a scenario adds must stay inside the validated 10-1000 range, since
-	// an out-of-range value is reset to 10 by validation
-	// (internal/conf/validate_realtime.go:170-172) instead of being rejected.
-	concurrentSummaryLimitBase = 200
+// readDuringWriteSummaryLimit is the summaryLimit written while readers run in
+// the "Read during write" race scenario. It differs from the baseline that
+// getTestSettings sets.
+const readDuringWriteSummaryLimit = 999
 
-	// readDuringWriteSummaryLimit is the summaryLimit written while readers run
-	// in the "Read during write" race scenario. It differs from the baseline.
-	readDuringWriteSummaryLimit = 999
-)
-
-// TestConcurrentUpdates verifies the system handles concurrent updates safely
-func TestConcurrentUpdates(t *testing.T) {
-	t.Parallel()
+// TestConcurrentSectionPatchesAllLand sends one PATCH per section at the same
+// time and requires every one to succeed and to be visible afterwards. The
+// handler holds settingsMutex (settings.go:475) for its whole read-modify-write,
+// so a writer that skipped the lock could publish a clone taken before another
+// writer's change. Each section gets its own value, so a lost update shows as
+// that section still holding its baseline.
+//
+// Not parallel: see the note in settings_blocked_fields_test.go.
+func TestConcurrentSectionPatchesAllLand(t *testing.T) {
 	t.Attr("component", "settings")
 	t.Attr("type", "concurrent")
 
-	tests := []struct {
-		name        string
-		concurrency int
-		scenario    string
+	patches := []struct {
+		section string
+		body    map[string]any
+		landed  func(t *testing.T, s *conf.Settings)
 	}{
 		{
-			name:        "Multiple updates to same section",
-			concurrency: 10,
-			scenario:    "same-section",
+			section: "dashboard",
+			body:    map[string]any{"summaryLimit": 200},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, 200, s.Realtime.Dashboard.SummaryLimit)
+			},
 		},
 		{
-			name:        "Updates to different sections",
-			concurrency: 5,
-			scenario:    "different-sections",
+			section: "mqtt",
+			body:    map[string]any{"topic": "concurrent/topic"},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, "concurrent/topic", s.Realtime.MQTT.Topic)
+			},
 		},
 		{
-			name:        "Mixed reads and writes",
-			concurrency: 10,
-			scenario:    "read-write",
+			section: "birdnet",
+			body:    map[string]any{"threshold": 0.55},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.InDelta(t, 0.55, s.BirdNET.Threshold, 0.0001)
+			},
 		},
 		{
-			name:        "Rapid sequential updates",
-			concurrency: 20,
-			scenario:    "rapid-sequential",
+			section: "weather",
+			body:    map[string]any{"pollInterval": 90},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, 90, s.Realtime.Weather.PollInterval)
+			},
 		},
 		{
-			name:        "Concurrent saves to disk",
-			concurrency: 5,
-			scenario:    "save-disk",
+			section: "audio",
+			body:    map[string]any{"export": map[string]any{"bitrate": "96k"}},
+			landed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, "96k", s.Realtime.Audio.Export.Bitrate)
+			},
 		},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	e := echo.New()
+	controller := getTestController(t, e)
+	baseline := controller.Settings.Load()
 
-			// Initialize test settings with known values
-
-			e := echo.New()
-			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 100), DisableSaveSettings: true}
-			controller.Settings.Store(getTestSettings(t))
-
-			if tt.scenario == "same-section" {
-				// The final-value check below only means something if the baseline
-				// lies outside the range of values the updates send.
-				initial := controller.Settings.Load().Realtime.Dashboard.SummaryLimit
-				require.False(t, initial >= concurrentSummaryLimitBase && initial < concurrentSummaryLimitBase+tt.concurrency,
-					"baseline summaryLimit %d must lie outside the range the updates send", initial)
-			}
-
-			var wg sync.WaitGroup
-			errorsChan := make(chan error, tt.concurrency)
-
-			// Use Go 1.25 WaitGroup.Go() for cleaner goroutine management
-			// Note: synctest.Test() can cause deadlocks with background goroutines that use time.Sleep
-			// so we use regular concurrent testing with WaitGroup.Go() improvements
-			for i := range tt.concurrency {
-				goroutineID := i
-				// Use WaitGroup.Go() for automatic Add/Done management (Go 1.25)
-				// This eliminates the need for manual wg.Add(1) and defer wg.Done()
-				wg.Go(func() {
-					// Errors are reported through errorsChan, so the return value is not needed.
-					_ = runConcurrentScenario(t, tt.scenario, goroutineID, controller, errorsChan)
-				})
-			}
-			wg.Wait()
-			close(errorsChan)
-
-			// Check for any errors
-			var errors []error
-			for err := range errorsChan {
-				errors = append(errors, err)
-			}
-
-			assert.Empty(t, errors, "Concurrent operations should not produce errors")
-
-			// Verify final state is consistent
-			settings := controller.Settings.Load()
-			assert.NotNil(t, settings)
-
-			// For same-section updates, verify one of the values "won"
-			if tt.scenario == "same-section" {
-				limit := settings.Realtime.Dashboard.SummaryLimit
-				assert.GreaterOrEqual(t, limit, concurrentSummaryLimitBase,
-					"Final value should be one of the concurrent updates")
-				assert.Less(t, limit, concurrentSummaryLimitBase+tt.concurrency,
-					"Final value should be one of the concurrent updates")
-			}
+	// Workers write their own slot and nothing else; assertions run on the test
+	// goroutine after Wait.
+	results := make([]error, len(patches))
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := range patches {
+		wg.Go(func() {
+			<-start
+			results[i] = makeSettingsUpdate(t, controller, patches[i].section, patches[i].body)
 		})
 	}
-}
+	close(start)
+	wg.Wait()
 
-// runConcurrentScenario executes a specific concurrent test scenario
-func runConcurrentScenario(t *testing.T, scenario string, goroutineID int, controller *Controller, errorsChan chan error) error {
-	t.Helper()
-	switch scenario {
-	case "same-section":
-		return runSameSectionScenario(t, goroutineID, controller, errorsChan)
-	case "different-sections":
-		return runDifferentSectionsScenario(t, goroutineID, controller, errorsChan)
-	case "read-write":
-		return runReadWriteScenario(t, goroutineID, controller, errorsChan)
-	case "rapid-sequential":
-		return runRapidSequentialScenario(t, goroutineID, controller, errorsChan)
-	case "save-disk":
-		return runSaveLogicScenario(t, goroutineID, controller, errorsChan)
-	default:
-		err := fmt.Errorf("unknown scenario: %s", scenario)
-		errorsChan <- err
-		return err
+	for i, p := range patches {
+		require.NoError(t, results[i], "PATCH %s must succeed", p.section)
 	}
-}
-
-// runSameSectionScenario handles concurrent updates to the same section
-func runSameSectionScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
-	t.Helper()
-	update := map[string]any{
-		"summaryLimit": concurrentSummaryLimitBase + goroutineID,
+	final := controller.Settings.Load()
+	require.NotSame(t, baseline, final, "the patches must publish a new snapshot")
+	for _, p := range patches {
+		p.landed(t, final)
 	}
-	err := makeSettingsUpdate(t, controller, "dashboard", update)
-	if err != nil {
-		errorsChan <- err
-	}
-	return err
-}
-
-// runDifferentSectionsScenario handles updates to different sections
-func runDifferentSectionsScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
-	t.Helper()
-	sections := []string{"dashboard", "mqtt", "birdnet", "weather", "audio"}
-	section := sections[goroutineID%len(sections)]
-
-	updates := map[string]any{
-		"dashboard": map[string]any{"summaryLimit": concurrentSummaryLimitBase + goroutineID},
-		"mqtt":      map[string]any{"topic": fmt.Sprintf("topic-%d", goroutineID)},
-		"birdnet":   map[string]any{"threshold": 0.1 + float64(goroutineID)*0.01},
-		"weather":   map[string]any{"pollInterval": 60 + goroutineID},
-		"audio":     map[string]any{"export": map[string]any{"bitrate": fmt.Sprintf("%dk", 96+goroutineID)}},
-	}
-
-	err := makeSettingsUpdate(t, controller, section, updates[section])
-	if err != nil {
-		errorsChan <- err
-	}
-	return err
-}
-
-// runReadWriteScenario handles mixed read and write operations
-func runReadWriteScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
-	t.Helper()
-	if goroutineID%2 == 0 {
-		// Write operation
-		update := map[string]any{
-			"summaryLimit": concurrentSummaryLimitBase + goroutineID,
-		}
-		err := makeSettingsUpdate(t, controller, "dashboard", update)
-		if err != nil {
-			errorsChan <- err
-		}
-		return err
-	}
-	// Read operation
-	err := readSectionSettings(controller, "dashboard")
-	if err != nil {
-		errorsChan <- err
-	}
-	return err
-}
-
-// runRapidSequentialScenario handles rapid sequential updates
-func runRapidSequentialScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
-	t.Helper()
-	for j := range 3 {
-		update := map[string]any{
-			"summaryLimit": concurrentSummaryLimitBase + goroutineID*10 + j,
-		}
-		err := makeSettingsUpdate(t, controller, "dashboard", update)
-		if err != nil {
-			errorsChan <- err
-			return err
-		}
-	}
-	return nil
-}
-
-// runSaveLogicScenario tests save logic without actual disk I/O (DisableSaveSettings prevents disk writes)
-func runSaveLogicScenario(t *testing.T, goroutineID int, controller *Controller, errorsChan chan error) error {
-	t.Helper()
-	update := map[string]any{
-		"summaryLimit": concurrentSummaryLimitBase + goroutineID,
-	}
-	err := makeSettingsUpdate(t, controller, "dashboard", update)
-	if err != nil {
-		errorsChan <- err
-	}
-	return err
 }
 
 // TestRaceConditionScenarios tests specific race condition scenarios
 func TestRaceConditionScenarios(t *testing.T) {
-	t.Parallel()
 	t.Attr("component", "settings")
 	t.Attr("type", "race-detection")
 
@@ -345,8 +218,6 @@ func TestRaceConditionScenarios(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := echo.New()
 			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 100), DisableSaveSettings: true}
 			controller.Settings.Store(getTestSettings(t))

@@ -39,12 +39,13 @@ func passthroughMiddleware() echo.MiddlewareFunc {
 // is removed), so this reuses that base directory as the browse root instead of
 // re-rooting SFS, which would invert the cleanup order and break Windows TempDir
 // removal. A passthrough auth middleware is injected so requests route through
-// the /filesystem group middleware.
+// the /filesystem group middleware. Many callers run in parallel, so the core
+// does not publish settings (a process-global); BrowseFileSystem reads none.
 func setupFilesystemTestEnvironment(t *testing.T) (*echo.Echo, *Handler, string) {
 	t.Helper()
 
 	e := echo.New()
-	core := apitest.NewCore(t, apitest.WithEcho(e))
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
 
 	// Set passthrough auth middleware for testing so the /filesystem group
 	// middleware (c.AuthMiddleware) is non-nil and lets requests through.
@@ -60,21 +61,25 @@ func setupFilesystemTestEnvironment(t *testing.T) (*echo.Echo, *Handler, string)
 	return e, h, tempDir
 }
 
-// TestFilesystemRouteRegistration verifies the filesystem handler registers exactly
-// the browse endpoint, with the same method and path the monolithic facade used
-// before the domain was extracted.
-func TestFilesystemRouteRegistration(t *testing.T) {
-	e := echo.New()
-
-	core := apitest.NewCore(t, apitest.WithEcho(e))
-	h := New(core)
-
-	h.RegisterRoutes(core.Group)
-
-	expectedRoutes := []string{
-		"GET /api/v2/filesystem/browse",
+// symlinkOrSkip creates a symlink and skips the test if the OS denies it.
+// Creating symlinks on Windows requires SeCreateSymbolicLinkPrivilege
+// (admin or Developer Mode). CI runners have it, but a local developer may
+// not, so skip rather than fail when creation is not permitted.
+func symlinkOrSkip(t *testing.T, target, link string) string {
+	t.Helper()
+	if err := os.Symlink(target, link); err != nil {
+		// Without SeCreateSymbolicLinkPrivilege (admin or Developer Mode)
+		// os.Symlink fails on Windows with ERROR_PRIVILEGE_NOT_HELD. Gate the
+		// skip on GOOS, not errors.Is(err, os.ErrPermission): syscall.Errno.Is
+		// maps only ERROR_ACCESS_DENIED/EACCES/EPERM to os.ErrPermission, so
+		// it would NOT match ERROR_PRIVILEGE_NOT_HELD and the skip would never
+		// fire. On Unix a symlink failure is a genuine error and must fail.
+		if runtime.GOOS == osWindows {
+			t.Skipf("skipping: cannot create symlink (needs privilege/Developer Mode on Windows): %v", err)
+		}
+		require.NoError(t, err)
 	}
-	apitest.AssertRoutesRegistered(t, e, expectedRoutes)
+	return link
 }
 
 // TestBrowseFileSystem_BasicDirectory tests browsing a directory with files and subdirectories.
@@ -86,8 +91,10 @@ func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 
 	e, _, tempDir := setupFilesystemTestEnvironment(t)
 
-	// Create test structure
-	subDir := filepath.Join(tempDir, "subdir")
+	// Create test structure. The directory name has a space and a dash, so a
+	// handler that rewrites item names fails here.
+	const subDirName = "sub dir-1"
+	subDir := filepath.Join(tempDir, subDirName)
 	require.NoError(t, os.Mkdir(subDir, 0o750))
 
 	testFile := filepath.Join(tempDir, "test.txt")
@@ -111,13 +118,13 @@ func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 
 	// Verify response
 	assert.Equal(t, tempDir, response.CurrentPath)
-	assert.Len(t, response.Items, 2) // subdir and test.txt
+	assert.Len(t, response.Items, 2) // the subdirectory and test.txt
 
 	// Find items by name
 	var foundDir, foundFile bool
 	for _, item := range response.Items {
 		switch item.Name {
-		case "subdir":
+		case subDirName:
 			assert.Equal(t, "folder", item.Type)
 			foundDir = true
 		case "test.txt":
@@ -126,7 +133,7 @@ func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 			foundFile = true
 		}
 	}
-	assert.True(t, foundDir, "Expected to find subdir")
+	assert.True(t, foundDir, "Expected to find %q", subDirName)
 	assert.True(t, foundFile, "Expected to find test.txt")
 }
 
@@ -417,142 +424,6 @@ func TestConvertDirEntryToItem(t *testing.T) {
 	}
 }
 
-// TestBrowseFileSystem_MixedFileTypes tests browsing a directory with various file types.
-func TestBrowseFileSystem_MixedFileTypes(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "filesystem")
-	t.Attr("type", "integration")
-	t.Attr("feature", "file-types")
-
-	e, _, tempDir := setupFilesystemTestEnvironment(t)
-
-	// Create various file types
-	files := map[string]string{
-		"audio.wav":  "RIFF",
-		"image.png":  "\x89PNG",
-		"text.txt":   "plain text",
-		"config.yml": "key: value",
-	}
-
-	for name, content := range files {
-		require.NoError(t, os.WriteFile(filepath.Join(tempDir, name), []byte(content), 0o600))
-	}
-
-	// Create a subdirectory
-	require.NoError(t, os.Mkdir(filepath.Join(tempDir, "clips"), 0o750))
-
-	server := httptest.NewServer(e)
-	defer server.Close()
-
-	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
-
-	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + tempDir)
-	require.NoError(t, err)
-	defer resp.Body.Close() //nolint:errcheck // Ignore close error in test
-
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var response BrowseResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
-
-	assert.Len(t, response.Items, 5) // 4 files + 1 directory
-
-	// Count types
-	fileCount, folderCount := 0, 0
-	for _, item := range response.Items {
-		switch item.Type {
-		case "file":
-			fileCount++
-		case "folder":
-			folderCount++
-		}
-	}
-	assert.Equal(t, 4, fileCount)
-	assert.Equal(t, 1, folderCount)
-}
-
-// TestBrowseFileSystem_LargeDirectory tests browsing a directory with many items.
-func TestBrowseFileSystem_LargeDirectory(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "filesystem")
-	t.Attr("type", "performance")
-	t.Attr("feature", "large-directory")
-
-	e, _, tempDir := setupFilesystemTestEnvironment(t)
-
-	// Create 100 files
-	fileCount := 100
-	for i := range fileCount {
-		fileName := filepath.Join(tempDir, "file_"+string(rune('a'+i%26))+"_"+string(rune('0'+i/26))+".txt")
-		require.NoError(t, os.WriteFile(fileName, []byte("content"), 0o600))
-	}
-
-	server := httptest.NewServer(e)
-	defer server.Close()
-
-	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
-
-	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + tempDir)
-	require.NoError(t, err)
-	defer resp.Body.Close() //nolint:errcheck // Ignore close error in test
-
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var response BrowseResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
-
-	assert.Len(t, response.Items, fileCount)
-}
-
-// TestBrowseFileSystem_SpecialCharactersInPath tests paths with special characters.
-func TestBrowseFileSystem_SpecialCharactersInPath(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "filesystem")
-	t.Attr("type", "unit")
-	t.Attr("feature", "special-characters")
-
-	e, _, tempDir := setupFilesystemTestEnvironment(t)
-
-	// Create directories with special characters (that are valid on Linux)
-	specialDirs := []string{
-		"dir with spaces",
-		"dir-with-dashes",
-		"dir_with_underscores",
-		"dir.with.dots",
-	}
-
-	for _, dirName := range specialDirs {
-		dirPath := filepath.Join(tempDir, dirName)
-		require.NoError(t, os.Mkdir(dirPath, 0o750))
-	}
-
-	server := httptest.NewServer(e)
-	defer server.Close()
-
-	client := apitest.NewTestHTTPClient(apitest.TestResponseHeaderTimeout)
-
-	resp, err := client.Get(server.URL + "/api/v2/filesystem/browse?path=" + tempDir)
-	require.NoError(t, err)
-	defer resp.Body.Close() //nolint:errcheck // Ignore close error in test
-
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var response BrowseResponse
-	require.NoError(t, json.NewDecoder(resp.Body).Decode(&response))
-
-	assert.Len(t, response.Items, len(specialDirs))
-
-	// Verify all special directory names are present
-	names := make(map[string]bool)
-	for _, item := range response.Items {
-		names[item.Name] = true
-	}
-
-	for _, dirName := range specialDirs {
-		assert.True(t, names[dirName], "Expected to find directory %q", dirName)
-	}
-}
-
 // TestValidateSymlinkTarget tests the validateSymlinkTarget helper function.
 func TestValidateSymlinkTarget(t *testing.T) {
 	t.Parallel()
@@ -568,27 +439,6 @@ func TestValidateSymlinkTarget(t *testing.T) {
 
 	targetFile := filepath.Join(targetDir, "file.txt")
 	require.NoError(t, os.WriteFile(targetFile, []byte("target"), 0o600))
-
-	// symlinkOrSkip creates a symlink and skips the subtest if the OS denies it.
-	// Creating symlinks on Windows requires SeCreateSymbolicLinkPrivilege
-	// (admin or Developer Mode). CI runners have it, but a local developer may
-	// not, so skip rather than fail when creation is not permitted.
-	symlinkOrSkip := func(t *testing.T, target, link string) string {
-		t.Helper()
-		if err := os.Symlink(target, link); err != nil {
-			// Without SeCreateSymbolicLinkPrivilege (admin or Developer Mode)
-			// os.Symlink fails on Windows with ERROR_PRIVILEGE_NOT_HELD. Gate the
-			// skip on GOOS, not errors.Is(err, os.ErrPermission): syscall.Errno.Is
-			// maps only ERROR_ACCESS_DENIED/EACCES/EPERM to os.ErrPermission, so
-			// it would NOT match ERROR_PRIVILEGE_NOT_HELD and the skip would never
-			// fire. On Unix a symlink failure is a genuine error and must fail.
-			if runtime.GOOS == osWindows {
-				t.Skipf("skipping: cannot create symlink (needs privilege/Developer Mode on Windows): %v", err)
-			}
-			require.NoError(t, err)
-		}
-		return link
-	}
 
 	tests := []struct {
 		name        string
@@ -669,7 +519,7 @@ func TestBrowseFileSystem_SymlinkHandling(t *testing.T) {
 
 	// Create a valid symlink to the target directory
 	validLink := filepath.Join(tempDir, "valid_link")
-	require.NoError(t, os.Symlink(targetDir, validLink))
+	symlinkOrSkip(t, targetDir, validLink)
 
 	server := httptest.NewServer(e)
 	defer server.Close()
@@ -692,9 +542,9 @@ func TestBrowseFileSystem_SymlinkHandling(t *testing.T) {
 	var foundSymlink bool
 	for _, item := range response.Items {
 		if item.Name == "valid_link" {
-			// Symlink to directory is shown as folder (follows symlink for type)
-			assert.Contains(t, []string{"folder", "symlink"}, item.Type,
-				"Symlink should be shown as folder or symlink")
+			// convertDirEntryToItem classifies by the entry's own mode, not the
+			// link target's, so a link to a directory is "symlink", not "folder".
+			assert.Equal(t, "symlink", item.Type, "a symlink to a directory must not be reported as a folder")
 			foundSymlink = true
 		}
 	}

@@ -415,7 +415,7 @@ func WithHealthErrorBuffer(buf *health.ErrorRingBuffer) Option {
 
 // New creates a new API controller, returning an error if initialization fails.
 // The controller owns the global settings singleton: it reads from the current
-// atomic snapshot on each request and publishes updates back via StoreSettings.
+// atomic snapshot on each request and publishes updates back through conf.UpdateSettings.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string,
@@ -431,7 +431,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		return nil, err
 	}
 	// Force true: the pointer identity check in NewWithOptions can fail when
-	// an out-of-band StoreSettings call (range filter rebuild at startup)
+	// an out-of-band UpdateSettings call (range filter rebuild at startup)
 	// replaces the global pointer before this constructor runs.
 	c.isGlobalOwner = true
 	return c, nil
@@ -485,7 +485,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// constructed here, so the &c.settingsMutex address and the method values are
 	// stable for the controller's lifetime.
 	c.tlsHandler = tlsapi.New(c.Core, &c.settingsMutex,
-		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
+		c.getSettingsOrFallback, c.updateAndSaveSettings, c.handleSettingsChanges)
 	// The integrations handler needs the same facade settings-save machinery as the
 	// TLS handler: the MQTT TLS certificate writes mutate persisted settings, so it
 	// receives the shared &c.settingsMutex (so those writes serialize against the
@@ -494,7 +494,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// lifetime, so this can be wired before the functional options loop (it needs no
 	// option-set dependency).
 	c.integrations = integrations.New(c.Core, &c.settingsMutex,
-		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
+		c.updateAndSaveSettings, c.handleSettingsChanges)
 	// The detections handler needs the same facade settings-save machinery as the
 	// integrations/TLS handlers (the review/ignore exclude-list mutation persists
 	// settings) plus four more facade-owned function dependencies whose subsystems
@@ -504,7 +504,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// read their backing fields at call time (so the post-option authService is
 	// observed), so this is wired before the functional options loop.
 	c.detections = detections.New(c.Core, &c.settingsMutex,
-		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges,
+		c.getSettingsOrFallback, c.updateAndSaveSettings, c.handleSettingsChanges,
 		c.isClientAuthenticated, c.loadCommonNameMap, c.loadFoldedCommonNameMap,
 		c.loadCommonToScientificMap)
 	// The analytics handler is injected the same facade-owned dependencies as

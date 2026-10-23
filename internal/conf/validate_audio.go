@@ -509,7 +509,7 @@ func (s *AudioSettings) clearFfmpegMetadata() {
 // concurrently exec'ing such a non-executable stub crashes the Windows race
 // detector with STATUS_STACK_BUFFER_OVERRUN. Production always uses the real
 // detector; only tests override it (see validate_audio_export_test.go).
-var ffmpegVersionDetector = GetFfmpegVersionFrom
+var ffmpegVersionDetector = boundedFfmpegVersion
 
 // validateAudioSettings validates the audio settings and sets the ffmpeg path
 func validateAudioSettings(settings *AudioSettings) error {

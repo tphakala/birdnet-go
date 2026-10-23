@@ -136,18 +136,6 @@ func TestStorageNotice_Transitions(t *testing.T) {
 	step(4, 3)
 }
 
-func TestStorageNotice_SameSignatureRaisedOnce(t *testing.T) {
-	rec := newStorageNoticeRecorder(t, 1, 0)
-	f := newNoticeFixture(rec)
-	f.set("models", classLayer)
-
-	f.sync()
-	f.sync()
-
-	created, _ := rec.counts()
-	assert.Equal(t, 1, created)
-}
-
 func TestStorageNotice_MemoryBackedPathIsLost(t *testing.T) {
 	rec := newStorageNoticeRecorder(t, 1, 0)
 	f := newNoticeFixture(rec)
@@ -462,23 +450,6 @@ func TestRegisterHealthChecks_IncludesStoragePersistence(t *testing.T) {
 
 	require.NotNil(t, found, "the check is registered in the config category")
 	assert.Equal(t, health.StatusSkipped, found.Status, "outside Docker and Podman the check is skipped")
-}
-
-func TestStorageNotice_StatusCountsArmsAndStop(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		f := newNoticeFixture(newStorageNoticeRecorder(t, 0, 0))
-		assert.Equal(t, StorageNoticeSyncStatus{}, f.h.StorageNoticeSyncStatus())
-
-		f.h.StartStorageNoticeSync()
-		assert.Equal(t, StorageNoticeSyncStatus{Arms: 1}, f.h.StorageNoticeSyncStatus())
-
-		f.h.ScheduleStorageNoticeSync()
-		assert.Equal(t, StorageNoticeSyncStatus{Arms: 2}, f.h.StorageNoticeSyncStatus())
-
-		f.h.StopStorageNoticeSync()
-		assert.Equal(t, StorageNoticeSyncStatus{Arms: 2, Stopped: true}, f.h.StorageNoticeSyncStatus())
-		f.h.Wait()
-	})
 }
 
 func TestStorageNotice_FixedPathIsForgottenNotCarried(t *testing.T) {

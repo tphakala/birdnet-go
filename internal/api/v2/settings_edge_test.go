@@ -3,10 +3,8 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -15,57 +13,15 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// isFieldSkipped checks if a field name appears in the skipped fields list.
-func isFieldSkipped(skippedFields []any, expectedSkip string) bool {
-	for _, skipped := range skippedFields {
-		skippedStr, ok := skipped.(string)
-		if !ok {
-			continue
-		}
-		if skippedStr == expectedSkip ||
-			skippedStr == "BirdNET."+expectedSkip ||
-			skippedStr == "BirdNET.RangeFilter."+expectedSkip {
-			return true
-		}
-	}
-	return false
-}
-
-// verifySkippedFields asserts that every field in shouldSkip appears in the
-// response's skippedFields list, and that no field in shouldNotSkip does. A field
-// tagged json:"-" is never carried through the PATCH merge, so it is silently
-// ignored rather than reverted, and must therefore NOT appear in skippedFields;
-// such fields belong in shouldNotSkip.
-func verifySkippedFields(t *testing.T, response map[string]any, shouldSkip, shouldNotSkip []string) {
-	t.Helper()
-
-	skippedRaw, present := response["skippedFields"]
-	skippedFields, isList := skippedRaw.([]any)
-
-	// When we expect skips, the field must be present and a list. When we only
-	// assert absence, an empty or missing list is a valid (passing) state.
-	if len(shouldSkip) > 0 {
-		require.True(t, present, "response is missing skippedFields")
-		require.True(t, isList, "skippedFields is not a list, got %T", skippedRaw)
-	}
-
-	for _, expected := range shouldSkip {
-		assert.True(t, isFieldSkipped(skippedFields, expected),
-			"expected field %q to be skipped, got %v", expected, skippedFields)
-	}
-	for _, unexpected := range shouldNotSkip {
-		assert.False(t, isFieldSkipped(skippedFields, unexpected),
-			"field %q must not be reported as skipped (json:%q fields are ignored, not reverted), got %v",
-			unexpected, "-", skippedFields)
-	}
-}
-
 // TestDiagnosticsProfilingRateValidation is the HTTP-boundary regression for the
 // diagnostics validator gap: a PATCH carrying a negative profiling rate used to
 // return 200 and persist the negative to config.yaml. It must now be rejected,
 // while a valid rate still succeeds.
+//
+// Not parallel: a valid rate is applied to the process-global block and mutex
+// profile rates, which resetProfileRates puts back to off afterwards.
 func TestDiagnosticsProfilingRateValidation(t *testing.T) {
-	t.Parallel()
+	resetProfileRates(t)
 
 	tests := []struct {
 		name         string
@@ -91,8 +47,6 @@ func TestDiagnosticsProfilingRateValidation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := echo.New()
 			controller := getTestController(t, e)
 
@@ -128,392 +82,94 @@ func TestDiagnosticsProfilingRateValidation(t *testing.T) {
 	}
 }
 
-// TestBoundaryValues verifies the system handles boundary values correctly
-func TestBoundaryValues(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		section      string
-		boundaryData any
-		description  string
-	}{
-		{
-			name:    "Port number boundaries",
-			section: "webserver",
-			boundaryData: map[string]any{
-				"port": "1", // Minimum valid port
-			},
-			description: "Should accept minimum port number",
-		},
-		{
-			name:    "Maximum valid port",
-			section: "webserver",
-			boundaryData: map[string]any{
-				"port": "65535", // Maximum valid port
-			},
-			description: "Should accept maximum port number",
-		},
-		{
-			name:    "Zero threshold",
-			section: "birdnet",
-			boundaryData: map[string]any{
-				"threshold": 0.0,
-			},
-			description: "Should accept zero threshold",
-		},
-		{
-			name:    "Maximum threshold",
-			section: "birdnet",
-			boundaryData: map[string]any{
-				"threshold": 1.0,
-			},
-			description: "Should accept maximum threshold",
-		},
-		{
-			name:    "Minimum latitude",
-			section: "birdnet",
-			boundaryData: map[string]any{
-				"latitude": -90.0,
-			},
-			description: "Should accept minimum latitude",
-		},
-		{
-			name:    "Maximum latitude",
-			section: "birdnet",
-			boundaryData: map[string]any{
-				"latitude": 90.0,
-			},
-			description: "Should accept maximum latitude",
-		},
-		{
-			name:    "Minimum longitude",
-			section: "birdnet",
-			boundaryData: map[string]any{
-				"longitude": -180.0,
-			},
-			description: "Should accept minimum longitude",
-		},
-		{
-			name:    "Maximum longitude",
-			section: "birdnet",
-			boundaryData: map[string]any{
-				"longitude": 180.0,
-			},
-			description: "Should accept maximum longitude",
-		},
-		{
-			name:    "Empty string in text field",
-			section: "mqtt",
-			boundaryData: map[string]any{
-				"topic": "",
-			},
-			description: "Should accept empty string in topic",
-		},
-		{
-			name:    "Maximum array size",
-			section: "rtsp",
-			boundaryData: map[string]any{
-				"urls": func() []string {
-					urls := make([]string, 100)
-					for i := range 100 {
-						urls[i] = fmt.Sprintf("rtsp://camera%d.example.com:554/stream%d", i+1, i+1)
-					}
-					return urls
-				}(), // Large array of actual RTSP URLs
-			},
-			description: "Should handle large URL arrays",
-		},
-		{
-			name:    "Single character string",
-			section: "dashboard",
-			boundaryData: map[string]any{
-				"locale": "a",
-			},
-			description: "Should accept single character locale",
-		},
-		{
-			name:    "Maximum string length",
-			section: "mqtt",
-			boundaryData: map[string]any{
-				"broker": "tcp://" + strings.Repeat("a", 250),
-			},
-			description: "Should handle long broker strings",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			e := echo.New()
-			controller := getTestController(t, e)
-
-			body, err := json.Marshal(tt.boundaryData)
-			require.NoError(t, err)
-
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
-				bytes.NewReader(body))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			rec := httptest.NewRecorder()
-			ctx := e.NewContext(req, rec)
-			ctx.SetParamNames("section")
-			ctx.SetParamValues(tt.section)
-
-			err = controller.UpdateSectionSettings(ctx)
-			if err != nil {
-				t.Logf("%s: Update failed - %v", tt.description, err)
-			} else {
-				assert.Equal(t, http.StatusOK, rec.Code, tt.description)
-			}
-		})
-	}
-}
-
-// TestSpecialCharacterHandling verifies special characters are handled correctly
-func TestSpecialCharacterHandling(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name        string
-		section     string
-		specialData any
-		description string
-	}{
-		{
-			name:    "UTF-8 characters in strings",
-			section: "species",
-			specialData: map[string]any{
-				"include": []string{"🦅 Eagle", "ñandú", "räkättirastas", "鳥"},
-			},
-			description: "Should handle UTF-8 characters",
-		},
-		{
-			name:    "Escaped characters",
-			section: "mqtt",
-			specialData: map[string]any{
-				"topic": "birdnet\\detection\\new",
-			},
-			description: "Should handle escaped backslashes",
-		},
-		{
-			name:    "Quotes in strings",
-			section: "dashboard",
-			specialData: map[string]any{
-				"locale": `en"US'test`,
-			},
-			description: "Should handle quotes in strings",
-		},
-		{
-			name:    "Line breaks in strings",
-			section: "mqtt",
-			specialData: map[string]any{
-				"topic": "birdnet\ndetection",
-			},
-			description: "Should handle line breaks",
-		},
-		{
-			name:    "Tab characters",
-			section: "mqtt",
-			specialData: map[string]any{
-				"topic": "birdnet\tdetection",
-			},
-			description: "Should handle tab characters",
-		},
-		{
-			name:    "URL encoding",
-			section: "mqtt",
-			specialData: map[string]any{
-				"broker": "tcp://broker.example.com:1883?param=value&other=test",
-			},
-			description: "Should handle URL with query parameters",
-		},
-		{
-			name:    "HTML entities",
-			section: "dashboard",
-			specialData: map[string]any{
-				"locale": "&lt;en&gt;",
-			},
-			description: "Should handle HTML entities",
-		},
-		{
-			name:    "Mixed case field names",
-			section: "birdnet",
-			specialData: map[string]any{
-				"rangeFilter": map[string]any{
-					"threshold": 0.05,
-				},
-			},
-			description: "Should handle camelCase field names",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			e := echo.New()
-			controller := getTestController(t, e)
-
-			body, err := json.Marshal(tt.specialData)
-			require.NoError(t, err)
-
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
-				bytes.NewReader(body))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			rec := httptest.NewRecorder()
-			ctx := e.NewContext(req, rec)
-			ctx.SetParamNames("section")
-			ctx.SetParamValues(tt.section)
-
-			err = controller.UpdateSectionSettings(ctx)
-			if err != nil {
-				t.Logf("%s: Update failed - %v", tt.description, err)
-			} else {
-				assert.Equal(t, http.StatusOK, rec.Code, tt.description)
-				t.Logf("%s: Successfully handled special characters", tt.description)
-			}
-		})
-	}
-}
-
-// TestFieldPermissionEnforcement verifies that field permissions are properly enforced
-func TestFieldPermissionEnforcement(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name          string
-		section       string
-		update        any
-		description   string
-		shouldSkip    []string
-		shouldNotSkip []string
-	}{
-		{
-			name:    "Labels is ignored, not skipped",
-			section: "birdnet",
-			update: map[string]any{
-				"labels": []string{"test1", "test2"}, // Runtime field, json:"-"
-			},
-			// Labels is tagged json:"-", so the PATCH merge never carries it and it
-			// is never reverted: it must NOT appear in skippedFields. (A PUT walk
-			// would list it as runtime-only; a PATCH cannot.)
-			description:   "json:\"-\" field is silently ignored on PATCH",
-			shouldNotSkip: []string{"Labels"},
-		},
-		{
-			name:    "RangeFilter runtime fields",
-			section: "birdnet",
-			update: map[string]any{
-				"rangeFilter": map[string]any{
-					"species":     []string{"test species"}, // Runtime field (yaml:"-", json present)
-					"lastUpdated": "2024-01-01T00:00:00Z",   // Runtime field (yaml:"-", json present)
-					"threshold":   0.05,                     // Allowed field
-				},
-			},
-			description: "reachable runtime fields are reverted and reported as skipped",
-			shouldSkip:  []string{"Species", "LastUpdated"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			e := echo.New()
-			controller := getTestController(t, e)
-
-			body, err := json.Marshal(tt.update)
-			require.NoError(t, err)
-
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
-				bytes.NewReader(body))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			rec := httptest.NewRecorder()
-			ctx := e.NewContext(req, rec)
-			ctx.SetParamNames("section")
-			ctx.SetParamValues(tt.section)
-
-			err = controller.UpdateSectionSettings(ctx)
-			require.NoError(t, err, "UpdateSectionSettings returned an error")
-
-			assert.Equal(t, http.StatusOK, rec.Code)
-
-			var response map[string]any
-			err = json.Unmarshal(rec.Body.Bytes(), &response)
-			require.NoError(t, err)
-
-			verifySkippedFields(t, response, tt.shouldSkip, tt.shouldNotSkip)
-		})
-	}
-}
-
-// TestComplexNestedPreservation verifies complex nested structures preserve all unmodified data
+// TestComplexNestedPreservation verifies that updating one species entry leaves
+// the include and exclude lists and the other entries as they were, including an
+// entry's actions with their parameters. The second row overwrites an existing
+// entry with zero values (threshold, interval and an emptied actions list), which
+// a merge that skips zero values would silently keep.
+//
+// Not parallel: see the note in settings_blocked_fields_test.go.
 func TestComplexNestedPreservation(t *testing.T) {
-	e := echo.New()
-	controller := getTestController(t, e)
+	// Seed keys are lowercase, as a real config has after load normalization.
+	notifyActions := []conf.SpeciesAction{{
+		Type:            "ExecuteCommand",
+		Command:         "/usr/bin/notify",
+		Parameters:      []string{"--species", "American Robin"},
+		ExecuteDefaults: true,
+	}}
+	eagle := conf.SpeciesConfig{Threshold: 0.9, Interval: 60}
 
-	// Update controller settings with complex initial state
-	// Use lowercase keys since that's what a real config would have after normalization
-	controller.Settings.Load().Realtime.Species.Include = []string{"Robin", "Eagle", "Owl"}
-	controller.Settings.Load().Realtime.Species.Exclude = []string{"Crow", "Pigeon"}
-	controller.Settings.Load().Realtime.Species.Config["robin"] = conf.SpeciesConfig{
-		Threshold: 0.8,
-		Interval:  30,
-		Actions: []conf.SpeciesAction{{
-			Type:    "ExecuteCommand",
-			Command: "/usr/bin/notify",
-		}},
-	}
-	controller.Settings.Load().Realtime.Species.Config["eagle"] = conf.SpeciesConfig{
-		Threshold: 0.9,
-		Interval:  60,
-	}
+	tests := []struct {
+		name    string
+		section string
+		seed    conf.SpeciesSettings
+		body    map[string]any
+		check   func(t *testing.T, got conf.SpeciesSettings)
+	}{
+		{
+			name:    "threshold change keeps the lists, the actions and the other entry",
+			section: "species",
+			seed: conf.SpeciesSettings{
+				Include: []string{"Robin", "Eagle", "Owl"},
+				Exclude: []string{"Crow", "Pigeon"},
+				Config: map[string]conf.SpeciesConfig{
+					"american robin": {Threshold: 0.8, Interval: 30, Actions: notifyActions},
+					"eagle":          eagle,
+				},
+			},
+			// The payload key is cased differently from the stored one: keys are
+			// normalized to lowercase.
+			body: map[string]any{"config": map[string]any{"American Robin": map[string]any{"threshold": 0.85}}},
+			check: func(t *testing.T, got conf.SpeciesSettings) {
+				t.Helper()
+				assert.Equal(t, []string{"Robin", "Eagle", "Owl"}, got.Include)
+				assert.Equal(t, []string{"Crow", "Pigeon"}, got.Exclude)
 
-	// Capture initial state
-	initialInclude := make([]string, len(controller.Settings.Load().Realtime.Species.Include))
-	copy(initialInclude, controller.Settings.Load().Realtime.Species.Include)
-	initialExclude := make([]string, len(controller.Settings.Load().Realtime.Species.Exclude))
-	copy(initialExclude, controller.Settings.Load().Realtime.Species.Exclude)
+				robin := got.Config["american robin"]
+				assert.InDelta(t, 0.85, robin.Threshold, 0.0001)
+				assert.Equal(t, 30, robin.Interval)
+				assert.Equal(t, notifyActions, robin.Actions)
 
-	// Update only one deeply nested field
-	update := map[string]any{
-		"config": map[string]any{
-			"Robin": map[string]any{
-				"threshold": 0.85, // Only change this
+				assert.Equal(t, eagle, got.Config["eagle"])
+			},
+		},
+		{
+			name:    "zero values overwrite an existing entry and leave the next one",
+			section: "realtime",
+			seed: conf.SpeciesSettings{
+				Config: map[string]conf.SpeciesConfig{
+					"bird a": {Threshold: 0.7, Interval: 30, Actions: notifyActions},
+					"bird b": {Threshold: 0.8, Interval: 60, Actions: []conf.SpeciesAction{}},
+				},
+			},
+			body: map[string]any{"species": map[string]any{"config": map[string]any{
+				"Bird A": map[string]any{"threshold": 0.0, "interval": 0, "actions": []any{}},
+				"Bird B": map[string]any{"threshold": 0.8, "interval": 60, "actions": []any{}},
+			}}},
+			check: func(t *testing.T, got conf.SpeciesSettings) {
+				t.Helper()
+				birdA := got.Config["bird a"]
+				assert.InDelta(t, 0.0, birdA.Threshold, 0.0001, "bird a threshold should be zero")
+				assert.Equal(t, 0, birdA.Interval, "bird a interval should be zero")
+				assert.Empty(t, birdA.Actions, "bird a actions should be cleared")
+				assert.NotNil(t, birdA.Actions, "bird a actions should be an empty slice, not nil")
+
+				birdB := got.Config["bird b"]
+				assert.InDelta(t, 0.8, birdB.Threshold, 0.0001, "bird b threshold should be unchanged")
+				assert.Equal(t, 60, birdB.Interval, "bird b interval should be unchanged")
+				assert.NotNil(t, birdB.Actions, "bird b actions should be an empty slice, not nil")
 			},
 		},
 	}
 
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			controller := newMergeController(t, e, func(s *conf.Settings) { s.Realtime.Species = tt.seed })
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/species", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("species")
+			patchSection(t, e, controller, tt.section, tt.body)
 
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify preservation
-	settings := controller.Settings.Load()
-
-	// Include/Exclude lists preserved
-	assert.Equal(t, initialInclude, settings.Realtime.Species.Include)
-	assert.Equal(t, initialExclude, settings.Realtime.Species.Exclude)
-
-	// Robin config (keys normalized to lowercase after API update)
-	robinConfig := settings.Realtime.Species.Config["robin"]
-	assert.InDelta(t, 0.85, robinConfig.Threshold, 0.0001) // Changed
-	assert.Equal(t, 30, robinConfig.Interval)              // Preserved
-	assert.Len(t, robinConfig.Actions, 1)                  // Preserved
-
-	// Eagle config completely preserved (keys normalized to lowercase)
-	eagleConfig := settings.Realtime.Species.Config["eagle"]
-	assert.InDelta(t, 0.9, eagleConfig.Threshold, 0.0001)
-	assert.Equal(t, 60, eagleConfig.Interval)
+			tt.check(t, controller.Settings.Load().Realtime.Species)
+		})
+	}
 }
