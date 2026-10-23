@@ -667,8 +667,11 @@ func (s *Settings) ValidateModelConfig(knownIDs map[string]bool, checkSourceRefs
 
 	// During early config loading, models.enabled is not yet synchronized
 	// with gallery-installed models (ScanInstalled runs later), so these
-	// checks produce false positives. The orchestrator re-validates with
-	// the authoritative model list after startup sync is complete.
+	// checks produce false positives. The only production caller passes
+	// false, and nothing re-runs this check with source references turned
+	// on, so a source or stream that lists a model missing from
+	// models.enabled is not rejected here; the analysis pipeline skips such
+	// aliases at runtime.
 	if checkSourceRefs {
 		enabledSet := make(map[string]bool, len(s.Models.Enabled))
 		for _, id := range s.Models.Enabled {
@@ -699,14 +702,14 @@ func (s *Settings) ValidateModelConfig(knownIDs map[string]bool, checkSourceRefs
 // errors are collected and returned together so the user can fix them in
 // one pass.
 func (s *Settings) applyModelValidation() error {
-	// Fallback known-ID set used during config loading before the classifier
-	// package is available; the orchestrator re-validates with the authoritative
-	// classifier.KnownConfigIDs() later. Reuse ValidAudioModels (the same
-	// canonical + catalog-alias set, kept in lockstep with the registry by
-	// TestKnownConfigIDs_MatchesConfValidAudioModels) rather than hand-maintaining
-	// a third copy that could drift. The extra "" default key is harmless here
-	// because models.enabled never contains an empty entry. ValidateModelConfig
-	// only reads the map.
+	// Known-ID set used during config loading, before the classifier package
+	// is available; classifier.KnownConfigIDs() is not consulted here. Reuse
+	// ValidAudioModels (the same canonical + catalog-alias set, kept in
+	// lockstep with the registry by
+	// TestKnownConfigIDs_MatchesConfValidAudioModels) rather than
+	// hand-maintaining a third copy that could drift. The extra "" default key
+	// is harmless here because models.enabled never contains an empty entry.
+	// ValidateModelConfig only reads the map.
 	modelIssues := s.ValidateModelConfig(ValidAudioModels, false)
 	var fatalErrors []string
 	for _, issue := range modelIssues {
