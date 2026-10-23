@@ -127,6 +127,8 @@ func (c *Controller) commitSettings(mutate func(current, updated *conf.Settings)
 	if err := mutate(current, updated); err != nil {
 		return nil, nil, err
 	}
+	// No new revision here: only conf stamps one, so a write through a controller
+	// that does not own the global snapshot (tests) leaves its ETag unchanged.
 	c.Settings.Store(updated)
 	return current, updated, nil
 }
@@ -136,9 +138,10 @@ func (c *Controller) commitSettings(mutate func(current, updated *conf.Settings)
 // published snapshot; if another writer published since, that newer snapshot
 // stays (discarding it would lose an install or a species list rebuild), a
 // warning is logged, and errRollbackSuperseded is returned. The caller must then
-// tell the client the change was NOT rolled back. The restored snapshot carries a
-// fresh revision (see conf.CompareAndStoreSettings), so an ETag issued for the
-// rolled-back snapshot cannot match it. Callers hold c.settingsMutex.
+// tell the client the change was NOT rolled back. For the owner of the global
+// snapshot the restored snapshot carries a fresh revision (see
+// conf.CompareAndStoreSettings), so an ETag issued for the rolled-back snapshot
+// cannot match it; a controller that does not own it restores current as it was. Callers hold c.settingsMutex.
 func (c *Controller) rollbackSettings(current, updated *conf.Settings) error {
 	restored := current
 	if c.isGlobalOwner {

@@ -2021,12 +2021,13 @@ type Settings struct {
 // Revision identifies the client-writable state of this snapshot within one
 // process. It changes on every publish except the runtime-only range filter
 // writers (UpdateIncludedSpecies, ShouldUpdateRangeFilterToday and
-// ResetRangeFilterUpdateFlag), and a value is never reused by a later publish, so
-// two snapshots with the same revision hold the same client-writable content. The
-// range filter species list and its update stamp are served to clients but cannot
-// be written by them, so they can differ between two snapshots that share a
-// revision. It is 0 for a snapshot that was not published by a settings writer
-// (Load, StoreSettings).
+// ResetRangeFilterUpdateFlag), and a value handed out by a writer is never reused
+// by a later publish, so two snapshots published by a settings writer with the
+// same revision hold the same client-writable content. The range filter species
+// list and its update stamp are served to clients but cannot be written by them,
+// so they can differ between two snapshots that share a revision. Load and
+// StoreSettings do not stamp: a snapshot they publish keeps whatever revision it
+// carries (0 for a new one), so the guarantee above does not cover them.
 func (s *Settings) Revision() uint64 { return s.revision }
 
 // RangeFilterConfig returns a pointer to the range filter settings block. The block

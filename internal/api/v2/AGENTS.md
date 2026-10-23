@@ -221,7 +221,9 @@ unauthenticated clients (the audio domain does this with its local
   `conf.UpdateSettings` also stamps the snapshot's `Revision`, which the settings
   ETag and `If-Match` check are built on; only the range filter writers inside
   `internal/conf` publish without bumping it (`updateRuntimeSettings`), because they
-  write fields no client can write. Every other writer must bump.
+  write fields no client can write. Every other writer must bump. `Load` and
+  `conf.StoreSettings` do not stamp a revision (startup and tests only), and a
+  controller that does not own the global snapshot (tests) never bumps its own.
 - **Document in README.md** - update the endpoint table immediately.
 
 ## Future api/v3
