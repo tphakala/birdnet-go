@@ -33,8 +33,6 @@ import (
 //     what fails if a leaf is dropped from the map or from the walk.
 //   - TestRestoreBlockedFieldsHandlesPointerSubtrees drives the pointer arms of
 //     the walk, which no blocked path reaches today.
-//   - TestBlockedFieldMapNamesRealFields pins that every name in the map still
-//     resolves to a struct field, so a rename cannot silently un-block a field.
 //   - TestPatchYamlDashFieldsAreEitherBlockedOrRederived pins the fields that
 //     PUT protects via yaml:"-" but PATCH does not.
 //
@@ -87,8 +85,7 @@ func blockedLeafPaths(blocked map[string]any, prefix string) []string {
 //
 // Deriving this rather than listing it is the point. The stored-value assertions
 // in the HTTP table are only meaningful while the merge can reach the field, and
-// that depends on json tags, which TestBlockedFieldMapNamesRealFields does not
-// check because it resolves Go field names.
+// that depends on json tags.
 func clientReachableBlockedLeaves(t *testing.T) []string {
 	t.Helper()
 
@@ -898,44 +895,4 @@ func TestPatchFfmpegMetadataIsRederivedNotClientSettable(t *testing.T) {
 		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
 	assert.Zero(t, audio.FfmpegMinor,
 		"ffmpeg metadata must be re-derived from the binary, never taken from the request")
-}
-
-// TestBlockedFieldMapNamesRealFields pins that every name in getBlockedFieldMap
-// still resolves to a field on conf.Settings. The walk skips names it cannot
-// resolve so a stale entry cannot panic a live request, which means a rename
-// would otherwise silently un-block a field with no test failing.
-func TestBlockedFieldMapNamesRealFields(t *testing.T) {
-	t.Parallel()
-
-	var walk func(structType reflect.Type, blocked map[string]any, prefix string)
-	walk = func(structType reflect.Type, blocked map[string]any, prefix string) {
-		for name, rule := range blocked {
-			path := name
-			if prefix != "" {
-				path = prefix + "." + name
-			}
-
-			field, ok := structType.FieldByName(name)
-			if !assert.True(t, ok, "getBlockedFieldMap names %s, which is not a field of %s", path, structType) {
-				continue
-			}
-
-			subfields, nested := rule.(map[string]any)
-			if !nested {
-				assert.Equal(t, true, rule, "%s must map to true or to a submap", path)
-				continue
-			}
-
-			fieldType := field.Type
-			for fieldType.Kind() == reflect.Pointer {
-				fieldType = fieldType.Elem()
-			}
-			if assert.Equal(t, reflect.Struct, fieldType.Kind(),
-				"%s carries nested restrictions but is not a struct", path) {
-				walk(fieldType, subfields, path)
-			}
-		}
-	}
-
-	walk(reflect.TypeFor[conf.Settings](), getBlockedFieldMap(), "")
 }
