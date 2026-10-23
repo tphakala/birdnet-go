@@ -167,7 +167,8 @@ original per-route registration order across the split.
   `publicMutationRoutes` or `publicReadRoutes` with a reason. With PrivateMode on,
   every route outside `isPrivateModeExempt` must reach it too. A new mutating
   route needs no test edit; a route that is meant to be public needs an
-  allow-list entry.
+  allow-list entry. A GET outside the auth-only prefixes that must be
+  protected needs a `protectedReadRoutes` entry.
 
 ## Route namespace guide
 
