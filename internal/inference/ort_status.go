@@ -69,7 +69,7 @@ func CheckORTAvailability(configuredPath string) ORTStatus {
 			Initialized: true,
 			Version:     version,
 		}
-		// A successful init already proves the C API level, so this only
+		// A successful init already passed the version floor, so this only
 		// guards odd version strings.
 		if meets, known := ortVersionMeetsMinimum(version); known && !meets {
 			status.Available = false

@@ -11,7 +11,8 @@ import ort "github.com/microsoft/onnxruntime/go/onnxruntime"
 
 // SessionOptions is the binding's session options type. Callers that tune a
 // session (thread counts, execution providers) take it through this alias so
-// that only this package imports the binding.
+// that callers outside the session owners (the VAD session and the heatmap
+// service import the binding themselves) need not import it.
 type SessionOptions = ort.SessionOptions
 
 // Version returns the version string of the loaded ONNX Runtime library, or
@@ -56,8 +57,8 @@ func MustInitORT(libraryPath string) {
 
 // DestroyORT tears down the ONNX Runtime environment. The teardown is terminal
 // for the process: the binding refuses to initialize again afterwards. It
-// fails while any session is still open, so close every classifier, range
-// filter and VAD session first.
+// fails while any session is still open, so close every session first
+// (classifiers, range filter, VAD and the heatmap service).
 func DestroyORT() error {
 	return ort.Shutdown()
 }

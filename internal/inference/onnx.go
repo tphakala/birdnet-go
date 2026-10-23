@@ -308,7 +308,10 @@ func (r *onnxRangeFilter) Close() {
 // When libraryPath is empty, searches standard system library paths for
 // libonnxruntime.so (Linux) or onnxruntime.dll (Windows).
 // Safe to call multiple times; skips if already initialized successfully.
-// On failure, allows retry with a corrected path (supports hot-reload recovery).
+// A failed load (missing file, wrong path) stays retryable with a corrected
+// path. A library that loads but is older than the supported minimum stays
+// rejected until the process restarts, because the binding keeps the first
+// successful load. Do not call it after DestroyONNXRuntime, which is terminal.
 func InitONNXRuntime(libraryPath string) (err error) {
 	ortInitMu.Lock()
 	defer ortInitMu.Unlock()
