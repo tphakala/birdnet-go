@@ -240,6 +240,40 @@ func TestCompareAndStoreSettings(t *testing.T) {
 	}
 }
 
+// TestCompareAndStoreSettings_RefusesNilRestore pins that a nil snapshot is never
+// published as a rollback target, and that a nil old matches only an unloaded
+// state, so neither case disturbs the published snapshot.
+func TestCompareAndStoreSettings_RefusesNilRestore(t *testing.T) {
+	tests := []struct {
+		name string
+		old  func(seeded *conf.Settings) *conf.Settings
+		next func(seeded *conf.Settings) *conf.Settings
+	}{
+		{
+			name: "nil next with the published snapshot as old",
+			old:  func(seeded *conf.Settings) *conf.Settings { return seeded },
+			next: func(*conf.Settings) *conf.Settings { return nil },
+		},
+		{
+			name: "nil old while a snapshot is published",
+			old:  func(*conf.Settings) *conf.Settings { return nil },
+			next: conf.CloneSettings,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			seeded := seedGlobalSettings(t, nil)
+
+			published, swapped := conf.CompareAndStoreSettings(tt.old(seeded), tt.next(seeded))
+
+			assert.False(t, swapped)
+			assert.Nil(t, published)
+			assert.Same(t, seeded, conf.GetSettings(), "a refused restore must leave the published snapshot alone")
+		})
+	}
+}
+
 // TestUpdateSettings_ErrorPublishesNothing pins that a mutate function that
 // fails, or reports nothing to do, leaves the published pointer untouched, so a
 // half-mutated clone never reaches readers.
