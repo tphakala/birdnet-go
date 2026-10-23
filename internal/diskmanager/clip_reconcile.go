@@ -21,7 +21,7 @@ import (
 )
 
 // ClipRecencyWindow is the age below which a detection's audio clip is treated as
-// possibly still being written by the encoder (FFmpeg). It is keyed on the
+// possibly still being written by the clip encoder. It is keyed on the
 // detection's COMPLETION time (Note.EndTime / LastUpdated), never its begin time:
 // an extended capture records its begin time many minutes before the tail of the
 // clip is written, so keying on begin time would treat an in-progress capture as

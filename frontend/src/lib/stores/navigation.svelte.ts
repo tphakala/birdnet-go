@@ -20,6 +20,8 @@ const UI_PREFIX_STR = ['', 'ui'].join('/');
 // Regex syntax (/^\/ui\//) is immune to sub_filter rules that target quoted strings.
 const UI_PATH_RE = /^\/ui\//;
 const UI_ROOT_RE = /^\/ui\/?$/;
+// One or more trailing slashes.
+const TRAILING_SLASHES_RE = /\/+$/;
 
 /**
  * Navigation store interface
@@ -57,11 +59,14 @@ function stripProxyPrefix(pathname: string): string {
 function normalizeUiPath(url: string): string {
   // Strip any proxy prefix that sub_filter may have injected into the value.
   // This handles cases where sub_filter rewrites constants or URL values.
-  const cleaned = stripProxyPrefix(url);
+  const stripped = stripProxyPrefix(url);
+
+  // A path made only of slashes becomes empty and falls into the root case below.
+  const cleaned = stripped.replace(TRAILING_SLASHES_RE, '');
 
   // Handle root or empty (including /ui and /ui/)
   // Use regex instead of string literals to avoid sub_filter corruption.
-  if (cleaned === '/' || cleaned === '' || UI_ROOT_RE.test(cleaned)) {
+  if (cleaned === '' || UI_ROOT_RE.test(cleaned)) {
     return DEFAULT_PATH;
   }
   // Already has /ui/ prefix

@@ -90,6 +90,9 @@ type secondaryBackendKey struct {
 //  5. entry.mu (Mutex) - per-model; guards instance lifecycle
 //  6. bn.mu (Mutex) - per-*BirdNET; guards its classifier/identity internals
 //
+// runtimeSnapMu is a leaf outside this order: it is taken only by the writers of the
+// diagnostic runtime snapshots, with nothing acquired while it is held.
+//
 // Delete/UnloadModel acquire mu + entry.mu but NOT inferenceMu or reloadMu.
 type Orchestrator struct {
 	// Public fields, same layout as BirdNET for drop-in caller migration.
@@ -177,6 +180,15 @@ type Orchestrator struct {
 	ortAvailable func(configuredPath string) bool
 	ovLoadable   func(libraryPath string) bool
 	modelsDir    string // base directory for gallery-installed models
+
+	// Runtime snapshots for diagnostics (see orchestrator_runtime_snapshot.go).
+	// runtimeSnaps is copy-on-write and read lock-free; runtimeSnapMu serializes
+	// only its writers. It is a LEAF lock: nothing is acquired while it is held,
+	// and readers never take it. modelsDirSnap mirrors modelsDir for readers that
+	// must not take o.mu.
+	runtimeSnapMu sync.Mutex
+	runtimeSnaps  atomic.Pointer[map[string]*publishedModel]
+	modelsDirSnap atomic.Pointer[string]
 
 	// Nighttime scheduling for bat model. Stored as atomic.Pointer so
 	// IsModelActive (called on every monitor tick) reads lock-free.
@@ -296,6 +308,7 @@ func NewOrchestrator(settings *conf.Settings) (*Orchestrator, error) {
 	// SetModelsDir, whose resolver wiring the constructor overwrites below anyway.
 	if modelsDir, ok := settings.ResolveModelsDir(); ok {
 		o.modelsDir = modelsDir
+		o.storeModelsDir(modelsDir)
 	}
 
 	// Fix the process-wide RSS baseline before the first model allocates its arena.
@@ -405,6 +418,7 @@ func (o *Orchestrator) SetModelsDir(dir string) {
 	// holding o.mu here would self-deadlock (the RWMutex is not reentrant).
 	o.mu.Lock()
 	o.modelsDir = dir
+	o.storeModelsDir(dir)
 	o.mu.Unlock()
 
 	o.registerTaxonomyResolver(dir)
@@ -1839,6 +1853,9 @@ func (o *Orchestrator) Delete() {
 			}
 			entry.instance = nil // nil out to signal closed state to PredictModel
 		}
+		// Drop the record under the same entry.mu as the reload swap, so a swap
+		// that landed after o.models was cleared cannot leave a record behind.
+		o.dropModelRuntime(id, entry)
 		// Drop the model's global inference counters while still holding entry.mu,
 		// mirroring UnloadModel: this prevents an in-flight RecordInvoke from
 		// re-creating the entry after deletion, and stops a teardown-then-recreate
@@ -2020,6 +2037,7 @@ func (o *Orchestrator) LoadModel(registryID string) error {
 			o.recordLoadFailure(registryID, err)
 			return err
 		}
+		o.publishLoadedModelLocked(registryID, o.currentSettings(), dynamicThreads)
 		// The model registered successfully; clear any stale unload tombstone and the
 		// stored load error so a later not-loaded diagnosis reports the model's actual
 		// current state rather than a now-superseded unload or failure. The cumulative
@@ -2362,6 +2380,7 @@ func (o *Orchestrator) UnloadModel(registryID string) error {
 		delete(o.modelRSS, registryID)
 		o.rssMu.Unlock()
 		o.dropProbedLatency(registryID)
+		o.dropModelRuntime(registryID, entry)
 
 		if entry.instance != nil {
 			modelID := entry.instance.ModelID()
@@ -2729,8 +2748,8 @@ func (o *Orchestrator) computeThreadAllocation(settings *conf.Settings) map[stri
 }
 
 // loadEnabledModels iterates models.enabled in config order (authoritative since Phase 4)
-// and loads each one in that order. Each loaded model is registered in the models map; an
-// already-registered model is skipped.
+// and loads each one in that order. Each loaded model is registered in the models map and
+// its runtime snapshot is published; an already-registered model is skipped.
 // threadAlloc provides the pre-computed thread count for each model. No load failure is
 // fatal now that models.enabled is authoritative and N=0 is a supported runtime state
 // (model de-privilege epic, Phase 4): every failure (v2.4 included) is recorded and the
@@ -2783,6 +2802,7 @@ func (o *Orchestrator) loadEnabledModels(threadAlloc map[string]int) {
 			if err := loader(o, threadAlloc[registryID]); err != nil {
 				return err
 			}
+			o.publishLoadedModelLocked(registryID, settings, threadAlloc[registryID])
 			// The model registered; clear any stale unload tombstone and stored load
 			// error (the cumulative failure count is kept for the LoadFailures metric).
 			o.modelUnloaded.Delete(registryID)

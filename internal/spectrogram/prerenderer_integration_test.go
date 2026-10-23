@@ -24,11 +24,10 @@ const (
 	testPollInterval = 100 * time.Millisecond
 )
 
-// TestPreRenderer_RealSoxExecution tests actual spectrogram generation with Sox
+// TestPreRenderer_RendersPNG tests actual spectrogram rendering through the pre-renderer
 // Run with: go test -v -tags=integration ./internal/spectrogram/...
-func TestPreRenderer_RealSoxExecution(t *testing.T) {
-	soxPath := requireSoxAvailable(t)
-	env := createIntegrationPreRenderer(t, soxPath, "test")
+func TestPreRenderer_RendersPNG(t *testing.T) {
+	env := createIntegrationPreRenderer(t, "test")
 	defer env.PreRenderer.Stop()
 
 	// Generate synthetic PCM data using shared helper
@@ -86,8 +85,7 @@ func TestPreRenderer_RealSoxExecution(t *testing.T) {
 // TestPreRenderer_ConcurrentProcessing tests multiple jobs being processed concurrently
 // Run with: go test -v -race -tags=integration ./internal/spectrogram/...
 func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
-	soxPath := requireSoxAvailable(t)
-	env := createIntegrationPreRenderer(t, soxPath, "concurrent")
+	env := createIntegrationPreRenderer(t, "concurrent")
 	defer env.PreRenderer.Stop()
 
 	// Generate synthetic PCM data using shared helper
@@ -140,8 +138,7 @@ func TestPreRenderer_ConcurrentProcessing(t *testing.T) {
 
 // TestPreRenderer_GracefulShutdownUnderLoad tests shutdown with active jobs
 func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
-	soxPath := requireSoxAvailable(t)
-	env := createIntegrationPreRenderer(t, soxPath, "shutdown")
+	env := createIntegrationPreRenderer(t, "shutdown")
 	// Note: Don't defer Stop() here - we manually stop to test shutdown behavior
 
 	// Generate synthetic PCM data using shared helper
@@ -179,8 +176,7 @@ func TestPreRenderer_GracefulShutdownUnderLoad(t *testing.T) {
 
 // TestPreRenderer_QueueOverflow tests behavior when submitting more jobs than queue size
 func TestPreRenderer_QueueOverflow(t *testing.T) {
-	soxPath := requireSoxAvailable(t)
-	env := createIntegrationPreRenderer(t, soxPath, "overflow")
+	env := createIntegrationPreRenderer(t, "overflow")
 	defer env.PreRenderer.Stop()
 
 	// Generate synthetic PCM data using shared helper

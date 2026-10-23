@@ -1,149 +1,68 @@
 # Event Bus Package
 
-The `events` package implements a high-performance, asynchronous event bus system designed to decouple error reporting from notification and telemetry systems in BirdNET-Go. This package is the core of the async event system redesign (issue #833).
+The `events` package is an asynchronous event bus. It carries error events and detection events from the code that produces them to consumers such as notifications, Sentry telemetry and alerting, without ever blocking the producer. For how the bus is built, how it is wired into the application and how deduplication works, see [ARCHITECTURE.md](ARCHITECTURE.md). This guide covers the day-to-day usage: publishing events, registering consumers, configuration and testing.
 
-## Overview
+## Publishing events
 
-The event bus provides a non-blocking, channel-based architecture that ensures error handling never blocks the main application flow. It achieves a 3,275x performance improvement over synchronous telemetry operations.
+### Error events
 
-## Architecture
-
-```mermaid
-graph TD
-    A[Application Code] -->|error.Build| B[Error Package]
-    B -->|PublishError| C[Event Bus]
-    C -->|Channel| D[Worker Pool]
-    D --> E[Consumer 1: Notifications]
-    D --> F[Consumer 2: Telemetry]
-    D --> G[Consumer N: ...]
-
-    H[Deduplicator] --> C
-    I[Rate Limiter] --> E
-    I --> F
-
-    style C fill:#f9f,stroke:#333,stroke-width:4px
-    style D fill:#bbf,stroke:#333,stroke-width:2px
-```
-
-## Key Components
-
-### EventBus
-
-The main orchestrator that manages:
-
-- **Channel-based architecture**: Non-blocking event distribution
-- **Worker pool**: Configurable number of workers (default: 4)
-- **Consumer management**: Dynamic registration/unregistration
-- **Deduplication**: Built-in error deduplication
-- **Fast path optimization**: Zero cost when no consumers registered
-
-### ErrorEvent Interface
+Application code does not call the bus directly. The `errors` package publishes every `EnhancedError` it builds through an `EventPublisher` installed at startup, so building an error is enough:
 
 ```go
-type ErrorEvent interface {
-    GetComponent() string
-    GetCategory() string
-    GetContext() map[string]interface{}
-    GetTimestamp() time.Time
-    GetError() error
-    GetMessage() string
-    IsReported() bool
-    MarkReported()
+err := errors.Newf("something went wrong").
+    Component("database").
+    Category(errors.CategoryDatabase).
+    Build()
+```
+
+The component, category and message (plus the `operation`, `error_type` and `provider` context values when present) form the deduplication key, so give errors a stable component and category.
+
+To publish an `ErrorEvent` yourself, use `TryPublish` on the bus. It never blocks. It returns `true` when the event was queued or suppressed as a duplicate, and `false` when it was dropped (full channel) or skipped (no consumer registered):
+
+```go
+if eb := events.GetEventBus(); eb != nil {
+    accepted := eb.TryPublish(event)
+    _ = accepted
 }
 ```
 
-### EventConsumer Interface
+### Detection events
+
+Detection events are created with `NewDetectionEvent`, which validates its input (non-empty species names, confidence between 0 and 1) and returns an error otherwise:
 
 ```go
-type EventConsumer interface {
-    Name() string
-    ProcessEvent(event ErrorEvent) error
-    ProcessBatch(events []ErrorEvent) error
-    SupportsBatching() bool
-}
-```
-
-## Features
-
-### 1. Non-Blocking Guarantees
-
-- **Channel buffer**: 10,000 events (configurable)
-- **Non-blocking sends**: Events dropped if buffer full (tracked in metrics)
-- **Async processing**: Worker goroutines process events independently
-- **Back-pressure strategy**: When buffer is full, new events are dropped and counted in `EventsDropped` metric. This ensures the application never blocks on telemetry/notification operations.
-
-### 2. Error Deduplication
-
-- **Time-based windows**: Default 1-minute deduplication window
-- **Component-based keys**: Errors deduplicated per component
-- **Performance**: < 100ns for deduplication checks
-- **Memory efficient**: Automatic cleanup of old entries
-
-### 3. Performance Optimizations
-
-- **Fast path**: Skip all processing when no consumers registered
-- **Batch processing**: Consumers can process events in batches
-- **Zero allocations**: Reuses internal structures where possible
-- **Atomic operations**: Lock-free metrics and state management
-
-### 4. Graceful Shutdown
-
-- **Context-based cancellation**: Clean shutdown on context cancel
-- **Drain timeout**: Configurable timeout for processing remaining events
-- **Worker synchronization**: Wait for all workers to complete
-
-## Usage
-
-### Basic Initialization
-
-```go
-// Initialize with default config
-eventBus, err := events.Initialize(nil)
+event, err := events.NewDetectionEvent(
+    "Eurasian Blue Tit", "Cyanistes caeruleus",
+    0.92, "backyard", true, 0,
+)
 if err != nil {
     return err
 }
-// The eventBus handle is typically not needed as most operations
-// go through the global singleton accessed via events.GetEventBus()
-
-// Or with custom config
-config := &events.Config{
-    BufferSize: 20000,
-    Workers:    8,
-    Enabled:    true,
-    Deduplication: &events.DeduplicationConfig{
-        Enabled:      true,
-        WindowSize:   2 * time.Minute,
-        MaxEntries:   10000,
-    },
+if eb := events.GetEventBus(); eb != nil {
+    eb.TryPublishDetection(event)
 }
-eventBus, err := events.Initialize(config)
-// Use eventBus for direct operations or rely on global singleton
 ```
 
-### Registering Consumers
+Detection events are not deduplicated.
+
+## Registering consumers
+
+A consumer implements `EventConsumer`. The bus calls `ProcessEvent` for each error event and never batches, so `ProcessBatch` and `SupportsBatching` can be minimal:
 
 ```go
-import "github.com/tphakala/birdnet-go/internal/logger"
-
-// Implement EventConsumer interface
 type MyConsumer struct {
-    name string
-    log  logger.Logger
+    log logger.Logger
 }
 
-func (c *MyConsumer) Name() string {
-    return c.name
-}
+func (c *MyConsumer) Name() string { return "my-consumer" }
 
 func (c *MyConsumer) ProcessEvent(event events.ErrorEvent) error {
-    // Process single event
     c.log.Debug("processing error event",
         logger.String("message", event.GetMessage()))
     return nil
 }
 
 func (c *MyConsumer) ProcessBatch(errorEvents []events.ErrorEvent) error {
-    // Process batch of events
     for _, event := range errorEvents {
         if err := c.ProcessEvent(event); err != nil {
             return err
@@ -152,119 +71,96 @@ func (c *MyConsumer) ProcessBatch(errorEvents []events.ErrorEvent) error {
     return nil
 }
 
-func (c *MyConsumer) SupportsBatching() bool {
-    return true
-}
-
-// Register the consumer
-consumer := &MyConsumer{name: "my-consumer"}
-if err := eventBus.RegisterConsumer(consumer); err != nil {
-    return err
-}
+func (c *MyConsumer) SupportsBatching() bool { return false }
 ```
 
-### Publishing Events
-
-Events are typically published through the error package integration:
+To receive detection events as well, also implement `DetectionEventConsumer` by adding `ProcessDetectionEvent(event events.DetectionEvent) error`. Registering the consumer adds it to both lists.
 
 ```go
-// The error package handles this internally
-err := errors.Newf("something went wrong").
-    Component("database").
-    Category(errors.CategoryDatabase).
-    Build()
+eb := events.GetEventBus()
+if eb == nil {
+    return nil // event bus is not initialized, for example when disabled
+}
+if err := eb.RegisterConsumer(&MyConsumer{log: log}); err != nil {
+    return err // for example, a consumer with this name is already registered
+}
 ```
 
-### Monitoring
+Consumer names must be unique. The first registration starts the worker pool. A consumer that panics is recovered and counted in `ConsumerErrors`, and an error from one consumer does not affect the others.
+
+## Configuration
+
+The application initializes the bus once at startup in `internal/telemetry/system_init_manager.go`. Calling `events.Initialize` again returns the existing bus, and `events.Initialize(nil)` uses `DefaultConfig()`.
 
 ```go
-// Get runtime statistics
-stats := eventBus.GetStats()
-fmt.Printf("Events processed: %d\n", stats.EventsProcessed)
-fmt.Printf("Events dropped: %d\n", stats.EventsDropped)
-fmt.Printf("Consumer errors: %d\n", stats.ConsumerErrors)
+config := &events.Config{
+    BufferSize: 10000,
+    Workers:    4,
+    Enabled:    true,
+    Deduplication: &events.DeduplicationConfig{
+        Enabled:         true,
+        TTL:             5 * time.Minute,
+        MaxEntries:      1000,
+        CleanupInterval: 1 * time.Minute,
+    },
+}
+eb, err := events.Initialize(config)
 ```
 
-## Performance Characteristics
+`Initialize` returns `ErrEventBusDisabled` when `Enabled` is false.
 
-| Metric                            | Target  | Actual    |
-| --------------------------------- | ------- | --------- |
-| Event publishing (no consumers)   | < 10ns  | 2.5ns     |
-| Event publishing (with consumers) | < 1μs   | 300ns     |
-| Deduplication check               | < 100ns | 95ns      |
-| Channel send                      | < 500ns | 165-390ns |
-| Memory per event                  | < 1KB   | ~200B     |
+### Event bus options (`Config`)
 
-## Configuration Options
+| Option          | `DefaultConfig` | Application     | Description                                      |
+| --------------- | --------------- | --------------- | ------------------------------------------------ |
+| `BufferSize`    | 10000           | 10000           | Slots in each event channel (errors, detections) |
+| `Workers`       | 4               | 4               | Worker goroutines                                |
+| `Enabled`       | true            | true            | When false, `Initialize` returns an error        |
+| `Debug`         | false           | `Debug` setting | Verbose bus logging                              |
+| `Deduplication` | enabled         | enabled         | Deduplication settings, or nil to disable        |
 
-### Event Bus Configuration
+### Deduplication options (`DeduplicationConfig`)
 
-| Option     | Default | Description                 |
-| ---------- | ------- | --------------------------- |
-| BufferSize | 10000   | Channel buffer size         |
-| Workers    | 4       | Number of worker goroutines |
-| Enabled    | true    | Enable/disable event bus    |
+| Option            | `DefaultConfig` | Application     | Description                                   |
+| ----------------- | --------------- | --------------- | --------------------------------------------- |
+| `Enabled`         | true            | true            | Enable deduplication                          |
+| `Debug`           | false           | `Debug` setting | Verbose deduplication logging                 |
+| `TTL`             | 5 minutes       | 5 minutes       | How long a seen error suppresses duplicates   |
+| `MaxEntries`      | 10000           | 1000            | Cache size, with least-recently-used eviction |
+| `CleanupInterval` | 1 minute        | 1 minute        | How often expired entries are removed         |
 
-### Deduplication Configuration
+## Monitoring and shutdown
 
-| Option          | Default   | Description                   |
-| --------------- | --------- | ----------------------------- |
-| Enabled         | true      | Enable deduplication          |
-| WindowSize      | 1 minute  | Time window for deduplication |
-| MaxEntries      | 10000     | Max entries in dedup cache    |
-| CleanupInterval | 5 minutes | Cache cleanup frequency       |
+```go
+stats := eb.GetStats()
+log.Info("event bus stats",
+    logger.Any("received", stats.EventsReceived),
+    logger.Any("dropped", stats.EventsDropped),
+    logger.Any("consumer_errors", stats.ConsumerErrors))
 
-## Error Handling
+dedupStats := eb.GetDeduplicationStats()
 
-The event bus is designed to be resilient:
+if err := eb.Shutdown(5 * time.Second); err != nil {
+    // shutdown timeout exceeded
+}
+```
 
-1. **Consumer errors**: Logged but don't affect other consumers
-2. **Channel overflow**: Events dropped and counted in metrics
-3. **Panic recovery**: Workers recover from consumer panics
-4. **Shutdown errors**: Best-effort shutdown with timeout
+A full channel drops the new event and increments `EventsDropped`; publishers are never blocked. Events still buffered at shutdown are not guaranteed to be processed.
 
 ## Testing
 
-The package includes comprehensive tests:
-
 ```bash
-# Run unit tests
-go test ./internal/events/
-
-# Run with race detection
-go test -race ./internal/events/
-
-# Run benchmarks
-go test -bench=. ./internal/events/
+task test
 ```
 
-## Integration Points
+`task test` applies the project's build tags and runs with `-race`. To run only this package or its benchmarks, take the exact command from `task --dry test`, or for benchmarks:
 
-1. **Error Package**: Uses `EventPublisher` interface to publish events
-2. **Notification Package**: Implements `EventConsumer` for notifications
-3. **Telemetry Package**: Implements `EventConsumer` for Sentry reporting
+```bash
+go test -run '^$' -bench . ./internal/events
+```
 
-## Best Practices
+In tests, call `events.ResetForTesting()` to discard the global bus and the fast path flag between cases. The package's `mocks/` directory holds a generated mock of `ErrorEvent`. A test consumer in `integration_test.go` shows the full flow from error creation to consumer.
 
-1. **Always check initialization**: Use `IsInitialized()` before operations
-2. **Handle shutdown gracefully**: Call `Shutdown()` with appropriate timeout
-3. **Monitor metrics**: Track dropped events and consumer errors
-4. **Configure appropriately**: Adjust buffer size based on load
-5. **Test error paths**: Ensure consumers handle errors gracefully
+## Thread safety
 
-## Thread Safety
-
-All public methods are thread-safe:
-
-- Registration/unregistration uses mutex protection
-- Event publishing uses atomic operations for fast path
-- Metrics use atomic counters
-- State management uses atomic booleans
-
-## Future Enhancements
-
-1. **Dynamic worker scaling**: Adjust workers based on load
-2. **Priority queues**: Support for high-priority events
-3. **Persistent queue**: Optional disk-backed queue for reliability
-4. **Circuit breakers**: Per-consumer circuit breakers
-5. **Event replay**: Ability to replay events for debugging
+All exported functions and methods are safe for concurrent use. Consumer registration is mutex protected, and the counters in `EventBusStats` are atomics.

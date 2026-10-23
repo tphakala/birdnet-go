@@ -115,6 +115,12 @@ interface ImportResponse {
   total: number;
 }
 
+/** Runtime state of the alert rules engine. */
+export interface AlertStatus {
+  /** True when alert rules handle detection notifications instead of the legacy push filters. */
+  engine_active: boolean;
+}
+
 // ---------- Filter types ----------
 
 export interface AlertRuleFilter {
@@ -207,6 +213,11 @@ export async function clearAlertHistory(): Promise<{ deleted: number }> {
 /** Fetch the alerting schema for the UI. */
 export async function fetchAlertSchema(): Promise<AlertSchema> {
   return api.get<AlertSchema>(`${BASE}/schema`);
+}
+
+/** Fetch whether the alert rules engine is active in the running server. */
+export async function fetchAlertStatus(): Promise<AlertStatus> {
+  return api.get<AlertStatus>(`${BASE}/status`);
 }
 
 /** Export all alert rules as JSON. */

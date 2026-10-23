@@ -6,21 +6,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // analyticsBatchFakeResolver is a test resolver that satisfies SpeciesNameResolver
-// and the optional batchLocalizer interface. It is distinct from the fakeResolver in
-// insights_nameresolver_test.go, which covers the forward (sci->common) path only.
-// Here the batch capability lets scientific-only labels (no embedded common name)
-// reach the commonToSci reverse map and become resolvable. Shared by the facade
-// name-map and exclude-list canonicalization tests.
+// and the optional batchLocalizer interface. The batch capability lets
+// scientific-only labels (no embedded common name) reach the commonToSci reverse
+// map and become resolvable. Shared by the search and exclude-list
+// canonicalization tests.
 type analyticsBatchFakeResolver struct{ batch map[string]string }
 
 func (a *analyticsBatchFakeResolver) Resolve(string, string) string      { return "" }
@@ -33,41 +30,6 @@ func (a *analyticsBatchFakeResolver) ResolveLocalizedBatch(names []string) map[s
 		}
 	}
 	return out
-}
-
-// TestNameMaps_PopulatesAllMaps verifies that a rebuild populates the display,
-// folded-search, and exact-resolution maps from the same label input, keeping them
-// consistent.
-func TestNameMaps_PopulatesAllMaps(t *testing.T) {
-	t.Parallel()
-
-	e := echo.New()
-	c := &Controller{Core: &apicore.Core{Group: e.Group("/api/v2")}}
-	c.names = speciesindex.New(nil)
-
-	labels := []string{
-		"Strix aluco_Tawny Owl",
-		"Parus major_Great Tit",
-	}
-	seedNames(t, c, nil, labels)
-
-	// Verify the scientific-to-common map (used by insights endpoints).
-	sciToCommon := c.loadCommonNameMap()
-	require.NotNil(t, sciToCommon)
-	assert.Equal(t, "Tawny Owl", sciToCommon["Strix aluco"])
-	assert.Equal(t, "Great Tit", sciToCommon["Parus major"])
-
-	// Verify the pre-folded scientific-to-common map (used by substring search).
-	folded := c.loadFoldedCommonNameMap()
-	require.NotNil(t, folded)
-	assert.Equal(t, "tawny owl", folded["Strix aluco"])
-	assert.Equal(t, "great tit", folded["Parus major"])
-
-	// Verify the common-to-scientific map (used by the search resolver).
-	commonToSci := c.loadCommonToScientificMap()
-	require.NotNil(t, commonToSci)
-	assert.Equal(t, "Strix aluco", commonToSci["tawny owl"])
-	assert.Equal(t, "Parus major", commonToSci["great tit"])
 }
 
 // Note: the ambiguous-common-name drop and malformed-label skipping previously

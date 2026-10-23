@@ -175,8 +175,7 @@ Create dedicated shares for better organization:
 ```
 /mnt/user/appdata/birdnet-go/    # Application data
 ├── config/                      # Configuration files
-│   ├── config.yaml             # Main configuration
-│   └── hls/                    # Temporary streaming files (tmpfs)
+│   └── config.yaml             # Main configuration
 └── data/                       # Persistent data
     ├── birdnet.db              # SQLite database
     ├── clips/                  # Audio recordings

@@ -22,7 +22,13 @@ import {
 } from '../../../../test/playSequences';
 import { MAX_AUDIO_LOAD_RETRIES, AUDIO_RETRY_DELAY_MS, CANPLAY_TIMEOUT_MS } from '$lib/utils/audio';
 import { loggers } from '$lib/utils/logger';
+import { mockAudioProbe, probeCalls } from '../../../../test/audioProbeMock';
 import { attachAudioGraphWhenRunning } from '$lib/utils/audioNodes';
+import {
+  clearSpectrogramSourceMarks,
+  isSpectrogramSourceKnownMissing,
+  markSpectrogramSourceMissing,
+} from '$lib/utils/spectrogramStatus';
 import AudioPlayer from './AudioPlayer.svelte';
 
 vi.mock('$lib/utils/audioContextManager', () => ({
@@ -320,6 +326,7 @@ describe('AudioPlayer recovery', () => {
     });
 
     afterEach(() => {
+      clearSpectrogramSourceMarks();
       globalThis.fetch = originalFetch;
       URL.createObjectURL = originalCreateObjectURL;
       URL.revokeObjectURL = originalRevokeObjectURL;
@@ -333,6 +340,29 @@ describe('AudioPlayer recovery', () => {
       await fireEvent.click(screen.getByText(BATS_ENABLE_TEXT));
       await settle();
     }
+
+    it('does not probe a failing audible-bats source', async () => {
+      mount({ modelType: 'bat' });
+      await activateAudibleBats();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(probeCalls()).toHaveLength(0);
+    });
+
+    it('keeps retrying an audible-bats source while the original is reported gone', async () => {
+      markSpectrogramSourceMissing('test-123');
+      mount({ modelType: 'bat' });
+      await activateAudibleBats();
+      const loadsBefore = ctl.load.mock.calls.length;
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(ctl.load.mock.calls.length).toBe(loadsBefore + 1);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
 
     it('resumes playback on the swapped source', async () => {
       const { container } = mount({ modelType: 'bat' });
@@ -434,4 +464,467 @@ describe('AudioPlayer recovery', () => {
       });
     }
   );
+
+  describe('spectrogram retry and error state', () => {
+    const SPECTROGRAM_ALT = 'components.audio.spectrogramAlt';
+    const SPECTROGRAM_UNAVAILABLE_TEXT = 'components.audio.spectrogramUnavailable';
+    // Longer than the sum of all retry backoffs (500 + 1000 + 2000 + 4000 ms)
+    const PAST_ALL_BACKOFFS_MS = 10_000;
+    // First entry of SPECTROGRAM_RETRY_DELAYS in AudioPlayer.svelte
+    const SPECTROGRAM_FIRST_RETRY_DELAY_MS = 500;
+    // SPECTROGRAM_POLL_INTERVAL in AudioPlayer.svelte
+    const POLL_INTERVAL_MS = 2000;
+    // MAX_POLL_DURATION in AudioPlayer.svelte
+    const MAX_POLL_DURATION_MS = 5 * 60 * 1000;
+    const SERVER_ERROR_STATUS = 500;
+    const NOT_FOUND_STATUS = 404;
+    // Failed status answers before the endpoint recovers, enough to outlast the image retries
+    const STATUS_ERRORS_BEFORE_RECOVERY = 8;
+    let originalFetch: typeof globalThis.fetch;
+
+    function statusResponse(status: string, httpStatus = 200, reason?: string): Response {
+      return new Response(JSON.stringify({ status, ...(reason ? { reason } : {}) }), {
+        status: httpStatus,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Answers the status endpoint from a queue, one entry per request.
+    function stubStatusFetch(responses: Response[]) {
+      const stub = vi.fn(async () => {
+        const next = responses.shift();
+        if (!next) throw new Error('unexpected extra status request');
+        return next;
+      });
+      globalThis.fetch = stub;
+      return stub;
+    }
+
+    function spectrogramImg(): HTMLImageElement {
+      return screen.getByAltText<HTMLImageElement>(SPECTROGRAM_ALT);
+    }
+
+    beforeEach(() => {
+      originalFetch = globalThis.fetch;
+    });
+
+    afterEach(() => {
+      globalThis.fetch = originalFetch;
+      clearSpectrogramSourceMarks();
+    });
+
+    describe('status reason', () => {
+      it.each([
+        ['not_started', 'source_missing'],
+        ['not_started', 'source_invalid'],
+      ])(
+        'ends every retry within one tick for a failed image and %s with %s',
+        async (status, reason) => {
+          const stub = stubStatusFetch([statusResponse(status, 200, reason)]);
+          mount();
+
+          await fireEvent.error(spectrogramImg());
+          await vi.advanceTimersByTimeAsync(0);
+
+          expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+          await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS + MAX_POLL_DURATION_MS);
+          expect(spectrogramImg().getAttribute('src')).not.toContain('retry=');
+          expect(stub).toHaveBeenCalledTimes(1);
+        }
+      );
+
+      it.each(['source_pending', 'busy', 'render_failed'])(
+        'keeps the capped image retries for a failed status with %s',
+        async reason => {
+          const stub = stubStatusFetch([statusResponse('failed', 200, reason)]);
+          mount();
+
+          await fireEvent.error(spectrogramImg());
+          await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+
+          expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+          expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+          expect(stub).toHaveBeenCalledTimes(1);
+        }
+      );
+
+      it('marks the clip as known missing for source_missing only', async () => {
+        stubStatusFetch([statusResponse('not_started', 200, 'source_missing')]);
+        mount();
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(0);
+        expect(isSpectrogramSourceKnownMissing('test-123')).toBe(true);
+
+        cleanup();
+        clearSpectrogramSourceMarks();
+        stubStatusFetch([statusResponse('failed', 200, 'source_invalid')]);
+        mount({ detectionId: 'other-1' });
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(0);
+        expect(isSpectrogramSourceKnownMissing('other-1')).toBe(false);
+      });
+
+      it('marks the clip as known missing when failed carries source_missing', async () => {
+        stubStatusFetch([statusResponse('failed', 200, 'source_missing')]);
+        mount();
+
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(isSpectrogramSourceKnownMissing('test-123')).toBe(true);
+      });
+
+      it('ends the image retries when a later poll reports a terminal reason', async () => {
+        stubStatusFetch([
+          statusResponse('generating'),
+          statusResponse('not_started', 200, 'source_missing'),
+        ]);
+        mount();
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+        expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+
+        await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+        await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+
+        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+        expect(spectrogramImg().getAttribute('src')).not.toContain('retry=2');
+      });
+
+      it.each(['source_pending', 'not_generated'])(
+        'keeps the image retries going for not_started with %s',
+        async reason => {
+          stubStatusFetch([statusResponse('not_started', 200, reason)]);
+          mount();
+
+          await fireEvent.error(spectrogramImg());
+          await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+
+          expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+          expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+        }
+      );
+    });
+
+    it('stops the image retries when the status poll reports failed', async () => {
+      stubStatusFetch([statusResponse('failed')]);
+      mount();
+
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+
+      expect(spectrogramImg().getAttribute('src')).not.toContain('retry=');
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+    });
+
+    it('clears the unavailable overlay when the image loads after a failure', async () => {
+      stubStatusFetch([statusResponse('failed')]);
+      mount();
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+
+      await fireEvent.load(spectrogramImg());
+
+      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+      expect(spectrogramImg().classList.contains('invisible')).toBe(false);
+    });
+
+    it('starts a fresh request with retry count 0 when the detection changes after a failure', async () => {
+      stubStatusFetch([statusResponse('not_started')]);
+      const { rerender } = mount();
+      // Exhaust the retries so the loader ends in the error state
+      for (let i = 0; i < 5; i++) {
+        await fireEvent.error(spectrogramImg());
+        await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+      }
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      expect(spectrogramImg().getAttribute('src')).toContain('retry=');
+
+      await rerender({ audioUrl: '/audio/next.mp3', detectionId: 'next-456' });
+
+      const src = spectrogramImg().getAttribute('src') ?? '';
+      expect(src).toContain('/api/v2/spectrogram/next-456');
+      expect(src).not.toContain('retry=');
+      expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE_TEXT)).not.toBeInTheDocument();
+    });
+
+    it('stops polling after the maximum poll duration when every status request fails', async () => {
+      const stub = vi.fn(async () => statusResponse('', SERVER_ERROR_STATUS));
+      globalThis.fetch = stub;
+      mount();
+      await fireEvent.error(spectrogramImg());
+
+      await vi.advanceTimersByTimeAsync(MAX_POLL_DURATION_MS + POLL_INTERVAL_MS * 2);
+      const callsAtLimit = stub.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(MAX_POLL_DURATION_MS);
+
+      // Polling kept going until the limit, then stopped for good
+      expect(callsAtLimit).toBeGreaterThan(MAX_POLL_DURATION_MS / POLL_INTERVAL_MS / 2);
+      expect(stub.mock.calls.length).toBe(callsAtLimit);
+    });
+
+    it('keeps polling after the status request throws a network error', async () => {
+      const stub = vi
+        .fn()
+        .mockRejectedValueOnce(new TypeError('network down'))
+        .mockResolvedValueOnce(statusResponse('failed'));
+      globalThis.fetch = stub;
+      mount();
+
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS);
+
+      expect(stub).toHaveBeenCalledTimes(2);
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+    });
+
+    it('does not restart the image retries when failed arrives while a retry is in flight', async () => {
+      let answer: (r: Response) => void = () => {};
+      globalThis.fetch = vi.fn(
+        () =>
+          new Promise<Response>(resolve => {
+            answer = resolve;
+          })
+      );
+      mount();
+      await fireEvent.error(spectrogramImg());
+      // The first retry fires and its image request is now in flight
+      await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+      expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+
+      answer(statusResponse('failed'));
+      await vi.advanceTimersByTimeAsync(0);
+      // The in-flight image request fails after the status answer
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(PAST_ALL_BACKOFFS_MS);
+
+      expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+      expect(spectrogramImg().getAttribute('src')).not.toContain('retry=2');
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+    });
+
+    it('retries again after a failed status once a later attempt starts', async () => {
+      stubStatusFetch([statusResponse('failed'), statusResponse('generating')]);
+      mount();
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(0);
+      // A late load ends the failed attempt; the next failure begins a new one
+      await fireEvent.load(spectrogramImg());
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(SPECTROGRAM_FIRST_RETRY_DELAY_MS);
+
+      expect(spectrogramImg().getAttribute('src')).toContain('retry=1');
+    });
+
+    it('ends polling at a permanent client error from the status endpoint', async () => {
+      const stub = vi.fn(async () => statusResponse('', NOT_FOUND_STATUS));
+      globalThis.fetch = stub;
+      mount();
+
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(MAX_POLL_DURATION_MS);
+
+      expect(stub).toHaveBeenCalledTimes(1);
+    });
+
+    it('still reloads the image when the status recovers after the image retries ran out', async () => {
+      const stub = stubStatusFetch([
+        ...Array.from({ length: STATUS_ERRORS_BEFORE_RECOVERY }, () =>
+          statusResponse('', SERVER_ERROR_STATUS)
+        ),
+        statusResponse('exists'),
+      ]);
+      mount();
+      await fireEvent.error(spectrogramImg());
+      // Run every image retry out at its backoff; each retry request fails in turn
+      for (const backoffMs of [500, 1000, 2000, 4000]) {
+        await vi.advanceTimersByTimeAsync(backoffMs);
+        await fireEvent.error(spectrogramImg());
+      }
+      expect(screen.getByText(SPECTROGRAM_UNAVAILABLE_TEXT)).toBeInTheDocument();
+      // The status endpoint has not recovered yet, so the poll is still running
+      expect(stub.mock.calls.length).toBeLessThan(STATUS_ERRORS_BEFORE_RECOVERY);
+
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * STATUS_ERRORS_BEFORE_RECOVERY);
+
+      expect(stub).toHaveBeenCalledTimes(STATUS_ERRORS_BEFORE_RECOVERY + 1);
+      expect(spectrogramImg().getAttribute('src')).toContain('cache=1');
+    });
+
+    it('does not keep polling when a cancelled poll rejects with a non-abort error', async () => {
+      let fail: (e: Error) => void = () => {};
+      const stub = vi.fn(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            fail = reject;
+          })
+      );
+      globalThis.fetch = stub;
+      const { unmount } = mount();
+      await fireEvent.error(spectrogramImg());
+      expect(stub).toHaveBeenCalledTimes(1);
+
+      unmount();
+      fail(new TypeError('network down'));
+      await vi.advanceTimersByTimeAsync(MAX_POLL_DURATION_MS);
+
+      expect(stub).toHaveBeenCalledTimes(1);
+    });
+
+    it('drops the generating overlay when the image loads', async () => {
+      stubStatusFetch([statusResponse('generating')]);
+      mount();
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(0);
+      expect(screen.getByText('components.audio.generating')).toBeInTheDocument();
+
+      await fireEvent.load(spectrogramImg());
+
+      expect(screen.queryByText('components.audio.generating')).not.toBeInTheDocument();
+    });
+
+    it('keeps polling after a failed status request and reloads the image once it exists', async () => {
+      const stub = stubStatusFetch([
+        statusResponse('', SERVER_ERROR_STATUS),
+        statusResponse('generating'),
+        statusResponse('exists'),
+      ]);
+      mount();
+
+      await fireEvent.error(spectrogramImg());
+      await vi.advanceTimersByTimeAsync(POLL_INTERVAL_MS * 3);
+
+      expect(stub).toHaveBeenCalledTimes(3);
+      expect(spectrogramImg().getAttribute('src')).toContain('cache=1');
+    });
+  });
+  describe('probe before retry', () => {
+    const MISSING_STATUS = 404;
+    const PENDING_STATUS = 503;
+    const PARTIAL_STATUS = 206;
+    const RETRY_AFTER_SECONDS = 9;
+    // Far longer than every retry delay, so a stray retry would show.
+    const LONG_WAIT_MS = AUDIO_RETRY_DELAY_MS * 10;
+    let restoreFetch: (() => void) | undefined;
+
+    afterEach(() => {
+      restoreFetch?.();
+      restoreFetch = undefined;
+      clearSpectrogramSourceMarks();
+    });
+
+    it('sends one ranged probe and no retries when the clip answers 404', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS });
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(probeCalls()).toHaveLength(1);
+      expect(probeCalls()[0]?.[0]).toBe('/audio/test.mp3');
+      expect(ctl.load).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(LOAD_ERROR_TEXT);
+    });
+
+    it('retries after Retry-After when the clip answers 503', async () => {
+      restoreFetch = mockAudioProbe({
+        status: PENDING_STATUS,
+        headers: { 'Retry-After': String(RETRY_AFTER_SECONDS) },
+      });
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+      expect(ctl.load).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(RETRY_AFTER_SECONDS * 1000 - AUDIO_RETRY_DELAY_MS);
+
+      expect(ctl.load).toHaveBeenCalledTimes(1);
+      expect(probeCalls()).toHaveLength(1);
+    });
+
+    it('keeps the scheduled retry when the probe answers 206', async () => {
+      restoreFetch = mockAudioProbe({ status: PARTIAL_STATUS });
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+
+      expect(probeCalls()).toHaveLength(1);
+      expect(ctl.load).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends no request and no retry for a clip the server reported gone', async () => {
+      restoreFetch = mockAudioProbe({ status: PARTIAL_STATUS });
+      markSpectrogramSourceMissing('test-123');
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(probeCalls()).toHaveLength(0);
+      expect(ctl.load).not.toHaveBeenCalled();
+      expect(screen.getByRole('alert')).toHaveTextContent(LOAD_ERROR_TEXT);
+    });
+
+    it('ignores a 404 that arrives after the retry already fired', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
+      mount();
+
+      ctl.failLoad();
+      await vi.advanceTimersByTimeAsync(AUDIO_RETRY_DELAY_MS);
+      expect(ctl.load).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(LONG_WAIT_MS);
+
+      expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('probes only the first failure of a cycle and again after the budget resets', async () => {
+      restoreFetch = mockAudioProbe({ status: PARTIAL_STATUS });
+      const { container } = mount();
+
+      await exhaustLoadRetries(ctl);
+      expect(probeCalls()).toHaveLength(1);
+
+      await press(container);
+      ctl.failLoad();
+      await settle();
+
+      expect(probeCalls()).toHaveLength(2);
+    });
+
+    it('aborts the probe when the clip loads', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
+      mount();
+
+      ctl.failLoad();
+      ctl.completeLoad();
+
+      expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
+    });
+
+    it('ignores a probe answer for a clip that is no longer the current source', async () => {
+      const probeDelayMs = AUDIO_RETRY_DELAY_MS / 4;
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: probeDelayMs });
+      const { rerender } = mount();
+
+      ctl.failLoad();
+      await rerender({ audioUrl: '/audio/other.mp3', detectionId: 'other-1' });
+      await vi.advanceTimersByTimeAsync(probeDelayMs * 2);
+
+      expect(probeCalls()).toHaveLength(1);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('aborts the probe when the player unmounts', async () => {
+      restoreFetch = mockAudioProbe({ status: MISSING_STATUS, delayMs: LONG_WAIT_MS });
+      mount();
+
+      ctl.failLoad();
+      cleanup();
+
+      expect(probeCalls()[0]?.[1].signal?.aborted).toBe(true);
+    });
+  });
 });

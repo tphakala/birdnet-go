@@ -15,6 +15,11 @@ const DefaultPrecisionHint = "f16"
 // f16 (see classifier.openVINOPrecisionFor for the BirdNET v2.4 iGPU case).
 const PrecisionF32 = "f32"
 
+// DefaultLibraryName is the soname the backend dlopens when no library path is
+// configured. It mirrors the fallback in ovbind_load (backend_openvino.go) and
+// is used only to report which library a path-less load resolved to.
+const DefaultLibraryName = "libopenvino_c.so"
+
 const (
 	// DeviceCPU is the OpenVINO CPU device. ARMv8.2 f16 acceleration runs here.
 	DeviceCPU = "CPU"

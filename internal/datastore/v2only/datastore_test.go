@@ -16,6 +16,7 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
@@ -340,6 +341,32 @@ func TestV2OnlyDatastore_GetSpeciesFirstAndLastDetectionTimeBefore(t *testing.T)
 		require.NoError(t, err)
 		assert.Nil(t, first)
 		assert.Nil(t, last)
+	})
+
+	t.Run("each bound skips false positives but keeps reviewed-correct detections", func(t *testing.T) {
+		// Both ends of the range are false positives, so each bound must skip
+		// its own end. The newest genuine detection carries a "correct" review,
+		// which must not be excluded along with the false positives.
+		review := func(ts time.Time, status entities.VerificationStatus) {
+			t.Helper()
+			det := seedDetection(t, ds, "Sylvia atricapilla", ts)
+			require.NoError(t, ds.manager.DB().Create(&entities.DetectionReview{
+				DetectionID: det.ID,
+				Verified:    status,
+			}).Error)
+		}
+		review(day(9, 8), entities.VerificationFalsePositive)
+		seedDetection(t, ds, "Sylvia atricapilla", day(10, 8))
+		seedDetection(t, ds, "Sylvia atricapilla", day(12, 8))
+		review(day(13, 8), entities.VerificationCorrect)
+		review(day(14, 8), entities.VerificationFalsePositive)
+
+		first, last, err := ds.GetSpeciesFirstAndLastDetectionTimeBefore(ctx, "Sylvia atricapilla", before)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		require.NotNil(t, last)
+		assert.Equal(t, day(10, 8), *first)
+		assert.Equal(t, day(13, 8), *last)
 	})
 
 	t.Run("sound class name does not prefix-match a longer class", func(t *testing.T) {
@@ -2114,7 +2141,7 @@ func TestV2OnlyDatastore_NewSpeciesWindowAfterMidnightReload(t *testing.T) {
 // GetSpeciesDiversityData buckets by the configured timezone, not UTC or the OS-local zone. A
 // detection at a fixed UTC instant 30 minutes before midnight must group on the NEXT calendar day
 // when the configured zone is UTC+5. The negative assertion (the UTC date does not match) proves
-// the bucketing is genuinely offset-aware, and exercises the BETWEEN date filter end-to-end.
+// the bucketing is genuinely offset-aware, and exercises the date range filter end-to-end.
 func TestV2OnlyDatastore_GetSpeciesDiversityData_TimezoneBucketing(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
@@ -2233,4 +2260,142 @@ func TestV2OnlyDatastore_DynamicThreshold_EmptySpeciesRejected(t *testing.T) {
 		ExpiresAt:     time.Now().Add(24 * time.Hour),
 	}})
 	require.Error(t, batchErr, "empty species name must be rejected in batch save")
+}
+
+// TestV2OnlyDatastore_Save_PersistsModelContributions verifies that saving a detection
+// via DetectionRepository.Save (and Datastore.Save) persists per-model consensus
+// contributions to detection_model_contributions and deduplicates colliding model IDs (#4648).
+func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ctx := t.Context()
+
+	repo := datastore.NewDetectionRepository(ds, time.UTC)
+
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	result := &detection.Result{
+		Timestamp:  now,
+		SourceNode: "Large Garage Wall",
+		Species: detection.Species{
+			ScientificName: "Poecile carolinensis",
+			CommonName:     "carolina chickadee",
+		},
+		Confidence: 0.92,
+		Model:      detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
+		ModelContributions: map[string]detection.ResultModelContrib{
+			"BirdNET_V2.4": {
+				Model:         detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
+				HitCount:      8,
+				MaxConfidence: 0.92,
+			},
+			"BirdNET_V3.0": {
+				Model:         detection.ModelInfo{Name: "BirdNET", Version: "3.0", Variant: "EUNA"},
+				HitCount:      5,
+				MaxConfidence: 0.87,
+			},
+			"Perch_V2": {
+				Model:         detection.ModelInfo{Name: "Perch", Version: "2", Variant: "default"},
+				HitCount:      3,
+				MaxConfidence: 0.84,
+			},
+		},
+	}
+
+	require.NoError(t, repo.Save(ctx, result, nil))
+	require.NotZero(t, result.ID)
+
+	var contribs []entities.DetectionModelContribution
+	require.NoError(t, ds.manager.DB().
+		Preload("Model").
+		Where("detection_id = ?", result.ID).
+		Find(&contribs).Error)
+	require.Len(t, contribs, 3, "all three contributing models must be saved in detection_model_contributions")
+
+	byModel := make(map[string]entities.DetectionModelContribution, len(contribs))
+	for _, c := range contribs {
+		require.NotNil(t, c.Model)
+		key := fmt.Sprintf("%s_%s_%s", c.Model.Name, c.Model.Version, c.Model.Variant)
+		byModel[key] = c
+	}
+
+	require.Contains(t, byModel, "BirdNET_2.4_default")
+	assert.Equal(t, 8, byModel["BirdNET_2.4_default"].HitCount)
+	assert.InDelta(t, 0.92, byModel["BirdNET_2.4_default"].MaxConfidence, 1e-9)
+
+	require.Contains(t, byModel, "BirdNET_3.0_EUNA")
+	assert.Equal(t, 5, byModel["BirdNET_3.0_EUNA"].HitCount)
+	assert.InDelta(t, 0.87, byModel["BirdNET_3.0_EUNA"].MaxConfidence, 1e-9)
+
+	require.Contains(t, byModel, "Perch_2_default")
+	assert.Equal(t, 3, byModel["Perch_2_default"].HitCount)
+	assert.InDelta(t, 0.84, byModel["Perch_2_default"].MaxConfidence, 1e-9)
+
+	// Also verify deduplication when two contribution entries resolve to the same AIModel row.
+	dupNote := &datastore.Note{
+		ScientificName: "Spizella pallida",
+		CommonName:     "clay-colored sparrow",
+		Date:           "2026-10-17",
+		Time:           "12:01:00",
+		Confidence:     0.93,
+		ModelContributions: map[string]detection.ResultModelContrib{
+			"default_a": {
+				Model:         detection.ModelInfo{}, // resolves via WithDefaults() to BirdNET 2.4 default
+				HitCount:      2,
+				MaxConfidence: 0.81,
+			},
+			"default_b": {
+				Model:         detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
+				HitCount:      4,
+				MaxConfidence: 0.93,
+			},
+		},
+	}
+	require.NoError(t, ds.Save(dupNote, nil))
+	require.NotZero(t, dupNote.ID)
+
+	var dupContribs []entities.DetectionModelContribution
+	require.NoError(t, ds.manager.DB().
+		Where("detection_id = ?", dupNote.ID).
+		Find(&dupContribs).Error)
+	require.Len(t, dupContribs, 1, "colliding ModelIDs must be merged into a single row")
+	assert.Equal(t, 6, dupContribs[0].HitCount)
+	assert.InDelta(t, 0.93, dupContribs[0].MaxConfidence, 1e-9)
+}
+
+// TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail verifies that model
+// contributions are best-effort: a failure to persist them must not fail the save
+// or roll back the detection (#4648).
+func TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	// Make every contribution write fail while detections stay writable.
+	require.NoError(t, ds.manager.DB().Migrator().DropTable(&entities.DetectionModelContribution{}))
+
+	note := &datastore.Note{
+		ScientificName: "Poecile carolinensis",
+		CommonName:     "carolina chickadee",
+		Date:           "2026-10-17",
+		Time:           "12:00:00",
+		Confidence:     0.92,
+		ModelContributions: map[string]detection.ResultModelContrib{
+			"BirdNET_V2.4": {
+				Model:         detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
+				HitCount:      8,
+				MaxConfidence: 0.92,
+			},
+		},
+	}
+
+	require.NoError(t, ds.Save(note, nil), "a contribution failure must not fail the detection save")
+	require.NotZero(t, note.ID, "the detection ID must still be propagated to the note")
+
+	var count int64
+	require.NoError(t, ds.manager.DB().Model(&entities.Detection{}).
+		Where("id = ?", note.ID).Count(&count).Error)
+	assert.Equal(t, int64(1), count, "the detection row must survive a contribution failure")
 }

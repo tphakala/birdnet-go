@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt bei der eingestellten Überlappung von {configured} s die gemessene Kapazität dieses Geräts, daher wird mit {effective} s Überlappung analysiert. Der Falsch-Positiv-Filter kann dadurch weniger Bestätigungen verlangen. Ihre gespeicherten Einstellungen bleiben unverändert; siehe Einstellungen > Analyse.",
         "cadenceOverloadedTitle": "Dieses Gerät kommt mit der Audioanalyse nicht hinterher",
         "cadenceOverloadedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt die gemessene Kapazität dieses Geräts selbst ohne Überlappung, daher kann die Analyse in Verzug geraten und Erkennungen können verloren gehen. Aktivieren Sie weniger Modelle oder Audioquellen, oder wählen Sie eine schnellere Modellvariante."
+      },
+      "storage": {
+        "notPersistentTitle": "Daten gehen verloren, wenn der Container neu erstellt wird",
+        "notPersistentMessage": "Diese Pfade liegen auf Speicher, der gelöscht wird, wenn der Container neu erstellt wird, zum Beispiel bei einem Image-Update: {paths}. Ordnen Sie ihnen in Ihrer Container-Konfiguration ein Volume oder ein Host-Verzeichnis zu.",
+        "anonymousVolumeTitle": "Daten liegen in einem anonymen Container-Volume",
+        "anonymousVolumeMessage": "Diese Pfade liegen in anonymen Volumes, die die Container-Laufzeit angelegt hat, weil kein Volume zugeordnet war: {paths}. Ein frisch gestarteter Container, zum Beispiel mit docker run nach einem Image-Update, erhält neue leere Volumes, sodass die Daten verloren scheinen. Ordnen Sie ihnen ein benanntes Volume oder ein Host-Verzeichnis zu."
       }
     },
     "loading": "Benachrichtigungen werden geladen..."
@@ -1576,7 +1582,7 @@
           "restartTitle": "Neustart erforderlich",
           "restartBody": "Starten Sie die Anwendung neu, um zur V2-Datenbank zu wechseln. Die Bereinigung der Legacy-Datenbank ist nach dem Neustart verfügbar.",
           "fallbackError": "Abweichung der Datensatzanzahl zwischen Legacy- und V2-Datenbank. Einige Datensätze wurden möglicherweise nicht korrekt migriert.",
-          "migrateInfo": "Die Migration überträgt {count} Datensätze von der Legacy-Datenbank in das neue V2-Schema. Der Dual-Write-Modus stellt sicher, dass während der Migration keine Daten verloren gehen.",
+          "migrateInfo": "Die Migration überträgt {count} Datensätze von der Legacy-Datenbank in das neue V2-Schema. Während der Migration gespeicherte neue Erkennungen werden ebenfalls in die neue Datenbank kopiert.",
           "sourceLegacy": "Quelle (Legacy)",
           "targetV2": "Ziel (V2)",
           "recordsLabel": "Datensätze",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "Sie können das System normal weiter verwenden, während die Migration im Hintergrund läuft.",
-          "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
+          "dual_write": "Migration läuft. Ihre Daten sind sicher - neue Erkennungen werden in der aktuellen Datenbank gespeichert und während der Migration in die neue Datenbank kopiert. Sie können BirdNET-Go normal weiter nutzen.",
           "migrating": "Kopiere Ihre bestehenden Erkennungen in die neue Datenbank. Dies kann je nach Anzahl der Erkennungen eine Weile dauern. Sie können jederzeit pausieren und fortsetzen.",
           "validating": "Überprüfe, ob alle Datensätze korrekt kopiert wurden. Fast fertig!",
           "cutover": "Wechsle zur neuen Datenbank. Das dauert nur einen Moment.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Ideal für schwache Signale. Vogelrufe heben sich deutlich vom Hintergrundrauschen ab. Empfohlen für wissenschaftliche/Graustufen-Stile.",
                   "standard": "Ausgewogene Standardeinstellung. Gut für die meisten Anwendungsfälle.",
-                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast. SoX-Standardwert."
+                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "Was im Bericht enthalten ist:",
           "applicationLogs": "**Anwendungsprotokolle** - Aktuelle Fehler und Debug-Informationen",
           "configuration": "**Konfiguration** - Ihre Einstellungen mit entfernten sensiblen Daten",
-          "systemInfo": "**Systeminformationen** - Betriebssystemversion, Speicher und Laufzeitdetails",
+          "systemInfo": "**Systeminformationen** - Betriebssystemversion, Speicher, Hardware, angeschlossene USB-Geräte und Soundkarten sowie Laufzeitdetails",
           "notIncluded": "**NICHT enthalten** - Audiodateien, Vogelerkennungen oder persönliche Daten"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "Min",
             "helpText": "Verhindert wiederholte Benachrichtigungen für dieselbe Art innerhalb dieses Zeitfensters. Auf 0 setzen zum Deaktivieren."
           }
+        },
+        "rulesNotice": {
+          "message": "Push-Benachrichtigungen für Erkennungen kommen von den Alarmregeln auf der Registerkarte Regeln. Die integrierten Erkennungsregeln benachrichtigen nur in der App. Um Push-Benachrichtigungen zu erhalten, fügen Sie der Regel {ruleName} die Aktion {pushAction} hinzu oder erstellen Sie eine Regel für das Ereignis {eventName} mit einer Konfidenzbedingung und einer Abklingzeit.",
+          "previousFilters": "Ihre Einstellungen Mindestkonfidenz ({confidence} %) und Arten-Abklingzeit ({minutes} Min) hier werden von Alarmregeln nicht verwendet.",
+          "openRules": "Regeln öffnen"
         },
         "noProviders": "Keine Anbieter konfiguriert",
         "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um Push-Benachrichtigungen zu erhalten",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Erkennungen zu BirdWeather hochladen",
-        "ffmpegWarning": {
-          "title": "FFmpeg nicht erkannt",
-          "message": "Bitte installieren Sie FFmpeg, um die FLAC-Kodierungsunterstützung zu aktivieren. BirdWeather veraltet WAV-Uploads zugunsten komprimierter FLAC-Audiodateien."
-        },
         "enable": "BirdWeather-Uploads aktivieren",
         "token": {
           "label": "BirdWeather-Token",
@@ -5153,6 +5160,7 @@
       "loop": "Wiederholung umschalten",
       "player": "Audioplayer",
       "autoplayBlocked": "Klicken zum Abspielen (Autoplay blockiert)",
+      "hlsLoadFailed": "Der Audioplayer konnte nicht geladen werden, bitte die Seite neu laden und erneut versuchen",
       "hlsNotSupported": "HLS-Wiedergabe wird in diesem Browser nicht unterstützt",
       "streamStarting": "Audiostream wird gestartet...",
       "levelFor": "Audiopegel für {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "Ungültiges JSON",
       "invalidEscalation": "Eskalationsstufen sind ungültig",
       "engineUnavailable": "Die Alerting-Engine ist nicht verfügbar"
+    },
+    "insights": {
+      "v2Required": "Einblicke erfordern die erweiterte (v2) Datenbank"
     },
     "detection": {
       "invalidDate": "Ungültiges {paramName}-Format, verwenden Sie JJJJ-MM-TT"

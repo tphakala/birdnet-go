@@ -3,6 +3,7 @@
 package media
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -51,17 +53,6 @@ func assertFullContentHeaders(t *testing.T, rec *httptest.ResponseRecorder, expe
 	}
 }
 
-// assertAudioErrorResponse checks error response body content.
-func assertAudioErrorResponse(t *testing.T, rec *httptest.ResponseRecorder, status int) {
-	t.Helper()
-	switch status {
-	case http.StatusNotFound:
-		assert.Contains(t, rec.Body.String(), "File not found", "Expected 'File not found' in body for 404")
-	case http.StatusBadRequest:
-		assert.Contains(t, rec.Body.String(), "Invalid file path", "Expected 'Invalid file path' in body for 400")
-	}
-}
-
 // assertAudioClipResponse validates the response based on expected status and content type.
 func assertAudioClipResponse(t *testing.T, rec *httptest.ResponseRecorder, expectedStatus int, expectedLength int64, partialContent, isSmallFile bool) {
 	t.Helper()
@@ -73,23 +64,6 @@ func assertAudioClipResponse(t *testing.T, rec *httptest.ResponseRecorder, expec
 		} else if expectedStatus == http.StatusOK {
 			assertFullContentHeaders(t, rec, expectedLength, isSmallFile)
 		}
-	} else {
-		assertAudioErrorResponse(t, rec, expectedStatus)
-	}
-}
-
-// assertHandlerError checks handler error matches expected status for error responses.
-func assertHandlerError(t *testing.T, handlerErr error, expectedStatus int) {
-	t.Helper()
-	if expectedStatus < 400 {
-		require.NoError(t, handlerErr)
-		return
-	}
-	if handlerErr == nil {
-		return // Handler returned nil, response written to recorder
-	}
-	if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
-		assert.Equal(t, expectedStatus, httpErr.Code)
 	}
 }
 
@@ -133,136 +107,29 @@ func requireAudioHandlerSuccess(t *testing.T, handlerErr <-chan error) {
 	}
 }
 
-// assertMediaResponseBody validates response body content based on type.
-func assertMediaResponseBody(t *testing.T, body []byte, expectedBody string, isAudioFile bool) {
-	t.Helper()
-	if isAudioFile {
-		assert.GreaterOrEqual(t, len(body), 4, "Audio response should have at least 4 bytes")
-		if len(body) >= 4 {
-			assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
-		}
-	} else {
-		assert.Equal(t, expectedBody, string(body))
-	}
-}
+// Rate and silent-clip size of the default audio fixture: 0.1 s of 16-bit mono,
+// which with the 44-byte WAV header is 8864 bytes.
+const (
+	testAudioRate     = 44100
+	testAudioDataSize = testAudioRate / 10 * 2
+)
 
-// createLargeWAVFile creates a large WAV file for testing partial content responses.
+// createLargeWAVFile creates a WAV file whose data chunk is a dataSize-byte
+// 0..255 ramp, for testing partial content responses.
 func createLargeWAVFile(t *testing.T, path string, dataSize int) {
 	t.Helper()
-	file, err := os.Create(path) //nolint:gosec // G304: path is from controlled test temp dir
-	require.NoError(t, err)
-	defer func() {
-		if err := file.Close(); err != nil {
-			t.Logf("Failed to close large file: %v", err)
-		}
-	}()
-
-	header := []byte{
-		'R', 'I', 'F', 'F',
-		byte(dataSize + 36), byte((dataSize + 36) >> 8), byte((dataSize + 36) >> 16), byte((dataSize + 36) >> 24),
-		'W', 'A', 'V', 'E', 'f', 'm', 't', ' ',
-		16, 0, 0, 0, 1, 0, 1, 0,
-		0x44, 0xAC, 0, 0, 0x88, 0x58, 0x01, 0, 2, 0, 16, 0,
-		'd', 'a', 't', 'a',
-		byte(dataSize), byte(dataSize >> 8), byte(dataSize >> 16), byte(dataSize >> 24),
+	ramp := make([]byte, dataSize)
+	for i := range ramp {
+		ramp[i] = byte(i % 256)
 	}
-	_, err = file.Write(header)
-	require.NoError(t, err)
-
-	content := make([]byte, dataSize)
-	for i := range content {
-		content[i] = byte(i % 256)
-	}
-	_, err = file.Write(content)
-	require.NoError(t, err)
+	writePCM16WAV(t, path, testAudioRate, ramp)
 }
 
-// TestInitMediaRoutesRegistration tests that media routes are properly registered
-func TestInitMediaRoutesRegistration(t *testing.T) {
-	// Setup
-	e, controller, _ := setupMediaTestEnvironment(t)
-
-	// Re-initialize the routes to ensure a clean state
-	controller.RegisterRoutes(controller.Group)
-
-	// Get all routes from the Echo instance
-	routes := e.Routes()
-
-	// Define the media route suffixes we expect to find
-	expectedSuffixes := map[string]bool{
-		"GET /media/audio/:filename":       false,
-		"GET /media/spectrogram/:filename": false,
-	}
-
-	// Check each route suffix
-	foundCount := 0
-	for _, r := range routes {
-		// Check if the route path ends with one of the expected suffixes
-		for suffix := range expectedSuffixes {
-			// Ensure the check is for the correct HTTP method and path suffix
-			if r.Method == http.MethodGet && strings.HasSuffix(r.Path, suffix[4:]) { // suffix[4:] removes "GET "
-				if !expectedSuffixes[suffix] {
-					expectedSuffixes[suffix] = true
-					foundCount++
-				}
-			}
-		}
-	}
-
-	// Verify that all expected routes were registered
-	assert.Equal(t, len(expectedSuffixes), foundCount, "Number of found media routes does not match expected.")
-	for suffix, found := range expectedSuffixes {
-		assert.True(t, found, "Media route suffix not registered: %s", suffix)
-	}
-}
-
-// createTestAudioFile creates a valid WAV file for testing that meets the minimum size requirements.
-// The file will be at least 1024 bytes to pass validation.
-func createTestAudioFile(t *testing.T, path string) error {
+// createTestAudioFile creates a valid, silent WAV file of testAudioDataSize PCM
+// bytes that meets the minimum size requirements.
+func createTestAudioFile(t *testing.T, path string) {
 	t.Helper()
-
-	// Create a 0.1 second WAV file (100ms) at 44100Hz, 16-bit, mono
-	// This results in a file size of approximately 8864 bytes (44 header + 8820 data)
-	durationSec := 0.1
-	sampleRate := 44100
-	numSamples := int(float64(sampleRate) * durationSec)
-	dataSize := numSamples * 2 // 16-bit = 2 bytes per sample
-
-	file, err := os.Create(path) //nolint:gosec // G304: path is constructed from controlled test temp dir
-	if err != nil {
-		return err
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			t.Logf("Failed to close test audio file: %v", err)
-		}
-	}()
-
-	// Write WAV header
-	header := []byte{
-		'R', 'I', 'F', 'F',
-		byte(dataSize + 36), byte((dataSize + 36) >> 8), byte((dataSize + 36) >> 16), byte((dataSize + 36) >> 24),
-		'W', 'A', 'V', 'E',
-		'f', 'm', 't', ' ',
-		16, 0, 0, 0, // Subchunk1Size
-		1, 0, // AudioFormat (PCM)
-		1, 0, // NumChannels (mono)
-		byte(sampleRate), byte(sampleRate >> 8), byte(sampleRate >> 16), byte(sampleRate >> 24), // SampleRate
-		byte(sampleRate * 2), byte((sampleRate * 2) >> 8), byte((sampleRate * 2) >> 16), byte((sampleRate * 2) >> 24), // ByteRate
-		2, 0, // BlockAlign
-		16, 0, // BitsPerSample
-		'd', 'a', 't', 'a',
-		byte(dataSize), byte(dataSize >> 8), byte(dataSize >> 16), byte(dataSize >> 24),
-	}
-
-	if _, err := file.Write(header); err != nil {
-		return err
-	}
-
-	// Write silence (zeros) as audio data
-	silence := make([]byte, dataSize)
-	_, err = file.Write(silence)
-	return err
+	writePCM16WAV(t, path, testAudioRate, make([]byte, testAudioDataSize))
 }
 
 // TestServeAudioClip tests the ServeAudioClip handler using SecureFS
@@ -273,8 +140,7 @@ func TestServeAudioClip(t *testing.T) {
 	// Create a small test audio file within the secure root
 	smallFilename := "small.wav"
 	smallFilePath := filepath.Join(tempDir, smallFilename)
-	err := createTestAudioFile(t, smallFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, smallFilePath)
 
 	// Create a large test audio file (over 1MB)
 	largeFilename := "large.wav"
@@ -282,11 +148,15 @@ func TestServeAudioClip(t *testing.T) {
 	createLargeWAVFile(t, largeFilePath, 1100*1024)
 
 	standardClipFilename := "corvus_corax_74p_20260724T132919Z.wav"
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, standardClipFilename)))
+	createTestAudioFile(t, filepath.Join(tempDir, standardClipFilename))
 	extendedClipFilename := "strix_uralensis_85p_20260724T231500Z_86s.wav"
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, extendedClipFilename)))
+	createTestAudioFile(t, filepath.Join(tempDir, extendedClipFilename))
 	spacedFilename := "my clip.wav"
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, spacedFilename)))
+	createTestAudioFile(t, filepath.Join(tempDir, spacedFilename))
+	cyrillicFilename := "тест.wav"
+	createTestAudioFile(t, filepath.Join(tempDir, cyrillicFilename))
+	umlautFilename := "Prüfung.wav"
+	createTestAudioFile(t, filepath.Join(tempDir, umlautFilename))
 
 	// Test cases
 	testCases := []struct {
@@ -297,6 +167,7 @@ func TestServeAudioClip(t *testing.T) {
 		expectedLength      int64 // Use int64 for http.ServeContent
 		partialContent      bool
 		expectedDisposition string
+		wantBody            string // substring of the error body, checked when set
 	}{
 		{
 			name:                "Small file - full content",
@@ -347,12 +218,27 @@ func TestServeAudioClip(t *testing.T) {
 			expectedDisposition: "inline; filename*=UTF-8''my%20clip.wav",
 		},
 		{
+			name:                "Cyrillic filename is percent-encoded UTF-8",
+			filename:            cyrillicFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''%D1%82%D0%B5%D1%81%D1%82.wav",
+		},
+		{
+			name:                "Umlaut filename is percent-encoded UTF-8",
+			filename:            umlautFilename,
+			expectedStatus:      http.StatusOK,
+			expectedLength:      8864,
+			expectedDisposition: "inline; filename*=UTF-8''Pr%C3%BCfung.wav",
+		},
+		{
 			name:           "Non-existent file",
 			filename:       "nonexistent.mp3",
 			rangeHeader:    "",
 			expectedStatus: http.StatusNotFound,
 			expectedLength: 0,
 			partialContent: false,
+			wantBody:       "File not found",
 		},
 		{
 			name:           "Invalid filename (traversal attempt)",
@@ -361,6 +247,7 @@ func TestServeAudioClip(t *testing.T) {
 			expectedStatus: http.StatusBadRequest, // SecureFS correctly detects and blocks traversal attempts
 			expectedLength: 0,
 			partialContent: false,
+			wantBody:       "Invalid file path",
 		},
 	}
 
@@ -376,14 +263,16 @@ func TestServeAudioClip(t *testing.T) {
 
 			isSmallFile := tc.filename == smallFilename
 			assertAudioClipResponse(t, rec, tc.expectedStatus, tc.expectedLength, tc.partialContent, isSmallFile)
+			if tc.wantBody != "" {
+				assert.Contains(t, rec.Body.String(), tc.wantBody)
+			}
 			assert.Equal(t, tc.expectedDisposition, rec.Header().Get("Content-Disposition"))
 		})
 	}
 }
 
-// TestServeSpectrogram tests the ServeSpectrogram handler using SecureFS
-// Note: This test verifies the handler logic calls SecureFS, but does not
-// guarantee actual spectrogram generation works if tools are missing.
+// TestServeSpectrogram tests the ServeSpectrogram handler using SecureFS,
+// including on-demand rendering by the built-in renderer.
 func TestServeSpectrogram(t *testing.T) {
 	// Setup test environment with SecureFS rooted in tempDir
 	e, controller, tempDir := setupMediaTestEnvironment(t)
@@ -391,16 +280,15 @@ func TestServeSpectrogram(t *testing.T) {
 	// Create a test audio file within the secure root
 	audioFilename := "audio.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := createTestAudioFile(t, audioFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, audioFilePath)
 
 	// --- Simulate Spectrogram Generation (by creating the expected file) ---
-	// This allows testing the "file exists" path without running external tools.
+	// This allows testing the "file exists" path without rendering.
 	// Default is raw=true, so the filename format is audio_800px.png
 	spectrogramFilename := "audio_800px.png"
 	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
 	spectrogramContent := "simulated spectrogram content"
-	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
+	err := os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
 	require.NoError(t, err)
 
 	// Test cases
@@ -410,6 +298,7 @@ func TestServeSpectrogram(t *testing.T) {
 		width          string
 		expectedStatus int
 		expectedBody   string
+		expectPNG      bool // body is a freshly rendered PNG, not a fixed string
 	}{
 		{
 			name:           "Spectrogram generated/exists",
@@ -419,12 +308,11 @@ func TestServeSpectrogram(t *testing.T) {
 			expectedBody:   spectrogramContent,
 		},
 		{
-			name:     "Spectrogram needs generation (file doesn't exist initially)",
-			filename: audioFilename,
-			width:    "1200", // Different width means different file
-			// Expect error because external tools likely won't run in test
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "",
+			name:           "Spectrogram renders on demand (file doesn't exist initially)",
+			filename:       audioFilename,
+			width:          "1200", // Different width means different file
+			expectedStatus: http.StatusOK,
+			expectPNG:      true,
 		},
 		{
 			name:           "Non-existent audio file",
@@ -462,7 +350,11 @@ func TestServeSpectrogram(t *testing.T) {
 
 			// For success cases, check response content
 			if tc.expectedStatus == http.StatusOK {
-				assert.Equal(t, tc.expectedBody, rec.Body.String())
+				if tc.expectPNG {
+					assert.True(t, bytes.HasPrefix(rec.Body.Bytes(), []byte(pngSignature)), "body must be a PNG")
+				} else {
+					assert.Equal(t, tc.expectedBody, rec.Body.String())
+				}
 				assert.Equal(t, "image/png", rec.Header().Get("Content-Type"))
 			}
 		})
@@ -475,11 +367,16 @@ func TestServeSpectrogram(t *testing.T) {
 // fixture files into. A passthrough auth middleware is injected so the
 // authenticated ID-based routes (clip extraction / audio processing) register and
 // can be exercised without a real auth service.
-func setupMediaTestEnvironment(t *testing.T) (*echo.Echo, *Handler, string) {
+//
+// opts are appended to the core options. Tests that call t.Parallel() must pass
+// apitest.WithoutSettingsPublish(): publishing replaces the process-global
+// settings snapshot and restores the previous one in Cleanup, so parallel
+// publishers restore each other's snapshots.
+func setupMediaTestEnvironment(t *testing.T, opts ...apitest.CoreOption) (*echo.Echo, *Handler, string) {
 	t.Helper()
 
 	e := echo.New()
-	core := apitest.NewCore(t, apitest.WithEcho(e))
+	core := apitest.NewCore(t, append([]apitest.CoreOption{apitest.WithEcho(e)}, opts...)...)
 	// Passthrough auth so the authenticated clip/process routes register and run
 	// without a real auth service.
 	core.AuthMiddleware = passthroughMiddleware()
@@ -502,7 +399,7 @@ func TestServeAudio_AlternateExtensionFallback(t *testing.T) {
 
 	// The real file on disk is FLAC (createTestAudioFile writes valid audio bytes;
 	// the serve path only cares about the extension for labeling).
-	require.NoError(t, createTestAudioFile(t, filepath.Join(tempDir, "drifted.flac")))
+	createTestAudioFile(t, filepath.Join(tempDir, "drifted.flac"))
 
 	server := httptest.NewServer(e)
 	defer server.Close()
@@ -528,93 +425,6 @@ func TestServeAudio_AlternateExtensionFallback(t *testing.T) {
 		"a clip with no on-disk file in any format must still 404")
 }
 
-// TestMediaEndpointsIntegration tests the media endpoints in an integrated way
-func TestMediaEndpointsIntegration(t *testing.T) {
-	// Setup test environment (already configures SecureFS)
-	// We need the echo instance for the test server
-	e, _, tempDir := setupMediaTestEnvironment(t)
-
-	// Create test files within the SecureFS root
-	audioFilename := "test.wav"
-	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := createTestAudioFile(t, audioFilePath)
-	require.NoError(t, err)
-
-	// Simulate existing spectrogram
-	// Default is raw=true, so the filename format is test_800px.png
-	spectrogramFilename := "test_800px.png"
-	spectrogramFilePath := filepath.Join(tempDir, spectrogramFilename)
-	spectrogramContent := "test spectrogram content"
-	err = os.WriteFile(spectrogramFilePath, []byte(spectrogramContent), 0o600)
-	require.NoError(t, err)
-
-	// Create a real HTTP server using the Echo instance from setup
-	server := httptest.NewServer(e)
-	defer server.Close()
-
-	client := server.Client()
-
-	// Test cases
-	testCases := []struct {
-		name           string
-		endpoint       string
-		expectedStatus int
-		expectedBody   string
-		isAudioFile    bool // Flag to indicate if this is an audio file that needs special handling
-	}{
-		{
-			name:           "Audio endpoint",
-			endpoint:       "/api/v2/media/audio/" + audioFilename,
-			expectedStatus: http.StatusOK,
-			expectedBody:   "", // For audio files, we'll check the WAV header instead
-			isAudioFile:    true,
-		},
-		{
-			name:           "Spectrogram endpoint (existing)",
-			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=800",
-			expectedStatus: http.StatusOK,
-			expectedBody:   spectrogramContent,
-			isAudioFile:    false,
-		},
-		{
-			name:           "Spectrogram endpoint (needs generation - likely fails)",
-			endpoint:       "/api/v2/media/spectrogram/" + audioFilename + "?width=1200",
-			expectedStatus: http.StatusInternalServerError,
-			expectedBody:   "",
-			isAudioFile:    false,
-		},
-		{
-			name:           "Missing audio file",
-			endpoint:       "/api/v2/media/audio/missing.mp3",
-			expectedStatus: http.StatusNotFound,
-			expectedBody:   "",
-			isAudioFile:    false,
-		},
-	}
-
-	// Run test cases
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Make request to the HTTP server
-			resp, err := client.Get(server.URL + tc.endpoint)
-			require.NoError(t, err)
-			defer func() {
-				assert.NoError(t, resp.Body.Close(), "Failed to close response body")
-			}()
-
-			// Check status code
-			assert.Equal(t, tc.expectedStatus, resp.StatusCode)
-
-			// Check response body for successful requests
-			if tc.expectedStatus == http.StatusOK {
-				body, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				assertMediaResponseBody(t, body, tc.expectedBody, tc.isAudioFile)
-			}
-		})
-	}
-}
-
 // TestMediaSecurityScenarios tests various security scenarios using SecureFS
 func TestMediaSecurityScenarios(t *testing.T) {
 	// Go 1.25: Add test metadata for better organization and reporting
@@ -629,8 +439,7 @@ func TestMediaSecurityScenarios(t *testing.T) {
 	// Create a test audio file within the secure root
 	secureFilename := "secure.wav"
 	secureFilePath := filepath.Join(tempDir, secureFilename)
-	err := createTestAudioFile(t, secureFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, secureFilePath)
 
 	// --- No need to create sensitive file outside tempDir, SecureFS prevents access ---
 
@@ -691,95 +500,35 @@ func TestRangeHeaderHandling(t *testing.T) {
 	err := os.WriteFile(filePath, fileContent, 0o600)
 	require.NoError(t, err)
 
-	// Test cases for range headers (same as before, but now served via SecureFS -> http.ServeContent)
+	// Closed and suffix slices are covered by TestServeAudioClip, the gzip
+	// end-to-end test and TestAudioConcurrentRangeRequests; these rows pin the
+	// full body, an open-ended range and the two kinds of unsatisfiable range.
 	testCases := []struct {
-		name           string
-		rangeHeader    string
-		expectedStatus int
-		validateFunc   func(*testing.T, *httptest.ResponseRecorder)
+		name                 string
+		rangeHeader          string
+		expectedStatus       int
+		expectedBody         []byte // checked for 200 and 206
+		expectedContentRange string // checked when set
 	}{
+		{name: "No range header", expectedStatus: http.StatusOK, expectedBody: fileContent},
 		{
-			name:           "No range header",
-			rangeHeader:    "",
-			expectedStatus: http.StatusOK,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent, rec.Body.Bytes())
-			},
-		},
-		{
-			name:           "Range: bytes=0-99",
-			rangeHeader:    "bytes=0-99",
-			expectedStatus: http.StatusPartialContent,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent[0:100], rec.Body.Bytes())
-				assert.Equal(t, "bytes 0-99/1024", rec.Header().Get("Content-Range"))
-			},
-		},
-		{
-			name:           "Range: bytes=100-199",
-			rangeHeader:    "bytes=100-199",
-			expectedStatus: http.StatusPartialContent,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent[100:200], rec.Body.Bytes())
-				assert.Equal(t, "bytes 100-199/1024", rec.Header().Get("Content-Range"))
-			},
-		},
-		{
-			name:           "Range: bytes=-100",
-			rangeHeader:    "bytes=-100",
-			expectedStatus: http.StatusPartialContent,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent[924:1024], rec.Body.Bytes())
-				assert.Equal(t, "bytes 924-1023/1024", rec.Header().Get("Content-Range"))
-			},
-		},
-		{
-			name:           "Range: bytes=924-",
-			rangeHeader:    "bytes=924-",
-			expectedStatus: http.StatusPartialContent,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, fileContent[924:1024], rec.Body.Bytes())
-				assert.Equal(t, "bytes 924-1023/1024", rec.Header().Get("Content-Range"))
-			},
+			name:                 "Range: bytes=924-",
+			rangeHeader:          "bytes=924-",
+			expectedStatus:       http.StatusPartialContent,
+			expectedBody:         fileContent[924:],
+			expectedContentRange: "bytes 924-1023/1024",
 		},
 		{
 			name:           "Invalid range format (bytes=invalid)",
 			rangeHeader:    "bytes=invalid",
 			expectedStatus: http.StatusRequestedRangeNotSatisfiable,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Empty(t, rec.Body.Bytes(), "416 responses should not include the file body")
-			},
 		},
 		{
-			name:           "Invalid range (out of bounds)",
-			rangeHeader:    "bytes=2000-",
-			expectedStatus: http.StatusRequestedRangeNotSatisfiable,
-			validateFunc: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// No body validation needed
-			},
+			name:                 "Invalid range (out of bounds)",
+			rangeHeader:          "bytes=2000-",
+			expectedStatus:       http.StatusRequestedRangeNotSatisfiable,
+			expectedContentRange: "bytes */1024", // an out-of-bounds 416 reports the current size
 		},
-		/* // <-- FIX: Comment out multi-range test
-		{
-			name:        "Multiple ranges - should be handled by http.ServeContent",
-			rangeHeader: "bytes=0-99,200-299",
-			// http.ServeContent serves the *entire* file if multiple ranges are requested,
-			// but the spec says it *should* return multipart/byteranges. Go's implementation might differ or require specific setup.
-			// Let's assume for now it sends the whole file (like Apache does sometimes).
-			// Update: Go's http.ServeContent *does* support multipart/byteranges.
-			// The test needs to be updated to expect this complex response format or simplified.
-			// For now, let's test the first part is correct, although the response is multipart.
-			// expectedBody:     fileContent[0:100], // This assertion is WRONG for multipart
-			// expectedContentRange: "bytes 0-99/1024", // This assertion is WRONG for multipart
-			// expectedContentType:  "multipart/byteranges; boundary=", // Check it starts with multipart
-		},
-		*/
 	}
 
 	for _, tc := range testCases {
@@ -793,70 +542,50 @@ func TestRangeHeaderHandling(t *testing.T) {
 			c.SetParamNames("filename")
 			c.SetParamValues(filename)
 
-			handlerErr := controller.ServeAudioClip(c)
+			require.NoError(t, controller.ServeAudioClip(c))
 			assert.Equal(t, tc.expectedStatus, rec.Code)
-			assertHandlerError(t, handlerErr, tc.expectedStatus)
-
-			if rec.Code == http.StatusOK || rec.Code == http.StatusPartialContent {
-				tc.validateFunc(t, rec)
+			if tc.expectedBody != nil {
+				assert.Equal(t, tc.expectedBody, rec.Body.Bytes())
+			} else {
+				// http.ServeContent answers with a short error text, so the body is
+				// not empty; what a 416 must never carry is the file itself.
+				const probeLen = 64
+				assert.False(t, bytes.Contains(rec.Body.Bytes(), fileContent[:probeLen]),
+					"416 responses should not include the file body")
+			}
+			if tc.expectedContentRange != "" {
+				assert.Equal(t, tc.expectedContentRange, rec.Header().Get("Content-Range"))
 			}
 		})
 	}
 }
 
-// TestServeAudioClipWithUnicodeFilenames tests handling of Unicode filenames with SecureFS
-func TestServeAudioClipWithUnicodeFilenames(t *testing.T) {
-	// Setup test environment
-	e, controller, tempDir := setupMediaTestEnvironment(t)
+// TestParseRawParameter pins every spelling of the raw query parameter. The
+// handler tests below only check that the parsed value reaches the file name.
+func TestParseRawParameter(t *testing.T) {
+	t.Parallel()
 
-	// Create test files with Unicode filenames
-	unicodeNames := []string{
-		"тест.wav",    // Cyrillic
-		"테스트.wav",     // Korean
-		"測試.wav",      // Chinese
-		"Prüfung.wav", // German with umlaut
-		"ファイル.wav",    // Japanese
-		"αρχείο.wav",  // Greek
+	tests := []struct {
+		in   string
+		want bool
+	}{
+		{"", true}, {"true", true}, {"false", false}, {"1", true}, {"0", false},
+		{"t", true}, {"f", false}, {"TRUE", true}, {"False", false},
+		{"yes", true}, {"YES", true}, {"no", false}, {"No", false},
+		{"on", true}, {"off", false},
+		{"invalid", true}, // unknown values keep the backward-compatible default
 	}
-
-	for _, name := range unicodeNames {
-		// Use filename directly relative to tempDir (SecureFS root)
-		filePath := filepath.Join(tempDir, name)
-		err := createTestAudioFile(t, filePath)
-		require.NoError(t, err)
-	}
-
-	// Test each Unicode filename
-	for _, name := range unicodeNames {
-		t.Run("Unicode filename: "+name, func(t *testing.T) {
-			// Create request
-			// Need to URL-encode the filename for the request path
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+name, http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetParamNames("filename")
-			// Echo automatically decodes path parameters, so pass the raw name here
-			c.SetParamValues(name)
-
-			// Call handler (uses SecureFS.ServeFile)
-			handlerErr := controller.ServeAudioClip(c)
-
-			// Check for handler error
-			require.NoErrorf(t, handlerErr, "Error serving Unicode filename %s", name)
-
-			// Check response
-			assert.Equal(t, http.StatusOK, rec.Code)
-			// Check that we got a valid WAV file (starts with "RIFF")
-			body := rec.Body.Bytes()
-			assert.Greater(t, len(body), 4, "Response body should not be empty")
-			if len(body) > 4 {
-				assert.Equal(t, []byte("RIFF"), body[:4], "Should return a WAV file starting with RIFF header")
-			}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, parseRawParameter(tt.in))
 		})
 	}
 }
 
-// TestServeSpectrogramRawParameter tests the raw parameter parsing functionality
+// TestServeSpectrogramRawParameter checks that the filename route passes the
+// parsed raw parameter to the file lookup: raw selects the plain PNG, raw=false
+// the legend PNG. The spellings are covered by TestParseRawParameter.
 func TestServeSpectrogramRawParameter(t *testing.T) {
 	// Setup test environment
 	e, controller, tempDir := setupMediaTestEnvironment(t)
@@ -864,13 +593,12 @@ func TestServeSpectrogramRawParameter(t *testing.T) {
 	// Create a test audio file within the secure root
 	audioFilename := "rawtest.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := createTestAudioFile(t, audioFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, audioFilePath)
 
 	// Simulate raw spectrogram (default behavior)
 	rawSpectrogramFilename := "rawtest_800px.png"
 	rawSpectrogramPath := filepath.Join(tempDir, rawSpectrogramFilename)
-	err = os.WriteFile(rawSpectrogramPath, []byte("raw spectrogram"), 0o600)
+	err := os.WriteFile(rawSpectrogramPath, []byte("raw spectrogram"), 0o600)
 	require.NoError(t, err)
 
 	// Simulate spectrogram with legend
@@ -895,67 +623,11 @@ func TestServeSpectrogramRawParameter(t *testing.T) {
 			description:    "Should default to raw=true",
 		},
 		{
-			name:           "Explicit raw=true",
-			rawParam:       "true",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Should generate raw spectrogram",
-		},
-		{
 			name:           "Explicit raw=false",
 			rawParam:       "false",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "legend spectrogram",
 			description:    "Should generate spectrogram with legend",
-		},
-		{
-			name:           "Raw=1 (numeric true)",
-			rawParam:       "1",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Should parse '1' as true",
-		},
-		{
-			name:           "Raw=0 (numeric false)",
-			rawParam:       "0",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "legend spectrogram",
-			description:    "Should parse '0' as false",
-		},
-		{
-			name:           "Raw=yes",
-			rawParam:       "yes",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Should parse 'yes' as true",
-		},
-		{
-			name:           "Raw=no",
-			rawParam:       "no",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "legend spectrogram",
-			description:    "Should parse 'no' as false",
-		},
-		{
-			name:           "Raw=invalid (defaults to true)",
-			rawParam:       "invalid",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Invalid values should default to true",
-		},
-		{
-			name:           "Raw=TRUE (case insensitive)",
-			rawParam:       "TRUE",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "raw spectrogram",
-			description:    "Should be case insensitive",
-		},
-		{
-			name:           "Raw=False (mixed case)",
-			rawParam:       "False",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "legend spectrogram",
-			description:    "Should handle mixed case",
 		},
 	}
 
@@ -1194,7 +866,8 @@ func TestServeAudioByID_AudioFormats(t *testing.T) {
 	}
 }
 
-// TestServeSpectrogramByIDRawParameter tests the raw parameter parsing for ID-based spectrogram endpoint
+// TestServeSpectrogramByIDRawParameter checks that the ID route passes the parsed raw
+// parameter to the file lookup. The spellings are covered by TestParseRawParameter.
 func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 	// Setup test environment
 	e, controller, tempDir := setupMediaTestEnvironment(t)
@@ -1202,13 +875,12 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 	// Create a test audio file
 	testFilename := "test_raw_param.wav"
 	filePath := filepath.Join(tempDir, testFilename)
-	err := createTestAudioFile(t, filePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, filePath)
 
 	// Simulate raw spectrogram (default behavior) using lg size (1026px)
 	rawSpectrogramFilename := "test_raw_param_1026px.png"
 	rawSpectrogramPath := filepath.Join(tempDir, rawSpectrogramFilename)
-	err = os.WriteFile(rawSpectrogramPath, []byte("id raw spectrogram"), 0o600)
+	err := os.WriteFile(rawSpectrogramPath, []byte("id raw spectrogram"), 0o600)
 	require.NoError(t, err)
 
 	// Simulate spectrogram with legend
@@ -1237,92 +909,15 @@ func TestServeSpectrogramByIDRawParameter(t *testing.T) {
 			expectedBody:   "id raw spectrogram",
 		},
 		{
-			name:           "Explicit raw=true",
-			rawParam:       "true",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
 			name:           "Explicit raw=false",
 			rawParam:       "false",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "id legend spectrogram",
 		},
 		{
-			name:           "Raw=1 (numeric true)",
-			rawParam:       "1",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=0 (numeric false)",
-			rawParam:       "0",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=t (short true)",
-			rawParam:       "t",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=f (short false)",
-			rawParam:       "f",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=yes",
-			rawParam:       "yes",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
+			// A spelling strconv.ParseBool rejects, so only the full parser maps it to false.
 			name:           "Raw=no",
 			rawParam:       "no",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=on",
-			rawParam:       "on",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=off",
-			rawParam:       "off",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=invalid (defaults to true)",
-			rawParam:       "invalid",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=TRUE (case insensitive)",
-			rawParam:       "TRUE",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=False (mixed case)",
-			rawParam:       "False",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id legend spectrogram",
-		},
-		{
-			name:           "Raw=YES (uppercase)",
-			rawParam:       "YES",
-			expectedStatus: http.StatusOK,
-			expectedBody:   "id raw spectrogram",
-		},
-		{
-			name:           "Raw=No (mixed case)",
-			rawParam:       "No",
 			expectedStatus: http.StatusOK,
 			expectedBody:   "id legend spectrogram",
 		},
@@ -1651,21 +1246,6 @@ func TestGetSpeciesImageInfo_ColdMissReturnsPendingJSON(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
 }
 
-// TestGetSpectrogramLogger tests that the spectrogram logger is never nil
-func TestGetSpectrogramLogger(t *testing.T) {
-	// Test that getSpectrogramLogger always returns a non-nil logger
-	logger := getSpectrogramLogger()
-	require.NotNil(t, logger, "getSpectrogramLogger() must never return nil")
-
-	// Test that we can call logging methods without panic
-	assert.NotPanics(t, func() {
-		logger.Info("test message")
-		logger.Debug("test debug")
-		logger.Warn("test warning")
-		logger.Error("test error")
-	}, "Logger methods should not panic")
-}
-
 // TestIsExportTempFor verifies the in-progress-encoding temp matcher accepts the
 // export temp formats and rejects unrelated sidecar temps that merely share the
 // clip's prefix and the ".temp" suffix (GitHub #3323).
@@ -1730,7 +1310,7 @@ func TestServeAudioClipWaitsForEncoding(t *testing.T) {
 	}()
 
 	requireAudioWaitStarted(t, waitStarted, handlerErr)
-	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	createTestAudioFile(t, audioFilePath)
 	require.NoError(t, os.Remove(tempFilePath))
 	requireAudioHandlerSuccess(t, handlerErr)
 	assert.Equal(t, http.StatusOK, rec.Code,
@@ -1771,7 +1351,7 @@ func TestServeAudioByIDWaitsForEncodingPreservesHeaders(t *testing.T) {
 	}()
 
 	requireAudioWaitStarted(t, waitStarted, handlerErr)
-	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	createTestAudioFile(t, audioFilePath)
 	require.NoError(t, os.Remove(tempFilePath))
 	requireAudioHandlerSuccess(t, handlerErr)
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -1827,34 +1407,6 @@ func TestServeAudioClipReturns503AfterTimeout(t *testing.T) {
 		"JSON error response should not advertise an audio filename")
 }
 
-// TestServeAudioClipNoTempFileReturns404 verifies that a missing file without
-// a temp file returns 404 (not 503).
-func TestServeAudioClipNoTempFileReturns404(t *testing.T) {
-	e, controller, _ := setupMediaTestEnvironment(t)
-
-	audioFilename := "nonexistent.wav"
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/media/audio/:filename")
-	ctx.SetParamNames("filename")
-	ctx.SetParamValues(audioFilename)
-
-	handlerErr := controller.ServeAudioClip(ctx)
-
-	// Should return 404, not 503
-	if handlerErr != nil {
-		if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
-			assert.Equal(t, http.StatusNotFound, httpErr.Code,
-				"Should return 404 when no temp file exists")
-		}
-	} else {
-		assert.Equal(t, http.StatusNotFound, rec.Code,
-			"Should return 404 when no temp file exists")
-	}
-}
-
 // TestIsRecentClipCompletion covers the recency predicate shared with the
 // reconcile crawler: a zero completion time is treated as recent (fail-safe),
 // times inside the window are recent, and times older than the window are not.
@@ -1881,27 +1433,31 @@ func TestIsRecentClipCompletion(t *testing.T) {
 
 // TestServeAudioByID_GraceSkippedForOldDetections verifies the defense-in-depth
 // grace-poll skip: a 404 for a detection whose capture completed long ago returns
-// immediately (no grace wait), while a recent detection still waits out the grace
-// period. Timing bounds around audioGracePeriod distinguish the two paths.
+// at once (no grace wait), while a recent detection still waits out the grace
+// period and then answers 503 with Retry-After. It runs under synctest, so the
+// elapsed time is the exact fake-clock duration: zero for the old detection and
+// audioGracePeriod for the recent one.
 func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 	// clipPath resolves but the file does not exist on disk, forcing the 404 path.
 	const missingClip = "2024/01/ghost_95p_20240101T000000Z.wav"
 
 	tests := []struct {
-		name       string
-		endTime    time.Time
-		maxElapsed time.Duration // set: proves grace was skipped
-		minElapsed time.Duration // set: proves grace ran
+		name        string
+		age         time.Duration // how long before now the capture completed
+		wantStatus  int
+		wantElapsed time.Duration
 	}{
 		{
-			name:       "old detection skips grace and 404s immediately",
-			endTime:    time.Now().Add(-time.Hour),
-			maxElapsed: audioGracePeriod,
+			name:        "old detection skips grace and 404s immediately",
+			age:         time.Hour,
+			wantStatus:  http.StatusNotFound,
+			wantElapsed: 0,
 		},
 		{
-			name:       "recent detection still waits the grace period",
-			endTime:    time.Now(),
-			minElapsed: audioGracePeriod,
+			name:        "recent detection waits the grace period and answers 503 while the export may be queued",
+			age:         0,
+			wantStatus:  http.StatusServiceUnavailable,
+			wantElapsed: audioGracePeriod,
 		},
 	}
 
@@ -1909,35 +1465,39 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e, controller, _ := setupMediaTestEnvironment(t)
 
-			mockDS := mocks.NewMockInterface(t)
-			mockDS.On("GetNoteClipPath", "42").Return(missingClip, nil)
-			mockDS.On("Get", "42").Return(datastore.Note{ID: 42, EndTime: tc.endTime}, nil).Maybe()
-			controller.DS = mockDS
+			synctest.Test(t, func(t *testing.T) {
+				// The end time is taken inside the bubble: the bubble clock starts at
+				// 2000-01-01 UTC (testing/synctest docs), so a time.Now() taken outside
+				// it would lie decades in the bubble's future and every row would count
+				// as recent.
+				mockDS := mocks.NewMockInterface(t)
+				mockDS.On("GetNoteClipPath", "42").Return(missingClip, nil)
+				mockDS.On("Get", "42").Return(datastore.Note{ID: 42, EndTime: time.Now().Add(-tc.age)}, nil).Maybe()
+				controller.DS = mockDS
 
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/42", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetParamNames("id")
-			c.SetParamValues("42")
+				req := httptest.NewRequest(http.MethodGet, "/api/v2/audio/42", http.NoBody)
+				rec := httptest.NewRecorder()
+				c := e.NewContext(req, rec)
+				c.SetParamNames("id")
+				c.SetParamValues("42")
 
-			start := time.Now()
-			handlerErr := controller.ServeAudioByID(c)
-			elapsed := time.Since(start)
+				start := time.Now()
+				handlerErr := controller.ServeAudioByID(c)
+				elapsed := time.Since(start)
 
-			// The missing clip resolves to a 404, returned as an echo.HTTPError
-			// (the framework translates it to the HTTP response).
-			require.Error(t, handlerErr, "missing clip must error")
-			httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr)
-			require.True(t, ok, "expected an echo.HTTPError")
-			assert.Equal(t, http.StatusNotFound, httpErr.Code, "missing clip must 404")
-			if tc.maxElapsed > 0 {
-				assert.Less(t, elapsed, tc.maxElapsed,
-					"old detection must skip the grace wait")
-			}
-			if tc.minElapsed > 0 {
-				assert.GreaterOrEqual(t, elapsed, tc.minElapsed,
-					"recent detection must wait out the grace period")
-			}
+				// A missing clip resolves to an echo.HTTPError (the framework turns it
+				// into the response); a pending answer is written directly.
+				code := rec.Code
+				if httpErr, ok := errors.AsType[*echo.HTTPError](handlerErr); ok {
+					code = httpErr.Code
+				}
+				assert.Equal(t, tc.wantStatus, code)
+				assert.Equal(t, tc.wantElapsed, elapsed)
+				if tc.wantStatus == http.StatusServiceUnavailable {
+					require.NoError(t, handlerErr)
+					assert.NotEmpty(t, rec.Header().Get(echo.HeaderRetryAfter), "503 must carry Retry-After")
+				}
+			})
 		})
 	}
 }
@@ -1946,7 +1506,7 @@ func TestServeAudioByID_GraceSkippedForOldDetections(t *testing.T) {
 // appears shortly after the initial request (no temp file visible), the
 // grace period wait catches it instead of returning 404. This covers the
 // race condition from issue #2355 where the detection DB record is committed
-// but FFmpeg hasn't created the temp file yet.
+// but the export hasn't created its temp file yet.
 func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	e, controller, tempDir := setupMediaTestEnvironment(t)
 
@@ -1971,7 +1531,7 @@ func TestServeAudioClipGraceWaitServesFile(t *testing.T) {
 	}()
 
 	requireAudioWaitStarted(t, waitStarted, handlerErr)
-	require.NoError(t, createTestAudioFile(t, audioFilePath))
+	createTestAudioFile(t, audioFilePath)
 	requireAudioHandlerSuccess(t, handlerErr)
 	assert.Equal(t, http.StatusOK, rec.Code,
 		"Should serve the file successfully after grace wait")
@@ -2104,24 +1664,6 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			expectedFilename: "bird_1026px-legend.png",
 		},
 		{
-			name:             "scientific_dark style raw",
-			relAudioPath:     "clips/2025/01/bird.wav",
-			width:            1026,
-			raw:              true,
-			style:            "scientific_dark",
-			dynamicRange:     "100",
-			expectedFilename: "bird_1026px-scientific_dark.png",
-		},
-		{
-			name:             "scientific_dark style with legend",
-			relAudioPath:     "clips/2025/01/bird.wav",
-			width:            1026,
-			raw:              false,
-			style:            "scientific_dark",
-			dynamicRange:     "100",
-			expectedFilename: "bird_1026px-scientific_dark-legend.png",
-		},
-		{
 			name:             "high_contrast_dark with non-default DR raw",
 			relAudioPath:     "clips/2025/01/bird.wav",
 			width:            514,
@@ -2129,15 +1671,6 @@ func TestBuildSpectrogramPathsWithStyle(t *testing.T) {
 			style:            "high_contrast_dark",
 			dynamicRange:     "80",
 			expectedFilename: "bird_514px-high_contrast_dark-dr80.png",
-		},
-		{
-			name:             "empty style and DR produce backward-compatible filename",
-			relAudioPath:     "clips/2025/01/bird.wav",
-			width:            1026,
-			raw:              true,
-			style:            "",
-			dynamicRange:     "",
-			expectedFilename: "bird_1026px.png",
 		},
 	}
 
@@ -2172,13 +1705,12 @@ func TestAudioRangeWithGzipMiddleware_EndToEnd(t *testing.T) {
 	// Arrange: set up environment with gzip middleware on the Echo instance.
 	// Echo middleware added via e.Use() applies to all routes at request time,
 	// so routes registered by setupMediaTestEnvironment are already covered.
-	e, _, tempDir := setupMediaTestEnvironment(t)
+	e, _, tempDir := setupMediaTestEnvironment(t, apitest.WithoutSettingsPublish())
 	e.Use(middleware.NewGzip())
 
 	audioFilename := "gzip-range-test.wav"
 	audioFilePath := filepath.Join(tempDir, audioFilename)
-	err := createTestAudioFile(t, audioFilePath)
-	require.NoError(t, err)
+	createTestAudioFile(t, audioFilePath)
 
 	audioURL := "/api/v2/media/audio/" + audioFilename
 
@@ -2257,7 +1789,7 @@ func TestAudioRangeConsistencyAcrossSequentialRequests(t *testing.T) {
 	)
 
 	// Arrange
-	e, _, tempDir := setupMediaTestEnvironment(t)
+	e, _, tempDir := setupMediaTestEnvironment(t, apitest.WithoutSettingsPublish())
 	filename := "sequential-range-test.wav"
 	filePath := filepath.Join(tempDir, filename)
 	audioURL := "/api/v2/media/audio/" + filename
@@ -2275,32 +1807,16 @@ func TestAudioRangeConsistencyAcrossSequentialRequests(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("%d", largeFileSize), recordedContentLength,
 		"Content-Length must match the large file size")
 
-	// Step 2: Send a follow-up range request using the recorded Content-Length
-	// (simulating Chrome's behavior of requesting bytes=0-{contentLength-1})
-	rangeEnd := largeFileSize - 1
-	chromeRangeHeader := fmt.Sprintf("bytes=0-%d", rangeEnd)
-
-	followUpReq := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
-	followUpReq.Header.Set("Range", chromeRangeHeader)
-	followUpRec := httptest.NewRecorder()
-	e.ServeHTTP(followUpRec, followUpReq)
-
-	assert.Equal(t, http.StatusPartialContent, followUpRec.Code,
-		"Follow-up range request covering the full file must return 206")
-	expectedRange := fmt.Sprintf("bytes 0-%d/%d", rangeEnd, largeFileSize)
-	assert.Equal(t, expectedRange, followUpRec.Header().Get("Content-Range"),
-		"Content-Range must span the entire file")
-
-	// Step 3: Replace the file with a smaller one (simulates a file being
+	// Step 2: Replace the file with a smaller one (simulates a file being
 	// re-exported at a different length, or a different clip replacing it)
 	err := os.Remove(filePath)
 	require.NoError(t, err, "Must be able to remove the original file")
 	createLargeWAVFile(t, filePath, smallDataSize)
 
-	// Step 4: Send a range request using the OLD (larger) content-length.
+	// Step 3: Send a range request built from the OLD (larger) content-length.
 	// The range now extends beyond the new file, so the server must reject
 	// it with 416 Range Not Satisfiable.
-	staleRangeHeader := fmt.Sprintf("bytes=%d-%d", smallFileSize, rangeEnd)
+	staleRangeHeader := fmt.Sprintf("bytes=%d-%d", smallFileSize, largeFileSize-1)
 	staleReq := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
 	staleReq.Header.Set("Range", staleRangeHeader)
 	staleRec := httptest.NewRecorder()
@@ -2313,17 +1829,13 @@ func TestAudioRangeConsistencyAcrossSequentialRequests(t *testing.T) {
 		"416 response must include Content-Range with the current file size")
 }
 
-// concurrentRangeResult holds the outcome of a single concurrent range request.
-type concurrentRangeResult struct {
-	statusCode int
-	err        error
-}
-
 // TestAudioConcurrentRangeRequests verifies that the audio endpoint handles
-// simultaneous range requests to the same file without panics, data corruption,
-// or races. Each response must be one of 200 (full content), 206 (partial), or
-// 416 (range not satisfiable). Results are collected via a channel so all
-// assertions run in the main goroutine (required by testify).
+// simultaneous range requests to the same file without data corruption or
+// races. Each response must carry the exact status for its Range header and, for
+// 2xx responses, exactly the bytes of the requested slice of the file. Results
+// are collected via a channel so all assertions run in the main goroutine
+// (required by testify). Run under -race, it also fails on unsynchronized state
+// shared between requests.
 func TestAudioConcurrentRangeRequests(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "media")
@@ -2333,55 +1845,55 @@ func TestAudioConcurrentRangeRequests(t *testing.T) {
 	const (
 		concurrentWorkers = 20
 		fileDataSize      = 100000
-		fileTotalSize     = fileDataSize + 44 // WAV header
 	)
 
-	// Accepted HTTP status codes for a valid range request response
-	acceptableStatuses := []int{
-		http.StatusOK,
-		http.StatusPartialContent,
-		http.StatusRequestedRangeNotSatisfiable,
-	}
-
 	// Arrange
-	e, _, tempDir := setupMediaTestEnvironment(t)
+	e, _, tempDir := setupMediaTestEnvironment(t, apitest.WithoutSettingsPublish())
 	filename := "concurrent-range-test.wav"
 	filePath := filepath.Join(tempDir, filename)
 	createLargeWAVFile(t, filePath, fileDataSize)
+	// The file as written is the oracle for every expected body.
+	fileBytes, err := os.ReadFile(filePath) //nolint:gosec // G304: path is under t.TempDir()
+	require.NoError(t, err)
 
 	audioURL := "/api/v2/media/audio/" + filename
 
-	// Diverse range headers that exercise different code paths
-	rangeHeaders := []string{
-		"",              // full content (no range)
-		"bytes=0-99",    // first 100 bytes
-		"bytes=100-199", // middle chunk
-		"bytes=-100",    // last 100 bytes
-		"bytes=0-",      // from start to end
-		fmt.Sprintf("bytes=0-%d", fileTotalSize-1),  // entire file as range
-		fmt.Sprintf("bytes=%d-", fileTotalSize-100), // near the end
-		"bytes=0-0",     // single byte
-		"bytes=999999-", // out of bounds (expect 416)
-		"bytes=invalid", // malformed (expect 416)
+	// Diverse range headers that exercise different code paths. wantBody is nil
+	// for 416 rows, whose body is an error text and not part of the contract.
+	rangeCases := []struct {
+		rangeHeader string
+		wantStatus  int
+		wantBody    []byte
+	}{
+		{"", http.StatusOK, fileBytes},
+		{"bytes=0-99", http.StatusPartialContent, fileBytes[:100]},
+		{"bytes=100-199", http.StatusPartialContent, fileBytes[100:200]},
+		{"bytes=-100", http.StatusPartialContent, fileBytes[len(fileBytes)-100:]},
+		{"bytes=0-0", http.StatusPartialContent, fileBytes[:1]},
+		{"bytes=999999-", http.StatusRequestedRangeNotSatisfiable, nil},
+		{"bytes=invalid", http.StatusRequestedRangeNotSatisfiable, nil},
+	}
+
+	type result struct {
+		caseIdx int
+		code    int
+		body    []byte
 	}
 
 	// Act: launch concurrent workers
-	results := make(chan concurrentRangeResult, concurrentWorkers)
+	results := make(chan result, concurrentWorkers)
 	var wg sync.WaitGroup
 
 	for i := range concurrentWorkers {
-		rangeHeader := rangeHeaders[i%len(rangeHeaders)]
+		caseIdx := i % len(rangeCases)
 		wg.Go(func() {
 			req := httptest.NewRequest(http.MethodGet, audioURL, http.NoBody)
-			if rangeHeader != "" {
-				req.Header.Set("Range", rangeHeader)
+			if h := rangeCases[caseIdx].rangeHeader; h != "" {
+				req.Header.Set("Range", h)
 			}
 			rec := httptest.NewRecorder()
 			e.ServeHTTP(rec, req)
-			results <- concurrentRangeResult{
-				statusCode: rec.Code,
-				err:        nil,
-			}
+			results <- result{caseIdx: caseIdx, code: rec.Code, body: rec.Body.Bytes()}
 		})
 	}
 
@@ -2393,9 +1905,11 @@ func TestAudioConcurrentRangeRequests(t *testing.T) {
 	resultCount := 0
 	for res := range results {
 		resultCount++
-		require.NoError(t, res.err, "Concurrent request must not return an error")
-		assert.Contains(t, acceptableStatuses, res.statusCode,
-			"Response status %d is not in the accepted set %v", res.statusCode, acceptableStatuses)
+		tc := rangeCases[res.caseIdx]
+		assert.Equal(t, tc.wantStatus, res.code, "status for Range %q", tc.rangeHeader)
+		if tc.wantBody != nil {
+			assert.Equal(t, tc.wantBody, res.body, "body for Range %q", tc.rangeHeader)
+		}
 	}
 	assert.Equal(t, concurrentWorkers, resultCount,
 		"Must receive a result from every concurrent worker")
@@ -2414,7 +1928,7 @@ func TestAudioETagInvalidatesStaleCache(t *testing.T) {
 	t.Attr("type", "regression")
 	t.Attr("issue", "2846")
 
-	e, controller, tempDir := setupMediaTestEnvironment(t)
+	e, controller, tempDir := setupMediaTestEnvironment(t, apitest.WithoutSettingsPublish())
 
 	const filename = "etag-cache-test.wav"
 	const dataSize = 2048

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
 // supportDumpEventLimit is the maximum number of events included in a support dump.
@@ -76,7 +77,9 @@ func (p *DatastoreAppEventsProvider) scrubMetadata(metadata map[string]any) map[
 	return scrubbed
 }
 
-// scrubNestedValue recursively scrubs sensitive keys in nested maps and slices.
+// scrubNestedValue recursively scrubs sensitive keys in nested maps and slices,
+// and masks the USB serial of a usb-id device token in string values (a
+// settings_saved diff carries the old and new audio device).
 func (p *DatastoreAppEventsProvider) scrubNestedValue(value any) any {
 	switch v := value.(type) {
 	case map[string]any:
@@ -87,6 +90,8 @@ func (p *DatastoreAppEventsProvider) scrubNestedValue(value any) any {
 			scrubbed[i] = p.scrubNestedValue(item)
 		}
 		return scrubbed
+	case string:
+		return privacy.RedactUSBDeviceID(v)
 	default:
 		return value
 	}

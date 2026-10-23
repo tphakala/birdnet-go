@@ -214,6 +214,10 @@ especially important during daylight saving time transitions.
 - **Console**: Optimized for humans scanning logs during development
 - **Files**: Optimized for machines parsing logs in production (ELK, Loki, etc.)
 
+### Console output never blocks
+
+Console lines go through one bounded queue (256 KiB) that a background writer drains to stdout. If whatever reads stdout stops draining (for example a stalled Docker log driver), new console lines are dropped instead of blocking the caller, so detection keeps running. Once the backlog drains, or when the logger closes, a WARN line in `application.log` (module `logger`, field `dropped_lines`) reports how many console lines were dropped since the previous report. It is not written when file logging is disabled or its level is above warn. File logs are unaffected and remain the complete record. On shutdown the console gets up to one second to drain; lines still queued when the process crashes or exits without a normal shutdown are not written.
+
 ## Log Rotation
 
 Automatic size-based log rotation prevents log files from growing unbounded.

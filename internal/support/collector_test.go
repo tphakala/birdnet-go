@@ -228,6 +228,25 @@ func TestCollector_scrubConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "mask usb-id serials in device values",
+			config: map[string]any{
+				"realtime": map[string]any{"audio": map[string]any{"source": "usb-id:0d8c:0014:SN12345"}},
+				"sources": []any{
+					map[string]any{"name": "Mic", "device": "usb-id:0d8c:0014:SN12345"},
+					map[string]any{"device": "usb-path:usb-0000:00:14.0-3"},
+					map[string]any{"device": "hw:1,0"},
+				},
+			},
+			want: map[string]any{
+				"realtime": map[string]any{"audio": map[string]any{"source": "usb-id:0d8c:0014:<redacted>"}},
+				"sources": []any{
+					map[string]any{"name": "Mic", "device": "usb-id:0d8c:0014:<redacted>"},
+					map[string]any{"device": "usb-path:usb-0000:00:14.0-3"},
+					map[string]any{"device": "hw:1,0"},
+				},
+			},
+		},
+		{
 			name: "handle mixed case keys",
 			config: map[string]any{
 				"Password": "secret",
@@ -313,6 +332,36 @@ func TestCollector_scrubConfig(t *testing.T) {
 							"enabled":  true,
 						},
 					},
+				},
+			},
+		},
+		{
+			name: "classify security address lists",
+			config: map[string]any{
+				"security": map[string]any{
+					"trustedProxies":          []any{"cloudflare", "198.51.100.20", "10.0.0.0/8"},
+					"plainhttpsessionclients": []any{"172.18.0.5", "127.0.0.1"},
+				},
+			},
+			want: map[string]any{
+				"security": map[string]any{
+					"trustedProxies":          []any{"cloudflare", "[redacted public address]", "[redacted private range]"},
+					"plainhttpsessionclients": []any{"[redacted private address]", "[redacted loopback address]"},
+				},
+			},
+		},
+		{
+			name: "empty security address lists stay empty",
+			config: map[string]any{
+				"security": map[string]any{
+					"trustedProxies":          []any{},
+					"plainhttpsessionclients": []any{},
+				},
+			},
+			want: map[string]any{
+				"security": map[string]any{
+					"trustedProxies":          []any{},
+					"plainhttpsessionclients": []any{},
 				},
 			},
 		},
@@ -1128,7 +1177,6 @@ func createComprehensiveMockConfig() map[string]any {
 			"audio": map[string]any{
 				"source":          "plughw:1,0",
 				"ffmpegPath":      "/usr/bin/ffmpeg",
-				"soxPath":         "/usr/bin/sox",
 				"streamTransport": "auto",
 				"soundLevel": map[string]any{
 					"enabled":              true,

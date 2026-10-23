@@ -14,6 +14,11 @@ import (
 // to ensure PCM sample boundaries are always respected.
 const captureBufferAlignment = 2048
 
+// captureWriteGapLogThreshold is the pause between two writes above which the
+// buffer logs a write gap at debug level. Capture sources deliver audio in
+// chunks well under a second, so a longer pause means the capture path stalled.
+const captureWriteGapLogThreshold = 2 * time.Second
+
 // getLogger returns a module-scoped logger for capture buffer diagnostics.
 // It is fetched dynamically so it always reflects the currently configured
 // central logger (e.g. after SetGlobal during startup).
@@ -40,12 +45,14 @@ type CaptureBuffer struct {
 	data              []byte
 	writeIndex        int
 	writtenBytes      int   // total bytes currently in the buffer (capped at bufferSize)
-	totalBytesWritten int64 // monotonic counter of all bytes ever written
+	totalBytesWritten int64 // monotonic counter of bytes kept (a write larger than the ring counts its tail)
 	sampleRate        int
 	bytesPerSample    int
 	bufferSize        int
 	bufferDuration    time.Duration
 	startTime         time.Time // wall-clock anchor for external APIs
+	firstWriteTime    time.Time // wall-clock time of the first Write, for lag diagnostics
+	lastWriteTime     time.Time // wall-clock time of the latest Write, for gap diagnostics
 	initialized       bool
 	wrapped           bool // true after the write pointer has wrapped at least once
 	lock              sync.Mutex
@@ -127,6 +134,9 @@ func (cb *CaptureBuffer) Initialized() bool {
 // Write appends PCM data to the circular buffer. The first call records a
 // wall-clock anchor time for external APIs. The monotonic totalBytesWritten
 // counter is always advanced, providing jitter-free byte offset calculations.
+// At debug level it logs a pause between writes longer than
+// captureWriteGapLogThreshold and the completion of the first lap, each with
+// the lag that lagSinceFirstWrite reports.
 //
 // Empty data is silently ignored. Write is safe for concurrent use.
 func (cb *CaptureBuffer) Write(data []byte) error {
@@ -134,13 +144,72 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 		return nil
 	}
 
+	// Log outside the lock so a slow log sink cannot hold up readers.
+	cb.write(data).log(cb.source)
+	return nil
+}
+
+// captureWriteDiagnostics describes one Write for debug logging: the pause since
+// the previous write, whether this write completed the first lap of the ring,
+// and, only when one of those is logged, the lag that lagSinceFirstWrite
+// reports.
+type captureWriteDiagnostics struct {
+	gap      time.Duration
+	firstLap bool
+	lag      time.Duration
+}
+
+// logged reports whether this write produces a debug line.
+func (d captureWriteDiagnostics) logged() bool {
+	return d.firstLap || d.gap > captureWriteGapLogThreshold
+}
+
+// log emits the debug lines for a write gap and for the first completed lap.
+func (d captureWriteDiagnostics) log(source string) {
+	if d.gap > captureWriteGapLogThreshold {
+		getLogger().Debug("capture buffer write gap",
+			logger.String("source", source),
+			logger.Int64("gap_ms", d.gap.Milliseconds()),
+			logger.Int64("lag_ms", d.lag.Milliseconds()))
+	}
+	if d.firstLap {
+		getLogger().Debug("capture buffer completed its first lap",
+			logger.String("source", source),
+			logger.Int64("lag_ms", d.lag.Milliseconds()))
+	}
+}
+
+// writtenDuration converts a byte count into the audio duration it holds.
+// Float math keeps it from overflowing on a long-running counter.
+func (cb *CaptureBuffer) writtenDuration(n int64) time.Duration {
+	return time.Duration(float64(n) / float64(cb.sampleRate*cb.bytesPerSample) * float64(time.Second))
+}
+
+// lagSinceFirstWrite is how far the audio counted in totalBytesWritten (only the kept tail of a write larger than the ring) trails wall-clock time
+// since the first write. Before the first wrap, ReadSegment maps time to offsets
+// as if this were zero or less; a positive value of a few seconds makes recent
+// segments unreadable. In steady capture it sits around minus one chunk, since
+// the first chunk is mapped to the time of its own write. The caller holds the
+// lock.
+func (cb *CaptureBuffer) lagSinceFirstWrite(now time.Time) time.Duration {
+	return now.Sub(cb.firstWriteTime) - cb.writtenDuration(cb.totalBytesWritten)
+}
+
+// write stores data in the ring under the lock and returns what Write logs.
+func (cb *CaptureBuffer) write(data []byte) captureWriteDiagnostics {
 	cb.lock.Lock()
 	defer cb.lock.Unlock()
 
+	now := time.Now()
+	var diag captureWriteDiagnostics
 	if !cb.initialized {
-		cb.startTime = time.Now()
+		cb.startTime = now
+		cb.firstWriteTime = now
 		cb.initialized = true
+	} else {
+		diag.gap = now.Sub(cb.lastWriteTime)
 	}
+	cb.lastWriteTime = now
 
 	prevIndex := cb.writeIndex
 	dataLen := len(data)
@@ -169,13 +238,17 @@ func (cb *CaptureBuffer) Write(data []byte) error {
 	// update startTime to reflect the oldest data still in the ring.
 	// Before the first wrap, startTime stays at the initial Write() time.
 	if cb.writeIndex <= prevIndex && dataLen > 0 {
+		diag.firstLap = !cb.wrapped
 		cb.wrapped = true
 	}
 	if cb.wrapped {
-		cb.startTime = time.Now().Add(-cb.bufferDuration)
+		cb.startTime = now.Add(-cb.bufferDuration)
 	}
 
-	return nil
+	if diag.logged() {
+		diag.lag = cb.lagSinceFirstWrite(now)
+	}
+	return diag
 }
 
 // ReadSegment extracts the audio data between startTime and endTime from the
@@ -222,7 +295,9 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 	// Clamp startTime to the oldest available data so that requests for
 	// audio slightly before the buffer window still return what we have
 	// rather than failing outright. cb.startTime is kept current by Write()
-	// which refreshes it on every call after the buffer wraps.
+	// which refreshes it on every call after the buffer wraps. The caller's
+	// start is kept for the warmup debug line.
+	requestedStart := startTime
 	if startTime.Before(cb.startTime) {
 		startTime = cb.startTime
 	}
@@ -278,6 +353,10 @@ func (cb *CaptureBuffer) ReadSegment(startTime, endTime time.Time) ([]byte, erro
 				logger.Int("requested_end_byte", endByteOffset),
 				logger.Int("written_bytes", cb.writtenBytes),
 				logger.Bool("wrapped", cb.wrapped),
+				logger.Time("requested_start", requestedStart),
+				logger.Time("requested_end", endTime),
+				logger.Time("buffer_start", cb.startTime),
+				logger.Int64("lag_ms", cb.lagSinceFirstWrite(time.Now()).Milliseconds()),
 			)
 			return nil, fmt.Errorf("capture_buffer_read_segment during warmup: %w", ErrInsufficientData)
 		}
@@ -358,8 +437,9 @@ func (cb *CaptureBuffer) WrittenBytes() int {
 	return cb.writtenBytes
 }
 
-// TotalBytesWritten returns the monotonically increasing count of all bytes
-// ever written to the buffer. Unlike WrittenBytes (which is capped at buffer
+// TotalBytesWritten returns the monotonically increasing count of bytes
+// written to the buffer; a write larger than the ring counts only the tail it
+// keeps. Unlike WrittenBytes (which is capped at buffer
 // size), this counter never decreases and is used internally for jitter-free
 // byte offset calculations.
 //
@@ -386,4 +466,6 @@ func (cb *CaptureBuffer) Reset() {
 	cb.initialized = false
 	cb.wrapped = false
 	cb.startTime = time.Time{}
+	cb.firstWriteTime = time.Time{}
+	cb.lastWriteTime = time.Time{}
 }

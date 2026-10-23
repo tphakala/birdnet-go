@@ -94,15 +94,6 @@ If you prefer to use an RTSP stream instead of a sound card:
 3. Comment out the sound card source and uncomment the RTSP section
 4. Add your RTSP URL(s)
 
-### HLS Streaming Performance Optimization
-
-The configuration includes a RAM disk (tmpfs) mount for the HLS streaming segments directory:
-
-- The `/config/hls` directory is mounted as a 50MB RAM disk
-- This improves streaming performance by storing temporary stream segments in memory
-- The RAM disk is automatically configured with the same UID/GID as your BirdNET-Go user
-- This temporary storage is cleared on container restart (which is expected for stream segments)
-
 ## Internet Access Using Cloudflare Tunnel
 
 The Docker Compose configuration includes an option to use Cloudflare Tunnel (cloudflared) to securely expose your BirdNET-Go instance to the internet without opening ports on your router/firewall.

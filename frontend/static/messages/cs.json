@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} při nastaveném překryvu {configured} s překračuje změřenou kapacitu tohoto zařízení, proto se zvuk analyzuje s překryvem {effective} s. Filtr falešně pozitivních detekcí proto může vyžadovat méně potvrzení. Vaše uložená nastavení se nemění; viz Nastavení > Analýza.",
         "cadenceOverloadedTitle": "Toto zařízení nestíhá analýzu zvuku",
         "cadenceOverloadedMessage": "Spuštění {models, plural, one {# modelu} few {# modelů} many {# modelu} other {# modelů}} na {sources, plural, one {# zvukovém zdroji} few {# zvukových zdrojích} many {# zvukového zdroje} other {# zvukových zdrojích}} překračuje změřenou kapacitu tohoto zařízení i bez překryvu, proto se analýza může zpožďovat a detekce mohou být vynechány. Povolte méně modelů nebo zvukových zdrojů, nebo zvolte rychlejší variantu modelu."
+      },
+      "storage": {
+        "notPersistentTitle": "Data budou ztracena při opětovném vytvoření kontejneru",
+        "notPersistentMessage": "Tyto cesty jsou na úložišti, které se při opětovném vytvoření kontejneru smaže, například při aktualizaci image: {paths}. Namapujte na ně svazek nebo adresář hostitele v konfiguraci kontejneru.",
+        "anonymousVolumeTitle": "Data jsou uložena v anonymním svazku kontejneru",
+        "anonymousVolumeMessage": "Tyto cesty jsou v anonymních svazcích, které běhové prostředí kontejneru vytvořilo, protože nebyl namapován žádný svazek: {paths}. Kontejner spuštěný znovu, například příkazem docker run po aktualizaci image, dostane nové prázdné svazky, takže data vypadají ztracená. Namapujte na ně pojmenovaný svazek nebo adresář hostitele."
       }
     },
     "loading": "Načítání oznámení…"
@@ -1576,7 +1582,7 @@
           "restartTitle": "Vyžadován restart",
           "restartBody": "Restartujte aplikaci pro přepnutí na databázi V2. Vyčištění původní databáze bude k dispozici po restartu.",
           "fallbackError": "Nesoulad počtu záznamů mezi původní a V2 databází. Některé záznamy se možná nemigrovaly správně.",
-          "migrateInfo": "Migrace přenese {count} záznamů z původní databáze do nového schématu V2. Režim duálního zápisu zajišťuje nulovou ztrátu dat během migrace.",
+          "migrateInfo": "Migrace přenese {count} záznamů z původní databáze do nového schématu V2. Nové detekce uložené během migrace se také zkopírují do nové databáze.",
           "sourceLegacy": "Zdroj (původní)",
           "targetV2": "Cíl (V2)",
           "recordsLabel": "Záznamy",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "Systém můžete dále běžně používat, zatímco migrace běží na pozadí.",
-          "dual_write": "Migrace probíhá. Vaše data jsou v bezpečí - všechny nové detekce se ukládají do obou databází.",
+          "dual_write": "Migrace probíhá. Vaše data jsou v bezpečí - nové detekce se ukládají do stávající databáze a během migrace se kopírují do nové databáze.",
           "migrating": "Kopírují se vaše stávající detekce do nové databáze.",
           "validating": "Ověřuje se, zda byly všechny záznamy zkopírovány správně. Téměř hotovo!",
           "cutover": "Přepínání na novou databázi. Zabere to jen okamžik.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Nejlepší pro slabé signály. Ptačí zpěv jasně vyniká ze šumu pozadí. Doporučeno pro vědecké styly / styly ve stupních šedi.",
                   "standard": "Výchozí vyvážené nastavení. Dobré pro většinu případů použití.",
-                  "extended": "Viditelnost více detailů, ale nižší kontrast. Výchozí hodnota SoX."
+                  "extended": "Viditelnost více detailů, ale nižší kontrast."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "Co je ve zprávě zahrnuto:",
           "applicationLogs": "**Záznamy aplikace** - nedávné chyby a ladicí informace",
           "configuration": "**Konfigurace** - vaše nastavení s odstraněnými citlivými daty",
-          "systemInfo": "**Informace o systému** - verze OS, paměť a podrobnosti o runtime",
+          "systemInfo": "**Informace o systému** - verze OS, paměť, hardware, připojená zařízení USB a zvukové karty a podrobnosti o runtime",
           "notIncluded": "**NENÍ zahrnuto** - zvukové soubory, detekce ptáků nebo osobní data"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "min",
             "helpText": "Zabrání opakovaným oznámením pro stejný druh v tomto časovém okně. Nastavte na 0 pro vypnutí."
           }
+        },
+        "rulesNotice": {
+          "message": "Push upozornění na detekce vytvářejí pravidla upozornění na kartě Pravidla. Vestavěná pravidla pro detekce upozorňují pouze v aplikaci. Chcete-li dostávat push upozornění, přidejte akci {pushAction} do pravidla {ruleName}, nebo vytvořte pravidlo pro událost {eventName} s podmínkou jistoty a dobou čekání.",
+          "previousFilters": "Vaše nastavení Minimální jistota ({confidence} %) a Prodleva mezi druhy ({minutes} min) zde pravidla upozornění nepoužívají.",
+          "openRules": "Otevřít Pravidla"
         },
         "noProviders": "Žádní nakonfigurovaní poskytovatelé",
         "noProvidersDescription": "Přidejte poskytovatele a začněte přijímat push oznámení",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Nahrávat detekce do BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg nebyl nalezen",
-          "message": "Nainstalujte prosím FFmpeg pro povolení podpory kódování FLAC. BirdWeather ukončuje podporu nahrávání WAV ve prospěch komprimovaných zvukových souborů FLAC."
-        },
         "enable": "Povolit nahrávání do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
@@ -5153,6 +5160,7 @@
       "loop": "Přepnout opakování",
       "player": "Přehrávač zvuku",
       "autoplayBlocked": "Kliknutím spustíte přehrávání (automatické přehrávání blokováno)",
+      "hlsLoadFailed": "Nepodařilo se načíst přehrávač zvuku, obnovte stránku a zkuste to znovu",
       "hlsNotSupported": "Přehrávání HLS není v tomto prohlížeči podporováno",
       "streamStarting": "Spouštění audio streamu...",
       "levelFor": "Úroveň zvuku pro {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "Neplatný JSON",
       "invalidEscalation": "Eskalační kroky jsou neplatné",
       "engineUnavailable": "Správce výstrah není dostupný"
+    },
+    "insights": {
+      "v2Required": "Přehledy vyžadují rozšířenou databázi (v2)"
     },
     "detection": {
       "invalidDate": "Neplatný formát {paramName}, použijte RRRR-MM-DD"

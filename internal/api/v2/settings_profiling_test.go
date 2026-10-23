@@ -80,29 +80,64 @@ func TestEnsureProfilingTokenForSave_NoOpCases(t *testing.T) {
 	}
 }
 
-// TestPatchDiagnosticsSectionIsWritable pins that the diagnostics section is
-// PATCHable. It was deliberately withheld from getSettingsSectionValue while the
-// PATCH merge path ignored getBlockedFieldMap, because adding it would have made
-// the generated profiling token client-settable. UpdateSectionSettings now
-// enforces the map via restoreBlockedFields, so the section is writable again.
+// TestEnablingProfilingThroughSettingsMintsToken pins that switching profiling
+// on through either settings write path leaves a usable token in the published
+// snapshot when no auth provider is configured (the only case in which
+// conf.EnsureProfilingToken mints one). Both paths publish on their own (see the note on
+// ensureProfilingTokenForSave), so a mint wired into only one of them leaves the
+// other enabling pprof with an empty token that the gate then refuses until a
+// restart.
 //
-// This replaces TestDiagnosticsSectionIsNotPatchable, which pinned the 400.
+// The PATCH row also pins that the diagnostics section is writable. It was
+// withheld from getSettingsSectionValue while the PATCH merge path ignored
+// getBlockedFieldMap, because adding it would have made the generated token
+// client-settable. UpdateSectionSettings now enforces the map via
+// restoreBlockedFields, so the section is writable again, and patchSection and
+// putRawSettings both require a 200.
 //
 // Deliberately changes only Enabled, not the sampling rates: the rates are
 // process-global runtime state (see the note further down this file), and this
-// test needs neither of them to prove the section is writable.
-func TestPatchDiagnosticsSectionIsWritable(t *testing.T) {
-	e := echo.New()
-	controller := getTestController(t, e)
-	require.False(t, controller.Settings.Load().Diagnostics.Profiling.Enabled,
-		"setup must start from profiling disabled")
+// test needs neither of them.
+func TestEnablingProfilingThroughSettingsMintsToken(t *testing.T) {
+	tests := []struct {
+		name   string
+		enable func(t *testing.T, e *echo.Echo, c *Controller)
+	}{
+		{
+			name: "PUT /settings",
+			enable: func(t *testing.T, e *echo.Echo, c *Controller) {
+				t.Helper()
+				putRawSettings(t, e, c, `{"diagnostics":{"profiling":{"enabled":true}}}`)
+			},
+		},
+		{
+			name: "PATCH /settings/diagnostics",
+			enable: func(t *testing.T, e *echo.Echo, c *Controller) {
+				t.Helper()
+				patchSection(t, e, c, "diagnostics", map[string]any{
+					"profiling": map[string]any{"enabled": true},
+				})
+			},
+		},
+	}
 
-	patchSection(t, e, controller, "diagnostics", map[string]any{
-		"profiling": map[string]any{"enabled": true},
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			controller := getTestController(t, e)
+			before := controller.Settings.Load().Diagnostics.Profiling
+			require.False(t, before.Enabled, "setup must start from profiling disabled")
+			require.Empty(t, before.Token, "setup must start from the tokenless state")
 
-	assert.True(t, controller.Settings.Load().Diagnostics.Profiling.Enabled,
-		"the enable flag must be writable, or profiling could not be turned on through PATCH at all")
+			tt.enable(t, e, controller)
+
+			after := controller.Settings.Load().Diagnostics.Profiling
+			assert.True(t, after.Enabled,
+				"the enable flag must be writable, or profiling could not be turned on at all")
+			assert.NotEmpty(t, after.Token,
+				"enabling profiling at runtime must mint a token in the same save, not defer it to a restart")
+		})
+	}
 }
 
 // TestPatchDiagnosticsCannotSetProfilingToken is the reason the section case was

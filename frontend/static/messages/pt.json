@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} com a sobreposição configurada de {configured} s excede a capacidade medida deste dispositivo, pelo que o áudio é analisado com {effective} s de sobreposição. Por isso, o filtro de falsos positivos pode exigir menos confirmações. As suas definições guardadas não mudam; consulte Configurações > Análise.",
         "cadenceOverloadedTitle": "Este dispositivo não consegue acompanhar a análise de áudio",
         "cadenceOverloadedMessage": "Executar {models, plural, one {# modelo} other {# modelos}} em {sources, plural, one {# fonte de áudio} other {# fontes de áudio}} excede a capacidade medida deste dispositivo mesmo sem sobreposição, pelo que a análise pode atrasar-se e podem perder-se deteções. Ative menos modelos ou fontes de áudio, ou escolha uma variante de modelo mais rápida."
+      },
+      "storage": {
+        "notPersistentTitle": "Os dados serão perdidos quando o contentor for recriado",
+        "notPersistentMessage": "Estes caminhos estão em armazenamento que é eliminado quando o contentor é recriado, por exemplo numa atualização da imagem: {paths}. Associe-lhes um volume ou uma pasta do anfitrião na configuração do seu contentor.",
+        "anonymousVolumeTitle": "Os dados estão guardados num volume anónimo do contentor",
+        "anonymousVolumeMessage": "Estes caminhos estão em volumes anónimos que o ambiente de execução do contentor criou porque nenhum volume foi associado: {paths}. Um contentor iniciado de novo, por exemplo com docker run após uma atualização da imagem, recebe volumes novos e vazios, pelo que os dados parecem perdidos. Associe-lhes um volume com nome ou uma pasta do anfitrião."
       }
     },
     "loading": "Carregando notificações..."
@@ -1576,7 +1582,7 @@
           "restartTitle": "Reinicialização necessária",
           "restartBody": "Reinicie o aplicativo para mudar para o banco de dados V2. A limpeza do banco de dados legado estará disponível após a reinicialização.",
           "fallbackError": "Divergência na contagem de registos entre os bancos de dados legado e V2. Alguns registos podem não ter sido migrados corretamente.",
-          "migrateInfo": "A migração transferirá {count} registos do banco de dados legado para o novo esquema V2. O modo de escrita dupla garante zero perda de dados durante a migração.",
+          "migrateInfo": "A migração transferirá {count} registos do banco de dados legado para o novo esquema V2. As novas detecções salvas durante a migração também são copiadas para o novo banco de dados.",
           "sourceLegacy": "Origem (legado)",
           "targetV2": "Destino (V2)",
           "recordsLabel": "Registos",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "Você pode continuar usando o sistema normalmente enquanto a migração é executada em segundo plano.",
-          "dual_write": "Migração em andamento. Seus dados estão seguros - todas as novas detecções estão sendo salvas em ambos os bancos de dados. Você pode continuar usando o BirdNET-Go normalmente.",
+          "dual_write": "Migração em andamento. Seus dados estão seguros - as novas detecções são salvas no banco de dados atual e copiadas para o novo banco de dados durante a migração. Você pode continuar usando o BirdNET-Go normalmente.",
           "migrating": "Copiando suas detecções existentes para o novo banco de dados. Isso pode demorar um pouco dependendo de quantas detecções você tem. Você pode pausar e retomar a qualquer momento.",
           "validating": "Verificando se todos os registos foram copiados corretamente. Quase pronto!",
           "cutover": "Alternando para o novo banco de dados. Isso leva apenas um momento.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Ideal para sinais fracos. Cantos de pássaros se destacam claramente do ruído de fundo. Recomendado para estilos científicos/escala de cinza.",
                   "standard": "Configuração balanceada padrão. Bom para a maioria dos casos de uso.",
-                  "extended": "Mais detalhes visíveis mas menor contraste. Valor padrão do SoX."
+                  "extended": "Mais detalhes visíveis mas menor contraste."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "O que está incluído no relatório:",
           "applicationLogs": "**Logs da aplicação** - Erros recentes e informações de depuração",
           "configuration": "**Configuração** - Suas configurações com dados sensíveis removidos",
-          "systemInfo": "**Informações do sistema** - Versão do SO, memória e detalhes de execução",
+          "systemInfo": "**Informações do sistema** - Versão do SO, memória, hardware, dispositivos USB ligados e placas de som, e detalhes de execução",
           "notIncluded": "**NÃO incluído** - Arquivos de áudio, detecções de pássaros ou dados pessoais"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "min",
             "helpText": "Evita notificações repetidas para a mesma espécie dentro desta janela de tempo. Defina como 0 para desativar."
           }
+        },
+        "rulesNotice": {
+          "message": "As notificações push de detecções vêm das regras de alerta na aba Regras. As regras de detecção integradas notificam apenas na aplicação. Para receber notificações push, adicione a ação {pushAction} à regra {ruleName} ou crie uma regra para o evento {eventName} com uma condição de confiança e um tempo de espera.",
+          "previousFilters": "As configurações Confiança Mínima ({confidence} %) e Tempo de Espera por Espécie ({minutes} min) definidas aqui não são usadas pelas regras de alerta.",
+          "openRules": "Abrir Regras"
         },
         "noProviders": "Nenhum provedor configurado",
         "noProvidersDescription": "Adicione um provedor para começar a receber notificações push",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Enviar detecções para o BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg não detectado",
-          "message": "Por favor, instale o FFmpeg para habilitar o suporte à codificação FLAC. O BirdWeather está descontinuando uploads WAV em favor de arquivos de áudio FLAC comprimidos."
-        },
         "enable": "Ativar uploads para BirdWeather",
         "token": {
           "label": "Token do BirdWeather",
@@ -5153,6 +5160,7 @@
       "loop": "Alternar repetição",
       "player": "Reprodutor de áudio",
       "autoplayBlocked": "Clique para reproduzir (reprodução automática bloqueada)",
+      "hlsLoadFailed": "Não foi possível carregar o reprodutor de áudio, recarregue a página e tente novamente",
       "hlsNotSupported": "A reprodução HLS não é suportada neste navegador",
       "streamStarting": "Iniciando transmissão de áudio...",
       "levelFor": "Nível de áudio para {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "JSON inválido",
       "invalidEscalation": "Os passos de escalação são inválidos",
       "engineUnavailable": "O mecanismo de alerta está indisponível"
+    },
+    "insights": {
+      "v2Required": "As análises requerem a base de dados melhorada (v2)"
     },
     "detection": {
       "invalidDate": "Formato de {paramName} inválido, utilize AAAA-MM-DD"

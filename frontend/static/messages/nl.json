@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} met de ingestelde overlap van {configured} s overschrijdt de gemeten capaciteit van dit apparaat, dus audio wordt geanalyseerd met {effective} s overlap. Het Vals Positief Filter kan daardoor minder bevestigingen vereisen. Uw opgeslagen instellingen blijven ongewijzigd; zie Instellingen > Analyse.",
         "cadenceOverloadedTitle": "Dit apparaat kan de audioanalyse niet bijhouden",
         "cadenceOverloadedMessage": "Het uitvoeren van {models, plural, one {# model} other {# modellen}} op {sources, plural, one {# audiobron} other {# audiobronnen}} overschrijdt de gemeten capaciteit van dit apparaat, zelfs zonder overlap, dus de analyse kan achterlopen en detecties kunnen worden gemist. Schakel minder modellen of audiobronnen in, of kies een snellere modelvariant."
+      },
+      "storage": {
+        "notPersistentTitle": "Gegevens gaan verloren wanneer de container opnieuw wordt aangemaakt",
+        "notPersistentMessage": "Deze paden staan op opslag die wordt verwijderd wanneer de container opnieuw wordt aangemaakt, bijvoorbeeld bij een image-update: {paths}. Koppel er een volume of een hostmap aan in je containerconfiguratie.",
+        "anonymousVolumeTitle": "Gegevens staan in een anoniem containervolume",
+        "anonymousVolumeMessage": "Deze paden staan in anonieme volumes die de containerruntime heeft aangemaakt omdat er geen volume was gekoppeld: {paths}. Een opnieuw gestarte container, bijvoorbeeld met docker run na een image-update, krijgt nieuwe lege volumes, waardoor de gegevens verloren lijken. Koppel er een benoemd volume of een hostmap aan."
       }
     },
     "loading": "Meldingen laden..."
@@ -1576,7 +1582,7 @@
           "restartTitle": "Herstart vereist",
           "restartBody": "Herstart de applicatie om naar de V2-database te schakelen. Opruiming van de oude database is beschikbaar na herstart.",
           "fallbackError": "Verschil in recordaantal tussen legacy- en V2-database. Sommige records zijn mogelijk niet correct gemigreerd.",
-          "migrateInfo": "De migratie zal {count} records overzetten van de legacy-database naar het nieuwe V2-schema. De dual-write-modus garandeert nul dataverlies tijdens de migratie.",
+          "migrateInfo": "De migratie zal {count} records overzetten van de legacy-database naar het nieuwe V2-schema. Nieuwe detecties die tijdens de migratie worden opgeslagen, worden ook naar de nieuwe database gekopieerd.",
           "sourceLegacy": "Bron (legacy)",
           "targetV2": "Doel (V2)",
           "recordsLabel": "Records",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "U kunt het systeem normaal blijven gebruiken terwijl de migratie op de achtergrond draait.",
-          "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - alle nieuwe detecties worden opgeslagen in beide databases. U kunt BirdNET-Go gewoon blijven gebruiken.",
+          "dual_write": "Migratie is bezig. Uw gegevens zijn veilig - nieuwe detecties worden opgeslagen in de huidige database en tijdens de migratie naar de nieuwe database gekopieerd. U kunt BirdNET-Go gewoon blijven gebruiken.",
           "migrating": "Bestaande detecties worden gekopieerd naar de nieuwe database. Dit kan even duren afhankelijk van hoeveel detecties u heeft. U kunt op elk moment pauzeren en hervatten.",
           "validating": "Controleren of alle records correct zijn gekopieerd. Bijna klaar!",
           "cutover": "Overschakelen naar de nieuwe database. Dit duurt slechts een moment.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Ideaal voor zwakke signalen. Vogelgeluiden komen duidelijk uit boven de achtergrondruis. Aanbevolen voor wetenschappelijke/grijstinten stijlen.",
                   "standard": "Standaard gebalanceerde instelling. Goed voor de meeste toepassingen.",
-                  "extended": "Meer detail zichtbaar maar lager contrast. SoX standaardwaarde."
+                  "extended": "Meer detail zichtbaar maar lager contrast."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "Wat is opgenomen in het rapport:",
           "applicationLogs": "**Applicatie logs** - Recente fouten en debug informatie",
           "configuration": "**Configuratie** - Jouw instellingen met gevoelige gegevens verwijderd",
-          "systemInfo": "**Systeem informatie** - OS versie, geheugen, en runtime details",
+          "systemInfo": "**Systeem informatie** - OS versie, geheugen, hardware, aangesloten USB-apparaten en geluidskaarten, en runtime details",
           "notIncluded": "**NIET opgenomen** - Audio bestanden, vogel herkenningen, of persoonlijke gegevens"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "min",
             "helpText": "Voorkom herhaalde notificaties voor dezelfde soort binnen dit tijdvenster. Stel in op 0 om uit te schakelen."
           }
+        },
+        "rulesNotice": {
+          "message": "Pushmeldingen voor detecties komen van de waarschuwingsregels op het tabblad Regels. De ingebouwde detectieregels melden alleen in de app. Voeg voor pushmeldingen de actie {pushAction} toe aan de regel {ruleName}, of maak een regel voor de gebeurtenis {eventName} met een betrouwbaarheidsvoorwaarde en een wachttijd.",
+          "previousFilters": "Uw instellingen Minimale betrouwbaarheid ({confidence} %) en Soort-afkoeltijd ({minutes} min) hier worden niet gebruikt door waarschuwingsregels.",
+          "openRules": "Regels openen"
         },
         "noProviders": "Geen providers geconfigureerd",
         "noProvidersDescription": "Voeg een provider toe om pushmeldingen te ontvangen",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Upload herkenningen naar BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg niet gedetecteerd",
-          "message": "Installeer FFmpeg om FLAC encoding ondersteuning in te schakelen, BirdWeather stopt met WAV uploads ten gunste van gecomprimeerde FLAC audio bestanden."
-        },
         "enable": "Schakel BirdWeather Uploads in",
         "token": {
           "label": "BirdWeather-token",
@@ -5153,6 +5160,7 @@
       "loop": "Herhaling aan/uit",
       "player": "Audiospeler",
       "autoplayBlocked": "Klik om af te spelen (autoplay geblokkeerd)",
+      "hlsLoadFailed": "De audiospeler kon niet worden geladen, laad de pagina opnieuw en probeer het nogmaals",
       "hlsNotSupported": "HLS-weergave wordt niet ondersteund in deze browser",
       "streamStarting": "Audiostream wordt gestart...",
       "levelFor": "Audioniveau voor {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "Ongeldige JSON",
       "invalidEscalation": "Escalatiestappen zijn ongeldig",
       "engineUnavailable": "Alerting-engine is niet beschikbaar"
+    },
+    "insights": {
+      "v2Required": "Inzichten vereisen de uitgebreide (v2) database"
     },
     "detection": {
       "invalidDate": "Ongeldig {paramName}-formaat, gebruik JJJJ-MM-DD"

@@ -92,5 +92,6 @@ func TestBuildAllSpeciesList_Empty(t *testing.T) {
 	t.Parallel()
 
 	got := buildAllSpeciesList(map[string]string{}, nil)
+	require.NotNil(t, got)
 	assert.Empty(t, got)
 }

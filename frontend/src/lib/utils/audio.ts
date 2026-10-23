@@ -28,11 +28,28 @@ export const AUDIO_RETRY_DELAY_MS = 2000;
  * Background retry delays in ms for a dashboard card whose clip is still being
  * exported. Spans the backend's pending-export window (about 90 s total). The
  * entry count is the retry limit. A media element cannot read the HTTP status, so
- * retries are blind.
+ * the first failure of a load of the original clip is also checked with
+ * probeAudioSource: a 404 ends the retries and a 503 with a longer Retry-After than
+ * the scheduled delay lengthens that delay. Every other failure retries blind.
  */
 export const DASHBOARD_AUDIO_RETRY_DELAYS_MS: readonly number[] = [
   2000, 4000, 8000, 16000, 30000, 30000,
 ];
+
+/** Range header value that asks for the first byte of a clip only. */
+const AUDIO_PROBE_RANGE = 'bytes=0-0';
+
+/** HTTP status the audio endpoint answers for a clip that is gone for good. */
+const HTTP_NOT_FOUND = 404;
+
+/** HTTP status the audio endpoint answers for a clip that may still be written. */
+const HTTP_SERVICE_UNAVAILABLE = 503;
+
+/** Milliseconds in a second, for converting a Retry-After header. */
+const MS_PER_SECOND = 1000;
+
+/** Longest Retry-After honoured, in ms; a larger or hostile value is capped to this. */
+export const MAX_AUDIO_PROBE_RETRY_AFTER_MS = 30000;
 
 /** DOMException name a browser uses when play() is interrupted by a load or pause */
 const ABORT_ERROR_NAME = 'AbortError';
@@ -119,4 +136,67 @@ export function playButtonLabelKey(
 ): 'media.audio.loading' | 'media.audio.pause' | 'media.audio.play' {
   if (isLoading) return 'media.audio.loading';
   return isPlaying ? 'media.audio.pause' : 'media.audio.play';
+}
+
+// =============================================================================
+// Load failure probe
+// =============================================================================
+
+/**
+ * What a media element's failed load was caused by, as the audio endpoint answers
+ * a one byte probe of the same URL.
+ * - `missing`: 404, the clip is gone for good; retrying cannot help.
+ * - `pending`: 503, the clip may still be written; retry after `retryAfterMs`
+ *   (undefined when the server sent no usable Retry-After).
+ * - `unknown`: any other status or a network error; keep the blind retries.
+ */
+export type AudioProbeOutcome =
+  { kind: 'missing' } | { kind: 'pending'; retryAfterMs?: number } | { kind: 'unknown' };
+
+/** Reads a Retry-After header in seconds as capped milliseconds; undefined when unusable. */
+function parseRetryAfterMs(header: string | null): number | undefined {
+  if (header === null || !/^\d+$/.test(header.trim())) return undefined;
+  const ms = Number(header.trim()) * MS_PER_SECOND;
+  return Math.min(ms, MAX_AUDIO_PROBE_RETRY_AFTER_MS);
+}
+
+/**
+ * A media element cannot read the HTTP status of a failed load, so this asks the
+ * audio endpoint once, with a GET for the first byte (the audio routes do not
+ * answer HEAD). The body is cancelled unread. Never rejects: an abort or network
+ * error yields `unknown`, so callers check their signal before acting.
+ *
+ * @param url - the audio URL whose element load failed
+ * @param signal - aborts the request when the caller moves on
+ * @returns how the server classifies the failure
+ */
+export async function probeAudioSource(
+  url: string,
+  signal: AbortSignal
+): Promise<AudioProbeOutcome> {
+  try {
+    const response = await fetch(url, { headers: { Range: AUDIO_PROBE_RANGE }, signal });
+    // Cancel before reading anything: a server that ignores Range must not stream the clip.
+    void response.body?.cancel().catch(() => undefined);
+    if (response.status === HTTP_NOT_FOUND) return { kind: 'missing' };
+    if (response.status === HTTP_SERVICE_UNAVAILABLE) {
+      return {
+        kind: 'pending',
+        retryAfterMs: parseRetryAfterMs(response.headers.get('Retry-After')),
+      };
+    }
+    return { kind: 'unknown' };
+  } catch {
+    return { kind: 'unknown' };
+  }
+}
+
+/**
+ * The delay before the retry that follows a `pending` probe: the server's
+ * Retry-After when it is longer than the scheduled delay, never shorter.
+ */
+export function pendingRetryDelayMs(outcome: AudioProbeOutcome, scheduledDelayMs: number): number {
+  return outcome.kind === 'pending' && outcome.retryAfterMs !== undefined
+    ? Math.max(scheduledDelayMs, outcome.retryAfterMs)
+    : scheduledDelayMs;
 }

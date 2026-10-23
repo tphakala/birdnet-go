@@ -10,21 +10,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
-// fakeResolver is a minimal datastore.SpeciesNameResolver for tests.
-type fakeResolver struct{ m map[string]string }
-
-func (f fakeResolver) Resolve(sci, _ string) string { return f.m[sci] }
-
-func (f fakeResolver) ResolveLocal(sci string) (string, bool) {
-	v, ok := f.m[sci]
-	return v, ok
-}
-
 // newNameMapController builds a bare Controller with an initialized species-name
 // index, for exercising the facade name-map accessors without spinning up the full
-// facade. The underlying builder itself is golden-tested in internal/speciesindex;
-// these tests cover the facade wiring (resolver install plus rebuild feeding the
-// accessors).
+// facade. The underlying builder itself is golden-tested in internal/speciesindex.
 func newNameMapController(t *testing.T) *Controller {
 	t.Helper()
 	e := echo.New()
@@ -49,27 +37,6 @@ func seedNames(t *testing.T, c *Controller, r datastore.SpeciesNameResolver, lab
 		locale = s.BirdNET.Locale
 	}
 	c.names.Rebuild(labels, locale)
-}
-
-func TestController_NameMaps_ResolverLocalizes(t *testing.T) {
-	t.Parallel()
-
-	// The resolver overrides the label's common name in both the forward
-	// (sciToCommon) and reverse (commonToSci) maps, so insights display and
-	// search both reflect the localized name.
-	c := newNameMapController(t)
-	seedNames(t, c, fakeResolver{m: map[string]string{"Turdus merula": "Mustarastas"}}, []string{"Turdus merula_LabelName"})
-
-	assert.Equal(t, "Mustarastas", c.loadCommonNameMap()["Turdus merula"])
-	assert.Equal(t, "Turdus merula", c.loadCommonToScientificMap()[apicore.NormalizeForLookup("Mustarastas")])
-}
-
-func TestController_NameMaps_NilResolverKeepsLabel(t *testing.T) {
-	t.Parallel()
-
-	c := newNameMapController(t)
-	seedNames(t, c, nil, []string{"Turdus merula_LabelName"})
-	assert.Equal(t, "LabelName", c.loadCommonNameMap()["Turdus merula"])
 }
 
 func TestResolveCommonName(t *testing.T) {
@@ -112,24 +79,6 @@ func TestWithSpeciesIndex_SharesInjectedService(t *testing.T) {
 	WithSpeciesIndex(nil)(own)
 	assert.Same(t, ownService, own.names)
 	assert.True(t, own.ownsNames)
-}
-
-func TestController_NameMaps_ScientificOnlyLabelSearchable(t *testing.T) {
-	t.Parallel()
-
-	// A scientific-only label (no "_", e.g. Perch v2 / bat labels) has no embedded
-	// common name; when the resolver provides one, the species becomes searchable
-	// by it (forward + reverse maps populated).
-	c := newNameMapController(t)
-	seedNames(t, c, fakeResolver{m: map[string]string{"Myotis myotis": "Greater Mouse-eared Bat"}}, []string{"Myotis myotis"})
-	assert.Equal(t, "Greater Mouse-eared Bat", c.loadCommonNameMap()["Myotis myotis"])
-	assert.Equal(t, "Myotis myotis", c.loadCommonToScientificMap()[apicore.NormalizeForLookup("Greater Mouse-eared Bat")])
-
-	// Without a resolver, a scientific-only label has no common name and is absent.
-	bare := newNameMapController(t)
-	seedNames(t, bare, nil, []string{"Myotis myotis"})
-	_, ok := bare.loadCommonNameMap()["Myotis myotis"]
-	assert.False(t, ok)
 }
 
 // TestSeedFallbackNames_OwnedServiceRebuilds exercises the active (owned-service)

@@ -343,8 +343,10 @@ var (
 // expired-token cleanup); cancelling it stops them, giving the cleanup goroutine
 // a proper shutdown path instead of running for the process lifetime.
 //
-// secureCookies controls the Secure attribute on the session/auth cookies. The
-// caller decides it from the effective web-server TLS configuration (see
+// secureCookies controls the Secure attribute on the session/auth cookies,
+// except for clients listed in Security.PlainHTTPSessionClients that connect
+// directly over plain HTTP (see plainHTTPClientSessionStore). The caller decides
+// it from the effective web-server TLS configuration (see
 // api.Config.SessionCookiesSecure), since the security package cannot import
 // internal/api.
 func NewOAuth2Server(ctx context.Context, secureCookies bool) *OAuth2Server {
@@ -405,13 +407,7 @@ func handleEmptySessionSecret(settings *conf.Settings) {
 		logger.Bool("debug_mode", settings.WebServer.Debug),
 		logger.String("recommendation", "BirdNET-Go will auto-generate a SessionSecret on next restart"))
 
-	tempSecret, err := conf.GenerateRandomSecret()
-	if err != nil {
-		GetLogger().Error("FATAL: Cannot generate temporary SessionSecret, crypto/rand is unavailable. Shutting down to prevent insecure operation.",
-			logger.Error(err))
-		os.Exit(1)
-	}
-	settings.Security.SessionSecret = tempSecret
+	settings.Security.SessionSecret = conf.GenerateRandomSecret()
 	GetLogger().Info("Generated temporary SessionSecret for this session")
 
 	_ = errors.New(
@@ -496,8 +492,10 @@ func (s *OAuth2Server) setupTokenPersistence() {
 }
 
 // InitializeGoth initializes social authentication providers. secureCookies sets
-// the Secure attribute on the session store's cookies; the caller derives it from
-// the effective web-server TLS configuration (api.Config.SessionCookiesSecure).
+// the Secure attribute on the session store's cookies, except for configured
+// plain-HTTP session clients (see plainHTTPClientSessionStore); the caller
+// derives it from the effective web-server TLS configuration
+// (api.Config.SessionCookiesSecure).
 func InitializeGoth(settings *conf.Settings, secureCookies bool) {
 	if settings == nil {
 		// settings is a required dependency: setupSessionStore and
@@ -516,8 +514,9 @@ func InitializeGoth(settings *conf.Settings, secureCookies bool) {
 
 // setupSessionStore configures the Gothic session store.
 // It attempts to use a filesystem store, falling back to an in-memory cookie store on failure.
-// secureCookies sets the Secure attribute on the session cookies; it is derived by
-// the caller from the effective web-server TLS configuration.
+// secureCookies sets the Secure attribute on the session cookies, except for
+// configured plain-HTTP session clients (see plainHTTPClientSessionStore); it is
+// derived by the caller from the effective web-server TLS configuration.
 func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	secLog := GetLogger()
 
@@ -538,7 +537,7 @@ func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	sessionPath, ok := getSessionPath()
 	if !ok {
 		// Fallback to in-memory store if config paths can't be retrieved
-		gothic.Store = newCookieStoreFallback()
+		gothic.Store = plainHTTPClientSessionStore{Store: newCookieStoreFallback(), settings: settings}
 		return
 	}
 
@@ -547,7 +546,7 @@ func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	// Ensure directory exists
 	if err := os.MkdirAll(sessionPath, DirPermissions); err != nil {
 		secLog.Error("Failed to create session directory, falling back to in-memory cookie store", logger.Error(err))
-		gothic.Store = newCookieStoreFallback()
+		gothic.Store = plainHTTPClientSessionStore{Store: newCookieStoreFallback(), settings: settings}
 		return
 	}
 
@@ -555,14 +554,14 @@ func setupSessionStore(settings *conf.Settings, secureCookies bool) {
 	authKey := createSessionKey(settings.Security.SessionSecret)
 	encKey := createSessionKey(settings.Security.SessionSecret + "encryption")
 
-	gothic.Store = sessions.NewFilesystemStore(
+	store := sessions.NewFilesystemStore(
 		sessionPath,
 		authKey,
 		encKey,
 	)
+	gothic.Store = plainHTTPClientSessionStore{Store: store, settings: settings}
 
 	// Configure session store options
-	store := gothic.Store.(*sessions.FilesystemStore)
 	store.Options = buildSessionOptions(secureCookies, maxAge)
 	secLog.Info("Filesystem session store configured", logger.Int("max_age_seconds", maxAge), logger.Bool("secure", secureCookies))
 
@@ -940,16 +939,12 @@ func isValidUserId(configuredIds, providedId string) bool {
 }
 
 // GenerateAuthCode generates a new authorization code
-func (s *OAuth2Server) GenerateAuthCode() (string, error) {
+func (s *OAuth2Server) GenerateAuthCode() string {
 	secLog := GetLogger()
 	secLog.Debug("Generating new authorization code")
 
 	code := make([]byte, AuthCodeByteLength)
-	_, err := rand.Read(code)
-	if err != nil {
-		secLog.Error("Failed to read random bytes for auth code", logger.Error(err))
-		return "", err
-	}
+	rand.Read(code)
 	authCode := base64.URLEncoding.EncodeToString(code)
 
 	s.mutex.Lock()
@@ -963,7 +958,7 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 	// Do not log the authCode itself
 	secLog.Info("Generated and stored new authorization code", logger.Time("expires_at", expiresAt))
 	go s.persistTokensIfEnabled() // Persist changes
-	return authCode, nil
+	return authCode
 }
 
 // ExchangeAuthCode exchanges an authorization code for an access token
@@ -1003,11 +998,7 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 
 	// Generate access token
 	tokenBytes := make([]byte, AccessTokenByteLength)
-	_, err := rand.Read(tokenBytes)
-	if err != nil {
-		secLog.Error("Failed to read random bytes for access token", logger.Error(err))
-		return "", err
-	}
+	rand.Read(tokenBytes)
 	accessToken := base64.URLEncoding.EncodeToString(tokenBytes)
 	expiresAt := time.Now().Add(s.currentSettings().Security.BasicAuth.AccessTokenExp)
 

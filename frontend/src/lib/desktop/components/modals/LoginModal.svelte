@@ -11,7 +11,7 @@
 <script lang="ts">
   import { api } from '$lib/utils/api';
   import { safeGet, safeElementAccess } from '$lib/utils/security';
-  import { extractRelativePath, getUiBasePath } from '$lib/utils/urlHelpers';
+  import { buildAppUrl, extractRelativePath, getUiBasePath } from '$lib/utils/urlHelpers';
   import { MAX_LOGIN_REDIRECT_LENGTH } from '$lib/utils/loginRedirect';
   import { loggers } from '$lib/utils/logger';
   import { t } from '$lib/i18n';
@@ -251,8 +251,12 @@
       action: 'handleOAuthLogin',
     });
 
-    // Redirect to OAuth provider
-    window.location.href = endpoint;
+    // Redirect to OAuth provider. The endpoint is this app's own backend route
+    // (e.g. '/auth/google'), so it must carry the reverse-proxy base path when the
+    // UI is served behind a path-prefixing proxy such as Home Assistant Ingress.
+    // buildAppUrl is idempotent and open-redirect guarded, and the endpoint
+    // validation above has already restricted this to a relative path.
+    window.location.href = buildAppUrl(endpoint);
   }
 
   function handleSubmit(event: Event) {

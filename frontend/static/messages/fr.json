@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} avec le chevauchement configuré de {configured} s dépasse la capacité mesurée de cet appareil, l'audio est donc analysé avec un chevauchement de {effective} s. Le filtre de faux positifs peut donc exiger moins de confirmations. Vos paramètres enregistrés restent inchangés ; voir Paramètres > Analyse.",
         "cadenceOverloadedTitle": "Cet appareil ne peut pas suivre l'analyse audio",
         "cadenceOverloadedMessage": "L'exécution de {models, plural, one {# modèle} other {# modèles}} sur {sources, plural, one {# source audio} other {# sources audio}} dépasse la capacité mesurée de cet appareil même sans chevauchement, l'analyse peut donc prendre du retard et des détections peuvent être manquées. Activez moins de modèles ou de sources audio, ou choisissez une variante de modèle plus rapide."
+      },
+      "storage": {
+        "notPersistentTitle": "Les données seront perdues lorsque le conteneur sera recréé",
+        "notPersistentMessage": "Ces chemins se trouvent sur un stockage supprimé lorsque le conteneur est recréé, par exemple lors d'une mise à jour de l'image : {paths}. Associez-leur un volume ou un répertoire de l'hôte dans la configuration de votre conteneur.",
+        "anonymousVolumeTitle": "Les données sont stockées dans un volume anonyme du conteneur",
+        "anonymousVolumeMessage": "Ces chemins se trouvent dans des volumes anonymes que l'environnement d'exécution du conteneur a créés parce qu'aucun volume n'était associé : {paths}. Un conteneur démarré à neuf, par exemple avec docker run après une mise à jour de l'image, reçoit de nouveaux volumes vides, si bien que les données semblent perdues. Associez-leur un volume nommé ou un répertoire de l'hôte."
       }
     },
     "loading": "Chargement des notifications..."
@@ -1576,7 +1582,7 @@
           "restartTitle": "Redémarrage requis",
           "restartBody": "Redémarrez l'application pour basculer vers la base de données V2. Le nettoyage de l'ancienne base de données sera disponible après le redémarrage.",
           "fallbackError": "Incohérence du nombre d'enregistrements entre les bases de données ancienne et V2. Certains enregistrements n'ont peut-être pas été migrés correctement.",
-          "migrateInfo": "La migration transférera {count} enregistrements de l'ancienne base de données vers le nouveau schéma V2. Le mode double écriture garantit zéro perte de données pendant la migration.",
+          "migrateInfo": "La migration transférera {count} enregistrements de l'ancienne base de données vers le nouveau schéma V2. Les nouvelles détections enregistrées pendant la migration sont également copiées vers la nouvelle base de données.",
           "sourceLegacy": "Source (ancienne)",
           "targetV2": "Cible (V2)",
           "recordsLabel": "Enregistrements",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "Vous pouvez continuer à utiliser le système normalement pendant que la migration s'exécute en arrière-plan.",
-          "dual_write": "Migration en cours. Vos données sont en sécurité - toutes les nouvelles détections sont enregistrées dans les deux bases de données. Vous pouvez continuer à utiliser BirdNET-Go normalement.",
+          "dual_write": "Migration en cours. Vos données sont en sécurité - les nouvelles détections sont enregistrées dans la base de données actuelle puis copiées vers la nouvelle base pendant la migration. Vous pouvez continuer à utiliser BirdNET-Go normalement.",
           "migrating": "Copie de vos détections existantes vers la nouvelle base de données. Cela peut prendre un certain temps selon le nombre de détections. Vous pouvez mettre en pause et reprendre à tout moment.",
           "validating": "Vérification que tous les enregistrements ont été copiés correctement. Presque terminé !",
           "cutover": "Passage à la nouvelle base de données. Cela ne prend qu'un instant.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Idéal pour les signaux faibles. Les chants d'oiseaux ressortent clairement du bruit de fond. Recommandé pour les styles scientifiques/niveaux de gris.",
                   "standard": "Réglage équilibré par défaut. Bon pour la plupart des cas d'utilisation.",
-                  "extended": "Plus de détails visibles mais contraste plus faible. Valeur par défaut de SoX."
+                  "extended": "Plus de détails visibles mais contraste plus faible."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "Ce qui est inclus dans le rapport :",
           "applicationLogs": "**Journaux d'application** - Erreurs récentes et informations de débogage",
           "configuration": "**Configuration** - Vos paramètres avec les données sensibles supprimées",
-          "systemInfo": "**Informations système** - Version du système d'exploitation, mémoire et détails d'exécution",
+          "systemInfo": "**Informations système** - Version du système d'exploitation, mémoire, matériel, périphériques USB connectés et cartes son, et détails d'exécution",
           "notIncluded": "**NON inclus** - Fichiers audio, détections d'oiseaux ou données personnelles"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "min",
             "helpText": "Empêche les notifications répétées pour la même espèce pendant cette période. Mettre à 0 pour désactiver."
           }
+        },
+        "rulesNotice": {
+          "message": "Les notifications push de détection proviennent des règles d'alerte de l'onglet Règles. Les règles de détection intégrées notifient uniquement dans l'application. Pour recevoir des notifications push, ajoutez l'action {pushAction} à la règle {ruleName}, ou créez une règle pour l'événement {eventName} avec une condition de confiance et un délai.",
+          "previousFilters": "Vos réglages Confiance minimale ({confidence} %) et Délai par espèce ({minutes} min) définis ici ne sont pas utilisés par les règles d'alerte.",
+          "openRules": "Ouvrir les règles"
         },
         "noProviders": "Aucun fournisseur configuré",
         "noProvidersDescription": "Ajoutez un fournisseur pour commencer à recevoir des notifications push",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Téléverser les détections vers BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg non détecté",
-          "message": "Veuillez installer FFmpeg pour activer la prise en charge de l'encodage FLAC, BirdWeather déprécie les téléchargements WAV au profit des fichiers audio FLAC compressés."
-        },
         "enable": "Activer les téléchargements BirdWeather",
         "token": {
           "label": "Jeton BirdWeather",
@@ -5153,6 +5160,7 @@
       "loop": "Basculer la boucle",
       "player": "Lecteur audio",
       "autoplayBlocked": "Cliquez pour lire (lecture automatique bloquée)",
+      "hlsLoadFailed": "Impossible de charger le lecteur audio, veuillez recharger la page et réessayer",
       "hlsNotSupported": "La lecture HLS n'est pas prise en charge dans ce navigateur",
       "streamStarting": "Démarrage du flux audio...",
       "levelFor": "Niveau audio pour {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "JSON invalide",
       "invalidEscalation": "Les étapes d'escalade sont invalides",
       "engineUnavailable": "Le moteur d'alerte est indisponible"
+    },
+    "insights": {
+      "v2Required": "Les analyses nécessitent la base de données améliorée (v2)"
     },
     "detection": {
       "invalidDate": "Format de {paramName} invalide, utilisez AAAA-MM-JJ"

@@ -185,7 +185,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/spectrogram/:id/process`           | `ProcessedSpectrogramByID` | ✅   | Spectrogram of denoised/normalized clip |
 
 **On-demand clip processing.** `clip`, `process`, `audible-bats` and the processed
-spectrogram decode the stored clip and process it in Go without FFmpeg; the processed spectrogram is then rendered by the spectrogram generator (SoX, with an FFmpeg fallback).
+spectrogram decode the stored clip and process it in Go without FFmpeg; the processed spectrogram is then rendered natively in Go by the spectrogram generator.
 `clip` accepts the formats `wav`, `flac`, `mp3`, `aac` (served as `.m4a`) and `opus`
 (served as `.ogg`); any other value answers **400**. Filters apply
 in the order denoise (`light`, `medium`, `heavy`), loudness normalization, gain
@@ -204,10 +204,30 @@ rendered: an unsupported format or a sample rate below 8 kHz, a damaged file, a 
 the size limits, or a clip too short for one spectrogram column. The first two also answer
 **503** with `Retry-After` while the clip is still being written, and also when the header probe
 cannot read the clip, since a half-written file looks the same; only damage found while decoding
-answers 422. With the native renderer, a clip that changes (size, modification time or file) between the
+answers 422. A clip that changes (size, modification time or file) between the
 readiness check and the render also answers 503 and nothing is cached (one removed before the
 render starts answers 404), and a WAV or FLAC that holds fewer samples than
 its header declares answers 422 (a rerun after the file is completed renders it).
+
+**Spectrogram reasons.** The status answer (`GET /spectrogram/:id/status`, in `data`) and the
+`404` of `GET /spectrogram/:id` for a missing source clip (in `data`) carry a machine
+readable `reason` when it is known. The field is additive: status values are unchanged, and
+queued and generating answers carry no reason. A client that can read the body (a `fetch`,
+not an `<img>`) should act on it:
+
+| `reason`         | Where                                                                                                                  | What a client should do                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `not_generated`  | status `not_started`, source clip on disk                                                                              | request generation                       |
+| `source_pending` | status `not_started` or `failed`, and the image `404` after the wait; the clip may still appear                        | retry later, a bounded number of times   |
+| `source_missing` | status `not_started` or `failed`, and the fast image `404`; the clip is gone for good                                  | stop retrying, show that no audio exists |
+| `source_invalid` | status `failed`; the clip exists but cannot be rendered                                                                | stop retrying                            |
+| `busy`           | status `failed`; no generation slot in time, a deadline or a cancellation                                              | retry with backoff                       |
+| `render_failed`  | status `failed`; any other generation failure, and the image `404` when the rendered image is missing after generation | retry a bounded number of times          |
+
+A kept render of the clip can still be served by `GET /spectrogram/:id` when the audio is
+gone, so `source_missing` describes the audio, not every image request. The `Invalid audio
+path` `not_started` answer and the `404` of user-requested mode (which carries `data.mode`)
+carry no reason.
 
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve
@@ -226,11 +246,26 @@ broadcast are emitted before its audio clip is written, and with Extended Captur
 clip write is deferred until the capture tail is recorded (up to the capture-buffer
 size). While a clip is still legitimately pending, the by-ID audio and spectrogram
 endpoints (`GET /audio/:id`, `GET /spectrogram/:id`) return `503 Service Unavailable`
-with a `Retry-After` header sized to the remaining time, instead of `404`. Clients
-should honor `Retry-After` and retry; the clip appears once the capture completes. A
-`404` from these endpoints means the clip is genuinely absent (never produced, or purged
-by retention). These pending 503s are intentionally not logged as errors and are not
+with a `Retry-After` header, instead of `404`; for the Extended Capture window it is
+sized to the remaining time. Clients
+should honor `Retry-After` and retry; the clip appears once the capture completes. The
+same `503` answers `GET /audio/:id` for a detection that completed within the last 10
+minutes when its clip is still missing after a short grace wait, because the export may
+still be queued (its `Retry-After` is the short minimum). A `404` from `GET /audio/:id`
+means the clip is absent: never produced, or purged by retention, and for a detection
+older than 10 minutes. A request with no known completion time (a filename serve) also
+answers `404` after the grace wait. A `404` from `GET /spectrogram/:id` carries
+`data.reason`, described below: `source_pending` means the clip may still appear. These pending 503s are intentionally not logged as errors and are not
 reported to telemetry, since they are expected, self-resolving backpressure.
+
+A by-ID spectrogram request (`GET /spectrogram/:id`) for a clip that can no longer appear
+answers `404` at once, with `data.reason` set to `source_missing`, instead of first waiting
+up to 5 seconds for the file. A clip can no longer appear when its detection completed more
+than 10 minutes ago, it is past the pending window, no export temp file is present and no
+copy of it exists under another audio extension: the same condition under which
+`GET /audio/:id` answers `404` without waiting. While the clip may still be written, the
+request keeps the wait and answers `404` with `reason` `source_pending` afterwards. A
+missing source is logged at Debug (or Warn after the wait), not as an API error.
 
 **Spectrogram after retention (`GET /spectrogram/:id`).** When the retention policy
 deletes a detection's audio and the "keep spectrograms" setting is on, the detection
@@ -244,6 +279,27 @@ unchanged and keep answering `404` for detections without audio. Detection and s
 responses carry `spectrogramOnly: true` for these detections (the field is omitted
 otherwise); `clipName` / `hasAudio` stay empty / false, so clients show the image but no
 player or download.
+
+**Spectrogram frequency range.** Bird spectrograms span 0 to 12 kHz. Bat
+spectrograms render at the clip's own sample rate and span 0 to half of it (a 384 kHz clip shows 0 to
+192 kHz, a 192 kHz clip 0 to 96 kHz). Bat renders carry the `-bat-v3` token in their file name, and a
+fresh render removes the older `-bat-v2` and `-bat` files next to it.
+
+- Detection and search responses carry `clipSampleRate` (Hz, an integer) for the detection's original
+  audio clip. The field is omitted when the rate is unknown. A spectrogram-only detection reports the
+  original clip's rate, which kept images made before the `-bat-v3` change do not match.
+- `GET /detections/:id` fills a missing rate for an older bat detection by reading that clip's header
+  once (a few KB, never the whole clip), waiting at most 250 ms, and storing the value. If the clip is
+  unreadable, nothing is stored and the next request tries again. If the wait runs out, the field is left
+  out of that response and the read finishes in the background; once it has stored the rate, the next
+  request returns it. Lists and search never read a clip. A page from `GET /detections`, searches
+  included, can lag a stored value by its 5 minute cache; `POST /search` is not cached.
+- `sr=<Hz>` on `GET /spectrogram/:id` means the client draws its axis from that clip rate, so the
+  endpoint serves only the exact current render of the clip and answers `404` where it would otherwise
+  fall back to a nearest render. An invalid or absent `sr` is ignored.
+- `POST /spectrogram/:id/generate` and `GET /spectrogram/:id/status` answer `503` with `Retry-After` when
+  the detection's model type cannot be looked up (a database error), and so does `GET /spectrogram/:id`
+  with `sr`. Nothing is queued or written, and the request can be retried.
 
 ### Notifications (`notifications/notifications.go`)
 
@@ -307,7 +363,7 @@ The `GET /settings/dashboard` endpoint is intentionally public so that unauthent
 
 **Blocked fields:** a set of fields can never be written through the settings API, on either write path. Both `PUT /settings` and `PATCH /settings/:section` merge the request into the current settings and then restore the blocked fields from the pre-update snapshot. Sending such a field is not an error: the rest of the request is applied normally and only the blocked values are reverted.
 
-The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg/sox tool paths and the sox format list (`Realtime.Audio.FfmpegPath`/`SoxPath`/`SoxAudioTypes`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
+The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg tool path (`Realtime.Audio.FfmpegPath`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
 
 Both verbs report identically under the `skippedFields` response key: it lists only the blocked paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed), and it is an empty array (`[]`) when nothing was reverted. Do not treat a non-empty list as a request failure. Because the frontend sends the whole settings object on every save, a `PUT` that carries the blanked `Security.BasicAuth.ClientID`/`ClientSecret` reports those two whenever BasicAuth is configured; that is expected and the rest of the save still applies.
 
@@ -482,13 +538,12 @@ HLS playlist and segment routes use token-based authentication instead of standa
 
 **Features:**
 
-- FFmpeg-based HLS streaming with AAC audio encoding
+- In-process HLS streaming (go-hls) with native AAC encoding, no FFmpeg process
 - Token-based auth for HLS content (no auth middleware on playlist/segment routes)
 - Automatic stream cleanup after 5 minutes of inactivity
 - Stream reuse: existing healthy streams are reused for new clients
 - Client tracking with heartbeat-based keep-alive
 - Secure file serving with path validation
-- Cross-platform support (FIFO on Unix, stdin pipe on Windows)
 - Configurable bitrate (16-320 kbps), sample rate, and segment length
 
 **Configuration (via settings):**
@@ -589,6 +644,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | Method | Route                          | Handler                  | Auth | Description              |
 | ------ | ------------------------------ | ------------------------ | ---- | ------------------------ |
 | GET    | `/alerts/schema`               | `GetAlertSchema`         | ❌   | Alert schema for UI      |
+| GET    | `/alerts/status`               | `GetAlertStatus`         | ❌   | Alert engine state       |
 | GET    | `/alerts/rules`                | `ListAlertRules`         | ❌   | List rules (filterable)  |
 | GET    | `/alerts/rules/:id`            | `GetAlertRule`           | ❌   | Get single rule          |
 | GET    | `/alerts/rules/export`         | `ExportAlertRules`       | ✅   | Export rules as JSON     |
@@ -598,9 +654,13 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | PATCH  | `/alerts/rules/:id/toggle`     | `ToggleAlertRule`        | ✅   | Enable/disable rule      |
 | DELETE | `/alerts/rules/:id`            | `DeleteAlertRule`        | ✅   | Delete rule              |
 | POST   | `/alerts/rules/:id/test`       | `TestAlertRule`          | ✅   | Test-fire rule           |
-| POST   | `/alerts/rules/reset-defaults` | `ResetDefaultAlertRules` | ✅   | Re-seed built-in rules   |
+| POST   | `/alerts/rules/reset-defaults` | `ResetDefaultAlertRules` | ✅   | Restore built-in rules   |
 | POST   | `/alerts/rules/import`         | `ImportAlertRules`       | ✅   | Import rules from JSON   |
 | DELETE | `/alerts/history`              | `ClearAlertHistory`      | ✅   | Delete all history       |
+
+`PUT /alerts/rules/:id` replaces the rule, with three exceptions. `built_in` in the body is ignored and the stored flag is kept. A rule that has a `name_key` or `description_key` keeps its stored `name` or `description` while the request sends the same key, because the editor sends the translated text. Renaming a built-in rule (changing its `name_key`, or its `name` when it has no key) makes it a custom rule. An omitted, null or unchanged `escalation_steps` keeps the stored steps while the rule's object type, trigger type, metric, event and each condition's property, operator and value are unchanged, and removes them otherwise, since a rule with steps fires only at or above its lowest step. A condition's `duration_sec` does not affect this. Steps that differ from the stored ones replace them.
+
+`POST /alerts/rules/reset-defaults` deletes the built-in rules and creates each shipped default again, except a default whose `name` or `name_key` a remaining rule already has. It returns `status` (`"defaults reset"`), `created` (number of defaults created) and `skipped` (names of the defaults it did not create). `POST /alerts/rules/import` does not create a rule whose `name`, or non-empty `name_key`, matches a stored rule or a rule imported earlier in the same request, and imports the others. It returns `imported`, `total` and `skipped` (names of the rules it did not create for that reason). Startup seeding recognises a default the same way.
 
 **Query Parameters:**
 
@@ -609,7 +669,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ### Insights (`analytics/insights.go`)
 
-Requires enhanced (v2) database. Returns 409 Conflict if not available.
+Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.insights.v2Required` if not available.
 
 | Method | Route                               | Handler                    | Auth | Description                              |
 | ------ | ----------------------------------- | -------------------------- | ---- | ---------------------------------------- |

@@ -69,13 +69,7 @@ func (m *Manager) getEncryptionKey() ([]byte, error) {
 
 		// Generate a new key if the file doesn't exist
 		key := make([]byte, AES256KeySize)
-		if _, err := rand.Read(key); err != nil {
-			return nil, errors.New(err).
-				Component("backup").
-				Category(errors.CategorySystem).
-				Context("operation", "generate_encryption_key").
-				Build()
-		}
+		rand.Read(key)
 
 		// Encode the key as hex
 		keyHex := hex.EncodeToString(key)
@@ -148,13 +142,7 @@ func encryptData(data, key []byte) ([]byte, error) {
 
 	// Generate a random nonce
 	nonce := make([]byte, gcm.NonceSize())
-	if _, err := rand.Read(nonce); err != nil {
-		return nil, errors.New(err).
-			Component("backup").
-			Category(errors.CategorySystem).
-			Context("operation", "generate_nonce").
-			Build()
-	}
+	rand.Read(nonce)
 
 	// Encrypt the data
 	ciphertext := gcm.Seal(nonce, nonce, data, nil)
@@ -211,13 +199,7 @@ func (m *Manager) GenerateEncryptionKey() (string, error) {
 
 	// Generate a new 256-bit key
 	key := make([]byte, AES256KeySize)
-	if _, err := rand.Read(key); err != nil {
-		return "", errors.New(err).
-			Component("backup").
-			Category(errors.CategorySystem).
-			Context("operation", "generate_random_key").
-			Build()
-	}
+	rand.Read(key)
 
 	// Convert key to hex string
 	keyHex := hex.EncodeToString(key)

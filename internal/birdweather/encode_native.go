@@ -117,12 +117,12 @@ func (b *BwClient) encodeWithNativeFLAC(pcmData []byte, timestamp string) (*audi
 	// rotated variants): GetDefaultOutputPath() and GetOutputPath("audio").
 	// CentralLogger.Module routes to a module's own writer only when that module
 	// has an output entry AND it is enabled, otherwise it falls back to the
-	// shared base handler. On a default install birdweather gets its own file
-	// (ensureModuleOutput, DefaultBirdweatherLogPath), so these lines land
-	// outside what the endpoint reads and never appear there. Disable or
-	// redirect the birdweather module output and they land in the default output
-	// instead, at which point they DO appear, which is what the matching
-	// noiseOperations entry is for.
+	// shared base handler. On a default install the birdweather module output is
+	// disabled (the viper default and the shipped config.yaml both set
+	// enabled: false), so these lines land in the default output and DO appear
+	// there, which is what the matching noiseOperations entry is for. Enable the
+	// birdweather module output and they go to its own file, which the endpoint
+	// does not read.
 	log.Info("Encoded audio to FLAC format (native go-flac)",
 		logger.String("timestamp", timestamp),
 		logger.String("encoder", clipenc.NativeFLAC),

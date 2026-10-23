@@ -256,3 +256,15 @@ func TestMapContainerEnvVar(t *testing.T) {
 		})
 	}
 }
+
+// TestGetCPUFlags_ReturnsCopy checks the cached flag list is not shared with
+// callers, who may sort or trim what they get.
+func TestGetCPUFlags_ReturnsCopy(t *testing.T) {
+	first := GetCPUFlags()
+	if len(first) == 0 {
+		t.Skip("this platform reports no CPU flags")
+	}
+	original := first[0]
+	first[0] = "mutated"
+	assert.Equal(t, original, GetCPUFlags()[0])
+}

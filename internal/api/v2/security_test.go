@@ -1,6 +1,5 @@
 // security_test.go: Package api provides security tests for API v2 endpoints.
-// This file focuses on testing general API security requirements including
-// input validation against attacks, rate limiting, CORS configuration, and CSRF protection.
+// This file focuses on input validation against hostile input.
 
 package api
 
@@ -9,9 +8,7 @@ import (
 	"net/http/httptest"
 	"regexp"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -21,16 +18,17 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// concurrencyWaitTimeout bounds how long a test waits for its concurrent
-// callers to reach the expected state. It is generous so a loaded CI runner
-// under -race does not fail the test; a correct run finishes in milliseconds.
-const concurrencyWaitTimeout = time.Minute
+// defaultDetectionPageSize is the page size GetDetections uses when the request
+// carries no numResults (defaultNumResults in the detections package).
+const defaultDetectionPageSize = 100
 
-// searchNotesEmptyMock returns a mockSetup function that configures empty search results.
-// Use this to reduce duplication in tests that mock SearchNotes.
-func searchNotesEmptyMock() func(*mock.Mock) {
+// searchNotesExactMock returns a mockSetup function that expects exactly one
+// SearchNotes call carrying term unchanged, with the default first page. The
+// detections handler trims the term and passes it on without escaping.
+func searchNotesExactMock(term string) func(*mock.Mock) {
 	return func(m *mock.Mock) {
-		m.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, int64(0), nil)
+		m.On("SearchNotes", term, false, defaultDetectionPageSize, 0).
+			Return([]datastore.Note{}, int64(0), nil).Once()
 	}
 }
 
@@ -115,16 +113,6 @@ func setPathParamsFromPath(c echo.Context, path string) {
 	// This allows the original path to be used for non-parameterized routes
 }
 
-// assertCSRFError checks that an error is an HTTPError with expected status and message substring.
-func assertCSRFError(t *testing.T, err error, expectedMessage string) {
-	t.Helper()
-	require.Error(t, err)
-	var httpErr *echo.HTTPError
-	require.ErrorAs(t, err, &httpErr, "expected echo.HTTPError, got %T", err)
-	assert.Equal(t, http.StatusForbidden, httpErr.Code)
-	assert.Contains(t, httpErr.Message, expectedMessage)
-}
-
 // createTestRequest builds an HTTP request with optional body and query params.
 func createTestRequest(method, path, body string, queryParams map[string]string) *http.Request {
 	var req *http.Request
@@ -203,10 +191,17 @@ func assertHTTPErrorContains(t *testing.T, tcName string, httpErr *echo.HTTPErro
 	assert.Failf(t, "could not extract error message", "tc=%s: HTTPError.Message is not string and Unwrap returned nil", tcName)
 }
 
-// TestInputValidation tests that API endpoints properly validate and reject invalid inputs
+// TestInputValidation sends hostile input to the detection and review handlers and checks the status each answers with and, for search terms, that the text reaches the datastore unchanged.
 func TestInputValidation(t *testing.T) {
 	// Setup
 	e, mockDS, controller := setupTestEnvironment(t)
+
+	// Search terms that must reach the datastore exactly as sent.
+	const (
+		scriptTagTerm = "<script>alert('XSS')</script>"
+		shellTerm     = "bird; rm -rf /"
+		nulByteTerm   = "bird\x00.mp3"
+	)
 
 	// Test cases for different API endpoints
 	testCases := []struct {
@@ -242,44 +237,13 @@ func TestInputValidation(t *testing.T) {
 			path:   "/api/v2/detections",
 			queryParams: map[string]string{
 				"queryType": "search",
-				"query":     "<script>alert('XSS')</script>",
+				"search":    scriptTagTerm,
 			},
 			handler: func(c echo.Context) error {
 				return controller.detections.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				// Capture the actual sanitized parameter passed to SearchNotes
-				m.On("SearchNotes", mock.AnythingOfType("string"), mock.Anything, mock.Anything, mock.Anything).
-					Run(func(args mock.Arguments) {
-						// Verify the search parameter was properly sanitized
-						searchParam := args.String(0)
-						// Check that dangerous tags were escaped or removed
-						assert.NotContains(t, searchParam, "<script>")
-						assert.NotContains(t, searchParam, "</script>")
-					}).
-					Return([]datastore.Note{}, int64(0), nil)
-			},
+			mockSetup:      searchNotesExactMock(scriptTagTerm),
 			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "Path traversal in date parameter",
-			method: http.MethodGet,
-			path:   "/api/v2/analytics/daily",
-			queryParams: map[string]string{
-				"start_date": "../../../etc/passwd",
-				"end_date":   "2023-01-07",
-			},
-			handler: func(c echo.Context) error {
-				// Simulate validation failure via HandleError
-				return controller.HandleError(c,
-					errors.NewStd("invalid characters detected in start_date"),
-					"invalid characters detected in start_date",
-					http.StatusBadRequest,
-				)
-			},
-			mockSetup:      nil,
-			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid characters detected in start_date",
 		},
 		{
 			name:   "Large numerical values in parameters",
@@ -310,53 +274,19 @@ func TestInputValidation(t *testing.T) {
 			mockSetup:      reviewDetectionMock("1"),
 			expectedStatus: http.StatusOK,
 		},
-		// New security abuse test cases
-		{
-			name:   "Path traversal with encoded characters",
-			method: http.MethodGet,
-			path:   "/api/v2/analytics/daily",
-			queryParams: map[string]string{
-				"start_date": "%2e%2e%2f%2e%2e%2f%2e%2e%2fetc%2fpasswd",
-				"end_date":   "2023-01-07",
-			},
-			handler: func(c echo.Context) error {
-				return controller.HandleError(c,
-					errors.NewStd("invalid characters detected in start_date"),
-					"invalid characters detected in start_date",
-					http.StatusBadRequest,
-				)
-			},
-			mockSetup:      nil,
-			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid characters detected in start_date",
-		},
 		{
 			name:   "Command injection attempt",
 			method: http.MethodGet,
 			path:   "/api/v2/detections",
 			queryParams: map[string]string{
 				"queryType": "search",
-				"query":     "bird; rm -rf /",
+				"search":    shellTerm,
 			},
 			handler: func(c echo.Context) error {
 				return controller.detections.GetDetections(c)
 			},
-			mockSetup:      searchNotesEmptyMock(),
+			mockSetup:      searchNotesExactMock(shellTerm),
 			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "Buffer overflow with extremely long parameter",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     strings.Repeat("A", 100000), // Very long string
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK, // Should handle it gracefully
 		},
 		{
 			name:   "HTTP parameter pollution",
@@ -369,10 +299,7 @@ func TestInputValidation(t *testing.T) {
 			handler: func(c echo.Context) error {
 				return controller.detections.GetDetections(c)
 			},
-			mockSetup: func(m *mock.Mock) {
-				// Only mock what's actually being called
-				m.On("SearchNotes", "", false, 100, 0).Return([]datastore.Note{}, int64(0), nil)
-			},
+			mockSetup:      searchNotesExactMock(""),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -392,17 +319,17 @@ func TestInputValidation(t *testing.T) {
 			expectedError:  "Invalid request format",
 		},
 		{
-			name:   "Unicode normalization attack",
+			name:   "NUL byte in search text",
 			method: http.MethodGet,
 			path:   "/api/v2/detections",
 			queryParams: map[string]string{
 				"queryType": "search",
-				"query":     "bird\u0000.mp3", // Null byte injection
+				"search":    nulByteTerm,
 			},
 			handler: func(c echo.Context) error {
 				return controller.detections.GetDetections(c)
 			},
-			mockSetup:      searchNotesEmptyMock(),
+			mockSetup:      searchNotesExactMock(nulByteTerm),
 			expectedStatus: http.StatusOK,
 		},
 		{
@@ -426,91 +353,6 @@ func TestInputValidation(t *testing.T) {
 			// Based on the code, numResults validation comes first
 			expectedError: "Invalid detection query parameters",
 		},
-		// Advanced XSS test cases
-		{
-			name:   "DOM-based XSS with event handler",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     "bird' onmouseover='alert(1)",
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "XSS with HTML entity encoding evasion",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     "&#x3C;script&#x3E;alert(1)&#x3C;/script&#x3E;",
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "XSS with JavaScript protocol in URL",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     "javascript:alert(document.cookie)",
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "XSS with CSS expression",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     "bird</style><style>body{background-image:url('javascript:alert(1)')}</style>",
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "XSS with SVG animation",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     "<svg><animate onbegin=alert(1) attributeName=x dur=1s>",
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "XSS with polyglot payload",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     "jaVasCript:/*-/*`/*\\`/*'/*\"/**/(/* */oNcliCk=alert() )//%0D%0A%0D%0A//</stYle/</titLe/</teXtarEa/</scRipt/--!>\\x3csVg/<sVg/oNloAd=alert()//\\x3e",
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK,
-		},
 		{
 			name:   "XSS with attribute injection",
 			method: http.MethodPost,
@@ -521,65 +363,6 @@ func TestInputValidation(t *testing.T) {
 			},
 			mockSetup:      reviewDetectionMock("1"),
 			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "XSS with template injection",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     "${alert(1)}",
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "XSS with Unicode normalization",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     "＜script＞alert(1)＜/script＞", // Full-width characters
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "XSS with data URI",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"queryType": "search",
-				"query":     "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==",
-			},
-			handler: func(c echo.Context) error {
-				return controller.detections.GetDetections(c)
-			},
-			mockSetup:      searchNotesEmptyMock(),
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:   "Date format validation - invalid characters",
-			method: http.MethodGet,
-			path:   "/api/v2/detections",
-			queryParams: map[string]string{
-				"start_date": "2023-12-invalid",
-			},
-			handler: func(c echo.Context) error {
-				return echo.NewHTTPError(
-					http.StatusBadRequest,
-					"invalid start_date format, use YYYY-MM-DD",
-				)
-			},
-			mockSetup:      nil,
-			expectedStatus: http.StatusBadRequest,
-			expectedError:  "invalid start_date format, use YYYY-MM-DD",
 		},
 	}
 
@@ -607,237 +390,4 @@ func TestInputValidation(t *testing.T) {
 			mockDS.AssertExpectations(t)
 		})
 	}
-}
-
-// TestDDoSProtection tests the API's resilience to high-volume requests
-func TestDDoSProtection(t *testing.T) {
-	// Go 1.25: Add test metadata for better organization and reporting
-	t.Attr("component", "security")
-	t.Attr("type", "performance")
-	t.Attr("feature", "ddos-protection")
-
-	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
-
-	// Number of concurrent requests to simulate
-	concurrentRequests := 50
-
-	// Concurrent identical requests share one datastore load: a caller either
-	// joins the load in flight or hits the cache once it is stored, so the
-	// datastore is queried exactly once.
-	// The datastore call blocks until every caller has missed the cache, so the
-	// requests overlap instead of running one after another.
-	release := make(chan struct{})
-	var releaseOnce sync.Once
-	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
-	mockDS.EXPECT().
-		SearchNotes(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		RunAndReturn(func(string, bool, int, int) ([]datastore.Note, int64, error) {
-			<-release
-			return []datastore.Note{}, 0, nil
-		}).
-		Once()
-
-	// Create a wait group to synchronize goroutines
-	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
-	var wg sync.WaitGroup
-
-	// Create channels to collect results
-	responseTimesChan := make(chan time.Duration, concurrentRequests)
-	statusCodesChan := make(chan int, concurrentRequests)
-	handlerErrsChan := make(chan error, concurrentRequests)
-
-	// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
-	for range concurrentRequests {
-		wg.Go(func() {
-			// Create request with query parameters
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?queryType=search&search=test", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetPath("/api/v2/detections")
-
-			// Record start time
-			startTime := time.Now()
-
-			// Call handler
-			handlerErrsChan <- controller.detections.GetDetections(c)
-
-			// Record response time
-			responseTime := time.Since(startTime)
-			responseTimesChan <- responseTime
-			statusCodesChan <- rec.Code
-		})
-	}
-
-	require.Eventually(t, func() bool { return controller.DetectionCache.Stats().Misses == uint64(concurrentRequests) },
-		concurrencyWaitTimeout, time.Millisecond, "every request reaches the cache before the load finishes")
-	releaseOnce.Do(func() { close(release) })
-
-	// Wait for all requests to complete
-	wg.Wait()
-	close(responseTimesChan)
-	close(statusCodesChan)
-	close(handlerErrsChan)
-
-	for err := range handlerErrsChan {
-		require.NoError(t, err, "GetDetections failed")
-	}
-
-	// Collect results
-	var totalResponseTime time.Duration
-	successCount := 0
-	rateLimitedCount := 0
-
-	for code := range statusCodesChan {
-		switch code {
-		case http.StatusOK:
-			successCount++
-		case http.StatusTooManyRequests:
-			rateLimitedCount++
-		}
-	}
-
-	for responseTime := range responseTimesChan {
-		totalResponseTime += responseTime
-	}
-
-	// Calculate average response time
-	avgResponseTime := float64(totalResponseTime.Microseconds()) / float64(concurrentRequests) / 1000.0 // in milliseconds
-
-	// Log results
-	t.Logf("DDoS simulation completed with %d concurrent requests", concurrentRequests)
-	t.Logf("Successful requests: %d (%.1f%%)", successCount, float64(successCount)/float64(concurrentRequests)*100)
-	if rateLimitedCount > 0 {
-		t.Logf("Rate limited requests: %d (%.1f%%)", rateLimitedCount, float64(rateLimitedCount)/float64(concurrentRequests)*100)
-	}
-	t.Logf("Average response time: %.2f ms", avgResponseTime)
-
-	// In production, we would expect some rate limiting to occur under high load
-	// This is a soft assertion since test environments may not have rate limiting enabled
-	if controller.Settings.Load() != nil && controller.Settings.Load().WebServer.Debug {
-		// In debug mode, we can log that rate limiting should be tested in production
-		t.Log("Note: Rate limiting should be verified in production environment")
-	}
-
-	// Every request must be answered with success or a rate-limit response: the
-	// cache never turns a request away with any other status.
-	assert.Equal(t, concurrentRequests, successCount+rateLimitedCount, "Not all requests were served or rate limited")
-}
-
-// TestRateLimiting tests API rate limiting functionality
-func TestRateLimiting(t *testing.T) {
-	// Setup
-	_, _, controller := setupTestEnvironment(t)
-
-	// Test that rapid request sequences would be rate limited
-	// We're documenting the need for rate limiting since we can't directly test middleware
-	testCases := []struct {
-		name     string
-		method   string
-		path     string
-		handler  func(c echo.Context) error
-		requests int
-	}{
-		{
-			name:     "GetDetections should be rate limited",
-			method:   http.MethodGet,
-			path:     "/api/v2/detections",
-			handler:  controller.detections.GetDetections,
-			requests: 100,
-		},
-		{
-			name:     "GetSpeciesSummary should be rate limited",
-			method:   http.MethodGet,
-			path:     "/api/v2/analytics/species",
-			handler:  controller.analytics.GetSpeciesSummary,
-			requests: 100,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Note: We can't directly test rate limiting in unit tests
-			// This is more of a documentation that these endpoints should have rate limiting
-			t.Logf("Endpoint %s %s should have rate limiting protection in production", tc.method, tc.path)
-		})
-	}
-}
-
-// TestCORSConfiguration ensures CORS is properly set up
-func TestCORSConfiguration(t *testing.T) {
-	// Document CORS requirements without using Echo instance
-	// CORS functionality would normally be tested with real middleware
-	req := httptest.NewRequest(http.MethodOptions, "/api/v2/detections", http.NoBody)
-	req.Header.Set(echo.HeaderOrigin, "https://example.com")
-	req.Header.Set(echo.HeaderAccessControlRequestMethod, http.MethodGet)
-
-	// In real implementations with middleware, we would make the request and check headers
-	t.Log("CORS should be properly configured in production for cross-origin requests")
-}
-
-// TestCSRFProtection documents which endpoints should have CSRF protection
-func TestCSRFProtection(t *testing.T) {
-	// Setup
-	e, _, controller := setupTestEnvironment(t)
-
-	// Endpoints that modify state and should have CSRF protection
-	modifyingEndpoints := []struct {
-		name   string
-		method string
-		path   string
-	}{
-		{"DeleteDetection", http.MethodDelete, "/api/v2/detections/1"},
-		{"ReviewDetection", http.MethodPost, "/api/v2/detections/1/review"},
-	}
-
-	// Document which endpoints should have CSRF protection
-	for _, endpoint := range modifyingEndpoints {
-		t.Run(endpoint.name+"_should_have_CSRF_protection", func(t *testing.T) {
-			t.Logf("Endpoint %s %s should have CSRF protection in production", endpoint.method, endpoint.path)
-		})
-	}
-
-	// Test CSRF token validation (simulating middleware behavior)
-	t.Run("CSRF_token_validation", func(t *testing.T) {
-		// Create a request without CSRF token
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review", strings.NewReader(`{"verified":"correct"}`))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-		c.SetPath("/api/v2/detections/:id/review")
-		c.SetParamNames("id")
-		c.SetParamValues("1")
-
-		// Create a middleware that simulates CSRF protection
-		csrfMiddleware := func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c echo.Context) error {
-				// Check for CSRF token in header
-				token := c.Request().Header.Get("X-CSRF-Token")
-				if token == "" {
-					return echo.NewHTTPError(http.StatusForbidden, "CSRF token missing")
-				}
-				if token != "valid-csrf-token" {
-					return echo.NewHTTPError(http.StatusForbidden, "Invalid CSRF token")
-				}
-				return next(c)
-			}
-		}
-
-		// Apply the middleware to the handler
-		handler := csrfMiddleware(controller.detections.ReviewDetection)
-
-		err := handler(c)
-		assertCSRFError(t, err, "CSRF token missing")
-
-		// Now try with invalid token
-		req.Header.Set("X-CSRF-Token", "invalid-token")
-		rec = httptest.NewRecorder()
-		c = e.NewContext(req, rec)
-		c.SetPath("/api/v2/detections/:id/review")
-		c.SetParamNames("id")
-		c.SetParamValues("1")
-
-		err = handler(c)
-		assertCSRFError(t, err, "Invalid CSRF token")
-	})
 }

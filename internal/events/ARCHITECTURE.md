@@ -1,368 +1,136 @@
-# Async Event System Architecture
+# Event Bus Architecture
 
-This document describes the complete async event system architecture implemented in BirdNET-Go, addressing all requirements from issue #833.
+This document describes how the `events` package is built and wired into the rest of BirdNET-Go. The bus moves error events and detection events from the code that produces them to the consumers that act on them (notifications, Sentry telemetry, alerting). A producer never waits for a consumer or for queue space. For the API and usage examples see [README.md](README.md).
 
-## System Overview
+## Overview
 
-The async event system provides a high-performance, non-blocking architecture for error handling, notifications, and telemetry. It achieves a **3,275x performance improvement** over the previous synchronous implementation.
+- Producers call `TryPublish` (error events) or `TryPublishDetection` (detection events). Both are non-blocking: an event is either queued or dropped and counted.
+- A fixed pool of worker goroutines takes events from the queues and hands each one to the registered consumers.
+- When no consumer is registered, publishing is a single atomic load and returns immediately.
 
-## Complete Architecture Diagram
+The package has no dependency on the packages that produce or consume events. The `errors` package publishes through a small `EventPublisher` interface that the event bus adapter implements, so there is no import cycle.
 
-```mermaid
-graph TB
-    subgraph "Application Layer"
-        A[Application Code]
-        B[Bird Detection]
-        C[API Handlers]
-        D[Background Jobs]
-    end
-
-    subgraph "Error Handling Layer"
-        E[Enhanced Error Package]
-        F[Error Builder API]
-        G[Privacy Scrubber]
-        H[Component Detection]
-    end
-
-    subgraph "Event Bus Core"
-        I[Event Publisher Interface]
-        J[Event Bus]
-        K[Channel Buffer<br/>10,000 events]
-        L[Worker Pool<br/>4 workers]
-        M[Deduplicator]
-        N[Fast Path Check]
-    end
-
-    subgraph "Consumer Layer"
-        O[Notification Worker]
-        P[Telemetry Worker]
-        Q[Future Consumers]
-    end
-
-    subgraph "External Systems"
-        R[Notification Service]
-        S[Sentry]
-        T[Future Systems]
-    end
-
-    A --> E
-    B --> E
-    C --> E
-    D --> E
-
-    E --> F
-    F --> G
-    F --> H
-    F --> I
-
-    I --> N
-    N -->|No Consumers| U[Skip<br/>2.5ns]
-    N -->|Has Consumers| J
-
-    J --> K
-    K --> L
-    L --> M
-    M --> O
-    M --> P
-    M --> Q
-
-    O --> R
-    P --> S
-    Q --> T
-
-    style J fill:#f9f,stroke:#333,stroke-width:4px
-    style L fill:#bbf,stroke:#333,stroke-width:2px
-    style N fill:#ff9,stroke:#333,stroke-width:2px
-```
-
-## Key Design Principles
-
-### 1. Zero-Cost Abstraction
-
-When no consumers are registered:
-
-- Fast path optimization skips all processing
-- Only ~2.5ns overhead for error creation
-- No allocations or goroutine creation
-
-### 2. Non-Blocking Guarantees
-
-- Channel-based architecture with buffering
-- Never blocks on consumer processing
-- Graceful degradation under load
-
-### 3. Decoupled Architecture
-
-- Interfaces prevent circular dependencies
-- Event bus is independent of consumers
-- Consumers are independent of each other
-
-## Component Details
-
-### Error Package Integration
-
-The error package publishes events through a clean interface:
-
-```go
-type EventPublisher interface {
-    PublishError(event ErrorEvent) error
-}
-```
-
-Flow:
-
-1. `errors.New()` creates enhanced error
-2. `.Build()` publishes to event bus
-3. Event bus distributes to consumers
-4. All processing is async
-
-### Event Bus Core
-
-Features:
-
-- **Buffer Size**: 10,000 events (configurable)
-- **Workers**: 4 concurrent workers (configurable)
-- **Deduplication**: 1-minute window
-- **Metrics**: Comprehensive statistics
-
-### Consumer Implementation
-
-Each consumer implements:
-
-```go
-type EventConsumer interface {
-    Name() string
-    ProcessEvent(event ErrorEvent) error
-    ProcessBatch(events []ErrorEvent) error
-    SupportsBatching() bool
-}
-```
-
-Current consumers:
-
-1. **NotificationWorker**: Creates user notifications
-2. **TelemetryWorker**: Reports to Sentry
-
-## Performance Characteristics
-
-### Benchmarks Summary
-
-| Operation                 | Target       | Actual    | Status |
-| ------------------------- | ------------ | --------- | ------ |
-| Error creation (disabled) | < 100ns      | 2.5ns     | ✅     |
-| Error creation (enabled)  | < 1μs        | 300ns     | ✅     |
-| Event publishing          | < 500ns      | 165-390ns | ✅     |
-| Deduplication check       | < 100ns      | 95ns      | ✅     |
-| Memory per error          | < 1KB        | ~200B     | ✅     |
-| End-to-end latency        | Non-blocking | 30.77μs   | ✅     |
-
-### Performance Improvements
-
-| Metric            | Before          | After   | Improvement |
-| ----------------- | --------------- | ------- | ----------- |
-| Error.Build()     | 100.78ms        | 30.77μs | 3,275x      |
-| Batch 1000 errors | 5.13s           | <50ms   | 100x+       |
-| CPU usage         | High (blocking) | Minimal | Significant |
-| Memory usage      | Per-error       | Batched | Reduced     |
-
-## Configuration
-
-### Event Bus Configuration
-
-```go
-type Config struct {
-    BufferSize    int                  // Channel buffer (default: 10000)
-    Workers       int                  // Worker count (default: 4)
-    Enabled       bool                 // Enable/disable (default: true)
-    Deduplication *DeduplicationConfig // Dedup settings
-}
-```
-
-### Consumer Configuration
-
-Each consumer has specific configuration:
-
-**TelemetryWorker**:
-
-- Rate limiting: 100 events/minute
-- Circuit breaker: 10 failures threshold
-- Sampling: Configurable 0-100%
-
-**NotificationWorker**:
-
-- Rate limiting: 50 events/30s
-- Priority mapping from error categories
-- Automatic expiration
-
-## Initialization Flow
+## Diagram
 
 ```mermaid
-sequenceDiagram
-    participant Main
-    participant EventBus
-    participant Errors
-    participant Telemetry
-    participant Notification
-
-    Main->>EventBus: Initialize()
-    EventBus-->>Main: Ready
-
-    Main->>Errors: SetEventPublisher()
-    Errors-->>Main: Configured
-
-    Main->>Telemetry: InitSentry()
-    Telemetry->>EventBus: RegisterConsumer(TelemetryWorker)
-    EventBus-->>Telemetry: Registered
-
-    Main->>Notification: Initialize()
-    Notification->>EventBus: RegisterConsumer(NotificationWorker)
-    EventBus-->>Notification: Registered
-
-    Note over EventBus: System Ready
-```
-
-## Error Flow Example
-
-```mermaid
-sequenceDiagram
-    participant Code
-    participant Error
-    participant EventBus
-    participant Dedup
-    participant Worker
-    participant Telemetry
-    participant Notification
-
-    Code->>Error: errors.Newf("API failed")
-    Error->>Error: .Component("api")
-    Error->>Error: .Category(Network)
-    Error->>Error: .Build()
-
-    Error->>EventBus: PublishError()
-
-    alt Fast Path (no consumers)
-        EventBus-->>Error: Skip (2.5ns)
-    else Normal Path
-        EventBus->>Dedup: Check duplicate
-        alt Is Duplicate
-            Dedup-->>EventBus: Skip
-        else Not Duplicate
-            Dedup->>Worker: Queue event
-            Worker->>Telemetry: ProcessEvent()
-            Worker->>Notification: ProcessEvent()
-
-            par Async Processing
-                Telemetry->>Telemetry: Rate limit check
-                Telemetry->>Telemetry: Circuit breaker
-                Telemetry->>Sentry: Report
-            and
-                Notification->>Notification: Create notification
-                Notification->>UI: Update
-            end
-        end
+flowchart TB
+    subgraph Producers
+        A["errors package<br/>(EnhancedError.Build)"]
+        B["Detection processor<br/>(database action)"]
     end
 
-    EventBus-->>Error: Return (non-blocking)
+    A -->|"TryPublish(any)"| AD[EventPublisherAdapter]
+    AD --> FP{"Any consumers<br/>registered?"}
+    B -->|TryPublishDetection| FP
+
+    FP -->|no| SKIP["Return false<br/>(FastPathHits++)"]
+    FP -->|yes| DD{"Error event?"}
+    DD -->|yes| DEDUP["ErrorDeduplicator<br/>ShouldProcess"]
+    DEDUP -->|duplicate| SUP["Suppressed<br/>(EventsSuppressed++)"]
+    DEDUP -->|new| EC[("Error channel<br/>10,000 slots")]
+    DD -->|"no (detection event)"| DC[("Detection channel<br/>10,000 slots")]
+
+    EC --> W["Worker pool<br/>4 goroutines"]
+    DC --> W
+
+    W --> N1[NotificationWorker]
+    W --> T1["TelemetryWorker<br/>(only when Sentry is enabled)"]
+    W --> N2[DetectionNotificationConsumer]
+    W --> AL[DetectionAlertBridge]
+
+    N1 --> NS[Notification service]
+    T1 --> S[Sentry]
+    N2 --> NS
+    AL --> AE[Alerting engine]
 ```
 
-## Monitoring and Observability
+A full channel drops the event (`EventsDropped++`) instead of waiting.
 
-### Metrics Available
+## Components
+
+### Event bus (`eventbus.go`)
+
+`Initialize(config)` creates the process-wide bus (a second call returns the existing one). `GetEventBus`, `IsInitialized` and `HasActiveConsumers` read its state. The bus owns two buffered channels, one for `ErrorEvent` values and one for `DetectionEvent` values, each with `BufferSize` slots.
+
+`DefaultConfig()` returns a buffer of 10000, 4 workers, deduplication enabled. The application initializes the bus in `internal/telemetry/system_init_manager.go` with its own constants: a buffer of 10000 per channel, 4 workers, and deduplication with a 5 minute TTL, 1000 entries and a 1 minute cleanup interval.
+
+Workers start when the first consumer registers (`RegisterConsumer`), not at `Initialize`. A consumer name must be unique. A consumer that also implements `DetectionEventConsumer` is added to the detection consumer list as well.
+
+Each worker selects on both channels. For an error event it calls `ProcessEvent` on every registered consumer, one after another; for a detection event it calls `ProcessDetectionEvent` on every `DetectionEventConsumer`. A panic in a consumer is recovered and counted in `ConsumerErrors`, and a consumer that takes longer than 100 ms is logged as slow. The bus calls `ProcessEvent` and `ProcessDetectionEvent` only; `ProcessBatch` and `SupportsBatching` are part of the `EventConsumer` interface, but the bus does not batch.
+
+`Shutdown(timeout)` stops accepting events, stops the deduplicator, cancels the workers' context and waits for them up to the timeout. Events still buffered at that point are not guaranteed to be processed. A metrics logger writes a summary every 5 minutes and once at shutdown.
+
+### Fast path
+
+Two checks keep publishing cheap when nothing is listening:
+
+1. A package-level atomic flag (`hasActiveConsumers`) is read first, without locking. If it is false, the call counts a `FastPathHits` and returns false.
+2. After the bus state checks, a second check under the bus mutex confirms that at least one consumer exists.
+
+`EventPublisherAdapter.TryPublish` repeats the first check, so an error created while no consumer is registered never reaches the bus.
+
+### Deduplication (`deduplicator.go`)
+
+Only error events are deduplicated, and the check runs on the publishing side, before the event is queued. Detection events are not deduplicated.
+
+The key is a SHA-256 based hash of the component, category and message, plus the `operation`, `error_type` and `provider` context values when present. An event whose key was seen within the TTL is suppressed. The cache is bounded by `MaxEntries` with least-recently-used eviction, and a cleanup goroutine removes expired entries every `CleanupInterval`. `GetDeduplicationStats` reports the counters.
+
+### Consumers
+
+Registered consumers in the application:
+
+| Consumer                        | Package                 | Handles                                                                                                                                      |
+| ------------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NotificationWorker`            | `internal/notification` | Error events, turned into user notifications; has a circuit breaker                                                                          |
+| `DetectionNotificationConsumer` | `internal/notification` | Detection events                                                                                                                             |
+| `TelemetryWorker`               | `internal/telemetry`    | Error events, reported to Sentry; registered only when Sentry telemetry is enabled. Rate limited, with a circuit breaker and a sampling rate |
+| `DetectionAlertBridge`          | `internal/alerting`     | Detection events, forwarded to the alerting engine (its `ProcessEvent` does nothing)                                                         |
+
+Rate limits, circuit breaker thresholds and sampling are properties of each consumer, configured in its own package.
+
+### Errors package integration
+
+`errors.SetEventPublisher` installs the publisher; the application sets it to an `EventPublisherAdapter` right after the bus is initialized. When an `EnhancedError` is built, the errors package publishes it through that interface. If no publisher is set, it falls back to its legacy synchronous reporting path.
+
+### Detection events (`detection_event.go`)
+
+`NewDetectionEvent` validates its input and returns a `DetectionEvent`. The detection processor publishes one per saved detection with `TryPublishDetection`. A dropped detection event is logged at warning level.
+
+### Application event emitter (`emitter.go`)
+
+`Emitter` is separate from the bus: it persists application events to the datastore through the `AppEventStore` interface. It is nil-safe, never returns an error to the caller, and is set once at startup with `SetDefault`.
+
+## Statistics
+
+`GetStats()` returns `EventBusStats`, read with atomic loads:
 
 ```go
 type EventBusStats struct {
-    EventsReceived   uint64  // Total events published
-    EventsSuppressed uint64  // Deduplicated events
-    EventsProcessed  uint64  // Successfully processed
-    EventsDropped    uint64  // Buffer overflow
-    ConsumerErrors   uint64  // Consumer failures
-    FastPathHits     uint64  // Skip processing count
+    EventsReceived   uint64 // events accepted into a channel
+    EventsSuppressed uint64 // error events removed by deduplication
+    EventsProcessed  uint64 // consumer calls that succeeded
+    EventsDropped    uint64 // events dropped because a channel was full
+    ConsumerErrors   uint64 // consumer errors and recovered panics
+    FastPathHits     uint64 // publishes skipped because no consumer is registered
 }
 ```
 
-Note: The metrics use atomic 64-bit counters. On 32-bit platforms, ensure proper alignment for atomic operations or consider using atomic.Uint64 type (Go 1.19+) which handles alignment automatically.
+`EventsProcessed` counts one per consumer call, so it grows by the number of consumers for each event.
 
-### Health Checks
+## Initialization order
 
-Each component provides health status:
+1. `SystemInitManager` calls `events.Initialize` with the configuration above and installs the `EventPublisherAdapter` in the errors package.
+2. The notification service registers `NotificationWorker` and `DetectionNotificationConsumer`.
+3. Telemetry registers `TelemetryWorker` when Sentry is enabled.
+4. The alerting package registers `DetectionAlertBridge` during its own initialization, once the bus exists.
+5. The first registration starts the workers. Events published before it are skipped by the fast path.
 
-- Event bus: Buffer usage, worker status
-- Telemetry: Circuit breaker state, Sentry connectivity
-- Notification: Storage usage, rate limit status
+## Testing and benchmarks
 
-## Best Practices
+The package tests cover the bus (`eventbus_test.go`), deduplication (`deduplicator_test.go`), the emitter and an end-to-end flow (`integration_test.go`). `mocks/` holds a generated mock of `ErrorEvent`. `benchmark_test.go` measures the fast path, publishing with a consumer, error creation with and without reporting, and `HasActiveConsumers`:
 
-### For Package Developers
+```bash
+go test -run '^$' -bench . ./internal/events
+```
 
-1. **Always use interfaces**: Prevent circular dependencies
-2. **Design for async**: Never block in consumers
-3. **Handle errors gracefully**: Log but don't fail
-4. **Provide metrics**: Observable behavior
-5. **Document thoroughly**: Clear examples
-
-### For Application Developers
-
-1. **Initialize early**: Set up event bus at startup
-2. **Use error builder**: Leverage the enhanced API
-3. **Monitor metrics**: Track dropped events
-4. **Configure appropriately**: Adjust for load
-5. **Handle shutdown**: Allow graceful termination
-
-## Testing Strategy
-
-### Unit Tests
-
-- Mock event publishers for error package
-- Mock consumers for event bus testing
-- Isolated component testing
-
-### Integration Tests
-
-- End-to-end error flow validation
-- Consumer interaction testing
-- Performance benchmarking
-
-### Load Tests
-
-- High-volume event generation
-- Buffer overflow handling
-- Consumer backpressure
-
-## Future Enhancements
-
-1. **Dynamic scaling**: Adjust workers based on load
-2. **Persistent queue**: Disk-backed for reliability
-3. **Event replay**: Debug and audit capabilities
-4. **Priority queues**: Urgent event handling
-5. **Distributed mode**: Multi-instance coordination
-
-## Migration Guide
-
-For systems upgrading to the async event system:
-
-1. **Update error handling**:
-
-   ```go
-   // Old
-   sentry.CaptureException(err)
-
-   // New
-   errors.New(err).Component("myapp").Build()
-   ```
-
-2. **Initialize event bus**:
-
-   ```go
-   // In main.go
-   events.Initialize(nil)
-   ```
-
-3. **Remove sync calls**: No more direct Sentry/notification calls
-
-4. **Monitor performance**: Use provided metrics
-
-5. **Test thoroughly**: Especially error paths
-
-## Conclusion
-
-The async event system provides a robust, high-performance foundation for error handling, notifications, and telemetry in BirdNET-Go. With a 3,275x performance improvement and comprehensive feature set, it ensures the application can scale while maintaining observability and user experience.
+Use `task test` for the regular test run so the project's build tags are applied.

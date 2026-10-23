@@ -438,6 +438,10 @@ export type TranslationKey =
   | 'notifications.content.analysis.cadenceCappedMessage' // params: models, sources, configured, effective
   | 'notifications.content.analysis.cadenceOverloadedTitle'
   | 'notifications.content.analysis.cadenceOverloadedMessage' // params: models, sources
+  | 'notifications.content.storage.notPersistentTitle'
+  | 'notifications.content.storage.notPersistentMessage' // params: paths
+  | 'notifications.content.storage.anonymousVolumeTitle'
+  | 'notifications.content.storage.anonymousVolumeMessage' // params: paths
   | 'notifications.loading'
   | 'search.title'
   | 'search.results'
@@ -2226,6 +2230,9 @@ export type TranslationKey =
   | 'settings.notifications.push.filters.speciesCooldown.label'
   | 'settings.notifications.push.filters.speciesCooldown.unit'
   | 'settings.notifications.push.filters.speciesCooldown.helpText'
+  | 'settings.notifications.push.rulesNotice.message' // params: pushAction, ruleName, eventName
+  | 'settings.notifications.push.rulesNotice.previousFilters' // params: confidence, minutes
+  | 'settings.notifications.push.rulesNotice.openRules'
   | 'settings.notifications.push.noProviders'
   | 'settings.notifications.push.noProvidersDescription'
   | 'settings.notifications.push.providers.title'
@@ -2421,8 +2428,6 @@ export type TranslationKey =
   | 'settings.filters.errors.speciesLoadFailed'
   | 'settings.integration.birdweather.title'
   | 'settings.integration.birdweather.description'
-  | 'settings.integration.birdweather.ffmpegWarning.title'
-  | 'settings.integration.birdweather.ffmpegWarning.message'
   | 'settings.integration.birdweather.enable'
   | 'settings.integration.birdweather.token.label'
   | 'settings.integration.birdweather.token.helpText'
@@ -3774,6 +3779,7 @@ export type TranslationKey =
   | 'media.audio.loop'
   | 'media.audio.player'
   | 'media.audio.autoplayBlocked'
+  | 'media.audio.hlsLoadFailed'
   | 'media.audio.hlsNotSupported'
   | 'media.audio.streamStarting'
   | 'media.audio.levelFor' // params: source
@@ -3942,6 +3948,7 @@ export type TranslationKey =
   | 'errors.alert.invalidJSON'
   | 'errors.alert.invalidEscalation'
   | 'errors.alert.engineUnavailable'
+  | 'errors.insights.v2Required'
   | 'errors.detection.invalidDate' // params: paramName
   | 'errors.backup.invalidType'
   | 'errors.backup.alreadyRunning'
@@ -4559,6 +4566,8 @@ export type TranslationParams = {
     models: string | number;
     sources: string | number;
   };
+  'notifications.content.storage.notPersistentMessage': { paths: string | number };
+  'notifications.content.storage.anonymousVolumeMessage': { paths: string | number };
   'search.resultsCountOther': { count: string | number };
   'search.review.reviewDetection': { species: string | number };
   'search.detailsPanel.expandDetails': { species: string | number };
@@ -4809,6 +4818,15 @@ export type TranslationParams = {
   'settings.notifications.templates.saveError': { message: string | number };
   'settings.notifications.testNotification.statusMessages.error': { message: string | number };
   'settings.notifications.statusMessages.error': { message: string | number };
+  'settings.notifications.push.rulesNotice.message': {
+    pushAction: string | number;
+    ruleName: string | number;
+    eventName: string | number;
+  };
+  'settings.notifications.push.rulesNotice.previousFilters': {
+    confidence: string | number;
+    minutes: string | number;
+  };
   'settings.notifications.push.providers.urlsPreview': { count: string | number };
   'settings.notifications.push.providers.deleteConfirm': { name: string | number };
   'settings.notifications.push.test.error': { message: string | number };

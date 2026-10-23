@@ -159,15 +159,19 @@ func (t *SpeciesTracker) applyYearlyStatus(status *SpeciesStatus, firstThisYear 
 }
 
 // applySeasonalStatus sets seasonal tracking fields on status.
-func (t *SpeciesTracker) applySeasonalStatus(status *SpeciesStatus, firstThisSeason *time.Time, currentTime time.Time) {
+//
+// A species carried over from the end of the previous season is never "new
+// this season"; otherwise every species heard on a season's first day,
+// residents included, would be flagged for the whole window.
+func (t *SpeciesTracker) applySeasonalStatus(status *SpeciesStatus, firstThisSeason *time.Time, carriedOver bool, currentTime time.Time) {
 	if !t.seasonalEnabled {
 		return
 	}
 	if firstThisSeason != nil {
 		status.DaysThisSeason = calculateDaysSince(currentTime, *firstThisSeason)
-		status.IsNewThisSeason = status.DaysThisSeason <= t.seasonalWindowDays
+		status.IsNewThisSeason = !carriedOver && status.DaysThisSeason <= t.seasonalWindowDays
 	} else {
-		status.IsNewThisSeason = true
+		status.IsNewThisSeason = !carriedOver
 		status.DaysThisSeason = 0
 	}
 }
@@ -194,7 +198,7 @@ func (t *SpeciesTracker) buildSpeciesStatusWithBuffer(scientificName string, cur
 
 	t.applyLifetimeStatus(status, firstSeen, exists, currentTime)
 	t.applyYearlyStatus(status, firstThisYear, currentTime)
-	t.applySeasonalStatus(status, firstThisSeason, currentTime)
+	t.applySeasonalStatus(status, firstThisSeason, t.isSeasonCarryoverLocked(scientificName, currentSeason, currentTime), currentTime)
 	t.applyNoveltyStatus(status, scientificName)
 
 	return *status
@@ -339,7 +343,7 @@ func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, current
 
 	t.applyLifetimeStatus(&status, firstSeen, exists, currentTime)
 	t.applyYearlyStatus(&status, firstThisYear, currentTime)
-	t.applySeasonalStatus(&status, firstThisSeason, currentTime)
+	t.applySeasonalStatus(&status, firstThisSeason, t.isSeasonCarryoverLocked(scientificName, currentSeason, currentTime), currentTime)
 	t.applyNoveltyStatus(&status, scientificName)
 
 	return status

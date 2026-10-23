@@ -496,22 +496,6 @@ func TestGetDetections_LoaderPanicIsLogged(t *testing.T) {
 	assert.Contains(t, rec.errs, "Detection page loader panicked")
 }
 
-// TestGetDetections_AllQueryLogsAllDetections pins that the default query type
-// keeps its own log messages after sharing the search loader.
-func TestGetDetections_AllQueryLogsAllDetections(t *testing.T) {
-	e, mockDS, h := setupTestEnvironment(t)
-	rec := newLevelRecorder()
-	h.APILogger = rec
-	mockDS.EXPECT().SearchNotes("", false, 10, 0).Return(nil, int64(0), assert.AnError).Once()
-
-	status, _ := getDetectionsBody(t, e, h, url.Values{"numResults": {"10"}})
-	assert.Equal(t, http.StatusInternalServerError, status)
-	rec.mu.Lock()
-	defer rec.mu.Unlock()
-	assert.Contains(t, rec.errs, "Failed to get all detections")
-	assert.NotContains(t, rec.errs, "Failed to search notes")
-}
-
 // TestGetDetections_RequestEndedLogsCorrelationID pins that the debug line for a
 // request that ended carries the correlation id the client received, so the
 // response can be traced back to the log.

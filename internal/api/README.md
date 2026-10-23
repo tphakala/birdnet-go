@@ -483,7 +483,7 @@ The API provides HTTP Live Streaming (HLS) for real-time audio from configured s
 
 **Features:**
 
-- FFmpeg-based transcoding for broad compatibility
+- Encoded in-process with a native AAC encoder (go-hls), no FFmpeg process
 - Automatic stream cleanup on client disconnect
 - Configurable segment duration and playlist length
 

@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przy ustawionym nakładaniu {configured} s przekracza zmierzoną wydajność tego urządzenia, dlatego dźwięk jest analizowany z nakładaniem {effective} s. Filtr fałszywych pozytywów może więc wymagać mniej potwierdzeń. Zapisane ustawienia nie zmieniają się; zobacz Ustawienia > Analiza.",
         "cadenceOverloadedTitle": "To urządzenie nie nadąża z analizą dźwięku",
         "cadenceOverloadedMessage": "Uruchomienie {models, plural, one {# modelu} few {# modeli} many {# modeli} other {# modelu}} na {sources, plural, one {# źródle dźwięku} few {# źródłach dźwięku} many {# źródłach dźwięku} other {# źródła dźwięku}} przekracza zmierzoną wydajność tego urządzenia nawet bez nakładania, dlatego analiza może się opóźniać, a wykrycia mogą zostać pominięte. Włącz mniej modeli lub źródeł dźwięku albo wybierz szybszy wariant modelu."
+      },
+      "storage": {
+        "notPersistentTitle": "Dane zostaną utracone po ponownym utworzeniu kontenera",
+        "notPersistentMessage": "Te ścieżki znajdują się w pamięci masowej, która jest usuwana po ponownym utworzeniu kontenera, na przykład przy aktualizacji obrazu: {paths}. Przypisz do nich wolumin lub katalog hosta w konfiguracji kontenera.",
+        "anonymousVolumeTitle": "Dane są przechowywane w anonimowym woluminie kontenera",
+        "anonymousVolumeMessage": "Te ścieżki znajdują się w anonimowych woluminach, które środowisko uruchomieniowe kontenera utworzyło, ponieważ nie przypisano żadnego woluminu: {paths}. Kontener uruchomiony od nowa, na przykład poleceniem docker run po aktualizacji obrazu, otrzymuje nowe puste woluminy, więc dane wyglądają na utracone. Przypisz do nich nazwany wolumin lub katalog hosta."
       }
     },
     "loading": "Ładowanie powiadomień..."
@@ -1576,7 +1582,7 @@
           "restartTitle": "Wymagane ponowne uruchomienie",
           "restartBody": "Uruchom ponownie aplikację, aby przełączyć się na bazę danych V2. Czyszczenie starszej bazy danych będzie dostępne po ponownym uruchomieniu.",
           "fallbackError": "Niezgodność liczby rekordów między starszą bazą danych a V2. Niektóre rekordy mogły nie zostać poprawnie zmigrowane.",
-          "migrateInfo": "Migracja przeniesie {count} rekordów ze starszej bazy danych do nowego schematu V2. Tryb podwójnego zapisu zapewnia brak utraty danych podczas migracji.",
+          "migrateInfo": "Migracja przeniesie {count} rekordów ze starszej bazy danych do nowego schematu V2. Nowe wykrycia zapisane podczas migracji są również kopiowane do nowej bazy danych.",
           "sourceLegacy": "Źródło (starsza)",
           "targetV2": "Cel (V2)",
           "recordsLabel": "Rekordy",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "Możesz normalnie korzystać z systemu, podczas gdy migracja działa w tle.",
-          "dual_write": "Migracja w toku. Twoje dane są bezpieczne - wszystkie nowe wykrycia są zapisywane w obu bazach danych. Możesz nadal normalnie korzystać z BirdNET-Go.",
+          "dual_write": "Migracja w toku. Twoje dane są bezpieczne - nowe wykrycia są zapisywane w bieżącej bazie danych i kopiowane do nowej bazy podczas migracji. Możesz nadal normalnie korzystać z BirdNET-Go.",
           "migrating": "Kopiowanie istniejących wykryć do nowej bazy danych. Może to potrwać, w zależności od liczby wykryć. Możesz wstrzymać i wznowić w dowolnym momencie.",
           "validating": "Sprawdzanie, czy wszystkie rekordy zostały poprawnie skopiowane. Prawie gotowe!",
           "cutover": "Przełączanie na nową bazę danych. To zajmie tylko chwilę.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Najlepszy dla słabych sygnałów. Śpiew ptaków wyraźnie wyróżnia się z szumu tła. Zalecany dla stylów naukowych/skali szarości.",
                   "standard": "Domyślne zrównoważone ustawienie. Dobre dla większości zastosowań.",
-                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast. Domyślna wartość SoX."
+                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "Co jest zawarte w raporcie:",
           "applicationLogs": "**Logi aplikacji** - Ostatnie błędy i informacje debugowania",
           "configuration": "**Konfiguracja** - Twoje ustawienia z usuniętymi wrażliwymi danymi",
-          "systemInfo": "**Informacje systemowe** - Wersja systemu operacyjnego, pamięć i szczegóły środowiska uruchomieniowego",
+          "systemInfo": "**Informacje systemowe** - Wersja systemu operacyjnego, pamięć, sprzęt, podłączone urządzenia USB i karty dźwiękowe oraz szczegóły środowiska uruchomieniowego",
           "notIncluded": "**NIE zawiera** - Pliki audio, detekcje ptaków ani dane osobowe"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "min",
             "helpText": "Zapobiegaj powtórnym powiadomieniom dla tego samego gatunku w tym oknie czasowym. Ustaw na 0, aby wyłączyć."
           }
+        },
+        "rulesNotice": {
+          "message": "Powiadomienia push o wykryciach pochodzą z reguł alertów na karcie Reguły. Wbudowane reguły wykryć powiadamiają tylko w aplikacji. Aby otrzymywać powiadomienia push, dodaj akcję {pushAction} do reguły {ruleName} lub utwórz regułę dla zdarzenia {eventName} z warunkiem pewności i czasem odnowienia.",
+          "previousFilters": "Ustawienia Minimalna pewność ({confidence} %) i Czas oczekiwania gatunku ({minutes} min) wprowadzone tutaj nie są używane przez reguły alertów.",
+          "openRules": "Otwórz Reguły"
         },
         "noProviders": "Brak skonfigurowanych dostawców",
         "noProvidersDescription": "Dodaj dostawcę, aby zacząć otrzymywać powiadomienia push",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Przesyłaj detekcje do BirdWeather",
-        "ffmpegWarning": {
-          "title": "Nie wykryto FFmpeg",
-          "message": "Proszę zainstalować FFmpeg, aby włączyć obsługę kodowania FLAC, BirdWeather wycofuje przesyłanie WAV na rzecz skompresowanych plików audio FLAC."
-        },
         "enable": "Włącz Przesyłanie do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
@@ -5153,6 +5160,7 @@
       "loop": "Przełącz pętlę",
       "player": "Odtwarzacz audio",
       "autoplayBlocked": "Kliknij, aby odtworzyć (autoodtwarzanie zablokowane)",
+      "hlsLoadFailed": "Nie udało się załadować odtwarzacza audio, odśwież stronę i spróbuj ponownie",
       "hlsNotSupported": "Odtwarzanie HLS nie jest obsługiwane w tej przeglądarce",
       "streamStarting": "Uruchamianie strumienia audio...",
       "levelFor": "Poziom dźwięku dla {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "Nieprawidłowy JSON",
       "invalidEscalation": "Kroki eskalacji są nieprawidłowe",
       "engineUnavailable": "Silnik alertów jest niedostępny"
+    },
+    "insights": {
+      "v2Required": "Analizy wymagają rozszerzonej bazy danych (v2)"
     },
     "detection": {
       "invalidDate": "Nieprawidłowy format {paramName}, użyj RRRR-MM-DD"

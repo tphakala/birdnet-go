@@ -4,8 +4,10 @@ package api
 
 import (
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -15,129 +17,99 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// assertSystemMetrics validates system metrics in health check response.
-func assertSystemMetrics(t *testing.T, metricsMap map[string]any) {
-	t.Helper()
-	if cpu, cpuExists := metricsMap["cpu_usage"]; cpuExists {
-		cpuValue, ok := cpu.(float64)
-		assert.True(t, ok, "CPU usage should be a number")
-		assert.GreaterOrEqual(t, cpuValue, float64(0), "CPU usage should be non-negative")
-		assert.LessOrEqual(t, cpuValue, float64(100), "CPU usage should be <= 100%")
-	}
-	if memory, memExists := metricsMap["memory_usage"]; memExists {
-		memValue, ok := memory.(float64)
-		assert.True(t, ok, "Memory usage should be a number")
-		assert.GreaterOrEqual(t, memValue, float64(0), "Memory usage should be non-negative")
-	}
+// healthResponse mirrors the fields HealthCheck emits. CPUUsage is a pointer so
+// an absent key reads as nil rather than zero.
+type healthResponse struct {
+	Status         string `json:"status"`
+	Version        string `json:"version"`
+	BuildDate      string `json:"build_date"`
+	Timestamp      string `json:"timestamp"`
+	Environment    string `json:"environment"`
+	DatabaseStatus string `json:"database_status"`
+	System         struct {
+		CPUUsage  *float64           `json:"cpu_usage"`
+		Memory    map[string]float64 `json:"memory"`
+		DiskSpace map[string]float64 `json:"disk_space"`
+	} `json:"system"`
 }
 
-// assertDiskSpace validates disk space metrics in health check response.
-func assertDiskSpace(t *testing.T, diskSpace any) {
-	t.Helper()
-	diskMap, ok := diskSpace.(map[string]any)
-	assert.True(t, ok, "Disk space should be an object")
-	if total, totalExists := diskMap["total"]; totalExists {
-		assert.GreaterOrEqual(t, total.(float64), float64(0), "Total disk space should be non-negative")
-	}
-	if free, freeExists := diskMap["free"]; freeExists {
-		assert.GreaterOrEqual(t, free.(float64), float64(0), "Free disk space should be non-negative")
-	}
-}
-
-// assertUptime validates uptime field in health check response.
-func assertUptime(t *testing.T, uptime any) {
-	t.Helper()
-	switch v := uptime.(type) {
-	case float64:
-		assert.GreaterOrEqual(t, v, float64(0), "Uptime should be non-negative")
-	case string:
-		assert.NotEmpty(t, v, "Uptime string should not be empty")
-	default:
-		assert.Fail(t, "Uptime should be a number or string")
-	}
-}
-
-// TestHealthCheck tests the health check endpoint
+// TestHealthCheck covers the three database branches of HealthCheck and the
+// response keys it emits.
 func TestHealthCheck(t *testing.T) {
-	// Setup
-	e, mockDS, controller := setupTestEnvironment(t)
+	const (
+		testVersion   = "1.2.3"
+		testBuildDate = "2023-05-15"
+	)
 
-	// Setup mock expectations for database check
-	mockDS.On("GetLastDetections", 1).Return([]datastore.Note{}, nil)
-
-	// Add system metrics to the controller settings
-	settings := controller.Settings.Load()
-	settings.Version = "1.2.3"
-	settings.BuildDate = "2023-05-15"
-
-	// Create a request to the health check endpoint
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/health")
-
-	// Test
-	require.NoError(t, controller.HealthCheck(c))
-	{
-		// Note: response time is deliberately NOT asserted. HealthCheck gathers
-		// system metrics via gopsutil (mem.VirtualMemory, disk.Usage), whose
-		// syscalls are environment-dependent and can exceed 100ms on a loaded,
-		// coarse-timer CI runner under -race (notably windows-amd64). A wall-clock
-		// SLA on a directly-invoked handler measures the runner, not correctness,
-		// and was an intermittent CI flake. The response contents below are the
-		// real contract and are asserted deterministically.
-
-		// Check response code
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		// Check content type header
-		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
-
-		// Parse response body
-		var response map[string]any
-		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-
-		// Check required fields
-		assert.Equal(t, "healthy", response["status"], "Status should be 'healthy'")
-		assert.Equal(t, "1.2.3", response["version"], "Version should match controller settings")
-		assert.Equal(t, "2023-05-15", response["build_date"], "Build date should match controller settings")
-
-		// Check database status if present
-		if dbStatus, exists := response["database_status"]; exists {
-			assert.Equal(t, "connected", dbStatus, "Database status should be 'connected'")
-		}
-
-		// Check system metrics if present
-		if metrics, exists := response["system"]; exists {
-			metricsMap, ok := metrics.(map[string]any)
-			assert.True(t, ok, "System metrics should be an object")
-			assertSystemMetrics(t, metricsMap)
-			if diskSpace, diskExists := metricsMap["disk_space"]; diskExists {
-				assertDiskSpace(t, diskSpace)
-			}
-		}
-
-		// Check uptime if present
-		if uptime, exists := response["uptime"]; exists {
-			assertUptime(t, uptime)
-		}
-
-		// Check for additional fields that might be useful
-		if env, exists := response["environment"]; exists {
-			assert.IsType(t, "", env, "Environment should be a string")
-		}
-
-		if timestamp, exists := response["timestamp"]; exists {
-			_, err := time.Parse(time.RFC3339, timestamp.(string))
-			require.NoError(t, err, "Timestamp should be in RFC3339 format")
-		}
+	tests := []struct {
+		name         string
+		setup        func(controller *Controller, mockDS *mocks.MockInterface)
+		wantDBStatus string
+	}{
+		{
+			name: "database connected",
+			setup: func(_ *Controller, mockDS *mocks.MockInterface) {
+				mockDS.On("GetLastDetections", 1).Return([]datastore.Note{}, nil).Once()
+			},
+			wantDBStatus: "connected",
+		},
+		{
+			name: "database disconnected",
+			setup: func(_ *Controller, mockDS *mocks.MockInterface) {
+				mockDS.On("GetLastDetections", 1).Return([]datastore.Note(nil), errors.NewStd("connection refused")).Once()
+			},
+			wantDBStatus: "disconnected",
+		},
+		{
+			name: "datastore disabled",
+			setup: func(controller *Controller, _ *mocks.MockInterface) {
+				controller.DS = nil
+			},
+			wantDBStatus: "unavailable",
+		},
 	}
 
-	// Verify mock expectations
-	mockDS.AssertExpectations(t)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, mockDS, controller := setupTestEnvironment(t)
+			tt.setup(controller, mockDS)
+
+			settings := controller.Settings.Load()
+			settings.Version = testVersion
+			settings.BuildDate = testBuildDate
+
+			req := httptest.NewRequest(http.MethodGet, apiV2Prefix+"/health", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath(apiV2Prefix + "/health")
+
+			// Response time is deliberately not asserted: the system metrics come
+			// from gopsutil syscalls whose latency depends on the runner, so a
+			// wall-clock limit would measure the environment, not correctness.
+			require.NoError(t, controller.HealthCheck(c))
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+
+			var resp healthResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+
+			assert.Equal(t, "healthy", resp.Status)
+			assert.Equal(t, testVersion, resp.Version)
+			assert.Equal(t, testBuildDate, resp.BuildDate)
+			assert.Equal(t, "production", resp.Environment)
+			assert.Equal(t, tt.wantDBStatus, resp.DatabaseStatus)
+			_, err := time.Parse(time.RFC3339, resp.Timestamp)
+			require.NoError(t, err, "timestamp should be RFC3339")
+
+			require.NotNil(t, resp.System.CPUUsage, "system.cpu_usage should be present")
+			assert.ElementsMatch(t, []string{"used_percent", "total_mb", "used_mb"}, slices.Collect(maps.Keys(resp.System.Memory)))
+			assert.ElementsMatch(t, []string{"total_gb", "free_gb", "used_percent"}, slices.Collect(maps.Keys(resp.System.DiskSpace)))
+		})
+	}
 }
 
 // TestHandleError tests error handling functionality
@@ -146,7 +118,7 @@ func TestHandleError(t *testing.T) {
 	e, _, controller := setupTestEnvironment(t)
 
 	// Create a request context
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/health", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, apiV2Prefix+"/health", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 

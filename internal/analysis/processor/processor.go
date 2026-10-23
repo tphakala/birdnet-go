@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -1224,7 +1223,9 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 	return false
 }
 
-// createDetection creates a detection object with all necessary information
+// createDetection creates a detection object with all necessary information.
+// Its ClipName is chosen from the Result's own model and sample rate, the fields
+// the audio exporter reads.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) createDetection(settings *conf.Settings, item classifier.Results, result datastore.Results, scientificName, commonName, speciesCode, rawScientificName string) Detections {
@@ -1233,7 +1234,8 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	// is or will be written, so nothing must reference one. The media API and
 	// the UI gate on a non-empty ClipName, and no SaveAudioAction is scheduled
 	// when export is off, so there is no async-export race to preserve here.
-	clipName := p.resolveClipName(settings, &item, scientificName, result.Confidence)
+	// The name is set below, once the Result exists, so it is chosen from the
+	// Result's own model and sample rate.
 
 	// Get capture length and pre-capture length for detection end time calculation
 	// Set begin and end time for note
@@ -1253,10 +1255,14 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 		beginTime, endTime,
 		scientificName, commonName, speciesCode, rawScientificName,
 		float64(result.Confidence),
-		item.Source, clipName,
+		item.Source, "",
 		item.ElapsedTime, occurrence,
 		item.ModelID,
 		result.Species)
+	detectionResult.ClipName = p.resolveClipName(settings, &detectionResult, scientificName, result.Confidence)
+	// The planned rate depends on the container the clip name carries, so it is
+	// planned only now (0 when export is off and the name is empty).
+	detectionResult.ClipSampleRate = plannedClipSampleRate(&detectionResult, &settings.Realtime.Audio.Export)
 
 	// Convert additional results from datastore.Results to detection.AdditionalResult.
 	// Exclude the primary species since it's already stored as Detection.LabelID.
@@ -1283,6 +1289,8 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 // createDetectionResult creates a detection.Result from the given parameters.
 // detectionTime should be pre-computed by the caller to ensure timestamp consistency
 // with other detection artifacts (e.g., Note) created from the same analysis.
+// The result carries no clip name or ClipSampleRate; createDetection sets both once the
+// clip name is resolved, because the planned rate depends on the name.
 func (p *Processor) createDetectionResult(settings *conf.Settings,
 	detectionTime time.Time,
 	beginTime, endTime time.Time,
@@ -1296,7 +1304,7 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 	// Resolve audio source info from registry
 	audioSource := p.resolveAudioSource(source)
 
-	return detection.Result{
+	result := detection.Result{
 		Timestamp:   detectionTime,
 		SourceNode:  settings.Main.Name,
 		AudioSource: audioSource,
@@ -1319,6 +1327,7 @@ func (p *Processor) createDetectionResult(settings *conf.Settings,
 		Model:          classifier.DetectionModelInfoForID(modelID),
 		RawLabel:       rawLabel,
 	}
+	return result
 }
 
 // resolveAudioSource resolves the audio source details from the registry.
@@ -1523,29 +1532,30 @@ func modelGlobalConfidenceThreshold(settings *conf.Settings, modelID string) flo
 // export is off makes it a truthful per-detection signal (no clip exists or is
 // being encoded), which the media endpoint and the frontend rely on to gate
 // audio playback per detection under runtime toggling of the export setting.
-func (p *Processor) resolveClipName(settings *conf.Settings, item *classifier.Results, scientificName string, confidence float32) string {
+// res supplies the model and sample rate the name's container is chosen from.
+func (p *Processor) resolveClipName(settings *conf.Settings, res *detection.Result, scientificName string, confidence float32) string {
 	if !settings.Realtime.Audio.Export.Enabled {
 		return ""
 	}
 
 	clipName := p.generateClipName(settings, scientificName, confidence)
-	return p.applyExportFormatExtension(settings, clipName, item.ModelID, item.Source)
+	return p.applyExportFormatExtension(settings, clipName, res)
 }
 
-// applyExportFormatExtension overrides a clip name's extension to match the
-// container the exporter will actually write, keeping the persisted ClipName in
-// lockstep with the on-disk file. buildClipPath derives the extension from
-// Export.Type; a bat/ultrasonic capture above the analysis rate is stored in the
-// dedicated Export.UltrasonicType instead (resolveExportFormat), so its extension
-// must be rewritten here. Shared by the createDetection and extended-capture paths
-// so both persist the same extension. An empty clip name is returned unchanged.
-func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName, modelID string, source datastore.AudioSource) string {
+// applyExportFormatExtension sets a clip name's extension to the container the
+// detection is stored in. buildClipPath derives the extension from Export.Type; a
+// bat/ultrasonic capture above the analysis rate is named in the dedicated
+// Export.UltrasonicType instead (resolveExportFormat), so its extension is
+// rewritten here. The model and sample rate are read from res, the same
+// detection.Result fields buildSaveAudioAction hands the encoder, so naming and
+// encoding decide from the same inputs. The exporter then writes the stored name
+// as it is (resolveExportParams). Shared by the createDetection and
+// extended-capture paths. An empty clip name is returned unchanged.
+func (p *Processor) applyExportFormatExtension(settings *conf.Settings, clipName string, res *detection.Result) string {
 	if clipName == "" {
 		return clipName
 	}
-	mInfo := classifier.DetectionModelInfoForID(modelID)
-	sourceRate := p.resolveAudioSource(source).SampleRate
-	format := exportFormatForModel(mInfo.Name, mInfo.Version, sourceRate, &settings.Realtime.Audio.Export)
+	format := exportFormatForModel(res.Model.Name, res.Model.Version, res.AudioSource.SampleRate, &settings.Realtime.Audio.Export)
 	// audioformat.FileExtension returns the extension WITHOUT a leading dot; replaceExtension
 	// expects the dot. Guard against an empty extension (only reachable with an
 	// unvalidated empty format) so buildClipPath's own extension is preserved rather
@@ -2287,22 +2297,12 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 
 	// Create SSE action if broadcaster is available (enabled when SSE API is configured)
 	if sseBroadcaster := p.GetSSEBroadcaster(); sseBroadcaster != nil {
-		// Create SSE retry config - use sensible defaults since SSE should be reliable
-		sseRetryConfig := jobqueue.RetryConfig{
-			Enabled:      true, // Enable retries for SSE to improve reliability
-			MaxRetries:   3,    // Conservative retry count for real-time streaming
-			InitialDelay: 1 * time.Second,
-			MaxDelay:     5 * time.Second,
-			Multiplier:   2.0,
-		}
-
 		sseAction = &SSEAction{
 			Settings:       settings,
 			Result:         det.Result, // Domain model (single source of truth)
 			BirdImageCache: p.BirdImageCache,
 			EventTracker:   p.GetEventTracker(),
 			DetectionCtx:   detectionCtx, // Share context from DatabaseAction (provides database ID)
-			RetryConfig:    sseRetryConfig,
 			SSEBroadcaster: sseBroadcaster,
 			CorrelationID:  det.CorrelationID,
 		}
@@ -2336,62 +2336,80 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 				RetryConfig:       mqttRetryConfig,
 				CorrelationID:     det.CorrelationID,
 				SpeciesTimeSource: speciesTimeSource,
+				liveSettings:      p.currentSettings,
+				liveClient:        p.GetMQTTClient,
 			}
 		}
 	}
 
 	// CRITICAL FIX for GitHub issue #1158 and #1748: Race condition and data visibility
 	//
-	// Problem: When database, SSE, and MQTT are enabled, they execute concurrently via the job queue.
-	// SSE and MQTT need the database-assigned Note.ID, but each action holds a VALUE COPY of Note.
-	// CompositeAction ensures sequential execution (timing), but doesn't share data between copies.
+	// Problem: SSE and MQTT need the database-assigned Note.ID, but each action holds
+	// a VALUE COPY of the result and the actions would otherwise run concurrently via
+	// the job queue.
 	//
-	// Solution: Combine DatabaseAction, SSEAction, and MqttAction into a CompositeAction that:
-	// 1. Executes them sequentially (Database → SSE → MQTT)
-	// 2. Uses DetectionContext to share the database ID atomically between actions
+	// Solution: when the database is enabled, a CompositeAction runs sequentially:
+	// 1. DatabaseAction saves the detection and stores the ID in the shared DetectionContext.
+	// 2. An enqueueAction hands MqttAction to the job queue as its own job. The queue
+	//    picks the retry policy per job (getJobQueueRetryConfig), so MQTT gets
+	//    realtime.mqtt.retrysettings, which a step inside the composite cannot have.
+	//    The job starts after the save, so it still reads the database ID.
+	// 3. SSEAction broadcasts inline.
+	// The composite itself must never be retried: a retry would run DatabaseAction
+	// again and store a duplicate row. Without a database there is no ID to wait
+	// for, so SSE and MQTT are queued as independent actions.
 	//
 	// This ensures:
 	// - Database save completes before downstream actions
 	// - SSE/MQTT receive the correct detection ID for URL construction
 	// - No polling needed (eliminates the old 5-second sleep hack in SSE)
+	// - A failed MQTT publish is retried without re-running the database save
 	//
 	// IMPORTANT: Audio export is NOT included in this CompositeAction. It runs as a
-	// separate independent action to prevent slow FFmpeg encoding (especially on
-	// Raspberry Pi) from blocking SSE/MQTT broadcasts. The media API handles the
+	// separate independent action to prevent slow clip encoding (especially on
+	// Raspberry Pi) from blocking the SSE broadcast. The media API handles the
 	// race where a client requests audio before export completes, using server-side
 	// wait with retries and 503 + Retry-After responses.
 	//
 	// See: https://github.com/tphakala/birdnet-go/issues/1158 (race condition)
 	// See: https://github.com/tphakala/birdnet-go/issues/1748 (detection ID in MQTT)
-	var sequentialActions []Action
 	if databaseAction != nil {
-		sequentialActions = append(sequentialActions, databaseAction)
-	}
-	if sseAction != nil {
-		sequentialActions = append(sequentialActions, sseAction)
-	}
-	if mqttAction != nil {
-		sequentialActions = append(sequentialActions, mqttAction)
-	}
-
-	if len(sequentialActions) > 1 {
-		// Create composite action for sequential execution with shared context
-		compositeAction := &CompositeAction{
-			Actions:       sequentialActions,
-			Description:   "Database save, SSE broadcast, and MQTT publish (sequential)",
-			CorrelationID: det.CorrelationID,
+		sequentialActions := []Action{databaseAction}
+		if mqttAction != nil {
+			sequentialActions = append(sequentialActions, &enqueueAction{
+				action: mqttAction,
+				// No PCM data: a retrying MQTT job must not pin the audio.
+				detection: Detections{CorrelationID: det.CorrelationID, Result: det.Result},
+				enqueue:   p.EnqueueTaskCtx,
+			})
 		}
-		actions = append(actions, compositeAction)
-	} else if len(sequentialActions) == 1 {
-		// Only one action enabled, add it directly
-		actions = append(actions, sequentialActions[0])
+		if sseAction != nil {
+			sequentialActions = append(sequentialActions, sseAction)
+		}
+
+		if len(sequentialActions) > 1 {
+			actions = append(actions, &CompositeAction{
+				Actions:       sequentialActions,
+				Description:   "Database save, MQTT enqueue, and SSE broadcast (sequential)",
+				CorrelationID: det.CorrelationID,
+			})
+		} else {
+			actions = append(actions, databaseAction)
+		}
+	} else {
+		if sseAction != nil {
+			actions = append(actions, sseAction)
+		}
+		if mqttAction != nil {
+			actions = append(actions, mqttAction)
+		}
 	}
 
 	// Add SaveAudioAction if audio export is enabled.
 	// This runs as an INDEPENDENT action (not inside the CompositeAction) so that
-	// slow audio encoding does not block the Database -> SSE -> MQTT pipeline.
-	// On resource-constrained hardware (RPi with SD cards), FFmpeg encoding can
-	// take 10-30+ seconds, which previously caused CompositeAction 30s timeouts
+	// slow audio encoding does not block the Database -> SSE pipeline.
+	// On resource-constrained hardware (RPi with SD cards), clip export took
+	// 10-30+ seconds back when it ran on FFmpeg, which timed out the CompositeAction
 	// (Sentry BIRDNET-GO-WD), preventing SSE/MQTT from ever firing.
 	if settings.Realtime.Audio.Export.Enabled && databaseAction != nil {
 		actions = append(actions, p.buildSaveAudioAction(det, detectionCtx, settings))
@@ -2412,6 +2430,8 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 				pcmData:       det.pcmData3s,
 				RetryConfig:   bwRetryConfig,
 				CorrelationID: det.CorrelationID,
+				liveSettings:  p.currentSettings,
+				liveClient:    p.GetBwClient,
 			})
 		}
 	}
@@ -2435,7 +2455,11 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 }
 
 // retryConfigFromSettings converts user-facing retry settings into a jobqueue RetryConfig.
+// Disabled settings yield a zero config, whatever retry counts the user left behind.
 func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
+	if !rs.Enabled {
+		return jobqueue.RetryConfig{Enabled: false}
+	}
 	return jobqueue.RetryConfig{
 		Enabled:      rs.Enabled,
 		MaxRetries:   rs.MaxRetries,
@@ -2450,7 +2474,8 @@ func retryConfigFromSettings(rs conf.RetrySettings) jobqueue.RetryConfig {
 // It reads PCM data from the capture buffer eagerly (while the data is still
 // available) and returns an action that will encode and write the audio file
 // when executed by the job queue. This decouples the slower clip encoding
-// from the fast Database -> SSE -> MQTT pipeline.
+// from the fast Database -> SSE pipeline. The action carries the planned
+// clip sample rate and, when the datastore can store one, a recorder to correct it.
 func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *DetectionContext, settings *conf.Settings) *SaveAudioAction {
 	// Derive the capture length and readiness time from the shared conf helper so this
 	// scheduler and the media API (which decides whether a not-yet-written clip is still
@@ -2489,6 +2514,8 @@ func (p *Processor) buildSaveAudioAction(det *Detections, detectionCtx *Detectio
 	// missed on one branch is invisible until that branch is exercised.
 	base := func() *SaveAudioAction {
 		return &SaveAudioAction{
+			clipRates:        p.Repo,
+			plannedRate:      det.Result.ClipSampleRate,
 			Settings:         settings,
 			ClipName:         det.Result.ClipName,
 			sourceSampleRate: det.Result.AudioSource.SampleRate,
@@ -2957,17 +2984,7 @@ func (p *Processor) generateCorrelationID(speciesName string, timestamp time.Tim
 // generateRandomHex generates a random hexadecimal string of specified length
 func generateRandomHex(length int) string {
 	bytes := make([]byte, (length+1)/2) // Round up for odd lengths
-	_, err := rand.Read(bytes)
-	if err != nil {
-		// Fallback to timestamp-based randomness if crypto/rand fails
-		// Build a hex string of exactly the requested length
-		fallback := fmt.Sprintf("%016x", time.Now().UnixNano())
-		// Repeat the fallback string if needed to ensure we have enough length
-		for len(fallback) < length {
-			fallback += fmt.Sprintf("%016x", time.Now().UnixNano())
-		}
-		return fallback[:length]
-	}
+	rand.Read(bytes)
 
 	hex := fmt.Sprintf("%x", bytes)
 	if len(hex) > length {
@@ -3007,24 +3024,6 @@ func (p *Processor) initPreRenderer() {
 			return
 		}
 
-		// Validate Sox binary is configured and exists. The native renderer draws
-		// prerender PCM in Go (spectrogram generator.go GenerateFromPCM) and the gate
-		// cannot change while the process runs, so this prerenderer never reaches sox.
-		if !conf.NativeSpectrogramEnabled() {
-			if p.Settings.Realtime.Audio.SoxPath == "" {
-				GetLogger().Error("Sox binary not configured, disabling pre-rendering",
-					logger.String("operation", "prerenderer_init"))
-				return
-			}
-			if _, err := exec.LookPath(p.Settings.Realtime.Audio.SoxPath); err != nil {
-				GetLogger().Error("Sox binary not found, disabling pre-rendering",
-					logger.String("path", p.Settings.Realtime.Audio.SoxPath),
-					logger.Error(err),
-					logger.String("operation", "prerenderer_init"))
-				return
-			}
-		}
-
 		// Create SecureFS for path validation
 		sfs, err := securefs.New(p.Settings.Realtime.Audio.Export.Path)
 		if err != nil {
@@ -3048,7 +3047,6 @@ func (p *Processor) initPreRenderer() {
 		GetLogger().Info("Spectrogram pre-renderer initialized",
 			logger.String("size", p.Settings.Realtime.Dashboard.Spectrogram.Size),
 			logger.Bool("raw", p.Settings.Realtime.Dashboard.Spectrogram.Raw),
-			logger.Bool("native_renderer", conf.NativeSpectrogramEnabled()),
 			logger.String("operation", "prerenderer_init"))
 	})
 }

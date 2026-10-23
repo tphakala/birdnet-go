@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} med den innstilte overlappen på {configured} s overstiger den målte kapasiteten til denne enheten, så lyden analyseres med {effective} s overlapp. Falsk positiv-filteret kan derfor kreve færre bekreftelser. De lagrede innstillingene dine er uendret; se Innstillinger > Analyse.",
         "cadenceOverloadedTitle": "Denne enheten klarer ikke å holde tritt med lydanalysen",
         "cadenceOverloadedMessage": "Å kjøre {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# lydkilde} other {# lydkilder}} overstiger den målte kapasiteten til denne enheten selv uten overlapp, så analysen kan komme på etterskudd, og deteksjoner kan gå tapt. Aktiver færre modeller eller lydkilder, eller velg en raskere modellvariant."
+      },
+      "storage": {
+        "notPersistentTitle": "Data går tapt når containeren gjenopprettes",
+        "notPersistentMessage": "Disse banene ligger på lagring som slettes når containeren gjenopprettes, for eksempel ved en oppdatering av imaget: {paths}. Knytt et volum eller en vertsmappe til dem i containerkonfigurasjonen din.",
+        "anonymousVolumeTitle": "Data lagres i et anonymt containervolum",
+        "anonymousVolumeMessage": "Disse banene ligger i anonyme volumer som container-kjøretiden opprettet fordi ingen volum var knyttet til dem: {paths}. En container som startes på nytt, for eksempel med docker run etter en oppdatering av imaget, får nye tomme volumer, så dataene ser ut til å være tapt. Knytt et navngitt volum eller en vertsmappe til dem."
       }
     },
     "loading": "Laster varsler..."
@@ -1576,7 +1582,7 @@
           "restartTitle": "Omstart kreves",
           "restartBody": "Start applikasjonen på nytt for å bytte til V2-databasen. Opprydding av eldre database vil være tilgjengelig etter omstart.",
           "fallbackError": "Antall poster stemmer ikke mellom eldre og V2-database. Noen poster kan ikke ha migrert korrekt.",
-          "migrateInfo": "Migreringen vil overføre {count} poster fra den eldre databasen til det nye V2-skjemaet. Dobbeltskrivemodus sikrer nulldatatap under migrering.",
+          "migrateInfo": "Migreringen vil overføre {count} poster fra den eldre databasen til det nye V2-skjemaet. Nye registreringer som lagres under migreringen kopieres også til den nye databasen.",
           "sourceLegacy": "Kilde (eldre)",
           "targetV2": "Mål (V2)",
           "recordsLabel": "Poster",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "Du kan fortsette å bruke systemet normalt mens migreringen kjører i bakgrunnen.",
-          "dual_write": "Migrering pågår. Dataene dine er trygge - alle nye registreringer lagres i begge databaser.",
+          "dual_write": "Migrering pågår. Dataene dine er trygge - nye registreringer lagres i den gjeldende databasen og kopieres til den nye databasen under migreringen.",
           "migrating": "Kopierer eksisterende registreringer til den nye databasen.",
           "validating": "Verifiserer at alle poster er kopiert korrekt. Nesten ferdig!",
           "cutover": "Bytter til den nye databasen. Dette tar bare et øyeblikk.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Best for svake signaler. Fuglekall fremheves tydelig fra bakgrunnsstøy. Anbefales for vitenskapelige/gråtone-stiler.",
                   "standard": "Standard balansert innstilling. God for de fleste brukstilfeller.",
-                  "extended": "Mer detalj synlig men lavere kontrast. SoX-standardverdi."
+                  "extended": "Mer detalj synlig men lavere kontrast."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "Hva er inkludert i rapporten:",
           "applicationLogs": "**Applikasjonslogger** - Nylige feil og feilsøkingsinformasjon",
           "configuration": "**Konfigurasjon** - Innstillingene dine med sensitiv data fjernet",
-          "systemInfo": "**Systeminformasjon** - OS-versjon, minne og kjøretidsdetaljer",
+          "systemInfo": "**Systeminformasjon** - OS-versjon, minne, maskinvare, tilkoblede USB-enheter og lydkort, og kjøretidsdetaljer",
           "notIncluded": "**IKKE inkludert** - Lydfiler, fugleregistreringer eller personlige data"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "min",
             "helpText": "Forhindre gjentatte varsler for samme art innen dette tidsvinduet. Sett til 0 for å deaktivere."
           }
+        },
+        "rulesNotice": {
+          "message": "Push-varsler om registreringer kommer fra varselregler på fanen Regler. De innebygde registreringsreglene varsler bare i appen. For å få push-varsler legger du til handlingen {pushAction} i regelen {ruleName}, eller oppretter en regel for hendelsen {eventName} med en sikkerhetsbetingelse og en nedkjøling.",
+          "previousFilters": "Innstillingene Minimum sikkerhet ({confidence}%) og Artsnedkjøling ({minutes} min) her brukes ikke av varselregler.",
+          "openRules": "Åpne Regler"
         },
         "noProviders": "Ingen leverandører konfigurert",
         "noProvidersDescription": "Legg til en leverandør for å begynne å motta push-varsler",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Last opp registreringer til BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg ikke funnet",
-          "message": "Installer FFmpeg for å aktivere FLAC-kodingsstøtte. BirdWeather avvikler WAV-opplastinger til fordel for komprimerte FLAC-lydfiler."
-        },
         "enable": "Aktiver BirdWeather-opplastinger",
         "token": {
           "label": "BirdWeather-token",
@@ -5153,6 +5160,7 @@
       "loop": "Veksle sløyfe",
       "player": "Lydspiller",
       "autoplayBlocked": "Klikk for å spille av (autoavspilling blokkert)",
+      "hlsLoadFailed": "Kunne ikke laste lydspilleren, last siden på nytt og prøv igjen",
       "hlsNotSupported": "HLS-avspilling støttes ikke i denne nettleseren",
       "streamStarting": "Starter lydstrøm...",
       "levelFor": "Lydnivå for {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "Ugyldig JSON",
       "invalidEscalation": "Eskaleringstrinn er ugyldige",
       "engineUnavailable": "Varslingsmotoren er utilgjengelig"
+    },
+    "insights": {
+      "v2Required": "Innsikt krever den forbedrede (v2) databasen"
     },
     "detection": {
       "invalidDate": "Ugyldig {paramName}-format, bruk ÅÅÅÅ-MM-DD"

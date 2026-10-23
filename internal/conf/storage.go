@@ -72,12 +72,32 @@ func Load() (*Settings, error) {
 	// missing field before unmarshal so the runtime struct can use a plain bool.
 	streamEnabledMigrated := migrateStreamEnabledDefaults()
 
-	// Unmarshal the config into settings, with custom Duration decode hook
-	if err := viper.Unmarshal(settings, viper.DecodeHook(DurationDecodeHook())); err != nil {
+	// Unmarshal the config into settings. configDecodeHook restores flat map
+	// keys that viper split on "." (scalar-valued maps that viper reaches by
+	// key path, today logging.module_levels and taxonomySynonyms; maps inside
+	// list entries are never split, see #4523) and decodes durations.
+	if err := viper.Unmarshal(settings, viper.DecodeHook(configDecodeHook())); err != nil {
 		return nil, errors.New(err).
 			Category(errors.CategoryConfiguration).
 			Context("operation", "unmarshal-config").
 			Build()
+	}
+
+	// Re-decode the logging section from viper's raw subtree: AllSettings()
+	// has re-split dotted module keys ("analysis.processor") into nested maps,
+	// losing them from logging.modules and, when a parent and a dotted child
+	// coexist, from module_levels. The raw subtree keeps the flat keys, so
+	// decoding from it restores both (#4523).
+	if err := reDecodeLoggingConfig(settings); err != nil {
+		return nil, err
+	}
+
+	// Restore species config and season keys that contain a dot. This must run
+	// before key normalization and before any persistMigration below, so a
+	// migration save never writes the zero-value phantom entry viper's split
+	// leaves behind.
+	if err := reDecodeDottedStructMaps(settings); err != nil {
+		return nil, err
 	}
 
 	// Normalize species config keys to lowercase for case-insensitive matching
@@ -192,17 +212,11 @@ func Load() (*Settings, error) {
 	}
 
 	// Auto-generate SessionSecret if not set (for backward compatibility)
-	if err := ensureSessionSecret(settings); err != nil {
-		return nil, err
-	}
+	ensureSessionSecret(settings)
 
 	// Mint the profiling token when pprof is enabled without an authentication
-	// provider. Deliberately non-fatal: without a token the pprof routes refuse
-	// every request, which is the safe outcome, and a diagnostics feature must
-	// not be able to stop the application from starting.
-	if generated, err := EnsureProfilingToken(settings); err != nil {
-		GetLogger().Warn("Failed to generate profiling token; the profiling endpoints will refuse requests", logger.Error(err))
-	} else if generated {
+	// provider.
+	if EnsureProfilingToken(settings) {
 		// A token that is minted but never written to disk is worse than none:
 		// it gates the endpoints for this process while being unreadable (it is
 		// never logged), and the next start mints a different one. Say so
@@ -417,28 +431,12 @@ func createDefaultConfig() error {
 
 	// If the basicauth secret is not set, generate a random one
 	if viper.GetString("security.basicauth.clientsecret") == "" {
-		clientSecret, err := GenerateRandomSecret()
-		if err != nil {
-			return errors.New(err).
-				Component("conf").
-				Category(errors.CategoryConfiguration).
-				Context("operation", "generate_client_secret").
-				Build()
-		}
-		viper.Set("security.basicauth.clientsecret", clientSecret)
+		viper.Set("security.basicauth.clientsecret", GenerateRandomSecret())
 	}
 	// If the session secret is not set, generate a random one
 	// This ensures backward compatibility for existing deployments
 	if viper.GetString("security.sessionsecret") == "" {
-		sessionSecret, err := GenerateRandomSecret()
-		if err != nil {
-			return errors.New(err).
-				Component("conf").
-				Category(errors.CategoryConfiguration).
-				Context("operation", "generate_session_secret").
-				Build()
-		}
-		viper.Set("security.sessionsecret", sessionSecret)
+		viper.Set("security.sessionsecret", GenerateRandomSecret())
 	}
 
 	// Create directories for config file

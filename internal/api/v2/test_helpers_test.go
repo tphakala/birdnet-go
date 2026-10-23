@@ -18,23 +18,7 @@ const (
 	testControlChanBuffer = 10       // Buffer size for control channel in tests
 	testNewYorkLatitude   = 40.7128  // New York City latitude for test data
 	testNewYorkLongitude  = -74.0060 // New York City longitude for test data
-	// testFailFastTimeout is a short timeout injected into deliberate-failure
-	// waits (unreachable ntfy host, audio file that never appears) so those
-	// tests reach the expected timeout state quickly instead of waiting the full
-	// production defaults. It is intentionally well above any local/CI dial or
-	// scheduling latency while staying far below the production timeouts.
-	testFailFastTimeout = 200 * time.Millisecond
 )
-
-// passthroughMiddleware returns a middleware that does nothing (allows all requests).
-// Used for testing endpoints that require authentication middleware.
-func passthroughMiddleware() echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			return next(c)
-		}
-	}
-}
 
 // getTestController creates a test controller with disabled saving
 // Note: apitest.DisableHTTPKeepAlivesForTesting() is called in TestMain before any tests run

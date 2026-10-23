@@ -198,7 +198,7 @@ RUN --mount=type=cache,target=/go/pkg/mod,uid=10001,gid=10001 \
 FROM --platform=$TARGETPLATFORM debian:trixie-slim AS runtime-base
 ARG TARGETPLATFORM
 
-# Install ALSA library and SOX for audio processing, tini (a tiny init run as
+# Install ALSA library for audio processing, tini (a tiny init run as
 # PID 1, see the final-stage ENTRYPOINT note), and other system utilities for
 # debugging.
 #
@@ -217,8 +217,6 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
     ca-certificates \
     libasound2 \
     ffmpeg \
-    sox \
-    libsox-fmt-mp3 \
     procps \
     iproute2 \
     net-tools \
@@ -498,7 +496,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 # 0. tini - A tiny init run as PID 1. This is defense-in-depth, not a bug fix:
 #    the bash wrapper below already forwards signals and (via its SIGCHLD
 #    handling) reaps processes reparented to PID 1, and birdnet-go Wait()s the
-#    ffmpeg/sox children it spawns. tini makes correct PID 1 behaviour (orphan
+#    ffmpeg children it spawns. tini makes correct PID 1 behaviour (orphan
 #    reaping + signal handling) intrinsic to the image instead of relying on the
 #    shell's semantics, so it stays correct across future entrypoint changes and
 #    matches Docker's own --init default. Baked into the image so every deploy

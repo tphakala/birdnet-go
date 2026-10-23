@@ -1,6 +1,7 @@
 package privacy
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -337,8 +338,7 @@ func TestGenerateSystemID(t *testing.T) {
 	// Test multiple generations to ensure they're unique
 	ids := make(map[string]bool)
 	for range 100 {
-		id, err := GenerateSystemID()
-		require.NoError(t, err, "GenerateSystemID failed")
+		id := GenerateSystemID()
 
 		// Check format
 		assert.True(t, IsValidSystemID(id), "Generated ID %q is not valid", id)
@@ -939,7 +939,38 @@ func TestScrubCoordinates(t *testing.T) {
 	runScrubTests(t, ScrubCoordinates, tests)
 }
 
-func TestScrubMessage_KeepsSpaceSeparatedDateTimes(t *testing.T) {
+func TestScrubCoordinates_KeepsALSASelectors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"hw selector in a device name", "Blue Yeti Stereo Microphone: USB Audio (hw:1,0)", "Blue Yeti Stereo Microphone: USB Audio (hw:1,0)"},
+		{"plughw selector", "plughw:1,0", "plughw:1,0"},
+		{"dsnoop selector", "dsnoop:1,0", "dsnoop:1,0"},
+		{"dmix selector", "dmix:1,0", "dmix:1,0"},
+		{"two digit card and device", "hw:10,12", "hw:10,12"},
+		{"selector with subdevice", "hw:1,0,0", "hw:1,0,0"},
+		{"pair after a bare colon", "device :1,0", "device :[LAT],[LON]"},
+		{"whole degree pair after a bare colon", "pos :60,24", "pos :[LAT],[LON]"},
+		{"quoted bare colon value", `"device":":1,0"`, `"device":":[LAT],[LON]"`},
+		{"selector then coordinates", "hw:1,0 at 60.1699,24.9384", "hw:1,0 at [LAT],[LON]"},
+		{"decimal pair after hw", "hw:60.1699,24.9384", "hw:[LAT],[LON]"},
+		{"decimal second half after hw", "hw:1,24.9384", "hw:[LAT],[LON]"},
+		{"space before second half after hw", "hw:1, 24.9384", "hw:[LAT],[LON]"},
+		{"signed second half after hw", "hw:1,-2", "hw:[LAT],[LON]"},
+		{"signed decimal pair after a colon", ":45.5,-120.5", ":[LAT],[LON]"},
+		{"labelled integer pair", "Location:60,24", "Location:[LAT],[LON]"},
+		{"quoted key before the colon", `{"lat":60,24}`, `{"lat":[LAT],[LON]}`},
+		{"hw prefix inside a word", "myhw:60,24", "myhw:[LAT],[LON]"},
+	}
+
+	runScrubTests(t, ScrubCoordinates, tests)
+}
+
+func TestScrubMessage_KeepsDatesAndTimes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -953,6 +984,17 @@ func TestScrubMessage_KeepsSpaceSeparatedDateTimes(t *testing.T) {
 		{"clock times", "from 10:15:30 to 11:45:00"},
 		{"dotted date time", "16.10.2026 00:12 started"},
 		{"date time with T", "2026-10-16T00:12:34 started"},
+		{"US slash date time", "10/16/2026 00:12:34 started"},
+		{"European slash date time", "16/10/2026 00:12:34"},
+		{"year first slash date time", "2026/10/16 00:12:34"},
+		{"two digit year slash date time", "10/16/26 00:12:34"},
+		{"slash date time with T and Z", "10/16/2026T00:12:34Z"},
+		{"slash date time with fraction", "10/16/2026 12:34:56.123"},
+		{"slash date in a sentence", "see 10/16/2026"},
+		{"year first slash date alone", "2026/10/16 started"},
+		{"slash date time after comma", "10/16/2026, 00:12:34 x"},
+		{"slash date before a count", "2026/10/16 50 birds"},
+		{"slash date ending a sentence", "backup done 2026/10/16 started. Next run tomorrow"},
 	}
 
 	for _, tt := range tests {
@@ -985,6 +1027,42 @@ func TestScrubCoordinates_StillScrubsWithNeighbors(t *testing.T) {
 	}
 }
 
+func TestScrubCoordinates_ScrubsPairAfterALeadingNumber(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"count and comma", "count 5, 60.1699,24.9384", "count [LAT],[LON]"},
+		{"bare run", "5, 60.1699, 24.9384", "[LAT],[LON]"},
+		{"glued integer", "x 1,60.1699,24.9384", "x [LAT],[LON]"},
+		{"count and space", "count 5 60.1699,24.9384", "count [LAT],[LON]"},
+		{"space only", "count 5 60.1699 24.9384", "count [LAT],[LON]"},
+		{"negative values", "5,-33.86,151.21", "[LAT],[LON]"},
+		{"decimal first", "0.5, 60.1699, 24.9384", "[LAT],[LON]"},
+		{"listed pairs are not merged", "60.1699,24.9384, 61.4981,23.7610", "[LAT],[LON], [LAT],[LON]"},
+		{"long tail number is consumed whole", "60.1699, 24.9384, 1000.5", "[LAT],[LON]"},
+		{"kept selector, then a pair", "hw:1,0,0 60.1699,24.9384", "hw:1,0,[LAT],[LON]"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, ScrubCoordinates(tt.input))
+		})
+	}
+
+	// No digit of a number run survives, whatever the run length and separator.
+	numbers := []string{"5", "60.1699", "-24.9384", "0.5", "151", "-33.86"}
+	for runLen := 2; runLen <= len(numbers); runLen++ {
+		for _, sep := range []string{",", ", ", " "} {
+			input := "count " + strings.Join(numbers[:runLen], sep) + " end"
+			assert.NotRegexp(t, `\d`, ScrubCoordinates(input), "input %q", input)
+		}
+	}
+}
+
 func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
 	t.Parallel()
 
@@ -1010,6 +1088,10 @@ func TestScrubCoordinates_ScrubsPairRightAfterTimestamp(t *testing.T) {
 		{"sentence period after fraction", "2026-10-16 00:12:34,123. 50 birds", "2026-10-16 00:12:34,123. 50 birds"},
 		{"Z suffix", "2026-10-16T00:12:34Z 60.1699,24.9384", "2026-10-16T00:12:34Z [LAT],[LON]"},
 		{"negative pair after time", "2026-10-16 00:12:34 -45.123,122.456", "2026-10-16 00:12:34 [LAT],[LON]"},
+		{"comma before time", "10/16/2026, 00:12:34 60.1699,24.9384", "10/16/2026, 00:12:34 [LAT],[LON]"},
+		{"pair after date shaped prefix", "1/2/60.1699,24.9384", "1/2/[LAT],[LON]"},
+		{"whole degree latitude glued to a date shape", "10/16/60,24.9384", "10/16/[LAT],[LON]"},
+		{"pair after slash date", "10/16/2026, 60.1699,24.9384", "10/16/2026, [LAT],[LON]"},
 		{"pair between timestamps", "2026-10-16 00:12:34 at 60.1699,24.9384 until 2026-10-16 00:13:00", "2026-10-16 00:12:34 at [LAT],[LON] until 2026-10-16 00:13:00"},
 	}
 	for _, tt := range tests {
@@ -1045,11 +1127,11 @@ func TestTrimGluedCoordinate(t *testing.T) {
 	}
 }
 
-func TestProtectedTimeSpans_MergesTouchingSpans(t *testing.T) {
+func TestProtectedDateTimeSpans_MergesTouchingSpans(t *testing.T) {
 	t.Parallel()
 	// The date-time ends exactly where the syslog prefix starts.
 	in := "2026-10-16 00:12:34Oct 16 00:12:35"
-	assert.Equal(t, [][]int{{0, len(in)}}, protectedTimeSpans(in))
+	assert.Equal(t, [][]int{{0, len(in)}}, protectedDateTimeSpans(in))
 	assert.Equal(t, in, ScrubCoordinates(in))
 }
 
@@ -2448,6 +2530,232 @@ func TestScrubStandaloneIPs_NonTimeTokensStillHashed(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			assert.NotContains(t, ScrubStandaloneIPs(tt.input), tt.leaks)
+		})
+	}
+}
+
+func TestScrubStandaloneIPs_KeepsUSBIDTokens(t *testing.T) {
+	t.Parallel()
+
+	keep := []struct {
+		name  string
+		input string
+	}{
+		{"redacted serial", "usb-id:0d8c:0014:<redacted>"},
+		{"empty serial at end of text", "usb-id:046d:0825:"},
+		{"no serial", "capture on usb-id:046d:0825 failed"},
+		{"bus path with hex letters", "usb-path:usb-0000:00:1d.0-1"},
+		{"bus path of digits", "usb-path:usb-0000:00:14.0-3"},
+	}
+	for _, tt := range keep {
+		t.Run("keeps "+tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.input, ScrubStandaloneIPs(tt.input))
+		})
+	}
+
+	scrub := []struct {
+		name     string
+		input    string
+		contains string
+		leaks    string
+	}{
+		{"address after the token", "usb-id:0d8c:0014:<redacted> peer 2001:db8::1", "usb-id:0d8c:0014:<redacted> peer public-ip-", "2001:db8::1"},
+		{"address glued after the prefix", "usb-id:2001:0db8::1", "", "2001:0db8"},
+		{"address glued after the pair", "usb-id:0d8c:0014:2001:db8::1", "", "2001:db8"},
+		{"address glued after usb-", "usb-path:usb-2001:db8::1.0-1", "", "2001:db8"},
+		{"truncated address after usb-id", "usb-id:2001:db8", "", "2001:db8"},
+		{"hex serial after the pair", "usb-id:046d:0825:ab12", "", "046d:0825"},
+		{"no dot after the PCI address", "usb-path:usb-0000:00:1d-1", "", "0000:00:1d"},
+		{"longer match after usb-", "usb-path:usb-0000:00:1d:ab.0-1", "", "0000:00:1d:ab"},
+	}
+	for _, tt := range scrub {
+		t.Run("scrubs "+tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubStandaloneIPs(tt.input)
+			assert.Contains(t, got, tt.contains)
+			assert.NotContains(t, got, tt.leaks)
+		})
+	}
+}
+
+func TestScrubMessage_ScrubsPathsAroundDates(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"dated directories stay one path", "/data/clips/2026/10/16/john.wav", AnonymizePath("/data/clips/2026/10/16/john.wav")},
+		{"date shaped tail after a slash", "/data/clips/10/16/2026", AnonymizePath("/data/clips/10/16/2026")},
+		{"path then date time", "path /var/log/john 10/16/2026 00:12:34", "path " + AnonymizePath("/var/log/john") + " 10/16/2026 00:12:34"},
+		{"path then date with T time", "/home/john 10/16/2026T12:34:56", AnonymizePath("/home/john") + " 10/16/2026T12:34:56"},
+		{"date glued to a path segment", "/home/john-10/16/2026", AnonymizePath("/home/john-10/16/2026")},
+		{"single segment head stays hashed", "/john 10/16/2026", AnonymizePath("/john") + " 10/16/2026"},
+		{"separators only head", "/ 10/16/2026", "/ 10/16/2026"},
+		{"date time then path", "10/16/2026 00:12:34 open /home/john/x.db", "10/16/2026 00:12:34 open " + AnonymizePath("/home/john/x.db")},
+	}
+	runScrubTests(t, ScrubMessage, tests)
+
+	leaks := []struct {
+		name  string
+		input string
+	}{
+		{"date then path segment", "10/16/2026/john.wav"},
+		{"date then single segment path", "10/16/2026 /john.wav"},
+		{"path then date then path", "/home/x 10/16/2026 john/secret"},
+		{"path then date then word", "/home/x 10/16/2026 john"},
+		{"date then word glued to it", "/home/x 10/16/2026john"},
+		{"date followed by one more digit", "10/16/20261/john"},
+		{"date then relative file name", "saved backup 2026/10/16 john smith.wav"},
+		{"date then dotted name", "10/16/2026 john.smith"},
+		{"windows dated directories", `C:\Users\john\2026\10\16\x.wav`},
+	}
+	for _, tt := range leaks {
+		t.Run("no leak "+tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.NotContains(t, ScrubMessage(tt.input), "john")
+		})
+	}
+
+	// After a path, a date is kept only before a clock time; anything else
+	// could be the rest of a path segment, so the path stage handles it.
+	notClockTimes := []struct {
+		name  string
+		input string
+	}{
+		{"three digit hour", "/home/john 10/16/2026 123:45"},
+		{"hour without a colon", "/home/john 10/16/2026 12"},
+	}
+	for _, tt := range notClockTimes {
+		t.Run("date not kept after path "+tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubMessage(tt.input)
+			assert.NotContains(t, got, "10/16/2026")
+			assert.NotContains(t, got, "john")
+		})
+	}
+}
+
+func TestScrubMessage_LogLinesKeepDeviceIDs(t *testing.T) {
+	t.Parallel()
+
+	keep := []string{
+		"10/16/2026 00:12:34 opened Blue Yeti Stereo Microphone: USB Audio (hw:1,0) id usb-id:0d8c:0014:<redacted>",
+		`{"time":"2026-10-16T00:12:34.015573-07:00","msg":"device ready","device":"hw:1,0","id":"usb-id:046d:0825:"}`,
+	}
+	for _, in := range keep {
+		t.Run("keeps "+in, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, in, ScrubMessage(in))
+		})
+	}
+
+	t.Run("scrubs private data beside device ids", func(t *testing.T) {
+		t.Parallel()
+		in := "10/16/2026 00:12:34 (hw:1,0) usb-id:0d8c:0014:SN12345 peer 2001:db8::1 at 60.1699,24.9384 file /home/john/clip.wav"
+		got := ScrubMessage(in)
+		assert.Contains(t, got, "10/16/2026 00:12:34 (hw:1,0) usb-id:0d8c:0014:<redacted> peer ")
+		for _, leak := range []string{"SN12345", "2001:db8::1", "60.1699", "24.9384", "john"} {
+			assert.NotContains(t, got, leak)
+		}
+	})
+}
+
+func TestScrubMessage_MasksUSBIDSerials(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{"bare token", "usb-id:0d8c:0014:SN12345", "usb-id:0d8c:0014:<redacted>"},
+		{"dots dashes underscores belong to the serial", "opened usb-id:0d8c:0014:SN-1.2_3 ok", "opened usb-id:0d8c:0014:<redacted> ok"},
+		{"colons slashes and equals belong to the serial", "opened usb-id:0d8c:0014:AB:CD/EF=1 ok", "opened usb-id:0d8c:0014:<redacted> ok"},
+		{"quoted serial with a space", `{"id":"usb-id:0d8c:0014:A1 B2","x":1}`, `{"id":"usb-id:0d8c:0014:<redacted>","x":1}`},
+		{"nested JSON value ends at the escaped quote", `{\"id\":\"usb-id:0d8c:0014:SN1\"}`, `{\"id\":\"usb-id:0d8c:0014:<redacted>\"}`},
+		{"closing bracket ends the serial", "(usb-id:0d8c:0014:SN1)", "(usb-id:0d8c:0014:<redacted>)"},
+		{"comma ends the serial and the scan continues", "usb-id:0d8c:0014:SN1,usb-id:046d:0825:SN2", "usb-id:0d8c:0014:<redacted>,usb-id:046d:0825:<redacted>"},
+		{"hex serial keeps the ids", "usb-id:046d:0825:ab12", "usb-id:046d:0825:<redacted>"},
+		{"backtick opens quoted mode", "`usb-id:0d8c:0014:A1 B2`", "`usb-id:0d8c:0014:<redacted>`"},
+		{"backslash inside a JSON serial is masked with it", `{"id":"usb-id:0d8c:0014:A1\\B2"}`, `{"id":"usb-id:0d8c:0014:<redacted>"}`},
+		{"escaped backslash at the end of a JSON serial", `{"id":"usb-id:0d8c:0014:A1\\"}`, `{"id":"usb-id:0d8c:0014:<redacted>"}`},
+		{"second token inside a quoted serial goes with it", `msg="usb-id:0d8c:0014:SN1 replaced by usb-id:046d:0825:SN2"`, `msg="usb-id:0d8c:0014:<redacted>"`},
+		{"masked token in quoted prose is kept", `msg="usb-id:0d8c:0014:<redacted> failed"`, `msg="usb-id:0d8c:0014:<redacted> failed"`},
+		{"masked token before a period is kept", "device usb-id:0d8c:0014:<redacted>.", "device usb-id:0d8c:0014:<redacted>."},
+		{"masked token before an error suffix is kept", "open usb-id:0d8c:0014:<redacted>: device busy", "open usb-id:0d8c:0014:<redacted>: device busy"},
+		{"serial that starts with the marker is masked", "usb-id:046d:0825:<redacted>ABC123 ok", "usb-id:046d:0825:<redacted> ok"},
+		{"marker followed by a dash and serial text is masked", "usb-id:046d:0825:<redacted>-ABC123 ok", "usb-id:046d:0825:<redacted> ok"},
+		{"marker followed by a dot and serial text is masked", "usb-id:046d:0825:<redacted>.SN1 ok", "usb-id:046d:0825:<redacted> ok"},
+		{"quoted serial that starts with a space", `device="usb-id:0d8c:0014: A1 B2"`, `device="usb-id:0d8c:0014:<redacted>"`},
+		{"quoted serial that starts with a comma", "'usb-id:0d8c:0014:,A1'", "'usb-id:0d8c:0014:<redacted>'"},
+		{"quoted empty serial is kept", `"usb-id:0d8c:0014:"`, `"usb-id:0d8c:0014:"`},
+		{"unquoted serial that starts with a space is empty", "usb-id:0d8c:0014: A1", "usb-id:0d8c:0014: A1"},
+		{"unterminated quoted serial runs to the end", `id="usb-id:0d8c:0014:A1 B2`, `id="usb-id:0d8c:0014:<redacted>`},
+		{"quoted serial cut off after a backslash", `id="usb-id:0d8c:0014:A1\`, `id="usb-id:0d8c:0014:<redacted>`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ScrubMessage(tt.input)
+			assert.Equal(t, tt.want, got)
+			assert.Equal(t, got, ScrubMessage(got), "second pass must not change the output")
+		})
+	}
+}
+
+// The later stages of ScrubMessage rewrite hex-and-colon text, so the stage is
+// checked on its own for text that is not a well-formed usb-id token.
+func TestScrubUSBIDSerials_LeavesMalformedTokens(t *testing.T) {
+	t.Parallel()
+
+	for _, in := range []string{
+		"usb-id:zzzz:0014:SN1",
+		"usb-id:0d8c:zzzz:SN1",
+	} {
+		t.Run(in, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, in, scrubUSBIDSerials(in))
+		})
+	}
+}
+
+// Each byte that ends an unquoted serial, checked on the stage alone because
+// later ScrubMessage stages rewrite some of the text around it.
+func TestScrubUSBIDSerials_UnquotedSerialEndsAtTerminators(t *testing.T) {
+	t.Parallel()
+
+	for _, term := range []string{" ", "\t", "\n", "\r", "\v", "\f", `"`, "'", "`", ",", ";", ")", "]", "}", `\`} {
+		t.Run(strconv.Quote(term), func(t *testing.T) {
+			t.Parallel()
+			in := "x usb-id:0d8c:0014:SN1" + term + "y"
+			assert.Equal(t, "x usb-id:0d8c:0014:<redacted>"+term+"y", scrubUSBIDSerials(in))
+		})
+	}
+}
+
+func TestRedactUSBDeviceID(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"serial is masked", "usb-id:0b33:0024:ABC123", "usb-id:0b33:0024:<redacted>"},
+		{"empty serial is unchanged", "usb-id:0d8c:0014:", "usb-id:0d8c:0014:"},
+		{"usb-path is unchanged", "usb-path:usb-xhci-hcd.0-1", "usb-path:usb-xhci-hcd.0-1"},
+		{"device name is unchanged", "USB Audio Device", "USB Audio Device"},
+		{"malformed usb-id is unchanged", "usb-id:onlyone", "usb-id:onlyone"},
+		{"serial with a space is masked whole", "usb-id:0d8c:0014:A1 B2", "usb-id:0d8c:0014:<redacted>"},
+		{"already masked is unchanged", "usb-id:0d8c:0014:<redacted>", "usb-id:0d8c:0014:<redacted>"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, RedactUSBDeviceID(tt.in))
 		})
 	}
 }

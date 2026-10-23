@@ -1,2586 +1,335 @@
 # BirdNET-Go Architecture
 
-This document provides a comprehensive overview of BirdNET-Go's architecture, tech stack, and design decisions.
+This document is a map of how BirdNET-Go is put together: the major subsystems, how audio becomes a detection, and where each concern lives in the tree. It deliberately stays at the package level. File lists, struct definitions and tuning numbers change too often to be copied here, so each section points at the package or guide that owns the detail.
+
+For coding rules read [`AGENTS.md`](AGENTS.md) and [`internal/AGENTS.md`](internal/AGENTS.md). For contributing see [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 ## Table of Contents
 
-- [BirdNET-Go Architecture](#birdnet-go-architecture)
-  - [Table of Contents](#table-of-contents)
-  - [System Overview](#system-overview)
-    - [High-Level Architecture](#high-level-architecture)
-  - [Backend Architecture](#backend-architecture)
-    - [Core Technologies](#core-technologies)
-    - [AI Model Integration](#ai-model-integration)
-    - [Web Framework](#web-framework)
-    - [Configuration Management](#configuration-management)
-    - [Database Layer](#database-layer)
-    - [Audio Processing Pipeline](#audio-processing-pipeline)
-    - [Real-Time Processing](#real-time-processing)
-    - [External Integrations](#external-integrations)
-    - [Testing Framework](#testing-framework)
-  - [Frontend Architecture](#frontend-architecture)
-    - [UI Technology Stack](#ui-technology-stack)
-    - [Svelte 5 UI](#svelte-5-ui)
-    - [Real-Time Communication](#real-time-communication)
-    - [State Management](#state-management)
-    - [Testing Strategy](#testing-strategy)
-  - [Build System](#build-system)
-    - [Frontend Compilation](#frontend-compilation)
-    - [Embedding in Go Binary](#embedding-in-go-binary)
-    - [Cross-Platform Builds](#cross-platform-builds)
-    - [Hot Reload Development](#hot-reload-development)
-  - [Platform Support](#platform-support)
-    - [Target Platforms](#target-platforms)
-    - [Hardware Requirements](#hardware-requirements)
-    - [Platform-Specific Features](#platform-specific-features)
-  - [API Design](#api-design)
-    - [API v2 (Active)](#api-v2-active)
-  - [Security Architecture](#security-architecture)
-    - [Authentication](#authentication)
-    - [Authentication Flow](#authentication-flow)
-    - [Authorization](#authorization)
-    - [Security Features](#security-features)
-    - [Configuration](#configuration)
-    - [Privacy by Design](#privacy-by-design)
-    - [API v2 Authentication Architecture](#api-v2-authentication-architecture)
-  - [Performance Considerations](#performance-considerations)
-    - [Memory Management](#memory-management)
-    - [Concurrency](#concurrency)
-    - [Caching](#caching)
-    - [Frontend Performance](#frontend-performance)
-  - [Development Tools](#development-tools)
-    - [Code Quality](#code-quality)
-    - [Pre-Commit Hooks](#pre-commit-hooks)
-    - [Debugging](#debugging)
-    - [Documentation](#documentation)
+- [System Overview](#system-overview)
+- [Process Lifecycle](#process-lifecycle)
+- [Audio Capture and Routing](#audio-capture-and-routing)
+- [Inference](#inference)
+- [Detection Pipeline](#detection-pipeline)
+- [Datastore](#datastore)
+- [Web Server and API](#web-server-and-api)
+- [Security](#security)
+- [Integrations and Supporting Services](#integrations-and-supporting-services)
+- [Frontend](#frontend)
+- [Build and Platforms](#build-and-platforms)
+- [Testing and Development Tools](#testing-and-development-tools)
+- [Further Reading](#further-reading)
 
 ---
 
 ## System Overview
 
-BirdNET-Go is a self-contained application for real-time bird sound identification using the BirdNET AI model. The architecture follows these key principles:
+BirdNET-Go is a single Go binary that listens to one or more audio sources, runs bird (and optionally bat) sound classification models over the audio in real time, stores detections, and serves a web interface and API for reviewing them.
 
-- **Single Binary Deployment**: Frontend assets are embedded into the Go binary
-- **Privacy-First**: No data collection without explicit user opt-in
-- **Cross-Platform**: Supports Linux, macOS, Windows on amd64 and arm64
-- **Resource-Efficient**: Runs on devices from Raspberry Pi to desktop servers
-- **Real-Time Processing**: Continuous audio analysis with immediate detection feedback
+Design principles:
 
-### High-Level Architecture
+- **Single binary.** The Svelte frontend is embedded in the Go binary. The default build also embeds the BirdNET v2.4 model.
+- **Local first.** Detections, audio clips and settings live on the user's machine. Error reporting (Sentry) and the Prometheus endpoint are off by default. Audio clips are stored locally by default.
+- **Runs on small hardware.** Raspberry Pi class devices up to desktop servers, with a low-memory mode for constrained systems.
+- **Hot reload.** Settings changed in the UI take effect without a restart; code reads settings per request or per operation, never once at startup.
+- **Hobbyist audience.** Defaults favour a working setup over tuning knobs.
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                        User Interface                        │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │             Svelte 5 + TypeScript + Tailwind           │ │
-│  │                    (Active Development)                 │ │
-│  └────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼ (HTTP/SSE)
-┌─────────────────────────────────────────────────────────────┐
-│                     Echo Web Framework                       │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐ │
-│  │  API v1      │  │  API v2      │  │  Static Assets   │ │
-│  │ (Deprecated) │  │  (Active)    │  │  (Embedded)      │ │
-│  └──────────────┘  └──────────────┘  └──────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                     Application Core (Go)                    │
-│  ┌───────────────────────────────────────────────────────┐ │
-│  │  Real-Time Audio Processing Pipeline                  │ │
-│  │  ┌──────────┐  ┌──────────┐  ┌────────┐  ┌─────────┐│ │
-│  │  │ Capture  │→ │ Analyze  │→ │ Detect │→ │ Notify  ││ │
-│  │  └──────────┘  └──────────┘  └────────┘  └─────────┘│ │
-│  └───────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                 ┌────────────┼────────────┐
-                 ▼            ▼            ▼
-┌──────────────────┐ ┌─────────────┐ ┌──────────────┐
-│  BirdNET Model   │ │  Database   │ │ External     │
-│  (TensorFlow     │ │  (GORM)     │ │ Services     │
-│   Lite + CGO)    │ │  SQLite/    │ │ MQTT/Webhook │
-│                  │ │  MySQL      │ │ BirdWeather  │
-└──────────────────┘ └─────────────┘ └──────────────┘
-```
+Standing constraints that shape the code (see [`AGENTS.md`](AGENTS.md)):
 
----
+- API v1 is gone and frozen. All endpoints are in `internal/api/v2/`.
+- The legacy database is deprecated and will be removed. New persistence targets the v2 schema only.
+- The frontend targets desktop and tablet; phone layouts are out of scope.
+- Errors go through `internal/errors`, never the standard `errors` package.
 
-## Backend Architecture
-
-### Core Technologies
-
-**Go (version specified in `go.mod`)**
-
-- Modern, statically-typed compiled language
-- Excellent concurrency primitives (goroutines, channels)
-- Cross-platform compilation support
-- Fast compilation and execution
-- Strong standard library for networking, HTTP, and I/O
-
-**CGO (C Interoperability)**
-
-- Used exclusively for interfacing with TensorFlow Lite C API
-- Enables BirdNET AI model inference
-
-**Key Dependencies:**
-
-```go
-// Web framework
-github.com/labstack/echo/v4
-
-// Configuration management
-github.com/spf13/viper
-github.com/spf13/cobra
-
-// Database ORM
-gorm.io/gorm
-gorm.io/driver/sqlite
-gorm.io/driver/mysql
-
-// Testing
-github.com/stretchr/testify
-
-// Audio processing (external binaries)
-// - FFmpeg (audio format conversion, RTSP streams)
-// - SoX (spectrogram generation only)
-```
-
-### AI Model Integration
-
-**Dual TensorFlow Lite Model Architecture**
-
-BirdNET-Go uses **TWO** TensorFlow Lite models from the BirdNET Analyzer project:
-
-1. **Analysis Model** - Species identification from audio
-2. **Range Filter Model** - Geographic/regional filtering of species
-
-Both models work together to provide accurate, location-aware bird identification.
-
-**Package Structure:**
+### High-level picture
 
 ```
-internal/classifier/
-├── birdnet.go              # Main BirdNET struct and initialization
-├── analyze.go              # Audio analysis and species detection
-├── range_filter.go         # Geographic range filtering
-├── model_registry.go       # Model metadata and registry
-├── models_embedded.go      # Embedded model data
-├── models_external.go      # External model loading
-├── label_files.go          # Label file management
-├── taxonomy.go             # Taxonomy mapping
-├── tracing.go              # Tracing and telemetry helpers
-└── queue.go                # Analysis queue management
-```
-
-**Inference Backend (`internal/inference/`):**
-
-The inference package defines `Classifier` and `RangeFilter` interfaces with backend-specific implementations in sub-packages:
-
-```text
-internal/inference/
-├── backend.go              # Classifier and RangeFilter interfaces
-├── tflite/                 # TFLite backend (via go-tflite)
-│   ├── classifier.go       # Species classification
-│   ├── rangefilter.go      # Geographic range filtering
-│   └── threads.go          # Thread count auto-detection
-└── onnx/                   # ONNX backend (build tag: onnx)
-    ├── classifier.go       # ONNX species classification
-    └── rangefilter.go      # ONNX range filtering
-```
-
-**TensorFlow Lite Integration via go-tflite:**
-
-BirdNET-Go uses the `github.com/tphakala/go-tflite` library for TensorFlow Lite integration:
-
-```go
-// internal/inference/tflite/classifier.go
-import (
-    tflitelib "github.com/tphakala/go-tflite"
-    "github.com/tphakala/go-tflite/delegates/xnnpack"
-)
-
-// The BirdNET struct holds inference.Classifier and inference.RangeFilter interfaces
-type BirdNET struct {
-    classifier       inference.Classifier   // Species identification backend
-    rangeFilter      inference.RangeFilter  // Geographic filtering backend
-    // ...
-}
-```
-
-The `go-tflite` library handles CGO/C API bindings to TensorFlow Lite internally, providing a clean Go interface to the BirdNET package.
-
-**Model Files:**
-
-| Model Type             | Filename                                            | Precision | Purpose                                               |
-| ---------------------- | --------------------------------------------------- | --------- | ----------------------------------------------------- |
-| Analysis               | `BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite`          | FP32      | Species identification (default, embedded)            |
-| Range Filter (Legacy)  | `BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite`    | FP16      | Geographic filtering (embedded)                       |
-| Range Filter (Updated) | `BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite` | FP16      | Geographic filtering (embedded)                       |
-| Labels                 | `BirdNET_GLOBAL_6K_V2.4_Labels_<locale>.txt`        | N/A       | Species labels in multiple languages (6,000+ species) |
-
-**Model Workflow:**
-
-```
-Audio PCM → Analysis Model → Species Predictions → Range Filter Model → Filtered Results
-    ↓              ↓                    ↓                     ↓                 ↓
-  48kHz        TFLite FP32         Confidence scores    Location-based      Final
-  Mono         Inference           (all species)        probability         detections
-```
-
-**Performance Characteristics:**
-
-- **Analysis Model Inference**: ~100-500ms per 3-second audio chunk (hardware dependent)
-- **Range Filter**: Negligible overhead (<10ms)
-- **Memory**: ~50-200MB total footprint (both models loaded)
-- **Hardware Acceleration**: XNNPACK delegate for CPU optimization
-- **Supported Platforms**: CPU inference (ARM64, AMD64)
-
-### Web Framework
-
-**Echo Framework (github.com/labstack/echo/v4)**
-
-Echo was chosen for its:
-
-- High performance and low memory footprint
-- Simple, expressive API
-- Built-in middleware support
-- Excellent routing capabilities
-- WebSocket and Server-Sent Events support
-
-**Server Structure:**
-
-```
-internal/api/
-├── server.go           # Echo server initialization
-├── middleware/         # Authentication, security, caching middleware
-├── auth/               # Authentication service and OAuth2
-├── static.go           # Static file serving and SPA handler
-├── v2/                 # API v2 controller and endpoints
-│   ├── dashboard.go    # Dashboard endpoints
-│   ├── media.go        # Media endpoints (audio, spectrograms)
-│   ├── weather.go      # Weather integration
-│   ├── birdweather.go  # BirdWeather integration
-│   ├── mqtt.go         # MQTT endpoints
-│   ├── audio_stream_hls.go # HLS audio streaming
-│   └── audio_level_sse.go  # Audio level SSE
-└── securefs/           # Embedded filesystem with security (FIFO queue, caching)
-```
-
-**Middleware Stack:**
-
-1. **Recovery**: Panic recovery and error handling (Echo built-in)
-2. **Sentry**: Error tracking and reporting (optional)
-3. **Logger**: Structured request/response logging
-4. **CSRF**: Cross-site request forgery protection
-5. **Authentication**: OAuth2-based auth for protected routes
-6. **Gzip**: Response compression
-7. **CacheControl**: Cache headers for assets and API responses
-8. **SecureHeaders**: Security headers (HSTS, X-Frame-Options)
-
-**Server-Sent Events (SSE):**
-
-Real-time updates are delivered via SSE for efficiency:
-
-```go
-// Real-time detection stream
-GET /api/v2/events/detections
-→ text/event-stream
-
-// System status updates
-GET /api/v2/events/status
-→ text/event-stream
-```
-
-### Configuration Management
-
-**Viper + Cobra CLI**
-
-Configuration is managed using Viper with Cobra for CLI commands:
-
-```
-cmd/
-├── root.go             # Root command and global flags
-├── realtime.go         # Real-time processing command
-├── file.go             # File analysis command
-├── config.go           # Configuration management
-└── directory.go        # Directory analysis command
-```
-
-**Configuration Sources (Priority Order):**
-
-1. Command-line flags
-2. Environment variables
-3. Configuration file (`config.yaml`)
-4. Defaults
-
-**Configuration File:**
-
-```yaml
-# config.yaml
-main:
-  name: BirdNET-Go
-  timeAs24h: true
-  log:
-    level: info
-    type: text
-
-realtime:
-  interval: 15
-  processingtime: false
-  audio:
-    source: ""
-
-webserver:
-  enabled: true
-  port: 8080
-  autotls: false
-
-database:
-  driver: sqlite
-  path: birdnet.db
-```
-
-**Settings Management:**
-
-```
-internal/conf/
-├── config.go           # Configuration structures
-├── settings.go         # Runtime settings management
-├── validation.go       # Configuration validation
-└── defaults.go         # Default values
-```
-
-### Database Layer
-
-**GORM ORM (gorm.io/gorm)**
-
-GORM provides a developer-friendly abstraction over database operations:
-
-**Supported Databases:**
-
-- **SQLite** (default): Embedded database, zero configuration
-- **MySQL/MariaDB**: For use-cases where external database is needed
-
-**Database Schema:**
-
-```
-internal/datastore/
-├── interfaces.go       # Database interface and methods
-├── model.go            # Data models
-├── sqlite.go           # SQLite implementation
-├── mysql.go            # MySQL implementation
-├── manage.go           # Database management operations
-├── analytics.go        # Analytics queries
-├── search_advanced.go  # Advanced search functionality
-└── dynamic_threshold.go # Dynamic threshold persistence
-```
-
-**Core Models:**
-
-```go
-// Detection record (Note)
-type Note struct {
-    ID             uint           `gorm:"primaryKey"`
-    SourceNode     string
-    Date           string         `gorm:"index"` // String format for flexibility
-    Time           string         `gorm:"index"`
-    Source         AudioSource    `gorm:"-"`     // Runtime only
-    BeginTime      time.Time
-    EndTime        time.Time
-    SpeciesCode    string
-    ScientificName string         `gorm:"index"`
-    CommonName     string         `gorm:"index"`
-    Confidence     float64        `gorm:"index"`
-    Latitude       float64
-    Longitude      float64
-    Threshold      float64
-    Sensitivity    float64
-    ClipName       string
-    ProcessingTime time.Duration
-
-    // Relationships (with cascade delete)
-    Results  []Results     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
-    Review   *NoteReview   `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
-    Comments []NoteComment `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
-    Lock     *NoteLock     `gorm:"foreignKey:NoteID;constraint:OnDelete:CASCADE"`
-
-    // Virtual fields (not stored)
-    Verified string `gorm:"-"` // Populated from Review.Verified
-    Locked   bool   `gorm:"-"` // Populated from Lock presence
-}
-
-// Review status for detections
-type NoteReview struct {
-    ID        uint      `gorm:"primaryKey"`
-    NoteID    uint      `gorm:"uniqueIndex"`
-    Verified  string    // "correct" or "false_positive"
-    CreatedAt time.Time
-    UpdatedAt time.Time
-}
-
-// User comments on detections
-type NoteComment struct {
-    ID        uint      `gorm:"primaryKey"`
-    NoteID    uint      `gorm:"index"`
-    Entry     string    `gorm:"type:text"`
-    CreatedAt time.Time
-    UpdatedAt time.Time
-}
-
-// Lock status for detections
-type NoteLock struct {
-    ID       uint      `gorm:"primaryKey"`
-    NoteID   uint      `gorm:"uniqueIndex"`
-    LockedAt time.Time
-}
-
-// Weather data models
-type DailyEvents struct {
-    ID       uint   `gorm:"primaryKey"`
-    Date     string `gorm:"index"`
-    Sunrise  int64
-    Sunset   int64
-    Country  string
-    CityName string
-}
-
-type HourlyWeather struct {
-    ID            uint `gorm:"primaryKey"`
-    DailyEventsID uint `gorm:"index"`
-    Time          time.Time
-    Temperature   float64
-    // ... weather fields
-}
-
-// Species image cache
-type ImageCache struct {
-    ID             uint      `gorm:"primaryKey"`
-    ProviderName   string    `gorm:"index"`
-    ScientificName string    `gorm:"index"`
-    URL            string
-    LicenseName    string
-    AuthorName     string
-    CachedAt       time.Time
-}
-
-// Dynamic threshold persistence
-type DynamicThreshold struct {
-    ID            uint      `gorm:"primaryKey"`
-    SpeciesName   string    `gorm:"uniqueIndex"`
-    Level         int       // Adjustment level (0-3)
-    CurrentValue  float64
-    BaseThreshold float64
-    ExpiresAt     time.Time
-    // ... threshold tracking fields
-}
-```
-
-**Database Features:**
-
-- **Automatic Migrations**: Schema updates on startup
-- **Indexes**: Optimized queries for common searches
-- **Connection Pooling**: Efficient connection management
-- **Transactions**: ACID compliance for data integrity
-- **Foreign Keys**: Referential integrity (MySQL)
-
-**Database Access Pattern:**
-
-```go
-// Singleton pattern for database access
-db := datastore.GetInstance()
-
-// Query detections
-detections, err := db.GetDetectionsBetweenDates(startDate, endDate)
-
-// Create detection
-err := db.Save(&detection)
-
-// Statistics
-stats, err := db.GetTopBirdsDetected(limit)
-```
-
-### Audio Processing Pipeline
-
-**Multi-Source Audio Capture**
-
-BirdNET-Go supports various audio input sources:
-
-1. **Local Audio Devices** (ALSA, CoreAudio, WASAPI)
-2. **RTSP Streams** (IP cameras, network audio sources)
-3. **File Analysis** (WAV, MP3, FLAC, OGG, etc.)
-
-**Audio Processing Architecture:**
-
-```
-internal/analysis/
-├── realtime.go         # Real-time processing orchestrator and entry point
-├── control_monitor.go  # Control signals and system restart handling
-├── file.go             # File analysis mode implementation
-├── directory.go        # Directory batch processing
-├── buffer_manager.go   # Audio buffer management
-├── processor/
-│   ├── processor.go    # Main audio analysis processor
-│   ├── workers.go      # Task queue management and job enqueueing
-│   ├── actions.go      # Action types (Database, MQTT, BirdWeather, SSE, etc.)
-│   ├── execute.go      # Action execution logic
-│   ├── eventtracker.go # Event frequency tracking
-│   ├── jobqueue_adapter.go  # Adapter between processor and job queue
-│   ├── dynamic_threshold.go      # Dynamic confidence threshold adjustment
-│   ├── threshold_persistence.go  # Save/load threshold state
-│   ├── mqtt.go         # MQTT publishing logic
-│   ├── logger.go       # Processor-specific logging
-│   ├── soundlevel_monitoring.go  # Sound level monitoring
-│   ├── soundlevel_calibration.go # Sound level calibration
-│   └── soundlevel_telemetry.go   # Sound level telemetry
-├── jobqueue/
-│   ├── queue.go        # Job queue implementation with retry capabilities
-│   ├── job.go          # Job lifecycle and state management
-│   ├── types.go        # Job status, retry config, and interfaces
-│   └── logger.go       # Job queue logging
-└── species/
-    └── species_tracker.go  # New species detection and tracking
-
-internal/myaudio/
-├── capture.go          # Audio capture from devices (via malgo)
-├── encode.go           # Audio encoding (PCM to WAV)
-├── ffmpeg_export.go    # FFmpeg-based audio export and conversion
-├── ffmpeg_stream.go    # RTSP stream handling via FFmpeg
-├── ffmpeg_manager.go   # FFmpeg process lifecycle management
-├── resample.go         # Audio resampling (file analysis mode only)
-├── buffer_pool.go      # Memory-efficient buffer pooling
-├── analysis_buffer.go  # Analysis buffer management
-├── capture_buffer.go   # Capture buffer management
-└── source_registry.go  # Audio source registration and management
-```
-
-**Audio Device Interface (malgo/miniaudio):**
-
-BirdNET-Go uses **malgo** (Go wrapper for miniaudio.h) for cross-platform audio device access:
-
-- **Linux**: ALSA backend
-- **macOS**: CoreAudio backend
-- **Windows**: WASAPI backend
-
-**Audio Format Requirements:**
-
-- **Realtime Mode**: Expects 48kHz, 16-bit mono PCM from audio source
-  - No explicit resampling in BirdNET-Go code
-  - malgo/miniaudio may handle format conversion internally
-- **File Analysis Mode**: Uses `resample.go` for format conversion to 48kHz mono
-
-**Processing Pipeline:**
-
-```
-Audio Source → Capture → Buffer → Analyze → Detect → Store → Notify
-     ↓           ↓         ↓        ↓         ↓       ↓       ↓
-  RTSP/Mic    malgo/    3-sec    BirdNET  Threshold Database MQTT/
-              FFmpeg    chunks   Analysis  + Range           Webhook
-                                + Range   Filter
-                                Filter
-```
-
-**FFmpeg Integration:**
-
-FFmpeg is used for:
-
-- **RTSP Stream Ingestion**: Capturing audio from IP cameras and network streams
-- **Spectrograms**: Checking each clip with ffprobe before an on-demand spectrogram is drawn, and rendering clips in formats the installed SoX cannot read or when SoX fails
-
-On-demand clip downloads, the denoise, normalize and gain preview, and audible-bats playback in the web interface do not use FFmpeg. `internal/audiocore/transcode` decodes WAV, FLAC, MP3, AAC (M4A) and Opus natively, denoises with the go-audio-dsp `denoiser`, normalizes with the go-audio-dsp `loudnorm` package, applies gain with the go-audio-dsp `gain` package, and encodes WAV, FLAC, MP3, AAC and Opus with the same native encoders clip export uses. A clip whose sample rate the lossy encoder cannot carry is resampled to 48 kHz first.
-
-On the live path, the per-route EQ and gain in `internal/audiocore` run on the go-audio-dsp `equalizer` and `gain` packages in float32, with float64 filter state. Audio returns to 16-bit with round-to-nearest and saturation. A route that resamples and processes hands the resampler's float32 output straight to those stages, so the audio is quantized once.
-
-A gain change applies to a source's live routes, including open live-audio listeners, without rebuilding them.
-
-Analysis inference input, the bat ultrasonic filter input and the voice activity detector's 16 kHz passthrough decode PCM16 with the go-audio-dsp `pcm` package, and the bat ultrasonic filter computes its STFT with the go-audio-dsp `stft` package. The route resampler decodes and encodes PCM16 with the same package, and the MP3 stream decoder encodes its float32 output with it, so both round to nearest and reach the full 16-bit range like the per-route EQ and gain.
-
-Sound level monitoring (`internal/audiocore/soundlevel`) measures each source with the go-audio-dsp `octave` meter: 1/3-octave bands from 25 Hz to 20 kHz below 0.95 of Nyquist, one-second mean square per band. birdnet-go keeps only the interval min/max/mean aggregation, the band keys and the output type. The Prometheus sound level series are labelled with the source id in both the `source` and the `name` label, never the display name, because the metrics listener has no authentication.
-
-**SoX Integration:**
-
-SoX (Sound eXchange) is used exclusively for:
-
-- Spectrogram generation (visualization)
-
-**Spectrogram Generation:**
-
-```
-internal/spectrogram/
-├── generator.go        # Spectrogram creation with SoX
-├── prerenderer.go      # Pre-rendering logic and queue management
-└── utils.go            # Utility functions for spectrogram operations
-```
-
-Spectrograms are generated on-demand or pre-rendered for dashboard display using SoX.
-
-**Async Task Processing System:**
-
-BirdNET-Go uses an asynchronous job queue system for handling detection actions (database saves, MQTT publishes, BirdWeather uploads, etc.):
-
-```
-internal/analysis/jobqueue/
-├── queue.go        # JobQueue implementation with retry and backoff
-├── job.go          # Job lifecycle management (pending → running → completed/failed)
-├── types.go        # RetryConfig, JobStatus, Action interface
-└── logger.go       # Structured logging for job execution
-```
-
-**Job Queue Features:**
-
-- **Async Execution**: Actions execute in background goroutines, non-blocking
-- **Retry with Exponential Backoff**: Configurable retry policies per action type
-- **Graceful Degradation**: Failed jobs don't block new detections
-- **Queue Limits**: Bounded queue prevents memory exhaustion (default: 1000 jobs)
-- **Statistics Tracking**: Per-action success/failure rates
-
-**Action Types** (internal/analysis/processor/actions.go):
-
-| Action Type             | Purpose                                    | Retry | Timeout    |
-| ----------------------- | ------------------------------------------ | ----- | ---------- |
-| LogAction               | Write detection to log file                | No    | N/A        |
-| DatabaseAction          | Save detection to database + audio clip    | No    | 30s        |
-| SaveAudioAction         | Export audio clip to disk (WAV/FLAC/MP3)   | No    | 30s        |
-| BirdWeatherAction       | Upload detection to BirdWeather API        | Yes   | 30s        |
-| MqttAction              | Publish detection to MQTT broker           | Yes   | 10s        |
-| SSEAction               | Broadcast detection via Server-Sent Events | Yes   | 30s        |
-| UpdateRangeFilterAction | Update BirdNET species filter daily        | No    | 30s        |
-| CompositeAction         | Execute multiple actions sequentially      | N/A   | 30s/action |
-
-**Task Processing Flow:**
-
-```
-Detection → ProcessDetection() → CreateActions() → EnqueueTask()
-                                                      ↓
-                                          JobQueue.Enqueue()
-                                                      ↓
-                                          [Async Execution]
-                                                      ↓
-                                   ┌─────────────────┴─────────────────┐
-                                   ↓                                   ↓
-                            Action.Execute()                    [Retry Logic]
-                                   ↓                                   ↓
-                            Success/Failure            Exponential Backoff
-                                   ↓                                   ↓
-                            Drop Job                 Retry or Mark Failed
-```
-
-**Retry Configuration:**
-
-Actions can specify retry behavior via `RetryConfig`:
-
-```go
-type RetryConfig struct {
-    Enabled      bool          // Enable retries
-    MaxRetries   int           // Max attempts (e.g., 3)
-    InitialDelay time.Duration // First retry delay (e.g., 5s)
-    MaxDelay     time.Duration // Cap on delay (e.g., 5min)
-    Multiplier   float64       // Backoff multiplier (e.g., 2.0 = exponential)
-}
-```
-
-**Example: BirdWeather Upload with Retry**
-
-1. Detection arrives → BirdWeatherAction created with retry enabled
-2. EnqueueTask() adds job to queue (non-blocking)
-3. Job executes in background goroutine
-4. If upload fails (network error): retry after 5s, then 10s, then 20s
-5. If max retries exceeded: mark as failed, log error, drop job
-6. Success: drop job with success status
-
-**CompositeAction for Sequential Execution:**
-
-Introduced to fix race condition between DatabaseAction and SSEAction (GitHub issue #1158):
-
-```go
-// SSEAction needs database ID assigned by DatabaseAction first
-composite := &CompositeAction{
-    Actions: []Action{databaseAction, sseAction},
-    Description: "Save to database then broadcast",
-    Timeout: 45 * time.Second,  // Override default timeout
-}
-```
-
-**Buffer Management:**
-
-Memory-efficient buffer pooling prevents allocation overhead:
-
-```go
-// Reusable buffer pools
-var pcmBufferPool = sync.Pool{
-    New: func() interface{} {
-        buf := make([]float32, defaultBufferSize)
-        return &buf
-    },
-}
-```
-
-### Real-Time Processing
-
-**Entry Point: Realtime Command**
-
-Real-time bird detection is initiated via the `realtime` command:
-
-```bash
-birdnet-go realtime [flags]
-```
-
-**Realtime Processor:**
-
-```
-internal/analysis/
-├── realtime.go         # Real-time processing orchestrator and entry point
-├── control_monitor.go  # Control signals and system restart handling
-└── processor/
-    ├── processor.go    # Main audio analysis processor
-    ├── workers.go      # Task queue management and job enqueueing
-    ├── actions.go      # Action types (Database, MQTT, BirdWeather, SSE, etc.)
-    ├── execute.go      # Action execution logic
-    └── jobqueue_adapter.go  # Adapter between processor and job queue
-```
-
-**Job Queue:**
-
-```
-internal/analysis/jobqueue/
-├── queue.go        # JobQueue implementation with retry and backoff
-├── job.go          # Job lifecycle management
-├── types.go        # RetryConfig, JobStatus, Action interface
-└── logger.go       # Job queue logging
-```
-
-**Processing Flow:**
-
-1. **Initialization**
-   - Load BirdNET TensorFlow Lite model
-   - Initialize audio sources (devices/RTSP streams)
-   - Initialize buffers:
-     - Analysis buffer: 6x buffer size to avoid underruns
-     - Capture buffer: 120 seconds for audio clip export
-   - Initialize job queue for async task processing (max 1000 jobs)
-   - Start web server (if enabled)
-   - Connect to MQTT broker (if configured)
-   - Initialize species tracker and event tracker
-
-2. **Capture Loop** (continuous)
-   - Capture audio continuously (48kHz, 16-bit PCM)
-   - Write to both analysis buffer and capture buffer simultaneously
-   - All audio analyzed - no Voice Activity Detection
-
-3. **Analysis Loop** (continuous)
-   - Buffer monitor reads 3-second audio chunks from analysis buffer
-   - Chunks overlap by configurable amount (default: 0.0s, range: 0.0-2.9s)
-   - Queue audio chunks to BirdNET analysis queue (default size: 5)
-   - BirdNET predicts species using TensorFlow Lite model
-   - Filter results by confidence threshold
-   - Apply species filters (location, time-based, custom lists)
-   - Apply privacy filter (if enabled):
-     - BirdNET model detects "human" vocalizations
-     - Not traditional VAD - uses BirdNET's species detection
-     - Filters bird detections when human speech detected
-     - Protects privacy by preventing audio clip export during conversations
-
-4. **Detection Handling** (async via job queue)
-   - Create actions based on configuration
-   - Enqueue tasks to job queue (non-blocking)
-   - Actions execute in background:
-     - DatabaseAction: Save detection to database with audio clip
-     - SSEAction: Broadcast detection via Server-Sent Events
-     - MqttAction: Publish to MQTT broker (with retry)
-     - BirdWeatherAction: Upload to BirdWeather API (with retry)
-     - SaveAudioAction: Export audio clip to disk
-   - Failed actions retry with exponential backoff
-
-**Concurrency Model:**
-
-BirdNET-Go uses a job queue system for concurrent action processing:
-
-```go
-// Initialize job queue with capacity and options
-processor.JobQueue = jobqueue.NewJobQueueWithOptions(
-    1000,  // maxJobs: queue capacity
-    false, // logAllSuccesses: only log retries by default
-)
-
-// Start background processing goroutine
-processor.JobQueue.Start()
-
-// Detection handling - non-blocking enqueue
-for _, detection := range detections {
-    task := &Task{
-        Type:      TaskTypeAction,
-        Detection: detection,
-        Action:    action, // DatabaseAction, MqttAction, etc.
-    }
-
-    // Enqueue returns immediately, action executes asynchronously
-    if err := processor.EnqueueTask(task); err != nil {
-        // Handle queue full or stopped errors
-        log.Printf("Failed to enqueue task: %v", err)
-    }
-}
-```
-
-**Job Queue Processing Loop:**
-
-The job queue runs a background goroutine that:
-
-1. Checks for jobs ready to execute (pending or retrying after backoff)
-2. Executes actions in separate goroutines (concurrent execution)
-3. Handles retry logic with exponential backoff on failure
-4. Drops completed and failed jobs from the active queue so their Action payloads become GC-eligible
-5. Respects queue capacity limits to prevent memory exhaustion
-
-**Graceful Shutdown:**
-
-```go
-// Signal handling for clean shutdown
-sigChan := make(chan os.Signal, 1)
-signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-
-<-sigChan
-// Stop audio capture
-// Flush pending detections
-// Close database connections
-// Shutdown web server
-```
-
-### External Integrations
-
-**MQTT Publishing:**
-
-```
-internal/mqtt/
-├── client.go           # MQTT client implementation
-├── publisher.go        # Detection publishing
-└── config.go           # Connection configuration
-```
-
-Publishes detections to configurable MQTT topics for home automation integration.
-
-**Webhook Notifications:**
-
-```
-internal/notification/
-├── webhook.go          # HTTP webhook delivery
-├── queue.go            # Retry queue for failed deliveries
-└── templates.go        # Customizable payload templates
-```
-
-**BirdWeather Integration:**
-
-```
-internal/birdweather/
-├── birdweather_client.go  # BirdWeather API client and upload logic
-├── audio.go               # Audio processing and normalization (LUFS)
-└── connection_probe.go    # "Test Connection" feature: connectivity/auth/upload probing
-```
-
-**Features:**
-
-- **Soundscape Upload**: Uploads 15-second audio clips to BirdWeather
-- **Audio Normalization**: Uses the go-audio-dsp `loudnorm` package to achieve -23 LUFS (EBU R128 standard); no FFmpeg involvement
-- **Detection Metadata**: Sends species, confidence, location, and timestamp
-- **Error Handling**: Retry logic via job queue for network failures
-- **Logging**: Dedicated file logger (`logs/birdweather.log`) for debugging uploads
-- **API Compliance**: Follows BirdWeather API v2 specification
-
-Optional integration with [BirdWeather.com](https://birdweather.com) for global bird activity tracking.
-
-**eBird Integration:**
-
-```
-internal/ebird/
-├── client.go           # eBird API v2 client
-└── types.go            # Taxonomy data structures
-```
-
-Integration with Cornell Lab's eBird API for:
-
-- Species taxonomy data (scientific names, common names, family classifications)
-- Building species family trees for UI visualization (Kingdom → Phylum → Class → Order → Family → Genus → Species → Subspecies)
-- Additional species metadata (banding codes, extinction status, taxonomic ordering)
-
-**Note:** Regional species filtering is handled by BirdNET's range filter, not by the eBird module.
-
-### Testing Framework
-
-**Testify + Assert:**
-
-Primary testing framework using `github.com/stretchr/testify`:
-
-```go
-func TestDetectionThreshold(t *testing.T) {
-    // Arrange
-    detector := NewDetector(0.8)
-
-    // Act
-    result := detector.Filter(0.9)
-
-    // Assert
-    assert.True(t, result)
-}
-```
-
-**Test Organization:**
-
-```
-internal/package/
-├── package.go          # Implementation
-├── package_test.go     # Unit tests
-└── testdata/           # Test fixtures (optional, used where needed)
-    ├── audio/          # Test audio files
-    └── expected/       # Expected results
-```
-
-**Note:** The `testdata/` directory is used only in packages that require external test data (e.g., `internal/ebird`). Most packages use inline test data or mocks.
-
-**Mock Framework:**
-
-**Automated Mock Generation with Mockery v2**
-
-BirdNET-Go uses [Mockery v2](https://vektra.github.io/mockery/) for automated mock generation, eliminating manual mock maintenance:
-
-```
-internal/datastore/mocks/
-├── mock_Interface.go   # Auto-generated mock (111KB, 62 methods)
-└── README.md           # Complete usage guide
-```
-
-**Key Benefits:**
-
-- **Zero Maintenance Burden**: Mocks automatically regenerate when interfaces change
-- **Type Safety**: Compiler catches mismatched method signatures immediately
-- **Expecter Pattern**: Clean `.EXPECT()` syntax for setting expectations
-- **734 Lines Eliminated**: Migration removed 734 lines of manual mock code across 36+ test files
-
-**Architecture:**
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  internal/datastore/interfaces.go                           │
-│  //go:generate mockery                                      │
-│  type Interface interface { ... }  (62 methods)             │
-└─────────────────────────────────────────────────────────────┘
-                          │
-                          ▼ (go generate)
-┌─────────────────────────────────────────────────────────────┐
-│  .mockery.yaml (configuration)                              │
-│  - with-expecter: true                                      │
-│  - filename: "mock_{{.InterfaceName}}.go"                   │
-│  - outpkg: mocks                                            │
-└─────────────────────────────────────────────────────────────┘
-                          │
-                          ▼
-┌─────────────────────────────────────────────────────────────┐
-│  internal/datastore/mocks/mock_Interface.go (generated)     │
-│  - NewMockInterface(t) constructor                          │
-│  - All 62 interface methods implemented                     │
-│  - EXPECT() methods for all operations                      │
-└─────────────────────────────────────────────────────────────┘
-                          │
-                          ▼ (import in tests)
-┌─────────────────────────────────────────────────────────────┐
-│  Test Files (36+ files migrated)                            │
-│  - internal/analysis/species/*_test.go (19 files)           │
-│  - internal/api/v2/*_test.go (17 files)                     │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**Usage Example:**
-
-```go
-import (
-    "testing"
-    "github.com/stretchr/testify/mock"
-    "github.com/tphakala/birdnet-go/internal/datastore/mocks"
-)
-
-func TestDetectionSave(t *testing.T) {
-    // Create auto-generated mock
-    mockDS := mocks.NewMockInterface(t)
-
-    // Set expectations using expecter pattern
-    mockDS.EXPECT().
-        Save(mock.AnythingOfType("*datastore.Note")).
-        Return(nil).
-        Once()
-
-    // Use mock in test
-    err := saveDetection(mockDS, detection)
-
-    // Assertions handled automatically
-    assert.NoError(t, err)
-}
-```
-
-**Conditional Mock Calls:**
-
-Use `.Maybe()` only for incidental calls that may or may not happen and are
-not what the test is checking:
-
-```go
-// Incidental call, only made when a feature is enabled
-mockDS.EXPECT().
-    GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
-    Return([]datastore.NotificationHistory{}, nil).
-    Maybe()  // Won't fail if not called
-```
-
-When an asynchronous call (for example one made from a goroutine) is the
-behaviour under test, keep the expectation strict and wait for it. A `.Maybe()`
-there lets the test pass when the behaviour is gone:
-
-```go
-// Async operation in goroutine: strict expectation plus an explicit wait
-saved := make(chan struct{})
-mockDS.EXPECT().
-    SaveNotificationHistory(mock.Anything, mock.AnythingOfType("*datastore.NotificationHistory")).
-    Return(nil).
-    Run(func(_ context.Context, _ *datastore.NotificationHistory) { close(saved) }).
-    Once()
-
-// ... trigger the code under test ...
-
-testutil.WaitForChannel(t, saved, 5*time.Second, "SaveNotificationHistory not called")
-```
-
-See `TESTING.md` (Async Mock Expectations) for the full rule, including the
-`require.Eventually` variant.
-
-**Regenerating Mocks:**
-
-When `datastore.Interface` changes:
-
-```bash
-# From project root
-go generate ./internal/datastore
-
-# Or directly
-mockery --config .mockery.yaml
-```
-
-**Documentation:**
-
-- Complete guide: `internal/datastore/mocks/README.md`
-- Migration examples and patterns
-- Common troubleshooting scenarios
-- Statistics: 734 lines deleted, 36+ files migrated
-
-**Test Coverage Goals:**
-
-- Unit tests: >80% coverage for core logic
-- Integration tests: API endpoints, database operations
-- E2E tests: Frontend workflows (Playwright)
-
-**Running Tests:**
-
-```bash
-# All Go tests
-task test
-
-# Specific package
-go test -v ./internal/classifier/...
-
-# With coverage
-go test -race -coverprofile=coverage.out ./...
-
-# Race detection
-go test -race ./...
+ Audio sources                                   Web UI (Svelte 5, embedded)
+ local devices (malgo)                                      ▲
+ RTSP / HTTP / HLS / RTMP / UDP (FFmpeg or native RTSP)     │ HTTP, SSE, HLS
+        │                                                   │
+        ▼                                          ┌────────┴────────┐
+ ┌──────────────┐   frames   ┌───────────────┐    │  Echo server    │
+ │ audiocore    │──────────▶│ AudioRouter   │    │  internal/api   │
+ │ engine       │            │ (per-consumer │    │  /api/v2/*      │
+ └──────────────┘            │  routes)      │    └────────▲────────┘
+                             └───────┬───────┘             │
+              ┌──────────────────────┼───────────────┐     │
+              ▼                      ▼               ▼     │
+       BufferConsumer         level / sound     live audio │
+       analysis + capture     level consumers   (HLS)      │
+       buffers                                             │
+              │                                            │
+              ▼                                            │
+ ┌─────────────────────┐  results   ┌────────────────┐     │
+ │ classifier          │───────────▶│ processor      │─────┤
+ │ Orchestrator        │  queue     │ filters,       │     │
+ │ TFLite/ONNX/OpenVINO│            │ thresholds,    │     │
+ └─────────────────────┘            │ actions        │     │
+                                    └───────┬────────┘     │
+                                            ▼              │
+                                     job queue (async)     │
+                      ┌──────────┬───────────┼─────────┬────┘
+                      ▼          ▼           ▼         ▼
+                  datastore   clip export   MQTT   BirdWeather / SSE / ...
+                                            │
+                                            ▼
+                                  event bus → notifications, alerting
 ```
 
 ---
 
-## Frontend Architecture
+## Process Lifecycle
 
-### UI Technology Stack
+**CLI** (`cmd/`, Cobra + Viper). The root command registers `serve` (with `realtime` kept as an alias), `authors`, `license`, `range` (species range filter inspection), `support` (support bundle collection, OpenVINO probe), `benchmark`, `notify` and `import-stage` (BirdNET-Pi import, runs privileged and skips normal daemon init). There is no file or directory analysis command. `cmd/` also holds developer tools that are not part of the CLI: `gen-schema` (configuration schema and reference generation), `wiki-export` and `perch-benchmark`.
 
-BirdNET-Go uses a modern Svelte 5 frontend:
+**Configuration** (`internal/conf`). Settings are layered: command-line flags, environment variables, `config.yaml`, defaults. Validation and migrations run on load. `task generate-schema` regenerates `config.schema.json` and the configuration reference from the `Settings` struct.
 
-| Feature              | Technology            |
-| -------------------- | --------------------- |
-| **Framework**        | Svelte 5 + TypeScript |
-| **Styling**          | Tailwind CSS v4.1     |
-| **State Management** | Svelte 5 Runes        |
-| **Build Tool**       | Vite                  |
-| **Testing**          | Vitest + Playwright   |
+**Service lifecycle** (`internal/app`). `cmd/serve` builds the audio engine, then registers four services with `app.App`, in start order:
 
-### Svelte 5 UI
+1. `BirdNETAnalyzer`: loads the model orchestrator and model manager.
+2. `DatabaseService`: opens or migrates the datastore, starts retention and housekeeping.
+3. `APIServerService`: creates the processor, event consumers and the web server.
+4. `AudioPipelineService`: wires audio sources into buffers, starts analysis monitors, sound level, quiet hours, weather polling and clip cleanup.
 
-**Core Technologies:**
+A service implements `Start` and `Stop` and may declare a shutdown tier. Shutdown has a 9 second total budget, sized for Docker's default 10 second stop timeout. The network tier (API server, monitors) stops first with 6 seconds. The core tier (the database, which must checkpoint its WAL) stops last with its own fresh 3 second budget. After a clean stop the process-global ONNX Runtime and OpenVINO cores are released.
 
-**Svelte 5** (NOT SvelteKit)
-
-- Compiled, component-based framework
-- Reactive by default using Runes system
-- No virtual DOM (compiles to optimal vanilla JS)
-- Excellent performance and small bundle size
-- True reactive programming without manual subscriptions
-
-**Why Svelte 5 (not SvelteKit)?**
-
-- **No SSR needed**: Frontend is embedded as static assets
-- **Simpler deployment**: Single binary includes everything
-- **Smaller bundle**: No server-side framework overhead
-- **Better integration**: Works seamlessly with Go backend
-
-**TypeScript:**
-
-- Strict type checking (`strict: true`)
-- No `any` types allowed (enforced by linting)
-- Comprehensive type definitions for all components
-- Better IDE support and refactoring
-
-**Tailwind CSS v4.1:**
-
-- Native CSS with Tailwind - no component library dependencies
-- Utility-first CSS framework
-- Custom theme configuration
-- Dark mode support
-- Responsive design utilities
-
-**Project Structure:**
-
-```
-frontend/
-├── src/
-│   ├── lib/
-│   │   ├── desktop/              # Desktop-specific UI
-│   │   │   ├── components/       # Reusable components
-│   │   │   │   ├── ui/           # Basic UI components (40+ components)
-│   │   │   │   ├── media/        # Audio/spectrogram players
-│   │   │   │   ├── forms/        # Form components
-│   │   │   │   ├── data/         # Data display components
-│   │   │   │   ├── modals/       # Modal dialogs
-│   │   │   │   └── review/       # Review-related components
-│   │   │   ├── features/         # Feature-specific modules
-│   │   │   │   ├── dashboard/    # Dashboard feature
-│   │   │   │   ├── settings/     # Settings management
-│   │   │   │   └── detections/   # Detection history
-│   │   │   └── layouts/          # Page layouts
-│   │   ├── utils/                # Utility functions
-│   │   │   ├── api.ts            # API client
-│   │   │   ├── cn.ts             # Class name utility
-│   │   │   └── date.ts           # Date formatting
-│   │   ├── types/                # TypeScript type definitions
-│   │   └── stores/               # Global state stores
-│   ├── App.svelte                # Main application component
-│   └── main.js                   # Application entry point
-├── static/                       # Static assets
-│   ├── images/                   # Images
-│   ├── icons/                    # Icons
-│   └── messages/                 # i18n message files
-├── tests/                        # Testing infrastructure
-│   ├── e2e/                      # E2E tests (Playwright)
-│   │   ├── auth/                 # Authentication tests
-│   │   │   └── basic.spec.ts
-│   │   ├── dashboard/            # Dashboard tests
-│   │   │   ├── smoke.spec.ts
-│   │   │   └── error-handling.spec.ts
-│   │   └── setup.setup.ts        # E2E test setup
-│   ├── fixtures/                 # Test fixtures
-│   └── support/                  # Test support utilities
-├── vite.config.js                # Vite + Vitest configuration
-├── tsconfig.json                 # TypeScript configuration
-├── tailwind.config.js            # Tailwind configuration
-└── playwright.config.ts          # Playwright configuration
-```
-
-**Component Architecture:**
-
-**Svelte 5 Runes (Reactivity System):**
-
-Svelte 5 uses "runes" for reactivity - a compile-time reactive system:
-
-```svelte
-<script lang="ts">
-  // $state - reactive state
-  let count = $state(0);
-
-  // $derived - computed values
-  let doubled = $derived(count * 2);
-
-  // $effect - side effects
-  $effect(() => {
-    console.log(`Count is ${count}`);
-  });
-
-  // $props - component props
-  interface Props {
-    title: string;
-    onUpdate?: (value: number) => void;
-  }
-  let { title, onUpdate }: Props = $props();
-</script>
-
-<button onclick={() => count++}>
-  {title}: {count} (doubled: {doubled})
-</button>
-```
-
-**Component Pattern:**
-
-```svelte
-<script lang="ts">
-  import { cn } from '$lib/utils/cn.js';
-  import type { Snippet } from 'svelte';
-
-  interface Props {
-    className?: string;
-    disabled?: boolean;
-    children?: Snippet;
-  }
-
-  let { className = '', disabled = false, children }: Props = $props();
-</script>
-
-<div class={cn('base-class', className, { 'disabled': disabled })}>
-  {#if children}
-    {@render children()}
-  {/if}
-</div>
-```
-
-**Key Features:**
-
-- **Snippets**: Replace slots for better composition
-- **$props()**: Automatic prop reactivity
-- **$state()**: Fine-grained reactivity
-- **$derived()**: Computed values
-- **$effect()**: Side effect management
-
-**Styling Approach:**
-
-```svelte
-<script lang="ts">
-  import { cn } from '$lib/utils/cn.js';
-
-  let { className = '', disabled = false } = $props();
-</script>
-
-<!-- Tailwind v4.1 with conditional classes -->
-<button class={cn(
-  'px-4 py-2 bg-blue-600 text-white',  // Base styles
-  'rounded-lg shadow-md',               // Tailwind utilities
-  'hover:bg-blue-700 focus:ring-2',     // Interactive states
-  { 'opacity-50 cursor-not-allowed': disabled }, // Conditional
-  className                              // User overrides
-)}>
-  Click me
-</button>
-```
-
-**Type Safety:**
-
-```typescript
-// types/api.ts
-export interface Detection {
-  id: number;
-  date: string;
-  scientificName: string;
-  commonName: string;
-  confidence: number;
-  latitude?: number;
-  longitude?: number;
-}
-
-export interface ApiResponse<T> {
-  data: T;
-  error?: string;
-  status: number;
-}
-
-// Component usage
-interface Props {
-  detections: Detection[];
-  onSelect: (detection: Detection) => void;
-}
-```
-
-### Real-Time Communication
-
-**Server-Sent Events (SSE):**
-
-The frontend uses SSE for real-time updates from the backend:
-
-```typescript
-// stores/sseNotifications.ts
-import ReconnectingEventSource from "reconnecting-eventsource";
-
-class SSENotificationManager {
-  private eventSource: ReconnectingEventSource | null = null;
-  private isConnected = false;
-
-  connect(): void {
-    this.eventSource = new ReconnectingEventSource(
-      "/api/v2/notifications/stream",
-      {
-        max_retry_time: 30000,
-        withCredentials: true,
-      },
-    );
-
-    this.eventSource.addEventListener("toast", (event: Event) => {
-      const messageEvent = event as MessageEvent;
-      const toastData: SSEToastData = JSON.parse(messageEvent.data);
-      this.handleToast(toastData);
-    });
-
-    this.eventSource.addEventListener("open", () => {
-      this.isConnected = true;
-    });
-  }
-
-  disconnect(): void {
-    this.eventSource?.close();
-    this.isConnected = false;
-  }
-}
-
-// Singleton instance
-export const sseNotifications = new SSENotificationManager();
-
-// Auto-connect when module imported (browser only)
-if (typeof window !== "undefined") {
-  setTimeout(() => sseNotifications.connect(), 100);
-}
-```
-
-**Usage in Components:**
-
-```svelte
-<script lang="ts">
-  import { sseNotifications } from '$lib/stores/sseNotifications';
-  import { onMount } from 'svelte';
-
-  onMount(() => {
-    // SSE auto-connects on import, just ensure it's initialized
-    if (sseNotifications) {
-      console.log('SSE notifications active');
-    }
-  });
-</script>
-```
-
-**Key Features:**
-
-- Uses `ReconnectingEventSource` for automatic reconnection
-- Singleton pattern with auto-connection
-- Handles toast notifications from backend
-- Reconnects automatically on connection loss
-
-### State Management
-
-**Global State (Stores):**
-
-For cross-component state, use Svelte stores:
-
-```typescript
-// stores/settings.ts
-import { writable } from "svelte/store";
-
-export interface Settings {
-  theme: "light" | "dark";
-  language: string;
-  threshold: number;
-}
-
-export const settings = writable<Settings>({
-  theme: "light",
-  language: "en",
-  threshold: 0.7,
-});
-
-// Auto-persist to localStorage
-settings.subscribe((value) => {
-  try {
-    localStorage.setItem("settings", JSON.stringify(value));
-  } catch {
-    // Storage can be unavailable (private mode, quota exceeded); keep in-memory state
-  }
-});
-```
-
-**Component State (Runes):**
-
-For component-local state, use Svelte 5 runes:
-
-```svelte
-<script lang="ts">
-  // Local state with $state
-  let isOpen = $state(false);
-  let searchQuery = $state('');
-
-  // Derived state with $derived
-  let filteredItems = $derived(
-    items.filter(item =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-  );
-</script>
-```
-
-### Testing Strategy
-
-**Unit Testing (Vitest):**
-
-Vitest is used for component and utility testing:
-
-```typescript
-// components/Button.test.ts
-import { render, screen } from "@testing-library/svelte";
-import { describe, it, expect } from "vitest";
-import Button from "./Button.svelte";
-
-describe("Button", () => {
-  it("renders with text", () => {
-    render(Button, { props: { text: "Click me" } });
-    expect(screen.getByText("Click me")).toBeInTheDocument();
-  });
-
-  it("handles click events", async () => {
-    let clicked = false;
-    render(Button, {
-      props: {
-        text: "Click",
-        onclick: () => {
-          clicked = true;
-        },
-      },
-    });
-
-    await screen.getByText("Click").click();
-    expect(clicked).toBe(true);
-  });
-});
-```
-
-**E2E Testing (Playwright):**
-
-Playwright tests user workflows:
-
-```typescript
-// tests/dashboard.test.ts
-import { test, expect } from "@playwright/test";
-
-test("dashboard displays recent detections", async ({ page }) => {
-  await page.goto("/");
-
-  // Wait for detections to load
-  await page.waitForSelector('[data-testid="detection-card"]');
-
-  // Verify detection cards are present
-  const cards = await page.locator('[data-testid="detection-card"]').count();
-  expect(cards).toBeGreaterThan(0);
-});
-
-test("audio player controls work", async ({ page }) => {
-  await page.goto("/");
-
-  // Click play button
-  await page.click('[data-testid="play-button"]');
-
-  // Verify audio is playing
-  const isPlaying = await page
-    .locator('[data-testid="audio-player"]')
-    .getAttribute("data-playing");
-  expect(isPlaying).toBe("true");
-});
-```
-
-**Running Tests:**
-
-```bash
-# Unit tests
-task frontend-test
-
-# Unit tests with UI
-npm run test:ui
-
-# E2E tests
-task e2e-test
-
-# E2E tests in headed mode (browser visible)
-task e2e-test-headed
-
-# E2E tests with UI (interactive)
-task e2e-test-ui
-```
+`internal/analysis` holds these services and the glue around them: buffer management, control signals and restart handling, sound level, clip reconciliation, and the job queue and processor subpackages. `internal/mempolicy` applies the low-memory policy (soft `GOMEMLIMIT`, glibc arena cap) before any inference thread starts. `internal/diagnostics` keeps a local boot journal that survives database loss. `internal/restart` decides between re-exec and container exit when a restart is requested.
 
 ---
 
-## Build System
+## Audio Capture and Routing
 
-### Frontend Compilation
+All audio infrastructure lives in `internal/audiocore`. (The older `myaudio` package no longer exists.)
 
-**Vite Build Process:**
+| Area                  | Package                                                                   | Role                                                                                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Engine                | `audiocore/engine`                                                        | `AudioEngine` orchestrates the source registry, router, stream manager, device manager, buffer manager and quiet-hours scheduler.                                    |
+| Local devices         | `audiocore` (`capture.go`, `device.go`, `usb.go`)                         | Cross-platform capture through malgo (miniaudio): ALSA, CoreAudio, WASAPI.                                                                                           |
+| Network streams       | `audiocore/ffmpeg`, `audiocore/stream`                                    | FFmpeg manages RTSP, HTTP, HLS, RTMP and UDP sources by default. Setting `BIRDNET_STREAM_INGEST=native` selects a native RTSP-only manager built on go-audio-stream. |
+| Routing               | `audiocore` (`router.go`)                                                 | Non-blocking fan-out of frames to consumers.                                                                                                                         |
+| Buffers               | `audiocore/buffer`                                                        | Analysis ring buffers, capture buffers, pooled frame memory.                                                                                                         |
+| DSP                   | `audiocore/resample`, `equalizer`, `loudness`, `ultrasonic`, `soundlevel` | Resampling, per-route EQ and gain, loudness normalization, bat band filtering, 1/3-octave sound level measurement. Built on the go-audio-dsp family of libraries.    |
+| Encoding and decoding | `audiocore/transcode`, `clipenc`, `wav`, `flac`, `mp3`, `aac`, `opus`     | Native encoders and decoders for clip export, on-demand downloads and processing. FFmpeg is not used for clips.                                                      |
+| Scheduling            | `audiocore/schedule`                                                      | Quiet hours.                                                                                                                                                         |
 
-The frontend is compiled to static JavaScript and CSS:
+**Frames and routing.** Sources produce `AudioFrame`s (PCM, source id and name, sample rate, timestamp). The frame data is read-only after creation and may be backed by pooled memory with reference counting. The router gives each consumer its own route with a bounded inbox; a slow consumer drops frames rather than stalling capture, and drops are counted, logged and reported. Per-route gain and EQ run in float32 with a single quantization back to 16-bit, and gain changes apply to live routes without rebuilding them.
 
-```bash
-# Development build (with source maps)
-npm run build:dev
+**From frames to analysis windows.**
 
-# Production build (optimized)
-npm run build
-```
+1. `analysis.BufferConsumer` is registered per source. It resamples to each enabled model's sample rate (one resampler per distinct target rate) and writes PCM16 to a per-source, per-model analysis buffer and to the source's capture buffer.
+2. The analysis buffer is a ring sized to one model clip, in overwrite mode. A monitor goroutine per source and model polls it and reads a full window when one is available. The window is 3 seconds for BirdNET v2.4, Bat and BSG, and 5 seconds for BirdNET v3 and Perch. The `birdnet.overlap` setting (default none) is scaled proportionally for 5 second models.
+3. The capture buffer holds recent audio (120 seconds by default, longer with extended capture) so that a clip can be cut with pre-roll when a detection is saved.
 
-**Output:**
+**Other consumers on a route** include audio level metering (the live level meter in the UI), sound level monitoring (`internal/analysis/sound_level*.go`), and live listening, which is served as HLS (see the API section). Sound level series exposed to Prometheus are labelled with the source id, never the display name, because the metrics listener has no authentication.
 
-```
-frontend/dist/
-├── index.html              # HTML entry point
-├── index.js                # Main application bundle (~705KB uncompressed)
-├── *.js                    # Route-specific bundles (lazy-loaded)
-├── *.css                   # Stylesheets
-└── messages/               # i18n translations (*.json)
-    ├── en.json
-    ├── de.json
-    ├── es.json
-    └── fi.json
-```
-
-**Note:** Static assets (images, icons) are served from the Go backend, not embedded in the frontend build output. The frontend build contains only JavaScript, CSS, and i18n message files.
-
-### Embedding in Go Binary
-
-**Go Embed Directive:**
-
-The compiled frontend is embedded using Go's `embed` package:
-
-```go
-// frontend/embed.go
-package frontend
-
-import (
-    "embed"
-    "io/fs"
-)
-
-//go:embed all:dist
-var distDir embed.FS
-
-// DistFS is the embedded Svelte build output filesystem
-var DistFS fs.FS
-
-func init() {
-    // Strip the "dist" prefix to serve files directly
-    DistFS, _ = fs.Sub(distDir, "dist")
-}
-```
-
-The `DistFS` variable is then used by the HTTP server to serve static assets:
-
-```go
-// internal/api/static.go
-file, err := frontend.DistFS.Open(path)
-```
-
-**Benefits:**
-
-- **Single binary deployment**: No external file dependencies
-- **Immutable assets**: Frontend version tied to binary version
-- **Simplified distribution**: One file to distribute
-- **Better caching**: Static assets have content-based hashes
-
-### Cross-Platform Builds
-
-**Taskfile Targets:**
-
-```bash
-# Build for current platform
-task
-
-# Development server with hot reload
-task dev_server
-
-# Cross-platform builds
-task linux_amd64
-task linux_arm64
-task darwin_amd64
-task darwin_arm64
-task windows_amd64
-
-# Build all platforms
-task build_all
-```
-
-**CGO Considerations:**
-
-Cross-compiling with CGO requires platform-specific toolchains:
-
-```bash
-# Linux ARM64 from Linux AMD64
-CGO_ENABLED=1 \
-GOOS=linux \
-GOARCH=arm64 \
-CC=aarch64-linux-gnu-gcc \
-go build -o birdnet-go-arm64
-```
-
-**Build Tags:**
-
-```go
-//go:build !windows
-// +build !windows
-
-// Unix-specific code
-```
-
-### Hot Reload Development
-
-**Air (Backend Hot Reload):**
-
-Air watches Go files and rebuilds on changes:
-
-```bash
-# Start development server with hot reload
-task dev_server
-```
-
-Configuration (`.air.toml`):
-
-```toml
-[build]
-  cmd = "task frontend-build && go build -o ./tmp/main ."
-  bin = "./tmp/main"
-  include_ext = ["go", "tpl", "tmpl", "html", "css", "js", "svelte", "ts"]
-  exclude_dir = ["tmp", "vendor", "frontend/node_modules", "frontend/dist"]
-```
-
-**Hot Module Replacement (HMR):**
-
-Since the frontend is embedded in the Go binary, standalone Vite dev server is **not supported**. Instead, use Air for hot reload during development:
-
-```bash
-# Development server with hot reload (rebuilds frontend + backend)
-task dev_server
-
-# Or directly with Air
-air realtime
-```
-
-Air watches both Go and frontend files, rebuilding and restarting the server automatically when changes are detected.
+**Liveness.** A watchdog restarts sources that go silent, and stream health is tracked per stream and exposed through the API.
 
 ---
 
-## Platform Support
+## Inference
 
-### Target Platforms
+`internal/classifier` owns models and prediction. `internal/inference` defines the backend abstraction and the runtime implementations.
 
-**Operating Systems:**
+**Orchestrator and model manager.** `classifier.Orchestrator` is the entry point for inference. It manages one or more loaded models with per-model locking, name resolution to a common species identity, hot reload and failover. `ModelManager` handles the model catalog, installation, variant and primary swaps, and uninstalling, driven from the settings UI and API.
 
-- **Linux**: Primary development platform
-  - Debian/Ubuntu (systemd service support)
-  - Raspberry Pi OS (ARM32/ARM64)
-  - Debian Trixie (Docker base image)
-- **macOS**: Desktop support
-  - Intel (amd64)
-  - Apple Silicon (arm64)
-- **Windows**: Desktop support
-  - x64 (amd64)
-  - ARM64 (experimental)
+**Models.** The registry knows these model families; which ones run is chosen by `models.enabled` and the per-model settings sections:
 
-**Architectures:**
+| Model        | Format | Clip | Notes                                                          |
+| ------------ | ------ | ---- | -------------------------------------------------------------- |
+| BirdNET v2.4 | TFLite | 3 s  | Default. FP32 model and range filter models are embedded.      |
+| BirdNET v3   | ONNX   | 5 s  | Downloaded.                                                    |
+| Perch v2     | ONNX   | 5 s  | Downloaded.                                                    |
+| Bat          | ONNX   | 3 s  | Ultrasonic source; gated by a night-time schedule. Downloaded. |
+| BSG Finland  | ONNX   | 3 s  | Regional model. Downloaded.                                    |
 
-- **amd64 (x86-64)**: Desktop PCs, servers
-- **arm64 (aarch64)**: Raspberry Pi 3B+/4/5, Apple Silicon, ARM servers
-- **arm (32-bit)**: Raspberry Pi Zero/2/3 (legacy support)
+Regional BirdNET v2.4 variants and geographic range models exist in the catalog. Non-embedded models are fetched from Hugging Face by the model manager. Building with the `noembed` tag leaves the embedded models out for smaller binaries and images; the Docker image ships them separately.
 
-### Hardware Requirements
+**Backends** (`internal/inference`):
 
-**Minimum (Raspberry Pi 3B+):**
+- **TFLite** through `go-tflite` (CGO), built unless the `notflite` tag is set. Used for BirdNET v2.4.
+- **ONNX Runtime** through `onnxruntime_go`, loaded as a shared library (`task download-onnxruntime`).
+- **OpenVINO** behind the `openvino` build tag, loaded at runtime, with ONNX Runtime as the fallback when the library is absent. Selected with `birdnet.backend` (`auto`, `onnx`, `openvino`). The default Linux amd64 and arm64 builds carry the tag.
 
-- CPU: ARM Cortex-A53 (4 cores) @ 1.4 GHz
-- RAM: 1GB
-- Storage: 4GB (8GB+ recommended)
-- Audio: USB microphone or RTSP camera
+`internal/hwprofile` decides which model builds a machine can run.
 
-**Recommended (Raspberry Pi 4/5 or Desktop):**
+**Species range filter.** A geographic and seasonal model (`classifier/range_filter*.go`, the `range` command) limits detections to species plausible for the configured location. It applies only when a location is configured and a participating model is in use; Bat and BSG never participate. It is refreshed daily by `UpdateRangeFilterAction` and reloaded on settings or model changes.
 
-- CPU: 4+ cores @ 1.5 GHz+
-- RAM: 2GB+
-- Storage: 16GB+
-- Audio: Quality USB microphone
+**Species identity.** `internal/speciesindex` is the single owner of the process-wide species name lookup. `internal/openfauna` supplies embedded multilingual names and taxonomy, `internal/labels` the non-bird and vocalization label sets, and `internal/ebird` taxonomy and observation data.
 
-**Performance Characteristics:**
-
-| Platform         | Inference Time | Max Concurrent Streams |
-| ---------------- | -------------- | ---------------------- |
-| Raspberry Pi 3B+ | ~800ms         | 1                      |
-| Raspberry Pi 4   | ~300ms         | 2-3                    |
-| Desktop (AMD64)  | ~100ms         | 5+                     |
-
-### Platform-Specific Features
-
-**Linux:**
-
-- Systemd service integration
-- ALSA audio capture
-- FFmpeg hardware acceleration support
-
-**macOS:**
-
-- CoreAudio input
-- Apple Silicon optimization
-- Native ARM64 support
-
-**Windows:**
-
-- WASAPI audio capture
-- Windows Service support
-- PowerShell scripts for management
+**Voice activity detection.** An optional Silero VAD (`internal/inference/vad`, needs ONNX Runtime, off by default) acts as a second source of "speech present" for the privacy filter described below.
 
 ---
 
-## API Design
+## Detection Pipeline
 
-### API v2 (Active)
+`classifier` pushes prediction results into a bounded results queue (non-blocking, a full queue drops the result and records it). `processor.Processor` (`internal/analysis/processor`) consumes it:
 
-All API endpoints are in `internal/api/v2/`.
+1. **Validate and classify results.** Parse species, record human-voice and dog-bark label hits for the filters, and drop human-sound labels from saved detections.
+2. **Thresholds.** Per-species threshold if configured, otherwise the model's global threshold; with dynamic thresholds enabled (default), the threshold for a species is lowered in steps after high-confidence detections and resets when its timer expires. The state is tracked per species, not per model, and persisted.
+3. **Species filters.** Exclude list, include list and range filter.
+4. **Pending detections.** A candidate becomes a pending detection keyed by source and species. A flusher releases it after the detection window, so repeated hits merge and the clip covers the whole event.
+5. **Discard filters.** Before actions run, a pending detection can be discarded by:
+   - the false-positive filter (requires confirmations within the window; level 0 is off);
+   - the **privacy filter** (on by default): human-voice labels above a confidence floor, plus optional VAD, mark moments of speech; a detection whose clip reaches a speech hit is dropped. Detections may wait briefly until a speech detector has scanned the whole clip;
+   - the dog bark filter and the daylight filter (nocturnal species during daylight, needs a location).
+6. **Actions.** Surviving detections get a set of actions enqueued on the job queue.
 
-**Design Principles:**
+Note that `internal/privacy` is unrelated to the voice filter: it scrubs telemetry and logs (URL anonymization, RTSP sanitizing, system id).
 
-- **RESTful**: Standard HTTP methods and status codes
-- **JSON**: All requests/responses in JSON format
-- **Versioned**: `/api/v2/` prefix for versioning
-- **Authenticated**: OAuth2 tokens for protected endpoints
-- **Documented**: See `internal/api/v2/README.md` for endpoint documentation
+**Actions** (`processor/actions_*.go`): log, database save, clip export, BirdWeather upload, MQTT publish, SSE broadcast, range filter update, external command, and `CompositeAction`, which runs several actions in sequence with a per-step timeout. When the database is enabled, the save and the SSE broadcast run in one composite so that SSE sees the database id assigned by the save. A step in between enqueues the MQTT publish as its own job after the save, so the payload carries the database id and the MQTT retry settings apply; the composite itself is never retried, since a retry would save the detection twice. Without a database, SSE and MQTT are queued as independent actions.
 
-**API Structure:**
+**Job queue** (`internal/analysis/jobqueue`). Actions run asynchronously off the audio path in a bounded queue with per-job state, optional retry with exponential backoff, and per-action statistics. Retry configuration is chosen in the processor's job queue adapter and currently applies to BirdWeather uploads, the MQTT publish job, and deferred clip saves under extended capture. A retry configuration with `Enabled` false means a single attempt. A job never has two attempts running at once: an attempt that overruns its timeout is waited for before the next one starts. See [`internal/analysis/jobqueue/README.md`](internal/analysis/jobqueue/README.md).
 
-```
-internal/api/v2/
-├── api.go              # Main API router and registration
-├── auth/               # Authentication service adapter
-│   ├── service.go      # Service interface definition
-│   ├── adapter.go      # SecurityAdapter implementation
-│   ├── middleware.go   # Authentication middleware
-│   └── authmethod_string.go  # Generated AuthMethod string methods
-├── auth.go             # Authentication endpoints (login/logout)
-├── detections.go       # Detection CRUD endpoints
-├── analytics.go        # Analytics and statistics endpoints
-├── settings.go         # Settings management endpoints
-├── media.go            # Media endpoints (audio, spectrograms)
-├── sse.go              # Server-Sent Events (detections, audio levels)
-├── streams.go          # Audio stream management
-├── streams_health.go   # Stream health monitoring
-├── system.go           # System info and control endpoints
-├── weather.go          # Weather integration endpoints
-├── species.go          # Species information endpoints
-├── range.go            # Geographic range filter endpoints
-├── search.go           # Search endpoints
-├── notifications.go    # Notification management
-├── integrations.go     # External integrations (MQTT, BirdWeather)
-├── control.go          # System control endpoints
-├── debug.go            # Debug endpoints
-├── filesystem.go       # Filesystem operations
-├── support.go          # Support bundle generation
-└── utils.go            # Shared utilities
-```
+**Event bus** (`internal/events`). After a database save, the detection is published as an event. Consumers include the notification service (new species and detection notifications), the alerting bridge (rules on detection events) and the telemetry worker. Errors flow through the same bus: `internal/errors` builds structured errors, which reach notifications and telemetry asynchronously without blocking the caller.
 
-**API Controller Pattern:**
-
-All API v2 endpoints are methods on the `Controller` struct:
-
-```go
-// internal/api/v2/api.go
-package api
-
-type Controller struct {
-    Group          *echo.Group
-    Settings       *conf.Settings
-    DS             datastore.Interface
-    SSEController  *SSEController
-    AuthMiddleware echo.MiddlewareFunc
-    // ... other dependencies
-}
-
-// Route registration
-func (c *Controller) initDetectionRoutes() {
-    // Public endpoints
-    c.Group.GET("/detections", c.GetDetections)
-    c.Group.GET("/detections/:id", c.GetDetection)
-
-    // Protected endpoints
-    detectionGroup := c.Group.Group("/detections", c.AuthMiddleware)
-    detectionGroup.DELETE("/:id", c.DeleteDetection)
-    detectionGroup.POST("/:id/review", c.ReviewDetection)
-}
-```
-
-**Example Handler:**
-
-```go
-// internal/api/v2/detections.go
-package api
-
-// DetectionResponse represents a detection in API responses
-type DetectionResponse struct {
-    ID             uint    `json:"id"`
-    Date           string  `json:"date"`
-    ScientificName string  `json:"scientificName"`
-    CommonName     string  `json:"commonName"`
-    Confidence     float64 `json:"confidence"`
-    // ... other fields
-}
-
-// GetDetections returns a paginated list of detections
-func (c *Controller) GetDetections(ctx echo.Context) error {
-    // Parse query parameters
-    startDate := ctx.QueryParam("start_date")
-    endDate := ctx.QueryParam("end_date")
-
-    // Validate parameters
-    if err := validateDateParam(startDate, "start_date"); err != nil {
-        return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-    }
-
-    // Query database
-    notes, err := c.DS.GetNotesWithinRange(startDate, endDate)
-    if err != nil {
-        return echo.NewHTTPError(http.StatusInternalServerError, err.Error())
-    }
-
-    // Transform to response format
-    detections := transformNotesToResponses(notes)
-
-    return ctx.JSON(http.StatusOK, detections)
-}
-```
-
-**Error Handling:**
-
-Consistent error responses:
-
-```json
-{
-  "error": "Resource not found",
-  "code": "NOT_FOUND",
-  "details": {
-    "resource": "detection",
-    "id": 12345
-  }
-}
-```
+**Species tracking** (`internal/analysis/species`) tracks lifetime, yearly and seasonal novelty for "new species" logic.
 
 ---
 
-## Security Architecture
+## Datastore
 
-### Authentication
+The datastore is in the middle of a long migration. Read [`internal/datastore/AGENTS.md`](internal/datastore/AGENTS.md) before touching it.
 
-**OAuth2-Based Authentication:**
+- **v2 schema** is the present and the future. Entities are in `datastore/v2/entities` (detections with predictions, model contributions, reviews, comments and locks; labels and taxonomic classes; AI models; audio sources; weather; dynamic thresholds; alert rules and history; notification history; app events and metadata; migration state). Persistence goes through repositories: `datastore.DetectionRepository` and the rest in `datastore/v2/repository`.
+- **Legacy schema** (the `notes` table, the `Note` model, `DataStore`, `SQLiteStore`, `MySQLStore` and the large `datastore.Interface`) is frozen and will be removed. `datastore/v2only` adapts a v2 database to the old `Interface` so existing callers keep working until they move to repositories.
+- **Startup decides the mode** (`datastore/v2/startup.go`): a fresh install starts directly in v2-only mode. An existing legacy database stays in legacy mode until the user starts a migration through the API. Migration runs as a state machine (initializing, dual write, migrating, validating, cutover, completed) in `datastore/v2/migration` and `state_manager.go`; afterwards data lives in `birdnet_v2.db` and may later be consolidated to the configured path.
+- **Engines.** SQLite (default, single open connection) and MySQL or MariaDB (pooled), for both schemas.
+- **Mocks.** `datastore.Interface` and other interfaces are mocked with mockery (`.mockery.yaml`, `go generate ./internal/datastore`). Never edit generated mocks by hand.
 
-```
-internal/security/
-├── auth.go             # Authentication method constants
-├── oauth.go            # OAuth2Server core implementation
-├── basic.go            # Basic auth with OAuth2 flow
-├── util.go             # Redirect URI and path validation
-└── logging.go          # Security-specific logging
-```
-
-**Authentication Methods:**
-
-```go
-// Supported authentication methods
-const (
-    AuthMethodNone        AuthMethod = "none"   // No authentication
-    AuthMethodLocalSubnet AuthMethod = "subnet" // Local subnet bypass
-    AuthMethodOAuth2      AuthMethod = "oauth2" // OAuth2 tokens
-    AuthMethodAPIKey      AuthMethod = "apikey" // API Key (future)
-)
-```
-
-**Architecture Components:**
-
-1. **OAuth2Server** - Core authentication manager
-   - Manages authorization codes and access tokens
-   - Handles token lifecycle (generation, validation, expiration)
-   - Persistent token storage across restarts
-   - Automatic cleanup of expired tokens
-
-2. **Basic Authentication** - Password-based flow
-   - OAuth2 authorization code flow (not JWT)
-   - Client ID/Secret validation
-   - Generates time-limited auth codes and access tokens
-   - Session-based authentication
-
-3. **Social Authentication** - Third-party identity providers
-   - Google OAuth2 (via Goth library)
-   - GitHub OAuth2 (via Goth library)
-   - User ID allowlist validation
-   - Persistent sessions via filesystem store
-
-4. **Local Subnet Bypass** - Network-based authentication
-   - Automatic authentication for local subnet clients
-   - Container-aware subnet detection
-   - Configurable allowed subnet (CIDR notation)
-   - Loopback address support
-
-### Authentication Flow
-
-**Basic Auth Flow:**
-
-1. User navigates to protected route
-2. Server redirects to `/login` page
-3. User submits password (client ID/secret)
-4. Server validates credentials
-5. Server generates authorization code (short-lived)
-6. User redirected to callback with code
-7. Server exchanges code for access token
-8. Access token stored in session (filesystem-backed)
-9. User redirected to original destination
-
-**Social Auth Flow:**
-
-1. User clicks "Login with Google/GitHub"
-2. Server initiates OAuth2 flow with provider
-3. User authenticates with provider
-4. Provider redirects back with auth data
-5. Server validates user ID against allowlist
-6. Session created and stored persistently
-7. User redirected to dashboard
-
-**Local Subnet Flow:**
-
-1. Client IP checked against server subnets
-2. If same /24 subnet → auto-authenticated
-3. If in allowed CIDR ranges → auto-authenticated
-4. Otherwise → requires explicit authentication
-
-### Authorization
-
-**Binary Authentication Model:**
-
-BirdNET-Go uses a **binary authentication model** (authenticated or not) rather than role-based access control. There are no user roles or permission levels.
-
-**Protected Routes:**
-
-```go
-// Routes requiring authentication
-- /settings/*                    // All settings pages
-- /api/v2/*                      // All API v2 endpoints
-- /api/v1/detections/delete      // Detection deletion
-- /api/v1/mqtt/*                 // MQTT configuration
-- /api/v1/audio-stream-hls       // HLS audio streaming
-- /logout                        // Logout endpoint
-
-// Public routes (even if auth enabled)
-- /api/v2/detections             // Detection listings
-- /api/v2/analytics              // Analytics data
-- /api/v2/media/species-image    // Species images
-- /api/v2/spectrogram/*          // Spectrograms
-- /api/v2/audio/*                // Audio files
-```
-
-**Middleware Authentication Check:**
-
-```go
-func (s *OAuth2Server) IsUserAuthenticated(c echo.Context) bool {
-    // 1. Check local subnet bypass on the verified client address
-    //    (authClientIP), never on the logged c.RealIP()
-    if _, ok := s.isLocalSubnetBypass(s.currentSettings(), c.Request()); ok {
-        return true
-    }
-
-    // 2. Check OAuth2 access token
-    if token, err := gothic.GetFromSession("access_token", c.Request()); err == nil {
-        if s.ValidateAccessToken(token) == nil {
-            return true
-        }
-    }
-
-    // 3. Check social provider sessions
-    if userId, err := gothic.GetFromSession("userId", c.Request()); err == nil {
-        if s.Settings.Security.GoogleAuth.Enabled {
-            if googleUser, _ := gothic.GetFromSession("google", c.Request()); googleUser != "" {
-                if isValidUserId(s.Settings.Security.GoogleAuth.UserId, userId) {
-                    return true
-                }
-            }
-        }
-        // Similar check for GitHub...
-    }
-
-    return false
-}
-```
-
-### Security Features
-
-**Token Management:**
-
-- Cryptographically secure token generation (`crypto/rand`)
-- Configurable expiration times for auth codes and access tokens
-- Automatic cleanup of expired tokens (hourly)
-- Persistent token storage in JSON format (0600 permissions)
-- Atomic file writes (temp file + rename)
-
-**Session Security:**
-
-- Filesystem-backed sessions (gorilla/sessions)
-- Session files stored in config directory
-- Configurable session duration (default: 7 days)
-- Secure cookies over HTTPS
-- HTTP-only cookies (XSS protection)
-- SameSite=Lax for CSRF protection
-- Session regeneration on login (prevents session fixation)
-
-**Redirect Protection:**
-
-```go
-// Strict redirect URI validation
-func ValidateRedirectURI(providedURI string, expectedURI *url.URL) error {
-    // - Scheme must match (http/https)
-    // - Hostname must match (case-insensitive)
-    // - Port must match (normalized)
-    // - Path must match (cleaned)
-    // - No query parameters allowed
-    // - No fragment allowed
-    // - Path traversal prevention
-    // - CR/LF injection prevention
-}
-```
-
-**Path Safety Checks:**
-
-```go
-func IsSafePath(pathStr string) bool {
-    return strings.HasPrefix(pathStr, "/") &&
-        !strings.Contains(pathStr, "//") &&        // No double slashes
-        !strings.Contains(pathStr, "\\") &&        // No backslashes
-        !strings.Contains(pathStr, "://") &&       // No protocols
-        !strings.Contains(pathStr, "..") &&        // No traversal
-        !strings.Contains(pathStr, "\x00") &&      // No null bytes
-        len(pathStr) < 512                          // Length limit
-}
-```
-
-### Configuration
-
-**Security Settings:**
-
-```go
-type Security struct {
-    Debug             bool              // Enable debug logging
-    Host              string            // Server hostname
-    AutoTLS           bool              // Automatic TLS via Let's Encrypt
-    RedirectToHTTPS   bool              // Force HTTPS redirect
-    SessionSecret     string            // Session encryption key (32+ chars)
-    SessionDuration   time.Duration     // Session lifetime (default: 7d)
-    AllowSubnetBypass AllowSubnetBypass // Subnet authentication bypass
-    BasicAuth         BasicAuth         // Password-based auth
-    GoogleAuth        SocialProvider    // Google OAuth2
-    GithubAuth        SocialProvider    // GitHub OAuth2
-}
-
-type BasicAuth struct {
-    Enabled        bool          // Enable basic auth
-    Password       string        // Login password
-    ClientID       string        // OAuth2 client ID
-    ClientSecret   string        // OAuth2 client secret
-    RedirectURI    string        // OAuth2 callback URL
-    AuthCodeExp    time.Duration // Auth code lifetime (default: 10min)
-    AccessTokenExp time.Duration // Access token lifetime (default: 24h)
-}
-
-type SocialProvider struct {
-    Enabled      bool   // Enable this provider
-    ClientID     string // Provider OAuth2 client ID
-    ClientSecret string // Provider OAuth2 client secret
-    RedirectURI  string // Provider OAuth2 callback URL
-    UserId       string // Comma-separated allowlist of user IDs
-}
-
-type AllowSubnetBypass struct {
-    Enabled bool   // Enable subnet bypass
-    Subnet  string // CIDR notation (e.g., "192.168.1.0/24")
-}
-```
-
-### Privacy by Design
-
-**Data Minimization:**
-
-- No telemetry by default
-- Optional opt-in analytics
-- No external API calls without user consent
-- Local-first data storage
-- Sessions stored locally (not in-memory or external)
-
-**Data Retention:**
-
-- User-configurable detection history retention
-- Automatic cleanup of old detections
-- Audio clips not stored by default (only metadata)
-- Session files cleaned up on logout
-- Expired tokens cleaned up hourly
-
-**Security Best Practices:**
-
-1. Always use strong SessionSecret (32+ characters, auto-generated if empty)
-2. Use HTTPS in production environments (`AutoTLS` or reverse proxy)
-3. Restrict subnet bypass to trusted networks only
-4. Regularly rotate OAuth2 client secrets
-5. Use specific user ID allowlists for social auth
-6. Ensure config directory has proper permissions (0755)
-7. Monitor security logs for authentication failures
-
-### API v2 Authentication Architecture
-
-**Adapter Pattern:**
-
-The API v2 authentication system uses an adapter pattern to provide a clean, testable interface over the security package.
-
-```
-internal/api/v2/auth/
-├── service.go          # Service interface definition
-├── adapter.go          # SecurityAdapter implementation
-├── middleware.go       # Authentication middleware
-└── authmethod_string.go # Generated AuthMethod string methods
-```
-
-**Service Interface:**
-
-```go
-type Service interface {
-    // CheckAccess validates if a request has access to protected resources
-    CheckAccess(c echo.Context) error
-
-    // IsAuthRequired checks if authentication is required for this request
-    IsAuthRequired(c echo.Context) bool
-
-    // GetUsername retrieves the username of the authenticated user
-    GetUsername(c echo.Context) string
-
-    // GetAuthMethod returns the authentication method used
-    GetAuthMethod(c echo.Context) AuthMethod
-
-    // ValidateToken checks if a bearer token is valid
-    ValidateToken(token string) error
-
-    // AuthenticateBasic handles basic authentication
-    AuthenticateBasic(c echo.Context, username, password string) (string, error)
-
-    // Logout invalidates the current session/token
-    Logout(c echo.Context) error
-}
-```
-
-**SecurityAdapter Implementation:**
-
-The `SecurityAdapter` wraps `OAuth2Server` and implements the `Service` interface:
-
-```go
-type SecurityAdapter struct {
-    OAuth2Server *security.OAuth2Server
-    logger       *slog.Logger
-}
-
-// Example: CheckAccess delegates to OAuth2Server
-func (a *SecurityAdapter) CheckAccess(c echo.Context) error {
-    if a.OAuth2Server.IsUserAuthenticated(c) {
-        return nil
-    }
-    return ErrSessionNotFound
-}
-```
-
-**Authentication Middleware:**
-
-The API v2 middleware supports multiple authentication methods in priority order:
-
-1. **Bearer Token** (from `Authorization` header)
-   - Validates OAuth2 access token
-   - Sets context: `authMethod=AuthMethodToken`
-   - Returns `401` with `WWW-Authenticate` header on failure
-
-2. **Session** (from cookies)
-   - Validates browser session
-   - Checks local subnet bypass
-   - Sets context: `authMethod=AuthMethodBrowserSession` or `AuthMethodLocalSubnet`
-
-3. **Unauthenticated Response Handling**
-   - Browser requests → redirect to `/login?redirect=<path>`
-   - API requests → JSON `401 Unauthorized`
-
-**Authentication Methods (v2):**
-
-```go
-type AuthMethod int
-
-const (
-    AuthMethodUnknown        // Unknown/unset
-    AuthMethodNone          // No auth required (bypass)
-    AuthMethodBasicAuth     // Username/password
-    AuthMethodToken         // Bearer token
-    AuthMethodOAuth2        // OAuth2 token
-    AuthMethodBrowserSession // Browser session
-    AuthMethodAPIKey        // API key (future)
-    AuthMethodLocalSubnet   // Local subnet bypass
-)
-```
-
-**Context Values:**
-
-After successful authentication, middleware sets:
-
-```go
-c.Set("isAuthenticated", true)
-c.Set("authMethod", AuthMethodToken)      // or other method
-c.Set("username", "user@example.com")     // if available
-c.Set("userClaims", nil)                  // reserved for future use
-```
-
-**Error Types:**
-
-```go
-var (
-    ErrInvalidCredentials = errors.NewStd("invalid credentials")
-    ErrInvalidToken       = errors.NewStd("invalid or expired token")
-    ErrSessionNotFound    = errors.NewStd("session not found or expired")
-    ErrLogoutFailed       = errors.NewStd("logout operation failed")
-    ErrBasicAuthDisabled  = errors.NewStd("basic authentication is disabled")
-)
-```
-
-**Benefits of Adapter Pattern:**
-
-1. **Clean separation** - API v2 doesn't directly depend on security internals
-2. **Testability** - Mock the Service interface for unit tests
-3. **Flexibility** - Can swap implementations without changing API handlers
-4. **Type safety** - Strongly typed AuthMethod enum vs strings
-5. **Logging** - Centralized security logging in one place
-
-**Integration Example:**
-
-```go
-// Create adapter
-authService := auth.NewSecurityAdapter(oauth2Server, logger)
-
-// Create middleware
-authMiddleware := auth.NewMiddleware(authService, logger)
-
-// Apply to routes
-api := e.Group("/api/v2")
-api.Use(authMiddleware.Authenticate)
-
-// Handlers can access auth state
-api.GET("/protected", func(c echo.Context) error {
-    username := c.Get("username").(string)
-    method := c.Get("authMethod").(auth.AuthMethod)
-    return c.JSON(200, map[string]interface{}{
-        "user": username,
-        "auth": method.String(),
-    })
-})
-```
+Related storage: `internal/diskmanager` enforces clip retention (age, usage and drain policies) and reconciles clips with the database; `internal/backup` provides scheduled, optionally encrypted backups to local, FTP, SFTP, rsync or Google Drive targets.
 
 ---
 
-## Performance Considerations
+## Web Server and API
 
-### Memory Management
+**Server** (`internal/api`, Echo). `server.go` builds the middleware chain and routes. Global middleware, in order: panic recovery, request logging, CORS, CSRF, body size limit, gzip (skipping SSE), security headers. Base-path handling for reverse proxies runs before routing and is hot-reloadable (`X-Ingress-Path`, then `X-Forwarded-Prefix`, then `webserver.basepath`). Authentication, rate limiting and cache control are applied per route or route group, not globally.
 
-**Buffer Pooling:**
+**Frontend serving.** The SPA shell and assets are served from the embedded `frontend.DistFS`, or from `./frontend/dist` on disk when it exists, which is how development works. `/ui/*` serves the same HTML shell and the client router takes over. HTML and text assets are rewritten for sub-path proxies.
 
-Reuse audio buffers to minimize GC pressure:
+**API v2** (`internal/api/v2`). A thin facade plus one subpackage per domain (analytics, detections, species, media, settings, system, weather, notifications, alerts, models, imports, support, and others) on shared `apicore` and `dto` packages. Each domain exposes a `Handler` with `RegisterRoutes`. The dependency direction is one-way: domains import `apicore`, `apicore` imports no domain, and a test enforces it. The endpoint catalog is [`internal/api/v2/README.md`](internal/api/v2/README.md); the recipe for adding endpoints is [`internal/api/v2/AGENTS.md`](internal/api/v2/AGENTS.md). Group-level middleware adds panic recovery, tunnel detection, a body limit, logging and private-mode gating.
 
-```go
-var pcmBufferPool = sync.Pool{
-    New: func() interface{} {
-        buf := make([]float32, 144000) // 3 seconds at 48kHz
-        return &buf
-    },
-}
+**Real time.** Server-Sent Events carry detections, sound levels, notifications, audio levels, stream health, system metrics and long-running job progress (imports, model installs). Live listening is HLS (`go-hls`) with tokenized playlists. The only WebSocket is the optional browser terminal, off unless `webserver.enableterminal` is set.
 
-// Acquire buffer
-buf := pcmBufferPool.Get().(*[]float32)
-defer pcmBufferPool.Put(buf) // Return to pool
-```
-
-**Database Connection Pooling:**
-
-Configure GORM connection pools for optimal performance:
-
-```go
-// Recommended GORM configuration (not currently implemented)
-db.DB().SetMaxIdleConns(10)
-db.DB().SetMaxOpenConns(100)
-db.DB().SetConnMaxLifetime(time.Hour)
-```
-
-**Note:** This configuration is recommended for production deployments but not currently implemented in the codebase.
-
-### Concurrency
-
-**Worker Pool Pattern:**
-
-```go
-// Create worker pool for analysis
-numWorkers := runtime.NumCPU()
-for i := 0; i < numWorkers; i++ {
-    go func() {
-        for chunk := range audioQueue {
-            // Process chunk
-            analyzeAudio(chunk)
-        }
-    }()
-}
-```
-
-**Rate Limiting:**
-
-The project uses a combination of semaphore and singleflight for concurrent spectrogram generation:
-
-```go
-import "golang.org/x/sync/singleflight"
-
-// Package-level concurrency control
-var (
-    spectrogramSemaphore = make(chan struct{}, maxConcurrentSpectrograms)
-    spectrogramGroup     singleflight.Group
-)
-
-func generateSpectrogram(id string) error {
-    // Singleflight prevents duplicate work for same ID
-    _, err, _ := spectrogramGroup.Do(id, func() (any, error) {
-        // Semaphore limits total concurrent operations
-        spectrogramSemaphore <- struct{}{}
-        defer func() { <-spectrogramSemaphore }()
-
-        return performGeneration(id)
-    })
-    return err
-}
-```
-
-**Benefits:**
-
-- **Singleflight**: Multiple requests for the same spectrogram only generate once
-- **Semaphore**: Limits total concurrent generations (prevents resource exhaustion)
-
-See [internal/api/v2/media.go](internal/api/v2/media.go) for full implementation.
-
-### Caching
-
-**In-Memory Cache:**
-
-```go
-// Cache for species labels
-type SpeciesCache struct {
-    mu    sync.RWMutex
-    cache map[string]string
-}
-
-func (c *SpeciesCache) Get(key string) (string, bool) {
-    c.mu.RLock()
-    defer c.mu.RUnlock()
-    val, ok := c.cache[key]
-    return val, ok
-}
-```
-
-**Filesystem Cache:**
-
-Pre-rendered spectrograms cached on disk:
-
-```
-data/
-└── spectrograms/
-    ├── abc123.png      # Cached spectrogram
-    └── def456.png
-```
-
-### Frontend Performance
-
-**Code Splitting:**
-
-The frontend uses **client-side routing with lazy-loaded components**. The Go backend serves the same HTML shell for all UI routes, and the client-side JavaScript determines which component to load:
-
-```javascript
-// App.svelte - Dynamic component loading
-async function loadComponent(route: string): Promise<void> {
-  switch (route) {
-    case 'settings':
-      if (!Settings) {
-        const module = await import('./lib/desktop/views/Settings.svelte');
-        Settings = module.default;
-      }
-      break;
-    case 'detections':
-      if (!Detections) {
-        const module = await import('./lib/desktop/views/Detections.svelte');
-        Detections = module.default;
-      }
-      break;
-  }
-}
-```
-
-**How it works:**
-
-1. Go backend serves `/ui/*` routes with the same HTML entry point
-2. Client-side code reads `window.location.pathname`
-3. Components are dynamically imported based on the current path
-4. Only the necessary code is loaded, reducing initial bundle size
-
-**Note:** This is **not SvelteKit routing** or **server-side rendering**. It's a manual lazy-loading implementation that works with the embedded Go server.
-
-**Bundle Size Optimization:**
-
-```bash
-# Production build
-npm run build
-
-# Actual bundle sizes (uncompressed):
-# - Main chunk (index.js):        ~705KB
-# - Vendor chunk (vendor.js):      ~40KB (Svelte core)
-# - MapLibre chunk:               ~917KB (Map rendering - largest)
-# - Route chunks:                  11-223KB (lazy-loaded on demand)
-```
-
-**Size Breakdown:**
-
-- Largest chunks: MapLibre (917KB), Main bundle (705KB)
-- Route-specific chunks loaded on-demand
-- Most route chunks under 100KB
-- Gzipped sizes typically 20-30% of uncompressed
-
-**Note:** Run `npm run analyze:bundle:size` to analyze bundle composition.
-
-**Image Optimization:**
-
-- Lazy loading for spectrogram images
-- PNG format for spectrograms (generated on-demand)
-- Cached on filesystem to avoid regeneration
-- Multiple size variants (sm: 400px, md: 800px, lg: 1000px, xl: 1200px)
+**Other endpoints on the server:** `/health`, pprof (off unless profiling is enabled, see [`doc/PROFILING.md`](doc/PROFILING.md)), the PWA manifest and service worker, and the OAuth routes. A separate Prometheus listener is optional (`realtime.telemetry`).
 
 ---
 
-## Development Tools
+## Security
 
-### Code Quality
+Detail for the authentication package is in [`internal/security/README.md`](internal/security/README.md) and the user-facing [`doc/wiki/security.md`](doc/wiki/security.md).
 
-**Linting:**
+**Model.** Authentication is binary: a request is authenticated or it is not. There are no roles. When no provider is configured the instance is open.
 
-```bash
-# Backend linting (from project root; whole module, adds build tags and CGO flags)
-task lint
+**Providers** (`internal/security`):
 
-# Frontend linting (from frontend/ directory)
-cd frontend && npm run check:all
+- Password login, implemented as an OAuth2 authorization-code flow against the server itself, issuing access tokens.
+- Social login through goth: Google, GitHub, Microsoft, LINE, Kakao and a generic OIDC provider (always with PKCE), each restricted by a user id allowlist.
+- **Local subnet bypass** (off by default) has two parts. The request gate admits loopback and the configured CIDRs only. A separate same-subnet-as-host check applies to `IsUserAuthenticated` and cookie handling.
+- **Trusted proxies** (`security.trustedproxies`, with a Cloudflare preset): forwarded client IP headers are honoured only from configured proxies, through `internal/security/proxytrust`.
+- Public access can be opened per feature, for example live audio. Private mode gates the whole v2 API.
 
-# Or use Taskfile (from project root)
-task frontend-lint
+**API v2 authentication** (`internal/api/auth`). A `Service` interface wraps the security package through `SecurityAdapter`; `Middleware.Authenticate` runs in this order: pass-through when authentication is not required (no provider, or subnet bypass); Bearer token if an `Authorization` header is present (an invalid token is an immediate 401, with no fall-through); browser session; otherwise a redirect to `/login` for HTML clients or a JSON 401 for API clients. `AuthMethodAPIKey` is declared but not implemented.
+
+**Sessions and tokens.** Sessions use gorilla's filesystem store under the config directory, with keys derived from `security.sessionsecret`, a 7 day default lifetime, `HttpOnly`, `SameSite=Lax` and `Secure` over TLS. Tokens persist to `tokens.json` (mode 0600, atomic writes) and expired tokens are cleaned up hourly. CSRF protection is global middleware.
+
+**Transport.** `security.tlsmode` selects plain HTTP, Let's Encrypt (autocert in `internal/api/server.go`) or a self-signed certificate (`internal/tls`). `internal/securefs` provides confined, cached file access for media.
+
+**Privacy.** Sentry is opt-in; reports go through the scrubbing in `internal/privacy`. Secrets and PII must never be logged; typed helpers in `internal/logger` enforce this for credential field names, backed by a lint rule.
+
+---
+
+## Integrations and Supporting Services
+
+| Package                  | Purpose                                                                                                                                           |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `internal/mqtt`          | MQTT publishing and Home Assistant discovery.                                                                                                     |
+| `internal/notification`  | Toasts, persistent notices and push delivery through shoutrrr, webhook and script providers, with rate limiting and circuit breakers.             |
+| `internal/birdweather`   | Soundscape and detection upload to BirdWeather, loudness-normalized with the native `loudnorm`.                                                   |
+| `internal/ebird`         | eBird API client for taxonomy and observations.                                                                                                   |
+| `internal/weather`       | Weather providers: Yr.no (default), OpenWeather, Pirate Weather, Weather Underground. Plus `internal/suncalc` for sun and moon.                   |
+| `internal/imageprovider` | Species images (Avicommons, Wikipedia) with a file cache.                                                                                         |
+| `internal/alerting`      | User-defined alert rules, evaluator, dispatcher and defaults, fed by detections and metrics.                                                      |
+| `internal/observability` | Prometheus metrics, health events and the metrics endpoint. `internal/health` runs the health checks; `internal/monitor` collects system metrics. |
+| `internal/telemetry`     | Optional Sentry integration and the error-to-event-bus bridge.                                                                                    |
+| `internal/support`       | Support bundle collection (`support collect`, the API and the UI).                                                                                |
+| `internal/imports`       | BirdNET-Pi import.                                                                                                                                |
+| `internal/spectrogram`   | Native Go spectrogram rendering, pre-rendering and size variants. No external binary is involved.                                                 |
+| `internal/detection`     | The domain `Result` type that carries detections between layers.                                                                                  |
+| `internal/update`        | Release manifest schema only; there is no in-app updater.                                                                                         |
+
+Each package has its own README where one exists; prefer those for behaviour and configuration keys.
+
+---
+
+## Frontend
+
+The UI is a Svelte 5 single-page app (not SvelteKit) with TypeScript, Tailwind CSS v4, Vite and Vitest, in `frontend/`. Component and style rules are in [`frontend/AGENTS.md`](frontend/AGENTS.md) and the nested guides it links.
+
+```
+frontend/src/
+├── App.svelte          # path-based client router under /ui/, lazy-loaded views
+├── main.js
+└── lib/
+    ├── api/            # typed API clients
+    ├── auth/           # provider definitions
+    ├── components/     # shared icons and primitives
+    ├── desktop/        # features/, views/, layouts/, components/: the main UI
+    ├── i18n/           # ICU message runtime and generated types
+    ├── stores/         # Svelte 5 rune stores (navigation, settings, auth, models, ...)
+    ├── telemetry/      # client-side error reporting
+    ├── types/
+    └── utils/          # API client, SSE helpers, settings and audio helpers
 ```
 
-**Formatting:**
+- **State.** Rune-based stores for cross-component state, `$state`, `$derived` and `$effect` inside components.
+- **Routing.** `App.svelte` maps `/ui/...` paths to route configs and loads views with dynamic `import()`. The Go server returns the same HTML shell for every UI route.
+- **Real time.** `ReconnectingEventSource` consumers for the SSE streams described above.
+- **i18n.** 16 locales in `frontend/static/messages`, validated with `npm run i18n:validate`; see [`frontend/static/messages/AGENTS.md`](frontend/static/messages/AGENTS.md).
+- **Scope.** Desktop and tablet. Phone viewports are out of scope.
+- **Tests.** Vitest unit and component tests, integration and reverse-proxy suites, browser-mode tests, and Playwright end-to-end tests in `frontend/tests/e2e`.
 
-```bash
-# Go formatting: golangci-lint has no formatters configured, so run gofmt on
-# the files you changed (the pre-commit hook also runs gofmt on staged files)
-gofmt -w <files>
+---
 
-# Go linting, and lint with auto-fix (task lint-fix runs golangci-lint --fix)
-task lint
-task lint-fix
+## Build and Platforms
 
-# Markdown: format only the files you changed (from frontend/)
-npx prettier --write ../<path to each changed .md file>
+**Build system.** [Task](https://taskfile.dev) (`Taskfile.yml`); run `task --list` for everything. Run `task setup-dev` once to install the TensorFlow Lite headers and library that every Go build, lint and test needs.
 
-# Frontend formatting (Prettier)
-npm run format
-```
+| Task                                                                               | Purpose                                                             |
+| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| `task`                                                                             | Build for the current platform (frontend plus Go, models embedded). |
+| `task linux_amd64`, `linux_arm64`, `darwin_amd64`, `darwin_arm64`, `windows_amd64` | Cross-platform builds.                                              |
+| `task noembed` and the `noembed_*` variants                                        | Builds without the embedded models.                                 |
+| `task frontend-build`                                                              | Production frontend build with strict type checking.                |
+| `task lint`, `task test`                                                           | Go lint and tests with the right build tags and CGO flags.          |
+| `task generate-schema`                                                             | Regenerate the config schema and reference.                         |
 
-### Pre-Commit Hooks
+CGO is required for TensorFlow Lite. The frontend is embedded with `//go:embed all:dist` (`frontend/embed.go`); building with the `skipfrontend` tag substitutes a stub so lint and tests do not need a frontend build.
 
-**Husky v9 Configuration:**
+**Development workflows.**
 
-The project uses Husky v9 for Git hooks with a bash-based pre-commit script:
+- `task dev_server` runs the backend with Air hot reload. Build the frontend in watch mode with `task frontend-watch`; the server picks up `./frontend/dist` from disk when it exists.
+- `task frontend-dev` runs the Vite dev server with HMR on port 5173, proxying `/api` to a running backend on 8080.
 
-```bash
-# .husky/pre-commit - Automated checks before commit
+**Platforms.** Release binaries are built for Linux amd64 and arm64, Windows amd64 and macOS arm64. Docker images are published for Linux amd64 and arm64, based on Debian trixie-slim with FFmpeg and ALSA. There is no 32-bit ARM build. FFmpeg handles network stream ingest by default.
 
-# Go Backend Checks:
-# - Auto-format Go files with gofmt
-# - Run golangci-lint on staged Go files only
-# - Skip vendor/, generated files, protobuf files
+---
 
-# Frontend Checks (from frontend/):
-# - Run lint-staged for JS/TS/Svelte files
-# - Run TypeScript type checking
-```
+## Testing and Development Tools
 
-**lint-staged Configuration** (frontend/package.json):
+- **Go tests** use testify and run through `task test` with the race detector. Read [`TESTING.md`](TESTING.md) before writing or changing tests, in particular the rules for asynchronous mock expectations.
+- **Mocks** are generated with mockery; see `.mockery.yaml` and [`internal/datastore/mocks/README.md`](internal/datastore/mocks/README.md).
+- **Lint.** `task lint` (golangci-lint with custom ruleguard rules in `rules/`), `cd frontend && npm run check:all` for the frontend. A Husky pre-commit hook formats and lints staged files.
+- **CI.** Go tests run through gotestsum with one automatic rerun, and the `test-report` job classifies results as regression, pass with flakes, or pass. A cross-platform build workflow compiles and vets Windows and arm64 targets and the `openvino` tag.
+- **Profiling and debugging.** [`doc/PROFILING.md`](doc/PROFILING.md), [`doc/DEBUG-COLLECTION.md`](doc/DEBUG-COLLECTION.md).
 
-```json
-{
-  "scripts": {
-    "prepare": "husky"
-  },
-  "lint-staged": {
-    "*.{js,ts,svelte}": ["prettier --write", "eslint --fix"],
-    "*.css": ["stylelint --fix"]
-  }
-}
-```
+---
 
-**Setup:**
+## Further Reading
 
-```bash
-cd frontend
-npm run prepare  # Initialize Husky hooks
-```
-
-See [.husky/pre-commit](.husky/pre-commit) for complete implementation.
-
-### Debugging
-
-**Backend Debugging:**
-
-```bash
-# Run with debug logging
-birdnet-go serve --debug
-
-# Run from source with the race detector
-go run -race . serve
-
-# Profiling requires diagnostics.profiling.enabled in config.yaml. The endpoints
-# are on the web server port, behind its authentication; where no auth provider
-# is configured, pass the token generated into diagnostics.profiling.token.
-# Profile CPU
-go tool pprof "http://localhost:8080/debug/pprof/profile?token=$BIRDNET_PROFILING_TOKEN"
-
-# Profile memory
-go tool pprof "http://localhost:8080/debug/pprof/heap?token=$BIRDNET_PROFILING_TOKEN"
-```
-
-See [doc/PROFILING.md](doc/PROFILING.md) for the full profiling workflow.
-
-### Documentation
-
-**Code Documentation:**
-
-```go
-// Package documentation in doc.go
-// Function documentation with godoc format
-
-// Example returns an example detection.
-//
-// The detection includes all required fields populated
-// with sample data for testing purposes.
-func Example() *Detection {
-    return &Detection{
-        CommonName: "Northern Cardinal",
-        Confidence: 0.95,
-    }
-}
-```
-
-For questions or contributions, see [CONTRIBUTING.md](CONTRIBUTING.md) or join our [Discord](https://discord.gg/gcSCFGUtsd).
+- [`doc/wiki/`](doc/wiki/): user-facing documentation, including `detection-pipeline.md`, `configuration-reference.md`, `security.md` and `building.md`.
+- [`internal/api/v2/README.md`](internal/api/v2/README.md): API endpoint catalog.
+- [`internal/datastore/AGENTS.md`](internal/datastore/AGENTS.md): datastore rules and the migration direction.
+- [`internal/classifier/README.md`](internal/classifier/README.md): the orchestrator, model manager and how to add a model.
+- [`internal/analysis/jobqueue/README.md`](internal/analysis/jobqueue/README.md), [`internal/analysis/species/README.md`](internal/analysis/species/README.md), [`internal/notification/README.md`](internal/notification/README.md), [`internal/mqtt/README.md`](internal/mqtt/README.md), [`internal/birdweather/README.md`](internal/birdweather/README.md), [`internal/backup/README.md`](internal/backup/README.md): per-package behaviour.
+- [`internal/events/ARCHITECTURE.md`](internal/events/ARCHITECTURE.md): the async event system in depth.

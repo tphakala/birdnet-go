@@ -13,7 +13,7 @@
    * - Respects appState.liveSpectrogram for auto-start
    */
 
-  import Hls from 'hls.js';
+  import type Hls from 'hls.js';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import { onMount } from 'svelte';
 
@@ -21,6 +21,7 @@
   import { t } from '$lib/i18n';
   import { appState, hasLiveAudioAccess } from '$lib/stores/appState.svelte';
   import { HLS_AUDIO_CONFIG } from '$lib/desktop/components/ui/hls-config';
+  import { canPlayHls, tryLoadHls } from '$lib/desktop/components/ui/hls-loader';
   import { useSpectrogramAnalyser } from '$lib/utils/useSpectrogramAnalyser.svelte';
   import SpectrogramCanvas from '$lib/desktop/components/media/SpectrogramCanvas.svelte';
   import { fetchWithCSRF } from '$lib/utils/api';
@@ -45,6 +46,8 @@
   const STORAGE_KEY = 'birdnet-spectrogram-active';
   const FFT_SIZE = 1024;
   const HEARTBEAT_INTERVAL = 20000;
+  /** How long (ms) a start failure message stays visible */
+  const ERROR_HIDE_DELAY_MS = 3000;
   const SOURCE_DISCOVERY_TIMEOUT = 5000;
   /** How often (ms) to poll for label promotion and pruning */
   const LABEL_POLL_INTERVAL_MS = 200;
@@ -69,6 +72,8 @@
   let isConnecting = $state(false);
   let gainPresetIndex = $state(0);
   let showDetectionLabels = $state(true);
+  let errorMessage = $state<string | null>(null);
+  let errorTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
 
   const gainLabel = $derived.by(() => {
     // eslint-disable-next-line security/detect-object-injection -- gainPresetIndex is a numeric index bounded by GAIN_PRESETS.length
@@ -178,9 +183,19 @@
     });
   }
 
+  function showError(message: string) {
+    if (errorTimer) globalThis.clearTimeout(errorTimer);
+    errorMessage = message;
+    errorTimer = globalThis.setTimeout(() => {
+      errorMessage = null;
+      errorTimer = null;
+    }, ERROR_HIDE_DELAY_MS);
+  }
+
   async function start() {
     if (isActive || isConnecting) return;
     isConnecting = true;
+    errorMessage = null;
 
     // Abort any previous in-flight operation
     abortController?.abort();
@@ -192,6 +207,23 @@
       const sourceId = await discoverFirstSource(signal);
       if (signal.aborted || !sourceId) {
         if (!signal.aborted) isConnecting = false;
+        return;
+      }
+
+      // Load HLS.js before starting the server stream, so a failed load
+      // cannot leave a started stream without a player.
+      const HlsClass = await tryLoadHls();
+      if (signal.aborted) return;
+      if (!canPlayHls(HlsClass)) {
+        // No server stream is started and the saved auto-start preference is kept,
+        // so a later attempt can succeed once HLS.js loads.
+        logger.warn('MiniSpectrogram: no HLS player available');
+        isConnecting = false;
+        // A null HlsClass means HLS.js failed to load (offline, stale chunk), which a
+        // page reload usually fixes; otherwise this browser has no HLS player at all.
+        showError(
+          HlsClass === null ? t('media.audio.hlsLoadFailed') : t('media.audio.hlsNotSupported')
+        );
         return;
       }
 
@@ -221,12 +253,12 @@
       audioElement = new globalThis.Audio();
       audioElement.crossOrigin = 'anonymous';
 
-      if (Hls.isSupported()) {
-        hls = new Hls(HLS_AUDIO_CONFIG);
+      if (HlsClass?.isSupported()) {
+        hls = new HlsClass(HLS_AUDIO_CONFIG);
         hls.loadSource(hlsUrl);
         hls.attachMedia(audioElement);
 
-        hls.on(Hls.Events.MANIFEST_PARSED, async () => {
+        hls.on(HlsClass.Events.MANIFEST_PARSED, async () => {
           if (signal.aborted) return;
           try {
             await audioElement?.play();
@@ -252,7 +284,7 @@
           }
         });
 
-        hls.on(Hls.Events.ERROR, (_event, data) => {
+        hls.on(HlsClass.Events.ERROR, (_event, data) => {
           if (signal.aborted) return;
           if (data.fatal) {
             logger.error('MiniSpectrogram: fatal HLS error', {
@@ -262,8 +294,9 @@
             stop();
           }
         });
-      } else if (audioElement.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS (Safari / iOS)
+      } else {
+        // Native HLS (Safari / iOS). canPlayHls was checked before the server
+        // stream was started, so a native player exists here.
         audioElement.src = hlsUrl;
         try {
           await audioElement.play();
@@ -282,11 +315,6 @@
         if (signal.aborted) {
           spectro.disconnect();
         }
-      } else {
-        // Browser supports neither HLS.js nor native HLS, tear down
-        logger.warn('MiniSpectrogram: browser does not support HLS');
-        stop();
-        return;
       }
     } catch (error) {
       if (signal.aborted) return;
@@ -319,7 +347,7 @@
   }
 
   // stopRuntime tears down the stream without clearing localStorage persistence.
-  // Used by $effect cleanup so reactive re-runs don't erase the user's play preference.
+  // Used by the onMount cleanup so leaving the dashboard keeps the user's auto-start preference.
   function stopRuntime() {
     abortController?.abort();
     abortController = null;
@@ -463,7 +491,10 @@
     if (hasLiveAudioAccess() && shouldAutoStart()) {
       start();
     }
-    return () => stop();
+    return () => {
+      if (errorTimer) globalThis.clearTimeout(errorTimer);
+      stopRuntime();
+    };
   });
 </script>
 
@@ -542,6 +573,13 @@
         overlayFontSize={9}
         className="h-28 w-full"
       />
+    {:else if errorMessage}
+      <div
+        role="alert"
+        class="flex h-28 items-center justify-center bg-black px-4 text-center text-sm text-white"
+      >
+        {errorMessage}
+      </div>
     {:else if isActive || isConnecting}
       <div class="flex h-28 items-center justify-center bg-black">
         <div

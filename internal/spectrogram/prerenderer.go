@@ -1,6 +1,5 @@
 // Package spectrogram provides background pre-rendering of spectrograms to eliminate UI lag.
-// Pre-rendering feeds PCM data directly to Sox (bypassing FFmpeg), or to the native renderer when
-// BIRDNET_SPECTROGRAM_RENDERER=native, in a background worker pool.
+// Pre-rendering feeds PCM data directly to the native renderer in a background worker pool.
 package spectrogram
 
 import (
@@ -527,7 +526,7 @@ func (pr *PreRenderer) processJob(job *Job, workerID int) {
 
 	// Generate spectrogram using shared generator
 	if err := pr.generator.GenerateFromPCM(ctx, job.PCMData, spectrogramPath, width, specSettings.Raw, job.SampleRate, WithFrequencyProfile(job.FrequencyProfile)); err != nil {
-		// Check if this is an expected operational error (context canceled, process killed)
+		// Check if this is an expected operational error (context canceled, interrupted render)
 		// These are normal events during shutdown, timeout, or resource management
 		if IsOperationalError(err) {
 			// Log at Debug level for expected operational events

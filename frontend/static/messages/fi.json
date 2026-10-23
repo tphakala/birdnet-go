@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}} asetetulla {configured} s päällekkäisyydellä, kuormitus ylittää tämän laitteen mitatun kapasiteetin, joten ääni analysoidaan {effective} s päällekkäisyydellä. Siksi väärien positiivisten suodatin voi vaatia vähemmän vahvistuksia. Tallennetut asetuksesi eivät muutu; katso Asetukset > Analyysi.",
         "cadenceOverloadedTitle": "Laite ei pysy äänianalyysin tahdissa",
         "cadenceOverloadedMessage": "Kun käytössä on {models, plural, one {# malli} other {# mallia}} ja {sources, plural, one {# äänilähde} other {# äänilähdettä}}, kuormitus ylittää tämän laitteen mitatun kapasiteetin jopa ilman päällekkäisyyttä, joten analyysi voi jäädä jälkeen ja havaintoja voi jäädä saamatta. Ota käyttöön vähemmän malleja tai äänilähteitä, tai valitse nopeampi mallivariantti."
+      },
+      "storage": {
+        "notPersistentTitle": "Tiedot menetetään, kun kontti luodaan uudelleen",
+        "notPersistentMessage": "Nämä polut ovat tallennustilassa, joka poistetaan, kun kontti luodaan uudelleen, esimerkiksi image-päivityksen yhteydessä: {paths}. Yhdistä niihin taltio tai isäntäkoneen hakemisto konttisi asetuksissa.",
+        "anonymousVolumeTitle": "Tiedot tallennetaan nimettömälle konttitaltiolle",
+        "anonymousVolumeMessage": "Nämä polut ovat nimettömillä taltioilla, jotka konttiympäristö loi, koska taltiota ei ollut yhdistetty: {paths}. Uudelleen käynnistetty kontti, esimerkiksi docker run -komennolla image-päivityksen jälkeen, saa uudet tyhjät taltiot, joten tiedot näyttävät kadonneen. Yhdistä niihin nimetty taltio tai isäntäkoneen hakemisto."
       }
     },
     "loading": "Ladataan ilmoituksia..."
@@ -1576,7 +1582,7 @@
           "restartTitle": "Uudelleenkäynnistys vaaditaan",
           "restartBody": "Käynnistä sovellus uudelleen vaihtaaksesi V2-tietokantaan. Vanhan tietokannan siivous on käytettävissä uudelleenkäynnistyksen jälkeen.",
           "fallbackError": "Tietuemäärä ei täsmää vanhan ja V2-tietokannan välillä. Joitain tietueita ei ehkä ole siirretty oikein.",
-          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Kaksoistallennustila varmistaa, ettei tietoja menetetä siirron aikana.",
+          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Siirron aikana tallennetut uudet havainnot kopioidaan myös uuteen tietokantaan.",
           "sourceLegacy": "Lähde (vanha)",
           "targetV2": "Kohde (V2)",
           "recordsLabel": "Tietueet",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "Voit jatkaa järjestelmän normaalia käyttöä migraation suorittaessa taustalla.",
-          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
+          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - uudet havainnot tallennetaan nykyiseen tietokantaan ja kopioidaan uuteen tietokantaan siirron aikana. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
           "migrating": "Kopioidaan olemassa olevia havaintojasi uuteen tietokantaan. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen. Voit keskeyttää ja jatkaa milloin tahansa.",
           "validating": "Tarkistetaan, että kaikki tietueet kopioitiin oikein. Melkein valmis!",
           "cutover": "Vaihdetaan uuteen tietokantaan. Tämä kestää vain hetken.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Paras heikoille signaaleille. Lintujen äänet erottuvat selvästi taustakohinasta. Suositellaan tieteellisille/harmaasävytyyleille.",
                   "standard": "Oletusarvoinen tasapainotettu asetus. Sopii useimpiin käyttötarkoituksiin.",
-                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti. SoX-oletusarvo."
+                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "Mitä raportti sisältää:",
           "applicationLogs": "**Sovelluslokit** - Viimeisimmät virheet ja virheenkorjaustiedot",
           "configuration": "**Kokoonpano** - Asetuksesi arkaluonteiset tiedot poistettuina",
-          "systemInfo": "**Järjestelmätiedot** - Käyttöjärjestelmän versio, muisti ja suoritusympäristön tiedot",
+          "systemInfo": "**Järjestelmätiedot** - Käyttöjärjestelmän versio, muisti, laitteisto, yhdistetyt USB-laitteet ja äänikortit sekä suoritusympäristön tiedot",
           "notIncluded": "**EI sisälly** - Äänitiedostoja, lintuhavaintoja tai henkilökohtaisia tietoja"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "min",
             "helpText": "Estää toistuvat ilmoitukset samasta lajista tämän aikavälin sisällä. Aseta 0 poistaaksesi käytöstä."
           }
+        },
+        "rulesNotice": {
+          "message": "Havaintojen push-ilmoitukset tulevat Säännöt-välilehden hälytyssäännöistä. Sisäänrakennetut havaintosäännöt ilmoittavat vain sovelluksessa. Saat push-ilmoitukset lisäämällä toiminnon {pushAction} sääntöön {ruleName} tai luomalla tapahtumalle {eventName} säännön, jossa on luottamusehto ja odotusaika.",
+          "previousFilters": "Hälytyssäännöt eivät käytä tässä asettamiasi arvoja Vähimmäisluottamus ({confidence} %) ja Lajikohtainen odotusaika ({minutes} min).",
+          "openRules": "Avaa Säännöt"
         },
         "noProviders": "Ei määritettyjä palveluntarjoajia",
         "noProvidersDescription": "Lisää palveluntarjoaja aloittaaksesi push-ilmoitusten vastaanottamisen",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Lähetä havainnot BirdWeatheriin",
-        "ffmpegWarning": {
-          "title": "FFmpeg ei havaittu",
-          "message": "Asenna FFmpeg ottaaksesi käyttöön FLAC-koodauksen tuen, BirdWeather on lopettamassa WAV-tiedostojen tuen pakattujen FLAC-äänitiedostojen hyväksi."
-        },
         "enable": "Ota käyttöön BirdWeather-lähetykset",
         "token": {
           "label": "BirdWeather-tunnus",
@@ -5153,6 +5160,7 @@
       "loop": "Vaihda silmukka",
       "player": "Äänisoitin",
       "autoplayBlocked": "Klikkaa toistaaksesi (automaattinen toisto estetty)",
+      "hlsLoadFailed": "Äänisoittimen lataaminen epäonnistui, lataa sivu uudelleen ja yritä uudestaan",
       "hlsNotSupported": "HLS-toisto ei ole tuettu tässä selaimessa",
       "streamStarting": "Käynnistetään äänistriimi...",
       "levelFor": "Äänitaso lähteelle {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "Virheellinen JSON",
       "invalidEscalation": "Eskalaatioaskeleet ovat virheellisiä",
       "engineUnavailable": "Hälytysjärjestelmä ei ole käytettävissä"
+    },
+    "insights": {
+      "v2Required": "Analyysit vaativat laajennetun (v2) tietokannan"
     },
     "detection": {
       "invalidDate": "Virheellinen {paramName}-muoto, käytä VVVV-KK-PP"

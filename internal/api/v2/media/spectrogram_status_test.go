@@ -1,6 +1,7 @@
 package media
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -15,7 +16,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -54,7 +54,10 @@ func probeError(t *testing.T, path string) error {
 	return err
 }
 
-func TestSpectrogramHTTPError_SourceErrorsAre422(t *testing.T) {
+// Source errors the clip cannot be rendered from answer 422. ErrInvalidOptions
+// stays a 500: after the parse-site width check no request value reaches it, so
+// it is a server fault.
+func TestSpectrogramHTTPError_SourceErrorStatus(t *testing.T) {
 	_, h, _ := setupMediaTestEnvironment(t)
 	dir := t.TempDir()
 
@@ -87,19 +90,22 @@ func TestSpectrogramHTTPError_SourceErrorsAre422(t *testing.T) {
 		tooLongMsg     = "Audio is too long for on-demand processing"
 		tooShortMsg    = "Source audio is too short for a spectrogram"
 		truncatedMsg   = "Source audio is shorter than its header declares"
+		genericMsg     = "Failed to generate spectrogram"
 	)
 	tests := []struct {
 		name string
 		err  error
+		code int
 		msg  string
 	}{
-		{"unsupported extension", probeError(t, legacy), unsupportedMsg},
-		{"rate below 8 kHz", probeError(t, lowRate), unsupportedMsg},
-		{"undecodable at decode time", decodeErr, undecodableMsg},
-		{"truncated wav", truncatedErr, truncatedMsg},
-		{"too long", probeError(t, huge), tooLongMsg},
-		{"no columns", errors.New(render.ErrNoColumns).Component("spectrogram").Category(errors.CategoryValidation).Build(), tooShortMsg},
-		{"empty clip", errors.New(render.ErrEmptyClip).Component("spectrogram").Category(errors.CategoryValidation).Build(), tooShortMsg},
+		{"unsupported extension", probeError(t, legacy), http.StatusUnprocessableEntity, unsupportedMsg},
+		{"rate below 8 kHz", probeError(t, lowRate), http.StatusUnprocessableEntity, unsupportedMsg},
+		{"undecodable at decode time", decodeErr, http.StatusUnprocessableEntity, undecodableMsg},
+		{"truncated wav", truncatedErr, http.StatusUnprocessableEntity, truncatedMsg},
+		{"too long", probeError(t, huge), http.StatusUnprocessableEntity, tooLongMsg},
+		{"no columns", errors.New(render.ErrNoColumns).Component("spectrogram").Category(errors.CategoryValidation).Build(), http.StatusUnprocessableEntity, tooShortMsg},
+		{"empty clip", errors.New(render.ErrEmptyClip).Component("spectrogram").Category(errors.CategoryValidation).Build(), http.StatusUnprocessableEntity, tooShortMsg},
+		{"invalid options is a server fault", errors.New(render.ErrInvalidOptions).Component("spectrogram").Category(errors.CategoryValidation).Build(), http.StatusInternalServerError, genericMsg},
 	}
 	e := echo.New()
 	for _, tt := range tests {
@@ -107,22 +113,10 @@ func TestSpectrogramHTTPError_SourceErrorsAre422(t *testing.T) {
 			rec := httptest.NewRecorder()
 			c := e.NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), rec)
 			_ = h.spectrogramHTTPError(c, productionWrap(tt.err))
-			assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+			assert.Equal(t, tt.code, rec.Code)
 			assert.Contains(t, rec.Body.String(), tt.msg)
 		})
 	}
-}
-
-func TestSpectrogramHTTPError_InvalidOptionsStays500(t *testing.T) {
-	_, h, _ := setupMediaTestEnvironment(t)
-	err := errors.New(render.ErrInvalidOptions).Component("spectrogram").Category(errors.CategoryValidation).Build()
-
-	rec := httptest.NewRecorder()
-	c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), rec)
-	_ = h.spectrogramHTTPError(c, productionWrap(err))
-
-	assert.Equal(t, http.StatusInternalServerError, rec.Code,
-		"after the parse-site width check no request value reaches ErrInvalidOptions, so it is a server fault")
 }
 
 func TestSpectrogramHTTPError_NotReadyWinsOverSourceStatus(t *testing.T) {
@@ -158,7 +152,7 @@ func TestSpectrogramHTTPError_NotReadyWinsOverSourceStatus(t *testing.T) {
 func TestSpectrogramSourceStatus_NotReadyIsNotASourceFailure(t *testing.T) {
 	t.Parallel()
 
-	notReadyAndUndecodable := fmt.Errorf("%w: %w", ffmpeg.ErrAudioFileNotReady, transcode.ErrUndecodableSource)
+	notReadyAndUndecodable := fmt.Errorf("%w: %w", errAudioFileNotReady, transcode.ErrUndecodableSource)
 	tests := []struct {
 		name       string
 		err        error
@@ -166,7 +160,7 @@ func TestSpectrogramSourceStatus_NotReadyIsNotASourceFailure(t *testing.T) {
 		wantSource bool
 	}{
 		{"not ready wrapping undecodable", notReadyAndUndecodable, true, false},
-		{"incomplete", ffmpeg.ErrAudioFileIncomplete, true, false},
+		{"incomplete", errAudioFileIncomplete, true, false},
 		{"source changed wrapping truncated", fmt.Errorf("%w: after render: %w", spectrogram.ErrSourceChanged, transcode.ErrTruncatedSource), true, false},
 		{"truncated source", productionWrap(transcode.ErrTruncatedSource), false, true},
 		{"unsupported source", productionWrap(transcode.ErrUnsupportedSource), false, true},
@@ -231,7 +225,6 @@ func dirNames(t *testing.T, dir string) []string {
 }
 
 func TestSpectrogramEndpoints_RejectOutOfRangeWidthBeforeWork(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	e, h, tempDir := setupMediaTestEnvironment(t)
 
 	writeToneWAV(t, fixturePath(tempDir, sourceName), 48000, 1, fixtureToneHz)
@@ -280,7 +273,6 @@ func TestSpectrogramEndpoints_RejectOutOfRangeWidthBeforeWork(t *testing.T) {
 }
 
 func TestProcessedSpectrogramByID_TooShortClipIs422(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	e, h, tempDir := setupMediaTestEnvironment(t)
 	clearBinaryEnvironment(t, h.Settings.Load())
 
@@ -316,7 +308,6 @@ func TestServeSpectrogramByID_RetainedRenderRejectsOutOfRangeWidth(t *testing.T)
 }
 
 func TestServeSpectrogramByID_UnsupportedSourceIs422(t *testing.T) {
-	t.Setenv(conf.EnvNativeSpectrogramRenderer, "native")
 	e, h, tempDir := setupMediaTestEnvironment(t)
 	clearBinaryEnvironment(t, h.Settings.Load())
 
@@ -338,4 +329,44 @@ func TestServeSpectrogramByID_UnsupportedSourceIs422(t *testing.T) {
 	requireLogLevel(t, logs.String(), "Spectrogram generation skipped: source audio cannot be rendered", "WARN")
 	assert.NotContains(t, logs.String(), `level=ERROR msg="Spectrogram generation failed"`, "a source failure is not logged as an error")
 	assert.Equal(t, before, dirNames(t, tempDir), "a rejected clip leaves no PNG behind")
+}
+
+func TestSpectrogramFailureReason(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{
+			"not ready wrapping a source failure is checked before it",
+			fmt.Errorf("%w: %w", errAudioFileNotReady, transcode.ErrUndecodableSource),
+			spectrogramReasonSourcePending,
+		},
+		{
+			"source that did not appear within the wait is never terminal",
+			fmt.Errorf("%w: %w (path: a.wav)", ErrAudioFileNotFound, os.ErrNotExist),
+			spectrogramReasonSourcePending,
+		},
+		{"unrenderable source", productionWrap(transcode.ErrUnsupportedSource), spectrogramReasonSourceInvalid},
+		{
+			"slot timeout",
+			fmt.Errorf("timeout waiting for generation slot: %w", context.DeadlineExceeded),
+			spectrogramReasonBusy,
+		},
+		{"canceled", context.Canceled, spectrogramReasonBusy},
+		{"plain failure", errors.NewStd("boom"), spectrogramReasonRenderFailed},
+		{
+			"output PNG missing after generation is a render failure",
+			fmt.Errorf("%w: spectrogram file missing after generation: %w", ErrSpectrogramGeneration, os.ErrNotExist),
+			spectrogramReasonRenderFailed,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, spectrogramFailureReason(tt.err))
+		})
+	}
 }

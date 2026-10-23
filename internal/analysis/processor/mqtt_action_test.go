@@ -29,10 +29,13 @@ type MockMQTTClient struct {
 	publishedTopic   string
 	publishedPayload string
 	publishErr       error
-	connectErr       error
-	publishCalls     int
-	reconnectLoops   int
-	disconnectCalls  int
+	// failNextPublishes fails that many publishes with failNextErr, then succeeds.
+	failNextPublishes int
+	failNextErr       error
+	connectErr        error
+	publishCalls      int
+	reconnectLoops    int
+	disconnectCalls   int
 	// messages records every successful publish in order.
 	messages []publishedMessage
 	// topicErrs fails publishes to specific topics only.
@@ -73,6 +76,10 @@ func (m *MockMQTTClient) publish(ctx context.Context, topic, payload string, ret
 	m.publishCalls++
 	if err := ctx.Err(); err != nil {
 		return err
+	}
+	if m.failNextPublishes > 0 {
+		m.failNextPublishes--
+		return m.failNextErr
 	}
 	if m.publishErr != nil {
 		return m.publishErr
@@ -166,6 +173,14 @@ func (m *MockMQTTClient) SetPublishError(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.publishErr = err
+}
+
+// FailNextPublishes makes the next n publishes return err, after which publishes succeed.
+func (m *MockMQTTClient) FailNextPublishes(n int, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.failNextPublishes = n
+	m.failNextErr = err
 }
 
 // SetTopicError makes publishes to topic fail with err; other topics succeed.
@@ -534,33 +549,106 @@ func TestMqttAction_Execute_EmptyTopic(t *testing.T) {
 	assert.Contains(t, err.Error(), "MQTT topic is not specified", "Error should mention topic")
 }
 
-// TestMqttAction_Execute_DisabledAfterCreation verifies that MqttAction exits
-// silently when MQTT is disabled via settings after the action was created.
-// This supports hot-reload: disabling MQTT in the UI takes effect immediately.
-func TestMqttAction_Execute_DisabledAfterCreation(t *testing.T) {
-	t.Parallel()
+// TestMqttAction_Execute_FollowsReconfigureAfterBuild verifies that an action
+// built before a settings change or a client reconfigure uses the settings and
+// client in effect when it executes, the way a queued retry does. Settings are
+// replaced, never mutated, and a reconfigure swaps the client, so the action
+// must not keep the snapshot and client it was built with.
+// Not parallel: it publishes global settings.
+func TestMqttAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
+	const (
+		changedTopic = "birdnet/changed"
+		// testSourceID is the audio source ID testDetection carries; with HA
+		// discovery enabled the detection is also republished to its topic.
+		testSourceID = "test-source"
+	)
 
-	mockClient := NewMockMQTTClient()
-	settings := &conf.Settings{}
-	settings.Realtime.MQTT.Enabled = true
-	settings.Realtime.MQTT.Topic = testMQTTTopic
-
-	eventTracker := NewEventTracker(testEventTrackerInterval)
-	det := testDetection()
-
-	action := &MqttAction{
-		Settings:     settings,
-		Result:       det.Result,
-		MqttClient:   mockClient,
-		EventTracker: eventTracker,
+	tests := []struct {
+		name   string
+		change func(p *Processor, initial *conf.Settings, newClient *MockMQTTClient)
+		// wantOld and wantNew are the topics expected on the old and the new client.
+		wantOld, wantNew []string
+	}{
+		{
+			name: "mqtt disabled",
+			change: func(_ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.MQTT.Enabled = false
+				conf.StoreSettings(updated)
+			},
+		},
+		{
+			name: "topic changed",
+			change: func(_ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.MQTT.Topic = changedTopic
+				conf.StoreSettings(updated)
+			},
+			wantOld: []string{changedTopic, mqtt.SourceDetectionTopic(changedTopic, testSourceID)},
+		},
+		{
+			name: "home assistant discovery disabled",
+			change: func(_ *Processor, initial *conf.Settings, _ *MockMQTTClient) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.MQTT.HomeAssistant.Enabled = false
+				conf.StoreSettings(updated)
+			},
+			wantOld: []string{testMQTTTopic},
+		},
+		{
+			name: "client replaced",
+			change: func(p *Processor, _ *conf.Settings, newClient *MockMQTTClient) {
+				p.SetMQTTClient(newClient)
+			},
+			wantNew: []string{testMQTTTopic, mqtt.SourceDetectionTopic(testMQTTTopic, testSourceID)},
+		},
+		{
+			name: "client removed",
+			change: func(p *Processor, _ *conf.Settings, _ *MockMQTTClient) {
+				p.DisconnectMQTTClient()
+			},
+		},
 	}
 
-	// Simulate runtime hot-reload toggle after action creation.
-	settings.Realtime.MQTT.Enabled = false
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prev := conf.GetSettings()
+			t.Cleanup(func() { conf.StoreSettings(prev) })
 
-	err := action.Execute(t.Context(), nil)
-	require.NoError(t, err, "Should silently return nil when MQTT is disabled")
-	assert.Equal(t, 0, mockClient.GetPublishCalls(), "Should not attempt publish when disabled")
+			initial := &conf.Settings{}
+			initial.Realtime.MQTT.Enabled = true
+			initial.Realtime.MQTT.Topic = testMQTTTopic
+			initial.Realtime.MQTT.HomeAssistant.Enabled = true
+			// Keep the once-per-day range filter gate closed so getDefaultActions
+			// does not publish a settings snapshot of its own.
+			initial.BirdNET.RangeFilter.LastUpdated = time.Now()
+			conf.StoreSettings(initial)
+
+			oldClient := NewMockMQTTClient()
+			newClient := NewMockMQTTClient()
+			p := &Processor{Settings: initial, EventTracker: NewEventTracker(time.Hour), MqttClient: oldClient}
+
+			action := defaultActionOfType[*MqttAction](t, p, initial)
+
+			tt.change(p, initial, newClient)
+
+			require.NoError(t, action.Execute(t.Context(), nil))
+
+			topics := func(c *MockMQTTClient) []string {
+				msgs := c.GetPublishedMessages()
+				out := make([]string, 0, len(msgs))
+				for _, m := range msgs {
+					out = append(out, m.topic)
+				}
+				return out
+			}
+			assert.ElementsMatch(t, tt.wantOld, topics(oldClient), "messages on the client the action was built with")
+			assert.ElementsMatch(t, tt.wantNew, topics(newClient), "messages on the replacement client")
+			if tt.wantOld == nil {
+				assert.Zero(t, oldClient.GetPublishCalls(), "no publish attempt on the old client")
+			}
+		})
+	}
 }
 
 // TestMqttAction_Execute_ClearsClipNameWhenExportFailed verifies that MqttAction
@@ -844,4 +932,110 @@ func TestMqttAction_Execute_SpeciesDetectionTimes_NilSource(t *testing.T) {
 	assert.True(t, present, "speciesFirstDetectedAt key must always be present (no omitempty)")
 	assert.Nil(t, jsonMap["speciesFirstDetectedAt"])
 	assert.Nil(t, jsonMap["speciesLastDetectedAt"])
+}
+
+// TestMqttAction_Execute_RetryReusesEventTrackerDecision verifies that a queue
+// retry of the same action reuses the first rate-limit decision: the retry
+// publishes (the tracker would otherwise suppress it inside the interval) and
+// does not re-stamp the tracker, while a different action for the same species
+// inside the interval is still suppressed.
+func TestMqttAction_Execute_RetryReusesEventTrackerDecision(t *testing.T) {
+	t.Parallel()
+
+	mockClient := NewMockMQTTClient()
+	mockClient.FailNextPublishes(1, fmt.Errorf("publish timeout"))
+
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	eventTracker := NewEventTracker(time.Hour)
+	det := testDetection()
+
+	newAction := func() *MqttAction {
+		return &MqttAction{
+			Settings:     settings,
+			Result:       det.Result,
+			MqttClient:   mockClient,
+			EventTracker: eventTracker,
+			DetectionCtx: &DetectionContext{},
+		}
+	}
+
+	first := newAction()
+	require.Error(t, first.Execute(t.Context(), nil), "first attempt fails")
+	require.NoError(t, first.Execute(t.Context(), nil), "retry succeeds")
+	assert.Len(t, mockClient.GetPublishedMessages(), 1, "the retry must publish")
+
+	require.NoError(t, newAction().Execute(t.Context(), nil))
+	assert.Len(t, mockClient.GetPublishedMessages(), 1,
+		"a second detection of the species inside the interval stays rate limited")
+}
+
+// defaultActionOfType builds the default actions of a detection with p and
+// returns the one of type T, failing the test when none was built.
+func defaultActionOfType[T Action](t *testing.T, p *Processor, settings *conf.Settings) T {
+	t.Helper()
+	det := testDetection()
+	for _, a := range p.getDefaultActions(&det, settings) {
+		if typed, ok := a.(T); ok {
+			return typed
+		}
+	}
+	var zero T
+	require.Failf(t, "action not built", "no %T in the default actions", zero)
+	return zero
+}
+
+// TestMqttAction_Execute_ResolvesSettingsOncePerAttempt verifies that one
+// Execute reads one settings snapshot: the resolver is called once, so the shared
+// publish and the per-source republish cannot mix values from two versions.
+func TestMqttAction_Execute_ResolvesSettingsOncePerAttempt(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+	settings.Realtime.MQTT.HomeAssistant.Enabled = true
+
+	client := NewMockMQTTClient()
+	det := testDetection()
+	var settingsCalls int
+	action := &MqttAction{
+		Result:       det.Result,
+		EventTracker: NewEventTracker(testEventTrackerInterval),
+		liveSettings: func() *conf.Settings {
+			settingsCalls++
+			return settings
+		},
+		liveClient: func() mqtt.Client { return client },
+	}
+
+	require.NoError(t, action.Execute(t.Context(), nil))
+	assert.Equal(t, 1, settingsCalls, "one settings snapshot per attempt")
+	assert.Equal(t, 2, client.GetPublishCalls(), "shared topic and per-source topic")
+}
+
+// TestMqttAction_Execute_NilResolverResultUsesCapturedSettings verifies that a
+// resolver returning no snapshot falls back to the settings the action was built
+// with instead of dereferencing nil.
+func TestMqttAction_Execute_NilResolverResultUsesCapturedSettings(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.MQTT.Enabled = true
+	settings.Realtime.MQTT.Topic = testMQTTTopic
+
+	client := NewMockMQTTClient()
+	det := testDetection()
+	action := &MqttAction{
+		Settings:     settings,
+		Result:       det.Result,
+		EventTracker: NewEventTracker(testEventTrackerInterval),
+		liveSettings: func() *conf.Settings { return nil },
+		liveClient:   func() mqtt.Client { return client },
+	}
+
+	require.NoError(t, action.Execute(t.Context(), nil))
+	assert.Equal(t, 1, client.GetPublishCalls(), "published with the captured settings")
 }

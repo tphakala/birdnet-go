@@ -106,7 +106,8 @@ func Supports(sampleRate, bitDepth, channels int) error {
 // the sink must be seekable. That is why this encodes to a real file rather
 // than streaming to an arbitrary writer. Like un-faststarted FFmpeg output, moov
 // therefore lands after the payload, so the file is not optimised for
-// progressive download; the FFmpeg export path produces the same layout.
+// progressive download; clip export produced the same layout back when it ran
+// on FFmpeg.
 //
 // ctx is honoured before the gain copy and the temp file are created but not
 // during encoding:

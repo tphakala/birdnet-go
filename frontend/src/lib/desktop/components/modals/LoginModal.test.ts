@@ -416,6 +416,47 @@ describe('LoginModal', () => {
       // Should not redirect to malicious endpoint (validation should block it)
       expect(mockLocation.href).toBe('');
     });
+
+    it('should keep the reverse-proxy base path on the OAuth redirect (issue #4147)', async () => {
+      // Home Assistant Ingress: the UI is served under /api/hassio_ingress/<token>/ui/...
+      const mockLocation = mockWindowLocation('/api/hassio_ingress/TOKEN/ui/dashboard');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          enabledProviders: ['google'],
+        },
+      });
+
+      const googleButton = screen.getByRole('button', { name: /continueWithGoogle/i });
+      await fireEvent.click(googleButton);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // The endpoint must carry the ingress prefix; without it the browser
+      // leaves the proxy path entirely and the request never reaches the app.
+      expect(mockLocation.href).toBe('/api/hassio_ingress/TOKEN/auth/google');
+    });
+
+    it('should leave the OAuth redirect unchanged for direct access (no proxy prefix)', async () => {
+      const mockLocation = mockWindowLocation('/ui/dashboard');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          enabledProviders: ['google'],
+        },
+      });
+
+      const googleButton = screen.getByRole('button', { name: /continueWithGoogle/i });
+      await fireEvent.click(googleButton);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockLocation.href).toBe('/auth/google');
+    });
   });
 
   describe('Focus Trap and Accessibility', () => {

@@ -220,7 +220,6 @@ realtime:
             enabled: true
             interval: 5
         source: plughw:1,0
-        soxPath: /usr/bin/sox
         streamTransport: auto
     birdweather:
         debug: false

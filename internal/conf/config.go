@@ -108,8 +108,6 @@ type AudioSettings struct {
 	FfmpegVersion   string              `yaml:"-" json:"ffmpegVersion,omitempty"`                               // ffmpeg version string, runtime value
 	FfmpegMajor     int                 `yaml:"-" json:"ffmpegMajor,omitempty"`                                 // ffmpeg major version number, runtime value
 	FfmpegMinor     int                 `yaml:"-" json:"ffmpegMinor,omitempty"`                                 // ffmpeg minor version number, runtime value
-	SoxPath         string              `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`                  // path to sox, runtime value
-	SoxAudioTypes   []string            `yaml:"-" json:"-"`                                                     // supported audio types of sox, runtime value
 	FfprobePath     string              `yaml:"-" json:"-"`                                                     // path to ffprobe, derived from ffmpeg path at runtime
 	StreamTransport string              `yaml:"streamtransport" json:"streamTransport"`                         // preferred transport for audio streaming: "auto", "sse", or "ws"
 	Export          ExportSettings      `yaml:"export" json:"export"`                                           // export settings
@@ -141,15 +139,6 @@ func (a *AudioSettings) FindSourceByID(sourceID string) *AudioSourceConfig {
 		}
 	}
 	return nil
-}
-
-// NeedsFfprobeWorkaround returns true if the current FFmpeg version requires
-// using ffprobe to get audio file length for spectrograms (FFmpeg 5.x bug).
-// FFmpeg 7.x and later have this issue fixed.
-func (a *AudioSettings) NeedsFfprobeWorkaround() bool {
-	// FFmpeg 5.x has a bug that requires using ffprobe for audio duration
-	// FFmpeg 7.x and later have this fixed
-	return a.FfmpegMajor == 5
 }
 
 // HasFfmpegVersion returns true if FFmpeg version information has been detected and populated.
@@ -307,13 +296,13 @@ const (
 	SpectrogramStyleScientific       = "scientific"
 )
 
-// Spectrogram dynamic range preset constants (dB values for Sox -z parameter).
+// Spectrogram dynamic range preset constants (dynamic range in dB).
 // Lower values increase contrast, making weak signals stand out better.
 // Higher values show more detail but with lower contrast.
 const (
 	SpectrogramDynamicRangeHighContrast = "80"  // High contrast - weak signals visible
 	SpectrogramDynamicRangeStandard     = "100" // Standard - balanced (default)
-	SpectrogramDynamicRangeExtended     = "120" // Extended - more detail, Sox default
+	SpectrogramDynamicRangeExtended     = "120" // Extended - more detail
 )
 
 // SpectrogramPreRender contains settings for spectrogram generation modes.
@@ -1704,6 +1693,26 @@ type Security struct {
 	// and a Forwarded header is not accepted. Hot-reloadable.
 	TrustedProxies []string     `yaml:"trustedproxies" json:"trustedProxies"`
 	PublicAccess   PublicAccess `yaml:"publicaccess" json:"publicAccess"` // features accessible without authentication
+
+	// PlainHTTPSessionClients lists the IP addresses of clients that reach the
+	// app directly over plain HTTP, for example another container calling
+	// http://birdnet-go:8080 while browsers use an HTTPS reverse proxy. Session
+	// cookies issued to these clients omit the Secure attribute so the clients can
+	// send them back; every other client keeps Secure whenever HTTPS is
+	// configured. Only exact addresses are accepted, not ranges. The match uses
+	// the connection's peer address, never forwarded headers, and applies only to
+	// requests that arrive without TLS and without reverse-proxy headers. Never
+	// list the address a reverse proxy or tunnel (such as cloudflared) connects
+	// from. With host networking or a native install, a proxy on the same host
+	// connects from loopback (127.0.0.1, ::1) or the host's own address, so do
+	// not list those when one runs there; with bridge networking and the proxy
+	// on the host, do not list the container network gateway. Give listed
+	// clients a fixed address so it cannot be reassigned: browser sessions
+	// through a proxy that terminates TLS without sending forwarding headers
+	// would otherwise lose Secure. Not shown in the web UI. Empty by default.
+	// Hot-reloadable.
+	PlainHTTPSessionClients []string `yaml:"plainhttpsessionclients" json:"plainHttpSessionClients"`
+
 	// PrivateMode, when true, requires the user to authenticate before any
 	// UI data is shown. Enforcement lives at the v2 API data layer, which
 	// returns 401 to unauthenticated requests; the public SPA shell is still
@@ -2154,16 +2163,19 @@ func (s *Settings) IsAuthProviderConfigured() bool {
 	return s.Security.BasicAuth.Enabled || len(s.GetEnabledOAuthProviders()) > 0
 }
 
+// randomSecretBytes is the number of random bytes in a GenerateRandomSecret
+// secret: 256 bits, which encode to 43 base64url characters.
+const randomSecretBytes = 32
+
 // GenerateRandomSecret generates a URL-safe base64 encoded random string
 // suitable for use as a client secret. The output is 43 characters long,
-// providing 256 bits of entropy. Returns an error if the system's
-// cryptographic random number generator fails.
-func GenerateRandomSecret() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("failed to generate random secret: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(bytes), nil
+// providing 256 bits of entropy. It cannot fail: crypto/rand.Read never
+// returns an error and crashes the program if the system's random source is
+// unavailable.
+func GenerateRandomSecret() string {
+	bytes := make([]byte, randomSecretBytes)
+	rand.Read(bytes)
+	return base64.RawURLEncoding.EncodeToString(bytes)
 }
 
 // GetWeatherProvider returns the configured provider and its settings as any.

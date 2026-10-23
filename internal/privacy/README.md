@@ -47,15 +47,12 @@ sanitized := privacy.SanitizeRTSPUrl(rtspURL)
 
 ### System Identification
 
-#### `GenerateSystemID() (string, error)`
+#### `GenerateSystemID() string`
 
 Creates a unique system identifier that is URL-safe and case-insensitive. Format: `XXXX-XXXX-XXXX` (14 characters total with hyphens).
 
 ```go
-id, err := privacy.GenerateSystemID()
-if err != nil {
-    // handle error
-}
+id := privacy.GenerateSystemID()
 // Result: "A1B2-C3D4-E5F6"
 ```
 
@@ -156,10 +153,7 @@ func main() {
     fmt.Println(cleanMsg) // "Connection failed to url-a1b2c3d4e5f6g7h8"
 
     // Generate system ID for telemetry
-    systemID, err := privacy.GenerateSystemID()
-    if err != nil {
-        panic(err)
-    }
+    systemID := privacy.GenerateSystemID()
     fmt.Println("System ID:", systemID) // "A1B2-C3D4-E5F6"
 }
 ```

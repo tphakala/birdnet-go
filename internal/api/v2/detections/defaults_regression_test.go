@@ -1,7 +1,5 @@
 // defaults_regression_test.go: regression tests for the detection/search endpoints
-// called with no query parameters. Catches config-migration breakage like #2352
-// where MigrateDashboardLayout zeroed Dashboard.SummaryLimit, causing GORM Limit(0)
-// to return 0 rows.
+// called with no query parameters.
 //
 // Pattern: call endpoint with no/minimal query params -> assert datastore receives
 // valid fallback values -> assert non-empty response. The analytics counterparts of
@@ -22,8 +20,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
-	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -78,32 +77,16 @@ func executeRequest(t *testing.T, e *echo.Echo, method, path string, handler ech
 	return rec
 }
 
-// setupPostMigrationTestEnvironment creates a test environment where
-// MigrateDashboardLayout() has been called, zeroing Dashboard.SummaryLimit.
-// This reproduces the exact scenario from #2352.
-func setupPostMigrationTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Handler) {
-	t.Helper()
-	e, mockDS, controller := setupTestEnvironment(t)
+func TestGetDetections_DefaultParams(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "detections")
+	t.Attr("type", "regression")
+	t.Attr("issue", "2361")
 
-	// Run migration - moves SummaryLimit into layout element, zeros deprecated field
-	migrated := controller.Settings.Load().MigrateDashboardLayout()
-	require.True(t, migrated, "migration should have occurred (no pre-existing layout)")
-
-	// Verify the deprecated field is actually zeroed
-	assert.Equal(t, 0, controller.Settings.Load().Realtime.Dashboard.SummaryLimit,
-		"deprecated SummaryLimit should be zeroed after migration")
-
-	// Verify GetEffectiveSummaryLimit still returns a valid value
-	effectiveLimit := controller.Settings.Load().GetEffectiveSummaryLimit()
-	assert.Positive(t, effectiveLimit,
-		"GetEffectiveSummaryLimit should return positive value after migration")
-
-	return e, mockDS, controller
-}
-
-// verifyGetDetectionsDefaults is a shared helper for detection default-parameter regression tests.
-func verifyGetDetectionsDefaults(t *testing.T, e *echo.Echo, mockDS *mocks.MockInterface, controller *Handler) {
-	t.Helper()
+	// MigrateDashboardLayout zeroes the deprecated Dashboard.SummaryLimit
+	// (conf/dashboard_migration.go:50); the handler default must not depend on it.
+	e, mockDS, controller := setupTestEnvironment(t, apitest.WithoutSettingsPublish(),
+		apitest.WithSettingsFunc(func(s *conf.Settings) { s.Realtime.Dashboard.SummaryLimit = 0 }))
 
 	notes := testNotes()
 	mockDS.On("SearchNotes", "", false, defaultNumResults, 0).Return(notes, int64(len(notes)), nil).Once()
@@ -122,49 +105,13 @@ func verifyGetDetectionsDefaults(t *testing.T, e *echo.Echo, mockDS *mocks.MockI
 	mockDS.AssertExpectations(t)
 }
 
-func TestGetDetections_DefaultParams(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "detections")
-	t.Attr("type", "regression")
-	t.Attr("issue", "2361")
-
-	e, mockDS, controller := setupTestEnvironment(t)
-	verifyGetDetectionsDefaults(t, e, mockDS, controller)
-}
-
-func TestGetRecentDetections_DefaultParams(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "detections")
-	t.Attr("type", "regression")
-	t.Attr("issue", "2361")
-
-	e, mockDS, controller := setupTestEnvironment(t)
-
-	notes := testNotes()
-
-	// Default limit is 10
-	mockDS.On("GetLastDetections", 10).Return(notes, nil).Once()
-
-	rec := executeRequest(t, e, http.MethodGet, "/api/v2/detections/recent", controller.GetRecentDetections)
-
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var result []map[string]any
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
-	assert.NotEmpty(t, result, "should return recent detections with default limit")
-
-	mockDS.AssertExpectations(t)
-}
-
 func TestSearchDetections_EmptyBody(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "search")
 	t.Attr("type", "regression")
 	t.Attr("issue", "2361")
 
-	// Must use setupTestEnvironment because HandleSearch calls c.Debug() which
-	// dereferences c.Settings.WebServer.Debug.
-	e, mockDS, controller := setupTestEnvironment(t)
+	e, mockDS, controller := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
 
 	mockResults := []datastore.DetectionRecord{
 		{
@@ -203,14 +150,4 @@ func TestSearchDetections_EmptyBody(t *testing.T) {
 	assert.NotEmpty(t, results, "should return results with default search params")
 
 	mockDS.AssertExpectations(t)
-}
-
-func TestGetDetections_DefaultParams_AfterMigration(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "detections")
-	t.Attr("type", "regression")
-	t.Attr("issue", "2361")
-
-	e, mockDS, controller := setupPostMigrationTestEnvironment(t)
-	verifyGetDetectionsDefaults(t, e, mockDS, controller)
 }

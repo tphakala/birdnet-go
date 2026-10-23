@@ -27,6 +27,27 @@ func FileExtension(format string) string {
 	return format
 }
 
+// exportFormats lists every format clip export can write, in the order
+// FormatForExtension tries them. FormatForExtension compares each against FileExtension, but the list itself
+// is kept by hand: a format added to FileExtension must be added here too.
+//
+//nolint:gochecknoglobals // immutable lookup table, never modified
+var exportFormats = [...]string{WAV, FLAC, MP3, AAC, Opus}
+
+// FormatForExtension is the inverse of FileExtension: it maps a clip file
+// extension, without the leading dot, back to the export format name that
+// writes it. The comparison ignores case. It returns ok=false for an empty or
+// unknown extension, including "aac", which FileExtension never produces
+// (AAC is stored as .m4a).
+func FormatForExtension(ext string) (format string, ok bool) {
+	for _, f := range exportFormats {
+		if strings.EqualFold(ext, FileExtension(f)) {
+			return f, true
+		}
+	}
+	return "", false
+}
+
 // MinBatSampleRate is the minimum source capture rate in Hz for bat detection and
 // audible bats playback: below it a recording cannot carry ultrasonic content.
 const MinBatSampleRate = 96000

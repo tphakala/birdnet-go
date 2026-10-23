@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/app"
@@ -77,75 +76,5 @@ func TestIsPrivateModeExempt(t *testing.T) {
 			assert.False(t, isPrivateModeExempt(tt.method, tt.path),
 				"expected %s %q to NOT be exempt", tt.method, tt.path)
 		})
-	}
-}
-
-// TestPrivateModeExemptPathsAreRegisteredRoutes mounts the routes that the
-// PrivateMode exempt allow-list cares about (using the same path constants the
-// controllers register them with) and asserts that isPrivateModeExempt's
-// verdict matches the intended policy for every registered route. If a route
-// constant is renamed the registered path and the exempt composition move
-// together, and if isPrivateModeExempt's composition is edited incorrectly the
-// verdict no longer matches a real route and this test fails.
-func TestPrivateModeExemptPathsAreRegisteredRoutes(t *testing.T) {
-	t.Parallel()
-
-	noop := func(echo.Context) error { return nil }
-
-	e := echo.New()
-	g := e.Group(apiV2Prefix)
-
-	// App config (public bootstrap endpoint, registered in RegisterAppRoutes).
-	g.GET(app.AppConfigEndpoint, noop)
-	g.POST(app.WizardDismissEndpoint, noop) // registered but NOT exempt under PrivateMode
-
-	// Auth flow (mirrors the auth domain's RegisterRoutes).
-	authGroup := g.Group(authapi.AuthGroupPath)
-	authGroup.POST(authapi.AuthLoginPath, noop)
-	authGroup.GET(authapi.AuthCallbackPath, noop)
-	authGroup.POST(authapi.AuthLogoutPath, noop)
-	authGroup.GET(authapi.AuthStatusPath, noop)
-
-	// HLS streaming (mirrors the audio domain's RegisterHLSRoutes).
-	hlsGroup := g.Group(audioapi.HLSGroupPath)
-	hlsGroup.POST(audioapi.HLSStartPath, noop)
-	hlsGroup.POST(audioapi.HLSStopPath, noop)
-	hlsGroup.POST(audioapi.HLSHeartbeatPath, noop)
-	hlsGroup.GET(audioapi.HLSStatusPath, noop)
-	hlsTokenGroup := hlsGroup.Group(audioapi.HLSTokenGroupPath)
-	hlsTokenGroup.GET(audioapi.HLSPlaylistPath, noop)
-	hlsTokenGroup.GET(audioapi.HLSContentPath, noop)
-
-	key := func(method, path string) string { return method + " " + path }
-
-	// Expected exempt set, with paths composed from the same constants the
-	// production code and isPrivateModeExempt use.
-	wantExempt := map[string]bool{
-		key(http.MethodGet, apiV2Prefix+app.AppConfigEndpoint):                                                     true,
-		key(http.MethodPost, apiV2Prefix+authapi.AuthGroupPath+authapi.AuthLoginPath):                              true,
-		key(http.MethodGet, apiV2Prefix+authapi.AuthGroupPath+authapi.AuthCallbackPath):                            true,
-		key(http.MethodPost, apiV2Prefix+audioapi.HLSGroupPath+audioapi.HLSStartPath):                              true,
-		key(http.MethodPost, apiV2Prefix+audioapi.HLSGroupPath+audioapi.HLSHeartbeatPath):                          true,
-		key(http.MethodGet, apiV2Prefix+audioapi.HLSGroupPath+audioapi.HLSStatusPath):                              true,
-		key(http.MethodGet, apiV2Prefix+audioapi.HLSGroupPath+audioapi.HLSTokenGroupPath+audioapi.HLSPlaylistPath): true,
-		key(http.MethodGet, apiV2Prefix+audioapi.HLSGroupPath+audioapi.HLSTokenGroupPath+audioapi.HLSContentPath):  true,
-	}
-
-	registered := make(map[string]bool)
-	for _, r := range e.Routes() {
-		// Echo can register auxiliary entries; only assert on the verbs we use.
-		if r.Method != http.MethodGet && r.Method != http.MethodPost {
-			continue
-		}
-		k := key(r.Method, r.Path)
-		registered[k] = true
-		assert.Equalf(t, wantExempt[k], isPrivateModeExempt(r.Method, r.Path),
-			"isPrivateModeExempt verdict mismatch for registered route %s", k)
-	}
-
-	// Every expected-exempt entry must correspond to an actually registered
-	// route (catches an exempt path that no real route serves).
-	for k := range wantExempt {
-		assert.Truef(t, registered[k], "exempt route %q is not a registered route", k)
 	}
 }

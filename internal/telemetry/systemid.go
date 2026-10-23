@@ -10,12 +10,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
-// GenerateSystemID creates a unique system identifier
-// Delegates to the privacy package for consistent implementation
-func GenerateSystemID() (string, error) {
-	return privacy.GenerateSystemID()
-}
-
 // File permission constants
 const (
 	// dirPermSecure is the permission for secure directories (owner rwx only)
@@ -48,10 +42,7 @@ func LoadOrCreateSystemID(configDir string) (string, error) {
 	}
 
 	// Generate new ID
-	id, err := GenerateSystemID()
-	if err != nil {
-		return "", err
-	}
+	id := privacy.GenerateSystemID()
 
 	// Save to file with secure permissions
 	if err := os.WriteFile(idFile, []byte(id), filePermSecure); err != nil {

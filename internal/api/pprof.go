@@ -170,8 +170,8 @@ func (s *Server) profilingGate() echo.MiddlewareFunc {
 // profilingTokenMatches compares the presented token against the configured one
 // in constant time.
 //
-// An empty configured token never matches, so an instance where token
-// generation failed refuses every request instead of accepting any.
+// An empty configured token never matches, so an instance that has no token
+// minted refuses every request instead of accepting any.
 func profilingTokenMatches(configured, presented string) bool {
 	if configured == "" || presented == "" {
 		return false

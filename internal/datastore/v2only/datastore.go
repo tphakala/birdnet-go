@@ -64,6 +64,9 @@ const (
 	// saveTransactionTimeout is the maximum duration for a Save transaction.
 	// This prevents indefinite lock holding during slow I/O operations.
 	saveTransactionTimeout = 30 * time.Second
+	// saveContributionsTimeout bounds the best-effort model contribution write that
+	// follows a committed Save, so a slow transaction cannot starve it of its budget.
+	saveContributionsTimeout = 30 * time.Second
 )
 
 // parseHour validates and parses an hour string to an integer.
@@ -835,6 +838,8 @@ func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []data
 // Save saves a note with its results atomically.
 // The detection and its predictions are saved in a single transaction to prevent
 // partial writes (e.g., detection saved but predictions failed).
+// Model contributions are written after the transaction commits, on a best-effort
+// basis: a failure to resolve or persist them is logged and does not fail the save.
 func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) error {
 	ctx := context.Background()
 
@@ -901,6 +906,11 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	}
 	if note.ClipName != "" {
 		det.ClipName = &note.ClipName
+		// The rate describes the clip file, so it is stored only with a clip;
+		// an unknown rate stays NULL rather than 0.
+		if note.ClipSampleRate > 0 {
+			det.ClipSampleRate = &note.ClipSampleRate
+		}
 	}
 	if !note.BeginTime.IsZero() {
 		bt := note.BeginTime.UnixMilli()
@@ -976,7 +986,26 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// downstream actions (MQTT, SSE) publish detectionId=0 (GitHub #2453).
 	note.ID = det.ID
 
+	contribCtx, cancelContribs := context.WithTimeout(ctx, saveContributionsTimeout)
+	defer cancelContribs()
+	ds.saveModelContributionsBestEffort(contribCtx, det.ID, note.ModelContributions)
+
 	return nil
+}
+
+// saveModelContributionsBestEffort resolves and persists model contributions for a
+// detection that has already committed. Contributions are supplementary metadata, so
+// a failure is logged and never rolls back or fails the detection save.
+func (ds *Datastore) saveModelContributionsBestEffort(ctx context.Context, detectionID uint, modelContribs map[string]detection.ResultModelContrib) {
+	contribs := ds.resolveModelContributions(ctx, modelContribs)
+	if len(contribs) == 0 {
+		return
+	}
+	if err := ds.detection.SaveModelContributions(ctx, detectionID, contribs); err != nil && ds.log != nil {
+		ds.log.Warn("v2 model contributions save failed",
+			logger.Uint64("detection_id", uint64(detectionID)),
+			logger.Error(err))
+	}
 }
 
 // buildDedupedPredictions deduplicates predictions by label_id, keeping the highest confidence
@@ -1003,6 +1032,45 @@ func buildDedupedPredictions(detectionID uint, results []datastore.Results, pred
 	return preds
 }
 
+// resolveModelContributions resolves each contributing AI model in the map and
+// deduplicates by database ModelID (summing hit counts and keeping the maximum
+// confidence) to guard against idx_contrib_detection_model unique constraint violations.
+func (ds *Datastore) resolveModelContributions(ctx context.Context, modelContribs map[string]detection.ResultModelContrib) []*entities.DetectionModelContribution {
+	if len(modelContribs) == 0 {
+		return nil
+	}
+
+	seen := make(map[uint]int, len(modelContribs))
+	contribs := make([]*entities.DetectionModelContribution, 0, len(modelContribs))
+	for _, contrib := range modelContribs {
+		m := contrib.Model.WithDefaults()
+		modelEntity, err := ds.model.GetOrCreate(ctx, m.Name, m.Version, m.Variant,
+			detection.ResolveModelType(m.Name, m.Version), m.ClassifierPath)
+		if err != nil {
+			if ds.log != nil {
+				ds.log.Warn("failed to resolve model for contribution",
+					logger.String("model_name", m.Name),
+					logger.Error(err))
+			}
+			continue
+		}
+		if idx, exists := seen[modelEntity.ID]; exists {
+			contribs[idx].HitCount += contrib.HitCount
+			if contrib.MaxConfidence > contribs[idx].MaxConfidence {
+				contribs[idx].MaxConfidence = contrib.MaxConfidence
+			}
+			continue
+		}
+		seen[modelEntity.ID] = len(contribs)
+		contribs = append(contribs, &entities.DetectionModelContribution{
+			ModelID:       modelEntity.ID,
+			HitCount:      contrib.HitCount,
+			MaxConfidence: contrib.MaxConfidence,
+		})
+	}
+	return contribs
+}
+
 // Delete deletes a note by ID.
 func (ds *Datastore) Delete(id string) error {
 	ctx := context.Background()
@@ -1027,6 +1095,14 @@ func (ds *Datastore) Get(id string) (datastore.Note, error) {
 	}
 
 	return ds.detectionToNote(det), nil
+}
+
+// clipSampleRateValue returns the stored clip sample rate, or 0 when it is NULL.
+func clipSampleRateValue(rate *int) int {
+	if rate == nil {
+		return 0
+	}
+	return *rate
 }
 
 // detectionToNote converts a v2 Detection to a legacy Note, including the runtime-only
@@ -1143,6 +1219,7 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		Longitude:           lon,
 		ClipName:            clipName,
 		SpectrogramClipName: spectrogramClipName,
+		ClipSampleRate:      clipSampleRateValue(det.ClipSampleRate),
 		BeginTime:           beginTime,
 		EndTime:             endTime,
 		ProcessingTime:      processingTime,
@@ -1287,6 +1364,7 @@ func (ds *Datastore) detectionToRecord(det *entities.Detection) datastore.Detect
 		Unlikely:        det.Unlikely,
 		HasAudio:        hasAudio,
 		SpectrogramOnly: spectrogramOnly,
+		ClipSampleRate:  clipSampleRateValue(det.ClipSampleRate),
 		Device:          device,
 		Source:          source,
 		TimeOfDay:       timeOfDay,
@@ -1831,6 +1909,17 @@ func (ds *Datastore) GetNoteKeptSpectrogram(noteID string) (clipName, modelType 
 	return clipName, modelType, nil
 }
 
+// RecordClipSampleRate forwards to the v2 detection repository, which holds the
+// guarded UPDATE and runs it under ctx.
+func (ds *Datastore) RecordClipSampleRate(ctx context.Context, noteID uint, clipName string, rate int) error {
+	return ds.detection.RecordClipSampleRate(ctx, noteID, clipName, rate)
+}
+
+// FillClipSampleRate forwards to the v2 detection repository, see RecordClipSampleRate.
+func (ds *Datastore) FillClipSampleRate(ctx context.Context, noteID uint, clipName string, rate int) (bool, error) {
+	return ds.detection.FillClipSampleRate(ctx, noteID, clipName, rate)
+}
+
 // DeleteNoteClipPath deletes the clip path for a note.
 func (ds *Datastore) DeleteNoteClipPath(noteID string) error {
 	ctx := context.Background()
@@ -2326,8 +2415,7 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 		StartTime: startTime,
 		EndTime:   endTime,
 	}
-	_, count, err := ds.detection.Search(ctx, filters)
-	return count, err
+	return ds.detection.CountSearch(ctx, filters)
 }
 
 // CountHourlyDetections counts detections for a specific hour.
@@ -2349,8 +2437,7 @@ func (ds *Datastore) CountHourlyDetections(date, hour string, duration int) (int
 		StartTime: &startTime,
 		EndTime:   &endTime,
 	}
-	_, count, err := ds.detection.Search(ctx, filters)
-	return count, err
+	return ds.detection.CountSearch(ctx, filters)
 }
 
 // SearchDetections performs a detection search with filters.
@@ -3291,7 +3378,16 @@ func (ds *Datastore) GetSpeciesDetectionDatesInPeriod(ctx context.Context, start
 var scientificNameLikeEscaper = strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `!_`)
 
 // labelIDsForScientificName returns the "d.label_id IN (...)" clause and its
-// arguments for a scientific-name history lookup.
+// arguments for a scientific-name history lookup. Labels are matched as described
+// on labelMatchForScientificName.
+func labelIDsForScientificName(tablePrefix, scientificName string) (clause string, args []any) {
+	match, args := labelMatchForScientificName(scientificName)
+	return fmt.Sprintf("d.label_id IN (SELECT id FROM %slabels WHERE %s)", tablePrefix, match), args
+}
+
+// labelMatchForScientificName returns a predicate on an unqualified labels
+// scientific_name column, and its arguments, selecting the labels that belong to
+// scientificName in a history lookup.
 //
 // A bare scientific name matches exactly, or a legacy concatenated label stored
 // as "ScientificName_CommonName". The "!_%" suffix is "literal underscore
@@ -3302,13 +3398,13 @@ var scientificNameLikeEscaper = strings.NewReplacer(`!`, `!!`, `%`, `!%`, `_`, `
 // distinct class "Car_passing_by"; the legacy concatenated form of such a name
 // is no longer matched. Every other name, including a single-token class like
 // "Dog" that BirdNET also emits as "Dog_Dog", keeps the prefix match.
-func labelIDsForScientificName(tablePrefix, scientificName string) (clause string, args []any) {
+func labelMatchForScientificName(scientificName string) (predicate string, args []any) {
 	if nonbird.IsMultiWordClassPrefix(scientificName) {
-		return fmt.Sprintf("d.label_id IN (SELECT id FROM %slabels WHERE scientific_name = ?)", tablePrefix), []any{scientificName}
+		return "scientific_name = ?", []any{scientificName}
 	}
 	// Escape LIKE metacharacters with '!' (see scientificNameLikeEscaper).
 	escaped := scientificNameLikeEscaper.Replace(scientificName)
-	return fmt.Sprintf("d.label_id IN (SELECT id FROM %slabels WHERE scientific_name = ? OR scientific_name LIKE ? ESCAPE '!')", tablePrefix), []any{scientificName, escaped + `!_%`}
+	return "scientific_name = ? OR scientific_name LIKE ? ESCAPE '!'", []any{scientificName, escaped + `!_%`}
 }
 
 // GetSpeciesLastDetectionDateBefore returns the last detection date before the given date.
@@ -3318,23 +3414,28 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 		return "", fmt.Errorf("invalid before date format: %w", err)
 	}
 
-	// Bucket dates by the configured timezone, anchored to the before date.
-	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(before.Unix()))
-
 	var result struct {
-		LastSeenDate string `gorm:"column:last_seen_date"`
+		LastDetectedAt *int64 `gorm:"column:last_detected_at"`
 	}
 
+	// Find the latest non-false-positive detection time per matching label, then the
+	// latest of those. Correlating on one label at a time lets the (label_id,
+	// detected_at) index be walked backwards from the cutoff and stop at the first
+	// qualifying row; aggregating over "label_id IN (...)" would read every earlier
+	// detection of the species, which is most of the table for a dominant species.
 	prefix := ds.manager.TablePrefix()
-	labelIDsClause, labelIDsArgs := labelIDsForScientificName(prefix, scientificName)
+	latestForLabel := fmt.Sprintf(
+		"SELECT d.detected_at FROM %sdetections d LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id"+
+			" WHERE d.label_id = l.id AND d.detected_at < ? AND (dr.verified IS NULL OR dr.verified != ?)"+
+			" ORDER BY d.detected_at DESC LIMIT 1",
+		prefix, prefix)
+	labelMatch, labelMatchArgs := labelMatchForScientificName(scientificName)
 	query := ds.manager.DB().WithContext(ctx).
-		Table(prefix+"detections d").
-		Select(fmt.Sprintf("COALESCE(MAX(%s), '') as last_seen_date", dateExpr)).
-		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
-		Where("d.detected_at < ?", before.Unix()).
-		// See labelIDsForScientificName for the matching rule.
-		Where(labelIDsClause, labelIDsArgs...).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
+		Table(prefix+"labels l").
+		Select(fmt.Sprintf("MAX((%s)) AS last_detected_at", latestForLabel),
+			before.Unix(), string(entities.VerificationFalsePositive)).
+		// See labelMatchForScientificName for the matching rule.
+		Where(labelMatch, labelMatchArgs...)
 
 	if err := query.Scan(&result).Error; err != nil {
 		return "", errors.New(err).
@@ -3346,13 +3447,20 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 			Build()
 	}
 
-	return result.LastSeenDate, nil
+	if result.LastDetectedAt == nil {
+		return "", nil
+	}
+
+	// Bucket the date by the configured timezone, anchored to the before date: the
+	// same fixed-offset calendar date detectionDateExpr computes in SQL.
+	offset := int64(ds.zoneOffsetSeconds(before.Unix()))
+	return time.Unix(*result.LastDetectedAt+offset, 0).UTC().Format(time.DateOnly), nil
 }
 
 // GetSpeciesFirstAndLastDetectionTimeBefore returns the earliest and most-recent
 // detection times for a species that occurred strictly before `before`.
 // Either/both may be nil when there is no prior detection. The name is matched
-// as described on labelIDsForScientificName.
+// as described on labelMatchForScientificName.
 func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Context, scientificName string, before time.Time) (first, last *time.Time, err error) {
 	var result struct {
 		FirstDetectedAt *int64 `gorm:"column:first_detected_at"`
@@ -3361,14 +3469,24 @@ func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Conte
 
 	prefix := ds.manager.TablePrefix()
 	labelIDsClause, labelIDsArgs := labelIDsForScientificName(prefix, scientificName)
+	priorDetections := func(aggregate string) *gorm.DB {
+		return ds.manager.DB().
+			Table(prefix+"detections d").
+			Select(aggregate).
+			Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
+			Where("d.detected_at < ?", before.Unix()).
+			// See labelMatchForScientificName for the matching rule.
+			Where(labelIDsClause, labelIDsArgs...).
+			Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
+	}
+
+	// Each bound gets its own scalar subquery. SQLite answers a lone MIN() or
+	// MAX() by seeking to one end of the (label_id, detected_at) index, but
+	// with both in one SELECT it scans every matching row, which takes over a
+	// second for a species with hundreds of thousands of detections.
 	query := ds.manager.DB().WithContext(ctx).
-		Table(prefix+"detections d").
-		Select("MIN(d.detected_at) as first_detected_at, MAX(d.detected_at) as last_detected_at").
-		Joins(fmt.Sprintf("LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id", prefix)).
-		Where("d.detected_at < ?", before.Unix()).
-		// See labelIDsForScientificName for the matching rule.
-		Where(labelIDsClause, labelIDsArgs...).
-		Where("(dr.verified IS NULL OR dr.verified != ?)", string(entities.VerificationFalsePositive))
+		Raw("SELECT (?) AS first_detected_at, (?) AS last_detected_at",
+			priorDetections("MIN(d.detected_at)"), priorDetections("MAX(d.detected_at)"))
 
 	if err := query.Scan(&result).Error; err != nil {
 		return nil, nil, errors.New(err).
@@ -3394,16 +3512,22 @@ func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Conte
 
 // GetSpeciesDiversityData returns unique species count per day.
 func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]datastore.DailyAnalyticsData, error) {
-	// Validate date formats before using in SQL
+	// Validate date formats before using in SQL. The parsed values are UTC midnights of the
+	// requested calendar days, used below to derive detected_at bounds.
+	var startDay, endDay time.Time
 	if startDate != "" {
-		if _, err := time.Parse(time.DateOnly, startDate); err != nil {
+		t, err := time.Parse(time.DateOnly, startDate)
+		if err != nil {
 			return nil, fmt.Errorf("invalid start date format (expected YYYY-MM-DD): %w", err)
 		}
+		startDay = t
 	}
 	if endDate != "" {
-		if _, err := time.Parse(time.DateOnly, endDate); err != nil {
+		t, err := time.Parse(time.DateOnly, endDate)
+		if err != nil {
 			return nil, fmt.Errorf("invalid end date format (expected YYYY-MM-DD): %w", err)
 		}
+		endDay = t
 	}
 
 	var results []datastore.DailyAnalyticsData
@@ -3411,9 +3535,8 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	// Bucket dates by the configured timezone, anchored to a query boundary: the start of the
 	// window, falling back to the end for a left-open range (and only then to the current offset
 	// for a fully open range), so an end-only historical query buckets stably regardless of run
-	// time. The SELECT, GROUP BY, and BETWEEN filter all reuse this single expression so they stay
-	// internally consistent; the user's date strings are interpreted in the same zone the dates
-	// are bucketed in.
+	// time. The SELECT and GROUP BY share this single expression, and the range filter below is
+	// derived from the same offset, so a row is in range exactly when its bucketed date is.
 	var refEpoch int64
 	if startDate != "" {
 		if t, perr := time.ParseInLocation(time.DateOnly, startDate, ds.timezone); perr == nil {
@@ -3425,7 +3548,8 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 			refEpoch = t.Unix()
 		}
 	}
-	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(refEpoch))
+	offset := ds.zoneOffsetSeconds(refEpoch)
+	dateExpr := ds.detectionDateExpr(offset)
 
 	// Build query to count distinct species per day, excluding false positives
 	prefix := ds.manager.TablePrefix()
@@ -3438,14 +3562,17 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 		Group(dateExpr).
 		Order("date")
 
-	// Apply date range filters
-	switch {
-	case startDate != "" && endDate != "":
-		query = query.Where(fmt.Sprintf("%s BETWEEN ? AND ?", dateExpr), startDate, endDate)
-	case startDate != "":
-		query = query.Where(fmt.Sprintf("%s >= ?", dateExpr), startDate)
-	case endDate != "":
-		query = query.Where(fmt.Sprintf("%s <= ?", dateExpr), endDate)
+	// Apply the date range as bounds on the raw detected_at column so the detected_at index
+	// can narrow the scan; a filter on the date expression could not use any index.
+	// dateExpr is the UTC calendar date of detected_at+offset, so a detection's bucketed date
+	// is on or after startDay exactly when detected_at >= startDay-offset, and on or before
+	// endDay exactly when detected_at < (endDay+1 day)-offset. Using the same fixed offset as
+	// dateExpr keeps the filter and the buckets in agreement, including across DST changes.
+	if startDate != "" {
+		query = query.Where("d.detected_at >= ?", startDay.Unix()-int64(offset))
+	}
+	if endDate != "" {
+		query = query.Where("d.detected_at < ?", endDay.AddDate(0, 0, 1).Unix()-int64(offset))
 	}
 
 	// Execute query

@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}} pie iestatītās {configured} s pārklāšanās, slodze pārsniedz šīs ierīces izmērīto jaudu, tāpēc audio tiek analizēts ar {effective} s pārklāšanos. Tāpēc viltus pozitīvo filtrs var prasīt mazāk apstiprinājumu. Jūsu saglabātie iestatījumi nemainās; skatiet Iestatījumi > Analīze.",
         "cadenceOverloadedTitle": "Šī ierīce netiek līdzi audio analīzei",
         "cadenceOverloadedMessage": "Kad darbojas {models, plural, zero {# modeļu} one {# modelis} other {# modeļi}} ar {sources, plural, zero {# audio avotiem} one {# audio avotu} other {# audio avotiem}}, slodze pārsniedz šīs ierīces izmērīto jaudu pat bez pārklāšanās, tāpēc analīze var atpalikt un noteikšanas var tikt izlaistas. Iespējojiet mazāk modeļu vai audio avotu vai izvēlieties ātrāku modeļa variantu."
+      },
+      "storage": {
+        "notPersistentTitle": "Dati tiks zaudēti, kad konteiners tiks izveidots no jauna",
+        "notPersistentMessage": "Šie ceļi atrodas krātuvē, kas tiek dzēsta, kad konteiners tiek izveidots no jauna, piemēram, atjauninot attēlu: {paths}. Piesaistiet tiem sējumu vai resursdatora direktoriju sava konteinera konfigurācijā.",
+        "anonymousVolumeTitle": "Dati tiek glabāti anonīmā konteinera sējumā",
+        "anonymousVolumeMessage": "Šie ceļi atrodas anonīmos sējumos, ko konteinera izpildlaiks izveidoja, jo neviens sējums nebija piesaistīts: {paths}. No jauna startēts konteiners, piemēram, ar docker run pēc attēla atjaunināšanas, saņem jaunus tukšus sējumus, tāpēc dati šķiet zaudēti. Piesaistiet tiem nosauktu sējumu vai resursdatora direktoriju."
       }
     },
     "loading": "Ielādē paziņojumus..."
@@ -1576,7 +1582,7 @@
           "restartTitle": "Nepieciešama restartēšana",
           "restartBody": "Restartējiet lietojumprogrammu, lai pārslēgtos uz V2 datubāzi. Mantotās datubāzes tīrīšana būs pieejama pēc restartēšanas.",
           "fallbackError": "Ierakstu skaita neatbilstība starp mantoto un V2 datubāzēm. Daži ieraksti, iespējams, nav pareizi migrēti.",
-          "migrateInfo": "Migrācija pārsūtīs {count} ierakstus no mantotās datubāzes uz jauno V2 shēmu. Dubultrakstīšanas režīms nodrošina nulles datu zudumu migrācijas laikā.",
+          "migrateInfo": "Migrācija pārsūtīs {count} ierakstus no mantotās datubāzes uz jauno V2 shēmu. Migrācijas laikā saglabātās jaunās atpazīšanas tiek kopētas arī uz jauno datubāzi.",
           "sourceLegacy": "Avots (mantotā)",
           "targetV2": "Mērķis (V2)",
           "recordsLabel": "Ieraksti",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "Varat turpināt normāli izmantot sistēmu, kamēr migrācija darbojas fonā.",
-          "dual_write": "Migrācija noris. Jūsu dati ir drošībā - visas jaunās atpazīšanas tiek saglabātas abās datubāzēs.",
+          "dual_write": "Migrācija noris. Jūsu dati ir drošībā - jaunās atpazīšanas tiek saglabātas pašreizējā datubāzē un migrācijas laikā tiek kopētas uz jauno datubāzi.",
           "migrating": "Kopē jūsu esošās atpazīšanas uz jauno datubāzi.",
           "validating": "Pārbauda, vai visi ieraksti tika pareizi nokopēti. Gandrīz gatavs!",
           "cutover": "Pārslēdzas uz jauno datubāzi. Tas aizņem tikai brīdi.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Vislabākais vājiem signāliem. Putnu balsis skaidri izceļas no fona trokšņa. Ieteicams zinātniskajiem/pelēktoņu stiliem.",
                   "standard": "Noklusējuma sabalansēts iestatījums. Labs lielākajai daļai lietojumu.",
-                  "extended": "Redzamas vairāk detaļas, bet zemāks kontrasts. SoX noklusējuma vērtība."
+                  "extended": "Redzamas vairāk detaļas, bet zemāks kontrasts."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "Kas ir iekļauts ziņojumā:",
           "applicationLogs": "**Lietojumprogrammas žurnāli** - nesenie kļūdu un atkļūdošanas ieraksti",
           "configuration": "**Konfigurācija** - jūsu iestatījumi ar noņemtiem sensitīviem datiem",
-          "systemInfo": "**Sistēmas informācija** - OS versija, atmiņa un izpildlaika detaļas",
+          "systemInfo": "**Sistēmas informācija** - OS versija, atmiņa, aparatūra, pievienotās USB ierīces un skaņas kartes, kā arī izpildlaika detaļas",
           "notIncluded": "**NAV iekļauts** - audio faili, putnu noteikšanas vai personiskie dati"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "min",
             "helpText": "Novērst atkārtotus paziņojumus par to pašu sugu šajā laika periodā. Iestatiet 0, lai atspējotu."
           }
+        },
+        "rulesNotice": {
+          "message": "Push paziņojumus par noteikšanām sūta brīdinājumu noteikumi cilnē Noteikumi. Iebūvētie noteikšanas noteikumi paziņo tikai lietotnē. Lai saņemtu push paziņojumus, pievienojiet darbību {pushAction} noteikumam {ruleName} vai izveidojiet noteikumu notikumam {eventName} ar ticamības nosacījumu un atdzišanas periodu.",
+          "previousFilters": "Brīdinājumu noteikumi neizmanto šeit iestatītās vērtības Minimālā ticamība ({confidence}%) un Sugas pauze ({minutes} min).",
+          "openRules": "Atvērt Noteikumus"
         },
         "noProviders": "Nav konfigurētu nodrošinātāju",
         "noProvidersDescription": "Pievienojiet nodrošinātāju, lai sāktu saņemt push paziņojumus",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Augšupielādēt noteikšanas uz BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg nav atrasts",
-          "message": "Lūdzu, instalējiet FFmpeg, lai iespējotu FLAC kodēšanas atbalstu. BirdWeather pārtrauc WAV augšupielādes par labu saspiestiem FLAC audio failiem."
-        },
         "enable": "Iespējot BirdWeather augšupielādes",
         "token": {
           "label": "BirdWeather tokens",
@@ -5153,6 +5160,7 @@
       "loop": "Pārslēgt cilpu",
       "player": "Audio atskaņotājs",
       "autoplayBlocked": "Noklikšķiniet, lai atskaņotu (automātiskā atskaņošana bloķēta)",
+      "hlsLoadFailed": "Neizdevās ielādēt audio atskaņotāju, lūdzu, pārlādējiet lapu un mēģiniet vēlreiz",
       "hlsNotSupported": "HLS atskaņošana šajā pārlūkā netiek atbalstīta",
       "streamStarting": "Tiek startēta audio straume...",
       "levelFor": "Audio līmenis avotam {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "Nederīgs JSON",
       "invalidEscalation": "Eskalācijas soļi nav derīgi",
       "engineUnavailable": "Brīdinājumu dzinis nav pieejams"
+    },
+    "insights": {
+      "v2Required": "Analīzei nepieciešama uzlabotā (v2) datubāze"
     },
     "detection": {
       "invalidDate": "Nederīgs {paramName} formāts, izmantojiet YYYY-MM-DD"

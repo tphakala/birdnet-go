@@ -198,7 +198,6 @@ export interface AudioSettings {
   sources: AudioSourceConfig[];
   source: string; // legacy single source, kept for backward compat
   ffmpegPath?: string;
-  soxPath?: string;
   streamTransport?: string;
   export: ExportSettings;
   soundLevel: SoundLevelSettings;
@@ -750,7 +749,7 @@ export type SpectrogramMode = 'auto' | 'prerender' | 'user-requested';
 // Spectrogram style preset options
 export type SpectrogramStyle = 'default' | 'scientific_dark' | 'high_contrast_dark' | 'scientific';
 
-// Spectrogram dynamic range preset options (dB values for Sox -z parameter)
+// Spectrogram dynamic range preset options (dynamic range in dB)
 // Lower values = higher contrast (weak signals visible), higher values = more detail
 export type SpectrogramDynamicRange = '80' | '100' | '120';
 
@@ -1011,7 +1010,6 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
         sources: [],
         source: '',
         ffmpegPath: '',
-        soxPath: '',
         streamTransport: 'auto',
         export: {
           type: 'wav',

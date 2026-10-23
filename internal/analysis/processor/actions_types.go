@@ -27,7 +27,8 @@ const (
 	MQTTPublishTimeout = 10 * time.Second
 
 	// CompositeActionTimeout is the default timeout for each action in a composite action.
-	// After audio export was decoupled, CompositeAction only runs Database, SSE, and MQTT
+	// After audio export was decoupled, CompositeAction only runs the Database save, the
+	// step that enqueues MQTT, and SSE
 	// which are fast operations even on slow hardware.
 	CompositeActionTimeout = 10 * time.Second
 
@@ -44,7 +45,7 @@ const (
 // DetectionContext provides thread-safe shared state for detection pipeline actions.
 // This enables downstream actions (MQTT, SSE, SaveAudio) to access data set by
 // upstream actions (Database) without polling, when used with CompositeAction for
-// sequential execution.
+// sequential execution. An action enqueued by a composite step shares it too.
 //
 // The context is created once per detection in getActionsForItem() and shared among
 // all actions that need access to the database-assigned detection ID.
@@ -60,7 +61,7 @@ type DetectionContext struct {
 	ClipSaved atomic.Bool
 
 	// birdImage holds the species image resolved once per detection, so the
-	// Database, SSE and MQTT actions of a single CompositeAction do not each
+	// Database, SSE and MQTT actions of a single detection do not each
 	// repeat the lookup. Three independent lookups per detection meant three
 	// SQLite reads for a cold species, on a path whose whole purpose is to stay
 	// off slow work. A stored empty BirdImage is a resolved verdict of "nothing
@@ -160,7 +161,14 @@ type SaveAudioAction struct {
 	species string
 	// clipTags is the safe, display-ready detection metadata embedded as FLAC
 	// tags; see clip_tags.go for what may and may not be carried.
-	clipTags      clipTagMeta
+	clipTags clipTagMeta
+	// clipRates is the detection repository the corrected clip sample rate is
+	// written through after the encode; nil only for a processor built without a
+	// repository (tests).
+	clipRates clipSampleRateRecorder
+	// plannedRate is the clip sample rate stored with the detection at save time
+	// (plannedClipSampleRate); the action corrects it when the encode wrote another.
+	plannedRate   int
 	NoteID        uint              // Note ID for correlation logging with pre-renderer
 	PreRenderer   PreRendererSubmit // Injected from processor
 	DetectionCtx  *DetectionContext // Shared context to signal ClipSaved to late consumers
@@ -204,15 +212,28 @@ type PreRendererSubmit interface {
 }
 
 type BirdWeatherAction struct {
-	Settings      *conf.Settings
-	Result        detection.Result // Domain model (single source of truth)
-	pcmData       []byte
-	BwClient      *birdweather.BwClient
-	EventTracker  *EventTracker
-	RetryConfig   jobqueue.RetryConfig // Configuration for retry behavior
+	// Settings is the snapshot captured when the action was built; used only
+	// when liveSettings is nil or returns nil.
+	Settings *conf.Settings
+	Result   detection.Result // Domain model (single source of truth)
+	pcmData  []byte
+	// BwClient is the client captured when the action was built; used only when
+	// liveClient is nil.
+	BwClient     *birdweather.BwClient
+	EventTracker *EventTracker
+	// RetryConfig is fixed for the life of the job; a settings change applies
+	// to detections made after it.
+	RetryConfig jobqueue.RetryConfig
+	// liveSettings returns the settings snapshot in effect when an attempt runs,
+	// so a queued retry follows settings changes; nil uses Settings.
+	liveSettings func() *conf.Settings
+	// liveClient returns the BirdWeather client in effect when an attempt runs,
+	// so a retry after a reconfigure uses the new client; nil uses BwClient.
+	liveClient    func() *birdweather.BwClient
 	Description   string
-	CorrelationID string     // Detection correlation ID for log tracking
-	mu            sync.Mutex // Protect concurrent access to Result and pcmData
+	CorrelationID string            // Detection correlation ID for log tracking
+	mu            sync.Mutex        // Protect concurrent access to Result and pcmData
+	rateLimit     rateLimitDecision // Event-tracker verdict of the first attempt, reused by queue retries
 }
 
 // speciesDetectionTimeSource is the minimal datastore capability MqttAction needs to
@@ -223,21 +244,100 @@ type speciesDetectionTimeSource interface {
 	GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Context, scientificName string, before time.Time) (first, last *time.Time, err error)
 }
 
+// clipSampleRateRecorder is the single detection repository method SaveAudioAction
+// needs to correct the stored clip sample rate after the encode.
+type clipSampleRateRecorder interface {
+	RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error
+}
+
+// rateLimitDecision caches the event-tracker verdict of an action's first
+// attempt. EventTracker stamps the species at check time, so a queue retry that
+// asked again would either be suppressed inside the species interval or re-stamp
+// the tracker and suppress a later detection. Retries reuse the first verdict
+// instead. Callers must hold the owning action's mutex.
+type rateLimitDecision struct {
+	checked bool
+	allowed bool
+}
+
+// allow runs check on the first call and returns that verdict on every later call.
+func (d *rateLimitDecision) allow(check func() bool) bool {
+	if !d.checked {
+		d.allowed = check()
+		d.checked = true
+	}
+	return d.allowed
+}
+
 type MqttAction struct {
+	// Settings is the snapshot captured when the action was built; used only
+	// when liveSettings is nil or returns nil.
 	Settings       *conf.Settings
 	Result         detection.Result // Domain model (single source of truth)
 	BirdImageCache *imageprovider.BirdImageCache
-	MqttClient     mqtt.Client
-	EventTracker   *EventTracker
-	DetectionCtx   *DetectionContext    // Shared context from DatabaseAction
-	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
-	Description    string
-	CorrelationID  string     // Detection correlation ID for log tracking
-	mu             sync.Mutex // Protect concurrent access to Result
+	// MqttClient is the client captured when the action was built; used only
+	// when liveClient is nil.
+	MqttClient   mqtt.Client
+	EventTracker *EventTracker
+	DetectionCtx *DetectionContext // Shared context from DatabaseAction
+	// RetryConfig is fixed for the life of the job; a settings change applies
+	// to detections made after it.
+	RetryConfig jobqueue.RetryConfig
+	// liveSettings returns the settings snapshot in effect when an attempt runs,
+	// so a queued retry follows settings changes; nil uses Settings.
+	liveSettings func() *conf.Settings
+	// liveClient returns the MQTT client in effect when an attempt runs, so a
+	// retry after a reconfigure uses the new client; nil uses MqttClient.
+	liveClient    func() mqtt.Client
+	Description   string
+	CorrelationID string            // Detection correlation ID for log tracking
+	mu            sync.Mutex        // Protect concurrent access to Result
+	rateLimit     rateLimitDecision // Event-tracker verdict of the first attempt, reused by queue retries
 	// SpeciesTimeSource provides the species' first-ever and most-recent previous
 	// detection times for the MQTT payload. Nil when the database is disabled or
 	// the backend does not support the query; the payload then carries null fields.
 	SpeciesTimeSource speciesDetectionTimeSource
+}
+
+// attemptSettings returns the settings snapshot for one attempt: the live
+// snapshot when a resolver is set and returns one, else the captured Settings.
+func (a *MqttAction) attemptSettings() *conf.Settings {
+	if a.liveSettings != nil {
+		if s := a.liveSettings(); s != nil {
+			return s
+		}
+	}
+	return a.Settings
+}
+
+// attemptClient returns the MQTT client for one attempt. A set resolver is
+// authoritative even when it returns nil (the client was removed): falling back
+// to the captured client would publish on a disconnected one.
+func (a *MqttAction) attemptClient() mqtt.Client {
+	if a.liveClient != nil {
+		return a.liveClient()
+	}
+	return a.MqttClient
+}
+
+// attemptSettings returns the settings snapshot for one attempt: the live
+// snapshot when a resolver is set and returns one, else the captured Settings.
+func (a *BirdWeatherAction) attemptSettings() *conf.Settings {
+	if a.liveSettings != nil {
+		if s := a.liveSettings(); s != nil {
+			return s
+		}
+	}
+	return a.Settings
+}
+
+// attemptClient returns the BirdWeather client for one attempt. A set resolver
+// is authoritative even when it returns nil (the client was removed).
+func (a *BirdWeatherAction) attemptClient() *birdweather.BwClient {
+	if a.liveClient != nil {
+		return a.liveClient()
+	}
+	return a.BwClient
 }
 
 type UpdateRangeFilterAction struct {
@@ -252,8 +352,7 @@ type SSEAction struct {
 	Result         detection.Result // Domain model (single source of truth)
 	BirdImageCache *imageprovider.BirdImageCache
 	EventTracker   *EventTracker
-	DetectionCtx   *DetectionContext    // Shared context from DatabaseAction (provides database ID)
-	RetryConfig    jobqueue.RetryConfig // Configuration for retry behavior
+	DetectionCtx   *DetectionContext // Shared context from DatabaseAction (provides database ID)
 	Description    string
 	CorrelationID  string     // Detection correlation ID for log tracking
 	mu             sync.Mutex // Protect concurrent access to Result
@@ -270,7 +369,7 @@ type SSEAction struct {
 //
 // Key Features:
 //   - Sequential execution: Actions execute in order, each waiting for the previous to complete
-//   - Configurable timeout: Per-action timeout can be overridden (default: 30 seconds)
+//   - Configurable timeout: Per-action timeout can be overridden (default: CompositeActionTimeout, 10 seconds)
 //   - Context support: Actions implementing ContextAction get proper context propagation
 //   - Panic recovery: Panics in individual actions are caught and converted to errors
 //   - Thread-safe: Mutex protects the Actions slice during access

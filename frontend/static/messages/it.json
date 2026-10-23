@@ -522,6 +522,12 @@
         "cadenceCappedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} con la sovrapposizione configurata di {configured} s supera la capacità misurata di questo dispositivo, quindi l'audio viene analizzato con {effective} s di sovrapposizione. Per questo il filtro falsi positivi può richiedere meno conferme. Le impostazioni salvate non cambiano; vedi Impostazioni > Analisi.",
         "cadenceOverloadedTitle": "Questo dispositivo non riesce a tenere il passo con l'analisi audio",
         "cadenceOverloadedMessage": "Eseguire {models, plural, one {# modello} other {# modelli}} su {sources, plural, one {# sorgente audio} other {# sorgenti audio}} supera la capacità misurata di questo dispositivo anche senza sovrapposizione, quindi l'analisi può accumulare ritardo e alcuni rilevamenti possono andare persi. Attiva meno modelli o sorgenti audio, oppure scegli una variante del modello più veloce."
+      },
+      "storage": {
+        "notPersistentTitle": "I dati andranno persi quando il container viene ricreato",
+        "notPersistentMessage": "Questi percorsi si trovano su uno spazio di archiviazione che viene eliminato quando il container viene ricreato, ad esempio durante un aggiornamento dell'immagine: {paths}. Associa loro un volume o una directory dell'host nella configurazione del container.",
+        "anonymousVolumeTitle": "I dati sono archiviati in un volume anonimo del container",
+        "anonymousVolumeMessage": "Questi percorsi si trovano in volumi anonimi creati dal runtime del container perché non era stato associato alcun volume: {paths}. Un container avviato da zero, ad esempio con docker run dopo un aggiornamento dell'immagine, riceve nuovi volumi vuoti, quindi i dati sembrano persi. Associa loro un volume con nome o una directory dell'host."
       }
     },
     "loading": "Caricamento notifiche..."
@@ -1576,7 +1582,7 @@
           "restartTitle": "Riavvio necessario",
           "restartBody": "Riavvia l'applicazione per passare al database V2. La pulizia del database legacy sarà disponibile dopo il riavvio.",
           "fallbackError": "Discrepanza nel conteggio dei record tra i database legacy e V2. Alcuni record potrebbero non essere stati migrati correttamente.",
-          "migrateInfo": "La migrazione trasferirà {count} record dal database legacy al nuovo schema V2. La modalità di scrittura doppia garantisce zero perdita di dati durante la migrazione.",
+          "migrateInfo": "La migrazione trasferirà {count} record dal database legacy al nuovo schema V2. Anche i nuovi rilevamenti salvati durante la migrazione vengono copiati nel nuovo database.",
           "sourceLegacy": "Sorgente (Legacy)",
           "targetV2": "Destinazione (V2)",
           "recordsLabel": "Record",
@@ -1628,7 +1634,7 @@
         },
         "notes": {
           "in_progress": "Puoi continuare a usare il sistema normalmente mentre la migrazione viene eseguita in background.",
-          "dual_write": "Migrazione in corso. I tuoi dati sono al sicuro - tutti i nuovi rilevamenti vengono salvati in entrambi i database.",
+          "dual_write": "Migrazione in corso. I tuoi dati sono al sicuro - i nuovi rilevamenti vengono salvati nel database attuale e copiati nel nuovo database durante la migrazione.",
           "migrating": "Copia dei rilevamenti esistenti nel nuovo database.",
           "validating": "Verifica che tutti i record siano stati copiati correttamente. Quasi fatto!",
           "cutover": "Passaggio al nuovo database. Richiede solo un momento.",
@@ -2726,7 +2732,7 @@
                 "descriptions": {
                   "highContrast": "Migliore per segnali deboli. I richiami degli uccelli risaltano chiaramente dal rumore di fondo. Raccomandato per stili scientifici/scala di grigi.",
                   "standard": "Impostazione bilanciata predefinita. Buona per la maggior parte dei casi d'uso.",
-                  "extended": "Più dettagli visibili ma contrasto inferiore. Valore predefinito SoX."
+                  "extended": "Più dettagli visibili ma contrasto inferiore."
                 }
               },
               "enabled": {
@@ -2828,7 +2834,7 @@
           "title": "Cosa è incluso nel rapporto:",
           "applicationLogs": "**Log applicazione** - Errori recenti e informazioni debug",
           "configuration": "**Configurazione** - Le tue impostazioni con dati sensibili rimossi",
-          "systemInfo": "**Informazioni sistema** - Versione OS, memoria e dettagli runtime",
+          "systemInfo": "**Informazioni sistema** - Versione OS, memoria, hardware, dispositivi USB collegati e schede audio, e dettagli runtime",
           "notIncluded": "**NON incluso** - File audio, rilevamenti uccelli o dati personali"
         },
         "userMessage": {
@@ -2981,6 +2987,11 @@
             "unit": "min",
             "helpText": "Previene notifiche ripetute per la stessa specie entro questa finestra temporale. Imposta a 0 per disabilitare."
           }
+        },
+        "rulesNotice": {
+          "message": "Le notifiche push dei rilevamenti provengono dalle regole di allerta nella scheda Regole. Le regole di rilevamento predefinite notificano solo nell'app. Per ricevere notifiche push, aggiungi l'azione {pushAction} alla regola {ruleName}, oppure crea una regola per l'evento {eventName} con una condizione di confidenza e un tempo di attesa.",
+          "previousFilters": "Le regole di allerta non usano le impostazioni Confidenza Minima ({confidence} %) e Raffreddamento Specie ({minutes} min) definite qui.",
+          "openRules": "Apri Regole"
         },
         "noProviders": "Nessun fornitore configurato",
         "noProvidersDescription": "Aggiungi un fornitore per iniziare a ricevere notifiche push",
@@ -3285,10 +3296,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Carica rilevamenti su BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg non rilevato",
-          "message": "Installa FFmpeg per abilitare supporto codifica FLAC, BirdWeather sta deprecando i caricamenti WAV in favore di file audio FLAC compressi."
-        },
         "enable": "Abilita Caricamenti BirdWeather",
         "token": {
           "label": "Token BirdWeather",
@@ -5153,6 +5160,7 @@
       "loop": "Attiva/disattiva ripetizione",
       "player": "Lettore audio",
       "autoplayBlocked": "Clicca per riprodurre (riproduzione automatica bloccata)",
+      "hlsLoadFailed": "Impossibile caricare il lettore audio, ricarica la pagina e riprova",
       "hlsNotSupported": "La riproduzione HLS non è supportata in questo browser",
       "streamStarting": "Avvio dello stream audio...",
       "levelFor": "Livello audio per {source}",
@@ -5387,6 +5395,9 @@
       "invalidJSON": "JSON non valido",
       "invalidEscalation": "I passaggi di escalation non sono validi",
       "engineUnavailable": "Il motore di avviso non è disponibile"
+    },
+    "insights": {
+      "v2Required": "Le analisi richiedono il database avanzato (v2)"
     },
     "detection": {
       "invalidDate": "Formato {paramName} non valido, usare AAAA-MM-GG"

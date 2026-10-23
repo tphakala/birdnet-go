@@ -1,7 +1,6 @@
 // Derived from SoX src/spectrogram.c, (c) 2008-9 robs@users.sourceforge.net,
 // licensed under the GNU Lesser General Public License version 2.1 or later.
-// Ported via github.com/tphakala/go-spectrogram ebf0c64 sox/chrome.go. Changes
-// made in October 2026: drawing goes through the Surface interface so the caller
+// Changes made in October 2026: drawing goes through the Surface interface so the caller
 // supplies glyph shapes, the footer comment and title are not drawn, and gain and
 // autogain are fixed at zero.
 
@@ -29,8 +28,8 @@ type Surface interface {
 type ChromeParams struct {
 	// Cols and Rows are the raster size in pixels.
 	Cols, Rows int
-	// SampleRate is the rate in Hz of the analysed signal; the frequency axis
-	// runs from DC to half of it.
+	// SampleRate is the rate in Hz the frequency axis is drawn for: it runs from
+	// DC to half of it. It can be lower than the rate of the analysed signal.
 	SampleRate int
 	// Seconds is the time the raster spans.
 	Seconds float64

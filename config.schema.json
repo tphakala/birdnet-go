@@ -45,10 +45,6 @@
           "type": "string",
           "description": "path to ffmpeg, runtime value"
         },
-        "soxpath": {
-          "type": "string",
-          "description": "path to sox, runtime value"
-        },
         "streamtransport": {
           "type": "string",
           "description": "preferred transport for audio streaming: \"auto\", \"sse\", or \"ws\""
@@ -2147,6 +2143,13 @@
         "publicaccess": {
           "$ref": "#/$defs/PublicAccess",
           "description": "features accessible without authentication"
+        },
+        "plainhttpsessionclients": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "description": "PlainHTTPSessionClients lists the IP addresses of clients that reach the\napp directly over plain HTTP, for example another container calling\nhttp://birdnet-go:8080 while browsers use an HTTPS reverse proxy. Session\ncookies issued to these clients omit the Secure attribute so the clients can\nsend them back; every other client keeps Secure whenever HTTPS is\nconfigured. Only exact addresses are accepted, not ranges. The match uses\nthe connection's peer address, never forwarded headers, and applies only to\nrequests that arrive without TLS and without reverse-proxy headers. Never\nlist the address a reverse proxy or tunnel (such as cloudflared) connects\nfrom. With host networking or a native install, a proxy on the same host\nconnects from loopback (127.0.0.1, ::1) or the host's own address, so do\nnot list those when one runs there; with bridge networking and the proxy\non the host, do not list the container network gateway. Give listed\nclients a fixed address so it cannot be reassigned: browser sessions\nthrough a proxy that terminates TLS without sending forwarding headers\nwould otherwise lose Secure. Not shown in the web UI. Empty by default.\nHot-reloadable."
         },
         "privatemode": {
           "type": "boolean",

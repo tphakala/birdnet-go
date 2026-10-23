@@ -6,117 +6,18 @@ import (
 	"fmt"
 	"math"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
-
-// MockClock is a mock implementation of the Clock interface for testing
-type MockClock struct {
-	mu            sync.Mutex
-	currentTime   time.Time
-	afterChannels []mockAfterChannel
-}
-
-type mockAfterChannel struct {
-	triggerTime time.Time
-	ch          chan time.Time
-}
-
-// NewMockClock creates a new MockClock with the specified initial time
-func NewMockClock(initialTime time.Time) *MockClock {
-	return &MockClock{
-		currentTime:   initialTime,
-		afterChannels: make([]mockAfterChannel, 0),
-	}
-}
-
-// Now returns the current mock time
-func (m *MockClock) Now() time.Time {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.currentTime
-}
-
-// Sleep is a no-op in the mock clock
-func (m *MockClock) Sleep(d time.Duration) {
-	// No-op in mock clock
-}
-
-// After returns a channel that will receive the current time after the specified duration
-func (m *MockClock) After(d time.Duration) <-chan time.Time {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	ch := make(chan time.Time, 1)
-	triggerTime := m.currentTime.Add(d)
-	m.afterChannels = append(m.afterChannels, mockAfterChannel{
-		triggerTime: triggerTime,
-		ch:          ch,
-	})
-
-	return ch
-}
-
-// Advance advances the mock clock by the specified duration and triggers any after channels
-func (m *MockClock) Advance(d time.Duration) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.currentTime = m.currentTime.Add(d)
-
-	// Trigger any after channels that have reached their time
-	var remainingChannels []mockAfterChannel
-	for _, ac := range m.afterChannels {
-		if !m.currentTime.Before(ac.triggerTime) {
-			// This channel should be triggered
-			select {
-			case ac.ch <- m.currentTime:
-				// Channel triggered
-			default:
-				// Channel already closed or full
-			}
-		} else {
-			// This channel should not be triggered yet
-			remainingChannels = append(remainingChannels, ac)
-		}
-	}
-
-	m.afterChannels = remainingChannels
-}
-
-// Set sets the mock clock to the specified time and triggers any after channels
-func (m *MockClock) Set(t time.Time) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	m.currentTime = t
-
-	// Trigger any after channels that have reached their time
-	var remainingChannels []mockAfterChannel
-	for _, ac := range m.afterChannels {
-		if !m.currentTime.Before(ac.triggerTime) {
-			// This channel should be triggered
-			select {
-			case ac.ch <- m.currentTime:
-				// Channel triggered
-			default:
-				// Channel already closed or full
-			}
-		} else {
-			// This channel should not be triggered yet
-			remainingChannels = append(remainingChannels, ac)
-		}
-	}
-
-	m.afterChannels = remainingChannels
-}
 
 // MockAction implements the Action interface for testing
 type MockAction struct {
@@ -523,12 +424,47 @@ func TestRetryExhaustion(t *testing.T) {
 	assert.True(t, jobFailed, "Job should have failed permanently after exhausting retries")
 }
 
+// TestEnqueue_DisabledRetryMeansSingleAttempt verifies that a RetryConfig with
+// Enabled false never retries, even when MaxRetries is non-zero.
+func TestEnqueue_DisabledRetryMeansSingleAttempt(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	queue := setupTestQueue(t, 100, false)
+	defer teardownTestQueue(t, queue)
+
+	action := &MockAction{
+		ExecuteFunc: func(data any) error {
+			return errors.NewStd("simulated failure")
+		},
+	}
+
+	const staleMaxRetries = 5
+	config := RetryConfig{
+		Enabled:      false,
+		MaxRetries:   staleMaxRetries,
+		InitialDelay: 1 * time.Millisecond,
+		MaxDelay:     10 * time.Millisecond,
+		Multiplier:   1.2,
+	}
+
+	job, err := queue.Enqueue(ctx, action, &TestData{ID: "disabled-retry"}, config)
+	require.NoError(t, err)
+	assert.Equal(t, 1, job.MaxAttempts, "disabled retry must allow exactly one attempt")
+
+	require.Eventually(t, func() bool {
+		queue.ProcessImmediately(ctx)
+		return queue.GetStats().FailedJobs == 1
+	}, DefaultTestTimeout, 10*time.Millisecond, "job should fail after its single attempt")
+
+	assert.Equal(t, 1, action.GetExecuteCount(), "action must not be retried")
+	assert.Equal(t, 0, queue.GetStats().RetryAttempts, "no retry may be scheduled")
+}
+
 // TestRetryBackoff tests that the retry backoff mechanism works correctly
 func TestRetryBackoff(t *testing.T) {
-	// TODO: This test could be improved by using a mock clock implementation
-	// that allows precise control over time, rather than relying on real time
-	// and sleep durations. This would make the test more reliable and faster.
-	// See the Clock interface and MockClock implementation for a potential approach.
+	// This test asserts counts and final stats only; the delays between
+	// executions are pinned by TestRetryBackoff_FollowsConfiguredSchedule.
 
 	// Create a context for manual control
 	ctx := t.Context()
@@ -647,6 +583,102 @@ func TestRetryBackoff(t *testing.T) {
 		// We're manually controlling the retry timing, so we can't make direct assertions about the delays
 		// Instead, just log them for information
 		t.Logf("Manual retry delays: %v", delays)
+	}
+}
+
+// TestRetryBackoff_FollowsConfiguredSchedule pins the wait before each retry:
+// the first retry waits InitialDelay, each later one multiplies by Multiplier
+// (with +-10% jitter), and MaxDelay caps the result. It runs on synctest virtual
+// time so the gaps are exact up to the processing tick.
+func TestRetryBackoff_FollowsConfiguredSchedule(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const (
+			tick         = 10 * time.Millisecond
+			initialDelay = time.Second
+			maxDelay     = 5 * time.Second
+			maxRetries   = 4
+			jitterLow    = 0.9
+			jitterHigh   = 1.1
+		)
+
+		queue := NewJobQueueWithOptions(100, false)
+		queue.SetProcessingInterval(tick)
+		queue.StartWithContext(t.Context())
+
+		var mu sync.Mutex
+		var executions []time.Time
+		action := &MockAction{
+			ExecuteFunc: func(data any) error {
+				mu.Lock()
+				executions = append(executions, time.Now())
+				mu.Unlock()
+				return errors.NewStd("simulated failure")
+			},
+		}
+
+		_, err := queue.Enqueue(t.Context(), action, &TestData{ID: "schedule"}, RetryConfig{
+			Enabled:      true,
+			MaxRetries:   maxRetries,
+			InitialDelay: initialDelay,
+			MaxDelay:     maxDelay,
+			Multiplier:   2.0,
+		})
+		require.NoError(t, err)
+
+		// Enough virtual time for 1s + 2s + 4s + 5s of retry waits plus jitter.
+		time.Sleep(30 * time.Second)
+		synctest.Wait()
+
+		mu.Lock()
+		got := slices.Clone(executions)
+		mu.Unlock()
+		require.Len(t, got, maxRetries+1, "initial attempt plus every retry")
+
+		// Gap k is the wait before retry k. The fourth raw delay (8s) exceeds
+		// MaxDelay even at the lowest jitter, so the cap always binds.
+		wantBase := []time.Duration{initialDelay, 2 * initialDelay, 4 * initialDelay}
+		for i, base := range wantBase {
+			gap := got[i+1].Sub(got[i])
+			assert.GreaterOrEqual(t, gap, time.Duration(jitterLow*float64(base)), "gap before retry %d", i+1)
+			assert.LessOrEqual(t, gap, time.Duration(jitterHigh*float64(base))+tick, "gap before retry %d", i+1)
+		}
+		cappedGap := got[maxRetries].Sub(got[maxRetries-1])
+		assert.GreaterOrEqual(t, cappedGap, maxDelay, "capped gap before retry %d", maxRetries)
+		assert.LessOrEqual(t, cappedGap, maxDelay+tick, "capped gap before retry %d", maxRetries)
+
+		assert.Equal(t, 1, queue.GetStats().FailedJobs)
+
+		require.NoError(t, queue.Stop())
+	})
+}
+
+// TestCalculateBackoffDelay_ExponentClamp pins that a non-positive failed
+// attempt count behaves like the first failure instead of shrinking the delay.
+func TestCalculateBackoffDelay_ExponentClamp(t *testing.T) {
+	const (
+		initialDelay = time.Second
+		maxDelay     = time.Hour
+		jitterLow    = 0.9
+		jitterHigh   = 1.1
+	)
+	config := RetryConfig{InitialDelay: initialDelay, MaxDelay: maxDelay, Multiplier: 2.0}
+
+	tests := []struct {
+		name          string
+		failedAttempt int
+		want          time.Duration
+	}{
+		{"negative", -1, initialDelay},
+		{"zero", 0, initialDelay},
+		{"first failure", 1, initialDelay},
+		{"second failure", 2, 2 * initialDelay},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := calculateBackoffDelay(config, tt.failedAttempt, &RealClock{})
+			assert.GreaterOrEqual(t, got, time.Duration(jitterLow*float64(tt.want)))
+			assert.LessOrEqual(t, got, time.Duration(jitterHigh*float64(tt.want)))
+		})
 	}
 }
 
@@ -954,62 +986,125 @@ func TestDropOldestJob(t *testing.T) {
 	assert.Equal(t, 3, stats.SuccessfulJobs, "Successful jobs should be 3")
 }
 
-// TestHangingJobTimeout tests that hanging jobs are properly timed out
-func TestHangingJobTimeout(t *testing.T) {
-	// Create a new job queue
-	queue := setupTestQueue(t, 100, false)
-	defer teardownTestQueue(t, queue)
+// overrunAction ignores its context, like BirdWeatherAction. Its first start
+// runs firstAttempt; every later start returns nil at once. It records the
+// virtual time of each start.
+type overrunAction struct {
+	mu           sync.Mutex
+	starts       []time.Time
+	firstAttempt func() error
+}
 
-	// Create a mock action that hangs indefinitely
-	action := &MockAction{
-		ExecuteTimeout: true, // This will cause the action to hang
+func (a *overrunAction) Execute(_ context.Context, _ any) error {
+	a.mu.Lock()
+	a.starts = append(a.starts, time.Now())
+	first := len(a.starts) == 1
+	a.mu.Unlock()
+	if first {
+		return a.firstAttempt()
+	}
+	return nil
+}
+
+func (a *overrunAction) GetDescription() string { return "overrun action" }
+
+func (a *overrunAction) startTimes() []time.Time {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return slices.Clone(a.starts)
+}
+
+// TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns pins that a job never
+// has two attempts running at once: after an attempt overruns the job timeout
+// the queue waits for it before starting the next one, credits a late success,
+// and fails the job after the ceiling when the attempt never returns.
+func TestTimeoutOverrun_StartsNoSecondAttemptWhileFirstRuns(t *testing.T) {
+	const (
+		tick       = 10 * time.Millisecond
+		lateReturn = 45 * time.Second // after the 30s job timeout
+	)
+
+	tests := []struct {
+		name        string
+		firstResult error // returned after lateReturn; ignored when neverReturn
+		neverReturn bool
+		noRetry     bool          // retry disabled, so the overrunning attempt is the only one
+		retryDelay  time.Duration // InitialDelay; zero means time.Second
+		wantStarts  int
+		wantOK      int
+		wantFailed  int
+	}{
+		{name: "late success", wantStarts: 1, wantOK: 1},
+		{name: "late failure", firstResult: errors.NewStd("late failure"), wantStarts: 2, wantOK: 1},
+		{name: "never returns", neverReturn: true, wantStarts: 1, wantFailed: 1},
+		// The only attempt overruns, so the job fails at the timeout and a late
+		// success must not be credited.
+		{name: "only attempt returns late", noRetry: true, wantStarts: 1, wantFailed: 1},
+		// The retry is not due for 30 minutes, yet the ceiling still applies.
+		{name: "never returns with long backoff", neverReturn: true, retryDelay: 30 * time.Minute, wantStarts: 1, wantFailed: 1},
 	}
 
-	// Create test data
-	data := &TestData{ID: "hanging-job"}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				release := make(chan struct{}, 1)
+				defer close(release) // lets a hung attempt exit even when an assertion aborts the test
+				action := &overrunAction{firstAttempt: func() error {
+					if tt.neverReturn {
+						<-release
+						return nil
+					}
+					time.Sleep(lateReturn)
+					return tt.firstResult
+				}}
 
-	// Create retry config
-	config := RetryConfig{
-		Enabled:      true,
-		MaxRetries:   1,
-		InitialDelay: 10 * time.Millisecond,
-		MaxDelay:     100 * time.Millisecond,
-		Multiplier:   2.0,
+				queue := NewJobQueueWithOptions(100, false)
+				queue.SetProcessingInterval(tick)
+				queue.StartWithContext(t.Context())
+
+				retryDelay := tt.retryDelay
+				if retryDelay == 0 {
+					retryDelay = time.Second
+				}
+				_, err := queue.Enqueue(t.Context(), action, &TestData{ID: "overrun"}, RetryConfig{
+					Enabled:      !tt.noRetry,
+					MaxRetries:   2,
+					InitialDelay: retryDelay,
+					MaxDelay:     max(time.Minute, retryDelay),
+					Multiplier:   2.0,
+				})
+				require.NoError(t, err)
+
+				// Past the 30s timeout, the late return and, for the hung
+				// attempt, the ceiling.
+				time.Sleep(abandonedAttemptCeiling + DefaultJobExecutionTimeout + time.Minute)
+				synctest.Wait()
+
+				starts := action.startTimes()
+				require.Len(t, starts, tt.wantStarts, "attempt starts")
+				if tt.wantStarts == 2 {
+					assert.GreaterOrEqual(t, starts[1].Sub(starts[0]), lateReturn,
+						"second attempt must not start before the first returned")
+				}
+				stats := queue.GetStats()
+				assert.Equal(t, tt.wantOK, stats.SuccessfulJobs, "successful jobs")
+				assert.Equal(t, tt.wantFailed, stats.FailedJobs, "failed jobs")
+				assert.Zero(t, stats.PendingJobs, "terminal job must leave the queue")
+
+				// A hung attempt must not block shutdown.
+				require.NoError(t, queue.StopWithTimeout(time.Second))
+
+				// An attempt that returns after its job already failed changes nothing.
+				if tt.neverReturn {
+					release <- struct{}{}
+					synctest.Wait()
+					after := queue.GetStats()
+					assert.Equal(t, tt.wantOK, after.SuccessfulJobs, "successful jobs after the late return")
+					assert.Equal(t, tt.wantFailed, after.FailedJobs, "failed jobs after the late return")
+				}
+			})
+		})
 	}
-
-	// Create a done channel to signal when the test is complete
-	done := make(chan struct{})
-
-	// Enqueue the job in a goroutine so we don't block the test
-	go func() {
-		// Enqueue the job
-		job, err := queue.Enqueue(t.Context(), action, data, config)
-		assert.NoError(t, err, "Failed to enqueue job")
-		assert.NotNil(t, job, "Job should not be nil")
-
-		// Signal that the job has been enqueued
-		close(done)
-	}()
-
-	// Wait for the job to be enqueued
-	waitForChannel(t, done, ShortTestTimeout, "Timed out waiting for job to be enqueued")
-
-	// Wait for the processing ticker to pick the job up and start it. The action
-	// increments its execute count before hanging, so poll for that instead of
-	// sleeping a fixed 2s that can be missed under CI load.
-	require.Eventually(t, func() bool {
-		return action.GetExecuteCount() == 1
-	}, DefaultTestTimeout, 10*time.Millisecond, "hanging job should be picked up and started")
-
-	// The job should be running at this point
-	// We can't directly check the job status, but we can check that the action was executed
-	assert.Equal(t, 1, action.GetExecuteCount(), "Action should have been executed once")
-
-	// We can't wait for the full 30-second timeout in a unit test,
-	// so we'll just verify that the timeout mechanism exists by checking the code
-
-	// In a real-world scenario, the job would eventually time out after 30 seconds,
-	// and the error would be recorded in the job's LastError field
 }
 
 // TestContextCancellation tests that jobs are properly cancelled when the context is cancelled

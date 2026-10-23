@@ -1,47 +1,65 @@
-# Svelte + Vite
+# BirdNET-Go Frontend
 
-This template should help get you started developing with Svelte in Vite.
+The web UI of BirdNET-Go: a Svelte 5 single page application (runes, TypeScript, Tailwind CSS v4) built with Vite. It is a plain Svelte SPA, not SvelteKit: routing is done client-side in `src/App.svelte` and the navigation store (see [ROUTES.md](ROUTES.md)). The production build in `frontend/dist` is embedded into the Go binary (`embed.go`) and served by the Go server under `/ui/`, with assets under `/ui/assets/`. The UI talks to the backend through the `/api/v2/` endpoints; startup configuration such as the CSRF token and the security state comes from `GET /api/v2/app/config`.
 
-## Recommended IDE Setup
+The UI targets desktop and tablet only. Phone layouts are out of scope and are not tested or fixed.
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
+## Development
 
-## Need an official Svelte framework?
+Run the commands from the repository root with [Task](https://taskfile.dev). Task installs the npm dependencies on demand (`task frontend-install`).
 
-Check out [SvelteKit](https://github.com/sveltejs/kit#readme), which is also powered by Vite. Deploy anywhere with its serverless-first approach and adapt to various platforms, with out of the box support for TypeScript, SCSS, and Less, and easily-added support for mdsvex, GraphQL, PostCSS, Tailwind CSS, and more.
+| Command               | Purpose                                                                                |
+| --------------------- | -------------------------------------------------------------------------------------- |
+| `task frontend-watch` | Rebuild `frontend/dist` on every change (`vite build --watch`)                         |
+| `task dev_server`     | Run the Go backend with hot reload through `air` (see `.air.toml`), with Go files only |
+| `task frontend-dev`   | Start the Vite dev server with HMR on port 5173                                        |
+| `task frontend-build` | Type-check and build the production bundle                                             |
+| `task dev`            | Print the development workflow options                                                 |
 
-## Technical considerations
+There are two ways to work on the UI:
 
-**Why use this over SvelteKit?**
+1. **Watch mode, served by Go.** Run `task frontend-watch` in one terminal and `task dev_server` (or `./bin/birdnet-go realtime`) in another, then open `http://localhost:8080`. When `frontend/dist` exists on disk next to the working directory, the Go server serves the UI from disk instead of the embedded copy, so a rebuild is picked up without recompiling Go. `air` ignores the `frontend` directory.
+2. **Vite dev server.** Run the backend as above, then `task frontend-dev` and open `http://localhost:5173`. Vite proxies `/api` to `http://localhost:8080`.
 
-- It brings its own routing solution which might not be preferable for some users.
-- It is first and foremost a framework that just happens to use Vite under the hood, not a Vite app.
+Without Task, the same scripts run from `frontend/`: `npm run dev`, `npm run build`, `npm run build -- --watch`.
 
-This template contains as little as possible to get started with Vite + Svelte, while taking into account the developer experience with regards to HMR and intellisense. It demonstrates capabilities on par with the other `create-vite` templates and is a good starting point for beginners dipping their toes into a Vite + Svelte project.
+## Tests and checks
 
-Should you later need the extended capabilities and extensibility provided by SvelteKit, the template has been structured similarly to SvelteKit so that it is easy to migrate.
+Run these from `frontend/` (the Task names are in brackets).
 
-**Why `global.d.ts` instead of `compilerOptions.types` inside `jsconfig.json` or `tsconfig.json`?**
+| Command                                         | Purpose                                                        |
+| ----------------------------------------------- | -------------------------------------------------------------- |
+| `npm test` [`task frontend-test`]               | Vitest unit and component tests                                |
+| `npm run check:all` [`task frontend-lint`]      | Prettier, ESLint, Stylelint, `svelte-check` and ast-grep rules |
+| `npm run typecheck` [`task frontend-typecheck`] | TypeScript and Svelte checks only                              |
+| `npm run test:a11y`                             | Accessibility tests                                            |
+| `npm run test:e2e`                              | Playwright end-to-end tests (see `tests/README.md`)            |
+| `task frontend-quality`                         | Auto-fix, then checks, tests and build                         |
 
-Setting `compilerOptions.types` shuts out all other types not explicitly listed in the configuration. Using triple-slash references keeps the default TypeScript setting of accepting type information from the entire workspace, while also adding `svelte` and `vite/client` type information.
+Translation checks are `npm run i18n:validate` and `npm run generate:i18n-types:check`.
 
-**Why include `.vscode/extensions.json`?**
+## Where things live
 
-Other templates indirectly recommend extensions via the README, but this file allows VS Code to prompt the user to install the recommended extension upon opening the project.
+| Path                                                                 | Contents                                                                                                                                                                                  |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/App.svelte`, `src/main.js`                                      | Entry points, client-side route table and page loading                                                                                                                                    |
+| `src/lib/desktop/`                                                   | The tablet and desktop UI: `layouts/`, `views/` (top level pages), `features/` (analytics, dashboard, detections, import-export, live-stream, settings, system, wizard) and `components/` |
+| `src/lib/components/`                                                | Shared primitives                                                                                                                                                                         |
+| `src/lib/api/`, `src/lib/auth/`, `src/lib/stores/`, `src/lib/utils/` | API helpers, auth, Svelte stores and utilities                                                                                                                                            |
+| `src/lib/i18n/`                                                      | Translation runtime and generated key types                                                                                                                                               |
+| `src/lib/telemetry/`                                                 | Frontend error reporting                                                                                                                                                                  |
+| `static/messages/`                                                   | Translation files, one JSON file per locale                                                                                                                                               |
+| `tests/`                                                             | Playwright end-to-end tests                                                                                                                                                               |
+| `tools/`                                                             | Screenshot tooling                                                                                                                                                                        |
+| `rules/`                                                             | ast-grep rule sets used by `npm run ast:all`                                                                                                                                              |
 
-**Why enable `checkJs` in the JS template?**
+## Guidelines
 
-It is likely that most cases of changing variable types in runtime are likely to be accidental, rather than deliberate. This provides advanced typechecking out of the box. Should you like to take advantage of the dynamically-typed nature of JavaScript, it is trivial to change the configuration.
+The rules for working in this directory are in [AGENTS.md](AGENTS.md). Nested guides cover the areas that have their own conventions:
 
-**Why is HMR not preserving my local component state?**
-
-HMR state preservation comes with a number of gotchas! It has been disabled by default in both `svelte-hmr` and `@sveltejs/vite-plugin-svelte` due to its often surprising behavior. You can read the details [here](https://github.com/sveltejs/svelte-hmr/tree/master/packages/svelte-hmr#preservation-of-local-state).
-
-If you have state that's important to retain within a component, consider creating an external store which would not be replaced by HMR.
-
-```js
-// store.js
-// An extremely simple external store
-import { writable } from 'svelte/store';
-export default writable(0);
-```
+- [src/lib/desktop/AGENTS.md](src/lib/desktop/AGENTS.md): the desktop and tablet UI
+- [src/lib/desktop/components/AGENTS.md](src/lib/desktop/components/AGENTS.md): UI components
+- [src/lib/desktop/components/ui/AGENTS.md](src/lib/desktop/components/ui/AGENTS.md): generic UI primitives
+- [src/lib/desktop/features/settings/AGENTS.md](src/lib/desktop/features/settings/AGENTS.md): settings pages
+- [static/messages/AGENTS.md](static/messages/AGENTS.md): translations
+- [tools/AGENTS.md](tools/AGENTS.md): screenshot tooling

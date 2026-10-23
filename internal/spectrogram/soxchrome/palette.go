@@ -1,7 +1,6 @@
 // Derived from SoX src/spectrogram.c, (c) 2008-9 robs@users.sourceforge.net,
 // licensed under the GNU Lesser General Public License version 2.1 or later.
-// Ported via github.com/tphakala/go-spectrogram ebf0c64 sox/palette.go. Changes
-// made in October 2026: only the default, high colour (-h), monochrome (-m) and
+// Changes made in October 2026: only the default, high colour (-h), monochrome (-m) and
 // monochrome light background (-m -l) branches are kept, the permutation is fixed
 // at its default, and the colour mapping works on float32 dB values.
 

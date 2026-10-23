@@ -6,17 +6,17 @@ Reference images for `TestSoxReferenceParity` in `internal/spectrogram`.
   `internal/spectrogram/native_parity_test.go` (fixed-seed integer noise, two
   tones, a chirp and a burst near the end). `TestParityClipMatchesGenerator`
   checks the file against the generator to within 1 LSB.
-- `*.png`: renders of that clip by the sox binary through the generator with the
-  native gate off, the same arguments `getSoxSpectrogramArgs` builds:
+- `*.png`: renders of that clip by the sox binary, frozen goldens that no code in
+  the repository regenerates. The command line, with `<width>`, `<rows>`,
+  `<range>` and the style arguments of each case:
   `sox clip.wav -n rate 24000 spectrogram -x <width> -y <rows> -d 2 -z <range> -o <png> [-r] [style args]`.
   The 24 kHz input makes `rate 24000` a no-op, so the resampler is not part of
   the comparison.
 
-Generated with `SoX v14.4.2` (Debian/Ubuntu package `14.4.2+git20190427-5build1`),
-the version CI installs.
+Generated with `SoX v14.4.2` (Debian/Ubuntu package `14.4.2+git20190427-5build1`).
 
-Regenerate with the installed sox:
-
-```sh
-SOX_REGEN=1 go test -run 'TestParityClipMatchesGenerator|TestSoxReferenceParity' ./internal/spectrogram/
-```
+To regenerate by hand, install that sox version and run the command above for
+each case in `parityCases` (`internal/spectrogram/native_parity_test.go`). If
+`clip.wav` itself is ever needed again, write it with
+`writeNativeWAV(t, dir, "clip.wav", parityClipSamples(), parityClipRate)` from a
+throwaway test.
