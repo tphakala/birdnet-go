@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Failed to load settings",
       "saveFailed": "Failed to save settings",
+      "changedElsewhere": "Settings were changed elsewhere. Review them and save again.",
       "databaseStatsFailed": "Failed to load database statistics",
       "csvDownloadFailed": "Failed to download CSV"
     },

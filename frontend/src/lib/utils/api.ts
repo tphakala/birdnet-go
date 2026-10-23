@@ -343,6 +343,12 @@ interface FetchOptions extends Omit<RequestInit, 'body'> {
   timeout?: number;
   /** Internal flag to prevent infinite CSRF retry loops */
   _csrfRetried?: boolean;
+  /**
+   * Called with the headers of the final response, success or HTTP error, before
+   * the body is read. Not called for a 401 redirect to login; a CSRF retry calls
+   * it for the retry's response only.
+   */
+  onHeaders?: (headers: Headers) => void;
 }
 
 /**
@@ -454,8 +460,10 @@ export async function fetchWithCSRF<T = unknown>(
   }
 
   // Strip signal from options so caller's signal doesn't overwrite the internal one
-  const { signal: _ignored, ...restOptions } = options;
+  // onHeaders is likewise ours, not fetch's.
+  const { signal: _ignored, onHeaders: _onHeaders, ...restOptions } = options;
   void _ignored; // Consumed via addEventListener above; destructured only to exclude from spread
+  void _onHeaders; // Called below; destructured only to exclude from spread
 
   const finalOptions: RequestInit = {
     ...defaultOptions,
@@ -505,6 +513,8 @@ export async function fetchWithCSRF<T = unknown>(
         return fetchWithCSRF<T>(url, { ...options, _csrfRetried: true });
       }
     }
+
+    options.onHeaders?.(response.headers);
 
     const result = await handleResponse<T>(response);
     logger.debug(`Response from ${url} received successfully`);

@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Nepodařilo se načíst nastavení",
       "saveFailed": "Nepodařilo se uložit nastavení",
+      "changedElsewhere": "Nastavení bylo změněno jinde. Zkontrolujte je a uložte znovu.",
       "databaseStatsFailed": "Nepodařilo se načíst statistiky databáze",
       "csvDownloadFailed": "Nepodařilo se stáhnout CSV"
     },

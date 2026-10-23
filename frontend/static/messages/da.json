@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Kunne ikke indlæse indstillinger",
       "saveFailed": "Kunne ikke gemme indstillinger",
+      "changedElsewhere": "Indstillingerne blev ændret et andet sted. Gennemgå dem, og gem igen.",
       "databaseStatsFailed": "Kunne ikke indlæse databasestatistik",
       "csvDownloadFailed": "Kunne ikke downloade CSV"
     },

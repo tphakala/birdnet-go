@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Échec du chargement des paramètres",
       "saveFailed": "Échec de l'enregistrement des paramètres",
+      "changedElsewhere": "Les paramètres ont été modifiés ailleurs. Vérifiez-les et enregistrez à nouveau.",
       "databaseStatsFailed": "Échec du chargement des statistiques de la base de données",
       "csvDownloadFailed": "Échec du téléchargement du CSV"
     },

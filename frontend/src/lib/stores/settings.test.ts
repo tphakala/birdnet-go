@@ -1841,3 +1841,104 @@ describe('Settings Store - tab change markers agree with the toolbar after a sav
     ).toBe(false);
   });
 });
+
+describe('Settings Store - save conflicts (If-Match)', () => {
+  type Body = Record<string, unknown>;
+  type LoadOptions = { onETag?: (etag: string | null) => void };
+  const CHANGED_ELSEWHERE_KEY = 'settings.errors.changedElsewhere';
+
+  let server: Record<string, unknown>;
+  let etag: string | null;
+
+  /** The ifMatch each save() call was given, in call order. */
+  const sentIfMatch = () => vi.mocked(settingsAPI.save).mock.calls.map(call => call[1]?.ifMatch);
+
+  const conflict = () => Object.assign(new Error('Precondition Failed'), { status: 412 });
+
+  beforeEach(async () => {
+    server = serverSettings() as unknown as Record<string, unknown>;
+    etag = '"e-1"';
+    vi.mocked(settingsAPI.load).mockReset();
+    vi.mocked(settingsAPI.load).mockImplementation((async (options?: LoadOptions) => {
+      options?.onETag?.(etag);
+      return JSON.parse(JSON.stringify(server));
+    }) as typeof settingsAPI.load);
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    const { toastActions } = await import('./toast.js');
+    vi.mocked(toastActions.error).mockClear();
+    settingsStore.set({
+      formData: { main: { name: '' } } as unknown as SettingsFormData,
+      originalData: { main: { name: '' } } as unknown as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    await settingsActions.loadSettings();
+  });
+
+  it('refetches, rebases and resends once after a 412, keeping the edit and taking the server change', async () => {
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.load).mockClear();
+    vi.mocked(settingsAPI.save).mockRejectedValueOnce(conflict());
+    vi.mocked(settingsAPI.load).mockImplementationOnce((async (options?: LoadOptions) => {
+      options?.onETag?.('"e-1"');
+      return JSON.parse(JSON.stringify(server));
+    }) as typeof settingsAPI.load);
+    // The out-of-band change lands before the second snapshot is read.
+    server.main = { name: 'Renamed elsewhere' };
+    etag = '"e-2"';
+
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(settingsAPI.load).toHaveBeenCalledTimes(2);
+    expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+    expect(sentIfMatch()).toEqual(['"e-1"', '"e-2"']);
+    const body = vi.mocked(settingsAPI.save).mock.calls[1][0] as unknown as Body;
+    expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.55);
+    expect(lookup(body, ['main', 'name'])).toBe('Renamed elsewhere');
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(get(settingsStore).error).toBeNull();
+  });
+
+  it('shows the changed-elsewhere message after a second 412, sends no third PUT and keeps the edit', async () => {
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.save).mockReset().mockRejectedValue(conflict());
+    const { toastActions } = await import('./toast.js');
+
+    await expect(settingsActions.saveSettings()).rejects.toThrow(CHANGED_ELSEWHERE_KEY);
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+    const state = get(settingsStore);
+    expect(state.error).toBe(CHANGED_ELSEWHERE_KEY);
+    expect(toastActions.error).toHaveBeenCalledExactlyOnceWith(CHANGED_ELSEWHERE_KEY);
+    expect(state.formData.birdnet.threshold).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(true);
+    expect(state.isSaving).toBe(false);
+  });
+
+  it('does not retry a failure that is not a 412', async () => {
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.save).mockRejectedValueOnce(
+      Object.assign(new Error('boom'), { status: 500 })
+    );
+
+    await expect(settingsActions.saveSettings({ notify: false })).rejects.toThrow('boom');
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { name: 'no ETag (older backend or a stripping proxy)', header: null, expected: undefined },
+    { name: 'a weak ETag', header: 'W/"e-1"', expected: undefined },
+    { name: 'a strong ETag', header: '"e-1"', expected: '"e-1"' },
+  ])('sends the right If-Match for $name', async ({ header, expected }) => {
+    etag = header;
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(sentIfMatch()).toEqual([expected]);
+  });
+});
