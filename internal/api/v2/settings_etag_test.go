@@ -302,6 +302,54 @@ func TestSettingsETag_MultipleIfMatchLines(t *testing.T) {
 	assert.Equal(t, etagTestIntervalRequested, conf.GetSettings().Realtime.Interval)
 }
 
+// TestSettingsETag_EmptyIfMatchIsRefused pins that an If-Match header that is
+// present but empty is a precondition no ETag can satisfy: it answers 412 and
+// publishes nothing, instead of being read as "no precondition" and applied.
+func TestSettingsETag_EmptyIfMatchIsRefused(t *testing.T) {
+	tests := []struct {
+		name    string
+		method  string
+		target  string
+		body    string
+		section string
+		handler func(c *Controller, ctx echo.Context) error
+	}{
+		{
+			name: "PUT", method: http.MethodPut, target: "/api/v2/settings", body: etagTestPutBody,
+			handler: func(c *Controller, ctx echo.Context) error { return c.UpdateSettings(ctx) },
+		},
+		{
+			name: "PATCH", method: http.MethodPatch, target: "/api/v2/settings/" + etagTestSection, body: etagTestPatchBody,
+			section: etagTestSection,
+			handler: func(c *Controller, ctx echo.Context) error { return c.UpdateSectionSettings(ctx) },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			c := newGlobalOwnerController(t, e, getTestSettings(t))
+			publishInterval(t, etagTestIntervalOutOfBand)
+			before := conf.GetSettings()
+
+			req := httptest.NewRequest(tt.method, tt.target, bytes.NewReader([]byte(tt.body)))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			req.Header.Set(apicore.HeaderIfMatch, "")
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			if tt.section != "" {
+				ctx.SetParamNames("section")
+				ctx.SetParamValues(tt.section)
+			}
+			require.NoError(t, tt.handler(c, ctx))
+
+			assert.Equal(t, http.StatusPreconditionFailed, rec.Code, "body: %s", rec.Body.String())
+			assert.Same(t, before, conf.GetSettings(), "a refused write must publish nothing")
+			assert.Equal(t, etagGetAll(t, e, c).etag, rec.Header().Get(apicore.HeaderETag), "a 412 must carry the current ETag")
+		})
+	}
+}
+
 // TestSettingsETag_PreconditionIsCheckedUnderTheWriterLock pins that the If-Match
 // comparison is made against the snapshot the write is applied to, inside the
 // settings writer lock: a PUT that waits behind another writer must see that

@@ -30,13 +30,14 @@ func settingsETag(s *conf.Settings) string {
 
 // checkSettingsPrecondition returns nil when the request carried no If-Match
 // header or its If-Match matches the ETag of current, and a 412 rejection
-// carrying the current ETag otherwise. It is meant to be the first statement of a
-// commitSettings mutate function, where current is the snapshot the write is
-// applied to, so the check is atomic with the publish. ifMatch is read from the
-// request before commitSettings so the mutate does no request I/O under the
-// writer lock.
-func checkSettingsPrecondition(ifMatch string, current *conf.Settings) error {
-	if ifMatch == "" {
+// carrying the current ETag otherwise. A header that is present but empty lists
+// no entity tag, so it never matches and is refused rather than read as "no
+// precondition". It is meant to be the first statement of a commitSettings mutate
+// function, where current is the snapshot the write is applied to, so the check
+// is atomic with the publish. ifMatch and present come from requestIfMatch, read
+// before commitSettings so the mutate does no request I/O under the writer lock.
+func checkSettingsPrecondition(ifMatch string, present bool, current *conf.Settings) error {
+	if !present {
 		return nil
 	}
 	etag := settingsETag(current)
@@ -47,8 +48,10 @@ func checkSettingsPrecondition(ifMatch string, current *conf.Settings) error {
 }
 
 // requestIfMatch returns the If-Match value of a request: every If-Match header
-// line joined into one comma-separated list (RFC 9110 section 5.3), or "" when
-// the request sent none. Header.Get would return only the first line.
-func requestIfMatch(r *http.Request) string {
-	return strings.Join(r.Header.Values(apicore.HeaderIfMatch), ",")
+// line joined into one comma-separated list (RFC 9110 section 5.3). present
+// reports whether the request sent the header at all, so an empty header can be
+// told from an absent one. Header.Get would return only the first line.
+func requestIfMatch(r *http.Request) (ifMatch string, present bool) {
+	values := r.Header.Values(apicore.HeaderIfMatch)
+	return strings.Join(values, ","), len(values) > 0
 }

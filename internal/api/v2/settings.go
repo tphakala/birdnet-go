@@ -228,13 +228,13 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	ifMatch := requestIfMatch(ctx.Request())
+	ifMatch, ifMatchPresent := requestIfMatch(ctx.Request())
 	var skippedFields []string
 	current, updated, err := c.commitSettings(func(current, updated *conf.Settings) error {
 		// Refuse a write built on settings that have changed since the client loaded
 		// them. Checked against current inside the writer lock, so nothing can
 		// publish between the check and this write.
-		if err := checkSettingsPrecondition(ifMatch, current); err != nil {
+		if err := checkSettingsPrecondition(ifMatch, ifMatchPresent, current); err != nil {
 			return err
 		}
 
@@ -427,11 +427,11 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	ifMatch := requestIfMatch(ctx.Request())
+	ifMatch, ifMatchPresent := requestIfMatch(ctx.Request())
 	var skippedFields []string
 	current, updated, err := c.commitSettings(func(current, updated *conf.Settings) error {
 		// See UpdateSettings: the precondition is checked inside the writer lock.
-		if err := checkSettingsPrecondition(ifMatch, current); err != nil {
+		if err := checkSettingsPrecondition(ifMatch, ifMatchPresent, current); err != nil {
 			return err
 		}
 
