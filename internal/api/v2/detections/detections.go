@@ -1701,17 +1701,17 @@ func (c *Handler) toggleSpeciesInIgnoredList(species string) (action string, isE
 			updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
 				return c.excludeEntryMatches(s, species)
 			})
-			action = "removed"
-			isExcluded = false
 		} else {
 			updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
-			action = "added"
-			isExcluded = true
 		}
 		return nil
 	})
 	if err != nil {
 		return "", wasExcluded, err
+	}
+	action, isExcluded = "removed", false
+	if !wasExcluded {
+		action, isExcluded = "added", true
 	}
 
 	// Trigger side-effects (range filter rebuild, etc.) so the include list

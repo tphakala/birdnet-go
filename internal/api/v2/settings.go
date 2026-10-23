@@ -220,10 +220,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	var (
-		rej           settingsRejection
-		skippedFields []string
-	)
+	var skippedFields []string
 	current, updated, err := c.commitSettings(func(current, updated *conf.Settings) error {
 		// Deep-merge the incoming JSON into the clone, preserving keys absent from the
 		// request. This is the same omission-preserving merge PATCH uses per section,
@@ -232,7 +229,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		// delete or rename a species-config entry by omitting its key.
 		if err := mergeFullSettings(updated, requestBody); err != nil {
 			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to merge settings update", logger.Error(err))
-			return rej.reject(err, "Failed to apply settings update", http.StatusBadRequest)
+			return newRejection(err, "Failed to apply settings update", http.StatusBadRequest)
 		}
 
 		// Restore redacted secret placeholders to their live values so the merge does
@@ -240,7 +237,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		// truth for pre-update secrets (same argument order and ordering as PATCH).
 		if err := restoreRedactedSecrets(current, updated); err != nil {
 			c.LogAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
-			return rej.reject(err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
+			return newRejection(err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
 		}
 
 		// Enforce the blocked-field map: revert every blocked leaf to its pre-update
@@ -284,20 +281,19 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		// Validate the clone before publishing. No rollback needed on validation
 		// failure: commitSettings publishes nothing when this returns an error.
 		if err := conf.ValidateSettings(updated); err != nil {
-			return rej.reject(err, "Invalid settings", http.StatusBadRequest)
+			return newRejection(err, "Invalid settings", http.StatusBadRequest)
 		}
 
 		ensureProfilingTokenForSave(updated)
 		return nil
 	})
 	if err != nil {
-		return c.respondCommitError(ctx, err, &rej)
+		return c.respondCommitError(ctx, err)
 	}
 	// The clone is now published globally (readers via conf.GetSettings see this
 	// version at once; existing pointer holders stay on the old one) and
 	// c.Settings was refreshed, so per-controller readers (ControllerSettings)
 	// return the freshly published value. Both stores are lock-free for readers.
-	publishGlobal := c.isGlobalOwner
 
 	// Run cross-field side-effects (interval tracking, telemetry toggles, etc.)
 	// against the published pair. handleSettingsChanges is read-only on both, and
@@ -307,10 +303,7 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		// Rollback: take back our own snapshot so in-memory state matches what is on
 		// disk (which was never overwritten), unless another writer published on top.
 		rbErr := c.rollbackSettings(current, updated)
-		msg := msgApplyFailedRolledBack
-		if rbErr != nil {
-			msg = msgApplyFailedNotRolledBack
-		}
+		msg := rollbackMessage(rbErr, msgApplyFailedRolledBack, msgApplyFailedNotRolledBack)
 		c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
 		return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
 	}
@@ -319,15 +312,13 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	// (production path) AND DisableSaveSettings is not set. conf.SaveSettings
 	// reads conf.GetSettings internally; persisting from a test that stored a
 	// standalone snapshot via c.Settings.Store would save an unrelated snapshot.
-	if publishGlobal && !c.DisableSaveSettings {
+	if c.isGlobalOwner && !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
 			// Rollback in-memory; disk write never happened successfully.
 			rbErr := c.rollbackSettings(current, updated)
-			msg := msgSaveFailedRolledBack
+			msg := rollbackMessage(rbErr, msgSaveFailedRolledBack, msgSaveFailedNotRolledBack)
 			if rbErr == nil {
 				restoreProfilingRates(current)
-			} else {
-				msg = msgSaveFailedNotRolledBack
 			}
 			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
 			return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
@@ -340,12 +331,12 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	telemetry.UpdateTelemetryEnabled()
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
-	if publishGlobal && !c.DisableSaveSettings {
+	if c.isGlobalOwner && !c.DisableSaveSettings {
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Settings updated and saved successfully",
 			logger.Int("skipped_fields_count", len(skippedFields)))
 	} else {
 		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Settings updated (save to disk skipped)",
-			logger.Bool("publishGlobal", publishGlobal),
+			logger.Bool("publishGlobal", c.isGlobalOwner),
 			logger.Bool("disableSaveSettings", c.DisableSaveSettings))
 	}
 
@@ -437,13 +428,10 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	var (
-		rej           settingsRejection
-		skippedFields []string
-	)
+	var skippedFields []string
 	current, updated, err := c.commitSettings(func(current, updated *conf.Settings) error {
 		if err := updateSettingsSection(updated, section, requestBody); err != nil {
-			return rej.reject(err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
+			return newRejection(err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 		}
 
 		// Restore redacted secret fields to their current values so the merge
@@ -451,7 +439,7 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		// source of truth for the pre-update values.
 		if err := restoreRedactedSecrets(current, updated); err != nil {
 			c.LogAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
-			return rej.reject(err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
+			return newRejection(err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
 		}
 
 		// Enforce the blocked-field map. The section merge above writes whatever the
@@ -500,23 +488,19 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		// Validate the clone before publishing. No rollback needed on validation
 		// failure: commitSettings publishes nothing when this returns an error.
 		if err := conf.ValidateSettings(updated); err != nil {
-			return rej.reject(err, fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
+			return newRejection(err, fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
 		}
 
 		ensureProfilingTokenForSave(updated)
 		return nil
 	})
 	if err != nil {
-		return c.respondCommitError(ctx, err, &rej)
+		return c.respondCommitError(ctx, err)
 	}
-	publishGlobal := c.isGlobalOwner
 
 	if err := c.handleSettingsChanges(current, updated); err != nil {
 		rbErr := c.rollbackSettings(current, updated)
-		msg := msgApplyFailedRolledBack
-		if rbErr != nil {
-			msg = msgApplyFailedNotRolledBack
-		}
+		msg := rollbackMessage(rbErr, msgApplyFailedRolledBack, msgApplyFailedNotRolledBack)
 		return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
 	}
 
@@ -524,14 +508,12 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	// AND the test did not disable save. conf.SaveSettings persists the
 	// conf.GetSettings value, which would be wrong under a standalone
 	// snapshot injected by a test that bypassed the global publish.
-	if publishGlobal && !c.DisableSaveSettings {
+	if c.isGlobalOwner && !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
 			rbErr := c.rollbackSettings(current, updated)
-			msg := msgSaveFailedRolledBack
+			msg := rollbackMessage(rbErr, msgSaveFailedRolledBack, msgSaveFailedNotRolledBack)
 			if rbErr == nil {
 				restoreProfilingRates(current)
-			} else {
-				msg = msgSaveFailedNotRolledBack
 			}
 			return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
 		}
@@ -539,10 +521,10 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 			logger.String("section", section))
 	}
 
-	if !publishGlobal || c.DisableSaveSettings {
+	if !c.isGlobalOwner || c.DisableSaveSettings {
 		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Section settings updated (save to disk skipped)",
 			logger.String("section", section),
-			logger.Bool("publishGlobal", publishGlobal),
+			logger.Bool("publishGlobal", c.isGlobalOwner),
 			logger.Bool("disableSaveSettings", c.DisableSaveSettings))
 	}
 

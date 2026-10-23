@@ -27,31 +27,40 @@ const (
 	msgSaveFailedNotRolledBack  = "Failed to save settings. The change could not be rolled back because settings changed at the same time; reload the settings to see their current state"
 )
 
+// rollbackMessage picks the client message for a failed write after
+// rollbackSettings returned rbErr: rolledBack when the rollback happened,
+// notRolledBack when it was superseded. The latter must never claim a rollback.
+func rollbackMessage(rbErr error, rolledBack, notRolledBack string) string {
+	if rbErr != nil {
+		return notRolledBack
+	}
+	return rolledBack
+}
+
 // errRollbackSuperseded reports that a rollback was skipped because another
 // writer published a newer settings snapshot after the one being rolled back.
 var errRollbackSuperseded = errors.NewStd("settings changed concurrently, change not rolled back")
 
-// settingsRejection records why a commitSettings mutate function refused a
-// request (malformed body, failed validation), so the handler can answer with
-// the right status and message after commitSettings returns. The zero value
-// means "not rejected".
-type settingsRejection struct {
+// rejectionError is the error a commitSettings mutate function returns when
+// it refuses the request (malformed body, failed validation), carrying the HTTP
+// status and client message the handler answers with.
+type rejectionError struct {
 	err     error
 	message string
 	status  int
 }
 
-// reject records a rejection and returns err, so a mutate function can
-// "return rej.reject(err, ...)".
-func (r *settingsRejection) reject(err error, message string, status int) error {
-	r.err, r.message, r.status = err, message, status
-	return err
+// newRejection wraps err as a rejectionError with the given client message
+// and HTTP status.
+func newRejection(err error, message string, status int) error {
+	return &rejectionError{err: err, message: message, status: status}
 }
 
-// rejected reports whether reject was called.
-func (r *settingsRejection) rejected() bool {
-	return r.err != nil
-}
+// Error returns the wrapped error text.
+func (r *rejectionError) Error() string { return r.err.Error() }
+
+// Unwrap returns the wrapped error.
+func (r *rejectionError) Unwrap() error { return r.err }
 
 // commitSettings builds and publishes a new settings snapshot. mutate receives
 // the snapshot that is current when the write happens and a clone to change;
@@ -110,8 +119,8 @@ func (c *Controller) rollbackSettings(current, updated *conf.Settings) error {
 // respondCommitError answers a failed commitSettings call. A mutate function
 // that rejected the request keeps its own status and message; a missing settings
 // snapshot is the usual "settings not initialized" 500; anything else is a 500.
-func (c *Controller) respondCommitError(ctx echo.Context, err error, rej *settingsRejection) error {
-	if rej.rejected() {
+func (c *Controller) respondCommitError(ctx echo.Context, err error) error {
+	if rej, ok := errors.AsType[*rejectionError](err); ok {
 		return c.HandleError(ctx, rej.err, rej.message, rej.status)
 	}
 	if errors.Is(err, conf.ErrSettingsNotLoaded) {
@@ -145,10 +154,10 @@ func (c *Controller) updateAndSaveSettings(mutate func(current, updated *conf.Se
 
 	if c.isGlobalOwner && !c.DisableSaveSettings {
 		if err := conf.SaveSettings(); err != nil {
-			if rbErr := c.rollbackSettings(current, updated); rbErr != nil {
-				return nil, nil, fmt.Errorf("failed to save settings and the change could not be rolled back because settings changed at the same time: %w", err)
-			}
-			return nil, nil, fmt.Errorf("failed to save settings: %w", err)
+			msg := rollbackMessage(c.rollbackSettings(current, updated),
+				"failed to save settings",
+				"failed to save settings and the change could not be rolled back because settings changed at the same time")
+			return nil, nil, fmt.Errorf("%s: %w", msg, err)
 		}
 	}
 

@@ -494,7 +494,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// lifetime, so this can be wired before the functional options loop (it needs no
 	// option-set dependency).
 	c.integrations = integrations.New(c.Core, &c.settingsMutex,
-		c.getSettingsOrFallback, c.updateAndSaveSettings, c.handleSettingsChanges)
+		c.updateAndSaveSettings, c.handleSettingsChanges)
 	// The detections handler needs the same facade settings-save machinery as the
 	// integrations/TLS handlers (the review/ignore exclude-list mutation persists
 	// settings) plus four more facade-owned function dependencies whose subsystems

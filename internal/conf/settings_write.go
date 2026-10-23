@@ -22,43 +22,32 @@ var ErrSettingsUnchanged = errors.NewStd("settings unchanged")
 // has been published yet, so there is no baseline to build an update from.
 var ErrSettingsNotLoaded = errors.NewStd("settings not loaded")
 
-// UpdateSettings publishes a changed settings snapshot. It calls mutate with
-// the snapshot that is current at that moment and a deep clone of it, then
-// publishes the clone when mutate returns nil.
+// UpdateSettings publishes a changed settings snapshot: it calls mutate with the
+// snapshot that is current under the settings writer lock and a deep clone of it,
+// and publishes the clone when mutate returns nil. Runtime writers go through
+// here (the ruleguard rule SettingsPublishThroughWriter enforces it), so a writer
+// cannot publish over a change another writer made after it read its baseline.
 //
-// Runtime writers of the global snapshot (the settings API, the model manager,
-// the range filter, path correction) go through here, so one lock orders them
-// and a writer cannot publish a snapshot built from a baseline that another
-// writer has already replaced. The ruleguard rule SettingsPublishThroughWriter
-// keeps new production code on this path.
+// mutate may change updated freely and must treat current as read-only. If
+// mutate returns an error, including ErrSettingsUnchanged, nothing is published
+// and nil snapshots are returned with the error. If no snapshot is published,
+// ErrSettingsNotLoaded is returned and mutate is not called.
 //
-// mutate may change updated freely and must treat current as read-only. When
-// mutate returns an error, including ErrSettingsUnchanged, nothing is
-// published and the error is returned as is. If no snapshot has been
-// published, ErrSettingsNotLoaded is returned and mutate is not called.
+// The lock is held while mutate runs, so mutate must:
+//   - take no other lock and not call the classifier, the orchestrator, the model
+//     manager, the control channel or the API's handleSettingsChanges, whose locks
+//     (for example mm.mu) are held by callers of UpdateSettings, which would deadlock;
+//   - not call UpdateSettings, CompareAndStoreSettings or a function that does
+//     (UpdateIncludedSpecies, ResetRangeFilterUpdateFlag,
+//     ShouldUpdateRangeFilterToday): the lock is not reentrant;
+//   - not write to disk or wait on unbounded I/O; settings validation is the one
+//     exception, and its ffmpeg probe has a timeout. Call SaveSettings after
+//     UpdateSettings returns.
 //
-// Rules for mutate, because the settings writer lock is held while it runs:
-//   - Take no other lock: read its arguments and in-memory catalogs, and log, nothing
-//     else. Do not call the classifier, the orchestrator, the model manager,
-//     the control channel or the API's handleSettingsChanges from it; those
-//     take locks (for example the model manager's mm.mu) whose holders call
-//     UpdateSettings, which would deadlock.
-//   - Do not call UpdateSettings, CompareAndStoreSettings or any function that
-//     does (UpdateIncludedSpecies, ResetRangeFilterUpdateFlag,
-//     ShouldUpdateRangeFilterToday) from it: the lock is not reentrant.
-//   - Do not write to disk or wait on unbounded I/O in it; settings validation
-//     is the one exception, and its ffmpeg probe has a timeout. SaveSettings has
-//     its own lock and is called after UpdateSettings returns.
-//
-// Lock order: the writer lock is acquired after the classifier model manager's
-// mm.mu (ModelManager.Uninstall holds mm.mu while its config writer calls
-// UpdateSettings) and after the API controller's settingsMutex, and it is never
-// held while acquiring either of them, so a caller that holds mm.mu or
-// settingsMutex may call UpdateSettings. The save lock taken by SaveSettings is
-// a leaf: nothing is acquired while holding it.
-//
-// The returned current and updated are the two snapshots passed to mutate;
-// updated is the published one, immutable from now on. Both are nil on error.
+// Lock order: the writer lock is acquired after the model manager's mm.mu
+// (ModelManager.Uninstall holds mm.mu while its config writer calls
+// UpdateSettings) and the API controller's settingsMutex, and is never held while
+// acquiring either. The save lock taken by SaveSettings is a leaf.
 func UpdateSettings(mutate func(current, updated *Settings) error) (current, updated *Settings, err error) {
 	settingsWriteMu.Lock()
 	defer settingsWriteMu.Unlock()

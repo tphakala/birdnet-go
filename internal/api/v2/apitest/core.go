@@ -199,7 +199,7 @@ func NewCore(t *testing.T, opts ...CoreOption) *apicore.Core {
 // core (no global publish, no disk write, matching DisableSaveSettings=true). A
 // mutate error, including conf.ErrSettingsUnchanged, stores nothing and is
 // returned as is, like the facade's.
-func CoreSettingsUpdater(core *apicore.Core) func(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error) {
+func CoreSettingsUpdater(core *apicore.Core) apicore.SettingsUpdater {
 	return func(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error) {
 		current = core.Settings.Load()
 		updated = conf.CloneSettings(current)

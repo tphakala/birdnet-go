@@ -1757,9 +1757,8 @@ func ensureModelEnabled(s *conf.Settings, registryID string) bool {
 // built-in/default source (for the primary, the embedded BuiltIn baseline). When
 // rangeFilter is non-nil (the geomodel dependency of the new variant) the gallery-managed
 // range-filter config is re-pointed at its files in the same clone and save; a custom
-// range filter is kept. Publishes through conf.UpdateSettings and then calls SaveSettings so the change survives
-// restarts and is visible to concurrent readers. A nil settings receiver or an unknown
-// registry ID is a no-op (nothing stored, nothing saved).
+// range filter is kept. It publishes through conf.UpdateSettings, then saves. A nil
+// settings receiver or an unknown registry ID is a no-op (nothing stored, nothing saved).
 func (mm *ModelManager) applyConfigForVariantSwap(registryID, modelPath string, rangeFilter *CatalogEntry) {
 	if mm.settings == nil {
 		return
@@ -2385,9 +2384,7 @@ func (mm *ModelManager) survivingGeomodelEntry() (CatalogEntry, bool) {
 // applyConfigForInstall updates settings to reflect a newly installed model.
 // Only fields with non-empty paths are set. The caller must hold no locks
 // (the settings writer lock is acquired inside conf.UpdateSettings).
-// Publishes through conf.UpdateSettings so the shared settings snapshot is never mutated
-// in place and the baseline is read under the settings writer lock. Settings are persisted to disk via conf.SaveSettings so changes
-// survive restarts and are visible to concurrent readers through conf.Setting().
+// It publishes through conf.UpdateSettings, then saves.
 func (mm *ModelManager) applyConfigForInstall(entry *CatalogEntry, modelPath, labelsPath, embeddingsPath string) {
 	if mm.settings == nil {
 		return
@@ -2480,9 +2477,7 @@ func (mm *ModelManager) sharedFilePathForRole(entry *CatalogEntry, role string) 
 // the permitted lock order: mm.mu is taken before the settings writer lock that
 // conf.UpdateSettings acquires, and the mutate function reads mm.installed
 // without locking because the caller already holds mm.mu.
-// Publishes through conf.UpdateSettings so the shared settings snapshot is never mutated
-// in place and the baseline is read under the settings writer lock. Settings are persisted to disk via conf.SaveSettings so changes
-// survive restarts and are visible to concurrent readers through conf.Setting().
+// It publishes through conf.UpdateSettings, then saves.
 func (mm *ModelManager) applyConfigForUninstall(entry *CatalogEntry) {
 	if mm.settings == nil {
 		return

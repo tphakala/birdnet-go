@@ -85,7 +85,7 @@ type Handler struct {
 
 	settingsMutex         *sync.RWMutex
 	getSettingsOrFallback func() *conf.Settings
-	updateAndSaveSettings func(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error)
+	updateAndSaveSettings apicore.SettingsUpdater
 	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error
 }
 
@@ -98,7 +98,7 @@ func New(
 	core *apicore.Core,
 	settingsMutex *sync.RWMutex,
 	getSettingsOrFallback func() *conf.Settings,
-	updateAndSaveSettings func(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error),
+	updateAndSaveSettings apicore.SettingsUpdater,
 	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
 ) *Handler {
 	return &Handler{

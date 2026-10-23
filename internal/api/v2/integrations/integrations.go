@@ -64,27 +64,24 @@ type Handler struct {
 	*apicore.Core
 
 	settingsMutex         *sync.RWMutex
-	getSettingsOrFallback func() *conf.Settings
-	updateAndSaveSettings func(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error)
+	updateAndSaveSettings apicore.SettingsUpdater
 	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error
 }
 
 // New builds an integrations Handler around the shared core and the facade's
 // settings-save machinery. settingsMutex MUST be the same *sync.RWMutex the
 // settings update handlers lock, so MQTT TLS certificate writes serialize against
-// them; the function arguments are the facade's getSettingsOrFallback/
-// updateAndSaveSettings/handleSettingsChanges method values.
+// them; the function arguments are the facade's updateAndSaveSettings and
+// handleSettingsChanges method values.
 func New(
 	core *apicore.Core,
 	settingsMutex *sync.RWMutex,
-	getSettingsOrFallback func() *conf.Settings,
-	updateAndSaveSettings func(mutate func(current, updated *conf.Settings) error) (current, updated *conf.Settings, err error),
+	updateAndSaveSettings apicore.SettingsUpdater,
 	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
 ) *Handler {
 	return &Handler{
 		Core:                  core,
 		settingsMutex:         settingsMutex,
-		getSettingsOrFallback: getSettingsOrFallback,
 		updateAndSaveSettings: updateAndSaveSettings,
 		handleSettingsChanges: handleSettingsChanges,
 	}
