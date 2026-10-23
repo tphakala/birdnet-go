@@ -513,6 +513,8 @@ func TestSession_CloseIsIdempotentAndRunAfterCloseFails(t *testing.T) {
 	}
 	sess, err := NewSession(Config{ModelData: EmbeddedModelData(), LibraryPath: os.Getenv("VAD_TEST_ORT_LIB")})
 	skipIfORTUnavailable(t, err)
+	// Close is idempotent, so this only matters when an assertion below fails first.
+	t.Cleanup(func() { _ = sess.Close() })
 
 	h := make([]float32, stateWidth)
 	c := make([]float32, stateWidth)
