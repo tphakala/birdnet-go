@@ -2323,6 +2323,7 @@
     "errors": {
       "loadFailed": "Falha ao carregar as configurações",
       "saveFailed": "Falha ao salvar as configurações",
+      "changedElsewhere": "As configurações foram alteradas noutro local. Reveja-as e guarde novamente.",
       "databaseStatsFailed": "Falha ao carregar as estatísticas do banco de dados",
       "csvDownloadFailed": "Falha ao baixar o CSV"
     },

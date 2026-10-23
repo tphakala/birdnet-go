@@ -1428,13 +1428,67 @@ function normalizeLoadedSettings(data: SettingsFormData): SettingsFormData {
   return coerceAllSections({ ...createEmptySettings(), ...data });
 }
 
-/** Fetches the current server settings, normalized like a load. Throws on a malformed response. */
-async function fetchServerSnapshot(): Promise<SettingsFormData> {
-  const data = await settingsAPI.load();
+/** HTTP status the backend answers a stale If-Match with. */
+const HTTP_PRECONDITION_FAILED = 412;
+
+/** Tries a full save makes: one send plus one resend after a 412 and a rebase. */
+const MAX_SETTINGS_SAVE_ATTEMPTS = 2;
+
+/** Prefix of a weak entity tag; the backend compares If-Match strongly, so a weak tag never matches. */
+const WEAK_ETAG_PREFIX = 'W/';
+
+/** Thrown when every save attempt got a 412: the settings keep changing under the form. */
+class SettingsChangedElsewhereError extends Error {
+  /** The status of the conflict it reports, so telemetry filters it like the 412 itself. */
+  readonly status = HTTP_PRECONDITION_FAILED;
+
+  constructor() {
+    super(t('settings.errors.changedElsewhere'));
+    this.name = 'SettingsChangedElsewhereError';
+  }
+}
+
+/**
+ * True for a 412 from the backend. Duck-typed on status: the store does not
+ * import the api module's ApiError, and tests mock settingsApi only.
+ */
+function isPreconditionFailed(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    error.status === HTTP_PRECONDITION_FAILED
+  );
+}
+
+/**
+ * The If-Match value to send for an ETag from the pre-save GET: only a strong
+ * ETag. Absent (an older backend) or weak (a proxy weakened it) means no
+ * protection, which is how saves worked before If-Match, rather than a save
+ * that can never match.
+ */
+function usableIfMatch(etag: string | null): string | undefined {
+  return etag && !etag.startsWith(WEAK_ETAG_PREFIX) ? etag : undefined;
+}
+
+/**
+ * Fetches the current server settings, normalized like a load, with the ETag
+ * the response carried (null when absent). Throws on a malformed response.
+ */
+async function fetchServerSnapshot(): Promise<{
+  snapshot: SettingsFormData;
+  etag: string | null;
+}> {
+  let etag: string | null = null;
+  const data = await settingsAPI.load({
+    onETag: value => {
+      etag = value;
+    },
+  });
   if (!isPlainObject(data)) {
     throw new Error(t('settings.errors.loadFailed'));
   }
-  return normalizeLoadedSettings(data);
+  return { snapshot: normalizeLoadedSettings(data), etag };
 }
 
 /**
@@ -1453,9 +1507,13 @@ function rebaseState(state: GlobalSettingsState, fresh: SettingsFormData): Globa
 
 /**
  * Rebases the store on the current server state, then sends the whole form to
- * the backend and marks exactly what was sent as saved. Resets isSaving and
- * rethrows on every failure path, including the refusal before a load. A failed
- * fetch of the server state fails the save before any request is sent.
+ * the backend and marks exactly what was sent as saved. The PUT carries the
+ * snapshot's strong ETag as If-Match; on a 412 (the settings changed between the
+ * GET and the PUT) the rebase and send run once more on a fresh snapshot, and a
+ * second 412 fails the save with SettingsChangedElsewhereError, edits kept.
+ * Resets isSaving and rethrows on every failure path, including the refusal
+ * before a load. A failed fetch of the server state fails the save before any
+ * request is sent.
  */
 async function persistFormData(notify: boolean): Promise<void> {
   try {
@@ -1466,37 +1524,50 @@ async function persistFormData(notify: boolean): Promise<void> {
     settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
 
     await runSerialized(async () => {
-      // Rebase first so a change made on the server since the load (a model
-      // gallery action) is not overwritten by load-time values.
-      const fresh = await fetchServerSnapshot();
-      settingsStore.update(state => rebaseState(state, fresh));
-      const rebased = get(settingsStore);
-      const sent: SettingsFormData = JSON.parse(JSON.stringify(rebased.formData));
-      const loadedLocale = rebased.originalData.realtime?.dashboard?.locale;
+      for (let attempt = 1; ; attempt++) {
+        // Rebase first so a change made on the server since the load (a model
+        // gallery action) is not overwritten by load-time values.
+        const { snapshot, etag } = await fetchServerSnapshot();
+        settingsStore.update(state => rebaseState(state, snapshot));
+        const rebased = get(settingsStore);
+        const sent: SettingsFormData = JSON.parse(JSON.stringify(rebased.formData));
+        const loadedLocale = rebased.originalData.realtime?.dashboard?.locale;
 
-      const coercedFormData = coerceAllSections(sent);
+        const coercedFormData = coerceAllSections(sent);
 
-      // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
-      // This ensures the config file is properly cleaned when users clear these fields
-      // Trim whitespace to handle cases like "   " which should also be treated as empty
-      if (coercedFormData.birdnet.modelPath?.trim() === '') {
-        coercedFormData.birdnet.modelPath = null;
+        // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
+        // This ensures the config file is properly cleaned when users clear these fields
+        // Trim whitespace to handle cases like "   " which should also be treated as empty
+        if (coercedFormData.birdnet.modelPath?.trim() === '') {
+          coercedFormData.birdnet.modelPath = null;
+        }
+        if (coercedFormData.birdnet.labelPath?.trim() === '') {
+          coercedFormData.birdnet.labelPath = null;
+        }
+
+        // Only pass options when there is an If-Match, so a bare save() call stays as before.
+        const ifMatch = usableIfMatch(etag);
+        try {
+          await (ifMatch
+            ? settingsAPI.save(coercedFormData, { ifMatch })
+            : settingsAPI.save(coercedFormData));
+        } catch (error) {
+          if (!isPreconditionFailed(error)) throw error;
+          if (attempt >= MAX_SETTINGS_SAVE_ATTEMPTS) throw new SettingsChangedElsewhereError();
+          continue;
+        }
+
+        // Read newLocale from coercedFormData (the value we actually persisted)
+        // and compare to originalData (the snapshot rebased on the backend).
+        await afterSettingsPersisted(coercedFormData.realtime?.dashboard?.locale, loadedLocale);
+
+        // Mark what was sent as saved, not formData as it is now, so an edit typed
+        // while the request was in flight stays unsaved. Restart-required state is
+        // owned by the backend (refreshed in afterSettingsPersisted) and surfaced
+        // by the global RestartBanner, so it is not tracked client-side.
+        settingsStore.update(state => ({ ...state, originalData: sent, isSaving: false }));
+        return;
       }
-      if (coercedFormData.birdnet.labelPath?.trim() === '') {
-        coercedFormData.birdnet.labelPath = null;
-      }
-
-      await settingsAPI.save(coercedFormData);
-
-      // Read newLocale from coercedFormData (the value we actually persisted)
-      // and compare to originalData (the snapshot rebased on the backend).
-      await afterSettingsPersisted(coercedFormData.realtime?.dashboard?.locale, loadedLocale);
-
-      // Mark what was sent as saved, not formData as it is now, so an edit typed
-      // while the request was in flight stays unsaved. Restart-required state is
-      // owned by the backend (refreshed in afterSettingsPersisted) and surfaced
-      // by the global RestartBanner, so it is not tracked client-side.
-      settingsStore.update(state => ({ ...state, originalData: sent, isSaving: false }));
     });
 
     if (notify) {
@@ -1511,7 +1582,11 @@ async function persistFormData(notify: boolean): Promise<void> {
     }));
 
     if (notify) {
-      toastActions.error(t('notifications.content.settings.saveFailed'));
+      toastActions.error(
+        error instanceof SettingsChangedElsewhereError
+          ? error.message
+          : t('notifications.content.settings.saveFailed')
+      );
     }
 
     throw error;
@@ -1630,8 +1705,8 @@ export const settingsActions = {
   async refreshKeepingEdits(): Promise<void> {
     if (!get(settingsStore).dataLoaded) return;
     await runSerialized(async () => {
-      const fresh = await fetchServerSnapshot();
-      settingsStore.update(state => rebaseState(state, fresh));
+      const { snapshot } = await fetchServerSnapshot();
+      settingsStore.update(state => rebaseState(state, snapshot));
     });
   },
 
