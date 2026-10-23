@@ -1830,6 +1830,8 @@ describe('Settings Store - tab change markers agree with the toolbar after a sav
     await settingsActions.saveSettings({ notify: false });
 
     const state = get(settingsStore);
+    // The key must survive the store round trip, or the comparison below proves nothing.
+    expect(state.formData.realtime?.audio?.sources[0]).toHaveProperty('equalizer', undefined);
     expect(get(hasUnsavedChanges)).toBe(false);
     expect(
       hasSettingsChanged(

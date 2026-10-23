@@ -58,7 +58,8 @@ describe('settingsChanges', () => {
       ['undefined key nested in an array', [{ a: 1 }], [{ a: 1, b: undefined }], false],
       ['key set where the other side is undefined', { a: 1, b: undefined }, { a: 1, b: 2 }, true],
       ['key set where the other side is absent', { a: 1 }, { a: 1, b: 2 }, true],
-      ['different keys at the same count', { a: 1, b: undefined }, { a: 1, c: 2 }, true],
+      ['different keys at the same defined count', { a: 1, b: undefined }, { c: 2 }, true],
+      ['null value where the other side is absent', { a: 1 }, { a: 1, b: null }, true],
     ])('%s', (_name, original, current, expected) => {
       expect(hasSettingsChanged(original, current)).toBe(expected);
     });

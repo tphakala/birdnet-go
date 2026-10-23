@@ -9,7 +9,9 @@ import { safeGet, safeArrayAccess } from './security';
 
 /** Own enumerable keys of an object whose value is not undefined. */
 function definedKeys(obj: Record<string, unknown>): string[] {
-  return Object.keys(obj).filter(key => safeGet(obj, key) !== undefined);
+  return Object.entries(obj)
+    .filter(([, value]) => value !== undefined)
+    .map(([key]) => key);
 }
 
 /**
@@ -21,8 +23,9 @@ function definedKeys(obj: Record<string, unknown>): string[] {
  * - Efficient array and object iteration
  * - No JSON.stringify overhead
  * - Handles circular references gracefully
- * - Ignores object keys whose value is undefined, matching JSON.stringify, which
- *   the save toolbar uses
+ * - Treats an object key whose value is undefined as absent, as JSON.stringify
+ *   does for the save toolbar's comparison (other JSON rules, such as key order,
+ *   are not mirrored)
  *
  * @param a First value to compare
  * @param b Second value to compare
