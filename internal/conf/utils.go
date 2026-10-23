@@ -555,12 +555,14 @@ func GetFfmpegVersionFrom(ffmpegPath string) (version string, major, minor int) 
 // Settings validation runs the probe inside settings writes, which hold the
 // process-wide settings writer lock, so a hung ffmpeg must not hold it forever.
 // The limit is generous so a cold first start from slow storage still finishes.
+// A killed probe can take up to ffmpegProbeWaitDelay longer to return.
 // It is a variable so that it can be tuned without changing the probe.
 var ffmpegVersionProbeTimeout = 30 * time.Second
 
 // boundedFfmpegVersion is the production ffmpegVersionDetector: it detects the
-// version like GetFfmpegVersionFrom but gives up after ffmpegVersionProbeTimeout,
-// returning the same empty result as any other failed probe.
+// version like GetFfmpegVersionFrom but gives up after ffmpegVersionProbeTimeout
+// (plus up to ffmpegProbeWaitDelay for the output pipe to close), returning the
+// same empty result as any other failed probe.
 func boundedFfmpegVersion(ffmpegPath string) (version string, major, minor int) {
 	ctx, cancel := context.WithTimeout(context.Background(), ffmpegVersionProbeTimeout)
 	defer cancel()
@@ -577,7 +579,9 @@ const ffmpegProbeWaitDelay = 2 * time.Second
 // GetFfmpegVersionFromContext is like GetFfmpegVersionFrom but bounds the
 // `ffmpeg -version` probe with the supplied context, so a hung or wrapped
 // binary cannot block the caller indefinitely. Returns empty string and 0,0
-// if detection fails or the context is cancelled.
+// if detection fails or the context is cancelled. A process that exited
+// successfully still yields its version when a child holds the output pipe past
+// ffmpegProbeWaitDelay.
 func GetFfmpegVersionFromContext(ctx context.Context, ffmpegPath string) (version string, major, minor int) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -586,7 +590,8 @@ func GetFfmpegVersionFromContext(ctx context.Context, ffmpegPath string) (versio
 	// A wrapper script can leave a child holding the output pipe after the process
 	// exits or is killed; without a wait delay CombinedOutput would keep waiting
 	// for it. When the process itself exited successfully, CombinedOutput returns
-	// exec.ErrWaitDelay together with the complete output, which is still valid.
+	// exec.ErrWaitDelay together with the output captured so far; it may be partial,
+	// so ParseFfmpegVersion below decides whether it holds a version.
 	cmd.WaitDelay = ffmpegProbeWaitDelay
 	output, err := cmd.CombinedOutput()
 	if err != nil && !errors.Is(err, exec.ErrWaitDelay) {
