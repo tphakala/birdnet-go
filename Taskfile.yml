@@ -1442,7 +1442,9 @@ tasks:
         if [ ! -f "{{.TFLITE_LIB_DIR}}/{{.LIB_FILENAME}}" ]; then
           echo "TensorFlow Lite C library not found. Downloading..."
           tflite_archive="tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}"
-          wget -q "https://github.com/tphakala/tflite_c/releases/download/{{.TFLITE_VERSION}}/${tflite_archive}" -P ./ || exit 1
+          # -O, not -P: with -P a leftover archive makes wget save the new one as
+          # "<name>.1", and the check below would read the stale file.
+          wget -q "https://github.com/tphakala/tflite_c/releases/download/{{.TFLITE_VERSION}}/${tflite_archive}" -O "${tflite_archive}" || { rm -f "${tflite_archive}"; exit 1; }
           # Verify the archive against the pinned SHA256 before extraction, as
           # check-openvino does. sha256sum on Linux, shasum on macOS.
           if [ -z "{{.TFLITE_SHA256}}" ]; then
