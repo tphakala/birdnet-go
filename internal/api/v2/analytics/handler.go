@@ -147,6 +147,7 @@ func (c *Handler) RegisterInsightsRoutes(g *echo.Group) {
 	insightsGroup.GET("/phantom-species", c.GetPhantomSpecies)
 	insightsGroup.GET("/dawn-chorus", c.GetDawnChorus)
 	insightsGroup.GET("/migration", c.GetMigration)
+	insightsGroup.GET("/model-contributions", c.GetModelContributionStats)
 
 	g.GET("/dashboard/kpis", c.GetDashboardKPIs)
 }

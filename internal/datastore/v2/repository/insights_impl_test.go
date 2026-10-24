@@ -32,6 +32,7 @@ func setupInsightsTestDB(t *testing.T) *gorm.DB {
 		&entities.Label{},
 		&entities.Detection{},
 		&entities.DetectionReview{},
+		&entities.DetectionModelContribution{},
 	)
 	require.NoError(t, err)
 
