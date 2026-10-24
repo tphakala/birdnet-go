@@ -23,8 +23,10 @@ type modelContributionReader interface {
 
 // ModelContributionResponse describes one model's contribution to a detection.
 // MinConfidence, MeanConfidence, FirstHitAt and LastHitAt are present together
-// or not at all: they are absent for rows recorded before these statistics
-// existed, never reported as zero.
+// or not at all: they are absent when the row has no recorded statistics (rows
+// recorded before they existed) or its stored values are unusable (non-positive
+// hit count, minimum above maximum, first hit after last hit), never reported as
+// zero.
 type ModelContributionResponse struct {
 	ModelName      string   `json:"modelName"`
 	ModelVersion   string   `json:"modelVersion"`

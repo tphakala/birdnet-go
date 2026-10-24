@@ -306,7 +306,8 @@ fresh render removes the older `-bat-v2` and `-bat` files next to it.
 the species for this detection, largest hit count first (then highest maximum confidence). Each element
 has `modelName`, `modelVersion`, `modelVariant`, `modelType`, `hitCount` and `maxConfidence`, plus
 `minConfidence`, `meanConfidence`, `firstHitAt` and `lastHitAt`. The last four appear together and are
-omitted for detections recorded before these statistics existed. Times are RFC3339 in the server's time
+omitted when they were not recorded (detections recorded before these statistics existed) or the stored
+values are unusable (zero hit count, minimum above maximum, first hit after last hit). Times are RFC3339 in the server's time
 zone, like `beginTime`.
 
 - The whole field is omitted on the legacy database, during migration, for detections with no recorded
