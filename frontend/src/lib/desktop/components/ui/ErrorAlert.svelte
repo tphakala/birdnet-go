@@ -72,11 +72,15 @@
     // Declared after the spread so it cannot be replaced; still honour a caller's handler
     rest.onfocusin?.(event);
     const from = event.relatedTarget;
-    // Moving between controls inside the alert keeps the earlier answer. Entering
-    // from outside replaces it, with nothing when focus came from no element
-    // (a click on plain page content, the window regaining focus).
-    if (from instanceof Node && root?.contains(from)) return;
-    returnFocusTo = from instanceof HTMLElement || from instanceof SVGElement ? from : null;
+    // Only focus arriving from an element outside the alert replaces the target.
+    // Moving between controls inside the alert keeps it, and so does focus with no
+    // related element (the window or tab regaining focus while a control in the
+    // alert is focused, or a click on plain page content). That can leave an older
+    // target in place after a later entry from the page body, which is harmless:
+    // handleDismiss only uses it while it is still connected and outside the alert.
+    if (!(from instanceof HTMLElement || from instanceof SVGElement)) return;
+    if (root?.contains(from)) return;
+    returnFocusTo = from;
   }
 
   function handleDismiss(event: MouseEvent) {

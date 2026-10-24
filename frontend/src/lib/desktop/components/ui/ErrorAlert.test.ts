@@ -116,7 +116,27 @@ describe('ErrorAlert', () => {
     }
   });
 
-  it('does not refocus an earlier element when focus entered from no element', async () => {
+  it('does not move focus when focus entered from no element and nothing was remembered', async () => {
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+
+    try {
+      renderTyped(ErrorAlertTestWrapper, { props: { dismissible: true } });
+      const dismissButton = screen.getByLabelText('Dismiss alert');
+
+      // Nothing outside the alert had focus, so there is no related element
+      dismissButton.focus();
+
+      await fireEvent.click(dismissButton, { detail: KEYBOARD_CLICK_DETAIL });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(document.activeElement).not.toBe(outside);
+    } finally {
+      outside.remove();
+    }
+  });
+
+  it('keeps the return target when the window regains focus inside the alert', async () => {
     const outside = document.createElement('button');
     document.body.appendChild(outside);
 
@@ -126,13 +146,13 @@ describe('ErrorAlert', () => {
 
       outside.focus();
       dismissButton.focus();
-      // Focus leaves the page content, then comes back into the alert with no related element
-      dismissButton.blur();
-      dismissButton.focus();
+      // The window regaining focus fires focusin on the focused control with no related element
+      await fireEvent.focusIn(dismissButton, { relatedTarget: null });
 
-      await fireEvent.click(dismissButton);
+      await fireEvent.click(dismissButton, { detail: KEYBOARD_CLICK_DETAIL });
 
-      expect(document.activeElement).not.toBe(outside);
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(document.activeElement).toBe(outside);
     } finally {
       outside.remove();
     }
