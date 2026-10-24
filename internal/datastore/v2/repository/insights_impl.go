@@ -24,7 +24,7 @@ func NewInsightsRepository(db *gorm.DB, useV2Prefix, isMySQL bool) InsightsRepos
 	}
 }
 
-// Table name helpers — same pattern as detectionRepository.
+// Table name helpers, same pattern as detectionRepository.
 func (r *insightsRepository) detectionsTable() string {
 	if r.useV2Prefix {
 		return tableV2Detections
@@ -60,7 +60,7 @@ func (r *insightsRepository) modelsTable() string {
 	return tableAIModels
 }
 
-// SQL expression helpers — same offset-arithmetic pattern as detectionRepository.hourFromUnixExpr.
+// SQL expression helpers, same offset-arithmetic pattern as detectionRepository.hourFromUnixExpr.
 // offsetSeconds is the configured timezone's UTC offset; it is added to the epoch before the
 // date/hour/year is extracted, so the result buckets by wall-clock value in that zone and is
 // independent of the database session / OS-local timezone (unlike the older 'localtime' /
