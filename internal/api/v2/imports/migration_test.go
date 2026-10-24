@@ -3,6 +3,7 @@ package importsapi
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,6 +20,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 
@@ -565,15 +569,20 @@ func TestMigrationStatusResponse_Progress(t *testing.T) {
 	assert.False(t, response.ShouldReadFromV2)
 }
 
-// TestGetMigrationStatus_NoStateManager tests behavior when state manager is not configured.
+// TestGetMigrationStatus_NoStateManager pins the response for a legacy install
+// without a migration state manager: a 503 with the not-configured error key,
+// and nothing logged at warn or error, because the dashboard banner requests
+// this endpoint on every page load and the condition is reported once at startup.
 // Note: Not parallel due to global state modification.
 func TestGetMigrationStatus_NoStateManager(t *testing.T) {
 	t.Attr("component", "migration")
 	t.Attr("type", "unit")
 	t.Attr("feature", "error-handling")
 
+	buf := logtest.CaptureBufferAt(t, slog.LevelWarn)
+
 	e := echo.New()
-	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
+	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), APILogger: logger.Global().Module("api")}}
 	controller.Settings.Store(getTestSettings(t))
 
 	// Save and clear the global state manager
@@ -588,6 +597,51 @@ func TestGetMigrationStatus_NoStateManager(t *testing.T) {
 	err := controller.GetMigrationStatus(ctx)
 	require.NoError(t, err) // Error is handled in response
 	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+
+	var resp apicore.ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, http.StatusServiceUnavailable, resp.Code)
+	assert.Equal(t, migrationNotConfiguredMessage, resp.Message)
+	assert.Equal(t, notification.MsgErrMigrationNotConfigured, resp.ErrorKey)
+	assert.NotEmpty(t, resp.CorrelationID)
+	assert.Empty(t, buf.String(), "an expected missing state manager must not log at warn or error")
+}
+
+// TestRequireMigrationStateManager_NoStateManagerLogsError pins that a
+// user-initiated migration action without a state manager is still logged as
+// an error, unlike the polled status request.
+// Note: Not parallel due to global state modification.
+func TestRequireMigrationStateManager_NoStateManagerLogsError(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "error-handling")
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelWarn)
+
+	e := echo.New()
+	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), APILogger: logger.Global().Module("api")}}
+	controller.Settings.Store(getTestSettings(t))
+
+	prevSM := stateManager
+	stateManager = nil
+	defer func() { stateManager = prevSM }()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	next := func(echo.Context) error {
+		t.Error("next handler must not run without a state manager")
+		return nil
+	}
+	require.NoError(t, controller.requireMigrationStateManager(next)(ctx))
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+
+	var resp apicore.ErrorResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, migrationNotConfiguredMessage, resp.Message)
+	assert.Equal(t, notification.MsgErrMigrationNotConfigured, resp.ErrorKey)
+	assert.Contains(t, buf.String(), "API Error")
 }
 
 // TestGetMigrationStatus_V2OnlyLegacyNotice pins that an install running the

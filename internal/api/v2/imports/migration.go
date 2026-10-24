@@ -12,6 +12,7 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -165,12 +166,19 @@ func getIsV2OnlyMode() bool {
 	return isV2OnlyMode
 }
 
+// migrationNotConfiguredMessage is the 503 message for a request that needs
+// the migration state manager when the install has none.
+const migrationNotConfiguredMessage = "Migration is not configured"
+
+// errMigrationNotConfigured is the error behind migrationNotConfiguredMessage.
+var errMigrationNotConfigured = errors.NewStd("migration not configured")
+
 // requireMigrationStateManager is middleware that returns 503 if the migration state manager is not available.
 func (c *Handler) requireMigrationStateManager(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		if getStateManager() == nil {
-			return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-				"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
+			return c.HandleErrorWithKey(ctx, errMigrationNotConfigured,
+				migrationNotConfiguredMessage, http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
 		}
 		return next(ctx)
 	}
@@ -250,10 +258,16 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 				CleanupSpaceReclaimed:  cleanupReclaimed,
 			})
 		}
-		c.LogWarnIfEnabled("Migration state manager not available",
+		// A legacy install without a state manager answers 503 on every request
+		// here, and the dashboard banner polls this endpoint on each page load.
+		// The condition is expected and was already reported once when migration
+		// setup failed at startup, so respond without the error log and the
+		// server error report that HandleErrorWithKey would add.
+		c.LogDebugIfEnabled("Migration state manager not available",
 			logger.String("path", path), logger.String("ip", ip))
-		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
+		resp := c.NewErrorResponse(errMigrationNotConfigured, migrationNotConfiguredMessage, http.StatusServiceUnavailable)
+		resp.ErrorKey = notification.MsgErrMigrationNotConfigured
+		return ctx.JSON(http.StatusServiceUnavailable, resp)
 	}
 
 	// Get migration state
