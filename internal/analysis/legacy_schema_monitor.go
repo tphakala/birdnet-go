@@ -31,7 +31,8 @@ const (
 )
 
 // legacyNoticeText is the notice for one legacy notice kind, used for the bell
-// notice and the push reminder: its priority and its English fallback text, with the keys that let the UI translate it.
+// notice and the push reminder: its priority and its English fallback text,
+// with the keys that let the UI translate it.
 type legacyNoticeText struct {
 	priority             notification.Priority
 	title, message       string
@@ -113,8 +114,8 @@ func migrationStateTagValue(state *entities.MigrationState, err error) string {
 // legacySchemaMonitor watches the migration state on installs that still run
 // the legacy schema. It keeps the migration_state telemetry tag current and
 // keeps one bell notice in line with the migration state and, when a reminder
-// is attached, sends the weekly push reminder. It is only built for
-// installs with a readable migration state, so v2 installs pay nothing.
+// is attached, sends the weekly push reminder. It is only built for installs
+// with a readable migration state, so v2 installs pay nothing.
 type legacySchemaMonitor struct {
 	states   migrationStateReader
 	interval time.Duration
@@ -132,8 +133,8 @@ type legacySchemaMonitor struct {
 	// while telemetry is off); tests replace it.
 	setTag func(string) bool
 
-	// mu serializes evaluations and guards lastTag, kind, latch and the reminder. Lock order:
-	// mu, then the latch's own lock.
+	// mu serializes evaluations and guards lastTag, kind, latch and the
+	// reminder. Lock order: mu, then the latch's own lock.
 	mu      sync.Mutex
 	lastTag string
 	kind    migration.LegacyNoticeKind // last notice kind from a successful read; none before one

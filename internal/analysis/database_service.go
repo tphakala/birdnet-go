@@ -64,8 +64,8 @@ type DatabaseService struct {
 	v2OnlyMode bool
 
 	// legacyMonitor keeps the migration_state telemetry tag, the legacy schema
-	// bell notice and the weekly push reminder current. It exists only while the process runs the legacy
-	// schema with a state manager.
+	// bell notice and the weekly push reminder current. It exists only while
+	// the process runs the legacy schema with a state manager.
 	legacyMonitor *legacySchemaMonitor
 }
 
@@ -108,9 +108,9 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 // It handles three startup paths: v2-only (post-migration), fresh install, and legacy mode.
 // Migration infrastructure is initialized when not in v2-only mode; on a legacy
 // install with a migration state manager it also starts the monitor that keeps
-// the migration_state telemetry tag, the legacy schema bell notice and the weekly
-// push reminder current, and logs the legacy schema startup WARN once (the monitor logs it, or this
-// method when no state manager exists).
+// the migration_state telemetry tag, the legacy schema bell notice and the
+// weekly push reminder current, and logs the legacy schema startup WARN once
+// (the monitor logs it, or this method when no state manager exists).
 //
 //nolint:gocognit,gocyclo // Database initialization requires handling multiple startup paths with detailed logging
 func (d *DatabaseService) Start(_ context.Context) error {
