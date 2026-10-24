@@ -542,7 +542,7 @@
 <div
   bind:this={viewAnchor}
   tabindex="-1"
-  class="rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+  class="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
 >
   <!-- Failed status fetches and failed migration actions land here, whichever view follows -->
   {#if !migrationStatus.loading && migrationStatus.error}
