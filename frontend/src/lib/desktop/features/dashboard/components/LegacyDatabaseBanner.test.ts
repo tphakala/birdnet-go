@@ -12,9 +12,11 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
 import { renderTyped } from '../../../../../test/render-helpers';
 
-const { apiGet, isGuestMode } = vi.hoisted(() => ({
+const { apiGet, isGuestMode, handleAppLinkClick } = vi.hoisted(() => ({
   apiGet: vi.fn<(url: string) => Promise<unknown>>(),
   isGuestMode: vi.fn<() => boolean>(() => false),
+  // Prevents the anchor's default navigation, as the real handler does for in-app links.
+  handleAppLinkClick: vi.fn<(event: Event) => void>(event => event.preventDefault()),
 }));
 
 vi.mock('$lib/utils/api', () => ({
@@ -26,13 +28,16 @@ vi.mock('$lib/stores/appState.svelte', () => ({
 }));
 
 vi.mock('$lib/stores/navigation.svelte', () => ({
-  handleAppLinkClick: vi.fn(),
+  handleAppLinkClick,
 }));
 
 import LegacyDatabaseBanner from './LegacyDatabaseBanner.svelte';
+import { resetBasePath, setBasePath } from '$lib/utils/urlHelpers';
 
 const STATUS_URL = '/api/v2/system/database/migration/status';
 const DISMISS_KEY = 'birdnet.legacyDbBannerDismissed';
+// A deployment prefix such as a reverse proxy or Home Assistant ingress adds.
+const BASE_PATH = '/proxy/birdnet';
 
 /** Lets the mount fetch settle and the banner render. */
 async function settle(): Promise<void> {
@@ -51,11 +56,13 @@ describe('LegacyDatabaseBanner', () => {
     apiGet.mockReset();
     isGuestMode.mockReturnValue(false);
     sessionStorage.clear();
+    setBasePath(BASE_PATH);
   });
 
   afterEach(() => {
     cleanup();
     sessionStorage.clear();
+    resetBasePath();
   });
 
   it.each([
@@ -74,7 +81,9 @@ describe('LegacyDatabaseBanner', () => {
     expect(banner).toHaveClass('mb-6');
 
     const link = screen.getByRole('link', { name: 'dashboard.legacyDatabase.action' });
-    expect(link.getAttribute('href')).toContain('/ui/system/database');
+    expect(link).toHaveAttribute('href', `${BASE_PATH}/ui/system/database`);
+    await fireEvent.click(link);
+    expect(handleAppLinkClick).toHaveBeenCalledTimes(1);
     expect(screen.getByRole('button', { name: 'common.aria.dismissAlert' })).toBeInTheDocument();
   });
 
