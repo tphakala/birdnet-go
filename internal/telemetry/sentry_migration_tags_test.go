@@ -8,8 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// migrationTagSetters lists the two setters whose boolean result the legacy
-// schema monitor relies on to retry an unapplied tag.
+// migrationTagSetters lists the two migration tag setters. Their boolean result
+// means the tag was applied; the legacy schema monitor uses it for the
+// migration_state tag to retry an unapplied value.
 var migrationTagSetters = []struct {
 	name   string
 	key    string
