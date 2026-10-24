@@ -107,6 +107,7 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	// Fresh install goes to v2-only mode.
 	assert.True(t, svc.IsV2OnlyMode(), "should be in v2-only mode for fresh install")
 	assert.NotNil(t, svc.V2Manager(), "V2Manager() should be set for fresh install")
+	assert.Nil(t, svc.legacyMonitor, "no migration state monitor on a v2 install")
 }
 
 func TestBootParamsFromStartupSQLite(t *testing.T) {

@@ -716,6 +716,37 @@ func SetDatastoreSchemaTag(schemaVersion string) {
 	})
 }
 
+const (
+	// migrationStateTagKey is the Sentry tag holding the legacy-to-v2 migration state.
+	migrationStateTagKey = "migration_state"
+	// migrationPrereqTagKey is the Sentry tag holding the outcome of the migration prerequisite checks.
+	migrationPrereqTagKey = "migration_prereq"
+)
+
+// SetMigrationStateTag sets a global Sentry tag with the legacy-to-v2 migration
+// state. The caller must pass a value from a closed set (the migration status
+// strings plus fixed fallbacks), never error text or a path.
+func SetMigrationStateTag(value string) {
+	if shouldSkipTelemetry() || value == "" {
+		return
+	}
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTag(migrationStateTagKey, value)
+	})
+}
+
+// SetMigrationPrereqTag sets a global Sentry tag with the outcome of the
+// migration prerequisite checks. The caller must pass a value from a closed
+// set: "passed" or the fixed ID of a failing check, never error text or a path.
+func SetMigrationPrereqTag(value string) {
+	if shouldSkipTelemetry() || value == "" {
+		return
+	}
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTag(migrationPrereqTagKey, value)
+	})
+}
+
 // processDeferredMessages processes any messages that were captured before Sentry was ready
 func processDeferredMessages() int {
 	deferredMutex.Lock()

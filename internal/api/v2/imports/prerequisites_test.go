@@ -699,3 +699,48 @@ const testDiskFreeBytes = 2 * MinDiskSpaceBytes
 
 // stubDiskFree is the diskFreeFn the setup helpers install.
 func stubDiskFree(string) (uint64, error) { return testDiskFreeBytes, nil }
+
+// TestPrerequisiteTagValue pins the closed set of values reported to telemetry
+// for the prerequisite checks: only a failing critical check is blocking.
+func TestPrerequisiteTagValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		checks []PrerequisiteCheck
+		want   string
+	}{
+		{
+			name: "all checks passed",
+			checks: []PrerequisiteCheck{
+				{ID: "state_idle", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+				{ID: "disk_space", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+			},
+			want: prerequisiteTagPassed,
+		},
+		{
+			name: "failed warning-severity check is not blocking",
+			checks: []PrerequisiteCheck{
+				{ID: "state_idle", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+				{ID: "memory_available", Status: CheckStatusFailed, Severity: CheckSeverityWarning},
+			},
+			want: prerequisiteTagPassed,
+		},
+		{
+			name: "first critical failure wins",
+			checks: []PrerequisiteCheck{
+				{ID: "state_idle", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+				{ID: "disk_space", Status: CheckStatusFailed, Severity: CheckSeverityCritical},
+				{ID: "sqlite_integrity", Status: CheckStatusError, Severity: CheckSeverityCritical},
+			},
+			want: "disk_space",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, prerequisiteTagValue(tt.checks))
+		})
+	}
+}

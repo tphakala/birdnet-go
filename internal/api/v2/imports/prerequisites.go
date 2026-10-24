@@ -41,6 +41,22 @@ type PrerequisitesResponse struct {
 	CheckedAt         time.Time           `json:"checked_at"`
 }
 
+// prerequisiteTagPassed is the migration_prereq telemetry value when no critical check blocks.
+const prerequisiteTagPassed = "passed"
+
+// prerequisiteTagValue reduces check results to the bounded migration_prereq
+// telemetry value: "passed" when no critical check failed or errored,
+// otherwise the fixed ID of the first one that did.
+func prerequisiteTagValue(checks []PrerequisiteCheck) string {
+	for i := range checks {
+		c := &checks[i]
+		if c.Severity == CheckSeverityCritical && (c.Status == CheckStatusFailed || c.Status == CheckStatusError) {
+			return c.ID
+		}
+	}
+	return prerequisiteTagPassed
+}
+
 // gormDBProvider is implemented by datastores that can provide a GORM DB instance.
 // Used by prerequisite checks that need direct database access for integrity checks.
 type gormDBProvider interface {

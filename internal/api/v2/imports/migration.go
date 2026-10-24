@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // MigrationStatusResponse represents the migration status for the API.
@@ -704,6 +705,7 @@ func (c *Handler) runPreflightChecks() error {
 
 // runCriticalPrerequisiteChecks runs all critical checks that must pass before migration.
 // This is used by both GetPrerequisites and runPreflightChecks to ensure consistency.
+// It also records the outcome in the migration_prereq telemetry tag.
 func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
 	checks := make([]PrerequisiteCheck, 0, 6)
 
@@ -729,6 +731,10 @@ func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
 
 	// Record count is also critical
 	checks = append(checks, c.checkRecordCount())
+
+	// Record the outcome for telemetry; this only runs when a user opens the
+	// prerequisites view or starts a migration.
+	telemetry.SetMigrationPrereqTag(prerequisiteTagValue(checks))
 
 	return checks
 }
