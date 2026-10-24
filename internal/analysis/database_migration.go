@@ -215,6 +215,14 @@ func setupMigrationWorker(cfg *migrationSetupConfig) (*datastoreV2.StateManager,
 type migrationInfra struct {
 	manager datastoreV2.Manager
 	states  *datastoreV2.StateManager
+	// metadata is the v2 app_metadata store the push reminder keeps its state in.
+	metadata appMetadataStore
+}
+
+// newMetadataStore builds the v2 app_metadata repository for a migration
+// manager. useV2Prefix is true for MySQL, where the v2 tables share a database.
+func newMetadataStore(manager datastoreV2.Manager, useV2Prefix bool) appMetadataStore {
+	return repository.NewAppMetadataRepository(manager.DB(), nil, useV2Prefix, manager.IsMySQL())
 }
 
 // initializeMigrationInfrastructure sets up the v2 database migration infrastructure.
@@ -348,7 +356,7 @@ func initializeMigrationInfrastructure(settings *conf.Settings, ds datastore.Int
 		return nil, err
 	}
 
-	return &migrationInfra{manager: v2Manager, states: states}, nil
+	return &migrationInfra{manager: v2Manager, states: states, metadata: newMetadataStore(v2Manager, false)}, nil
 }
 
 // initializeMySQLMigrationInfrastructure sets up migration infrastructure for MySQL.
@@ -411,7 +419,7 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 		return nil, err
 	}
 
-	return &migrationInfra{manager: v2Manager, states: states}, nil
+	return &migrationInfra{manager: v2Manager, states: states, metadata: newMetadataStore(v2Manager, true)}, nil
 }
 
 // initializeV2OnlyMode creates a V2OnlyDatastore when migration is complete.

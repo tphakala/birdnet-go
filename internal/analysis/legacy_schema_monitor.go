@@ -30,8 +30,9 @@ const (
 	legacySchemaCheckOperation = "legacy_schema_check"
 )
 
-// legacyNoticeText is the bell notice for one legacy notice kind: its priority
-// and its English fallback text, with the keys that let the UI translate it.
+// legacyNoticeText is the notice for one legacy notice kind, used for the bell
+// notice and the push reminder: its priority and its English fallback text,
+// with the keys that let the UI translate it.
 type legacyNoticeText struct {
 	priority             notification.Priority
 	title, message       string
@@ -71,13 +72,14 @@ var legacyNoticeKinds = map[migration.LegacyNoticeKind]legacyNoticeText{
 	},
 }
 
-// newLegacyNoticeNotification builds the bell notice from its text.
-func newLegacyNoticeNotification(text *legacyNoticeText) *notification.Notification {
+// newLegacyNoticeNotification builds the notice from its text for one delivery
+// target: the bell for the persistent notice, push for the reminder.
+func newLegacyNoticeNotification(text *legacyNoticeText, target string) *notification.Notification {
 	return notification.NewNotification(notification.TypeWarning, text.priority, text.title, text.message).
 		WithComponent(notification.ComponentDatabase).
 		WithTitleKey(text.titleKey, nil).
 		WithMessageKey(text.messageKey, nil).
-		WithDeliveryTarget(notification.DeliveryTargetBell)
+		WithDeliveryTarget(target)
 }
 
 // migrationStateReader reads the persisted migration state.
@@ -111,8 +113,9 @@ func migrationStateTagValue(state *entities.MigrationState, err error) string {
 
 // legacySchemaMonitor watches the migration state on installs that still run
 // the legacy schema. It keeps the migration_state telemetry tag current and
-// keeps one bell notice in line with the migration state. It is only built for
-// installs with a readable migration state, so v2 installs pay nothing.
+// keeps one bell notice in line with the migration state and, when a reminder
+// is attached, sends the weekly push reminder. It is only built for installs
+// with a readable migration state, so v2 installs pay nothing.
 type legacySchemaMonitor struct {
 	states   migrationStateReader
 	interval time.Duration
@@ -130,13 +133,15 @@ type legacySchemaMonitor struct {
 	// while telemetry is off); tests replace it.
 	setTag func(string) bool
 
-	// mu serializes evaluations and guards lastTag, kind and latch. Lock order:
-	// mu, then the latch's own lock.
+	// mu serializes evaluations and guards lastTag, kind, latch and the
+	// reminder. Lock order: mu, then the latch's own lock.
 	mu      sync.Mutex
 	lastTag string
 	kind    migration.LegacyNoticeKind // last notice kind from a successful read; none before one
 	latch   notification.PersistentNotice
-	applied bool // lastTag was accepted by setTag; false means offer it again on the next tick, even when the read fails
+	// reminder sends the weekly push reminder; nil when there is no store for it.
+	reminder *legacyReminder
+	applied  bool // lastTag was accepted by setTag; false means offer it again on the next tick, even when the read fails
 
 	stopCh   chan struct{}
 	doneCh   chan struct{}
@@ -158,6 +163,13 @@ func newLegacySchemaMonitor(states migrationStateReader, interval time.Duration,
 		stopCh:       make(chan struct{}),
 		doneCh:       make(chan struct{}),
 	}
+}
+
+// setReminder attaches the push reminder. Call it before start.
+func (m *legacySchemaMonitor) setReminder(r *legacyReminder) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.reminder = r
 }
 
 // start evaluates once synchronously, logs the legacy schema startup WARN once
@@ -234,10 +246,13 @@ func (m *legacySchemaMonitor) stop() {
 // last publish was not applied (telemetry was off, for example). A failed read
 // keeps the last value, and offers it again while it is not applied; before
 // any successful read it publishes unavailable. It then brings the bell notice
-// in line with the notice kind of the last successful read.
+// in line with the notice kind of the last successful read and offers that kind
+// to the push reminder, on every return path.
 func (m *legacySchemaMonitor) evaluate() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// Deferred first so it runs after reconcileLocked and on every return path.
+	defer m.remindLocked()
 	defer m.reconcileLocked()
 
 	state, err := m.states.GetState()
@@ -278,10 +293,26 @@ func (m *legacySchemaMonitor) reconcileLocked() {
 		if !ok {
 			return "", nil
 		}
-		return string(kind), func() *notification.Notification { return newLegacyNoticeNotification(&text) }
+		return string(kind), func() *notification.Notification {
+			return newLegacyNoticeNotification(&text, notification.DeliveryTargetBell)
+		}
 	}); err != nil {
 		m.log.Warn("failed to update legacy database schema notification",
 			logger.Error(err),
 			logger.String("operation", legacySchemaCheckOperation))
 	}
+}
+
+// remindLocked offers the current notice kind to the push reminder. The caller
+// holds m.mu. Without a notification service nothing is sent or recorded; the
+// next tick is the retry.
+func (m *legacySchemaMonitor) remindLocked() {
+	if m.reminder == nil {
+		return
+	}
+	svc := m.service()
+	if svc == nil {
+		return
+	}
+	m.reminder.check(m.kind, svc)
 }
