@@ -177,6 +177,14 @@ type DetectionRepository interface {
 	// SaveModelContributions stores per-model contribution data for a detection.
 	SaveModelContributions(ctx context.Context, detectionID uint, contribs []*entities.DetectionModelContribution) error
 
+	// GetModelContributionsByDetectionIDs returns the stored model contributions of
+	// the given detections, keyed by detection ID. Detections without rows have no
+	// key. Each detection's rows are ordered by hit count (highest first), then
+	// maximum confidence (highest first), then model ID. Each row's Model carries
+	// ID, Name, Version, Variant and ModelType only. Large ID sets are queried in
+	// chunks of batchQuerySize.
+	GetModelContributionsByDetectionIDs(ctx context.Context, detectionIDs []uint) (map[uint][]*entities.DetectionModelContribution, error)
+
 	// === Reviews ===
 
 	// SaveReview creates or updates a review for a detection.

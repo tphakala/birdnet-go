@@ -1288,6 +1288,88 @@ func (r *detectionRepository) SaveModelContributions(ctx context.Context, detect
 	}, r.metrics)
 }
 
+// contributionWithModelRow is the scan target of the contribution and model join.
+type contributionWithModelRow struct {
+	ID            uint
+	DetectionID   uint
+	ModelID       uint
+	HitCount      int
+	MaxConfidence float64
+	FirstHitAt    *int64
+	LastHitAt     *int64
+	MinConfidence *float64
+	ConfidenceSum *float64
+	ModelName     string
+	ModelVersion  string
+	ModelVariant  string
+	ModelType     string
+}
+
+// contributionWithModelColumns lists the selected columns explicitly so that
+// classifier_path is never read.
+const contributionWithModelColumns = "c.id, c.detection_id, c.model_id, c.hit_count, c.max_confidence, " +
+	"c.first_hit_at, c.last_hit_at, c.min_confidence, c.confidence_sum, " +
+	"m.name AS model_name, m.version AS model_version, m.variant AS model_variant, m.model_type AS model_type"
+
+// contributionOrder gives each detection's contributions a total, stable order.
+const contributionOrder = "c.detection_id ASC, c.hit_count DESC, c.max_confidence DESC, c.model_id ASC"
+
+// GetModelContributionsByDetectionIDs returns the stored model contributions of
+// the given detections, keyed by detection ID. See the interface for ordering.
+func (r *detectionRepository) GetModelContributionsByDetectionIDs(ctx context.Context, detectionIDs []uint) (map[uint][]*entities.DetectionModelContribution, error) {
+	result := make(map[uint][]*entities.DetectionModelContribution)
+	if len(detectionIDs) == 0 {
+		return result, nil
+	}
+
+	// De-duplicate so one detection's rows are fetched by exactly one chunk.
+	ids := slices.Clone(detectionIDs)
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+
+	for i := 0; i < len(ids); i += batchQuerySize {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		chunk := ids[i:min(i+batchQuerySize, len(ids))]
+
+		var rows []contributionWithModelRow
+		err := r.db.WithContext(ctx).
+			Table(r.modelContributionsTable()+" c").
+			Select(contributionWithModelColumns).
+			Joins(fmt.Sprintf("JOIN %s m ON m.id = c.model_id", r.modelsTable())).
+			Where("c.detection_id IN ?", chunk).
+			Order(contributionOrder).
+			Scan(&rows).Error
+		if err != nil {
+			return nil, fmt.Errorf("batch load model contributions: %w", err)
+		}
+
+		for j := range rows {
+			row := &rows[j]
+			result[row.DetectionID] = append(result[row.DetectionID], &entities.DetectionModelContribution{
+				ID:            row.ID,
+				DetectionID:   row.DetectionID,
+				ModelID:       row.ModelID,
+				HitCount:      row.HitCount,
+				MaxConfidence: row.MaxConfidence,
+				FirstHitAt:    row.FirstHitAt,
+				LastHitAt:     row.LastHitAt,
+				MinConfidence: row.MinConfidence,
+				ConfidenceSum: row.ConfidenceSum,
+				Model: &entities.AIModel{
+					ID:        row.ModelID,
+					Name:      row.ModelName,
+					Version:   row.ModelVersion,
+					Variant:   row.ModelVariant,
+					ModelType: entities.ModelType(row.ModelType),
+				},
+			})
+		}
+	}
+	return result, nil
+}
+
 // SavePredictionsBatch stores predictions for multiple detections efficiently.
 // Uses ON CONFLICT DO NOTHING for idempotent migration support.
 func (r *detectionRepository) SavePredictionsBatch(ctx context.Context, preds []*entities.DetectionPrediction) error {

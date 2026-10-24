@@ -301,6 +301,20 @@ fresh render removes the older `-bat-v2` and `-bat` files next to it.
   the detection's model type cannot be looked up (a database error), and so does `GET /spectrogram/:id`
   with `sr`. Nothing is queued or written, and the request can be retried.
 
+**Model contributions.** On the enhanced (v2) database, `GET /detections`, `GET /detections/recent` and
+`GET /detections/:id` carry a read-only `modelContributions` array: one element per model that detected
+the species for this detection, largest hit count first (then highest maximum confidence). Each element
+has `modelName`, `modelVersion`, `modelVariant`, `modelType`, `hitCount` and `maxConfidence`, plus
+`minConfidence`, `meanConfidence`, `firstHitAt` and `lastHitAt`. The last four appear together and are
+omitted for detections recorded before these statistics existed. Times are RFC3339 in the server's time
+zone, like `beginTime`.
+
+- The whole field is omitted on the legacy database, during migration, for detections with no recorded
+  contributions (including migrated ones), and when the read fails or takes longer than 1 second.
+- `POST /search` does not carry it.
+- The SSE `pending` event has its own `modelContributions` with a different element shape (`modelID`,
+  `hitCount`, `maxConfidence`, present only when more than one model contributed).
+
 ### Notifications (`notifications/notifications.go`)
 
 | Method | Route                              | Handler                            | Auth | Description                                                                                                                                                                                    |
