@@ -16,6 +16,7 @@
   @component
 -->
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { TriangleAlert, CircleX, Info, X } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
@@ -36,22 +37,18 @@
   const DISMISS_KEY = 'birdnet.legacyDbBannerDismissed';
   const DISMISSED_VALUE = '1';
 
-  type BannerKind = Exclude<LegacyNoticeKind, 'none'>;
-
   interface Variant {
     tone: 'warning' | 'error';
-    role: 'status' | 'alert';
     icon: typeof TriangleAlert;
     titleKey: string;
     messageKey: string;
   }
 
-  const VARIANTS = new Map<BannerKind, Variant>([
+  const VARIANTS = new Map<LegacyNoticeKind, Variant>([
     [
       'not_started',
       {
         tone: 'warning',
-        role: 'status',
         icon: TriangleAlert,
         titleKey: 'notifications.content.migration.legacyNotStartedTitle',
         messageKey: 'notifications.content.migration.legacyNotStartedMessage',
@@ -61,7 +58,6 @@
       'in_progress',
       {
         tone: 'warning',
-        role: 'status',
         icon: Info,
         titleKey: 'notifications.content.migration.legacyInProgressTitle',
         messageKey: 'notifications.content.migration.legacyInProgressMessage',
@@ -71,7 +67,6 @@
       'needs_attention',
       {
         tone: 'error',
-        role: 'alert',
         icon: CircleX,
         titleKey: 'notifications.content.migration.legacyNeedsAttentionTitle',
         messageKey: 'notifications.content.migration.legacyNeedsAttentionMessage',
@@ -81,17 +76,12 @@
       'restart_required',
       {
         tone: 'warning',
-        role: 'status',
         icon: TriangleAlert,
         titleKey: 'notifications.content.migration.legacyRestartRequiredTitle',
         messageKey: 'notifications.content.migration.legacyRestartRequiredMessage',
       },
     ],
   ]);
-
-  function isBannerKind(value: unknown): value is BannerKind {
-    return [...VARIANTS.keys()].some(k => k === value);
-  }
 
   // Session-scoped dismissal, guarded so a private-window or blocked
   // sessionStorage never throws (see frontend/AGENTS.md).
@@ -104,8 +94,9 @@
   }
 
   let dismissed = $state(readDismissed());
-  let kind = $state<BannerKind | null>(null);
-  let variant = $derived(kind === null || dismissed ? undefined : VARIANTS.get(kind));
+  // $state.raw: the variant holds an icon component, which must not be proxied.
+  let variant = $state.raw<Variant | undefined>();
+  let isError = $derived(variant?.tone === 'error');
 
   function dismiss() {
     dismissed = true;
@@ -119,10 +110,12 @@
   $effect(() => {
     if (dismissed || isGuestMode()) return;
     let active = true;
-    api
-      .get<MigrationStatus>(MIGRATION_STATUS_ENDPOINT)
+    // untrack: api.get reads the CSRF token synchronously, and a token refresh
+    // elsewhere must not re-run this effect and fetch the status again.
+    untrack(() => api.get<MigrationStatus>(MIGRATION_STATUS_ENDPOINT))
       .then(status => {
-        if (active && isBannerKind(status.legacy_notice)) kind = status.legacy_notice;
+        // Unknown kinds and 'none' have no variant, so nothing renders.
+        if (active) variant = VARIANTS.get(status.legacy_notice ?? 'none');
       })
       .catch(() => {
         /* No banner when the status is unavailable (401, 503, network). */
@@ -133,13 +126,13 @@
   });
 </script>
 
-{#if variant}
+{#if variant && !dismissed}
   {@const Icon = variant.icon}
   <div
-    role={variant.role}
+    role={isError ? 'alert' : 'status'}
     class={cn(
       'flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center',
-      variant.tone === 'error'
+      isError
         ? 'border-[color-mix(in_srgb,var(--color-error)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-error)_10%,var(--color-base-100))]'
         : 'border-[color-mix(in_srgb,var(--color-warning)_40%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_10%,var(--color-base-100))]',
       className
@@ -148,7 +141,7 @@
     <Icon
       class={cn(
         'size-6 shrink-0',
-        variant.tone === 'error' ? 'text-[var(--color-error)]' : 'text-[var(--color-warning)]'
+        isError ? 'text-[var(--color-error)]' : 'text-[var(--color-warning)]'
       )}
       aria-hidden="true"
     />
@@ -165,7 +158,7 @@
       onclick={handleAppLinkClick}
       class={cn(
         'btn btn-sm shrink-0 self-start sm:self-auto',
-        variant.tone === 'error' ? 'btn-error' : 'btn-warning'
+        isError ? 'btn-error' : 'btn-warning'
       )}
     >
       {t('dashboard.legacyDatabase.action')}
