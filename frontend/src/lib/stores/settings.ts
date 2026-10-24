@@ -914,6 +914,12 @@ export interface GlobalSettingsState {
   isSaving: boolean;
   activeSection: string;
   error: string | null;
+  /**
+   * True when the failure in `error` was also shown as a toast, so the Settings page
+   * banner does not announce it a second time. Written with every non-null `error`;
+   * absent means no toast.
+   */
+  errorToasted?: boolean;
   dataLoaded: boolean;
 }
 
@@ -1437,8 +1443,11 @@ const MAX_SETTINGS_SAVE_ATTEMPTS = 2;
 /** Prefix of a weak entity tag; the backend compares If-Match strongly, so a weak tag never matches. */
 const WEAK_ETAG_PREFIX = 'W/';
 
-/** Thrown when every save attempt got a 412: the settings keep changing under the form. */
-class SettingsChangedElsewhereError extends Error {
+/**
+ * Thrown when every save attempt got a 412: the settings keep changing under the form.
+ * Callers identify the conflict with `instanceof`.
+ */
+export class SettingsChangedElsewhereError extends Error {
   /** The status of the conflict it reports, so telemetry filters it like the 412 itself. */
   readonly status = HTTP_PRECONDITION_FAILED;
 
@@ -1579,6 +1588,7 @@ async function persistFormData(notify: boolean): Promise<void> {
       ...state,
       isSaving: false,
       error: errorMessage,
+      errorToasted: notify,
     }));
 
     if (notify) {
@@ -1689,6 +1699,7 @@ export const settingsActions = {
         ...state,
         isLoading: false,
         error: errorMessage,
+        errorToasted: false,
       }));
       throw error;
     }
