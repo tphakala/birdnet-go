@@ -201,11 +201,11 @@ A single goroutine reads from `ResultsQueue` and processes each batch of results
 
 ### Cross-Model Detection Consensus
 
-Detections from different models for the **same species on the same source** are merged into a single `PendingDetection`. The key is `sourceID:commonName` (no model ID in the key).
+Detections from different models for the **same species on the same source** are merged into a single `PendingDetection`. The key is `sourceID:scientificName`, with the scientific name lower-cased (no model ID in the key).
 
 Each pending detection tracks:
 
-- `ModelContributions`: a map from model ID to `{HitCount, MaxConfidence, LastHitAt}`
+- `ModelContributions`: a map from model ID to `{HitCount, MaxConfidence, MinConfidence, ConfidenceSum, FirstHitAt, LastHitAt}`
 - `BestModelID`: which model produced the single highest confidence score
 - `FlushDeadline`: when to evaluate the detection for approval
 
@@ -241,7 +241,12 @@ Each `PendingDetection` stores a `ModelContributions` map tracking per-model sta
 | --------------- | ---------------------------------------------------------------- |
 | `HitCount`      | Number of analysis windows where this model detected the species |
 | `MaxConfidence` | Highest single-detection confidence from this model              |
-| `LastHitAt`     | Timestamp of the most recent hit from this model                 |
+| `MinConfidence` | Lowest single-detection confidence from this model               |
+| `ConfidenceSum` | Sum of the confidences of this model's hits (mean = sum / hits)  |
+| `FirstHitAt`    | Audio capture time of the end of this model's first hit window   |
+| `LastHitAt`     | Audio capture time of the end of this model's latest hit window  |
+
+When a detection is approved, these per-model statistics are saved with it in the `DetectionModelContribution` table.
 
 At flush time, the total hit count is the **sum across all models**. This means:
 

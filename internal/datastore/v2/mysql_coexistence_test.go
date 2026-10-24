@@ -24,7 +24,7 @@ import (
 )
 
 // Shared testcontainer state for all tests in this file.
-// Tests MUST NOT use t.Parallel() — they share one database and mutate schema.
+// Tests MUST NOT use t.Parallel(); they share one database and mutate schema.
 var (
 	coexTestContainer *containers.MySQLContainer
 	coexTestDB        *gorm.DB
@@ -43,7 +43,7 @@ func testMain(m *testing.M) int {
 	if code, skip := containers.SkipTestMainIfContainerRuntimeUnavailable(); skip {
 		return code
 	}
-	ctx := context.Background() //nolint:gocritic // testMain uses *testing.M, not *testing.T — no t.Context() available
+	ctx := context.Background() //nolint:gocritic // testMain uses *testing.M, not *testing.T; no t.Context() available
 
 	cfg := &containers.MySQLConfig{
 		Database:     "coexistence_test",
@@ -140,7 +140,7 @@ func seedLegacyTables(t *testing.T, db *gorm.DB) {
 	require.NoError(t, err, "failed to migrate legacy schema")
 
 	// Insert sample data into each table.
-	// BeginTime and EndTime must be non-zero — MySQL strict mode rejects '0000-00-00'.
+	// BeginTime and EndTime must be non-zero; MySQL strict mode rejects '0000-00-00'.
 	sampleTime := time.Date(2026, 1, 15, 8, 30, 0, 0, time.UTC)
 	require.NoError(t, db.Create(&datastore.Note{
 		CommonName:     "Common Blackbird",
@@ -344,7 +344,7 @@ func TestMySQL_V2Initialize_WithLegacyTables_CreatesV2Prefixed(t *testing.T) {
 	// Assert no bare v2 tables created (detections without prefix should NOT exist,
 	// since that would mean UseV2Prefix was ignored)
 	assert.False(t, tableExists(t, coexTestDB, coexTestDBName, "detections"),
-		"bare 'detections' table should NOT exist — UseV2Prefix must be effective")
+		"bare 'detections' table should NOT exist; UseV2Prefix must be effective")
 }
 
 // TestMySQL_V2Initialize_WithLegacyTables_LegacyDataIntact verifies that
@@ -522,4 +522,84 @@ func TestMySQL_StartupDetection_LegacyOnly_ReturnsLegacyMode(t *testing.T) {
 	assert.False(t, state.V2Available)
 	assert.False(t, state.FreshInstall)
 	require.NoError(t, state.Error)
+}
+
+// TestMySQL_V2Initialize_SwapsContributionDetectionIndex verifies the upgrade of a
+// v2_detection_model_contributions table created before the hit statistics
+// existed: InnoDB has bound the detection_id foreign key to the plain index, and
+// the drop must still succeed (the unique index takes over), keep the row and
+// keep the cascade working.
+func TestMySQL_V2Initialize_SwapsContributionDetectionIndex(t *testing.T) {
+	dropAllTables(t, coexTestDB, coexTestDBName)
+
+	mgr := newTestMySQLManager(t, true)
+	t.Cleanup(func() {
+		_ = mgr.Delete()
+		_ = mgr.Close()
+	})
+	require.NoError(t, mgr.Initialize())
+	db := mgr.DB()
+
+	const (
+		table    = "v2_detection_model_contributions"
+		oldIndex = "idx_v2_detection_model_contributions_detection_id"
+		modelIdx = "idx_v2_detection_model_contributions_model_id"
+		unique   = "idx_contrib_detection_model"
+	)
+	entity := &entities.DetectionModelContribution{}
+
+	// Recreate the pre-upgrade table: plain detection_id index listed before the
+	// unique index, both foreign keys.
+	require.NoError(t, db.Exec("DROP TABLE "+table).Error)
+	require.NoError(t, db.Exec("CREATE TABLE "+table+" ("+
+		"id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT, "+
+		"detection_id BIGINT UNSIGNED NOT NULL, "+
+		"model_id BIGINT UNSIGNED NOT NULL, "+
+		"hit_count BIGINT NOT NULL, "+
+		"max_confidence DOUBLE NOT NULL, "+
+		"PRIMARY KEY (id), "+
+		"INDEX "+oldIndex+" (detection_id), "+
+		"UNIQUE INDEX "+unique+" (detection_id, model_id), "+
+		"CONSTRAINT fk_old_contrib_detection FOREIGN KEY (detection_id) REFERENCES v2_detections(id) ON DELETE CASCADE ON UPDATE CASCADE, "+
+		"CONSTRAINT fk_old_contrib_model FOREIGN KEY (model_id) REFERENCES v2_ai_models(id))").Error)
+
+	// Insert a detection and an old-shape contribution row. The detection's own
+	// label and model references are not under test, so FK checks are off for the
+	// inserts, on one connection.
+	detection := entities.Detection{ModelID: 1, LabelID: 1, DetectedAt: 1000, Confidence: 0.9}
+	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
+			return err
+		}
+		if err := tx.Create(&detection).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("INSERT INTO "+table+" (detection_id, model_id, hit_count, max_confidence) VALUES (?, 1, 3, 0.9)",
+			detection.ID).Error; err != nil {
+			return err
+		}
+		return tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error
+	}))
+	require.True(t, db.Migrator().HasIndex(entity, oldIndex))
+
+	require.NoError(t, mgr.Initialize())
+
+	mig := db.Migrator()
+	assert.False(t, mig.HasIndex(entity, oldIndex), "the redundant detection_id index must be dropped")
+	assert.True(t, mig.HasIndex(entity, unique), "the unique index must survive the drop")
+	assert.True(t, mig.HasIndex(entity, modelIdx), "the model_id index must be added")
+
+	var row entities.DetectionModelContribution
+	require.NoError(t, db.First(&row).Error)
+	assert.Equal(t, 3, row.HitCount)
+	assert.Nil(t, row.FirstHitAt)
+	assert.Nil(t, row.LastHitAt)
+	assert.Nil(t, row.MinConfidence)
+	assert.Nil(t, row.ConfidenceSum)
+
+	// The foreign key still cascades after the drop.
+	require.NoError(t, db.Delete(&entities.Detection{}, detection.ID).Error)
+	var remaining int64
+	require.NoError(t, db.Model(&entities.DetectionModelContribution{}).Count(&remaining).Error)
+	assert.Zero(t, remaining, "deleting the detection must still cascade to its contributions")
 }

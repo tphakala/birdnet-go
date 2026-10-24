@@ -1012,9 +1012,44 @@ func buildDedupedPredictions(detectionID uint, results []datastore.Results, pred
 	return preds
 }
 
+// contributionEntity builds the stored row for one model's contribution. The four
+// extended statistics are set only when c.HasHitStats(); otherwise they stay NULL.
+func contributionEntity(modelID uint, c *detection.ResultModelContrib) *entities.DetectionModelContribution {
+	e := &entities.DetectionModelContribution{
+		ModelID:       modelID,
+		HitCount:      c.HitCount,
+		MaxConfidence: c.MaxConfidence,
+	}
+	if c.HasHitStats() {
+		e.FirstHitAt = new(c.FirstHitAt.UnixMilli())
+		e.LastHitAt = new(c.LastHitAt.UnixMilli())
+		e.MinConfidence = new(c.MinConfidence)
+		e.ConfidenceSum = new(c.ConfidenceSum)
+	}
+	return e
+}
+
+// mergeContribution folds c into dst, the row of another entry that resolved to the
+// same model. Hit counts add up and the maximum confidence is kept. The four extended
+// statistics are one unit: they are combined (lowest minimum, summed sums, earliest
+// first hit, latest last hit) only when both sides have them, and cleared otherwise,
+// because a sum over only some of the hits would give a wrong mean.
+func mergeContribution(dst *entities.DetectionModelContribution, c *detection.ResultModelContrib) {
+	dst.HitCount += c.HitCount
+	dst.MaxConfidence = max(dst.MaxConfidence, c.MaxConfidence)
+	if dst.FirstHitAt == nil || dst.LastHitAt == nil || dst.MinConfidence == nil || dst.ConfidenceSum == nil || !c.HasHitStats() {
+		dst.FirstHitAt, dst.LastHitAt, dst.MinConfidence, dst.ConfidenceSum = nil, nil, nil, nil
+		return
+	}
+	*dst.FirstHitAt = min(*dst.FirstHitAt, c.FirstHitAt.UnixMilli())
+	*dst.LastHitAt = max(*dst.LastHitAt, c.LastHitAt.UnixMilli())
+	*dst.MinConfidence = min(*dst.MinConfidence, c.MinConfidence)
+	*dst.ConfidenceSum += c.ConfidenceSum
+}
+
 // resolveModelContributions resolves each contributing AI model in the map and
-// deduplicates by database ModelID (summing hit counts and keeping the maximum
-// confidence) to guard against idx_contrib_detection_model unique constraint violations.
+// deduplicates by database ModelID (see mergeContribution for the merge rules) to
+// guard against idx_contrib_detection_model unique constraint violations.
 func (ds *Datastore) resolveModelContributions(ctx context.Context, modelContribs map[string]detection.ResultModelContrib) []*entities.DetectionModelContribution {
 	if len(modelContribs) == 0 {
 		return nil
@@ -1022,7 +1057,8 @@ func (ds *Datastore) resolveModelContributions(ctx context.Context, modelContrib
 
 	seen := make(map[uint]int, len(modelContribs))
 	contribs := make([]*entities.DetectionModelContribution, 0, len(modelContribs))
-	for _, contrib := range modelContribs {
+	for key := range modelContribs {
+		contrib := modelContribs[key]
 		m := contrib.Model.WithDefaults()
 		modelEntity, err := ds.model.GetOrCreate(ctx, m.Name, m.Version, m.Variant,
 			detection.ResolveModelType(m.Name, m.Version), m.ClassifierPath)
@@ -1035,18 +1071,11 @@ func (ds *Datastore) resolveModelContributions(ctx context.Context, modelContrib
 			continue
 		}
 		if idx, exists := seen[modelEntity.ID]; exists {
-			contribs[idx].HitCount += contrib.HitCount
-			if contrib.MaxConfidence > contribs[idx].MaxConfidence {
-				contribs[idx].MaxConfidence = contrib.MaxConfidence
-			}
+			mergeContribution(contribs[idx], &contrib)
 			continue
 		}
 		seen[modelEntity.ID] = len(contribs)
-		contribs = append(contribs, &entities.DetectionModelContribution{
-			ModelID:       modelEntity.ID,
-			HitCount:      contrib.HitCount,
-			MaxConfidence: contrib.MaxConfidence,
-		})
+		contribs = append(contribs, contributionEntity(modelEntity.ID, &contrib))
 	}
 	return contribs
 }

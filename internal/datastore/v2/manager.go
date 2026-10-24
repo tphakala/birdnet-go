@@ -64,7 +64,7 @@ type Manager interface {
 	IsMySQL() bool
 	// TablePrefix returns the prefix applied to every v2 table name. It is
 	// non-empty (currently "v2_") only on MySQL deployments that are still
-	// in the v1→v2 migration window — there, v2 tables coexist alongside
+	// in the v1→v2 migration window; there, v2 tables coexist alongside
 	// the legacy v1 schema and need the prefix to avoid name collisions.
 	// On SQLite, on fresh-install MySQL, and on any future cutover where
 	// the prefix is dropped, this returns "". Code that builds raw-SQL
@@ -341,6 +341,54 @@ func dropStaleThresholdTables(db *gorm.DB, log logger.Logger) error {
 	return nil
 }
 
+// contributionDetectionIDColumn is the column of the plain index that
+// detection_model_contributions carried before the unique (detection_id, model_id)
+// index was left to serve detection_id lookups on its own.
+const contributionDetectionIDColumn = "detection_id"
+
+// dropRedundantContributionIndex drops the plain detection_id index of
+// detection_model_contributions, which the leading column of the unique
+// idx_contrib_detection_model index makes redundant. AutoMigrate never drops indexes,
+// so databases created before the entity lost its index tag still carry it.
+//
+// The index is dropped by the name the NamingStrategy derives for the physical
+// (possibly v2_ prefixed) table, never by a field name: Schema.LookIndex matches field
+// names, so "DetectionID" would resolve to idx_contrib_detection_model and drop the
+// unique index. A failure is only logged, because an extra index is harmless and the
+// drop is retried on the next start.
+func dropRedundantContributionIndex(db *gorm.DB, log logger.Logger) {
+	entity := &entities.DetectionModelContribution{}
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(entity); err != nil {
+		warnContributionIndexDrop(log, err)
+		return
+	}
+	name := db.NamingStrategy.IndexName(stmt.Schema.Table, contributionDetectionIDColumn)
+	mig := db.Migrator()
+	if !mig.HasIndex(entity, name) {
+		return
+	}
+	if err := mig.DropIndex(entity, name); err != nil {
+		warnContributionIndexDrop(log, err)
+		return
+	}
+	if log != nil {
+		log.Info("dropped redundant detection_model_contributions index",
+			logger.String("index", name),
+			logger.String("operation", "drop_redundant_contribution_index"))
+	}
+}
+
+// warnContributionIndexDrop logs a failed redundant-index drop; the drop is retried
+// on the next start.
+func warnContributionIndexDrop(log logger.Logger, err error) {
+	if log != nil {
+		log.Warn("could not drop redundant detection_model_contributions index; will retry on next start",
+			logger.Error(err),
+			logger.String("operation", "drop_redundant_contribution_index"))
+	}
+}
+
 // Initialize creates the schema and seeds initial data.
 func (m *SQLiteManager) Initialize() error {
 	// Rename tables that changed names in PR #2165 (TableName() overrides removed).
@@ -381,6 +429,8 @@ func (m *SQLiteManager) Initialize() error {
 	if err := m.validateV2SchemaIntegrity(); err != nil {
 		return fmt.Errorf("v2 schema integrity check failed: %w", err)
 	}
+
+	dropRedundantContributionIndex(m.db, m.log)
 
 	// Fix SQLite foreign key constraints that GORM's AutoMigrate may not handle correctly.
 	// SQLite requires ON DELETE clauses to be defined at table creation time.
@@ -451,7 +501,7 @@ func (m *SQLiteManager) renamePrePR2165Tables() error {
 //
 // Strategy:
 //  1. Try ALTER TABLE DROP COLUMN (SQLite 3.35.0+).
-//  2. If DROP COLUMN fails and the table is empty, DROP TABLE entirely — AutoMigrate
+//  2. If DROP COLUMN fails and the table is empty, DROP TABLE entirely; AutoMigrate
 //     will recreate it with the correct schema.
 //  3. If DROP COLUMN fails and the table has data, return ErrV2SchemaCorrupted so the
 //     caller can decide how to handle it (e.g. self-healing or user notification).
@@ -471,7 +521,7 @@ func (m *SQLiteManager) cleanupLegacySchemaContamination() error {
 
 		// Try DROP COLUMN first (SQLite 3.35.0+).
 		if err := m.db.Exec("ALTER TABLE `" + c.table + "` DROP COLUMN `" + c.column + "`").Error; err != nil {
-			// DROP COLUMN not available — check if table is empty.
+			// DROP COLUMN not available; check if table is empty.
 			var rowCount int64
 			if countErr := m.db.Raw("SELECT COUNT(*) FROM `" + c.table + "`").Scan(&rowCount).Error; countErr != nil {
 				reportInitFailure("sqlite", "countRows_"+c.table, countErr, m.dbPath)
@@ -479,7 +529,7 @@ func (m *SQLiteManager) cleanupLegacySchemaContamination() error {
 			}
 
 			if rowCount == 0 {
-				// Table is empty — safe to drop and let AutoMigrate recreate it.
+				// Table is empty; safe to drop and let AutoMigrate recreate it.
 				if m.log != nil {
 					m.log.Info("dropping empty table with orphaned column, AutoMigrate will recreate",
 						logger.String("table", c.table),
@@ -490,7 +540,7 @@ func (m *SQLiteManager) cleanupLegacySchemaContamination() error {
 					return fmt.Errorf("%w: failed to drop empty table %s: %w", ErrV2SchemaCorrupted, c.table, dropErr)
 				}
 			} else {
-				// Table has data and DROP COLUMN is unavailable — cannot clean up safely.
+				// Table has data and DROP COLUMN is unavailable; cannot clean up safely.
 				reportInitFailure("sqlite", "dropOrphanedColumn_"+c.table+"_"+c.column, err, m.dbPath)
 				return fmt.Errorf("%w: cannot remove orphaned column %s.%s: table has %d rows and DROP COLUMN unavailable",
 					ErrV2SchemaCorrupted, c.table, c.column, rowCount)
@@ -833,12 +883,12 @@ func (m *SQLiteManager) CheckpointWAL() error {
 // fire reliably with connection pooling.
 //
 // Use PASSIVE mode (not TRUNCATE) for the periodic checkpoint because it
-// never blocks writers — it only checkpoints pages that are not in active
+// never blocks writers; it only checkpoints pages that are not in active
 // use. The TRUNCATE mode used in CheckpointWAL() is reserved for shutdown
 // where we want to fully clean up the WAL file.
 func (m *SQLiteManager) StartPeriodicCheckpoint() {
 	m.walMu.Lock()
-	// Guard against double-start — would leak the previous goroutine.
+	// Guard against double-start; would leak the previous goroutine.
 	if m.walCancel != nil {
 		m.walMu.Unlock()
 		return
