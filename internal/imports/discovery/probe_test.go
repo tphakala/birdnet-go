@@ -100,3 +100,16 @@ func TestProbe_SymlinkToValidDB(t *testing.T) {
 	assert.True(t, got.Valid, "symlink to a valid birds.db must be reported as valid")
 	assert.Empty(t, got.Reason)
 }
+
+func TestProbe_BackupAudioDir(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	db := writeBirdsDB(t, dir)
+	backupAudio := filepath.Join(dir, "By_Date")
+	require.NoError(t, os.MkdirAll(backupAudio, 0o755))
+
+	got := Probe(t.Context(), db)
+
+	assert.True(t, got.Valid)
+	assert.Equal(t, backupAudio, got.AudioDirGuess)
+}
