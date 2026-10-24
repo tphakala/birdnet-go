@@ -11,6 +11,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
+// readBudgetTolerance is how far the deadline the reader sees may be from now plus
+// modelContributionsReadBudget; it is far below the budget so a changed budget fails.
+const readBudgetTolerance = 250 * time.Millisecond
+
 // fakeContributionReader is a modelContributionReader with a canned result.
 type fakeContributionReader struct {
 	rows     map[uint][]*entities.DetectionModelContribution
@@ -113,7 +117,7 @@ func TestAttachModelContributions_ReadFailureLeavesFieldOut(t *testing.T) {
 		assert.Equal(t, 1, f.calls)
 		assert.Equal(t, []uint{5, 6}, f.gotIDs, "zero ids are not queried")
 		require.True(t, f.hasDL, "the read must run under its own budget")
-		assert.WithinDuration(t, time.Now().Add(modelContributionsReadBudget), f.deadline, modelContributionsReadBudget)
+		assert.WithinDuration(t, time.Now().Add(modelContributionsReadBudget), f.deadline, readBudgetTolerance)
 		require.Len(t, dets[0].ModelContributions, 1)
 		assert.Equal(t, "BirdNET", dets[0].ModelContributions[0].ModelName)
 		assert.Nil(t, dets[1].ModelContributions)
