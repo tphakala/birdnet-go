@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS } from './settings';
+import {
+  settingsStore,
+  settingsActions,
+  hasUnsavedChanges,
+  resetIfMatchFallbackForTest,
+  SECTION_STORE_PATHS,
+} from './settings';
 import type {
   AudioSettings,
   AudioSourceConfig,
@@ -1857,7 +1863,23 @@ describe('Settings Store - save conflicts (If-Match)', () => {
 
   const conflict = () => Object.assign(new Error('Precondition Failed'), { status: 412 });
 
+  /**
+   * Makes save() answer 412 to every request that carries an If-Match, naming the
+   * ETag next() returns as the current one, as the server does. A request without
+   * If-Match is accepted.
+   */
+  const rejectIfMatchSaves = (next: () => string | null) => {
+    vi.mocked(settingsAPI.save)
+      .mockReset()
+      .mockImplementation(async (_data, options) => {
+        if (!options?.ifMatch) return undefined;
+        options.onETag?.(next());
+        throw conflict();
+      });
+  };
+
   beforeEach(async () => {
+    resetIfMatchFallbackForTest();
     server = serverSettings() as unknown as Record<string, unknown>;
     etag = '"e-1"';
     vi.mocked(settingsAPI.load).mockReset();
@@ -1942,6 +1964,80 @@ describe('Settings Store - save conflicts (If-Match)', () => {
       'notifications.content.settings.saveFailed'
     );
   });
+
+  it('saves without If-Match once two 412s name the same current ETag, and keeps it off for later saves', async () => {
+    // What the page sees through a compressing proxy: the proxy appended -gzip to the
+    // GET's ETag, while the 412 names the origin's real current ETag.
+    etag = '"e-1-gzip"';
+    rejectIfMatchSaves(() => '"e-1"');
+    const { toastActions } = await import('./toast.js');
+    vi.mocked(toastActions.error).mockClear();
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(3);
+    expect(sentIfMatch()).toEqual(['"e-1-gzip"', '"e-1-gzip"', undefined]);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(get(settingsStore).error).toBeNull();
+    expect(toastActions.error).not.toHaveBeenCalled();
+
+    vi.mocked(settingsAPI.load).mockClear();
+    vi.mocked(settingsAPI.save).mockClear();
+    settingsActions.updateSection('birdnet', { threshold: 0.6 });
+
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(settingsAPI.load).toHaveBeenCalledTimes(1);
+    expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+    expect(sentIfMatch()).toEqual([undefined]);
+  });
+
+  it('still fails with changed elsewhere when the current ETag moves between the two 412s', async () => {
+    const named = ['"e-2"', '"e-3"'];
+    rejectIfMatchSaves(() => named.shift() ?? '"e-9"');
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await expect(settingsActions.saveSettings({ notify: false })).rejects.toMatchObject({
+      message: CHANGED_ELSEWHERE_KEY,
+      status: 412,
+    });
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+    expect(get(settingsStore).formData.birdnet.threshold).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(true);
+
+    // A real conflict must not switch the precondition off for later saves.
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(sentIfMatch()).toEqual(['"e-1"']);
+  });
+
+  it.each([
+    { name: 'no ETag', named: null },
+    { name: 'an empty ETag', named: '' },
+  ])(
+    'still fails with changed elsewhere when both 412s carry $name, and keeps If-Match on',
+    async ({ named }) => {
+      rejectIfMatchSaves(() => named);
+      settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+      await expect(settingsActions.saveSettings({ notify: false })).rejects.toMatchObject({
+        message: CHANGED_ELSEWHERE_KEY,
+        status: 412,
+      });
+
+      expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+      expect(sentIfMatch()).toEqual(['"e-1"', '"e-1"']);
+
+      // Nothing identified a rewritten validator, so later saves still send If-Match.
+      vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+      await settingsActions.saveSettings({ notify: false });
+
+      expect(sentIfMatch()).toEqual(['"e-1"']);
+    }
+  );
 
   it.each([
     { name: 'no ETag (older backend or a stripping proxy)', header: null, expected: undefined },

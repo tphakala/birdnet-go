@@ -136,13 +136,24 @@ export const settingsAPI = {
 
   /**
    * Save all settings to the server. ifMatch is sent as If-Match, so the server
-   * answers 412 when the settings changed since the ETag was issued.
+   * answers 412 when the settings changed since the ETag was issued. onETag
+   * receives the ETag of the response (null when absent), also for an HTTP
+   * error, so a caller can read the current ETag a 412 names. It is only
+   * called when ifMatch is set.
    */
-  save: (data: SettingsFormData, options?: { ifMatch?: string }): Promise<unknown> => {
+  save: (
+    data: SettingsFormData,
+    options?: { ifMatch?: string; onETag?: (etag: string | null) => void }
+  ): Promise<unknown> => {
     return api.put<unknown>(
       SETTINGS_ENDPOINT,
       data,
-      options?.ifMatch ? { headers: { 'If-Match': options.ifMatch } } : undefined
+      options?.ifMatch
+        ? {
+            headers: { 'If-Match': options.ifMatch },
+            onHeaders: headers => options.onETag?.(headers.get('ETag')),
+          }
+        : undefined
     );
   },
 
