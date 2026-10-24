@@ -80,6 +80,9 @@ async function runStep(step: Step) {
 }
 
 describe('Settings error banner Accessibility', () => {
+  const originalLoad = vi.mocked(settingsAPI.load).getMockImplementation();
+  const originalSave = vi.mocked(settingsAPI.save).getMockImplementation();
+
   beforeEach(async () => {
     vi.mocked(toastActions.error).mockClear();
     serveConfirmedSettings();
@@ -91,7 +94,10 @@ describe('Settings error banner Accessibility', () => {
 
   afterEach(() => {
     settingsStore.set(initialState);
-    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    vi.mocked(settingsAPI.load).mockReset();
+    if (originalLoad) vi.mocked(settingsAPI.load).mockImplementation(originalLoad);
+    vi.mocked(settingsAPI.save).mockReset();
+    if (originalSave) vi.mocked(settingsAPI.save).mockImplementation(originalSave);
   });
 
   it.each<{
