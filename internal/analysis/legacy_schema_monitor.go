@@ -87,9 +87,20 @@ func newLegacySchemaMonitor(states migrationStateReader, interval time.Duration,
 }
 
 // start evaluates once synchronously, then polls in a goroutine until stop.
+// It does nothing when the monitor was already started or stopped. started is
+// claimed before the stop check so a concurrent stop either sees it and waits
+// for doneCh, or has closed stopCh before the check below.
 func (m *legacySchemaMonitor) start() {
+	if !m.started.CompareAndSwap(false, true) {
+		return
+	}
+	select {
+	case <-m.stopCh:
+		close(m.doneCh) // a stop that saw started is waiting on it
+		return
+	default:
+	}
 	m.evaluate()
-	m.started.Store(true)
 	go m.run()
 }
 

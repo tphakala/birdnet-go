@@ -303,3 +303,35 @@ func TestLegacySchemaMonitor_StopBeforeStart(t *testing.T) {
 	})
 	assert.Zero(t, reader.pos, "a stopped monitor that never started reads nothing")
 }
+
+func TestLegacySchemaMonitor_StartAfterStopReadsNothing(t *testing.T) {
+	t.Parallel()
+
+	reader := &fakeStateReader{steps: []fakeStateStep{{state: entities.MigrationStatusIdle}}}
+	rec := &tagRecorder{}
+	m := newLegacySchemaMonitor(reader, time.Second, logger.Global().Module("test"))
+	m.setTag = rec.set
+
+	m.stop()
+	m.start()
+	m.stop()
+
+	assert.Zero(t, reader.pos, "a stopped monitor must not read the database")
+	assert.Empty(t, rec.snapshot(), "a stopped monitor must not publish a tag")
+}
+
+func TestLegacySchemaMonitor_SecondStartIsIgnored(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		reader := &fakeStateReader{steps: []fakeStateStep{{state: entities.MigrationStatusIdle}}}
+		m := newLegacySchemaMonitor(reader, time.Second, logger.Global().Module("test"))
+		m.setTag = (&tagRecorder{}).set
+
+		m.start()
+		m.start()
+		assert.Equal(t, 1, reader.pos, "only the first start reads")
+
+		assert.NotPanics(t, m.stop, "a second start must not add a second poll goroutine")
+	})
+}
