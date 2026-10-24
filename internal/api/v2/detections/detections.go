@@ -160,15 +160,17 @@ type DetectionResponse struct {
 	SpectrogramOnly bool   `json:"spectrogramOnly,omitempty"`
 	ModelType       string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	// ClipSampleRate is the sample rate in Hz of the detection's original audio clip, omitted when unknown. Bat spectrograms span 0 to half of it. A spectrogram-only detection reports the original clip's rate.
-	ClipSampleRate     int               `json:"clipSampleRate,omitempty"`
-	Verified           string            `json:"verified"`
-	Locked             bool              `json:"locked"`
-	Unlikely           bool              `json:"unlikely,omitempty"`
-	Comments           []CommentResponse `json:"comments,omitempty"`
-	Weather            *WeatherInfo      `json:"weather,omitempty"`
-	TimeOfDay          string            `json:"timeOfDay,omitempty"`
-	IsNewSpecies       bool              `json:"isNewSpecies,omitempty"`       // First seen within tracking window
-	DaysSinceFirstSeen int               `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
+	ClipSampleRate int `json:"clipSampleRate,omitempty"`
+	// ModelContributions is the per-model breakdown from the enhanced database, read only. It is omitted on the legacy database, during migration, and when nothing was recorded.
+	ModelContributions []ModelContributionResponse `json:"modelContributions,omitempty"`
+	Verified           string                      `json:"verified"`
+	Locked             bool                        `json:"locked"`
+	Unlikely           bool                        `json:"unlikely,omitempty"`
+	Comments           []CommentResponse           `json:"comments,omitempty"`
+	Weather            *WeatherInfo                `json:"weather,omitempty"`
+	TimeOfDay          string                      `json:"timeOfDay,omitempty"`
+	IsNewSpecies       bool                        `json:"isNewSpecies,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen int                         `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
 
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"isNewThisYear,omitempty"`   // First time this year
@@ -618,7 +620,7 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 	}
 
 	// Convert notes to response format
-	detections := c.convertNotesToDetectionResponses(notes, params.IncludeWeather)
+	detections := c.convertNotesToDetectionResponses(reqCtx, notes, params.IncludeWeather)
 	c.stripSourceForUnauthenticated(ctx, detections)
 
 	// Create paginated response
@@ -760,7 +762,7 @@ func (c *Handler) stripSourceForUnauthenticated(ctx echo.Context, detections []D
 }
 
 // convertNotesToDetectionResponses converts datastore notes to API detection responses
-func (c *Handler) convertNotesToDetectionResponses(notes []datastore.Note, includeWeather bool) []DetectionResponse {
+func (c *Handler) convertNotesToDetectionResponses(ctx context.Context, notes []datastore.Note, includeWeather bool) []DetectionResponse {
 	detections := make([]DetectionResponse, 0, len(notes))
 
 	// Create a map to cache weather data if needed
@@ -771,6 +773,7 @@ func (c *Handler) convertNotesToDetectionResponses(notes []datastore.Note, inclu
 		detection := c.noteToDetectionResponse(note, includeWeather, weatherCache)
 		detections = append(detections, detection)
 	}
+	c.attachModelContributions(ctx, detections)
 	return detections
 }
 
@@ -1264,11 +1267,12 @@ func (c *Handler) GetDetection(ctx echo.Context) error {
 
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
-	detection := c.noteToDetectionResponse(&note, true, weatherCache)
+	resp := []DetectionResponse{c.noteToDetectionResponse(&note, true, weatherCache)}
+	c.attachModelContributions(ctx.Request().Context(), resp)
 	if !c.isClientAuthenticated(ctx) {
-		detection.Source = nil
+		resp[0].Source = nil
 	}
-	return ctx.JSON(http.StatusOK, detection)
+	return ctx.JSON(http.StatusOK, resp[0])
 }
 
 // GetRecentDetections returns the most recent detections
@@ -1292,7 +1296,7 @@ func (c *Handler) GetRecentDetections(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to get recent detections", http.StatusInternalServerError)
 	}
 
-	detections := c.convertNotesToDetectionResponses(notes, includeWeather)
+	detections := c.convertNotesToDetectionResponses(ctx.Request().Context(), notes, includeWeather)
 	c.stripSourceForUnauthenticated(ctx, detections)
 	return ctx.JSON(http.StatusOK, detections)
 }
