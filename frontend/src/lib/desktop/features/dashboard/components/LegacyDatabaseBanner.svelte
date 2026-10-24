@@ -6,9 +6,11 @@
   mount (no polling) and renders for the four kinds that need a notice:
   - not_started, in_progress and restart_required: a warning status.
   - needs_attention (migration paused or failed): an error alert.
-  Each links to System > Database. "none", unknown kinds and a failed fetch
-  (401, 503 on installs without migration support) render nothing. Guests
-  never fetch: the endpoint needs authentication.
+  Each links to System > Database. "none", unknown kinds, a missing field and
+  a failed fetch (503 on installs without migration support, network errors)
+  render nothing. Guests never fetch: the endpoint needs authentication. For a
+  signed-in user whose session expired, the shared API client redirects to the
+  login page on a 401.
 
   Dismissal lasts for the browser session (sessionStorage), so the banner
   returns in the next session until the migration completes.
@@ -118,7 +120,7 @@
         if (active) variant = VARIANTS.get(status.legacy_notice ?? 'none');
       })
       .catch(() => {
-        /* No banner when the status is unavailable (401, 503, network). */
+        /* No banner when the status is unavailable (503, network, a suppressed 401 redirect). */
       });
     return () => {
       active = false;
