@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -132,6 +133,9 @@
   // meanwhile, so a slow or still-failing server does not collect stacked requests.
   let statusRetrying = $state(false);
 
+  // Stays mounted while the views and alerts come and go, so focus has somewhere to land
+  let viewAnchor = $state<HTMLDivElement>();
+
   async function retryMigrationStatus(): Promise<void> {
     if (statusRetrying) return;
     statusRetrying = true;
@@ -139,6 +143,13 @@
       await fetchMigrationStatus();
     } finally {
       statusRetrying = false;
+    }
+    if (migrationStatus.error) return;
+    // Success removes the alert and with it the focused Retry button, which would
+    // drop focus to the document body
+    await tick();
+    if (!document.activeElement || document.activeElement === document.body) {
+      viewAnchor?.focus();
     }
   }
 
@@ -528,15 +539,13 @@
 {#if !migrationStatus.loading && migrationStatus.error}
   <ErrorAlert className="mb-4">
     <span class="block">{migrationStatus.error}</span>
-    {#if !migrationStatus.data}
-      <Button
-        className="mt-2"
-        onclick={retryMigrationStatus}
-        aria-disabled={statusRetrying ? 'true' : undefined}
-      >
-        {statusRetrying ? t('common.retrying') : t('common.retry')}
-      </Button>
-    {/if}
+    <Button
+      className="mt-2"
+      onclick={retryMigrationStatus}
+      aria-disabled={statusRetrying ? 'true' : undefined}
+    >
+      {statusRetrying ? t('common.retrying') : t('common.retry')}
+    </Button>
   </ErrorAlert>
 {/if}
 {#if actionError}
@@ -547,6 +556,9 @@
     className="mb-4"
   />
 {/if}
+
+<!-- Focus lands here when a retry succeeds and removes the button that had it -->
+<div bind:this={viewAnchor} tabindex="-1" class="outline-none"></div>
 
 {#if migrationStatus.loading}
   <!-- Loading state (waiting for migration status to determine view) -->

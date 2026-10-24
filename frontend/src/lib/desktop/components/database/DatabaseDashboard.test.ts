@@ -153,6 +153,42 @@ describe('DatabaseDashboard migration errors', () => {
 
     await screen.findByText(t('system.database.backup.history.title'));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    // The Retry button that had focus is gone; focus must not fall back to the page body
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  it('offers Retry when a status refresh fails while an earlier status is still shown', async () => {
+    const user = userEvent.setup();
+    let statusCalls = 0;
+    apiGet.mockImplementation((url: string) => {
+      if (url === STATUS_URL) {
+        statusCalls += 1;
+        return statusCalls === 1
+          ? Promise.resolve(idleStatus)
+          : Promise.reject(apiError('Status unavailable', 500));
+      }
+      if (url.startsWith(PREREQUISITES_URL)) return Promise.resolve(startablePrerequisites);
+      return Promise.reject(apiError(NOT_CONFIGURED, 503));
+    });
+    apiPost.mockResolvedValue(null);
+
+    renderTyped(DatabaseDashboard);
+
+    await user.click(
+      await screen.findByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: t('system.database.migration.confirmDialog.title'),
+    });
+    await user.click(within(dialog).getByRole('checkbox'));
+    await user.click(
+      within(dialog).getByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Status unavailable');
+    expect(screen.getByText(t('system.database.backup.history.title'))).toBeInTheDocument();
+    expect(within(alert).getByRole('button', { name: t('common.retry') })).toBeInTheDocument();
   });
 
   it('lets the user dismiss a failed action message', async () => {
