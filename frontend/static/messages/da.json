@@ -449,7 +449,15 @@
         "completedTitle": "Databasemigrering fuldført",
         "completedMessage": "Migrering fuldført. Genstart venligst BirdNET-Go for at skifte til den nye database.",
         "errorTitle": "Databasemigreringsfejl",
-        "errorMessage": "Migrering sat på pause på grund af fejl. Kontrollér logfiler og prøv at genoptage."
+        "errorMessage": "Migrering sat på pause på grund af fejl. Kontrollér logfiler og prøv at genoptage.",
+        "legacyNotStartedTitle": "Databaseopgradering påkrævet",
+        "legacyNotStartedMessage": "Denne installation bruger stadig det gamle databaseformat, som holder op med at fungere i en kommende version. Åbn System > Database for at køre migreringen.",
+        "legacyInProgressTitle": "Databasemigrering i gang",
+        "legacyInProgressMessage": "Migreringen til det nye databaseformat kører. Lad BirdNET-Go køre, indtil den er færdig; det gamle format holder op med at fungere i en kommende version.",
+        "legacyNeedsAttentionTitle": "Databasemigrering kræver opmærksomhed",
+        "legacyNeedsAttentionMessage": "Migreringen til det nye databaseformat er sat på pause eller mislykkedes. Åbn System > Database for at genoptage eller prøve igen; det gamle format holder op med at fungere i en kommende version.",
+        "legacyRestartRequiredTitle": "Genstart for at afslutte databasemigreringen",
+        "legacyRestartRequiredMessage": "Migreringen er fuldført. Genstart BirdNET-Go for at skifte til den nye database. Hvis denne besked bliver ved efter en genstart, så tjek loggen for databasefejl."
       },
       "cleanup": {
         "completeTitle": "Oprydning af ældre database fuldført",

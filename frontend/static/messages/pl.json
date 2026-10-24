@@ -449,7 +449,15 @@
         "completedTitle": "Migracja bazy danych zakończona",
         "completedMessage": "Migracja zakończona. Uruchom ponownie BirdNET-Go, aby przełączyć się na nową bazę danych.",
         "errorTitle": "Błąd migracji bazy danych",
-        "errorMessage": "Migracja wstrzymana z powodu błędów. Sprawdź logi i spróbuj wznowić."
+        "errorMessage": "Migracja wstrzymana z powodu błędów. Sprawdź logi i spróbuj wznowić.",
+        "legacyNotStartedTitle": "Wymagana aktualizacja bazy danych",
+        "legacyNotStartedMessage": "Ta instalacja nadal używa starego formatu bazy danych, który przestanie działać w przyszłym wydaniu. Otwórz System > Baza danych, aby uruchomić migrację.",
+        "legacyInProgressTitle": "Trwa migracja bazy danych",
+        "legacyInProgressMessage": "Trwa migracja do nowego formatu bazy danych. Pozostaw BirdNET-Go uruchomiony do jej zakończenia; stary format przestanie działać w przyszłym wydaniu.",
+        "legacyNeedsAttentionTitle": "Migracja bazy danych wymaga uwagi",
+        "legacyNeedsAttentionMessage": "Migracja do nowego formatu bazy danych została wstrzymana lub zakończyła się błędem. Otwórz System > Baza danych, aby ją wznowić lub spróbować ponownie; stary format przestanie działać w przyszłym wydaniu.",
+        "legacyRestartRequiredTitle": "Uruchom ponownie, aby zakończyć migrację bazy danych",
+        "legacyRestartRequiredMessage": "Migracja została zakończona. Uruchom ponownie BirdNET-Go, aby przełączyć się na nową bazę danych. Jeśli ten komunikat nie znika po ponownym uruchomieniu, sprawdź w dzienniku błędy bazy danych."
       },
       "cleanup": {
         "completeTitle": "Czyszczenie starej bazy danych zakończone",

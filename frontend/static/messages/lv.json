@@ -449,7 +449,15 @@
         "completedTitle": "Datubāzes migrācija pabeigta",
         "completedMessage": "Migrācija pabeigta. Lūdzu, restartējiet BirdNET-Go, lai pārslēgtos uz jauno datubāzi.",
         "errorTitle": "Datubāzes migrācijas kļūda",
-        "errorMessage": "Migrācija apturēta kļūdu dēļ. Pārbaudiet žurnālus un mēģiniet atsākt."
+        "errorMessage": "Migrācija apturēta kļūdu dēļ. Pārbaudiet žurnālus un mēģiniet atsākt.",
+        "legacyNotStartedTitle": "Nepieciešams datubāzes jauninājums",
+        "legacyNotStartedMessage": "Šī instalācija joprojām izmanto veco datubāzes formātu, kas kādā nākamajā laidienā pārstās darboties. Atveriet Sistēma > Datubāze, lai palaistu migrāciju.",
+        "legacyInProgressTitle": "Notiek datubāzes migrācija",
+        "legacyInProgressMessage": "Notiek migrācija uz jauno datubāzes formātu. Atstājiet BirdNET-Go darbojamies, līdz tā beidzas; vecais formāts kādā nākamajā laidienā pārstās darboties.",
+        "legacyNeedsAttentionTitle": "Datubāzes migrācijai nepieciešama uzmanība",
+        "legacyNeedsAttentionMessage": "Migrācija uz jauno datubāzes formātu ir apturēta vai neizdevās. Atveriet Sistēma > Datubāze, lai to atsāktu vai mēģinātu vēlreiz; vecais formāts kādā nākamajā laidienā pārstās darboties.",
+        "legacyRestartRequiredTitle": "Restartējiet, lai pabeigtu datubāzes migrāciju",
+        "legacyRestartRequiredMessage": "Migrācija ir pabeigta. Restartējiet BirdNET-Go, lai pārslēgtos uz jauno datubāzi. Ja šis ziņojums paliek arī pēc restartēšanas, pārbaudiet žurnālā datubāzes kļūdas."
       },
       "cleanup": {
         "completeTitle": "Mantotās datubāzes tīrīšana pabeigta",
