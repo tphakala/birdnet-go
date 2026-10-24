@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {En model fejler ved hver analyse} other {# modeller fejler ved hver analyse}}",
       "failingMessage": "{count, plural, one {{models} er indlæst, men hver analyse fejler, så den registrerer intet.} other {{models} er indlæst, men hver analyse fejler, så de registrerer intet.}} Siden AI-modeller viser backend og fejlen."
     },
+    "legacyDatabase": {
+      "action": "Åbn databaseindstillinger"
+    },
     "banner": {
       "title": "Titel",
       "titlePlaceholder": "Min fuglestation",

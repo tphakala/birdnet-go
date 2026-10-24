@@ -638,6 +638,7 @@ export type TranslationKey =
   | 'dashboard.acousticModels.loadFailedAction'
   | 'dashboard.acousticModels.failingTitle' // params: count
   | 'dashboard.acousticModels.failingMessage' // params: count, models
+  | 'dashboard.legacyDatabase.action'
   | 'dashboard.banner.title'
   | 'dashboard.banner.titlePlaceholder'
   | 'dashboard.banner.description'

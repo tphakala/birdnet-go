@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {Model zlyháva pri každej analýze} few {# modely zlyhávajú pri každej analýze} many {# modelov zlyháva pri každej analýze} other {# modelov zlyháva pri každej analýze}}",
       "failingMessage": "{count, plural, one {{models} je načítaný, ale každá analýza zlyháva, takže nič nedeteguje.} few {{models} sú načítané, ale každá analýza zlyháva, takže nič nedetegujú.} many {{models} sú načítané, ale každá analýza zlyháva, takže nič nedetegujú.} other {{models} sú načítané, ale každá analýza zlyháva, takže nič nedetegujú.}} Stránka Modely AI zobrazuje backend a chybu."
     },
+    "legacyDatabase": {
+      "action": "Otvoriť nastavenia databázy"
+    },
     "banner": {
       "title": "Názov",
       "titlePlaceholder": "Moja vtáčia stanica",
