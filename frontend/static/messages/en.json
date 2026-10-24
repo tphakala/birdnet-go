@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {A model fails every analysis} other {# models fail every analysis}}",
       "failingMessage": "{count, plural, one {{models} is loaded, but every analysis fails, so it detects nothing.} other {{models} are loaded, but every analysis fails, so they detect nothing.}} The AI Models page shows the backend and the error."
     },
+    "legacyDatabase": {
+      "action": "Open database settings"
+    },
     "banner": {
       "title": "Title",
       "titlePlaceholder": "My Bird Station",

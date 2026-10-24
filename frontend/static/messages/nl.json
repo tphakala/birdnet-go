@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {Een model faalt bij elke analyse} other {# modellen falen bij elke analyse}}",
       "failingMessage": "{count, plural, one {{models} is geladen, maar elke analyse mislukt, dus het detecteert niets.} other {{models} zijn geladen, maar elke analyse mislukt, dus ze detecteren niets.}} De pagina AI-modellen toont de backend en de fout."
     },
+    "legacyDatabase": {
+      "action": "Database-instellingen openen"
+    },
     "banner": {
       "title": "Titel",
       "titlePlaceholder": "Mijn vogelstation",

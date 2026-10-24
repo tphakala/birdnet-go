@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {Ein Modell scheitert bei jeder Analyse} other {# Modelle scheitern bei jeder Analyse}}",
       "failingMessage": "{count, plural, one {{models} ist geladen, aber jede Analyse schlägt fehl, daher erkennt es nichts.} other {{models} sind geladen, aber jede Analyse schlägt fehl, daher erkennen sie nichts.}} Die Seite KI-Modelle zeigt das Backend und den Fehler."
     },
+    "legacyDatabase": {
+      "action": "Datenbankeinstellungen öffnen"
+    },
     "banner": {
       "title": "Titel",
       "titlePlaceholder": "Meine Vogelstation",

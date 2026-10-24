@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {Un modèle échoue à chaque analyse} other {# modèles échouent à chaque analyse}}",
       "failingMessage": "{count, plural, one {{models} est chargé, mais chaque analyse échoue, il ne détecte donc rien.} other {{models} sont chargés, mais chaque analyse échoue, ils ne détectent donc rien.}} La page Modèles IA indique le backend et l'erreur."
     },
+    "legacyDatabase": {
+      "action": "Ouvrir les paramètres de la base de données"
+    },
     "banner": {
       "title": "Titre",
       "titlePlaceholder": "Ma station ornithologique",

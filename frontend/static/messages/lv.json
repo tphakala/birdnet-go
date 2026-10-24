@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, zero {# modeļiem neizdodas neviena analīze} one {Modelim neizdodas neviena analīze} other {# modeļiem neizdodas neviena analīze}}",
       "failingMessage": "{count, plural, zero {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.} one {{models} ir ielādēts, bet katra analīze neizdodas, tāpēc tas neko nenosaka.} other {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.}} Lapa MI Modeļi parāda aizmugursistēmu un kļūdu."
     },
+    "legacyDatabase": {
+      "action": "Atvērt datubāzes iestatījumus"
+    },
     "banner": {
       "title": "Virsraksts",
       "titlePlaceholder": "Mana putnu stacija",

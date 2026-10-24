@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {Egy modell minden elemzésnél hibázik} other {# modell minden elemzésnél hibázik}}",
       "failingMessage": "{count, plural, one {A(z) {models} be van töltve, de minden elemzés sikertelen, így semmit sem észlel.} other {A(z) {models} be vannak töltve, de minden elemzés sikertelen, így semmit sem észlelnek.}} Az AI Modellek oldal mutatja a háttérrendszert és a hibát."
     },
+    "legacyDatabase": {
+      "action": "Adatbázis-beállítások megnyitása"
+    },
     "banner": {
       "title": "Cím",
       "titlePlaceholder": "A madár megfigyelő állomásom",

@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {Model zawodzi przy każdej analizie} few {# modele zawodzą przy każdej analizie} many {# modeli zawodzi przy każdej analizie} other {# modeli zawodzi przy każdej analizie}}",
       "failingMessage": "{count, plural, one {{models} jest załadowany, ale każda analiza kończy się błędem, więc niczego nie wykrywa.} few {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.} many {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.} other {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.}} Strona Modele AI pokazuje backend i błąd."
     },
+    "legacyDatabase": {
+      "action": "Otwórz ustawienia bazy danych"
+    },
     "banner": {
       "title": "Tytuł",
       "titlePlaceholder": "Moja stacja ptaków",

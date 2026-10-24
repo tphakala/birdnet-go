@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {Malli epäonnistuu jokaisessa analyysissä} other {# mallia epäonnistuu jokaisessa analyysissä}}",
       "failingMessage": "{count, plural, one {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten se ei tunnista mitään.} other {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten ne eivät tunnista mitään.}} Tekoälymallit-sivulla näkyy taustajärjestelmä ja virhe."
     },
+    "legacyDatabase": {
+      "action": "Avaa tietokanta-asetukset"
+    },
     "banner": {
       "title": "Otsikko",
       "titlePlaceholder": "Oma lintuasema",

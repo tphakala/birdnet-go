@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {En modell misslyckas vid varje analys} other {# modeller misslyckas vid varje analys}}",
       "failingMessage": "{count, plural, one {{models} är inläst, men varje analys misslyckas, så den upptäcker ingenting.} other {{models} är inlästa, men varje analys misslyckas, så de upptäcker ingenting.}} Sidan AI-modeller visar backend och felet."
     },
+    "legacyDatabase": {
+      "action": "Öppna databasinställningar"
+    },
     "banner": {
       "title": "Titel",
       "titlePlaceholder": "Min fågelstation",

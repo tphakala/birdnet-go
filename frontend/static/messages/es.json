@@ -802,6 +802,9 @@
       "failingTitle": "{count, plural, one {Un modelo falla en cada análisis} other {# modelos fallan en cada análisis}}",
       "failingMessage": "{count, plural, one {{models} está cargado, pero cada análisis falla, así que no detecta nada.} other {{models} están cargados, pero cada análisis falla, así que no detectan nada.}} La página Modelos de IA muestra el backend y el error."
     },
+    "legacyDatabase": {
+      "action": "Abrir configuración de la base de datos"
+    },
     "banner": {
       "title": "Título",
       "titlePlaceholder": "Mi estación de aves",

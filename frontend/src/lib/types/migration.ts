@@ -15,6 +15,13 @@ export interface DatabaseStats {
 }
 
 /**
+ * Legacy-schema notice kind reported by the migration status endpoint.
+ * 'none' unless the install still runs the legacy database schema.
+ */
+export type LegacyNoticeKind =
+  'none' | 'not_started' | 'in_progress' | 'needs_attention' | 'restart_required';
+
+/**
  * Migration status returned from the API
  */
 export interface MigrationStatus {
@@ -37,6 +44,7 @@ export interface MigrationStatus {
   dirty_id_count: number;
   error_message?: string;
   is_v2_only_mode?: boolean;
+  legacy_notice?: LegacyNoticeKind;
 
   // Cleanup state fields
   cleanup_state?: string;

@@ -45,6 +45,9 @@ type MigrationStatusResponse struct {
 	IsDualWriteActive  bool       `json:"is_dual_write_active"`
 	ShouldReadFromV2   bool       `json:"should_read_from_v2"`
 	IsV2OnlyMode       bool       `json:"is_v2_only_mode"`
+	// LegacyNotice is the legacy-schema notice kind (migration.LegacyNoticeKind)
+	// for the dashboard banner: "none" unless the process runs the legacy schema.
+	LegacyNotice string `json:"legacy_notice"`
 
 	// Cleanup state fields
 	CleanupState           string   `json:"cleanup_state"`            // idle, in_progress, completed, failed
@@ -240,6 +243,7 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 				IsDualWriteActive:      false,
 				ShouldReadFromV2:       true,
 				IsV2OnlyMode:           true,
+				LegacyNotice:           string(migration.LegacyNoticeNone),
 				CleanupState:           cleanupState,
 				CleanupError:           cleanupErr,
 				CleanupTablesRemaining: cleanupRemaining,
@@ -350,6 +354,7 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 		IsDualWriteActive:      isDualWriteActive,
 		ShouldReadFromV2:       shouldReadFromV2,
 		IsV2OnlyMode:           v2Only,
+		LegacyNotice:           string(migration.LegacyNotice(!v2Only, state.State)),
 		CleanupState:           cleanupState,
 		CleanupError:           cleanupErr,
 		CleanupTablesRemaining: cleanupRemaining,

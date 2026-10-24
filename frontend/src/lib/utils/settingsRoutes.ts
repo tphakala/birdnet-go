@@ -12,4 +12,5 @@ export const SETTINGS_ROUTES = {
 /** System page destinations; resolve the deployment prefix with buildAppUrl at each use. */
 export const SYSTEM_ROUTES = {
   inference: '/ui/system/inference',
+  database: '/ui/system/database',
 } as const;

@@ -1,0 +1,150 @@
+/**
+ * Tests for the dashboard legacy database banner.
+ *
+ * The banner renders only for the four legacy notice kinds the migration
+ * status endpoint reports. "none", unknown kinds, a failed fetch and guests
+ * render nothing, and guests never call the endpoint (a guest fetch would
+ * redirect to the login page in private mode). Dismissal is per session and
+ * must work when sessionStorage throws.
+ */
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/svelte';
+import { tick } from 'svelte';
+import { renderTyped } from '../../../../../test/render-helpers';
+
+const { apiGet, isGuestMode } = vi.hoisted(() => ({
+  apiGet: vi.fn<(url: string) => Promise<unknown>>(),
+  isGuestMode: vi.fn<() => boolean>(() => false),
+}));
+
+vi.mock('$lib/utils/api', () => ({
+  api: { get: apiGet },
+}));
+
+vi.mock('$lib/stores/appState.svelte', () => ({
+  isGuestMode,
+}));
+
+vi.mock('$lib/stores/navigation.svelte', () => ({
+  handleAppLinkClick: vi.fn(),
+}));
+
+import LegacyDatabaseBanner from './LegacyDatabaseBanner.svelte';
+
+const STATUS_URL = '/api/v2/system/database/migration/status';
+const DISMISS_KEY = 'birdnet.legacyDbBannerDismissed';
+
+/** Lets the mount fetch settle and the banner render. */
+async function settle(): Promise<void> {
+  await tick();
+  await Promise.resolve();
+  await tick();
+}
+
+function respondWith(kind: string | undefined): void {
+  apiGet.mockResolvedValue({ state: 'idle', legacy_notice: kind });
+}
+
+describe('LegacyDatabaseBanner', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    apiGet.mockReset();
+    isGuestMode.mockReturnValue(false);
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    sessionStorage.clear();
+  });
+
+  it.each([
+    ['not_started', 'status', 'legacyNotStarted'],
+    ['in_progress', 'status', 'legacyInProgress'],
+    ['restart_required', 'status', 'legacyRestartRequired'],
+    ['needs_attention', 'alert', 'legacyNeedsAttention'],
+  ])('shows the %s notice as a %s with a database link', async (kind, role, keyStem) => {
+    respondWith(kind);
+    renderTyped(LegacyDatabaseBanner, { props: { class: 'mb-6' } });
+
+    const banner = await screen.findByRole(role);
+    expect(apiGet).toHaveBeenCalledWith(STATUS_URL);
+    expect(banner).toHaveTextContent(`notifications.content.migration.${keyStem}Title`);
+    expect(banner).toHaveTextContent(`notifications.content.migration.${keyStem}Message`);
+    expect(banner).toHaveClass('mb-6');
+
+    const link = screen.getByRole('link', { name: 'dashboard.legacyDatabase.action' });
+    expect(link.getAttribute('href')).toContain('/ui/system/database');
+    expect(screen.getByRole('button', { name: 'common.aria.dismissAlert' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['none', 'none'],
+    ['an unknown kind', 'migrating_soon'],
+    ['a missing field', undefined],
+  ])('renders nothing for %s', async (_label, kind) => {
+    respondWith(kind);
+    const { container } = renderTyped(LegacyDatabaseBanner);
+    await settle();
+
+    expect(apiGet).toHaveBeenCalledTimes(1);
+    expect(container.textContent.trim()).toBe('');
+  });
+
+  it('renders nothing when the fetch fails', async () => {
+    apiGet.mockRejectedValue(new Error('Service Unavailable'));
+    const { container } = renderTyped(LegacyDatabaseBanner);
+    await settle();
+
+    expect(apiGet).toHaveBeenCalledTimes(1);
+    expect(container.textContent.trim()).toBe('');
+  });
+
+  it('never fetches or renders for a guest', async () => {
+    isGuestMode.mockReturnValue(true);
+    respondWith('not_started');
+    const { container } = renderTyped(LegacyDatabaseBanner);
+    await settle();
+
+    expect(apiGet).not.toHaveBeenCalled();
+    expect(container.textContent.trim()).toBe('');
+  });
+
+  it('hides on dismiss, remembers it for the session, and stays hidden on remount', async () => {
+    respondWith('not_started');
+    const first = renderTyped(LegacyDatabaseBanner);
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'common.aria.dismissAlert' }));
+    await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
+    expect(sessionStorage.getItem(DISMISS_KEY)).toBe('1');
+
+    first.unmount();
+    apiGet.mockClear();
+    const second = renderTyped(LegacyDatabaseBanner);
+    await settle();
+
+    expect(apiGet).not.toHaveBeenCalled();
+    expect(second.container.textContent.trim()).toBe('');
+  });
+
+  it('still hides on dismiss when sessionStorage throws', async () => {
+    const blocked = (): never => {
+      throw new DOMException('blocked', 'SecurityError');
+    };
+    const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(blocked);
+    const setItem = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(blocked);
+    try {
+      respondWith('needs_attention');
+      renderTyped(LegacyDatabaseBanner);
+
+      await fireEvent.click(
+        await screen.findByRole('button', { name: 'common.aria.dismissAlert' })
+      );
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+      expect(setItem).toHaveBeenCalled();
+    } finally {
+      getItem.mockRestore();
+      setItem.mockRestore();
+    }
+  });
+});
