@@ -92,6 +92,7 @@
     birdNetV3Settings,
   } from '$lib/stores/settings';
   import { cn } from '$lib/utils/cn.js';
+  import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError, getCsrfToken } from '$lib/utils/api';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { toastActions } from '$lib/stores/toast';
@@ -355,6 +356,103 @@
   let birdnetV3 = $derived($birdNetV3Settings ?? { overrideThreshold: false, threshold: 0.5 });
   const hasPerchModel = $derived(installedModels.some(m => m.catalogId.startsWith('perch')));
   const hasBirdNetV3Model = $derived(installedModels.some(m => m.catalogId === 'birdnet-v3.0'));
+
+  // ── Change detection ──────────────────────────────────────────────────
+  // The saved and the current value of each card, used by the card's unsaved-changes badge
+  // and by the tab dots, so a tab shows a dot exactly when one of its card badges would.
+  interface ChangePair {
+    original: unknown;
+    current: unknown;
+  }
+
+  const birdDetectionChange: ChangePair = $derived({
+    original: {
+      threshold: store.originalData.birdnet?.threshold,
+      locale: store.originalData.birdnet?.locale,
+      fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
+    },
+    current: {
+      threshold: birdnet?.threshold,
+      locale: birdnet?.locale,
+      fpFilter: falsePositiveFilter.level,
+    },
+  });
+  const perchChange: ChangePair = $derived({
+    original: {
+      override: store.originalData.perch?.overrideThreshold ?? false,
+      threshold: store.originalData.perch?.threshold ?? 0.5,
+    },
+    current: { override: perch.overrideThreshold, threshold: perch.threshold },
+  });
+  const birdnetV3Change: ChangePair = $derived({
+    original: {
+      override: store.originalData.birdnetv3?.overrideThreshold ?? false,
+      threshold: store.originalData.birdnetv3?.threshold ?? 0.5,
+    },
+    current: { override: birdnetV3.overrideThreshold, threshold: birdnetV3.threshold },
+  });
+  const batChange: ChangePair = $derived({
+    original: {
+      batThreshold: store.originalData.bat?.threshold,
+      batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
+      batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
+      batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
+    },
+    current: {
+      batThreshold: bat.threshold,
+      batNighttimeOnly: bat.nighttimeOnly,
+      batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
+      batFPFilter: batFPLevel,
+    },
+  });
+  const rangeFilterChange: ChangePair = $derived({
+    original: store.originalData.birdnet?.rangeFilter,
+    current: birdnet?.rangeFilter,
+  });
+  const dynamicThresholdChange: ChangePair = $derived({
+    original: store.originalData.realtime?.dynamicThreshold,
+    current: store.formData.realtime?.dynamicThreshold,
+  });
+  const advancedChange: ChangePair = $derived({
+    original: {
+      threads: store.originalData.birdnet?.threads,
+      modelPath: store.originalData.birdnet?.modelPath,
+      labelPath: store.originalData.birdnet?.labelPath,
+    },
+    current: {
+      threads: birdnet?.threads,
+      modelPath: birdnet?.modelPath,
+      labelPath: birdnet?.labelPath,
+    },
+  });
+  const modelRegionChange: ChangePair = $derived({
+    original: { modelRegion: normalizeRegionMode(store.originalData.birdnet?.modelRegion) },
+    current: { modelRegion: normalizeRegionMode(birdnet?.modelRegion) },
+  });
+  const downloadSourceChange: ChangePair = $derived({
+    original: { huggingFaceEndpoint: store.originalData.birdnet?.huggingFaceEndpoint ?? '' },
+    current: { huggingFaceEndpoint: birdnet?.huggingFaceEndpoint ?? '' },
+  });
+
+  // A tab shows the change dot when any card badge on it would. The Perch, BirdNET v3.0 and bat
+  // cards count only while they are shown, so the dot and the badges stay in step. For Perch and
+  // BirdNET v3.0 the gate changes nothing today, since the defaults equal the saved-side
+  // fallbacks. For bat it is load-bearing: with no bat section saved, the page's defaults differ
+  // from the saved values and would light the dot for good.
+  const settingsTabHasChanges = $derived(
+    [
+      birdDetectionChange,
+      rangeFilterChange,
+      dynamicThresholdChange,
+      advancedChange,
+      ...(hasPerchModel ? [perchChange] : []),
+      ...(hasBirdNetV3Model ? [birdnetV3Change] : []),
+      ...(hasBatModel ? [batChange] : []),
+    ].some(c => hasSettingsChanged(c.original, c.current))
+  );
+  const modelsTabHasChanges = $derived(
+    [modelRegionChange, downloadSourceChange].some(c => hasSettingsChanged(c.original, c.current))
+  );
 
   // ── Derived catalog views ─────────────────────────────────────────────
   // Installed models, with the permanent built-in classifier (BirdNET v2.4) sorted
@@ -1191,8 +1289,8 @@
     // in the disabled field so the number on screen matches the effective value.
     effectiveThreshold: number;
     current: { overrideThreshold: boolean; threshold: number };
-    originalOverride: boolean;
-    originalThreshold: number;
+    // Saved and current values for the section's unsaved-changes badge.
+    change: ChangePair;
     onOverride: (_value: boolean) => void;
     onThreshold: (_value: number) => void;
   }
@@ -1239,12 +1337,14 @@
       label: t('analysis.tabs.settings'),
       icon: SettingsIcon,
       content: settingsTabContent,
+      hasChanges: settingsTabHasChanges,
     },
     {
       id: 'models',
       label: t('analysis.tabs.models'),
       icon: Package,
       content: modelsTabContent,
+      hasChanges: modelsTabHasChanges,
     },
   ]);
 
@@ -1603,8 +1703,8 @@
     title={t(cfg.titleKey)}
     description={t(cfg.descKey)}
     defaultOpen={true}
-    originalData={{ override: cfg.originalOverride, threshold: cfg.originalThreshold }}
-    currentData={{ override: cfg.current.overrideThreshold, threshold: cfg.current.threshold }}
+    originalData={cfg.change.original}
+    currentData={cfg.change.current}
   >
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       <Checkbox
@@ -1638,16 +1738,8 @@
       title={t('analysis.bird.title')}
       description={t('analysis.bird.description')}
       defaultOpen={true}
-      originalData={{
-        threshold: store.originalData.birdnet?.threshold,
-        locale: store.originalData.birdnet?.locale,
-        fpFilter: store.originalData.realtime?.falsePositiveFilter?.level ?? 0,
-      }}
-      currentData={{
-        threshold: birdnet?.threshold,
-        locale: birdnet?.locale,
-        fpFilter: falsePositiveFilter.level,
-      }}
+      originalData={birdDetectionChange.original}
+      currentData={birdDetectionChange.current}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <NumberField
@@ -1789,8 +1881,7 @@
         thresholdLabelKey: 'analysis.detection.perchThreshold.label',
         effectiveThreshold: birdnet?.threshold ?? 0.3,
         current: perch,
-        originalOverride: store.originalData.perch?.overrideThreshold ?? false,
-        originalThreshold: store.originalData.perch?.threshold ?? 0.5,
+        change: perchChange,
         onOverride: updatePerchOverride,
         onThreshold: updatePerchThreshold,
       })}
@@ -1804,8 +1895,7 @@
         thresholdLabelKey: 'analysis.detection.birdnetv3Threshold.label',
         effectiveThreshold: birdnet?.threshold ?? 0.3,
         current: birdnetV3,
-        originalOverride: store.originalData.birdnetv3?.overrideThreshold ?? false,
-        originalThreshold: store.originalData.birdnetv3?.threshold ?? 0.5,
+        change: birdnetV3Change,
         onOverride: updateBirdNetV3Override,
         onThreshold: updateBirdNetV3Threshold,
       })}
@@ -1817,18 +1907,8 @@
         title={t('analysis.bat.title')}
         description={t('analysis.bat.description')}
         defaultOpen={true}
-        originalData={{
-          batThreshold: store.originalData.bat?.threshold,
-          batNighttimeOnly: store.originalData.bat?.nighttimeOnly,
-          batUltrasonicFilter: store.originalData.bat?.ultrasonicFilter?.enabled ?? true,
-          batFPFilter: store.originalData.bat?.falsePositiveFilter?.level ?? 0,
-        }}
-        currentData={{
-          batThreshold: bat.threshold,
-          batNighttimeOnly: bat.nighttimeOnly,
-          batUltrasonicFilter: bat.ultrasonicFilter?.enabled ?? true,
-          batFPFilter: batFPLevel,
-        }}
+        originalData={batChange.original}
+        currentData={batChange.current}
       >
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
           <NumberField
@@ -1884,8 +1964,8 @@
     <SettingsSection
       title={t('settings.main.sections.rangeFilter.title')}
       description={t('settings.main.sections.rangeFilter.description')}
-      originalData={store.originalData.birdnet?.rangeFilter}
-      currentData={birdnet?.rangeFilter}
+      originalData={rangeFilterChange.original}
+      currentData={rangeFilterChange.current}
     >
       <SettingsNote><span>{t('analysis.rangeFilter.birdOnlyNote')}</span></SettingsNote>
 
@@ -2082,8 +2162,8 @@
     <SettingsSection
       title={t('settings.main.sections.dynamicThreshold.title')}
       description={t('settings.main.sections.dynamicThreshold.description')}
-      originalData={store.originalData.realtime?.dynamicThreshold}
-      currentData={store.formData.realtime?.dynamicThreshold}
+      originalData={dynamicThresholdChange.original}
+      currentData={dynamicThresholdChange.current}
     >
       <SettingsNote><span>{t('analysis.dynamicThreshold.birdOnlyNote')}</span></SettingsNote>
 
@@ -2140,16 +2220,8 @@
       title={t('analysis.advanced.title')}
       description={t('analysis.advanced.description')}
       defaultOpen={false}
-      originalData={{
-        threads: store.originalData.birdnet?.threads,
-        modelPath: store.originalData.birdnet?.modelPath,
-        labelPath: store.originalData.birdnet?.labelPath,
-      }}
-      currentData={{
-        threads: birdnet?.threads,
-        modelPath: birdnet?.modelPath,
-        labelPath: birdnet?.labelPath,
-      }}
+      originalData={advancedChange.original}
+      currentData={advancedChange.current}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <NumberField
@@ -2196,8 +2268,8 @@
       title={t('analysis.gallery.title')}
       description={t('analysis.gallery.description')}
       defaultOpen={true}
-      originalData={{ modelRegion: normalizeRegionMode(store.originalData.birdnet?.modelRegion) }}
-      currentData={{ modelRegion: normalizeRegionMode(birdnet?.modelRegion) }}
+      originalData={modelRegionChange.original}
+      currentData={modelRegionChange.current}
     >
       <ModelRegionSelector disabled={store.isLoading || store.isSaving} />
 
@@ -2341,10 +2413,8 @@
     <SettingsSection
       title={t('analysis.downloadSource.title')}
       description={t('analysis.downloadSource.description')}
-      originalData={{
-        huggingFaceEndpoint: store.originalData.birdnet?.huggingFaceEndpoint ?? '',
-      }}
-      currentData={{ huggingFaceEndpoint: birdnet?.huggingFaceEndpoint ?? '' }}
+      originalData={downloadSourceChange.original}
+      currentData={downloadSourceChange.current}
     >
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <!--
