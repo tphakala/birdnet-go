@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, fireEvent, waitFor } from '@testing-library/svelte';
 import { writable } from 'svelte/store';
 import FilterSettingsPage from './FilterSettingsPage.svelte';
-import type { SettingsFormData } from '$lib/stores/settings';
+import type { FirstDailyConsensusSettings, SettingsFormData } from '$lib/stores/settings';
 
 // Mock API module
 vi.mock('$lib/utils/api', () => ({
@@ -119,6 +119,10 @@ const mockRealtimeSettings = writable({
   },
 });
 
+const mockFirstDailyConsensusSettings = writable<FirstDailyConsensusSettings | undefined>(
+  undefined
+);
+
 const mockUpdateSection = vi.fn();
 
 vi.mock('$lib/stores/settings', async importOriginal => {
@@ -139,6 +143,9 @@ vi.mock('$lib/stores/settings', async importOriginal => {
     },
     realtimeSettings: {
       subscribe: (fn: (val: unknown) => void) => mockRealtimeSettings.subscribe(fn),
+    },
+    firstDailyConsensusSettings: {
+      subscribe: (fn: (val: unknown) => void) => mockFirstDailyConsensusSettings.subscribe(fn),
     },
     settingsActions: {
       ...actual.settingsActions,
@@ -259,5 +266,43 @@ describe('FilterSettingsPage - Privacy Guard & VAD Settings', () => {
         })
       );
     });
+  });
+});
+
+describe('FilterSettingsPage - First-daily consensus', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFirstDailyConsensusSettings.set({ enabled: false, whitelist: ['Parus major'] });
+  });
+
+  afterEach(() => {
+    mockFirstDailyConsensusSettings.set(undefined);
+  });
+
+  it('keeps the whitelist when the rule is toggled', async () => {
+    const { getByLabelText } = render(FilterSettingsPage);
+
+    await fireEvent.click(getByLabelText('settings.filters.firstDailyConsensus.enable'));
+
+    expect(mockUpdateSection).toHaveBeenCalledWith('realtime', {
+      firstDailyConsensus: { enabled: true, whitelist: ['Parus major'] },
+    });
+  });
+
+  it('keeps the rule state when an exempt species is removed', async () => {
+    mockFirstDailyConsensusSettings.set({ enabled: true, whitelist: ['Parus major'] });
+    const { getByLabelText } = render(FilterSettingsPage);
+
+    await fireEvent.click(getByLabelText('common.aria.removeSpecies'));
+
+    expect(mockUpdateSection).toHaveBeenCalledWith('realtime', {
+      firstDailyConsensus: { enabled: true, whitelist: [] },
+    });
+  });
+
+  it('explains why the exempt species list is disabled while the rule is off', () => {
+    const { getByText } = render(FilterSettingsPage);
+
+    expect(getByText('settings.filters.firstDailyConsensus.disabledHelp')).toBeInTheDocument();
   });
 });

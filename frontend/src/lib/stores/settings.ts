@@ -394,6 +394,12 @@ export interface DogBarkFilterSettings {
   species: string[];
 }
 
+/** Requires two models to confirm a species' first detection of the day. */
+export interface FirstDailyConsensusSettings {
+  enabled: boolean;
+  whitelist?: string[] | null;
+}
+
 export interface DaylightFilterSettings {
   enabled: boolean;
   debug: boolean;
@@ -631,6 +637,7 @@ export interface RealtimeSettings {
   privacyFilter?: PrivacyFilterSettings;
   dogBarkFilter?: DogBarkFilterSettings;
   daylightFilter?: DaylightFilterSettings;
+  firstDailyConsensus?: FirstDailyConsensusSettings;
   rtsp?: RTSPSettings;
   mqtt?: MQTTSettings;
   telemetry?: TelemetrySettings;
@@ -1054,6 +1061,7 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
         offset: 0,
         species: [],
       },
+      firstDailyConsensus: { enabled: false, whitelist: [] },
       extendedCapture: {
         enabled: false,
         maxDuration: 120,
@@ -1280,6 +1288,11 @@ export const dogBarkFilterSettings = derived(
 export const daylightFilterSettings = derived(
   settingsStore,
   $store => $store.formData.realtime?.daylightFilter
+);
+
+export const firstDailyConsensusSettings = derived(
+  settingsStore,
+  $store => $store.formData.realtime?.firstDailyConsensus
 );
 
 export const birdweatherSettings = derived(

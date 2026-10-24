@@ -5,7 +5,12 @@
 // Phase 2a.
 package classifier
 
-import "github.com/tphakala/birdnet-go/internal/speciesindex"
+import (
+	"maps"
+	"slices"
+
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
+)
 
 // SpeciesIndex returns the orchestrator-owned species-name index. Consumers read
 // Snapshot() lock-free; only the orchestrator rebuilds it. It is never nil on an
@@ -25,6 +30,34 @@ func (o *Orchestrator) SpeciesSnapshot() *speciesindex.Snapshot {
 		return speciesindex.Empty()
 	}
 	return o.names.Snapshot()
+}
+
+// ModelSpeciesSets returns, for every loaded model, the set of species keys
+// (speciesindex.CanonicalKey) it can predict, so taxonomic aliases match. It
+// reads each model's labels, which BirdNET locks against inference, so callers
+// should build it off hot paths and reuse it until SpeciesSnapshot changes.
+func (o *Orchestrator) ModelSpeciesSets() map[string]map[string]struct{} {
+	if o == nil {
+		return nil
+	}
+	snapshot := o.SpeciesSnapshot()
+	o.mu.RLock()
+	ids := slices.Collect(maps.Keys(o.models))
+	o.mu.RUnlock()
+	sets := make(map[string]map[string]struct{}, len(ids))
+	for _, id := range ids {
+		inst := o.instanceFor(id)
+		if inst == nil {
+			continue
+		}
+		labels := inst.Labels()
+		set := make(map[string]struct{}, len(labels))
+		for _, label := range labels {
+			set[snapshot.CanonicalKey(label)] = struct{}{}
+		}
+		sets[id] = set
+	}
+	return sets
 }
 
 // rebuildSpeciesIndex republishes the species-name index snapshot from the union of

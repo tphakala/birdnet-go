@@ -34,6 +34,8 @@
     privacyFilterSettings,
     dogBarkFilterSettings,
     daylightFilterSettings,
+    firstDailyConsensusSettings,
+    type FirstDailyConsensusSettings,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import { api, ApiError } from '$lib/utils/api';
@@ -96,6 +98,7 @@
           ...daylightBase,
           species: daylightBase.species ?? [],
         },
+        firstDaily: normalizeFirstDaily($firstDailyConsensusSettings),
       };
     })()
   );
@@ -124,6 +127,19 @@
     )
   );
 
+  // The API sends a null whitelist for an empty list (a Go nil slice), while the
+  // editor writes []; normalize both sides so that is not an unsaved change.
+  function normalizeFirstDaily(value: FirstDailyConsensusSettings | undefined) {
+    return { enabled: value?.enabled ?? false, whitelist: value?.whitelist ?? [] };
+  }
+
+  let firstDailyConsensusHasChanges = $derived(
+    hasSettingsChanged(
+      normalizeFirstDaily(store.originalData.realtime?.firstDailyConsensus),
+      normalizeFirstDaily(store.formData.realtime?.firstDailyConsensus)
+    )
+  );
+
   // Tab state
   let activeTab = $state('filters');
 
@@ -134,7 +150,11 @@
       label: t('settings.filters.title'),
       icon: Filter,
       content: filtersTabContent,
-      hasChanges: privacyFilterHasChanges || dogBarkFilterHasChanges || daylightFilterHasChanges,
+      hasChanges:
+        privacyFilterHasChanges ||
+        dogBarkFilterHasChanges ||
+        daylightFilterHasChanges ||
+        firstDailyConsensusHasChanges,
     },
   ]);
 
@@ -284,6 +304,19 @@
   function handleDaylightSpeciesChange(updatedSpecies: string[]) {
     settingsActions.updateSection('realtime', {
       daylightFilter: { ...settings.daylight, species: updatedSpecies },
+    });
+  }
+
+  // First-daily consensus update handlers
+  function updateFirstDailyEnabled(enabled: boolean) {
+    settingsActions.updateSection('realtime', {
+      firstDailyConsensus: { ...settings.firstDaily, enabled },
+    });
+  }
+
+  function handleFirstDailyWhitelistChange(whitelist: string[]) {
+    settingsActions.updateSection('realtime', {
+      firstDailyConsensus: { ...settings.firstDaily, whitelist },
     });
   }
 </script>
@@ -511,6 +544,42 @@
             />
           </div>
         </fieldset>
+      </div>
+    </SettingsSection>
+
+    <!-- First-Daily Consensus Section -->
+    <SettingsSection
+      title={t('settings.filters.firstDailyConsensus.title')}
+      description={t('settings.filters.firstDailyConsensus.description')}
+      defaultOpen={true}
+      hasChanges={firstDailyConsensusHasChanges}
+    >
+      <div class="space-y-4">
+        <!-- Enable First-Daily Consensus -->
+        <Checkbox
+          checked={settings.firstDaily.enabled}
+          label={t('settings.filters.firstDailyConsensus.enable')}
+          disabled={store.isLoading || store.isSaving}
+          onchange={updateFirstDailyEnabled}
+        />
+
+        <!-- Exempt Species List -->
+        <SpeciesListEditor
+          species={settings.firstDaily.whitelist}
+          disabled={!settings.firstDaily.enabled || store.isLoading || store.isSaving}
+          predictions={speciesListState.data}
+          predictionsLoading={speciesListState.loading}
+          localizeLabel={localizeSpeciesLabel}
+          listLabel={t('settings.filters.firstDailyConsensus.speciesListLabel')}
+          addLabel={t('settings.filters.firstDailyConsensus.addSpeciesLabel')}
+          addPlaceholder={t('settings.filters.typeSpeciesName')}
+          addHelpText={settings.firstDaily.enabled
+            ? t('settings.filters.firstDailyConsensus.addSpeciesHelp')
+            : t('settings.filters.firstDailyConsensus.disabledHelp')}
+          addButtonText={t('settings.filters.falsePositivePrevention.addSpeciesButton')}
+          hasChanges={firstDailyConsensusHasChanges}
+          onSpeciesChange={handleFirstDailyWhitelistChange}
+        />
       </div>
     </SettingsSection>
   </div>

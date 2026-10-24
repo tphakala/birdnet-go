@@ -364,3 +364,21 @@ func TestSpeciesIndex_ConcurrentTriggersPublishNewest(t *testing.T) {
 			"the loaded model's species must be present after the race (iteration %d)", i)
 	}
 }
+
+func TestModelSpeciesSets(t *testing.T) {
+	t.Parallel()
+
+	var nilOrch *Orchestrator
+	assert.Nil(t, nilOrch.ModelSpeciesSets(), "nil receiver")
+
+	o := newSpeciesIndexTestOrchestrator(t,
+		&mockModelInstance{id: "A", labels: []string{"Turdus merula_Common Blackbird"}},
+		&mockModelInstance{id: "B", labels: []string{"Parus major"}},
+	)
+	sets := o.ModelSpeciesSets()
+
+	require.Len(t, sets, 2)
+	assert.Contains(t, sets["A"], speciesindex.CanonicalKey("Turdus merula"))
+	assert.NotContains(t, sets["A"], speciesindex.CanonicalKey("Parus major"), "another model's species")
+	assert.Contains(t, sets["B"], speciesindex.CanonicalKey("Parus Major"), "a bare scientific-name label, keyed case-insensitively")
+}
