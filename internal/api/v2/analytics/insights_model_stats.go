@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -18,12 +19,8 @@ import (
 // insightsQueryTimeout.
 const modelStatsMaxRangeDays = 366
 
-const (
-	// hoursPerDay converts a UTC calendar span to whole days.
-	hoursPerDay = 24
-	// modelStatsOperation labels log lines and parameter errors of the endpoint.
-	modelStatsOperation = "model contribution stats"
-)
+// modelStatsOperation labels log lines and parameter errors of the endpoint.
+const modelStatsOperation = "model contribution stats"
 
 var (
 	// ErrModelStatsRangeTooLong is returned by modelStatsRange when the inclusive
@@ -107,7 +104,7 @@ func modelStatsRange(startDate, endDate string, loc *time.Location) (start, end 
 	// Count days on the UTC calendar so DST changes cannot skew the cap.
 	startUTC := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), 0, 0, 0, 0, time.UTC)
 	endUTC := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 0, 0, 0, 0, time.UTC)
-	days := int(endUTC.Sub(startUTC).Hours()/hoursPerDay) + 1
+	days := int(endUTC.Sub(startUTC).Hours()/apicore.HoursPerDay) + 1
 	if days < 1 {
 		return 0, 0, "", fmt.Errorf("%w: end_date before start_date", ErrModelStatsInvalidDate)
 	}
