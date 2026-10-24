@@ -28,6 +28,8 @@
   import MigrationConfirmDialog from './MigrationConfirmDialog.svelte';
   import LegacyCleanupCard from './LegacyCleanupCard.svelte';
   import LegacyCleanupConfirmDialog from './LegacyCleanupConfirmDialog.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
 
   import type { DatabaseStats } from '$lib/types/migration';
 
@@ -53,6 +55,10 @@
     error: null,
     data: null,
   });
+  // Failure of the last migration action. Kept apart from migrationStatus.error because
+  // status polling clears that on every successful fetch, which would wipe an action
+  // failure before it can be read.
+  let actionError = $state<string | null>(null);
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let v2Stats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let prerequisites = $state<ApiState<PrerequisitesResponse>>({
@@ -122,6 +128,20 @@
     }
   }
 
+  // Retry after a failed first status fetch. Marks the button busy and ignores clicks
+  // meanwhile, so a slow or still-failing server does not collect stacked requests.
+  let statusRetrying = $state(false);
+
+  async function retryMigrationStatus(): Promise<void> {
+    if (statusRetrying) return;
+    statusRetrying = true;
+    try {
+      await fetchMigrationStatus();
+    } finally {
+      statusRetrying = false;
+    }
+  }
+
   async function fetchLegacyStats(): Promise<void> {
     try {
       legacyStats.data = await api.get<DatabaseStats>('/api/v2/system/database/stats');
@@ -184,6 +204,7 @@
   async function startMigration(): Promise<void> {
     showConfirmDialog = false;
     startLoading = true;
+    actionError = null;
     try {
       if (legacyStats.data?.total_detections != null) {
         await api.post('/api/v2/system/database/migration/start', {
@@ -194,7 +215,7 @@
       }
       await fetchMigrationStatus();
     } catch (e) {
-      migrationStatus.error =
+      actionError =
         e instanceof ApiError ? e.message : t('system.database.migration.errors.startFailed');
     } finally {
       startLoading = false;
@@ -202,31 +223,34 @@
   }
 
   async function pauseMigration(): Promise<void> {
+    actionError = null;
     try {
       await api.post('/api/v2/system/database/migration/pause');
       await fetchMigrationStatus();
     } catch (e) {
-      migrationStatus.error =
+      actionError =
         e instanceof ApiError ? e.message : t('system.database.migration.errors.pauseFailed');
     }
   }
 
   async function resumeMigration(): Promise<void> {
+    actionError = null;
     try {
       await api.post('/api/v2/system/database/migration/resume');
       await fetchMigrationStatus();
     } catch (e) {
-      migrationStatus.error =
+      actionError =
         e instanceof ApiError ? e.message : t('system.database.migration.errors.resumeFailed');
     }
   }
 
   async function retryValidation(): Promise<void> {
+    actionError = null;
     try {
       await api.post('/api/v2/system/database/migration/retry-validation');
       await fetchMigrationStatus();
     } catch (e) {
-      migrationStatus.error =
+      actionError =
         e instanceof ApiError
           ? e.message
           : t('system.database.migration.errors.retryValidationFailed');
@@ -234,11 +258,12 @@
   }
 
   async function cancelMigration(): Promise<void> {
+    actionError = null;
     try {
       await api.post('/api/v2/system/database/migration/cancel');
       await fetchMigrationStatus();
     } catch (e) {
-      migrationStatus.error =
+      actionError =
         e instanceof ApiError ? e.message : t('system.database.migration.errors.cancelFailed');
     }
   }
@@ -499,6 +524,30 @@
   });
 </script>
 
+<!-- Failed status fetches and failed migration actions land here, whichever view follows -->
+{#if !migrationStatus.loading && migrationStatus.error}
+  <ErrorAlert className="mb-4">
+    <span class="block">{migrationStatus.error}</span>
+    {#if !migrationStatus.data}
+      <Button
+        className="mt-2"
+        onclick={retryMigrationStatus}
+        aria-disabled={statusRetrying ? 'true' : undefined}
+      >
+        {statusRetrying ? t('common.retrying') : t('common.retry')}
+      </Button>
+    {/if}
+  </ErrorAlert>
+{/if}
+{#if actionError}
+  <ErrorAlert
+    message={actionError}
+    dismissible
+    onDismiss={() => (actionError = null)}
+    className="mb-4"
+  />
+{/if}
+
 {#if migrationStatus.loading}
   <!-- Loading state (waiting for migration status to determine view) -->
   <div class="flex items-center justify-center py-16" role="status">
@@ -506,6 +555,9 @@
       {t('system.database.dashboard.loading')}
     </div>
   </div>
+{:else if migrationStatus.error && !migrationStatus.data}
+  <!-- Status unknown: the alert above explains why, and the migration controls would only
+       report a state the server never confirmed -->
 {:else if isV2OnlyMode}
   <!-- OPERATIONAL DASHBOARD VIEW -->
   {#if overviewLoading}
