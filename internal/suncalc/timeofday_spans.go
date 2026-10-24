@@ -46,6 +46,8 @@ func (sc *SunCalc) TimeOfDayWindows(periods []string, from, to time.Time) []Time
 	for day.Before(to) {
 		next := time.Date(day.Year(), day.Month(), day.Day()+1, 0, 0, 0, 0, loc)
 		noon := time.Date(day.Year(), day.Month(), day.Day(), noonHour, 0, 0, 0, loc)
+		// A date whose sun events cannot be calculated is skipped: its rows get no
+		// label either, because the label path fails on the same calculation.
 		if events, err := sc.sunEventTimes(noon, st); err == nil {
 			windows = appendDayWindows(windows, wanted, day, next, &events)
 		}

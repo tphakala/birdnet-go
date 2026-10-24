@@ -1070,7 +1070,7 @@ func TestSearch_TimeOfDayWindows_ManyWindows(t *testing.T) {
 		windows = append(windows, suncalc.TimeWindow{Start: d * daySecs, End: d*daySecs + windowLen})
 	}
 	// One row at the start, middle and end of the windows, and just outside each.
-	var want []uint
+	want := make([]uint, 0, 6)
 	for _, d := range []int64{0, days / 2, days - 1} {
 		want = append(want,
 			createTestDetection(t, db, d*daySecs).ID,
@@ -1152,7 +1152,7 @@ func TestGetDetectedAtBounds(t *testing.T) {
 	ctx := t.Context()
 	repo := &detectionRepository{db: db}
 
-	_, _, ok, err := repo.GetDetectedAtBounds(ctx)
+	_, _, ok, err := repo.GetDetectedAtBounds(ctx, 0)
 	require.NoError(t, err)
 	assert.False(t, ok, "an empty table has no bounds")
 
@@ -1160,9 +1160,19 @@ func TestGetDetectedAtBounds(t *testing.T) {
 	createTestDetection(t, db, 100)
 	createTestDetection(t, db, 900)
 
-	earliest, latest, ok, err := repo.GetDetectedAtBounds(ctx)
+	earliest, latest, ok, err := repo.GetDetectedAtBounds(ctx, 0)
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, int64(100), earliest)
 	assert.Equal(t, int64(900), latest)
+
+	earliest, latest, ok, err = repo.GetDetectedAtBounds(ctx, 400)
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, int64(500), earliest, "rows before notBefore must not widen the span")
+	assert.Equal(t, int64(900), latest)
+
+	_, _, ok, err = repo.GetDetectedAtBounds(ctx, 1000)
+	require.NoError(t, err)
+	assert.False(t, ok, "no rows at or after notBefore")
 }

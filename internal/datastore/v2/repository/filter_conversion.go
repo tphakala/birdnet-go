@@ -924,7 +924,7 @@ func ConvertAdvancedFilters(
 
 	// Confidence conversion. The single-operator filter and the explicit range are
 	// independent inputs; when both are given the narrower of each bound wins, so
-	// the result is their intersection (matching the AND-ed SQL on the legacy path).
+	// the result is their intersection.
 	sf.MinConfidence, sf.MaxConfidence = ConfidenceFilterToMinMax(filters.Confidence)
 	if r := filters.ConfidenceRange; r != nil {
 		if r.Min > 0 && (sf.MinConfidence == nil || r.Min > *sf.MinConfidence) {

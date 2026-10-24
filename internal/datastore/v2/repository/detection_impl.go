@@ -910,15 +910,16 @@ func (r *detectionRepository) CountByHour(ctx context.Context, hourStart int64) 
 	return r.countByHalfOpenRange(ctx, hourStart, hourStart+3600)
 }
 
-// GetDetectedAtBounds returns the earliest and latest detected_at, or ok=false
-// when the table is empty.
-func (r *detectionRepository) GetDetectedAtBounds(ctx context.Context) (earliest, latest int64, ok bool, err error) {
+// GetDetectedAtBounds returns the earliest and latest detected_at at or after
+// notBefore, or ok=false when there are none.
+func (r *detectionRepository) GetDetectedAtBounds(ctx context.Context, notBefore int64) (earliest, latest int64, ok bool, err error) {
 	var bounds struct {
 		Earliest *int64
 		Latest   *int64
 	}
 	err = r.db.WithContext(ctx).Table(r.tableName()).
 		Select("MIN(detected_at) AS earliest, MAX(detected_at) AS latest").
+		Where("detected_at >= ?", notBefore).
 		Scan(&bounds).Error
 	if err != nil || bounds.Earliest == nil || bounds.Latest == nil {
 		return 0, 0, false, err

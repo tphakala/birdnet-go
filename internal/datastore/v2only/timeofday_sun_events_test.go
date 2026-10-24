@@ -36,10 +36,12 @@ func TestV2OnlyDatastore_TimeOfDayFilterMatchesTheLabel(t *testing.T) {
 
 	start := time.Date(2024, 6, 10, 0, 0, 0, 0, time.UTC)
 	labelByID := make(map[uint]string)
+	instantByID := make(map[uint]time.Time)
 	var all []time.Time
 	for ts := start; ts.Before(start.AddDate(0, 0, seedDays)); ts = ts.Add(seedStep) {
 		det := seedDetection(t, ds, "Turdus merula", ts)
 		labelByID[det.ID] = ds.calculateTimeOfDay(ts, 1, 1)
+		instantByID[det.ID] = ts
 		all = append(all, ts)
 	}
 
@@ -95,8 +97,14 @@ func TestV2OnlyDatastore_TimeOfDayFilterMatchesTheLabel(t *testing.T) {
 			TimeOfDay: []string{datastore.TimeOfDayDay},
 			DateRange: &datastore.DateRange{Start: day, End: day},
 		})
-		assert.NotEmpty(t, got)
-		assert.Less(t, len(got), len(wantIDs(datastore.TimeOfDayDay)))
+		var want []uint
+		for id, label := range labelByID {
+			if label == datastore.TimeOfDayDay && instantByID[id].Format(time.DateOnly) == day.Format(time.DateOnly) {
+				want = append(want, id)
+			}
+		}
+		require.NotEmpty(t, want)
+		assert.ElementsMatch(t, want, got)
 	})
 
 	t.Run("several periods are unioned", func(t *testing.T) {
@@ -172,4 +180,32 @@ func TestV2OnlyDatastore_ConfidenceBand(t *testing.T) {
 	t.Run("a maximum of zero matches nothing", func(t *testing.T) {
 		assert.Empty(t, idsFor(&datastore.ConfidenceRangeFilter{Min: 0, Max: 0}))
 	})
+}
+
+// TestV2OnlyDatastore_TimeOfDayFilterIgnoresImplausiblyOldRows pins that a row
+// stamped at the Unix epoch (a zeroed clock) does not stretch the span the sun
+// events are resolved over back to 1970, which would be twenty thousand days of
+// windows for a request about last week.
+func TestV2OnlyDatastore_TimeOfDayFilterIgnoresImplausiblyOldRows(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ds.suncalc = suncalc.NewSunCalc(helsinkiLatitude, helsinkiLongitude)
+
+	seedDetection(t, ds, "Turdus merula", time.Unix(0, 0))
+	noon := time.Date(2024, 6, 10, 9, 0, 0, 0, time.UTC) // midday in Helsinki
+	recent := seedDetection(t, ds, "Turdus merula", noon)
+
+	started := time.Now()
+	notes, _, err := ds.SearchNotesAdvanced(&datastore.AdvancedSearchFilters{
+		TimeOfDay: []string{datastore.TimeOfDayDay},
+		Limit:     searchLimit,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, notes, 1)
+	assert.Equal(t, recent.ID, notes[0].ID)
+	const generous = 20 * time.Second
+	assert.Less(t, time.Since(started), generous, "a bad timestamp must not make the filter walk every day since 1970")
 }

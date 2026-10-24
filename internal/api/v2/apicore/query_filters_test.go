@@ -151,9 +151,25 @@ func TestParseDateRangeFilter_OneSidedRangeIsOpenEnded(t *testing.T) {
 		assert.True(t, got.End.Equal(dayStart.AddDate(0, 0, 1).Add(-time.Second)))
 	})
 
-	t.Run("start in the future is rejected", func(t *testing.T) {
+	t.Run("start in the future keeps the filter and matches nothing", func(t *testing.T) {
 		t.Parallel()
-		assert.Nil(t, ParseDateRangeFilter("", "2999-01-01", ""))
+		got := ParseDateRangeFilter("", "2999-01-01", "")
+		require.NotNil(t, got, "dropping the range would return every detection")
+		assert.Equal(t, 2999, got.Start.Year())
+		assert.Equal(t, 2999, got.End.Year())
+	})
+
+	t.Run("end before the open start keeps the filter and matches nothing", func(t *testing.T) {
+		t.Parallel()
+		got := ParseDateRangeFilter("", "", "1960-05-01")
+		require.NotNil(t, got)
+		assert.Equal(t, 1960, got.Start.Year())
+		assert.Equal(t, 1960, got.End.Year())
+	})
+
+	t.Run("two explicit dates in the wrong order are rejected", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, ParseDateRangeFilter("", "2024-06-10", "2024-06-01"))
 	})
 
 	t.Run("unparseable bound is rejected", func(t *testing.T) {

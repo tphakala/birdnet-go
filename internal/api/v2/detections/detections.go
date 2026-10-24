@@ -628,7 +628,8 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return c.HandleError(ctx, err, "Failed to retrieve detections", http.StatusInternalServerError)
+		status, message := searchFailureResponse(err, "Failed to retrieve detections")
+		return c.HandleError(ctx, err, message, status)
 	}
 
 	// Convert notes to response format
@@ -702,6 +703,41 @@ func validateAdvancedFilterParams(p *detectionQueryParams) error {
 				p.TimeOfDay, allowedTimeOfDayParams))
 	}
 
+	return nil
+}
+
+// searchFailureResponse picks the HTTP status and client message for a failed
+// detection search. A validation error means the serving datastore cannot express
+// the filters asked for (the legacy store has no confidence band or review
+// verdict), which is the caller's request, not a server fault, so it is a 400 that
+// says why. Anything else keeps the generic 500.
+func searchFailureResponse(err error, fallbackMessage string) (status int, message string) {
+	if enhanced, ok := errors.AsType[*errors.EnhancedError](err); ok && enhanced.Category == errors.CategoryValidation {
+		return http.StatusBadRequest, err.Error()
+	}
+	return http.StatusInternalServerError, fallbackMessage
+}
+
+// validateFilterDatesAndHour applies the date and hour checks the list endpoint
+// runs while parsing its query string, for callers that build detectionQueryParams
+// from a request body. Without them an unparseable or inverted date, or an
+// out-of-range hour, would be dropped by the filter builders and the request would
+// match every detection.
+func validateFilterDatesAndHour(p *detectionQueryParams) error {
+	for _, dp := range []struct{ value, name string }{
+		{p.Date, "date"}, {p.StartDate, "start_date"}, {p.EndDate, "end_date"},
+	} {
+		if err := validateDateParam(dp.value, dp.name); err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+		}
+	}
+	if err := validateDateOrder(p.StartDate, p.EndDate); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "start_date cannot be after end_date")
+	}
+	if p.Hour != "" && apicore.ParseHourFilter(p.Hour) == nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			"invalid hour parameter: must be a valid hour (0-23) or hour range (e.g. 6-9)")
+	}
 	return nil
 }
 

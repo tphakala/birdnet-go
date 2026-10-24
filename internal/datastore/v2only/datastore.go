@@ -401,6 +401,10 @@ func (ds *Datastore) filterLookupDeps() *repository.FilterLookupDeps {
 	return deps
 }
 
+// earliestPlausibleDetection is the floor under the span a time-of-day filter
+// resolves sun events for. See timeOfDayWindows.
+var earliestPlausibleDetection = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+
 // timeOfDayWindows resolves time-of-day periods to the windows, within the
 // requested Unix range, in which a detection is labelled with one of them by the
 // station's real sun events (see suncalc.SunCalc.TimeOfDayWindows).
@@ -415,7 +419,11 @@ func (ds *Datastore) filterLookupDeps() *repository.FilterLookupDeps {
 // zero) as "any", while the windows are a function of time alone and include it.
 // Stations that record coordinates never see the difference.
 func (ds *Datastore) timeOfDayWindows(ctx context.Context, periods []string, start, end *int64) ([]suncalc.TimeWindow, error) {
-	earliest, latest, ok, err := ds.detection.GetDetectedAtBounds(ctx)
+	// Detections stamped before any station could have recorded them (a zeroed
+	// clock, a bad import) must not stretch the span back to 1970: that is twenty
+	// thousand days of windows for a request that asked about last week. The bounds
+	// ignore them, so they match no time-of-day period.
+	earliest, latest, ok, err := ds.detection.GetDetectedAtBounds(ctx, earliestPlausibleDetection.Unix())
 	if err != nil || !ok {
 		return nil, err
 	}

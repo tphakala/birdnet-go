@@ -203,9 +203,20 @@ func ParseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResul
 	}
 	end = time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
 
-	// Reject inverted date ranges where start is after end
 	if start.After(end) {
-		return nil
+		// Two explicit dates in the wrong order are rejected. When one side is only
+		// a default (a start after today, or an end before openRangeStartYear) the
+		// request asked for a range that holds nothing, so collapse it onto the
+		// date it did give. Returning nil here would drop the date filter and
+		// return every detection instead.
+		if startDate != "" && endDate != "" {
+			return nil
+		}
+		if startDate == "" {
+			start = end
+		} else {
+			end = start
+		}
 	}
 	return &DateRangeResult{
 		Start: start,

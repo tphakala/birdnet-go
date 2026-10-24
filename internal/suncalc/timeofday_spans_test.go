@@ -157,7 +157,7 @@ func TestGetSunEventTimes_DoesNotDependOnTheInstantPassed(t *testing.T) {
 	// Offsets from UTC midnight that all fall on 15 Sep in Helsinki (UTC+3).
 	day := time.Date(2024, 9, 15, 0, 0, 0, 0, time.UTC)
 
-	var sunrises []time.Time
+	sunrises := make([]time.Time, 0, 4)
 	for _, offset := range []time.Duration{0, 3 * time.Hour, 9*time.Hour + 30*time.Minute, 20 * time.Hour} {
 		events, err := NewSunCalc(lat, lon).GetSunEventTimes(day.Add(offset))
 		require.NoError(t, err)

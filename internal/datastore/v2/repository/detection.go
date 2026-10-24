@@ -118,8 +118,9 @@ type DetectionRepository interface {
 	CountByHour(ctx context.Context, hourStart int64) (int64, error)
 
 	// GetDetectedAtBounds returns the earliest and latest detected_at (Unix
-	// seconds). ok is false when there are no detections.
-	GetDetectedAtBounds(ctx context.Context) (earliest, latest int64, ok bool, err error)
+	// seconds) among detections at or after notBefore, so rows stamped by a zeroed
+	// clock or a bad import do not widen the span. ok is false when there are none.
+	GetDetectedAtBounds(ctx context.Context, notBefore int64) (earliest, latest int64, ok bool, err error)
 
 	// === Aggregations ===
 

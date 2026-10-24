@@ -281,6 +281,9 @@ func (c *Handler) BatchResolveDetections(ctx echo.Context) error {
 
 	// Validate with the same rules the list endpoint applies, so a filter set that
 	// the list rejects cannot be resolved into a bulk-action target here.
+	if err := validateFilterDatesAndHour(params); err != nil {
+		return err
+	}
 	if err := validateAdvancedFilterParams(params); err != nil {
 		return err
 	}
@@ -290,7 +293,8 @@ func (c *Handler) BatchResolveDetections(ctx echo.Context) error {
 		if ended, respErr := c.respondIfRequestEnded(ctx, err, "Detection resolve request ended before completion"); ended {
 			return respErr
 		}
-		return c.HandleError(ctx, err, "Failed to resolve detections", http.StatusInternalServerError)
+		status, message := searchFailureResponse(err, "Failed to resolve detections")
+		return c.HandleError(ctx, err, message, status)
 	}
 
 	if totalCount > int64(maxBatchSize) {

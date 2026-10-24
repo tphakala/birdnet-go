@@ -52,6 +52,11 @@ const (
 	TimeOfDaySunrise = "sunrise"
 	TimeOfDaySunset  = "sunset"
 	TimeOfDayUnknown = "unknown"
+
+	// TimeOfDayAliasDawn and TimeOfDayAliasDusk are the historical names the
+	// advanced search accepted for TimeOfDaySunrise and TimeOfDaySunset.
+	TimeOfDayAliasDawn = "dawn"
+	TimeOfDayAliasDusk = "dusk"
 )
 
 // Verification status filter constants for detection queries. They name the

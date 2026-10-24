@@ -343,7 +343,7 @@ func applyTimeOfDayFilter(query *gorm.DB, timeOfDay []string) *gorm.DB {
 
 	for _, tod := range timeOfDay {
 		switch strings.ToLower(tod) {
-		case "dawn", TimeOfDaySunrise:
+		case TimeOfDayAliasDawn, TimeOfDaySunrise:
 			// Approximate dawn as 5-7 AM
 			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
 			args = append(args, "05:00:00", "07:00:00")
@@ -351,7 +351,7 @@ func applyTimeOfDayFilter(query *gorm.DB, timeOfDay []string) *gorm.DB {
 			// Approximate day as 7 AM - 6 PM
 			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
 			args = append(args, "07:00:00", "18:00:00")
-		case "dusk", TimeOfDaySunset:
+		case TimeOfDayAliasDusk, TimeOfDaySunset:
 			// Approximate dusk as 6-8 PM
 			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
 			args = append(args, "18:00:00", "20:00:00")
@@ -420,9 +420,9 @@ func NormalizeTimeOfDayPeriods(periods []string) []string {
 			canonical = TimeOfDayDay
 		case TimeOfDayNight:
 			canonical = TimeOfDayNight
-		case TimeOfDaySunrise, "dawn":
+		case TimeOfDaySunrise, TimeOfDayAliasDawn:
 			canonical = TimeOfDaySunrise
-		case TimeOfDaySunset, "dusk":
+		case TimeOfDaySunset, TimeOfDayAliasDusk:
 			canonical = TimeOfDaySunset
 		default:
 			// "", "any" and anything unrecognized: no constraint.
