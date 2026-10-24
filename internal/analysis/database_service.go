@@ -330,6 +330,11 @@ func (d *DatabaseService) Start(_ context.Context) error {
 			if infra.states != nil {
 				d.legacyMonitor = newLegacySchemaMonitor(infra.states, legacySchemaPollInterval, datastoreLog,
 					schemaVersion == datastore.SchemaVersionLegacy)
+				if infra.metadata != nil {
+					d.legacyMonitor.setReminder(newLegacyReminder(infra.metadata,
+						func() *conf.Settings { return conf.CurrentOrFallback(d.settings) },
+						d.settings.BuildDate, legacySchemaPollInterval, datastoreLog))
+				}
 			}
 		}
 		if d.legacyMonitor == nil && schemaVersion == datastore.SchemaVersionLegacy {
