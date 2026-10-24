@@ -66,6 +66,16 @@ const (
 	MsgMigrationErrorTitle       = "notifications.content.migration.errorTitle"
 	MsgMigrationErrorMessage     = "notifications.content.migration.errorMessage"
 
+	// Legacy database schema notices
+	MsgMigrationLegacyNotStartedTitle        = "notifications.content.migration.legacyNotStartedTitle"
+	MsgMigrationLegacyNotStartedMessage      = "notifications.content.migration.legacyNotStartedMessage"
+	MsgMigrationLegacyInProgressTitle        = "notifications.content.migration.legacyInProgressTitle"
+	MsgMigrationLegacyInProgressMessage      = "notifications.content.migration.legacyInProgressMessage"
+	MsgMigrationLegacyNeedsAttentionTitle    = "notifications.content.migration.legacyNeedsAttentionTitle"
+	MsgMigrationLegacyNeedsAttentionMessage  = "notifications.content.migration.legacyNeedsAttentionMessage"
+	MsgMigrationLegacyRestartRequiredTitle   = "notifications.content.migration.legacyRestartRequiredTitle"
+	MsgMigrationLegacyRestartRequiredMessage = "notifications.content.migration.legacyRestartRequiredMessage"
+
 	// Legacy database cleanup notifications
 	MsgCleanupCompleteTitle   = "notifications.content.cleanup.completeTitle"
 	MsgCleanupCompleteMessage = "notifications.content.cleanup.completeMessage"
