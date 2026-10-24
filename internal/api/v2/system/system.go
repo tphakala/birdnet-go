@@ -1103,7 +1103,7 @@ var skipFsPrefixes = [...]string{"fuse", "cgroup", "proc", "sys", "dev"}
 // separate disk. A mount point that cannot be inspected is kept.
 func isFileMount(mountpoint string) bool {
 	fi, err := os.Stat(mountpoint)
-	return err == nil && !fi.IsDir()
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // skipFilesystem returns true if the filesystem type should be skipped
