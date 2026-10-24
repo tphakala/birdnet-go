@@ -39,9 +39,13 @@ Performance Optimizations:
 -->
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
+  import { MediaQuery } from 'svelte/reactivity';
   import { ReconnectingEventSource } from '$lib/utils/ReconnectingEventSource';
   import CurrentlyHearingCard from '$lib/desktop/features/dashboard/components/CurrentlyHearingCard.svelte';
-  import DailySummaryCard from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
+  import DailySummaryCard, {
+    type DailySummaryBodyContext,
+  } from '$lib/desktop/features/dashboard/components/DailySummaryCard.svelte';
+  import PhoneSpeciesTable from '$lib/mobile/dashboard/PhoneSpeciesTable.svelte';
   import NewSpeciesHighlightsCard from '$lib/desktop/features/dashboard/components/NewSpeciesHighlightsCard.svelte';
   import DetectionCardGrid from '$lib/desktop/features/dashboard/components/DetectionCardGrid.svelte';
   import { t } from '$lib/i18n';
@@ -172,6 +176,10 @@ Performance Optimizations:
   // the server's "today" may be the browser's "tomorrow". Without this, the date picker
   // blocks navigation to the server's current date (#3005).
   let serverTimezone = $state('');
+
+  // Phone screens (the 640px breakpoint) get the compact species table instead of the heatmap.
+  const PHONE_MEDIA_QUERY = '(max-width: 639px)';
+  const isPhone = new MediaQuery(PHONE_MEDIA_QUERY, false);
 
   // Guest detection: security is on but user has no access (not authenticated).
   // Guests view the owner's published dashboard read-only and can never enter
@@ -1054,6 +1062,7 @@ Performance Optimizations:
       }
       updated.hourlyUpdated = [hour];
       updated.latest_heard = detection.time;
+      updated.max_confidence = Math.max(updated.max_confidence ?? 0, detection.confidence);
 
       // Update in place - sorting is handled by DailySummaryCard's sortedData derived value
       dailySummary = [
@@ -1104,6 +1113,7 @@ Performance Optimizations:
         count: 1,
         hourly_counts: Array(24).fill(0),
         high_confidence: detection.confidence >= 0.8,
+        max_confidence: detection.confidence,
         first_heard: detection.time,
         latest_heard: detection.time,
         thumbnail_url: '', // Empty string will trigger fallback in BirdThumbnailPopup
@@ -1350,6 +1360,10 @@ Performance Optimizations:
   }
 </script>
 
+{#snippet phoneSummary(context: DailySummaryBodyContext)}
+  <PhoneSpeciesTable {...context} />
+{/snippet}
+
 <div class="col-span-12">
   <AcousticModelBanner class="mb-6" />
   <DashboardEditMode
@@ -1568,6 +1582,7 @@ Performance Optimizations:
           onServerTimezone={tz => {
             serverTimezone = tz;
           }}
+          body={isPhone.current ? phoneSummary : undefined}
         />
       {:else if element.type === 'new-species-highlights'}
         <NewSpeciesHighlightsCard
