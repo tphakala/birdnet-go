@@ -329,7 +329,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		}
 		if d.legacyMonitor == nil && schemaVersion == datastore.SchemaVersionLegacy {
 			// Legacy schema without a readable migration state.
-			telemetry.SetMigrationStateTag(migrationTagUnavailable)
+			_ = telemetry.SetMigrationStateTag(migrationTagUnavailable)
 		}
 	} else {
 		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",

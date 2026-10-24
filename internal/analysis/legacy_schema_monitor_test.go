@@ -44,10 +44,11 @@ type tagRecorder struct {
 	tags []string
 }
 
-func (r *tagRecorder) set(v string) {
+func (r *tagRecorder) set(v string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.tags = append(r.tags, v)
+	return true
 }
 
 func (r *tagRecorder) snapshot() []string {
@@ -148,5 +149,41 @@ func TestLegacySchemaMonitor_FirstReadFailureReportsUnavailable(t *testing.T) {
 		m.stop()
 
 		assert.Equal(t, []string{"unavailable", "dual_write"}, rec.snapshot())
+	})
+}
+
+func TestLegacySchemaMonitor_RetriesTagWhileTelemetryIsOff(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		reader := &fakeStateReader{steps: []fakeStateStep{{state: entities.MigrationStatusIdle}}}
+		var mu sync.Mutex
+		var calls []string
+		enabled := false
+		m := newLegacySchemaMonitor(reader, time.Second, logger.Global().Module("test"))
+		m.setTag = func(v string) bool {
+			mu.Lock()
+			defer mu.Unlock()
+			calls = append(calls, v)
+			return enabled
+		}
+
+		m.start()
+		time.Sleep(time.Second)
+		synctest.Wait()
+		mu.Lock()
+		enabled = true // the user opts in later
+		mu.Unlock()
+		time.Sleep(time.Second)
+		synctest.Wait()
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+		m.stop()
+
+		mu.Lock()
+		defer mu.Unlock()
+		// Offered on start and the next tick (rejected), accepted on the third
+		// evaluation, then not offered again.
+		assert.Equal(t, []string{"idle", "idle", "idle"}, calls)
 	})
 }

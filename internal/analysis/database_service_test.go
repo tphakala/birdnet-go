@@ -110,6 +110,31 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	assert.Nil(t, svc.legacyMonitor, "no migration state monitor on a v2 install")
 }
 
+func TestDatabaseService_Start_LegacyInstallRunsStateMonitor(t *testing.T) {
+	t.Parallel()
+
+	configuredPath := filepath.Join(t.TempDir(), "birdnet.db")
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = configuredPath
+
+	// Create a legacy database so startup does not take the fresh-install path.
+	legacy := datastore.New(settings)
+	require.NoError(t, legacy.Open())
+	require.NoError(t, legacy.Close())
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	svc := NewDatabaseService(settings, metrics)
+	require.NoError(t, svc.Start(t.Context()))
+	require.False(t, svc.IsV2OnlyMode(), "an existing legacy database starts in legacy mode")
+	require.NotNil(t, svc.legacyMonitor, "legacy install with a state manager gets the monitor")
+
+	require.NoError(t, svc.Stop(t.Context()))
+	assert.Nil(t, svc.legacyMonitor, "Stop releases the monitor")
+}
+
 func TestBootParamsFromStartupSQLite(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

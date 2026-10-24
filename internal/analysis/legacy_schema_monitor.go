@@ -59,12 +59,14 @@ type legacySchemaMonitor struct {
 	interval time.Duration
 	log      logger.Logger
 
-	// setTag publishes the tag value; tests replace it.
-	setTag func(string)
+	// setTag publishes the tag value and reports whether it was applied (false
+	// while telemetry is off); tests replace it.
+	setTag func(string) bool
 
 	// mu serializes evaluations and guards lastTag.
 	mu      sync.Mutex
 	lastTag string
+	applied bool // lastTag was accepted by setTag; false means retry on the next tick
 
 	stopCh   chan struct{}
 	doneCh   chan struct{}
@@ -115,7 +117,8 @@ func (m *legacySchemaMonitor) stop() {
 	}
 }
 
-// evaluate reads the state and publishes the tag when its value changed. A
+// evaluate reads the state and publishes the tag when its value changed or the
+// last publish was not applied (telemetry was off, for example). A
 // failed read keeps the last published value, except before any successful
 // read, where it publishes unavailable.
 func (m *legacySchemaMonitor) evaluate() {
@@ -133,9 +136,9 @@ func (m *legacySchemaMonitor) evaluate() {
 	}
 
 	tag := migrationStateTagValue(state, err)
-	if tag == m.lastTag {
+	if tag == m.lastTag && m.applied {
 		return
 	}
 	m.lastTag = tag
-	m.setTag(tag)
+	m.applied = m.setTag(tag)
 }

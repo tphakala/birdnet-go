@@ -725,26 +725,31 @@ const (
 
 // SetMigrationStateTag sets a global Sentry tag with the legacy-to-v2 migration
 // state. The caller must pass a value from a closed set (the migration status
-// strings plus fixed fallbacks), never error text or a path.
-func SetMigrationStateTag(value string) {
+// strings plus fixed fallbacks), never error text or a path. It reports whether
+// the tag was applied; false means telemetry is currently off or the value is
+// empty, so a caller may retry later.
+func SetMigrationStateTag(value string) bool {
 	if shouldSkipTelemetry() || value == "" {
-		return
+		return false
 	}
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTag(migrationStateTagKey, value)
 	})
+	return true
 }
 
 // SetMigrationPrereqTag sets a global Sentry tag with the outcome of the
 // migration prerequisite checks. The caller must pass a value from a closed
 // set: "passed" or the fixed ID of a failing check, never error text or a path.
-func SetMigrationPrereqTag(value string) {
+// It reports whether the tag was applied.
+func SetMigrationPrereqTag(value string) bool {
 	if shouldSkipTelemetry() || value == "" {
-		return
+		return false
 	}
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTag(migrationPrereqTagKey, value)
 	})
+	return true
 }
 
 // processDeferredMessages processes any messages that were captured before Sentry was ready

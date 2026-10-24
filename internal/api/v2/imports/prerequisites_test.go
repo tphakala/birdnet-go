@@ -727,6 +727,21 @@ func TestPrerequisiteTagValue(t *testing.T) {
 			want: prerequisiteTagPassed,
 		},
 		{
+			name: "errored critical check blocks",
+			checks: []PrerequisiteCheck{
+				{ID: "state_idle", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+				{ID: "sqlite_integrity", Status: CheckStatusError, Severity: CheckSeverityCritical},
+			},
+			want: "sqlite_integrity",
+		},
+		{
+			name: "skipped critical check does not block",
+			checks: []PrerequisiteCheck{
+				{ID: "legacy_accessible", Status: CheckStatusSkipped, Severity: CheckSeverityCritical},
+			},
+			want: prerequisiteTagPassed,
+		},
+		{
 			name: "first critical failure wins",
 			checks: []PrerequisiteCheck{
 				{ID: "state_idle", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
