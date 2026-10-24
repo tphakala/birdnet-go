@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"gorm.io/gorm"
 )
 
@@ -23,7 +24,7 @@ func NewInsightsRepository(db *gorm.DB, useV2Prefix, isMySQL bool) InsightsRepos
 	}
 }
 
-// Table name helpers — same pattern as detectionRepository.
+// Table name helpers, same pattern as detectionRepository.
 func (r *insightsRepository) detectionsTable() string {
 	if r.useV2Prefix {
 		return tableV2Detections
@@ -45,7 +46,21 @@ func (r *insightsRepository) reviewsTable() string {
 	return tableDetectionReviews
 }
 
-// SQL expression helpers — same offset-arithmetic pattern as detectionRepository.hourFromUnixExpr.
+func (r *insightsRepository) modelContributionsTable() string {
+	if r.useV2Prefix {
+		return tableV2DetectionModelContributions
+	}
+	return tableDetectionModelContributions
+}
+
+func (r *insightsRepository) modelsTable() string {
+	if r.useV2Prefix {
+		return tableV2AIModels
+	}
+	return tableAIModels
+}
+
+// SQL expression helpers, same offset-arithmetic pattern as detectionRepository.hourFromUnixExpr.
 // offsetSeconds is the configured timezone's UTC offset; it is added to the epoch before the
 // date/hour/year is extracted, so the result buckets by wall-clock value in that zone and is
 // independent of the database session / OS-local timezone (unlike the older 'localtime' /
@@ -301,4 +316,198 @@ func (r *insightsRepository) GetDashboardKPIs(ctx context.Context, todaySince in
 	}
 
 	return kpis, nil
+}
+
+// hasContributionStatsSQL is the one predicate that decides whether a contribution
+// row has recorded confidence stats. The four stat columns are written together,
+// but nothing constrains that, so min and sum both gate every stats expression:
+// a row can then never feed the minimum without feeding the mean, or the reverse.
+const hasContributionStatsSQL = "c.confidence_sum IS NOT NULL AND c.min_confidence IS NOT NULL"
+
+// modelContributionRow is one scanned row of the per-model aggregate query.
+type modelContributionRow struct {
+	ModelID             uint
+	Name                string
+	Version             string
+	Variant             string
+	ModelType           string
+	DetectionCount      int64
+	Hits                int64
+	SoleDetections      int64
+	MaxConfidence       float64
+	MinConfidence       *float64
+	ConfidenceSum       *float64
+	StatsHits           int64
+	DetectionsWithStats int64
+	Correct             int64
+	FalsePositive       int64
+}
+
+// modelContributionTotalsRow is the scanned row of the range totals query.
+type modelContributionTotalsRow struct {
+	TotalDetections             int64
+	DetectionsWithContributions int64
+}
+
+// GetModelContributionStats implements InsightsRepository. The three statements
+// run in one read transaction so they see one snapshot.
+func (r *insightsRepository) GetModelContributionStats(ctx context.Context, start, end int64) (*ModelContributionStats, error) {
+	result := &ModelContributionStats{
+		Models:     []ModelContributionStat{},
+		Agreements: []ModelAgreement{},
+	}
+	if start >= end {
+		return result, nil
+	}
+
+	// Every query below must use tx, never r.db: SQLite runs with one open
+	// connection, so a query on r.db would wait for the transaction's connection.
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		rows, err := r.queryModelContributionRows(tx, start, end)
+		if err != nil {
+			return err
+		}
+		agreements, err := r.queryModelAgreements(tx, start, end)
+		if err != nil {
+			return err
+		}
+		totals, err := r.queryContributionTotals(tx, start, end)
+		if err != nil {
+			return err
+		}
+		result = assembleModelContributionStats(rows, agreements, totals)
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("model contribution stats: %w", err)
+	}
+	return result, nil
+}
+
+// queryModelContributionRows runs the per-model aggregate. The derived table pd
+// counts the contributing models per detection over the same range, which gives
+// the sole-contributor count without a subquery inside an aggregate.
+func (r *insightsRepository) queryModelContributionRows(tx *gorm.DB, start, end int64) ([]modelContributionRow, error) {
+	contrib := r.modelContributionsTable()
+	query := fmt.Sprintf(`
+SELECT c.model_id AS model_id, m.name AS name, m.version AS version, m.variant AS variant, m.model_type AS model_type,
+  COUNT(*) AS detection_count,
+  SUM(c.hit_count) AS hits,
+  SUM(CASE WHEN pd.model_count = 1 THEN 1 ELSE 0 END) AS sole_detections,
+  MAX(c.max_confidence) AS max_confidence,
+  MIN(CASE WHEN %[1]s THEN c.min_confidence END) AS min_confidence,
+  SUM(CASE WHEN %[1]s THEN c.confidence_sum END) AS confidence_sum,
+  SUM(CASE WHEN %[1]s THEN c.hit_count ELSE 0 END) AS stats_hits,
+  SUM(CASE WHEN %[1]s THEN 1 ELSE 0 END) AS detections_with_stats,
+  SUM(CASE WHEN dr.verified = ? THEN 1 ELSE 0 END) AS correct,
+  SUM(CASE WHEN dr.verified = ? THEN 1 ELSE 0 END) AS false_positive
+FROM %[2]s c
+JOIN %[3]s d ON d.id = c.detection_id
+JOIN (SELECT c2.detection_id AS detection_id, COUNT(*) AS model_count
+      FROM %[2]s c2 JOIN %[3]s d2 ON d2.id = c2.detection_id
+      WHERE d2.detected_at >= ? AND d2.detected_at < ?
+      GROUP BY c2.detection_id) pd ON pd.detection_id = c.detection_id
+JOIN %[4]s m ON m.id = c.model_id
+LEFT JOIN %[5]s dr ON dr.detection_id = c.detection_id
+WHERE d.detected_at >= ? AND d.detected_at < ?
+GROUP BY c.model_id, m.name, m.version, m.variant, m.model_type
+ORDER BY detection_count DESC, c.model_id ASC`,
+		hasContributionStatsSQL, contrib, r.detectionsTable(), r.modelsTable(), r.reviewsTable())
+
+	var rows []modelContributionRow
+	// Args in text order: the two verdicts of the CASE expressions, then the
+	// derived table's range, then the outer WHERE range.
+	err := tx.Raw(query,
+		entities.VerificationCorrect, entities.VerificationFalsePositive,
+		start, end,
+		start, end,
+	).Scan(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("per-model rows: %w", err)
+	}
+	return rows, nil
+}
+
+// queryModelAgreements counts the detections each model pair shares. The join
+// condition c2.model_id > c1.model_id yields each pair once with model_a < model_b.
+func (r *insightsRepository) queryModelAgreements(tx *gorm.DB, start, end int64) ([]ModelAgreement, error) {
+	query := fmt.Sprintf(`
+SELECT c1.model_id AS model_a_id, c2.model_id AS model_b_id, COUNT(*) AS shared_detections
+FROM %[1]s c1
+JOIN %[1]s c2 ON c2.detection_id = c1.detection_id AND c2.model_id > c1.model_id
+JOIN %[2]s d ON d.id = c1.detection_id
+WHERE d.detected_at >= ? AND d.detected_at < ?
+GROUP BY c1.model_id, c2.model_id
+ORDER BY shared_detections DESC, model_a_id ASC, model_b_id ASC`,
+		r.modelContributionsTable(), r.detectionsTable())
+
+	var agreements []ModelAgreement
+	if err := tx.Raw(query, start, end).Scan(&agreements).Error; err != nil {
+		return nil, fmt.Errorf("agreements: %w", err)
+	}
+	return agreements, nil
+}
+
+// queryContributionTotals counts the detections in range and those with at least
+// one contribution row.
+func (r *insightsRepository) queryContributionTotals(tx *gorm.DB, start, end int64) (modelContributionTotalsRow, error) {
+	query := fmt.Sprintf(`
+SELECT COUNT(DISTINCT d.id) AS total_detections, COUNT(DISTINCT c.detection_id) AS detections_with_contributions
+FROM %s d LEFT JOIN %s c ON c.detection_id = d.id
+WHERE d.detected_at >= ? AND d.detected_at < ?`,
+		r.detectionsTable(), r.modelContributionsTable())
+
+	var totals modelContributionTotalsRow
+	if err := tx.Raw(query, start, end).Scan(&totals).Error; err != nil {
+		return totals, fmt.Errorf("totals: %w", err)
+	}
+	return totals, nil
+}
+
+// assembleModelContributionStats derives hit shares, means and outcome counts in
+// Go. Unreviewed is the remainder after correct and false positive, so an empty
+// or legacy verdict counts as unreviewed instead of falling out of every bucket.
+func assembleModelContributionStats(rows []modelContributionRow, agreements []ModelAgreement, totals modelContributionTotalsRow) *ModelContributionStats {
+	stats := &ModelContributionStats{
+		TotalDetections:             totals.TotalDetections,
+		DetectionsWithContributions: totals.DetectionsWithContributions,
+		Models:                      make([]ModelContributionStat, 0, len(rows)),
+		Agreements:                  make([]ModelAgreement, 0, len(agreements)),
+	}
+	for i := range rows {
+		stats.TotalHits += rows[i].Hits
+	}
+	for i := range rows {
+		row := &rows[i]
+		stat := ModelContributionStat{
+			ModelID:             row.ModelID,
+			Name:                row.Name,
+			Version:             row.Version,
+			Variant:             row.Variant,
+			ModelType:           row.ModelType,
+			Detections:          row.DetectionCount,
+			Hits:                row.Hits,
+			SoleDetections:      row.SoleDetections,
+			DetectionsWithStats: row.DetectionsWithStats,
+			MaxConfidence:       row.MaxConfidence,
+			MinConfidence:       row.MinConfidence,
+			Correct:             row.Correct,
+			FalsePositive:       row.FalsePositive,
+			Unreviewed:          row.DetectionCount - row.Correct - row.FalsePositive,
+		}
+		if stats.TotalHits > 0 {
+			stat.HitShare = float64(row.Hits) / float64(stats.TotalHits)
+		}
+		if row.StatsHits > 0 && row.ConfidenceSum != nil {
+			mean := *row.ConfidenceSum / float64(row.StatsHits)
+			if row.MinConfidence != nil {
+				// Clamp float rounding so min <= mean <= max always holds.
+				mean = min(max(mean, *row.MinConfidence), row.MaxConfidence)
+			}
+			stat.MeanConfidence = &mean
+		}
+		stats.Models = append(stats.Models, stat)
+	}
+	stats.Agreements = append(stats.Agreements, agreements...)
+	return stats
 }

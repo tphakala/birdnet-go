@@ -32,6 +32,7 @@ func setupInsightsTestDB(t *testing.T) *gorm.DB {
 		&entities.Label{},
 		&entities.Detection{},
 		&entities.DetectionReview{},
+		&entities.DetectionModelContribution{},
 	)
 	require.NoError(t, err)
 
@@ -194,7 +195,7 @@ func TestGetDawnChorusRaw(t *testing.T) {
 
 	labelA := seedLabel(t, db, "Turdus merula")
 
-	// Day 1: two detections at 5:00 AM and 6:30 AM — should return 5:00 AM
+	// Day 1: two detections at 5:00 AM and 6:30 AM, should return 5:00 AM
 	day1 := time.Date(now.Year(), now.Month(), now.Day()-5, 0, 0, 0, 0, time.Local)
 	seedDetection(t, db, labelA, day1.Add(5*time.Hour).Unix(), 0.9)
 	seedDetection(t, db, labelA, day1.Add(6*time.Hour+30*time.Minute).Unix(), 0.85)
@@ -204,7 +205,7 @@ func TestGetDawnChorusRaw(t *testing.T) {
 	day2 := time.Date(now.Year(), now.Month(), now.Day()-3, 0, 0, 0, 0, time.Local)
 	seedDetection(t, db, labelA, day2.Add(6*time.Hour).Unix(), 0.88)
 
-	// Detection outside hour range (11:00 AM — should be excluded)
+	// Detection outside hour range (11:00 AM, should be excluded)
 	seedDetection(t, db, labelA, day1.Add(11*time.Hour).Unix(), 0.92)
 
 	// Detection before since (should be excluded)
