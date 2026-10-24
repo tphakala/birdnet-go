@@ -604,6 +604,14 @@ func (c *Handler) runNotificationEventLoop(ctx echo.Context, client *Notificatio
 				return nil
 			}
 
+			// Service.CreateWithMetadata broadcasts a push-only notification so
+			// the push dispatcher can receive it, but does not save it to the
+			// store. Shown here it would be a bell entry the notification list
+			// does not return, gone after a reload.
+			if notif.DeliveryTarget == notification.DeliveryTargetPush {
+				continue
+			}
+
 			// Guest hardening: unauthenticated SSE subscribers only receive
 			// non-toast bird-detection events. Toast payloads are always
 			// created as TypeWarning/TypeInfo today (see toast.go), but we

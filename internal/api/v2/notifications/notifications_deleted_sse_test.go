@@ -58,6 +58,84 @@ func runLoopWithDeletions(t *testing.T, guest bool, events ...notification.Delet
 	return rec.Body.String()
 }
 
+// runLoopWithNotifications feeds created notifications into a notification SSE
+// event loop and returns what it wrote to the wire.
+func runLoopWithNotifications(t *testing.T, guest bool, notifs ...*notification.Notification) string {
+	t.Helper()
+	c := mockHandler()
+	c.SetTestContext(t.Context(), nil)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, sseEndpoint, http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	created := make(chan *notification.Notification, len(notifs))
+	for _, n := range notifs {
+		created <- n
+	}
+	client := &NotificationClient{
+		ID:           "created-sse-client",
+		Done:         make(chan struct{}, 1),
+		SubscriberCh: created,
+		DeletionCh:   make(chan notification.DeletedEvent),
+		Context:      t.Context(),
+		Guest:        guest,
+	}
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.runNotificationEventLoop(ctx, client) }()
+
+	// The loop writes each received notification before it selects again, so
+	// once the queue is drained the Done signal is seen only after the last write.
+	require.Eventually(t, func() bool { return len(created) == 0 }, 2*time.Second, time.Millisecond)
+	client.Done <- struct{}{}
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		require.Fail(t, "event loop did not return after disconnect")
+	}
+	return rec.Body.String()
+}
+
+// TestNotificationEventLoop_SkipsPushOnlyNotifications pins that a notification
+// routed only to push providers never reaches a browser. The service broadcasts
+// it so the push dispatcher can receive it, but the notification store never
+// held it, so a bell entry would vanish on reload and its actions would target
+// an ID the store does not know. Notifications for the bell or for all channels
+// keep arriving, for authenticated and guest clients alike.
+func TestNotificationEventLoop_SkipsPushOnlyNotifications(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		guest bool
+		// typ is a type the client would otherwise receive: guests only get
+		// detection notifications.
+		typ notification.Type
+	}{
+		{name: "authenticated client", guest: false, typ: notification.TypeWarning},
+		{name: "guest client", guest: true, typ: notification.TypeDetection},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			pushOnly := notification.NewNotification(tt.typ, notification.PriorityHigh, "push-only", "m").
+				WithDeliveryTarget(notification.DeliveryTargetPush)
+			forAll := notification.NewNotification(tt.typ, notification.PriorityMedium, "for-all", "m")
+			bellOnly := notification.NewNotification(tt.typ, notification.PriorityMedium, "bell-only", "m").
+				WithDeliveryTarget(notification.DeliveryTargetBell)
+
+			body := runLoopWithNotifications(t, tt.guest, pushOnly, forAll, bellOnly)
+
+			assert.NotContains(t, body, pushOnly.ID, "a push-only notification must not reach the client")
+			assert.Contains(t, body, forAll.ID, "a notification for all channels still arrives")
+			assert.Contains(t, body, bellOnly.ID, "a bell-only notification still arrives")
+		})
+	}
+}
+
 func TestNotificationEventLoop_SendsDeletedEvent(t *testing.T) {
 	t.Parallel()
 	body := runLoopWithDeletions(t, false, notification.DeletedEvent{ID: "abc-123", Type: notification.TypeError})
