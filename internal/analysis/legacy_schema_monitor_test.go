@@ -3,6 +3,7 @@ package analysis
 import (
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -105,6 +106,8 @@ func TestLegacySchemaMonitor_TagFollowsStateAcrossTicks(t *testing.T) {
 			{state: entities.MigrationStatusMigrating},
 			{err: errors.NewStd("transient")},
 			{state: entities.MigrationStatusFailed},
+			// Never read while the monitor runs; a poll after stop would publish it.
+			{state: entities.MigrationStatusDualWrite},
 		}}
 		rec := &tagRecorder{}
 		m := newLegacySchemaMonitor(reader, time.Second, logger.Global().Module("test"))
@@ -244,4 +247,59 @@ func TestLegacySchemaMonitor_RetriesTagWhileReadsFail(t *testing.T) {
 			})
 		})
 	}
+}
+
+// gatedStateReader returns idle for the first read and blocks every later read
+// until release is closed, so a test can stop the monitor mid-read.
+type gatedStateReader struct {
+	reads   atomic.Int32
+	release chan struct{}
+}
+
+func (g *gatedStateReader) GetState() (*entities.MigrationState, error) {
+	if g.reads.Add(1) > 1 {
+		<-g.release
+	}
+	return &entities.MigrationState{State: entities.MigrationStatusIdle}, nil
+}
+
+func TestLegacySchemaMonitor_StopWaitsForInFlightRead(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		reader := &gatedStateReader{release: make(chan struct{})}
+		m := newLegacySchemaMonitor(reader, time.Second, logger.Global().Module("test"))
+		m.setTag = (&tagRecorder{}).set
+
+		m.start()
+		time.Sleep(time.Second)
+		synctest.Wait() // the second read is now blocked inside GetState
+		require.EqualValues(t, 2, reader.reads.Load())
+
+		var stopped atomic.Bool
+		go func() {
+			m.stop()
+			stopped.Store(true)
+		}()
+		synctest.Wait()
+		assert.False(t, stopped.Load(), "stop must wait for the in-flight read")
+
+		close(reader.release)
+		synctest.Wait()
+		assert.True(t, stopped.Load(), "stop returns once the read finishes")
+	})
+}
+
+func TestLegacySchemaMonitor_StopBeforeStart(t *testing.T) {
+	t.Parallel()
+
+	reader := &fakeStateReader{steps: []fakeStateStep{{state: entities.MigrationStatusIdle}}}
+	m := newLegacySchemaMonitor(reader, time.Second, logger.Global().Module("test"))
+	m.setTag = (&tagRecorder{}).set
+
+	assert.NotPanics(t, func() {
+		m.stop()
+		m.stop()
+	})
+	assert.Zero(t, reader.pos, "a stopped monitor that never started reads nothing")
 }
