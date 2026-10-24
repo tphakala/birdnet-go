@@ -145,7 +145,7 @@ func TestManager_AllStreamHealth(t *testing.T) {
 	// StreamHealth for a non-existent source must return an error.
 	_, err = mgr.StreamHealth("nonexistent")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "no stream found")
+	assert.ErrorIs(t, err, audiocore.ErrSourceNotFound)
 }
 
 // TestManager_Shutdown starts multiple streams, calls Shutdown, and verifies all

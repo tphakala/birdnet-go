@@ -338,15 +338,9 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			return p.quietHoursScheduler.IsStreamSuppressed(sourceID)
 		},
 		// RecoveryState lets the watchdog defer a restart to the native stream
-		// supervisor while it reconnects in place. Sound-card sources and the FFmpeg
-		// producer have no recovery intent, so the lookup miss / RecoveryUnknown both
-		// return the legacy restart path.
+		// supervisor while it reconnects in place; see streamRecoveryState.
 		RecoveryState: func(sourceID string) (audiocore.RecoveryState, time.Time) {
-			h, err := p.engine.StreamManager().StreamHealth(sourceID)
-			if err != nil || h == nil {
-				return audiocore.RecoveryUnknown, time.Time{}
-			}
-			return h.Recovery, h.RecoveryEntered
+			return streamRecoveryState(p.engine.StreamManager(), sourceID)
 		},
 	}
 	p.watchdog = audiocore.NewLivenessWatchdog(
@@ -2863,4 +2857,23 @@ func logHLSCleanup(err error) {
 		log.Info("cleaned up leftover HLS streaming files",
 			logger.String("operation", "cleanup_hls_files"))
 	}
+}
+
+// streamHealthLookup is the part of audiocore.StreamManager that
+// streamRecoveryState needs.
+type streamHealthLookup interface {
+	StreamHealth(sourceID string) (*audiocore.StreamHealth, error)
+}
+
+// streamRecoveryState reports the stream producer's recovery intent for
+// sourceID, for the liveness watchdog's RecoveryState callback. Sound-card
+// sources are not tracked by the stream manager and the FFmpeg producer reports
+// no intent, so a lookup miss returns RecoveryUnknown with a zero time, which
+// takes the watchdog's legacy restart path.
+func streamRecoveryState(mgr streamHealthLookup, sourceID string) (audiocore.RecoveryState, time.Time) {
+	h, err := mgr.StreamHealth(sourceID)
+	if err != nil || h == nil {
+		return audiocore.RecoveryUnknown, time.Time{}
+	}
+	return h.Recovery, h.RecoveryEntered
 }
