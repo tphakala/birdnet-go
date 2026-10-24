@@ -342,8 +342,12 @@ func TestLegacySchemaMonitor_SecondStartIsIgnored(t *testing.T) {
 
 // wantLegacyCreate describes one expected bell notice.
 type wantLegacyCreate struct {
-	kind     migration.LegacyNoticeKind
-	priority notification.Priority
+	kind        migration.LegacyNoticeKind
+	priority    notification.Priority
+	title       string
+	messagePart string // a fragment that tells the kinds' English messages apart
+	titleKey    string // literal key as spelled in en.json
+	messageKey  string
 }
 
 func TestLegacySchemaMonitor_BellNoticeAcrossTransitions(t *testing.T) {
@@ -351,10 +355,26 @@ func TestLegacySchemaMonitor_BellNoticeAcrossTransitions(t *testing.T) {
 
 	idle := fakeStateStep{state: entities.MigrationStatusIdle}
 	step := func(s entities.MigrationStatus) fakeStateStep { return fakeStateStep{state: s} }
-	notStarted := wantLegacyCreate{migration.LegacyNoticeNotStarted, notification.PriorityMedium}
-	inProgress := wantLegacyCreate{migration.LegacyNoticeInProgress, notification.PriorityMedium}
-	needsAttention := wantLegacyCreate{migration.LegacyNoticeNeedsAttention, notification.PriorityHigh}
-	restart := wantLegacyCreate{migration.LegacyNoticeRestartRequired, notification.PriorityMedium}
+	notStarted := wantLegacyCreate{
+		kind: migration.LegacyNoticeNotStarted, priority: notification.PriorityMedium,
+		title: "Database upgrade required", messagePart: "Open System > Database to run the migration",
+		titleKey: "notifications.content.migration.legacyNotStartedTitle", messageKey: "notifications.content.migration.legacyNotStartedMessage",
+	}
+	inProgress := wantLegacyCreate{
+		kind: migration.LegacyNoticeInProgress, priority: notification.PriorityMedium,
+		title: "Database migration in progress", messagePart: "Keep BirdNET-Go running",
+		titleKey: "notifications.content.migration.legacyInProgressTitle", messageKey: "notifications.content.migration.legacyInProgressMessage",
+	}
+	needsAttention := wantLegacyCreate{
+		kind: migration.LegacyNoticeNeedsAttention, priority: notification.PriorityHigh,
+		title: "Database migration needs attention", messagePart: "paused or has failed",
+		titleKey: "notifications.content.migration.legacyNeedsAttentionTitle", messageKey: "notifications.content.migration.legacyNeedsAttentionMessage",
+	}
+	restart := wantLegacyCreate{
+		kind: migration.LegacyNoticeRestartRequired, priority: notification.PriorityMedium,
+		title: "Restart to finish the database migration", messagePart: "Restart BirdNET-Go to switch",
+		titleKey: "notifications.content.migration.legacyRestartRequiredTitle", messageKey: "notifications.content.migration.legacyRestartRequiredMessage",
+	}
 
 	tests := []struct {
 		name        string
@@ -415,10 +435,10 @@ func TestLegacySchemaMonitor_BellNoticeAcrossTransitions(t *testing.T) {
 					assert.Equal(t, w.priority, n.Priority, "create %d", i)
 					assert.Equal(t, notification.ComponentDatabase, n.Component)
 					assert.Equal(t, notification.DeliveryTargetBell, n.DeliveryTarget)
-					assert.Equal(t, legacyNoticeKinds[w.kind].titleKey, n.TitleKey, "create %d", i)
-					assert.Equal(t, legacyNoticeKinds[w.kind].messageKey, n.MessageKey, "create %d", i)
-					assert.NotEmpty(t, n.Title)
-					assert.NotEmpty(t, n.Message)
+					assert.Equal(t, w.titleKey, n.TitleKey, "create %d", i)
+					assert.Equal(t, w.messageKey, n.MessageKey, "create %d", i)
+					assert.Equal(t, w.title, n.Title, "create %d", i)
+					assert.Contains(t, n.Message, w.messagePart, "create %d", i)
 				}
 			})
 		})
