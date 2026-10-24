@@ -192,6 +192,39 @@ func TestGetModelContributionStats_Handler(t *testing.T) {
 	}
 }
 
+func TestGetModelContributionStats_ResponseMapping(t *testing.T) {
+	t.Parallel()
+	e, controller := setupInsightsTestController(t, &mockInsightsRepo{modelContributionStats: sampleModelContributionStats()})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/insights/model-contributions?start_date=2026-03-01&end_date=2026-03-10", http.NoBody)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.getModelContributionStatsImpl(e.NewContext(req, rec)))
+	require.Equal(t, http.StatusOK, rec.Code)
+
+	assert.JSONEq(t, `{
+		"start_date": "2026-03-01",
+		"end_date": "2026-03-10",
+		"total_detections": 10,
+		"detections_with_contributions": 8,
+		"total_hits": 12,
+		"models": [
+			{
+				"model_id": 1, "name": "BirdNET", "version": "2.4", "variant": "default", "model_type": "bird",
+				"detections": 8, "hits": 9, "hit_share": 0.75, "sole_detections": 5,
+				"confidence": {"min": 0.6, "mean": 0.7, "max": 0.9, "detections_with_stats": 3},
+				"outcomes": {"correct": 2, "false_positive": 1, "unreviewed": 5}
+			},
+			{
+				"model_id": 2, "name": "Perch", "version": "2", "variant": "default", "model_type": "bird",
+				"detections": 3, "hits": 3, "hit_share": 0.25, "sole_detections": 0,
+				"confidence": {"min": null, "mean": null, "max": 0.8, "detections_with_stats": 0},
+				"outcomes": {"correct": 0, "false_positive": 0, "unreviewed": 3}
+			}
+		],
+		"agreements": [{"model_a_id": 1, "model_b_id": 2, "shared_detections": 3}]
+	}`, rec.Body.String())
+}
+
 func TestGetModelContributionStats_RejectsBadParams(t *testing.T) {
 	t.Parallel()
 	e, controller := setupInsightsTestController(t, &mockInsightsRepo{modelContributionStats: sampleModelContributionStats()})

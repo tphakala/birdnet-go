@@ -201,6 +201,7 @@ func TestGetModelContributionStats_NullStatsOnly(t *testing.T) {
 	assert.Nil(t, m.MinConfidence)
 	assert.Nil(t, m.MeanConfidence)
 	assert.Equal(t, int64(0), m.DetectionsWithStats)
+	assert.InDelta(t, 0.5, m.MaxConfidence, 1e-9, "the maximum comes from every row, including rows without stats")
 }
 
 func TestGetModelContributionStats_Transitions(t *testing.T) {

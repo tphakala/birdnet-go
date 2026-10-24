@@ -94,6 +94,7 @@ func TestMySQL_GetModelContributionStats(t *testing.T) {
 			assert.Equal(t, int64(0), b.DetectionsWithStats)
 			assert.Nil(t, b.MinConfidence)
 			assert.Nil(t, b.MeanConfidence, "a model with no recorded stats has no mean")
+			assert.InDelta(t, 0.75, b.MaxConfidence, 1e-9, "the maximum comes from every row, including rows without stats")
 			assert.Equal(t, int64(1), b.FalsePositive)
 
 			assert.Equal(t, []repository.ModelAgreement{
