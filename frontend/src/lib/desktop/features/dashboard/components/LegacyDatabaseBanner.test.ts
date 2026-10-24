@@ -203,7 +203,7 @@ describe('LegacyDatabaseBanner', () => {
       await fireEvent.click(dismissButton, { detail: MOUSE_CLICK_DETAIL });
 
       expect(screen.queryByRole('status')).toBeNull();
-      expect(document.activeElement).not.toBe(outside);
+      expect(document.activeElement).toBe(document.body);
     } finally {
       outside.remove();
     }
