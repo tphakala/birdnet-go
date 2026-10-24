@@ -1437,15 +1437,31 @@ function normalizeLoadedSettings(data: SettingsFormData): SettingsFormData {
 /** HTTP status the backend answers a stale If-Match with. */
 const HTTP_PRECONDITION_FAILED = 412;
 
-/** Tries a full save makes: one send plus one resend after a 412 and a rebase. */
+/** Tries a full save makes with If-Match: one send plus one resend after a 412 and a rebase. */
 const MAX_SETTINGS_SAVE_ATTEMPTS = 2;
 
 /** Prefix of a weak entity tag; the backend compares If-Match strongly, so a weak tag never matches. */
 const WEAK_ETAG_PREFIX = 'W/';
 
 /**
- * Thrown when every save attempt got a 412: the settings keep changing under the form.
- * Callers identify the conflict with `instanceof`.
+ * Set once a save sees two 412s in a row name the same current ETag. That means the
+ * validator is rewritten between the browser and the server (a compressing reverse
+ * proxy such as Caddy or Apache mod_deflate appends "-gzip"), so no If-Match from a
+ * GET can ever match. From then on saves in this page load send no If-Match, which
+ * is how saves worked before conditional saves. Reset by a page reload.
+ */
+let ifMatchUnusable = false;
+
+/** Test-only: forget a detected ETag rewrite so each test starts as a fresh page. */
+export function resetIfMatchFallbackForTest(): void {
+  ifMatchUnusable = false;
+}
+
+/**
+ * Thrown when the save is still refused with a 412 after its attempts: the settings keep
+ * changing under the form. A save makes up to three sends, the third without If-Match
+ * once the validator is judged rewritten in transit. Callers identify the conflict with
+ * `instanceof`.
  */
 export class SettingsChangedElsewhereError extends Error {
   /** The status of the conflict it reports, so telemetry filters it like the 412 itself. */
@@ -1474,9 +1490,10 @@ function isPreconditionFailed(error: unknown): boolean {
  * The If-Match value to send for an ETag from the pre-save GET: only a strong
  * ETag. Absent (an older backend) or weak (a proxy weakened it) means no
  * protection, which is how saves worked before If-Match, rather than a save
- * that can never match.
+ * that can never match. Also absent once a rewritten ETag was detected.
  */
 function usableIfMatch(etag: string | null): string | undefined {
+  if (ifMatchUnusable) return undefined;
   return etag && !etag.startsWith(WEAK_ETAG_PREFIX) ? etag : undefined;
 }
 
@@ -1517,11 +1534,42 @@ function rebaseState(state: GlobalSettingsState, fresh: SettingsFormData): Globa
 }
 
 /**
+ * Sends the whole form with PUT, with If-Match when ifMatch is set. Resolves
+ * { conflict: false } when the server accepted it and, on a 412, { conflict: true }
+ * with the current ETag the rejection named (null when it named none, or when no
+ * If-Match was sent). Rethrows every other failure.
+ */
+async function sendSettings(
+  data: SettingsFormData,
+  ifMatch: string | undefined
+): Promise<{ conflict: false } | { conflict: true; currentETag: string | null }> {
+  let currentETag: string | null = null;
+  try {
+    // Only pass options when there is an If-Match, so a bare save() call stays as before.
+    await (ifMatch
+      ? settingsAPI.save(data, {
+          ifMatch,
+          onETag: value => {
+            currentETag = value;
+          },
+        })
+      : settingsAPI.save(data));
+    return { conflict: false };
+  } catch (error) {
+    if (!isPreconditionFailed(error)) throw error;
+    return { conflict: true, currentETag };
+  }
+}
+
+/**
  * Rebases the store on the current server state, then sends the whole form to
  * the backend and marks exactly what was sent as saved. The PUT carries the
  * snapshot's strong ETag as If-Match; on a 412 (the settings changed between the
  * GET and the PUT) the rebase and send run once more on a fresh snapshot, and a
  * second 412 fails the save with SettingsChangedElsewhereError, edits kept.
+ * Unless both 412s named the same non-empty current ETag: then nothing changed on the
+ * server and the ETag is rewritten on the way, so one more send without If-Match
+ * follows and later saves in this page load send none.
  * Resets isSaving and rethrows on every failure path, including the refusal
  * before a load. A failed fetch of the server state fails the save before any
  * request is sent.
@@ -1535,6 +1583,8 @@ async function persistFormData(notify: boolean): Promise<void> {
     settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
 
     await runSerialized(async () => {
+      // The current ETag the previous attempt's 412 named, to spot a rewritten validator.
+      let previousConflictETag: string | null = null;
       for (let attempt = 1; ; attempt++) {
         // Rebase first so a change made on the server since the load (a model
         // gallery action) is not overwritten by load-time values.
@@ -1556,16 +1606,24 @@ async function persistFormData(notify: boolean): Promise<void> {
           coercedFormData.birdnet.labelPath = null;
         }
 
-        // Only pass options when there is an If-Match, so a bare save() call stays as before.
         const ifMatch = usableIfMatch(etag);
-        try {
-          await (ifMatch
-            ? settingsAPI.save(coercedFormData, { ifMatch })
-            : settingsAPI.save(coercedFormData));
-        } catch (error) {
-          if (!isPreconditionFailed(error)) throw error;
-          if (attempt >= MAX_SETTINGS_SAVE_ATTEMPTS) throw new SettingsChangedElsewhereError();
-          continue;
+        const outcome = await sendSettings(coercedFormData, ifMatch);
+        if (outcome.conflict) {
+          if (attempt < MAX_SETTINGS_SAVE_ATTEMPTS) {
+            previousConflictETag = outcome.currentETag;
+            continue;
+          }
+          // Both GET-issued ETags were refused while the server named the same current
+          // ETag twice: nothing changed between the two PUTs, so the validator is
+          // rewritten on the way. Save once more without If-Match and stop sending it.
+          if (outcome.currentETag && outcome.currentETag === previousConflictETag) {
+            ifMatchUnusable = true;
+            logger.warn(
+              'Settings If-Match is rewritten between the browser and the server; saving without it for this page load'
+            );
+            continue;
+          }
+          throw new SettingsChangedElsewhereError();
         }
 
         // Read newLocale from coercedFormData (the value we actually persisted)

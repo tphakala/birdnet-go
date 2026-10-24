@@ -70,4 +70,16 @@ describe('settingsAPI conditional headers', () => {
     expect(first.get('If-Match')).toBe('"e-7"');
     expect(second.has('If-Match')).toBe(false);
   });
+
+  it('save reports the ETag of a 412 to onETag before it rejects', async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(412, { error: 'stale' }, { ETag: '"e-8"' }));
+    const { settingsAPI } = await import('./settingsApi.js');
+    const onETag = vi.fn();
+
+    await expect(
+      settingsAPI.save(serverSettings(), { ifMatch: '"e-7"', onETag })
+    ).rejects.toMatchObject({ status: 412 });
+
+    expect(onETag).toHaveBeenCalledExactlyOnceWith('"e-8"');
+  });
 });
