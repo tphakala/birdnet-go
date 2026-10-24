@@ -240,15 +240,43 @@ type Detections struct {
 	Results       []detection.AdditionalResult // Additional BirdNET prediction results
 }
 
-// PendingDetection struct represents a single detection held in memory,
-// including its last updated timestamp and a deadline for flushing it to the worker queue.
 // ModelContribution tracks a single AI model's detection activity for a pending detection.
+// Update it only through recordHit so the statistics stay consistent.
 type ModelContribution struct {
 	HitCount      int       // Number of times this model detected the species
 	MaxConfidence float64   // Highest confidence seen from this model
-	LastHitAt     time.Time // When this model last detected the species
+	MinConfidence float64   // Lowest confidence seen from this model
+	ConfidenceSum float64   // Sum of the confidences of this model's hits
+	FirstHitAt    time.Time // Audio end stamp of the earliest hit window (processing time when the source gave none)
+	LastHitAt     time.Time // Audio end stamp of the latest hit window (processing time when the source gave none)
 }
 
+// recordHit folds one hit into the contribution. Times are folded with min/max
+// rather than first write wins, because two models' windows can arrive out of
+// audio order. A contribution without FirstHitAt has no statistics yet, so they
+// start from this hit.
+func (c *ModelContribution) recordHit(confidence float64, at time.Time) {
+	c.HitCount++
+	c.MaxConfidence = max(c.MaxConfidence, confidence)
+	if c.FirstHitAt.IsZero() {
+		c.MinConfidence = confidence
+		c.ConfidenceSum = confidence
+		c.FirstHitAt = at
+		c.LastHitAt = at
+		return
+	}
+	c.MinConfidence = min(c.MinConfidence, confidence)
+	c.ConfidenceSum += confidence
+	if at.Before(c.FirstHitAt) {
+		c.FirstHitAt = at
+	}
+	if at.After(c.LastHitAt) {
+		c.LastHitAt = at
+	}
+}
+
+// PendingDetection struct represents a single detection held in memory,
+// including its last updated timestamp and a deadline for flushing it to the worker queue.
 type PendingDetection struct {
 	Detection       Detections // The detection data (from the best-confidence model)
 	Confidence      float64    // Best confidence seen across all models
@@ -755,6 +783,9 @@ func (p *Processor) processDetections(item classifier.Results) {
 		p.pipelineStats.RecordInference(item.Source.ID, item.ModelID, len(item.Results), len(detectionResults), maxConf, threshold)
 	}
 
+	// Every result of this chunk shares one window, so one hit stamp serves them all.
+	hitAt, _ := audioEndOrNow(&item)
+
 	for i := range detectionResults {
 		det := detectionResults[i]
 		commonName := strings.ToLower(det.Result.Species.CommonName)
@@ -791,11 +822,7 @@ func (p *Processor) processDetections(item classifier.Results) {
 				existing.ModelContributions = make(map[string]ModelContribution, 1)
 			}
 			contrib := existing.ModelContributions[item.ModelID]
-			contrib.HitCount++
-			if confidence > contrib.MaxConfidence {
-				contrib.MaxConfidence = confidence
-			}
-			contrib.LastHitAt = now
+			contrib.recordHit(confidence, hitAt)
 			existing.ModelContributions[item.ModelID] = contrib
 
 			p.pendingDetections[mapKey] = existing
@@ -807,6 +834,8 @@ func (p *Processor) processDetections(item classifier.Results) {
 				logger.String("model_id", item.ModelID),
 				logger.Time("flush_deadline", now.Add(detectionWindow)),
 				logger.String("operation", "create_pending_detection"))
+			var contrib ModelContribution
+			contrib.recordHit(confidence, hitAt)
 			p.pendingDetections[mapKey] = PendingDetection{
 				Detection:       det,
 				Confidence:      confidence,
@@ -818,15 +847,9 @@ func (p *Processor) processDetections(item classifier.Results) {
 				LastUpdated:     item.StartTime,
 				// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
 				// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
-				FlushDeadline: now.Add(detectionWindow),
-				Count:         1,
-				ModelContributions: map[string]ModelContribution{
-					item.ModelID: {
-						HitCount:      1,
-						MaxConfidence: confidence,
-						LastHitAt:     now,
-					},
-				},
+				FlushDeadline:      now.Add(detectionWindow),
+				Count:              1,
+				ModelContributions: map[string]ModelContribution{item.ModelID: contrib},
 			}
 		}
 
@@ -1800,6 +1823,10 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 				Model:         classifier.DetectionModelInfoForID(modelID),
 				HitCount:      contrib.HitCount,
 				MaxConfidence: contrib.MaxConfidence,
+				FirstHitAt:    contrib.FirstHitAt,
+				LastHitAt:     contrib.LastHitAt,
+				MinConfidence: contrib.MinConfidence,
+				ConfidenceSum: contrib.ConfidenceSum,
 			}
 		}
 	}

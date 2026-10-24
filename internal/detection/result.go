@@ -64,10 +64,25 @@ type Result struct {
 }
 
 // ResultModelContrib records a single AI model's contribution to a detection.
+//
+// FirstHitAt, LastHitAt, MinConfidence and ConfidenceSum form one unit of extended
+// statistics, present only when HasHitStats reports true; otherwise the datastore
+// stores NULL for all four.
 type ResultModelContrib struct {
 	Model         ModelInfo
 	HitCount      int
 	MaxConfidence float64
+	FirstHitAt    time.Time // Capture time of the end of the model's first hit window (processing time when the source gave none)
+	LastHitAt     time.Time // Capture time of the end of the model's last hit window (processing time when the source gave none)
+	MinConfidence float64   // Lowest confidence among the hits
+	ConfidenceSum float64   // Sum of the hit confidences; the mean is ConfidenceSum / HitCount
+}
+
+// HasHitStats reports whether the extended statistics are present: at least one hit
+// and both hit times set. Both times are checked because the zero time.Time has a
+// year-0001 Unix millisecond value that would break FirstHitAt <= LastHitAt.
+func (c *ResultModelContrib) HasHitStats() bool {
+	return c.HitCount > 0 && !c.FirstHitAt.IsZero() && !c.LastHitAt.IsZero()
 }
 
 // Comment represents a user comment on a detection.

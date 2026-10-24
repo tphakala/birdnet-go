@@ -134,6 +134,9 @@ func (m *MySQLManager) Initialize() error {
 		return fmt.Errorf("v2 schema integrity check failed: %w", err)
 	}
 
+	// The unique (detection_id, model_id) index serves the detection_id foreign key.
+	dropRedundantContributionIndex(m.db, m.log)
+
 	// Initialize migration state singleton using FirstOrCreate to handle race conditions
 	state := entities.MigrationState{ID: 1, State: entities.MigrationStatusIdle}
 	if err := m.db.FirstOrCreate(&state, entities.MigrationState{ID: 1}).Error; err != nil {
