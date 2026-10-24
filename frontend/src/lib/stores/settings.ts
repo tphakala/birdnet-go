@@ -1502,7 +1502,9 @@ async function fetchServerSnapshot(): Promise<{
 
 /**
  * Rebases the state on a fresh server snapshot: pending edits are kept, every
- * other path takes the server value, and originalData becomes the snapshot.
+ * other path takes the server value, and originalData becomes the snapshot. An
+ * edit wins over a server change to the same path (last writer wins, see
+ * rebaseSettingsKeepingEdits).
  */
 function rebaseState(state: GlobalSettingsState, fresh: SettingsFormData): GlobalSettingsState {
   const merged = rebaseSettingsKeepingEdits(
