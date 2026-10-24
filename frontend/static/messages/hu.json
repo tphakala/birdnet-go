@@ -4251,7 +4251,6 @@
     },
     "species": {
       "pageLabel": "Faj beállítások",
-      "saveError": "A konfiguráció mentése sikertelen \"{species}\" számára. Kérjük, próbálja újra.",
       "configUpdated": "Konfiguráció frissítve \"{species}\" számára",
       "configAdded": "Konfiguráció hozzáadva \"{species}\" számára",
       "duplicateConfigError": "A(z) \"{species}\" faj már rendelkezik konfigurációval. Kérjük, válasszon más nevet.",

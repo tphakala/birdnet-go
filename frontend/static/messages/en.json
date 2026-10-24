@@ -4251,7 +4251,6 @@
     },
     "species": {
       "pageLabel": "Species settings",
-      "saveError": "Failed to save configuration for \"{species}\". Please try again.",
       "configUpdated": "Updated configuration for \"{species}\"",
       "configAdded": "Added configuration for \"{species}\"",
       "duplicateConfigError": "Species \"{species}\" already has a configuration. Please choose a different name.",

@@ -4251,7 +4251,6 @@
     },
     "species": {
       "pageLabel": "Artsinnstillinger",
-      "saveError": "Lagring av konfigurasjon for «{species}» mislyktes. Prøv igjen.",
       "configUpdated": "Konfigurasjon for «{species}» oppdatert",
       "configAdded": "Konfigurasjon for «{species}» lagt til",
       "duplicateConfigError": "Art «{species}» har allerede en konfigurasjon. Velg et annet navn.",

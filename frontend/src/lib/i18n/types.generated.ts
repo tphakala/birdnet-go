@@ -3142,7 +3142,6 @@ export type TranslationKey =
   | 'settings.security.validation.invalidEntry' // params: tab, field
   | 'settings.security.validation.pendingEntry' // params: tab, field
   | 'settings.species.pageLabel'
-  | 'settings.species.saveError' // params: species
   | 'settings.species.configUpdated' // params: species
   | 'settings.species.configAdded' // params: species
   | 'settings.species.duplicateConfigError' // params: species
@@ -4823,7 +4822,6 @@ export type TranslationParams = {
   };
   'settings.security.validation.invalidEntry': { tab: string | number; field: string | number };
   'settings.security.validation.pendingEntry': { tab: string | number; field: string | number };
-  'settings.species.saveError': { species: string | number };
   'settings.species.configUpdated': { species: string | number };
   'settings.species.configAdded': { species: string | number };
   'settings.species.duplicateConfigError': { species: string | number };

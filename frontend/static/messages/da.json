@@ -4251,7 +4251,6 @@
     },
     "species": {
       "pageLabel": "Artsindstillinger",
-      "saveError": "Kunne ikke gemme konfigurationen for \"{species}\". Prøv venligst igen.",
       "configUpdated": "Opdateret konfiguration for \"{species}\"",
       "configAdded": "Tilføjet konfiguration for \"{species}\"",
       "duplicateConfigError": "Arten \"{species}\" har allerede en konfiguration. Vælg venligst et andet navn.",

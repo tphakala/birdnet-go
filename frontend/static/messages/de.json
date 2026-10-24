@@ -4251,7 +4251,6 @@
     },
     "species": {
       "pageLabel": "Arteneinstellungen",
-      "saveError": "Konfiguration für \"{species}\" konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
       "configUpdated": "Konfiguration für \"{species}\" aktualisiert",
       "configAdded": "Konfiguration für \"{species}\" hinzugefügt",
       "duplicateConfigError": "Art \"{species}\" hat bereits eine Konfiguration. Bitte wählen Sie einen anderen Namen.",

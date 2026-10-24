@@ -4251,7 +4251,6 @@
     },
     "species": {
       "pageLabel": "Nastavenia druhov",
-      "saveError": "Uloženie konfigurácie pre \"{species}\" zlyhalo. Skúste to znova.",
       "configUpdated": "Konfigurácia pre \"{species}\" aktualizovaná",
       "configAdded": "Konfigurácia pre \"{species}\" pridaná",
       "duplicateConfigError": "Druh \"{species}\" už má konfiguráciu. Vyberte iný názov.",
