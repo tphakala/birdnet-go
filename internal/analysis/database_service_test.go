@@ -139,6 +139,7 @@ func TestDatabaseService_Start_LegacyInstallRunsStateMonitor(t *testing.T) {
 
 	require.False(t, svc.IsV2OnlyMode(), "an existing legacy database starts in legacy mode")
 	require.NotNil(t, svc.legacyMonitor, "legacy install with a state manager gets the monitor")
+	assert.True(t, svc.legacyMonitor.legacySchema, "the monitor of a legacy install raises the legacy schema notice")
 }
 
 func TestBootParamsFromStartupSQLite(t *testing.T) {
