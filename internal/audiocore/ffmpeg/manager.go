@@ -372,18 +372,17 @@ func (m *Manager) ReconfigureStream(sourceID string, cfg *StreamConfig) error {
 }
 
 // StreamHealth returns health information for the stream identified by sourceID.
+// An untracked sourceID returns an error wrapping audiocore.ErrSourceNotFound.
+// The miss is expected (sound-card sources are never tracked here, and the
+// liveness watchdog and the stream health API probe IDs that may be absent), so
+// it is a plain wrapped error and is not reported to telemetry.
 func (m *Manager) StreamHealth(sourceID string) (*audiocore.StreamHealth, error) {
 	m.mu.RLock()
 	stream, exists := m.streams[sourceID]
 	m.mu.RUnlock()
 
 	if !exists {
-		return nil, errors.Newf("no stream found for sourceID: %s", sourceID).
-			Category(errors.CategoryValidation).
-			Component("ffmpeg-manager").
-			Context("operation", "stream_health").
-			Context("source_id", sourceID).
-			Build()
+		return nil, fmt.Errorf("ffmpeg stream health: %w: %s", audiocore.ErrSourceNotFound, sourceID)
 	}
 
 	h := stream.GetHealth()
