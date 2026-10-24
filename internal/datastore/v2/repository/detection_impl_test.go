@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -990,4 +991,178 @@ func TestCountSearch_MatchesSearchTotal(t *testing.T) {
 			assert.Len(t, rows, int(got), "CountSearch must equal the unpaginated row count")
 		})
 	}
+}
+
+// TestSearch_TimeOfDayWindows pins that the window filter keeps exactly the
+// detections inside the union of its half-open windows, and that no windows
+// means no results rather than no constraint.
+func TestSearch_TimeOfDayWindows(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	const (
+		windowA = int64(1000)
+		windowB = int64(5000)
+	)
+	times := []int64{windowA - 1, windowA, windowA + 99, windowA + 100, windowB, windowB + 50}
+	for _, ts := range times {
+		createTestDetection(t, db, ts)
+	}
+
+	tests := []struct {
+		name    string
+		windows []suncalc.TimeWindow
+		want    []int64
+	}{
+		{
+			name:    "one window is half open",
+			windows: []suncalc.TimeWindow{{Start: windowA, End: windowA + 100}},
+			want:    []int64{windowA, windowA + 99},
+		},
+		{
+			name: "windows are unioned",
+			windows: []suncalc.TimeWindow{
+				{Start: windowA, End: windowA + 100},
+				{Start: windowB, End: windowB + 100},
+			},
+			want: []int64{windowA, windowA + 99, windowB, windowB + 50},
+		},
+		{
+			name:    "no windows matches nothing",
+			windows: nil,
+			want:    []int64{},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			results, total, err := repo.Search(ctx, &SearchFilters{
+				TimeOfDay: &TimeOfDayFilter{Windows: tc.windows},
+			})
+			require.NoError(t, err)
+			assert.Equal(t, int64(len(tc.want)), total)
+
+			got := make([]int64, 0, len(results))
+			for _, d := range results {
+				got = append(got, d.DetectedAt)
+			}
+			assert.ElementsMatch(t, tc.want, got)
+		})
+	}
+}
+
+// TestSearch_TimeOfDayWindows_ManyWindows pins that a few years of daily windows
+// stay within SQLite's expression-depth limit (1000), which a plain chain of ORs
+// would exceed, and still select exactly the rows inside them.
+func TestSearch_TimeOfDayWindows_ManyWindows(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	const (
+		days      = 2500
+		daySecs   = int64(86400)
+		windowLen = int64(3600)
+	)
+	windows := make([]suncalc.TimeWindow, 0, days)
+	for d := range int64(days) {
+		windows = append(windows, suncalc.TimeWindow{Start: d * daySecs, End: d*daySecs + windowLen})
+	}
+	// One row at the start, middle and end of the windows, and just outside each.
+	var want []uint
+	for _, d := range []int64{0, days / 2, days - 1} {
+		want = append(want,
+			createTestDetection(t, db, d*daySecs).ID,
+			createTestDetection(t, db, d*daySecs+windowLen-1).ID)
+		createTestDetection(t, db, d*daySecs+windowLen)
+		createTestDetection(t, db, d*daySecs+windowLen+10)
+	}
+
+	results, total, err := repo.Search(ctx, &SearchFilters{TimeOfDay: &TimeOfDayFilter{Windows: windows}})
+	require.NoError(t, err)
+	assert.Equal(t, int64(len(want)), total)
+	got := make([]uint, 0, len(results))
+	for _, d := range results {
+		got = append(got, d.ID)
+	}
+	assert.ElementsMatch(t, want, got)
+}
+
+// TestTimeWindowsPredicate pins the generated SQL's properties that do not need a
+// database: no bound parameters (so no variable limit), a depth far below
+// SQLite's expression limit however many windows there are, and tolerance of
+// unsorted, overlapping and empty input.
+func TestTimeWindowsPredicate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no windows never matches", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, "1 = 0", timeWindowsPredicate("c", nil))
+		assert.Equal(t, "1 = 0", timeWindowsPredicate("c", []suncalc.TimeWindow{{Start: 5, End: 5}}))
+	})
+
+	t.Run("uses no placeholders and stays shallow for decades of windows", func(t *testing.T) {
+		t.Parallel()
+		const days = 40000 // well past the 32766-variable limit if each edge were a parameter
+		windows := make([]suncalc.TimeWindow, 0, days)
+		for d := range int64(days) {
+			windows = append(windows, suncalc.TimeWindow{Start: d * 100, End: d*100 + 10})
+		}
+		predicate := timeWindowsPredicate("c", windows)
+
+		assert.NotContains(t, predicate, "?")
+		depth, maxDepth := 0, 0
+		for _, r := range predicate {
+			switch r {
+			case '(':
+				depth++
+				maxDepth = max(maxDepth, depth)
+			case ')':
+				depth--
+			}
+		}
+		assert.Zero(t, depth, "parentheses must balance")
+		const sqliteExpressionDepthLimit = 1000
+		assert.Less(t, maxDepth, sqliteExpressionDepthLimit/10)
+	})
+
+	t.Run("unsorted overlapping input is normalized", func(t *testing.T) {
+		t.Parallel()
+		db := setupDetectionTestDB(t)
+		repo := &detectionRepository{db: db}
+		for _, ts := range []int64{5, 10, 24, 25, 99, 100, 101} {
+			createTestDetection(t, db, ts)
+		}
+		results, _, err := repo.Search(t.Context(), &SearchFilters{TimeOfDay: &TimeOfDayFilter{Windows: []suncalc.TimeWindow{
+			{Start: 100, End: 102}, {Start: 5, End: 12}, {Start: 10, End: 25}, {Start: 50, End: 50},
+		}}})
+		require.NoError(t, err)
+		got := make([]int64, 0, len(results))
+		for _, d := range results {
+			got = append(got, d.DetectedAt)
+		}
+		assert.ElementsMatch(t, []int64{5, 10, 24, 100, 101}, got)
+	})
+}
+
+// TestGetDetectedAtBounds covers the empty and populated cases.
+func TestGetDetectedAtBounds(t *testing.T) {
+	db := setupDetectionTestDB(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	_, _, ok, err := repo.GetDetectedAtBounds(ctx)
+	require.NoError(t, err)
+	assert.False(t, ok, "an empty table has no bounds")
+
+	createTestDetection(t, db, 500)
+	createTestDetection(t, db, 100)
+	createTestDetection(t, db, 900)
+
+	earliest, latest, ok, err := repo.GetDetectedAtBounds(ctx)
+	require.NoError(t, err)
+	require.True(t, ok)
+	assert.Equal(t, int64(100), earliest)
+	assert.Equal(t, int64(900), latest)
 }

@@ -1,12 +1,15 @@
 // advanced_filter_endtoend_test.go: the advanced filter parameters exercised
-// through GET /api/v2/detections against a real datastore.
+// through GET /api/v2/detections against a store that applies the filters it is
+// handed.
 //
 // The rest of this package's coverage stops at the parsed parameters or at the
 // filter struct the handler builds. That leaves a gap: a parameter can be parsed,
 // validated, mapped into AdvancedSearchFilters and still not narrow anything,
 // because nothing asserts on rows actually coming back. These tests close it by
 // seeding notes and checking what the endpoint returns, which is the only place a
-// silently-dropped filter shows up.
+// silently-dropped filter shows up. The store applies only the fields under test
+// (the confidence band and the hour window); how the real datastores turn those
+// fields into SQL is covered in internal/datastore/v2/repository and v2only.
 package detections
 
 import (
@@ -19,54 +22,77 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"gorm.io/driver/sqlite"
-	"gorm.io/gorm"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // seededConfidences are spread across the percentage range so a band can exclude
 // rows on both sides of it.
 var seededConfidences = []float64{0.05, 0.11, 0.22, 0.33, 0.44, 0.55, 0.70, 0.88, 0.95}
 
-// newSeededHandler builds a detections handler backed by an in-memory SQLite
-// datastore holding one note per seeded confidence.
+// seededHourOffset is the hour the first seeded note is recorded at; each later
+// note is one hour after the previous.
+const seededHourOffset = 6
+
+// newSeededHandler builds a detections handler over a store holding one note per
+// seeded confidence. The store applies the advanced filters' confidence band and
+// hour window to those notes, like a real datastore would.
 func newSeededHandler(t *testing.T) (*echo.Echo, *Handler) {
 	t.Helper()
 
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
-	require.NoError(t, err)
-	// Close the pool so its opener goroutine does not trip the package's goleak gate.
-	t.Cleanup(func() {
-		if sqlDB, dbErr := db.DB(); dbErr == nil {
-			_ = sqlDB.Close()
-		}
-	})
-	require.NoError(t, db.AutoMigrate(
-		&datastore.Note{}, &datastore.NoteReview{}, &datastore.NoteLock{}, &datastore.NoteComment{},
-	))
-
 	date := time.Now().Format(time.DateOnly)
+	notes := make([]datastore.Note, 0, len(seededConfidences))
 	for i, confidence := range seededConfidences {
-		note := datastore.Note{
+		notes = append(notes, datastore.Note{
+			ID:             uint(i + 1), //nolint:gosec // G115: bounded by the seed slice
 			Date:           date,
-			Time:           fmt.Sprintf("%02d:30:00", i+6),
+			Time:           fmt.Sprintf("%02d:30:00", i+seededHourOffset),
 			ScientificName: "Turdus merula",
 			CommonName:     "Eurasian Blackbird",
 			SpeciesCode:    "eurbla",
 			Confidence:     confidence,
-		}
-		require.NoError(t, db.Create(&note).Error)
+		})
 	}
 
-	// SQLiteStore is the concrete store the application runs; DataStore alone does
-	// not satisfy datastore.Interface.
-	ds := &datastore.SQLiteStore{DB: db}
 	e := echo.New()
-	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(ds))
+	store := mocks.NewMockInterface(t)
+	store.On("SearchNotesAdvanced", mock.Anything).Return(
+		func(f *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
+			matched := make([]datastore.Note, 0, len(notes))
+			for i := range notes {
+				if noteMatchesBandAndHour(&notes[i], f) {
+					matched = append(matched, notes[i])
+				}
+			}
+			return matched, int64(len(matched)), nil
+		},
+	).Maybe()
+	// A request with no advanced filter takes the plain listing path.
+	store.On("SearchNotes", "", false, mock.Anything, mock.Anything).Return(
+		func(string, bool, int, int) ([]datastore.Note, int64, error) {
+			return notes, int64(len(notes)), nil
+		},
+	).Maybe()
+	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(store))
 	return e, buildTestHandler(t, core, map[string]string{}, map[string]string{})
+}
+
+// noteMatchesBandAndHour applies the two filter fields these tests exercise.
+func noteMatchesBandAndHour(n *datastore.Note, f *datastore.AdvancedSearchFilters) bool {
+	if r := f.ConfidenceRange; r != nil && (n.Confidence < r.Min || n.Confidence > r.Max) {
+		return false
+	}
+	if h := f.Hour; h != nil {
+		var hour int
+		if _, err := fmt.Sscanf(n.Time, "%d:", &hour); err != nil || hour < h.Start || hour > h.End {
+			return false
+		}
+	}
+	return true
 }
 
 // getDetections calls the endpoint with the given query string and returns the

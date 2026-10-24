@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // =============================================================================
@@ -80,13 +81,14 @@ func DateRangeToUnix(dr *datastore.DateRange, tz *time.Location) (start, end *in
 // time-of-day period ("sunrise", "day", "sunset", "night").
 //
 // The four periods partition the 24-hour clock, mirroring the sun-event
-// classifier used by the legacy datastore (suncalc.ClassifyTimeOfDay), where
-// every detection carries exactly one label and "day" means the daylight arc
-// *outside* the sunrise and sunset transition windows. The normalized datastore
-// filters by hour buckets rather than per-date sun events, so these are fixed
-// approximations of that partition -- but they are the same approximation for
-// every caller, which is what keeps the simple and advanced search paths
-// agreeing with each other.
+// classifier (suncalc.ClassifyTimeOfDay), where every detection carries exactly
+// one label and "day" means the daylight arc *outside* the sunrise and sunset
+// transition windows.
+//
+// These hour buckets are only the fallback for a datastore with no sun
+// calculator (see FilterLookupDeps.TimeOfDayWindows), which has nothing to
+// resolve real sun events against. They are a fixed approximation, but the same
+// one for every caller, so the simple and advanced search paths still agree.
 //
 // Returns nil for an unrecognized period.
 func timeOfDayPeriodHours(period string) []int {
@@ -331,6 +333,31 @@ type FilterLookupDeps struct {
 	// Precomputed once per locale change so common-name search does not normalize every
 	// map value on every query. When present it is preferred over SciToCommon.
 	SciToCommonFolded map[string]string
+	// TimeOfDayWindows resolves time-of-day periods to the absolute windows in
+	// which a detection carries that label, from the station's real sun events,
+	// over the Unix range [start, end) (a nil bound means unbounded on that side).
+	// nil means no sun calculator is available, and the filter falls back to the
+	// fixed hour buckets of timeOfDayPeriodHours.
+	TimeOfDayWindows TimeOfDayWindowResolver
+}
+
+// TimeOfDayWindowResolver turns canonical time-of-day periods into the absolute
+// time windows they cover within a Unix range. See FilterLookupDeps.TimeOfDayWindows.
+type TimeOfDayWindowResolver func(ctx context.Context, periods []string, start, end *int64) ([]suncalc.TimeWindow, error)
+
+// applyTimeOfDay sets the time-of-day constraint on sf for the canonical periods.
+// It reports whether the constraint was resolved to sun-event windows; when it
+// was not (no resolver), the caller keeps the hour-bucket approximation.
+func applyTimeOfDay(ctx context.Context, sf *SearchFilters, deps *FilterLookupDeps, periods []string) (bool, error) {
+	if len(periods) == 0 || deps == nil || deps.TimeOfDayWindows == nil {
+		return false, nil
+	}
+	windows, err := deps.TimeOfDayWindows(ctx, periods, sf.StartTime, sf.EndTime)
+	if err != nil {
+		return false, err
+	}
+	sf.TimeOfDay = &TimeOfDayFilter{Windows: windows}
+	return true, nil
 }
 
 // ResolveSpeciesToLabelIDs converts species names to label IDs.
@@ -725,8 +752,15 @@ func ConvertSearchFilters(
 		sf.IsLocked = &isLocked
 	}
 
-	// TimeOfDay to hours conversion
-	sf.IncludedHours = singleTimeOfDayToHours(filters.TimeOfDay)
+	// Time of day: real sun-event windows when a resolver is available, else the
+	// fixed hour buckets.
+	resolved, err := applyTimeOfDay(ctx, sf, deps, datastore.NormalizeTimeOfDayPeriods([]string{filters.TimeOfDay}))
+	if err != nil {
+		return nil, err
+	}
+	if !resolved {
+		sf.IncludedHours = singleTimeOfDayToHours(filters.TimeOfDay)
+	}
 
 	// Sorting
 	// Default sort is by detected_at descending
@@ -876,8 +910,17 @@ func ConvertAdvancedFilters(
 	// Time conversions
 	sf.StartTime, sf.EndTime = DateRangeToUnix(filters.DateRange, tz)
 
-	// Hour filtering (merge TimeOfDay and Hour filters)
-	sf.IncludedHours = MergeHourFilters(filters.TimeOfDay, filters.Hour)
+	// Time of day: real sun-event windows when a resolver is available (the hour
+	// filter then stands alone), else merge both into hour buckets.
+	resolved, err := applyTimeOfDay(ctx, sf, deps, datastore.NormalizeTimeOfDayPeriods(filters.TimeOfDay))
+	if err != nil {
+		return nil, err
+	}
+	if resolved {
+		sf.IncludedHours = MergeHourFilters(nil, filters.Hour)
+	} else {
+		sf.IncludedHours = MergeHourFilters(filters.TimeOfDay, filters.Hour)
+	}
 
 	// Confidence conversion. The single-operator filter and the explicit range are
 	// independent inputs; when both are given the narrower of each bound wins, so

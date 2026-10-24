@@ -57,7 +57,10 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 
 	// Calculate actual sunrise/sunset times for this location and date
 	sc := suncalc.NewSunCalc(latitude, longitude)
-	sunTimes, err := sc.GetSunEventTimes(testDate)
+	// Ask for the same instant the filter does (sunEventAnchor): SunCalc keys its
+	// answer by the station-local calendar date of whatever instant it is given, and
+	// UTC midnight is the previous station date for a station west of UTC.
+	sunTimes, err := sc.GetSunEventTimes(sunEventAnchor(testDate))
 	require.NoError(t, err, "Failed to calculate sun times")
 
 	// Log the calculated times for debugging

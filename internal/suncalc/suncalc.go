@@ -208,6 +208,15 @@ func (sc *SunCalc) sunEventTimes(date time.Time, st *sunState) (SunEventTimes, e
 	localDate := date.In(st.location)
 	dateKey := localDate.Format(time.DateOnly)
 
+	// Calculate from noon of that date, not from the instant that happened to be
+	// passed in. The astral calculation reads the clock time as well as the date,
+	// moving sunrise and sunset by a few minutes (and polar-edge dates between
+	// resolvable and not), and the result is cached by date. Without a fixed
+	// anchor, the first caller for a date decides the answer every later caller
+	// gets, so a row's label and a filter built from the same date could disagree
+	// and which one won would depend on the order and age of the cache.
+	anchor := time.Date(localDate.Year(), localDate.Month(), localDate.Day(), noonHour, 0, 0, 0, st.location)
+
 	// Acquire a read lock and check if the date is in the cache.
 	st.lock.RLock()
 	entry, exists := st.cache[dateKey]
@@ -251,7 +260,7 @@ func (sc *SunCalc) sunEventTimes(date time.Time, st *sunState) (SunEventTimes, e
 	}
 
 	// Calculate outside the lock to avoid blocking readers.
-	times, err := st.calculateSunEventTimes(localDate)
+	times, err := st.calculateSunEventTimes(anchor)
 	if err != nil {
 		if m != nil {
 			m.RecordSunCalcOperation(sunEventsOperation, "error")

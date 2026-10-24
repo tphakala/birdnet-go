@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
 )
 
@@ -34,9 +33,10 @@ type AdvancedSearchFilters struct {
 	ConfidenceRange *ConfidenceRangeFilter
 	// TimeOfDay names the periods to keep. The canonical vocabulary is the one the
 	// simple search path uses -- "day", "night", "sunrise", "sunset" (see the
-	// TimeOfDay* constants) -- resolved against the station's real sun events.
-	// "dawn" and "dusk" are accepted as legacy aliases for "sunrise" and "sunset";
-	// NormalizeTimeOfDayPeriods maps them before the filter is applied.
+	// TimeOfDay* constants). The normalized datastore resolves them against the
+	// station's real sun events; the deprecated legacy store approximates them with
+	// fixed clock windows. "dawn" and "dusk" are accepted as legacy aliases for
+	// "sunrise" and "sunset"; NormalizeTimeOfDayPeriods maps them.
 	TimeOfDay []string
 	Hour      *HourFilter
 	DateRange *DateRange
@@ -101,6 +101,13 @@ type DateRange struct {
 // SearchNotesAdvanced performs an advanced search with multiple filter support
 // This is a new method that doesn't break the existing SearchNotes method
 func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note, int64, error) {
+	// Refuse filters this store cannot express rather than ignore them, which would
+	// return rows the caller asked to exclude. The legacy store is deprecated and
+	// does not grow new filter capabilities; the normalized datastore serves them.
+	if err := rejectUnsupportedLegacyFilters(filters); err != nil {
+		return nil, 0, err
+	}
+
 	// Track metrics
 	// TODO: Add metrics tracking when IncrementSearches method is available
 	// ds.metricsMu.RLock()
@@ -128,7 +135,6 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 
 	// Apply confidence filter
 	query = applyConfidenceFilter(query, filters.Confidence)
-	query = applyConfidenceRangeFilter(query, filters.ConfidenceRange)
 
 	// Apply date range filter
 	query = applyDateRangeFilter(query, filters.DateRange)
@@ -136,9 +142,8 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 	// Apply hour filter
 	query = applyHourFilter(query, filters.Hour)
 
-	// Apply time of day filter. Resolved against the station's real sun events,
-	// bounded by the same date range the query already filters on.
-	query = ds.applyTimeOfDayFilter(query, filters.TimeOfDay, filters.DateRange)
+	// Apply time of day filter
+	query = applyTimeOfDayFilter(query, filters.TimeOfDay)
 
 	// Apply species filter
 	if len(filters.Species) > 0 {
@@ -156,7 +161,7 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 	}
 
 	// Apply verified filter
-	query = applyVerifiedFilter(query, filters.VerifiedStatus, filters.Verified)
+	query = applyVerifiedFilter(query, filters.Verified)
 
 	// Apply locked filter
 	query = applyLockedFilter(query, filters.Locked)
@@ -200,7 +205,7 @@ func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note
 			query = query.Order("confidence DESC")
 		case "status":
 			// Only add note_reviews JOIN if not already joined by applyVerifiedFilter
-			if !joinsVerificationTable(filters.VerifiedStatus, filters.Verified) {
+			if filters.Verified == nil {
 				query = query.Joins("LEFT JOIN note_reviews ON note_reviews.note_id = notes.id")
 			}
 			query = query.Order("CASE WHEN note_reviews.verified = 'correct' THEN 0 WHEN note_reviews.verified IS NULL OR note_reviews.verified = '' THEN 1 ELSE 2 END ASC")
@@ -288,24 +293,6 @@ func applyConfidenceFilter(query *gorm.DB, filter *ConfidenceFilter) *gorm.DB {
 	return query
 }
 
-// applyConfidenceRangeFilter applies an inclusive confidence range to the query.
-// Unlike applyConfidenceFilter, which takes a single comparison, this expresses a
-// band, so callers can ask for "between 60% and 80% confident".
-func applyConfidenceRangeFilter(query *gorm.DB, r *ConfidenceRangeFilter) *gorm.DB {
-	if r == nil {
-		return query
-	}
-	// A zero minimum and a maximum at or above the upper bound select everything, so skip the
-	// predicates rather than emitting SQL that can only narrow the plan.
-	if r.Min > 0 {
-		query = query.Where("confidence >= ?", r.Min)
-	}
-	if r.Max < ConfidenceUpperBound {
-		query = query.Where("confidence <= ?", r.Max)
-	}
-	return query
-}
-
 // applyDateRangeFilter applies date range filtering to the query
 func applyDateRangeFilter(query *gorm.DB, dateRange *DateRange) *gorm.DB {
 	if dateRange == nil {
@@ -343,14 +330,81 @@ func applyHourFilter(query *gorm.DB, hour *HourFilter) *gorm.DB {
 	return query.Where("(time >= ? OR time < ?)", startHourStr, endHourStr)
 }
 
+// applyTimeOfDayFilter applies time of day filtering to the query using fixed clock
+// windows. The canonical "sunrise"/"sunset" names map onto the same windows as the
+// historical "dawn"/"dusk"; only the normalized datastore resolves real sun events.
+func applyTimeOfDayFilter(query *gorm.DB, timeOfDay []string) *gorm.DB {
+	if len(timeOfDay) == 0 {
+		return query
+	}
+
+	var timeConditions []string
+	var args []any
+
+	for _, tod := range timeOfDay {
+		switch strings.ToLower(tod) {
+		case "dawn", TimeOfDaySunrise:
+			// Approximate dawn as 5-7 AM
+			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
+			args = append(args, "05:00:00", "07:00:00")
+		case "day":
+			// Approximate day as 7 AM - 6 PM
+			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
+			args = append(args, "07:00:00", "18:00:00")
+		case "dusk", TimeOfDaySunset:
+			// Approximate dusk as 6-8 PM
+			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
+			args = append(args, "18:00:00", "20:00:00")
+		case "night":
+			// Approximate night as 8 PM - 5 AM
+			timeConditions = append(timeConditions, "(time >= ? OR time < ?)")
+			args = append(args, "20:00:00", "05:00:00")
+		}
+	}
+
+	if len(timeConditions) > 0 {
+		return query.Where("("+strings.Join(timeConditions, " OR ")+")", args...)
+	}
+
+	return query
+}
+
+// applyVerifiedFilter applies verified filtering to the query
+func applyVerifiedFilter(query *gorm.DB, verified *bool) *gorm.DB {
+	if verified == nil {
+		return query
+	}
+
+	if *verified {
+		return query.Joins("INNER JOIN note_reviews ON note_reviews.note_id = notes.id AND note_reviews.verified != ''")
+	}
+
+	return query.Joins("LEFT JOIN note_reviews ON note_reviews.note_id = notes.id").
+		Where("note_reviews.id IS NULL OR note_reviews.verified = ''")
+}
+
+// applyLockedFilter applies locked filtering to the query
+func applyLockedFilter(query *gorm.DB, locked *bool) *gorm.DB {
+	if locked == nil {
+		return query
+	}
+
+	if *locked {
+		return query.Joins("INNER JOIN note_locks ON note_locks.note_id = notes.id")
+	}
+
+	return query.Joins("LEFT JOIN note_locks ON note_locks.note_id = notes.id").
+		Where("note_locks.id IS NULL")
+}
+
 // NormalizeTimeOfDayPeriods maps a caller-supplied time-of-day period list onto
 // the canonical vocabulary used by the simple search path: "day", "night",
 // "sunrise", "sunset".
 //
 // The advanced path historically spoke "dawn"/"dusk" and meant fixed clock
 // windows, while the simple path spoke "sunrise"/"sunset" and meant real sun
-// events. Both now resolve against sun events, so the two legacy names are
-// accepted as aliases rather than being a separate, differently-behaving filter.
+// events. The two legacy names are accepted as aliases for the canonical ones
+// rather than being a separate, differently-behaving filter.
 // "any" and unrecognized values are dropped (an empty result means "no filter"),
 // and duplicates are collapsed so an aliased list cannot apply a period twice.
 func NormalizeTimeOfDayPeriods(periods []string) []string {
@@ -386,149 +440,23 @@ func NormalizeTimeOfDayPeriods(periods []string) []string {
 	return normalized
 }
 
-// applyTimeOfDayFilter applies time-of-day filtering to an advanced-search query.
-//
-// It resolves each requested period against the station's real sun events, using
-// the same per-date condition builder as the simple search path, so the two
-// endpoints cannot disagree about what "sunset" means. Multiple periods are OR-ed.
-// When sun events are unavailable (no SunCalc configured, i.e. no station
-// location), it falls back to the historical fixed clock windows rather than
-// dropping the filter and silently returning everything.
-func (ds *DataStore) applyTimeOfDayFilter(query *gorm.DB, periods []string, dateRange *DateRange) *gorm.DB {
-	periods = NormalizeTimeOfDayPeriods(periods)
-	if len(periods) == 0 {
-		return query
+// rejectUnsupportedLegacyFilters returns a validation error for the filters only
+// the normalized datastore implements: a confidence band and the three-state
+// review verdict.
+func rejectUnsupportedLegacyFilters(filters *AdvancedSearchFilters) error {
+	var unsupported []string
+	if filters.ConfidenceRange != nil {
+		unsupported = append(unsupported, "confidence range")
 	}
-
-	if ds.SunCalc == nil || ds.DB == nil {
-		return applyTimeOfDayClockWindows(query, periods)
+	if status := strings.ToLower(strings.TrimSpace(filters.VerifiedStatus)); status != "" && status != VerifiedStatusAny {
+		unsupported = append(unsupported, "review verdict")
 	}
-
-	// buildTimeOfDayConditions needs a bounded date range: it emits one condition
-	// per calendar date and refuses ranges longer than a year. An unfiltered query
-	// has no range, in which case it defaults to the last year itself.
-	var startDateStr, endDateStr string
-	if dateRange != nil {
-		startDateStr = dateRange.Start.Format(time.DateOnly)
-		endDateStr = dateRange.End.Format(time.DateOnly)
+	if len(unsupported) == 0 {
+		return nil
 	}
-
-	var combined *gorm.DB
-	for _, period := range periods {
-		dateConditions, err := buildTimeOfDayConditions(period, startDateStr, endDateStr, ds.SunCalc, ds.DB)
-		if err != nil {
-			GetLogger().Warn("Failed to build advanced TimeOfDay conditions, falling back to clock windows",
-				logger.String("period", period),
-				logger.Error(err))
-			return applyTimeOfDayClockWindows(query, periods)
-		}
-		for _, cond := range dateConditions {
-			if combined == nil {
-				combined = ds.DB.Where(cond)
-				continue
-			}
-			combined = combined.Or(cond)
-		}
-	}
-
-	if combined == nil {
-		// No sun events could be resolved for any date in range; leaving the query
-		// unfiltered would return every row, so match nothing instead — the same
-		// outcome the caller asked for when no detection falls in the period.
-		return query.Where("1 = 0")
-	}
-	return query.Where(combined)
-}
-
-// applyTimeOfDayClockWindows is the sun-event-free fallback: fixed local clock
-// windows approximating each period. Used only when no station location is
-// configured, so SunCalc cannot resolve real sunrise/sunset times.
-func applyTimeOfDayClockWindows(query *gorm.DB, periods []string) *gorm.DB {
-	var timeConditions []string
-	var args []any
-
-	for _, tod := range periods {
-		switch tod {
-		case TimeOfDaySunrise:
-			// Approximate the sunrise window as 5-7 AM.
-			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
-			args = append(args, "05:00:00", "07:00:00")
-		case TimeOfDayDay:
-			// Approximate day as 7 AM - 6 PM.
-			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
-			args = append(args, "07:00:00", "18:00:00")
-		case TimeOfDaySunset:
-			// Approximate the sunset window as 6-8 PM.
-			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
-			args = append(args, "18:00:00", "20:00:00")
-		case TimeOfDayNight:
-			// Approximate night as 8 PM - 5 AM.
-			timeConditions = append(timeConditions, "(time >= ? OR time < ?)")
-			args = append(args, "20:00:00", "05:00:00")
-		}
-	}
-
-	if len(timeConditions) > 0 {
-		return query.Where("("+strings.Join(timeConditions, " OR ")+")", args...)
-	}
-
-	return query
-}
-
-// applyVerifiedFilter applies verified filtering to the query.
-//
-// status is the three-state verdict filter and takes precedence; verified is the
-// legacy two-state fallback used when no status is given. Passing "correct" or
-// "false_positive" selects that verdict specifically, which the boolean form
-// cannot express.
-func applyVerifiedFilter(query *gorm.DB, status string, verified *bool) *gorm.DB {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case VerifiedStatusCorrect:
-		return query.Joins("INNER JOIN note_reviews ON note_reviews.note_id = notes.id").
-			Where("note_reviews.verified = ?", VerifiedStatusCorrect)
-	case VerifiedStatusFalsePositive:
-		return query.Joins("INNER JOIN note_reviews ON note_reviews.note_id = notes.id").
-			Where("note_reviews.verified = ?", VerifiedStatusFalsePositive)
-	case VerifiedStatusUnverified:
-		return query.Joins("LEFT JOIN note_reviews ON note_reviews.note_id = notes.id").
-			Where("note_reviews.id IS NULL OR note_reviews.verified = ''")
-	}
-
-	// No explicit status: fall back to the legacy reviewed/not-reviewed boolean.
-	if verified == nil {
-		return query
-	}
-
-	if *verified {
-		return query.Joins("INNER JOIN note_reviews ON note_reviews.note_id = notes.id AND note_reviews.verified != ''")
-	}
-
-	return query.Joins("LEFT JOIN note_reviews ON note_reviews.note_id = notes.id").
-		Where("note_reviews.id IS NULL OR note_reviews.verified = ''")
-}
-
-// joinsVerificationTable reports whether the given verification filters cause
-// applyVerifiedFilter to join note_reviews. The "status" sort orders on that
-// table and must add its own LEFT JOIN when the filter did not, but must not
-// join twice when it did.
-func joinsVerificationTable(status string, verified *bool) bool {
-	switch strings.ToLower(strings.TrimSpace(status)) {
-	case VerifiedStatusCorrect, VerifiedStatusFalsePositive, VerifiedStatusUnverified:
-		return true
-	}
-	return verified != nil
-}
-
-// applyLockedFilter applies locked filtering to the query
-func applyLockedFilter(query *gorm.DB, locked *bool) *gorm.DB {
-	if locked == nil {
-		return query
-	}
-
-	if *locked {
-		return query.Joins("INNER JOIN note_locks ON note_locks.note_id = notes.id")
-	}
-
-	return query.Joins("LEFT JOIN note_locks ON note_locks.note_id = notes.id").
-		Where("note_locks.id IS NULL")
+	return errors.Newf("the legacy datastore does not support the %s filter", strings.Join(unsupported, " and ")).
+		Component("datastore").
+		Category(errors.CategoryValidation).
+		Context("operation", "search_notes_advanced").
+		Build()
 }

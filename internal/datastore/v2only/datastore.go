@@ -389,12 +389,48 @@ func (ds *Datastore) loadNameMaps() *speciesindex.Snapshot {
 // device lookups, plus common-name search via the active-locale name maps).
 func (ds *Datastore) filterLookupDeps() *repository.FilterLookupDeps {
 	snap := ds.loadNameMaps()
-	return &repository.FilterLookupDeps{
+	deps := &repository.FilterLookupDeps{
 		LabelRepo:         ds.label,
 		SourceRepo:        ds.source,
 		SciToCommon:       snap.SciToCommon,
 		SciToCommonFolded: snap.SciToCommonFolded,
 	}
+	if ds.suncalc != nil {
+		deps.TimeOfDayWindows = ds.timeOfDayWindows
+	}
+	return deps
+}
+
+// timeOfDayWindows resolves time-of-day periods to the windows, within the
+// requested Unix range, in which a detection is labelled with one of them by the
+// station's real sun events (see suncalc.SunCalc.TimeOfDayWindows).
+//
+// The range is clamped to the span the detections table actually covers, so the
+// answer does not depend on how wide the caller's range is: an open-ended or
+// very wide range costs the same as one that fits the data, and no range is
+// refused or approximated. An empty table has no windows.
+//
+// One difference from the per-row label remains by design: calculateTimeOfDay
+// labels a detection recorded with no coordinates (latitude and longitude both
+// zero) as "any", while the windows are a function of time alone and include it.
+// Stations that record coordinates never see the difference.
+func (ds *Datastore) timeOfDayWindows(ctx context.Context, periods []string, start, end *int64) ([]suncalc.TimeWindow, error) {
+	earliest, latest, ok, err := ds.detection.GetDetectedAtBounds(ctx)
+	if err != nil || !ok {
+		return nil, err
+	}
+	from := earliest
+	if start != nil {
+		from = max(from, *start)
+	}
+	// The detections query treats the end as exclusive. Without an end the range
+	// reaches to now, not just to the newest row seen a moment ago, so a detection
+	// recorded while this request is being built is not left outside every window.
+	to := max(latest+1, time.Now().Unix())
+	if end != nil {
+		to = min(to, *end)
+	}
+	return ds.suncalc.TimeOfDayWindows(periods, time.Unix(from, 0), time.Unix(to, 0)), nil
 }
 
 // GetDBCounters returns the atomic counters for database query latency tracking.
