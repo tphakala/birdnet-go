@@ -10,7 +10,8 @@ var (
 	ErrModelPathRequired = errors.NewStd("birdnet: model path is required")
 	ErrLabelsRequired    = errors.NewStd("birdnet: labels are required")
 	ErrEmptyBatch        = errors.NewStd("birdnet: batch must contain at least one segment")
-	ErrSessionClosed     = errors.NewStd("birdnet: session is closed")
+	// ErrSessionClosed is returned by Predict methods after Close.
+	ErrSessionClosed = errors.NewStd("birdnet: session is closed")
 )
 
 type InputSizeError struct {

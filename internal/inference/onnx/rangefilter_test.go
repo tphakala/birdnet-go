@@ -3,18 +3,16 @@ package onnx
 import (
 	"testing"
 
-	ort "github.com/yalue/onnxruntime_go"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// newTestRangeFilter creates a RangeFilter with a non-nil (but unusable) session
-// for testing input validation paths that must pass the nil-session guard.
+// newTestRangeFilter creates a RangeFilter with an open fake session
+// for testing input validation paths that must pass the closed-session check.
 func newTestRangeFilter(t *testing.T, numLabels int) *RangeFilter {
 	t.Helper()
 	return &RangeFilter{
-		session: &ort.DynamicAdvancedSession{},
+		session: guardedSession{s: &fakeSession{}},
 		labels:  make([]string, numLabels),
 	}
 }
