@@ -347,6 +347,23 @@ func TestValidateAdvancedFilterParams_SharedByListAndResolve(t *testing.T) {
 			params:  detectionQueryParams{TimeOfDay: "teatime"},
 			wantErr: true,
 		},
+		{name: "locked true is valid", params: detectionQueryParams{Locked: "true"}},
+		{
+			name:    "bad locked value",
+			params:  detectionQueryParams{Locked: "banana"},
+			wantErr: true,
+		},
+		{name: "hour band is valid", params: detectionQueryParams{HourRange: "6-9"}},
+		{
+			name:    "out of range hour",
+			params:  detectionQueryParams{HourRange: "25"},
+			wantErr: true,
+		},
+		{
+			name:    "inverted hour band",
+			params:  detectionQueryParams{HourRange: "9-6"},
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -366,6 +383,12 @@ func TestValidateAdvancedFilterParams_SharedByListAndResolve(t *testing.T) {
 			}
 			if tc.params.TimeOfDay != "" {
 				listParams["timeOfDay"] = tc.params.TimeOfDay
+			}
+			if tc.params.Locked != "" {
+				listParams["locked"] = tc.params.Locked
+			}
+			if tc.params.HourRange != "" {
+				listParams["hourRange"] = tc.params.HourRange
 			}
 			_, listErr := parseParams(t, listParams)
 

@@ -131,21 +131,15 @@
       Number(draft.hourStart) > Number(draft.hourEnd)
   );
 
-  // Today, recomputed once per day rather than on every state change.
-  const today = $derived.by(() => {
-    const daysSinceEpoch = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-    void daysSinceEpoch; // establishes the once-per-day dependency
-    return getLocalDateString();
-  });
-
   const startDateConstraints = $derived.by(() => {
     const endDate = draft.endDate;
+    const today = getLocalDateString();
     // The start cannot be after the end, nor in the future.
     return { maxDate: endDate && endDate < today ? endDate : endDate || today };
   });
 
   const endDateConstraints = $derived.by(() => {
-    const constraints: { maxDate?: string; minDate?: string } = { maxDate: today };
+    const constraints: { maxDate?: string; minDate?: string } = { maxDate: getLocalDateString() };
     if (draft.startDate) constraints.minDate = draft.startDate;
     return constraints;
   });

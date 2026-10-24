@@ -558,8 +558,8 @@
       "timeOfDay": "Momento della giornata",
       "hourRange": "Ora del giorno",
       "hourRangeHelp": "Filtra i rilevamenti per ora dell'orologio, indipendentemente da alba e tramonto (lascia vuoto per tutte le ore)",
-      "hourStart": "Ora più presto",
-      "hourEnd": "Ora più tardi",
+      "hourStart": "Ora di inizio",
+      "hourEnd": "Ora di fine",
       "source": "Sorgente audio"
     },
     "advancedFilters": "Filtri avanzati",
@@ -634,7 +634,7 @@
     "errors": {
       "searchFailed": "Ricerca fallita: {error}",
       "minMaxConfidence": "La confidenza minima non può essere maggiore della confidenza massima.",
-      "minMaxHour": "L'ora più presto non può essere successiva all'ora più tardi."
+      "minMaxHour": "L'ora di inizio non può essere successiva all'ora di fine."
     },
     "pagination": {
       "page": "Pagina {current} di {total}",
@@ -2092,7 +2092,7 @@
       "switchToList": "Passa alla vista elenco",
       "openAllAboutBirds": "Visualizza questa specie su All About Birds",
       "openWikipedia": "Visualizza questa specie su Wikipedia",
-      "viewDetections": "Visualizza tutte le rilevazioni di {species}",
+      "viewDetections": "Visualizza tutte le rilevamenti di {species}",
       "noSpeciesFound": "Nessuna specie trovata corrispondente ai tuoi filtri.",
       "headers": {
         "species": "Specie",

@@ -41,6 +41,7 @@ import (
 // the other (not-yet-extracted) consumers (audio_hls); this local copy avoids
 // rippling that shared constant into apicore for a single domain.
 const queryValueTrue = "true"
+const queryValueFalse = "false"
 
 // queryValueAny is the "any" status sentinel used by the search request
 // normalization. It is detection/search-owned (the only consumer).

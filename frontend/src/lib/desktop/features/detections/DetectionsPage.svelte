@@ -194,14 +194,24 @@
     window.history.replaceState({}, '', `${window.location.pathname}?${query}`);
   }
 
+  /**
+   * Id of the newest fetch. Filter apply, reset, sort, page size and Back all
+   * refetch, so requests can overlap; a slow earlier response must not replace a
+   * newer one, or the rows shown would pair with another request's filters (and
+   * "select all matching" would resolve a different set than the one on screen).
+   */
+  let latestFetchId = 0;
+
   // Fetch detections data
   async function fetchDetections() {
+    const fetchId = ++latestFetchId;
     loading = true;
     error = null;
 
     // Keep the panel in step with the URL before the request goes out, so the
     // form reflects what is being fetched even if the request is slow or fails.
-    filters = parseDetectionFilters(new URLSearchParams(window.location.search));
+    const requestFilters = parseDetectionFilters(new URLSearchParams(window.location.search));
+    filters = requestFilters;
 
     try {
       const queryParams = getQueryParams();
@@ -220,6 +230,7 @@
       const data = await fetchWithCSRF<DetectionsApiResponse>(
         `/api/v2/detections?${queryString.toString()}`
       );
+      if (fetchId !== latestFetchId) return;
 
       // Validate numResults before using
       const validatedNumResults =
@@ -237,7 +248,7 @@
         duration: queryParams.duration,
         species: queryParams.species,
         search: queryParams.search,
-        filters,
+        filters: requestFilters,
         numResults: validatedNumResults,
         offset: queryParams.offset ?? 0,
         totalResults: data.total || 0,
@@ -248,10 +259,11 @@
         showingTo: Math.min((queryParams.offset || 0) + (data.data?.length || 0), data.total || 0),
       };
     } catch (err) {
+      if (fetchId !== latestFetchId) return;
       error = err instanceof Error ? err.message : t('detections.errors.fetchFailed');
       logger.error('Error fetching detections:', err);
     } finally {
-      loading = false;
+      if (fetchId === latestFetchId) loading = false;
     }
   }
 

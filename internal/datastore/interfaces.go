@@ -2367,7 +2367,7 @@ func buildTimeOfDayConditions(timeOfDay, startDateStr, endDateStr string, sc *su
 		today := time.Now()
 		endDateStr = today.Format(time.DateOnly)
 		startDateStr = today.AddDate(-1, 0, 0).Format(time.DateOnly) // 1 year ago
-		GetLogger().Info("TimeOfDay filter applied without date range, defaulting to last year",
+		GetLogger().Debug("TimeOfDay filter applied without date range, defaulting to last year",
 			logger.String("start_date", startDateStr),
 			logger.String("end_date", endDateStr))
 	case startDateStr == "":
@@ -2485,7 +2485,7 @@ func buildTimeOfDayConditions(timeOfDay, startDateStr, endDateStr string, sc *su
 	}
 
 	// Log summary of how many conditions were created
-	GetLogger().Info("Created date-specific conditions for TimeOfDay filter",
+	GetLogger().Debug("Created date-specific conditions for TimeOfDay filter",
 		logger.Int("condition_count", len(conditions)),
 		logger.Int("day_range", int(endDate.Sub(startDate).Hours()/24)+1))
 

@@ -71,7 +71,7 @@ node screenshot.js http://localhost:8080/ui/analytics -o analytics.png
 node screenshot.js http://localhost:8080/ui/settings -o settings.png
 
 # Search results
-node screenshot.js "http://localhost:8080/ui/search?query=bird" -o search-results.png
+node screenshot.js "http://localhost:8080/ui/detections?search=bird" -o search-results.png
 ```
 
 ### Output

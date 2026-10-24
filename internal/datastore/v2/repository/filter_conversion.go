@@ -888,7 +888,7 @@ func ConvertAdvancedFilters(
 			minConf := r.Min
 			sf.MinConfidence = &minConf
 		}
-		if r.Max > 0 && r.Max < 1.0 && (sf.MaxConfidence == nil || r.Max < *sf.MaxConfidence) {
+		if r.Max < datastore.ConfidenceUpperBound && (sf.MaxConfidence == nil || r.Max < *sf.MaxConfidence) {
 			maxConf := r.Max
 			sf.MaxConfidence = &maxConf
 		}

@@ -682,6 +682,20 @@ func validateAdvancedFilterParams(p *detectionQueryParams) error {
 				p.Verified, allowedVerifiedParams()))
 	}
 
+	if p.Locked != "" && p.Locked != queryValueTrue && p.Locked != queryValueFalse {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Sprintf("invalid locked parameter '%s'. Allowed values: %s, %s",
+				p.Locked, queryValueTrue, queryValueFalse))
+	}
+
+	// A malformed or inverted band would otherwise be dropped by ParseHourFilter
+	// and return every hour, as if the filter had been applied and matched more.
+	if p.HourRange != "" && apicore.ParseHourFilter(p.HourRange) == nil {
+		return echo.NewHTTPError(http.StatusBadRequest,
+			fmt.Sprintf("invalid hourRange parameter '%s'. Use an hour 0-23 or a range such as 6-9",
+				p.HourRange))
+	}
+
 	if p.TimeOfDay != "" && !isValidTimeOfDayParam(p.TimeOfDay) {
 		return echo.NewHTTPError(http.StatusBadRequest,
 			fmt.Sprintf("invalid timeOfDay parameter '%s'. Allowed values: %v",
@@ -1272,7 +1286,7 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 		if confMax != nil {
 			confRange.Max = *confMax
 		} else {
-			confRange.Max = 1.0
+			confRange.Max = datastore.ConfidenceUpperBound
 		}
 		filters.ConfidenceRange = confRange
 	}

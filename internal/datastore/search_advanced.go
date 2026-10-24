@@ -73,8 +73,14 @@ type ConfidenceFilter struct {
 	Value    float64
 }
 
+// ConfidenceUpperBound is the largest confidence fraction. A ConfidenceRangeFilter
+// whose Max is this value has no upper bound.
+const ConfidenceUpperBound = 1.0
+
 // ConfidenceRangeFilter represents an inclusive confidence range. Values are
-// fractions in [0, 1], matching the confidence column, not percentages.
+// fractions in [0, 1], matching the confidence column, not percentages. Max must
+// be set explicitly: ConfidenceUpperBound means "no upper bound", and 0 is a real
+// cap of "at most 0%", not an unset value.
 type ConfidenceRangeFilter struct {
 	Min float64
 	Max float64
@@ -289,12 +295,12 @@ func applyConfidenceRangeFilter(query *gorm.DB, r *ConfidenceRangeFilter) *gorm.
 	if r == nil {
 		return query
 	}
-	// A zero minimum and a maximum at or above 1.0 select everything, so skip the
+	// A zero minimum and a maximum at or above the upper bound select everything, so skip the
 	// predicates rather than emitting SQL that can only narrow the plan.
 	if r.Min > 0 {
 		query = query.Where("confidence >= ?", r.Min)
 	}
-	if r.Max > 0 && r.Max < 1.0 {
+	if r.Max < ConfidenceUpperBound {
 		query = query.Where("confidence <= ?", r.Max)
 	}
 	return query

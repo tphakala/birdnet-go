@@ -2092,7 +2092,7 @@
       "switchToList": "Zur Listenansicht wechseln",
       "openAllAboutBirds": "Diese Art auf All About Birds ansehen",
       "openWikipedia": "Diese Art auf Wikipedia ansehen",
-      "viewDetections": "Alle Nachweise von {species} anzeigen",
+      "viewDetections": "Alle Erkennungen von {species} anzeigen",
       "noSpeciesFound": "Keine Arten gefunden, die Ihren Filtern entsprechen.",
       "headers": {
         "species": "Art",

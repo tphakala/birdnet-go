@@ -558,8 +558,8 @@
       "timeOfDay": "Moment de la journée",
       "hourRange": "Heure de la journée",
       "hourRangeHelp": "Filtrer les détections par heure de l'horloge, indépendamment du lever et du coucher du soleil (laisser vide pour toutes les heures)",
-      "hourStart": "Heure la plus tôt",
-      "hourEnd": "Heure la plus tard",
+      "hourStart": "Heure la plus précoce",
+      "hourEnd": "Heure la plus tardive",
       "source": "Source audio"
     },
     "advancedFilters": "Filtres avancés",
@@ -634,7 +634,7 @@
     "errors": {
       "searchFailed": "Échec de la recherche : {error}",
       "minMaxConfidence": "Le taux minimal de confiance ne peut pas être supérieur au taux maximal.",
-      "minMaxHour": "L'heure la plus tôt ne peut pas être postérieure à l'heure la plus tard."
+      "minMaxHour": "L'heure la plus précoce ne peut pas être postérieure à l'heure la plus tardive."
     },
     "pagination": {
       "page": "Page {current} sur {total}",

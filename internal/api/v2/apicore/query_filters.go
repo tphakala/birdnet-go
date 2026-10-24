@@ -153,6 +153,10 @@ func ParseHourFilter(param string) *HourFilterResult {
 	return &HourFilterResult{Start: hourVal, End: hourVal}
 }
 
+// openRangeStartYear is the start of a range that has only an end date, early
+// enough to precede any stored detection.
+const openRangeStartYear = 1970
+
 // DateRangeResult holds the parsed date range.
 type DateRangeResult struct {
 	Start time.Time
@@ -160,7 +164,9 @@ type DateRangeResult struct {
 }
 
 // ParseDateRangeFilter parses date range from single date or start/end date parameters.
-// If singleDate is provided, it's used as both start and end.
+// If singleDate is provided, it's used as both start and end. When only one of
+// startDate and endDate is given the range is open on the other side (from
+// openRangeStartYear, or through today).
 // Returns nil if no valid dates are provided.
 func ParseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResult {
 	if singleDate != "" {
@@ -173,20 +179,36 @@ func ParseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResul
 		}
 	}
 
-	if startDate != "" && endDate != "" {
-		start, err1 := time.Parse(time.DateOnly, startDate)
-		end, err2 := time.Parse(time.DateOnly, endDate)
-		if err1 == nil && err2 == nil {
-			// Reject inverted date ranges where start is after end
-			if start.After(end) {
-				return nil
-			}
-			return &DateRangeResult{
-				Start: start,
-				End:   end.AddDate(0, 0, 1).Add(-time.Second),
-			}
-		}
+	if startDate == "" && endDate == "" {
+		return nil
 	}
 
-	return nil
+	// A one-sided range is open-ended on the missing side, so a user who sets only
+	// "from" or only "to" still gets that bound applied instead of no date filter.
+	start := time.Date(openRangeStartYear, time.January, 1, 0, 0, 0, 0, time.UTC)
+	if startDate != "" {
+		parsed, err := time.Parse(time.DateOnly, startDate)
+		if err != nil {
+			return nil
+		}
+		start = parsed
+	}
+	end := time.Now()
+	if endDate != "" {
+		parsed, err := time.Parse(time.DateOnly, endDate)
+		if err != nil {
+			return nil
+		}
+		end = parsed
+	}
+	end = time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
+
+	// Reject inverted date ranges where start is after end
+	if start.After(end) {
+		return nil
+	}
+	return &DateRangeResult{
+		Start: start,
+		End:   end.AddDate(0, 0, 1).Add(-time.Second),
+	}
 }

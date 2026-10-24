@@ -559,7 +559,7 @@
       "hourRange": "Uur van de dag",
       "hourRangeHelp": "Filter detecties op klokuur, los van zonsopkomst en zonsondergang (leeg laten voor alle uren)",
       "hourStart": "Vroegste uur",
-      "hourEnd": "Laatste uur",
+      "hourEnd": "Laatst mogelijke uur",
       "source": "Audiobron"
     },
     "advancedFilters": "Uitgebreide filters",

@@ -268,6 +268,13 @@ func TestSearchNotesAdvanced_ConfidenceRange(t *testing.T) {
 			wantIDs: []uint{2, 4},
 		},
 		{
+			name: "a zero maximum is a cap, not an unset value",
+			min:  0,
+			max:  0,
+			// Every seeded row has confidence above 0, so "at most 0%" matches none.
+			wantIDs: []uint{},
+		},
+		{
 			name:    "an empty band matches nothing",
 			min:     0.99,
 			max:     0.995,
