@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	importsapi "github.com/tphakala/birdnet-go/internal/api/v2/imports"
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -110,8 +111,11 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	assert.Nil(t, svc.legacyMonitor, "no migration state monitor on a v2 install")
 }
 
+// Not parallel: Start publishes the migration state manager and worker to
+// package-level state in the imports API package, so the test resets it.
 func TestDatabaseService_Start_LegacyInstallRunsStateMonitor(t *testing.T) {
-	t.Parallel()
+	// Registered first so it runs after the Stop cleanup below.
+	t.Cleanup(func() { importsapi.SetMigrationDependencies(nil, nil) })
 
 	configuredPath := filepath.Join(t.TempDir(), "birdnet.db")
 	settings := &conf.Settings{}
@@ -128,11 +132,13 @@ func TestDatabaseService_Start_LegacyInstallRunsStateMonitor(t *testing.T) {
 
 	svc := NewDatabaseService(settings, metrics)
 	require.NoError(t, svc.Start(t.Context()))
+	t.Cleanup(func() {
+		assert.NoError(t, svc.Stop(t.Context()), "Stop() should succeed")
+		assert.Nil(t, svc.legacyMonitor, "Stop releases the monitor")
+	})
+
 	require.False(t, svc.IsV2OnlyMode(), "an existing legacy database starts in legacy mode")
 	require.NotNil(t, svc.legacyMonitor, "legacy install with a state manager gets the monitor")
-
-	require.NoError(t, svc.Stop(t.Context()))
-	assert.Nil(t, svc.legacyMonitor, "Stop releases the monitor")
 }
 
 func TestBootParamsFromStartupSQLite(t *testing.T) {
