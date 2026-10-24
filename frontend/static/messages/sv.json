@@ -4259,7 +4259,6 @@
     },
     "species": {
       "pageLabel": "Artinställningar",
-      "saveError": "Kunde inte spara konfiguration för \"{species}\". Försök igen.",
       "configUpdated": "Konfiguration uppdaterad för \"{species}\"",
       "configAdded": "Konfiguration tillagd för \"{species}\"",
       "duplicateConfigError": "Arten \"{species}\" har redan en konfiguration. Välj ett annat namn.",

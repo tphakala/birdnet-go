@@ -4259,7 +4259,6 @@
     },
     "species": {
       "pageLabel": "Paramètres des espèces",
-      "saveError": "Échec de l'enregistrement de la configuration pour \"{species}\". Veuillez réessayer.",
       "configUpdated": "Configuration de \"{species}\" mise à jour",
       "configAdded": "Configuration de \"{species}\" ajoutée",
       "duplicateConfigError": "L'espèce \"{species}\" a déjà une configuration. Veuillez choisir un autre nom.",

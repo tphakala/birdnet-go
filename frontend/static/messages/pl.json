@@ -4259,7 +4259,6 @@
     },
     "species": {
       "pageLabel": "Ustawienia gatunków",
-      "saveError": "Nie udało się zapisać konfiguracji dla \"{species}\". Spróbuj ponownie.",
       "configUpdated": "Zaktualizowano konfigurację dla \"{species}\"",
       "configAdded": "Dodano konfigurację dla \"{species}\"",
       "duplicateConfigError": "Gatunek \"{species}\" ma już konfigurację. Wybierz inną nazwę.",

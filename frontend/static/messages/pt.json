@@ -4259,7 +4259,6 @@
     },
     "species": {
       "pageLabel": "Configurações de espécies",
-      "saveError": "Falha ao guardar a configuração de \"{species}\". Tente novamente.",
       "configUpdated": "Configuração de \"{species}\" atualizada",
       "configAdded": "Configuração de \"{species}\" adicionada",
       "duplicateConfigError": "A espécie \"{species}\" já tem uma configuração. Escolha outro nome.",

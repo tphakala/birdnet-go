@@ -39,6 +39,7 @@
     speciesSettings,
     realtimeSettings,
     speciesTrackingSettings,
+    SettingsChangedElsewhereError,
   } from '$lib/stores/settings';
   import { hasSettingsChanged } from '$lib/utils/settingsChanges';
   import type { SpeciesSettings } from '$lib/stores/settings';
@@ -1217,8 +1218,17 @@
       );
       closeEditor();
     } catch (error) {
-      logger.error('Failed to save species configuration:', error);
-      toastActions.error(t('settings.species.saveError', { species }));
+      // The store already showed the error to the user, so no second toast here. A
+      // changed-elsewhere conflict is an expected flow (the user was asked to review and
+      // save again), not a fault.
+      if (error instanceof SettingsChangedElsewhereError) {
+        logger.warn(
+          'Settings changed elsewhere during species configuration save; the user was asked to review them',
+          error
+        );
+      } else {
+        logger.error('Failed to save species configuration:', error);
+      }
     }
   }
 

@@ -4259,7 +4259,6 @@
     },
     "species": {
       "pageLabel": "Soortinstellingen",
-      "saveError": "Opslaan van configuratie voor \"{species}\" mislukt. Probeer het opnieuw.",
       "configUpdated": "Configuratie voor \"{species}\" bijgewerkt",
       "configAdded": "Configuratie voor \"{species}\" toegevoegd",
       "duplicateConfigError": "Soort \"{species}\" heeft al een configuratie. Kies een andere naam.",

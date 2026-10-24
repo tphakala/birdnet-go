@@ -4259,7 +4259,6 @@
     },
     "species": {
       "pageLabel": "Sugu iestatījumi",
-      "saveError": "Neizdevās saglabāt konfigurāciju sugai \"{species}\". Lūdzu, mēģiniet vēlreiz.",
       "configUpdated": "Atjaunināta konfigurācija sugai \"{species}\"",
       "configAdded": "Pievienota konfigurācija sugai \"{species}\"",
       "duplicateConfigError": "Sugai \"{species}\" jau ir konfigurācija. Lūdzu, izvēlieties citu nosaukumu.",

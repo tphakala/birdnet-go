@@ -4259,7 +4259,6 @@
     },
     "species": {
       "pageLabel": "Lajiasetukset",
-      "saveError": "Lajin \"{species}\" asetusten tallennus epäonnistui. Yritä uudelleen.",
       "configUpdated": "Lajin \"{species}\" asetukset päivitetty",
       "configAdded": "Lajin \"{species}\" asetukset lisätty",
       "duplicateConfigError": "Lajilla \"{species}\" on jo asetukset. Valitse toinen nimi.",
