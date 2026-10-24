@@ -83,6 +83,20 @@
     returnFocusTo = from;
   }
 
+  function handleFocusOut(event: FocusEvent & { currentTarget: HTMLDivElement }) {
+    // Declared after the spread so it cannot be replaced; still honour a caller's handler
+    rest.onfocusout?.(event);
+    // Focus left for the page body (a click on non-focusable content): forget the
+    // target, so a later Tab back in and keyboard dismiss does not jump to a field
+    // that may be far away. A window or tab blur also fires focusout with no related
+    // element, but the document has lost focus by then, so the target is kept for
+    // the refocus. Moves within the alert, or to another element (re-entry sets
+    // the target again), leave it alone.
+    if (event.relatedTarget === null && document.hasFocus()) {
+      returnFocusTo = null;
+    }
+  }
+
   function handleDismiss(event: MouseEvent) {
     // Only for keyboard activation (Enter or Space on the button reports a click
     // with no click count). A mouse click leaves focus alone, so it does not jump
@@ -112,6 +126,7 @@
     bind:this={root}
     {...rest}
     onfocusin={handleFocusIn}
+    onfocusout={handleFocusOut}
   >
     {#if type === 'error'}
       <XCircle

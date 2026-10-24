@@ -158,6 +158,68 @@ describe('ErrorAlert', () => {
     }
   });
 
+  it('forgets the return target when focus leaves the alert for the page body', async () => {
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    const hasFocusSpy = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+
+    try {
+      renderTyped(ErrorAlertTestWrapper, { props: { dismissible: true } });
+      const dismissButton = screen.getByLabelText('Dismiss alert');
+
+      outside.focus();
+      dismissButton.focus();
+      // A click on plain page content: focus goes to the body while the window keeps focus
+      await fireEvent.focusOut(dismissButton, { relatedTarget: null });
+      // Later Tab back into the alert, with no related element
+      await fireEvent.focusIn(dismissButton, { relatedTarget: null });
+
+      await fireEvent.click(dismissButton, { detail: KEYBOARD_CLICK_DETAIL });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(document.activeElement).not.toBe(outside);
+    } finally {
+      hasFocusSpy.mockRestore();
+      outside.remove();
+    }
+  });
+
+  it('keeps the return target when the whole window loses focus', async () => {
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    const hasFocusSpy = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+
+    try {
+      renderTyped(ErrorAlertTestWrapper, { props: { dismissible: true } });
+      const dismissButton = screen.getByLabelText('Dismiss alert');
+
+      outside.focus();
+      dismissButton.focus();
+      // A window blur fires focusout with no related element, and the document has lost focus
+      await fireEvent.focusOut(dismissButton, { relatedTarget: null });
+      await fireEvent.focusIn(dismissButton, { relatedTarget: null });
+
+      await fireEvent.click(dismissButton, { detail: KEYBOARD_CLICK_DETAIL });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(document.activeElement).toBe(outside);
+    } finally {
+      hasFocusSpy.mockRestore();
+      outside.remove();
+    }
+  });
+
+  it('still calls a caller supplied onfocusout handler', async () => {
+    const onfocusout = vi.fn();
+    renderTyped(ErrorAlertTestWrapper, { props: { dismissible: true, onfocusout } });
+
+    const dismissButton = screen.getByLabelText('Dismiss alert');
+    dismissButton.focus();
+    await fireEvent.focusOut(dismissButton, { relatedTarget: null });
+
+    expect(onfocusout).toHaveBeenCalledTimes(1);
+  });
+
   it('does not move focus when dismissed with the mouse', async () => {
     const outside = document.createElement('button');
     document.body.appendChild(outside);
