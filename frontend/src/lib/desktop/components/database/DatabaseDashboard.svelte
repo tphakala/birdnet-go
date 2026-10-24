@@ -133,7 +133,7 @@
   // meanwhile, so a slow or still-failing server does not collect stacked requests.
   let statusRetrying = $state(false);
 
-  // Stays mounted while the views and alerts come and go, so focus has somewhere to land
+  // Wrapper around the alerts and views; see the template
   let viewAnchor = $state<HTMLDivElement>();
 
   async function retryMigrationStatus(): Promise<void> {
@@ -535,153 +535,158 @@
   });
 </script>
 
-<!-- Failed status fetches and failed migration actions land here, whichever view follows -->
-{#if !migrationStatus.loading && migrationStatus.error}
-  <ErrorAlert className="mb-4">
-    <span class="block">{migrationStatus.error}</span>
-    <Button
-      className="mt-2"
-      onclick={retryMigrationStatus}
-      aria-disabled={statusRetrying ? 'true' : undefined}
-    >
-      {statusRetrying ? t('common.retrying') : t('common.retry')}
-    </Button>
-  </ErrorAlert>
-{/if}
-{#if actionError}
-  <ErrorAlert
-    message={actionError}
-    dismissible
-    onDismiss={() => (actionError = null)}
-    className="mb-4"
-  />
-{/if}
+<!-- The wrapper stays mounted while alerts and views come and go, so focus has somewhere
+     to land when a successful retry removes the button that had it -->
+<div
+  bind:this={viewAnchor}
+  tabindex="-1"
+  class="rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+>
+  <!-- Failed status fetches and failed migration actions land here, whichever view follows -->
+  {#if !migrationStatus.loading && migrationStatus.error}
+    <ErrorAlert className="mb-4">
+      <span class="block">{migrationStatus.error}</span>
+      <Button
+        className="mt-2"
+        onclick={retryMigrationStatus}
+        aria-disabled={statusRetrying ? 'true' : undefined}
+      >
+        {statusRetrying ? t('common.retrying') : t('common.retry')}
+      </Button>
+    </ErrorAlert>
+  {/if}
+  {#if actionError}
+    <ErrorAlert
+      message={actionError}
+      dismissible
+      onDismiss={() => (actionError = null)}
+      className="mb-4"
+    />
+  {/if}
 
-<!-- Focus lands here when a retry succeeds and removes the button that had it -->
-<div bind:this={viewAnchor} tabindex="-1" class="outline-none"></div>
-
-{#if migrationStatus.loading}
-  <!-- Loading state (waiting for migration status to determine view) -->
-  <div class="flex items-center justify-center py-16" role="status">
-    <div class="text-sm text-muted">
-      {t('system.database.dashboard.loading')}
-    </div>
-  </div>
-{:else if migrationStatus.error && !migrationStatus.data}
-  <!-- Status unknown: the alert above explains why, and the migration controls would only
-       report a state the server never confirmed -->
-{:else if isV2OnlyMode}
-  <!-- OPERATIONAL DASHBOARD VIEW -->
-  {#if overviewLoading}
+  {#if migrationStatus.loading}
+    <!-- Loading state (waiting for migration status to determine view) -->
     <div class="flex items-center justify-center py-16" role="status">
       <div class="text-sm text-muted">
         {t('system.database.dashboard.loading')}
       </div>
     </div>
-  {:else if overviewError || !overview}
-    <div
-      class="bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-error)_20%,transparent)] rounded-xl p-4 text-sm text-[var(--color-error)]"
-    >
-      {overviewError ?? t('system.database.dashboard.fetchFailed')}
-    </div>
+  {:else if migrationStatus.error && !migrationStatus.data}
+    <!-- Status unknown: the alert above explains why, and the migration controls would only
+       report a state the server never confirmed -->
+  {:else if isV2OnlyMode}
+    <!-- OPERATIONAL DASHBOARD VIEW -->
+    {#if overviewLoading}
+      <div class="flex items-center justify-center py-16" role="status">
+        <div class="text-sm text-muted">
+          {t('system.database.dashboard.loading')}
+        </div>
+      </div>
+    {:else if overviewError || !overview}
+      <div
+        class="bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-error)_20%,transparent)] rounded-xl p-4 text-sm text-[var(--color-error)]"
+      >
+        {overviewError ?? t('system.database.dashboard.fetchFailed')}
+      </div>
+    {:else}
+      <div class="space-y-4">
+        <!-- Top metric strip -->
+        <DatabaseMetricStrip
+          performance={overview.performance}
+          engine={overview.engine}
+          status={overview.status}
+          sizeBytes={overview.size_bytes}
+          totalDetections={overview.total_detections}
+          journalMode={overview.sqlite?.journal_mode}
+          {readLatencyHistory}
+          {writeLatencyHistory}
+          {queriesPerSecHistory}
+        />
+
+        <!-- Middle row: engine-specific cards + detection rate -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
+          {#if overview.engine === 'sqlite' && overview.sqlite}
+            <DatabaseSqliteDetails details={overview.sqlite} />
+            <DatabaseLocksWalCard details={overview.sqlite} />
+          {:else if overview.engine === 'mysql' && overview.mysql}
+            <DatabaseMysqlConnectionPool details={overview.mysql} />
+            <DatabaseMysqlInnodbCard details={overview.mysql} />
+          {/if}
+
+          <DatabaseDetectionRateCard
+            data={overview.detection_rate_24h ?? []}
+            engine={overview.engine}
+            mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
+          />
+        </div>
+
+        <!-- Table breakdown -->
+        <DatabaseTableBreakdown
+          tables={overview.tables ?? []}
+          showEngine={overview.engine === 'mysql'}
+        />
+
+        <!-- Legacy cleanup (only if legacy DB exists and cleanup is available) -->
+        {#if legacyStatus.data?.exists && legacyStatus.data?.can_cleanup}
+          <LegacyCleanupCard
+            status={legacyStatus.data}
+            cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
+            cleanupError={migrationStatus.data?.cleanup_error ?? ''}
+            cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
+            isLoading={legacyStatus.loading || cleanupLoading}
+            onDelete={() => (showCleanupDialog = true)}
+          />
+        {/if}
+      </div>
+    {/if}
   {:else}
+    <!-- MIGRATION VIEW (not v2-only) -->
     <div class="space-y-4">
       <!-- Top metric strip -->
-      <DatabaseMetricStrip
-        performance={overview.performance}
-        engine={overview.engine}
-        status={overview.status}
-        sizeBytes={overview.size_bytes}
-        totalDetections={overview.total_detections}
-        journalMode={overview.sqlite?.journal_mode}
-        {readLatencyHistory}
-        {writeLatencyHistory}
-        {queriesPerSecHistory}
+      <DatabaseMigrationMetricStrip
+        legacyStats={legacyStats.data}
+        v2Stats={v2Stats.data}
+        migrationStatus={migrationStatus.data}
       />
 
-      <!-- Middle row: engine-specific cards + detection rate -->
+      <!-- Middle row: details + progress -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        {#if overview.engine === 'sqlite' && overview.sqlite}
-          <DatabaseSqliteDetails details={overview.sqlite} />
-          <DatabaseLocksWalCard details={overview.sqlite} />
-        {:else if overview.engine === 'mysql' && overview.mysql}
-          <DatabaseMysqlConnectionPool details={overview.mysql} />
-          <DatabaseMysqlInnodbCard details={overview.mysql} />
-        {/if}
-
-        <DatabaseDetectionRateCard
-          data={overview.detection_rate_24h ?? []}
-          engine={overview.engine}
-          mysqlHost={overview.engine === 'mysql' ? overview.location : undefined}
-        />
+        <DatabaseMigrationDetails stats={legacyStats.data} />
+        <div class="lg:col-span-2">
+          <DatabaseMigrationProgress
+            status={migrationStatus.data}
+            legacyStats={legacyStats.data}
+            v2Stats={v2Stats.data}
+            prerequisites={prerequisites.data}
+            isStarting={startLoading}
+            onStart={() => (showConfirmDialog = true)}
+            onPause={pauseMigration}
+            onResume={resumeMigration}
+            onRetryValidation={retryValidation}
+            onCancel={cancelMigration}
+          />
+        </div>
       </div>
 
-      <!-- Table breakdown -->
-      <DatabaseTableBreakdown
-        tables={overview.tables ?? []}
-        showEngine={overview.engine === 'mysql'}
-      />
-
-      <!-- Legacy cleanup (only if legacy DB exists and cleanup is available) -->
-      {#if legacyStatus.data?.exists && legacyStatus.data?.can_cleanup}
-        <LegacyCleanupCard
-          status={legacyStatus.data}
-          cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
-          cleanupError={migrationStatus.data?.cleanup_error ?? ''}
-          cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
-          isLoading={legacyStatus.loading || cleanupLoading}
-          onDelete={() => (showCleanupDialog = true)}
+      <!-- Prerequisites (collapsible, hidden during active migration) -->
+      {#if !isActive}
+        <DatabasePrerequisites
+          prerequisites={prerequisites.data}
+          isLoading={prerequisites.loading}
+          onRefresh={fetchPrerequisites}
         />
       {/if}
+
+      <!-- Backup history -->
+      <DatabaseBackupHistory
+        backups={backupJobs}
+        onCreateBackup={createBackup}
+        isCreating={backupCreating}
+        disabled={isActive}
+      />
     </div>
   {/if}
-{:else}
-  <!-- MIGRATION VIEW (not v2-only) -->
-  <div class="space-y-4">
-    <!-- Top metric strip -->
-    <DatabaseMigrationMetricStrip
-      legacyStats={legacyStats.data}
-      v2Stats={v2Stats.data}
-      migrationStatus={migrationStatus.data}
-    />
-
-    <!-- Middle row: details + progress -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
-      <DatabaseMigrationDetails stats={legacyStats.data} />
-      <div class="lg:col-span-2">
-        <DatabaseMigrationProgress
-          status={migrationStatus.data}
-          legacyStats={legacyStats.data}
-          v2Stats={v2Stats.data}
-          prerequisites={prerequisites.data}
-          isStarting={startLoading}
-          onStart={() => (showConfirmDialog = true)}
-          onPause={pauseMigration}
-          onResume={resumeMigration}
-          onRetryValidation={retryValidation}
-          onCancel={cancelMigration}
-        />
-      </div>
-    </div>
-
-    <!-- Prerequisites (collapsible, hidden during active migration) -->
-    {#if !isActive}
-      <DatabasePrerequisites
-        prerequisites={prerequisites.data}
-        isLoading={prerequisites.loading}
-        onRefresh={fetchPrerequisites}
-      />
-    {/if}
-
-    <!-- Backup history -->
-    <DatabaseBackupHistory
-      backups={backupJobs}
-      onCreateBackup={createBackup}
-      isCreating={backupCreating}
-      disabled={isActive}
-    />
-  </div>
-{/if}
+</div>
 
 <!-- Dialogs -->
 <MigrationConfirmDialog
