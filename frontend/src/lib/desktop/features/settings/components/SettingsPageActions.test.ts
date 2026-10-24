@@ -3,11 +3,13 @@ import { render, screen, fireEvent } from '@testing-library/svelte';
 import { get } from 'svelte/store';
 import { tick } from 'svelte';
 import {
+  SettingsChangedElsewhereError,
   settingsActions,
   settingsStore,
   settingsValidationErrors,
   settingsValidationReasons,
 } from '$lib/stores/settings';
+import { loggers } from '$lib/utils/logger';
 import SettingsPageActions from './SettingsPageActions.svelte';
 
 const initialState = get(settingsStore);
@@ -142,4 +144,50 @@ describe('SettingsPageActions reset', () => {
 
     expect(onReset).toHaveBeenCalledTimes(1);
   });
+});
+
+describe('SettingsPageActions save failure logging', () => {
+  beforeEach(() => {
+    vi.mocked(loggers.settings.warn).mockClear();
+    vi.mocked(loggers.settings.error).mockClear();
+  });
+
+  afterEach(() => {
+    settingsStore.set(initialState);
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    {
+      name: 'changed-elsewhere conflict',
+      failure: new SettingsChangedElsewhereError(),
+      warnCalls: 1,
+      errorCalls: 0,
+    },
+    {
+      name: 'server error',
+      failure: Object.assign(new Error('boom'), { status: 500 }),
+      warnCalls: 0,
+      errorCalls: 1,
+    },
+  ])(
+    'logs a changed-elsewhere conflict as a warning and other save failures as errors: $name',
+    async ({ failure, warnCalls, errorCalls }) => {
+      vi.spyOn(settingsActions, 'saveSettings').mockRejectedValue(failure);
+      makeUnsavedChange();
+      render(SettingsPageActions);
+
+      await fireEvent.click(saveButton());
+      await tick();
+
+      expect(loggers.settings.warn).toHaveBeenCalledTimes(warnCalls);
+      expect(loggers.settings.error).toHaveBeenCalledTimes(errorCalls);
+      // The error logged is the very object thrown, so the Sentry hook sees the same input.
+      const logged = [
+        ...vi.mocked(loggers.settings.warn).mock.calls,
+        ...vi.mocked(loggers.settings.error).mock.calls,
+      ];
+      expect(logged.every(call => call.includes(failure))).toBe(true);
+    }
+  );
 });
