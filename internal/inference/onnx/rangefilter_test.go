@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newTestRangeFilter creates a RangeFilter with a non-nil (but unusable) session
-// for testing input validation paths that must pass the nil-session guard.
+// newTestRangeFilter creates a RangeFilter with an open fake session
+// for testing input validation paths that must pass the closed-session check.
 func newTestRangeFilter(t *testing.T, numLabels int) *RangeFilter {
 	t.Helper()
 	return &RangeFilter{

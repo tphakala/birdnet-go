@@ -242,7 +242,7 @@ func (c *CustomClassifier) Labels() []string {
 	return cp
 }
 
-// Close releases the ONNX session. It waits for in-flight predictions to
+// Close releases the ONNX session. It waits for in-flight inference runs to
 // finish, is safe to call more than once and concurrently with Predict, and
 // every later Predict call returns ErrSessionClosed.
 func (c *CustomClassifier) Close() error {
