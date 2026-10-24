@@ -220,6 +220,25 @@ func TestPatchDashboardSettings_RequiresAuth(t *testing.T) {
 		"PATCH /settings/dashboard must remain auth-protected")
 }
 
+// TestPutSettings_RequiresAuth verifies that the full-settings PUT is inside the
+// authenticated route group. A single /:section route serves every PATCH (see
+// the route registration in settings.go), so
+// TestPatchDashboardSettings_RequiresAuth already guards PATCH on every
+// section; PUT is registered separately and needs its own check.
+func TestPutSettings_RequiresAuth(t *testing.T) {
+	e := newSettingsAuthTestEnv(t)
+
+	body := bytes.NewBufferString(`{"main":{"name":"x"}}`)
+	req := httptest.NewRequest(http.MethodPut, "/api/v2/settings", body)
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+
+	e.ServeHTTP(rec, req)
+
+	assert.Equal(t, http.StatusUnauthorized, rec.Code,
+		"PUT /settings must require auth")
+}
+
 // TestGetBirdnetSettings_StillRequiresAuth is a regression guard ensuring that
 // exposing /settings/dashboard publicly did not accidentally expose other
 // settings sections. /settings/birdnet remains auth-protected.

@@ -39,7 +39,7 @@ func TestIsLibraryAbsent(t *testing.T) {
 		},
 		{
 			"windows loadlibrary missing dll",
-			fmt.Errorf("openvino_c.dll: The specified module could not be found."),
+			fmt.Errorf("openvino_c.dll: The specified module could not be found."), //nolint:revive // error-strings: reproduces the verbatim Windows loader message
 			true,
 		},
 		{

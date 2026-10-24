@@ -23,9 +23,10 @@ func (o *Orchestrator) buildBirdNETV24(settings *conf.Settings) (*BirdNET, pathR
 
 // loadBirdNETV24 loads the built-in BirdNET v2.4 model into o.models under
 // RegistryIDBirdNETV24, following the same build/register/defer-warm-up shape as
-// the secondary loaders (loadPerch). v2.4 is embedded and implicitly enabled, so
-// it is prepended to the effective enable set and loads first during construction;
-// its failure is fatal to construction (handled by loadEnabledModels). The thread
+// the secondary loaders (loadPerch). v2.4 is the built-in model but is loaded only when
+// models.enabled names it (authoritative since Phase 4); it is not implicitly enabled. Its
+// load failure is non-fatal: loadEnabledModels records it and continues, so construction
+// succeeds degraded at N=0 (handled by loadEnabledModels). The thread
 // count is unused: v2.4 takes it from settings.BirdNET.Threads inside NewBirdNET,
 // so the parameter exists only to satisfy the shared modelLoaders signature.
 func (o *Orchestrator) loadBirdNETV24(_ int) error {
@@ -54,6 +55,13 @@ func (o *Orchestrator) loadBirdNETV24(_ int) error {
 	if cloned {
 		o.updateSettings(settings)
 	}
+
+	// Wire (or refresh) the v2.4 label resolver into the name-resolver chain on BOTH the
+	// construction load and a later retry via LoadModel. The chain used to be wired only
+	// once at construction, so a v2.4 that failed at construction and loaded later resolved
+	// through OpenFauna alone for the process lifetime. The caller holds o.mu and bn is a
+	// private, uncontended instance, so bn.Labels() under o.mu is order-legal here.
+	o.withV24LabelResolverLocked(bn.Labels())
 
 	// Defer the warm-up + RSS measurement until the caller releases o.mu, so the
 	// warm-up inference runs via the serialized inference path (see loadPerch).

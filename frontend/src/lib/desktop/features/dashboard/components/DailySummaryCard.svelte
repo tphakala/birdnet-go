@@ -636,6 +636,16 @@ Responsive Breakpoints:
     hourly: () => '#',
   });
 
+  // Returns the cached URL for a key, building and storing it on first use
+  function cachedUrl(cacheKey: string, build: () => string): string {
+    let url = urlCache.get(cacheKey);
+    if (url === undefined) {
+      url = build();
+      urlCache.set(cacheKey, url);
+    }
+    return url;
+  }
+
   // Reactive URL builder factory - clears cache when selectedDate changes
   $effect(() => {
     // Clear cache when selectedDate changes to prevent stale URLs
@@ -644,18 +654,14 @@ Responsive Breakpoints:
     // Create optimized, memoized URL builders
     urlBuilders.species = (species: DailySpeciesSummary) => {
       const cacheKey = `species:${species.scientific_name}:${selectedDate}`;
-      if (!urlCache.has(cacheKey)) {
-        urlCache.set(
-          cacheKey,
-          buildSpeciesDetectionUrl(
-            species.scientific_name,
-            selectedDate,
-            CONFIG.QUERY.DEFAULT_NUM_RESULTS,
-            0
-          )
-        );
-      }
-      return urlCache.get(cacheKey)!;
+      return cachedUrl(cacheKey, () =>
+        buildSpeciesDetectionUrl(
+          species.scientific_name,
+          selectedDate,
+          CONFIG.QUERY.DEFAULT_NUM_RESULTS,
+          0
+        )
+      );
     };
 
     urlBuilders.speciesHour = (
@@ -664,31 +670,23 @@ Responsive Breakpoints:
       duration: number = 1
     ) => {
       const cacheKey = `species-hour:${species.scientific_name}:${selectedDate}:${hour}:${duration}`;
-      if (!urlCache.has(cacheKey)) {
-        urlCache.set(
-          cacheKey,
-          buildSpeciesHourUrl(
-            species.scientific_name,
-            selectedDate,
-            hour,
-            duration,
-            CONFIG.QUERY.DEFAULT_NUM_RESULTS,
-            0
-          )
-        );
-      }
-      return urlCache.get(cacheKey)!;
+      return cachedUrl(cacheKey, () =>
+        buildSpeciesHourUrl(
+          species.scientific_name,
+          selectedDate,
+          hour,
+          duration,
+          CONFIG.QUERY.DEFAULT_NUM_RESULTS,
+          0
+        )
+      );
     };
 
     urlBuilders.hourly = (hour: number, duration: number = 1) => {
       const cacheKey = `hourly:${selectedDate}:${hour}:${duration}`;
-      if (!urlCache.has(cacheKey)) {
-        urlCache.set(
-          cacheKey,
-          buildHourlyDetectionUrl(selectedDate, hour, duration, CONFIG.QUERY.DEFAULT_NUM_RESULTS, 0)
-        );
-      }
-      return urlCache.get(cacheKey)!;
+      return cachedUrl(cacheKey, () =>
+        buildHourlyDetectionUrl(selectedDate, hour, duration, CONFIG.QUERY.DEFAULT_NUM_RESULTS, 0)
+      );
     };
   });
 

@@ -65,6 +65,17 @@ func buildAllSpeciesOrchestrator(t *testing.T, settings *conf.Settings, rf *fake
 	}
 	o.settingsAtomic.Store(settings)
 	o.rangeFilter = newTestRangeFilterService(rf)
+	// Publish the participant snapshot the way a production reload does, so the shared
+	// display/gate helper (which reads state.participants, not the live model map) sees
+	// both classifiers. Anchored on v2.4 with a universal backend loaded.
+	o.rangeFilter.state.Store(&rangeFilterState{
+		backend:       rf,
+		kind:          rfKindGeomodelV3,
+		participants:  []participantLabels{{id: primaryID, labels: settings.BirdNET.Labels}, {id: nonPrimaryID, labels: nonPrimaryLabels}},
+		anchoredOnV24: true,
+		coveredLabels: settings.BirdNET.Labels,
+		generation:    1,
+	})
 	return o
 }
 
@@ -264,6 +275,16 @@ func TestGetAllProbableSpecies_NonUniversalPrimary(t *testing.T) {
 			"Perch_V2":     {instance: nonPrimary},
 		},
 	}
+	// Publish the participant snapshot a reload builds; the legacy (non-universal) backend
+	// has no geomodel vocabulary, so the shared helper fails the non-v2.4 participant open.
+	o.rangeFilter.state.Store(&rangeFilterState{
+		backend:       primaryRF,
+		kind:          rfKindMDataV2,
+		participants:  []participantLabels{{id: "BirdNET_V2.4", labels: settings.BirdNET.Labels}, {id: "Perch_V2", labels: nonPrimary.labels}},
+		anchoredOnV24: true,
+		coveredLabels: settings.BirdNET.Labels,
+		generation:    1,
+	})
 
 	scores, err := o.GetAllProbableSpeciesWithSettings(time.Now(), 0, settings)
 	require.NoError(t, err)
@@ -480,6 +501,17 @@ func TestGetAllProbableSpecies_DeterministicDedupByModelID(t *testing.T) {
 			"zzz_model": {instance: higher},
 		},
 	}
+	// Publish the participant snapshot in the deterministic order a reload builds (v2.4
+	// first, then byte-sorted by ID), so the lower model ID is processed first and its label
+	// wins the scientific-name dedup independent of Go's randomized map iteration.
+	o.rangeFilter.state.Store(&rangeFilterState{
+		backend:       rf,
+		kind:          rfKindGeomodelV3,
+		participants:  []participantLabels{{id: primaryID, labels: settings.BirdNET.Labels}, {id: "aaa_model", labels: lower.labels}, {id: "zzz_model", labels: higher.labels}},
+		anchoredOnV24: true,
+		coveredLabels: settings.BirdNET.Labels,
+		generation:    1,
+	})
 
 	scores, err := o.GetAllProbableSpeciesWithSettings(time.Now(), 0, settings)
 	require.NoError(t, err)

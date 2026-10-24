@@ -18,7 +18,6 @@
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
-  import { generateId } from '$lib/utils/uuid';
   import {
     fetchDeviceCapabilities as fetchCapabilities,
     coerceSupportedRate,
@@ -31,7 +30,12 @@
     deviceLabel,
     type AudioDevice,
   } from '$lib/utils/audioDevices';
-  import { getAvailableModels, DEFAULT_MODEL_ID, fetchModels } from '$lib/stores/models.svelte';
+  import { getAvailableModels, fetchModels, modelsLoading } from '$lib/stores/models.svelte';
+  import {
+    acousticModelAvailability,
+    subscribeAcousticModels,
+  } from '$lib/stores/acousticModels.svelte';
+  import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import SoundCardCard from './SoundCardCard.svelte';
   import SelectDropdown from './SelectDropdown.svelte';
   import TextInput from './TextInput.svelte';
@@ -52,11 +56,9 @@
   } from '$lib/stores/settings';
 
   // Local EqualizerSettings type matching AudioEqualizerSettings component's interface
-  // where filter.id is optional (assigned on save)
   interface LocalEqualizerSettings {
     enabled: boolean;
     filters: Array<{
-      id?: string;
       type: EqualizerFilterType;
       frequency: number;
       q?: number;
@@ -69,16 +71,20 @@
   const logger = loggers.audio;
 
   const availableModels = $derived(getAvailableModels());
+  const acousticAvailability = $derived(acousticModelAvailability());
 
+  // Pre-selection for a source without an explicit list: the classifier's
+  // default targets when known, nothing at N=0, the legacy BirdNET pick otherwise.
   function getDefaultModels(): string[] {
-    if (availableModels.some(m => m.id === DEFAULT_MODEL_ID)) {
-      return [DEFAULT_MODEL_ID];
-    }
-    return availableModels.length > 0 ? [availableModels[0].id] : [DEFAULT_MODEL_ID];
+    return defaultModelSelection(acousticAvailability, availableModels);
   }
 
   $effect(() => {
     return fetchModels();
+  });
+
+  $effect(() => {
+    return subscribeAcousticModels();
   });
 
   const modelOptions = $derived(availableModels.map(m => ({ value: m.id, label: m.name })));
@@ -200,15 +206,12 @@
       newModels = getDefaultModels();
     }
 
-    // Transform equalizer filters to ensure all have an id (required by store type)
+    // A disabled equalizer without filters is stored as undefined
     const transformedEqualizer =
       newEqualizer.enabled || newEqualizer.filters.length > 0
         ? {
             enabled: newEqualizer.enabled,
-            filters: newEqualizer.filters.map(f => ({
-              ...f,
-              id: f.id || generateId(),
-            })),
+            filters: newEqualizer.filters,
           }
         : undefined;
 
@@ -226,7 +229,7 @@
     resetAddForm();
   }
 
-  // Update source — returns boolean for success
+  // Update source; returns boolean for success
   function updateSource(index: number, updatedSource: AudioSourceConfig): boolean {
     const updatedSources = [...sources];
     if (index >= 0 && index < updatedSources.length) {
@@ -481,6 +484,8 @@
               models={availableModels}
               selectedModels={newModels}
               sourceSampleRate={newSampleRate}
+              loading={modelsLoading()}
+              availability={acousticAvailability}
               {disabled}
               onToggle={models => (newModels = models)}
             />
@@ -506,6 +511,7 @@
                     equalizerSettings={newEqualizer}
                     {disabled}
                     onUpdate={handleNewEqualizerUpdate}
+                    sampleRate={newSampleRate}
                   />
                 </div>
               {/if}

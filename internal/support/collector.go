@@ -20,11 +20,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/mempolicy"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"gopkg.in/yaml.v3"
@@ -71,6 +74,7 @@ const (
 	metadataFileName       = "metadata.json"
 	configYAMLFileName     = "config.yaml"
 	systemInfoFileName     = "system_info.json"
+	runtimeInfoFileName    = "runtime_info.json"
 	databaseInfoFileName   = "database_info.json"
 	deploymentInfoFileName = "deployment_info.json"
 	appEventsFileName      = "app_events.json"
@@ -94,6 +98,16 @@ const (
 	journalFlagJSON       = "json"
 	journalFlagNoHostname = "--no-hostname"
 	journalFlagLines      = "-n"
+
+	// Journal binary and collection skip reporting
+	journalctlBinary        = "journalctl"
+	osLinux                 = "linux"
+	journalSkippedReasonKey = "skipped_reason"
+
+	// Reasons journald collection is skipped, recorded under journalSkippedReasonKey
+	journalSkipUnsupportedOS = "unsupported_os"
+	journalSkipContainer     = "running_in_container"
+	journalSkipNotInstalled  = "journalctl_not_found"
 
 	// Journal priority levels (syslog severity)
 	priorityEmergency = "0" // System is unusable
@@ -207,6 +221,8 @@ type Collector struct {
 	sensitiveKeys     []string
 	dbInfoProvider    DatabaseInfoProvider
 	appEventsProvider AppEventsProvider
+	// runtimeInfoProvider supplies runtime_info.json; nil in the CLI.
+	runtimeInfoProvider RuntimeInfoProvider
 }
 
 // DefaultSensitiveKeys returns the default list of sensitive configuration keys to redact.
@@ -232,7 +248,7 @@ func DefaultSensitiveKeys() []string {
 		"url", "urls", "endpoint", "webhook_url",
 
 		// Network topology
-		"subnet",
+		"subnet", trustedProxiesKey, plainHTTPSessionClientsKey,
 
 		// Secret file paths
 		"privatekeypath", "sshkeypath", "credentialspath",
@@ -463,7 +479,8 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 	if opts.IncludeSystemInfo {
 		getLogger().Debug("support: collecting system information")
 		dump.Diagnostics.SystemCollection.Attempted = true
-		dump.SystemInfo = c.collectSystemInfo()
+		dump.SystemInfo = c.collectSystemInfo(ctx)
+		dump.RuntimeInfo = c.collectRuntimeInfo(ctx)
 		dump.Diagnostics.SystemCollection.Successful = true
 		getLogger().Debug("support: system information collected",
 			logger.String("os", dump.SystemInfo.OS),
@@ -654,6 +671,28 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 		getLogger().Debug("support: system info added successfully")
 	}
 
+	// Add runtime info: the file exists whenever system info was requested, with
+	// available=false when no running instance was inspected.
+	if dump.RuntimeInfo != nil {
+		runtimeFile, err := w.Create(runtimeInfoFileName)
+		if err != nil {
+			getLogger().Error("support: failed to create runtime info file in archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_runtime_info_file").
+				Build()
+		}
+		if err := json.NewEncoder(runtimeFile).Encode(dump.RuntimeInfo); err != nil {
+			getLogger().Error("support: failed to write runtime info to archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_runtime_info").
+				Build()
+		}
+	}
+
 	// Add database info if collected
 	if dump.DatabaseInfo != nil {
 		getLogger().Debug("support: adding database info to archive")
@@ -824,7 +863,7 @@ func (c *Collector) collectRuntimeEnv(allowlist []string) map[string]string {
 }
 
 // collectSystemInfo gathers system information
-func (c *Collector) collectSystemInfo() SystemInfo {
+func (c *Collector) collectSystemInfo(ctx context.Context) SystemInfo {
 	info := SystemInfo{
 		OS:           runtime.GOOS,
 		Architecture: runtime.GOARCH,
@@ -844,6 +883,9 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		runtime.ReadMemStats(&memStats)
 		info.MemoryMB = memStats.Sys / bytesPerMB
 	}
+
+	collectHostFacts(&info)
+	info.USB, info.SoundCards = collectHardwareInventory(ctx, runtime.GOOS, hardwareInventoryRoot)
 
 	// Collect disk information
 	partitions, err := disk.Partitions(false)
@@ -888,6 +930,30 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 	}
 
 	return info
+}
+
+// collectHostFacts fills the CPU, board, SIMD, kernel and cgroup memory fields
+// of info. Every probe is best effort: a failure leaves its field empty.
+func collectHostFacts(info *SystemInfo) {
+	info.CPUModel = sysinfo.GetCPUModel()
+	info.CPUFlags = sysinfo.GetCPUFlags()
+
+	hw := hwprofile.Hardware()
+	info.Board = hw.Board.Model
+	info.SIMD = hw.SIMD
+
+	if kernel, err := host.KernelVersion(); err == nil {
+		info.KernelVersion = kernel
+	}
+
+	if cg := mempolicy.DetectCgroupMemory(); cg.Version != "" {
+		info.CgroupMemory = &CgroupMemoryInfo{
+			Version:    cg.Version,
+			LimitBytes: cg.LimitBytes,
+			LimitExact: cg.LimitExact,
+			UsageBytes: cg.UsageBytes,
+		}
+	}
 }
 
 // collectConfig loads and scrubs the configuration
@@ -936,9 +1002,12 @@ func (c *Collector) scrubConfig(config map[string]any) map[string]any {
 //   - Default/empty values are left unchanged
 //   - URL values get structural redaction (preserving scheme and port)
 //   - Other values get replaced with [redacted]
+//   - IP address lists (trustedproxies, plainhttpsessionclients) keep their
+//     length, each entry replaced by its address class; the cloudflare preset is kept
 //
-// For non-sensitive keys, it recursively processes nested structures
-// and sanitizes RTSP URLs in string values.
+// For non-sensitive keys, it recursively processes nested structures,
+// sanitizes RTSP URLs in string values and masks the USB serial in "usb-id:"
+// device tokens (privacy.RedactUSBDeviceID).
 func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) any {
 	// Check if key is sensitive using word boundary matching
 	lowerKey := strings.ToLower(key)
@@ -951,6 +1020,9 @@ func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) an
 	}
 
 	if isSensitive {
+		if isAddressListKey(lowerKey) {
+			return redactAddressList(value)
+		}
 		return c.redactSensitiveValue(value, sensitiveKeys)
 	}
 
@@ -1042,8 +1114,10 @@ func (c *Collector) processNonSensitiveValue(key string, value any, sensitiveKey
 		}
 		return scrubbed
 	case string:
-		// Sanitize RTSP URLs in all string values (existing behavior)
-		return privacy.SanitizeRTSPUrls(v)
+		// Sanitize RTSP URLs and mask USB serials in all string values. A device
+		// value (audio source, sources[].device) is exactly one identifier, so the
+		// whole-value helper applies and also masks a serial that contains spaces.
+		return privacy.RedactUSBDeviceID(privacy.SanitizeRTSPUrls(v))
 	default:
 		return value
 	}
@@ -1076,19 +1150,13 @@ func (c *Collector) collectLogs(ctx context.Context, duration time.Duration, max
 	var journalLogs []LogEntry
 	var acc logScanAccum
 
-	// Try to collect from journald first (systemd systems).
-	// Skip journal collection in container runtimes (Docker, Podman, LXC,
-	// systemd-nspawn) where journald is typically unavailable. Uses
-	// sysinfo.IsContainer() so the check matches the same gate that
-	// addJournaldLogs uses on the archive path — keeping both journald
-	// collection paths consistent and removing the now-redundant local
-	// Docker-only helper.
-	if sysinfo.IsContainer() {
-		getLogger().Debug("support: running in a container runtime, skipping journal log collection")
-		diagnostics.JournalLogs.Attempted = false
-		diagnostics.JournalLogs.Details = map[string]any{
-			"skipped_reason": "running_in_container",
-		}
+	// Try to collect from journald first (systemd systems). Skipped when
+	// hostJournalSkipReason reports the host cannot have journald: not Linux,
+	// a container runtime, or no journalctl on PATH. The archive path
+	// (addLogFilesToArchive) uses the same function, so both journald paths agree.
+	if reason := hostJournalSkipReason(); reason != "" {
+		getLogger().Debug("support: skipping journal log collection", logger.String("reason", reason))
+		markJournalSkipped(&diagnostics.JournalLogs, reason)
 	} else {
 		getLogger().Debug("support: attempting to collect journal logs")
 		diagnostics.JournalLogs.Attempted = true
@@ -1182,7 +1250,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		logger.Int("maxLines", maxJournalLogLines))
 
 	// Run journalctl command with line limit
-	cmd := exec.CommandContext(ctx, "journalctl", //nolint:gosec // G204: hardcoded command, args are constants/formatted values
+	cmd := exec.CommandContext(ctx, journalctlBinary, //nolint:gosec // G204: hardcoded command, args are constants/formatted values
 		journalFlagUnit, systemdServiceName,
 		journalFlagSince, since,
 		journalFlagNoPager,
@@ -1203,8 +1271,7 @@ func (c *Collector) collectJournalLogs(ctx context.Context, duration time.Durati
 		// This is not a fatal error, just means no journald logs available
 		getLogger().Debug("journalctl unavailable or service not found", logger.Error(err))
 		diagnostics.Details["error_type"] = "command_failed"
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			diagnostics.Details["exit_code"] = exitErr.ExitCode()
 			diagnostics.Details["stderr"] = string(exitErr.Stderr)
 		}
@@ -1703,16 +1770,13 @@ func (c *Collector) addLogFilesToArchive(ctx context.Context, w *zip.Writer, dur
 		lfc.logsAdded++
 	}
 
-	// Add journald logs when running on a host where systemd-journald is
-	// actually available. In container runtimes (Docker, Podman, LXC,
-	// systemd-nspawn, generic) the journalctl binary either does not exist
-	// or returns an error, which previously surfaced as a recurring Sentry
-	// event every time a support dump was generated. Use the shared
-	// sysinfo.IsContainer() detector so we cover all container flavours,
-	// not just Docker.
-	switch {
-	case sysinfo.IsContainer():
-		getLogger().Debug("support: skipping journald collection (container runtime)")
+	// Add journald logs only on a host where journald can exist: Linux, not a
+	// container runtime, with journalctl on PATH. Running the command anywhere
+	// else only fails (previously a recurring Sentry event in containers). The
+	// diagnostics path uses the same hostJournalSkipReason gate.
+	switch reason := hostJournalSkipReason(); {
+	case reason != "":
+		getLogger().Debug("support: skipping journald collection", logger.String("reason", reason))
 	case nearDeadline(lfc.ctx):
 		// journalctl runs an external command that can be slow; skip it when the
 		// deadline is near so it cannot overrun the handler window.
@@ -2098,11 +2162,41 @@ func (c *Collector) addLogFileToArchive(ctx context.Context, w *zip.Writer, sour
 	return bw.Flush()
 }
 
+// journalSkipReason reports why journald collection does not apply on this
+// host, or "" when it does. Checks run in order: OS, container, PATH.
+func journalSkipReason(goos string, inContainer bool, lookPath func(string) (string, error)) string {
+	switch {
+	case goos != osLinux:
+		return journalSkipUnsupportedOS
+	case inContainer:
+		return journalSkipContainer
+	}
+	if _, err := lookPath(journalctlBinary); err != nil {
+		return journalSkipNotInstalled
+	}
+	return ""
+}
+
+// hostJournalSkipReason evaluates journalSkipReason for the running host. Both
+// journald collection paths call it so they never disagree.
+func hostJournalSkipReason() string {
+	return journalSkipReason(runtime.GOOS, sysinfo.IsContainer(), exec.LookPath)
+}
+
+// markJournalSkipped records that journald collection was not attempted and why.
+// It clears any result of an earlier attempt and keeps only the searched paths.
+func markJournalSkipped(diag *LogSourceDiagnostics, reason string) {
+	*diag = LogSourceDiagnostics{
+		PathsSearched: diag.PathsSearched,
+		Details:       map[string]any{journalSkippedReasonKey: reason},
+	}
+}
+
 // getJournaldLogs retrieves logs from journald as a string
 func (c *Collector) getJournaldLogs(ctx context.Context, duration time.Duration) string {
 	since := time.Now().Add(-duration).Format(journalTimeFormat)
 
-	cmd := exec.CommandContext(ctx, "journalctl", //nolint:gosec // G204: hardcoded command, args are constants/formatted values
+	cmd := exec.CommandContext(ctx, journalctlBinary, //nolint:gosec // G204: hardcoded command, args are constants/formatted values
 		"-u", "birdnet-go.service",
 		"--since", since,
 		"--no-pager",

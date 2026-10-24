@@ -2,7 +2,6 @@ package processor
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -11,8 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/birdweather"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 )
 
@@ -41,31 +42,31 @@ func TestPrivacyWrapError(t *testing.T) {
 		},
 		{
 			name:          "simple error",
-			err:           errors.New("simple error message"),
+			err:           errors.NewStd("simple error message"),
 			shouldContain: []string{"simple error message"},
 		},
 		{
 			name:             "RTSP URL with credentials",
-			err:              errors.New("failed to connect to rtsp://admin:password123@192.168.1.100:554/stream"),
+			err:              errors.NewStd("failed to connect to rtsp://admin:password123@192.168.1.100:554/stream"),
 			shouldContain:    []string{"failed to connect to"},
 			shouldNotContain: []string{"admin", "password123"},
 		},
 		{
 			name: "API key in error",
 			// NOTE: This is a fake API key used only for testing the sanitization function.
-			err:              errors.New("API request failed: api_key=abc123xyz789"),
+			err:              errors.NewStd("API request failed: api_key=abc123xyz789"),
 			shouldContain:    []string{"API request failed"},
 			shouldNotContain: []string{"abc123xyz789"},
 		},
 		{
 			name:             "Token in error",
-			err:              errors.New("authentication failed: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"),
+			err:              errors.NewStd("authentication failed: token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"),
 			shouldContain:    []string{"authentication failed", "[TOKEN]"},
 			shouldNotContain: []string{"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9"},
 		},
 		{
 			name:             "Email in error",
-			err:              errors.New("notification failed for user@example.com"),
+			err:              errors.NewStd("notification failed for user@example.com"),
 			shouldContain:    []string{"notification failed for", "[EMAIL]"},
 			shouldNotContain: []string{"user@example.com"},
 		},
@@ -102,7 +103,7 @@ func TestPrivacyWrapError(t *testing.T) {
 func TestPrivacyWrapErrorWrapped(t *testing.T) {
 	t.Parallel()
 	// Create a wrapped error with sensitive information
-	baseErr := errors.New("user@example.com")
+	baseErr := errors.NewStd("user@example.com")
 	wrappedErr := fmt.Errorf("operation failed for: %w", baseErr)
 
 	// Sanitize the wrapped error
@@ -197,6 +198,12 @@ func TestGetJobQueueRetryConfig(t *testing.T) {
 			action:         mqttAction,
 			wantEnabled:    true,
 			wantMaxRetries: 5,
+		},
+		{
+			name:           "CompositeAction",
+			action:         &CompositeAction{},
+			wantEnabled:    false,
+			wantMaxRetries: 0,
 		},
 		{
 			name:           "GenericAction",
@@ -1265,6 +1272,176 @@ func TestPrivacyScrubMessage(t *testing.T) {
 			for _, s := range tt.shouldNotContain {
 				assert.NotContains(t, sanitized, s, "sanitized should NOT contain %q", s)
 			}
+		})
+	}
+}
+
+// TestRetryConfigFromSettings_DisabledMeansNoRetries verifies that disabling
+// retries in the settings drops the retry count, not only the Enabled flag.
+func TestRetryConfigFromSettings_DisabledMeansNoRetries(t *testing.T) {
+	t.Parallel()
+
+	const (
+		staleMaxRetries = 5
+		delaySeconds    = 30
+	)
+	got := retryConfigFromSettings(conf.RetrySettings{
+		Enabled:           false,
+		MaxRetries:        staleMaxRetries,
+		InitialDelay:      delaySeconds,
+		MaxDelay:          delaySeconds,
+		BackoffMultiplier: 2,
+	})
+	assert.False(t, got.Enabled)
+	assert.Zero(t, got.MaxRetries)
+
+	enabled := retryConfigFromSettings(conf.RetrySettings{
+		Enabled:           true,
+		MaxRetries:        staleMaxRetries,
+		InitialDelay:      delaySeconds,
+		MaxDelay:          delaySeconds,
+		BackoffMultiplier: 2,
+	})
+	assert.True(t, enabled.Enabled)
+	assert.Equal(t, staleMaxRetries, enabled.MaxRetries)
+	assert.Equal(t, delaySeconds*time.Second, enabled.InitialDelay)
+}
+
+// TestBirdWeatherAction_Execute_RetryReusesEventTrackerDecision verifies that a
+// retry of the same action reaches the upload path again instead of being
+// swallowed by the species rate limit.
+func TestBirdWeatherAction_Execute_RetryReusesEventTrackerDecision(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.Birdweather.Enabled = true
+	det := testDetection()
+
+	action := &BirdWeatherAction{
+		Settings:     settings,
+		Result:       det.Result,
+		EventTracker: NewEventTracker(time.Hour),
+	}
+
+	// With no client the action returns an error after the rate limit check.
+	require.Error(t, action.Execute(t.Context(), nil), "first attempt reaches the client check")
+	require.Error(t, action.Execute(t.Context(), nil), "retry must reach the client check too")
+}
+
+// TestBirdWeatherAction_Execute_ResolvesSettingsOncePerAttempt verifies that one
+// Execute reads one settings snapshot, so the enabled flag, the threshold and the
+// debug flag cannot come from two versions after a reload mid-attempt.
+func TestBirdWeatherAction_Execute_ResolvesSettingsOncePerAttempt(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.Birdweather.Enabled = true
+	settings.Debug = true
+	det := testDetection()
+
+	var settingsCalls int
+	action := &BirdWeatherAction{
+		Result:       det.Result,
+		EventTracker: NewEventTracker(time.Hour),
+		liveSettings: func() *conf.Settings {
+			settingsCalls++
+			return settings
+		},
+		liveClient: func() *birdweather.BwClient { return nil },
+	}
+
+	// No client: the attempt reads the enabled flag and the threshold, then fails
+	// at the client check.
+	require.Error(t, action.Execute(t.Context(), nil))
+	assert.Equal(t, 1, settingsCalls, "one settings snapshot per attempt")
+}
+
+// TestBirdWeatherAction_Execute_NilResolverResultUsesCapturedSettings verifies
+// that a resolver returning no snapshot falls back to the settings the action was
+// built with: the enabled check passes on them and the missing client is reported.
+func TestBirdWeatherAction_Execute_NilResolverResultUsesCapturedSettings(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Realtime.Birdweather.Enabled = true
+	det := testDetection()
+
+	action := &BirdWeatherAction{
+		Settings:     settings,
+		Result:       det.Result,
+		EventTracker: NewEventTracker(time.Hour),
+		liveSettings: func() *conf.Settings { return nil },
+		liveClient:   func() *birdweather.BwClient { return nil },
+	}
+
+	err := action.Execute(t.Context(), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "BirdWeather client is not initialized")
+}
+
+// TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild verifies that an
+// action built before a settings change or a client removal uses the settings
+// and client in effect when it executes, the way a queued retry does.
+// Not parallel: it publishes global settings.
+func TestBirdWeatherAction_Execute_FollowsReconfigureAfterBuild(t *testing.T) {
+	tests := []struct {
+		name    string
+		change  func(p *Processor, initial *conf.Settings)
+		wantErr bool
+	}{
+		{
+			name: "birdweather disabled",
+			change: func(_ *Processor, initial *conf.Settings) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.Birdweather.Enabled = false
+				conf.StoreSettings(updated)
+			},
+		},
+		{
+			// The detection confidence (0.95) is below the raised threshold, so the
+			// upload is skipped; with the build-time threshold it would reach the client.
+			name: "threshold raised",
+			change: func(_ *Processor, initial *conf.Settings) {
+				updated := conf.CloneSettings(initial)
+				updated.Realtime.Birdweather.Threshold = 0.99
+				conf.StoreSettings(updated)
+			},
+		},
+		{
+			name:    "client removed",
+			change:  func(p *Processor, _ *conf.Settings) { p.SetBwClient(nil) },
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			prev := conf.GetSettings()
+			t.Cleanup(func() { conf.StoreSettings(prev) })
+
+			initial := &conf.Settings{}
+			initial.Realtime.Birdweather.Enabled = true
+			// Keep the once-per-day range filter gate closed so getDefaultActions
+			// does not publish a settings snapshot of its own.
+			initial.BirdNET.RangeFilter.LastUpdated = time.Now()
+			conf.StoreSettings(initial)
+
+			// A zero client rejects an upload without PCM before touching its settings.
+			p := &Processor{Settings: initial, EventTracker: NewEventTracker(time.Hour), BwClient: &birdweather.BwClient{}}
+
+			action := defaultActionOfType[*BirdWeatherAction](t, p, initial)
+
+			tt.change(p, initial)
+
+			err := action.Execute(t.Context(), nil)
+			if !tt.wantErr {
+				require.NoError(t, err)
+				return
+			}
+			// The nil-client branch is the only one that returns this message;
+			// the zero client fails with an empty-PCM validation error.
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "BirdWeather client is not initialized")
 		})
 	}
 }

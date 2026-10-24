@@ -12,10 +12,20 @@
     label?: string;
   }
 
-  let { size = 'lg', color = 'text-[var(--color-primary)]', label, ...rest }: Props = $props();
+  let {
+    size = 'lg',
+    color = 'text-[var(--color-primary)]',
+    label,
+    'aria-hidden': ariaHidden,
+    ...rest
+  }: Props = $props();
 
   // Reactive label with default
   let effectiveLabel = $derived(label ?? t('common.ui.loading'));
+
+  // Decorative mode: a persistent status region elsewhere carries the announcement,
+  // so the spinner exposes no role, label or text to assistive technology.
+  let hidden = $derived(ariaHidden === true || ariaHidden === 'true');
 
   // Size classes using native Tailwind
   const sizeClasses: Record<SpinnerSize, string> = {
@@ -28,10 +38,16 @@
 
   // Base spinner classes using native Tailwind
   const baseSpinnerClasses =
-    'inline-block aspect-square border-[var(--color-base-300)] border-t-current rounded-full animate-spin';
+    'inline-block aspect-square border-[var(--color-base-300)] border-t-current rounded-full animate-spin motion-reduce:animate-none';
 </script>
 
-<div class="flex items-center justify-center" role="status" aria-label={effectiveLabel} {...rest}>
-  <span class={cn(baseSpinnerClasses, safeGet(sizeClasses, size, ''), color)}></span>
-  <span class="sr-only">{effectiveLabel}</span>
-</div>
+{#if hidden}
+  <div class="flex items-center justify-center" aria-hidden="true" {...rest}>
+    <span class={cn(baseSpinnerClasses, safeGet(sizeClasses, size, ''), color)}></span>
+  </div>
+{:else}
+  <div class="flex items-center justify-center" role="status" aria-label={effectiveLabel} {...rest}>
+    <span class={cn(baseSpinnerClasses, safeGet(sizeClasses, size, ''), color)}></span>
+    <span class="sr-only">{effectiveLabel}</span>
+  </div>
+{/if}

@@ -33,9 +33,9 @@ upgrading regenerates the service unit and picks up these steps.
 
 ### Docker Compose installations
 
-The external media volume is commented out in `docker-compose.yml` by default.
+The external media volume is commented out in `docker-compose.yml` (and the same block in `docker-compose.host.yml`) by default.
 `docker compose up` works without any host setup. To enable it, perform the
-one-time host setup below, then uncomment the bind block in `docker-compose.yml`.
+one-time host setup below, then uncomment the bind block in the Compose file you use (`docker-compose.yml` or `docker-compose.host.yml`).
 
 #### One-time manual setup
 
@@ -43,7 +43,7 @@ one-time host setup below, then uncomment the bind block in `docker-compose.yml`
 sudo mkdir -p /mnt/birdnet-go/external
 sudo mount --bind /mnt/birdnet-go/external /mnt/birdnet-go/external
 sudo mount --make-rshared /mnt/birdnet-go/external
-# Use the same UID:GID as BIRDNET_UID:BIRDNET_GID in docker-compose.yml (default 1000).
+# Use the same UID:GID as BIRDNET_UID:BIRDNET_GID in your Compose file (default 1000).
 sudo chown -h "${BIRDNET_UID:-1000}:${BIRDNET_GID:-1000}" /mnt/birdnet-go/external
 ```
 

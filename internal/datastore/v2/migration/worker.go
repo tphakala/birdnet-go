@@ -3,7 +3,6 @@ package migration
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -59,7 +59,7 @@ const validationCatchUpPercent = 5.0
 // used when the percentage-based threshold would be too small for small datasets.
 const validationCatchUpMinThreshold = 100
 
-// validationPreDelay is the delay before validation to let dual-writes complete.
+// validationPreDelay is the delay before each validation attempt.
 const validationPreDelay = 3 * time.Second
 
 // catchUpMaxBatches is the safety limit for catch-up iterations per validation attempt.
@@ -73,13 +73,13 @@ const catchUpMaxBatches = 10000
 const tailSyncInterval = 10 * time.Second
 
 // ErrMigrationPaused is returned when migration is paused by user.
-var ErrMigrationPaused = errors.New("migration paused")
+var ErrMigrationPaused = errors.NewStd("migration paused")
 
 // ErrMigrationCancelled is returned when migration is cancelled.
-var ErrMigrationCancelled = errors.New("migration cancelled")
+var ErrMigrationCancelled = errors.NewStd("migration cancelled")
 
 // ErrTooManyErrors is returned when too many consecutive errors occur.
-var ErrTooManyErrors = errors.New("too many consecutive errors")
+var ErrTooManyErrors = errors.NewStd("too many consecutive errors")
 
 // rateSample records a batch's timing for rate calculation.
 type rateSample struct {
@@ -169,31 +169,31 @@ type WorkerConfig struct {
 func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 	// Validate required dependencies
 	if cfg == nil {
-		return nil, errors.New("worker config is required")
+		return nil, errors.NewStd("worker config is required")
 	}
 	if cfg.Legacy == nil {
-		return nil, errors.New("legacy repository is required")
+		return nil, errors.NewStd("legacy repository is required")
 	}
 	if cfg.V2Detection == nil {
-		return nil, errors.New("v2 detection repository is required")
+		return nil, errors.NewStd("v2 detection repository is required")
 	}
 	if cfg.LabelRepo == nil {
-		return nil, errors.New("label repository is required")
+		return nil, errors.NewStd("label repository is required")
 	}
 	if cfg.ModelRepo == nil {
-		return nil, errors.New("model repository is required")
+		return nil, errors.NewStd("model repository is required")
 	}
 	if cfg.SourceRepo == nil {
-		return nil, errors.New("source repository is required")
+		return nil, errors.NewStd("source repository is required")
 	}
 	if cfg.StateManager == nil {
-		return nil, errors.New("state manager is required")
+		return nil, errors.NewStd("state manager is required")
 	}
 	if cfg.Logger == nil {
-		return nil, errors.New("logger is required")
+		return nil, errors.NewStd("logger is required")
 	}
 	if cfg.SpeciesLabelTypeID == 0 {
-		return nil, errors.New("species label type ID is required")
+		return nil, errors.NewStd("species label type ID is required")
 	}
 
 	batchSize := cfg.BatchSize
@@ -248,7 +248,7 @@ func (w *Worker) Start(ctx context.Context) error {
 	w.mu.Lock()
 	if w.running {
 		w.mu.Unlock()
-		return errors.New("worker already running")
+		return errors.NewStd("worker already running")
 	}
 	w.running = true
 	w.paused = false
@@ -501,7 +501,7 @@ func (w *Worker) handleValidatingState(ctx context.Context) runAction {
 	for attempt := 1; attempt <= validationMaxRetries; attempt++ {
 		w.logger.Info("running validation", logger.Int("attempt", attempt))
 
-		// Wait for in-flight dual-writes to complete
+		// Wait before counting records
 		select {
 		case <-ctx.Done():
 			return runActionReturn
@@ -614,7 +614,7 @@ func (w *Worker) completeValidation(_ context.Context) runAction {
 		}
 	}
 
-	// Continue running — next iteration will enter tail sync via COMPLETED case
+	// Continue running: next iteration will enter tail sync via COMPLETED case
 	return runActionContinue
 }
 
@@ -643,7 +643,7 @@ func (w *Worker) processDirtyIDs(ctx context.Context) (int64, error) {
 		if err != nil {
 			return totalCaught, err
 		}
-		// Stop if no progress was made — remaining IDs have persistent errors
+		// Stop if no progress was made: remaining IDs have persistent errors
 		if batchCaught == 0 {
 			break
 		}
@@ -688,11 +688,10 @@ func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int
 		}
 		if len(results) == 0 || results[0].ID != dirtyID {
 			// The legacy row for this dirty ID is gone, so the detection was deleted and any
-			// surviving v2 row is an orphan that would resurrect after v2 promotion (Forgejo
-			// #1581). Reconcile the v2 side and clear the marker via the same shared helper the
-			// runtime reconciler (DualWriteRepository.reconcileDirtyIDs) uses, so the two paths
-			// cannot drift. On any error other than not-found/locked, leave the id dirty for retry.
-			if recErr := repository.ReconcileDeletedGhost(ctx, w.v2Detection, w.stateManager, dirtyID); recErr != nil {
+			// surviving v2 row is an orphan that would resurrect after v2 promotion.
+			// Reconcile the v2 side and clear the marker; on any error other than
+			// not-found/locked, leave the id dirty for retry.
+			if recErr := reconcileDeletedGhost(ctx, w.v2Detection, w.stateManager, dirtyID); recErr != nil {
 				w.logger.Warn("failed to reconcile deleted dirty ID in v2, will retry",
 					logger.Uint64("id", uint64(dirtyID)),
 					logger.Error(recErr))
@@ -714,7 +713,7 @@ func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int
 			continue // Leave as dirty for next attempt
 		}
 
-		// Successfully migrated — remove from dirty set
+		// Successfully migrated: remove from dirty set
 		if removeErr := w.stateManager.RemoveDirtyID(dirtyID); removeErr != nil {
 			w.logger.Warn("failed to remove dirty ID after migration",
 				logger.Uint64("id", uint64(dirtyID)),
@@ -725,6 +724,26 @@ func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int
 	return caught, nil
 }
 
+// reconcileDeletedGhost removes from v2 a detection whose legacy row no longer exists and
+// clears its dirty marker. Legacy is the source of truth during migration, so a missing
+// legacy row means the detection was deleted; a surviving v2 row is an orphan that would
+// resurrect after v2 promotion. A row already absent from v2 (ErrDetectionNotFound) needs
+// no delete. A locked, user-verified v2 row (ErrDetectionLocked) is never force-deleted;
+// its marker is still cleared so the id does not linger in the dirty set and block
+// migration validation forever, and the protected row is left in place. Any other delete
+// error leaves the marker for a later retry (a non-nil return); it returns nil once the
+// marker is cleared or the row was already gone.
+func reconcileDeletedGhost(ctx context.Context, v2Repo repository.DetectionRepository, sm *datastoreV2.StateManager, id uint) error {
+	if v2Repo == nil || sm == nil {
+		return fmt.Errorf("reconcile deleted ghost %d: nil repository or state manager", id)
+	}
+	if delErr := v2Repo.Delete(ctx, id); delErr != nil &&
+		!errors.Is(delErr, repository.ErrDetectionNotFound) && !errors.Is(delErr, repository.ErrDetectionLocked) {
+		return delErr
+	}
+	return sm.RemoveDirtyID(id)
+}
+
 // runCatchUp finds and migrates records that exist in legacy but not in V2.
 // Unlike processBatch which continues from LastMigratedID, this function
 // scans the entire legacy database to find actually missing records.
@@ -733,7 +752,7 @@ func (w *Worker) processDirtyIDsBatch(ctx context.Context, dirtyIDs []uint) (int
 func (w *Worker) runCatchUp(ctx context.Context) (int64, error) {
 	var totalCaught int64
 
-	// Phase 1: Process known dirty IDs first — these are the most likely cause
+	// Phase 1: Process known dirty IDs first, since these are the most likely cause
 	// of count mismatches and can be resolved without a full scan.
 	dirtyCaught, dirtyErr := w.processDirtyIDs(ctx)
 	if dirtyErr != nil {
@@ -875,7 +894,7 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 		}
 	}
 
-	// Continue running — next iteration will enter tail sync via COMPLETED case
+	// Continue running: next iteration will enter tail sync via COMPLETED case
 	return runActionContinue
 }
 
@@ -920,7 +939,7 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 			break
 		}
 		// If no records were synced in a non-empty batch, all records failed.
-		// Break to avoid a tight retry loop — failed records are tracked as
+		// Break to avoid a tight retry loop: failed records are tracked as
 		// dirty IDs and will be retried on the next tail sync cycle.
 		if synced == 0 {
 			w.logger.Warn("tail sync: all records in batch failed, backing off")
@@ -1307,7 +1326,7 @@ func (w *Worker) validateWithCounts(ctx context.Context) (legacyCount, v2Count i
 		logger.Int64("legacy", legacyCount),
 		logger.Int64("v2", v2Count))
 
-	// V2 should have at least as many records as legacy (could have more from dual-write)
+	// V2 should have at least as many records as legacy (it can have more, for example a locked v2 row kept after its legacy row was deleted)
 	if v2Count < legacyCount {
 		return legacyCount, v2Count, fmt.Errorf("v2 count (%d) is less than legacy count (%d)", v2Count, legacyCount)
 	}
@@ -1406,10 +1425,10 @@ type batchResult struct {
 // Returns the number of records migrated and the highest ID processed.
 func (w *Worker) processBatch(ctx context.Context) (batchResult, error) {
 	// Get the last migrated ID from the state manager (NOT from V2 table).
-	// CRITICAL: We must use state.LastMigratedID because during dual-write mode,
-	// new detections are written to V2 with high IDs. Querying MAX(legacy_id)
-	// from V2 would return the newest detection's ID, causing the worker to
-	// incorrectly believe all historical records have been migrated.
+	// CRITICAL: We must use state.LastMigratedID because V2 can hold
+	// rows above the watermark (for example from catch-up or tail sync). Querying
+	// MAX(legacy_id) from V2 would then run ahead of the watermark, causing the
+	// worker to incorrectly believe all historical records have been migrated.
 	state, err := w.stateManager.GetState()
 	if err != nil {
 		return batchResult{}, fmt.Errorf("failed to get migration state: %w", err)
@@ -1649,7 +1668,11 @@ func (w *Worker) updateExistingRecords(ctx context.Context, records []*detection
 		}
 		if det.ClipName != nil {
 			updates["clip_name"] = *det.ClipName
+			// Keep clip_name and spectrogram_clip_name mutually exclusive.
+			updates["spectrogram_clip_name"] = nil
 		}
+		// clip_sample_rate is deliberately not touched: the legacy table has no such
+		// column, so the migration has nothing to copy and must not clear a stored value.
 
 		if updateErr := w.v2Detection.Update(ctx, r.ID, updates); updateErr != nil {
 			w.logger.Warn("failed to update record", logger.Uint64("id", uint64(r.ID)), logger.Error(updateErr))
@@ -1676,7 +1699,7 @@ func (w *Worker) migrateRecord(ctx context.Context, result *detection.Result) er
 		return fmt.Errorf("conversion failed: %w", err)
 	}
 
-	// Check if record already exists in V2 (from dual-write)
+	// Check if record already exists in V2 (from an earlier pass)
 	existing, err := w.v2Detection.Get(ctx, result.ID)
 	if err == nil && existing != nil {
 		// Record already exists - check if it's locked
@@ -1699,7 +1722,10 @@ func (w *Worker) migrateRecord(ctx context.Context, result *detection.Result) er
 		}
 		if det.ClipName != nil {
 			updates["clip_name"] = *det.ClipName
+			// Keep clip_name and spectrogram_clip_name mutually exclusive.
+			updates["spectrogram_clip_name"] = nil
 		}
+		// clip_sample_rate is left untouched here too (see the update above).
 		return w.v2Detection.Update(ctx, result.ID, updates)
 	}
 

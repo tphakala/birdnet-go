@@ -73,19 +73,12 @@ func migrateStreamEnabledDefaults() bool {
 // configs that predate the field so session signing remains stable across
 // restarts. Unlike the security package's temporary runtime fallback, this
 // updates the loaded settings and best-effort saves the generated secret.
-func ensureSessionSecret(settings *Settings) error {
+func ensureSessionSecret(settings *Settings) {
 	if settings.Security.SessionSecret != "" {
-		return nil
+		return
 	}
 
-	sessionSecret, err := GenerateRandomSecret()
-	if err != nil {
-		return errors.New(err).
-			Component("conf").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "generate_session_secret").
-			Build()
-	}
+	sessionSecret := GenerateRandomSecret()
 
 	settings.Security.SessionSecret = sessionSecret
 
@@ -99,21 +92,19 @@ func ensureSessionSecret(settings *Settings) error {
 	// This ensures the secret remains the same across restarts
 	configFile := viper.ConfigFileUsed()
 	if configFile == "" {
-		return nil
+		return
 	}
 
 	if err := SaveYAMLConfig(configFile, settings); err != nil {
 		// Log the error but don't fail - the generated secret will work for this session
 		GetLogger().Warn("Failed to save generated SessionSecret to config file", logger.Error(err))
-		return nil
+		return
 	}
 
 	// Set secure file permissions after saving
 	if err := os.Chmod(configFile, 0o600); err != nil {
 		GetLogger().Warn("Failed to set secure permissions on config file", logger.Error(err))
 	}
-
-	return nil
 }
 
 // EnsureProfilingToken mints diagnostics.profiling.token when the pprof
@@ -137,31 +128,22 @@ func ensureSessionSecret(settings *Settings) error {
 //
 // The caller owns persistence, and is told whether anything changed so it can
 // decide whether a write is needed.
-func EnsureProfilingToken(settings *Settings) (bool, error) {
+func EnsureProfilingToken(settings *Settings) bool {
 	if settings == nil {
-		return false, nil
+		return false
 	}
 
 	profiling := &settings.Diagnostics.Profiling
 	if !profiling.Enabled || profiling.Token != "" || settings.IsAuthProviderConfigured() {
-		return false, nil
+		return false
 	}
 
-	token, err := GenerateRandomSecret()
-	if err != nil {
-		return false, errors.New(err).
-			Component("conf").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "generate_profiling_token").
-			Build()
-	}
-
-	profiling.Token = token
+	profiling.Token = GenerateRandomSecret()
 
 	// The value itself is never logged.
 	GetLogger().Info("Generated profiling token; no authentication provider is configured, so /debug/pprof/ requires the token from diagnostics.profiling.token")
 
-	return true, nil
+	return true
 }
 
 // migrateLegacyProvider converts a legacy SocialProvider to the new OAuthProviderConfig format.
@@ -384,12 +366,33 @@ func (s *Settings) MigrateSourceModels() bool {
 	return migrated
 }
 
-// configVersionSourceTargetDefaults is the config file version stamped by
-// MigrateSourceTargetDefaults. An empty per-source or per-stream model list changed
-// meaning from "the built-in BirdNET v2.4" to "the orchestrator's default targets"
-// (model de-privilege epic, Phase 4); the migration pins every pre-Phase-4 empty list
-// to ["birdnet"] once so no source changes targets. Later phases add higher versions.
-const configVersionSourceTargetDefaults = 1
+// Config file versions. Each constant names the one-shot migration that raises the file to
+// that version; currentConfigVersion is the newest one this build applies. A freshly
+// generated config is stamped with currentConfigVersion (stampConfigVersion) so this
+// build's one-shot migrations never rewrite a file it just created.
+//
+// A migration step that runs OUTSIDE conf.Load() must NEVER gate on ConfigVersion: Part A
+// of the models-enabled-authoritative migration stamps ConfigVersion=2 inside Load(), so a
+// later step (e.g. the classifier's one-shot auto-enable capture in ScanInstalled) that
+// gated on ConfigVersion<2 would be silently disabled by that stamp. Such steps use an
+// independent companion marker instead (see ModelsConfig.AutoEnableMigrated).
+const (
+	// configVersionSourceTargetDefaults: an empty per-source or per-stream model list changed
+	// meaning from "the built-in BirdNET v2.4" to "the orchestrator's default targets" (model
+	// de-privilege epic, Phase 4); MigrateSourceTargetDefaults pins every pre-Phase-4 empty
+	// list to ["birdnet"] once so no source changes targets.
+	configVersionSourceTargetDefaults = 1
+
+	// configVersionModelsEnabledAuthoritative: models.enabled became the only source of the
+	// enabled model set (model de-privilege epic, Phase 4). Before it the orchestrator enabled
+	// BirdNET v2.4 implicitly, ahead of every listed model, whether or not the list named it;
+	// MigrateModelsEnabledAuthoritative writes that implicit lead out once so every existing
+	// install keeps loading the same models in the same order.
+	configVersionModelsEnabledAuthoritative = 2
+
+	// currentConfigVersion is the newest config version this build applies.
+	currentConfigVersion = configVersionModelsEnabledAuthoritative
+)
 
 // MigrateSourceTargetDefaults writes ["birdnet"] into every source and stream whose
 // model list is empty, exactly once per config file, then stamps ConfigVersion.
@@ -416,6 +419,51 @@ func (s *Settings) MigrateSourceTargetDefaults() bool {
 	}
 	s.ConfigVersion = configVersionSourceTargetDefaults
 	return true
+}
+
+// MigrateModelsEnabledAuthoritative makes models.enabled the authoritative, ordered enable
+// set (model de-privilege epic, Phase 4). Before this version the orchestrator enabled
+// BirdNET v2.4 implicitly and ALWAYS loaded it first, whether or not the list named it;
+// once the orchestrator collapses to config-order loading, only the list order decides the
+// load order, so an existing install whose list omits v2.4 (or names it later) would change
+// its load order. Exactly once per config file, at a version below 2, this reproduces the
+// legacy v2.4-first order: if a v2.4 spelling is already present it is MOVED to the front
+// (keeping its spelling), otherwise "birdnet" is prepended; then ConfigVersion is stamped
+// to 2. An explicit empty list at a lower version still loaded v2.4 implicitly, so it gets
+// "birdnet" prepended too; after this version an empty list means "no acoustic model" and
+// is left alone. Runs after MigrateSourceTargetDefaults, so a version-0 file gets both.
+// Returns true when the list or the stamp changed, so persistMigration writes the file.
+func (s *Settings) MigrateModelsEnabledAuthoritative() bool {
+	if s.ConfigVersion >= configVersionModelsEnabledAuthoritative {
+		return false
+	}
+	switch idx := slices.IndexFunc(s.Models.Enabled, isBirdNETV24ConfigID); {
+	case idx < 0:
+		// v2.4 absent (including an explicit empty list): prepend the canonical spelling.
+		s.Models.Enabled = append([]string{ModelIDBirdNET}, s.Models.Enabled...)
+	case idx > 0:
+		// v2.4 present but not first: move it to the front keeping its spelling, so the
+		// config-order load reproduces the legacy v2.4-first order byte-for-byte. A later
+		// duplicate v2.4 spelling is left in place; the loader deduplicates it.
+		v24 := s.Models.Enabled[idx]
+		s.Models.Enabled = slices.Delete(s.Models.Enabled, idx, idx+1)
+		s.Models.Enabled = append([]string{v24}, s.Models.Enabled...)
+	default:
+		// idx == 0: v2.4 already leads; only the version stamp below changes.
+	}
+	s.ConfigVersion = configVersionModelsEnabledAuthoritative
+	return true
+}
+
+// isBirdNETV24ConfigID reports whether a models.enabled entry names the BirdNET v2.4 family
+// under either config spelling, case-insensitively. MigrateModelIDAliases runs later in
+// Load, so the catalog spelling ("birdnet-v2.4") can still be present here; matching it
+// keeps the migration from prepending a duplicate "birdnet". The conf package cannot read
+// the classifier registry (import cycle), so the two spellings are the alias set from
+// ModelRegistry[RegistryIDBirdNETV24].ConfigAliases; TestModelRegistry_V24AliasesMatchConf
+// pins the two lists in lockstep.
+func isBirdNETV24ConfigID(id string) bool {
+	return strings.EqualFold(id, ModelIDBirdNET) || strings.EqualFold(id, ModelIDBirdNETCatalog)
 }
 
 // normalizeRTSPStreamEnabledDefaults materializes enabled=true for legacy raw

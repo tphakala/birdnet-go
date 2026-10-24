@@ -130,14 +130,13 @@
     const sendsDrillDownHour = isDrillDown && Boolean(params.get('hour'));
     const hourRange = hourBandToParam(activeFilters);
 
+    const durationParam = params.get('duration');
+
     return {
       queryType,
       date,
       hour: sendsDrillDownHour ? (params.get('hour') ?? undefined) : undefined,
-      duration:
-        sendsDrillDownHour && params.get('duration')
-          ? parseInt(params.get('duration')!)
-          : undefined,
+      duration: sendsDrillDownHour && durationParam ? parseInt(durationParam) : undefined,
       species: params.get('species') || undefined,
       search: search || undefined,
       numResults,
@@ -240,14 +239,13 @@
         search: queryParams.search,
         filters,
         numResults: validatedNumResults,
-        offset: queryParams.offset!,
+        offset: queryParams.offset ?? 0,
         totalResults: data.total || 0,
         itemsPerPage: data.limit || validatedNumResults,
         currentPage: data.current_page || 1,
         totalPages: data.total_pages || 1,
         showingFrom: (queryParams.offset || 0) + 1,
         showingTo: Math.min((queryParams.offset || 0) + (data.data?.length || 0), data.total || 0),
-        dashboardSettings: data.dashboardSettings,
       };
     } catch (err) {
       error = err instanceof Error ? err.message : t('detections.errors.fetchFailed');

@@ -20,6 +20,11 @@ type Job struct {
 	LastError              error       // Last error encountered
 	Config                 RetryConfig // Retry configuration for this job
 	TestExemptFromDropping bool        // Flag to indicate if this job should be exempt from dropping during queue overflow
+
+	// abandonedAt is when the queue stopped waiting for an attempt that overran
+	// its timeout; it is non-zero while that attempt's goroutine is still
+	// running. Guarded by JobQueue.mu.
+	abandonedAt time.Time
 }
 
 // JobStats tracks statistics about job processing

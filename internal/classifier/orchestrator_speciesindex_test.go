@@ -151,10 +151,12 @@ func TestSpeciesIndex_RebuiltOnRebuildNameResolver(t *testing.T) {
 // species-name snapshot.
 func TestSpeciesIndex_RebuiltOnPrimaryReload(t *testing.T) {
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	// Sequential subtests share o; each reload must publish a fresh snapshot pointer.

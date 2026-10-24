@@ -179,6 +179,17 @@ func (m *ActionMockDatastore) GetNoteClipPath(_ string) (string, error) {
 func (m *ActionMockDatastore) GetNoteModelType(_ string) (string, error) {
 	return "bird", nil
 }
+func (m *ActionMockDatastore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
+	return "", "bird", nil
+}
+
+func (m *ActionMockDatastore) RecordClipSampleRate(_ context.Context, _ uint, _ string, _ int) error {
+	return nil
+}
+
+func (m *ActionMockDatastore) FillClipSampleRate(_ context.Context, _ uint, _ string, _ int) (bool, error) {
+	return false, nil
+}
 func (m *ActionMockDatastore) DeleteNoteClipPath(_ string) error {
 	return nil
 }
@@ -263,6 +274,9 @@ func (m *ActionMockDatastore) GetLockedNotesClipPaths() ([]string, error) {
 	return nil, nil
 }
 func (m *ActionMockDatastore) ClearNoteClipPathsByNames(_ []string) (int64, error) {
+	return 0, nil
+}
+func (m *ActionMockDatastore) RetainNoteSpectrogramsByClipNames(_ []string) (int64, error) {
 	return 0, nil
 }
 func (m *ActionMockDatastore) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {
@@ -546,6 +560,14 @@ func (m *MockDetectionRepository) CountAll(_ context.Context) (int64, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return int64(m.savedCount), nil
+}
+
+func (m *MockDetectionRepository) RecordClipSampleRate(_ context.Context, _ uint, _ string, _ int) error {
+	return nil
+}
+
+func (m *MockDetectionRepository) FillClipSampleRate(_ context.Context, _ uint, _ string, _ int) (bool, error) {
+	return false, nil
 }
 
 // Compile-time check that MockDetectionRepository implements datastore.DetectionRepository

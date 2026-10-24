@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -391,4 +392,52 @@ func TestNewCORS_AllowsCacheControlHeader(t *testing.T) {
 
 	assert.Contains(t, rec.Header().Get(echo.HeaderAccessControlAllowHeaders), echo.HeaderCacheControl,
 		"CORS preflight must allow the Cache-Control request header for cross-origin SSE")
+}
+
+// TestNewSecureHeaders_HSTSFollowsEchoScheme pins that HSTS is decided by
+// Echo's Context.Scheme(), which Echo#SchemeExtractor controls.
+func TestNewSecureHeaders_HSTSFollowsEchoScheme(t *testing.T) {
+	t.Parallel()
+
+	const stubHTTPS, stubHTTP = "https", "http"
+
+	tests := []struct {
+		name           string
+		scheme         string
+		maxAge         int
+		excludeSubs    bool
+		wantHSTS       bool
+		wantSubdomains bool
+	}{
+		{name: "https scheme sends HSTS with subdomains", scheme: stubHTTPS, maxAge: HSTSMaxAge, wantHSTS: true, wantSubdomains: true},
+		{name: "http scheme sends no HSTS", scheme: stubHTTP, maxAge: HSTSMaxAge},
+		{name: "zero max age sends no HSTS even on https", scheme: stubHTTPS, maxAge: 0},
+		{name: "exclude subdomains drops includeSubdomains", scheme: stubHTTPS, maxAge: HSTSMaxAge, excludeSubs: true, wantHSTS: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e := echo.New()
+			e.SchemeExtractor = func(*http.Request) string { return tt.scheme }
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+
+			cfg := DefaultSecurityConfig()
+			cfg.HSTSMaxAge = tt.maxAge
+			cfg.HSTSExcludeSubdomains = tt.excludeSubs
+			h := NewSecureHeaders(cfg)(func(echo.Context) error { return nil })
+			require.NoError(t, h(c))
+
+			got := rec.Header().Get("Strict-Transport-Security")
+			if !tt.wantHSTS {
+				assert.Empty(t, got)
+				return
+			}
+			assert.Contains(t, got, "max-age=")
+			assert.Equal(t, tt.wantSubdomains, strings.Contains(got, "includeSubdomains"))
+		})
+	}
 }

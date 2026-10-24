@@ -80,8 +80,8 @@ func TestParseFileInfoReturnsUnrecognizedForBadFormat(t *testing.T) {
 			require.ErrorIs(t, err, errUnrecognizedFilename)
 
 			// Must NOT be an EnhancedError (which would be reported to Sentry)
-			var enhanced *errors.EnhancedError
-			assert.False(t, errors.As(err, &enhanced), "should not be an EnhancedError")
+			_, ok := errors.AsType[*errors.EnhancedError](err)
+			assert.False(t, ok, "should not be an EnhancedError")
 		})
 	}
 }
@@ -135,14 +135,14 @@ func TestStripDurationSuffix(t *testing.T) {
 		{"turdus_migratorius_94p_20260309T092833Z_86s", "turdus_migratorius_94p_20260309T092833Z"},
 		{"cyanocitta_cristata_89p_20210106T150405Z_38s", "cyanocitta_cristata_89p_20210106T150405Z"},
 		{"bubo_bubo_100p_20210102T150405Z_120s", "bubo_bubo_100p_20210102T150405Z"},
-		// No duration suffix — should be unchanged
+		// No duration suffix; should be unchanged
 		{"bubo_bubo_80p_20210102T150405Z", "bubo_bubo_80p_20210102T150405Z"},
 		// Not a valid duration suffix
 		{"bubo_bubo_80p_20210102T150405Z_abc", "bubo_bubo_80p_20210102T150405Z_abc"},
 		// Signed numbers should not match
 		{"bubo_bubo_80p_20210102T150405Z_-5s", "bubo_bubo_80p_20210102T150405Z_-5s"},
 		{"bubo_bubo_80p_20210102T150405Z_+5s", "bubo_bubo_80p_20210102T150405Z_+5s"},
-		// Single character — not enough
+		// Single character; not enough
 		{"bubo_bubo_80p_20210102T150405Z_s", "bubo_bubo_80p_20210102T150405Z_s"},
 		// No underscores at all
 		{"nounderscores", "nounderscores"},

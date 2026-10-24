@@ -19,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/schedule"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/classifier/region"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/events"
@@ -59,7 +60,7 @@ func (c *Controller) initSettingsRoutes() {
 	// (species summary limit, layout, locale, thumbnails settings, etc.)
 	// before login. The Layout is already exposed publicly via
 	// /api/v2/app/config (see PR #2402). Mutations (PATCH) on this section
-	// remain auth-protected — see the settingsGroup PATCH handler below.
+	// remain auth-protected (see the settingsGroup PATCH handler below).
 	// Registered on the parent group so that Echo's router matches this
 	// static path before the auth-protected `/:section` parameter route.
 	c.Group.GET("/settings/dashboard", c.GetDashboardSettings)
@@ -76,6 +77,9 @@ func (c *Controller) initSettingsRoutes() {
 	settingsGroup.GET("/imageproviders", c.GetImageProviders)
 	// GET /api/v2/settings/systemid - Retrieves the system ID for support tracking (must be before /:section)
 	settingsGroup.GET("/systemid", c.GetSystemID)
+	// GET /api/v2/settings/connection - Classifies the requester's own connection against
+	// security.trustedProxies (read-only, must be before /:section)
+	settingsGroup.GET("/connection", c.GetConnectionCheck)
 	// GET /api/v2/settings/:section - Retrieves settings for a specific section (e.g., birdnet, webserver)
 	// NOTE: /settings/dashboard is intentionally registered publicly above and
 	// will match before this parameterized route.
@@ -83,7 +87,7 @@ func (c *Controller) initSettingsRoutes() {
 	// PUT /api/v2/settings - Updates multiple settings sections with complete replacement
 	settingsGroup.PUT("", c.UpdateSettings)
 	// PATCH /api/v2/settings/:section - Updates a specific settings section with partial replacement
-	// (includes /settings/dashboard — writes remain auth-protected).
+	// (includes /settings/dashboard; writes remain auth-protected).
 	settingsGroup.PATCH("/:section", c.UpdateSectionSettings)
 
 	c.LogInfoIfEnabled("Settings routes initialized successfully")
@@ -129,7 +133,7 @@ const dashboardSectionName = "dashboard"
 // section so that unauthenticated guests can render the SPA dashboard
 // (species summary limit, layout, locale, thumbnails, etc.) without first
 // completing login. The Dashboard section contains no secrets, tokens, or
-// PII — the full settings payload (which does) remains behind auth. Writes
+// PII; the full settings payload (which does) remains behind auth. Writes
 // to this section are handled by UpdateSectionSettings and remain
 // auth-protected.
 func (c *Controller) GetDashboardSettings(ctx echo.Context) error {
@@ -377,9 +381,6 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	})
 }
 
-// publishAndSaveSettings publishes updated settings and persists to disk.
-// Must be called while c.settingsMutex is held. On save failure, the atomic
-// Settings snapshot is rolled back to current.
 // ensureProfilingTokenForSave mints the profiling token into a settings
 // snapshot that is about to be published and persisted, so enabling pprof at
 // runtime on an instance with no authentication provider yields a usable
@@ -393,19 +394,18 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 // diagnostics change, so the two handlers that CAN (PUT /settings and
 // PATCH /settings/:section) never minted anything.
 //
-// Non-fatal by design. The pprof routes fail closed without a token, and a
-// diagnostics credential must not cost the user the rest of their settings
-// change. EnsureProfilingToken is a no-op unless profiling is enabled, the
-// token is empty, and no auth provider is configured, so the normal save path
-// pays a boolean check and nothing else.
+// EnsureProfilingToken is a no-op unless profiling is enabled, the token is
+// empty, and no auth provider is configured, so the normal save path pays a
+// boolean check and nothing else.
 func ensureProfilingTokenForSave(updated *conf.Settings) {
-	if _, err := conf.EnsureProfilingToken(updated); err != nil {
-		apicore.GetLogger().Warn(
-			"Failed to generate profiling token; the profiling endpoints will refuse requests",
-			logger.Error(err))
-	}
+	// Whether a token was minted does not matter here: the caller persists the
+	// whole snapshot either way.
+	conf.EnsureProfilingToken(updated)
 }
 
+// publishAndSaveSettings publishes updated settings and persists to disk.
+// Must be called while c.settingsMutex is held. On save failure, the atomic
+// Settings snapshot is rolled back to current.
 func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
 	ensureProfilingTokenForSave(updated)
 	if c.isGlobalOwner {
@@ -689,9 +689,9 @@ func mergeJSONIntoStruct(data json.RawMessage, target any) error {
 	// slice elements. By nilling slices first, json.Unmarshal allocates fresh
 	// backing arrays and every element starts at its zero value.
 	//
-	// Only slices are affected — scalar, map, and struct fields are correctly
+	// Only slices are affected: scalar, map, and struct fields are correctly
 	// overwritten by json.Unmarshal. We must NOT zero the entire struct because
-	// fields tagged json:"-" (runtime values like Labels, SoxAudioTypes) would
+	// fields tagged json:"-" (runtime values like Labels) would
 	// be destroyed and are absent from mergedJSON.
 	zeroJSONSliceFields(reflect.ValueOf(target))
 
@@ -716,7 +716,7 @@ func zeroJSONSliceFields(v reflect.Value) {
 		if !field.CanSet() {
 			continue
 		}
-		// Skip fields invisible to JSON — they hold runtime values not
+		// Skip fields invisible to JSON: they hold runtime values not
 		// present in mergedJSON and would be permanently lost.
 		if tag, ok := sf.Tag.Lookup("json"); ok && tag == "-" {
 			continue
@@ -731,7 +731,7 @@ func zeroJSONSliceFields(v reflect.Value) {
 				zeroJSONSliceFields(field)
 			}
 		default:
-			// Only slices need zeroing — scalars, maps, etc. are correctly
+			// Only slices need zeroing: scalars, maps, etc. are correctly
 			// overwritten by json.Unmarshal without stale value issues.
 		}
 	}
@@ -940,7 +940,7 @@ func zeroJSONSliceAndMapFields(v reflect.Value) {
 		if !field.CanSet() {
 			continue
 		}
-		// Skip fields invisible to JSON — they hold runtime values not present in
+		// Skip fields invisible to JSON: they hold runtime values not present in
 		// mergedJSON and would be permanently lost.
 		if tag, ok := sf.Tag.Lookup("json"); ok && tag == "-" {
 			continue
@@ -1789,7 +1789,7 @@ func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
 	sanitized.Security.GithubAuth.ClientSecret = redact(s.Security.GithubAuth.ClientSecret)
 	sanitized.Security.MicrosoftAuth.ClientSecret = redact(s.Security.MicrosoftAuth.ClientSecret)
 
-	// Array-based OAuth providers — must copy the slice to avoid mutating the original
+	// Array-based OAuth providers: must copy the slice to avoid mutating the original
 	if len(s.Security.OAuthProviders) > 0 {
 		providers := make([]conf.OAuthProviderConfig, len(s.Security.OAuthProviders))
 		sanitized.Security.OAuthProviders = providers
@@ -1809,6 +1809,7 @@ func sanitizeSettingsForAPI(s *conf.Settings) *conf.Settings {
 	// --- Weather API keys ---
 	sanitized.Realtime.Weather.OpenWeather.APIKey = redact(s.Realtime.Weather.OpenWeather.APIKey)
 	sanitized.Realtime.Weather.Wunderground.APIKey = redact(s.Realtime.Weather.Wunderground.APIKey)
+	sanitized.Realtime.Weather.PirateWeather.APIKey = redact(s.Realtime.Weather.PirateWeather.APIKey)
 
 	// --- eBird API key ---
 	sanitized.Realtime.EBird.APIKey = redact(s.Realtime.EBird.APIKey)
@@ -1887,7 +1888,7 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 		apicore.RestoreRedactedSecret(*cur, inc)
 	}
 
-	// Security — defense-in-depth: restore even though SessionSecret is
+	// Security (defense-in-depth): restore even though SessionSecret is
 	// also in the blocked field map (protects against future unblocking).
 	restore(&current.Security.SessionSecret, &incoming.Security.SessionSecret)
 	restore(&current.Security.BasicAuth.Password, &incoming.Security.BasicAuth.Password)
@@ -1898,7 +1899,7 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// Diagnostics
 	restore(&current.Diagnostics.Profiling.Token, &incoming.Diagnostics.Profiling.Token)
 
-	// Array-based OAuth providers — match by Provider name to handle reordering
+	// Array-based OAuth providers: match by Provider name to handle reordering
 	for i := range incoming.Security.OAuthProviders {
 		if incoming.Security.OAuthProviders[i].ClientSecret != redactedValue {
 			continue
@@ -1920,6 +1921,7 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 	// Weather API keys
 	restore(&current.Realtime.Weather.OpenWeather.APIKey, &incoming.Realtime.Weather.OpenWeather.APIKey)
 	restore(&current.Realtime.Weather.Wunderground.APIKey, &incoming.Realtime.Weather.Wunderground.APIKey)
+	restore(&current.Realtime.Weather.PirateWeather.APIKey, &incoming.Realtime.Weather.PirateWeather.APIKey)
 
 	// eBird
 	restore(&current.Realtime.EBird.APIKey, &incoming.Realtime.EBird.APIKey)
@@ -1949,7 +1951,7 @@ func restoreRedactedSecrets(current, incoming *conf.Settings) error {
 		}
 	}
 
-	// Webhook auth secrets — match by provider Name + endpoint URL to handle reordering
+	// Webhook auth secrets: match by provider Name + endpoint URL to handle reordering
 	// Build a map of current providers keyed by Name for O(1) lookup.
 	curProvidersByName := make(map[string]*conf.PushProviderConfig, len(current.Notification.Push.Providers))
 	for i := range current.Notification.Push.Providers {
@@ -1999,7 +2001,7 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 		}
 	}
 
-	// Scalar secret fields — these always have a 1:1 restore and should
+	// Scalar secret fields: these always have a 1:1 restore and should
 	// never remain as sentinel, but check defensively.
 	check(s.Security.SessionSecret, "security.sessionSecret")
 	check(s.Security.BasicAuth.Password, "security.basicAuth.password")
@@ -2011,6 +2013,7 @@ func validateNoRedactedSentinels(s *conf.Settings) error {
 	check(s.Output.MySQL.Password, "output.mysql.password")
 	check(s.Realtime.Weather.OpenWeather.APIKey, "realtime.weather.openWeather.apiKey")
 	check(s.Realtime.Weather.Wunderground.APIKey, "realtime.weather.wunderground.apiKey")
+	check(s.Realtime.Weather.PirateWeather.APIKey, "realtime.weather.pirateWeather.apiKey")
 	check(s.Realtime.EBird.APIKey, "realtime.ebird.apiKey")
 
 	// Array-based OAuth providers
@@ -2078,6 +2081,7 @@ func clearRedactedSentinels(s *conf.Settings) {
 	clearField(&s.Output.MySQL.Password)
 	clearField(&s.Realtime.Weather.OpenWeather.APIKey)
 	clearField(&s.Realtime.Weather.Wunderground.APIKey)
+	clearField(&s.Realtime.Weather.PirateWeather.APIKey)
 	clearField(&s.Realtime.EBird.APIKey)
 
 	for i := range s.Security.OAuthProviders {
@@ -2448,9 +2452,42 @@ const (
 // atomic stores that cannot fail and so need neither the controlChan queue nor
 // a toast. Anyone adding a diagnostics setting will look here first, hence this
 // pointer; the reasoning is at that call site.
+// modelsEnabledChanged reports whether the SET of known models named by models.enabled
+// changed. Registry IDs are compared (via classifier.ResolveConfigModelID), so order, case,
+// and entries that resolve to no known model are ignored. Since Phase 4 the list is
+// authoritative and N=0 is a valid runtime state, so a change must load or unload models at
+// runtime (via the reconcile_models signal) instead of waiting for a restart.
+func modelsEnabledChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldSet := knownModelIDSet(oldSettings.Models.Enabled)
+	curSet := knownModelIDSet(currentSettings.Models.Enabled)
+	if len(oldSet) != len(curSet) {
+		return true
+	}
+	for id := range oldSet {
+		if !curSet[id] {
+			return true
+		}
+	}
+	return false
+}
+
+// knownModelIDSet resolves the config entries to their registry IDs, dropping unknown
+// entries, so the comparison ignores order, case and models that do not exist.
+func knownModelIDSet(ids []string) map[string]bool {
+	set := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if registryID, known := classifier.ResolveConfigModelID(id); known {
+			set[registryID] = true
+		}
+	}
+	return set
+}
+
 var settingsChangeChecks = []settingsChangeCheck{
 	{"BirdNET", "reload_birdnet", birdnetSettingsChanged, "Reloading BirdNET model with new settings...", notification.MsgSettingsReloadingBirdnet, ToastTypeInfo, toastDurationLong},
+	{"Models.Enabled", "reconcile_models", modelsEnabledChanged, "Applying enabled model changes...", "", ToastTypeInfo, toastDurationLong},
 	{"Analysis overlap", actionRestartAudioCapture, analysisOverlapChanged, "Restarting audio capture to apply new overlap...", "", ToastTypeInfo, toastDurationMedium},
+	{"FP filter cadence", actionReconfigureAudioSources, falsePositiveFilterActiveChanged, "Re-planning the analysis cadence...", "", ToastTypeInfo, toastDurationMedium},
 	{"Range filter", "rebuild_range_filter", rangeFilterSettingsChanged, "Rebuilding species range filter...", notification.MsgSettingsRebuildingRangeFilter, ToastTypeInfo, toastDurationMedium},
 	{"Species interval", "update_detection_intervals", intervalSettingsChanged, "Updating detection intervals...", notification.MsgSettingsUpdatingIntervals, ToastTypeInfo, toastDurationShort},
 	{"Dynamic thresholds", "reconfigure_dynamic_thresholds", dynamicThresholdEnabledChanged, "Reconfiguring dynamic thresholds...", notification.MsgSettingsReconfiguringDynamicThresholds, ToastTypeInfo, toastDurationMedium},
@@ -2564,6 +2601,22 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	// marking above already has.
 	if coordinatesChanged(oldSettings, currentSettings) {
 		c.notifyRegionStaleness(oldSettings, currentSettings)
+	}
+
+	// Location, ModelRegion and the primary model path feed the optimize offers,
+	// and none of them fires a model topology event, so re-evaluate the bell
+	// notice here. The evaluation is debounced and runs off this goroutine. A
+	// location change can therefore raise both the region-staleness warning above
+	// and an optimize notice for the same regional model; which of the two should
+	// win is an open product decision, so both are kept for now.
+	if optimizeNoticeInputsChanged(oldSettings, currentSettings) {
+		c.scheduleOptimizeNoticeSync()
+	}
+
+	// The config, database, models and clips locations feed the storage
+	// persistence notices. The evaluation is debounced and runs off this goroutine.
+	if storageNoticeInputsChanged(oldSettings, currentSettings) {
+		c.system.ScheduleStorageNoticeSync()
 	}
 
 	// Trigger reconfigurations asynchronously.
@@ -2684,6 +2737,17 @@ func analysisOverlapChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.BirdNET.Overlap != currentSettings.BirdNET.Overlap
 }
 
+// falsePositiveFilterActiveChanged reports whether the bird false positive filter
+// crossed between off (level 0) and on (level >= 1). The analysis cadence cap
+// applies only while the filter is on, so crossing re-plans the cadence through
+// reconfigure_audio_sources, which restarts capture only when the effective
+// overlap actually changes. Level changes that stay on one side of 0 need no
+// action: the confirmation count is recomputed at flush time.
+func falsePositiveFilterActiveChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return cadence.FilterActive(oldSettings.Realtime.FalsePositiveFilter.Level) !=
+		cadence.FilterActive(currentSettings.Realtime.FalsePositiveFilter.Level)
+}
+
 // dynamicThresholdEnabledChanged checks if the DynamicThreshold.Enabled flag was toggled.
 // When this changes, the persistence and cleanup goroutines must be started or stopped
 // to match the new state.
@@ -2724,6 +2788,53 @@ func coordinatesChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.BirdNET.LocationConfigured != currentSettings.BirdNET.LocationConfigured ||
 		oldSettings.BirdNET.Latitude != currentSettings.BirdNET.Latitude ||
 		oldSettings.BirdNET.Longitude != currentSettings.BirdNET.Longitude
+}
+
+// optimizeNoticeInputsChanged reports whether a settings change alters an input
+// of the model optimize offers: the region the recommender scores against (the
+// station location, which auto region mode resolves from, or the ModelRegion
+// mode itself), or the configured primary model path, which decides whether the
+// BirdNET v2.4 offer is withheld from a user running a custom model.
+func optimizeNoticeInputsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return coordinatesChanged(oldSettings, currentSettings) ||
+		oldSettings.BirdNET.ModelRegion != currentSettings.BirdNET.ModelRegion ||
+		oldSettings.BirdNET.ModelPath != currentSettings.BirdNET.ModelPath
+}
+
+// optimizeNoticeScheduler is the part of the models handler the facade drives
+// to keep the model optimize bell notice in sync. It is an interface so the
+// wiring tests can observe the facade's calls.
+type optimizeNoticeScheduler interface {
+	ScheduleOptimizeNoticeSync()
+	StopOptimizeNoticeSync()
+}
+
+// optimizeNoticeHook boxes the scheduler for Controller.optimizeNotices, since
+// an atomic.Pointer needs a concrete type.
+type optimizeNoticeHook struct {
+	scheduler optimizeNoticeScheduler
+}
+
+// scheduleOptimizeNoticeSync asks the models handler to re-evaluate the model
+// optimize bell notice. It is a no-op until NewWithOptions publishes the
+// handler, which it does only when a ModelManager is wired and routes are
+// initialized.
+func (c *Controller) scheduleOptimizeNoticeSync() {
+	if h := c.optimizeNotices.Load(); h != nil {
+		h.scheduler.ScheduleOptimizeNoticeSync()
+	}
+}
+
+// storageNoticeInputsChanged reports whether a settings change alters an input
+// of the storage persistence notices: the models directory, the SQLite path, the
+// MySQL switch (which drops the database path), or the clip export switch and
+// path.
+func storageNoticeInputsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.Models.Directory != currentSettings.Models.Directory ||
+		oldSettings.Output.SQLite.Path != currentSettings.Output.SQLite.Path ||
+		oldSettings.Output.MySQL.Enabled != currentSettings.Output.MySQL.Enabled ||
+		oldSettings.Realtime.Audio.Export.Enabled != currentSettings.Realtime.Audio.Export.Enabled ||
+		oldSettings.Realtime.Audio.Export.Path != currentSettings.Realtime.Audio.Export.Path
 }
 
 // notifyRegionStaleness runs the recommend-only region staleness detector after
@@ -2798,7 +2909,7 @@ func mqttSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 // a stream (e.g., enables Perch v2 alongside BirdNET) the orchestrator must
 // rebind the stream's analysis pipeline. Without this check, the save
 // persists to disk but the running pipeline keeps using the previous model
-// set until a restart — silently breaking the hot-reload contract.
+// set until a restart, silently breaking the hot-reload contract.
 func streamsSettingsChanged(oldSettings, currentSettings *conf.Settings) bool {
 	oldRTSP := oldSettings.Realtime.RTSP
 	newRTSP := currentSettings.Realtime.RTSP

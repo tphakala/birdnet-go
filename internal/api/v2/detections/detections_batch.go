@@ -112,7 +112,7 @@ func (c *Handler) BatchDeleteDetections(ctx echo.Context) error {
 			continue
 		}
 
-		clipName := note.ClipName
+		mediaName := note.MediaName()
 		if err := c.DS.Delete(idStr); err != nil {
 			c.LogWarnIfEnabled("Batch delete: failed to delete detection",
 				logger.String("id", idStr),
@@ -122,8 +122,8 @@ func (c *Handler) BatchDeleteDetections(ctx echo.Context) error {
 		}
 
 		processed++
-		if clipName != "" {
-			c.removeDetectionFiles(clipName)
+		if mediaName != "" {
+			c.removeDetectionFiles(mediaName)
 		}
 	}
 
@@ -285,8 +285,11 @@ func (c *Handler) BatchResolveDetections(ctx echo.Context) error {
 		return err
 	}
 
-	notes, totalCount, err := c.getDetectionsByQueryType(params)
+	notes, totalCount, err := c.getDetectionsByQueryType(ctx.Request().Context(), params)
 	if err != nil {
+		if ended, respErr := c.respondIfRequestEnded(ctx, err, "Detection resolve request ended before completion"); ended {
+			return respErr
+		}
 		return c.HandleError(ctx, err, "Failed to resolve detections", http.StatusInternalServerError)
 	}
 

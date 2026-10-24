@@ -5,7 +5,8 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/classifier"
-	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 )
@@ -110,6 +111,8 @@ func (p *Processor) isExtendedCaptureSpecies(scientificName string) bool {
 }
 
 // resolveSpeciesFilter resolves the config species list into a set of scientific names.
+// A Perch multi-word sound class is keyed by its full lowercased label and can be
+// referenced by that label or by its spaced name.
 // Returns (isAll, resolvedSet) where isAll=true means all species qualify.
 // taxonomyDB may be nil if taxonomy is unavailable.
 func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier.TaxonomyDatabase, locale, operationName string) (isAll bool, resolvedSet map[string]bool) {
@@ -123,7 +126,12 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 	commonToScientific := make(map[string]string)
 	scientificNames := make(map[string]bool)
 	for _, label := range labels {
-		if sci, common, found := strings.Cut(label, "_"); found {
+		if id, display, ok := nonbird.MultiWordLabelNames(label); ok {
+			// Perch v2 multi-word sound class: the whole label is the scientific key.
+			idLower := strings.ToLower(id)
+			commonToScientific[strings.ToLower(display)] = idLower
+			scientificNames[idLower] = true
+		} else if sci, common, found := strings.Cut(label, "_"); found {
 			sciLower := strings.ToLower(sci)
 			commonLower := strings.ToLower(common)
 			commonToScientific[commonLower] = sciLower
@@ -232,23 +240,28 @@ func resolveSpeciesFilter(configSpecies, labels []string, taxonomyDB *classifier
 // normalizeDetectionTimes sets BeginTime/EndTime on an approved detection.
 // BeginTime is always backdated to FirstDetected so the audio clip starts from
 // the beginning of the event. EndTime handling depends on capture mode:
-//   - Extended captures: EndTime = LastUpdated + normal detection window (spans full session)
+//   - Extended captures: EndTime = LastUpdated + normal detection window (spans full session),
+//     with LastUpdated capped so EndTime stops at MaxDeadline once MaxDuration is at
+//     least the normal window (see detectionEndTime)
 //   - Normal captures: EndTime = FirstDetected + normal detection window (configured length)
 //
-// For extended captures the clip name is regenerated to reflect the actual duration.
-func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
-	settings := p.currentSettings()
+// EndTime comes from detectionEndTime, read with the caller's settings snapshot so the
+// saved span matches the one the privacy check used.
+// For extended captures the clip name is regenerated to reflect the actual duration,
+// with its container chosen from the Result's own model and sample rate, and the
+// planned clip sample rate is recomputed from it.
+func (p *Processor) normalizeDetectionTimes(item *PendingDetection, settings *conf.Settings) {
 	item.Detection.Result.BeginTime = item.FirstDetected
 
-	captureLength := time.Duration(settings.Realtime.Audio.Export.Length) * time.Second
-	preCaptureLength := time.Duration(settings.Realtime.Audio.Export.PreCapture) * time.Second
-	normalDetectionWindow := max(time.Duration(0), captureLength-preCaptureLength)
+	item.Detection.Result.EndTime = detectionEndTime(settings, item)
 
+	// For non-extended detections EndTime is recalculated from FirstDetected so the
+	// time span (EndTime - BeginTime) keeps the configured capture length even when
+	// a later higher-confidence detection replaced the Detection struct during the
+	// pending window. For extended captures it reflects LastUpdated (set on
+	// creation and every re-detection) + the normal detection window, with
+	// LastUpdated capped at MaxDeadline minus the window (see detectionEndTime).
 	if item.ExtendedCapture {
-		// For extended captures, EndTime reflects the last detection + normal detection window.
-		// LastUpdated is always initialized (set on creation and every re-detection).
-		item.Detection.Result.EndTime = item.LastUpdated.Add(normalDetectionWindow)
-
 		// Regenerate clip name with the actual duration (unknown at createDetection
 		// time), but only when export is enabled. When export is off the clip name
 		// stays empty so it remains a truthful per-detection signal (no file will be
@@ -263,19 +276,17 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection) {
 				durationSeconds,
 				item.Detection.Result.Timestamp,
 			)
-			// Reapply the bat WAV fallback so a bat detection above 48kHz keeps the
-			// .wav extension the exporter writes, instead of the configured
-			// MP3/Opus/AAC extension (matches createDetection's resolveClipName).
-			item.Detection.Result.ClipName = p.applyBatFormatFallback(
-				settings, clipName, item.BestModelID, datastore.AudioSource{ID: item.Source})
+			// Reapply the export-format extension so the stored ClipName records the
+			// container: a bat/ultrasonic detection above the analysis rate is named
+			// in UltrasonicType, not the configured Export.Type. The model and rate
+			// come from the Result, as in createDetection's resolveClipName.
+			item.Detection.Result.ClipName = p.applyExportFormatExtension(
+				settings, clipName, &item.Detection.Result)
+			// The clip may not have existed when the rate was planned (export was
+			// disabled then), so plan it again from the final clip name.
+			item.Detection.Result.ClipSampleRate = plannedClipSampleRate(
+				&item.Detection.Result, &settings.Realtime.Audio.Export)
 		}
-	} else {
-		// For non-extended detections, recalculate EndTime to maintain the configured
-		// capture window. BeginTime was backdated to FirstDetected, but EndTime may
-		// come from a later higher-confidence detection that replaced the Detection
-		// struct during the pending window. Without this recalculation, the time span
-		// (EndTime - BeginTime) inflates beyond the configured capture length.
-		item.Detection.Result.EndTime = item.FirstDetected.Add(normalDetectionWindow)
 	}
 }
 
@@ -307,7 +318,10 @@ func (p *Processor) applyExtendedCapture(mapKey string, now time.Time, normalDet
 //   - Medium (30s-2m): 30s after now
 //   - Long (>2m): 60s after now
 //
-// The result is always capped at maxDeadline to enforce the absolute maximum duration.
+// The result is always capped at maxDeadline. The privacy filter may still hold the
+// detection after that deadline until its clip is scanned, up to the clip end plus
+// the coverage wait; detectionEndTime caps the end time at the same bound, and the
+// saved clip ends PreCapture after it.
 func calculateExtendedFlushDeadline(now, firstDetected, maxDeadline time.Time, normalDetectionWindow time.Duration) time.Time {
 	sessionDuration := now.Sub(firstDetected)
 

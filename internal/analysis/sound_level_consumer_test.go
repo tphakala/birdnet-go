@@ -12,6 +12,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/soundlevel"
 )
 
+const (
+	consumerTestRate  = 48000
+	expectedBandCount = 30
+	oddFrameBytes     = 201
+)
+
 func TestSoundLevelConsumer_NilProcessor(t *testing.T) {
 	t.Parallel()
 
@@ -63,7 +69,7 @@ func TestSoundLevelConsumer_WriteEmptyFrame(t *testing.T) {
 	case <-ch:
 		t.Fatal("expected no data on channel for empty frame")
 	default:
-		// Good — no data.
+		// Good, no data.
 	}
 }
 
@@ -129,10 +135,55 @@ func TestSoundLevelConsumer_WriteProducesDataAfterInterval(t *testing.T) {
 		assert.Equal(t, "src-4", result.Source)
 		assert.Equal(t, "Source Four", result.Name)
 		assert.Equal(t, interval, result.Duration)
-		assert.NotEmpty(t, result.OctaveBands)
+		assert.Len(t, result.OctaveBands, expectedBandCount)
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for sound level data on channel")
 	}
+}
+
+func TestSoundLevelConsumer_WriteSpanningIntervalsPublishesEach(t *testing.T) {
+	t.Parallel()
+
+	// A 2.5 s write is longer than one decode chunk and spans two 1 s intervals.
+	const interval = 1
+	proc, err := soundlevel.NewProcessor("src-6", "Source Six", consumerTestRate, interval)
+	require.NoError(t, err)
+
+	consumer, ch, err := NewSoundLevelConsumer("slc-7", proc, consumerTestRate, 16, 1)
+	require.NoError(t, err)
+	require.Greater(t, 5*consumerTestRate/2, soundLevelDecodeChunk)
+
+	require.NoError(t, consumer.Write(audiocore.AudioFrame{
+		SourceID: "src-6",
+		Data:     makeSineWavePCM16(5*consumerTestRate/2, 440, consumerTestRate),
+	}))
+
+	assert.Len(t, ch, 2)
+}
+
+func TestSoundLevelConsumer_OddLengthFrameIsDropped(t *testing.T) {
+	t.Parallel()
+
+	const interval = 1
+	proc, err := soundlevel.NewProcessor("src-7", "Source Seven", consumerTestRate, interval)
+	require.NoError(t, err)
+
+	consumer, ch, err := NewSoundLevelConsumer("slc-8", proc, consumerTestRate, 16, 1)
+	require.NoError(t, err)
+
+	require.NoError(t, consumer.Write(audiocore.AudioFrame{
+		SourceID: "src-7",
+		Data:     make([]byte, oddFrameBytes),
+	}))
+	assert.Empty(t, ch)
+
+	// The dropped frame left no partial sample behind: one aligned second
+	// completes exactly one interval.
+	require.NoError(t, consumer.Write(audiocore.AudioFrame{
+		SourceID: "src-7",
+		Data:     makeSineWavePCM16(consumerTestRate, 440, consumerTestRate),
+	}))
+	assert.Len(t, ch, 1)
 }
 
 func TestSoundLevelConsumer_CloseRejectsWrites(t *testing.T) {

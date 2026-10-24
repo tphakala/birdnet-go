@@ -55,6 +55,9 @@ func TestInitFromDatabase_CriticalReliability(t *testing.T) {
 							{ScientificName: fmt.Sprintf("Seasonal_Species_%d", i), FirstSeenDate: "2024-04-01"},
 						}, nil).Once()
 				}
+				// Season carry-over lookback
+				ds.On("GetSpeciesFirstDetectionInPeriod", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+					Return([]datastore.NewSpeciesData{}, nil).Once()
 			},
 			&conf.SpeciesTrackingSettings{
 				Enabled:              true,
@@ -274,9 +277,9 @@ func TestCheckAndUpdateSpecies_CriticalReliability(t *testing.T) {
 			func(tracker *SpeciesTracker, now time.Time) {
 				tracker.speciesFirstSeen["Boundary_Species"] = now.AddDate(0, 0, -14) // Exactly 14 days
 			},
-			true, // Exactly at boundary is still "new"
+			false, // The notification window has expired
 			14,
-			"Species exactly at window boundary should still be new",
+			"Species exactly at window boundary should no longer trigger new-species notifications",
 		},
 		{
 			"yearly_tracking_update",

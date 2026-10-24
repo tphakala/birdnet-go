@@ -870,7 +870,7 @@
           type="button"
           onclick={handleSave}
           disabled={!isValid}
-          class="px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          class="px-4 py-1.5 rounded-lg text-xs font-medium bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
         >
           {rule ? t('common.buttons.save') : t('common.buttons.create')}
         </button>

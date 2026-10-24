@@ -6,7 +6,6 @@ import {
   safeArrayAccess,
   validateInput,
   safeRegexTest,
-  validateCIDR,
   validateProtocolURL,
   sanitizeFilename,
   createEnumLookup,
@@ -120,26 +119,6 @@ describe('Security Utilities', () => {
       const pattern = /./;
       const longString = 'a'.repeat(2000);
       expect(safeRegexTest(pattern, longString)).toBe(false);
-    });
-  });
-
-  describe('validateCIDR', () => {
-    it('should validate correct CIDR notation', () => {
-      expect(validateCIDR('192.168.1.0/24')).toBe(true);
-      expect(validateCIDR('10.0.0.0/8')).toBe(true);
-      expect(validateCIDR('172.16.0.0/12')).toBe(true);
-    });
-
-    it('should reject invalid CIDR notation', () => {
-      expect(validateCIDR('192.168.1.0')).toBe(false); // No mask
-      expect(validateCIDR('192.168.1.0/33')).toBe(false); // Invalid mask
-      expect(validateCIDR('256.168.1.0/24')).toBe(false); // Invalid octet
-      expect(validateCIDR('192.168.1/24')).toBe(false); // Missing octet
-      expect(validateCIDR('')).toBe(false);
-    });
-
-    it('should reject overly long input', () => {
-      expect(validateCIDR('192.168.1.0/24' + 'x'.repeat(100))).toBe(false);
     });
   });
 

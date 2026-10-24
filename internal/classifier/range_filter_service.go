@@ -142,12 +142,18 @@ const (
 // participant is loaded (N=0).
 func (v rangeFilterView) coveredLabels(settings *conf.Settings) []string {
 	if v.v24Labels != nil {
-		// v2.4 loaded: use the PUBLISHED v2.4 label set (settings.BirdNET.Labels), not
+		// v2.4 loaded: prefer the PUBLISHED v2.4 label set (settings.BirdNET.Labels), not
 		// the view's bn.Labels() clone. The two hold the same species but can differ in
 		// order (bn.Settings vs the atomic snapshot), and the pre-decouple fail-open and
-		// backfill paths indexed the published slice, so using it keeps the inclusion
-		// list and the name-resolver dedup byte-identical (invariant I1).
-		return settings.BirdNET.Labels
+		// backfill paths indexed the published slice, so using it keeps the inclusion list
+		// and the name-resolver dedup byte-identical (invariant I1). On the post-construction
+		// retry path (v2.4 failed at construction, loaded later via LoadModel), the global
+		// snapshot never received labels, so fall back to the loaded instance's own labels
+		// to avoid an empty covered set that would fail the inclusion list CLOSED.
+		if len(settings.BirdNET.Labels) > 0 {
+			return settings.BirdNET.Labels
+		}
+		return v.v24Labels
 	}
 	if len(v.participants) == 0 {
 		return nil
@@ -193,6 +199,18 @@ type rangeFilterState struct {
 	// fail-open path and scoreProbableSpecies index this slice, so a Perch-only or
 	// v3.0-only install fails open over its own species instead of an empty v2.4 list.
 	coveredLabels []string
+	// participants is the participant snapshot (registry ID + label set) this state's
+	// backend was actually built over, in rangeFilterView order. The status surface and
+	// the inclusion-list backfill read it instead of the live view, so a failed rebuild
+	// that kept the previous backend (rollback) cannot report a just-loaded participant
+	// as covered, and the display and gate lists are built from the same set (the
+	// display/gate reconciliation in Phase 4 PR B2). Empty on a torn-down or fresh service.
+	participants []participantLabels
+	// anchoredOnV24 records that coveredLabels is BirdNET v2.4's label space because v2.4
+	// was loaded at build time; false means coveredLabels is the participant union. It
+	// lets the coverage and backfill rules key on what the backend was built over rather
+	// than re-reading the live view (which can have drifted since the build).
+	anchoredOnV24 bool
 }
 
 // rangeFilterService owns the range-filter backend and occurrence cache.
@@ -251,6 +269,19 @@ func (rfs *rangeFilterService) loadState() *rangeFilterState {
 		return s
 	}
 	return &rangeFilterState{}
+}
+
+// hasParticipant reports whether id is in the participant set this state's backend was
+// built over. Coverage is reported only for participants the active backend actually
+// mapped, so a participant loaded after a failed rebuild (which kept the old backend) is
+// not falsely reported as covered.
+func (s *rangeFilterState) hasParticipant(id string) bool {
+	for i := range s.participants {
+		if s.participants[i].id == id {
+			return true
+		}
+	}
+	return false
 }
 
 // backendKind returns the loaded backend kind, mapping the zero value (an unpublished
@@ -320,6 +351,8 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() ran
 			rfs.state.Store(&rangeFilterState{
 				kind:          rfKindNone,
 				coveredLabels: view.coveredLabels(settings),
+				participants:  view.participants,
+				anchoredOnV24: view.v24Labels != nil,
 				generation:    cur.generation + 1,
 			})
 			rfs.mu.Unlock()
@@ -348,6 +381,8 @@ func (rfs *rangeFilterService) reload(settings *conf.Settings, viewFn func() ran
 		kind:          kind,
 		fellBack:      fellBack,
 		coveredLabels: covered,
+		participants:  view.participants,
+		anchoredOnV24: view.v24Labels != nil,
 		generation:    newGen,
 	})
 	// Close the replaced backend under rfs.mu: every prediction is serialized by the
@@ -453,11 +488,14 @@ func (rfs *rangeFilterService) clearSpeciesCache() {
 // scoring, exactly where BirdNET.getProbableSpecies released bn.mu, so scoring
 // never blocks a reload.
 //
-// Returns (scores, geomodel vocabulary, filterActive, err). geomodel is non-nil
-// only on the universal path; filterActive is false when the scores are the
+// Returns (scores, geomodel vocabulary, filterActive, state, err). geomodel is
+// non-nil only on the universal path; filterActive is false when the scores are the
 // synthetic all-zero fallback (no backend, or no location), so a caller never
-// reports a synthetic zero as "very rare" (#3935).
-func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, settings *conf.Settings) (probableSpecies []SpeciesScore, geomodel *LabelVocabulary, filterActive bool, err error) {
+// reports a synthetic zero as "very rare" (#3935). state is the immutable range-filter
+// snapshot the scores were computed against (never nil); a caller that also needs the
+// covered labels, participants or generation must read them from this state rather than
+// a fresh loadState(), so scores and those fields cannot straddle a concurrent reload.
+func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, settings *conf.Settings) (probableSpecies []SpeciesScore, geomodel *LabelVocabulary, filterActive bool, state *rangeFilterState, err error) {
 	rfs.Debug("Applying range filter")
 
 	// Build the exclude matcher once: it reverse-resolves localized common-name
@@ -469,8 +507,11 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 	// labels on a v2.4 install (byte-identical to the former settings.BirdNET.Labels),
 	// the loaded-participant union otherwise. The fail-open paths score over it so a
 	// Perch-only or v3.0-only install fails open over its own species instead of the
-	// empty v2.4 label set (which would drop every detection).
-	covered := rfs.loadState().coveredLabels
+	// empty v2.4 label set (which would drop every detection). st is this pre-predict
+	// snapshot; the post-predict paths return predict's own snapshot (res.state) so a
+	// caller's participant backfill stays on the same generation as the geomodel.
+	st := rfs.loadState()
+	covered := st.coveredLabels
 
 	// Skip filtering if location is not configured. This reads only the settings
 	// snapshot, so it needs no lock and is checked before acquiring rfs.mu. A nil
@@ -479,7 +520,7 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 	// debug line is logged when both hold.
 	if !settings.BirdNET.LocationConfigured {
 		rfs.Debug("Location not configured, not using location based prediction filter")
-		return failOpenScores(covered, excluder, settings, rfs.debug), nil, false, nil
+		return failOpenScores(covered, excluder, settings, rfs.debug), nil, false, st, nil
 	}
 
 	threshold := settings.BirdNET.RangeFilter.Threshold
@@ -501,7 +542,7 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 	switch res.kind {
 	case predictNotLoaded:
 		rfs.Debug("Range filter model not loaded, returning zero scores for all covered labels (fail open)")
-		return failOpenScores(covered, excluder, settings, rfs.debug), nil, false, nil
+		return failOpenScores(covered, excluder, settings, rfs.debug), nil, false, res.state, nil
 
 	case predictLegacy:
 		// Legacy path: map geomodel scores to the classifier's label set. predictFilter
@@ -511,7 +552,7 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 		// accepted: this path is not the default (the universal geomodel path is).
 		filters, ferr := rfs.predictFilter(date, week, settings, threshold)
 		if ferr != nil {
-			return nil, nil, false, errors.New(ferr).
+			return nil, nil, false, res.state, errors.New(ferr).
 				Category(errors.CategoryValidation).
 				Context("date", date.Format(time.DateOnly)).
 				Context("week", week).
@@ -535,11 +576,11 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 		addUserOverrideSpeciesScores(rfs.debug, &speciesScores, settings, nil)
 
 		sort.Sort(ByScore(speciesScores))
-		return speciesScores, nil, true, nil
+		return speciesScores, nil, true, res.state, nil
 
 	case predictUniversal:
 		if predErr != nil {
-			return nil, nil, false, errors.New(predErr).
+			return nil, nil, false, res.state, errors.New(predErr).
 				Category(errors.CategoryValidation).
 				Context("date", date.Format(time.DateOnly)).
 				Context("week", week).
@@ -553,7 +594,7 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 		// same rows as before.
 		speciesScores, _ := scoreProbableSpecies(rfs.debug, excluder, res.scores, res.allGeoLabels, res.cachedMapping, res.coveredLabels, settings)
 		sort.Sort(ByScore(speciesScores))
-		return speciesScores, res.geomodel, true, nil
+		return speciesScores, res.geomodel, true, res.state, nil
 	}
 
 	// Unreachable: predict returns only the three kinds handled above. The switch has no
@@ -561,7 +602,7 @@ func (rfs *rangeFilterService) probableSpecies(date time.Time, week float32, set
 	// case here (failing golangci-lint in CI, not the Go compiler) rather than letting it
 	// silently fall into the universal scoring path. Fail safe to "no filter" if it is
 	// ever reached anyway.
-	return failOpenScores(covered, excluder, settings, rfs.debug), nil, false, nil
+	return failOpenScores(covered, excluder, settings, rfs.debug), nil, false, res.state, nil
 }
 
 // predictKind classifies the outcome of the shared locked prediction so each caller
@@ -599,6 +640,13 @@ type predictResult struct {
 	// install.
 	coveredLabels []string
 	geomodel      *LabelVocabulary
+	// state is the immutable range-filter snapshot predict read under rfs.mu. The whole
+	// inclusion-list calculation must use this ONE snapshot: uncoveredParticipantSpecies
+	// reads its participants and anchoredOnV24, and the fail-open branch its coveredLabels,
+	// so a concurrent reload cannot swap the generation between predict and the participant
+	// backfill and publish a list that mixes two states. Never nil (loadState never returns
+	// nil).
+	state *rangeFilterState
 }
 
 // predict runs the universal-geomodel prediction triple under a SINGLE rfs.mu hold
@@ -619,15 +667,16 @@ type predictResult struct {
 // session (mappedView relies on the same invariant).
 func (rfs *rangeFilterService) predict(settings *conf.Settings, week, threshold float32, syncUnmappedScore bool) (predictResult, error) {
 	rfs.mu.Lock()
-	rf := rfs.loadState().backend
+	st := rfs.loadState()
+	rf := st.backend
 	if rf == nil || !settings.BirdNET.LocationConfigured {
 		rfs.mu.Unlock()
-		return predictResult{kind: predictNotLoaded}, nil
+		return predictResult{kind: predictNotLoaded, state: st}, nil
 	}
 	up, isUniversal := rf.(UniversalSpeciesPredictor)
 	if !isUniversal {
 		rfs.mu.Unlock()
-		return predictResult{kind: predictLegacy}, nil
+		return predictResult{kind: predictLegacy, state: st}, nil
 	}
 
 	allGeoLabels := up.GeomodelLabels()
@@ -661,6 +710,7 @@ func (rfs *rangeFilterService) predict(settings *conf.Settings, week, threshold 
 		allGeoLabels:  allGeoLabels,
 		cachedMapping: cachedMapping,
 		coveredLabels: coveredLabels,
+		state:         st,
 	}
 	// Wrap the geomodel vocabulary so the species endpoint answers coverage from a
 	// precomputed canonical-key memo instead of an openfauna.CanonicalName scan per
@@ -696,7 +746,8 @@ func (rfs *rangeFilterService) predictFilter(date time.Time, week float32, setti
 	// Re-check nil under lock in case a reload raced between the caller's nil check
 	// and this point.
 	rfs.mu.Lock()
-	backend := rfs.loadState().backend
+	st := rfs.loadState()
+	backend := st.backend
 	if backend == nil {
 		rfs.mu.Unlock()
 		return nil, fmt.Errorf("range filter was closed during prediction")
@@ -719,10 +770,16 @@ func (rfs *rangeFilterService) predictFilter(date time.Time, week float32, setti
 			Build()
 	}
 
+	// Label the MData scores from the backend's covered-label space, not settings.BirdNET.Labels
+	// directly: the two match byte-for-byte on a normal v2.4 install (coveredLabels prefers the
+	// published label set), but on the post-construction retry path the published set is empty,
+	// so reading it here would drop every species (fail closed). coveredLabels falls back to the
+	// loaded v2.4 instance's labels, which are in the same order as the MData scores.
+	covered := st.coveredLabels
 	var results []Filter
 	for i, score := range scores {
-		if score >= threshold && i < len(settings.BirdNET.Labels) {
-			results = append(results, Filter{Score: score, Label: settings.BirdNET.Labels[i]})
+		if score >= threshold && i < len(covered) {
+			results = append(results, Filter{Score: score, Label: covered[i]})
 		}
 	}
 
@@ -767,14 +824,16 @@ func (rfs *rangeFilterService) getCachedSpeciesScores(targetDate time.Time, sett
 	}
 	rfs.speciesCacheMu.RUnlock()
 
-	// MISS PATH: use the same settings snapshot as the cache key. Sample the generation
-	// just before predicting so the write path can detect a backend swap that raced the
-	// prediction.
-	genBefore := rfs.loadState().generation
-	speciesScores, _, _, err := rfs.probableSpecies(targetDate, 0.0, settings)
+	// MISS PATH: use the same settings snapshot as the cache key. probableSpecies scores
+	// against its own locked snapshot; take genBefore FROM that snapshot rather than a
+	// separate pre-call loadState, so the write-path genBefore == genNow check reflects the
+	// exact generation the scores were computed against and cannot spuriously reject a valid
+	// cache write when a reload lands between a pre-call sample and the prediction.
+	speciesScores, _, _, rfState, err := rfs.probableSpecies(targetDate, 0.0, settings)
 	if err != nil {
 		return nil, err
 	}
+	genBefore := rfState.generation
 	scores := buildOccurrenceIndex(speciesScores)
 
 	// WRITE PATH: double-check, evict old entries, publish new results.
@@ -838,7 +897,7 @@ func (rfs *rangeFilterService) occurrenceAtTime(species string, detectionTime ti
 	// Fallback on cache miss. Anchor to the local calendar day (matching
 	// getCachedSpeciesScores, which keys on the local DateOnly of detectionTime).
 	day := conf.LocalNoon(detectionTime)
-	speciesScores, _, _, err := rfs.probableSpecies(day, 0.0, settings)
+	speciesScores, _, _, _, err := rfs.probableSpecies(day, 0.0, settings)
 	if err != nil {
 		rfs.Debug("Error getting probable species for occurrence: %v", err)
 		return 0.0

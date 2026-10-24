@@ -44,6 +44,11 @@
     "size_bytes": 5122,
     "lines": 143
   },
+  "tphakala/BirdNET-v3.0-Models|regional/central-africa/birdnet-v3.0-preview3.1-central-africa-labels-b1.txt": {
+    "sha256": "13fb3701a59e5b9fcde3aaf4fa9e48914643e14102ae273e942498e10409a76b",
+    "size_bytes": 29833,
+    "lines": 1505
+  },
   "tphakala/BirdNET-v3.0-Models|regional/central-europe/birdnet-v3.0-preview3.1-central-europe-labels-b1.txt": {
     "sha256": "e64919cbbbd13ad9ca5efe2ea03a098ad56b827b0578a703051738d0c892596a",
     "size_bytes": 22527,
@@ -68,6 +73,11 @@
     "sha256": "96219a5a02b54ef5a0542aaec4a39afd586521f44ab887bfd7df97ae3fa1388f",
     "size_bytes": 32104,
     "lines": 816
+  },
+  "tphakala/BirdNET-v3.0-Models|regional/east-africa/birdnet-v3.0-preview3.1-east-africa-labels-b1.txt": {
+    "sha256": "8f8c798043919c93e487c01057f807a00f40830f997a99edc74a7ab1df7e99f2",
+    "size_bytes": 35080,
+    "lines": 1784
   },
   "tphakala/BirdNET-v3.0-Models|regional/eastern-brazil/birdnet-v3.0-preview3.1-eastern-brazil-labels-b1.txt": {
     "sha256": "ce9a20f287bb6c0cbaf52ac5f28df02d5e0c17e335020687a40c0987c921844e",
@@ -194,6 +204,11 @@
     "size_bytes": 30993,
     "lines": 811
   },
+  "tphakala/BirdNET-v3.0-Models|regional/west-africa/birdnet-v3.0-preview3.1-west-africa-labels-b1.txt": {
+    "sha256": "95e843ebda0c7db8a382eadff9b001ede053dbf2f822160c7bbb05eff0320b59",
+    "size_bytes": 19384,
+    "lines": 994
+  },
   "tphakala/BirdNET-v3.0-Models|regional/western-palearctic/birdnet-v3.0-preview3.1-western-palearctic-labels-b1.txt": {
     "sha256": "10a2fb277ce4dc981f6a68ac11bd073ff3c9e28f2c929c1bcf0ecb553aa56ff3",
     "size_bytes": 28565,
@@ -244,6 +259,11 @@
     "size_bytes": 5263,
     "lines": 346
   },
+  "tphakala/Perch-v2-Models|regional/central-africa/perch_v2_central-africa_labels.txt": {
+    "sha256": "b4fa7748e0bb842e08ac31f6ef2998625182ebe4ecb19b2b4cc7945fd9eb6bb1",
+    "size_bytes": 35791,
+    "lines": 1883
+  },
   "tphakala/Perch-v2-Models|regional/central-europe/perch_v2_central-europe_labels.txt": {
     "sha256": "ac7c30b45b85404bc67830e8341e53ea47ad0d899a30789454c072abc6828072",
     "size_bytes": 14787,
@@ -268,6 +288,11 @@
     "sha256": "7adcce5853a92ba1bbe5ee05ffdb75bbad9d0d1604349beef19151e6731cc750",
     "size_bytes": 26299,
     "lines": 1409
+  },
+  "tphakala/Perch-v2-Models|regional/east-africa/perch_v2_east-africa_labels.txt": {
+    "sha256": "536daf97a9945d7f8bff0c55c60d26c15c6001f01f0e448a0548156d074cd329",
+    "size_bytes": 41028,
+    "lines": 2159
   },
   "tphakala/Perch-v2-Models|regional/eastern-brazil/perch_v2_eastern-brazil_labels.txt": {
     "sha256": "84ebe24f0f0fd8efd4339bc5a5260fe8779fcd06b575aa5fe58eb62186bbdc7b",
@@ -393,6 +418,11 @@
     "sha256": "41ab36a976dfea277181801d1329940201d777390a3269138cabe0fc6edb460b",
     "size_bytes": 26056,
     "lines": 1407
+  },
+  "tphakala/Perch-v2-Models|regional/west-africa/perch_v2_west-africa_labels.txt": {
+    "sha256": "18eef8b461ee60892b4581a3484c8505d486ca6d6240423d4fc0e27f510d07dd",
+    "size_bytes": 24127,
+    "lines": 1309
   },
   "tphakala/Perch-v2-Models|regional/western-palearctic/perch_v2_western-palearctic_labels.txt": {
     "sha256": "4e63079981649c4bffda95d1254c3c22689ade06dd2bc55ce08b14d03d8360b1",

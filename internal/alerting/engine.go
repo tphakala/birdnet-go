@@ -28,6 +28,9 @@ const (
 	cleanupMaxRetries = 3
 	// cleanupBaseDelay is the base delay for exponential backoff between cleanup retries.
 	cleanupBaseDelay = 100 * time.Millisecond
+	// cooldownPruneInterval is the minimum time between sweeps that drop stale
+	// cooldown entries.
+	cooldownPruneInterval = 1 * time.Hour
 	// unknownDetectionSpeciesKey is used when detection events lack species metadata.
 	unknownDetectionSpeciesKey = "unknown"
 )
@@ -40,16 +43,20 @@ type Engine struct {
 	repo           repository.AlertRuleRepository
 	metricTracker  *MetricTracker
 	actionFunc     ActionFunc
-	testActionFunc ActionFunc // Used by TestFireRule to tag notifications as test
+	testActionFunc ActionFunc // Used by TestFireRule to dispatch test fires
 	log            logger.Logger
 	telemetry      *AlertingTelemetry // nil-safe engine health reporter
 
 	// Cooldown tracking (in-memory, resets on restart).
-	// Key is rule ID for event rules, or "ruleID|metricKey" for metric
-	// rules so that per-instance metrics (e.g., disk paths) have
-	// independent cooldowns.
-	cooldowns   map[string]time.Time
-	cooldownsMu sync.RWMutex
+	// Key is the rule ID plus a scope: the metric instance for metric rules
+	// so that per-instance metrics (e.g., disk paths) have independent
+	// cooldowns, the species for detection event rules whose event names one,
+	// and empty for other event rules. Stale entries are dropped by pruneCooldowns.
+	// lastCooldownPrune is the time of the last sweep. Both fields are
+	// guarded by cooldownsMu.
+	cooldowns         map[cooldownStateKey]time.Time
+	lastCooldownPrune time.Time
+	cooldownsMu       sync.RWMutex
 
 	// Escalation tracking: maps "ruleID|metricKey" → last fired step value.
 	// Prevents re-fire until metric crosses the next higher step.
@@ -72,13 +79,16 @@ func NewEngine(repo repository.AlertRuleRepository, actionFunc ActionFunc, log l
 		actionFunc:    actionFunc,
 		log:           log,
 		telemetry:     at,
-		cooldowns:     make(map[string]time.Time),
+		cooldowns:     make(map[cooldownStateKey]time.Time),
 		escalations:   make(map[string]float64),
+		// First sweep runs one interval after start.
+		lastCooldownPrune: time.Now(),
 	}
 }
 
 // SetTestActionFunc sets the function called when a rule is test-fired.
-// This should tag the resulting notification as a test so push providers skip it.
+// It routes test fires through the test dispatch variants; the resulting
+// notifications are still delivered to push providers.
 func (e *Engine) SetTestActionFunc(fn ActionFunc) {
 	e.testActionFunc = fn
 }
@@ -106,17 +116,27 @@ func metricBufferKey(metricName string, properties map[string]any) string {
 	return metricName
 }
 
+// cooldownStateKey identifies one cooldown window: a rule and the scope it is
+// rate-limited in (a metric instance or a detection species). scope is empty
+// when the rule is rate-limited as a whole.
+type cooldownStateKey struct {
+	ruleID uint
+	scope  string
+}
+
 // cooldownKey builds the cooldown state key. For metric rules, it includes
 // the metric instance (path) so per-instance metrics have independent cooldowns.
-// For event rules, it uses only the rule ID.
-func cooldownKey(rule *entities.AlertRule, event *AlertEvent) string {
+// For event rules on detection events that name a species it includes the
+// species, so each species has its own window. Other event rules, and
+// species-less detection events, use only the rule ID.
+func cooldownKey(rule *entities.AlertRule, event *AlertEvent) cooldownStateKey {
 	if rule.TriggerType == TriggerTypeMetric {
-		return fmt.Sprintf("%d|%s", rule.ID, metricBufferKey(rule.MetricName, event.Properties))
+		return cooldownStateKey{ruleID: rule.ID, scope: metricBufferKey(rule.MetricName, event.Properties)}
 	}
 	if speciesKey := detectionSpeciesKey(event); isSpeciesScopedDetectionRule(rule, event, speciesKey) {
-		return fmt.Sprintf("%d|%s", rule.ID, speciesKey)
+		return cooldownStateKey{ruleID: rule.ID, scope: speciesKey}
 	}
-	return fmt.Sprintf("%d", rule.ID)
+	return cooldownStateKey{ruleID: rule.ID}
 }
 
 // escalationKey builds the escalation state key from the rule ID and metric
@@ -137,28 +157,16 @@ func detectionSpeciesKey(event *AlertEvent) string {
 	return unknownDetectionSpeciesKey
 }
 
-// isSpeciesScopedDetectionRule reports whether a detection rule's cooldown and
-// escalation state should be tracked per species rather than per rule. The
-// caller passes speciesKey from detectionSpeciesKey(event); species-less
-// detections (unknownDetectionSpeciesKey) always use per-rule scoping. Novelty
-// conditions reuse detectionMetadataProperties as the single source of truth
-// for which properties scope a rule to a species.
+// isSpeciesScopedDetectionRule reports whether an event rule's cooldown should
+// be tracked per species rather than per rule. Every event rule on a detection
+// event is species-scoped when the event names a species, so one species'
+// notification never silences another. The caller passes speciesKey from
+// detectionSpeciesKey(event); species-less detections
+// (unknownDetectionSpeciesKey) fall back to one per-rule window.
 func isSpeciesScopedDetectionRule(rule *entities.AlertRule, event *AlertEvent, speciesKey string) bool {
-	if rule.TriggerType != TriggerTypeEvent || !isDetectionEvent(event.EventName) {
-		return false
-	}
-	if speciesKey == unknownDetectionSpeciesKey {
-		return false
-	}
-	if len(rule.EscalationSteps) > 0 {
-		return true
-	}
-	for i := range rule.Conditions {
-		if slices.Contains(detectionMetadataProperties, rule.Conditions[i].Property) {
-			return true
-		}
-	}
-	return false
+	return rule.TriggerType == TriggerTypeEvent &&
+		isDetectionEvent(event.EventName) &&
+		speciesKey != unknownDetectionSpeciesKey
 }
 
 func detectionEscalationKey(rule *entities.AlertRule, event *AlertEvent, speciesKey string) string {
@@ -250,18 +258,26 @@ func highestStepExceeded(steps []float64, value float64) (step float64, found bo
 	return step, found
 }
 
-// shouldSuppressEscalation checks if a metric rule should be suppressed
-// because the metric hasn't crossed a new escalation step. Returns true
-// if the rule should NOT fire. When it returns false (allow fire), it also
-// returns a shallow copy of properties with PropertyThresholdStep set.
-func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *AlertEvent) (suppress bool, props map[string]any) {
+// shouldSuppressEscalation decides whether a metric rule with escalation steps
+// fires for this event. Returns true if the rule should NOT fire, either
+// because the metric hasn't crossed a new escalation step or because the
+// cooldown is still active. When it returns false (allow fire), it has already
+// acquired the cooldown, so callers must not acquire the cooldown again.
+//
+// For a numeric value it also records the step and returns a shallow copy of
+// properties with PropertyThresholdStep set. The step is recorded only together
+// with the cooldown, so a step crossed during a cooldown stays pending and
+// fires once the cooldown ends. A rule without steps, or a sample without a
+// numeric value, skips the step comparison: only the cooldown limits it, no
+// step is recorded and the event properties are returned unchanged.
+func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *AlertEvent, cdKey cooldownStateKey) (suppress bool, props map[string]any) {
 	if len(rule.EscalationSteps) == 0 {
-		return false, event.Properties
+		return !e.tryAcquireCooldown(cdKey, rule.CooldownSec), event.Properties
 	}
 
 	val, ok := event.Properties[PropertyValue]
 	if !ok {
-		return false, event.Properties
+		return !e.tryAcquireCooldown(cdKey, rule.CooldownSec), event.Properties
 	}
 	floatVal, err := toFloat64(val)
 	if err != nil {
@@ -269,7 +285,7 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 			logger.String("metric", event.MetricName),
 			logger.String("object_type", event.ObjectType),
 			logger.Error(err))
-		return false, event.Properties
+		return !e.tryAcquireCooldown(cdKey, rule.CooldownSec), event.Properties
 	}
 
 	currentStep, stepFound := highestStepExceeded(rule.EscalationSteps, floatVal)
@@ -278,17 +294,24 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 	}
 
 	key := escalationKey(rule.ID, event.MetricName, event.Properties)
+	now := time.Now()
 
-	// Single write lock for atomic check-and-update to avoid TOCTOU race
-	// where two goroutines both pass the read check and both fire.
+	// Lock order matches shouldSuppressDetectionEscalation. Checks and writes
+	// happen under both locks so two goroutines cannot both fire.
+	e.cooldownsMu.Lock()
 	e.escalationsMu.Lock()
 	lastStep, exists := e.escalations[key]
-	if exists && lastStep >= currentStep {
+	if (exists && lastStep >= currentStep) || !e.cooldownExpiredLocked(cdKey, rule.CooldownSec, now) {
 		e.escalationsMu.Unlock()
+		e.cooldownsMu.Unlock()
 		return true, nil
 	}
 	e.escalations[key] = currentStep
 	e.escalationsMu.Unlock()
+	if rule.CooldownSec > 0 {
+		e.cooldowns[cdKey] = now
+	}
+	e.cooldownsMu.Unlock()
 
 	// Shallow-copy properties and add the threshold step (don't mutate shared map).
 	propsCopy := make(map[string]any, len(event.Properties)+1)
@@ -301,7 +324,7 @@ func (e *Engine) shouldSuppressEscalation(rule *entities.AlertRule, event *Alert
 // shouldSuppressDetectionEscalation applies confidence laddering to detection
 // event rules. It is keyed by species and novelty episode, so a higher
 // confidence step can notify again without waiting for the rule cooldown.
-func (e *Engine) shouldSuppressDetectionEscalation(rule *entities.AlertRule, event *AlertEvent, cdKey, speciesKey string) (suppress bool, props map[string]any) {
+func (e *Engine) shouldSuppressDetectionEscalation(rule *entities.AlertRule, event *AlertEvent, cdKey cooldownStateKey, speciesKey string) (suppress bool, props map[string]any) {
 	if len(rule.EscalationSteps) == 0 {
 		return false, event.Properties
 	}
@@ -349,7 +372,7 @@ func (e *Engine) shouldSuppressDetectionEscalation(rule *entities.AlertRule, eve
 
 // cooldownExpiredLocked reports whether the cooldown for key has elapsed (or is
 // disabled). Callers must hold e.cooldownsMu.
-func (e *Engine) cooldownExpiredLocked(key string, cooldownSec int, now time.Time) bool {
+func (e *Engine) cooldownExpiredLocked(key cooldownStateKey, cooldownSec int, now time.Time) bool {
 	if cooldownSec <= 0 {
 		return true
 	}
@@ -391,6 +414,8 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 	copy(rules, e.rules)
 	e.rulesMu.RUnlock()
 
+	e.pruneCooldowns(rules, time.Now())
+
 	isDetection := isDetectionEvent(event.EventName)
 	if isDetection {
 		e.log.Debug("Alert engine received detection event",
@@ -413,17 +438,13 @@ func (e *Engine) HandleEvent(event *AlertEvent) {
 
 		cdKey := cooldownKey(rule, event)
 
-		// Metric rules with escalation steps: check escalation BEFORE
-		// acquiring cooldown so a suppressed step doesn't consume the
-		// cooldown and block a later, legitimate escalated alert.
-		// The escalation path has its own atomic protection via
-		// shouldSuppressEscalation.
+		// Metric rules with escalation steps: shouldSuppressEscalation checks
+		// the step and acquires the cooldown atomically, so a suppressed step
+		// doesn't consume the cooldown and a step blocked by the cooldown
+		// isn't recorded as delivered.
 		if rule.TriggerType == TriggerTypeMetric && len(rule.EscalationSteps) > 0 {
-			suppress, props := e.shouldSuppressEscalation(rule, event)
+			suppress, props := e.shouldSuppressEscalation(rule, event, cdKey)
 			if suppress {
-				continue
-			}
-			if !e.tryAcquireCooldown(cdKey, rule.CooldownSec) {
 				continue
 			}
 			augmentedEvent := &AlertEvent{
@@ -532,11 +553,42 @@ func (e *Engine) evaluateMetricConditions(rule *entities.AlertRule, event *Alert
 	return true
 }
 
+// pruneCooldowns drops cooldown entries of rules missing from rules (deleted or
+// disabled) and entries whose rule cooldown has elapsed. It runs at most once
+// per cooldownPruneInterval. An elapsed entry reads the same as a missing one in
+// tryAcquireCooldown and cooldownExpiredLocked, so under the rule's current
+// CooldownSec dropping it does not change the outcome. Dropping the entry of a
+// missing rule forgets a window that is still open, and a swept entry cannot
+// honor a CooldownSec raised afterwards; in both cases a rule can notify once
+// more than it would have without the sweep. rules is the enabled-rule snapshot
+// HandleEvent took before this call, so a concurrent RefreshRules can leave it
+// slightly stale with the same effect.
+func (e *Engine) pruneCooldowns(rules []entities.AlertRule, now time.Time) {
+	e.cooldownsMu.Lock()
+	defer e.cooldownsMu.Unlock()
+
+	if now.Sub(e.lastCooldownPrune) < cooldownPruneInterval {
+		return
+	}
+	e.lastCooldownPrune = now
+
+	cooldownByRule := make(map[uint]time.Duration, len(rules))
+	for i := range rules {
+		cooldownByRule[rules[i].ID] = time.Duration(rules[i].CooldownSec) * time.Second
+	}
+	for key, lastFired := range e.cooldowns {
+		cooldown, ok := cooldownByRule[key.ruleID]
+		if !ok || now.Sub(lastFired) >= cooldown {
+			delete(e.cooldowns, key)
+		}
+	}
+}
+
 // tryAcquireCooldown atomically checks whether key is in cooldown and, if not,
 // records the current time so subsequent calls observe the cooldown. This avoids
 // the TOCTOU race where a separate read-lock check + write-lock set would let
 // two concurrent callers both pass the check before either writes.
-func (e *Engine) tryAcquireCooldown(key string, cooldownSec int) (acquired bool) {
+func (e *Engine) tryAcquireCooldown(key cooldownStateKey, cooldownSec int) (acquired bool) {
 	if cooldownSec <= 0 {
 		return true // no cooldown configured — always allow
 	}
@@ -559,8 +611,9 @@ func (e *Engine) fireRule(rule *entities.AlertRule, event *AlertEvent) {
 
 // TestFireRule fires a rule's actions directly, bypassing condition evaluation
 // and cooldown checks. Used by the test endpoint. The resulting notification
-// is marked as a test so that push providers (Telegram, Shoutrrr, etc.) do
-// not forward it.
+// is delivered to push providers like a live one, but the synthetic event
+// carries no detection properties, so detection-specific rendering such as
+// the global new-species template does not apply.
 func (e *Engine) TestFireRule(rule *entities.AlertRule) {
 	event := &AlertEvent{
 		ObjectType: rule.ObjectType,

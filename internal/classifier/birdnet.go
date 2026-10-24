@@ -1157,13 +1157,14 @@ type ClassifierCoverage struct {
 	WithRangeData    int    `json:"withRangeData"`
 	WithoutRangeData int    `json:"withoutRangeData"`
 	// CoveredByBackend reports whether the loaded range-filter backend actually scores
-	// this classifier's full label space. Under the universal geomodel it is true for
-	// every participant when v2.4 is NOT loaded (the backend maps onto the participant
-	// union), but only for v2.4 itself when v2.4 IS loaded, because the covered label
-	// space is then the v2.4 set and a non-v2.4 participant's exclusive species are
-	// dropped. Under the legacy v2.4-only MData backend (which maps only the 6522 v2.4
-	// labels) it is true for v2.4 alone, and under no backend it is false for all, so a
-	// mixed set is honest about which classifiers are actually range-filtered.
+	// this classifier's species, so the status surface is honest about which classifiers
+	// are really range-filtered. Under the universal geomodel it is true for every
+	// built-over participant (v2.4 loaded or not): the geomodel scores every participant
+	// by canonical scientific name, and the residual for geomodel-unknown species is
+	// governed by the "allow species without range data" toggle, not by coverage. Under
+	// the legacy v2.4-only MData backend (which maps only the 6522 v2.4 labels) it is true
+	// for v2.4 alone, and under no backend it is false for all. A participant absent from
+	// the backend's built-over set is never covered.
 	CoveredByBackend bool `json:"coveredByBackend"`
 }
 

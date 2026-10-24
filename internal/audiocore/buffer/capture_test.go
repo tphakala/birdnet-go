@@ -1,7 +1,6 @@
 package buffer_test
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -9,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
-	internalerrors "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestCaptureBuffer_WriteAndReadSegment writes PCM data and reads a time segment back.
@@ -327,7 +326,7 @@ func TestCaptureBuffer_ReadSegmentInsufficientData(t *testing.T) {
 	assert.Nil(t, seg)
 	require.ErrorIs(t, err, buffer.ErrInsufficientData)
 
-	_, isEnhanced := errors.AsType[*internalerrors.EnhancedError](err)
+	_, isEnhanced := errors.AsType[*errors.EnhancedError](err)
 	assert.False(t, isEnhanced,
 		"warmup ErrInsufficientData must not be wrapped in EnhancedError (would trigger Sentry on every restart)")
 }
@@ -385,7 +384,7 @@ func TestCaptureBuffer_ReadSegmentInsufficientDataAfterWrap(t *testing.T) {
 
 	// Post-wrap failures MUST surface as EnhancedError so telemetry sees
 	// genuine bugs.
-	_, isEnhanced := errors.AsType[*internalerrors.EnhancedError](err)
+	_, isEnhanced := errors.AsType[*errors.EnhancedError](err)
 	assert.True(t, isEnhanced,
 		"post-wrap ErrInsufficientData must surface as EnhancedError for telemetry")
 }

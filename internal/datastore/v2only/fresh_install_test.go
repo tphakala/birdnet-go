@@ -1,6 +1,7 @@
 package v2only
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 func TestInitializeFreshInstall_SQLite(t *testing.T) {
@@ -137,55 +139,6 @@ func TestInitializeFreshInstall_NoDatabase(t *testing.T) {
 	assert.Contains(t, err.Error(), "no database configured")
 }
 
-// TestInitializeFreshInstall_WiresSunCalcForTimeOfDay is a regression test for the Search
-// page's "Time of Day" column always showing "any" regardless of the actual detection
-// timestamp. The root cause was that InitializeFreshInstall (and initializeV2OnlyMode in
-// internal/analysis/database_migration.go) built the v2only.Config without a SunCalc
-// instance, so calculateTimeOfDay always hit its ds.suncalc == nil guard and returned the
-// literal "any" for every detection, no matter when it occurred.
-func TestInitializeFreshInstall_WiresSunCalcForTimeOfDay(t *testing.T) {
-	v2.ResetDatabaseMode()
-	t.Cleanup(v2.ResetDatabaseMode)
-
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "birdnet.db")
-
-	// Helsinki coordinates, used elsewhere in this codebase's suncalc tests.
-	const testLatitude = 60.1699
-	const testLongitude = 24.9384
-
-	settings := &conf.Settings{}
-	settings.Output.SQLite.Enabled = true
-	settings.Output.SQLite.Path = dbPath
-	settings.BirdNET.Latitude = testLatitude
-	settings.BirdNET.Longitude = testLongitude
-
-	ds, err := InitializeFreshInstall(settings, nil, nil)
-	require.NoError(t, err)
-	// Cleanups run LIFO, so this closes the datastore before ResetDatabaseMode
-	// runs. The close error is asserted rather than discarded: silently leaking
-	// the SQLite handle would make later tests in this package flaky.
-	t.Cleanup(func() {
-		require.NoError(t, ds.Close())
-	})
-
-	require.NotNil(t, ds.suncalc,
-		"InitializeFreshInstall must wire a SunCalc instance so calculateTimeOfDay can classify "+
-			"by the configured station coordinates instead of always falling back to \"any\"")
-
-	// A well-into-daytime and a well-into-nighttime UTC timestamp (mid-September, outside the
-	// midnight-sun/polar-night window) at these coordinates. The exact classification (day vs.
-	// night) is covered by internal/suncalc's own tests; here we only need to confirm the
-	// datastore no longer short-circuits to the "any" fallback now that SunCalc is configured.
-	day := time.Date(2024, 9, 15, 12, 0, 0, 0, time.UTC)
-	night := time.Date(2024, 9, 15, 0, 0, 0, 0, time.UTC)
-
-	assert.NotEqual(t, datastore.TimeOfDayAny, ds.calculateTimeOfDay(day, testLatitude, testLongitude),
-		"daytime detection must be classified, not the \"any\" fallback")
-	assert.NotEqual(t, datastore.TimeOfDayAny, ds.calculateTimeOfDay(night, testLatitude, testLongitude),
-		"nighttime detection must be classified, not the \"any\" fallback")
-}
-
 func TestInitializeFreshInstall_EmptySQLitePath(t *testing.T) {
 	v2.ResetDatabaseMode()
 	defer v2.ResetDatabaseMode()
@@ -197,4 +150,105 @@ func TestInitializeFreshInstall_EmptySQLitePath(t *testing.T) {
 	_, err := InitializeFreshInstall(settings, nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "sqlite path is empty")
+}
+
+// TestInitializeFreshInstall_ConfiguresSunCalc pins that a fresh-install datastore gets a sun
+// calculator for the configured station location. Without it civil dawn is never available, so
+// the dawn-chorus onset endpoint returns a null onset for every day and the chart stays empty.
+func TestInitializeFreshInstall_ConfiguresSunCalc(t *testing.T) {
+	v2.ResetDatabaseMode()
+	t.Cleanup(v2.ResetDatabaseMode)
+
+	const (
+		// Mid-latitude station: civil dawn is defined on every day of the year.
+		stationLatitude  = 50.0
+		stationLongitude = 10.0
+		onsetDate        = "2026-05-15"
+		minuteStep       = 5
+	)
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
+	settings.BirdNET.Latitude = stationLatitude
+	settings.BirdNET.Longitude = stationLongitude
+
+	// The sun calculator reads the published settings snapshot, so publish this test's settings
+	// (and restore the previous snapshot) rather than depend on whatever another test left.
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prev) })
+	conf.StoreSettings(settings)
+
+	ds, err := InitializeFreshInstall(settings, nil, nil)
+	require.NoError(t, err)
+	defer func() { _ = ds.Close() }()
+
+	require.NotNil(t, ds.suncalc, "fresh install must configure a sun calculator")
+
+	// Enough morning detections for a day to qualify for an onset.
+	for i := range minOnsetDetections {
+		require.NoError(t, ds.Save(&datastore.Note{
+			Date:           onsetDate,
+			Time:           fmt.Sprintf("05:%02d:00", i*minuteStep),
+			ScientificName: "Turdus merula",
+			CommonName:     "Eurasian Blackbird",
+			Confidence:     0.9,
+		}, nil))
+	}
+
+	got, err := ds.GetDailyActivityOnset(t.Context(), onsetDate, onsetDate, "")
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, minOnsetDetections, got[0].DetectionCount)
+	assert.NotNil(t, got[0].OnsetRelMinutes, "onset relative to civil dawn must be computed")
+}
+
+// TestInitializeFreshInstall_SunCalcFollowsLocationChange pins that the datastore's sun
+// calculator follows a station location changed through the settings (a new published snapshot)
+// without rebuilding the datastore, so time-of-day and dawn-chorus onset use the new location.
+// It publishes global settings, so it must not run in parallel.
+func TestInitializeFreshInstall_SunCalcFollowsLocationChange(t *testing.T) {
+	v2.ResetDatabaseMode()
+	t.Cleanup(v2.ResetDatabaseMode)
+	prev := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prev) })
+
+	const (
+		helsinkiLatitude  = 60.1699
+		helsinkiLongitude = 24.9384
+		sydneyLatitude    = -33.8688
+		sydneyLongitude   = 151.2093
+	)
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
+	settings.BirdNET.Latitude = helsinkiLatitude
+	settings.BirdNET.Longitude = helsinkiLongitude
+	conf.StoreSettings(settings)
+
+	ds, err := InitializeFreshInstall(settings, nil, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, ds.Close()) })
+
+	require.NotNil(t, ds.suncalc)
+	assert.Equal(t, "Europe/Helsinki", ds.suncalc.LocationName())
+
+	moved := conf.CloneSettings(settings)
+	moved.BirdNET.Latitude = sydneyLatitude
+	moved.BirdNET.Longitude = sydneyLongitude
+	conf.StoreSettings(moved)
+
+	// The sun times the datastore classifies with must be the new location's. Checked before
+	// LocationName, so the sun-times call alone must notice the change.
+	date := time.Date(2024, 6, 21, 12, 0, 0, 0, time.UTC)
+	got, err := ds.suncalc.GetSunEventTimes(date)
+	require.NoError(t, err)
+	want, err := suncalc.NewSunCalc(sydneyLatitude, sydneyLongitude).GetSunEventTimes(date)
+	require.NoError(t, err)
+	assert.True(t, want.Sunrise.Equal(got.Sunrise), "sunrise must match a fixed Sydney calculator")
+	assert.True(t, want.CivilDawn.Equal(got.CivilDawn), "civil dawn must match a fixed Sydney calculator")
+
+	assert.Equal(t, "Australia/Sydney", ds.suncalc.LocationName(),
+		"the datastore's sun calculator must follow the published station location")
 }

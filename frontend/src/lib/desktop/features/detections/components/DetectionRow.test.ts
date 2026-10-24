@@ -2,10 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/svelte';
 import DetectionRow from './DetectionRow.svelte';
 import type { Detection } from '$lib/types/detection.types';
+import { downloadDetectionAudio } from '$lib/utils/audioDownload';
 
-// DetectionRow is presentational: opening the action menu and clicking an item
-// must invoke the callback the parent passed (the parent owns the actual
-// API/modal logic via useDetectionActions). These tests assert that wiring.
+// DetectionRow is presentational for mutation actions: opening the action menu
+// and clicking one must invoke the callback the parent passed. Audio download
+// is wired directly through the shared download helper.
 
 vi.mock('$lib/stores/navigation.svelte', () => ({
   navigation: {
@@ -15,21 +16,26 @@ vi.mock('$lib/stores/navigation.svelte', () => ({
   },
 }));
 
+vi.mock('$lib/utils/audioDownload', () => ({
+  downloadDetectionAudio: vi.fn(),
+}));
+
 function createMockDetection(overrides: Partial<Detection> = {}): Detection {
   return {
     id: 123,
     date: '2024-01-15',
     time: '10:30:00',
+    beginTime: '2024-01-15T10:30:00',
+    endTime: '2024-01-15T10:30:03',
+    speciesCode: 'amerob',
     commonName: 'American Robin',
     scientificName: 'Turdus migratorius',
     confidence: 0.85,
+    verified: 'unverified',
     locked: false,
-    sourceType: 'microphone',
-    sourceName: 'default',
     clipName: 'clip_001.wav',
-    spectrogramPath: '/spectrograms/clip_001.png',
     ...overrides,
-  } as Detection;
+  };
 }
 
 async function openMenuAndClick(itemName: RegExp) {
@@ -106,6 +112,25 @@ describe('DetectionRow action callbacks', () => {
 
     expect(onMarkFalsePositive).toHaveBeenCalledTimes(1);
   });
+
+  it('downloads available audio from the action menu', async () => {
+    const detection = createMockDetection({ id: 700, clipName: 'clip_700.wav' });
+    render(DetectionRow, { props: { detection } });
+
+    await openMenuAndClick(/download/i);
+
+    expect(downloadDetectionAudio).toHaveBeenCalledExactlyOnceWith(detection);
+  });
+
+  it('omits the download action when the detection has no audio clip', async () => {
+    render(DetectionRow, {
+      props: { detection: createMockDetection({ id: 701, clipName: '' }) },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+
+    expect(screen.queryByRole('menuitem', { name: /download/i })).not.toBeInTheDocument();
+  });
 });
 
 describe('DetectionRow recording cell gating', () => {
@@ -144,5 +169,60 @@ describe('DetectionRow recording cell gating', () => {
     });
 
     expect(container.querySelector('.spectrogram-player')).toBeNull();
+  });
+
+  // Retention removed the audio but kept the image: show the image only.
+  it('renders a plain spectrogram image, without a player, for a spectrogram-only detection', () => {
+    const { container } = render(DetectionRow, {
+      props: {
+        detection: createMockDetection({ id: 603, clipName: '', spectrogramOnly: true }),
+        showRecordingColumn: true,
+      },
+    });
+
+    expect(container.querySelector('.spectrogram-player')).toBeNull();
+    const img = container.querySelector('img.spectrogram-img');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('src')).toContain('/api/v2/spectrogram/603?size=md&raw=true');
+  });
+
+  it('caps the spectrogram-only image at the width of the player it replaces', () => {
+    const { container } = render(DetectionRow, {
+      props: {
+        detection: createMockDetection({ id: 606, clipName: '', spectrogramOnly: true }),
+        showRecordingColumn: true,
+      },
+    });
+
+    const imageContainer = container.querySelector('.spectrogram-image-container');
+    expect(imageContainer).not.toBeNull();
+    expect(imageContainer?.classList.contains('max-w-[200px]')).toBe(true);
+  });
+
+  it('omits the download action for a spectrogram-only detection', async () => {
+    render(DetectionRow, {
+      props: {
+        detection: createMockDetection({ id: 604, clipName: '', spectrogramOnly: true }),
+        showRecordingColumn: true,
+      },
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+
+    expect(screen.queryByRole('menuitem', { name: /download/i })).not.toBeInTheDocument();
+  });
+
+  it('keeps the player for a detection that still has audio even if flagged spectrogram-only', () => {
+    const { container } = render(DetectionRow, {
+      props: {
+        detection: createMockDetection({
+          id: 605,
+          clipName: 'clip_605.wav',
+          spectrogramOnly: true,
+        }),
+      },
+    });
+
+    expect(container.querySelector('.spectrogram-player')).not.toBeNull();
   });
 });

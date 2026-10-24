@@ -96,8 +96,7 @@ func skipIfORTUnavailable(t *testing.T, err error) {
 	if err == nil {
 		return
 	}
-	var ee *errors.EnhancedError
-	if errors.As(err, &ee) {
+	if ee, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		if stage, ok := ee.GetContext()["stage"]; ok && stage == "ort_init" {
 			t.Skipf("ONNX Runtime unavailable; skipping: %v", err)
 		}
@@ -202,15 +201,41 @@ func benchSequence(b *testing.B, durationSec int) {
 	}
 }
 
-// Parity-test constants: the production default gate threshold and the gate's
-// chunk/step geometry (3 s analysis chunks arriving every 0.5 s, flushed on a
-// 1 s cadence).
-const (
-	parityThreshold  = 0.35
-	parityChunkBytes = 3 * sampleRate16k * bytesPerSample
-	parityStepBytes  = sampleRate16k * bytesPerSample / 2 // 0.5 s
-	parityFlushEvery = 2                                  // flush every 2nd step = 1 s cadence
-)
+// Parity-test constants: the production default gate threshold.
+const parityThreshold = 0.35
+
+// parityGeometry is one analysis geometry the gate must keep parity on: a model
+// clip of chunkSec seconds arriving every stepMs (the overlap step), with the
+// gate's 1 s throttle merging ceil(1000/stepMs) chunks into each flush.
+type parityGeometry struct {
+	name     string
+	chunkSec int
+	stepMs   int
+	// peakDelta is the allowed gap between the full-chunk and streaming peak.
+	// Overlapping full chunks sample the signal at many start offsets and can
+	// peak higher than one streaming pass; the privacy assertion (streaming
+	// stays at or above the gate threshold) is checked separately.
+	peakDelta float64
+}
+
+// parityGeometries covers 3 s and 5 s models from heavy overlap (false
+// positive filter level 5 and level 1) to none.
+var parityGeometries = []parityGeometry{
+	{"3s step 200ms", 3, 200, 0.3},
+	{"3s step 1000ms", 3, 1000, 0.15},
+	{"3s step 3000ms", 3, 3000, 0.15},
+	{"5s step 333ms", 5, 333, 0.3},
+	{"5s step 1667ms", 5, 1667, 0.3},
+	{"5s step 5000ms", 5, 5000, 0.15},
+}
+
+func (g parityGeometry) chunkBytes() int { return g.chunkSec * sampleRate16k * bytesPerSample }
+func (g parityGeometry) stepBytes() int {
+	return (g.stepMs * sampleRate16k / 1000) * bytesPerSample
+}
+
+// flushEvery is the number of steps merged into one throttled 1 s flush.
+func (g parityGeometry) flushEvery() int { return max(1, (1000+g.stepMs-1)/g.stepMs) }
 
 // noisePCM16 returns durationSec seconds of deterministic white noise at
 // sampleRate as PCM16 bytes (seeded PRNG, modest amplitude), a stand-in for
@@ -244,13 +269,22 @@ func TestVAD_StreamingCoverageParity(t *testing.T) {
 	}
 	pcm, err := os.ReadFile(rawPath) //nolint:gosec // G304: test fixture path from env
 	require.NoError(t, err)
-	if len(pcm) < parityChunkBytes {
-		t.Skipf("speech fixture too short: %d bytes, need %d", len(pcm), parityChunkBytes)
-	}
-
 	cfg := Config{ModelPath: modelPath, LibraryPath: libPath}
-	baseProbs := fullChunkProbs(t, cfg, pcm)
-	streamProbs := streamingProbs(t, cfg, pcm)
+	for _, geo := range parityGeometries {
+		t.Run(geo.name, func(t *testing.T) {
+			if len(pcm) < geo.chunkBytes() {
+				t.Skipf("speech fixture too short: %d bytes, need %d", len(pcm), geo.chunkBytes())
+			}
+			assertCoverageParity(t, cfg, geo, pcm)
+		})
+	}
+}
+
+// assertCoverageParity runs the peak and coverage parity checks for one geometry.
+func assertCoverageParity(t *testing.T, cfg Config, geo parityGeometry, pcm []byte) {
+	t.Helper()
+	baseProbs := fullChunkProbs(t, cfg, geo, pcm)
+	streamProbs := streamingProbs(t, cfg, geo, pcm)
 	baseMax := maxOf(baseProbs)
 	streamMax := maxOf(streamProbs)
 	baseCover := fractionAtOrAbove(baseProbs, parityThreshold)
@@ -279,12 +313,16 @@ func TestVAD_StreamingNoiseFPParity(t *testing.T) {
 	pcm := noisePCM16(10, sampleRate16k, 42)
 
 	cfg := Config{ModelPath: modelPath, LibraryPath: libPath}
-	baseMax := maxOf(fullChunkProbs(t, cfg, pcm))
-	streamMax := maxOf(streamingProbs(t, cfg, pcm))
-	t.Logf("noise: full-chunk max=%.4f streaming max=%.4f", baseMax, streamMax)
+	for _, geo := range parityGeometries {
+		t.Run(geo.name, func(t *testing.T) {
+			baseMax := maxOf(fullChunkProbs(t, cfg, geo, pcm))
+			streamMax := maxOf(streamingProbs(t, cfg, geo, pcm))
+			t.Logf("noise: full-chunk max=%.4f streaming max=%.4f", baseMax, streamMax)
 
-	assert.Less(t, baseMax, float32(parityThreshold), "noise must not trip the full-chunk path")
-	assert.Less(t, streamMax, float32(parityThreshold), "noise must not trip the streaming path")
+			assert.Less(t, baseMax, float32(parityThreshold), "noise must not trip the full-chunk path")
+			assert.Less(t, streamMax, float32(parityThreshold), "noise must not trip the streaming path")
+		})
+	}
 }
 
 // maxOf returns the maximum of probs (0 for empty).
@@ -310,39 +348,39 @@ func fractionAtOrAbove(probs []float32, threshold float64) float64 {
 	return float64(n) / float64(len(probs))
 }
 
-// fullChunkProbs scores pcm as independent full 3 s chunks every 0.5 s (the old
+// fullChunkProbs scores pcm as independent full chunks every geo step (the old
 // gate behaviour) and returns every per-chunk aggregate probability.
-func fullChunkProbs(t *testing.T, cfg Config, pcm []byte) []float32 {
+func fullChunkProbs(t *testing.T, cfg Config, geo parityGeometry, pcm []byte) []float32 {
 	t.Helper()
 	d, err := New(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, d.Close()) })
 
-	probs := make([]float32, 0, len(pcm)/parityStepBytes+1)
-	for off := 0; off+parityChunkBytes <= len(pcm); off += parityStepBytes {
-		p, err := d.SpeechProbability(pcm[off:off+parityChunkBytes], sampleRate16k)
+	probs := make([]float32, 0, len(pcm)/geo.stepBytes()+1)
+	for off := 0; off+geo.chunkBytes() <= len(pcm); off += geo.stepBytes() {
+		p, err := d.SpeechProbability(pcm[off:off+geo.chunkBytes()], sampleRate16k)
 		require.NoError(t, err)
 		probs = append(probs, p)
 	}
 	return probs
 }
 
-// streamingProbs feeds pcm through a Streamer exactly as the gate does: 0.5 s of
-// fresh audio per step, a Flush every parityFlushEvery steps against one shared
+// streamingProbs feeds pcm through a Streamer exactly as the gate does: one geo step of
+// fresh audio per step, a Flush every geo.flushEvery() steps against one shared
 // session, and returns every per-flush aggregate probability.
-func streamingProbs(t *testing.T, cfg Config, pcm []byte) []float32 {
+func streamingProbs(t *testing.T, cfg Config, geo parityGeometry, pcm []byte) []float32 {
 	t.Helper()
 	sess, err := NewSession(cfg)
 	require.NoError(t, err)
 	t.Cleanup(func() { assert.NoError(t, sess.Close()) })
 	st := NewStreamer(0)
 
-	probs := make([]float32, 0, len(pcm)/parityStepBytes/parityFlushEvery+1)
+	probs := make([]float32, 0, len(pcm)/geo.stepBytes()/geo.flushEvery()+1)
 	steps := 0
-	for off := 0; off+parityStepBytes <= len(pcm); off += parityStepBytes {
-		require.NoError(t, st.Append(pcm[off:off+parityStepBytes], sampleRate16k))
+	for off := 0; off+geo.stepBytes() <= len(pcm); off += geo.stepBytes() {
+		require.NoError(t, st.Append(pcm[off:off+geo.stepBytes()], sampleRate16k))
 		steps++
-		if steps%parityFlushEvery != 0 {
+		if steps%geo.flushEvery() != 0 {
 			continue
 		}
 		p, ok, _, err := st.Flush(sess)
@@ -402,15 +440,19 @@ func TestVAD_EmbeddedStreamingParity(t *testing.T) {
 	skipIfORTUnavailable(t, err)
 	require.NoError(t, probe.Close())
 
-	pcm := speechLikePCM16(6, sampleRate16k)
-	baseMax := maxOf(fullChunkProbs(t, cfg, pcm))
-	streamMax := maxOf(streamingProbs(t, cfg, pcm))
-	t.Logf("embedded: full-chunk max=%.4f streaming max=%.4f", baseMax, streamMax)
+	pcm := speechLikePCM16(12, sampleRate16k)
+	for _, geo := range parityGeometries {
+		t.Run(geo.name, func(t *testing.T) {
+			baseMax := maxOf(fullChunkProbs(t, cfg, geo, pcm))
+			streamMax := maxOf(streamingProbs(t, cfg, geo, pcm))
+			t.Logf("embedded: full-chunk max=%.4f streaming max=%.4f", baseMax, streamMax)
 
-	require.GreaterOrEqual(t, baseMax, float32(parityThreshold),
-		"the synthetic voiced signal must register as speech on the embedded model")
-	assert.GreaterOrEqual(t, streamMax, float32(parityThreshold),
-		"PRIVACY REGRESSION: streaming must detect the speech the full-chunk path detects")
-	assert.InDelta(t, baseMax, streamMax, 0.15,
-		"streaming must reach a comparable peak confidence to the full-chunk path")
+			require.GreaterOrEqual(t, baseMax, float32(parityThreshold),
+				"the synthetic voiced signal must register as speech on the embedded model")
+			assert.GreaterOrEqual(t, streamMax, float32(parityThreshold),
+				"PRIVACY REGRESSION: streaming must detect the speech the full-chunk path detects")
+			assert.InDelta(t, baseMax, streamMax, geo.peakDelta,
+				"streaming must reach a comparable peak confidence to the full-chunk path")
+		})
+	}
 }

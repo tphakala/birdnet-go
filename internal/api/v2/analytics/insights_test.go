@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
 
@@ -457,6 +458,49 @@ func TestGetDawnChorus_RejectsMalformedDays(t *testing.T) {
 			ctx := e.NewContext(req, rec)
 			_ = controller.getDawnChorusImpl(ctx)
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
+		})
+	}
+}
+
+// TestInsightsHandlersReturn409WithoutEnhancedDatabase pins the guard on every
+// gated insights wrapper: status 409 with the insights message and error key.
+func TestInsightsHandlersReturn409WithoutEnhancedDatabase(t *testing.T) {
+	// Not parallel: this test reads the process-global database mode flag and
+	// forces it to the legacy state, restoring it when done.
+	datastoreV2.ResetDatabaseMode()
+	t.Cleanup(datastoreV2.ResetDatabaseMode)
+
+	tests := []struct {
+		name   string
+		path   string
+		invoke func(*Handler, echo.Context) error
+	}{
+		{"expected today", "/api/v2/insights/expected-today", (*Handler).GetExpectedToday},
+		{"expected today regional", "/api/v2/insights/expected-today/regional", (*Handler).GetExpectedTodayRegional},
+		{"phantom species", "/api/v2/insights/phantom-species", (*Handler).GetPhantomSpecies},
+		{"dawn chorus", "/api/v2/insights/dawn-chorus", (*Handler).GetDawnChorus},
+		{"migration", "/api/v2/insights/migration", (*Handler).GetMigration},
+		{"dashboard kpis", "/api/v2/dashboard/kpis", (*Handler).GetDashboardKPIs},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// With a failing repo, a wrapper that lost its guard falls through to
+			// its Impl and answers something other than 409 instead of panicking.
+			e, h := setupInsightsTestController(t, &mockInsightsRepo{err: context.DeadlineExceeded})
+			req := httptest.NewRequest(http.MethodGet, tc.path, http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+
+			require.NoError(t, tc.invoke(h, ctx))
+			assert.Equal(t, http.StatusConflict, rec.Code)
+
+			var resp apicore.ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			// Literals, not the production constants, so a changed constant
+			// value fails here. They match errors.insights.v2Required in en.json.
+			assert.Equal(t, "errors.insights.v2Required", resp.ErrorKey)
+			assert.Equal(t, "Insights require the enhanced (v2) database", resp.Message)
 		})
 	}
 }

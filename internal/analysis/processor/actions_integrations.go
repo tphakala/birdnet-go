@@ -21,7 +21,9 @@ import (
 )
 
 // NoteWithBirdImage wraps a Note with bird image data for MQTT publishing.
-// The SourceID field enables Home Assistant to filter detections by source.
+// The SourceID field is the audio source ID of the detection. HA discovery
+// sensors no longer filter on it; they read the per-source topic keyed by the
+// same ID.
 //
 // IMPORTANT: JSON field names are part of the public MQTT API contract.
 // Changing them breaks existing Home Assistant and other MQTT integrations.
@@ -38,52 +40,73 @@ type NoteWithBirdImage struct {
 	Source *struct{} `json:"Source,omitempty"` // Suppressed: use sourceId instead
 
 	DetectionID uint                    `json:"detectionId"`          // Database ID for URL construction (e.g., /api/v2/audio/{id})
-	SourceID    string                  `json:"sourceId"`             // Audio source ID for HA filtering (added for HA discovery)
+	SourceID    string                  `json:"sourceId"`             // Audio source ID of the detection; HA discovery sensors read the per-source topic keyed by it
 	SourceName  string                  `json:"sourceName,omitempty"` // Display name for stable source mapping (#2799)
 	BirdImage   imageprovider.BirdImage `json:"BirdImage"`            // PascalCase for backward compatibility - DO NOT CHANGE
+	// SpeciesFirstDetectedAt is the species' earliest previous detection
+	// (all-time, excluding the current detection). Null when this is the
+	// species' first-ever detection, or when the lookup fails or no datastore
+	// is wired. No omitempty: the key is always present.
+	SpeciesFirstDetectedAt *time.Time `json:"speciesFirstDetectedAt"`
+	// SpeciesLastDetectedAt is the species' most-recent previous detection
+	// (all-time, excluding the current detection). Null when this is the
+	// species' first-ever detection, or when the lookup fails or no datastore
+	// is wired. No omitempty: the key is always present.
+	SpeciesLastDetectedAt *time.Time `json:"speciesLastDetectedAt"`
 }
 
-// Execute sends the note to the BirdWeather API
+// Execute sends the note to the BirdWeather API.
+// The settings snapshot and the BirdWeather client are resolved once per
+// attempt, so a queued retry follows settings changes and client reconfiguration.
 func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
 	// Check event frequency (supports scientific name lookup)
-	if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, BirdWeatherSubmit) {
+	// Decided once per detection so queue retries are neither suppressed nor re-stamped.
+	if !a.rateLimit.allow(func() bool {
+		return a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, BirdWeatherSubmit)
+	}) {
 		return nil
 	}
 
-	// Early check if BirdWeather is still enabled in settings
-	if !a.Settings.Realtime.Birdweather.Enabled {
+	// One settings snapshot for the whole attempt, so a reload mid-attempt cannot
+	// mix values from two versions.
+	s := a.attemptSettings()
+
+	// Early check if BirdWeather is still enabled in the settings of this attempt
+	if !s.Realtime.Birdweather.Enabled {
 		return nil // Silently exit if BirdWeather was disabled after this action was created
 	}
 
 	// Add threshold check here
-	if a.Result.Confidence < float64(a.Settings.Realtime.Birdweather.Threshold) {
-		if a.Settings.Debug {
+	if a.Result.Confidence < float64(s.Realtime.Birdweather.Threshold) {
+		if s.Debug {
 			// Add structured logging
 			GetLogger().Debug("Skipping BirdWeather upload due to low confidence",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
 				logger.String("species", a.Result.Species.CommonName),
 				logger.Float64("confidence", a.Result.Confidence),
-				logger.Float64("threshold", float64(a.Settings.Realtime.Birdweather.Threshold)),
+				logger.Float64("threshold", float64(s.Realtime.Birdweather.Threshold)),
 				logger.String("operation", "birdweather_threshold_check"))
 		}
 		return nil
 	}
 
-	// Safe check for nil BwClient
-	if a.BwClient == nil {
-		// Client initialization failures indicate configuration issues that require
-		// manual intervention (e.g., missing API keys, disabled service)
-		// Retrying won't fix these problems, so mark as non-retryable
+	// The client in effect for this attempt; nil while BirdWeather is being
+	// reconfigured or after it was removed.
+	client := a.attemptClient()
+	if client == nil {
+		// A nil client means BirdWeather was removed, failed to initialize, or is
+		// between disconnect and reconnect during a reconfigure. The error is returned
+		// so the job queue retries it under RetryConfig and a later attempt finds the new client.
 		return errors.Newf("BirdWeather client is not initialized").
 			Component("analysis.processor").
 			Category(errors.CategoryIntegration).
 			Context("operation", "birdweather_upload").
 			Context("integration", "birdweather").
-			Context("retryable", false). // Configuration error - not retryable
+			Context("retryable", false). // Informational only; nothing reads this key, and the job queue retries under RetryConfig
 			Context("config_section", "realtime.birdweather").
 			Build()
 	}
@@ -93,7 +116,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 	pcmData := a.pcmData
 
 	// Try to publish with appropriate error handling
-	if err := a.BwClient.Publish(&note, pcmData); err != nil {
+	if err := client.Publish(&note, pcmData); err != nil {
 		// Check if this is a CategoryNotFound error (e.g., species not recognized by Birdweather)
 		// These are expected for non-bird species and should not be logged at error level
 		if errors.IsNotFound(err) {
@@ -114,7 +137,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 		// code bug. Return the sentinel unchanged so the job queue still
 		// retries (any non-nil error triggers retry with backoff) while
 		// shouldReportToSentry suppresses it via the notification-component
-		// filter — wrapping here would hide the sentinel from that filter.
+		// filter; wrapping here would hide the sentinel from that filter.
 		if errors.Is(err, notification.ErrCircuitBreakerOpen) || errors.Is(err, notification.ErrTooManyRequests) {
 			GetLogger().Debug("BirdWeather upload short-circuited: circuit breaker open",
 				logger.String("component", "analysis.processor.actions"),
@@ -183,7 +206,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 			Build()
 	}
 
-	if a.Settings.Debug {
+	if s.Debug {
 		GetLogger().Debug("Successfully uploaded to BirdWeather",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -197,10 +220,14 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 }
 
 // Execute sends the note to the MQTT broker.
+// The job queue runs this action as its own job and retries it under
+// realtime.mqtt.retrysettings when it returns an error.
 // Transient connection errors (EOF, not connected) are logged as warnings and
-// do NOT fail the CompositeAction — the detection is already saved to the database.
-// This eliminates the TOCTOU race at Layer 2 (GitHub #2397).
-func (a *MqttAction) Execute(_ context.Context, data any) error {
+// are not returned, so they are not retried: the detection is already saved to
+// the database. This eliminates the TOCTOU race at Layer 2 (GitHub #2397).
+// The settings snapshot and the MQTT client are resolved once per attempt, so a
+// queued retry follows settings changes and client reconfiguration.
+func (a *MqttAction) Execute(ctx context.Context, data any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -209,28 +236,49 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 	// Instead, we attempt the publish directly and handle errors gracefully.
 	// The Publish() method returns a clear error if the client is disconnected.
 
-	// Check event frequency (supports scientific name lookup)
-	if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, MQTTPublish) {
+	// Check event frequency (supports scientific name lookup). Decided once per
+	// detection: queue retries of this action reuse the first verdict.
+	if !a.rateLimit.allow(func() bool {
+		return a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, MQTTPublish)
+	}) {
 		return nil
 	}
 
-	// Early check if MQTT is still enabled in settings.
-	// Supports hot-reload: disabling MQTT in the UI takes effect immediately,
-	// even for actions already queued. Matches BirdWeatherAction pattern.
-	if !a.Settings.Realtime.MQTT.Enabled {
+	// One settings snapshot for the whole attempt, so a reload mid-attempt cannot
+	// mix values from two versions.
+	s := a.attemptSettings()
+
+	// Early check if MQTT is still enabled in the settings of this attempt.
+	// Disabling MQTT in the UI takes effect immediately, even for actions
+	// already queued.
+	if !s.Realtime.MQTT.Enabled {
 		return nil
 	}
 
 	// Validate MQTT settings
-	if a.Settings.Realtime.MQTT.Topic == "" {
+	if s.Realtime.MQTT.Topic == "" {
 		return errors.Newf("MQTT topic is not specified").
 			Component("analysis.processor").
 			Category(errors.CategoryConfiguration).
 			Context("operation", "mqtt_publish").
 			Context("integration", "mqtt").
-			Context("retryable", false). // Configuration error - not retryable
+			Context("retryable", false). // Informational only; nothing reads this key, and the job queue retries under RetryConfig
 			Context("config_section", "realtime.mqtt.topic").
 			Build()
+	}
+
+	// The client in effect for this attempt. It is nil while MQTT is being
+	// reconfigured or after it was disabled; treat that like a transient
+	// connection issue: the detection is saved, so no retry.
+	client := a.attemptClient()
+	if client == nil {
+		GetLogger().Warn("MQTT publish skipped: no MQTT client (detection saved to database)",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("topic", s.Realtime.MQTT.Topic),
+			logger.String("operation", "mqtt_publish_no_client"))
+		return nil
 	}
 
 	// Get bird image of detected bird using the shared helper
@@ -242,7 +290,7 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 	// reason it is unusable in a notification embed. Tracked separately along with
 	// the notification case.
 
-	// Get detection ID from shared context (set by DatabaseAction in CompositeAction sequence)
+	// Get detection ID from shared context (set by DatabaseAction, which runs before this action is enqueued)
 	var detectionID uint
 	if a.DetectionCtx != nil {
 		detectionID = uint(a.DetectionCtx.NoteID.Load())
@@ -258,18 +306,46 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 
 	// NOTE: ClipName is always included in the MQTT payload, even though the
 	// audio file may not be on disk yet. Audio export runs independently after
-	// the CompositeAction completes. Home Assistant and other MQTT consumers
+	// the composite that saves the detection completes. Home Assistant and other MQTT consumers
 	// that construct audio URLs from ClipName should handle 404/503 responses
 	// gracefully, or use the detection ID-based audio endpoint which has
 	// built-in wait-for-encoding support.
 
+	// Fetch the species' first-ever and most-recent previous detection times
+	// (all-time; the strict before bound in the query excludes the current
+	// detection, which DatabaseAction persisted before this action was
+	// enqueued). This must run before the publish-timeout context is created
+	// below so it derives from the action's context. Non-fatal: on any failure
+	// the payload is published with null fields, matching this action's
+	// "transient errors are non-fatal" philosophy (GitHub #2397).
+	var firstSeen, lastSeen *time.Time
+	if a.SpeciesTimeSource != nil {
+		qctx, qcancel := context.WithTimeout(ctx, speciesTimeQueryTimeout)
+		var qerr error
+		firstSeen, lastSeen, qerr = a.SpeciesTimeSource.GetSpeciesFirstAndLastDetectionTimeBefore(qctx, a.Result.Species.ScientificName, a.Result.Timestamp)
+		qcancel()
+		if qerr != nil && !errors.Is(qerr, context.Canceled) {
+			// A canceled context is an expected shutdown interruption, not a
+			// degraded state; logging it would add per-detection noise on stop.
+			GetLogger().Warn("failed to fetch species detection times for MQTT",
+				logger.String("component", "analysis.processor.actions"),
+				logger.String("detection_id", a.CorrelationID),
+				logger.String("species", a.Result.Species.CommonName),
+				logger.String("scientific_name", a.Result.Species.ScientificName),
+				logger.Error(qerr),
+				logger.String("operation", "mqtt_species_detection_times"))
+		}
+	}
+
 	// Wrap note with bird image and include detection ID, SourceID, and SourceName
 	noteWithBirdImage := NoteWithBirdImage{
-		Note:        note,
-		DetectionID: detectionID, // Explicit field for URL construction (e.g., /api/v2/audio/{id})
-		SourceID:    note.Source.ID,
-		SourceName:  note.Source.DisplayName,
-		BirdImage:   birdImage,
+		Note:                   note,
+		DetectionID:            detectionID, // Explicit field for URL construction (e.g., /api/v2/audio/{id})
+		SourceID:               note.Source.ID,
+		SourceName:             note.Source.DisplayName,
+		BirdImage:              birdImage,
+		SpeciesFirstDetectedAt: firstSeen,
+		SpeciesLastDetectedAt:  lastSeen,
 	}
 
 	// Create a JSON representation of the note
@@ -285,21 +361,26 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 		return err
 	}
 
+	// Capture the incoming step context before the line below reassigns ctx to a
+	// background-derived one, so the per-source republish stays bounded by the
+	// action's own deadline (see publishSourceDetection).
+	stepCtx := ctx
+
 	// Create a context with timeout for publishing
 	ctx, cancel := context.WithTimeout(context.Background(), MQTTPublishTimeout)
 	defer cancel()
 
 	// Publish the note to the MQTT broker.
-	// The detection is already saved to the database (CompositeAction order: DB -> SSE -> MQTT).
-	// Transient connection errors are non-fatal — we log a warning and return nil to avoid
-	// failing the CompositeAction and generating noisy Sentry events (GitHub #2397).
-	err = a.MqttClient.Publish(ctx, a.Settings.Realtime.MQTT.Topic, string(noteJson))
+	// The detection is already saved to the database (this action is enqueued after the save).
+	// Transient connection errors are non-fatal: we log a warning and return nil to avoid
+	// failed jobs and noisy Sentry events (GitHub #2397).
+	err = client.Publish(ctx, s.Realtime.MQTT.Topic, string(noteJson))
 	if err != nil {
 		sanitizedErr := privacy.WrapError(err)
 		isConnErr := mqtt.IsTransientConnectionError(err)
 
 		if isConnErr {
-			// Transient connection error — detection is safe in DB, downgrade to warning.
+			// Transient connection error, detection is safe in DB, downgrade to warning.
 			// This is the key fix for GitHub #2397: the TOCTOU race between IsConnected()
 			// and Publish() produces these errors. Since the detection is persisted,
 			// a missed MQTT notification is not data loss.
@@ -309,12 +390,12 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 				logger.Error(sanitizedErr),
 				logger.String("species", a.Result.Species.CommonName),
 				logger.Float64("confidence", a.Result.Confidence),
-				logger.String("topic", a.Settings.Realtime.MQTT.Topic),
+				logger.String("topic", s.Realtime.MQTT.Topic),
 				logger.String("operation", "mqtt_publish_transient_skip"))
-			return nil // Non-fatal: don't fail the CompositeAction
+			return nil // Non-fatal: the detection is saved, so no retry
 		}
 
-		// Non-transient error (config issue, JSON error, etc.) — this is a real problem
+		// Non-transient error (config issue, JSON error, etc.): this is a real problem
 		GetLogger().Error("Failed to publish to MQTT",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
@@ -323,7 +404,7 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 			logger.String("scientific_name", a.Result.Species.ScientificName),
 			logger.Float64("confidence", a.Result.Confidence),
 			logger.String("clip_name", a.Result.ClipName),
-			logger.String("topic", a.Settings.Realtime.MQTT.Topic),
+			logger.String("topic", s.Realtime.MQTT.Topic),
 			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.String("operation", "mqtt_publish"))
 
@@ -331,7 +412,7 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 			ObjectType: alerting.ObjectTypeIntegration,
 			EventName:  alerting.EventMQTTPublishFailed,
 			Properties: map[string]any{
-				alerting.PropertyBroker: a.Settings.Realtime.MQTT.Broker,
+				alerting.PropertyBroker: s.Realtime.MQTT.Broker,
 				alerting.PropertyError:  sanitizedErr.Error(),
 			},
 		})
@@ -342,24 +423,102 @@ func (a *MqttAction) Execute(_ context.Context, data any) error {
 			Context("operation", "mqtt_publish").
 			Context("species", a.Result.Species.CommonName).
 			Context("confidence", a.Result.Confidence).
-			Context("topic", a.Settings.Realtime.MQTT.Topic).
+			Context("topic", s.Realtime.MQTT.Topic).
 			Context("clip_name", a.Result.ClipName).
 			Context("integration", "mqtt").
 			Context("retryable", true).
 			Build()
 	}
 
-	if a.Settings.Debug {
+	a.publishSourceDetection(stepCtx, s, client, note.Source.ID, string(noteJson))
+
+	if s.Debug {
 		GetLogger().Debug("Successfully published to MQTT",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
 			logger.String("species", a.Result.Species.CommonName),
 			logger.String("scientific_name", a.Result.Species.ScientificName),
 			logger.Float64("confidence", a.Result.Confidence),
-			logger.String("topic", a.Settings.Realtime.MQTT.Topic),
+			logger.String("topic", s.Realtime.MQTT.Topic),
 			logger.String("operation", "mqtt_publish_success"))
 	}
 	return nil
+}
+
+// publishSourceDetection republishes a detection to its source's own topic
+// (mqtt.SourceDetectionTopic), which the Home Assistant discovery sensors read.
+// Only done while HA discovery is enabled, so installs without it see no extra
+// traffic. Detections without a source ID have no matching sensors and are
+// skipped.
+//
+// The publish is bounded by whatever remains of the action's step budget
+// (the job execution timeout, via the parent context) and by MQTTPublishTimeout,
+// whichever is shorter; it does not always get the full MQTTPublishTimeout. An
+// already-expired step is skipped entirely so it does not start a publish that
+// can only fail with the step's own deadline.
+//
+// Failure is logged and not returned: the detection already reached the shared
+// topic, and failing the action would make a retry publish it there twice.
+//
+// s and client are the settings snapshot and client of the current attempt, so
+// the republish uses the same values as the shared publish before it.
+func (a *MqttAction) publishSourceDetection(parent context.Context, s *conf.Settings, client mqtt.Client, sourceID, payload string) {
+	if !mqtt.SourceTopicsEnabled(s) || sourceID == "" {
+		return
+	}
+
+	// If the action's step budget is already spent, do not start a publish that
+	// can only fail with the step's own deadline/cancel. That is not a broker or
+	// config fault, so it is logged at debug and never alerted.
+	if err := parent.Err(); err != nil {
+		GetLogger().Debug("Skipping per-source detection publish: step context already done",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("source_id", sourceID),
+			logger.Error(err),
+			logger.String("operation", "mqtt_publish_source_topic"))
+		return
+	}
+
+	// The publish is bounded by whatever remains of the action's step budget
+	// (the job execution timeout) and by MQTTPublishTimeout, whichever is shorter; it
+	// does not always get the full MQTTPublishTimeout.
+	ctx, cancel := context.WithTimeout(parent, MQTTPublishTimeout)
+	defer cancel()
+
+	topic := mqtt.SourceDetectionTopic(s.Realtime.MQTT.Topic, sourceID)
+	if err := client.Publish(ctx, topic, payload); err != nil {
+		sanitizedErr := privacy.WrapError(err)
+		GetLogger().Warn("Failed to publish detection to per-source MQTT topic",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.Error(sanitizedErr),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("topic", topic),
+			logger.String("operation", "mqtt_publish_source_topic"))
+
+		// A context deadline/cancel means the step budget ran out mid-publish, not
+		// a broker or config fault, so it warns only and never alerts.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return
+		}
+
+		// A non-transient failure is a real problem (config or topic error). The
+		// shared-path alert in Execute never fired for it, because the shared
+		// publish already succeeded before this per-source republish ran, so
+		// raise the same alert here. Transient connection errors stay a warning
+		// only, matching the shared path (GitHub #2397).
+		if !mqtt.IsTransientConnectionError(err) {
+			alerting.TryPublish(&alerting.AlertEvent{
+				ObjectType: alerting.ObjectTypeIntegration,
+				EventName:  alerting.EventMQTTPublishFailed,
+				Properties: map[string]any{
+					alerting.PropertyBroker: s.Realtime.MQTT.Broker,
+					alerting.PropertyError:  sanitizedErr.Error(),
+				},
+			})
+		}
+	}
 }
 
 // Execute updates the range filter species list, this is run every day
@@ -435,7 +594,7 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 		return nil
 	}
 
-	// Get detection ID from shared context (set by DatabaseAction in CompositeAction sequence).
+	// Get detection ID from shared context (set by DatabaseAction earlier in the same composite).
 	// DetectionContext provides the database ID without polling via atomic.Uint64.
 	var noteID uint
 	if a.DetectionCtx != nil {
@@ -455,7 +614,7 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 
 	// NOTE: ClipName is always included in the SSE payload, even though the audio
 	// file may not be on disk yet. Audio export runs as a separate independent
-	// action after the DB -> SSE -> MQTT composite completes. The media API
+	// action after the Database -> SSE composite completes. The media API
 	// handles this race gracefully: waitForAudioFile() polls for the file with
 	// retries, and returns 503 + Retry-After if it's still being encoded.
 	// This is better than clearing ClipName, which would prevent the frontend
@@ -463,7 +622,6 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 
 	// Broadcast the detection with error handling
 	if err := a.SSEBroadcaster(&note, &birdImage); err != nil {
-		// Log the error with retry information if retries are enabled
 		// Sanitize error before logging
 		sanitizedErr := privacy.WrapError(err)
 		GetLogger().Error("Failed to broadcast via SSE",
@@ -474,7 +632,6 @@ func (a *SSEAction) Execute(_ context.Context, data any) error {
 			logger.String("scientific_name", a.Result.Species.ScientificName),
 			logger.Float64("confidence", a.Result.Confidence),
 			logger.String("clip_name", a.Result.ClipName),
-			logger.Bool("retry_enabled", a.RetryConfig.Enabled),
 			logger.String("operation", "sse_broadcast"))
 		return errors.New(err).
 			Component("analysis.processor").

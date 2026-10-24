@@ -133,8 +133,9 @@ class UsageValidator {
 
         const [, file, lineNum, content] = match;
 
-        // Extract all t('key') and t("key") calls from the line
-        const regex = /t\s*\(\s*['"]([\w.]+)['"]/g;
+        // Extract all t('key') and t("key") calls from the line. The word boundary
+        // keeps a dynamic import of a dotted package name from reading as a key.
+        const regex = /\bt\s*\(\s*['"]([\w.]+)['"]/g;
         let keyMatch;
 
         while ((keyMatch = regex.exec(content)) !== null) {

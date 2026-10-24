@@ -212,7 +212,18 @@ func (m *mockStore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters
 }
 func (m *mockStore) GetNoteClipPath(noteID string) (string, error) { return "", nil }
 func (m *mockStore) GetNoteModelType(_ string) (string, error)     { return "bird", nil }
-func (m *mockStore) DeleteNoteClipPath(noteID string) error        { return nil }
+func (m *mockStore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
+	return "", "bird", nil
+}
+
+func (m *mockStore) RecordClipSampleRate(_ context.Context, _ uint, _ string, _ int) error {
+	return nil
+}
+
+func (m *mockStore) FillClipSampleRate(_ context.Context, _ uint, _ string, _ int) (bool, error) {
+	return false, nil
+}
+func (m *mockStore) DeleteNoteClipPath(noteID string) error { return nil }
 func (m *mockStore) GetClipsQualifyingForRemoval(minHours, minClips int) ([]datastore.ClipForRemoval, error) {
 	return nil, nil
 }
@@ -249,6 +260,9 @@ func (m *mockStore) GetNoteLock(noteID string) (*datastore.NoteLock, error) {
 func (m *mockStore) IsNoteLocked(noteID string) (bool, error)            { return false, nil }
 func (m *mockStore) GetLockedNotesClipPaths() ([]string, error)          { return nil, nil }
 func (m *mockStore) ClearNoteClipPathsByNames(_ []string) (int64, error) { return 0, nil }
+func (m *mockStore) RetainNoteSpectrogramsByClipNames(_ []string) (int64, error) {
+	return 0, nil
+}
 func (m *mockStore) GetNoteClipReferences(_ uint, _ int) ([]diskmanager.ClipReference, error) {
 	return nil, nil
 }
@@ -1125,9 +1139,6 @@ func TestMain(m *testing.M) {
 	conftest.NewTestSettings().Apply()
 
 	goleak.VerifyTestMain(m,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		// NOTE: startCacheRefresh.func1 is deliberately NOT ignored. Close() stops it, so
 		// ignoring it hid every test that constructed a cache and never closed it.
 		// Ignore HTTP/2 client connection goroutines from the shared imageHTTPClient

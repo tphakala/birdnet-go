@@ -546,8 +546,9 @@ func migrationPhaseForTransition(to entities.MigrationStatus) string {
 	}
 }
 
-// IsInDualWriteMode returns true if dual-write is active.
-// Dual-write is active during DUAL_WRITE, MIGRATING, VALIDATING, and CUTOVER states.
+// IsInDualWriteMode returns true if the migration state is DUAL_WRITE, MIGRATING,
+// VALIDATING, or CUTOVER. It only reports the persisted state: live saves go to the
+// legacy store and the migration worker copies them to V2.
 func (m *StateManager) IsInDualWriteMode() (bool, error) {
 	state, err := m.GetState()
 	if err != nil {
@@ -593,11 +594,11 @@ func (m *StateManager) GetProgress() (migratedRecords, totalRecords int64, lastM
 // ============================================================================
 // Dirty ID Tracking
 // ============================================================================
-// These methods track detection IDs that failed to write to V2 during dual-write.
+// These methods track detection IDs the migration worker failed to write to V2.
 // Unlike in-memory tracking, these persist across restarts.
 
 // AddDirtyID records a detection ID that failed to write to V2.
-// This is called when saveToV2 fails during dual-write.
+// The migration worker calls it when copying a record to V2 fails.
 func (m *StateManager) AddDirtyID(detectionID uint) error {
 	dirty := entities.MigrationDirtyID{DetectionID: detectionID}
 	// Use ON CONFLICT IGNORE semantics - if already dirty, that's fine

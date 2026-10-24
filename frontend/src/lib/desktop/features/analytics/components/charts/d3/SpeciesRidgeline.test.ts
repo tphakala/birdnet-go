@@ -95,4 +95,15 @@ describe('SpeciesRidgeline', () => {
     });
     expect(container.querySelector('.ridgeline-note')).toBeNull();
   });
+
+  it('renders the plot inside a flex child below the note', async () => {
+    const { container } = render(SpeciesRidgeline, {
+      props: { series: sample, noteKey: 'my.note.key' },
+    });
+    await Promise.resolve();
+    const plot = container.querySelector('.ridgeline-plot');
+    expect(plot).toBeTruthy();
+    expect(plot?.querySelector('svg')).toBeTruthy();
+    expect(plot?.previousElementSibling?.classList.contains('ridgeline-note')).toBe(true);
+  });
 });

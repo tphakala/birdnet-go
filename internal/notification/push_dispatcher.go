@@ -112,7 +112,7 @@ func ReconfigureFromSettings(settings *conf.Settings) error {
 		globalPushDispatcher = nil
 	}
 
-	// Call initializePushDispatcher directly — we already hold the lock,
+	// Call initializePushDispatcher directly; we already hold the lock,
 	// so going through dispatcherOnce.Do is unnecessary and avoids the
 	// anti-pattern of resetting sync.Once by value assignment.
 	return initializePushDispatcher(settings, existingMetrics)
@@ -610,9 +610,8 @@ func (d *pushDispatcher) logCircuitBreakerOpen(providerName, notifID string) {
 
 // shouldRetry determines if an attempt should be retried.
 func (d *pushDispatcher) shouldRetry(err error, attempts int, providerName string) bool {
-	var perr *providerError
 	retryable := true
-	if errors.As(err, &perr) {
+	if perr, ok := errors.AsType[*providerError](err); ok {
 		retryable = perr.Retryable
 	}
 
@@ -1208,7 +1207,16 @@ func (d *pushDispatcher) getCircuitBreakerConfig(settings *conf.Settings) Circui
 }
 
 // buildEnhancedProvider creates a single enhanced provider with all supporting components.
+// It returns nil without building anything for a disabled provider, so a disabled
+// provider resolves no secrets and reports no errors.
 func (d *pushDispatcher) buildEnhancedProvider(pc *conf.PushProviderConfig, cbConfig CircuitBreakerConfig, settings *conf.Settings, notificationMetrics *metrics.NotificationMetrics) *enhancedProvider {
+	if !pc.Enabled {
+		d.log.Debug("skipping disabled push provider",
+			logger.String("name", pc.Name),
+			logger.String("type", pc.Type))
+		return nil
+	}
+
 	prov := buildProvider(pc, d.log)
 	if prov == nil {
 		return nil
@@ -1219,10 +1227,6 @@ func (d *pushDispatcher) buildEnhancedProvider(pc *conf.PushProviderConfig, cbCo
 			logger.String("name", pc.Name),
 			logger.String("type", pc.Type),
 			logger.Error(err))
-		return nil
-	}
-
-	if !prov.IsEnabled() {
 		return nil
 	}
 

@@ -26,6 +26,8 @@ export function getThemeInitScript(): string {
   (function() {
     try {
       var scheme = localStorage.getItem('color-scheme') || 'blue';
+      // Stored JSON-encoded ("amber") by the app; a plain value is accepted too
+      try { scheme = JSON.parse(scheme); } catch (e) {}
       var valid = ['blue','forest','amber','violet','rose','custom'];
       if (valid.indexOf(scheme) === -1) scheme = 'blue';
       document.documentElement.setAttribute('data-scheme', scheme);
@@ -43,8 +45,11 @@ export function getThemeInitScript(): string {
               return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
             }
             var ct = function(hex) { return lum(hex) > 0.179 ? '#020617' : '#ffffff'; };
-            s.setProperty('--custom-primary-content', ct(c.primary));
-            s.setProperty('--custom-accent-content', ct(c.accent || c.primary));
+            var pc = ct(c.primary), ac = ct(c.accent || c.primary);
+            s.setProperty('--custom-primary-content', pc);
+            s.setProperty('--custom-accent-content', ac);
+            s.setProperty('--custom-primary-shade', pc === '#ffffff' ? 'black' : 'white');
+            s.setProperty('--custom-accent-shade', ac === '#ffffff' ? 'black' : 'white');
           }
         }
       }

@@ -381,8 +381,8 @@ func RegisterAviCommonsProvider(registry *ImageProviderRegistry, dataFs fs.FS, m
 
 	if err := registry.Register(aviCommonsProviderName, cache); err != nil {
 		// Check if it's already an enhanced error from Register method
-		var enhancedErr *errors.EnhancedError
-		if !errors.As(err, &enhancedErr) {
+		enhancedErr, ok := errors.AsType[*errors.EnhancedError](err)
+		if !ok {
 			enhancedErr = errors.Newf("failed to register Avicommons provider with registry: %v", err).
 				Component("imageprovider").
 				Category(errors.CategoryImageProvider).

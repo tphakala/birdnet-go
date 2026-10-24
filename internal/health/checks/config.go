@@ -10,14 +10,14 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 )
 
-// ToolInfo holds the runtime availability status of an external tool (FFmpeg, Sox, etc.).
+// ToolInfo holds the runtime availability status of an external tool (FFmpeg, etc.).
 type ToolInfo struct {
-	Name    string // e.g. "FFmpeg", "Sox"
+	Name    string // e.g. "FFmpeg"
 	Path    string // resolved absolute path, empty if unavailable
 	Version string // version string, empty if unknown
 }
 
-// ToolAvailabilityCheck verifies that required external tools (FFmpeg, Sox) are present.
+// ToolAvailabilityCheck verifies that required external tools (FFmpeg) are present.
 type ToolAvailabilityCheck struct {
 	getTools func() []ToolInfo
 }

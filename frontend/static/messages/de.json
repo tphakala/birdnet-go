@@ -109,6 +109,14 @@
       "closeModal": "Modal schließen",
       "dismissAlert": "Warnung verwerfen",
       "closeNotification": "Benachrichtigung schließen",
+      "toastRegion": {
+        "topLeft": "Benachrichtigungen, oben links",
+        "topCenter": "Benachrichtigungen, oben mittig",
+        "topRight": "Benachrichtigungen, oben rechts",
+        "bottomLeft": "Benachrichtigungen, unten links",
+        "bottomCenter": "Benachrichtigungen, unten mittig",
+        "bottomRight": "Benachrichtigungen, unten rechts"
+      },
       "toggleDropdown": "Dropdown umschalten",
       "sortAscending": "Aufsteigend sortieren",
       "selectLanguage": "Sprache auswählen",
@@ -130,7 +138,6 @@
       "selectToday": "Heute auswählen",
       "dateSelected": "Datum ausgewählt: {date}",
       "calendarNavigation": "Verwenden Sie die Pfeiltasten zur Navigation im Kalender, Enter zum Auswählen, Escape zum Schließen",
-      "downloadCsv": "Artenliste als CSV herunterladen",
       "visitEbirdLink": "eBird.org in neuem Tab öffnen",
       "learnEbirdTaxonomyLink": "eBird-Taxonomie in neuem Tab öffnen",
       "resizeHandle": "Ziehen zum Ändern der Größe",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Audioanalyse überlastet",
-        "overloadMessage": "Ihr System verwirft {dropRate} % der Audioaufnahmen der Quelle ''{sourceName}'', da es mit der Analyse nicht Schritt halten kann. Reduzieren Sie den BirdNET-Überlappungswert in den Erkennungseinstellungen oder erwägen Sie ein Upgrade auf eine schnellere CPU."
+        "overloadMessage": "Ihr System verwirft {dropRate} % der Audioaufnahmen der Quelle '{sourceName}', da es mit der Analyse nicht Schritt halten kann. Reduzieren Sie den BirdNET-Überlappungswert in den Erkennungseinstellungen oder erwägen Sie ein Upgrade auf eine schnellere CPU."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime nicht verfügbar",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Kein Modell analysiert {sourceName}",
         "notRegisteredMessage": "Kein Audio erreicht {models} an der Audioquelle \"{sourceName}\", sodass keine Erkennungen erzeugt werden. Öffnen Sie System > KI-Modelle, um den Status pro Quelle zu überprüfen, und stellen Sie sicher, dass die Audioquelle verbunden ist und Audio sendet."
       },
+      "acousticModels": {
+        "noneTitle": "Kein akustisches Modell aktiviert",
+        "noneMessage": "Es ist kein akustisches Modell geladen, sodass Audio zwar erfasst, aber nicht analysiert wird. Aktivieren Sie ein Modell unter Einstellungen > Analyse, oder installieren Sie eines aus der Modellgalerie.",
+        "loadFailedTitle": "Akustisches Modell konnte nicht geladen werden",
+        "loadFailedMessage": "Ein aktiviertes akustisches Modell konnte nicht geladen werden, sodass Audio erfasst, aber nicht analysiert wird. Überprüfen Sie das Modell auf der Seite System > KI-Modelle."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# Modell hat einen besseren Build für dieses System} other {# Modelle haben bessere Builds für dieses System}}",
+        "message": "Ein Build, der besser zur Hardware oder zum Standort dieses Systems passt, ist verfügbar für: {models}. Öffnen Sie Einstellungen > Analyse > Modelle und wählen Sie Optimieren, um zu wechseln."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Aktueller Wert: {value}% (Schwellenwert: {threshold}%)",
@@ -493,6 +510,23 @@
           "diskFull": "Festplatte voll - Speicherplatz freigeben",
           "permissionDenied": "Zugriff verweigert - Datei- oder Dienstberechtigungen prüfen"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} scheitert bei jeder Analyse",
+        "message": "{modelName} ist geladen, aber die letzten {failures} Analysen in Folge sind auf {runtime} fehlgeschlagen: Die Inferenz hat einen Fehler zurückgegeben. Audio wird erfasst, aber dieses Modell erkennt nichts. Überprüfen Sie das Modell auf der Seite System > KI-Modelle.",
+        "nonFiniteMessage": "{modelName} ist geladen, aber die letzten {failures} Analysen in Folge sind auf {runtime} fehlgeschlagen: Das Modell hat ungültige Werte (NaN oder unendlich) geliefert. Audio wird erfasst, aber dieses Modell erkennt nichts. Überprüfen Sie das Modell auf der Seite System > KI-Modelle."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analyse-Überlappung für dieses Gerät begrenzt",
+        "cadenceCappedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt bei der eingestellten Überlappung von {configured} s die gemessene Kapazität dieses Geräts, daher wird mit {effective} s Überlappung analysiert. Der Falsch-Positiv-Filter kann dadurch weniger Bestätigungen verlangen. Ihre gespeicherten Einstellungen bleiben unverändert; siehe Einstellungen > Analyse.",
+        "cadenceOverloadedTitle": "Dieses Gerät kommt mit der Audioanalyse nicht hinterher",
+        "cadenceOverloadedMessage": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt die gemessene Kapazität dieses Geräts selbst ohne Überlappung, daher kann die Analyse in Verzug geraten und Erkennungen können verloren gehen. Aktivieren Sie weniger Modelle oder Audioquellen, oder wählen Sie eine schnellere Modellvariante."
+      },
+      "storage": {
+        "notPersistentTitle": "Daten gehen verloren, wenn der Container neu erstellt wird",
+        "notPersistentMessage": "Diese Pfade liegen auf Speicher, der gelöscht wird, wenn der Container neu erstellt wird, zum Beispiel bei einem Image-Update: {paths}. Ordnen Sie ihnen in Ihrer Container-Konfiguration ein Volume oder ein Host-Verzeichnis zu.",
+        "anonymousVolumeTitle": "Daten liegen in einem anonymen Container-Volume",
+        "anonymousVolumeMessage": "Diese Pfade liegen in anonymen Volumes, die die Container-Laufzeit angelegt hat, weil kein Volume zugeordnet war: {paths}. Ein frisch gestarteter Container, zum Beispiel mit docker run nach einem Image-Update, erhält neue leere Volumes, sodass die Daten verloren scheinen. Ordnen Sie ihnen ein benanntes Volume oder ein Host-Verzeichnis zu."
       }
     },
     "loading": "Benachrichtigungen werden geladen..."
@@ -760,6 +794,16 @@
       "recentDetectionsFetch": "Fehler beim Abrufen aktueller Erkennungen: {status}",
       "recentDetectionsLoad": "Fehler beim Laden aktueller Erkennungen",
       "configFetch": "Fehler beim Abrufen der Dashboard-Konfiguration: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Kein akustisches Modell aktiviert",
+      "noneMessage": "Audio wird erfasst, aber nicht analysiert. Aktivieren Sie ein Modell in der Modellgalerie, um Arten zu erkennen.",
+      "noneAction": "Modellgalerie öffnen",
+      "loadFailedTitle": "Akustisches Modell konnte nicht geladen werden",
+      "loadFailedMessage": "Ein aktiviertes Modell konnte nicht geladen werden, daher wird kein Audio analysiert. Die Seite KI-Modelle zeigt, welches Modell fehlgeschlagen ist und warum.",
+      "loadFailedAction": "Status der KI-Modelle anzeigen",
+      "failingTitle": "{count, plural, one {Ein Modell scheitert bei jeder Analyse} other {# Modelle scheitern bei jeder Analyse}}",
+      "failingMessage": "{count, plural, one {{models} ist geladen, aber jede Analyse schlägt fehl, daher erkennt es nichts.} other {{models} sind geladen, aber jede Analyse schlägt fehl, daher erkennen sie nichts.}} Die Seite KI-Modelle zeigt das Backend und den Fehler."
     },
     "banner": {
       "title": "Titel",
@@ -1029,7 +1073,8 @@
       "error": "Fehler beim Laden der Erkennung: {error}",
       "loadingResults": "Lade {count} Ergebnisse...",
       "thumbnailLoading": "Lade Vorschaubild von {species}...",
-      "thumbnailLoaded": "Vorschaubild von {species} geladen"
+      "thumbnailLoaded": "Vorschaubild von {species} geladen",
+      "resultsPerPage": "Ergebnisse pro Seite"
     },
     "errors": {
       "notFound": "Erkennung nicht gefunden. Sie wurde möglicherweise gelöscht oder die ID ist falsch.",
@@ -1554,7 +1599,7 @@
           "restartTitle": "Neustart erforderlich",
           "restartBody": "Starten Sie die Anwendung neu, um zur V2-Datenbank zu wechseln. Die Bereinigung der Legacy-Datenbank ist nach dem Neustart verfügbar.",
           "fallbackError": "Abweichung der Datensatzanzahl zwischen Legacy- und V2-Datenbank. Einige Datensätze wurden möglicherweise nicht korrekt migriert.",
-          "migrateInfo": "Die Migration überträgt {count} Datensätze von der Legacy-Datenbank in das neue V2-Schema. Der Dual-Write-Modus stellt sicher, dass während der Migration keine Daten verloren gehen.",
+          "migrateInfo": "Die Migration überträgt {count} Datensätze von der Legacy-Datenbank in das neue V2-Schema. Während der Migration gespeicherte neue Erkennungen werden ebenfalls in die neue Datenbank kopiert.",
           "sourceLegacy": "Quelle (Legacy)",
           "targetV2": "Ziel (V2)",
           "recordsLabel": "Datensätze",
@@ -1606,7 +1651,7 @@
         },
         "notes": {
           "in_progress": "Sie können das System normal weiter verwenden, während die Migration im Hintergrund läuft.",
-          "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
+          "dual_write": "Migration läuft. Ihre Daten sind sicher - neue Erkennungen werden in der aktuellen Datenbank gespeichert und während der Migration in die neue Datenbank kopiert. Sie können BirdNET-Go normal weiter nutzen.",
           "migrating": "Kopiere Ihre bestehenden Erkennungen in die neue Datenbank. Dies kann je nach Anzahl der Erkennungen eine Weile dauern. Sie können jederzeit pausieren und fortsetzen.",
           "validating": "Überprüfe, ob alle Datensätze korrekt kopiert wurden. Fast fertig!",
           "cutover": "Wechsle zur neuen Datenbank. Das dauert nur einen Moment.",
@@ -1842,7 +1887,14 @@
       "fp16Help": "16-Bit-Gleitkomma.",
       "invocationsHelp": "Gesamte analysierte Audiosegmente seit dem Start.",
       "noModelsHint": "Noch keine Audioquelle konfiguriert?",
-      "noModelsHintLink": "Audioquellen konfigurieren"
+      "noModelsHintLink": "Audioquellen konfigurieren",
+      "modelFailing": "jede Analyse schlägt fehl",
+      "lastSuccess": "Letzter Erfolg",
+      "lastSuccessHelp": "Wann dieses Modell zuletzt Audio ohne Fehler analysiert hat.",
+      "lastSuccessNever": "Keiner seit dem Laden des Modells",
+      "modelFailingHelp": "{reason} Versuchen Sie eine andere Version dieses Modells unter Einstellungen > Analyse > Modelle oder prüfen Sie das oben angezeigte Backend und die Präzision.",
+      "modelFailingReasonNonFinite": "Alle letzten Analysen sind fehlgeschlagen, weil das Modell ungültige Werte (NaN oder unendlich) geliefert hat, daher erkennt es nichts.",
+      "modelFailingReasonError": "Alle letzten Analysen sind fehlgeschlagen, weil die Inferenz einen Fehler zurückgegeben hat, daher erkennt das Modell nichts."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2286,7 +2338,9 @@
       "saveAriaLabel": "Änderungen speichern",
       "savingAriaLabel": "Änderungen werden gespeichert...",
       "unsavedChanges": "Ungespeicherte Änderungen",
-      "toolbar": "Einstellungsaktionen"
+      "toolbar": "Einstellungsaktionen",
+      "validationBlocked": "Einige Felder müssen geprüft werden, bevor Sie speichern können.",
+      "noChangesToSave": "Keine Änderungen zu speichern."
     },
     "errors": {
       "loadFailed": "Einstellungen konnten nicht geladen werden",
@@ -2370,10 +2424,9 @@
             "lenient": "Für Audio niedriger Qualität (RTSP-Kameras, Webcam-Mikrofone)",
             "moderate": "Ausgewogen für typische Hobby-Setups",
             "balanced": "Ursprüngliches Verhalten vor September 2025",
-            "strict": "RPi 4+ erforderlich. Für hochwertige Mikrofone",
-            "maximum": "RPi 4+ erforderlich. Für professionelle Mikrofone"
+            "strict": "Für hochwertige Mikrofone",
+            "maximum": "Für professionelle Mikrofone"
           },
-          "hardwareNote": "Die Stufen \"Streng\" und \"Maximum\" erfordern höhere Überlappungseinstellungen und mehr CPU-Ressourcen. RPi 4 oder bessere Hardware ist für diese Stufen erforderlich.",
           "overlapAdjusted": "Überlappungseinstellung automatisch auf {overlap}s angepasst, um die Filteranforderungen zu erfüllen",
           "overlapReduced": "Überlappungseinstellung auf {overlap}s reduziert, um der Filterstufe zu entsprechen",
           "levelNames": {
@@ -2385,7 +2438,19 @@
             "maximum": "Maximum",
             "unknown": "Unbekannt"
           },
-          "warningOff": "Ohne Filterung wird jede Erkennung über dem Konfidenzschwellenwert sofort akzeptiert. Dies erzeugt typischerweise mehrere Fehlerkennungen pro Tag. Selbst eine niedrige Filterung verbessert die Ergebnisqualität erheblich."
+          "warningOff": "Ohne Filterung wird jede Erkennung über dem Konfidenzschwellenwert sofort akzeptiert. Dies erzeugt typischerweise mehrere Fehlerkennungen pro Tag. Selbst eine niedrige Filterung verbessert die Ergebnisqualität erheblich.",
+          "readoutTitle": "Aktuell erforderliche Bestätigungen",
+          "readoutPreviewTitle": "Erforderliche Bestätigungen nach dem Speichern (Schätzung)",
+          "readoutIntro": "Eine Erkennung wird akzeptiert, wenn genügend Analysefenster innerhalb von {seconds} Sekunden übereinstimmen.",
+          "readoutLine": "{model}: {count} von {windows} Fenstern, alle {step} s ein neues Fenster",
+          "readoutPreview": "Geschätzt aus Ihren ungespeicherten Änderungen. Die Gerätegrenze wird nach dem Speichern erneut geprüft.",
+          "readoutPending": "Die gespeicherten Einstellungen werden übernommen. Bis die aktualisierten Werte geladen sind, sind dies Schätzungen.",
+          "capNoticeTitle": "Überlappung auf die Leistung dieses Geräts begrenzt",
+          "capNotice": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt bei der eingestellten Überlappung von {configured} s die gemessene Kapazität dieses Geräts, daher wird mit {effective} s Überlappung analysiert. Der Filter kann deshalb weniger Bestätigungen verlangen. Ihre gespeicherten Einstellungen bleiben unverändert.",
+          "overloadedNoticeTitle": "Dieses Gerät kommt mit der Analyse nicht hinterher",
+          "overloadedNotice": "Der Betrieb von {models, plural, one {# Modell} other {# Modellen}} mit {sources, plural, one {# Audioquelle} other {# Audioquellen}} übersteigt die gemessene Kapazität dieses Geräts selbst ohne Überlappung. Die Analyse kann in Verzug geraten und Erkennungen können verloren gehen. Aktivieren Sie weniger Modelle oder Audioquellen, oder wählen Sie eine schnellere Modellvariante.",
+          "unknownLatency": "Die Verarbeitungszeit konnte für {models} nicht gemessen werden und wird beim Begrenzen der Überlappung nicht berücksichtigt. Die Analyse kann dennoch in Verzug geraten.",
+          "cpuNote": "Eine höhere Stärke analysiert überlappendes Audio häufiger, was für jedes aktivierte Modell und jede Audioquelle CPU-Zeit kostet. BirdNET-Go begrenzt die Überlappung automatisch auf das, was dieses Gerät verarbeiten kann."
         },
         "rangeFilter": {
           "title": "Reichweitenfilter",
@@ -2400,7 +2465,7 @@
             "accuracy": "Geschätzte Genauigkeit: innerhalb von {accuracy} m",
             "locationDetected": "Browserstandort wurde ermittelt.",
             "geolocationUnsupported": "Dieser Browser unterstützt die Gerätestandortbestimmung nicht. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
-            "geolocationRequiresHttps": "Die Browser-Standortbestimmung erfordert HTTPS oder localhost. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
+            "geolocationInsecureHelp": "Erfordert HTTPS oder localhost. Suchen Sie stattdessen einen Ort oder verwenden Sie die Karte.",
             "geolocationDenied": "Die Standortberechtigung wurde verweigert. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
             "geolocationUnavailable": "Ihr Gerät konnte seinen Standort nicht bestimmen. Geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
             "geolocationTimedOut": "Die Standortanfrage hat das Zeitlimit überschritten. Versuchen Sie es erneut, geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
@@ -2627,7 +2692,7 @@
                 "descriptions": {
                   "highContrast": "Ideal für schwache Signale. Vogelrufe heben sich deutlich vom Hintergrundrauschen ab. Empfohlen für wissenschaftliche/Graustufen-Stile.",
                   "standard": "Ausgewogene Standardeinstellung. Gut für die meisten Anwendungsfälle.",
-                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast. SoX-Standardwert."
+                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast."
                 }
               },
               "enabled": {
@@ -2729,7 +2794,7 @@
           "title": "Was im Bericht enthalten ist:",
           "applicationLogs": "**Anwendungsprotokolle** - Aktuelle Fehler und Debug-Informationen",
           "configuration": "**Konfiguration** - Ihre Einstellungen mit entfernten sensiblen Daten",
-          "systemInfo": "**Systeminformationen** - Betriebssystemversion, Speicher und Laufzeitdetails",
+          "systemInfo": "**Systeminformationen** - Betriebssystemversion, Speicher, Hardware, angeschlossene USB-Geräte und Soundkarten sowie Laufzeitdetails",
           "notIncluded": "**NICHT enthalten** - Audiodateien, Vogelerkennungen oder persönliche Daten"
         },
         "userMessage": {
@@ -2882,6 +2947,11 @@
             "unit": "Min",
             "helpText": "Verhindert wiederholte Benachrichtigungen für dieselbe Art innerhalb dieses Zeitfensters. Auf 0 setzen zum Deaktivieren."
           }
+        },
+        "rulesNotice": {
+          "message": "Push-Benachrichtigungen für Erkennungen kommen von den Alarmregeln auf der Registerkarte Regeln. Die integrierten Erkennungsregeln benachrichtigen nur in der App. Um Push-Benachrichtigungen zu erhalten, fügen Sie der Regel {ruleName} die Aktion {pushAction} hinzu oder erstellen Sie eine Regel für das Ereignis {eventName} mit einer Konfidenzbedingung und einer Abklingzeit.",
+          "previousFilters": "Ihre Einstellungen Mindestkonfidenz ({confidence} %) und Arten-Abklingzeit ({minutes} Min) hier werden von Alarmregeln nicht verwendet.",
+          "openRules": "Regeln öffnen"
         },
         "noProviders": "Keine Anbieter konfiguriert",
         "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um Push-Benachrichtigungen zu erhalten",
@@ -3149,7 +3219,7 @@
         "vadEnable": "Privatsphären-Schutz aktivieren (Silero VAD)",
         "vadHelp": "Führt ein dediziertes neuronales Spracherkennungsmodell parallel zum Klassifikator für zuverlässige Sprachfilterung aus. Verbraucht zusätzliche Systemressourcen (ca. 20-30 MB RAM und CPU-Inferenz pro Segment).",
         "vadThresholdLabel": "Schwellenwert für Privatsphären-Schutz",
-        "vadThresholdHelp": "Empfindlichkeitsschwellenwert für die Sprachaktivitätserkennung (Standard 0,35). Niedrigere Werte machen den Filter empfindlicher für leise oder entfernte Sprache."
+        "vadThresholdHelp": "Empfindlichkeitsschwellenwert für die Sprachaktivitätserkennung (Standard 0,6). Niedrigere Werte machen den Filter empfindlicher für leise oder entfernte Sprache."
       },
       "falsePositivePrevention": {
         "title": "Falsch-Positiv-Prävention",
@@ -3186,14 +3256,14 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Erkennungen zu BirdWeather hochladen",
-        "ffmpegWarning": {
-          "title": "FFmpeg nicht erkannt",
-          "message": "Bitte installieren Sie FFmpeg, um die FLAC-Kodierungsunterstützung zu aktivieren. BirdWeather veraltet WAV-Uploads zugunsten komprimierter FLAC-Audiodateien."
-        },
         "enable": "BirdWeather-Uploads aktivieren",
         "token": {
           "label": "BirdWeather-Token",
-          "helpText": "Ihr einzigartiges BirdWeather-Token."
+          "helpText": "Ihr einzigartiges BirdWeather-Token.",
+          "errors": {
+            "required": "Geben Sie Ihr Token ein oder schalten Sie BirdWeather aus.",
+            "format": "Ein BirdWeather-Token besteht aus 24 Buchstaben und Ziffern."
+          }
         },
         "threshold": {
           "label": "Upload-Schwellenwert",
@@ -3269,7 +3339,7 @@
             "label": "Gerätename",
             "helpText": "Der Basisname für Geräte, wie sie in Home Assistant erscheinen. Jede Audioquelle hat ihr eigenes Gerät, das mit diesem BirdNET-Go-Hauptgerät verknüpft ist."
           },
-          "sensorsNote": "<strong>Erstellte Sensoren:</strong> Für jede Audioquelle erhält Home Assistant: Letzte Art, Konfidenz, wissenschaftlicher Name und Schallpegel (wenn aktiviert). Das Bridge-Gerät enthält Online/Offline-Verfügbarkeitsstatus.",
+          "sensorsNote": "<strong>Erstellte Sensoren:</strong> Für jede Audioquelle erhält Home Assistant: Letzte Art, Konfidenz, wissenschaftlicher Name und Schallpegel (wenn aktiviert). Das Bridge-Gerät enthält Online/Offline-Verfügbarkeitsstatus. Die Erkennungssensoren jeder Quelle lesen das eigene MQTT-Topic dieser Quelle, &lt;base_topic&gt;/sources/&lt;source_id&gt;, und ihr Schallpegel-Sensor liest das Subtopic &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, sodass eine Erkennung einer Quelle niemals die Sensoren einer anderen Quelle zurücksetzt.",
           "discovery": {
             "button": "Discovery senden",
             "success": "Discovery-Nachrichten an Home Assistant gesendet",
@@ -3315,7 +3385,8 @@
             "none": "Keiner",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3336,6 +3407,16 @@
             "helpText": "Wählen Sie Maßeinheiten für Temperatur und Windgeschwindigkeit: Metrisch, Imperial oder UK‑Hybrid."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API-Schlüssel",
+            "helpText": "Geben Sie Ihren Pirate Weather API-Schlüssel ein. Erforderlich für Wetterdaten."
+          },
+          "endpoint": {
+            "label": "API-Endpunkt",
+            "helpText": "Überschreiben Sie den Standard-Pirate-Weather-API-Endpunkt, falls nötig. Standardmäßig wird https://api.pirateweather.net/forecast verwendet, wenn leer gelassen."
+          }
+        },
         "notes": {
           "none": "Es werden keine Wetterdaten abgerufen.",
           "yrno": {
@@ -3343,7 +3424,8 @@
             "freeService": "Yr ist ein kostenloser Wetterdatendienst. Für weitere Informationen besuchen Sie <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Die Nutzung von OpenWeather erfordert einen API-Schlüssel. Registrieren Sie sich für einen kostenlosen API-Schlüssel bei <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Erfordert einen Weather Underground API-Schlüssel und eine gültige PWS-Stations-ID. Weitere Informationen unter <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>."
+          "wunderground": "Erfordert einen Weather Underground API-Schlüssel und eine gültige PWS-Stations-ID. Weitere Informationen unter <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a>.",
+          "pirateweather": "Die Nutzung von Pirate Weather erfordert einen API-Schlüssel, registrieren Sie sich unter <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API-Schlüssel",
@@ -3685,6 +3767,8 @@
         "frequencyResponse": "Frequenzgang",
         "cutoffFrequency": "Grenzfrequenz",
         "cutoffFrequencyHelp": "Frequenz, bei der der Filter beginnt, Signale zu dämpfen. Vogelrufe liegen typischerweise zwischen 1-10 kHz.",
+        "centerFrequency": "Mittenfrequenz",
+        "bandwidth": "Bandbreite",
         "qFactor": "Q-Faktor",
         "qFactorHelp": "Qualitätsfaktor steuert die Schärfe des Filters. Niedrigere Werte (0,1-1) erzeugen sanftere Übergänge, höhere Werte (1-10) erzeugen steilere Abschnitte.",
         "gain": "Verstärkung",
@@ -3692,17 +3776,31 @@
         "attenuation": "Dämpfung",
         "attenuationHelp": "Filterabrollrate. Höhere Werte sorgen für steilere Dämpfung gefilterter Frequenzen.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Aus",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Fügen Sie mehrere Filter hinzu, um den Frequenzgang für optimale Vogelerkennung in Ihrer Umgebung zu gestalten.",
+        "emptyEntryRestored": "Geben Sie eine Zahl ein. Der vorherige Wert wurde beibehalten.",
         "graph": {
           "flatResponse": "Flacher Frequenzgang (Keine Filter aktiv)",
           "frequency": "Frequenz (Hz)",
-          "gain": "Verstärkung (dB)"
+          "gain": "Verstärkung (dB)",
+          "loading": "Frequenzgang wird berechnet...",
+          "updating": "Frequenzgang wird aktualisiert...",
+          "error": "Der Frequenzgang konnte nicht berechnet werden. Er wird aktualisiert, wenn du einen Filter änderst oder Erneut versuchen wählst.",
+          "sampleRate": "Berechnet für eine Abtastrate von {rate} Hz.",
+          "clipped": "Der Frequenzgang erreicht seinen Höchstwert bei {peak} dB, oberhalb des oberen Rands des Diagramms.",
+          "skippedHeading": "{count, plural, one {# Filter wird nicht auf das Audio angewendet} other {# Filter werden nicht auf das Audio angewendet}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) wird übersprungen: Dieser Filtertyp wird nicht unterstützt.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) wird übersprungen: Seine Einstellungen sind bei {rate} Hz ungültig.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) wird übersprungen: Er konnte nicht zur Filterkette hinzugefügt werden.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) wird übersprungen."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3716,6 +3814,7 @@
         "dataOutputTitle": "Schallpegeldatenausgabe",
         "dataOutputDescription": "Wenn aktiviert, werden Schallpegelmessungen veröffentlicht über:",
         "mqttTopic": "MQTT-Topic:",
+        "mqttSourceTopic": "Quellenspezifisches MQTT-Topic (mit Home Assistant Discovery):",
         "sseEndpoint": "SSE-Endpunkt:",
         "prometheusMetrics": "Prometheus-Metriken:"
       },
@@ -3777,6 +3876,8 @@
         "pathHelp": "Verzeichnis, in dem Audioclips gespeichert werden. Relative Pfade beziehen sich auf das Anwendungsverzeichnis. Beispiel: 'clips/' oder '/var/audio/birds/'",
         "typeLabel": "Audioformat",
         "typeHelp": "Audioformat für gespeicherte Clips. WAV und FLAC sind verlustfrei (beste Qualität, größere Dateien). MP3, AAC und Opus sind verlustbehaftet (kleinere Dateien, leichter Qualitätsverlust).",
+        "ultrasonicTypeLabel": "Ultraschallformat",
+        "ultrasonicTypeHelp": "Verlustfreies Format (WAV oder FLAC), das nur für Fledermaus- und Ultraschallaufnahmen über 48 kHz verwendet wird. Diese werden mit ihrer vollen Quellabtastrate anstelle des obigen Formats gespeichert, sodass keine Ultraschalldetails verloren gehen.",
         "bitrateLabel": "Bitrate",
         "bitrateHelp": "Audio-Kompressionsbitrate für verlustbehaftete Formate. Bereich: {min}-{max} kbps. Höhere Werte bieten bessere Qualität, aber größere Dateien.",
         "losslessBitrateValue": "Nicht zutreffend - Verlustfrei",
@@ -3845,7 +3946,17 @@
       },
       "models": {
         "recommendBoth": "Für die beste Artenerkennung wird empfohlen, sowohl BirdNET als auch Perch gemeinsam auszuführen.",
-        "perchOnlyWarning": "Perch allein erzeugt weniger Erkennungen. Senken Sie den Konfidenzschwellenwert auf 0.50 für aussagekräftige Ergebnisse, oder aktivieren Sie BirdNET für eine bessere Abdeckung."
+        "perchOnlyWarning": "Perch allein erzeugt weniger Erkennungen. Senken Sie den Konfidenzschwellenwert auf 0.50 für aussagekräftige Ergebnisse, oder aktivieren Sie BirdNET für eine bessere Abdeckung.",
+        "loading": "Erkennungsmodelle werden geladen...",
+        "noneEnabledTitle": "Kein Erkennungsmodell aktiviert.",
+        "noneEnabledHelp": "Sie können diese Quelle trotzdem speichern. Das Audio wird von den Standardmodellen analysiert, sobald eines aktiviert ist.",
+        "noneEnabledLink": "Modellgalerie öffnen",
+        "noneAvailable": "Auf diesem Server sind keine Erkennungsmodelle aktiviert.",
+        "loadFailedWarning": "Ein Erkennungsmodell konnte nicht geladen werden, daher wird diese Quelle nicht analysiert, bis es wiederhergestellt ist.",
+        "loadFailedLink": "Status der KI-Modelle anzeigen",
+        "defaultBadge": "{models} (Standard)",
+        "defaultPendingBadge": "Standardmodelle",
+        "noneBadge": "Kein Modell geladen"
       }
     },
     "security": {
@@ -3858,7 +3969,7 @@
       "allowSubnetBypassLabel": "Zugriff aus Subnetz zur Umgehung der Authentifizierung erlauben",
       "subnetBypassLocalNote": "Wenn aktiviert, wird Clients im selben lokalen Netzwerk wie dieser Server automatisch vertraut und sie überspringen die Anmeldung. Verwenden Sie das Feld unten nur, um dieses Vertrauen auf weitere Netzwerke auszuweiten (zum Beispiel ein separates VLAN oder ein geroutetes Subnetz).",
       "allowedSubnetsLabel": "Erlaubte Subnetze",
-      "allowedSubnetsHelp": "Zusätzliche Netzwerkbereiche, die die Anmeldung umgehen dürfen, zusätzlich zum eigenen lokalen Netzwerk dieses Servers. CIDR-Notation, kommagetrennt.",
+      "allowedSubnetsHelp": "Zusätzliche Netzwerkbereiche, die die Anmeldung umgehen dürfen, zusätzlich zum eigenen lokalen Netzwerk dieses Servers. Verwenden Sie die CIDR-Notation, wie z.B. 192.168.10.0/24.",
       "securityWarningTitle": "Sicherheitswarnung:",
       "subnetWarningText": "Das lokale Netzwerk dieses Servers und alle hier aufgeführten Subnetze erhalten vollen Zugriff ohne Anmeldung. Fügen Sie nur Netzwerke hinzu, denen Sie voll vertrauen.",
       "httpsSettingsTitle": "HTTPS-Einstellungen",
@@ -4086,6 +4197,77 @@
         "downloadCertificate": "Zertifikat herunterladen",
         "downloadCertificateHelp": "Installieren Sie dieses Zertifikat im Vertrauensspeicher Ihres Betriebssystems, um Browser-Sicherheitswarnungen zu vermeiden.",
         "fileReadError": "Ausgewählte Datei konnte nicht gelesen werden"
+      },
+      "reverseProxy": {
+        "title": "Reverse-Proxy",
+        "description": "Für den Zugriff über nginx, Caddy, Traefik, Cloudflare oder einen anderen Proxy",
+        "listLabel": "Vertrauenswürdige Proxys",
+        "listHelp": "Fügen Sie die Adresse jedes Proxys vor BirdNET-Go hinzu. Bei Docker ist dies oft die Gateway-Adresse von Docker, wie z.B. 172.17.0.1.",
+        "placeholder": "Zum Beispiel 172.17.0.1",
+        "emptyState": "Keine vertrauenswürdigen Proxys. BirdNET-Go verwendet die Adresse, die sich damit verbindet.",
+        "emptyStateCloudflareOnly": "Nur die veröffentlichten Edge-Adressen von Cloudflare sind vertrauenswürdig. Es sind keine weiteren Proxys eingetragen.",
+        "rangeBadge": "Bereich",
+        "ruleOwnAddress": "Geben Sie die eigene Adresse jedes Proxys an. Listen Sie niemals einen Bereich auf, der auch die Computer enthält, von denen aus Sie browsen.",
+        "ruleHeaders": "Der Proxy muss die Client-Adresse an X-Forwarded-For anhängen oder X-Real-IP überschreiben.",
+        "cloudflareLabel": "Cloudflare vertrauen",
+        "cloudflareHelp": "Aktivieren Sie dies, wenn Ihre Website über Cloudflare bereitgestellt wird. BirdNET-Go vertraut dann den veröffentlichten Edge-Adressen von Cloudflare.",
+        "check": {
+          "title": "Ihre Verbindung",
+          "recheck": "Erneut prüfen",
+          "checking": "Verbindung wird geprüft",
+          "error": "Ihre Verbindung konnte nicht geprüft werden.",
+          "stale": "Diese Prüfung zeigt die gespeicherten Einstellungen. Speichern Sie, um Ihre Änderungen zu prüfen.",
+          "trust": "{peer} vertrauen",
+          "trustWarning": "Vertrauen Sie {peer} nur, wenn es sich um Ihren Reverse Proxy handelt und nicht um den Computer, von dem aus Sie browsen.",
+          "trustWithCloudflare": "{peer} und Cloudflare vertrauen",
+          "cloudflareInFront": "Cloudflare liegt vor {peer}. Vertrauen Sie beiden, um Ihre Adresse zu verifizieren.",
+          "cloudflareEdge": "{peer} gehört zu Cloudflare. Aktivieren Sie unten „Cloudflare vertrauen“.",
+          "chainHint": "Wenn ein weiterer Proxy vor {peer} liegt, listen Sie diesen ebenfalls auf.",
+          "added": "Zur Liste hinzugefügt. Speichern Sie zum Übernehmen.",
+          "coveredBy": "Bereits durch {range} in der Liste abgedeckt. Speichern Sie zum Übernehmen.",
+          "selfClientCause": "Der Proxy leitet möglicherweise seine eigene Adresse als Client weiter, oft weil die Portfreigabe des Containers den echten Client verbirgt. Beheben Sie das in der Netzwerkeinrichtung des Containers oder Proxys."
+        },
+        "status": {
+          "direct": {
+            "title": "Direkt verbunden",
+            "body": "Ihr Browser verbindet sich direkt von {peer} mit BirdNET-Go.",
+            "bodyNoPeer": "Ihr Browser verbindet sich direkt mit BirdNET-Go.",
+            "hint": "Wenn Sie einen Reverse Proxy verwenden und {peer} dessen Adresse ist, richten Sie den Proxy so ein, dass er X-Forwarded-For sendet."
+          },
+          "trusted_proxy": {
+            "title": "Über einen vertrauenswürdigen Proxy verbunden",
+            "body": "Ihre Verbindung erfolgt über {peer}, der vertrauenswürdig ist. Ihre Adresse {client} wurde verifiziert.",
+            "hint": "Wenn {client} ein weiterer Proxy statt Ihres Computers ist, listen Sie diesen Proxy ebenfalls auf."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Ihre Adresse konnte nicht verifiziert werden",
+            "body": "{peer} ist vertrauenswürdig, aber die weitergeleitete Adresse konnte nicht verifiziert werden. Häufige Ursachen:",
+            "causeRange": "Ein aufgelisteter Bereich enthält auch Ihren Computer, sodass keine Adresse in der Kette als Ihre gilt.",
+            "causeHeaders": "Der Proxy hängt X-Forwarded-For nicht an oder überschreibt X-Real-IP nicht.",
+            "causeConflict": "Der Proxy sendet widersprüchliche oder wiederholte Adress-Header oder nur einen Forwarded-Header."
+          },
+          "untrusted_public_proxy": {
+            "title": "Über einen öffentlichen Proxy verbunden",
+            "body": "Ihre Verbindung erfolgt über {peer}, eine öffentliche Adresse. Für öffentliche Adressen wird niemals ein Vertrauen per Mausklick angeboten. Fügen Sie eine solche Adresse nur manuell hinzu, wenn Sie sicher sind, dass es sich um Ihren Proxy handelt."
+          },
+          "untrusted_proxy": {
+            "title": "Über einen nicht vertrauenswürdigen Proxy verbunden",
+            "body": "Ihre Verbindung erfolgt über einen Proxy unter {peer}, der nicht vertrauenswürdig ist, daher kann BirdNET-Go Ihre Adresse nicht verifizieren."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Proxy-Header können nicht verifiziert werden",
+            "body": "Ihre Verbindung erfolgt über {peer}, aber die gesendeten Adress-Header könnten nicht einmal verifiziert werden, wenn er vertrauenswürdig wäre.",
+            "bodyNoPeer": "Ihre Verbindung erfolgt über einen Proxy, aber dessen Adresse konnte nicht gelesen werden.",
+            "fix": "Richten Sie den Proxy so ein, dass er X-Forwarded-For anhängt oder X-Real-IP überschreibt."
+          }
+        }
+      },
+      "bypassProxyNote": "Hinter einem Reverse Proxy funktioniert diese Umgehung nur, wenn der Proxy als vertrauenswürdig aufgeführt ist.",
+      "bypassProxyLink": "Vertrauenswürdige Proxys einrichten",
+      "allowedSubnetsEmpty": "Keine zusätzlichen Subnetze. Nur das eigene lokale Netzwerk dieses Servers darf die Anmeldung umgehen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} enthält einen ungültigen Eintrag.",
+        "pendingEntry": "{tab}: {field} enthält Text, der nicht hinzugefügt wurde. Drücken Sie die Eingabetaste oder Hinzufügen, oder löschen Sie ihn."
       }
     },
     "species": {
@@ -4845,6 +5027,28 @@
         "edit": "Art bearbeiten",
         "remove": "Art entfernen"
       }
+    },
+    "networkAddressList": {
+      "add": "Hinzufügen",
+      "remove": "{address} entfernen",
+      "empty": "Noch keine Adressen hinzugefügt.",
+      "pendingHint": "Drücken Sie die Eingabetaste oder Hinzufügen, um diese Adresse hinzuzufügen.",
+      "limitReached": "Die Liste ist voll ({max} Einträge).",
+      "rowDuplicate": "Duplikat",
+      "rowInvalid": {
+        "cidr": "Ungültiger Bereich",
+        "ip": "Ungültige IP-Adresse",
+        "ipOrCidr": "Ungültige Adresse oder ungültiger Bereich"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Ungültiger Bereich: {values}. Verwenden Sie einen Bereich wie 192.168.1.0/24.",
+          "ip": "Ungültige IP-Adresse: {values}. Verwenden Sie eine Adresse wie 192.168.1.10.",
+          "ipOrCidr": "Ungültige Adresse oder ungültiger Bereich: {values}. Verwenden Sie eine Adresse wie 192.168.1.10 oder einen Bereich wie 192.168.1.0/24."
+        },
+        "duplicate": "Bereits in der Liste: {values}.",
+        "limit": "Die Liste fasst höchstens {max} Einträge. Nicht hinzugefügt: {values}."
+      }
     }
   },
   "media": {
@@ -4871,6 +5075,7 @@
       "loop": "Wiederholung umschalten",
       "player": "Audioplayer",
       "autoplayBlocked": "Klicken zum Abspielen (Autoplay blockiert)",
+      "hlsLoadFailed": "Der Audioplayer konnte nicht geladen werden, bitte die Seite neu laden und erneut versuchen",
       "hlsNotSupported": "HLS-Wiedergabe wird in diesem Browser nicht unterstützt",
       "streamStarting": "Audiostream wird gestartet...",
       "levelFor": "Audiopegel für {source}",
@@ -5039,6 +5244,33 @@
       "viewDetections": "{name}-Erkennungen ansehen",
       "largeView": "Große Ansicht von {name}",
       "clickToView": "Klicken, um Erkennungen anzusehen"
+    },
+    "locationMap": {
+      "mapLabel": "Karte zur Auswahl des Stationsstandorts",
+      "expandedMapLabel": "Vollbildkarte zur Auswahl des Stationsstandorts",
+      "zoomIn": "Vergrößern",
+      "zoomOut": "Verkleinern",
+      "expand": "Karte im Vollbild anzeigen",
+      "search": {
+        "label": "Ort suchen",
+        "placeholder": "Ort oder Adresse",
+        "submit": "Suchen",
+        "disclosure": "Suchanfragen werden an Photon (photon.komoot.io) gesendet, das OpenStreetMap-Daten verwendet.",
+        "openPhoton": "Photon in neuem Tab öffnen",
+        "searching": "Suche läuft...",
+        "results": "{count, plural, one {# Ort gefunden} other {# Orte gefunden}}",
+        "noResults": "Keine Orte gefunden. Versuchen Sie einen anderen Namen oder klicken Sie auf die Karte.",
+        "errorNetwork": "Die Ortssuche ist nicht verfügbar. Prüfen Sie die Internetverbindung. Sie können weiterhin auf die Karte klicken oder Koordinaten eingeben.",
+        "errorRateLimited": "Zu viele Suchanfragen. Warten Sie einen Moment und versuchen Sie es erneut.",
+        "errorUnavailable": "Der Suchdienst hat nicht geantwortet. Sie können weiterhin auf die Karte klicken oder Koordinaten eingeben.",
+        "kind": {
+          "city": "Stadt",
+          "town": "Kleinstadt",
+          "village": "Dorf",
+          "station": "Bahnhof",
+          "airport": "Flughafen"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5078,6 +5310,9 @@
       "invalidJSON": "Ungültiges JSON",
       "invalidEscalation": "Eskalationsstufen sind ungültig",
       "engineUnavailable": "Die Alerting-Engine ist nicht verfügbar"
+    },
+    "insights": {
+      "v2Required": "Einblicke erfordern die erweiterte (v2) Datenbank"
     },
     "detection": {
       "invalidDate": "Ungültiges {paramName}-Format, verwenden Sie JJJJ-MM-TT"
@@ -5125,6 +5360,7 @@
       "birdweatherClientFailed": "BirdWeather-Client konnte nicht erstellt werden",
       "noWeatherProvider": "Kein Wetteranbieter ausgewählt",
       "openWeatherKeyRequired": "OpenWeather-API-Schlüssel ist erforderlich",
+      "pirateWeatherKeyRequired": "Pirate Weather-API-Schlüssel ist erforderlich",
       "processorUnavailable": "Prozessor nicht verfügbar",
       "discoveryFailed": "Home Assistant-Erkennung konnte nicht ausgelöst werden"
     },
@@ -5189,12 +5425,37 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Seite neu laden"
+    },
     "skip": "Überspringen",
     "back": "Zurück",
     "next": "Weiter",
     "done": "Fertig",
     "progress": "Schritt {current} von {total}",
     "progressLabel": "Assistent-Fortschritt",
+    "status": {
+      "saving": "Wird gespeichert...",
+      "loadingStep": "Schritt wird geladen..."
+    },
+    "errors": {
+      "saveFailed": "Dieser Schritt konnte nicht gespeichert werden. Prüfen Sie die Verbindung und versuchen Sie es erneut, oder überspringen Sie die Einrichtung und ändern Sie dies später in den Einstellungen.",
+      "saveRejected": "Die Einstellungen in diesem Schritt wurden nicht akzeptiert. Prüfen Sie die Werte und versuchen Sie es erneut, oder überspringen Sie die Einrichtung und ändern Sie dies später in den Einstellungen.",
+      "stepLoadFailed": "Dieser Schritt konnte nicht geladen werden. Klicken Sie auf Erneut versuchen oder laden Sie die Seite neu.",
+      "stepLoadFailedReload": "Dieser Schritt konnte weiterhin nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen; in früheren Schritten gespeicherte Auswahlen bleiben erhalten.",
+      "audioSourceSaveUnfinished": "Die Änderung der Audioquelle wurde nicht abgeschlossen. Prüfen Sie die Audioquellen unter Einstellungen > Audio.",
+      "saveUnfinished": "Einige Änderungen aus der Einrichtung wurden nicht gespeichert. Prüfen Sie diese in den Einstellungen."
+    },
+    "reasons": {
+      "completeStep": "Schließen Sie diesen Schritt ab, um fortzufahren."
+    },
+    "leaveConfirm": {
+      "title": "Einrichtung verlassen?",
+      "message": "Die Einrichtung wird nicht erneut geöffnet. In früheren Schritten gespeicherte Auswahlen bleiben erhalten; Änderungen in diesem Schritt werden nicht gespeichert. Sie können später alles in den Einstellungen ändern.",
+      "messageSaving": "Die Einrichtung wird nicht erneut geöffnet. In früheren Schritten gespeicherte Auswahlen bleiben erhalten. Dieser Schritt wird noch gespeichert, und einige oder alle seiner Änderungen gehen möglicherweise verloren. Sie können später alles in den Einstellungen ändern.",
+      "stay": "Einrichtung fortsetzen",
+      "leave": "Einrichtung verlassen"
+    },
     "whatsNew": {
       "title": "Neuigkeiten in {version}"
     },
@@ -5217,13 +5478,6 @@
         "locationHelp": "Ihr Standort hilft, Arten zu filtern, die in Ihrer Gegend wahrscheinlich vorkommen",
         "latitudeLabel": "Breitengrad",
         "longitudeLabel": "Längengrad",
-        "useMyLocation": "Meinen Standort verwenden",
-        "locationDetected": "Standort erkannt",
-        "locationError": "Standort konnte nicht ermittelt werden. Bitte geben Sie die Koordinaten manuell ein.",
-        "locationDenied": "Standortzugriff verweigert. Bitte geben Sie die Koordinaten manuell ein.",
-        "geolocationRequiresHttps": "Browser-Standort erfordert HTTPS. Bitte geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
-        "geolocationDenied": "Standortberechtigung wurde verweigert. Bitte geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
-        "geolocationFailed": "Ihr Standort konnte nicht ermittelt werden. Bitte geben Sie die Koordinaten manuell ein oder verwenden Sie die Karte.",
         "localesLoading": "Sprachen werden geladen...",
         "localesLoadFailed": "Sprachoptionen konnten nicht geladen werden. Englisch wurde als Standard ausgewählt."
       },
@@ -5239,7 +5493,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Geben Sie die URL Ihres RTSP-Audiostreams ein",
         "additionalSourcesHint": "Sie können später in den Einstellungen weitere Audioquellen hinzufügen.",
-        "configureLater": "Überspringen - später konfigurieren"
+        "devicesLoadFailed": "Die Audiogeräte dieses Systems konnten nicht aufgelistet werden.",
+        "useStreamInstead": "Stattdessen einen RTSP-Stream verwenden",
+        "setUpLater": "Audio später einrichten",
+        "setUpLaterChosen": "Audio wird jetzt nicht eingerichtet. Fügen Sie später in den Einstellungen eine Soundkarte oder einen Stream hinzu.",
+        "streamReplacesSoundCards": "Soundkarten nehmen nicht mehr auf, wenn Sie einen Stream verwenden. Sie können sie in den Einstellungen wieder hinzufügen.",
+        "soundCardReplacesStream": "Der bei der Stream-Option angezeigte Stream wird ausgeschaltet, wenn Sie eine Soundkarte verwenden. Sie können ihn in den Einstellungen wieder einschalten.",
+        "reasons": {
+          "chooseDevice": "Wählen Sie ein Audiogerät oder richten Sie Audio später ein.",
+          "devicesFailed": "Die Audiogeräte konnten nicht aufgelistet werden. Wiederholen Sie den Versuch, verwenden Sie einen Stream oder richten Sie Audio später ein.",
+          "noDevices": "Kein Audiogerät gefunden. Verwenden Sie einen Stream oder richten Sie Audio später ein.",
+          "enterUrl": "Geben Sie die Stream-URL ein oder richten Sie Audio später ein.",
+          "urlScheme": "Geben Sie eine vollständige Stream-URL ein, die mit rtsp:// oder rtsps:// beginnt und keine Leerzeichen enthält."
+        }
       },
       "detection": {
         "title": "Erkennungsschwelle",
@@ -5251,6 +5517,7 @@
         "highAccuracyDesc": "Weniger Fehlerkennungen, kann einige Vögel verpassen",
         "highSensitivity": "Hohe Empfindlichkeit",
         "highSensitivityDesc": "Mehr Erkennungen, mehr Fehlerkennungen",
+        "descriptionStored": "Wählen Sie, wie streng die Vogelidentifizierung sein soll. Aktuell: {threshold}, passt zu keiner Voreinstellung.",
         "threshold": "Konfidenzschwelle",
         "fpFilterNote": "Sobald Ihr System läuft und sich bewährt hat, können Sie den Falsch-Positiv-Filter in den Einstellungen aktivieren, um fehlerhafte Erkennungen weiter zu reduzieren."
       },
@@ -5260,10 +5527,12 @@
         "privacyFilterHelp": "Filtert Erkennungen heraus, wenn menschliche Stimmen in der Nähe des Mikrofons erkannt werden",
         "birdweatherLabel": "Erkennungen mit BirdWeather teilen",
         "birdweatherHelp": "Tragen Sie Ihre Vogelerkennungen zum BirdWeather-Community-Netzwerk bei",
-        "birdweatherIdLabel": "BirdWeather-Stations-ID",
-        "birdweatherIdPlaceholder": "Geben Sie Ihre BirdWeather-Stations-ID ein",
         "errorReportingLabel": "Anonyme Fehlerberichte senden",
-        "errorReportingHelp": "Helfen Sie, BirdNET-Go zu verbessern, indem Sie anonyme Fehlerberichte senden, wenn etwas schiefgeht"
+        "errorReportingHelp": "Helfen Sie, BirdNET-Go zu verbessern, indem Sie anonyme Fehlerberichte senden, wenn etwas schiefgeht",
+        "reasons": {
+          "enterToken": "Geben Sie Ihr Token ein oder schalten Sie das Teilen aus.",
+          "tokenFormat": "Ein BirdWeather-Token besteht aus 24 Buchstaben und Ziffern."
+        }
       },
       "responsibleUse": {
         "title": "Verantwortungsvolle Nutzung von BirdNET-Go",
@@ -5502,6 +5771,8 @@
         "catalogLoadFailed": "Modellkatalog konnte nicht geladen werden",
         "installFailed": "Modellinstallation konnte nicht gestartet werden",
         "removeFailed": "Modell konnte nicht entfernt werden",
+        "removeHasDependents": "{name} wird von {models} benötigt. Entfernen Sie zuerst diese Modelle.",
+        "operationInProgress": "Eine Modellinstallation, Neuinstallation oder Entfernung läuft bereits ({name}). Versuchen Sie es erneut, wenn sie abgeschlossen ist.",
         "actionFailed": "Es gab ein Problem mit {name}",
         "downloadSourceHint": "Wenn huggingface.co in Ihrem Netzwerk blockiert oder langsam ist, richten Sie im Abschnitt Download-Quelle unten einen Spiegelserver ein.",
         "goToDownloadSource": "Zur Download-Quelle",

@@ -161,7 +161,7 @@ func requirePublisherAlive(t *testing.T, pub *containers.StreamPublisher) {
 		return
 	}
 	stderr := strings.TrimSpace(pub.Stderr())
-	if exitErr, ok := pub.ExitError(); ok && exitErr != nil {
+	if exited, exitErr := pub.ExitError(); exited && exitErr != nil {
 		t.Fatalf("FFmpeg publisher exited shortly after start: %v\nstderr:\n%s", exitErr, stderr)
 	}
 	t.Fatalf("FFmpeg publisher exited shortly after start\nstderr:\n%s", stderr)

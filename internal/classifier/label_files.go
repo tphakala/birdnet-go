@@ -3,12 +3,12 @@ package classifier
 
 import (
 	"embed"
-	"errors"
 	"fmt"
 	"io/fs"
 	"path"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // LabelLoadResult contains the result of loading a label file

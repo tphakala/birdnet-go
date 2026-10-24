@@ -13,6 +13,19 @@ export function isExportFormat(value: unknown): value is ExportFormat {
   return typeof value === 'string' && (EXPORT_FORMATS as readonly string[]).includes(value);
 }
 
+// The two lossless containers valid for the ultrasonic export format. They carry
+// any sample rate natively (no FFmpeg), so a bat/ultrasonic capture above the
+// analysis rate can be stored losslessly at its full source rate.
+export type LosslessExportFormat = Extract<ExportFormat, 'wav' | 'flac'>;
+
+const LOSSLESS_EXPORT_FORMATS: readonly LosslessExportFormat[] = ['wav', 'flac'];
+
+export function isLosslessExportFormat(value: unknown): value is LosslessExportFormat {
+  return (
+    typeof value === 'string' && (LOSSLESS_EXPORT_FORMATS as readonly string[]).includes(value)
+  );
+}
+
 // Parse "128k" / "128K" / "128" into a positive number, or null if the
 // input cannot be interpreted as a positive numeric bitrate. Returning
 // null lets chooseBitrateForFormat distinguish "invalid" from "valid 128k"

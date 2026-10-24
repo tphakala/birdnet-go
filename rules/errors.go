@@ -25,12 +25,20 @@ import "github.com/quasilyte/go-ruleguard/dsl"
 //   - Reduces LOC: no separate variable declaration needed
 //   - Scopes the variable to the if block
 //
-// See: https://pkg.go.dev/errors#AsType
+// The rule resolves errors to internal/errors, which every package in this
+// module uses instead of the standard library (depguard bans the latter).
+// Targets whose type does not implement error (for example an anonymous
+// interface such as interface{ Timeout() bool }) are skipped, since AsType
+// requires E to satisfy error.
+//
+// See: internal/errors/errors.go AsType, a passthrough to the standard AsType.
 func ErrorsAsType(m dsl.Matcher) {
+	m.Import("github.com/tphakala/birdnet-go/internal/errors")
+
 	// Pattern: errors.As(err, &target)
-	// This catches all errors.As calls with address-of second argument
 	m.Match(
 		`errors.As($err, &$target)`,
 	).
-		Report("use errors.AsType[$target]($err) instead of errors.As for type-safe, faster error assertion (Go 1.26+)")
+		Where(m["target"].Type.Implements("error")).
+		Report("use errors.AsType[T]($err) instead of errors.As($err, &$target) for a type-safe, reflection-free error assertion")
 }

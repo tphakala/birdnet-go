@@ -156,3 +156,41 @@ func TestNotificationSuppressionThreadSafety(t *testing.T) {
 	assert.True(t, tracker.ShouldSuppressNotification("Species2", now.Add(1*time.Hour)),
 		"Species2 should be suppressed after recording")
 }
+
+func TestNotificationWindowPreservesConfiguredSuppression(t *testing.T) {
+	t.Parallel()
+	first := time.Date(2025, 6, 1, 10, 0, 0, 0, time.UTC)
+	untilWindowEnd := time.Date(2025, 6, 8, 0, 0, 0, 0, time.UTC).Sub(first)
+	const scientificName = "Parus major"
+	tests := []struct {
+		name             string
+		windowDays       int
+		suppressionHours int
+		repeatAfter      time.Duration
+		wantNotification bool
+	}{
+		{"short_interval_active", 7, 1, 30 * time.Minute, false},
+		{"short_interval_expired", 7, 1, time.Hour, true},
+		{"suppression_disabled", 7, 0, time.Minute, true},
+		{"longer_new_species_window", 14, 168, 168 * time.Hour, true},
+		{"before_window_end", 7, 0, untilWindowEnd - time.Nanosecond, true},
+		{"at_window_end", 7, 0, untilWindowEnd, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			tracker := NewTrackerFromSettings(nil, &conf.SpeciesTrackingSettings{
+				NewSpeciesWindowDays:         tt.windowDays,
+				NotificationSuppressionHours: tt.suppressionHours,
+			})
+			isNew, _ := tracker.CheckAndUpdateSpecies(scientificName, first)
+			require.True(t, isNew)
+			tracker.RecordNotificationSent(scientificName, first)
+
+			repeat := first.Add(tt.repeatAfter)
+			isNew, _ = tracker.CheckAndUpdateSpecies(scientificName, repeat)
+			notify := isNew && !tracker.ShouldSuppressNotification(scientificName, repeat)
+			assert.Equal(t, tt.wantNotification, notify)
+		})
+	}
+}

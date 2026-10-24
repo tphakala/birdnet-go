@@ -18,9 +18,8 @@ const TAB_TO_SEGMENT: Record<string, string> = {
 
 /**
  * Strips a single trailing slash from a path while preserving the root "/".
- * Exported so the App.svelte router can canonicalize a trailing slash before its
- * pathToRouteMap lookup (the map keys are slashless), reusing one implementation
- * rather than hand-rolling the guarded slice at each call site.
+ * The navigation store already canonicalizes UI paths, so this only serves
+ * callers that receive a raw pathname.
  */
 export function stripTrailingSlash(path: string): string {
   return path.length > 1 && path.endsWith('/') ? path.slice(0, -1) : path;

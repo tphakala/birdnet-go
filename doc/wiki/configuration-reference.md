@@ -121,8 +121,8 @@ BatConfig holds configuration for bat detection using BirdNET v2.4 embeddings.
 | `bat.falsepositivefilter.level` | integer | Filtering aggressivity level (0-5): 0=Off, 1=Lenient, 2=Moderate, 3=Balanced, 4=Strict, 5=Maximum |
 | `bat.ultrasonicfilter.enabled` | boolean | enable ultrasonic validation filter |
 | `bat.ultrasonicfilter.cvthreshold` | number | detections with US frame CV below this are tagged unlikely |
-| `bat.ultrasonicfilter.fftsize` | integer | FFT window size in samples (must be power of 2) |
-| `bat.ultrasonicfilter.hopsize` | integer | STFT hop size in samples |
+| `bat.ultrasonicfilter.fftsize` | integer | FFT window size in samples (a power of 2, at least 2) |
+| `bat.ultrasonicfilter.hopsize` | integer | STFT hop size in samples, 1 to fftsize |
 | `bat.ultrasonicfilter.frequencysplithz` | integer | boundary between audible and ultrasonic bands in Hz |
 
 ## bsg
@@ -143,7 +143,7 @@ ModelsConfig holds global model enablement and management settings.
 |---------|------|-------------|
 | `models.enabled` | string[] | list of model IDs to load (e.g., "birdnet", "perch_v2") |
 | `models.directory` | string | base directory for downloaded model files |
-| `models.installed` | string[] | list of installed model IDs managed by the model gallery |
+| `models.autoenablemigrated` | boolean | AutoEnableMigrated is an internal marker recording that the classifier's one-shot legacy model auto-enable has run for this config file, so it never re-runs. Do not edit by hand; a managed read-only config may set it true (with configversion: 2) to keep an explicit models.enabled from being re-seeded. Set by the classifier; hidden from the JSON API; the companion-marker rationale (why not ConfigVersion) lives in internal/conf/migrations.go. |
 
 ## lowmemory
 
@@ -169,12 +169,12 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.audio.sources` | audio-source-config[] | Audio capture devices |
 | `realtime.audio.source` | string | Legacy: migrated to Sources on load |
 | `realtime.audio.ffmpegpath` | string | path to ffmpeg, runtime value |
-| `realtime.audio.soxpath` | string | path to sox, runtime value |
 | `realtime.audio.streamtransport` | string | preferred transport for audio streaming: "auto", "sse", or "ws" |
 | `realtime.audio.export.debug` | boolean | true to enable audio export debug |
 | `realtime.audio.export.enabled` | boolean | export audio clips containing indentified bird calls |
 | `realtime.audio.export.path` | string | path to audio clip export directory |
-| `realtime.audio.export.type` | string | audio file type, wav, mp3 or flac |
+| `realtime.audio.export.type` | string | audio file type: wav, flac, aac, opus or mp3 |
+| `realtime.audio.export.ultrasonictype` | string | wav or flac only; used for bat/ultrasonic captures above 48 kHz |
 | `realtime.audio.export.bitrate` | string | bitrate for audio export |
 | `realtime.audio.export.retention.debug` | boolean | true to enable retention debug |
 | `realtime.audio.export.retention.policy` | string | retention policy, "none", "age" or "usage" |
@@ -259,7 +259,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.privacyfilter.enabled` | boolean | true to enable privacy filter |
 | `realtime.privacyfilter.confidence` | number | confidence threshold for label-based human detection |
 | `realtime.privacyfilter.vad.enabled` | boolean | true to enable the VAD speech gate (opt-in, default false) |
-| `realtime.privacyfilter.vad.threshold` | number | speech-probability gate in (0,1]; default 0.35 |
+| `realtime.privacyfilter.vad.threshold` | number | speech-probability gate in (0,1]; default 0.6 |
 | `realtime.privacyfilter.vad.modelpath` | string | optional override for the embedded silero .onnx; must be a sequence-export model (inputs input/h/c), not the stock upstream frame model; empty uses the embedded model |
 | `realtime.dogbarkfilter.debug` | boolean | true to enable debug mode |
 | `realtime.dogbarkfilter.enabled` | boolean | true to enable dog bark filter |
@@ -270,9 +270,9 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.daylightfilter.enabled` | boolean | true to enable daylight filter |
 | `realtime.daylightfilter.offset` | integer | hours to adjust daylight window; positive = shrink (lenient), negative = expand (strict) |
 | `realtime.daylightfilter.species` | string[] | species, families, orders, or genera to filter during daylight |
-| `realtime.rtsp.streams` | stream-config[] | Stream configurations |
-| `realtime.rtsp.urls` | string[] | Legacy: accepts old format, migrated on load |
-| `realtime.rtsp.transport` | string | Legacy: global default, migrated on load |
+| `realtime.rtsp.streams` | stream-config[] | Streams to analyze. Each entry has name (required, unique), url (required), enabled, type (rtsp, http, hls, rtmp or udp), transport (tcp or udp, RTSP and RTMP only; empty uses the global transport), mediaMode (auto, audio-only or full-stream, RTSP only; default full-stream), channelMode (downmix, left or right; default downmix) and gain (dB) |
+| `realtime.rtsp.urls` | string[] | Legacy: a urls list in an older config is converted to streams on startup and saved; not read once streams has entries |
+| `realtime.rtsp.transport` | string | Global default transport (tcp or udp): read as the engine-wide default and copied into streams that set none; kept after the urls migration |
 | `realtime.rtsp.health.healthydatathreshold` | integer | seconds before stream considered unhealthy (default: 60) |
 | `realtime.rtsp.health.monitoringinterval` | integer | health check interval in seconds (default: 30) |
 | `realtime.rtsp.ffmpegParameters` | string[] | Custom FFmpeg parameters |
@@ -307,7 +307,7 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.species.include` | string[] | Always include these species |
 | `realtime.species.exclude` | string[] | Always exclude these species |
 | `realtime.species.config` | any |  |
-| `realtime.weather.provider` | string | "none", "yrno", "openweather", or "wunderground" |
+| `realtime.weather.provider` | string | "none", "yrno", "openweather", "wunderground", or "pirateweather" |
 | `realtime.weather.pollinterval` | integer | weather data polling interval in minutes |
 | `realtime.weather.debug` | boolean | true to enable debug mode |
 | `realtime.weather.openweather.enabled` | boolean | true to enable OpenWeather integration, for legacy support |
@@ -319,6 +319,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.weather.wunderground.stationid` | string | WeatherUnderground station ID |
 | `realtime.weather.wunderground.endpoint` | string | WeatherUnderground API endpoint |
 | `realtime.weather.wunderground.units` | string | units of measurement: "e" (imperial), "m" (metric), "h" (UK hybrid) |
+| `realtime.weather.pirateweather.apikey` | string | Pirate Weather API key |
+| `realtime.weather.pirateweather.endpoint` | string | Pirate Weather API endpoint |
 | `realtime.speciestracking.enabled` | boolean | true to enable new species tracking |
 | `realtime.speciestracking.newspecieswindowdays` | integer | Days to consider a species "new" (default: 7) |
 | `realtime.speciestracking.syncintervalminutes` | integer | Interval to sync with database (default: 60) |
@@ -371,8 +373,9 @@ SecurityConfig handles all security-related settings and validations for the app
 | `security.redirecttohttps` | boolean | true to redirect to HTTPS |
 | `security.allowsubnetbypass.enabled` | boolean | true to enable subnet bypass |
 | `security.allowsubnetbypass.subnet` | string | disable OAuth2 in subnet |
-| `security.trustedproxies` | string[] | TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose forwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) may be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always trusted in addition to these, so a default port-forwarded install and the common local cloudflared topology work without configuration. When the immediate peer is not trusted, forwarded headers are ignored and the real connection address is used, preventing source-IP spoofing on a directly exposed instance. The reserved value "cloudflare" (TrustedProxyCloudflarePreset) expands to Cloudflare's published edge ranges. Hot-reloadable. |
+| `security.trustedproxies` | string[] | TrustedProxies lists reverse proxies (CIDR ranges or bare IPs) whose forwarded client-IP headers (CF-Connecting-IP, X-Forwarded-For, X-Real-IP) may be trusted. Loopback, link-local, and private (RFC1918/ULA) peers are always trusted in addition to these, so a default port-forwarded install and the common local cloudflared topology work without configuration. When the immediate peer is not trusted, forwarded headers are ignored and the real connection address is used, preventing source-IP spoofing on a directly exposed instance. The reserved value "cloudflare" (TrustedProxyCloudflarePreset) expands to Cloudflare's published edge ranges. The same trust decides whether X-Forwarded-Proto (and X-Forwarded-Ssl, X-Forwarded-Protocol, X-Url-Scheme) is honored when deciding whether to send the HSTS header, so a proxy on a public or 100.64.0.0/10 (CGNAT, Tailscale IPv4) address must be listed here for HSTS to be sent. Other HTTPS checks, such as the COOP header and the CSRF cookie Secure flag, do not consult this list. The subnet bypass (AllowSubnetBypass) is stricter: it honors a forwarded client address only from a proxy listed here, even one on a private or loopback address, and a request that carries any client-IP header (CF-Connecting-IP, X-Forwarded-For, X-Real-IP, True-Client-IP or Forwarded) from any other peer gets no bypass. For the bypass, list each proxy's own address rather than a range that also holds clients: a client inside a listed range is trusted as a proxy, so its own forwarded headers can name any address. Have the proxy append X-Forwarded-For or overwrite X-Real-IP; the client-IP headers it forwards must all name the same client, and a Forwarded header is not accepted. Hot-reloadable. |
 | `security.publicaccess.liveaudio` | boolean | allow unauthenticated users to start/listen to live audio streams |
+| `security.plainhttpsessionclients` | string[] | PlainHTTPSessionClients lists the IP addresses of clients that reach the app directly over plain HTTP, for example another container calling http://birdnet-go:8080 while browsers use an HTTPS reverse proxy. Session cookies issued to these clients omit the Secure attribute so the clients can send them back; every other client keeps Secure whenever HTTPS is configured. Only exact addresses are accepted, not ranges. The match uses the connection's peer address, never forwarded headers, and applies only to requests that arrive without TLS and without reverse-proxy headers. Never list the address a reverse proxy or tunnel (such as cloudflared) connects from. With host networking or a native install, a proxy on the same host connects from loopback (127.0.0.1, ::1) or the host's own address, so do not list those when one runs there; with bridge networking and the proxy on the host, do not list the container network gateway. Give listed clients a fixed address so it cannot be reassigned: browser sessions through a proxy that terminates TLS without sending forwarding headers would otherwise lose Secure. Not shown in the web UI. Empty by default. Hot-reloadable. |
 | `security.privatemode` | boolean | PrivateMode, when true, requires the user to authenticate before any UI data is shown. Enforcement lives at the v2 API data layer, which returns 401 to unauthenticated requests; the public SPA shell is still served so it can render a login form instead of the dashboard, detections, analytics, search, about, and notifications views. Settings and system routes are additionally auth-gated at the HTTP layer. PublicAccess.LiveAudio still applies independently. Default is false to preserve guest-friendly upstream behavior. |
 | `security.basicauth.enabled` | boolean | true to enable password authentication |
 | `security.basicauth.password` | string | password for admin interface |

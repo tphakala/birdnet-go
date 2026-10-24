@@ -1,6 +1,7 @@
 <script lang="ts">
   import { untrack } from 'svelte';
   import { t } from '$lib/i18n';
+  import Checkbox from '$lib/desktop/components/forms/Checkbox.svelte';
   import type { WizardStepProps } from '../types';
 
   let { onValidChange }: WizardStepProps = $props();
@@ -39,18 +40,16 @@
     {t('wizard.steps.responsibleUse.outro')}
   </p>
 
-  <label
-    class="mt-6 flex cursor-pointer items-center gap-3 rounded-lg border-2 p-4 transition-colors {acknowledged
+  <Checkbox
+    bind:checked={acknowledged}
+    size="sm"
+    className="mt-6"
+    labelClassName="w-full rounded-lg border-2 p-4 transition-[color,background-color,border-color] motion-reduce:transition-none {acknowledged
       ? 'border-[var(--color-primary)] bg-[var(--color-primary)]/5'
       : 'border-[var(--border-200)] hover:border-[var(--border-300)]'}"
   >
-    <input
-      type="checkbox"
-      bind:checked={acknowledged}
-      class="size-4 shrink-0 accent-[var(--color-primary)]"
-    />
     <span class="text-sm font-medium text-[var(--color-base-content)]">
       {t('wizard.steps.responsibleUse.acknowledge')}
     </span>
-  </label>
+  </Checkbox>
 </div>

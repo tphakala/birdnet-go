@@ -23,6 +23,7 @@
   import SourceBadge from './SourceBadge.svelte';
   import PlayOverlay from './PlayOverlay.svelte';
   import SpeciesInfoBar from './SpeciesInfoBar.svelte';
+  import SpectrogramImage from '$lib/desktop/components/media/SpectrogramImage.svelte';
   import ActionMenu from '$lib/desktop/components/ui/ActionMenu.svelte';
   import AudioSettingsButton from './AudioSettingsButton.svelte';
   import AudibleBatsButton from './AudibleBatsButton.svelte';
@@ -145,6 +146,10 @@
     onFreezeEnd?.();
   }
 
+  const showsSpectrogram = $derived(
+    Boolean(detection.clipName) || Boolean(detection.spectrogramOnly)
+  );
+
   // Start/stop loader based on visibility. Skip entirely when this detection has
   // no clip: there is no spectrogram to fetch.
   $effect(() => {
@@ -200,8 +205,8 @@
 >
   <!-- Inner container with overflow-hidden for spectrogram clipping -->
   <!-- Compact (shorter) layout when there is no spectrogram to display -->
-  <div class="detection-card-inner" class:compact={!detection.clipName}>
-    <!-- Spectrogram Background (hidden when this detection has no clip) -->
+  <div class="detection-card-inner" class:compact={!showsSpectrogram}>
+    <!-- Spectrogram Background (hidden when this detection has neither a clip nor a kept image) -->
     {#if detection.clipName}
       <div class="spectrogram-container">
         {#if loader.showSpinner}
@@ -237,6 +242,18 @@
             onerror={() => loader.handleImageError()}
           />
         {/if}
+      </div>
+    {:else if detection.spectrogramOnly}
+      <!-- Retention removed the audio but kept the image: no loader, no polling. Same
+           size and raw flag as the list view's player so the same cached file is used. -->
+      <div class="spectrogram-container">
+        <SpectrogramImage
+          detectionId={detection.id.toString()}
+          size="md"
+          raw={true}
+          cover
+          alt={t('components.audio.spectrogramForSpecies', { species: detection.commonName })}
+        />
       </div>
     {:else}
       <!-- Neutral background placeholder keeps the card's shape/aspect ratio -->

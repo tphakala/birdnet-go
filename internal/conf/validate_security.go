@@ -82,6 +82,22 @@ func validateSecuritySettings(settings *Security) error {
 		}
 	}
 
+	// Validate plain-HTTP session client entries. Each must be a single IP
+	// address: a range could cover a reverse proxy or gateway and strip Secure
+	// from browser sessions. Blank entries are skipped like the trusted-proxy
+	// list above.
+	for _, entry := range settings.PlainHTTPSessionClients {
+		trimmed := strings.TrimSpace(entry)
+		if trimmed == "" || net.ParseIP(trimmed) != nil {
+			continue
+		}
+		return errors.Newf("security.plainhttpsessionclients entry %q is not an IP address", trimmed).
+			Category(errors.CategoryValidation).
+			Context("validation_type", "security-plainhttpsessionclients-format").
+			Context("entry", trimmed).
+			Build()
+	}
+
 	// Normalize session duration: viper nested defaults can be lost when the
 	// parent key exists in the config file but sessionduration is absent.
 	if settings.SessionDuration <= 0 {

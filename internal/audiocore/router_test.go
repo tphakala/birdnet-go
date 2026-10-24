@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
-	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
+	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
 )
 
 // mockConsumer implements AudioConsumer for testing.
@@ -296,7 +296,7 @@ func TestRouter_DispatchWithResampling(t *testing.T) {
 // TestRouter_ConcurrentDispatch verifies that concurrent dispatch from
 // multiple goroutines does not trigger data races (run with -race).
 // Uses testing/synctest so the drain assertion does not race the per-route
-// drainer goroutine on loaded CI runners (see Forgejo #453).
+// drainer goroutine on loaded CI runners.
 func TestRouter_ConcurrentDispatch(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		router := NewAudioRouter(GetLogger(), nil)
@@ -368,7 +368,7 @@ func TestDrainRoutePanicRecovery(t *testing.T) {
 	err := router.AddRoute("src1", panicConsumer, 48000, 0.0, nil)
 	require.NoError(t, err)
 
-	// Dispatch a frame — the consumer will panic on Write.
+	// Dispatch a frame: the consumer will panic on Write.
 	router.Dispatch(AudioFrame{
 		SourceID:   "src1",
 		Data:       make([]byte, 100),
@@ -381,7 +381,7 @@ func TestDrainRoutePanicRecovery(t *testing.T) {
 	// Wait for drainer to process the frame, recover, and exit.
 	time.Sleep(200 * time.Millisecond)
 
-	// The drainer exited on panic — the route's stopped channel is closed,
+	// The drainer exited on panic: the route's stopped channel is closed,
 	// and subsequent dispatches to its inbox are silently dropped.
 	// Verify the process didn't crash (panic was recovered).
 }
@@ -527,16 +527,18 @@ func TestRouter_DrainRouteAppliesGain(t *testing.T) {
 	}
 }
 
-// TestRouter_GainClipping verifies that high gain correctly clips signals
-// to the int16 range rather than producing corrupted output.
-func TestRouter_GainClipping(t *testing.T) {
+// TestRouter_GainSaturatesToInt16Range verifies that a gain large enough to
+// overflow the int16 range saturates at exactly 32767 and -32768 (the library
+// encoder scales by 32768 and saturates) rather than wrapping or losing the
+// negative extreme.
+func TestRouter_GainSaturatesToInt16Range(t *testing.T) {
 	t.Parallel()
 
 	router := NewAudioRouter(GetLogger(), nil)
 	defer router.Close()
 
 	consumer := newMockConsumer("c1")
-	// +40 dB is 100x linear — will clip a signal near max.
+	// +40 dB is 100x linear: will clip a signal near max.
 	err := router.AddRoute("src-1", consumer, 48000, 40.0, nil)
 	require.NoError(t, err)
 
@@ -564,32 +566,28 @@ func TestRouter_GainClipping(t *testing.T) {
 		t.Fatal("timed out waiting for frame")
 	}
 
-	// Verify output is clipped to max int16 range, not corrupted.
+	// Verify output saturates at the int16 range, not corrupted.
 	require.Len(t, received.Data, 4)
 	sample0 := int16(received.Data[0]) | int16(received.Data[1])<<8
 	sample1 := int16(received.Data[2]) | int16(received.Data[3])<<8
 
-	// Float64ToBytesPCM16 clamps to [-1.0, 1.0] before conversion,
-	// so output should be at or near ±32767.
-	assert.InDelta(t, 32767, int(sample0), 1, "positive sample should clip to max")
-	assert.InDelta(t, -32767, int(sample1), 1, "negative sample should clip to min")
+	assert.Equal(t, math.MaxInt16, int(sample0), "positive sample should saturate to 32767")
+	assert.Equal(t, math.MinInt16, int(sample1), "negative sample should saturate to -32768")
 }
 
-// TestRouter_AddRouteWithGain verifies that AddRoute correctly converts
-// a dB gain value to the corresponding linear multiplier and stores it
-// on the Route.
+// TestRouter_AddRouteWithGain verifies that AddRoute stores a go-audio-dsp gain
+// on the Route for a non-zero dB value and no gain stage for 0 dB.
 func TestRouter_AddRouteWithGain(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
-		name       string
-		gainDB     float64
-		wantLinear float64
+		name   string
+		gainDB float64
 	}{
-		{"zero_dB_no_change", 0.0, 1.0},
-		{"positive_6dB", 6.0, 1.9953},
-		{"negative_6dB", -6.0, 0.5012},
-		{"max_40dB", 40.0, 100.0},
-		{"min_neg40dB", -40.0, 0.01},
+		{"zero_dB_no_change", 0.0},
+		{"positive_6dB", 6.0},
+		{"negative_6dB", -6.0},
+		{"max_40dB", 40.0},
+		{"min_neg40dB", -40.0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -602,8 +600,39 @@ func TestRouter_AddRouteWithGain(t *testing.T) {
 			router.mu.RLock()
 			routes := router.routes["src-1"]
 			require.Len(t, routes, 1)
-			assert.InDelta(t, tt.wantLinear, routes[0].gainLinear, 0.01)
+			if tt.gainDB == 0 {
+				assert.Nil(t, routes[0].gain.Load(), "0 dB must add no gain stage")
+			} else if assert.NotNil(t, routes[0].gain.Load()) {
+				assert.InDelta(t, tt.gainDB, routes[0].gain.Load().GainDB(), 0)
+			}
 			router.mu.RUnlock()
+		})
+	}
+}
+
+// TestRouter_AddRouteRejectsInvalidGain verifies that AddRoute refuses a gain
+// go-audio-dsp cannot represent (NaN, infinities, a factor that overflows
+// float32) and registers no route for it.
+func TestRouter_AddRouteRejectsInvalidGain(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		gainDB float64
+	}{
+		{"nan", math.NaN()},
+		{"positive_inf", math.Inf(1)},
+		{"negative_inf", math.Inf(-1)},
+		{"factor_overflows_float32", 1000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			router := NewAudioRouter(GetLogger(), nil)
+			t.Cleanup(router.Close)
+			err := router.AddRoute("src-1", newMockConsumer("c1"), 48000, tt.gainDB, nil)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid gain value")
+			assert.False(t, router.HasConsumers("src-1"), "a rejected gain must not register a route")
 		})
 	}
 }
@@ -624,9 +653,9 @@ func TestRouter_UpdateFilterChain(t *testing.T) {
 	router.mu.RUnlock()
 
 	// Build a chain via builder and update.
-	router.UpdateFilterChain("src-1", func(sampleRate int) *equalizer.FilterChain {
-		chain := equalizer.NewFilterChain()
-		hp, hpErr := equalizer.NewHighPass(float64(sampleRate), 100, 0.707, 1)
+	router.UpdateFilterChain("src-1", func(sampleRate int) *dspeq.FilterChain {
+		chain := dspeq.NewFilterChain()
+		hp, hpErr := dspeq.NewFilter(dspeq.Band{Type: dspeq.HighPass, Frequency: 100, Q: 0.707, Passes: 1}, sampleRate)
 		require.NoError(t, hpErr)
 		require.NoError(t, chain.AddFilter(hp))
 		return chain
@@ -636,11 +665,11 @@ func TestRouter_UpdateFilterChain(t *testing.T) {
 	routes = router.routes["src-1"]
 	loaded := routes[0].filterChain.Load()
 	assert.NotNil(t, loaded, "chain should be set after update")
-	assert.Equal(t, 1, loaded.Length())
+	assert.Equal(t, 1, loaded.Len())
 	router.mu.RUnlock()
 
 	// Update to nil (disable EQ).
-	router.UpdateFilterChain("src-1", func(_ int) *equalizer.FilterChain {
+	router.UpdateFilterChain("src-1", func(_ int) *dspeq.FilterChain {
 		return nil
 	})
 
@@ -659,9 +688,9 @@ func TestRouter_ApplyProcessing_EQOnly(t *testing.T) {
 
 	consumer := newMockConsumer("c1")
 
-	// Build a HighPass at 8000 Hz — should strongly attenuate a 100 Hz tone.
-	chain := equalizer.NewFilterChain()
-	hp, err := equalizer.NewHighPass(48000, 8000, 0.707, 2)
+	// Build a HighPass at 8000 Hz: should strongly attenuate a 100 Hz tone.
+	chain := dspeq.NewFilterChain()
+	hp, err := dspeq.NewFilter(dspeq.Band{Type: dspeq.HighPass, Frequency: 8000, Q: 0.707, Passes: 2}, 48000)
 	require.NoError(t, err)
 	require.NoError(t, chain.AddFilter(hp))
 
@@ -711,15 +740,17 @@ func TestRouter_ApplyProcessing_EQAndGain(t *testing.T) {
 
 	consumer := newMockConsumer("c1")
 
-	// Use a simple LowPass that passes a 100 Hz signal, combined with +6 dB gain.
-	chain := equalizer.NewFilterChain()
-	lp, err := equalizer.NewLowPass(48000, 15000, 0.707, 1)
+	// A -12 dB low shelf at 1 kHz cuts a 100 Hz tone to 0.25x amplitude; the
+	// +6 dB route gain then raises it to ~0.5x. Without the EQ the output would
+	// be ~2x the input and without the gain ~0.25x, so both stages are pinned.
+	chain := dspeq.NewFilterChain()
+	shelf, err := dspeq.NewFilter(dspeq.Band{Type: dspeq.LowShelf, Frequency: 1000, Q: 0.707, GainDB: -12}, 48000)
 	require.NoError(t, err)
-	require.NoError(t, chain.AddFilter(lp))
+	require.NoError(t, chain.AddFilter(shelf))
 
 	require.NoError(t, router.AddRoute("src-both", consumer, 48000, 6.0, chain))
 
-	// 100 Hz sine, well below the 15kHz cutoff — should pass through LowPass.
+	// 100 Hz sine, well below the 1 kHz shelf corner: receives the full -12 dB.
 	const numSamples = 480
 	input := make([]byte, numSamples*2)
 	for i := range numSamples {
@@ -745,46 +776,87 @@ func TestRouter_ApplyProcessing_EQAndGain(t *testing.T) {
 		t.Fatal("timeout waiting for processed frame")
 	}
 
-	// Signal passes through LowPass mostly unchanged, then +6 dB ≈ 2x amplitude.
+	// -12 dB shelf (x0.25) then +6 dB gain (x2) gives x0.5.
 	inputRMS := rmsOfPCM16(input)
 	outputRMS := rmsOfPCM16(received.Data)
-	assert.InDelta(t, inputRMS*2.0, outputRMS, inputRMS*0.5,
-		"output should be ~2x input (6 dB gain) after passing through LowPass")
+	assert.InDelta(t, inputRMS*0.5, outputRMS, inputRMS*0.05,
+		"output should be ~0.5x input (-12 dB shelf then +6 dB gain)")
 }
 
-// BenchmarkApplyProcessing_PoolWarm measures steady-state per-frame allocations
-// on the applyProcessing hot path with a fully wired buffer.Manager. The pools
-// are warmed before the timed loop so the reported allocs/op reflects recycling
-// behaviour, not first-call pool misses.
-func BenchmarkApplyProcessing_PoolWarm(b *testing.B) {
-	mgr := buffer.NewManager(GetLogger())
-	r := NewAudioRouter(GetLogger(), mgr)
-	defer r.Close()
+// processingBenchCase is one steady-state processing configuration shared by
+// the applyProcessing benchmarks and the allocation regression table.
+type processingBenchCase struct {
+	name   string
+	bands  []dspeq.Band
+	gainDB float64
+}
 
-	// Construct a minimal Route that exercises the gain branch.
-	// gainLinear != 1.0 ensures applyProcessing is called; nil filterChain
-	// means EQ is skipped so only gain scaling runs.
-	route := &Route{
-		gainLinear: 2.0, // +6 dB: exercises the gain path
-		inbox:      make(chan AudioFrame, 1),
-		done:       make(chan struct{}),
-		stopped:    make(chan struct{}),
-	}
-	// filterChain zero value is a nil atomic.Pointer, which Load() returns nil for.
+// processingBenchCases are the applyProcessing configurations: gain only (the
+// byte fast path), EQ only, and EQ plus gain (the float32 path).
+var processingBenchCases = []processingBenchCase{
+	{name: "gain_only", gainDB: 6.020599913279624},
+	{name: "eq_only", bands: benchEQBands},
+	{name: "eq_and_gain", bands: benchEQBands, gainDB: 6.020599913279624},
+}
 
-	// 2880 bytes = 1440 samples = 30 ms of 48 kHz mono 16-bit PCM.
-	frame := AudioFrame{
+// benchEQBands is a three-band EQ at 48 kHz: high-pass, low shelf and peaking.
+var benchEQBands = []dspeq.Band{
+	{Type: dspeq.HighPass, Frequency: 100, Q: 0.707, Passes: 2},
+	{Type: dspeq.LowShelf, Frequency: 200, Q: 0.707, GainDB: -6},
+	{Type: dspeq.Peaking, Frequency: 3000, WidthHz: 1500, GainDB: 4},
+}
+
+// benchProcessingFrame is 2880 bytes = 1440 samples = 30 ms of 48 kHz mono
+// 16-bit PCM, the size of the live pipeline's frames.
+func benchProcessingFrame() AudioFrame {
+	return AudioFrame{
 		SourceID:   "bench",
 		SourceName: "bench",
-		Data:       make([]byte, 2880),
+		Data:       make([]byte, refFrameSamples*bytesPerPCM16Sample),
 		SampleRate: 48000,
 		BitDepth:   16,
 		Channels:   1,
 	}
+}
+
+// BenchmarkApplyProcessing_PoolWarm measures steady-state per-frame allocations
+// on the gain-only applyProcessing hot path with a fully wired buffer.Manager.
+// The pools are warmed before the timed loop so the reported allocs/op reflects
+// recycling behaviour, not first-call pool misses. The EQ variants follow in
+// BenchmarkApplyProcessing_EQ and BenchmarkApplyProcessing_EQAndGain.
+func BenchmarkApplyProcessing_PoolWarm(b *testing.B) {
+	benchApplyProcessing(b, processingBenchCases[0])
+}
+
+// BenchmarkApplyProcessing_EQ is the EQ-only (float32 path) counterpart of
+// BenchmarkApplyProcessing_PoolWarm.
+func BenchmarkApplyProcessing_EQ(b *testing.B) {
+	benchApplyProcessing(b, processingBenchCases[1])
+}
+
+// BenchmarkApplyProcessing_EQAndGain is the EQ plus gain counterpart of
+// BenchmarkApplyProcessing_PoolWarm.
+func BenchmarkApplyProcessing_EQAndGain(b *testing.B) {
+	benchApplyProcessing(b, processingBenchCases[2])
+}
+
+func benchApplyProcessing(b *testing.B, tc processingBenchCase) {
+	b.Helper()
+	mgr := buffer.NewManager(GetLogger())
+	r := NewAudioRouter(GetLogger(), mgr)
+	defer r.Close()
+
+	route := &Route{}
+	route.gain.Store(testGain(b, tc.gainDB))
+	var chain *dspeq.FilterChain
+	if tc.bands != nil {
+		chain = testChain(b, 48000, tc.bands...)
+	}
+	frame := benchProcessingFrame()
 
 	// Warm the pools so steady-state pool reuse is established before timing.
 	for range 4 {
-		res, err := r.applyProcessing(frame, route, nil)
+		res, err := r.applyProcessing(frame, route, chain, route.gain.Load())
 		if err != nil {
 			b.Fatalf("warm-up applyProcessing failed: %v", err)
 		}
@@ -794,7 +866,7 @@ func BenchmarkApplyProcessing_PoolWarm(b *testing.B) {
 	b.ReportAllocs()
 
 	for b.Loop() {
-		res, err := r.applyProcessing(frame, route, nil)
+		res, err := r.applyProcessing(frame, route, chain, route.gain.Load())
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -803,66 +875,98 @@ func BenchmarkApplyProcessing_PoolWarm(b *testing.B) {
 }
 
 // TestApplyProcessing_AllocationRegression guards against allocation regressions
-// on the applyProcessing hot path. It measures steady-state allocs/op after pool
-// warm-up and asserts they stay within the cap documented in maxAllowedAllocs.
+// on the processing hot paths. It measures steady-state allocs/op after pool
+// warm-up and asserts they stay within each case's cap.
 //
 // Do NOT add t.Parallel() here: sync.Pool is stateful and parallel execution
 // could pollute pool state during the alloc-sensitive measurement window.
 func TestApplyProcessing_AllocationRegression(t *testing.T) {
-	mgr := buffer.NewManager(GetLogger())
-	r := NewAudioRouter(GetLogger(), mgr)
-	defer r.Close()
-
-	route := &Route{
-		gainLinear: 2.0,
-		inbox:      make(chan AudioFrame, 1),
-		done:       make(chan struct{}),
-		stopped:    make(chan struct{}),
-	}
-
-	frame := AudioFrame{
-		SourceID:   "bench",
-		SourceName: "bench",
-		Data:       make([]byte, 2880),
-		SampleRate: 48000,
-		BitDepth:   16,
-		Channels:   1,
-	}
-
-	// Warm the pools before measuring.
-	for range 4 {
-		res, err := r.applyProcessing(frame, route, nil)
-		require.NoError(t, err)
-		res.release()
-	}
-
-	// Measure steady-state allocation count over 100 iterations.
-	allocs := testing.AllocsPerRun(100, func() {
-		res, err := r.applyProcessing(frame, route, nil)
-		if err != nil {
-			panic(err)
-		}
-		res.release()
-	})
-
-	// Regression gate. The baseline is not zero because sync.Pool.Put boxes
-	// the slice header into an interface{} value (see SA6002 nolint comment in
-	// internal/audiocore/buffer/pool.go). Each Put call for Float64Pool and
-	// BytePool boxes one slice header, costing one small allocation. Two Put
-	// calls per applyProcessing call produce 2 allocs/op at steady state under
-	// the benchmark (warm, isolated). Under -race with parallel tests, the GC
-	// may collect pooled items causing up to 2 additional pool-miss allocs per
-	// call; the cap is set to 4 to tolerate that noise while still catching
-	// any real regressions (e.g. extra make() calls) that would push allocs
-	// well above this threshold.
+	// The baseline is not zero because sync.Pool.Put boxes the slice header into
+	// an interface{} value (see the SA6002 nolint comment in
+	// internal/audiocore/buffer/pool.go), costing one small allocation per Put.
+	// Under -race with parallel tests, the GC may collect pooled items causing
+	// up to 2 additional pool-miss allocs per call; every cap is the measured
+	// baseline plus 2 so that noise is tolerated while a real regression (an
+	// extra make(), a lost pool) still trips it.
 	//
-	// Measured benchmark baseline: 2 allocs/op, 48 B/op (3 runs, -count=3).
-	// Increase this constant only after investigating WHY allocations grew.
-	const maxAllowedAllocs = 4
+	// Measured baselines (benchmark, warm, isolated, -count=3):
+	//   gain_only            1 alloc/op (the output BytePool Put)
+	//   eq_only              2 allocs/op (float32 and output Puts)
+	//   eq_and_gain          2 allocs/op
+	//   resample_then_eq     2 allocs/op via handleRouteFrame (float32 and output Puts)
+	// Increase a cap only after investigating WHY allocations grew.
+	const allocNoiseAllowance = 2
 
-	assert.LessOrEqual(t, int(allocs), maxAllowedAllocs,
-		"applyProcessing allocations per call exceed the regression cap of %d (got %.0f)",
-		maxAllowedAllocs, allocs)
+	for i, tc := range processingBenchCases {
+		baselines := []int{1, 2, 2}
+		t.Run(tc.name, func(t *testing.T) {
+			mgr := buffer.NewManager(GetLogger())
+			r := NewAudioRouter(GetLogger(), mgr)
+			defer r.Close()
+
+			route := &Route{}
+			route.gain.Store(testGain(t, tc.gainDB))
+			var chain *dspeq.FilterChain
+			if tc.bands != nil {
+				chain = testChain(t, 48000, tc.bands...)
+			}
+			frame := benchProcessingFrame()
+
+			for range 4 {
+				res, err := r.applyProcessing(frame, route, chain, route.gain.Load())
+				require.NoError(t, err)
+				res.release()
+			}
+
+			allocs := testing.AllocsPerRun(100, func() {
+				res, err := r.applyProcessing(frame, route, chain, route.gain.Load())
+				if err != nil {
+					panic(err)
+				}
+				res.release()
+			})
+
+			maxAllowed := baselines[i] + allocNoiseAllowance
+			assert.LessOrEqual(t, int(allocs), maxAllowed,
+				"applyProcessing allocations per call exceed the regression cap of %d (got %.0f)",
+				maxAllowed, allocs)
+		})
+	}
+
+	t.Run("resample_then_eq", func(t *testing.T) {
+		const (
+			srcRate  = 256000
+			dstRate  = 48000
+			baseline = 2
+		)
+		mgr := buffer.NewManager(GetLogger())
+		r := NewAudioRouter(GetLogger(), mgr)
+		defer r.Close()
+
+		consumer := newMockConsumer("alloc-resample")
+		consumer.sampleRate = dstRate
+		route := newAlignTestRoute(t, consumer, alignRunOpts{srcRate: srcRate, dstRate: dstRate, bitDepth: 16})
+		route.filterChain.Store(testChain(t, dstRate, benchEQBands...))
+		frame := AudioFrame{
+			SourceID: "bench", SourceName: "bench",
+			Data: int16sToBytes(noiseAndTone(srcRate/10, srcRate)), SampleRate: srcRate,
+			BitDepth: 16, Channels: 1,
+		}
+		run := func() {
+			r.handleRouteFrame(frame, route)
+			<-consumer.frames
+		}
+		for range 4 {
+			run()
+		}
+
+		allocs := testing.AllocsPerRun(100, run)
+
+		maxAllowed := baseline + allocNoiseAllowance
+		assert.LessOrEqual(t, int(allocs), maxAllowed,
+			"handleRouteFrame allocations per call exceed the regression cap of %d (got %.0f)",
+			maxAllowed, allocs)
+	})
 }
 
 // rmsOfPCM16 computes the RMS of 16-bit little-endian PCM samples.
@@ -1110,10 +1214,35 @@ func TestRouter_MultiRouteContention(t *testing.T) {
 }
 
 // TestRouter_PoolCacheHit verifies that routes with a buffer manager cache
-// pool pointers at creation time and use them in handleRouteFrame without
-// calling BytePoolFor/Float64PoolFor on each frame.
+// pool pointers and use them in handleRouteFrame without calling
+// BytePoolFor/Float32PoolFor on each frame. A gain-only route takes no float
+// buffer, so it caches only the output byte pool; an EQ route caches both.
 func TestRouter_PoolCacheHit(t *testing.T) {
 	t.Parallel()
+
+	t.Run("gain_only", func(t *testing.T) {
+		t.Parallel()
+		route := poolCacheRoute(t, 3.0, nil)
+		assert.Nil(t, route.float32Pool.Load(), "a gain-only route takes no float32 buffer")
+		assert.NotNil(t, route.byteOutPool.Load(), "byteOutPool should be cached after frames")
+	})
+
+	t.Run("eq", func(t *testing.T) {
+		t.Parallel()
+		chain := dspeq.NewFilterChain()
+		hp, err := dspeq.NewFilter(dspeq.Band{Type: dspeq.HighPass, Frequency: 100, Q: 0.707, Passes: 1}, 48000)
+		require.NoError(t, err)
+		require.NoError(t, chain.AddFilter(hp))
+		route := poolCacheRoute(t, 0, chain)
+		assert.NotNil(t, route.float32Pool.Load(), "float32Pool should be cached after frames")
+		assert.NotNil(t, route.byteOutPool.Load(), "byteOutPool should be cached after frames")
+	})
+}
+
+// poolCacheRoute adds a route with the given gain and chain to a router with a
+// buffer manager, pushes ten frames through it, and returns the route.
+func poolCacheRoute(t *testing.T, gainDB float64, chain *dspeq.FilterChain) *Route {
+	t.Helper()
 
 	mgr := buffer.NewManager(GetLogger())
 	router := NewAudioRouter(GetLogger(), mgr)
@@ -1121,7 +1250,7 @@ func TestRouter_PoolCacheHit(t *testing.T) {
 
 	consumer := newMockConsumer("pool-test")
 	consumer.sampleRate = 48000
-	require.NoError(t, router.AddRoute("src-1", consumer, 48000, 3.0, nil))
+	require.NoError(t, router.AddRoute("src-1", consumer, 48000, gainDB, chain))
 
 	const frameCount = 10
 	for range frameCount {
@@ -1139,14 +1268,11 @@ func TestRouter_PoolCacheHit(t *testing.T) {
 		}
 	}
 
-	// Verify route has cached pools (non-nil) when gain is applied.
 	router.mu.RLock()
+	defer router.mu.RUnlock()
 	routes := router.routes["src-1"]
 	require.Len(t, routes, 1)
-	route := routes[0]
-	assert.NotNil(t, route.float64Pool.Load(), "float64Pool should be cached after frames")
-	assert.NotNil(t, route.byteOutPool.Load(), "byteOutPool should be cached after frames")
-	router.mu.RUnlock()
+	return routes[0]
 }
 
 // TestRouter_QueueDepth verifies that Routes() returns the current inbox

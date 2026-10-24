@@ -7,12 +7,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// analysisBaseClipLength is the reference clip length that the user-configured
+// AnalysisBaseClipLength is the reference clip length that the user-configured
 // birdnet.overlap value is defined against. Overlap is expressed as seconds of
 // overlap on the 3-second BirdNET v2.4 window (validated range 0..2.99s), and
 // is scaled proportionally for models with a different clip length so the
 // overlap FRACTION is preserved across models. See effectiveOverlap.
-const analysisBaseClipLength = 3 * time.Second
+const AnalysisBaseClipLength = 3 * time.Second
 
 // minAnalysisStep is the smallest analysis step, in the DURATION domain, that a
 // resolved overlap may leave (ClipLength - overlap). It floors BufferInterval and
@@ -53,25 +53,30 @@ func overlapToBytes(overlap time.Duration, sampleRate int) int {
 	return samples * frame
 }
 
+// ConfiguredBaseOverlap returns the user-configured birdnet.overlap as a
+// duration on the AnalysisBaseClipLength window. It returns 0 for nil settings.
+// This is the configured value only; the overlap the pipeline actually uses
+// comes from the published cadence plan (Orchestrator.EffectiveBaseOverlap).
+func ConfiguredBaseOverlap(s *conf.Settings) time.Duration {
+	if s == nil {
+		return 0
+	}
+	return time.Duration(s.BirdNET.Overlap * float64(time.Second))
+}
+
 // ResolveModelOverlap returns the effective analysis-window overlap for a model
-// given the current settings. The bat model always uses a fixed 50% overlap
-// (ClipLength/2), matching its historically fixed buffer cadence; every other
-// model honors the user-configured birdnet.overlap, ratio-scaled to the model's
-// clip length. The result is clamped to [0, ClipLength - minAnalysisStep] so the
-// derived read size is always strictly positive.
-func ResolveModelOverlap(modelID string, spec ModelSpec, s *conf.Settings) time.Duration {
+// given the effective base overlap (see Orchestrator.EffectiveBaseOverlap). The
+// bat model always uses a fixed 50% overlap (ClipLength/2), matching its
+// historically fixed buffer cadence; every other model uses baseOverlap,
+// ratio-scaled to the model's clip length. The result is clamped to
+// [0, ClipLength - minAnalysisStep] so the derived read size is always
+// strictly positive.
+func ResolveModelOverlap(modelID string, spec ModelSpec, baseOverlap time.Duration) time.Duration {
 	if modelID == RegistryIDBat {
 		return spec.ClipLength / 2
 	}
 
-	var overlap time.Duration
-	if s != nil {
-		overlap = effectiveOverlap(
-			time.Duration(s.BirdNET.Overlap*float64(time.Second)),
-			analysisBaseClipLength,
-			spec.ClipLength,
-		)
-	}
+	overlap := effectiveOverlap(baseOverlap, AnalysisBaseClipLength, spec.ClipLength)
 
 	// Clamp into [0, max(0, ClipLength-minAnalysisStep)] so the derived read size
 	// stays strictly positive. maxOverlap is floored at 0 to stay well-defined for

@@ -12,9 +12,11 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
@@ -281,6 +283,68 @@ func TestGetInferenceStatus_HTTP200(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp), "response body must unmarshal to InferenceStatusResponse")
 	assert.Equal(t, hwprofile.TFLiteLinked(), resp.Backends.TFLite.Available, "TFLite backend availability must match the compiled-in state (false under the notflite build tag)")
 	assert.NotZero(t, resp.SnapshotAtUnix, "SnapshotAtUnix must be a non-zero Unix timestamp")
+}
+
+// TestGetInferenceStatus_NoModelFieldsContract pins the Phase 4 no-model fields the
+// dashboard gates on: defaultTargets is always an array (never null), and
+// acousticModelsState is always present. This is the producer-side check that guards the
+// full-stack field-consumption contract (model de-privilege epic, Phase 4): with no
+// orchestrator wired (bare Core) the targets are empty and the state is "".
+func TestGetInferenceStatus_NoModelFieldsContract(t *testing.T) {
+	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
+	e := echo.New()
+	controller := &Handler{Core: apitest.NewCore(t, apitest.WithEcho(e))}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetInferenceStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	// Assert against the raw JSON so a null-vs-[] regression (which a typed decode hides)
+	// is caught: the frontend indexes defaultTargets.
+	var raw map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &raw))
+
+	dt, ok := raw["defaultTargets"]
+	require.True(t, ok, "defaultTargets must always be present")
+	assert.Equal(t, "[]", string(dt), "defaultTargets must marshal as an empty array (never null) with no orchestrator")
+
+	st, ok := raw["acousticModelsState"]
+	require.True(t, ok, "acousticModelsState must always be present")
+	assert.Equal(t, `""`, string(st), "acousticModelsState is empty with no orchestrator")
+}
+
+// TestGetInferenceStatus_AnalysisCadenceFromPublishedPlan pins the handler
+// wiring of analysisCadence: with an orchestrator attached, the response carries
+// the published plan's status and overlaps.
+func TestGetInferenceStatus_AnalysisCadenceFromPublishedPlan(t *testing.T) {
+	// NOT parallel: apitest.NewCore publishes settings to the process-global snapshot.
+	e := echo.New()
+	core := apitest.NewCore(t, apitest.WithEcho(e))
+	orch := &classifier.Orchestrator{}
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: 2800 * time.Millisecond,
+		EffectiveBaseOverlap:  1800 * time.Millisecond,
+		Status:                cadence.StatusCapped,
+	})
+	core.Processor = &processor.Processor{Bn: orch}
+	controller := &Handler{Core: core}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/inference", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetInferenceStatus(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var resp InferenceStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.NotNil(t, resp.AnalysisCadence, "a published plan must be reported")
+	assert.Equal(t, "capped", resp.AnalysisCadence.Status)
+	assert.InDelta(t, 2.8, resp.AnalysisCadence.ConfiguredOverlapSec, 1e-9)
+	assert.InDelta(t, 1.8, resp.AnalysisCadence.EffectiveOverlapSec, 1e-9)
 }
 
 // eventInferenceTopologyChangedName is asserted against the package constant so
@@ -915,4 +979,80 @@ func TestBuildSourceAttachments_FallbackRowCarriesLiveness(t *testing.T) {
 		assert.False(t, prim[0].NotRunning,
 			"with no live evidence the row must not assert that the model is failing")
 	})
+}
+
+// TestBuildModelHealth pins the per-model health mapping: the state derives from
+// the classifier verdict (failing) and the window count (idle), and zero
+// timestamps are omitted.
+func TestBuildModelHealth(t *testing.T) {
+	t.Parallel()
+	at := time.Unix(1_790_000_000, 0)
+	tests := []struct {
+		name string
+		in   classifier.ModelInferenceHealth
+		want ModelHealthInfo
+	}{
+		{
+			name: "idle before the first window",
+			in:   classifier.ModelInferenceHealth{},
+			want: ModelHealthInfo{State: modelHealthIdle, FailureThreshold: classifier.InferenceFailureNoticeThreshold},
+		},
+		{
+			name: "ok with a short failure run",
+			in: classifier.ModelInferenceHealth{
+				ConsecutiveFailures: 2, InferenceCount: 50, LastInferenceAt: at, LastSuccessAt: at.Add(-time.Minute),
+				ErrorClass: classifier.InferenceErrorClassOther,
+			},
+			want: ModelHealthInfo{
+				State: modelHealthOK, ConsecutiveFailures: 2, FailureThreshold: classifier.InferenceFailureNoticeThreshold,
+				InferenceCount: 50, LastInferenceAtUnix: at.Unix(), LastSuccessAtUnix: at.Add(-time.Minute).Unix(),
+				ErrorClass: classifier.InferenceErrorClassOther,
+			},
+		},
+		{
+			name: "failing, never succeeded",
+			in: classifier.ModelInferenceHealth{
+				ConsecutiveFailures: 20, InferenceCount: 20, LastInferenceAt: at, Failing: true,
+				ErrorClass: classifier.InferenceErrorClassNonFinite,
+			},
+			want: ModelHealthInfo{
+				State: modelHealthFailing, ConsecutiveFailures: 20, FailureThreshold: classifier.InferenceFailureNoticeThreshold,
+				InferenceCount: 20, LastInferenceAtUnix: at.Unix(), ErrorClass: classifier.InferenceErrorClassNonFinite,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := buildModelHealth(&tt.in)
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want, *got)
+		})
+	}
+}
+
+// TestModelHealthInfo_JSONFieldNames pins the wire names the frontend reads
+// (inference.types.ts InferenceModelHealth and the acoustic model store).
+func TestModelHealthInfo_JSONFieldNames(t *testing.T) {
+	t.Parallel()
+	raw, err := json.Marshal(ModelHealthInfo{
+		State: modelHealthFailing, ConsecutiveFailures: 12, FailureThreshold: 10, InferenceCount: 40,
+		LastInferenceAtUnix: 2, LastSuccessAtUnix: 1, ErrorClass: classifier.InferenceErrorClassNonFinite,
+	})
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, map[string]any{
+		"state":               "failing",
+		"consecutiveFailures": float64(12),
+		"failureThreshold":    float64(10),
+		"inferenceCount":      float64(40),
+		"lastInferenceAtUnix": float64(2),
+		"lastSuccessAtUnix":   float64(1),
+		"errorClass":          "non_finite_output",
+	}, got)
+
+	raw, err = json.Marshal(InferenceModelStatus{ID: "m", Health: &ModelHealthInfo{State: modelHealthIdle}})
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), `"health":{"state":"idle"`)
 }

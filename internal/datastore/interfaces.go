@@ -127,6 +127,17 @@ type Interface interface {
 	SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note, int64, error)
 	GetNoteClipPath(noteID string) (string, error)
 	GetNoteModelType(noteID string) (string, error)
+	GetNoteKeptSpectrogram(noteID string) (clipName, modelType string, err error)
+	// RecordClipSampleRate sets the stored clip sample rate (Hz) of the detection
+	// when its clip_name still equals clipName, overwriting any existing value. It
+	// is authoritative and used to correct a rate planned before the clip was written.
+	// Only the v2-only store persists it; the legacy store has no such column.
+	RecordClipSampleRate(ctx context.Context, noteID uint, clipName string, rate int) error
+	// FillClipSampleRate stores rate (Hz) only while the detection's clip_sample_rate
+	// is NULL and its clip_name still equals clipName. It reports whether a row
+	// changed, so concurrent or repeated fills converge and never overwrite a value
+	// written by the exporter. Only the v2-only store persists it.
+	FillClipSampleRate(ctx context.Context, noteID uint, clipName string, rate int) (bool, error)
 	DeleteNoteClipPath(noteID string) error
 	GetNoteReview(noteID string) (*NoteReview, error)
 	SaveNoteReview(review *NoteReview) error
@@ -192,6 +203,7 @@ type Interface interface {
 	GetAllImageCaches(providerName string) ([]ImageCache, error)
 	GetLockedNotesClipPaths() ([]string, error)
 	ClearNoteClipPathsByNames(clipNames []string) (int64, error)
+	RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error)
 	GetNoteClipReferences(afterID uint, limit int) ([]diskmanager.ClipReference, error)
 	CountHourlyDetections(date, hour string, duration int) (int64, error)
 	// Analytics methods
@@ -350,8 +362,9 @@ func (ds *DataStore) CountDetectionsSince(ctx context.Context, since time.Time) 
 
 // NewDataStore creates a new DataStore instance based on the provided configuration context.
 func New(settings *conf.Settings) Interface {
-	// Create a SunCalc instance to be shared by all datastore implementations
-	sunCalc := suncalc.NewSunCalc(settings.BirdNET.Latitude, settings.BirdNET.Longitude)
+	// Create a SunCalc instance to be shared by all datastore implementations. It follows the
+	// live station location so a location change in the settings takes effect without a restart.
+	sunCalc := suncalc.NewSunCalcWithSource(conf.LiveLocation(settings))
 
 	switch {
 	case settings.Output.SQLite.Enabled:
@@ -365,7 +378,7 @@ func New(settings *conf.Settings) Interface {
 			SunCalc:  sunCalc,
 		}
 	default:
-		// No database explicitly enabled — default to SQLite
+		// No database explicitly enabled, default to SQLite
 		return &SQLiteStore{
 			Settings: settings,
 			SunCalc:  sunCalc,
@@ -429,21 +442,6 @@ func (ds *DataStore) SetSunCalcMetrics(suncalcMetrics any) {
 			sunCalc.SetMetrics(m)
 		}
 	}
-}
-
-// ReconfigureSunCalc repoints the datastore's sun calculator at new station
-// coordinates and reports whether anything changed.
-//
-// Without this, a location edit made in the UI would leave time-of-day
-// classification and the Search page's time-of-day filter answering from the
-// old observer until the process restarted. Invalidation lives entirely inside
-// SunCalc, which stamps its cached events with the location they were computed
-// under; the datastore keeps no sun-time cache of its own to go stale.
-func (ds *DataStore) ReconfigureSunCalc(latitude, longitude float64) bool {
-	if ds.SunCalc == nil {
-		return false
-	}
-	return ds.SunCalc.UpdateLocation(latitude, longitude)
 }
 
 // Save stores a note and its associated results as a single transaction in the database.
@@ -523,7 +521,7 @@ func (ds *DataStore) Save(note *Note, results []Results) error {
 			"total_duration_ms", time.Since(txStart).Milliseconds())
 	}
 
-	// Success — record metrics.
+	// Success: record metrics.
 	duration := time.Since(txStart)
 	txLogger.Info("Transaction completed",
 		logger.String("tx_id", txID),
@@ -653,6 +651,26 @@ func (ds *DataStore) GetNoteClipPath(noteID string) (string, error) {
 // The legacy schema does not track model types, so this always returns "bird".
 func (ds *DataStore) GetNoteModelType(_ string) (string, error) {
 	return "bird", nil
+}
+
+// GetNoteKeptSpectrogram returns the clip name of a spectrogram kept after retention
+// removed the detection's audio, and the model type. The legacy schema does not
+// persist the link, so the clip name is always empty and the model type is "bird".
+func (ds *DataStore) GetNoteKeptSpectrogram(_ string) (clipName, modelType string, err error) {
+	return "", "bird", nil
+}
+
+// RecordClipSampleRate is a no-op on the legacy store: its notes table has no
+// clip_sample_rate column (Note.ClipSampleRate is gorm:"-"). This stub exists only
+// because the legacy store still implements Interface and goes away with it.
+func (ds *DataStore) RecordClipSampleRate(_ context.Context, _ uint, _ string, _ int) error {
+	return nil
+}
+
+// FillClipSampleRate is a no-op on the legacy store, see RecordClipSampleRate. It
+// reports that no row changed. Removed together with the legacy store.
+func (ds *DataStore) FillClipSampleRate(_ context.Context, _ uint, _ string, _ int) (bool, error) {
+	return false, nil
 }
 
 // DeleteNoteClipPath deletes the field representing the path to the audio clip associated with a note.
@@ -2026,6 +2044,14 @@ func (ds *DataStore) GetLockedNotesClipPaths() ([]string, error) {
 	}
 
 	return clipPaths, nil
+}
+
+// RetainNoteSpectrogramsByClipNames is called when retention deleted the audio of the named
+// clips but a spectrogram render was kept. The legacy notes table has no column for the
+// spectrogram link, so this clears clip_name exactly like ClearNoteClipPathsByNames and the
+// kept render stays unlinked. Only the v2 store persists the link.
+func (ds *DataStore) RetainNoteSpectrogramsByClipNames(clipNames []string) (int64, error) {
+	return ds.ClearNoteClipPathsByNames(clipNames)
 }
 
 // ClearNoteClipPathsByNames clears the clip_name field for notes matching the given filenames.

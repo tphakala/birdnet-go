@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -12,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TaxonomyDatabase matches the production struct in internal/classifier/genus.go

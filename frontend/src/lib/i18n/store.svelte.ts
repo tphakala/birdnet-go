@@ -30,28 +30,50 @@ const CRITICAL_FALLBACKS: Record<string, string> = {
 
 // Initialize locale from localStorage, browser preferences, or use default
 function getInitialLocale(): Locale {
-  if (typeof localStorage !== 'undefined') {
-    const stored = localStorage.getItem('birdnet-locale');
-    if (stored && isValidLocale(stored)) {
-      return stored;
+  try {
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('birdnet-locale');
+      if (stored && isValidLocale(stored)) {
+        return stored;
+      }
     }
+  } catch {
+    // Storage access can throw (for example a SecurityError when site data
+    // is blocked); fall through to browser detection.
   }
 
   // If no stored preference, use browser locale detection
   return detectBrowserLocale();
 }
 
+/**
+ * Marks the page with the language of the messages it shows, so screen readers
+ * pronounce the text correctly and the browser hyphenates and spellchecks in
+ * that language. index.html's inline script sets the initial value before the
+ * app loads; this keeps it in step with the store: at module load and whenever
+ * loadMessages puts a locale's messages (or the English fallback) on screen.
+ */
+function applyDocumentLanguage(locale: Locale): void {
+  if (typeof document !== 'undefined') {
+    document.documentElement.lang = locale;
+  }
+}
+
 // State management with Svelte 5 runes
-let currentLocale = $state<Locale>(getInitialLocale());
+const initialLocale = getInitialLocale();
+let currentLocale = $state<Locale>(initialLocale);
 let messages = $state<Record<string, string>>({});
+// Locale of the messages currently shown, which lags currentLocale while a
+// switch is loading, is DEFAULT_LOCALE while the English fallback is shown,
+// and stays on the old one when the English fallback fails too.
+let messagesLocale: Locale = initialLocale;
 let loading = $state(false);
-// Keep previous messages while loading new ones
-let previousMessages = $state<Record<string, string>>({});
 // Track if initial translation load has completed (for first load only)
 let initialLoadComplete = $state(false);
 
-// Build version for cache invalidation. Changes on every build via Vite define.
-// Falls back to 'dev' so dev/test mode always fetches fresh translations.
+// Cache version for invalidation: a hash of the message files, injected via
+// Vite define (dev server, build and tests alike), so it changes whenever a
+// translation changes. Falls back to 'dev' if the define is missing.
 const I18N_CACHE_VERSION: string =
   typeof __I18N_CACHE_VERSION__ !== 'undefined' ? __I18N_CACHE_VERSION__ : 'dev';
 
@@ -90,7 +112,8 @@ export function getLocale(): Locale {
 }
 
 /**
- * Set the current locale and load corresponding messages
+ * Set the current locale and load the corresponding messages; the page's html
+ * lang follows once they are shown
  * @param locale - The locale code to set
  */
 export function setLocale(locale: Locale): void {
@@ -98,114 +121,90 @@ export function setLocale(locale: Locale): void {
   loadMessages(locale);
 
   // Persist locale to localStorage
-  if (typeof localStorage !== 'undefined') {
-    try {
+  try {
+    if (typeof localStorage !== 'undefined') {
       localStorage.setItem('birdnet-locale', locale);
-    } catch (error) {
-      logger.warn('Failed to save locale to localStorage:', error);
     }
+  } catch (error) {
+    logger.warn('Failed to save locale to localStorage:', error);
   }
 }
 
 // Sequence counter to track the latest loadMessages request
 let loadSequence = 0;
 
-// Message loading with English fallback and race condition protection
-async function loadMessages(locale: Locale): Promise<void> {
-  // Increment sequence for this request
-  const currentSequence = ++loadSequence;
-
-  loading = true;
-  // Store current messages as previous before loading new ones
-  if (Object.keys(messages).length > 0) {
-    previousMessages = { ...messages };
+// Fetches one locale's message file; throws when the server does not return it.
+// In production, these files are copied to dist/messages by Vite.
+async function fetchMessages(locale: Locale): Promise<Record<string, string>> {
+  const response = await fetch(
+    buildAppUrl(`/ui/assets/messages/${locale}.json?v=${I18N_CACHE_VERSION}`)
+  );
+  if (!response.ok) {
+    throw new Error(`Failed to fetch: ${response.status}`);
   }
+  return response.json();
+}
 
-  try {
-    // Use fetch to load JSON from the built assets directory
-    // In production, these files are copied to dist/messages by Vite
-    const response = await fetch(
-      buildAppUrl(`/ui/assets/messages/${locale}.json?v=${I18N_CACHE_VERSION}`)
-    );
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.status}`);
-    }
-    const data = await response.json();
-
-    // Check if this response is still the latest request
-    if (currentSequence !== loadSequence) {
-      // This request has been superseded, discard the result
-      return;
-    }
-
-    messages = data;
-    // Clear previous messages after successful load
-    previousMessages = {};
-    // Mark initial load as complete and resolve the promise
-    markInitialLoadComplete();
-    // Update localStorage cache
+// Puts a locale's messages on screen. Every path that shows messages goes
+// through here, so the messages, their locale, the html lang and the cache
+// entry always agree. persist is false for messages read from the cache.
+function showMessages(data: Record<string, string>, locale: Locale, persist: boolean): void {
+  messages = data;
+  messagesLocale = locale;
+  applyDocumentLanguage(locale);
+  markInitialLoadComplete();
+  if (persist) {
     try {
-      localStorage.setItem(cacheKey(locale), JSON.stringify(messages));
+      localStorage.setItem(cacheKey(locale), JSON.stringify(data));
     } catch {
       // Ignore storage errors
     }
-  } catch (error) {
-    // Check if this response is still the latest request before handling errors
-    if (currentSequence !== loadSequence) {
-      // This request has been superseded, discard the result
-      return;
-    }
+  }
+}
 
-    logger.error(`Failed to load messages for ${locale}:`, error);
+// Message loading with English fallback and race condition protection.
+// Messages are replaced only after a load succeeds, so when the locale and
+// the English fallback both fail the page keeps what it already shows.
+async function loadMessages(locale: Locale): Promise<void> {
+  const currentSequence = ++loadSequence;
+  // A newer loadMessages call supersedes this one; its results are discarded
+  const isLatest = () => currentSequence === loadSequence;
+
+  loading = true;
+  try {
+    try {
+      const data = await fetchMessages(locale);
+      if (isLatest()) showMessages(data, locale, true);
+      return;
+    } catch (error) {
+      if (!isLatest()) return;
+      logger.error(`Failed to load messages for ${locale}:`, error);
+    }
 
     // Fallback to English if the requested locale fails
     if (locale !== DEFAULT_LOCALE) {
       logger.info(`Falling back to ${DEFAULT_LOCALE} locale`);
       try {
-        const fallbackResponse = await fetch(
-          buildAppUrl(`/ui/assets/messages/${DEFAULT_LOCALE}.json?v=${I18N_CACHE_VERSION}`)
-        );
-        if (fallbackResponse.ok) {
-          const fallbackData = await fallbackResponse.json();
-
-          // Check again if this is still the latest request
-          if (currentSequence !== loadSequence) {
-            return;
-          }
-
-          messages = fallbackData;
-          // Clear previous messages after successful fallback load
-          previousMessages = {};
-          // Mark initial load as complete and resolve the promise
-          markInitialLoadComplete();
-          // Update localStorage cache for fallback
-          try {
-            localStorage.setItem(cacheKey(DEFAULT_LOCALE), JSON.stringify(messages));
-          } catch {
-            // Ignore storage errors
-          }
-          return;
-        }
+        const data = await fetchMessages(DEFAULT_LOCALE);
+        if (isLatest()) showMessages(data, DEFAULT_LOCALE, true);
+        return;
       } catch (fallbackError) {
+        if (!isLatest()) return;
         logger.error(`Failed to load fallback messages:`, fallbackError);
       }
     }
 
-    // If all else fails, restore previous messages
-    // This prevents raw translation keys from being displayed
-    if (Object.keys(previousMessages).length > 0) {
-      messages = previousMessages;
-      previousMessages = {};
-    }
+    // The page still shows the messages it had (or the English critical
+    // fallbacks when none ever loaded); keep html lang on that language.
+    applyDocumentLanguage(Object.keys(messages).length > 0 ? messagesLocale : DEFAULT_LOCALE);
 
     // Mark initial load as complete even on failure to prevent waitForTranslations() from hanging
     // Components will use critical fallbacks for essential UI strings
     markInitialLoadComplete();
 
-    logger.warn('Translation loading failed, restored previous messages to prevent UI degradation');
+    logger.warn('Translation loading failed, keeping the messages already shown');
   } finally {
-    // Only set loading to false if this is still the latest request
-    if (currentSequence === loadSequence) {
+    if (isLatest()) {
       loading = false;
     }
   }
@@ -255,28 +254,9 @@ function getNestedValue(obj: Record<string, unknown>, path: string): unknown {
  * @returns The translated string
  */
 export function t(key: string, params?: Record<string, unknown>): string {
-  // If messages haven't loaded yet, check previousMessages first
+  // Before the first messages load, serve the critical fallbacks for the
+  // loading and error screens so they never show raw keys
   if (Object.keys(messages).length === 0) {
-    // Check if we have the key in previousMessages
-    if (Object.keys(previousMessages).length > 0) {
-      const prevValue = getNestedValue(previousMessages, key);
-      if (typeof prevValue === 'string') {
-        // Process the message with params if needed
-        if (!params) {
-          return prevValue;
-        }
-        // Apply parameter interpolation to previous message
-        let result = prevValue;
-        result = result.replace(/\{(\w+)\}/g, (_, param) => {
-          // eslint-disable-next-line security/detect-object-injection
-          return params[param]?.toString() ?? `{${param}}`;
-        });
-        return result;
-      }
-    }
-
-    // Check critical fallbacks for essential UI strings (loading/error screens)
-    // This prevents showing raw keys during initial render before translations load
     if (key in CRITICAL_FALLBACKS) {
       // eslint-disable-next-line security/detect-object-injection
       return CRITICAL_FALLBACKS[key];
@@ -293,8 +273,10 @@ export function t(key: string, params?: Record<string, unknown>): string {
     return message;
   }
 
-  // Handle ICU MessageFormat plural syntax using extracted parser
-  let result = parsePlural(message, params, currentLocale);
+  // Handle ICU MessageFormat plural syntax using extracted parser, with the
+  // plural rules of the language the messages are in: while a switch loads,
+  // or after it falls back to English, that is not currentLocale
+  let result = parsePlural(message, params, messagesLocale);
 
   // Simple interpolation: {name} -> value
   result = result.replace(/\{(\w+)\}/g, (_, param) => {
@@ -315,35 +297,26 @@ export function t(key: string, params?: Record<string, unknown>): string {
 
 // Initialize on module load
 if (typeof window !== 'undefined') {
-  // Load messages immediately and synchronously if possible
-  const locale = getLocale();
+  applyDocumentLanguage(initialLocale);
   cleanupOldCaches();
-  loading = true;
 
-  // Try to load messages synchronously from cache if available
-  const cachedMessages = localStorage.getItem(cacheKey(locale));
+  // Show cached messages synchronously if available
+  let cachedMessages: string | null = null;
+  try {
+    cachedMessages = localStorage.getItem(cacheKey(initialLocale));
+  } catch {
+    // Storage blocked or unavailable; continue with the async load
+  }
   if (cachedMessages) {
     try {
-      messages = JSON.parse(cachedMessages);
-      loading = false;
-      // Mark initial load as complete since we have cached translations
-      markInitialLoadComplete();
+      showMessages(JSON.parse(cachedMessages), initialLocale, false);
     } catch {
       // Continue with async load
     }
   }
 
   // Always load fresh messages asynchronously
-  loadMessages(locale).then(() => {
-    // Cache messages for next time
-    if (Object.keys(messages).length > 0) {
-      try {
-        localStorage.setItem(cacheKey(locale), JSON.stringify(messages));
-      } catch {
-        // Ignore storage errors
-      }
-    }
-  });
+  loadMessages(initialLocale);
 }
 
 /**

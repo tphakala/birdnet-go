@@ -6,6 +6,14 @@
  */
 
 import { CANDIDATE_SAMPLE_RATES } from '$lib/utils/audio/sampleRate';
+import {
+  DEFAULT_EQ_GAIN_DB,
+  DEFAULT_EQ_Q,
+  DEFAULT_EQ_WIDTH_HZ,
+  EQ_PASSES_OFF,
+  defaultEqFrequencyHz,
+} from '$lib/utils/audio/equalizer';
+import { isPlainObject } from '$lib/utils/security';
 import type {
   BirdNetSettings,
   AudioSettings,
@@ -16,6 +24,8 @@ import type {
   MQTTSettings,
   OAuthSettings,
   EqualizerFilter,
+  EqualizerFilterType,
+  EqualizerSettings,
   NotificationSettings,
   PushSettings,
   PushProviderConfig,
@@ -177,11 +187,63 @@ export function coerceObject<T extends Record<string, unknown>>(
   return defaultValue;
 }
 
+/**
+ * Coerce an equalizer so that it keeps every value the backend produced. Only values the
+ * frontend cannot read at all are replaced: a filter type that is not a string becomes
+ * LowPass, and a frequency, Q, width or gain that coerceNumber cannot turn into a finite
+ * number becomes its default; coerceNumber also turns numeric strings and booleans into
+ * numbers. A string type, any finite number (out of the editor's range or not) and any
+ * integer passes stay as stored, because the backend does not validate a disabled
+ * equalizer and accepts more than the editor offers; clamping would rewrite them on the
+ * next unrelated save. A missing passes means off, a non-integer passes is rounded.
+ * Filter ids are dropped: they were never stored and made two coercions of one input
+ * differ.
+ */
+function coerceEqualizerSettings(value: unknown): EqualizerSettings {
+  const eq = coerceObject<UnknownSettings>(value, {});
+  const filters: EqualizerFilter[] = [];
+  for (const filter of coerceArray<unknown>(eq.filters, [])) {
+    if (!isPlainObject(filter)) continue; // Dropped, as an unreadable entry
+    // The type is kept verbatim, case included: the backend skips a type it does not know
+    // rather than failing, and the editor shows such a filter with no parameters
+    const type = typeof filter.type === 'string' ? filter.type : 'LowPass';
+    filters.push({
+      type: type as EqualizerFilterType,
+      frequency: coerceStoredNumber(filter.frequency, defaultEqFrequencyHz(type)),
+      q: coerceStoredNumber(filter.q, DEFAULT_EQ_Q),
+      width: coerceStoredNumber(filter.width, DEFAULT_EQ_WIDTH_HZ), // Bandwidth in Hz
+      gain: coerceStoredNumber(filter.gain, DEFAULT_EQ_GAIN_DB),
+      // A missing or invalid passes means no filtering; the backend reads it the same way.
+      // Adding 0 turns a rounded -0 into 0.
+      passes: Math.round(coerceStoredNumber(filter.passes, EQ_PASSES_OFF)) + 0,
+    });
+  }
+  return { enabled: coerceBoolean(eq.enabled, false), filters };
+}
+
+/**
+ * Read a number as stored: a finite number, or a value coerceNumber turns into one (a
+ * numeric string, a boolean), passes through unclamped; anything else is the default.
+ */
+function coerceStoredNumber(value: unknown, defaultValue: number): number {
+  return coerceNumber(value, -Infinity, Infinity, defaultValue);
+}
+
+/**
+ * Return an owner (a sound card source or a stream) with its equalizer coerced. An owner
+ * that is not a plain object, or has no equalizer object, is returned as it is: no
+ * equalizer means the global one applies, so the key must not appear or change.
+ */
+function withCoercedEqualizer<T>(owner: T): T {
+  if (!isPlainObject(owner) || !isPlainObject(owner.equalizer)) return owner;
+  return { ...owner, equalizer: coerceEqualizerSettings(owner.equalizer) };
+}
+
 function coerceStreamConfig(stream: unknown): UnknownSettings {
-  const rawStream = coerceObject(stream, {} as UnknownSettings);
+  const rawStream = coerceObject<UnknownSettings>(stream, {});
 
   const coercedStream: UnknownSettings = {
-    ...rawStream,
+    ...withCoercedEqualizer(rawStream),
     name: coerceString(rawStream.name, ''),
     url: coerceString(rawStream.url, ''),
     enabled: coerceBoolean(rawStream.enabled, true),
@@ -209,7 +271,7 @@ function coerceStreamConfig(stream: unknown): UnknownSettings {
 }
 
 function coerceRTSPSettings(settings: unknown): UnknownSettings {
-  const rawRtsp = coerceObject(settings, {} as UnknownSettings);
+  const rawRtsp = coerceObject<UnknownSettings>(settings, {});
 
   return {
     ...rawRtsp,
@@ -302,74 +364,13 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
 
   // Equalizer settings
   if ('equalizer' in settings && settings.equalizer && typeof settings.equalizer === 'object') {
-    const eq = settings.equalizer as unknown as UnknownSettings;
-    coerced.equalizer = {
-      enabled: coerceBoolean(eq.enabled, false),
-      filters: coerceArray(eq.filters, [])
-        .map(filter => {
-          // Type guard for valid filter objects
-          // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- filter could be null from coerceArray
-          if (!filter || typeof filter !== 'object' || Array.isArray(filter)) {
-            return null; // Will be filtered out
-          }
+    coerced.equalizer = coerceEqualizerSettings(settings.equalizer);
+  }
 
-          const f = filter as UnknownSettings;
-
-          // Normalize and validate filter type - backend expects proper case
-          // BandStop and Notch are aliases for BandReject (DSP module treats as synonyms)
-          const allowedTypesMap = {
-            lowpass: 'LowPass',
-            highpass: 'HighPass',
-            bandpass: 'BandPass',
-            bandstop: 'BandReject',
-            bandreject: 'BandReject',
-            notch: 'BandReject',
-          };
-          const rawType = coerceString(f.type, 'LowPass').toLowerCase();
-          const normalizedType =
-            allowedTypesMap[rawType as keyof typeof allowedTypesMap] || 'LowPass';
-
-          // Determine default frequency based on filter type
-          let defaultFrequency = 15000; // Default for LowPass
-          if (normalizedType === 'HighPass') {
-            defaultFrequency = 100;
-          } else if (normalizedType === 'BandReject' || normalizedType === 'BandPass') {
-            defaultFrequency = 1000;
-          }
-
-          const coercedFilter: EqualizerFilter = {
-            id: coerceString(
-              f.id,
-              `filter_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`
-            ),
-            type: normalizedType as EqualizerFilter['type'],
-            frequency: coerceNumber(f.frequency, 20, 20000, defaultFrequency),
-            q: coerceNumber(f.q, 0.1, 10, 0.707),
-            width: coerceNumber(f.width, 1, 10000, 100), // Bandwidth in Hz
-            gain: coerceNumber(f.gain, -48, 12, 0),
-            passes: 1, // Default passes
-          };
-
-          // Set proper default passes based on filter type
-          if (typeof f.passes === 'number') {
-            coercedFilter.passes = coerceNumber(f.passes, 0, 4, 1);
-          } else {
-            // Default to 1 pass (12dB) for HighPass/LowPass/BandReject filters
-            if (
-              normalizedType === 'HighPass' ||
-              normalizedType === 'LowPass' ||
-              normalizedType === 'BandReject'
-            ) {
-              coercedFilter.passes = 1;
-            } else {
-              coercedFilter.passes = 0; // 0dB for other filter types initially
-            }
-          }
-
-          return coercedFilter;
-        })
-        .filter(Boolean) as EqualizerFilter[], // Remove falsy entries and ensure proper typing
-    };
+  // Per-source equalizers go through the same coercion; a source without one keeps
+  // inheriting the global equalizer, so its key is neither added nor changed
+  if (Array.isArray(settings.sources)) {
+    coerced.sources = settings.sources.map(source => withCoercedEqualizer(source));
   }
 
   // Export settings validation
@@ -379,6 +380,14 @@ export function coerceAudioSettings(settings: PartialAudioSettings): PartialAudi
 
     // Always coerce enabled to boolean to ensure stable type
     coercedExport.enabled = coerceBoolean(exp.enabled, false);
+
+    // Backfill the ultrasonic export format for configs saved before this setting
+    // existed (or with an out-of-range value), so the WAV/FLAC dropdown always has
+    // a valid lossless value rather than rendering blank. The backend is the
+    // source of truth and re-validates on save.
+    if (coercedExport.ultrasonicType !== 'wav' && coercedExport.ultrasonicType !== 'flac') {
+      coercedExport.ultrasonicType = 'flac';
+    }
 
     // Clamp capture length between 10 and 60 seconds (backend validation)
     if ('length' in exp) {
@@ -468,6 +477,15 @@ export function coerceSecuritySettings(settings: PartialSecuritySettings): Parti
     };
   }
 
+  // Trusted reverse proxies: a missing or null list is the empty list (the
+  // backend treats them alike), so the saved and edited copies agree and the
+  // page never reports a change for a config that never had the key.
+  const isString = (entry: unknown): entry is string => typeof entry === 'string';
+  coerced.trustedProxies =
+    Array.isArray(settings.trustedProxies) && settings.trustedProxies.every(isString)
+      ? settings.trustedProxies
+      : coerceArray<unknown>(settings.trustedProxies).filter(isString);
+
   // Auto TLS - handle as boolean
   if ('autoTls' in settings) {
     coerced.autoTls = coerceBoolean(settings.autoTls, false);
@@ -491,10 +509,7 @@ export function coerceSpeciesSettings(
   const coerced: PartialSpeciesSettings = {
     include: coerceArray<string>(safeSettings.include, []),
     exclude: coerceArray<string>(safeSettings.exclude, []),
-    config: coerceObject<Record<string, SpeciesConfig>>(
-      safeSettings.config as UnknownSettings,
-      {} as Record<string, SpeciesConfig>
-    ),
+    config: coerceObject<Record<string, SpeciesConfig>>(safeSettings.config, {}),
   };
 
   // Validate and clean species config
@@ -803,7 +818,7 @@ export function coercePrivacyFilterSettings(
     debug: false,
     vad: {
       enabled: false,
-      threshold: 0.35,
+      threshold: 0.6,
       modelPath: '',
     },
   };
@@ -815,7 +830,7 @@ export function coercePrivacyFilterSettings(
   const rawVad = data.vad as Record<string, unknown> | undefined;
   const vad: PrivacyFilterVadSettings = {
     enabled: coerceBoolean(rawVad?.enabled, false),
-    threshold: coerceNumber(rawVad?.threshold, 0.01, 1.0, 0.35),
+    threshold: coerceNumber(rawVad?.threshold, 0.01, 1.0, 0.6),
     modelPath: coerceString(rawVad?.modelPath, ''),
   };
 
@@ -833,9 +848,9 @@ export function coercePrivacyFilterSettings(
 export function coerceSettings(section: string, data: UnknownSettings): UnknownSettings {
   switch (section) {
     case 'birdnet':
-      return coerceBirdNetSettings(data as PartialBirdNetSettings);
+      return coerceBirdNetSettings(data);
     case 'audio':
-      return coerceAudioSettings(data as PartialAudioSettings);
+      return coerceAudioSettings(data);
     case 'realtime': {
       // Handle realtime nested structures
       const coercedRealtime: UnknownSettings = { ...data };
@@ -889,13 +904,13 @@ export function coerceSettings(section: string, data: UnknownSettings): UnknownS
       return coercedRealtime;
     }
     case 'security':
-      return coerceSecuritySettings(data as PartialSecuritySettings);
+      return coerceSecuritySettings(data);
     case 'species':
-      return coerceSpeciesSettings(data as PartialSpeciesSettings);
+      return coerceSpeciesSettings(data);
     case 'mqtt':
-      return coerceMQTTSettings(data as PartialMQTTSettings);
+      return coerceMQTTSettings(data);
     case 'notification':
-      return coerceNotificationSettings(data as PartialNotificationSettings);
+      return coerceNotificationSettings(data);
     default:
       return data;
   }

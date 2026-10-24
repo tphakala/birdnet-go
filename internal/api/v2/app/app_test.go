@@ -6,7 +6,7 @@ package app
 
 import (
 	"encoding/json"
-	"errors"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -28,6 +28,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/branding"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/security/securitytest"
 	"github.com/tphakala/birdnet-go/internal/speciesdict"
 )
@@ -1478,6 +1479,31 @@ func TestGetAppConfig_SentryConfigWhenEnabled(t *testing.T) {
 	assert.Equal(t, "test-system-id-123", response.Sentry.SystemID)
 }
 
+// TestGetAppConfig_SentryConfigOmittedForOldBuild tests that Sentry config is omitted
+// for a build past its telemetry age even when telemetry is enabled.
+func TestGetAppConfig_SentryConfigOmittedForOldBuild(t *testing.T) {
+	// Not parallel: publishes settings to the process-global snapshot that
+	// GetAppConfig reads via currentSettings.
+	_, controller := setupAppConfigTest(t, nil)
+
+	t.Setenv("BIRDNET_GO_SENTRY_DSN", "https://dummy@example.ingest.sentry.io/1")
+
+	controller.Settings.Load().Sentry.Enabled = true
+	controller.Settings.Load().BuildDate = time.Now().AddDate(-1, 0, 0).Format(time.RFC3339)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(req, rec)
+
+	require.NoError(t, controller.GetAppConfig(ctx))
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response AppConfigResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Nil(t, response.Sentry, "Sentry config must be omitted for an expired build")
+}
+
 // TestGetAppConfig_SentryConfigWhenDisabled tests that Sentry config is omitted when telemetry is disabled.
 func TestGetAppConfig_SentryConfigWhenDisabled(t *testing.T) {
 	// Not parallel: publishes settings to the process-global snapshot that
@@ -1524,4 +1550,63 @@ func TestGetAppConfig_SpeciesDictVersion(t *testing.T) {
 	expectedVersion := speciesdict.Version()
 	assert.NotEmpty(t, response.SpeciesDictVersion, "speciesDictVersion must not be empty")
 	assert.Equal(t, expectedVersion, response.SpeciesDictVersion, "speciesDictVersion must match speciesdict.Version()")
+}
+
+// allowAllAuth is an auth.Service stub that reports every request as
+// authenticated. The embedded nil interface is never dereferenced because
+// GetAppConfig calls only IsAuthenticated.
+type allowAllAuth struct{ auth.Service }
+
+func (allowAllAuth) IsAuthenticated(echo.Context) bool { return true }
+
+// TestGetAppConfig_WizardStateRequiresAccess pins that wizard state is not
+// reported to a visitor without access.
+func TestGetAppConfig_WizardStateRequiresAccess(t *testing.T) {
+	authConfig := &conf.Security{
+		BasicAuth: conf.BasicAuth{Enabled: true, Password: "test"},
+	}
+	onboardingPending := map[string]string{appMetadataKeyOnboardingPending: onboardingPendingValue}
+	lastSeenOld := map[string]string{appMetadataKeyLastSeenVersion: "0.9.0"}
+
+	tests := []struct {
+		name            string
+		security        *conf.Security
+		authSvc         auth.Service
+		metadata        map[string]string
+		wantFresh       bool
+		wantNewVersion  bool
+		wantPrevVersion string
+	}{
+		{name: "visitor without access is not offered onboarding", security: authConfig, metadata: onboardingPending},
+		{name: "visitor with access is offered onboarding", security: authConfig, authSvc: allowAllAuth{}, metadata: onboardingPending, wantFresh: true},
+		{name: "visitor without access is not offered what's new", security: authConfig, metadata: lastSeenOld},
+		{name: "visitor with access is offered what's new", security: authConfig, authSvc: allowAllAuth{}, metadata: lastSeenOld, wantNewVersion: true, wantPrevVersion: "0.9.0"},
+		{name: "onboarding without auth configured is unchanged", metadata: onboardingPending, wantFresh: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller := setupAppConfigTest(t, tt.security)
+			controller.authService = tt.authSvc
+			repo := newMockAppMetadataRepo()
+			maps.Copy(repo.store, tt.metadata)
+			controller.appMetadataRepo = repo
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/app/config", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/app/config")
+
+			require.NoError(t, controller.GetAppConfig(c))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var response AppConfigResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			// Precondition: each row grants or denies access as its name says.
+			require.Equal(t, tt.security == nil || tt.authSvc != nil, response.Security.AccessAllowed)
+			assert.Equal(t, tt.wantFresh, response.FreshInstall)
+			assert.Equal(t, tt.wantNewVersion, response.NewVersion)
+			assert.Equal(t, tt.wantPrevVersion, response.PreviousVersion)
+		})
+	}
 }

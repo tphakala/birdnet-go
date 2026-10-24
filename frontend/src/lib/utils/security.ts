@@ -92,7 +92,7 @@ export function createSafeMap<V>(): Map<string, V>;
 // eslint-disable-next-line no-redeclare
 export function createSafeMap<V>(obj?: Record<string, V>): Map<string, V> {
   if (obj) {
-    return new Map(Object.entries(obj) as [string, V][]);
+    return new Map(Object.entries(obj));
   }
   return new Map<string, V>();
 }
@@ -131,32 +131,6 @@ export function safeRegexTest(pattern: RegExp, input: string, maxLength = 1000):
   } catch {
     return false;
   }
-}
-
-/**
- * CIDR validation without complex regex
- * Structured validation prevents ReDoS
- */
-export function validateCIDR(cidr: string): boolean {
-  if (!cidr || cidr.length > 18) return false; // max: xxx.xxx.xxx.xxx/xx
-
-  const parts = cidr.split('/');
-  if (parts.length !== 2) return false;
-
-  const [ip, mask] = parts;
-  const octets = ip.split('.');
-
-  if (octets.length !== 4) return false;
-
-  for (const octet of octets) {
-    if (!/^\d{1,3}$/.test(octet)) return false;
-    const num = parseInt(octet, 10);
-    if (num > 255) return false;
-  }
-
-  if (!/^\d{1,2}$/.test(mask)) return false;
-  const maskNum = parseInt(mask, 10);
-  return maskNum >= 0 && maskNum <= 32;
 }
 
 /**
@@ -217,12 +191,12 @@ export function safeSwitch<T>(key: string, cases: Record<string, T>, defaultValu
  * Prevents "Spread types may only be created from object types" errors
  */
 export function safeSpread<T extends object>(...objects: (T | undefined | null)[]): Partial<T> {
-  return objects.reduce((result, obj) => {
+  return objects.reduce<Partial<T>>((result, obj) => {
     if (obj != null && typeof obj === 'object') {
       return { ...result, ...obj };
     }
     return result;
-  }, {} as Partial<T>);
+  }, {});
 }
 
 /**
@@ -281,44 +255,6 @@ export function safeElementAccess<T extends HTMLElement>(
   if (elementType && !(element instanceof elementType)) return undefined;
 
   return element as T;
-}
-
-/**
- * Safe number to string key conversion for Maps
- * Ensures consistent key types in Map operations
- */
-export function numberToStringKey(key: number): string {
-  return key.toString();
-}
-
-/**
- * Create a Map with number keys converted to strings
- * Handles index-based Map operations safely
- */
-export function createIndexMap<V>(): Map<string, V> {
-  return new Map<string, V>();
-}
-
-/**
- * Safe Map operations with number index conversion
- * Automatically converts number indices to string keys
- */
-export class IndexMap<V> extends Map<string, V> {
-  setByIndex(index: number, value: V): this {
-    return this.set(numberToStringKey(index), value);
-  }
-
-  getByIndex(index: number): V | undefined {
-    return this.get(numberToStringKey(index));
-  }
-
-  deleteByIndex(index: number): boolean {
-    return this.delete(numberToStringKey(index));
-  }
-
-  hasByIndex(index: number): boolean {
-    return this.has(numberToStringKey(index));
-  }
 }
 
 /**

@@ -20,7 +20,6 @@
 -->
 <script lang="ts">
   import { getContext } from 'svelte';
-  import { generateId } from '$lib/utils/uuid';
   import {
     Settings,
     Trash2,
@@ -35,7 +34,9 @@
   import { slide } from 'svelte/transition';
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
-  import { DEFAULT_MODEL_ID } from '$lib/stores/models.svelte';
+  import { modelsLoading } from '$lib/stores/models.svelte';
+  import { acousticModelAvailability } from '$lib/stores/acousticModels.svelte';
+  import { defaultModelSelection } from '$lib/utils/defaultModelSelection';
   import { maskUrlCredentials } from '$lib/utils/security';
   import StatusPill, { type StatusVariant } from '$lib/desktop/components/ui/StatusPill.svelte';
   import Checkbox from './Checkbox.svelte';
@@ -73,7 +74,6 @@
   interface LocalEqualizerSettings {
     enabled: boolean;
     filters: Array<{
-      id?: string;
       type: EqualizerFilterType;
       frequency: number;
       q?: number;
@@ -93,6 +93,8 @@
     status?: StreamStatus;
     availableModels: Array<{
       id: string;
+      /** Classifier registry ID; the join key for default-target mapping. Absent on an older server. */
+      registryId?: string;
       name: string;
       category: string;
       minSampleRate?: number;
@@ -112,6 +114,8 @@
     onUpdate,
     onDelete,
   }: Props = $props();
+
+  const acousticAvailability = $derived(acousticModelAvailability());
 
   // Get the stream health state from context - the $state object is passed directly
   // Mutations to this object are reactive and will trigger re-renders
@@ -337,7 +341,9 @@
     editStreamType = stream.type;
     editEnabled = stream.enabled;
     editGain = stream.gain ?? 0;
-    editModels = stream.models?.length ? [...stream.models] : [DEFAULT_MODEL_ID];
+    editModels = stream.models?.length
+      ? [...stream.models]
+      : defaultModelSelection(acousticAvailability, availableModels);
     editEqualizer = stream.equalizer
       ? { ...stream.equalizer, filters: [...stream.equalizer.filters] }
       : { enabled: false, filters: [] };
@@ -366,14 +372,19 @@
   function saveEdit() {
     if (needsTest) return;
     if (editName.trim() && editUrl.trim()) {
+      // Rewrite an empty model list to the defaults so a cleared selection saves
+      // the classifier defaults rather than []. This is a no-op at N=0, where
+      // defaultModelSelection returns [] (no acoustic model to map), preserving
+      // the empty-list save the backend resolves to its own defaults.
+      if (editModels.length === 0) {
+        editModels = defaultModelSelection(acousticAvailability, availableModels);
+      }
+
       const transformedEqualizer =
         editEqualizer.enabled || editEqualizer.filters.length > 0
           ? {
               enabled: editEqualizer.enabled,
-              filters: editEqualizer.filters.map(f => ({
-                ...f,
-                id: f.id || generateId(),
-              })),
+              filters: editEqualizer.filters,
             }
           : undefined;
 
@@ -391,7 +402,7 @@
         gain: editGain,
         equalizer: transformedEqualizer,
         quietHours: editQuietHours,
-      } as StreamConfig);
+      });
       if (success) {
         isEditing = false;
       }
@@ -497,7 +508,7 @@
           </button>
           <button
             type="button"
-            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:opacity-90 transition-colors"
+            class="inline-flex items-center justify-center h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-error)] text-[var(--color-error-content)] hover:bg-[var(--color-error-hover)] transition-colors"
             onclick={executeDelete}
           >
             {t('common.delete')}
@@ -640,6 +651,8 @@
           selectedModels={editModels}
           {sourceSampleRate}
           isStream={true}
+          loading={modelsLoading()}
+          availability={acousticAvailability}
           {disabled}
           onToggle={models => (editModels = models)}
         />
@@ -667,6 +680,10 @@
           </button>
           {#if showEqualizer}
             <div id="stream-eq-{index}" class="mt-3" transition:slide={{ duration: 200 }}>
+              <!-- No sampleRate: a stream's EQ chain runs at the pipeline output rate,
+                   which is the server's configured rate (the preview default) for
+                   every stream except a bat stream with a higher native rate. The
+                   probed stream rate is not that rate, so it is not sent. -->
               <AudioEqualizerSettings
                 equalizerSettings={editEqualizer}
                 {disabled}
@@ -697,7 +714,7 @@
           <span title={needsTest ? t('settings.audio.streams.testRequired') : undefined}>
             <button
               type="button"
-              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              class="inline-flex items-center justify-center gap-1.5 h-8 px-3 text-sm font-medium rounded-lg bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:not-disabled:bg-[var(--color-primary-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               onclick={saveEdit}
               disabled={!editName.trim() || !editUrl.trim() || needsTest}
             >

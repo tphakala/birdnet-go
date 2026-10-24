@@ -84,6 +84,11 @@ type Handler struct {
 	// ffmpeg.ProbeStreamInfo); overridden in tests to stub probing.
 	probeStreamInfo probeStreamInfoFunc
 
+	// lookupStreamHost resolves stream-test hostnames before probing. nil by
+	// default (the system resolver is used); overridden in tests so they never
+	// touch real DNS.
+	lookupStreamHost lookupHostFunc
+
 	// audioLevelChan is the live audio-level channel injected by the parent server
 	// via SetAudioLevelChan after construction.
 	audioLevelChan chan audiocore.AudioLevelData

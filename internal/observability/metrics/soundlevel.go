@@ -5,7 +5,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-// SoundLevelMetrics contains Prometheus metrics for sound level measurements
+// SoundLevelMetrics contains Prometheus metrics for sound level measurements.
+//
+// Every series is labelled by the stable source id. The name label is kept so
+// existing dashboards keep working, and it carries the same value as the source
+// label. The recorders take no display name: the metrics listener has no
+// authentication, and a display name can embed internal host details.
 type SoundLevelMetrics struct {
 	registry *prometheus.Registry
 
@@ -169,41 +174,50 @@ func (m *SoundLevelMetrics) Collect(ch chan<- prometheus.Metric) {
 
 // Recording methods
 
-// UpdateSoundLevel updates the current sound level gauge
-func (m *SoundLevelMetrics) UpdateSoundLevel(source, name, measurementType string, levelDB float64) {
-	m.soundLevelGauge.WithLabelValues(source, name, measurementType).Set(levelDB)
-	m.soundLevelUpdatesTotal.WithLabelValues(source, name).Inc()
+// UpdateSoundLevel updates the current sound level gauge.
+func (m *SoundLevelMetrics) UpdateSoundLevel(source, measurementType string, levelDB float64) {
+	m.soundLevelGauge.WithLabelValues(source, source, measurementType).Set(levelDB)
+	m.soundLevelUpdatesTotal.WithLabelValues(source, source).Inc()
 }
 
-// RecordSoundLevelDuration records the duration of a sound level measurement window
-func (m *SoundLevelMetrics) RecordSoundLevelDuration(source, name string, durationSeconds float64) {
-	m.soundLevelDuration.WithLabelValues(source, name).Observe(durationSeconds)
+// RecordSoundLevelDuration records the duration of a sound level measurement
+// window.
+func (m *SoundLevelMetrics) RecordSoundLevelDuration(source string, durationSeconds float64) {
+	m.soundLevelDuration.WithLabelValues(source, source).Observe(durationSeconds)
 }
 
-// UpdateOctaveBandLevel updates the sound level for a specific octave band
-func (m *SoundLevelMetrics) UpdateOctaveBandLevel(source, name, frequencyBand string, minDB, maxDB, meanDB float64) {
-	m.octaveBandMinGauge.WithLabelValues(source, name, frequencyBand).Set(minDB)
-	m.octaveBandMaxGauge.WithLabelValues(source, name, frequencyBand).Set(maxDB)
-	m.octaveBandMeanGauge.WithLabelValues(source, name, frequencyBand).Set(meanDB)
-	m.octaveBandLevelGauge.WithLabelValues(source, name, frequencyBand, "current").Set(meanDB)
+// UpdateOctaveBandLevel updates the sound level for a specific octave band.
+func (m *SoundLevelMetrics) UpdateOctaveBandLevel(source, frequencyBand string, minDB, maxDB, meanDB float64) {
+	m.octaveBandMinGauge.WithLabelValues(source, source, frequencyBand).Set(minDB)
+	m.octaveBandMaxGauge.WithLabelValues(source, source, frequencyBand).Set(maxDB)
+	m.octaveBandMeanGauge.WithLabelValues(source, source, frequencyBand).Set(meanDB)
+	m.octaveBandLevelGauge.WithLabelValues(source, source, frequencyBand, "current").Set(meanDB)
 }
 
-// RecordSoundLevelProcessingDuration records the duration of sound level processing
-func (m *SoundLevelMetrics) RecordSoundLevelProcessingDuration(source, name, operation string, duration float64) {
-	m.soundLevelProcessingDuration.WithLabelValues(source, name, operation).Observe(duration)
+// RecordSoundLevelProcessingDuration records the duration of sound level
+// processing.
+func (m *SoundLevelMetrics) RecordSoundLevelProcessingDuration(source, operation string, duration float64) {
+	m.soundLevelProcessingDuration.WithLabelValues(source, source, operation).Observe(duration)
 }
 
-// RecordSoundLevelProcessingError records a sound level processing error
-func (m *SoundLevelMetrics) RecordSoundLevelProcessingError(source, name, errorType string) {
-	m.soundLevelProcessingErrors.WithLabelValues(source, name, errorType).Inc()
+// RecordSoundLevelProcessingError records a sound level processing error.
+func (m *SoundLevelMetrics) RecordSoundLevelProcessingError(source, errorType string) {
+	m.soundLevelProcessingErrors.WithLabelValues(source, source, errorType).Inc()
 }
 
-// RecordSoundLevelPublishing records a sound level publishing attempt
-func (m *SoundLevelMetrics) RecordSoundLevelPublishing(source, name, destination, status string) {
-	m.soundLevelPublishingTotal.WithLabelValues(source, name, destination, status).Inc()
+// RecordSoundLevelPublishing records a sound level publishing attempt.
+func (m *SoundLevelMetrics) RecordSoundLevelPublishing(source, destination, status string) {
+	m.soundLevelPublishingTotal.WithLabelValues(source, source, destination, status).Inc()
 }
 
-// RecordSoundLevelPublishingError records a sound level publishing error
-func (m *SoundLevelMetrics) RecordSoundLevelPublishingError(source, name, destination, errorType string) {
-	m.soundLevelPublishingErrors.WithLabelValues(source, name, destination, errorType).Inc()
+// RecordSoundLevelPublishingError records a sound level publishing error.
+func (m *SoundLevelMetrics) RecordSoundLevelPublishingError(source, destination, errorType string) {
+	m.soundLevelPublishingErrors.WithLabelValues(source, source, destination, errorType).Inc()
+}
+
+// SoundLevelPublishingErrorsVec exposes the publishing-errors counter vector so
+// tests can assert the exact value of a specific labelled series (e.g. via
+// testutil.ToFloat64), rather than only counting how many series exist.
+func (m *SoundLevelMetrics) SoundLevelPublishingErrorsVec() *prometheus.CounterVec {
+	return m.soundLevelPublishingErrors
 }

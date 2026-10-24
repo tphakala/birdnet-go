@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
@@ -593,4 +595,49 @@ func TestBuildFlushNotification_IncludesLastUpdated(t *testing.T) {
 	notif := p.buildFlushNotification(item, PendingStatusApproved)
 	assert.Equal(t, lastUpdated.Unix(), notif.LastUpdated,
 		"Flush notification LastUpdated should reflect latest hit time")
+}
+
+// TestSnapshotVisiblePending_UsesEffectiveBaseOverlap pins that the visibility
+// threshold follows the published cadence plan: at level 5 a capped overlap needs
+// far fewer confirmations than the configured one, so a pending detection with a
+// few hits is visible only under the effective overlap.
+func TestSnapshotVisiblePending_UsesEffectiveBaseOverlap(t *testing.T) {
+	t.Parallel()
+
+	s := &conf.Settings{}
+	s.Realtime.FalsePositiveFilter.Level = 5
+	s.BirdNET.Overlap = 2.8
+
+	orch := &classifier.Orchestrator{Settings: s}
+	p := &Processor{
+		Settings: s,
+		Bn:       orch,
+		pendingDetections: map[string]PendingDetection{
+			"src1:species_a": {
+				Detection: Detections{Result: detection.Result{Species: detection.Species{CommonName: "Species A"}}},
+				Source:    "src1",
+				Count:     3,
+			},
+		},
+	}
+
+	// Configured 2.8 s: 21 confirmations, visibility threshold 5; 3 hits stay hidden.
+	assert.Empty(t, p.SnapshotVisiblePending())
+
+	// Effective 1.8 s: 4 confirmations, visibility threshold 2; 3 hits are visible.
+	orch.SetCadencePlan(&cadence.Plan{
+		ConfiguredBaseOverlap: 2800 * time.Millisecond,
+		EffectiveBaseOverlap:  1800 * time.Millisecond,
+	})
+	assert.Len(t, p.SnapshotVisiblePending(), 1)
+}
+
+func TestPrecomputeVisibilityThresholds_FollowsBaseOverlap(t *testing.T) {
+	t.Parallel()
+	s := &conf.Settings{}
+	s.Realtime.FalsePositiveFilter.Level = 5
+	configured := precomputeVisibilityThresholds(s, 2800*time.Millisecond).getThreshold("")
+	effective := precomputeVisibilityThresholds(s, 1800*time.Millisecond).getThreshold("")
+	assert.Equal(t, 5, configured)
+	assert.Equal(t, 2, effective)
 }

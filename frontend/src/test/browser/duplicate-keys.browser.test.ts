@@ -22,7 +22,8 @@
  * with `.rejects.toThrow(...)` instead of a synchronous `expect(() => ...).toThrow`.
  *
  * Related components and their issues:
- * - SubnetInput.svelte:179       → {#each subnets as subnet, index (subnet)}
+ * - a value-keyed string list   → {#each values as value (value)} (why address
+ *   list editors such as NetworkAddressListInput key rows by index)
  * - SelectDropdown.svelte:477    → {#each options as option (option.value)}
  * - SelectField.svelte:103       → {#each options as option (option.value)}
  * - SpeciesSelector.svelte:413   → {#each filteredSpecies as group (group.category)}
@@ -43,11 +44,11 @@ import IndexKey from './wrappers/IndexKey.svelte';
 import IndexKeyFixed from './wrappers/IndexKeyFixed.svelte';
 
 // ============================================================================
-// Pattern: String value as key — {#each items as item (item)}
+// Pattern: String value as key: {#each items as item (item)}
 // Affected: any {#each items as item (item)} list that uses a bare string as the key
 // ============================================================================
 
-describe('Duplicate Key: String value as key — (item)', () => {
+describe('Duplicate Key: String value as key (item)', () => {
   it('renders unique string items without error', async () => {
     await render(StringListKey, {
       items: ['Parus major', 'Turdus merula', 'Erithacus rubecula'],
@@ -73,9 +74,9 @@ describe('Duplicate Key: String value as key — (item)', () => {
     ).rejects.toThrow(/each_key_duplicate|duplicate key/i);
   });
 
-  it('throws on duplicate subnet strings (SubnetInput bug)', async () => {
-    // Reproduces SubnetInput.svelte:179 — {#each subnets as subnet, index (subnet)}
-    // When the subnets array has identical CIDR blocks
+  it('throws on duplicate subnet strings in a value-keyed list', async () => {
+    // A list keyed by value, {#each subnets as subnet (subnet)}, throws when the
+    // array has identical CIDR blocks
     await expect(
       render(StringListKey, {
         items: ['192.168.1.0/24', '10.0.0.0/8', '192.168.1.0/24'],
@@ -85,7 +86,7 @@ describe('Duplicate Key: String value as key — (item)', () => {
 
   it('renders empty list without error', async () => {
     await render(StringListKey, { items: [] });
-    // Empty <ul> renders but may not be "visible" (no height) — just check it's in the DOM
+    // Empty <ul> renders but may not be "visible" (no height), so just check it's in the DOM
     await expect.element(page.getByTestId('string-list')).toBeInTheDocument();
   });
 
@@ -96,11 +97,11 @@ describe('Duplicate Key: String value as key — (item)', () => {
 });
 
 // ============================================================================
-// Pattern: Object property as key — {#each options as option (option.value)}
+// Pattern: Object property as key: {#each options as option (option.value)}
 // Affected: SelectDropdown, SelectField
 // ============================================================================
 
-describe('Duplicate Key: Object property as key — (option.value)', () => {
+describe('Duplicate Key: Object property as key (option.value)', () => {
   it('renders unique option values without error', async () => {
     await render(OptionValueKey, {
       options: [
@@ -142,11 +143,11 @@ describe('Duplicate Key: Object property as key — (option.value)', () => {
 });
 
 // ============================================================================
-// Pattern: Group category as key — {#each groups as group (group.category)}
+// Pattern: Group category as key: {#each groups as group (group.category)}
 // Affected: SpeciesSelector
 // ============================================================================
 
-describe('Duplicate Key: Group category as key — (group.category)', () => {
+describe('Duplicate Key: Group category as key (group.category)', () => {
   it('renders unique category names without error', async () => {
     await render(GroupCategoryKey, {
       groups: [
@@ -169,7 +170,7 @@ describe('Duplicate Key: Group category as key — (group.category)', () => {
   });
 
   it('throws on duplicate category names (SpeciesSelector bug)', async () => {
-    // Reproduces SpeciesSelector.svelte:413 — {#each filteredSpecies as group (group.category)}
+    // Reproduces SpeciesSelector.svelte:413: {#each filteredSpecies as group (group.category)}
     // When filteredSpecies contains multiple groups with the same category
     // (e.g., when filtering produces duplicate category groupings)
     await expect(
@@ -212,11 +213,11 @@ describe('Duplicate Key: Group category as key — (group.category)', () => {
 });
 
 // ============================================================================
-// Pattern: Index as key — {#each items as item, index (index)}
+// Pattern: Index as key: {#each items as item, index (index)}
 // Affected: RTSPUrlInput
 // ============================================================================
 
-describe('Index as Key: DOM recycling issue — (index)', () => {
+describe('Index as Key: DOM recycling issue (index)', () => {
   it('renders all items correctly with index keys', async () => {
     // Index keys don't cause duplicate key errors (indices are unique)
     // but they cause incorrect DOM recycling on remove/reorder

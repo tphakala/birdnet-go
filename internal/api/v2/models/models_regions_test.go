@@ -15,10 +15,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// expectedRegionCount is the number of tiles each family publishes; the dropdown
-// union carries exactly this many because families share a slug set.
-const expectedRegionCount = 40
-
 // getRegions calls GetModelRegions directly and decodes the response.
 func getRegions(t *testing.T, mutate func(*conf.Settings)) ModelRegionsResponse {
 	t.Helper()
@@ -62,7 +58,11 @@ func TestGetModelRegions_AutoResolves(t *testing.T) {
 	assert.True(t, resp.LocationConfigured)
 	assert.Equal(t, "andes", resp.Resolved.Slug, "Bogota resolves to andes")
 	assert.Equal(t, string(region.SourceAuto), resp.Resolved.Source)
-	assert.Len(t, resp.Regions, expectedRegionCount, "dropdown union covers every tile")
+	// Families share one slug set, so the dropdown union carries exactly the
+	// tiles of any one family's embedded table.
+	perchTable, ok := region.TableForRepo("tphakala/Perch-v2-Models")
+	require.True(t, ok, "perch region table must be embedded")
+	assert.Len(t, resp.Regions, len(perchTable.Regions), "dropdown union covers every tile")
 
 	// The options are sorted and each carries display metadata.
 	for _, o := range resp.Regions {

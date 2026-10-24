@@ -1,7 +1,6 @@
 package notification
 
 import (
-	"os"
 	"testing"
 	"time"
 
@@ -15,12 +14,8 @@ import (
 // TestMain provides goleak verification to detect goroutine leaks
 func TestMain(m *testing.M) {
 	goleak.VerifyTestMain(m,
-		goleak.IgnoreTopFunction("testing.(*T).Run"),
-		goleak.IgnoreTopFunction("runtime.gopark"),
-		goleak.IgnoreTopFunction("gopkg.in/natefinch/lumberjack%2ev2.(*Logger).millRun"),
 		goleak.IgnoreTopFunction("github.com/tphakala/birdnet-go/internal/notification.(*Service).cleanupLoop"),
 	)
-	os.Exit(m.Run())
 }
 
 // setupTestServiceAndConsumer creates a notification service and consumer for testing.
@@ -439,6 +434,47 @@ func TestDetectionNotificationConsumer_ConfidenceThreshold(t *testing.T) {
 	notifications, err = service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
 	require.NoError(t, err)
 	assert.Len(t, notifications, 2, "Detection at threshold should create notification")
+}
+
+// TestDetectionNotificationConsumer_AlertEngineActiveSkipsLegacyFilters verifies
+// that while the alert engine is active the legacy consumer creates no detection
+// notification at all, so the Minimum Confidence and Species Cooldown push
+// filters have no effect. The Notifications settings page hides those inputs on
+// that premise.
+func TestDetectionNotificationConsumer_AlertEngineActiveSkipsLegacyFilters(t *testing.T) {
+	// Note: Cannot use t.Parallel() because tests share global settingsInstance and
+	// the process-global alert engine flag
+
+	settings := conftest.GetTestSettings()
+	settings.Notification.Push.MinConfidenceThreshold = 0.5
+	settings.Notification.Push.SpeciesCooldownMinutes = 5
+	conftest.SetTestSettings(settings)
+	defer conftest.SetTestSettings(nil) // Clean up
+
+	SetAlertEngineActive(true)
+	t.Cleanup(func() { SetAlertEngineActive(false) })
+
+	service, consumer, cleanup := setupTestServiceAndConsumer(t)
+	defer cleanup()
+
+	// One new-species event that passes the legacy confidence threshold and one
+	// that does not; neither may produce a notification while the engine is active.
+	for _, confidence := range []float64{0.92, 0.30} {
+		event, err := events.NewDetectionEvent(
+			"American Robin",
+			"Turdus migratorius",
+			confidence,
+			"backyard-camera",
+			true,
+			0,
+		)
+		require.NoError(t, err)
+		require.NoError(t, consumer.ProcessDetectionEvent(event))
+	}
+
+	notifications, err := service.List(&FilterOptions{Types: []Type{TypeDetection}, Limit: 10})
+	require.NoError(t, err)
+	assert.Empty(t, notifications, "legacy consumer must defer to the alert engine")
 }
 
 // TestDetectionNotificationConsumer_SpeciesCooldown verifies that the same species

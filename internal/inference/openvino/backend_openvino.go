@@ -420,6 +420,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
@@ -427,6 +428,26 @@ import (
 // Supported reports whether the OpenVINO backend is compiled into this build.
 // True here (built under the "openvino" tag); false in stub_noopenvino.go.
 const Supported = true
+
+// loadedLibraryPath records the path handed to the dlopen that bound
+// libopenvino_c, set once by the first successful load. ovbind_load keeps its
+// handle for the process lifetime and reuses it on later InitOV calls, so a
+// later InitOV with a different path (after ov_core_create failed once) does
+// not change which library is in use. Never guarded by ovMu, so a reader cannot
+// block behind a model compile.
+var loadedLibraryPath atomic.Pointer[string]
+
+// LoadedLibraryPath reports the library path passed to the dlopen that bound
+// libopenvino_c; "" means the default soname (DefaultLibraryName). loaded is
+// false until a load has succeeded. It is an atomic read and never waits on a
+// model compile.
+func LoadedLibraryPath() (path string, loaded bool) {
+	p := loadedLibraryPath.Load()
+	if p == nil {
+		return "", false
+	}
+	return *p, true
+}
 
 const (
 	// inputPortIndex is the index of the single audio input tensor.
@@ -495,6 +516,10 @@ func InitOV(libraryPath string) error {
 		}
 		return errors.Newf("openvino: failed to load libopenvino_c: %s", errMsg).Build()
 	}
+	// ovbind_load returned success, so the handle is bound. Only the first
+	// success ran dlopen; later ones reuse the handle (see loadedLibraryPath).
+	loaded := libraryPath
+	loadedLibraryPath.CompareAndSwap(nil, &loaded)
 
 	var core *C.ov_core_t
 	if st := C.ovbind_core_create(&core); !ovOK(st) {

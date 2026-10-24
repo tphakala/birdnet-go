@@ -59,9 +59,9 @@ type reloadOpts struct {
 //
 // Lock order: o.reloadMu -> o.rebuildMu -> o.mu -> inferenceMu -> entry.mu -> bn.mu.
 // reloadEntry holds o.reloadMu across build, swap and notify; it takes o.mu only to
-// snapshot the entry, inferenceMu only for the warm-up, entry.mu only for the swap, and
-// calls reloadAnchorRangeFilter (rfs.buildMu -> rfs.mu) and rebuildSpeciesIndex
-// (o.rebuildMu -> o.mu) holding only o.reloadMu.
+// snapshot the entry, inferenceMu only for the warm-up and each latency probe run,
+// entry.mu only for the swap, and calls reloadAnchorRangeFilter (rfs.buildMu ->
+// rfs.mu) and rebuildSpeciesIndex (o.rebuildMu -> o.mu) holding only o.reloadMu.
 func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts reloadOpts) (swapped bool, err error) {
 	o.reloadMu.Lock()
 	defer o.reloadMu.Unlock()
@@ -138,13 +138,33 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	//    cold and left modelRSS[v24] at its startup value), so PR3 skips warm-up+RSS for
 	//    the v2.4 anchor to stay byte-identical. Secondaries warm up exactly as before,
 	//    serialized behind live inference on inferenceMu (bounded by warmupTimeout).
+	input := silentInput(next.Spec())
+	var warmedUp bool
 	if recordRSS {
 		func() {
 			o.inferenceMu.Lock()
 			defer o.inferenceMu.Unlock()
-			o.warmupAndRecordRSS(registryID, before, next)
+			warmedUp = o.warmupAndRecordRSS(registryID, before, next, input)
 		}()
 	}
+
+	// 5b. Probe inference latency on the private instance (secondaries and the v2.4
+	//     anchor alike). Each run takes only inferenceMu: entry.mu guards the serving
+	//     instance and must not be held. The result is stored after the swap succeeds.
+	//     The anchor skipped the warm-up, and a failed warm-up may not have run the
+	//     lazy allocation, so in both cases the probe starts with an untimed run.
+	probed, probeOK := o.probeLatency(registryID, next, input, warmedUp, func(run func()) bool {
+		o.inferenceMu.Lock()
+		defer o.inferenceMu.Unlock()
+		run()
+		return true
+	})
+
+	// 5c. Describe the private instance for the diagnostic snapshot before any lock is
+	//     taken: NumSpecies can take the instance's own lock, which must not nest inside
+	//     the runtime-snapshot leaf lock. Published with the swap, never on a failed or
+	//     orphaned reload.
+	snap := newModelRuntimeSnapshot(registryID, next, configuredThreadsFor(registryID, settings, opts.threads))
 
 	// 6. Swap under entry.mu. Re-check the orphan guard: a Delete/Unload may have raced
 	//    the build/warm-up. Keeping the same *modelEntry preserves its mutex identity and
@@ -164,10 +184,14 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	}
 	entry.instance = next
 	entry.generation++
+	o.storeProbedLatency(registryID, probed, probeOK)
+	snap.Generation = entry.generation
+	o.publishReloadedModelRuntime(entry, &snap)
 	if opts.backend != nil {
 		entry.backend = *opts.backend
 	}
-	dropInferenceFailureStreak(registryID) // fresh instance, fresh streak
+	dropInferenceHealth(registryID)      // fresh instance, fresh streak
+	o.kickInferenceHealthSyncIfTracked() // the replaced instance's failure notice is stale
 	entry.mu.Unlock()
 
 	// Close the replaced instance after releasing entry.mu: native teardown can be slow,
@@ -187,8 +211,14 @@ func (o *Orchestrator) reloadEntry(registryID string, build entryBuilder, opts r
 	//    backend/device swap keeps the label set, and ReloadSecondaryModels reads the
 	//    settings the anchor reload already published.
 	if bn, ok := next.(*BirdNET); ok {
+		labels := bn.Labels()
 		o.updateSettings(bn.currentSettings())
-		o.logMissingTaxonomyCodes(bn, bn.Labels())
+		o.logMissingTaxonomyCodes(bn, labels)
+		// Refresh the v2.4 label resolver so a locale or label change on reload is reflected
+		// in name resolution. labels is read BEFORE setV24LabelResolver takes o.mu (bn.Labels()
+		// takes the model lock), so o.mu is never held while waiting on a serving instance's
+		// model lock, which PredictModel holds for a full inference.
+		o.setV24LabelResolver(labels)
 		debug.FreeOSMemory()
 	}
 	if registryID == RegistryIDBirdNETV24 {

@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -51,7 +52,7 @@ func TestWarmupAndRecordRSS_RecordsNonNegativeDelta(t *testing.T) {
 	if before == 0 {
 		t.Skip("process RSS unavailable on this platform")
 	}
-	o.warmupAndRecordRSS(inst.ModelID(), before, inst)
+	o.warmupAndRecordRSS(inst.ModelID(), before, inst, silentInput(inst.Spec()))
 
 	// Warm-up must size the dummy clip from the spec (48000 * 3s = 144000).
 	require.Equal(t, 144000, inst.predictedN, "warm-up dummy size")
@@ -216,11 +217,13 @@ func TestLoadModel_RunsDeferredWarmup(t *testing.T) {
 func TestRunPendingWarmups_DoesNotHoldMapLockDuringWarmup(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
+	var startedOnce sync.Once
 	inst := &mockModelInstance{
 		id:   "Blocking_Model",
 		spec: ModelSpec{SampleRate: 48000, ClipLength: 3 * time.Second},
 		predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
-			close(started)
+			// The warm-up is followed by the latency probe, which calls Predict again.
+			startedOnce.Do(func() { close(started) })
 			<-release
 			return nil, nil
 		},

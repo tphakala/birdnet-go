@@ -524,14 +524,12 @@ func isDNSError(err error) bool {
 	}
 
 	// Check if it's a DNSError type
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
+	if _, ok := errors.AsType[*net.DNSError](err); ok {
 		return true
 	}
 
 	// Check for URL errors with lookup operation
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) && strings.HasPrefix(urlErr.Op, "lookup") {
+	if urlErr, ok := errors.AsType[*url.Error](err); ok && strings.HasPrefix(urlErr.Op, "lookup") {
 		return true
 	}
 
@@ -554,8 +552,7 @@ func isDNSTimeout(err error) bool {
 	}
 
 	// Also check for net.Error timeout
-	var netErr net.Error
-	if errors.As(err, &netErr) && netErr.Timeout() {
+	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 		return true
 	}
 
@@ -603,8 +600,7 @@ func tryAPIConnection(ctx context.Context, apiEndpoint string, hostHeader ...str
 
 	resp, err := client.Do(req)
 	if err != nil {
-		var netErr net.Error
-		if errors.As(err, &netErr) && netErr.Timeout() {
+		if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 			return fmt.Errorf("API connectivity test timed out: %w", err)
 		}
 		// Check if this is a DNS error

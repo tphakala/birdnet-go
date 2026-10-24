@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
 	audioBuffer "github.com/tphakala/birdnet-go/internal/audiocore/buffer"
 	"github.com/tphakala/birdnet-go/internal/audiocore/clipenc"
-	"github.com/tphakala/birdnet-go/internal/audiocore/ffmpeg"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/detection"
@@ -38,8 +37,8 @@ func logLineContaining(t *testing.T, logs, marker string) string {
 	return found
 }
 
-// A bat model at an ultrasonic capture rate: the combination needsBatFormatFallback
-// downgrades to WAV, because no lossy container carries 256 kHz.
+// A bat model at an ultrasonic capture rate (above the 48 kHz analysis rate):
+// resolveExportFormat stores it losslessly in the dedicated UltrasonicType.
 const (
 	batModelName        = "BattyBirdNET"
 	batSourceSampleRate = 256000
@@ -81,13 +80,13 @@ func blockOutputPath(t *testing.T, exportDir, clipName string) {
 }
 
 // The success log is the primary support artefact for the clip export path. It
-// must name the encoder that produced the file, so a support log answers "native
-// or FFmpeg" without the reader having to reconstruct it from the format and the
+// must name the encoder that produced the file, so a support log answers "which
+// encoder" without the reader having to reconstruct it from the format and the
 // operator's environment.
 func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 
 	require.NoError(t, a.Execute(t.Context(), nil))
 
@@ -95,7 +94,7 @@ func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
 	assert.Contains(t, out, "Audio clip saved successfully")
 	assert.Contains(t, out, "encoder="+clipenc.NativeFLAC,
 		"the success log must name the encoder that wrote the clip")
-	assert.Contains(t, out, "format="+ffmpeg.FormatFLAC)
+	assert.Contains(t, out, "format="+audioformat.FLAC)
 	assert.Contains(t, out, "operation=audio_export_success")
 }
 
@@ -113,7 +112,7 @@ func TestExecute_SuccessLogNamesNativeEncoder(t *testing.T) {
 func TestExecute_SuccessLogNamesSpeciesForClipPathAggregation(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 	// Lowercase, matching what buildSaveAudioAction stores and what the sibling
 	// detection operations log; see the casing rationale on
 	// TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch.
@@ -138,7 +137,7 @@ func TestExecute_SuccessLogNamesSpeciesForClipPathAggregation(t *testing.T) {
 func TestExecute_SuccessLogClipPathKeepsDateSegments(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "2026/07/wren.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "2026/07/wren.flac", audioformat.FLAC)
 
 	require.NoError(t, a.Execute(t.Context(), nil))
 
@@ -184,11 +183,42 @@ func TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch(t *testing
 		}
 	}
 
-	tests := []struct {
-		name      string
-		build     func(t *testing.T) (*Processor, *Detections)
-		wantEager bool
-	}{
+	tests := saveAudioBranchCases(sourceID, newDetection)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, det := tt.build(t)
+
+			action := p.buildSaveAudioAction(det, &DetectionContext{}, p.currentSettings())
+
+			require.NotNil(t, action)
+			// Pin WHICH branch ran. Without this the eager row silently fell back
+			// to the deferred branch and the eager return site, the one most
+			// production exports take, was never executed at all.
+			if tt.wantEager {
+				require.NotEmpty(t, action.pcmData, "the eager branch pre-reads the PCM")
+				require.Nil(t, action.bufferMgr, "the eager branch does not defer")
+			} else {
+				require.Empty(t, action.pcmData, "only the eager branch pre-reads the PCM")
+			}
+			assert.Equal(t, wantSpecies, action.species,
+				"every construction branch must carry the species, lowercased to match approve_detection")
+		})
+	}
+}
+
+// saveAudioBranchCase is one buildSaveAudioAction construction branch.
+type saveAudioBranchCase struct {
+	name      string
+	build     func(t *testing.T) (*Processor, *Detections)
+	wantEager bool
+}
+
+// saveAudioBranchCases returns one case per buildSaveAudioAction branch
+// (deferred read, capture read error, eager read). newDetection builds the
+// detection for a capture window.
+func saveAudioBranchCases(sourceID string, newDetection func(begin, end time.Time) *Detections) []saveAudioBranchCase {
+	return []saveAudioBranchCase{
 		{
 			// Extended Capture: the tail is still being written, so the action
 			// carries buffer coordinates and reads later.
@@ -255,27 +285,6 @@ func TestBuildSaveAudioAction_PopulatesLowercasedSpeciesOnEveryBranch(t *testing
 			wantEager: true,
 		},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			p, det := tt.build(t)
-
-			action := p.buildSaveAudioAction(det, &DetectionContext{})
-
-			require.NotNil(t, action)
-			// Pin WHICH branch ran. Without this the eager row silently fell back
-			// to the deferred branch and the eager return site, the one most
-			// production exports take, was never executed at all.
-			if tt.wantEager {
-				require.NotEmpty(t, action.pcmData, "the eager branch pre-reads the PCM")
-				require.Nil(t, action.bufferMgr, "the eager branch does not defer")
-			} else {
-				require.Empty(t, action.pcmData, "only the eager branch pre-reads the PCM")
-			}
-			assert.Equal(t, wantSpecies, action.species,
-				"every construction branch must carry the species, lowercased to match approve_detection")
-		})
-	}
 }
 
 // buildSpeciesTestSettings is the minimal settings object buildSaveAudioAction
@@ -293,7 +302,7 @@ func buildSpeciesTestSettings(t *testing.T) *conf.Settings {
 func TestExecute_SuccessLogCarriesGainAndDuration(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.wav", ffmpeg.FormatWAV)
+	a := newExportLogAction(t, dir, "clip.wav", audioformat.WAV)
 
 	require.NoError(t, a.Execute(t.Context(), nil))
 
@@ -324,11 +333,9 @@ func TestExecute_SuccessLogCarriesGainAndDuration(t *testing.T) {
 // codec's range, so this covers the ordinary case only; the clamping the field
 // also has to survive is the test below.
 func TestExecute_SuccessLogCarriesBitrateForLossyFormats(t *testing.T) {
-	t.Setenv(conf.EnvNativeAACEncoder, "native")
-	resetNativeSkipOnce()
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.m4a", ffmpeg.FormatAAC)
+	a := newExportLogAction(t, dir, "clip.m4a", audioformat.AAC)
 
 	require.NoError(t, a.Execute(t.Context(), nil))
 
@@ -342,10 +349,9 @@ func TestExecute_SuccessLogCarriesBitrateForLossyFormats(t *testing.T) {
 // actively misleading. Opus caps at 256 kbps, so a 320k configuration is the
 // case that tells the two apart.
 func TestExecute_SuccessLogCarriesClampedBitrate(t *testing.T) {
-	resetNativeSkipOnce()
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.opus", ffmpeg.FormatOpus)
+	a := newExportLogAction(t, dir, "clip.opus", audioformat.Opus)
 	a.Settings.Realtime.Audio.Export.Bitrate = "320k"
 
 	require.NoError(t, a.Execute(t.Context(), nil))
@@ -360,15 +366,12 @@ func TestExecute_SuccessLogCarriesClampedBitrate(t *testing.T) {
 // The gap this change closes: a failed export used to leave nothing but the job
 // queue's own line ("Job failed permanently", or "Job scheduled for retry after
 // failure" on the attempts before it), which names neither the encoder nor the
-// format. An operator who opted AAC into the native encoder could not tell
-// whether go-aac or FFmpeg produced the failure.
+// format, so the encoder behind a failure could not be told from the logs.
 func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
-	t.Setenv(conf.EnvNativeAACEncoder, "native")
-	resetNativeSkipOnce()
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
 	blockOutputPath(t, dir, "clip.m4a")
-	a := newExportLogAction(t, dir, "clip.m4a", ffmpeg.FormatAAC)
+	a := newExportLogAction(t, dir, "clip.m4a", audioformat.AAC)
 
 	require.Error(t, a.Execute(t.Context(), nil))
 
@@ -376,7 +379,7 @@ func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
 	assert.Contains(t, out, "Audio clip export failed")
 	assert.Contains(t, out, "encoder="+clipenc.NativeAAC,
 		"a failed export must be attributable to the encoder that failed")
-	assert.Contains(t, out, "format="+ffmpeg.FormatAAC)
+	assert.Contains(t, out, "format="+audioformat.AAC)
 	assert.Contains(t, out, "operation=audio_export_failed")
 	assert.Contains(t, out, "detection_id=export-log-test")
 	// A rejected bitrate is one of the ways a lossy encode fails, so the value
@@ -390,8 +393,8 @@ func TestExecute_FailureLogNamesNativeEncoder(t *testing.T) {
 func TestExecute_FailureLogIsWarnNotError(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
-	a.Settings.Realtime.Audio.FfmpegPath = ""
+	blockOutputPath(t, dir, "clip.mp3")
+	a := newExportLogAction(t, dir, "clip.mp3", audioformat.MP3)
 
 	require.Error(t, a.Execute(t.Context(), nil))
 
@@ -405,21 +408,21 @@ func TestExecute_FailureLogIsWarnNotError(t *testing.T) {
 	}
 }
 
-// The other half of the pair: the same failure on the FFmpeg path is attributed
-// to FFmpeg, so the two are distinguishable in a support log.
-func TestExecute_FailureLogNamesFFmpeg(t *testing.T) {
+// A format no native encoder handles is an export error attributed to no encoder,
+// never an FFmpeg route, and writes nothing.
+func TestExecute_UnrecognizedFormatFailsWithoutEncoder(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
-	// No FFmpeg binary configured, so the export fails inside ffmpeg.ExportAudio.
-	a.Settings.Realtime.Audio.FfmpegPath = ""
+	a := newExportLogAction(t, dir, "clip.invalid", "invalid")
 
 	require.Error(t, a.Execute(t.Context(), nil))
 
 	out := logs.String()
 	assert.Contains(t, out, "Audio clip export failed")
-	assert.Contains(t, out, "encoder="+clipenc.FFmpeg)
-	assert.Contains(t, out, "format="+ffmpeg.FormatMP3)
+	assert.NotContains(t, out, "encoder=ffmpeg")
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "nothing may be written for an unrecognized format")
 }
 
 // encodeClip documents that it populates clipEncoding "as far as the export
@@ -434,7 +437,7 @@ func TestExecute_FailureLogNamesFFmpeg(t *testing.T) {
 func TestExecute_FailureBeforeGainResolutionOmitsGain(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 	a.Settings.Realtime.Audio.Export.Normalization = conf.NormalizationSettings{
 		Enabled:    true,
 		TargetLUFS: -23,
@@ -468,7 +471,7 @@ func TestExecute_FailureBeforeGainResolutionOmitsGain(t *testing.T) {
 func TestExecute_FailureLogCarriesPhaseTimings(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 	blockOutputPath(t, dir, "clip.flac")
 
 	require.Error(t, a.Execute(t.Context(), nil))
@@ -534,8 +537,8 @@ func TestRelativeClipPath(t *testing.T) {
 func TestExecute_FailureLogOmitsFullPath(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
-	a.Settings.Realtime.Audio.FfmpegPath = ""
+	blockOutputPath(t, dir, "clip.mp3")
+	a := newExportLogAction(t, dir, "clip.mp3", audioformat.MP3)
 
 	require.Error(t, a.Execute(t.Context(), nil))
 
@@ -554,7 +557,7 @@ func TestExecute_FailureLogOmitsFullPath(t *testing.T) {
 func TestExecute_CancelledExportLogsAtDebug(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.flac", ffmpeg.FormatFLAC)
+	a := newExportLogAction(t, dir, "clip.flac", audioformat.FLAC)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -569,16 +572,17 @@ func TestExecute_CancelledExportLogsAtDebug(t *testing.T) {
 
 // The regression this pair exists to prevent: a genuine defect that merely
 // COINCIDES with shutdown is still a defect. The guard used to test the context
-// as well as the error, so ENOSPC, corrupt PCM or a missing FFmpeg binary hit
+// as well as the error, so ENOSPC or corrupt PCM hit
 // while the process was stopping were all logged at Debug under a message
 // asserting they had been cancelled. On a container that OOM-restarts that
 // misattributes every in-flight export failure in the restart window.
 func TestExecute_RealErrorDuringShutdownStaysAtWarn(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
-	// Not a cancellation: FFmpeg is simply not there.
-	a.Settings.Realtime.Audio.FfmpegPath = ""
+	// WAV takes no context, so the blocked output path is a real error that a
+	// cancelled context cannot turn into a cancellation.
+	blockOutputPath(t, dir, "clip.wav")
+	a := newExportLogAction(t, dir, "clip.wav", audioformat.WAV)
 
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
@@ -601,8 +605,9 @@ func TestExecute_RealErrorDuringShutdownStaysAtWarn(t *testing.T) {
 func TestExecute_TimedOutExportStaysAtWarn(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
 	dir := t.TempDir()
-	a := newExportLogAction(t, dir, "clip.mp3", ffmpeg.FormatMP3)
-	a.Settings.Realtime.Audio.FfmpegPath = ""
+	// WAV takes no context, so the blocked output path is a real error.
+	blockOutputPath(t, dir, "clip.wav")
+	a := newExportLogAction(t, dir, "clip.wav", audioformat.WAV)
 
 	// An already-expired deadline, which is what the job queue's execution
 	// timeout leaves on the context when an encode runs long.
@@ -618,188 +623,28 @@ func TestExecute_TimedOutExportStaysAtWarn(t *testing.T) {
 	assert.NotContains(t, out, "Audio clip export cancelled")
 }
 
-// An ultrasonic capture whose configured container cannot carry the sample rate
-// is exported as WAV. That downgrade used to be entirely silent, leaving an
-// operator configured for a lossy format with no explanation for the .wav files
-// on disk.
-func TestResolveExportParams_BatDowngradeIsLogged(t *testing.T) {
-	resetBatFormatDowngradeOnce()
+// A bat/ultrasonic capture above the analysis rate is stored losslessly in the
+// dedicated UltrasonicType (default FLAC) at its full source rate, not downgraded
+// to WAV. This is intended behavior, so unlike the old forced-WAV path it emits no
+// downgrade warning and never strands. The stored name is already in the
+// ultrasonic format, as production naming writes it.
+func TestResolveExportParams_BatUltrasonicUsesUltrasonicType(t *testing.T) {
 	logs := logtest.CaptureBuffer(t)
-	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
+	a := newExportLogAction(t, t.TempDir(), "clip.flac", audioformat.MP3)
+	a.Settings.Realtime.Audio.Export.UltrasonicType = conf.AudioExportTypeFLAC
 	a.modelName = batModelName
 	a.sourceSampleRate = batSourceSampleRate
 
-	_, format, path := a.resolveExportParams("/clips/clip.mp3")
+	rate, format, path := a.resolveExportParams("/clips/clip.flac")
 
-	require.Equal(t, ffmpeg.FormatWAV, format, "the downgrade itself must still happen")
-	assert.Equal(t, "/clips/clip.wav", path)
-	assert.Contains(t, logs.String(), "operation=audio_export_bat_format_fallback")
-	assert.Contains(t, logs.String(), "requested_format="+ffmpeg.FormatMP3)
-}
-
-// The downgrade fires on every single detection of a bat install, so repeating
-// the SAME condition must not repeat the log. (The companion test below covers
-// the other half: a DIFFERENT condition still gets its own line.)
-func TestResolveExportParams_BatDowngradeLoggedOncePerCondition(t *testing.T) {
-	resetBatFormatDowngradeOnce()
-	logs := logtest.CaptureBuffer(t)
-	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
-	a.modelName = batModelName
-	a.sourceSampleRate = batSourceSampleRate
-
-	for range 3 {
-		_, _, _ = a.resolveExportParams("/clips/clip.mp3")
-	}
-
-	assert.Equal(t, 1, strings.Count(logs.String(), "audio_export_bat_format_fallback"),
-		"a bat install takes this path on every detection; the log must not repeat")
-}
-
-// The guard is keyed on the inputs the decision is made from, not on "have we
-// ever logged this". Both inputs vary at runtime: Export.Type is hot-reloadable,
-// and the capture rate belongs to the source, so a multi-source install runs
-// several at once. A bare sync.Once let the first condition silence every later,
-// DIFFERENT one, leaving the operator an explanation naming a format they had
-// since changed away from or a rate belonging to another source.
-func TestResolveExportParams_BatDowngradeLogsEachDistinctCondition(t *testing.T) {
-	resetBatFormatDowngradeOnce()
-	logs := logtest.CaptureBuffer(t)
-	a := newExportLogAction(t, t.TempDir(), "clip.mp3", ffmpeg.FormatMP3)
-	a.modelName = batModelName
-	a.sourceSampleRate = batSourceSampleRate
-
-	_, _, _ = a.resolveExportParams("/clips/clip.mp3")
-
-	// A second source at a different ultrasonic rate: same format, new condition.
-	const otherBatRate = 192000
-	a.sourceSampleRate = otherBatRate
-	_, _, _ = a.resolveExportParams("/clips/clip.mp3")
-
-	// The operator switches the export format in the UI without restarting.
-	a.Settings.Realtime.Audio.Export.Type = ffmpeg.FormatOpus
-	a.sourceSampleRate = batSourceSampleRate
-	_, _, _ = a.resolveExportParams("/clips/clip.opus")
-
+	assert.Equal(t, conf.AudioExportTypeFLAC, format,
+		"a bat capture above the analysis rate must use the ultrasonic format, not a WAV downgrade")
+	assert.Equal(t, batSourceSampleRate, rate, "ultrasonic audio must keep its full source rate")
+	assert.Equal(t, ".flac", filepath.Ext(path),
+		"the on-disk extension must follow the ultrasonic format")
 	out := logs.String()
-	assert.Equal(t, 3, strings.Count(out, "audio_export_bat_format_fallback"),
-		"each distinct format/rate combination must explain itself exactly once")
-	assert.Contains(t, out, "sample_rate="+strconv.Itoa(otherBatRate),
-		"the second source's rate must not be hidden by the first")
-	assert.Contains(t, out, "requested_format="+ffmpeg.FormatOpus,
-		"a hot-reloaded format must re-explain itself")
-}
-
-// The sibling downgrade: an install with no FFmpeg whose opted-in native encoder
-// cannot carry the clip either. It means the same thing as the bat downgrade
-// ("you are not getting the format you configured"), so it is logged the same
-// way. It used to be the opposite of its sibling on both counts: WARN on every
-// single clip forever, against Info exactly once. A bat clip drives it: bat audio
-// is never resampled (ultrasonic handling is out of scope), so a sub-48k bat clip
-// the encoder cannot carry still strands to WAV instead of being converted.
-func TestResolveExportParams_StrandedFallbackIsWarnedOncePerCondition(t *testing.T) {
-	resetNativeSkipOnce()
-	resetStrandedFormatOnce()
-	logs := logtest.CaptureBuffer(t)
-
-	// 44.1 kHz is a rate Opus does not accept, and with no FFmpeg to fall back
-	// on there is no encoder left for the configured format. A bat clip is not
-	// resampled, so this still strands rather than converting to 48kHz.
-	const unsupportedOpusRate = 44100
-	a := newExportLogAction(t, t.TempDir(), "clip.opus", ffmpeg.FormatOpus)
-	a.modelName = batModelName
-	a.Settings.Realtime.Audio.FfmpegPath = ""
-	a.sourceSampleRate = unsupportedOpusRate
-
-	for range 3 {
-		_, format, _ := a.resolveExportParams("/clips/clip.opus")
-		require.Equal(t, ffmpeg.FormatWAV, format, "the recording must still survive as WAV")
-	}
-
-	out := logs.String()
-	assert.Equal(t, 1, strings.Count(out, "audio_export_no_encoder_fallback"),
-		"the condition is static per clip shape; it must not warn on every detection")
-	// Scoped to the fallback line itself. A buffer-wide "level=WARN" is already
-	// satisfied by the native-encoder skip warning this same path emits, so it
-	// would pass even if the fallback were still logged at Info.
-	assert.Contains(t, logLineContaining(t, out, "audio_export_no_encoder_fallback"), "level=WARN",
-		"it means the same thing to the operator as the bat downgrade, so it takes the same level")
-}
-
-// The stranded guard is keyed like its sibling, so a second distinct condition
-// still explains itself. Without this, a bare sync.Once would pass the
-// once-per-condition test above identically. Bat clips drive it: they are never
-// resampled, so a sub-48k rate the native encoder cannot carry still strands.
-func TestResolveExportParams_StrandedFallbackLogsEachDistinctCondition(t *testing.T) {
-	t.Setenv(conf.EnvNativeAACEncoder, "native")
-	resetNativeSkipOnce()
-	resetStrandedFormatOnce()
-	logs := logtest.CaptureBuffer(t)
-
-	a := newExportLogAction(t, t.TempDir(), "clip.opus", ffmpeg.FormatOpus)
-	a.modelName = batModelName
-	a.Settings.Realtime.Audio.FfmpegPath = ""
-	a.sourceSampleRate = 44100
-	_, _, _ = a.resolveExportParams("/clips/clip.opus")
-
-	// A different format the native encoder also rejects at this rate.
-	a.Settings.Realtime.Audio.Export.Type = ffmpeg.FormatAAC
-	a.sourceSampleRate = 22050
-	_, _, _ = a.resolveExportParams("/clips/clip.m4a")
-
-	out := logs.String()
-	assert.Equal(t, 2, strings.Count(out, "audio_export_no_encoder_fallback"),
-		"each distinct format/rate combination must explain itself exactly once")
-	// The two native-encoder skip warnings share one guard now that the format is
-	// part of the key; both formats must still get their own line. Asserted by
-	// counting the operation, not by Contains("format=aac"), which is also a
-	// substring of the stranded line's own requested_format=aac and would pass
-	// even if these warnings were never emitted.
-	assert.Equal(t, 2, strings.Count(out, "audio_export_native_unsupported"),
-		"one shared guard must not let the first format silence the second")
-}
-
-// selectEncoder is the whole routing table, extracted so a failed export can
-// name its encoder. AAC is covered from both sides: with the gate off it must
-// still resolve to FFmpeg, which is what every install that has not opted in does
-// on every clip. Opus is no longer gated: go-opus is its unconditional default.
-// Asserting nativeAACSelected directly (as the gate tests do) checks the
-// predicate but not the routing built on it.
-func TestSelectEncoder_RoutingTable(t *testing.T) {
-	for _, tc := range []struct {
-		name       string
-		aacGate    string
-		format     string
-		rate       int
-		wantEncode string
-	}{
-		{"wav is always native", "", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
-		{"flac is always native", "", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
-		{"wav ignores the aac gate", "native", ffmpeg.FormatWAV, conf.SampleRate, clipenc.NativeWAV},
-		{"flac ignores the aac gate", "native", ffmpeg.FormatFLAC, conf.SampleRate, clipenc.NativeFLAC},
-		{"aac without the gate stays on ffmpeg", "", ffmpeg.FormatAAC, conf.SampleRate, clipenc.FFmpeg},
-		{"opus is native by default", "", ffmpeg.FormatOpus, conf.SampleRate, clipenc.NativeOpus},
-		{"aac with the gate goes native", "native", ffmpeg.FormatAAC, conf.SampleRate, clipenc.NativeAAC},
-		// The encoder cannot carry the clip's rate: FFmpeg takes it rather than the
-		// export failing outright.
-		{"aac falls back when the rate is unsupported", "native", ffmpeg.FormatAAC, 22050, clipenc.FFmpeg},
-		{"opus falls back when the rate is unsupported", "", ffmpeg.FormatOpus, 22050, clipenc.FFmpeg},
-		// With its own gate pinned off below, MP3 routes to FFmpeg; ALAC has no
-		// native encoder at all. Neither is touched by the AAC gate.
-		{"mp3 without its gate stays on ffmpeg", "native", ffmpeg.FormatMP3, conf.SampleRate, clipenc.FFmpeg},
-		{"alac is always ffmpeg", "native", ffmpeg.FormatALAC, conf.SampleRate, clipenc.FFmpeg},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			// Not parallel: t.Setenv, and the skip warning uses a package-level Once.
-			t.Setenv(conf.EnvNativeAACEncoder, tc.aacGate)
-			// This table exercises the AAC gate; MP3 has its own, covered in
-			// native_mp3_gate_test.go. Pin it off so MP3 routes to FFmpeg here
-			// regardless of the ambient environment.
-			t.Setenv(conf.EnvNativeMP3Encoder, "")
-			resetNativeSkipOnce()
-
-			assert.Equal(t, tc.wantEncode, selectEncoder(tc.format, tc.rate))
-		})
-	}
+	assert.NotContains(t, out, "audio_export_bat_format_fallback",
+		"routing to the ultrasonic format is intended behavior, not a downgrade to warn about")
 }
 
 // The bitrate reported alongside the encoder is the effective one, and the
@@ -807,22 +652,21 @@ func TestSelectEncoder_RoutingTable(t *testing.T) {
 func TestLossyBitrateKbps(t *testing.T) {
 	t.Parallel()
 
-	assert.Equal(t, 96, lossyBitrateKbps(ffmpeg.FormatMP3, "96k"))
-	assert.Equal(t, 96, lossyBitrateKbps(ffmpeg.FormatAAC, "96k"))
-	assert.Equal(t, 96, lossyBitrateKbps(ffmpeg.FormatOpus, "96k"))
+	assert.Equal(t, 96, lossyBitrateKbps(audioformat.MP3, "96k"))
+	assert.Equal(t, 96, lossyBitrateKbps(audioformat.AAC, "96k"))
+	assert.Equal(t, 96, lossyBitrateKbps(audioformat.Opus, "96k"))
 
-	assert.Equal(t, 0, lossyBitrateKbps(ffmpeg.FormatWAV, "96k"), "WAV is lossless")
-	assert.Equal(t, 0, lossyBitrateKbps(ffmpeg.FormatFLAC, "96k"), "FLAC is lossless")
-	assert.Equal(t, 0, lossyBitrateKbps(ffmpeg.FormatALAC, "96k"), "ALAC is lossless")
+	assert.Equal(t, 0, lossyBitrateKbps(audioformat.WAV, "96k"), "WAV is lossless")
+	assert.Equal(t, 0, lossyBitrateKbps(audioformat.FLAC, "96k"), "FLAC is lossless")
 
 	// A malformed setting parses to 0, which the log then omits rather than
 	// reporting a bitrate the encoder never used.
-	assert.Equal(t, 0, lossyBitrateKbps(ffmpeg.FormatMP3, "not-a-bitrate"))
+	assert.Equal(t, 0, lossyBitrateKbps(audioformat.MP3, "not-a-bitrate"))
 
 	// MP3 and Opus are clamped to what the codec accepts, so the logged value
 	// tracks the encode rather than echoing an over-large setting back.
-	assert.Positive(t, lossyBitrateKbps(ffmpeg.FormatMP3, "9999k"))
-	assert.Less(t, lossyBitrateKbps(ffmpeg.FormatMP3, "9999k"), 9999)
+	assert.Positive(t, lossyBitrateKbps(audioformat.MP3, "9999k"))
+	assert.Less(t, lossyBitrateKbps(audioformat.MP3, "9999k"), 9999)
 }
 
 func TestClipDurationMs(t *testing.T) {

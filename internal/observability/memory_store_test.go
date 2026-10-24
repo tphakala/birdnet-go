@@ -8,7 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/goleak"
+
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 func TestNewMemoryStore(t *testing.T) {
@@ -201,7 +202,7 @@ func TestMemoryStore_Subscribe_SlowConsumerDrops(t *testing.T) {
 		ch, cancel := store.Subscribe()
 		t.Cleanup(cancel)
 
-		// Don't read from channel — simulate slow consumer
+		// Don't read from channel: simulate slow consumer
 		// Record 3 batches; channel cap is 1, so at most 1 is buffered
 		store.RecordBatch(map[string]float64{"cpu": 1.0})
 		store.RecordBatch(map[string]float64{"cpu": 2.0})
@@ -220,8 +221,9 @@ func TestMemoryStore_Subscribe_SlowConsumerDrops(t *testing.T) {
 }
 
 func TestMemoryStore_ConcurrentAccess(t *testing.T) {
-	t.Parallel()
-	defer goleak.VerifyNone(t, goleak.IgnoreCurrent())
+	// Not parallel: a per-test leak check sees every goroutine in the process,
+	// so it cannot share the run with concurrently executing tests.
+	testutil.VerifyNoLeaks(t)
 	store := NewMemoryStore(100)
 
 	var wg sync.WaitGroup

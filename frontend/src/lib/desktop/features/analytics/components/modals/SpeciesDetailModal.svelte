@@ -85,7 +85,7 @@
   onClose={handleClose}
   className="sm:modal-middle"
 >
-  {#snippet header()}
+  {#snippet header({ titleId })}
     {#if displaySpecies}
       <div class="flex items-center justify-between">
         <a
@@ -95,7 +95,7 @@
           aria-label={viewDetectionsLabel}
           title={viewDetectionsLabel}
         >
-          <h3 id="modal-title" class="font-bold text-lg truncate">
+          <h3 id={titleId} class="font-bold text-lg truncate">
             {displayName}
           </h3>
           <p class="text-sm text-[var(--color-base-content)] opacity-70 italic truncate">
@@ -179,7 +179,7 @@
     <button
       class="px-4 py-2 rounded-lg font-medium transition-colors w-full
              bg-[var(--color-primary)] text-[var(--color-primary-content)]
-             hover:bg-[var(--color-primary)]/90"
+             hover:bg-[var(--color-primary-hover)]"
       onclick={handleClose}
     >
       {t('common.close')}

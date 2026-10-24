@@ -30,6 +30,18 @@ type DetectionRepository interface {
 	// Returns ErrDetectionNotFound if not found, ErrDetectionLocked if locked.
 	Update(ctx context.Context, id uint, updates map[string]any) error
 
+	// RecordClipSampleRate sets the clip sample rate (Hz) of the detection whose
+	// clip_name still equals clipName, overwriting any stored value. An empty
+	// clipName or rate <= 0 is a no-op. It ignores detection locks (the rate is
+	// clip metadata) and never reports ErrDetectionNotFound or ErrDetectionLocked.
+	RecordClipSampleRate(ctx context.Context, id uint, clipName string, rate int) error
+
+	// FillClipSampleRate sets the clip sample rate (Hz) only while it is NULL and
+	// clip_name still equals clipName, so concurrent fills converge and an exporter
+	// value is never overwritten. It reports whether a row changed. An empty
+	// clipName or rate <= 0 is a no-op. It ignores detection locks.
+	FillClipSampleRate(ctx context.Context, id uint, clipName string, rate int) (bool, error)
+
 	// Delete removes a detection by ID.
 	// Returns ErrDetectionNotFound if not found, ErrDetectionLocked if locked.
 	Delete(ctx context.Context, id uint) error
@@ -82,6 +94,11 @@ type DetectionRepository interface {
 	// Search finds detections matching the given filters.
 	// Returns results, total count, and any error.
 	Search(ctx context.Context, filters *SearchFilters) ([]*entities.Detection, int64, error)
+
+	// CountSearch returns the number of detections matching the given filters,
+	// the same total Search reports, without loading any rows. Sorting and
+	// pagination fields are ignored.
+	CountSearch(ctx context.Context, filters *SearchFilters) (int64, error)
 
 	// === Counts ===
 
@@ -214,7 +231,7 @@ type DetectionRepository interface {
 	Lock(ctx context.Context, detectionID uint) error
 
 	// Unlock removes the lock from a detection.
-	// This operation is idempotent — unlocking an already-unlocked detection succeeds silently.
+	// This operation is idempotent: unlocking an already-unlocked detection succeeds silently.
 	Unlock(ctx context.Context, detectionID uint) error
 
 	// IsLocked checks if a detection is locked.

@@ -3,7 +3,6 @@ package jobqueue
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -77,7 +77,7 @@ func TestLogJobFailed(t *testing.T) {
 	logger.SetGlobal(cl)
 	t.Cleanup(func() { logger.SetGlobal(oldGlobal) })
 
-	testErr := errors.New("connection timeout")
+	testErr := errors.NewStd("connection timeout")
 	assert.NotPanics(t, func() {
 		LogJobFailed(t.Context(), "job-1000", "process", 5, 5, testErr)
 	})
@@ -133,7 +133,7 @@ func TestLogJobRetrying(t *testing.T) {
 func TestLogJobRetryScheduled(t *testing.T) {
 	nextRetryAt := time.Now().Add(30 * time.Second)
 	delay := 30 * time.Second
-	testErr := errors.New("connection timeout")
+	testErr := errors.NewStd("connection timeout")
 
 	assert.NotPanics(t, func() {
 		LogJobRetryScheduled(t.Context(), "job-retry-sched-1", "HTTP POST request", 2, 5, delay, nextRetryAt, testErr)
@@ -167,7 +167,7 @@ func TestLogJobRetryScheduled_Level(t *testing.T) {
 		},
 		{
 			name:      "genuine failure logs at warn",
-			err:       errors.New("connection refused"),
+			err:       errors.NewStd("connection refused"),
 			wantLevel: "level=WARN",
 			wantMsg:   "Job scheduled for retry after failure",
 		},

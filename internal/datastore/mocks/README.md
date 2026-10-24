@@ -37,10 +37,10 @@ When the `Interface` changes, regenerate mocks:
 ```bash
 # From project root
 go generate ./internal/datastore
-
-# Or directly with mockery
-mockery --config .mockery.yaml
 ```
+
+Use the mockery version named in `TESTING.md` ("Mock Generation with mockery");
+older versions fail on the current Go release.
 
 **IMPORTANT**: Never manually edit files in this directory. They are auto-generated.
 
@@ -78,7 +78,7 @@ func TestSpeciesTracker(t *testing.T) {
 
     // Set expectations
     mockDS.EXPECT().
-        GetActiveNotificationHistory(mock.AnythingOfType("time.Time")).
+        GetActiveNotificationHistory(mock.Anything, mock.AnythingOfType("time.Time")).
         Return([]datastore.NotificationHistory{}, nil)
 
     tracker := NewTrackerFromSettings(mockDS, settings)
@@ -86,11 +86,12 @@ func TestSpeciesTracker(t *testing.T) {
 ```
 
 **Benefits**:
+
 - ✅ No manual mock maintenance
 - ✅ Automatic updates when interface changes
 - ✅ Type-safe expectations
 - ✅ Better error messages
-- ✅ All 62 methods available automatically
+- ✅ Every `Interface` method available automatically
 
 ## 🎯 Common Patterns
 
@@ -183,19 +184,20 @@ All datastore mocks have been successfully migrated to generated mocks:
 
 - **Total manual mock lines deleted**: 734 lines
 - **Test files migrated**: 36+ files
-- **Generated mock file**: 111KB with all 62 methods
 - **Maintenance burden**: Eliminated ✨
 
 ### Out of Scope
 
 These mocks are for non-datastore interfaces and remain unchanged:
+
 - `internal/imageprovider/*` - Image provider mocks
-- `internal/api/v2/range_test.go` - MockBirdNET, MockProcessor
-- `internal/api/v2/integrations_test.go` - MockMQTTClient, MockBirdWeatherClient
+- `internal/api/v2/range/range_test.go` - MockBirdNET, MockProcessor
+- `internal/analysis/processor/mqtt_action_test.go` - MockMQTTClient
 
 ## 🛠️ Configuration
 
 Mock generation is configured in:
+
 - **Go generate directive**: `internal/datastore/interfaces.go:4`
 - **Global config**: `.mockery.yaml`
 
@@ -203,10 +205,7 @@ Mock generation is configured in:
 
 - [Mockery Documentation](https://vektra.github.io/mockery/)
 - [Testify Mock Guide](https://pkg.go.dev/github.com/stretchr/testify/mock)
-- [BG-21: Implementation Issue](https://linear.app/birdnet-go/issue/BG-21)
 
 ---
 
-**Last Generated**: October 26, 2025
-**Mockery Version**: v2.53.5
-**Interface Methods**: 62
+**Mockery Version**: named in each generated file's header; see `TESTING.md` for the version to regenerate with

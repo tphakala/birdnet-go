@@ -302,11 +302,11 @@ func TestHotReloadRestartFieldsCovered(t *testing.T) {
 		"Output":  "Database",
 	}
 	// registry restart-category field paths intentionally NOT wired to a restart
-	// marker yet, with the reason. See docs/superpowers/specs/2026-06-16-restart-required-tracking.md.
+	// marker yet, with the reason.
 	restartExempt := map[string]string{
 		"BirdNET.ONNXRuntimePath": "model/runtime path; model changes already route through reload_birdnet",
 		"BirdNET.OpenVINOPath":    "OpenVINO library path; loaded once at init and not safely unloadable, so it takes effect on restart (mirrors ONNXRuntimePath)",
-		"Models":                  "model registry path; restart-vs-reload undecided",
+		"Models.Directory":        "models directory resolved once at startup (ResolveModelsDir/NewModelManager); Models.Enabled hot-reloads via reconcile_models",
 		"Perch":                   "perch model path; not wired",
 		"BirdNETV3":               "BirdNET v3.0 model path; not wired",
 		"BSG":                     "BSG model path; not wired",

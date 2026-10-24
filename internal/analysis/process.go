@@ -5,7 +5,6 @@ package analysis
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/audiocore/buffer"
-	"github.com/tphakala/birdnet-go/internal/audiocore/convert"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -22,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
+	dsppcm "github.com/tphakala/go-audio-dsp/pcm"
 )
 
 var processMetrics atomic.Pointer[metrics.MyAudioMetrics]
@@ -41,6 +40,8 @@ const (
 
 // bufferOverrunTracker tracks BirdNET processing buffer overruns using a tumbling window.
 // When the window expires and enough overruns have accumulated, a single Sentry event is sent.
+// maxElapsed is the longest window processing time (PCM conversion plus inference,
+// excluding the wait for the shared inference lock) seen in the window.
 type bufferOverrunTracker struct {
 	mu           sync.Mutex
 	source       string
@@ -175,7 +176,8 @@ func recordResultsQueueDropHealth(source string) {
 }
 
 // recordBufferOverrun records a buffer overrun event and reports to Sentry
-// when the tumbling window expires with enough accumulated overruns.
+// when the tumbling window expires with enough accumulated overruns. elapsed is
+// the window's own processing time, excluding the wait for the shared inference lock.
 func recordBufferOverrun(tracker *bufferOverrunTracker, elapsed, bufferLen time.Duration) {
 	tracker.mu.Lock()
 	defer tracker.mu.Unlock()
@@ -242,6 +244,12 @@ func SetProcessMetrics(myAudioMetrics *metrics.MyAudioMetrics) {
 	processMetrics.CompareAndSwap(nil, myAudioMetrics)
 }
 
+// ErrResultsDropped is returned by ProcessData when the analysis result could not
+// be queued because the results queue was full. The drop is already logged and
+// counted by recordResultsQueueDrop; callers treat the window as not analyzed.
+// It is a bare sentinel so it adds no telemetry report of its own.
+var ErrResultsDropped = errors.NewStd("analysis result dropped: results queue full")
+
 // ProcessRequest carries the per-window audio payload and identifiers for one
 // ProcessData call. ctx, the classifier backend, and the *buffer.Manager stay separate
 // parameters (they are collaborators, not request data); grouping the payload keeps the
@@ -252,11 +260,18 @@ type ProcessRequest struct {
 	AudioCapturedAt time.Time // capture timestamp used for detection alignment
 	Source          string    // audio source ID
 	ModelID         string    // registry model ID to run inference with
+	// Audio is the window's place on the audio timeline (backlog-corrected end,
+	// gap flag, fresh byte count), passed through to the queued
+	// classifier.Results. The zero value means unknown.
+	Audio classifier.AudioTiming
 }
 
 // ProcessData processes the given audio data to detect bird species, logs the
 // detected species and optionally saves the audio clip if a bird species is
 // detected above the configured threshold.
+//
+// req.Audio is passed through unchanged to the queued classifier.Results. A
+// result that cannot be queued is dropped and reported as ErrResultsDropped.
 //
 // ctx is propagated to the model inference call for cancellation and deadlines.
 // bufMgr is the audiocore buffer manager owning the Float32Pool that the
@@ -290,42 +305,39 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 	predictStart := time.Now()
 
 	// convert audio data to float32
-	sampleData, err := convertToFloat32WithPool(bufMgr, data, conf.BitDepth)
+	samples, err := decodePCM16WithPool(bufMgr, data)
+	conversionDuration := time.Since(predictStart)
 	if err != nil {
 		return errors.New(err).
 			Component("analysis").
 			Category(errors.CategoryAudio).
 			Context("operation", "pcm_to_float32").
-			Context("bit_depth", fmt.Sprintf("%d", conf.BitDepth)).
 			Build()
 	}
 
-	// Defer pool return so the buffer is reclaimed even if PredictModel panics.
+	// Defer pool return so the buffer is reclaimed even if PredictModelTimed panics.
 	// The Manager's lazy per-size pool map routes the slice back to the pool
 	// sized for its actual length, so non-standard sizes are handled too.
 	//
-	// INVARIANT: bn.PredictModel must copy the samples into the model's
+	// INVARIANT: bn.PredictModelTimed must copy the samples into the model's
 	// input tensor before returning; it must not retain a reference to
-	// sampleData past Predict. The pool may hand the same backing array to
+	// samples past Predict. The pool may hand the same backing array to
 	// another caller as soon as Put returns, so any retained reference
 	// would become a use-after-free. Classifier backends plugged into the
 	// Orchestrator are required to honour this contract; see
 	// internal/classifier for the implementing side.
-	if conf.BitDepth == 16 && len(sampleData) > 0 {
-		if pool := bufMgr.Float32PoolFor(len(sampleData[0])); pool != nil {
-			defer pool.Put(sampleData[0])
-		}
+	if pool := bufMgr.Float32PoolFor(len(samples)); pool != nil {
+		defer pool.Put(samples)
 	}
 
 	// Run inference on the specified model via the Orchestrator.
-	inferenceStart := time.Now()
-	results, err := bn.PredictModel(ctx, modelID, sampleData)
-	inferenceDuration := time.Since(inferenceStart)
+	results, timing, err := bn.PredictModelTimed(ctx, modelID, [][]float32{samples})
 
-	// Record inference duration metric (always, even on error)
+	// Record inference duration and lock wait metrics (always, even on error)
 	pm := processMetrics.Load()
 	if pm != nil {
-		pm.RecordAudioInferenceDuration(source, inferenceDuration.Seconds())
+		pm.RecordAudioInferenceDuration(source, timing.Predict.Seconds())
+		pm.RecordAudioInferenceLockWait(source, timing.LockWait.Seconds())
 	}
 
 	if err != nil {
@@ -340,10 +352,12 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		logger.String("source", source),
 		logger.String("model_id", modelID),
 		logger.Int("result_count", len(results)),
-		logger.Duration("inference_duration", inferenceDuration),
+		logger.Duration("inference_duration", timing.Predict),
+		logger.Duration("lock_wait", timing.LockWait),
 		logger.Int("sample_bytes", len(data)))
 
-	// get elapsed time (includes conversion + inference for overrun check)
+	// Wall time including the wait for the shared inference lock; stored as the
+	// detection's processing time. The overrun check below uses the window's own work.
 	elapsedTime := time.Since(predictStart)
 
 	// Record result count metric
@@ -377,28 +391,27 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 
 	// Derive the analysis buffer interval from the model's spec and the
 	// effective overlap, so the overrun threshold matches the real cadence
-	// (which now honors birdnet.overlap; the bat model stays fixed at 50%).
-	// If inference exceeds this interval the pipeline falls behind real-time.
-	settings := bn.CurrentSettings()
-	spec, ok := bn.ModelSpecFor(modelID)
-	if !ok {
-		// Defensive fallback for an unregistered model: assume the BirdNET base
-		// clip. BufferInterval depends only on ClipLength and the overlap.
-		spec = classifier.ModelSpec{ClipLength: 3 * time.Second}
-	}
-	effectiveBufferDuration := spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, settings))
+	// (which follows the effective base overlap; the bat model stays fixed at 50%).
+	// If this window's own work exceeds this interval, the model cannot keep up on
+	// its own. Waiting for the shared inference lock is excluded: that is
+	// contention for the shared lock, which the keep-up monitor judges by lost audio.
+	effectiveBufferDuration := bufferIntervalFor(bn, modelID)
 
-	if elapsedTime > effectiveBufferDuration {
+	// The window's own work: PCM conversion plus the model's inference time.
+	processingTime := conversionDuration + timing.Predict
+	if processingTime > effectiveBufferDuration {
 		log.Warn("processing time exceeded buffer interval",
+			logger.Duration("processing_time", processingTime),
+			logger.Duration("lock_wait", timing.LockWait),
 			logger.Duration("elapsed_time", elapsedTime),
 			logger.Duration("buffer_interval", effectiveBufferDuration),
 			logger.String("model_id", modelID),
 			logger.String("source", source))
-		recordBufferOverrun(getOverrunTracker(source, modelID), elapsedTime, effectiveBufferDuration)
+		recordBufferOverrun(getOverrunTracker(source, modelID), processingTime, effectiveBufferDuration)
 
 		m := processMetrics.Load()
 		if m != nil {
-			m.RecordBirdNETProcessingOverrun(source, elapsedTime.Seconds(), effectiveBufferDuration.Seconds())
+			m.RecordBirdNETProcessingOverrun(source, processingTime.Seconds(), effectiveBufferDuration.Seconds())
 		}
 	}
 
@@ -430,6 +443,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		Results:         results,
 		Source:          audioSource,
 		ModelID:         modelID,
+		Audio:           req.Audio,
 	}
 
 	// Send the results to the queue. PCMdata is the independently owned copy
@@ -450,6 +464,7 @@ func ProcessData(ctx context.Context, bn classifierBackend, bufMgr *buffer.Manag
 		// counter + log + rate-limited telemetry) instead of discarding it
 		// silently.
 		recordResultsQueueDrop(source, modelID, pm)
+		return ErrResultsDropped
 	}
 	return nil
 }
@@ -497,34 +512,57 @@ func recordResultsQueueDrop(source, modelID string, pm *metrics.MyAudioMetrics) 
 	return totalDropped
 }
 
-func convertToFloat32WithPool(bufMgr *buffer.Manager, sample []byte, bitDepth int) ([][]float32, error) {
-	if bitDepth == 16 {
-		return [][]float32{convert16BitToFloat32WithPool(bufMgr, sample)}, nil
+// decodePCM16WithPool decodes little-endian 16-bit PCM to float32 samples in
+// [-1, 1) using the size-specific pool from bufMgr. The result is bit-identical
+// to int16/32768. The Manager lazily creates a per-size Float32Pool on first
+// use, so any length the pipeline produces is pooled; the caller returns the
+// slice to the same pool. An odd byte length (a half sample) is an error and
+// takes nothing from the pool.
+func decodePCM16WithPool(bufMgr *buffer.Manager, pcm []byte) ([]float32, error) {
+	if len(pcm)%bytesPerSample != 0 {
+		return nil, errors.New(dsppcm.ErrOddByteLength).
+			Component("analysis").
+			Category(errors.CategoryAudio).
+			Context("operation", "decode_pcm16").
+			Context("data_size", len(pcm)).
+			Build()
 	}
-	// Delegate non-16-bit conversions to audiocore/convert (no pooling needed here;
-	// non-16-bit paths are cold and handled separately by PR B2).
-	return convert.ConvertToFloat32(sample, bitDepth)
-}
 
-// convert16BitToFloat32WithPool converts 16-bit PCM samples to float32 using
-// the size-specific pool from bufMgr. The Manager lazily creates a per-size
-// Float32Pool on first use, so any length the pipeline produces is pooled.
-func convert16BitToFloat32WithPool(bufMgr *buffer.Manager, sample []byte) []float32 {
-	length := len(sample) / 2
+	length := len(pcm) / bytesPerSample
 	pool := bufMgr.Float32PoolFor(length)
 
-	var float32Data []float32
+	var samples []float32
 	if pool != nil {
-		float32Data = pool.Get()
+		samples = pool.Get()
 	} else {
 		// length == 0 (or exceedingly rare pool construction failure) falls through to a fresh slice.
-		float32Data = make([]float32, length)
+		samples = make([]float32, length)
 	}
 
-	const divisor = float32(32768.0)
-	for i := range length {
-		s := int16(sample[i*2]) | int16(sample[i*2+1])<<8
-		float32Data[i] = float32(s) / divisor
+	// Every sample is written: samples has exactly len(pcm)/2 elements, and
+	// the pool does not zero recycled buffers.
+	if _, err := dsppcm.BytesToFloat32(samples, pcm); err != nil {
+		if pool != nil {
+			pool.Put(samples)
+		}
+		return nil, errors.New(err).
+			Component("analysis").
+			Category(errors.CategoryAudio).
+			Context("operation", "decode_pcm16").
+			Build()
 	}
-	return float32Data
+	return samples, nil
+}
+
+// bufferIntervalFor returns the analysis buffer interval for a model under the
+// effective base overlap (the published cadence plan's), which is what the
+// allocated buffer actually advances by. Used for the overrun threshold.
+func bufferIntervalFor(bn classifierBackend, modelID string) time.Duration {
+	spec, ok := bn.ModelSpecFor(modelID)
+	if !ok {
+		// Defensive fallback for an unregistered model: assume the BirdNET base
+		// clip. BufferInterval depends only on ClipLength and the overlap.
+		spec = classifier.ModelSpec{ClipLength: classifier.AnalysisBaseClipLength}
+	}
+	return spec.BufferInterval(classifier.ResolveModelOverlap(modelID, spec, bn.EffectiveBaseOverlap()))
 }

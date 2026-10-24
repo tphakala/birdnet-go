@@ -41,11 +41,11 @@ func TestBytePool_Stats(t *testing.T) {
 	pool, err := buffer.NewBytePool(size)
 	require.NoError(t, err)
 
-	// First Get — pool is empty, so this is a miss (new allocation).
+	// First Get - pool is empty, so this is a miss (new allocation).
 	buf1 := pool.Get()
 	pool.Put(buf1)
 
-	// Second Get — pool now has a buffer, so this is a hit.
+	// Second Get - pool now has a buffer, so this is a hit.
 	buf2 := pool.Get()
 	pool.Put(buf2)
 
@@ -65,7 +65,7 @@ func TestBytePool_SizeMismatch(t *testing.T) {
 	pool, err := buffer.NewBytePool(size)
 	require.NoError(t, err)
 
-	// Put a buffer of a different size — must be discarded.
+	// Put a buffer of a different size - must be discarded.
 	wrongSize := make([]byte, size*2)
 	pool.Put(wrongSize)
 
@@ -273,62 +273,4 @@ func TestFloat32Pool_ClearConcurrent(t *testing.T) {
 	for bufLen := range results {
 		assert.Equal(t, size, bufLen, "all slices must have correct size")
 	}
-}
-
-func TestNewFloat64Pool_InvalidSize(t *testing.T) {
-	t.Parallel()
-	tests := []struct {
-		name string
-		size int
-	}{
-		{"zero", 0},
-		{"negative", -1},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			pool, err := buffer.NewFloat64Pool(tt.size)
-			require.Error(t, err)
-			assert.Nil(t, pool)
-		})
-	}
-}
-
-func TestFloat64Pool_GetReturnsCorrectSize(t *testing.T) {
-	t.Parallel()
-	const size = 72192
-	pool, err := buffer.NewFloat64Pool(size)
-	require.NoError(t, err)
-
-	buf := pool.Get()
-	assert.Len(t, buf, size)
-
-	pool.Put(buf)
-
-	stats := pool.GetStats()
-	assert.Equal(t, uint64(1), stats.Misses, "first Get allocates")
-}
-
-func TestFloat64Pool_ReuseAfterPut(t *testing.T) {
-	t.Parallel()
-	pool, err := buffer.NewFloat64Pool(1024)
-	require.NoError(t, err)
-
-	buf := pool.Get()
-	pool.Put(buf)
-
-	buf2 := pool.Get()
-	assert.Len(t, buf2, 1024)
-}
-
-func TestFloat64Pool_PutDiscardsWrongSize(t *testing.T) {
-	t.Parallel()
-	pool, err := buffer.NewFloat64Pool(1024)
-	require.NoError(t, err)
-
-	pool.Put(make([]float64, 512))
-	pool.Put(nil)
-
-	stats := pool.GetStats()
-	assert.Equal(t, uint64(2), stats.Discarded)
 }

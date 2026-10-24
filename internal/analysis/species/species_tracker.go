@@ -156,8 +156,10 @@ type SpeciesTracker struct {
 
 	// Lifetime tracking (existing)
 	speciesFirstSeen map[string]time.Time // scientificName -> first detection time
-	speciesLastSeen  map[string]time.Time // scientificName -> most recent detection time
-	windowDays       int                  // Days to consider a species "new"
+	// Earlier audio dates restored from storage, used only for notification deadlines.
+	speciesFirstAudioDate map[string]time.Time
+	speciesLastSeen       map[string]time.Time // scientificName -> most recent detection time
+	windowDays            int                  // Days to consider a species "new"
 
 	// Novelty episode tracking
 	noveltyEpisodes map[string]NoveltyStatus // scientificName -> active novelty episode
@@ -168,6 +170,13 @@ type SpeciesTracker struct {
 	currentYear     int
 	currentSeason   string
 	seasons         map[string]seasonDates // season name -> start dates
+
+	// Season carry-over: species detected within the seasonal window before
+	// seasonCarryoverStart. They were already present when the season began, so
+	// they are not "new this season". seasonCarryoverStart is the (date-only)
+	// start of the season the set describes; zero until first computed.
+	seasonCarryover      map[string]struct{}
+	seasonCarryoverStart time.Time
 
 	// Configuration
 	ds                 SpeciesDatastore

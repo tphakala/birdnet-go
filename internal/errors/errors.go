@@ -433,7 +433,7 @@ func init() {
 
 	// audiocore package and subpackages (slash-separated match Go import paths)
 	RegisterComponent("audiocore", "audiocore")
-	RegisterComponent("audiocore/convert", "audiocore.convert")
+	RegisterComponent("audiocore/wav", "audiocore.wav")
 	RegisterComponent("audiocore/flac", "audiocore.flac")
 	RegisterComponent("audiocore/ffmpeg", "audiocore.ffmpeg")
 	RegisterComponent("audiocore/buffer", "audiocore.buffer")
@@ -442,6 +442,7 @@ func init() {
 	RegisterComponent("audiocore/engine", "audiocore.engine")
 	RegisterComponent("audiocore/schedule", "audiocore.schedule")
 	RegisterComponent("audiocore/equalizer", "audiocore.equalizer")
+	RegisterComponent("audiocore/transcode", "audiocore.transcode")
 }
 
 // Helper functions for auto-detection and categorization
@@ -599,13 +600,13 @@ func CategoryOf(err error) ErrorCategory {
 
 	// The interface comes first: a cause can carry a category without being an
 	// *EnhancedError.
-	if catErr, ok := stderrors.AsType[CategorizedError](err); ok {
+	if catErr, ok := AsType[CategorizedError](err); ok {
 		if category := catErr.ErrorCategory(); category != "" {
 			return category
 		}
 	}
 
-	if enhErr, ok := stderrors.AsType[*EnhancedError](err); ok && enhErr.Category != "" {
+	if enhErr, ok := AsType[*EnhancedError](err); ok && enhErr.Category != "" {
 		return enhErr.Category
 	}
 
@@ -792,6 +793,17 @@ func As(err error, target any) bool {
 	return stderrors.As(err, target)
 }
 
+// AsType finds the first error in err's tree that matches the type E and, if
+// one is found, returns that error value and true. Otherwise it returns the
+// zero value of E and false (passthrough to standard library).
+func AsType[E error](err error) (E, bool) {
+	return stderrors.AsType[E](err)
+}
+
+// ErrUnsupported indicates that a requested operation cannot be performed,
+// because it is unsupported (passthrough to standard library).
+var ErrUnsupported = stderrors.ErrUnsupported
+
 // Unwrap returns the result of calling the Unwrap method on err (passthrough to standard library)
 func Unwrap(err error) error {
 	return stderrors.Unwrap(err)
@@ -805,8 +817,8 @@ func Join(errs ...error) error {
 // IsCategory checks if an error is an EnhancedError with the specified category.
 // This is a convenience function to reduce boilerplate when checking error categories.
 func IsCategory(err error, category ErrorCategory) bool {
-	var enhancedErr *EnhancedError
-	return As(err, &enhancedErr) && enhancedErr.Category == category
+	enhancedErr, ok := AsType[*EnhancedError](err)
+	return ok && enhancedErr.Category == category
 }
 
 // IsNotFound checks if an error is an EnhancedError with CategoryNotFound.

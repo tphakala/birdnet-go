@@ -6,13 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
-)
 
-// maxUSBSysfsWalkDepth bounds the upward sysfs walk in findUSBDeviceNode; the USB
-// device node is normally only 3-4 levels above the card directory, so this is a
-// generous cap that simply guarantees termination.
-const maxUSBSysfsWalkDepth = 12
+	"github.com/tphakala/birdnet-go/internal/usbsysfs"
+)
 
 // resolveUSBIdentity maps an ALSA decoded id (":3,0") to the USB identity of its
 // card. It is a thin wrapper over usbIdentityForCard that reads/parses
@@ -76,61 +72,14 @@ func usbIdentityForCard(card int, cards map[int]procCardEntry, root string) usbI
 	return ident
 }
 
-// findUSBDeviceNode walks up from <root>/sys/class/sound/cardN to the USB device node and
-// returns its directory. The device node is the first ancestor exposing an "idVendor" file; the
-// walk stops there so a parent hub or host controller (e.g. "xhci-hcd.0" on a root hub) is never
-// mistaken for the device, and is bounded to the <root>/sys subtree so a symlink that resolves
-// outside sysfs cannot send it wandering into unrelated system directories. Returns ("", false)
-// when the card is absent or is not backed by a USB device.
-func findUSBDeviceNode(root string, card int) (string, bool) {
-	sysRoot := filepath.Join(root, "sys")
-	// Resolve sysRoot the same way as target below; otherwise a symlinked element in root (a
-	// test temp dir, or a path like macOS /var -> /private/var) would leave the resolved target
-	// without the literal sysRoot prefix and the walk would stop immediately.
-	if resolved, symErr := filepath.EvalSymlinks(sysRoot); symErr == nil {
-		sysRoot = resolved
-	}
-	target, err := filepath.EvalSymlinks(filepath.Join(sysRoot, "class", "sound", "card"+strconv.Itoa(card)))
-	if err != nil {
-		return "", false
-	}
-	dir := target
-	for range maxUSBSysfsWalkDepth {
-		// Stay strictly below the sysfs root: the USB device node is always a descendant of
-		// <root>/sys, so stop at sysRoot itself or anything symlink resolution placed outside.
-		if dir == sysRoot || !strings.HasPrefix(dir, sysRoot+string(os.PathSeparator)) {
-			break
-		}
-		if _, statErr := os.Stat(filepath.Join(dir, "idVendor")); statErr == nil {
-			return dir, true
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			break
-		}
-		dir = parent
-	}
-	return "", false
-}
-
-// readSysfsAttr reads a single sysfs attribute file and returns its trimmed contents, or "" on
-// any read error.
-func readSysfsAttr(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(data))
-}
-
 // readUSBSerial returns the serial of the USB device backing ALSA card N, or "" when the device
 // reports none (common on inexpensive audio adapters) or cannot be located.
 func readUSBSerial(root string, card int) string {
-	dir, ok := findUSBDeviceNode(root, card)
+	dir, ok := usbsysfs.CardUSBDevice(root, card)
 	if !ok {
 		return ""
 	}
-	return readSysfsAttr(filepath.Join(dir, "serial"))
+	return usbsysfs.ReadAttr(filepath.Join(dir, "serial"))
 }
 
 // usbIdentityFromSysfs derives a card's USB identity entirely from <root>/sys, the fallback used
@@ -143,21 +92,21 @@ func readUSBSerial(root string, card int) string {
 // stays a stable cross-reboot identifier here. Returns a zero usbIdentity for a non-USB card or
 // when the vendor/product ids are missing or malformed.
 func usbIdentityFromSysfs(root string, card int) usbIdentity {
-	dir, ok := findUSBDeviceNode(root, card)
+	dir, ok := usbsysfs.CardUSBDevice(root, card)
 	if !ok {
 		return usbIdentity{}
 	}
-	vendor := readSysfsAttr(filepath.Join(dir, "idVendor"))
+	vendor := usbsysfs.ReadAttr(filepath.Join(dir, "idVendor"))
 	if !hex4Re.MatchString(vendor) {
 		return usbIdentity{}
 	}
-	product := readSysfsAttr(filepath.Join(dir, "idProduct"))
+	product := usbsysfs.ReadAttr(filepath.Join(dir, "idProduct"))
 	if !hex4Re.MatchString(product) {
 		return usbIdentity{}
 	}
 	return usbIdentity{
 		VendorID:  vendor,
 		ProductID: product,
-		Serial:    readSysfsAttr(filepath.Join(dir, "serial")),
+		Serial:    usbsysfs.ReadAttr(filepath.Join(dir, "serial")),
 	}
 }

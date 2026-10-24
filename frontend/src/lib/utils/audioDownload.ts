@@ -1,9 +1,8 @@
 /**
  * audioDownload.ts
  *
- * Shared helper for downloading a detection's audio clip. Used by the dashboard
- * DetectionCard and the mobile DetectionCardMobile so the filename logic lives
- * in one place.
+ * Shared helper for downloading a detection's audio clip from detection cards
+ * and action menus, so the filename logic lives in one place.
  *
  * The actual bytes are served by GET /api/v2/audio/{id}; the `download`
  * attribute only hints the saved filename, so the sanitization here is for a
@@ -47,4 +46,43 @@ export function downloadDetectionAudio(detection: Detection): void {
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
+}
+
+/** Matches the RFC 5987 `filename*=UTF-8''<percent-encoded>` form. */
+const EXTENDED_FILENAME_PATTERN = /filename\*=UTF-8''([^;]+)/i;
+/** Matches the plain `filename="<name>"` form. */
+const PLAIN_FILENAME_PATTERN = /filename="?([^";]+)"?/i;
+
+/**
+ * File extension of the container the server produces for the formats whose name
+ * is not their extension; other formats use their own name.
+ */
+export const CLIP_CONTAINER_EXTENSION: Partial<Record<string, string>> = {
+  aac: 'm4a',
+  opus: 'ogg',
+};
+
+/**
+ * Return the file extension (without a dot) of the filename in a
+ * Content-Disposition header, so a download is named for the container the
+ * server actually produced. Falls back to `fallback` when the header is absent,
+ * carries no filename, or the filename has no extension.
+ */
+export function extensionFromContentDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+
+  let filename: string | undefined;
+  const extended = EXTENDED_FILENAME_PATTERN.exec(header);
+  if (extended?.[1] !== undefined) {
+    try {
+      filename = decodeURIComponent(extended[1]);
+    } catch {
+      filename = undefined;
+    }
+  }
+  filename ??= PLAIN_FILENAME_PATTERN.exec(header)?.[1];
+
+  const dot = filename?.lastIndexOf('.') ?? -1;
+  if (!filename || dot < 0 || dot === filename.length - 1) return fallback;
+  return filename.slice(dot + 1);
 }

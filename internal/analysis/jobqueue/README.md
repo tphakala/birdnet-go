@@ -14,7 +14,7 @@ The `jobqueue` package provides a job queue implementation with the following ke
 - **Comprehensive Statistics**: Track success, failure, and retry metrics per action type
 - **Type-Safe API**: Generic implementation for type safety
 - **Context Support**: Cancel jobs via context cancellation
-- **Timeout Handling**: Automatically timeout hanging jobs
+- **Timeout Handling**: Automatically timeout hanging jobs. A job never has two attempts running at once: an attempt that ignores its timeout is waited for before the next one starts, a late success completes the job while a retry is still pending (a timeout on the last allowed attempt fails the job at once), and a job whose attempt has not returned after 10 minutes fails without another attempt
 - **Action Description Tracking**: Track statistics based on both action type and description
 - **Unique Job IDs**: Uses UUID v4 (truncated to 12 characters) for job identifiers
 
@@ -170,7 +170,7 @@ queue.Stop()
 
 1. **Idempotency**: Design jobs to be idempotent so they can be safely retried
 2. **Statelessness**: Jobs should not rely on external state that might change between retries
-3. **Timeout Awareness**: Jobs should respect context cancellation and timeouts
+3. **Timeout Awareness**: Jobs should respect context cancellation and timeouts. An attempt that ignores cancellation keeps running after its timeout and its goroutine lives until `Execute` returns; the queue starts no further attempt of that job in the meantime
 4. **Error Handling**: Return meaningful errors that help diagnose issues
 5. **Descriptive Actions**: Provide meaningful descriptions for actions to aid in monitoring and debugging
 
@@ -198,10 +198,12 @@ The job queue uses a mutex (`sync.Mutex`) to protect shared state and ensure thr
 Failed jobs are retried with exponential backoff and jitter to prevent thundering herd problems:
 
 ```go
-backoff := initialDelay * math.Pow(multiplier, attemptNum)
+backoff := initialDelay * math.Pow(multiplier, retryNumber-1)
 jitterFactor := 0.9 + 0.2*rand
 backoff *= jitterFactor
 ```
+
+The first retry waits InitialDelay, the second InitialDelay*Multiplier, and so on, capped at MaxDelay.
 
 ### Memory Management
 

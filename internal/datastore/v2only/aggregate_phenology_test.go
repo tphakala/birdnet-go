@@ -14,7 +14,7 @@ func TestBuildSpeciesPhenology_Empty(t *testing.T) {
 	t.Parallel()
 
 	// Nil input returns a non-nil empty slice (the wire layer must never marshal null).
-	got := buildSpeciesPhenology(nil, accumTestZone)
+	got := buildSpeciesPhenology(nil, accumTestZone, sciAsCommon)
 	require.NotNil(t, got)
 	assert.Empty(t, got)
 }
@@ -40,7 +40,7 @@ func TestBuildSpeciesPhenology_FormatsAndSortsByArrival(t *testing.T) {
 		},
 	}
 
-	got := buildSpeciesPhenology(rows, accumTestZone)
+	got := buildSpeciesPhenology(rows, accumTestZone, sciAsCommon)
 	require.Len(t, got, 2)
 
 	assert.Equal(t, "Apus apus", got[0].ScientificName, "earliest arrival sorts first")
@@ -69,7 +69,7 @@ func TestBuildSpeciesPhenology_TimezoneDateAssignment(t *testing.T) {
 		},
 	}
 
-	got := buildSpeciesPhenology(rows, accumTestZone)
+	got := buildSpeciesPhenology(rows, accumTestZone, sciAsCommon)
 	require.Len(t, got, 1)
 	assert.Equal(t, "2026-06-02", got[0].FirstSeen, "00:30 local must land on its own local date, not the UTC date")
 	assert.Equal(t, "2026-06-04", got[0].LastSeen, "00:30 local must land on its own local date, not the UTC date")
@@ -84,7 +84,7 @@ func TestBuildSpeciesPhenology_SingleDaySpecies(t *testing.T) {
 		{ScientificName: "One-off", FirstDetected: ts, LastDetected: ts, Count: 1},
 	}
 
-	got := buildSpeciesPhenology(rows, accumTestZone)
+	got := buildSpeciesPhenology(rows, accumTestZone, sciAsCommon)
 	require.Len(t, got, 1)
 	assert.Equal(t, "2026-06-07", got[0].FirstSeen)
 	assert.Equal(t, "2026-06-07", got[0].LastSeen)
@@ -103,7 +103,7 @@ func TestBuildSpeciesPhenology_TieBreak(t *testing.T) {
 		{ScientificName: "A same", FirstDetected: first, LastDetected: localUnix(accumTestZone, 2026, 6, 4, 6, 0), Count: 10},
 	}
 
-	got := buildSpeciesPhenology(rows, accumTestZone)
+	got := buildSpeciesPhenology(rows, accumTestZone, sciAsCommon)
 	require.Len(t, got, 3)
 	// Earliest last-seen first; on an equal last-seen, scientific name ascending ("A same" < "C early").
 	assert.Equal(t, "A same", got[0].ScientificName)
@@ -123,7 +123,7 @@ func TestBuildSpeciesPhenology_NilLocDefaultsUTC(t *testing.T) {
 		},
 	}
 
-	got := buildSpeciesPhenology(rows, nil)
+	got := buildSpeciesPhenology(rows, nil, sciAsCommon)
 	require.Len(t, got, 1)
 	assert.Equal(t, "2026-06-01", got[0].FirstSeen)
 	assert.Equal(t, "2026-06-02", got[0].LastSeen)

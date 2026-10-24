@@ -99,8 +99,15 @@ describe('Date Validators', () => {
     const validator = futureDate();
 
     beforeEach(() => {
-      // Mock current date to a fixed point
+      // Pin "now" to a fixed point. Installing fake timers here (after the
+      // outer describe's `global.Date` reset runs) keeps setSystemTime's Date
+      // mock intact; a bare setSystemTime would be clobbered by that reset.
+      vi.useFakeTimers();
       vi.setSystemTime(new Date('2024-01-15T12:00:00'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
     });
 
     it('should return null for empty values', () => {
@@ -156,8 +163,15 @@ describe('Date Validators', () => {
     const validator = pastDate();
 
     beforeEach(() => {
-      // Mock current date to a fixed point
+      // Pin "now" to a fixed point. Installing fake timers here (after the
+      // outer describe's `global.Date` reset runs) keeps setSystemTime's Date
+      // mock intact; a bare setSystemTime would be clobbered by that reset.
+      vi.useFakeTimers();
       vi.setSystemTime(new Date('2024-01-15T12:00:00'));
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
     });
 
     it('should return null for empty values', () => {

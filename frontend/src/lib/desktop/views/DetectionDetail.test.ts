@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { waitFor, cleanup } from '@testing-library/svelte';
 import { createComponentTestFactory } from '../../../test/render-helpers';
 import DetectionDetail from './DetectionDetail.svelte';
+import AudioPlayer from '$lib/desktop/components/media/AudioPlayer.svelte';
 import type { Detection } from '$lib/types/detection.types';
 
 // Heavy / context-dependent children are not relevant to the fetch-race logic.
@@ -165,9 +166,41 @@ describe('DetectionDetail audio download', () => {
     expect(downloadLink).toHaveAttribute('download', '');
   });
 
-  it('links to the species All About Birds sounds page next to the recording', async () => {
+  it('passes the clip sample rate from the detail response to the player', async () => {
     const detection = makeDetection({
-      id: 1239,
+      id: 1242,
+      clipName: 'bat_1242.wav',
+      modelType: 'bat',
+      clipSampleRate: 384_000,
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1242')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    detailTest.render({ detectionId: '1242' });
+
+    await waitFor(() => {
+      expect(vi.mocked(AudioPlayer)).toHaveBeenCalled();
+    });
+    // A Svelte 5 component is called as (internals, props); the legacy typings
+    // describe a one-argument constructor, so read the call as a plain list.
+    const lastCall: unknown[] | undefined = vi.mocked(AudioPlayer).mock.calls.at(-1);
+    expect(lastCall?.[1]).toMatchObject({
+      modelType: 'bat',
+      clipSampleRate: 384_000,
+    });
+  });
+
+  it('labels the media region as an audio recording when the detection has a clip', async () => {
+    const detection = makeDetection({
+      id: 1241,
       scientificName: 'Phalaenoptilus nuttallii',
       commonName: 'Common Poorwill',
       clipName: 'phalaenoptilus_nuttallii_88p_20260720T051601Z.m4a',
@@ -176,14 +209,48 @@ describe('DetectionDetail audio download', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL) => {
-        if (String(input).includes('/api/v2/detections/1239')) {
+        if (String(input).includes('/api/v2/detections/1241')) {
           return Promise.resolve(jsonResponse(detection));
         }
         return Promise.resolve(jsonResponse({}));
       })
     );
 
-    const { container } = detailTest.render({ detectionId: '1239' });
+    const { container } = detailTest.render({ detectionId: '1241' });
+
+    await waitFor(() => {
+      expect(container.querySelector('section[aria-labelledby="media-heading"]')).not.toBeNull();
+    });
+
+    expect(
+      container
+        .querySelector('section[aria-labelledby="media-heading"] [role="region"]')
+        ?.getAttribute('aria-label')
+    ).toBe('detections.detail.aria.audioRecordingFor');
+    // Positive control: the automocked player records its render, so the negative assertion in the
+    // spectrogram-only test can fail.
+    expect(vi.mocked(AudioPlayer)).toHaveBeenCalled();
+  });
+
+  it('links to the species All About Birds sounds page next to the recording', async () => {
+    const detection = makeDetection({
+      id: 1250,
+      scientificName: 'Phalaenoptilus nuttallii',
+      commonName: 'Common Poorwill',
+      clipName: 'phalaenoptilus_nuttallii_88p_20260720T051601Z.m4a',
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1250')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container } = detailTest.render({ detectionId: '1250' });
 
     await waitFor(() => {
       expect(container.querySelector('.media-heading-row a.media-compare-link')).not.toBeNull();
@@ -201,7 +268,7 @@ describe('DetectionDetail audio download', () => {
 
   it('links to the species All About Birds guide and Wikipedia article in the identity card', async () => {
     const detection = makeDetection({
-      id: 1240,
+      id: 1251,
       scientificName: 'Dumetella carolinensis',
       commonName: 'Gray Catbird',
     });
@@ -209,14 +276,14 @@ describe('DetectionDetail audio download', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL) => {
-        if (String(input).includes('/api/v2/detections/1240')) {
+        if (String(input).includes('/api/v2/detections/1251')) {
           return Promise.resolve(jsonResponse(detection));
         }
         return Promise.resolve(jsonResponse({}));
       })
     );
 
-    const { container } = detailTest.render({ detectionId: '1240' });
+    const { container } = detailTest.render({ detectionId: '1251' });
 
     await waitFor(() => {
       expect(container.querySelector('.species-reference-links')).not.toBeNull();
@@ -236,6 +303,56 @@ describe('DetectionDetail audio download', () => {
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', 'noopener noreferrer');
     });
+  });
+});
+
+describe('DetectionDetail spectrogram-only detection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('shows the kept spectrogram image without a player or download link', async () => {
+    const detection = makeDetection({
+      id: 1240,
+      scientificName: 'Phalaenoptilus nuttallii',
+      commonName: 'Common Poorwill',
+      clipName: '',
+      spectrogramOnly: true,
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/v2/detections/1240')) {
+          return Promise.resolve(jsonResponse(detection));
+        }
+        return Promise.resolve(jsonResponse({}));
+      })
+    );
+
+    const { container } = detailTest.render({ detectionId: '1240' });
+
+    await waitFor(() => {
+      expect(container.querySelector('img.spectrogram-img')).not.toBeNull();
+    });
+
+    expect(container.querySelector('img.spectrogram-img')?.getAttribute('src')).toContain(
+      '/api/v2/spectrogram/1240?size=lg&raw=false'
+    );
+    expect(container.querySelector('a.meta-download')).toBeNull();
+    expect(container.querySelector('#media-heading')).not.toBeNull();
+    // The region names the image, not an audio recording that no longer exists.
+    expect(
+      container
+        .querySelector('section[aria-labelledby="media-heading"] [role="region"]')
+        ?.getAttribute('aria-label')
+    ).toBe('components.audio.spectrogramForSpecies');
+    expect(vi.mocked(AudioPlayer)).not.toHaveBeenCalled();
   });
 });
 

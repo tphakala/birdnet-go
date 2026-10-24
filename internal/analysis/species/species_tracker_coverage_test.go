@@ -1,7 +1,6 @@
 package species
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestIsNewSpecies tests the IsNewSpecies method
@@ -173,7 +173,7 @@ func TestSyncIfNeeded(t *testing.T) {
 	t.Run("sync handles database error with existing data", func(t *testing.T) {
 		ds := mocks.NewMockInterface(t)
 		ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-			Return(nil, errors.New("database error"))
+			Return(nil, errors.NewStd("database error"))
 
 		settings := &conf.SpeciesTrackingSettings{
 			Enabled:              true,

@@ -107,9 +107,9 @@ func setDefaultConfig() {
 	viper.SetDefault("bat.falsepositivefilter.level", 2)
 	viper.SetDefault("bat.ultrasonicfilter.enabled", true)
 	viper.SetDefault("bat.ultrasonicfilter.cvthreshold", 0.15)
-	viper.SetDefault("bat.ultrasonicfilter.fftsize", 8192)
-	viper.SetDefault("bat.ultrasonicfilter.hopsize", 4096)
-	viper.SetDefault("bat.ultrasonicfilter.frequencysplithz", 20000)
+	viper.SetDefault("bat.ultrasonicfilter.fftsize", DefaultUltrasonicFFTSize)
+	viper.SetDefault("bat.ultrasonicfilter.hopsize", DefaultUltrasonicHopSize)
+	viper.SetDefault("bat.ultrasonicfilter.frequencysplithz", DefaultUltrasonicSplitHz)
 
 	// Global model enablement (BirdNET only by default)
 	viper.SetDefault("models.enabled", []string{"birdnet"})
@@ -133,7 +133,8 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.debug", false)
 	viper.SetDefault("realtime.audio.export.enabled", true)
 	viper.SetDefault("realtime.audio.export.path", "clips/")
-	viper.SetDefault("realtime.audio.export.type", "wav")
+	viper.SetDefault("realtime.audio.export.type", AudioExportTypeWAV)
+	viper.SetDefault("realtime.audio.export.ultrasonictype", AudioExportTypeFLAC) // bat/ultrasonic captures above 48 kHz; WAV or FLAC only
 	viper.SetDefault("realtime.audio.export.bitrate", DefaultAudioExportBitrate)
 	viper.SetDefault("realtime.audio.export.length", DefaultAudioExportLength)
 	viper.SetDefault("realtime.audio.export.preCapture", 3)
@@ -143,7 +144,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.audio.export.normalization.enabled", false)                             // disabled by default
 	viper.SetDefault("realtime.audio.export.normalization.targetLUFS", DefaultNormalizationTargetLUFS) // EBU R128 broadcast standard
 	viper.SetDefault("realtime.audio.export.normalization.loudnessRange", 7.0)                         // typical range for broadcast
-	viper.SetDefault("realtime.audio.export.normalization.truePeak", -2.0)                             // headroom to prevent clipping
+	viper.SetDefault("realtime.audio.export.normalization.truePeak", DefaultNormalizationTruePeak)     // headroom to prevent clipping
 
 	// Quiet hours configuration (sound card)
 	viper.SetDefault("realtime.audio.quiethours.enabled", false)
@@ -216,7 +217,7 @@ func setDefaultConfig() {
 	// False positive filter configuration
 	// Level 0 = Off (no filtering, backward compatible default)
 	// Level 1 = Lenient, Level 2 = Moderate, Level 3 = Balanced (original behavior)
-	// Level 4 = Strict (RPi 4+ required), Level 5 = Maximum (RPi 4+ required)
+	// Level 4 = Strict, Level 5 = Maximum
 	viper.SetDefault("realtime.falsepositivefilter.level", 0)
 
 	// Log configuration
@@ -230,9 +231,9 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.birdweather.threshold", 0.7)
 	viper.SetDefault("realtime.birdweather.locationaccuracy", 0)
 	viper.SetDefault("realtime.birdweather.retrysettings.enabled", true)
-	viper.SetDefault("realtime.birdweather.retrysettings.maxretries", 10)
-	viper.SetDefault("realtime.birdweather.retrysettings.initialdelay", 60)
-	viper.SetDefault("realtime.birdweather.retrysettings.maxdelay", 3600)
+	viper.SetDefault("realtime.birdweather.retrysettings.maxretries", 3)
+	viper.SetDefault("realtime.birdweather.retrysettings.initialdelay", 30)
+	viper.SetDefault("realtime.birdweather.retrysettings.maxdelay", 600)
 	viper.SetDefault("realtime.birdweather.retrysettings.backoffmultiplier", 2.0)
 
 	// eBird configuration
@@ -269,6 +270,10 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.weather.wunderground.endpoint", "https://api.weather.com/v2/pws/observations/current")
 	viper.SetDefault("realtime.weather.wunderground.units", "m") // m=metric, e=imperial, h=UK hybrid
 
+	// Pirate Weather specific configuration
+	viper.SetDefault("realtime.weather.pirateweather.apikey", "")
+	viper.SetDefault("realtime.weather.pirateweather.endpoint", "https://api.pirateweather.net/forecast")
+
 	// RTSP configuration
 	viper.SetDefault("realtime.rtsp.urls", []string{})
 	viper.SetDefault("realtime.rtsp.transport", DefaultTransport)
@@ -300,7 +305,7 @@ func setDefaultConfig() {
 	viper.SetDefault("realtime.privacyfilter.debug", false)
 	viper.SetDefault("realtime.privacyfilter.confidence", 0.05)
 	viper.SetDefault("realtime.privacyfilter.vad.enabled", false)
-	viper.SetDefault("realtime.privacyfilter.vad.threshold", 0.35)
+	viper.SetDefault("realtime.privacyfilter.vad.threshold", 0.6)
 	viper.SetDefault("realtime.privacyfilter.vad.modelpath", "")
 
 	// Dog bark filter configuration
@@ -399,6 +404,7 @@ func setDefaultConfig() {
 	viper.SetDefault("security.allowsubnetbypass.enabled", false)
 	viper.SetDefault("security.allowsubnetbypass.subnet", "")
 	viper.SetDefault("security.trustedproxies", []string{})
+	viper.SetDefault("security.plainhttpsessionclients", []string{})
 	viper.SetDefault("security.publicaccess.liveaudio", false)
 	viper.SetDefault("security.sessionduration", "168h") // 7 days
 

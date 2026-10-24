@@ -8,6 +8,22 @@ import {
 } from './utils';
 import type { ImportProgress, ImportSourcesResponse, SourceCandidate } from './types';
 
+function candidate(overrides: Partial<SourceCandidate> = {}): SourceCandidate {
+  return {
+    path: '/home/pi/BirdNET-Pi/birds.db',
+    kind: 'local',
+    detection_count: 0,
+    latest_date: '',
+    audio_dir_guess: '',
+    size: 0,
+    valid: true,
+    reason: '',
+    owner_uid: 1000,
+    owner_name: 'pi',
+    ...overrides,
+  };
+}
+
 const baseResp: ImportSourcesResponse = {
   environment: 'Bare Metal',
   containerized: false,
@@ -25,7 +41,7 @@ describe('deriveSourceStepState', () => {
   it('returns candidates when one or more candidates are present', () => {
     const resp: ImportSourcesResponse = {
       ...baseResp,
-      candidates: [{ path: '/home/pi/BirdNET-Pi/birds.db' } as SourceCandidate],
+      candidates: [candidate()],
     };
     expect(deriveSourceStepState(resp)).toBe('candidates');
   });
@@ -37,17 +53,17 @@ describe('deriveSourceStepState', () => {
 
 describe('isUnreadable', () => {
   it('returns true for a permission_denied invalid candidate', () => {
-    const c = { valid: false, reason: 'permission_denied' } as SourceCandidate;
+    const c = candidate({ valid: false, reason: 'permission_denied' });
     expect(isUnreadable(c)).toBe(true);
   });
 
   it('returns false for a valid candidate', () => {
-    const c = { valid: true, reason: '' } as SourceCandidate;
+    const c = candidate({ valid: true, reason: '' });
     expect(isUnreadable(c)).toBe(false);
   });
 
   it('returns false for an invalid candidate with a non-permission reason', () => {
-    const c = { valid: false, reason: 'invalid_schema' } as SourceCandidate;
+    const c = candidate({ valid: false, reason: 'invalid_schema' });
     expect(isUnreadable(c)).toBe(false);
   });
 });

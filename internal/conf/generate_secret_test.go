@@ -13,23 +13,20 @@ func TestGenerateRandomSecret(t *testing.T) {
 
 	t.Run("returns non-empty string", func(t *testing.T) {
 		t.Parallel()
-		secret, err := GenerateRandomSecret()
-		require.NoError(t, err)
+		secret := GenerateRandomSecret()
 		assert.NotEmpty(t, secret)
 	})
 
 	t.Run("returns 43 character base64url string", func(t *testing.T) {
 		t.Parallel()
-		secret, err := GenerateRandomSecret()
-		require.NoError(t, err)
+		secret := GenerateRandomSecret()
 		// 32 bytes encoded as base64url without padding = 43 characters
 		assert.Len(t, secret, 43)
 	})
 
 	t.Run("output is valid base64url encoding", func(t *testing.T) {
 		t.Parallel()
-		secret, err := GenerateRandomSecret()
-		require.NoError(t, err)
+		secret := GenerateRandomSecret()
 
 		decoded, err := base64.RawURLEncoding.DecodeString(secret)
 		require.NoError(t, err)
@@ -38,11 +35,8 @@ func TestGenerateRandomSecret(t *testing.T) {
 
 	t.Run("generates unique secrets", func(t *testing.T) {
 		t.Parallel()
-		secret1, err := GenerateRandomSecret()
-		require.NoError(t, err)
-
-		secret2, err := GenerateRandomSecret()
-		require.NoError(t, err)
+		secret1 := GenerateRandomSecret()
+		secret2 := GenerateRandomSecret()
 
 		assert.NotEqual(t, secret1, secret2, "two generated secrets should not be identical")
 	})

@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { chooseBitrateForFormat, type ExportFormat } from './audioExportFormat';
+import {
+  chooseBitrateForFormat,
+  isLosslessExportFormat,
+  type ExportFormat,
+} from './audioExportFormat';
 
 describe('chooseBitrateForFormat', () => {
   it('returns empty string for lossless formats', () => {
@@ -44,5 +48,26 @@ describe('chooseBitrateForFormat', () => {
   ])('lossless %s -> lossy %s always yields a valid bitrate', (_from, to) => {
     const next = chooseBitrateForFormat(to, '');
     expect(next).toMatch(/^\d+k$/);
+  });
+});
+
+describe('isLosslessExportFormat', () => {
+  it('accepts the two lossless containers the ultrasonic format is limited to', () => {
+    expect(isLosslessExportFormat('wav')).toBe(true);
+    expect(isLosslessExportFormat('flac')).toBe(true);
+  });
+
+  it('rejects lossy formats so the ultrasonic control can never select one', () => {
+    expect(isLosslessExportFormat('mp3')).toBe(false);
+    expect(isLosslessExportFormat('aac')).toBe(false);
+    expect(isLosslessExportFormat('opus')).toBe(false);
+  });
+
+  it('rejects unknown or non-string values', () => {
+    expect(isLosslessExportFormat('gibberish')).toBe(false);
+    expect(isLosslessExportFormat('')).toBe(false);
+    expect(isLosslessExportFormat(undefined)).toBe(false);
+    expect(isLosslessExportFormat(null)).toBe(false);
+    expect(isLosslessExportFormat(42)).toBe(false);
   });
 });

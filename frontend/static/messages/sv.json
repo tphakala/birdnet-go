@@ -109,6 +109,14 @@
       "closeModal": "Stäng dialogruta",
       "dismissAlert": "Avfärda varning",
       "closeNotification": "Stäng avisering",
+      "toastRegion": {
+        "topLeft": "Aviseringar, uppe till vänster",
+        "topCenter": "Aviseringar, uppe i mitten",
+        "topRight": "Aviseringar, uppe till höger",
+        "bottomLeft": "Aviseringar, nere till vänster",
+        "bottomCenter": "Aviseringar, nere i mitten",
+        "bottomRight": "Aviseringar, nere till höger"
+      },
       "toggleDropdown": "Växla rullgardinsmeny",
       "sortAscending": "Sortera stigande",
       "selectLanguage": "Välj språk",
@@ -130,7 +138,6 @@
       "selectToday": "Välj idag",
       "dateSelected": "Datum valt: {date}",
       "calendarNavigation": "Använd piltangenterna för att navigera i kalendern, Enter för att välja, Escape för att stänga",
-      "downloadCsv": "Ladda ner artlistan som CSV",
       "visitEbirdLink": "Öppna eBird.org i en ny flik",
       "learnEbirdTaxonomyLink": "Öppna eBird Taxonomy i en ny flik",
       "resizeHandle": "Dra för att ändra storlek",
@@ -452,7 +459,7 @@
       },
       "buffer": {
         "overloadTitle": "Ljudanalys överbelastad",
-        "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa ''{sourceName}'' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
+        "overloadMessage": "Ditt system förlorar {dropRate}% av ljudsamplingarna för källa '{sourceName}' eftersom det inte kan hålla jämna steg med analysen. Minska BirdNET-överlappningsvärdet i detektionsinställningarna eller överväg att uppgradera till en snabbare CPU."
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime inte tillgänglig",
@@ -474,6 +481,16 @@
         "notRegisteredTitle": "Ingen modell analyserar {sourceName}",
         "notRegisteredMessage": "Inget ljud når {models} på ljudkällan \"{sourceName}\", så det produceras inga detektioner. Öppna System > AI-modeller för att kontrollera dess status per källa, och bekräfta att ljudkällan är ansluten och skickar ljud."
       },
+      "acousticModels": {
+        "noneTitle": "Ingen akustisk modell aktiverad",
+        "noneMessage": "Ingen akustisk modell är inläst, så ljud spelas in men analyseras inte. Aktivera en modell i Inställningar > Analys, eller installera en från modellgalleriet.",
+        "loadFailedTitle": "Akustisk modell kunde inte läsas in",
+        "loadFailedMessage": "En aktiverad akustisk modell kunde inte läsas in, så ljud spelas in men analyseras inte. Kontrollera modellen på sidan System > AI-modeller."
+      },
+      "modelOptimize": {
+        "title": "{count, plural, one {# modell har en bättre version för det här systemet} other {# modeller har bättre versioner för det här systemet}}",
+        "message": "En version som passar bättre för systemets hårdvara eller plats finns tillgänglig för: {models}. Öppna Inställningar > Analys > Modeller och välj Optimera för att byta."
+      },
       "alert": {
         "firedTitle": "{rule_name}",
         "metricExceeded": "Nuvarande värde: {value}% (tröskel: {threshold}%)",
@@ -493,6 +510,23 @@
           "diskFull": "Disken är full - frigör utrymme",
           "permissionDenied": "Åtkomst nekad - kontrollera fil- eller tjänstbehörigheter"
         }
+      },
+      "inferenceFailing": {
+        "title": "{modelName} misslyckas vid varje analys",
+        "message": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: inferensen returnerade ett fel. Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller.",
+        "nonFiniteMessage": "{modelName} är inläst, men de senaste {failures} analyserna i rad misslyckades på {runtime}: modellen returnerade ogiltiga poäng (NaN eller oändliga). Ljud spelas in, men den här modellen upptäcker ingenting. Kontrollera modellen på sidan System > AI-modeller."
+      },
+      "analysis": {
+        "cadenceCappedTitle": "Analysöverlappning begränsad för den här enheten",
+        "cadenceCappedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Falskpositivfiltret kan därför kräva färre bekräftelser. Dina sparade inställningar är oförändrade; se Inställningar > Analys.",
+        "cadenceOverloadedTitle": "Den här enheten hinner inte med ljudanalysen",
+        "cadenceOverloadedMessage": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning, så analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor, eller välj en snabbare modellvariant."
+      },
+      "storage": {
+        "notPersistentTitle": "Data går förlorad när containern återskapas",
+        "notPersistentMessage": "Dessa sökvägar ligger på lagring som raderas när containern återskapas, till exempel vid en uppdatering av avbilden: {paths}. Koppla en volym eller en värdkatalog till dem i din containerkonfiguration.",
+        "anonymousVolumeTitle": "Data lagras i en anonym containervolym",
+        "anonymousVolumeMessage": "Dessa sökvägar ligger i anonyma volymer som containerns körmiljö skapade eftersom ingen volym var kopplad: {paths}. En container som startas om från början, till exempel med docker run efter en uppdatering av avbilden, får nya tomma volymer, så data ser ut att ha försvunnit. Koppla en namngiven volym eller en värdkatalog till dem."
       }
     },
     "loading": "Laddar aviseringar..."
@@ -760,6 +794,16 @@
       "recentDetectionsFetch": "Kunde inte hämta senaste detekteringar: {status}",
       "recentDetectionsLoad": "Kunde inte ladda senaste detekteringar",
       "configFetch": "Kunde inte hämta instrumentpanelens konfiguration: {status}"
+    },
+    "acousticModels": {
+      "noneTitle": "Ingen akustisk modell aktiverad",
+      "noneMessage": "Ljud fångas, men analyseras inte. Aktivera en modell i modellgalleriet för att börja detektera arter.",
+      "noneAction": "Öppna modellgalleri",
+      "loadFailedTitle": "Akustisk modell kunde inte läsas in",
+      "loadFailedMessage": "En aktiverad modell kunde inte läsas in, så inget ljud analyseras. Sidan AI-modeller visar vilken modell som misslyckades och varför.",
+      "loadFailedAction": "Visa status för AI-modeller",
+      "failingTitle": "{count, plural, one {En modell misslyckas vid varje analys} other {# modeller misslyckas vid varje analys}}",
+      "failingMessage": "{count, plural, one {{models} är inläst, men varje analys misslyckas, så den upptäcker ingenting.} other {{models} är inlästa, men varje analys misslyckas, så de upptäcker ingenting.}} Sidan AI-modeller visar backend och felet."
     },
     "banner": {
       "title": "Titel",
@@ -1029,7 +1073,8 @@
       "error": "Fel vid laddning av detektering: {error}",
       "loadingResults": "Laddar {count} resultat...",
       "thumbnailLoading": "Laddar {species} miniatyrbild...",
-      "thumbnailLoaded": "Miniatyrbild av {species} laddad"
+      "thumbnailLoaded": "Miniatyrbild av {species} laddad",
+      "resultsPerPage": "Resultat per sida"
     },
     "errors": {
       "notFound": "Detekteringen hittades inte. Den kan ha tagits bort eller så är ID:t felaktigt.",
@@ -1554,7 +1599,7 @@
           "restartTitle": "Omstart krävs",
           "restartBody": "Starta om applikationen för att byta till V2-databasen. Rensning av äldre databas blir tillgänglig efter omstart.",
           "fallbackError": "Antal poster stämmer inte mellan äldre och V2-databaser. Vissa poster kan ha migrerats felaktigt.",
-          "migrateInfo": "Migreringen kommer att överföra {count} poster från den äldre databasen till det nya V2-schemat. Dubbelskrivningsläge säkerställer noll dataförlust under migreringen.",
+          "migrateInfo": "Migreringen kommer att överföra {count} poster från den äldre databasen till det nya V2-schemat. Nya detektioner som sparas under migreringen kopieras också till den nya databasen.",
           "sourceLegacy": "Källa (Äldre)",
           "targetV2": "Mål (V2)",
           "recordsLabel": "Poster",
@@ -1606,7 +1651,7 @@
         },
         "notes": {
           "in_progress": "Du kan fortsätta använda systemet normalt medan migreringen körs i bakgrunden.",
-          "dual_write": "Migrering pågår. Din data är säker - alla nya detektioner sparas i båda databaserna.",
+          "dual_write": "Migrering pågår. Din data är säker - nya detektioner sparas i den nuvarande databasen och kopieras till den nya databasen under migreringen.",
           "migrating": "Kopierar dina befintliga detektioner till den nya databasen.",
           "validating": "Verifierar att alla poster kopierades korrekt. Nästan klart!",
           "cutover": "Byter till den nya databasen. Det tar bara ett ögonblick.",
@@ -1842,7 +1887,14 @@
       "fp16Help": "16-bitars flyttal. Hårdvara som stöder det kan köra vissa modeller snabbare och med mindre minne.",
       "invocationsHelp": "Totalt antal ljudsegment som denna modell har analyserat sedan start.",
       "noModelsHint": "Ingen ljudkälla konfigurerad ännu?",
-      "noModelsHintLink": "Konfigurera ljudkällor"
+      "noModelsHintLink": "Konfigurera ljudkällor",
+      "modelFailing": "varje analys misslyckas",
+      "lastSuccess": "Senaste lyckade",
+      "lastSuccessHelp": "När den här modellen senast analyserade ljud utan fel.",
+      "lastSuccessNever": "Ingen sedan modellen lästes in",
+      "modelFailingHelp": "{reason} Prova en annan version av den här modellen under Inställningar > Analys > Modeller, eller kontrollera den backend och precision som visas ovan.",
+      "modelFailingReasonNonFinite": "Alla senaste analyser misslyckades eftersom modellen returnerade ogiltiga poäng (NaN eller oändliga), så den upptäcker ingenting.",
+      "modelFailingReasonError": "Alla senaste analyser misslyckades eftersom inferensen returnerade ett fel, så modellen upptäcker ingenting."
     },
     "metrics": {
       "cpu": "CPU",
@@ -2286,7 +2338,9 @@
       "saveAriaLabel": "Spara ändringar",
       "savingAriaLabel": "Sparar ändringar...",
       "unsavedChanges": "Osparade ändringar",
-      "toolbar": "Inställningsåtgärder"
+      "toolbar": "Inställningsåtgärder",
+      "validationBlocked": "Vissa fält behöver uppmärksammas innan du kan spara.",
+      "noChangesToSave": "Inga ändringar att spara."
     },
     "errors": {
       "loadFailed": "Kunde inte ladda inställningar",
@@ -2370,10 +2424,9 @@
             "lenient": "För ljud med låg kvalitet (RTSP-kameror, webbkameramikrofoner)",
             "moderate": "Balanserad för typiska hobbyuppställningar",
             "balanced": "Ursprungligt beteende före september 2025",
-            "strict": "RPi 4+ krävs. För högkvalitativa mikrofoner",
-            "maximum": "RPi 4+ krävs. För professionella mikrofoner"
+            "strict": "För högkvalitativa mikrofoner",
+            "maximum": "För professionella mikrofoner"
           },
-          "hardwareNote": "Strikt- och maximumnivåer kräver högre överlappningsinställningar och mer CPU-resurser. RPi 4 eller bättre hårdvara krävs för dessa nivåer.",
           "overlapAdjusted": "Överlappningsinställningen justerades automatiskt till {overlap}s för att uppfylla filterkraven",
           "overlapReduced": "Överlappningsinställningen minskades till {overlap}s för att matcha filternivån",
           "levelNames": {
@@ -2385,7 +2438,19 @@
             "maximum": "Maximum",
             "unknown": "Okänd"
           },
-          "warningOff": "Utan filtrering accepteras varje detektering över konfidenströskeln omedelbart. Detta ger vanligtvis flera falska positiva per dag. Även låg filtrering förbättrar resultatkvaliteten avsevärt."
+          "warningOff": "Utan filtrering accepteras varje detektering över konfidenströskeln omedelbart. Detta ger vanligtvis flera falska positiva per dag. Även låg filtrering förbättrar resultatkvaliteten avsevärt.",
+          "readoutTitle": "Bekräftelser som krävs nu",
+          "readoutPreviewTitle": "Bekräftelser som krävs efter sparande (uppskattning)",
+          "readoutIntro": "En detektion godtas när tillräckligt många analysfönster inom {seconds} sekunder stämmer överens.",
+          "readoutLine": "{model}: {count} av {windows} fönster, ett nytt fönster var {step} s",
+          "readoutPreview": "Uppskattat utifrån dina osparade ändringar. Enhetens gräns kontrolleras igen efter sparande.",
+          "readoutPending": "De sparade inställningarna tillämpas. Värdena är uppskattningar tills de uppdaterade antalen har lästs in.",
+          "capNoticeTitle": "Överlappning begränsad till vad den här enheten klarar",
+          "capNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} med den inställda överlappningen på {configured} s överskrider den här enhetens uppmätta kapacitet, så ljudet analyseras med {effective} s överlappning. Filtret kan därför kräva färre bekräftelser. Dina sparade inställningar är oförändrade.",
+          "overloadedNoticeTitle": "Den här enheten hinner inte med analysen",
+          "overloadedNotice": "Att köra {models, plural, one {# modell} other {# modeller}} på {sources, plural, one {# ljudkälla} other {# ljudkällor}} överskrider den här enhetens uppmätta kapacitet även utan överlappning. Analysen kan hamna efter och detektioner kan missas. Aktivera färre modeller eller ljudkällor, eller välj en snabbare modellvariant.",
+          "unknownLatency": "Bearbetningstiden kunde inte mätas för {models}, så den räknas inte med när överlappningen begränsas. Analysen kan ändå hamna efter.",
+          "cpuNote": "En högre styrka analyserar överlappande ljud oftare, vilket kostar CPU-tid för varje aktiverad modell och ljudkälla. BirdNET-Go begränsar överlappningen automatiskt till vad den här enheten klarar att bearbeta."
         },
         "rangeFilter": {
           "title": "Områdesfilter",
@@ -2400,7 +2465,7 @@
             "accuracy": "Uppskattad noggrannhet: inom {accuracy} m",
             "locationDetected": "Webbläsarens plats hittades.",
             "geolocationUnsupported": "Den här webbläsaren stöder inte enhetspositionering. Ange koordinater manuellt eller använd kartan.",
-            "geolocationRequiresHttps": "Webbläsarens platsbestämning kräver HTTPS eller localhost. Ange koordinater manuellt eller använd kartan.",
+            "geolocationInsecureHelp": "Kräver HTTPS eller localhost. Sök efter en plats eller använd kartan i stället.",
             "geolocationDenied": "Platsbehörighet nekades. Ange koordinater manuellt eller använd kartan.",
             "geolocationUnavailable": "Enheten kunde inte fastställa sin plats. Ange koordinater manuellt eller använd kartan.",
             "geolocationTimedOut": "Platsbegäran överskred tidsgränsen. Försök igen, ange koordinater manuellt eller använd kartan.",
@@ -2627,7 +2692,7 @@
                 "descriptions": {
                   "highContrast": "Bäst för svaga signaler. Fågelläten framträder tydligt mot bakgrundsbruset. Rekommenderas för vetenskapliga/gråskalestilar.",
                   "standard": "Standardbalanserad inställning. Bra för de flesta användningsfall.",
-                  "extended": "Mer detaljer synliga men lägre kontrast. SoX standardvärde."
+                  "extended": "Mer detaljer synliga men lägre kontrast."
                 }
               },
               "enabled": {
@@ -2729,7 +2794,7 @@
           "title": "Vad som ingår i rapporten:",
           "applicationLogs": "**Applikationsloggar** - Senaste fel och felsökningsinformation",
           "configuration": "**Konfiguration** - Dina inställningar med känslig data borttagen",
-          "systemInfo": "**Systeminformation** - OS-version, minne och körtidsdetaljer",
+          "systemInfo": "**Systeminformation** - OS-version, minne, hårdvara, anslutna USB-enheter och ljudkort samt körtidsdetaljer",
           "notIncluded": "**INGÅR INTE** - Ljudfiler, fågeldetektioner eller personuppgifter"
         },
         "userMessage": {
@@ -2882,6 +2947,11 @@
             "unit": "min",
             "helpText": "Förhindra upprepade aviseringar för samma art inom detta tidsfönster. Ange 0 för att inaktivera."
           }
+        },
+        "rulesNotice": {
+          "message": "Push-notifieringar om detekteringar kommer från larmregler på fliken Regler. De inbyggda detekteringsreglerna aviserar bara i appen. För att få push-notifieringar lägger du till åtgärden {pushAction} i regeln {ruleName}, eller skapar en regel för händelsen {eventName} med ett konfidensvillkor och en väntetid.",
+          "previousFilters": "Dina inställningar Minsta konfidens ({confidence}%) och Artavkylning ({minutes} min) här används inte av larmregler.",
+          "openRules": "Öppna Regler"
         },
         "noProviders": "Inga leverantörer konfigurerade",
         "noProvidersDescription": "Lägg till en leverantör för att börja ta emot push-aviseringar",
@@ -3149,7 +3219,7 @@
         "vadEnable": "Aktivera Integritetsskydd (Silero VAD)",
         "vadHelp": "Kör en dedikerad neural talidentifieringsmodell jämte klassificeraren för robust röstfiltrering. Förbrukar ytterligare systemresurser (ca 20-30 MB RAM och CPU-inferens per segment).",
         "vadThresholdLabel": "Tröskelvärde för Integritetsskydd",
-        "vadThresholdHelp": "Känslighetströskel för talaktivitetsdetektorn (standard 0.35). Lägre värden gör filtret känsligare för tyst eller avlägset tal."
+        "vadThresholdHelp": "Känslighetströskel för talaktivitetsdetektorn (standard 0.6). Lägre värden gör filtret känsligare för tyst eller avlägset tal."
       },
       "falsePositivePrevention": {
         "title": "Förebyggande av falska positiva",
@@ -3186,14 +3256,14 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Ladda upp detektioner till BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg inte detekterat",
-          "message": "Installera FFmpeg för att aktivera stöd för FLAC-kodning, BirdWeather fasar ut WAV-uppladdningar till förmån för komprimerade FLAC-ljudfiler."
-        },
         "enable": "Aktivera BirdWeather-uppladdningar",
         "token": {
           "label": "BirdWeather-token",
-          "helpText": "Din unika BirdWeather-token."
+          "helpText": "Din unika BirdWeather-token.",
+          "errors": {
+            "required": "Ange din BirdWeather-token eller stäng av BirdWeather.",
+            "format": "En BirdWeather-token består av 24 bokstäver och siffror."
+          }
         },
         "threshold": {
           "label": "Uppladdningströskelvärde",
@@ -3269,7 +3339,7 @@
             "label": "Enhetsnamn",
             "helpText": "Basnamnet för enheter som de visas i Home Assistant. Varje ljudkälla har sin egen enhet kopplad till denna huvudsakliga BirdNET-Go-enhet."
           },
-          "sensorsNote": "<strong>Skapade sensorer:</strong> För varje ljudkälla tar Home Assistant emot: Senaste art, Konfidens, Vetenskapligt namn och Ljudnivå (om aktiverat). Bryggenheten inkluderar tillgänglighetsstatus online/offline.",
+          "sensorsNote": "<strong>Skapade sensorer:</strong> För varje ljudkälla tar Home Assistant emot: Senaste art, Konfidens, Vetenskapligt namn och Ljudnivå (om aktiverat). Bryggenheten inkluderar tillgänglighetsstatus online/offline. Varje källas detekteringssensorer läser källans eget MQTT-ämne, &lt;base_topic&gt;/sources/&lt;source_id&gt;, och dess Ljudnivå-sensor läser underämnet &lt;base_topic&gt;/sources/&lt;source_id&gt;/soundlevel, så en detektering från en källa aldrig nollställer en annan källas sensorer.",
           "discovery": {
             "button": "Skicka Discovery",
             "success": "Identifieringsmeddelanden skickade till Home Assistant",
@@ -3315,7 +3385,8 @@
             "none": "Ingen",
             "yrno": "Yr.no",
             "openweather": "OpenWeather",
-            "wunderground": "Weather Underground"
+            "wunderground": "Weather Underground",
+            "pirateweather": "Pirate Weather"
           }
         },
         "wunderground": {
@@ -3336,6 +3407,16 @@
             "helpText": "Välj enheter för temperatur och vindhastighet (m = Metrisk, e = Imperial, h = UK Hybrid)."
           }
         },
+        "pirateweather": {
+          "apiKey": {
+            "label": "Pirate Weather API-nyckel",
+            "helpText": "Ange din Pirate Weather API-nyckel. Krävs för väderdata."
+          },
+          "endpoint": {
+            "label": "API-slutpunkt",
+            "helpText": "Åsidosätt standardslutpunkten för Pirate Weather API vid behov. Använder https://api.pirateweather.net/forecast som standard om det lämnas tomt."
+          }
+        },
         "notes": {
           "none": "Ingen väderdata kommer att hämtas.",
           "yrno": {
@@ -3343,7 +3424,8 @@
             "freeService": "Yr är en gratis väderdatatjänst. För mer information, besök <a href=\"https://hjelp.yr.no/hc/en-us/articles/206550539-Facts-about-Yr\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Yr.no</a>."
           },
           "openweather": "Användning av OpenWeather kräver en API-nyckel, registrera dig för en gratis API-nyckel på <a href=\"https://home.openweathermap.org/users/sign_up\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">OpenWeather</a>.",
-          "wunderground": "Kräver en Weather Underground API-nyckel och ett giltigt PWS-stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> för detaljer."
+          "wunderground": "Kräver en Weather Underground API-nyckel och ett giltigt PWS-stations-ID. Se <a href=\"https://www.wunderground.com/member/devices\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Weather Underground</a> för detaljer.",
+          "pirateweather": "Användning av Pirate Weather kräver en API-nyckel, registrera dig på <a href=\"https://pirateweather.net/\" class=\"link link-primary\" target=\"_blank\" rel=\"noopener noreferrer\">Pirate Weather</a>."
         },
         "apiKey": {
           "label": "API-nyckel",
@@ -3685,6 +3767,8 @@
         "frequencyResponse": "Frekvenssvar",
         "cutoffFrequency": "Gränsfrekvens",
         "cutoffFrequencyHelp": "Frekvens vid vilken filtret börjar dämpa signaler. Fågelläten ligger typiskt i intervallet 1-10 kHz.",
+        "centerFrequency": "Mittfrekvens",
+        "bandwidth": "Bandbredd",
         "qFactor": "Q-faktor",
         "qFactorHelp": "Kvalitetsfaktorn styr filtrets skärpa. Lägre värden (0,1-1) ger mjukare lutning, högre värden (1-10) ger brantare avskärning.",
         "gain": "Förstärkning",
@@ -3692,17 +3776,31 @@
         "attenuation": "Dämpning",
         "attenuationHelp": "Filtrets avklingningshastighet. Högre värden ger brantare dämpning av filtrerade frekvenser.",
         "attenuationLevels": {
-          "0db": "0dB",
+          "off": "Av",
           "12db": "12dB",
           "24db": "24dB",
           "36db": "36dB",
-          "48db": "48dB"
+          "48db": "48dB",
+          "custom": "{db} dB"
         },
         "filterHelp": "Lägg till flera filter för att forma frekvensvaret för optimal fågeldetektering i din miljö.",
+        "emptyEntryRestored": "Ange ett tal. Det tidigare värdet behölls.",
         "graph": {
           "flatResponse": "Plant svar (inga filter tillämpade)",
           "frequency": "Frekvens (Hz)",
-          "gain": "Förstärkning (dB)"
+          "gain": "Förstärkning (dB)",
+          "loading": "Beräknar frekvenssvaret...",
+          "updating": "Uppdaterar frekvenssvaret...",
+          "error": "Frekvenssvaret kunde inte beräknas. Det uppdateras när du ändrar ett filter eller väljer Försök igen.",
+          "sampleRate": "Beräknat för en samplingsfrekvens på {rate} Hz.",
+          "clipped": "Svaret toppar vid {peak} dB, över grafens övre kant.",
+          "skippedHeading": "{count, plural, one {# filter tillämpas inte på ljudet} other {# filter tillämpas inte på ljudet}}",
+          "skippedReasons": {
+            "unknown_type": "Filter {number} ({type}, {frequency} Hz) hoppas över: den här filtertypen stöds inte.",
+            "invalid_parameters": "Filter {number} ({type}, {frequency} Hz) hoppas över: dess inställningar är inte giltiga vid {rate} Hz.",
+            "add_failed": "Filter {number} ({type}, {frequency} Hz) hoppas över: det kunde inte läggas till i filterkedjan.",
+            "unknown": "Filter {number} ({type}, {frequency} Hz) hoppas över."
+          }
         }
       },
       "soundLevelMonitoring": {
@@ -3716,6 +3814,7 @@
         "dataOutputTitle": "Utdata för ljudnivå",
         "dataOutputDescription": "När aktiverad publiceras ljudnivåmätningar via:",
         "mqttTopic": "MQTT-ämne:",
+        "mqttSourceTopic": "MQTT-ämne per källa (med Home Assistant discovery):",
         "sseEndpoint": "SSE-slutpunkt:",
         "prometheusMetrics": "Prometheus-mätvärden:"
       },
@@ -3777,6 +3876,8 @@
         "pathHelp": "Katalog där ljudklipp sparas. Relativa sökvägar utgår från applikationskatalogen. Exempel: 'clips/' eller '/var/audio/birds/'",
         "typeLabel": "Ljudformat",
         "typeHelp": "Ljudformat för sparade klipp. WAV och FLAC är förlustfria (bästa kvalitet, större filer). MP3, AAC och Opus är förlustbehäftade (mindre filer, viss kvalitetsförlust).",
+        "ultrasonicTypeLabel": "Ultraljudsformat",
+        "ultrasonicTypeHelp": "Förlustfritt format (WAV eller FLAC) som endast används för fladdermus- och ultraljudsinspelningar över 48 kHz. Dessa sparas med sin fulla källsamplingsfrekvens i stället för formatet ovan, så att inga ultraljudsdetaljer går förlorade.",
         "bitrateLabel": "Bithastighet",
         "bitrateHelp": "Ljudkomprimeringens bithastighet för förlustbehäftade format. Intervall: {min}-{max} kbps. Högre värden ger bättre kvalitet men större filer.",
         "losslessBitrateValue": "Ej tillämpligt - Förlustfri",
@@ -3845,7 +3946,17 @@
       },
       "models": {
         "recommendBoth": "För bästa artdetekteringstäckning rekommenderas att köra både BirdNET och Perch tillsammans.",
-        "perchOnlyWarning": "Perch ensamt ger färre detektioner. Sänk konfidensströskeln till 0.50 för meningsfulla resultat, eller aktivera BirdNET bredvid för bästa täckning."
+        "perchOnlyWarning": "Perch ensamt ger färre detektioner. Sänk konfidensströskeln till 0.50 för meningsfulla resultat, eller aktivera BirdNET bredvid för bästa täckning.",
+        "loading": "Laddar detektionsmodeller...",
+        "noneEnabledTitle": "Ingen detektionsmodell aktiverad.",
+        "noneEnabledHelp": "Du kan fortfarande spara den här källan. Dess ljud kommer att analyseras av standardmodellerna så snart en har aktiverats.",
+        "noneEnabledLink": "Öppna modellgalleri",
+        "noneAvailable": "Inga detektionsmodeller är aktiverade på den här servern.",
+        "loadFailedWarning": "En detektionsmodell kunde inte läsas in, så den här källan analyseras inte förrän den återställs.",
+        "loadFailedLink": "Visa status för AI-modeller",
+        "defaultBadge": "{models} (standard)",
+        "defaultPendingBadge": "Standardmodeller",
+        "noneBadge": "Ingen modell inläst"
       }
     },
     "security": {
@@ -3858,7 +3969,7 @@
       "allowSubnetBypassLabel": "Tillåt åtkomst från subnät att kringgå autentisering",
       "subnetBypassLocalNote": "När detta är aktiverat anses klienter i samma lokala nätverk som denna server automatiskt vara betrodda och hoppar över inloggningen. Använd fältet nedan endast för att utöka denna tillit till ytterligare nätverk (till exempel ett separat VLAN eller ett routat subnät).",
       "allowedSubnetsLabel": "Tillåtna subnät",
-      "allowedSubnetsHelp": "Ytterligare nätverksintervall som får kringgå inloggningen, utöver serverns eget lokala nätverk. CIDR-notation, kommaseparerade.",
+      "allowedSubnetsHelp": "Ytterligare nätverksintervall som får kringgå inloggningen, utöver serverns eget lokala nätverk. Använd CIDR-notation, som 192.168.10.0/24.",
       "securityWarningTitle": "Säkerhetsvarning:",
       "subnetWarningText": "Denna servers lokala nätverk och alla subnät som anges här får full åtkomst utan att logga in. Inkludera endast nätverk som du litar fullständigt på.",
       "httpsSettingsTitle": "HTTPS-inställningar",
@@ -4086,6 +4197,77 @@
         "downloadCertificate": "Ladda ner certifikat",
         "downloadCertificateHelp": "Installera detta certifikat i ditt operativsystems förtroendearkiv för att undvika webbläsarens säkerhetsvarningar.",
         "fileReadError": "Kunde inte läsa den valda filen"
+      },
+      "reverseProxy": {
+        "title": "Omvänd proxy",
+        "description": "För åtkomst via nginx, Caddy, Traefik, Cloudflare eller en annan proxy",
+        "listLabel": "Betrodda proxys",
+        "listHelp": "Lägg till adressen för varje proxy framför BirdNET-Go. Med Docker är detta ofta Docker-gatewayadressen, som 172.17.0.1.",
+        "placeholder": "Till exempel 172.17.0.1",
+        "emptyState": "Inga betrodda proxys. BirdNET-Go använder adressen som ansluter till den.",
+        "emptyStateCloudflareOnly": "Endast Cloudflares publicerade edge-adresser är betrodda. Inga andra proxys är listade.",
+        "rangeBadge": "Intervall",
+        "ruleOwnAddress": "Ange varje proxys egen adress. Ange aldrig ett intervall som även innehåller datorerna du surfar från.",
+        "ruleHeaders": "Proxyn måste lägga till klientadressen i X-Forwarded-For eller skriva över X-Real-IP.",
+        "cloudflareLabel": "Lita på Cloudflare",
+        "cloudflareHelp": "Aktivera detta när din webbplats levereras via Cloudflare. BirdNET-Go litar då på Cloudflares publicerade edge-adresser.",
+        "check": {
+          "title": "Din anslutning",
+          "recheck": "Kontrollera igen",
+          "checking": "Kontrollerar din anslutning",
+          "error": "Kunde inte kontrollera din anslutning.",
+          "stale": "Denna kontroll visar de sparade inställningarna. Spara för att kontrollera dina ändringar.",
+          "trust": "Lita på {peer}",
+          "trustWarning": "Lita bara på {peer} om det är din omvända proxy, inte datorn du surfar från.",
+          "trustWithCloudflare": "Lita på {peer} och Cloudflare",
+          "cloudflareInFront": "Cloudflare finns framför {peer}. Lita på båda för att verifiera din adress.",
+          "cloudflareEdge": "{peer} tillhör Cloudflare. Aktivera Lita på Cloudflare nedan.",
+          "chainHint": "Om en annan proxy finns framför {peer}, lista den också.",
+          "added": "Tillagd i listan. Spara för att tillämpa.",
+          "coveredBy": "Täcks redan av {range} i listan. Spara för att tillämpa.",
+          "selfClientCause": "Proxyn kanske vidarebefordrar sin egen adress som klient, ofta för att containerns portpublicering döljer den verkliga klienten. Åtgärda det i containerns eller proxyns nätverksinställningar."
+        },
+        "status": {
+          "direct": {
+            "title": "Direktansluten",
+            "body": "Din webbläsare ansluter direkt till BirdNET-Go från {peer}.",
+            "bodyNoPeer": "Din webbläsare ansluter direkt till BirdNET-Go.",
+            "hint": "Om du använder en omvänd proxy och {peer} är dess adress, ställ in proxyn att skicka X-Forwarded-For."
+          },
+          "trusted_proxy": {
+            "title": "Ansluten via en betrodd proxy",
+            "body": "Din anslutning går via {peer}, som är betrodd. Din adress {client} verifierades.",
+            "hint": "Om {client} är en annan proxy snarare än din dator, lista den proxyn också."
+          },
+          "trusted_proxy_unverified": {
+            "title": "Din adress kunde inte verifieras",
+            "body": "{peer} är betrodd, men adressen den vidarebefordrar kunde inte verifieras. Vanliga orsaker:",
+            "causeRange": "Ett listat intervall innehåller även din dator, så ingen adress i kedjan räknas som din.",
+            "causeHeaders": "Proxyn lägger inte till X-Forwarded-For eller skriver inte över X-Real-IP.",
+            "causeConflict": "Proxyn skickar motstridiga eller upprepade adresshuvuden, eller endast ett Forwarded-huvud."
+          },
+          "untrusted_public_proxy": {
+            "title": "Ansluten via en offentlig proxy",
+            "body": "Din anslutning går via {peer}, en offentlig adress. Offentliga adresser erbjuds aldrig för att lita på med ett klick. Lägg till en manuellt endast om du är säker på att det är din proxy."
+          },
+          "untrusted_proxy": {
+            "title": "Ansluten via en obetrodd proxy",
+            "body": "Din anslutning går via en proxy på {peer} som inte är betrodd, så BirdNET-Go kan inte verifiera din adress."
+          },
+          "untrusted_proxy_unverifiable": {
+            "title": "Proxy-huvuden kan inte verifieras",
+            "body": "Din anslutning går via {peer}, men adresshuvudena den skickar kunde inte verifieras även om den vore betrodd.",
+            "bodyNoPeer": "Din anslutning går via en proxy, men dess adress kunde inte läsas.",
+            "fix": "Ställ in proxyn att lägga till X-Forwarded-For eller skriva över X-Real-IP."
+          }
+        }
+      },
+      "bypassProxyNote": "Bakom en omvänd proxy fungerar detta kringgående endast när proxyn är listad som betrodd.",
+      "bypassProxyLink": "Konfigurera betrodda proxys",
+      "allowedSubnetsEmpty": "Inga ytterligare subnät. Endast serverns eget lokala nätverk får kringgå inloggningen.",
+      "validation": {
+        "invalidEntry": "{tab}: {field} har en post som inte är giltig.",
+        "pendingEntry": "{tab}: {field} har text som inte lades till. Tryck på Enter eller Lägg till, eller rensa den."
       }
     },
     "species": {
@@ -4845,6 +5027,28 @@
         "edit": "Redigera art",
         "remove": "Ta bort art"
       }
+    },
+    "networkAddressList": {
+      "add": "Lägg till",
+      "remove": "Ta bort {address}",
+      "empty": "Inga adresser tillagda ännu.",
+      "pendingHint": "Tryck på Enter eller Lägg till för att lägga till denna adress.",
+      "limitReached": "Listan är full ({max} poster).",
+      "rowDuplicate": "Dubblett",
+      "rowInvalid": {
+        "cidr": "Ogiltigt intervall",
+        "ip": "Ogiltig IP-adress",
+        "ipOrCidr": "Ogiltig adress eller intervall"
+      },
+      "errors": {
+        "invalid": {
+          "cidr": "Ogiltigt intervall: {values}. Använd ett intervall som 192.168.1.0/24.",
+          "ip": "Ogiltig IP-adress: {values}. Använd en adress som 192.168.1.10.",
+          "ipOrCidr": "Ogiltig adress eller intervall: {values}. Använd en adress som 192.168.1.10 eller ett intervall som 192.168.1.0/24."
+        },
+        "duplicate": "Finns redan i listan: {values}.",
+        "limit": "Listan kan innehålla högst {max} poster. Inte tillagda: {values}."
+      }
     }
   },
   "media": {
@@ -4871,6 +5075,7 @@
       "loop": "Växla upprepning",
       "player": "Ljudspelare",
       "autoplayBlocked": "Klicka för att spela (autouppspelning blockerad)",
+      "hlsLoadFailed": "Det gick inte att läsa in ljudspelaren, ladda om sidan och försök igen",
       "hlsNotSupported": "HLS-uppspelning stöds inte i den här webbläsaren",
       "streamStarting": "Startar ljudström...",
       "levelFor": "Ljudnivå för {source}",
@@ -5039,6 +5244,33 @@
       "viewDetections": "Visa detektioner för {name}",
       "largeView": "Stor vy av {name}",
       "clickToView": "Klicka för att se detektioner"
+    },
+    "locationMap": {
+      "mapLabel": "Karta för att välja stationens plats",
+      "expandedMapLabel": "Helskärmskarta för att välja stationens plats",
+      "zoomIn": "Zooma in",
+      "zoomOut": "Zooma ut",
+      "expand": "Utöka kartan till helskärm",
+      "search": {
+        "label": "Sök efter en plats",
+        "placeholder": "Ort eller adress",
+        "submit": "Sök",
+        "disclosure": "Sökningar skickas till Photon (photon.komoot.io), som använder OpenStreetMap-data.",
+        "openPhoton": "Öppna Photon i en ny flik",
+        "searching": "Söker...",
+        "results": "{count, plural, one {# plats hittades} other {# platser hittades}}",
+        "noResults": "Inga platser hittades. Prova ett annat namn eller klicka på kartan.",
+        "errorNetwork": "Platssökningen är inte tillgänglig. Kontrollera internetanslutningen. Du kan fortfarande klicka på kartan eller ange koordinater.",
+        "errorRateLimited": "För många sökningar. Vänta en stund och försök igen.",
+        "errorUnavailable": "Söktjänsten svarade inte. Du kan fortfarande klicka på kartan eller ange koordinater.",
+        "kind": {
+          "city": "Stad",
+          "town": "Tätort",
+          "village": "By",
+          "station": "Tågstation",
+          "airport": "Flygplats"
+        }
+      }
     }
   },
   "connectivity": {
@@ -5078,6 +5310,9 @@
       "invalidJSON": "Ogiltig JSON",
       "invalidEscalation": "Eskaleringsstegen är ogiltiga",
       "engineUnavailable": "Varningsmotorn är otillgänglig"
+    },
+    "insights": {
+      "v2Required": "Insikter kräver den utökade (v2) databasen"
     },
     "detection": {
       "invalidDate": "Ogiltigt {paramName}-format, använd ÅÅÅÅ-MM-DD"
@@ -5125,6 +5360,7 @@
       "birdweatherClientFailed": "Kunde inte skapa BirdWeather-klient",
       "noWeatherProvider": "Ingen väderleverantör vald",
       "openWeatherKeyRequired": "OpenWeather API-nyckel krävs",
+      "pirateWeatherKeyRequired": "Pirate Weather API-nyckel krävs",
       "processorUnavailable": "Processor inte tillgänglig",
       "discoveryFailed": "Kunde inte utlösa Home Assistant-upptäckt"
     },
@@ -5189,12 +5425,37 @@
     }
   },
   "wizard": {
+    "actions": {
+      "reloadPage": "Ladda om sidan"
+    },
     "skip": "Hoppa över",
     "back": "Tillbaka",
     "next": "Nästa",
     "done": "Klar",
     "progress": "Steg {current} av {total}",
     "progressLabel": "Guideförlopp",
+    "status": {
+      "saving": "Sparar...",
+      "loadingStep": "Läser in steg..."
+    },
+    "errors": {
+      "saveFailed": "Det här steget kunde inte sparas. Kontrollera anslutningen och försök igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
+      "saveRejected": "Inställningarna i det här steget godkändes inte. Kontrollera värdena och försök igen, eller hoppa över konfigurationen och ändra det senare i Inställningar.",
+      "stepLoadFailed": "Det här steget kunde inte läsas in. Tryck på Försök igen eller ladda om sidan.",
+      "stepLoadFailedReload": "Det här steget kunde fortfarande inte läsas in. Ladda om sidan för att försöka igen; val som sparats i tidigare steg behålls.",
+      "audioSourceSaveUnfinished": "Ändringen av ljudkällan slutfördes inte. Kontrollera ljudkällorna under Inställningar > Ljud.",
+      "saveUnfinished": "Några ändringar från konfigurationen sparades inte. Kontrollera dem i Inställningar."
+    },
+    "reasons": {
+      "completeStep": "Slutför det här steget för att fortsätta."
+    },
+    "leaveConfirm": {
+      "title": "Lämna konfigurationen?",
+      "message": "Konfigurationen öppnas inte igen. Val som sparats i tidigare steg behålls; ändringar i det här steget sparas inte. Du kan ändra allt senare i Inställningar.",
+      "messageSaving": "Konfigurationen öppnas inte igen. Val som sparats i tidigare steg behålls. Det här steget sparas fortfarande, och några av eller alla ändringarna behålls kanske inte. Du kan ändra allt senare i Inställningar.",
+      "stay": "Fortsätt konfigurera",
+      "leave": "Lämna konfigurationen"
+    },
     "whatsNew": {
       "title": "Nyheter i {version}"
     },
@@ -5217,13 +5478,6 @@
         "locationHelp": "Din plats hjälper till att filtrera arter till de som troligen finns i ditt område",
         "latitudeLabel": "Latitud",
         "longitudeLabel": "Longitud",
-        "useMyLocation": "Använd min plats",
-        "locationDetected": "Plats identifierad",
-        "locationError": "Kunde inte identifiera plats. Ange koordinater manuellt.",
-        "locationDenied": "Platsåtkomst nekad. Ange koordinater manuellt.",
-        "geolocationRequiresHttps": "Webbläsarens platsbestämning kräver HTTPS. Ange koordinaterna manuellt eller använd kartan.",
-        "geolocationDenied": "Platstillstånd nekades. Ange koordinaterna manuellt eller använd kartan.",
-        "geolocationFailed": "Din plats kunde inte fastställas. Ange koordinaterna manuellt eller använd kartan.",
         "localesLoading": "Laddar språk...",
         "localesLoadFailed": "Kunde inte ladda språkalternativ. Engelska har valts som standard."
       },
@@ -5239,7 +5493,19 @@
         "rtspUrlPlaceholder": "rtsp://user:password@host:port/stream",
         "rtspUrlHelp": "Ange URL:en till din RTSP-ljudström",
         "additionalSourcesHint": "Du kan lägga till fler ljudkällor senare under Inställningar.",
-        "configureLater": "Hoppa över - konfigurera senare"
+        "devicesLoadFailed": "Det gick inte att lista ljudenheterna på det här systemet.",
+        "useStreamInstead": "Använd en RTSP-ström i stället",
+        "setUpLater": "Konfigurera ljud senare",
+        "setUpLaterChosen": "Ljud konfigureras inte nu. Lägg till ett ljudkort eller en ström senare i Inställningar.",
+        "streamReplacesSoundCards": "Ljudkort slutar spela in när du använder en ström. Du kan lägga till dem igen i Inställningar.",
+        "soundCardReplacesStream": "Strömmen som visas vid strömalternativet stängs av när du använder ett ljudkort. Du kan slå på den igen i Inställningar.",
+        "reasons": {
+          "chooseDevice": "Välj en ljudenhet eller konfigurera ljud senare.",
+          "devicesFailed": "Ljudenheterna kunde inte listas. Försök igen, använd en ström eller konfigurera ljud senare.",
+          "noDevices": "Ingen ljudenhet hittades. Använd en ström eller konfigurera ljud senare.",
+          "enterUrl": "Ange ström-URL:en eller konfigurera ljud senare.",
+          "urlScheme": "Ange en komplett ström-URL som börjar med rtsp:// eller rtsps:// och inte innehåller blanksteg."
+        }
       },
       "detection": {
         "title": "Detekteringströskel",
@@ -5251,6 +5517,7 @@
         "highAccuracyDesc": "Färre falska positiva, kan missa vissa fåglar",
         "highSensitivity": "Hög känslighet",
         "highSensitivityDesc": "Fler detekteringar, fler falska positiva",
+        "descriptionStored": "Välj hur strikt fågelidentifieringen ska vara. Nuvarande: {threshold}, ingen förinställning.",
         "threshold": "Konfidenströskel",
         "fpFilterNote": "När ditt system är igång och beprövat kan du aktivera filtret för falska positiva under Inställningar för att ytterligare minska felaktiga detekteringar."
       },
@@ -5260,10 +5527,12 @@
         "privacyFilterHelp": "Filtrerar bort detekteringar när mänskliga röster upptäcks nära mikrofonen",
         "birdweatherLabel": "Dela detekteringar med BirdWeather",
         "birdweatherHelp": "Bidra med dina fågeldetekteringar till BirdWeather-gemenskapsnätverket",
-        "birdweatherIdLabel": "BirdWeather stations-ID",
-        "birdweatherIdPlaceholder": "Ange ditt BirdWeather stations-ID",
         "errorReportingLabel": "Skicka anonyma felrapporter",
-        "errorReportingHelp": "Hjälp till att förbättra BirdNET-Go genom att skicka anonyma felrapporter när något går fel"
+        "errorReportingHelp": "Hjälp till att förbättra BirdNET-Go genom att skicka anonyma felrapporter när något går fel",
+        "reasons": {
+          "enterToken": "Ange din BirdWeather-token eller stäng av delning med BirdWeather.",
+          "tokenFormat": "En BirdWeather-token består av 24 bokstäver och siffror."
+        }
       },
       "responsibleUse": {
         "title": "Ansvarsfull användning av BirdNET-Go",
@@ -5502,6 +5771,8 @@
         "catalogLoadFailed": "Kunde inte ladda modellkatalogen",
         "installFailed": "Kunde inte starta modellinstallation",
         "removeFailed": "Kunde inte ta bort modell",
+        "removeHasDependents": "{name} används av {models}. Ta bort de modellerna först.",
+        "operationInProgress": "En installation, ominstallation eller borttagning av en modell pågår redan ({name}). Försök igen när den är klar.",
         "actionFailed": "Det uppstod ett problem med {name}",
         "downloadSourceHint": "Om huggingface.co är blockerat eller långsamt på ditt nätverk kan du ange en spegelsajt i avsnittet Nedladdningskälla nedan.",
         "goToDownloadSource": "Gå till Nedladdningskälla",

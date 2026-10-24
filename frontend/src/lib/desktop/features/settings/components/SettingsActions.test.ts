@@ -95,7 +95,7 @@ describe('SettingsActions', () => {
     // Get the mocked logger
     const { loggers } =
       await vi.importMock<typeof import('$lib/utils/logger')>('$lib/utils/logger');
-    mockSettingsLogger = loggers.settings as MockLogger;
+    mockSettingsLogger = loggers.settings;
     mockSettingsLogger.error.mockClear();
   });
 

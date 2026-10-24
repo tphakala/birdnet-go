@@ -8,7 +8,6 @@ package analytics
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -21,6 +20,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 const (
@@ -158,7 +158,7 @@ func TestGetBatchHourlySpeciesData_QueryFailureIsNotZeroes(t *testing.T) {
 	mockDS := mocks.NewMockInterface(t)
 	mockDS.On("GetBatchHourlyOccurrences", mock.Anything, "2026-03-01", "2026-03-31",
 		mock.Anything, 0.0).
-		Return(map[string][apicore.HoursPerDay]int{}, errors.New("query timeout"))
+		Return(map[string][apicore.HoursPerDay]int{}, errors.NewStd("query timeout"))
 
 	rec := callBatchHourly(t, mockDS, batchQuery([]string{sciBlackbird},
 		"start_date", "2026-03-01", "end_date", "2026-03-31"))

@@ -26,7 +26,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: '24'
+          node-version: '26'
           cache: 'npm'
           cache-dependency-path: 'frontend/package-lock.json'
 
@@ -62,6 +62,29 @@ jobs:
           echo "" >> frontend/static/LICENSES.md
           echo "License: https://github.com/snakers4/silero-vad/blob/master/LICENSE" >> frontend/static/LICENSES.md
           echo "Source: MIT" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+
+          # internal/spectrogram/soxchrome is derived from SoX (LGPL) and the Go fonts
+          # carry their own grant, and go-licenses skips internal packages, so list
+          # both by hand here.
+          echo "## Derived Code" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "### SoX spectrogram effect" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "Palette, colour mapping and axis layout in internal/spectrogram/soxchrome are derived from" >> frontend/static/LICENSES.md
+          echo "SoX src/spectrogram.c, (c) 2008-9 robs@users.sourceforge.net. That package is licensed under" >> frontend/static/LICENSES.md
+          echo "the GNU LGPL 2.1 or later (internal/spectrogram/soxchrome/LICENSE)." >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "License: https://sourceforge.net/p/sox/code/ci/master/tree/LICENSE.LGPL" >> frontend/static/LICENSES.md
+          echo "Source: LGPL-2.1-or-later" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "### Go fonts" >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "Go Mono from golang.org/x/image/font/gofont, (c) 2016 Bigelow & Holmes Inc., draws" >> frontend/static/LICENSES.md
+          echo "spectrogram axis text." >> frontend/static/LICENSES.md
+          echo "" >> frontend/static/LICENSES.md
+          echo "License: https://cs.opensource.google/go/x/image/+/v0.47.0:font/gofont/ttfs/README" >> frontend/static/LICENSES.md
+          echo "Source: BSD-3-Clause" >> frontend/static/LICENSES.md
           echo "" >> frontend/static/LICENSES.md
 
           echo "## Dependencies" >> frontend/static/LICENSES.md
@@ -111,9 +134,8 @@ jobs:
           branch: update-licenses
           delete-branch: true
 
-      - name: Auto-approve PR
-        if: steps.create-pr.outputs.pull-request-number
-        uses: hmarr/auto-approve-action@05a696a09d381a5a0d142c755f7eacbb19eb6525 # v4
-        with:
-          pull-request-number: ${{ steps.create-pr.outputs.pull-request-number }}
-          review-message: "Auto-approved dependency license update"
+      - name: Merge PR
+        if: steps.create-pr.outputs.pull-request-number && steps.create-pr.outputs.pull-request-operation != 'closed'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge "${{ steps.create-pr.outputs.pull-request-number }}" --repo "${{ github.repository }}" --squash --delete-branch

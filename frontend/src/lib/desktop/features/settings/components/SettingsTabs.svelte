@@ -30,14 +30,14 @@
   import type { Snippet, Component } from 'svelte';
   import { untrack } from 'svelte';
   import { navigation } from '$lib/stores/navigation.svelte';
-  import type { IconProps } from '@lucide/svelte';
+  import type { LucideProps } from '@lucide/svelte';
   import { t } from '$lib/i18n';
   import SettingsPageActions from './SettingsPageActions.svelte';
 
   export interface TabDefinition {
     id: string;
     label: string;
-    icon?: Component<IconProps>;
+    icon?: Component<LucideProps>;
     hasChanges?: boolean;
     content: Snippet;
   }
@@ -168,6 +168,7 @@
         )}
         aria-selected={isActive}
         aria-controls="settings-tabpanel-{tab.id}"
+        aria-describedby={tab.hasChanges ? `settings-tab-${tab.id}-changes` : undefined}
         tabindex={isActive ? 0 : -1}
         onclick={() => selectTab(tab.id)}
         onkeydown={e => handleKeyDown(e, index)}
@@ -184,11 +185,13 @@
         <!-- Change indicator -->
         {#if tab.hasChanges}
           <span
-            class="badge badge-primary badge-xs"
-            role="status"
-            aria-label={t('settings.tabs.hasChanges')}
+            class="size-2.5 shrink-0 rounded-full bg-[var(--color-primary)]"
+            data-testid="tab-change-dot"
+            aria-hidden="true"
+          ></span>
+          <span id="settings-tab-{tab.id}-changes" class="sr-only"
+            >{t('settings.tabs.hasChanges')}</span
           >
-          </span>
         {/if}
       </button>
     {/each}

@@ -56,7 +56,6 @@ The "realtime" command is an alias for backward compatibility.`,
 
 			audioEngine := engine.New(cmd.Context(), &engine.Config{
 				FFmpegPath:               settings.Realtime.Audio.FfmpegPath,
-				SoxPath:                  settings.Realtime.Audio.SoxPath,
 				Transport:                engineTransport,
 				FFmpegParameters:         settings.Realtime.RTSP.FFmpegParameters,
 				Debug:                    settings.Debug,

@@ -53,6 +53,7 @@ jobs:
           EOL
 
       - name: Create Pull Request
+        id: create-pr
         uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -69,3 +70,9 @@ jobs:
             This PR was created automatically by the update-authors workflow.
           branch: update-authors
           delete-branch: true 
+
+      - name: Merge PR
+        if: steps.create-pr.outputs.pull-request-number && steps.create-pr.outputs.pull-request-operation != 'closed'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge "${{ steps.create-pr.outputs.pull-request-number }}" --repo "${{ github.repository }}" --squash --delete-branch

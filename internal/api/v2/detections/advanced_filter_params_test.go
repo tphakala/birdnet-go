@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 )
 
@@ -282,9 +283,9 @@ func TestBuildAdvancedSearchFilters_TimeOfDay(t *testing.T) {
 	}
 }
 
-// TestAdvancedSearchCacheKey_DistinguishesConfidenceBounds guards against cache
+// TestAdvancedPageKey_DistinguishesConfidenceBounds guards against cache
 // collisions: two different confidence bands must not share a cached result set.
-func TestAdvancedSearchCacheKey_DistinguishesConfidenceBounds(t *testing.T) {
+func TestAdvancedPageKey_DistinguishesConfidenceBounds(t *testing.T) {
 	t.Parallel()
 
 	base := detectionQueryParams{Search: "owl", NumResults: 25}
@@ -299,17 +300,17 @@ func TestAdvancedSearchCacheKey_DistinguishesConfidenceBounds(t *testing.T) {
 	withBoth.ConfidenceMin = "60"
 	withBoth.ConfidenceMax = "90"
 
-	keys := []string{
-		base.advancedSearchCacheKey(),
-		withMin.advancedSearchCacheKey(),
-		withMax.advancedSearchCacheKey(),
-		withBoth.advancedSearchCacheKey(),
+	keys := []apicore.DetectionPageKey{
+		*base.advancedPageKey(),
+		*withMin.advancedPageKey(),
+		*withMax.advancedPageKey(),
+		*withBoth.advancedPageKey(),
 	}
 
-	seen := make(map[string]struct{}, len(keys))
+	seen := make(map[apicore.DetectionPageKey]struct{}, len(keys))
 	for _, key := range keys {
 		_, duplicate := seen[key]
-		assert.False(t, duplicate, "cache keys must be distinct, got a repeat of %q", key)
+		assert.False(t, duplicate, "cache keys must be distinct, got a repeat of %+v", key)
 		seen[key] = struct{}{}
 	}
 }

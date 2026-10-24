@@ -102,13 +102,13 @@ func calculateFilterComplexity(filters *SearchFilters) float64 {
 
 	// Add complexity for each active filter
 	if filters.Species != "" {
-		complexity += 1
+		complexity++
 	}
 	if filters.DateStart != "" {
-		complexity += 1
+		complexity++
 	}
 	if filters.DateEnd != "" {
-		complexity += 1
+		complexity++
 	}
 	if filters.ConfidenceMin > 0 {
 		complexity += 0.5
@@ -117,19 +117,19 @@ func calculateFilterComplexity(filters *SearchFilters) float64 {
 		complexity += 0.5
 	}
 	if filters.VerifiedOnly {
-		complexity += 1
+		complexity++
 	}
 	if filters.UnverifiedOnly {
-		complexity += 1
+		complexity++
 	}
 	if filters.LockedOnly {
-		complexity += 1
+		complexity++
 	}
 	if filters.UnlockedOnly {
-		complexity += 1
+		complexity++
 	}
 	if filters.Device != "" {
-		complexity += 1
+		complexity++
 	}
 	if filters.TimeOfDay != "" && filters.TimeOfDay != "any" {
 		complexity += 2 // Time-based filters are more complex

@@ -20,6 +20,7 @@ vi.mock('../registry/analyticsControls.svelte', () => ({
     speciesNames: new Map(),
     applyParams: vi.fn(),
     ensureSpecies: vi.fn(),
+    enableAutoSelect: vi.fn(() => () => {}),
     ensureSources: vi.fn(),
     syncFromUrl: vi.fn(),
     init: vi.fn(() => () => {}),

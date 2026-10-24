@@ -32,6 +32,8 @@ Once enabled, you should see:
 - 📊 **Automatic error reporting** begins immediately
 - 🔒 **Privacy protection** automatically applied to all reports
 
+Builds older than about six months (183 days after their build date) do not send error reports, even with telemetry enabled. Update to a current release to resume reporting. Support dump uploads you request yourself still work.
+
 That's it! No additional configuration is required.
 
 ## Understanding the Interface
@@ -119,7 +121,7 @@ sentry:
 
 If running BirdNET-Go in Docker, telemetry settings are managed the same way:
 
-1. Access the web interface through your mapped port
+1. Access the web interface through its port (the mapped host port with bridge networking, `WEB_PORT` with host networking)
 2. Navigate to Settings → Support
 3. Enable telemetry as described above
 4. Settings persist in your mounted config volume

@@ -2,12 +2,12 @@ package classifier
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"runtime"
+	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // mockModelInstance implements ModelInstance for testing.
@@ -155,10 +156,12 @@ func TestNewOrchestrator_SyncsSharedState(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	// Verify shared state is synced from loaded v2.4 model
@@ -177,10 +180,12 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	// Verify the v2.4 entry is present and exposes the ModelInstance surface.
@@ -206,10 +211,12 @@ func TestOrchestrator_PrimaryIsModelInstance(t *testing.T) {
 func TestOrchestrator_UnloadReloadV24_RoundTrip(t *testing.T) {
 	// Not parallel: NewOrchestrator publishes into the global settings snapshot.
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: embedded model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	require.True(t, o.IsModelLoaded(RegistryIDBirdNETV24), "v2.4 loads at construction")
@@ -236,10 +243,12 @@ func TestOrchestrator_ModelsMapPopulated(t *testing.T) {
 	t.Parallel()
 
 	settings := conftest.GetTestSettings()
+	enableBirdNETV24(settings) // models.enabled is authoritative (Phase 4); name v2.4 so it loads
 	o, err := NewOrchestrator(settings)
 	if err != nil {
 		t.Skipf("Skipping: model not available in test environment: %v", err)
 	}
+	requireV24Loaded(t, o) // skip when the embedded model is compiled out (noembed)
 	t.Cleanup(func() { o.Delete() })
 
 	assert.Len(t, o.models, 1, "Should have exactly one model in Phase 3b")
@@ -476,8 +485,12 @@ func TestOrchestrator_LoadAdditionalModels_UnknownModelSkipped(t *testing.T) {
 		modelRSS: make(map[string]int64),
 	}
 
-	err := o.loadEnabledModels(map[string]int{})
-	assert.NoError(t, err)
+	o.loadEnabledModels(map[string]int{})
+
+	// The unknown model ID is skipped: only the stand-in v2.4 stays loaded and no load
+	// failure is recorded for the unresolvable entry (it never reaches a loader).
+	assert.True(t, o.IsModelLoaded(RegistryIDBirdNETV24))
+	assert.Empty(t, o.LoadFailures(), "an unknown model ID is skipped, not recorded as a load failure")
 }
 
 func TestEnabledModels(t *testing.T) {
@@ -572,36 +585,42 @@ func TestComputeThreadAllocation(t *testing.T) {
 		want    map[string]int
 	}{
 		{
-			// v2.4 is implicitly enabled and prepended, so it appears even with an
-			// empty enabled list.
-			name:    "v2.4 only",
+			// models.enabled is authoritative (Phase 4): an empty list allocates nothing,
+			// with no implicit v2.4 prepend.
+			name:    "empty enabled list yields no allocation",
 			threads: fixedThreads,
 			enabled: nil,
-			want:    map[string]int{BirdNET_V2_4: fixedThreads},
+			want:    map[string]int{},
 		},
 		{
-			name:    "v2.4 plus a distinct enabled model",
+			name:    "a single explicitly enabled model",
 			threads: fixedThreads,
 			enabled: []string{conf.ModelIDPerchV2},
-			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			want:    map[string]int{RegistryIDPerchV2: fixedThreads},
 		},
 		{
 			name:    "case variants collapse to one entry",
 			threads: fixedThreads,
 			enabled: []string{conf.ModelIDPerchV2, upperPerchV2ModelID},
-			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			want:    map[string]int{RegistryIDPerchV2: fixedThreads},
 		},
 		{
-			name:    "an enabled model resolving to v2.4 is not double counted",
+			name:    "an enabled model resolving to v2.4 is counted once",
 			threads: fixedThreads,
 			enabled: []string{conf.ModelIDBirdNET},
 			want:    map[string]int{BirdNET_V2_4: fixedThreads},
 		},
 		{
+			name:    "v2.4 and a secondary both explicitly enabled",
+			threads: fixedThreads,
+			enabled: []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2},
+			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+		},
+		{
 			name:    "unknown model IDs are skipped",
 			threads: fixedThreads,
 			enabled: []string{unknownModelID, conf.ModelIDPerchV2},
-			want:    map[string]int{BirdNET_V2_4: fixedThreads, RegistryIDPerchV2: fixedThreads},
+			want:    map[string]int{RegistryIDPerchV2: fixedThreads},
 		},
 	}
 
@@ -625,7 +644,8 @@ func TestComputeThreadAllocation(t *testing.T) {
 func TestComputeThreadAllocation_NonPositiveThreadsUsesNumCPU(t *testing.T) {
 	t.Parallel()
 	settings := &conf.Settings{}
-	settings.Models.Enabled = []string{conf.ModelIDPerchV2}
+	// models.enabled is authoritative (Phase 4): name both models so two are allocated.
+	settings.Models.Enabled = []string{conf.ModelIDBirdNET, conf.ModelIDPerchV2}
 	settings.BirdNET.Threads = 0
 
 	o := &Orchestrator{}
@@ -915,7 +935,7 @@ func TestOrchestrator_PredictModel_ErrorIncrementsInvokeErrors(t *testing.T) {
 	// (globalInferenceCounters). Keeping it serial avoids coupling the delta to
 	// any other test that touches the shared counters.
 	const modelID = "error-model"
-	predictErr := errors.New("injected predict failure")
+	predictErr := errors.NewStd("injected predict failure")
 
 	mock := &mockModelInstance{
 		id:   modelID,
@@ -973,9 +993,9 @@ func TestInferenceFailureLogsAtError(t *testing.T) {
 // again, and unloading the model drops the entry so a later instance under the
 // same ID starts fresh.
 func TestOrchestrator_PredictModel_FailureStreak(t *testing.T) {
-	// Not parallel: exercises the package-global inferenceFailureStreaks map.
+	// Not parallel: exercises the package-global inferenceHealthRecords map.
 	const modelID = "streak-model"
-	predictErr := errors.New("injected predict failure")
+	predictErr := errors.NewStd("injected predict failure")
 
 	var fail bool
 	mock := &mockModelInstance{
@@ -989,15 +1009,15 @@ func TestOrchestrator_PredictModel_FailureStreak(t *testing.T) {
 		},
 	}
 	o := newTestOrchestrator(t, mock)
-	dropInferenceFailureStreak(modelID)
-	t.Cleanup(func() { dropInferenceFailureStreak(modelID) })
+	dropInferenceHealth(modelID)
+	t.Cleanup(func() { dropInferenceHealth(modelID) })
 
 	streak := func() (int64, bool) {
-		v, ok := inferenceFailureStreaks.Load(modelID)
+		v, ok := inferenceHealthRecords.Load(modelID)
 		if !ok {
 			return 0, false
 		}
-		return v.(*atomic.Int64).Load(), true
+		return v.(*modelInferenceHealth).streak.Load(), true
 	}
 	sample := [][]float32{{0.1}}
 
@@ -1107,7 +1127,7 @@ func TestOrchestrator_LoadAdditionalModels_RecordsLoadFailure(t *testing.T) {
 	o := &Orchestrator{Settings: settings, models: map[string]*modelEntry{
 		RegistryIDBirdNETV24: {instance: &mockModelInstance{id: RegistryIDBirdNETV24}},
 	}, modelRSS: make(map[string]int64)}
-	require.NoError(t, o.loadEnabledModels(map[string]int{}))
+	o.loadEnabledModels(map[string]int{})
 
 	assert.Equal(t, int64(1), o.LoadFailures()[testRegistryIDNotLoaded],
 		"a startup loader failure must be recorded so a later not-loaded diagnosis can explain it")
@@ -1151,7 +1171,7 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 	// 1. First load attempt fails: records a cumulative failure and a stored error.
 	loadErr := fmt.Errorf("transient startup failure")
 	modelLoaders[regID] = func(_ *Orchestrator, _ int) error { return loadErr }
-	require.NoError(t, o.loadEnabledModels(map[string]int{}))
+	o.loadEnabledModels(map[string]int{})
 	require.Equal(t, int64(1), o.LoadFailures()[regID])
 
 	// 2. Second attempt succeeds: the loader registers the model, which must clear
@@ -1160,7 +1180,7 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 		orc.models[regID] = &modelEntry{instance: &mockModelInstance{id: regID}}
 		return nil
 	}
-	require.NoError(t, o.loadEnabledModels(map[string]int{}))
+	o.loadEnabledModels(map[string]int{})
 	require.True(t, o.IsModelLoaded(regID))
 	assert.Equal(t, int64(1), o.LoadFailures()[regID],
 		"the cumulative failure count survives a successful load")
@@ -1172,4 +1192,140 @@ func TestOrchestrator_SuccessfulReload_ClearsStaleFailureError(t *testing.T) {
 	assert.Contains(t, err.Error(), notLoadedReasonUnloaded)
 	assert.NotContains(t, err.Error(), "failed to load",
 		"a model that recovered from an earlier failure and was then unloaded must report unloaded, not the stale failure")
+}
+
+// predictTimingHold is how long the lock-wait test holds inferenceMu. That test
+// asserts lower bounds only so it stays stable under -race and loaded CI
+// machines.
+const predictTimingHold = 50 * time.Millisecond
+
+// TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately verifies that time
+// spent waiting for the shared inference lock lands in LockWait and not in Predict.
+func TestOrchestrator_PredictModelTimed_ReportsLockWaitSeparately(t *testing.T) {
+	// Not parallel: it holds this orchestrator's inferenceMu for a real-time
+	// interval. The stack probe matches only the predicting goroutine, so other
+	// tests blocked on a mutex cannot satisfy it.
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})
+	o.inferenceMu.Lock()
+	released := false
+	t.Cleanup(func() {
+		if !released {
+			o.inferenceMu.Unlock() // lets the goroutine below finish if the probe fails
+		}
+	})
+
+	type outcome struct {
+		timing PredictTiming
+		err    error
+	}
+	done := make(chan outcome, 1)
+	gid := make(chan string, 1)
+	go func() {
+		gid <- currentGoroutineHeader()
+		_, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+		done <- outcome{timing, err}
+	}()
+
+	waitUntilBlockedInPredictModelTimed(t, <-gid)
+	time.Sleep(predictTimingHold)
+	released = true
+	o.inferenceMu.Unlock()
+
+	got := <-done
+	require.NoError(t, got.err)
+	assert.GreaterOrEqual(t, got.timing.LockWait, predictTimingHold)
+	assert.Less(t, got.timing.Predict, got.timing.LockWait)
+}
+
+// currentGoroutineHeader returns the "goroutine N " prefix that starts the
+// calling goroutine's block in a runtime.Stack dump. Only the id is kept: with
+// GOTRACEBACK=system or crash the rest of the header line names the goroutine's
+// current M, which differs once it is parked.
+func currentGoroutineHeader() string {
+	const (
+		goroutinePrefix = "goroutine "
+		// headerBufBytes holds "goroutine " plus any goroutine id and the rest
+		// of the first header line; only the id is kept.
+		headerBufBytes = 64
+	)
+	buf := make([]byte, headerBufBytes)
+	rest := strings.TrimPrefix(string(buf[:runtime.Stack(buf, false)]), goroutinePrefix)
+	id, _, _ := strings.Cut(rest, " ")
+	return goroutinePrefix + id + " "
+}
+
+// waitUntilBlockedInPredictModelTimed returns once the goroutine whose stack
+// block starts with header is parked on a mutex inside PredictModelTimed, so a
+// hold measured from here is a lower bound of that call's lock wait whatever
+// the scheduler does.
+func waitUntilBlockedInPredictModelTimed(t *testing.T, header string) {
+	t.Helper()
+	const (
+		stackBufBytes = 1 << 20
+		probeInterval = time.Millisecond
+		probeTimeout  = 10 * time.Second
+	)
+	deadline := time.Now().Add(probeTimeout)
+	buf := make([]byte, stackBufBytes)
+	for time.Now().Before(deadline) {
+		stacks := string(buf[:runtime.Stack(buf, true)])
+		for g := range strings.SplitSeq(stacks, "\n\n") {
+			if strings.HasPrefix(g, header) && strings.Contains(g, "PredictModelTimed") && strings.Contains(g, "sync.(*Mutex).Lock") {
+				return
+			}
+		}
+		time.Sleep(probeInterval)
+	}
+	t.Fatal("the predicting goroutine never blocked on the inference lock inside PredictModelTimed")
+}
+
+// TestOrchestrator_PredictModelTimed_PredictMatchesModelTime verifies that Predict
+// reports the model's own inference time. It runs on synctest's fake clock, so
+// the model's time is exact.
+func TestOrchestrator_PredictModelTimed_PredictMatchesModelTime(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		const modelTime = 30 * time.Millisecond
+		o := newTestOrchestrator(t, &mockModelInstance{
+			id: "m1",
+			predict: func(_ context.Context, _ [][]float32) ([]datastore.Results, error) {
+				time.Sleep(modelTime)
+				return []datastore.Results{{Species: "Turdus merula", Confidence: 0.9}}, nil
+			},
+		})
+
+		results, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+		require.NoError(t, err)
+		require.Len(t, results, 1)
+		assert.Equal(t, modelTime, timing.Predict)
+		assert.Zero(t, timing.LockWait)
+	})
+}
+
+// TestOrchestrator_PredictModelTimed_NotLoadedHasZeroTiming verifies the not-loaded
+// early return reports a zero timing.
+func TestOrchestrator_PredictModelTimed_NotLoadedHasZeroTiming(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t)
+	results, timing, err := o.PredictModelTimed(t.Context(), "nonexistent", [][]float32{{0.1}})
+	require.ErrorIs(t, err, ErrModelNotLoaded)
+	assert.Nil(t, results)
+	assert.Equal(t, PredictTiming{}, timing)
+}
+
+// TestOrchestrator_PredictModelTimed_ClosedModelHasZeroPredict verifies a closed
+// model fails and reports no inference time.
+func TestOrchestrator_PredictModelTimed_ClosedModelHasZeroPredict(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: "m1"})
+	o.models["m1"].instance = nil
+
+	results, timing, err := o.PredictModelTimed(t.Context(), "m1", [][]float32{{0.1}})
+	require.Error(t, err)
+	assert.Nil(t, results)
+	assert.Zero(t, timing.Predict)
 }

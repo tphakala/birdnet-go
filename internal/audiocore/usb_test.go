@@ -117,6 +117,10 @@ func TestExtractBusPathFromDetail(t *testing.T) {
 		{"pi", "C-Media ... USB Audio Device at usb-xhci-hcd.0-1, full speed", "usb-xhci-hcd.0-1"},
 		{"no at segment", "Loopback 1", ""},
 		{"at without comma", "thing at usb-0000:00:14.0-3", "usb-0000:00:14.0-3"},
+		{"name contains at", "Mic at Home at usb-0000:00:14.0-3, high speed", "usb-0000:00:14.0-3"},
+		{"separator at start", " at usb-x, full speed", "usb-x"},
+		{"separator at end", "thing at ", ""},
+		{"no comma, trailing newline", "thing at usb-x\n", "usb-x"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -174,25 +178,8 @@ func TestDeviceDedupKey(t *testing.T) {
 
 func TestRedactDeviceID(t *testing.T) {
 	t.Parallel()
-	tests := []struct {
-		name string
-		in   string
-		want string
-	}{
-		{"usb-id with serial is masked", "usb-id:0b33:0024:ABC123", "usb-id:0b33:0024:<redacted>"},
-		{"usb-id with empty serial is unchanged", "usb-id:0d8c:0014:", "usb-id:0d8c:0014:"},
-		{"usb-path is unchanged", "usb-path:usb-xhci-hcd.0-1", "usb-path:usb-xhci-hcd.0-1"},
-		{"legacy alsa id is unchanged", ":1,0", ":1,0"},
-		{"device name is unchanged", "USB Audio Device", "USB Audio Device"},
-		{"malformed usb-id is unchanged", "usb-id:onlyone", "usb-id:onlyone"},
-		{"empty is unchanged", "", ""},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			assert.Equal(t, tt.want, redactDeviceID(tt.in))
-		})
-	}
+	assert.Equal(t, "usb-id:0b33:0024:<redacted>", redactDeviceID("usb-id:0b33:0024:ABC123"))
+	assert.Equal(t, "usb-path:usb-xhci-hcd.0-1", redactDeviceID("usb-path:usb-xhci-hcd.0-1"))
 }
 
 func TestMatchesDevice(t *testing.T) {

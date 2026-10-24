@@ -72,6 +72,26 @@ func isBlockedTargetIP(ip netip.Addr) bool {
 	return false
 }
 
+// IsBlockedStreamTarget reports whether ip must be refused as a destination
+// for the stream test endpoints. It applies the same policy as the webhook
+// guard (isBlockedTargetIP) and additionally refuses loopback, including a
+// loopback IPv4 carried in an IPv4-mapped, IPv4-compatible, NAT64, 6to4 or
+// Teredo IPv6 address. Private RFC1918 and ULA ranges stay allowed because
+// cameras live on the user's LAN.
+func IsBlockedStreamTarget(ip netip.Addr) bool {
+	if isBlockedTargetIP(ip) {
+		return true
+	}
+	ip = ip.Unmap().WithZone("")
+	if ip.IsLoopback() {
+		return true
+	}
+	if v4, ok := embeddedTransitionIPv4(ip); ok && v4.IsLoopback() {
+		return true
+	}
+	return false
+}
+
 // isBlockedAddr applies the core policy to a single already-unmapped address:
 // link-local, unspecified, or a known cloud metadata IP.
 func isBlockedAddr(ip netip.Addr) bool {

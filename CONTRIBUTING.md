@@ -37,6 +37,8 @@ air realtime
 - ✅ Frontend embedded in Go binary (use `air`, not Vite dev server)
 - ✅ Pre-commit hooks auto-format & lint
 - ✅ AI-assisted coding encouraged - use responsibly
+- ✅ Fix PRs merge quickly; [discuss new features first](#fixes-and-features-what-to-expect) or expect a wait of months
+- ✅ Feature authors [maintain what they add](#feature-ownership): no drive-by features
 
 **Need details?** Read the sections below. **Questions?** [Discord](https://discord.gg/gcSCFGUtsd)
 
@@ -103,14 +105,15 @@ Before contributing:
 1. **Read the [License](#license-and-legal)** and [Privacy Policy](PRIVACY.md)
 2. **Review [ARCHITECTURE.md](ARCHITECTURE.md)** - Understand the tech stack
 3. **Check [existing issues](https://github.com/tphakala/birdnet-go/issues)** - Avoid duplicates
-4. **Join [Discord](https://discord.gg/gcSCFGUtsd)** - For discussions and support
-5. **Read relevant CLAUDE.md files** - Development guidelines:
-   - [CLAUDE.md](CLAUDE.md) - Project overview and universal rules
-   - [internal/CLAUDE.md](internal/CLAUDE.md) - Go backend guidelines
-   - [frontend/CLAUDE.md](frontend/CLAUDE.md) - Svelte 5 frontend guidelines
-   - [internal/api/v2/CLAUDE.md](internal/api/v2/CLAUDE.md) - API v2 guidelines
+4. **Planning a new feature?** Discuss it with the maintainer before writing code (see [Fixes and Features](#fixes-and-features-what-to-expect))
+5. **Join [Discord](https://discord.gg/gcSCFGUtsd)** - For discussions and support
+6. **Read relevant AGENTS.md files** - Development guidelines:
+   - [AGENTS.md](AGENTS.md) - Project overview, universal rules, and an index of all module guides
+   - [internal/AGENTS.md](internal/AGENTS.md) - Go backend guidelines
+   - [frontend/AGENTS.md](frontend/AGENTS.md) - Svelte 5 frontend guidelines
+   - [internal/api/v2/AGENTS.md](internal/api/v2/AGENTS.md) - API v2 guidelines
 
-   **Note:** CLAUDE.md files serve all contributors (AI-assisted or manual).
+   **Note:** AGENTS.md files serve all contributors (AI-assisted or manual).
 
 ## Development Setup
 
@@ -278,9 +281,8 @@ task clean            # Clean artifacts
 Configuration: [.golangci.yaml](.golangci.yaml)
 
 ```bash
-golangci-lint run -v                    # All files
-golangci-lint run -v internal/api/v2/   # Specific path
-golangci-lint run --fix                 # Auto-fix
+task lint                               # Whole module (never lint single packages)
+task lint-fix                           # Auto-fix
 ```
 
 ### Frontend Linting
@@ -355,8 +357,7 @@ See [frontend/doc/AST-GREP-SETUP.md](frontend/doc/AST-GREP-SETUP.md) for details
 task test                    # All tests
 task test-verbose            # Verbose output
 task test-coverage           # With coverage
-go test -race -v ./...       # Race detector
-go test -v ./internal/api/v2/...  # Specific package
+task --dry test              # Print the exact go test command, to run one package
 ```
 
 ### Frontend Tests
@@ -374,9 +375,11 @@ task e2e-report                 # View report
 
 BirdNET-Go **welcomes AI-assisted coding tools**. The main developer uses [Claude Code](https://claude.ai/claude-code), and all PRs receive [CodeRabbit AI](https://coderabbit.ai/) reviews.
 
-### CLAUDE.md Guidelines
+### AGENTS.md Guidelines
 
-Project guidelines are in CLAUDE.md files (see [Getting Started](#getting-started)). These files work for both AI assistants and manual development.
+Project guidelines are in [AGENTS.md](https://agents.md) files (see [Getting Started](#getting-started)): one at the repository root for cross-cutting rules and one per module for area-specific rules. Claude Code, Codex, Cursor, Antigravity, Copilot, and most other AI coding tools read them automatically, and they work just as well for manual development. For tool and version caveats, see "About These Instruction Files" in [AGENTS.md](AGENTS.md).
+
+Please do not add `CLAUDE.md`, `CLAUDE.local.md`, or `GEMINI.md` files: a root `CLAUDE.md` or `CLAUDE.local.md` stops Claude Code from loading any `AGENTS.md` file (details in "About These Instruction Files" in [AGENTS.md](AGENTS.md)). Personal instructions belong in a gitignored `.claude/rules/*.local.md` file instead.
 
 ### Responsible AI Usage
 
@@ -408,7 +411,7 @@ Project guidelines are in CLAUDE.md files (see [Getting Started](#getting-starte
 
 1. Install: [Claude Code guide](https://docs.claude.com/en/docs/claude-code)
 2. Open BirdNET-Go repository
-3. CLAUDE.md files provide automatic context
+3. AGENTS.md files provide automatic context
 4. Ask Claude for help with specific tasks
 
 ### Quality Gate (Mandatory for AI-Assisted PRs)
@@ -428,6 +431,34 @@ PRs that skip preflight typically require 5-10 review rounds. Running preflight 
 
 ## Submitting Changes
 
+### Fixes and Features: What to Expect
+
+Bug fix PRs and feature PRs are reviewed very differently, so set your expectations before you start.
+
+**Fix PRs (`fix:`)** are usually reviewed and merged quickly. A focused fix for a real, reproducible bug, with a test that covers it, is the easiest kind of contribution to accept. Linking the issue it fixes helps even more.
+
+**Feature PRs (`feat:`)** can take several months to merge, and some will not be merged at all, unless the feature was discussed with the maintainer before the PR was filed. Every new feature becomes code the maintainer has to support, debug, and keep working for years after the contributor has moved on. Before accepting one, the maintainer has to weigh:
+
+- **Maintenance burden:** how much new code, configuration, UI, and support load it adds, and who keeps it working as the rest of the application changes
+- **Fit with the project vision:** whether it belongs in BirdNET-Go at all, and whether it matches the direction the maintainer has planned for the application
+
+A working implementation does not answer either question, so a finished feature PR that arrives without prior discussion goes to the back of the queue.
+
+**To get a feature merged faster, discuss it first.** Open a [GitHub Discussion](https://github.com/tphakala/birdnet-go/discussions) or an [issue](https://github.com/tphakala/birdnet-go/issues), or ask on [Discord](https://discord.gg/gcSCFGUtsd), describing the problem the feature solves and your proposed approach. Wait for the maintainer to agree on scope and design before writing a lot of code. This saves you from building something that cannot be accepted, and a feature agreed on up front is reviewed like any other PR.
+
+#### Feature Ownership
+
+**If you contribute a feature, you take responsibility for maintaining it.** BirdNET-Go is maintained by volunteers in their spare time. A feature PR whose author submits the code and is never heard from again leaves every bug report, support question, and future breakage in that feature to the maintainer, so a feature PR is accepted on the understanding that its author stays involved after it merges.
+
+By opening a feature PR, you agree to:
+
+- Answer review feedback on the PR until it is merged or closed
+- Respond to issues and discussions about the feature, and fix bugs in it
+- Help keep the feature working when other parts of the application change around it
+- Say so on GitHub if you can no longer look after it, so it can be handed over or retired
+
+If you cannot make that commitment, open a [feature request](https://github.com/tphakala/birdnet-go/issues/new/choose) instead of a PR. A feature whose author has stopped responding may be disabled or removed when it breaks or becomes a support burden.
+
 ### Branch Naming
 
 ```bash
@@ -441,7 +472,7 @@ git checkout -b docs/what-updated           # Documentation
 ```bash
 git pull origin main                        # Update from main
 git checkout -b feature/my-feature          # Create branch
-golangci-lint run -v                        # Lint Go
+task lint                                   # Lint Go
 task frontend-quality                       # Lint frontend
 task test                                   # Test Go
 task frontend-test                          # Test frontend
@@ -474,30 +505,11 @@ refactor(analysis): optimize detection pipeline
 
 **PR Title:** `type(scope): Brief description`
 
-**PR Template:**
+**PR Description:** GitHub fills the description from the [PR template](.github/pull_request_template.md) when you open a pull request. Follow it: keep every section, fill each one in, and go through every checkbox. Do not replace it with your own format or delete sections, and do not leave the template's placeholder comments as the only content. If a section does not apply, say so in a sentence (for example "No related issue" under Related issue, with the problem explained in Description).
 
-```markdown
-## Summary
+Pull requests that do not follow the template are sent back to the author before they are reviewed. An automated check enforces this on pull requests from forks: it labels a pull request `needs: template`, comments with what is missing, and runs again every time you edit the description.
 
-Brief description of changes.
-
-## Changes
-
-- Change 1
-- Change 2
-
-## Testing
-
-- [ ] Go tests pass (`task test`)
-- [ ] Frontend tests pass (`task frontend-test`)
-- [ ] Linting passes
-- [ ] Manual testing completed
-- [ ] Preflight quality gate passed (AI-assisted PRs)
-
-## Related Issues
-
-Fixes #123
-```
+If you use an AI tool to write the description, check that it used the template; some tools write their own format by default.
 
 **Review Process:**
 
@@ -509,7 +521,7 @@ Fixes #123
 ### Critical Constraints
 
 - **NEVER expand API v1** - Use `internal/api/v2/`
-- **Always lint before commit** - `golangci-lint run -v` and `task frontend-quality`
+- **Always lint before commit** - `task lint` and `task frontend-quality`
 - **Branch from updated main** - `git pull origin main` first
 - **No `any` types in TypeScript** - Properly type all parameters
 
@@ -526,9 +538,9 @@ Fixes #123
 ### Development Guidelines
 
 - [Architecture](ARCHITECTURE.md)
-- [Go Backend Guidelines](internal/CLAUDE.md)
-- [Frontend Guidelines](frontend/CLAUDE.md)
-- [API v2 Guidelines](internal/api/v2/CLAUDE.md)
+- [Go Backend Guidelines](internal/AGENTS.md)
+- [Frontend Guidelines](frontend/AGENTS.md)
+- [API v2 Guidelines](internal/api/v2/AGENTS.md)
 
 ### Community
 
@@ -549,7 +561,7 @@ air realtime            # Hot reload
 task dev_server         # Full dev server
 
 # Quality
-golangci-lint run -v    # Go linting
+task lint               # Go linting
 task frontend-quality   # Frontend quality
 
 # Testing

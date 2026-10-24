@@ -2,11 +2,11 @@ package dbstats
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
 )
 

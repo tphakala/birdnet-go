@@ -3,11 +3,12 @@
 package sysinfo
 
 import (
-	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"syscall"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // realMountProber is the production implementation of MountProber for POSIX systems.

@@ -351,7 +351,7 @@ func (s *Server) initAuth() {
 
 // setupMiddleware configures the Echo middleware stack.
 func (s *Server) setupMiddleware() {
-	// HEAD→GET rewrite — runs before routing so HEAD requests match GET routes.
+	// HEAD→GET rewrite: runs before routing so HEAD requests match GET routes.
 	// Per RFC 9110 §9.3.2, HEAD must return the same status as GET.
 	// Go's net/http automatically suppresses the response body for HEAD.
 	s.echo.Pre(mw.NewHeadToGet())
@@ -407,7 +407,7 @@ func (s *Server) setupMiddleware() {
 					// sees mismatched Path/RawPath and may route inconsistently.
 					// hasPercentEncodedPrefix treats %XX hex digits
 					// case-insensitively so lowercase-hex-forwarding proxies
-					// also match. Fixes Forgejo #447.
+					// also match.
 					if req.URL.RawPath != "" {
 						encodedBP := (&url.URL{Path: bp}).EscapedPath()
 						if n := hasPercentEncodedPrefix(req.URL.RawPath, encodedBP); n >= 0 {
@@ -433,7 +433,7 @@ func (s *Server) setupMiddleware() {
 	// Recovery middleware - should be first
 	s.echo.Use(echomw.Recover())
 
-	// Base path context — makes the effective base path available to all handlers
+	// Base path context: makes the effective base path available to all handlers
 	// via c.Get("basePath"). Computed per-request from ingressPath() which checks
 	// proxy headers and config in priority order.
 	s.echo.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
@@ -446,7 +446,7 @@ func (s *Server) setupMiddleware() {
 	// Request logging using custom middleware package (uses centralized logger)
 	s.echo.Use(mw.NewRequestLogger())
 
-	// Security middleware configuration — start from defaults, override server-specific values
+	// Security middleware configuration: start from defaults, override server-specific values
 	securityConfig := mw.DefaultSecurityConfig()
 	securityConfig.AllowedOrigins = s.config.AllowedOrigins
 	securityConfig.AllowCredentials = true
@@ -783,7 +783,7 @@ func (s *Server) ShutdownWithContext(ctx context.Context) error {
 		s.apiController.Shutdown()
 	}
 
-	// Shutdown Echo server — since the listener is already closed and SSE
+	// Shutdown Echo server: since the listener is already closed and SSE
 	// clients are disconnected, this should complete quickly.
 	if err := s.echo.Shutdown(ctx); err != nil {
 		// Ignore "use of closed network connection" since we closed the listener above
@@ -914,14 +914,14 @@ func (s *Server) IsDevMode() bool {
 
 // registerSPARoutes registers all frontend SPA routes.
 // These routes serve the HTML shell that loads the Svelte application.
-// All SPA routes are public so the SPA can bootstrap and render the login
+// Most SPA routes are public so the SPA can bootstrap and render the login
 // form when Security.PrivateMode is enabled. The data layer (v2 API
 // endpoints) is the actual security boundary: it is gated by
 // privateModeAuth in api/v2/api.go and returns 401 to unauthenticated
 // requests in private mode, prompting the SPA to render the login form.
-// Settings and system routes remain auth-gated at this layer too so deep
-// links to those pages still server-side redirect to /login for unauth
-// browser navigations.
+// Settings and system routes (including the /ui/settings/* and /ui/system/*
+// sub-paths) remain auth-gated at this layer too so deep links to those pages
+// still server-side redirect to /login for unauth browser navigations.
 func (s *Server) registerSPARoutes() {
 	// Redirect root path to dashboard
 	s.echo.GET("/", func(c echo.Context) error {
@@ -930,7 +930,7 @@ func (s *Server) registerSPARoutes() {
 
 	authMiddleware := s.getAuthMiddleware()
 
-	// Public SPA shell routes — the SPA itself decides what to render
+	// Public SPA shell routes: the SPA itself decides what to render
 	// based on Security.PrivateMode and the authenticated/guest state
 	// returned by /api/v2/app/config.
 	publicRoutes := []string{
@@ -974,6 +974,12 @@ func (s *Server) registerSPARoutes() {
 		"/ui/settings/species",
 		"/ui/settings/support",
 		"/ui/settings/userinterface",
+		// Catch-alls for the sub-paths, so deep links such as
+		// /ui/system/database or /ui/system/health redirect unauthenticated
+		// browsers to /login. Echo prefers them over the public /ui/*
+		// catch-all because they are more specific.
+		"/ui/settings/*",
+		"/ui/system/*",
 	}
 	for _, route := range protectedRoutes {
 		if authMiddleware != nil {
@@ -981,13 +987,6 @@ func (s *Server) registerSPARoutes() {
 		} else {
 			s.echo.GET(route, s.spaHandler.ServeApp)
 		}
-	}
-
-	// Protected catch-all for settings routes
-	if authMiddleware != nil {
-		s.echo.GET("/ui/settings/*", s.spaHandler.ServeApp, authMiddleware)
-	} else {
-		s.echo.GET("/ui/settings/*", s.spaHandler.ServeApp)
 	}
 
 	// Public catch-all for any other unmatched /ui/* paths so the SPA can

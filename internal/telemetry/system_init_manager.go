@@ -2,13 +2,12 @@ package telemetry
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
-	apperrors "github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -231,7 +230,7 @@ func (m *SystemInitManager) initializeEventBus() error {
 		}
 
 		adapter := events.NewEventPublisherAdapter(eventBus)
-		apperrors.SetEventPublisher(adapter)
+		errors.SetEventPublisher(adapter)
 
 		m.sysLog.Info("event bus initialized successfully",
 			logger.Int("buffer_size", eventBusConfig.BufferSize),

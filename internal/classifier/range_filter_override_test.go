@@ -117,7 +117,7 @@ func TestGetProbableSpecies_BareLocalizedCommonNameOverride_CanonicalizesLabel(t
 
 	rfs := newTestRangeFilterService(rf)
 
-	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
+	scores, _, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))
@@ -171,7 +171,7 @@ func TestGetProbableSpecies_NonPrimaryLocalizedCommonOverride_ReverseResolvesToS
 
 	rfs := newTestRangeFilterService(rf)
 
-	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
+	scores, _, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))
@@ -251,7 +251,7 @@ func TestGetProbableSpecies_LegacyPath_NonPrimaryLocalizedCommonOverride_Reverse
 	// the threshold, so the legacy filter contributes Turdus merula.
 	rfs := newTestRangeFilterService(&fakeRangeFilter{scores: []float32{0.9, 0.0}})
 
-	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
+	scores, _, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 
 	labels := make([]string, 0, len(scores))
@@ -313,7 +313,7 @@ func requireScoreForLabel(t *testing.T, scores []SpeciesScore, label string) Spe
 func probableSpeciesFor(t *testing.T, settings *conf.Settings, rf *fakeUniversalRangeFilter) []SpeciesScore {
 	t.Helper()
 	rfs := newTestRangeFilterService(rf)
-	scores, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
+	scores, _, _, _, err := rfs.probableSpecies(time.Now(), 0, settings)
 	require.NoError(t, err)
 	return scores
 }

@@ -85,7 +85,7 @@ describe('LoginModal', () => {
   });
 
   afterEach(() => {
-    vi.resetAllMocks();
+    vi.clearAllMocks();
   });
 
   describe('Redirect URL Validation', () => {
@@ -97,7 +97,7 @@ describe('LoginModal', () => {
       });
 
       // Check that the hidden input contains the valid redirect URL
-      const redirectInput = screen.getByDisplayValue('/ui/dashboard') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/dashboard');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/dashboard');
       expect(redirectInput.name).toBe('redirect');
@@ -111,7 +111,7 @@ describe('LoginModal', () => {
       });
 
       // Should fallback to the detected base path (/ui/)
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
@@ -124,7 +124,7 @@ describe('LoginModal', () => {
       });
 
       // Browsers normalize '/\' to '//', so this must fall back to the base path.
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
@@ -137,7 +137,7 @@ describe('LoginModal', () => {
       });
 
       // Should fallback to the detected base path
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
@@ -150,13 +150,13 @@ describe('LoginModal', () => {
       });
 
       // Should fallback to the detected base path
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
 
     it('should reject URLs that are too long and fallback to base path', () => {
-      const longUrl = '/' + 'a'.repeat(2001); // Exceeds MAX_REDIRECT_LENGTH
+      const longUrl = '/' + 'a'.repeat(2001); // Exceeds MAX_LOGIN_REDIRECT_LENGTH
       loginModalTest.render({
         isOpen: true,
         onClose: vi.fn(),
@@ -164,7 +164,7 @@ describe('LoginModal', () => {
       });
 
       // Should fallback to the detected base path
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/ui/');
     });
@@ -181,7 +181,7 @@ describe('LoginModal', () => {
 
       // Fallback must include the reverse-proxy prefix (via the shared
       // getUiBasePath helper), not a hand-rolled, prefix-unaware guess.
-      const redirectInput = screen.getByDisplayValue('/proxy/birdnet/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/proxy/birdnet/ui/');
       expect(redirectInput).toBeDefined();
       expect(redirectInput.value).toBe('/proxy/birdnet/ui/');
     });
@@ -197,9 +197,9 @@ describe('LoginModal', () => {
         redirectUrl: '/ui/detections?queryType=search&q=a..b//c',
       });
 
-      const redirectInput = screen.getByDisplayValue(
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>(
         '/ui/detections?queryType=search&q=a..b//c'
-      ) as HTMLInputElement;
+      );
       expect(redirectInput.value).toBe('/ui/detections?queryType=search&q=a..b//c');
     });
 
@@ -215,9 +215,9 @@ describe('LoginModal', () => {
         redirectUrl: '/ui/detections?q=javascript:tutorial',
       });
 
-      const redirectInput = screen.getByDisplayValue(
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>(
         '/ui/detections?q=javascript:tutorial'
-      ) as HTMLInputElement;
+      );
       expect(redirectInput.value).toBe('/ui/detections?q=javascript:tutorial');
     });
 
@@ -231,7 +231,7 @@ describe('LoginModal', () => {
       });
 
       // A dangerous scheme at the start of the PATH must still fall back.
-      const redirectInput = screen.getByDisplayValue('/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/ui/');
       expect(redirectInput.value).toBe('/ui/');
     });
 
@@ -246,9 +246,9 @@ describe('LoginModal', () => {
         redirectUrl: '/ui/help/javascript:basics',
       });
 
-      const redirectInput = screen.getByDisplayValue(
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>(
         '/ui/help/javascript:basics'
-      ) as HTMLInputElement;
+      );
       expect(redirectInput.value).toBe('/ui/help/javascript:basics');
     });
 
@@ -262,7 +262,7 @@ describe('LoginModal', () => {
         onClose: vi.fn(),
       });
 
-      const redirectInput = screen.getByDisplayValue('/proxy/birdnet/ui/') as HTMLInputElement;
+      const redirectInput = screen.getByDisplayValue<HTMLInputElement>('/proxy/birdnet/ui/');
       expect(redirectInput.value).toBe('/proxy/birdnet/ui/');
     });
   });
@@ -416,6 +416,47 @@ describe('LoginModal', () => {
       // Should not redirect to malicious endpoint (validation should block it)
       expect(mockLocation.href).toBe('');
     });
+
+    it('should keep the reverse-proxy base path on the OAuth redirect (issue #4147)', async () => {
+      // Home Assistant Ingress: the UI is served under /api/hassio_ingress/<token>/ui/...
+      const mockLocation = mockWindowLocation('/api/hassio_ingress/TOKEN/ui/dashboard');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          enabledProviders: ['google'],
+        },
+      });
+
+      const googleButton = screen.getByRole('button', { name: /continueWithGoogle/i });
+      await fireEvent.click(googleButton);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // The endpoint must carry the ingress prefix; without it the browser
+      // leaves the proxy path entirely and the request never reaches the app.
+      expect(mockLocation.href).toBe('/api/hassio_ingress/TOKEN/auth/google');
+    });
+
+    it('should leave the OAuth redirect unchanged for direct access (no proxy prefix)', async () => {
+      const mockLocation = mockWindowLocation('/ui/dashboard');
+
+      loginModalTest.render({
+        isOpen: true,
+        onClose: vi.fn(),
+        authConfig: {
+          basicEnabled: false,
+          enabledProviders: ['google'],
+        },
+      });
+
+      const googleButton = screen.getByRole('button', { name: /continueWithGoogle/i });
+      await fireEvent.click(googleButton);
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockLocation.href).toBe('/auth/google');
+    });
   });
 
   describe('Focus Trap and Accessibility', () => {
@@ -475,6 +516,73 @@ describe('LoginModal', () => {
       await fireEvent.click(closeButton);
 
       expect(onCloseMock).toHaveBeenCalled();
+    });
+  });
+
+  describe('Cancel handling', () => {
+    function dismissals(): Array<[string, () => Promise<unknown>]> {
+      return [
+        [
+          'close button',
+          () => fireEvent.click(screen.getByRole('button', { name: /close login dialog/i })),
+        ],
+        ['Escape', () => fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' })],
+        ['backdrop', () => fireEvent.click(screen.getByRole('button', { name: /close modal/i }))],
+      ];
+    }
+
+    it.each(['close button', 'Escape', 'backdrop'])(
+      'calls onCancel, not onClose, from the %s',
+      async name => {
+        const onClose = vi.fn();
+        const onCancel = vi.fn();
+        loginModalTest.render({ isOpen: true, onClose, onCancel });
+
+        const dismiss = dismissals().find(([label]) => label === name);
+        await dismiss?.[1]();
+
+        expect(onCancel).toHaveBeenCalledTimes(1);
+        expect(onClose).not.toHaveBeenCalled();
+      }
+    );
+
+    it.each(['close button', 'Escape', 'backdrop'])(
+      'falls back to onClose from the %s without onCancel',
+      async name => {
+        const onClose = vi.fn();
+        loginModalTest.render({ isOpen: true, onClose });
+
+        const dismiss = dismissals().find(([label]) => label === name);
+        await dismiss?.[1]();
+
+        expect(onClose).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it('still calls onClose and not onCancel on a successful password login', async () => {
+      const { api } = await import('$lib/utils/api');
+      vi.mocked(api.post).mockResolvedValue({
+        success: true,
+        message: 'ok',
+        redirectUrl: '/api/v2/auth/callback?code=x',
+      });
+      const onClose = vi.fn();
+      const onCancel = vi.fn();
+      loginModalTest.render({
+        isOpen: true,
+        onClose,
+        onCancel,
+        redirectUrl: '/ui/settings',
+        authConfig: { basicEnabled: true, enabledProviders: [] },
+      });
+
+      await fireEvent.input(screen.getByLabelText('auth.password'), {
+        target: { value: 'valid-password' },
+      });
+      await fireEvent.click(screen.getByRole('button', { name: /continue with password/i }));
+
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(onCancel).not.toHaveBeenCalled();
     });
   });
 

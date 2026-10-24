@@ -44,6 +44,16 @@ func installExcludeTestResolver(t *testing.T, c *Controller) {
 // confusing downstream mismatch.
 func patchSection(t *testing.T, e *echo.Echo, c *Controller, section string, payload any) *httptest.ResponseRecorder {
 	t.Helper()
+	rec := sendSectionPatch(t, e, c, section, payload)
+	require.Equal(t, http.StatusOK, rec.Code, "section save must succeed; body: %s", rec.Body.String())
+	return rec
+}
+
+// sendSectionPatch drives UpdateSectionSettings for an arbitrary section and
+// returns the response without asserting its status, for tests that expect a
+// rejection.
+func sendSectionPatch(t *testing.T, e *echo.Echo, c *Controller, section string, payload any) *httptest.ResponseRecorder {
+	t.Helper()
 	data, err := json.Marshal(payload)
 	require.NoError(t, err)
 	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+section, bytes.NewReader(data))
@@ -53,7 +63,6 @@ func patchSection(t *testing.T, e *echo.Echo, c *Controller, section string, pay
 	ctx.SetParamNames("section")
 	ctx.SetParamValues(section)
 	require.NoError(t, c.UpdateSectionSettings(ctx))
-	require.Equal(t, http.StatusOK, rec.Code, "section save must succeed; body: %s", rec.Body.String())
 	return rec
 }
 

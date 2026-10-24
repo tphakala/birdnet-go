@@ -1,15 +1,14 @@
 package processor
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
@@ -78,52 +77,62 @@ func newClipGatingProcessor(exportEnabled bool) *Processor {
 	}
 }
 
-// TestApplyBatFormatFallback verifies the shared bat WAV fallback used by both the
-// createDetection and extended-capture paths: a bat model above 48kHz exported to a
-// format that cannot carry that rate keeps the .wav extension the exporter writes.
-func TestApplyBatFormatFallback(t *testing.T) {
+// TestApplyExportFormatExtension verifies the shared clip-name extension override
+// used by both the createDetection and extended-capture paths: a bat model above
+// 48kHz is named in the dedicated ultrasonic format (WAV or FLAC), while every
+// other case keeps the configured Export.Type extension. The name reads the model
+// and sample rate from the detection.Result, the same fields the encoder reads.
+func TestApplyExportFormatExtension(t *testing.T) {
 	t.Parallel()
 
-	reg := audiocore.NewSourceRegistry(audiocore.GetLogger())
-	_, err := reg.Register(&audiocore.SourceConfig{
-		ID:               "bat_src",
-		Type:             audiocore.SourceTypeRTSP,
-		ConnectionString: "rtsp://cam/ultrasonic",
-		DisplayName:      "Bat mic",
-		SampleRate:       96000, // above 48kHz -> triggers the bat WAV fallback
-		BitDepth:         16,
-		Channels:         1,
-	})
-	require.NoError(t, err)
-
-	p := &Processor{
-		Settings: &conf.Settings{
-			Realtime: conf.RealtimeSettings{
-				Audio: conf.AudioSettings{
-					Export: conf.ExportSettings{Enabled: true, Type: "mp3"},
+	newProc := func(exportType, ultrasonicType string) *Processor {
+		return &Processor{
+			Settings: &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					Audio: conf.AudioSettings{
+						Export: conf.ExportSettings{Enabled: true, Type: exportType, UltrasonicType: ultrasonicType},
+					},
 				},
 			},
-		},
+		}
 	}
-	p.registry = reg
-	batSource := datastore.AudioSource{ID: "bat_src"}
+	// batResult is a bat-model detection captured at 96kHz, above the analysis rate.
+	batResult := detection.Result{
+		Model:       classifier.DetectionModelInfoForID(classifier.RegistryIDBat),
+		AudioSource: detection.AudioSource{ID: "bat_src", SampleRate: 96000},
+	}
+	birdResult := detection.Result{
+		AudioSource: detection.AudioSource{ID: "bat_src", SampleRate: 96000},
+	}
 
 	t.Run("empty clip name is returned unchanged", func(t *testing.T) {
 		t.Parallel()
-		assert.Empty(t, p.applyBatFormatFallback(p.Settings, "", classifier.RegistryIDBat, batSource))
+		p := newProc("mp3", "flac")
+		assert.Empty(t, p.applyExportFormatExtension(p.Settings, "", &batResult))
 	})
 
-	t.Run("bat model above 48kHz with mp3 export forces .wav", func(t *testing.T) {
+	t.Run("bat model above 48kHz uses the ultrasonic format (flac)", func(t *testing.T) {
 		t.Parallel()
-		got := p.applyBatFormatFallback(p.Settings, "2024/01/myotis_85p_x.mp3", classifier.RegistryIDBat, batSource)
-		assert.Equal(t, "2024/01/myotis_85p_x.wav", got,
-			"a bat detection above 48kHz must keep the .wav extension the exporter writes")
+		p := newProc("mp3", "flac")
+		got := p.applyExportFormatExtension(p.Settings, "2024/01/myotis_85p_x.mp3", &batResult)
+		assert.Equal(t, "2024/01/myotis_85p_x.flac", got,
+			"a bat detection above 48kHz is named in the dedicated ultrasonic format")
 	})
 
-	t.Run("non-bat model keeps the configured extension", func(t *testing.T) {
+	t.Run("bat model above 48kHz uses the ultrasonic format (wav)", func(t *testing.T) {
 		t.Parallel()
-		got := p.applyBatFormatFallback(p.Settings, "2024/01/parus_85p_x.mp3", "", batSource)
-		assert.Equal(t, "2024/01/parus_85p_x.mp3", got)
+		p := newProc("mp3", "wav")
+		got := p.applyExportFormatExtension(p.Settings, "2024/01/myotis_85p_x.mp3", &batResult)
+		assert.Equal(t, "2024/01/myotis_85p_x.wav", got)
+	})
+
+	t.Run("non-bat model keeps the configured Export.Type extension", func(t *testing.T) {
+		t.Parallel()
+		p := newProc("mp3", "flac")
+		got := p.applyExportFormatExtension(p.Settings, "2024/01/parus_85p_x.mp3", &birdResult)
+		assert.Equal(t, "2024/01/parus_85p_x.mp3", got,
+			"a non-bat capture is named in the configured Export.Type even above 48kHz "+
+				"(resolveExportParams downsamples it to 48kHz)")
 	})
 }
 
@@ -133,10 +142,7 @@ func TestApplyBatFormatFallback(t *testing.T) {
 func TestResolveClipName_ExportGating(t *testing.T) {
 	t.Parallel()
 
-	item := &classifier.Results{
-		Source:  datastore.AudioSource{ID: "test_source"},
-		ModelID: "",
-	}
+	item := &detection.Result{AudioSource: detection.AudioSource{ID: "test_source"}}
 
 	t.Run("export disabled yields empty clip name", func(t *testing.T) {
 		t.Parallel()
@@ -199,7 +205,7 @@ func TestNormalizeDetectionTimes_ExtendedCapture_ExportGating(t *testing.T) {
 			},
 		}
 		item := newItem()
-		p.normalizeDetectionTimes(item)
+		p.normalizeDetectionTimes(item, p.currentSettings())
 		assert.Empty(t, item.Detection.Result.ClipName,
 			"extended capture must not regenerate a clip name when export is disabled")
 	})
@@ -217,9 +223,73 @@ func TestNormalizeDetectionTimes_ExtendedCapture_ExportGating(t *testing.T) {
 			},
 		}
 		item := newItem()
-		p.normalizeDetectionTimes(item)
+		p.normalizeDetectionTimes(item, p.currentSettings())
 		require.NotEmpty(t, item.Detection.Result.ClipName,
 			"extended capture must regenerate a clip name when export is enabled")
 		assert.Contains(t, item.Detection.Result.ClipName, "strix_aluco")
+	})
+}
+
+// TestNormalizeDetectionTimes_ExtendedCapture_NamesFromDetectionResult verifies
+// the regenerated extended-capture name reads the model and sample rate from the
+// pending detection's Result, the fields the encoder reads, and not from the
+// registry or BestModelID at flush time.
+func TestNormalizeDetectionTimes_ExtendedCapture_NamesFromDetectionResult(t *testing.T) {
+	t.Parallel()
+
+	newProc := func() *Processor {
+		return &Processor{
+			Settings: &conf.Settings{
+				Realtime: conf.RealtimeSettings{
+					Audio: conf.AudioSettings{
+						Export: conf.ExportSettings{
+							Enabled: true, Length: 60, PreCapture: 6,
+							Type: "mp3", UltrasonicType: "flac",
+						},
+					},
+					ExtendedCapture: conf.ExtendedCaptureSettings{Enabled: true, MaxDuration: 600},
+				},
+			},
+		}
+	}
+	newItem := func(bestModelID string) *PendingDetection {
+		firstDetected := time.Date(2026, 3, 7, 20, 0, 0, 0, time.UTC)
+		return &PendingDetection{
+			Detection: Detections{
+				Result: detection.Result{
+					BeginTime:   firstDetected.Add(30 * time.Second),
+					EndTime:     firstDetected.Add(84 * time.Second),
+					Timestamp:   firstDetected,
+					Species:     detection.Species{CommonName: "myotis", ScientificName: "Myotis daubentonii"},
+					Model:       classifier.DetectionModelInfoForID(classifier.RegistryIDBat),
+					AudioSource: detection.AudioSource{ID: "bat_src", SampleRate: 96000},
+				},
+			},
+			Confidence:      0.92,
+			Source:          "bat_src",
+			BestModelID:     bestModelID,
+			FirstDetected:   firstDetected,
+			LastUpdated:     firstDetected.Add(3 * time.Minute),
+			Count:           45,
+			ExtendedCapture: true,
+		}
+	}
+
+	t.Run("bat Result with no registry is named in the ultrasonic format", func(t *testing.T) {
+		t.Parallel()
+		p := newProc()
+		item := newItem(classifier.RegistryIDBat)
+		p.normalizeDetectionTimes(item, p.currentSettings())
+		assert.True(t, strings.HasSuffix(item.Detection.Result.ClipName, ".flac"),
+			"got %q", item.Detection.Result.ClipName)
+	})
+
+	t.Run("name follows the Result model, not BestModelID", func(t *testing.T) {
+		t.Parallel()
+		p := newProc()
+		item := newItem(classifier.RegistryIDBirdNETV3)
+		p.normalizeDetectionTimes(item, p.currentSettings())
+		assert.True(t, strings.HasSuffix(item.Detection.Result.ClipName, ".flac"),
+			"got %q", item.Detection.Result.ClipName)
 	})
 }

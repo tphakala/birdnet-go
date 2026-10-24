@@ -1,8 +1,8 @@
 package notification
 
 import (
+	"bytes"
 	"context"
-	"errors"
 	"io"
 	"testing"
 	"time"
@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	logger "github.com/tphakala/birdnet-go/internal/logger"
 	"golang.org/x/sync/semaphore"
 )
@@ -94,72 +95,72 @@ func TestCategorizeError(t *testing.T) {
 		},
 		{
 			name:     "network_error",
-			err:      errors.New("network connection refused"),
+			err:      errors.NewStd("network connection refused"),
 			expected: "network",
 		},
 		{
 			name:     "dial_error",
-			err:      errors.New("dial tcp failed"),
+			err:      errors.NewStd("dial tcp failed"),
 			expected: "network",
 		},
 		{
 			name:     "lookup_error",
-			err:      errors.New("lookup host failed"),
+			err:      errors.NewStd("lookup host failed"),
 			expected: "network",
 		},
 		{
 			name:     "connection_error",
-			err:      errors.New("connection reset by peer"),
+			err:      errors.NewStd("connection reset by peer"),
 			expected: "network",
 		},
 		{
 			name:     "validation_error",
-			err:      errors.New("validation failed"),
+			err:      errors.NewStd("validation failed"),
 			expected: "validation",
 		},
 		{
 			name:     "invalid_error",
-			err:      errors.New("invalid parameter"),
+			err:      errors.NewStd("invalid parameter"),
 			expected: "validation",
 		},
 		{
 			name:     "malformed_error",
-			err:      errors.New("malformed request"),
+			err:      errors.NewStd("malformed request"),
 			expected: "validation",
 		},
 		{
 			name:     "permission_denied",
-			err:      errors.New("permission denied"),
+			err:      errors.NewStd("permission denied"),
 			expected: "permission",
 		},
 		{
 			name:     "unauthorized",
-			err:      errors.New("unauthorized access"),
+			err:      errors.NewStd("unauthorized access"),
 			expected: "permission",
 		},
 		{
 			name:     "forbidden",
-			err:      errors.New("forbidden"),
+			err:      errors.NewStd("forbidden"),
 			expected: "permission",
 		},
 		{
 			name:     "not_found",
-			err:      errors.New("resource not found"),
+			err:      errors.NewStd("resource not found"),
 			expected: "not_found",
 		},
 		{
 			name:     "404_error",
-			err:      errors.New("HTTP 404"),
+			err:      errors.NewStd("HTTP 404"),
 			expected: "not_found",
 		},
 		{
 			name:     "generic_error",
-			err:      errors.New("some random error"),
+			err:      errors.NewStd("some random error"),
 			expected: "provider_error",
 		},
 		{
 			name:     "empty_error",
-			err:      errors.New(""),
+			err:      errors.NewStd(""),
 			expected: "provider_error",
 		},
 	}
@@ -249,28 +250,28 @@ func TestPushDispatcher_shouldRetry(t *testing.T) {
 	}{
 		{
 			name:       "first_attempt_retryable",
-			err:        errors.New("temporary error"),
+			err:        errors.NewStd("temporary error"),
 			attempts:   1,
 			maxRetries: 3,
 			expected:   true,
 		},
 		{
 			name:       "max_attempts_reached",
-			err:        errors.New("temporary error"),
+			err:        errors.NewStd("temporary error"),
 			attempts:   4,
 			maxRetries: 3,
 			expected:   false,
 		},
 		{
 			name:       "non_retryable_error",
-			err:        &providerError{Err: errors.New("fatal"), Retryable: false},
+			err:        &providerError{Err: errors.NewStd("fatal"), Retryable: false},
 			attempts:   1,
 			maxRetries: 3,
 			expected:   false,
 		},
 		{
 			name:       "retryable_provider_error",
-			err:        &providerError{Err: errors.New("temp"), Retryable: true},
+			err:        &providerError{Err: errors.NewStd("temp"), Retryable: true},
 			attempts:   1,
 			maxRetries: 3,
 			expected:   true,
@@ -745,4 +746,129 @@ func TestRegisterProvidersWithHealthChecker(t *testing.T) {
 		all := hc.GetAllProviderHealth()
 		assert.Len(t, all, 2)
 	})
+}
+
+// Fixture names and fake values shared by the push provider build and reload tests.
+// The secret variables only matter for whether they are set.
+const (
+	testPushSecretSetEnv   = "TEST_PUSH_PROVIDER_TOKEN_SET"
+	testPushSecretUnsetEnv = "TEST_PUSH_PROVIDER_TOKEN_UNSET"
+	testPushSecretValue    = "fake-token-value"
+	testPushWebhookURL     = "https://hooks.example.invalid/x"
+	testPushNtfyURL        = "ntfy://ntfy.sh/test-topic"
+	testPushNtfyName       = "test-ntfy"
+	testPushWebhookName    = "test-webhook"
+	testPushScriptName     = "test-script"
+)
+
+// testBearerWebhookProvider returns a webhook provider config with one bearer
+// endpoint whose token is the given value (typically a ${VAR} reference).
+func testBearerWebhookProvider(name string, enabled bool, token string) conf.PushProviderConfig {
+	return conf.PushProviderConfig{
+		Type:    "webhook",
+		Enabled: enabled,
+		Name:    name,
+		Endpoints: []conf.WebhookEndpointConfig{{
+			URL:  testPushWebhookURL,
+			Auth: conf.WebhookAuthConfig{Type: authTypeBearer, Token: token},
+		}},
+	}
+}
+
+// TestInitializeEnhancedProviders_SkipsDisabledAndBuildsEnabled verifies that a
+// disabled provider is never built (no secret resolution or template parsing,
+// and so no warning or error output) while enabled providers are
+// still built and misconfigured enabled providers still fail loudly.
+func TestInitializeEnhancedProviders_SkipsDisabledAndBuildsEnabled(t *testing.T) {
+	// Not parallel: t.Setenv cannot be used in parallel tests.
+	t.Setenv(testPushSecretSetEnv, testPushSecretValue)
+	t.Setenv(testPushSecretUnsetEnv, "") // empty counts as missing
+
+	unsetRef := "${" + testPushSecretUnsetEnv + "}"
+	setRef := "${" + testPushSecretSetEnv + "}"
+
+	ntfy := conf.PushProviderConfig{
+		Type:    "shoutrrr",
+		Enabled: true,
+		Name:    testPushNtfyName,
+		URLs:    []string{testPushNtfyURL},
+	}
+
+	tests := []struct {
+		name          string
+		providers     []conf.PushProviderConfig
+		wantNames     []string
+		wantLogOutput bool
+	}{
+		{
+			name: "ntfy_enabled_with_disabled_slack_example",
+			providers: []conf.PushProviderConfig{
+				ntfy,
+				testBearerWebhookProvider("slack-webhook", false, unsetRef),
+			},
+			wantNames: []string{testPushNtfyName},
+		},
+		{
+			name: "disabled_webhook_with_invalid_template",
+			providers: []conf.PushProviderConfig{{
+				Type:      "webhook",
+				Enabled:   false,
+				Name:      testPushWebhookName,
+				Endpoints: []conf.WebhookEndpointConfig{{URL: testPushWebhookURL}},
+				Template:  "{{",
+			}},
+		},
+		{
+			name: "disabled_unknown_type",
+			providers: []conf.PushProviderConfig{{
+				Type:    "pushover",
+				Enabled: false,
+				Name:    "test-unknown",
+			}},
+		},
+		{
+			name:      "enabled_webhook_with_set_secret",
+			providers: []conf.PushProviderConfig{testBearerWebhookProvider(testPushWebhookName, true, setRef)},
+			wantNames: []string{testPushWebhookName},
+		},
+		{
+			name:          "enabled_webhook_with_unset_secret",
+			providers:     []conf.PushProviderConfig{testBearerWebhookProvider(testPushWebhookName, true, unsetRef)},
+			wantLogOutput: true,
+		},
+		{
+			name: "enabled_script_with_command",
+			providers: []conf.PushProviderConfig{{
+				Type:    "script",
+				Enabled: true,
+				Name:    testPushScriptName,
+				Command: "/bin/true",
+			}},
+			wantNames: []string{testPushScriptName},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			d := &pushDispatcher{log: logger.NewSlogLogger(&buf, logger.LogLevelWarn, time.UTC)}
+
+			settings := &conf.Settings{}
+			settings.Notification.Push.Enabled = true
+			settings.Notification.Push.Providers = tt.providers
+
+			built := d.initializeEnhancedProviders(settings, nil)
+
+			gotNames := make([]string, 0, len(built))
+			for i := range built {
+				gotNames = append(gotNames, built[i].prov.GetName())
+			}
+			assert.ElementsMatch(t, tt.wantNames, gotNames)
+			if tt.wantLogOutput {
+				assert.NotEmpty(t, buf.String(), "an enabled misconfigured provider must log")
+			} else {
+				assert.Empty(t, buf.String(), "no warning or error output expected")
+			}
+		})
+	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -65,7 +64,6 @@ func setupTestEnv(t *testing.T) *testEnv {
 
 // PreRendererTestOptions configures PreRenderer settings for testing
 type PreRendererTestOptions struct {
-	SoxPath         string
 	SpectrogramSize string
 	RawEnabled      bool
 }
@@ -73,7 +71,6 @@ type PreRendererTestOptions struct {
 // DefaultPreRendererOptions returns sensible defaults for testing
 func DefaultPreRendererOptions() *PreRendererTestOptions {
 	return &PreRendererTestOptions{
-		SoxPath:         "/usr/bin/sox",
 		SpectrogramSize: "lg",
 		RawEnabled:      true,
 	}
@@ -84,7 +81,6 @@ func configurePreRendererSettings(settings *conf.Settings, opts *PreRendererTest
 	if opts == nil {
 		opts = DefaultPreRendererOptions()
 	}
-	settings.Realtime.Audio.SoxPath = opts.SoxPath
 	settings.Realtime.Dashboard.Spectrogram.Enabled = true
 	settings.Realtime.Dashboard.Spectrogram.Size = opts.SpectrogramSize
 	settings.Realtime.Dashboard.Spectrogram.Raw = opts.RawEnabled
@@ -201,30 +197,6 @@ func createMinimalPreRenderer(t *testing.T, queueSize int) (*PreRenderer, *testE
 	return pr, env
 }
 
-// requireSoxAvailable checks if Sox is available in PATH.
-// Skips the test if Sox is not found, otherwise returns the Sox path.
-func requireSoxAvailable(t *testing.T) string {
-	t.Helper()
-
-	soxPath, err := exec.LookPath("sox")
-	if err != nil {
-		t.Skip("Sox binary not found in PATH; skipping integration test")
-	}
-	return soxPath
-}
-
-// requireFFmpegAvailable checks if FFmpeg is available in PATH.
-// Skips the test if FFmpeg is not found, otherwise returns the FFmpeg path.
-func requireFFmpegAvailable(t *testing.T) string {
-	t.Helper()
-
-	ffmpegPath, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		t.Skip("FFmpeg binary not found in PATH; skipping integration test")
-	}
-	return ffmpegPath
-}
-
 // integrationTestEnv extends testEnv with integration-specific fields
 type integrationTestEnv struct {
 	*testEnv
@@ -235,13 +207,12 @@ type integrationTestEnv struct {
 // createIntegrationPreRenderer creates a fully-configured PreRenderer for integration tests.
 // This helper eliminates the repeated setup pattern across integration tests.
 // The PreRenderer is started automatically; caller should defer env.PreRenderer.Stop().
-func createIntegrationPreRenderer(t *testing.T, soxPath, audioDirName string) *integrationTestEnv {
+func createIntegrationPreRenderer(t *testing.T, audioDirName string) *integrationTestEnv {
 	t.Helper()
 
 	env := setupTestEnv(t)
 
 	// Configure settings for integration testing
-	env.Settings.Realtime.Audio.SoxPath = soxPath
 	env.Settings.Realtime.Dashboard.Spectrogram.Enabled = true
 	env.Settings.Realtime.Dashboard.Spectrogram.Size = "lg"
 	env.Settings.Realtime.Dashboard.Spectrogram.Raw = true

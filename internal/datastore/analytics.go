@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore/entities"
+	"github.com/tphakala/birdnet-go/internal/datastore/mapper"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
@@ -74,11 +75,14 @@ type ActivityHeatmapData struct {
 // with any detections in range, so each species' shape is comparable regardless of its raw
 // volume. Total is the species' detection count over the range (false positives excluded),
 // used to rank species by volume and shown in the tooltip. ScientificName is the stable key;
-// the localized common name is resolved client-side (the v2 label schema stores no common name).
+// CommonName is the display name, so the payload is self-describing.
 type SpeciesHourlyDistribution struct {
 	ScientificName string
-	Buckets        [24]float64
-	Total          int
+	// CommonName is the server-locale common name resolved via the datastore name resolver; it falls
+	// back to the scientific name when no mapping exists.
+	CommonName string
+	Buckets    [24]float64
+	Total      int
 }
 
 // DailyActivityOnset is one calendar day's dawn-chorus onset relative to civil dawn, behind the
@@ -103,12 +107,14 @@ type DailyActivityOnset struct {
 // detections that fall into each equal-width confidence bin over [0,1] (Bins sums to ~1.0), so the
 // distribution shape is comparable across species regardless of detection volume. Total is the
 // species' detection count over the range (false positives excluded), shown in the tooltip.
-// ScientificName is the stable key; the localized common name is resolved client-side (the v2 label
-// schema stores no common name), matching the sibling species charts.
+// ScientificName is the stable key; CommonName is the display name, so the payload is self-describing.
 type SpeciesConfidenceHistogram struct {
 	ScientificName string
-	Bins           []float64
-	Total          int
+	// CommonName is the server-locale common name resolved via the datastore name resolver; it falls
+	// back to the scientific name when no mapping exists.
+	CommonName string
+	Bins       []float64
+	Total      int
 }
 
 // SpeciesAccumulationPoint is one day on the species accumulation curve (the biodiversity collector's
@@ -165,12 +171,16 @@ type YearOverYearResult struct {
 // SpeciesPhenologyPoint is one species' residency span within the selected date range: its first and
 // last false-positive-excluded detection (as station-local YYYY-MM-DD dates) and the in-range
 // detection count. Species are the top-N by detection volume; the chart draws one residency bar per
-// species (a Gantt) to show arrival/departure timing.
+// species (a Gantt) to show arrival/departure timing. CommonName is the display name, so the payload
+// is self-describing.
 type SpeciesPhenologyPoint struct {
 	ScientificName string
-	FirstSeen      string
-	LastSeen       string
-	Count          int
+	// CommonName is the server-locale common name resolved via the datastore name resolver; it falls
+	// back to the scientific name when no mapping exists.
+	CommonName string
+	FirstSeen  string
+	LastSeen   string
+	Count      int
 }
 
 // SpeciesHourlyCounts is one species' raw hour-of-day detection counts, behind the acoustic
@@ -179,21 +189,24 @@ type SpeciesPhenologyPoint struct {
 // ridgeline's SpeciesHourlyDistribution (which normalizes each species to sum to 1.0 to compare
 // timing shape), the streamgraph stacks the raw counts so band width is detection volume; Total is
 // the sum of Counts, used to rank species by volume and shown in the tooltip. ScientificName is the
-// stable key; the localized common name is resolved client-side (the v2 label schema stores no
-// common name), matching the sibling species charts.
+// stable key; CommonName is the display name, so the payload is self-describing.
 type SpeciesHourlyCounts struct {
 	ScientificName string
-	Counts         [24]int
-	Total          int
+	// CommonName is the server-locale common name resolved via the datastore name resolver; it falls
+	// back to the scientific name when no mapping exists.
+	CommonName string
+	Counts     [24]int
+	Total      int
 }
 
 // NewSpeciesData represents a species detected for the first time within a period
 type NewSpeciesData struct {
-	ScientificName string `json:"scientific_name"`
-	CommonName     string `json:"common_name"`
-	FirstSeenDate  string `json:"first_seen_date"` // The absolute first date
-	LastSeenDate   string `json:"last_seen_date"`  // The most recent detection date
-	CountInPeriod  int    `json:"count_in_period"` // Optional: How many times seen in the query period
+	ScientificName string    `json:"scientific_name"`
+	CommonName     string    `json:"common_name"`
+	FirstSeenDate  string    `json:"first_seen_date"` // The absolute first date
+	LastSeenDate   string    `json:"last_seen_date"`  // The most recent detection date
+	CountInPeriod  int       `json:"count_in_period"` // Optional: How many times seen in the query period
+	FirstBeginTime time.Time `json:"-"`               // Earliest audio start, used to restore notification tracking across midnight
 }
 
 // SpeciesDetectionDate represents a species detected on a specific calendar date.
@@ -1026,6 +1039,143 @@ func (ds *DataStore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 	return result.LastSeenDate, nil
 }
 
+// GetSpeciesFirstAndLastDetectionTimeBefore returns the earliest and most-recent
+// detection times for a species that occurred strictly before `before`.
+// Either/both may be nil when there is no prior detection.
+//
+// The legacy schema stores detection time as separate notes.date (YYYY-MM-DD) and
+// notes.time (HH:MM:SS) string columns, so the dialect-aware datetime expression
+// from GetDateTimeExpr is used for both the MIN/MAX aggregates and the bound.
+// The bound is converted to the datastore timezone (Timezone) so it compares
+// consistently against the stored wall-clock strings, regardless of the
+// location of `before`.
+func (ds *DataStore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Context, scientificName string, before time.Time) (first, last *time.Time, err error) {
+	dtExpr := ds.GetDateTimeExpr("notes.date", "notes.time")
+	if dtExpr == "" {
+		// Safely get database type for error context
+		dialectName := DialectUnknown
+		if d := ds.Dialector(); d != nil {
+			dialectName = d.Name()
+		}
+		return nil, nil, errors.Newf("unsupported database type for datetime formatting").
+			Component("datastore").
+			Category(errors.CategoryConfiguration).
+			Context("operation", "get_species_first_and_last_detection_time_before").
+			Context("database_type", dialectName).
+			Build()
+	}
+
+	query := fmt.Sprintf(`
+	SELECT MIN(%s) as first_dt, MAX(%s) as last_dt
+	FROM notes
+	LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
+	WHERE notes.scientific_name = ?
+		AND %s < ?
+		AND notes.date != '' AND notes.date IS NOT NULL
+		AND notes.time != '' AND notes.time IS NOT NULL
+		AND (note_reviews.verified IS NULL OR note_reviews.verified != '%s')
+	`, dtExpr, dtExpr, dtExpr, entities.VerificationFalsePositive)
+
+	// The aggregate yields a dialect-dependent driver type: time.Time on MySQL
+	// (STR_TO_DATE with parseTime=True) and a "YYYY-MM-DD HH:MM:SS" string on
+	// SQLite (datetime()). database/sql cannot convert either into a fixed
+	// *time.Time or *string destination (string->*time.Time and time.Time->*string
+	// are both unsupported), and GORM cannot scan into an interface{} struct
+	// field, so read the raw driver values via Rows() and normalize explicitly.
+	rows, err := ds.DB.WithContext(ctx).Raw(query, scientificName, before.In(Timezone()).Format(mapper.DateFormat+" "+mapper.TimeFormat)).Rows()
+	if err != nil {
+		return nil, nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_first_and_last_detection_time_before").
+			Context("scientific_name", scientificName).
+			Context("before", before.Format(time.RFC3339)).
+			Build()
+	}
+	defer rows.Close() //nolint:errcheck // closing rows after a full read is best-effort
+
+	// MIN/MAX always return exactly one row (NULLs when there is no prior
+	// detection), so a single Next() covers the data. Since a scalar aggregate
+	// always yields a row, Next() returning false indicates an iteration error
+	// (e.g. a context deadline or driver failure) rather than an empty result;
+	// check rows.Err() so a failure is surfaced instead of being published as
+	// null fields without the caller's failure warning.
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, nil, errors.New(err).
+				Component("datastore").
+				Category(errors.CategoryDatabase).
+				Context("operation", "get_species_first_and_last_detection_time_before").
+				Context("scientific_name", scientificName).
+				Build()
+		}
+		return nil, nil, nil
+	}
+
+	var firstRaw, lastRaw any
+	if err := rows.Scan(&firstRaw, &lastRaw); err != nil {
+		return nil, nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_species_first_and_last_detection_time_before").
+			Context("scientific_name", scientificName).
+			Build()
+	}
+
+	first, err = speciesDetectionTimeValue(firstRaw, scientificName)
+	if err != nil {
+		return nil, nil, err
+	}
+	last, err = speciesDetectionTimeValue(lastRaw, scientificName)
+	if err != nil {
+		return nil, nil, err
+	}
+	return first, last, nil
+}
+
+// speciesDetectionTimeValue normalizes the dialect-dependent driver value
+// returned by the first/last detection aggregate (time.Time on MySQL, string on
+// SQLite) into a *time.Time in the local timezone. A nil aggregate (no prior
+// detection) yields nil.
+func speciesDetectionTimeValue(v any, scientificName string) (*time.Time, error) {
+	switch t := v.(type) {
+	case nil:
+		return nil, nil //nolint:nilnil // a nil aggregate means no prior detection, not an error
+	case time.Time:
+		return &t, nil
+	case string:
+		if t == "" {
+			return nil, nil //nolint:nilnil // an empty aggregate string means no prior detection, not an error
+		}
+		return parseSpeciesDetectionTime(t, scientificName)
+	case []byte:
+		return parseSpeciesDetectionTime(string(t), scientificName)
+	default:
+		return nil, errors.Newf("unexpected species detection time value type").
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("scientific_name", scientificName).
+			Context("value_type", fmt.Sprintf("%T", v)).
+			Build()
+	}
+}
+
+// parseSpeciesDetectionTime parses a legacy "YYYY-MM-DD HH:MM:SS" datetime
+// string in the datastore's timezone.
+func parseSpeciesDetectionTime(value, scientificName string) (*time.Time, error) {
+	t, err := time.ParseInLocation(mapper.DateFormat+" "+mapper.TimeFormat, value, Timezone())
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "parse_species_detection_time").
+			Context("scientific_name", scientificName).
+			Context("value", value).
+			Build()
+	}
+	return &t, nil
+}
+
 // GetNewSpeciesDetections finds species whose absolute first detection falls within the specified date range.
 // This is suitable for lifetime tracking only - NOT for seasonal or yearly tracking.
 // It supports pagination with limit and offset parameters.
@@ -1038,6 +1188,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 		FirstDetectionDate string // Scan directly into string
 		LastDetectionDate  string
 		CountInPeriod      int
+		FirstBeginTime     time.Time
 	}
 	var rawResults []RawNewSpeciesResult
 
@@ -1061,12 +1212,16 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	// Revised query with pagination
 	// NOTE: This query benefits significantly from a composite index on (scientific_name, date)
 	// Excludes detections marked as false_positive from both CTEs
+	// Select the audio timestamp from the original column so SQLite preserves its
+	// DATETIME type when scanning. MIN alone returns text. NULLIF ignores imports
+	// without an audio start; MIN(id) prevents ties from duplicating species rows.
 	query := fmt.Sprintf(`
 	WITH SpeciesFirstSeen AS (
 	    SELECT
 	        notes.scientific_name,
 	        MIN(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as first_detection_date,
-	        MAX(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as last_detection_date
+	        MAX(CASE WHEN notes.date != '' AND notes.date IS NOT NULL THEN notes.date ELSE NULL END) as last_detection_date,
+	        MIN(NULLIF(notes.begin_time, ?)) as first_begin_time
 	    FROM notes
 	    LEFT JOIN note_reviews ON notes.id = note_reviews.note_id
 	    WHERE (note_reviews.verified IS NULL OR note_reviews.verified != '%s')
@@ -1089,16 +1244,21 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 	    COALESCE(sip.common_name, sfs.scientific_name) as common_name,
 	    sfs.first_detection_date,
 	    sfs.last_detection_date,
-	    sip.count_in_period
+	    sip.count_in_period,
+	    first_note.begin_time as first_begin_time
 	FROM SpeciesFirstSeen sfs
 	JOIN SpeciesInPeriod sip ON sfs.scientific_name = sip.scientific_name
+	LEFT JOIN notes first_note ON first_note.id = (
+	    SELECT MIN(n.id) FROM notes n
+	    WHERE n.scientific_name = sfs.scientific_name AND n.begin_time = sfs.first_begin_time
+	)
 	WHERE sfs.first_detection_date BETWEEN ? AND ?
 	ORDER BY sfs.first_detection_date DESC
 	LIMIT ? OFFSET ?;
 	`, entities.VerificationFalsePositive, entities.VerificationFalsePositive)
 
 	// Execute the raw SQL query into the temporary struct
-	if err := ds.DB.WithContext(ctx).Raw(query, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {
+	if err := ds.DB.WithContext(ctx).Raw(query, time.Time{}, startDate, endDate, startDate, endDate, limit, offset).Scan(&rawResults).Error; err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryDatabase).
@@ -1121,6 +1281,7 @@ func (ds *DataStore) GetNewSpeciesDetections(ctx context.Context, startDate, end
 				FirstSeenDate:  raw.FirstDetectionDate, // Assign only if valid
 				LastSeenDate:   raw.LastDetectionDate,
 				CountInPeriod:  raw.CountInPeriod,
+				FirstBeginTime: raw.FirstBeginTime,
 			})
 		} else {
 			// Log if a record surprisingly had an empty date after SQL filtering

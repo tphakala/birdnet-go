@@ -15,10 +15,10 @@ The enhanced error system automatically reports errors to Sentry with privacy-sa
 
 ### Important: Import Guidelines
 
-**DO NOT** import the standard `errors` package alongside this custom errors package. This custom package provides passthrough functions for standard error operations:
+**DO NOT** import the standard `errors` package, with or without an alias; the `depguard` linter rejects it. This custom package provides passthrough functions for standard error operations:
 
 ```go
-// ❌ WRONG - Do not import both
+// ❌ WRONG - Do not import the standard package
 import (
     "errors"  // Don't do this
     "github.com/tphakala/birdnet-go/internal/errors"
@@ -28,7 +28,8 @@ import (
 import "github.com/tphakala/birdnet-go/internal/errors"
 
 // The custom package provides passthrough functions:
-// errors.Is(), errors.As(), errors.Unwrap() are all available
+// errors.Is(), errors.As(), errors.AsType(), errors.Unwrap(), errors.Join()
+// and errors.NewStd() are all available, as is the errors.ErrUnsupported sentinel
 ```
 
 ### Basic Usage
@@ -413,8 +414,7 @@ The enhanced error system preserves standard error interfaces:
 if errors.Is(err, ErrNotFound) { ... }
 
 // Enhanced error checking
-var enhancedErr *errors.EnhancedError
-if errors.As(err, &enhancedErr) {
+if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
     component := enhancedErr.GetComponent()
     category := enhancedErr.GetCategory()
 }
@@ -506,18 +506,21 @@ The enhanced error system is designed to be lightweight:
 - Telemetry reporting is asynchronous via event bus
 - Privacy scrubbing uses efficient regex patterns
 - Automatic component detection uses call stack inspection minimally
-- Negligible cost when telemetry is disabled (~2.5ns overhead)
+- Low cost when telemetry is disabled: `Build()` still allocates the error
+  (2 allocations per error in `BenchmarkErrorCreationNoTelemetry`, one of which
+  is the benchmark's own `fmt.Errorf`); only the reporting skip check itself is
+  cheap
 
 ## Import Best Practices
 
 ### Standard Library Integration
 
-This package provides all necessary error handling functions as passthrough methods, so you should **never** import the standard `errors` package alongside it:
+This package provides passthroughs for the standard error functions, so never import the standard `errors` package, with or without an alias such as `stderrors`. There are no exceptions: this package imports nothing else from the module, so it cannot cause an import cycle, and the `depguard` linter rejects the standard package everywhere except `errors.go` in this directory. If a standard function is missing, add a passthrough here.
 
 ```go
-// ❌ WRONG - Creates import conflicts and confusion
+// ❌ WRONG - Importing the standard package, aliased or not
 import (
-    stderrors "errors"  // Don't alias the standard package
+    stderrors "errors"  // Not needed: use the passthroughs instead
     "github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -525,10 +528,13 @@ import (
 import "github.com/tphakala/birdnet-go/internal/errors"
 
 // Available passthrough functions:
-errors.Is(err, target)     // Standard error checking
-errors.As(err, &target)    // Standard error unwrapping
-errors.Unwrap(err)         // Standard error unwrapping
-errors.Join(errs...)       // Standard error joining
+errors.Is(err, target)                       // Standard error checking
+errors.AsType[*fs.PathError](err)            // Type-safe error unwrapping (preferred)
+errors.As(err, &target)                      // Legacy form; the ErrorsAsType lint rule flags it, use AsType
+errors.Unwrap(err)                           // Standard error unwrapping
+errors.Join(errs...)                         // Standard error joining
+errors.NewStd("not found")                   // Standard errors.New, for sentinels
+errors.ErrUnsupported                        // Standard sentinel
 ```
 
 ### Function Availability
@@ -536,14 +542,15 @@ errors.Join(errs...)       // Standard error joining
 The custom errors package provides:
 
 - **Enhanced Functions**: `errors.New()`, `errors.Newf()` with telemetry integration
-- **Standard Functions**: `errors.Is()`, `errors.As()`, `errors.Unwrap()`, `errors.Join()`
+- **Standard Functions**: `errors.Is()`, `errors.As()`, `errors.AsType()`, `errors.Unwrap()`, `errors.Join()`, `errors.NewStd()`
+- **Standard Sentinels**: `errors.ErrUnsupported`
 - **Specialized Functions**: Component detection, context building, privacy scrubbing
 
 ### Migration Checklist
 
 When updating existing code:
 
-1. ✅ Remove any `import "errors"` or `import stderrors "errors"`
+1. ✅ Remove any `import "errors"` or `import stderrors "errors"`, and change standard `errors.New("...")` calls to `errors.NewStd("...")`
 2. ✅ Ensure `import "github.com/tphakala/birdnet-go/internal/errors"` is present
 3. ✅ Replace `fmt.Errorf()` with `errors.Newf()` where enhanced telemetry is needed
 4. ✅ Add `.Component()`, `.Category()`, and `.Context()` calls
@@ -573,7 +580,7 @@ graph LR
 1. **Error Creation**: When `Build()` is called, the error is created with all context
 2. **Event Publishing**: The error is published to the event bus as an `ErrorEvent`
 3. **Async Processing**: Workers process errors asynchronously without blocking
-4. **Fast Path**: If no consumers are registered, publishing is skipped (2.5ns overhead)
+4. **Fast Path**: If no consumers are registered, publishing is skipped (the skip check itself is cheap; building the error still allocates)
 
 ### Performance Characteristics
 
@@ -583,7 +590,7 @@ The event bus integration provides exceptional performance:
 | ------------------- | -------------------- | -------------------- | ----------- |
 | Error.Build()       | 100.78ms             | 30.77μs              | 3,275x      |
 | Batch (1000 errors) | 5.13s                | <50ms                | 100x+       |
-| No telemetry        | 200ns                | 2.5ns                | 80x         |
+| No telemetry        | not re-measured      | 2 allocs             | n/a         |
 
 ### Event Publisher Interface
 
@@ -591,7 +598,7 @@ The error package uses the `EventPublisher` interface to decouple from the event
 
 ```go
 type EventPublisher interface {
-    PublishError(event ErrorEvent) error
+    TryPublish(event any) bool
 }
 ```
 

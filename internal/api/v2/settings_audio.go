@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"slices"
 
+	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
+
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/equalizer"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -19,9 +21,9 @@ type sourceNameUpdater interface {
 }
 
 // audioDeviceSettingChanged checks if audio device pipeline settings have changed.
-// Only compares device-affecting fields (Device, Gain, Model, Models,
-// SampleRate), not display-only fields (Name, Equalizer, QuietHours) which
-// are handled separately.
+// Only compares device-affecting fields (Device, Model, Models, SampleRate),
+// not display-only fields (Name, Equalizer, QuietHours) or Gain, which are
+// handled separately (gain by sourceGainsChanged).
 //
 // Models is the per-source list of classifier IDs (e.g. ["birdnet",
 // "perch_v2"]); Model is the deprecated singular alias. Both are compared so
@@ -35,11 +37,39 @@ func audioDeviceSettingChanged(oldSettings, currentSettings *conf.Settings) bool
 	}
 	for i := range oldSources {
 		if oldSources[i].Device != newSources[i].Device ||
-			oldSources[i].Gain != newSources[i].Gain ||
 			oldSources[i].Model != newSources[i].Model ||
 			!slices.Equal(oldSources[i].Models, newSources[i].Models) ||
 			oldSources[i].SampleRate != newSources[i].SampleRate {
 			return true
+		}
+	}
+	return false
+}
+
+// sourceGainsChanged reports whether the gain of any sound card source or
+// stream differs between the two settings, compared index by index. A length
+// change or a reorder is not reported here: audioDeviceSettingChanged and
+// streamsSettingsChanged already trigger a reconfigure for those, and the
+// reconfigure applies each source's gain. The gain itself is applied by the
+// update_source_gains action to the live routes without a reconfigure.
+func sourceGainsChanged(oldSettings, currentSettings *conf.Settings) bool {
+	oldSources := oldSettings.Realtime.Audio.Sources
+	newSources := currentSettings.Realtime.Audio.Sources
+	if len(oldSources) == len(newSources) {
+		for i := range oldSources {
+			if oldSources[i].Gain != newSources[i].Gain {
+				return true
+			}
+		}
+	}
+
+	oldStreams := oldSettings.Realtime.RTSP.Streams
+	newStreams := currentSettings.Realtime.RTSP.Streams
+	if len(oldStreams) == len(newStreams) {
+		for i := range oldStreams {
+			if oldStreams[i].Gain != newStreams[i].Gain {
+				return true
+			}
 		}
 	}
 	return false
@@ -141,7 +171,7 @@ func (c *Controller) handleEqualizerChange(currentSettings *conf.Settings) error
 
 	for _, src := range eng.Registry().List() {
 		displayName := src.DisplayName
-		router.UpdateFilterChain(src.ID, func(sampleRate int) *equalizer.FilterChain {
+		router.UpdateFilterChain(src.ID, func(sampleRate int) *dspeq.FilterChain {
 			return equalizer.ResolveAndBuildFilterChain(currentSettings, displayName, sampleRate)
 		})
 	}
@@ -183,9 +213,7 @@ func perStreamEqualizerChanged(oldSettings, currentSettings *conf.Settings) bool
 // getAudioBlockedFields returns the blocked fields map for the audio section
 func getAudioBlockedFields() map[string]any {
 	return map[string]any{
-		"FfmpegPath":    true, // Runtime: validated at startup by ValidateToolPath, must not be overwritten by API
-		"SoxPath":       true, // Runtime: validated at startup by ValidateToolPath, must not be overwritten by API
-		"SoxAudioTypes": true, // Runtime list of supported audio types
+		"FfmpegPath": true, // Runtime: validated at startup by ValidateToolPath, must not be overwritten by API
 	}
 }
 
@@ -244,6 +272,12 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 		reconfigActions = append(reconfigActions, actionReconfigureAudioSources)
 		_ = c.SendToastWithKey("Reconfiguring audio sources...", "info", toastDurationMedium,
 			notification.MsgSettingsReconfiguringAudioSources, nil)
+	}
+
+	// Check source gains: applied to the live routes without a reconfigure.
+	if sourceGainsChanged(oldSettings, currentSettings) {
+		c.Debug("Source gain settings changed, triggering live gain update")
+		reconfigActions = append(reconfigActions, actionUpdateSourceGains)
 	}
 
 	// Check extended capture filter settings (hot-reloadable: Enabled, Species, MaxDuration)

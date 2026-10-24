@@ -303,7 +303,7 @@ func TestCollector_InferenceThroughput(t *testing.T) {
 	// the elapsed interval is exactly what the test sets. This replaces the old
 	// approach of bracketing wall-clock reads, whose resolution is coarse on
 	// Windows: both collect() calls could land in the same clock quantum, yielding
-	// elapsed 0 -> throughput 0 -> a spurious failure. See Forgejo #1181.
+	// elapsed 0 -> throughput 0 -> a spurious failure.
 	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
 	collector.now = func() time.Time { return clock }
 

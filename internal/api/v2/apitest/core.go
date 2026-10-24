@@ -109,10 +109,7 @@ func WithoutSettingsPublish() CoreOption { return func(c *coreConfig) { c.publis
 // second's. Build the second with WithoutSettingsPublish, and a test that publishes
 // must not call t.Parallel.
 //
-// The core's DetectionCache (a patrickmn/go-cache) starts a janitor goroutine that
-// cannot be stopped (cleanup only flushes it). A domain test package that adds a
-// goleak gate must ignore "github.com/patrickmn/go-cache.(*janitor).Run", the same
-// way package api's TestMain does.
+// The core starts no cache goroutines, so goleak gates need no cache ignores.
 func NewCore(t *testing.T, opts ...CoreOption) *apicore.Core {
 	t.Helper()
 
@@ -190,9 +187,6 @@ func NewCore(t *testing.T, opts ...CoreOption) *apicore.Core {
 		core.Wait()
 		if core.SFS != nil {
 			_ = core.SFS.Close()
-		}
-		if core.DetectionCache != nil {
-			core.DetectionCache.Flush()
 		}
 	})
 

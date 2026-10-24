@@ -18,7 +18,7 @@ For development work within VSCode, using the provided [devcontainer](https://co
 
 **Inside the Devcontainer:**
 
-- All Go, CGO, TensorFlow, ONNX Runtime, FFmpeg, and SoX dependencies are pre-installed.
+- All Go, CGO, TensorFlow, ONNX Runtime, and FFmpeg dependencies are pre-installed.
 - Your source code is mounted into the container.
 - An `air` development server ([`.air.toml`](../../.air.toml)) is automatically started. It watches for code changes (`.go`, `.html`, `.css`, `.js`, etc.) and triggers:
   - Tailwind CSS recompilation.
@@ -52,9 +52,9 @@ This project uses [Task](https://taskfile.dev/) (`Taskfile.yml`) as its build sy
 
 ### 2. Prepare Dependencies (Handled mostly by Task)
 
-- **TensorFlow Lite C Library:** `task` will automatically download the correct pre-compiled library (from [tphakala/tflite_c](https://github.com/tphakala/tflite_c/releases/tag/{{TFLITE_VERSION}})) for your target OS/architecture when you run a build task. It places the library in the expected system path (e.g., `/usr/lib`, `/usr/local/lib`, `/opt/homebrew/lib`, or `/usr/x86_64-w64-mingw32/lib` for Windows cross-compile) and creates necessary symlinks.
+- **TensorFlow Lite C Library:** `task` will automatically download the correct pre-compiled library (from the [tphakala/tflite_c releases](https://github.com/tphakala/tflite_c/releases), at the tag set in the `TFLITE_VERSION` variable of `Taskfile.yml`) for your target OS/architecture when you run a build task. It places the library in the expected system path (e.g., `/usr/lib`, `/usr/local/lib`, `/opt/homebrew/lib`, or `/usr/x86_64-w64-mingw32/lib` for Windows cross-compile) and creates necessary symlinks.
 - **ONNX Runtime (Optional):** Needed for BirdNET v3.0 models (currently in development preview). Run `task download-onnxruntime` to automatically download and install the correct version for your platform. See [ONNX Runtime Installation](onnx-runtime-installation.md) for manual installation options.
-- **TensorFlow Headers:** `task` checks if TensorFlow source code (needed for C header files for CGO) is present in `.cache/tensorflow/` inside the project root. If not, it clones the specific tag (`{{TFLITE_VERSION}}`) required.
+- **TensorFlow Headers:** `task` checks if TensorFlow source code (needed for C header files for CGO) is present in `.cache/tensorflow/` inside the project root. If not, it clones the tag given by the `TFLITE_VERSION` variable in `Taskfile.yml`.
 
 ### One-Command Setup
 
@@ -97,6 +97,17 @@ Navigate to the cloned BirdNET-Go project directory in your terminal.
   ```bash
   task clean
   ```
+
+### Version string
+
+Every build gets its version string from `scripts/build-version.sh`, which Task, `air` and the container build all use:
+
+- If `BUILD_VERSION` is set, it is used as is.
+- If a release tag points at the checked-out commit, the tag is the version, for example `20260823`.
+- Any other build, including `main`, a branch or a clone without tags, gets `<commit date in UTC>-g<9-character hash>-dev`, for example `20260927-g5dc2ab881-dev`.
+- If git is missing or the source tree has no git metadata of its own (a source tarball, or a copy nested inside another repository), the version is `unknown`.
+
+Uncommitted changes do not change the string. The container build cannot read git metadata (`.git` is excluded from the build context), so for a local `docker build` pass the version in yourself: `--build-arg BUILD_VERSION="$(sh scripts/build-version.sh)"`.
 
 ### 4. Run Tests
 

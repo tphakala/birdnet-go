@@ -43,10 +43,22 @@ export const restartInProgress = $state({ value: false });
 let recoveryDelayTimer: ReturnType<typeof setTimeout> | null = null;
 let recoveryPollTimer: ReturnType<typeof setInterval> | null = null;
 
-/** Fetch restart status from the backend */
+/** Sequence number of the latest restart status request */
+let restartStatusRequestSeq = 0;
+/** Sequence number of the request whose response was last applied */
+let restartStatusAppliedSeq = 0;
+
+/**
+ * Fetch restart status from the backend. Callers do not always await it (a
+ * settings save refreshes it in the background), so requests can overlap; a
+ * response older than one already applied is dropped.
+ */
 export async function fetchRestartStatus(): Promise<void> {
+  const seq = ++restartStatusRequestSeq;
   try {
     const data = await api.get<RestartStatus>('/api/v2/system/restart-status');
+    if (seq < restartStatusAppliedSeq) return;
+    restartStatusAppliedSeq = seq;
     Object.assign(restartState, data);
     // If the server is reachable, any in-progress restart has completed.
     if (restartInProgress.value) {
@@ -86,7 +98,7 @@ function startRecoveryPolling(): void {
           window.location.reload();
         }
       } catch {
-        // Server still down — keep polling
+        // Server still down, keep polling
       } finally {
         clearTimeout(timeout);
       }

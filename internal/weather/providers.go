@@ -44,6 +44,16 @@ func NewWundergroundProvider(client *http.Client) Provider {
 	return &WundergroundProvider{httpClient: client}
 }
 
+// NewPirateWeatherProvider creates a new Pirate Weather provider with a shared
+// HTTP client. A nil client falls back to a default client (see
+// newUnguardedTestClient).
+func NewPirateWeatherProvider(client *http.Client) Provider {
+	if client == nil {
+		client = newUnguardedTestClient()
+	}
+	return &PirateWeatherProvider{httpClient: client}
+}
+
 // Provider implementations
 type YrNoProvider struct {
 	httpClient   *http.Client
@@ -58,5 +68,10 @@ type OpenWeatherProvider struct {
 
 // WundergroundProvider implements the Provider interface for WeatherUnderground
 type WundergroundProvider struct {
+	httpClient *http.Client
+}
+
+// PirateWeatherProvider implements the Provider interface for Pirate Weather.
+type PirateWeatherProvider struct {
 	httpClient *http.Client
 }

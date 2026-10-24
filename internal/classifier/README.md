@@ -1,197 +1,97 @@
-# BirdNET Package
+# Classifier Package
 
-The BirdNET package forms the core of the BirdNET-Go application, providing functionality for bird species identification using machine learning techniques. This package interfaces with TensorFlow Lite models to analyze audio data and identify bird species based on their sounds.
+The `classifier` package loads the acoustic models, runs inference on audio windows, filters species by location and season, and keeps the species identity data that the rest of the application reads. Several models can be loaded at once. The `Orchestrator` is the entry point, and nothing outside the package should talk to a model implementation directly.
 
-## Package Overview
+## Main pieces
 
-The package implements the following key functionalities:
+| Piece                     | Files                                                                           | Role                                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Orchestrator`            | `orchestrator*.go`                                                              | Owns the loaded models, runs inference, owns the range filter, the species index and the taxonomy. Created by `NewOrchestrator(settings)`. |
+| `ModelManager`            | `model_manager*.go`                                                             | Installs, replaces and uninstalls downloadable models, and hot-loads them into the orchestrator.                                           |
+| Model registry            | `model_registry.go`                                                             | `ModelRegistry`: the single source of truth for which models exist and their audio requirements.                                           |
+| Model catalog             | `model_catalog*.go`, `catalog_loader.go`                                        | Downloadable models and their hardware and regional variants, as shown in the model gallery.                                               |
+| Range filter              | `range_filter*.go`, `mapped_range_filter.go`                                    | Location and week based species filtering.                                                                                                 |
+| Labels and names          | `label_files.go`, `label_vocabulary.go`, `names.go`, `taxonomy*.go`, `genus.go` | Label loading and species name and taxonomy lookup.                                                                                        |
+| Results queue and overlap | `queue.go`, `overlap.go`, `cadence/`                                            | Hand-off of results and the analysis window cadence.                                                                                       |
+| Bat scheduler             | `nighttime_scheduler.go`                                                        | Runs the bat model only at night.                                                                                                          |
 
-- Loading and initialization of TensorFlow Lite models for bird species recognition
-- Audio sample processing and analysis
-- Species probability calculation and filtering based on geographic location and time of year
-- Results queuing and processing for downstream consumption
-- Taxonomy integration with eBird taxonomy codes
+## Models
 
-## Core Components
+`ModelRegistry` in `model_registry.go` defines these models (registry ID, backend, input):
 
-### BirdNET Struct
+| Registry ID    | Name            | Backend                                                              | Input                                                         |
+| -------------- | --------------- | -------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `BirdNET_V2.4` | BirdNET v2.4    | TFLite (ONNX INT8-ARM variant on arm64 and on builds without TFLite) | 48 kHz, 3 s                                                   |
+| `BirdNET_V3.0` | BirdNET v3.0    | ONNX                                                                 | 32 kHz, 5 s                                                   |
+| `Perch_V2`     | Google Perch v2 | ONNX                                                                 | 32 kHz, 5 s                                                   |
+| `Bat`          | Bat classifier  | ONNX classifier head on BirdNET v2.4 embeddings                      | 3 s windows of raw ultrasonic audio (at least 96 kHz capture) |
+| `BSG`          | BSG Finland     | ONNX                                                                 | 48 kHz, 3 s                                                   |
 
-The main structure that encapsulates the TensorFlow Lite interpreters and configuration settings.
+BirdNET v2.4 is the stock default and ships embedded in the binary (builds with the `noembed` tag expect external files). The other models are downloaded through the gallery. `models.enabled` in the configuration selects which models load. BSG is registered and has a catalog entry, but it is hidden in the gallery and has no loader in `modelLoaders` yet, so it cannot be loaded.
 
-```go
-type BirdNET struct {
-    AnalysisInterpreter *tflite.Interpreter  // Interpreter for the main bird identification model
-    RangeInterpreter    *tflite.Interpreter  // Interpreter for the range filter model
-    Settings            *conf.Settings       // Application configuration settings
-    ModelInfo           ModelInfo            // Information about the current model
-    mu                  sync.Mutex           // Mutex for thread safety
-}
-```
+Every loaded model implements `ModelInstance` (`model.go`): `Predict`, `Spec`, `ModelID`, `Labels`, `RuntimeInfo` (device, live backend and precision) and `Close`. `BirdNET` (`birdnet.go`) is the TFLite and ONNX v2.4 implementation; `BirdNETV3`, `Perch` and `Bat` are the others. `ModelSpec` carries the sample rate and clip length, and `BufferDimensions` and `BufferInterval` derive buffer sizes from it.
 
-### Analysis Functionality
+## Orchestrator
 
-The package provides methods for analyzing audio samples and producing detection results:
+- `NewOrchestrator(settings)` builds the taxonomy service, the OpenFauna name resolver, the species index and the range filter service, then loads every model in `models.enabled`. A model that fails to load is recorded (`LoadFailures`, `LoadErrors`) and does not stop startup; `AcousticModelsState` reports the degraded state.
+- `PredictModel` and `PredictModelTimed` run one model by registry ID. Inference is serialized across models; each model also has its own lock, so reloading one model does not block lookups on another. The lock order is documented on the `Orchestrator` type and must be followed when adding code.
+- `LoadModel`, `UnloadModel`, `ReconcileEnabledModels` and `ReloadSecondaryModels` change the loaded set at runtime. Reloads build the new instance first and swap it in afterwards.
+- `DefaultTargets` lists the models a source analyzes when it names none: every loaded model that is not schedule gated, v2.4 first.
+- Inference health is tracked per model (`orchestrator_inference_health.go`), and a model that fails every window raises a persistent notification.
+- Diagnostic runtime snapshots (`orchestrator_runtime_snapshot.go`) describe what each loaded model was built as without waiting on inference.
 
-- `PredictModel()` - Performs inference on audio samples with a chosen model to detect bird species
+## Inference backends
 
-### Model Registry
+The runtimes live in `internal/inference` and are selected through its interfaces (`Classifier`, `EmbeddingExtractor`, `CustomClassifier`, range filters):
 
-The package includes a model registry system to support different BirdNET models:
+- `tflite`: TensorFlow Lite, used by the stock BirdNET v2.4 model and its embedded range filter.
+- `onnx`: ONNX Runtime, used by BirdNET v3.0, Perch v2, the bat classifier and the ONNX range filters.
+- `openvino`: an execution provider for ONNX models, chosen with the `birdnet.backend` setting. It appears as the live backend in `RuntimeInfo`, never as a model file type.
+- `vad`: a Silero voice activity detector used by the speech privacy filter in `internal/analysis/processor`, not by the classifier.
 
-```go
-// ModelInfo represents metadata about a BirdNET model
-type ModelInfo struct {
-    ID               string   // Unique identifier for the model
-    Name             string   // User-friendly name
-    Description      string   // Description of the model
-    SupportedLocales []string // List of supported locale codes
-    DefaultLocale    string   // Default locale if none is specified
-    NumSpecies       int      // Number of species in the model
-    CustomPath       string   // Path to custom model file, if any
-}
-```
+## Model manager and catalog
 
-Key functions:
+`ModelManager` scans the models directory (`ScanInstalled`), installs and replaces models (`Install`, `Reinstall`, `InstallOrReplace`) and uninstalls them (`Uninstall`). Downloads come from Hugging Face with SHA-256 verification and endpoint failover, progress is reported through `DownloadState`, and a failed variant swap is rolled back. After an install it writes the model paths into the configuration and hot-loads the model through the orchestrator.
 
-- `DetermineModelInfo()` - Identifies model type from filepath or model identifier
-- `IsLocaleSupported()` - Validates if a locale is supported by the model
+The catalog is a list of `CatalogEntry` values (`model_catalog.go`), each pointing at a registry model through `RegistryID`. An entry can have `Variants` (for example `fp32`, `fp16`, `int8-arm`, or a regional slice), `DependsOn` entries for shared files, and `Component` entries for support files. The embedded catalog is seeded to `model-catalog.json` in the configuration directory on first run (`LoadCatalog`); a file the user edited is kept. The regional variants of BirdNET v3.0 and Perch v2 are generated into `model_catalog_regional_gen.go` by `go generate ./internal/classifier` from `gen/manifests/`. The `recommend` package ranks variants against the host hardware, and `region` maps station coordinates to a regional slice.
 
-### Label Files
+### Adding a model
 
-The package exclusively uses the V2.4 format label files, which contain species names in the format "ScientificName_CommonName" and are available in multiple languages.
+The model families are wired by hand. The Perch v2 wiring shows what a new single-file ONNX model needs:
 
-The language-specific files follow the naming pattern `BirdNET_GLOBAL_6K_V2.4_Labels_<locale>.txt`, where `<locale>` is the locale identifier (e.g., `en_uk`, `de`, `fr`).
+1. Add the registry ID constant and a `ModelRegistry` entry in `model_registry.go`: backend, `Spec`, config aliases, species count and `rangeFilterCompat`. Add its filename patterns to `filenamePatterns`.
+2. Add the config model IDs in `internal/conf/consts.go` and register them in `ValidAudioModels` (`conf/validate.go`) and the alias migration (`conf/migrations.go`). Add a settings struct for its paths and threshold.
+3. Implement `ModelInstance` (see `perch_onnx.go`), write `build<Model>` and `load<Model>` on the orchestrator (see `orchestrator_perch_onnx.go`), and add the loader to `modelLoaders`.
+4. If it supports OpenVINO, add a builder to `openvinoCapableSecondaryBuilders` so a backend change reloads it.
+5. Add a catalog entry with a `RegistryID`, files and checksums in `model_catalog.go`, and the family's settings fields to `familyFields` in `model_manager.go`.
+6. If it has its own confidence threshold, handle it in `modelGlobalConfidenceThreshold` in `internal/analysis/processor/processor.go`.
 
-The package handles two locale formats:
+## Range filter
 
-- Hyphenated format in the API (e.g., `en-uk`, `pt-br`): Used in settings and code
-- Underscore format in filenames (e.g., `en_uk`, `pt_BR`): Used in label filenames
+The range filter (`rangeFilterService`) keeps species that are probable at the station location and week. Its backend is chosen from the configuration by `resolveRangeFilterBackend`:
 
-The system automatically converts between these formats, allowing users to specify locales with hyphens while the files use underscores. For locales with region codes (like `pt-br`), the region part is also capitalized in the filename format (e.g., `pt_BR`).
+- the embedded TFLite metadata model for BirdNET v2.4;
+- a strict ONNX filter whose output must match the classifier labels one to one;
+- the mapped geomodel, an ONNX model with its own label set whose scores are matched onto each classifier's labels by scientific name (`mappedRangeFilter`).
 
-Label files are embedded directly in the binary using Go's `embed` package, eliminating the need for external files during deployment.
+Which models take part is set per registry entry (`rangeFilterCompat`): v2.4 uses its metadata filter, v3.0 and Perch use the geomodel, and Bat and BSG do not participate. The service holds an immutable state snapshot that is rebuilt on model load, unload and reload (`ReloadRangeFilter`). If a configured backend cannot be built, it falls back to the embedded filter or runs without filtering. `GetProbableSpecies`, `GetSpeciesOccurrence` and `RangeFilterStatus` are the read entry points.
 
-Key functions:
+## Labels and species identity
 
-- `GetLabelFileData()` - Loads the appropriate label file based on model version and locale
-- `loadEmbeddedLabels()` - Loads embedded label files based on the model and locale
-- `loadExternalLabels()` - Allows loading custom label files from external sources
+- BirdNET v2.4 label files for every supported locale are embedded (`data/labels/V2.4`, named `BirdNET_GLOBAL_6K_V2.4_Labels_<locale>.txt`); `GetLabelFileData` falls back to English when a locale is missing. Labels use the `ScientificName_CommonName` form. The other models read the label file installed with them.
+- The orchestrator is the only writer of the process-wide species name index (`internal/speciesindex`). It rebuilds the index from the union of all loaded models' labels on model load, unload, reload, range filter rebuild and locale change. Other packages read `SpeciesIndex().Snapshot()` without locks.
+- `internal/openfauna` is the first name resolver in the chain: it maps scientific names to common names in many locales and carries taxonomy metadata. `taxonomy*.go` provides eBird species codes and multilingual names from the geomodel taxonomy.
 
-### Taxonomy Integration
+## Results, overlap and cadence
 
-The package provides integrated eBird taxonomy data to enhance species identification:
+- `ResultsQueue` carries `Results` from the analysis pipeline to the detection processor. Its default capacity is `DefaultQueueSize` (100) and `ResizeQueue` replaces it. A value sent on the queue belongs to the receiver, so the sender must not modify it.
+- `birdnet.overlap` is defined on a 3 second window. `ResolveModelOverlap` scales it to each model's clip length so the overlap fraction stays the same, and fixes the bat model at 50 percent.
+- The `cadence` package solves for the effective base overlap that keeps the inference load of all source and model pairs under a duty ceiling when the false positive filter is on. The orchestrator publishes the plan (`SetCadencePlan`) and probes model latency for it; `EffectiveBaseOverlap` returns the overlap the pipeline actually uses. The configured value is never changed.
 
-```go
-// TaxonomyMap is a bidirectional mapping between eBird codes and species names
-type TaxonomyMap map[string]string
-```
+## Nighttime scheduler
 
-Key functions:
+The bat model is schedule gated. `nighttimeScheduler` computes from civil dusk and dawn whether it should be active and refreshes that state every 60 seconds, so the hot path reads one atomic value. It is controlled by `bat.nighttimeonly`, needs a configured location and a `suncalc` instance (`SetSunCalc`), and fails open (the bat model stays active) when either is missing. `IsModelActive` and `ModelScheduleStatus` report the state.
 
-- `LoadTaxonomyData()` - Loads taxonomy data from embedded or custom file
-- `GetSpeciesCodeFromName()` - Gets eBird code for a species name
-- `GetSpeciesNameFromCode()` - Gets species name for an eBird code
-- `SplitSpeciesName()` - Splits species name into scientific and common parts
-- `Orchestrator.EnrichResultWithTaxonomy()` - Adds taxonomy information to detection results (taxonomy is owned by the orchestrator, not the primary model)
+## Testing
 
-Example usage of taxonomy enrichment:
-
-```go
-scientific, common, code := orchestrator.EnrichResultWithTaxonomy(result.Species)
-fmt.Printf("Species: %s (%s), eBird code: %s, Confidence: %.2f\n",
-    common, scientific, code, result.Confidence)
-```
-
-### Range Filtering
-
-The package implements a sophisticated range filtering system that uses location and seasonal data to filter bird species predictions:
-
-- `predictFilter()` - Applies TensorFlow model to predict species based on location and time
-- `GetProbableSpecies()` - Filters and sorts bird species based on location-specific scores
-- `BuildRangeFilter()` - Updates the range filter with current probable species
-
-The range filtering system uses a specialized TensorFlow Lite model that takes three inputs:
-
-- Latitude (float)
-- Longitude (float)
-- Week number (float, 1-52)
-
-This helps reduce false positives by filtering out species that are unlikely to be present in a given location during a particular season.
-
-### Results Management
-
-The package includes a queuing system for handling results from audio analysis:
-
-- `Results` struct - Contains detection results and related metadata
-- `ResultsQueue` - Channel for sending analysis results to consuming components
-
-## Embedded Resources
-
-The package embeds several key resources:
-
-- TensorFlow Lite models for bird species identification:
-  - `BirdNET_GLOBAL_6K_V2.4_Model_FP32.tflite` - Primary model for species identification
-  - `BirdNET_GLOBAL_6K_V2.4_MData_Model_FP16.tflite` - Legacy range filter model
-  - `BirdNET_GLOBAL_6K_V2.4_MData_Model_V2_FP16.tflite` - Updated range filter model
-
-- Taxonomy and label data:
-  - `eBird_taxonomy_codes_2021E.json` - eBird taxonomy mapping between species codes and names
-  - `data/labels/V2.4/*.txt` - V2.4 label files in multiple languages
-
-## Usage
-
-A typical usage pattern involves:
-
-```go
-// Create new classifier orchestrator
-orchestrator, err := classifier.NewOrchestrator(settings)
-if err != nil {
-    // Handle error
-}
-
-// Process an audio chunk with a specific model (the built-in BirdNET v2.4 here)
-ctx := context.Background()
-results, err := orchestrator.PredictModel(ctx, classifier.RegistryIDBirdNETV24, audioSample)
-if err != nil {
-    // Handle error
-}
-
-// Process results with taxonomy information
-for _, result := range results {
-    scientific, common, code := orchestrator.EnrichResultWithTaxonomy(result.Species)
-    fmt.Printf("Species: %s (%s), eBird code: %s, Confidence: %.2f\n",
-        common, scientific, code, result.Confidence)
-}
-```
-
-## Thread Safety
-
-The package implements thread safety mechanisms to allow usage in concurrent contexts:
-
-- A mutex protects the TensorFlow interpreters from concurrent access
-- The results queue provides a thread-safe way to communicate results between components
-
-## Performance Optimizations
-
-The package includes several optimizations for performance:
-
-- Automatic thread count determination based on available CPU cores
-- Optional XNNPACK delegate support for accelerated inference
-- Performance core optimization on supported hardware
-- Efficient queue system to handle analysis results asynchronously
-
-## Cross-Platform Support
-
-The package is designed to work on multiple platforms:
-
-- Linux (including Raspberry Pi and other SBCs)
-- macOS
-- Windows
-
-## Dependencies
-
-The package depends on:
-
-- `github.com/tphakala/go-tflite` - TensorFlow Lite bindings for Go
-- `github.com/tphakala/go-tflite/delegates/xnnpack` - XNNPACK acceleration for TensorFlow Lite
-- Internal packages including `conf`, `datastore`, `detection`, and `cpuspec`
+Go tests in this package need the TensorFlow Lite library and the build tags that `task test` supplies; run them with `task test` rather than a bare `go test`. Tests that need an ONNX runtime or OpenVINO skip themselves when it is absent.

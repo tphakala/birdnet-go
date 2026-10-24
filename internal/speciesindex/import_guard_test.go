@@ -60,9 +60,8 @@ func listDeps(t *testing.T, pkg string) []string {
 			require.Failf(t, "go list timed out",
 				"go list -deps %s did not finish within %s", pkg, goListTimeout)
 		}
-		var exitErr *exec.ExitError
 		var stderr []byte
-		if errors.As(err, &exitErr) {
+		if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 			stderr = exitErr.Stderr
 		}
 		require.NoErrorf(t, err, "go list -deps %s failed: %s", pkg, stderr)

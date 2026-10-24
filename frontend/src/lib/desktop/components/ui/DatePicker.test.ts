@@ -15,14 +15,14 @@ describe('DatePicker Component', () => {
   let user = userEvent.setup();
 
   beforeEach(() => {
-    // Reset all mocks before each test
-    testUtils.resetAllMocks();
+    // Clear mock call history before each test
+    testUtils.clearAllMocks();
     user = userEvent.setup();
   });
 
   afterEach(() => {
     // Clean up after each test
-    testUtils.resetAllMocks();
+    testUtils.clearAllMocks();
   });
 
   describe('Basic Rendering', () => {

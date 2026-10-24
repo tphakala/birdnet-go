@@ -69,8 +69,9 @@ func TestResolveTimezone_NearbyCoordsShareCacheEntry(t *testing.T) {
 
 func TestNewSunCalc_StoresLocation(t *testing.T) {
 	sc := NewSunCalc(testLatitude, testLongitude)
-	require.NotNil(t, sc.location, "SunCalc.location is nil after construction")
-	assert.Equal(t, "Europe/Helsinki", sc.location.String(), "SunCalc.location should be Europe/Helsinki")
+	st := sc.current()
+	require.NotNil(t, st.location, "sunState.location is nil after construction")
+	assert.Equal(t, "Europe/Helsinki", st.location.String(), "sunState.location should be Europe/Helsinki")
 }
 
 func TestSunEventTimes_HelsinkiSummerTimezone(t *testing.T) {

@@ -11,9 +11,10 @@
 ## Checklist
 
 - [ ] I have read the [Contributing Guidelines](https://github.com/tphakala/birdnet-go/blob/main/CONTRIBUTING.md)
-- [ ] Tests pass locally (`go test -race ./...` and/or `npm test`)
-- [ ] Linters are clean (`golangci-lint run` and/or `npm run check:all`)
+- [ ] Tests pass locally (`task test` and/or `npm test`)
+- [ ] Linters are clean (`task lint` and/or `npm run check:all`)
 - [ ] New exports and user-facing changes are documented
+- [ ] Feature PRs only: the feature was discussed with the maintainer first (linked above), and I will maintain it after it is merged, as described in [Feature Ownership](https://github.com/tphakala/birdnet-go/blob/main/CONTRIBUTING.md#feature-ownership)
 
 ## Licensing (required)
 

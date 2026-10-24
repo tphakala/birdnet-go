@@ -86,7 +86,7 @@ func notifyModelsNotRegistered(sourceID, sourceName string, modelIDs []string) {
 			"sourceName": sourceName,
 			"models":     models,
 		}).
-		WithDeliveryTarget("bell")
+		WithDeliveryTarget(notification.DeliveryTargetBell)
 
 	// Arm the 6h suppression window only after the notification is actually
 	// created. The service rate-limits, so storing the key before the create (or

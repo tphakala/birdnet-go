@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	stderrors "errors"
 	"io"
 	"net"
 	"os"
@@ -47,7 +46,7 @@ type client struct {
 	lastConnErrMsg     string    // last connection error message for deduplication
 	connErrCount       int       // count of consecutive identical connection errors
 	lastConnErrLogTime time.Time // when the repeated error was last logged
-	// Publish suppression while disconnected — prevents Sentry flood when broker is unreachable.
+	// Publish suppression while disconnected: prevents Sentry flood when broker is unreachable.
 	// When the connection drops, the first publish failure is logged as a warning.
 	// Subsequent publish attempts are silently suppressed until the connection is restored.
 	disconnected           bool      // true after onConnectionLost, false after onConnect
@@ -90,7 +89,7 @@ func NewClient(settings *conf.Settings, observabilityMetrics *observability.Metr
 	// Configure LWT (Last Will and Testament) for Home Assistant availability tracking
 	if settings.Realtime.MQTT.HomeAssistant.Enabled {
 		config.LWT.Enabled = true
-		config.LWT.Topic = config.Topic + "/status"
+		config.LWT.Topic = StatusTopic(config.Topic)
 		config.LWT.Payload = "offline"
 		config.LWT.QoS = 1
 		config.LWT.Retain = true
@@ -324,8 +323,7 @@ func (c *client) handleConnectionFailure(connectErr error, clientToConnect mqtt.
 	c.mu.Unlock()
 
 	// Enhance error if needed
-	var enhancedErr *errors.EnhancedError
-	if !errors.As(connectErr, &enhancedErr) {
+	if _, ok := errors.AsType[*errors.EnhancedError](connectErr); !ok {
 		connectErr = errors.New(connectErr).
 			Component("mqtt").
 			Category(errors.CategoryMQTTConnection).
@@ -373,7 +371,7 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 	// Fast path: if we know the connection is down, suppress publish attempts
 	// to avoid flooding Sentry and logs with repeated errors.
 	// Returns nil (not an error) because detection data is already persisted
-	// in the database before MQTT publish — a missed notification during a
+	// in the database before MQTT publish: a missed notification during a
 	// broker outage is graceful degradation, not data loss. Callers do not
 	// need to retry suppressed publishes.
 	if suppressed := c.suppressPublishWhileDisconnected(topic); suppressed {
@@ -431,7 +429,7 @@ func (c *client) publishInternal(ctx context.Context, topic, payload string, ret
 		}
 
 		// Get potentially reconnected client and retry regardless of IsConnected()
-		// state — let attemptPublish determine the actual outcome.
+		// state: let attemptPublish determine the actual outcome.
 		c.mu.RLock()
 		retryClient := c.internalClient
 		c.mu.RUnlock()
@@ -528,7 +526,7 @@ func IsTransientConnectionError(err error) bool {
 	if err == nil {
 		return false
 	}
-	if stderrors.Is(err, io.EOF) || stderrors.Is(err, io.ErrUnexpectedEOF) {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
 		return true
 	}
 	msg := strings.ToLower(err.Error())
@@ -703,8 +701,7 @@ func (c *client) performDNSResolution(ctx context.Context, log logger.Logger) er
 			log.Error("Failed to resolve broker hostname",
 				logger.String("host", host),
 				logger.Error(err))
-			var dnsErr *net.DNSError
-			if errors.As(err, &dnsErr) {
+			if dnsErr, ok := errors.AsType[*net.DNSError](err); ok {
 				c.mu.Lock()
 				c.lastConnAttempt = time.Now()
 				c.mu.Unlock()
@@ -1031,7 +1028,7 @@ func (c *client) markDisconnectedLocked() {
 // onConnectionLost is the only other trigger for reconnection, and paho invokes
 // it solely for connections that were established at least once. A client whose
 // first Connect failed therefore has nothing driving it, and stays dead until
-// the process restarts — the broker being unreachable for a few seconds while
+// the process restarts: the broker being unreachable for a few seconds while
 // the network comes up at boot is enough to lose MQTT for the whole run.
 //
 // Marking the client disconnected routes publishes through
@@ -1195,8 +1192,7 @@ func (c *client) handleReconnectFailure(log logger.Logger, err error) {
 
 	// Extract error category for metrics (always track, even when log is suppressed)
 	errorCategory := "generic"
-	var enhancedErr *errors.EnhancedError
-	if errors.As(err, &enhancedErr) {
+	if enhancedErr, ok := errors.AsType[*errors.EnhancedError](err); ok {
 		errorCategory = enhancedErr.GetCategory()
 	}
 	c.metrics.IncrementErrorsWithCategory(errorCategory, "reconnect_failed")
