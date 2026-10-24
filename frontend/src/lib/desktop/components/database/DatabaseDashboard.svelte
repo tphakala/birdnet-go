@@ -84,6 +84,8 @@
     'cutover',
   ];
   let isActive = $derived(ACTIVE_MIGRATION_STATES.includes(migrationStatus.data?.state ?? ''));
+  // No status has loaded and the last attempt failed
+  let statusUnknown = $derived(migrationStatus.data === null && migrationStatus.error !== null);
   let isCleanupActive = $derived(migrationStatus.data?.cleanup_state === 'in_progress');
 
   // SSE connection
@@ -571,9 +573,6 @@
         {t('system.database.dashboard.loading')}
       </div>
     </div>
-  {:else if migrationStatus.error && !migrationStatus.data}
-    <!-- Status unknown: the alert above explains why, and the migration controls would only
-       report a state the server never confirmed -->
   {:else if isV2OnlyMode}
     <!-- OPERATIONAL DASHBOARD VIEW -->
     {#if overviewLoading}
@@ -642,30 +641,36 @@
   {:else}
     <!-- MIGRATION VIEW (not v2-only) -->
     <div class="space-y-4">
-      <!-- Top metric strip -->
-      <DatabaseMigrationMetricStrip
-        legacyStats={legacyStats.data}
-        v2Stats={v2Stats.data}
-        migrationStatus={migrationStatus.data}
-      />
+      <!-- Top metric strip. The strip and the progress card report the migration state,
+           which they would show as Idle while the status is unknown; the legacy details,
+           prerequisites and backups come from their own endpoints and stay. -->
+      {#if !statusUnknown}
+        <DatabaseMigrationMetricStrip
+          legacyStats={legacyStats.data}
+          v2Stats={v2Stats.data}
+          migrationStatus={migrationStatus.data}
+        />
+      {/if}
 
       <!-- Middle row: details + progress -->
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <DatabaseMigrationDetails stats={legacyStats.data} />
-        <div class="lg:col-span-2">
-          <DatabaseMigrationProgress
-            status={migrationStatus.data}
-            legacyStats={legacyStats.data}
-            v2Stats={v2Stats.data}
-            prerequisites={prerequisites.data}
-            isStarting={startLoading}
-            onStart={() => (showConfirmDialog = true)}
-            onPause={pauseMigration}
-            onResume={resumeMigration}
-            onRetryValidation={retryValidation}
-            onCancel={cancelMigration}
-          />
-        </div>
+        {#if !statusUnknown}
+          <div class="lg:col-span-2">
+            <DatabaseMigrationProgress
+              status={migrationStatus.data}
+              legacyStats={legacyStats.data}
+              v2Stats={v2Stats.data}
+              prerequisites={prerequisites.data}
+              isStarting={startLoading}
+              onStart={() => (showConfirmDialog = true)}
+              onPause={pauseMigration}
+              onResume={resumeMigration}
+              onRetryValidation={retryValidation}
+              onCancel={cancelMigration}
+            />
+          </div>
+        {/if}
       </div>
 
       <!-- Prerequisites (collapsible, hidden during active migration) -->

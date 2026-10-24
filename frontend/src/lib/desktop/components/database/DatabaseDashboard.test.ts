@@ -135,7 +135,7 @@ describe('DatabaseDashboard migration errors', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Another migration is already running');
   });
-  it('hides the migration controls and offers a retry while the status is unknown', async () => {
+  it('hides the state cards, keeps the independent panels and offers a retry while the status is unknown', async () => {
     const user = userEvent.setup();
     serve({
       [STATUS_URL]: apiError(NOT_CONFIGURED, 503),
@@ -146,12 +146,16 @@ describe('DatabaseDashboard migration errors', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(NOT_CONFIGURED);
-    expect(screen.queryByText(t('system.database.backup.history.title'))).not.toBeInTheDocument();
+    // Backups come from their own endpoint and stay; the state cards would claim "Idle"
+    expect(screen.getByText(t('system.database.backup.history.title'))).toBeInTheDocument();
+    expect(
+      screen.queryByText(t('system.database.migration.strip.readyToMigrate'))
+    ).not.toBeInTheDocument();
 
     serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
     await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
 
-    await screen.findByText(t('system.database.backup.history.title'));
+    await screen.findByText(t('system.database.migration.strip.readyToMigrate'));
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     // The Retry button that had focus is gone; focus must not fall back to the page body
     expect(document.activeElement).not.toBe(document.body);
