@@ -61,6 +61,10 @@ type DatabaseService struct {
 	dataStore  datastore.Interface
 	v2Manager  datastoreV2.Manager
 	v2OnlyMode bool
+
+	// legacyMonitor keeps the migration_state telemetry tag current. It exists
+	// only while the process runs the legacy schema with a state manager.
+	legacyMonitor *legacySchemaMonitor
 }
 
 // NewDatabaseService creates a new DatabaseService with the given settings and metrics.
@@ -100,7 +104,9 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 
 // Start initializes and opens the database connections.
 // It handles three startup paths: v2-only (post-migration), fresh install, and legacy mode.
-// Migration infrastructure is initialized when not in v2-only mode.
+// Migration infrastructure is initialized when not in v2-only mode; on a legacy
+// install with a migration state manager it also starts the monitor that keeps
+// the migration_state telemetry tag current.
 //
 //nolint:gocognit,gocyclo // Database initialization requires handling multiple startup paths with detailed logging
 func (d *DatabaseService) Start(_ context.Context) error {
@@ -290,14 +296,15 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	}
 
 	// Set datastore schema version as a Sentry tag for telemetry
-	telemetry.SetDatastoreSchemaTag(d.dataStore.SchemaVersion())
+	schemaVersion := d.dataStore.SchemaVersion()
+	telemetry.SetDatastoreSchemaTag(schemaVersion)
 
 	// Initialize v2 migration infrastructure only if not in enhanced database mode
 	// In enhanced database mode, migration is already complete - no need for migration infrastructure
 	if !d.v2OnlyMode {
 		// This sets up the StateManager and Worker for the database migration API.
 		// Store the returned manager so Stop() can close the v2 database connection.
-		migrationManager, err := initializeMigrationInfrastructure(settings, d.dataStore)
+		infra, err := initializeMigrationInfrastructure(settings, d.dataStore)
 		if err != nil {
 			// Schema corruption during migration setup is the same silent-fallback class
 			// of failure the v2-only and fresh-install arms now refuse. A migration v2
@@ -313,12 +320,25 @@ func (d *DatabaseService) Start(_ context.Context) error {
 			GetLogger().Warn("migration infrastructure initialization failed",
 				logger.Error(err),
 				logger.String("operation", "initialize_migration_infrastructure"))
-		} else {
-			d.v2Manager = migrationManager
+		}
+		if infra != nil {
+			d.v2Manager = infra.manager
+			if infra.states != nil {
+				d.legacyMonitor = newLegacySchemaMonitor(infra.states, legacySchemaPollInterval, GetLogger())
+			}
+		}
+		if d.legacyMonitor == nil && schemaVersion == datastore.SchemaVersionLegacy {
+			// Legacy schema without a readable migration state.
+			_ = telemetry.SetMigrationStateTag(migrationTagUnavailable)
 		}
 	} else {
 		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
 			logger.String("operation", "initialize_migration_infrastructure"))
+	}
+
+	// Start the monitor last so the failure defer above never has to stop it.
+	if d.legacyMonitor != nil {
+		d.legacyMonitor.start()
 	}
 
 	startSucceeded = true
@@ -369,9 +389,16 @@ func bootParamsFromStartup(settings *conf.Settings, st datastoreV2.StartupState)
 }
 
 // Stop gracefully shuts down the database connections with WAL checkpoints.
-// It stops the migration worker, closes the v2 database, then closes the primary datastore.
+// It stops the migration state monitor and the migration worker, closes the v2 database,
+// then closes the primary datastore.
 func (d *DatabaseService) Stop(_ context.Context) error {
 	log := GetLogger()
+
+	// Stop the state monitor first so nothing reads the database after it closes.
+	if d.legacyMonitor != nil {
+		d.legacyMonitor.stop()
+		d.legacyMonitor = nil
+	}
 
 	// Stop the migration worker before closing databases.
 	importsapi.StopMigrationWorker()

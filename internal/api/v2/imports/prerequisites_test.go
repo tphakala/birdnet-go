@@ -2,12 +2,15 @@
 package importsapi
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
@@ -699,3 +702,117 @@ const testDiskFreeBytes = 2 * MinDiskSpaceBytes
 
 // stubDiskFree is the diskFreeFn the setup helpers install.
 func stubDiskFree(string) (uint64, error) { return testDiskFreeBytes, nil }
+
+// TestPrerequisiteTagValue pins the closed set of values reported to telemetry
+// for the prerequisite checks: only a failing critical check is blocking.
+func TestPrerequisiteTagValue(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		checks []PrerequisiteCheck
+		want   string
+	}{
+		{
+			name: "all checks passed",
+			checks: []PrerequisiteCheck{
+				{ID: "state_idle", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+				{ID: "disk_space", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+			},
+			want: prerequisiteTagPassed,
+		},
+		{
+			name: "failed warning-severity check is not blocking",
+			checks: []PrerequisiteCheck{
+				{ID: "state_idle", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+				{ID: "memory_available", Status: CheckStatusFailed, Severity: CheckSeverityWarning},
+			},
+			want: prerequisiteTagPassed,
+		},
+		{
+			name: "errored critical check blocks",
+			checks: []PrerequisiteCheck{
+				{ID: "state_idle", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+				{ID: "sqlite_integrity", Status: CheckStatusError, Severity: CheckSeverityCritical},
+			},
+			want: "sqlite_integrity",
+		},
+		{
+			name: "skipped critical check does not block",
+			checks: []PrerequisiteCheck{
+				{ID: "legacy_accessible", Status: CheckStatusSkipped, Severity: CheckSeverityCritical},
+			},
+			want: prerequisiteTagPassed,
+		},
+		{
+			name: "first critical failure wins",
+			checks: []PrerequisiteCheck{
+				{ID: "state_idle", Status: CheckStatusPassed, Severity: CheckSeverityCritical},
+				{ID: "disk_space", Status: CheckStatusFailed, Severity: CheckSeverityCritical},
+				{ID: "sqlite_integrity", Status: CheckStatusError, Severity: CheckSeverityCritical},
+			},
+			want: "disk_space",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, prerequisiteTagValue(tt.checks))
+		})
+	}
+}
+
+// discardTransport is a sentry.Transport that drops every event; the test below
+// only reads tags off the hub scope.
+type discardTransport struct{}
+
+func (discardTransport) Configure(sentry.ClientOptions)        {}
+func (discardTransport) SendEvent(*sentry.Event)               {}
+func (discardTransport) Flush(time.Duration) bool              { return true }
+func (discardTransport) FlushWithContext(context.Context) bool { return true }
+func (discardTransport) Close()                                {}
+
+// TestRunCriticalPrerequisiteChecks_PublishesPrereqTag pins that running the
+// critical checks publishes the migration_prereq telemetry tag derived from
+// their results: "passed" when none blocks, otherwise the ID of the first
+// failing critical check. Not parallel: the setup helper holds the shared
+// migration state, and the test binds a client on the process-wide Sentry hub.
+func TestRunCriticalPrerequisiteChecks_PublishesPrereqTag(t *testing.T) {
+	tests := []struct {
+		name     string
+		freeDisk uint64
+		want     string
+	}{
+		{name: "all critical checks pass", freeDisk: testDiskFreeBytes, want: prerequisiteTagPassed},
+		{name: "disk space check fails", freeDisk: 0, want: "disk_space"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, controller, _ := setupPrerequisitesTestEnvironment(t)
+			controller.diskFreeFn = func(string) (uint64, error) { return tt.freeDisk, nil }
+
+			// Telemetry reports only when the user opted in and a client is bound.
+			settings := controller.Settings.Load()
+			prevEnabled := settings.Sentry.Enabled
+			settings.Sentry.Enabled = true
+			t.Cleanup(func() { settings.Sentry.Enabled = prevEnabled })
+
+			hub := sentry.CurrentHub()
+			original := hub.Client()
+			client, err := sentry.NewClient(sentry.ClientOptions{Transport: discardTransport{}})
+			require.NoError(t, err)
+			hub.BindClient(client)
+			t.Cleanup(func() { hub.BindClient(original) })
+			// The tag lands on the top scope; pop it afterwards so it does not leak.
+			hub.PushScope()
+			t.Cleanup(hub.PopScope)
+
+			controller.runCriticalPrerequisiteChecks()
+
+			event := hub.Scope().ApplyToEvent(&sentry.Event{}, nil, client)
+			require.NotNil(t, event)
+			assert.Equal(t, tt.want, event.Tags["migration_prereq"])
+		})
+	}
+}
