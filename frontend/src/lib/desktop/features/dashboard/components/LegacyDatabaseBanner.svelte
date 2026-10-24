@@ -16,7 +16,8 @@
   per kind: the banner stays hidden while the fetched kind equals the
   dismissed one and returns when the kind changes (for example a dismissed
   not_started warning followed by a failed run), like the bell notice. It
-  returns in the next session until the migration completes.
+  returns in the next session until the migration completes. Dismissing from
+  the keyboard returns focus to the control it came from.
 
   @component
 -->
@@ -26,6 +27,7 @@
   import { t } from '$lib/i18n';
   import { cn } from '$lib/utils/cn';
   import { api } from '$lib/utils/api';
+  import { createFocusReturn } from '$lib/utils/focusReturn';
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { SYSTEM_ROUTES } from '$lib/utils/settingsRoutes';
   import { handleAppLinkClick } from '$lib/stores/navigation.svelte';
@@ -104,7 +106,11 @@
   let variant = $state.raw<Variant | undefined>();
   let isError = $derived(variant?.tone === 'error');
 
-  function dismiss() {
+  const { track: trackFocus, restore: restoreFocus } = createFocusReturn();
+
+  function dismiss(event: MouseEvent) {
+    // Before the banner is hidden: dismissing removes the focused button.
+    restoreFocus(event);
     if (!kind) return;
     dismissedKind = kind;
     try {
@@ -140,6 +146,7 @@
   {@const Icon = variant.icon}
   <div
     role={isError ? 'alert' : 'status'}
+    use:trackFocus
     class={cn(
       'flex flex-col gap-3 rounded-2xl border p-4 sm:flex-row sm:items-center',
       isError
