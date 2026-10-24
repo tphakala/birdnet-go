@@ -449,7 +449,15 @@
         "completedTitle": "Database Migration Completed",
         "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
         "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming."
+        "errorMessage": "Migration paused due to errors. Check logs and try resuming.",
+        "legacyNotStartedTitle": "Database upgrade required",
+        "legacyNotStartedMessage": "This installation still uses the old database format, which will stop working in a future release. Open System > Database to run the migration.",
+        "legacyInProgressTitle": "Database migration in progress",
+        "legacyInProgressMessage": "The migration to the new database format is running. Keep BirdNET-Go running until it finishes; the old format will stop working in a future release.",
+        "legacyNeedsAttentionTitle": "Database migration needs attention",
+        "legacyNeedsAttentionMessage": "The migration to the new database format is paused or has failed. Open System > Database to resume or retry it; the old format will stop working in a future release.",
+        "legacyRestartRequiredTitle": "Restart to finish the database migration",
+        "legacyRestartRequiredMessage": "The migration has finished. Restart BirdNET-Go to switch to the new database. If this message stays after a restart, check the log for database errors."
       },
       "cleanup": {
         "completeTitle": "Legacy Database Cleanup Complete",

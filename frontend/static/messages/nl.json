@@ -449,7 +449,15 @@
         "completedTitle": "Databasemigratie voltooid",
         "completedMessage": "Migratie voltooid. Herstart BirdNET-Go om over te schakelen naar de nieuwe database.",
         "errorTitle": "Databasemigratiefout",
-        "errorMessage": "Migratie gepauzeerd vanwege fouten. Controleer de logs en probeer te hervatten."
+        "errorMessage": "Migratie gepauzeerd vanwege fouten. Controleer de logs en probeer te hervatten.",
+        "legacyNotStartedTitle": "Database-upgrade vereist",
+        "legacyNotStartedMessage": "Deze installatie gebruikt nog het oude databaseformaat, dat in een toekomstige versie niet meer zal werken. Open Systeem > Database om de migratie uit te voeren.",
+        "legacyInProgressTitle": "Databasemigratie bezig",
+        "legacyInProgressMessage": "De migratie naar het nieuwe databaseformaat wordt uitgevoerd. Laat BirdNET-Go draaien tot deze klaar is; het oude formaat zal in een toekomstige versie niet meer werken.",
+        "legacyNeedsAttentionTitle": "Databasemigratie heeft aandacht nodig",
+        "legacyNeedsAttentionMessage": "De migratie naar het nieuwe databaseformaat is gepauzeerd of mislukt. Open Systeem > Database om te hervatten of opnieuw te proberen; het oude formaat zal in een toekomstige versie niet meer werken.",
+        "legacyRestartRequiredTitle": "Herstart om de databasemigratie af te ronden",
+        "legacyRestartRequiredMessage": "De migratie is voltooid. Herstart BirdNET-Go om over te schakelen naar de nieuwe database. Als dit bericht na een herstart blijft staan, controleer dan het logboek op databasefouten."
       },
       "cleanup": {
         "completeTitle": "Opruiming oude database voltooid",

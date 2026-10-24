@@ -449,7 +449,15 @@
         "completedTitle": "Migração da base de dados concluída",
         "completedMessage": "Migração concluída. Reinicie o BirdNET-Go para mudar para a nova base de dados.",
         "errorTitle": "Erro na migração da base de dados",
-        "errorMessage": "Migração em pausa devido a erros. Verifique os registos e tente retomar."
+        "errorMessage": "Migração em pausa devido a erros. Verifique os registos e tente retomar.",
+        "legacyNotStartedTitle": "É necessária a atualização da base de dados",
+        "legacyNotStartedMessage": "Esta instalação ainda usa o formato antigo da base de dados, que deixará de funcionar numa versão futura. Abra Sistema > Base de dados para executar a migração.",
+        "legacyInProgressTitle": "Migração da base de dados em curso",
+        "legacyInProgressMessage": "A migração para o novo formato da base de dados está em execução. Mantenha o BirdNET-Go em execução até terminar; o formato antigo deixará de funcionar numa versão futura.",
+        "legacyNeedsAttentionTitle": "A migração da base de dados precisa de atenção",
+        "legacyNeedsAttentionMessage": "A migração para o novo formato da base de dados está em pausa ou falhou. Abra Sistema > Base de dados para a retomar ou tentar novamente; o formato antigo deixará de funcionar numa versão futura.",
+        "legacyRestartRequiredTitle": "Reinicie para concluir a migração da base de dados",
+        "legacyRestartRequiredMessage": "A migração foi concluída. Reinicie o BirdNET-Go para mudar para a nova base de dados. Se esta mensagem continuar após reiniciar, verifique o registo para erros da base de dados."
       },
       "cleanup": {
         "completeTitle": "Limpeza da base de dados antiga concluída",

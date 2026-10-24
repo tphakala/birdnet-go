@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -62,8 +63,9 @@ type DatabaseService struct {
 	v2Manager  datastoreV2.Manager
 	v2OnlyMode bool
 
-	// legacyMonitor keeps the migration_state telemetry tag current. It exists
-	// only while the process runs the legacy schema with a state manager.
+	// legacyMonitor keeps the migration_state telemetry tag and the legacy schema
+	// bell notice current. It exists only while the process runs the legacy
+	// schema with a state manager.
 	legacyMonitor *legacySchemaMonitor
 }
 
@@ -106,7 +108,9 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 // It handles three startup paths: v2-only (post-migration), fresh install, and legacy mode.
 // Migration infrastructure is initialized when not in v2-only mode; on a legacy
 // install with a migration state manager it also starts the monitor that keeps
-// the migration_state telemetry tag current.
+// the migration_state telemetry tag and the legacy schema bell notice current,
+// and logs the legacy schema startup WARN once (the monitor logs it, or this
+// method when no state manager exists).
 //
 //nolint:gocognit,gocyclo // Database initialization requires handling multiple startup paths with detailed logging
 func (d *DatabaseService) Start(_ context.Context) error {
@@ -324,12 +328,14 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		if infra != nil {
 			d.v2Manager = infra.manager
 			if infra.states != nil {
-				d.legacyMonitor = newLegacySchemaMonitor(infra.states, legacySchemaPollInterval, GetLogger())
+				d.legacyMonitor = newLegacySchemaMonitor(infra.states, legacySchemaPollInterval, datastoreLog,
+					schemaVersion == datastore.SchemaVersionLegacy)
 			}
 		}
 		if d.legacyMonitor == nil && schemaVersion == datastore.SchemaVersionLegacy {
 			// Legacy schema without a readable migration state.
 			_ = telemetry.SetMigrationStateTag(migrationTagUnavailable)
+			logLegacySchemaWarning(datastoreLog, migration.LegacyNoticeNone, migrationTagUnavailable)
 		}
 	} else {
 		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",

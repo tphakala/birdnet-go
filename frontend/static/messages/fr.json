@@ -449,7 +449,15 @@
         "completedTitle": "Migration de la base de données terminée",
         "completedMessage": "Migration terminée. Veuillez redémarrer BirdNET-Go pour basculer vers la nouvelle base de données.",
         "errorTitle": "Erreur de migration de la base de données",
-        "errorMessage": "Migration mise en pause suite à des erreurs. Vérifiez les journaux et réessayez."
+        "errorMessage": "Migration mise en pause suite à des erreurs. Vérifiez les journaux et réessayez.",
+        "legacyNotStartedTitle": "Mise à niveau de la base de données requise",
+        "legacyNotStartedMessage": "Cette installation utilise encore l'ancien format de base de données, qui cessera de fonctionner dans une prochaine version. Ouvrez Système > Base de données pour lancer la migration.",
+        "legacyInProgressTitle": "Migration de la base de données en cours",
+        "legacyInProgressMessage": "La migration vers le nouveau format de base de données est en cours. Laissez BirdNET-Go en marche jusqu'à la fin ; l'ancien format cessera de fonctionner dans une prochaine version.",
+        "legacyNeedsAttentionTitle": "La migration de la base de données demande votre attention",
+        "legacyNeedsAttentionMessage": "La migration vers le nouveau format de base de données est en pause ou a échoué. Ouvrez Système > Base de données pour la reprendre ou la relancer ; l'ancien format cessera de fonctionner dans une prochaine version.",
+        "legacyRestartRequiredTitle": "Redémarrez pour terminer la migration de la base de données",
+        "legacyRestartRequiredMessage": "La migration est terminée. Redémarrez BirdNET-Go pour basculer vers la nouvelle base de données. Si ce message persiste après le redémarrage, consultez le journal pour y trouver des erreurs de base de données."
       },
       "cleanup": {
         "completeTitle": "Nettoyage de l'ancienne base de données terminé",

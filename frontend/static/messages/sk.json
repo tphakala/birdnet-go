@@ -449,7 +449,15 @@
         "completedTitle": "Migrácia databázy dokončená",
         "completedMessage": "Migrácia dokončená. Reštartujte BirdNET-Go pre prepnutie na novú databázu.",
         "errorTitle": "Chyba migrácie databázy",
-        "errorMessage": "Migrácia pozastavená kvôli chybám. Skontrolujte záznamy a skúste pokračovať."
+        "errorMessage": "Migrácia pozastavená kvôli chybám. Skontrolujte záznamy a skúste pokračovať.",
+        "legacyNotStartedTitle": "Je potrebná aktualizácia databázy",
+        "legacyNotStartedMessage": "Táto inštalácia stále používa starý formát databázy, ktorý v budúcom vydaní prestane fungovať. Migráciu spustíte v časti Systém > Databáza.",
+        "legacyInProgressTitle": "Prebieha migrácia databázy",
+        "legacyInProgressMessage": "Prebieha migrácia do nového formátu databázy. Nechajte BirdNET-Go bežať, kým sa nedokončí; starý formát v budúcom vydaní prestane fungovať.",
+        "legacyNeedsAttentionTitle": "Migrácia databázy vyžaduje pozornosť",
+        "legacyNeedsAttentionMessage": "Migrácia do nového formátu databázy je pozastavená alebo zlyhala. Obnovte ju alebo zopakujte v časti Systém > Databáza; starý formát v budúcom vydaní prestane fungovať.",
+        "legacyRestartRequiredTitle": "Dokončite migráciu databázy reštartom",
+        "legacyRestartRequiredMessage": "Migrácia bola dokončená. Reštartujte BirdNET-Go, aby sa prepol na novú databázu. Ak sa táto správa zobrazuje aj po reštarte, skontrolujte v zázname chyby databázy."
       },
       "cleanup": {
         "completeTitle": "Vyčistenie starej databázy dokončené",

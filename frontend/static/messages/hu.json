@@ -449,7 +449,15 @@
         "completedTitle": "Adatbázis migráció befejezve",
         "completedMessage": "A migráció befejeződött. Kérjük, indítsa újra a BirdNET-Go-t az új adatbázis használatához.",
         "errorTitle": "Adatbázis migráció hiba",
-        "errorMessage": "A migráció hibák miatt szünetelt. Ellenőrizze a naplókat és próbálja folytatni."
+        "errorMessage": "A migráció hibák miatt szünetelt. Ellenőrizze a naplókat és próbálja folytatni.",
+        "legacyNotStartedTitle": "Adatbázis-frissítés szükséges",
+        "legacyNotStartedMessage": "Ez a telepítés még a régi adatbázisformátumot használja, amely egy későbbi kiadásban megszűnik működni. A migráció elindításához nyissa meg a Rendszer > Adatbázis oldalt.",
+        "legacyInProgressTitle": "Adatbázis-migráció folyamatban",
+        "legacyInProgressMessage": "Az új adatbázisformátumra való migráció fut. Hagyja futni a BirdNET-Go-t, amíg be nem fejeződik; a régi formátum egy későbbi kiadásban megszűnik működni.",
+        "legacyNeedsAttentionTitle": "Az adatbázis-migráció figyelmet igényel",
+        "legacyNeedsAttentionMessage": "Az új adatbázisformátumra való migráció szünetel vagy hibával leállt. A folytatáshoz vagy az újrapróbáláshoz nyissa meg a Rendszer > Adatbázis oldalt; a régi formátum egy későbbi kiadásban megszűnik működni.",
+        "legacyRestartRequiredTitle": "Indítsa újra az adatbázis-migráció befejezéséhez",
+        "legacyRestartRequiredMessage": "A migráció befejeződött. Indítsa újra a BirdNET-Go-t az új adatbázis használatához. Ha ez az üzenet újraindítás után is megmarad, ellenőrizze a naplóban az adatbázishibákat."
       },
       "cleanup": {
         "completeTitle": "Régi adatbázis karbantartás befejezve",
