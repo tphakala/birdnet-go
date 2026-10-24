@@ -72,8 +72,8 @@ type ResultModelContrib struct {
 	Model         ModelInfo
 	HitCount      int
 	MaxConfidence float64
-	FirstHitAt    time.Time // Capture time of the end of the model's first hit window
-	LastHitAt     time.Time // Capture time of the end of the model's last hit window
+	FirstHitAt    time.Time // Capture time of the end of the model's first hit window (processing time when the source gave none)
+	LastHitAt     time.Time // Capture time of the end of the model's last hit window (processing time when the source gave none)
 	MinConfidence float64   // Lowest confidence among the hits
 	ConfidenceSum float64   // Sum of the hit confidences; the mean is ConfidenceSum / HitCount
 }

@@ -247,8 +247,8 @@ type ModelContribution struct {
 	MaxConfidence float64   // Highest confidence seen from this model
 	MinConfidence float64   // Lowest confidence seen from this model
 	ConfidenceSum float64   // Sum of the confidences of this model's hits
-	FirstHitAt    time.Time // Audio end stamp of the earliest hit window
-	LastHitAt     time.Time // Audio end stamp of the latest hit window
+	FirstHitAt    time.Time // Audio end stamp of the earliest hit window (processing time when the source gave none)
+	LastHitAt     time.Time // Audio end stamp of the latest hit window (processing time when the source gave none)
 }
 
 // recordHit folds one hit into the contribution. Times are folded with min/max

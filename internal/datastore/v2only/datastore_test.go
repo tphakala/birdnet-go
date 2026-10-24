@@ -2485,3 +2485,56 @@ func TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail(t *testing.T) 
 		Where("id = ?", note.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count, "the detection row must survive a contribution failure")
 }
+
+// TestMergeContribution_Stats pins both orders of a merge, which the map-iteration
+// order of resolveModelContributions leaves random: stats survive only when both
+// sides have them, whichever side arrived first.
+func TestMergeContribution_Stats(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	withStats := detection.ResultModelContrib{
+		HitCount: 2, MaxConfidence: 0.8, MinConfidence: 0.7, ConfidenceSum: 1.5,
+		FirstHitAt: base, LastHitAt: base.Add(time.Second),
+	}
+	withoutStats := detection.ResultModelContrib{HitCount: 1, MaxConfidence: 0.9}
+
+	assertNoStats := func(t *testing.T, e *entities.DetectionModelContribution) {
+		t.Helper()
+		assert.Equal(t, 3, e.HitCount)
+		assert.InDelta(t, 0.9, e.MaxConfidence, 1e-9)
+		assert.Nil(t, e.FirstHitAt)
+		assert.Nil(t, e.LastHitAt)
+		assert.Nil(t, e.MinConfidence)
+		assert.Nil(t, e.ConfidenceSum)
+	}
+
+	t.Run("destination has stats, merged entry lacks them", func(t *testing.T) {
+		t.Parallel()
+		dst := contributionEntity(1, &withStats)
+		mergeContribution(dst, &withoutStats)
+		assertNoStats(t, dst)
+	})
+	t.Run("destination lacks stats, merged entry has them", func(t *testing.T) {
+		t.Parallel()
+		dst := contributionEntity(1, &withoutStats)
+		mergeContribution(dst, &withStats)
+		assertNoStats(t, dst)
+	})
+	t.Run("both have stats", func(t *testing.T) {
+		t.Parallel()
+		other := detection.ResultModelContrib{
+			HitCount: 1, MaxConfidence: 0.6, MinConfidence: 0.6, ConfidenceSum: 0.6,
+			FirstHitAt: base.Add(-time.Second), LastHitAt: base.Add(5 * time.Second),
+		}
+		dst := contributionEntity(1, &withStats)
+		mergeContribution(dst, &other)
+		require.NotNil(t, dst.FirstHitAt)
+		require.NotNil(t, dst.LastHitAt)
+		require.NotNil(t, dst.MinConfidence)
+		require.NotNil(t, dst.ConfidenceSum)
+		assert.Equal(t, base.Add(-time.Second).UnixMilli(), *dst.FirstHitAt)
+		assert.Equal(t, base.Add(5*time.Second).UnixMilli(), *dst.LastHitAt)
+		assert.InDelta(t, 0.6, *dst.MinConfidence, 1e-9)
+		assert.InDelta(t, 2.1, *dst.ConfidenceSum, 1e-9)
+	})
+}
