@@ -463,7 +463,7 @@
       },
       "ort": {
         "unavailableTitle": "Az ONNX Runtime nem elérhető",
-        "unavailableMessage": "Az ONNX Runtime {requiredVersion} szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
+        "unavailableMessage": "Az ONNX Runtime {requiredVersion} vagy újabb verziója szükséges a(z) {modelName} modellhez, de nem található. Lásd a telepítési útmutatót: {installGuideURL}"
       },
       "region": {
         "staleTitle": "A modellrégió elavult lehet",

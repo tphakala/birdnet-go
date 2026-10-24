@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 
 	ort "github.com/tphakala/birdnet-go/internal/inference/onnx"
@@ -314,31 +315,47 @@ func InitONNXRuntime(libraryPath string) (err error) {
 		}
 	}()
 
-	ort.MustInitORT(libraryPath)
+	optOut, initErr := ort.InitORT(libraryPath)
+	if initErr != nil {
+		return describeORTInitError(libraryPath, initErr)
+	}
 	ortInitialized = true
 	publishORTRuntime(libraryPath, configured)
-	logKleidiAIWorkaround(ortlib.GetVersion(), runtime.GOARCH)
+	logORTInitialized(ortlib.GetVersion(), libraryPath, optOut)
 	return nil
 }
 
-// archARM64 is the runtime.GOARCH value of 64-bit Arm. Of the targets
-// BirdNET-Go builds for, it is the only one where ONNX Runtime uses KleidiAI
-// kernels.
-const archARM64 = "arm64"
+// ortAPIBaseTooOldMarker is the text yalue/onnxruntime_go v1.36.0 returns when
+// the loaded library cannot serve the C API level it requests: code 2 means
+// GetApi(29) returned NULL (setup_env.go:87, setup_env_windows.go:56).
+const ortAPIBaseTooOldMarker = "Error setting ORT API base: 2"
 
-// logKleidiAIWorkaround logs at Info that sessions disable the KleidiAI
-// kernels for ortVersion, so support can confirm the workaround is active on
-// an arm64 host. It stays silent off arm64, where the
-// session option changes nothing. InitONNXRuntime calls it after a successful
-// init.
-func logKleidiAIWorkaround(ortVersion, goarch string) {
-	if goarch != archARM64 || !ort.KleidiAIWorkaroundNeeded(ortVersion) {
-		return
+// describeORTInitError turns an InitORT failure into a user-facing error. The
+// cryptic "too old" failure gets a readable message; any other failure keeps
+// the generic wording. It must not call ortlib.GetVersion: after a failed init
+// that points into an unloaded library.
+func describeORTInitError(path string, err error) error {
+	if !strings.Contains(err.Error(), ortAPIBaseTooOldMarker) {
+		return fmt.Errorf("failed to initialize ONNX Runtime: %w; install guide: %s", err, ORTInstallGuideURL)
 	}
-	logger.Global().Module("inference").Info(
-		"ONNX Runtime KleidiAI kernels are disabled to avoid a known memory growth in older ONNX Runtime releases on Arm CPUs with SME",
-		logger.String("ort_version", ortVersion),
-		logger.String("fixed_in", ort.KleidiAIFixedVersion))
+	hint := ""
+	if v := inferVersionFromPath(path); v != "" {
+		if _, known := ortVersionMeetsMinimum(v); known {
+			hint = "; its file name suggests version " + v
+		}
+	}
+	return fmt.Errorf("ONNX Runtime library %q is older than the supported minimum (%s required)%s: %w; install guide: %s",
+		path, ORTRequiredVersion(), hint, err, ORTInstallGuideURL)
+}
+
+// logORTInitialized logs the loaded library and the telemetry opt-out state.
+func logORTInitialized(version, libraryPath string, optOut ort.TelemetryOptOut) {
+	logger.Global().Module("inference").Info("ONNX Runtime initialized",
+		logger.String("version", version),
+		logger.String("library_path", libraryPath),
+		logger.String("ort_disable_telemetry", optOut.Value),
+		logger.Bool("telemetry_disabled", optOut.Disabled),
+		logger.Bool("telemetry_api_disabled", optOut.APIDisabled))
 }
 
 // findONNXRuntimeLibrary searches standard system paths for the ONNX Runtime
