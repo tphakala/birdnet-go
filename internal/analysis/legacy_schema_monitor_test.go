@@ -187,3 +187,61 @@ func TestLegacySchemaMonitor_RetriesTagWhileTelemetryIsOff(t *testing.T) {
 		assert.Equal(t, []string{"idle", "idle", "idle"}, calls)
 	})
 }
+
+func TestLegacySchemaMonitor_RetriesTagWhileReadsFail(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		steps []fakeStateStep
+		want  []string
+	}{
+		{
+			name:  "reads fail from the start",
+			steps: []fakeStateStep{{err: errors.NewStd("down")}},
+			// Offered on start and the next tick (rejected), accepted on the
+			// third evaluation, then not offered again.
+			want: []string{"unavailable", "unavailable", "unavailable"},
+		},
+		{
+			name:  "reads fail after one good read",
+			steps: []fakeStateStep{{state: entities.MigrationStatusMigrating}, {err: errors.NewStd("down")}},
+			want:  []string{"migrating", "migrating", "migrating"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				reader := &fakeStateReader{steps: tt.steps}
+				var mu sync.Mutex
+				var calls []string
+				enabled := false
+				m := newLegacySchemaMonitor(reader, time.Second, logger.Global().Module("test"))
+				m.setTag = func(v string) bool {
+					mu.Lock()
+					defer mu.Unlock()
+					calls = append(calls, v)
+					return enabled
+				}
+
+				m.start()
+				time.Sleep(time.Second)
+				synctest.Wait()
+				mu.Lock()
+				enabled = true // the user opts in while reads keep failing
+				mu.Unlock()
+				time.Sleep(time.Second)
+				synctest.Wait()
+				time.Sleep(2 * time.Second)
+				synctest.Wait()
+				m.stop()
+
+				mu.Lock()
+				defer mu.Unlock()
+				assert.Equal(t, tt.want, calls)
+			})
+		})
+	}
+}

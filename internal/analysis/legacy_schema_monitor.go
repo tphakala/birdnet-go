@@ -66,7 +66,7 @@ type legacySchemaMonitor struct {
 	// mu serializes evaluations and guards lastTag.
 	mu      sync.Mutex
 	lastTag string
-	applied bool // lastTag was accepted by setTag; false means retry on the next tick
+	applied bool // lastTag was accepted by setTag; false means offer it again on the next tick, even when the read fails
 
 	stopCh   chan struct{}
 	doneCh   chan struct{}
@@ -118,9 +118,9 @@ func (m *legacySchemaMonitor) stop() {
 }
 
 // evaluate reads the state and publishes the tag when its value changed or the
-// last publish was not applied (telemetry was off, for example). A
-// failed read keeps the last published value, except before any successful
-// read, where it publishes unavailable.
+// last publish was not applied (telemetry was off, for example). A failed read
+// keeps the last value, and offers it again while it is not applied; before
+// any successful read it publishes unavailable.
 func (m *legacySchemaMonitor) evaluate() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -131,6 +131,9 @@ func (m *legacySchemaMonitor) evaluate() {
 			logger.Error(err),
 			logger.String("operation", "legacy_schema_monitor_evaluate"))
 		if m.lastTag != "" {
+			if !m.applied {
+				m.applied = m.setTag(m.lastTag)
+			}
 			return
 		}
 	}
