@@ -604,7 +604,7 @@ func TestGetMigrationStatus_V2OnlyLegacyNotice(t *testing.T) {
 
 		prevV2Only := isV2OnlyMode
 		isV2OnlyMode = true
-		defer func() { isV2OnlyMode = prevV2Only }()
+		t.Cleanup(func() { isV2OnlyMode = prevV2Only })
 
 		response := getMigrationStatusResponse(t, e, controller)
 		assert.True(t, response.IsV2OnlyMode)
@@ -612,8 +612,9 @@ func TestGetMigrationStatus_V2OnlyLegacyNotice(t *testing.T) {
 	})
 
 	t.Run("without state manager", func(t *testing.T) {
+		// The unlock is registered first so it runs after the globals are restored.
 		migrationTestMu.Lock()
-		defer migrationTestMu.Unlock()
+		t.Cleanup(migrationTestMu.Unlock)
 
 		e := echo.New()
 		controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
@@ -621,7 +622,7 @@ func TestGetMigrationStatus_V2OnlyLegacyNotice(t *testing.T) {
 
 		prevSM, prevV2Only := stateManager, isV2OnlyMode
 		stateManager, isV2OnlyMode = nil, true
-		defer func() { stateManager, isV2OnlyMode = prevSM, prevV2Only }()
+		t.Cleanup(func() { stateManager, isV2OnlyMode = prevSM, prevV2Only })
 
 		response := getMigrationStatusResponse(t, e, controller)
 		assert.Equal(t, string(entities.MigrationStatusCompleted), response.State)
