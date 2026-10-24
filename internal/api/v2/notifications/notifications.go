@@ -604,10 +604,9 @@ func (c *Handler) runNotificationEventLoop(ctx echo.Context, client *Notificatio
 				return nil
 			}
 
-			// Service.CreateWithMetadata broadcasts a push-only notification so
-			// the push dispatcher can receive it, but does not save it to the
-			// store. Shown here it would be a bell entry the notification list
-			// does not return, gone after a reload.
+			// Service.CreateWithMetadata broadcasts push-only notifications for
+			// the push dispatcher but does not store them; shown here one would
+			// be a bell entry that is gone after a reload.
 			if notif.DeliveryTarget == notification.DeliveryTargetPush {
 				continue
 			}

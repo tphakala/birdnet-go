@@ -16,9 +16,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// runLoopWithDeletions feeds events into a notification SSE event loop and
-// returns what it wrote to the wire.
-func runLoopWithDeletions(t *testing.T, guest bool, events ...notification.DeletedEvent) string {
+// runLoop runs a notification SSE event loop for client until drained reports
+// that every queued event was received, then disconnects it and returns what
+// the loop wrote to the wire.
+func runLoop(t *testing.T, client *NotificationClient, drained func() bool) string {
 	t.Helper()
 	c := mockHandler()
 	c.SetTestContext(t.Context(), nil)
@@ -28,6 +29,26 @@ func runLoopWithDeletions(t *testing.T, guest bool, events ...notification.Delet
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
+	errCh := make(chan error, 1)
+	go func() { errCh <- c.runNotificationEventLoop(ctx, client) }()
+
+	// The loop writes each received event before it selects again, so once the
+	// queue is drained the Done signal is seen only after the last write.
+	require.Eventually(t, drained, 2*time.Second, time.Millisecond)
+	client.Done <- struct{}{}
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(2 * time.Second):
+		require.Fail(t, "event loop did not return after disconnect")
+	}
+	return rec.Body.String()
+}
+
+// runLoopWithDeletions feeds events into a notification SSE event loop and
+// returns what it wrote to the wire.
+func runLoopWithDeletions(t *testing.T, guest bool, events ...notification.DeletedEvent) string {
+	t.Helper()
 	deletions := make(chan notification.DeletedEvent, len(events))
 	for _, ev := range events {
 		deletions <- ev
@@ -40,36 +61,13 @@ func runLoopWithDeletions(t *testing.T, guest bool, events ...notification.Delet
 		Context:      t.Context(),
 		Guest:        guest,
 	}
-
-	errCh := make(chan error, 1)
-	go func() { errCh <- c.runNotificationEventLoop(ctx, client) }()
-
-	// Wait until the loop drained the queued events, then disconnect it.
-	// The loop writes each received event before it selects again, so once the
-	// queue is drained the Done signal is seen only after the last write.
-	require.Eventually(t, func() bool { return len(deletions) == 0 }, 2*time.Second, time.Millisecond)
-	client.Done <- struct{}{}
-	select {
-	case err := <-errCh:
-		require.NoError(t, err)
-	case <-time.After(2 * time.Second):
-		require.Fail(t, "event loop did not return after disconnect")
-	}
-	return rec.Body.String()
+	return runLoop(t, client, func() bool { return len(deletions) == 0 })
 }
 
 // runLoopWithNotifications feeds created notifications into a notification SSE
 // event loop and returns what it wrote to the wire.
 func runLoopWithNotifications(t *testing.T, guest bool, notifs ...*notification.Notification) string {
 	t.Helper()
-	c := mockHandler()
-	c.SetTestContext(t.Context(), nil)
-
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, sseEndpoint, http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
 	created := make(chan *notification.Notification, len(notifs))
 	for _, n := range notifs {
 		created <- n
@@ -82,49 +80,31 @@ func runLoopWithNotifications(t *testing.T, guest bool, notifs ...*notification.
 		Context:      t.Context(),
 		Guest:        guest,
 	}
-
-	errCh := make(chan error, 1)
-	go func() { errCh <- c.runNotificationEventLoop(ctx, client) }()
-
-	// The loop writes each received notification before it selects again, so
-	// once the queue is drained the Done signal is seen only after the last write.
-	require.Eventually(t, func() bool { return len(created) == 0 }, 2*time.Second, time.Millisecond)
-	client.Done <- struct{}{}
-	select {
-	case err := <-errCh:
-		require.NoError(t, err)
-	case <-time.After(2 * time.Second):
-		require.Fail(t, "event loop did not return after disconnect")
-	}
-	return rec.Body.String()
+	return runLoop(t, client, func() bool { return len(created) == 0 })
 }
 
 // TestNotificationEventLoop_SkipsPushOnlyNotifications pins that a notification
-// routed only to push providers never reaches a browser. The service broadcasts
-// it so the push dispatcher can receive it, but the notification store never
-// held it, so a bell entry would vanish on reload and its actions would target
-// an ID the store does not know. Notifications for the bell or for all channels
-// keep arriving, for authenticated and guest clients alike.
+// routed only to push providers never reaches a browser, for authenticated and
+// guest clients alike, while notifications for the bell or for all channels
+// still arrive.
 func TestNotificationEventLoop_SkipsPushOnlyNotifications(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	for _, tt := range []struct {
 		name  string
 		guest bool
-		// typ is a type the client would otherwise receive: guests only get
-		// detection notifications.
-		typ notification.Type
 	}{
-		{name: "authenticated client", guest: false, typ: notification.TypeWarning},
-		{name: "guest client", guest: true, typ: notification.TypeDetection},
-	}
-	for _, tt := range tests {
+		{name: "authenticated client", guest: false},
+		{name: "guest client", guest: true},
+	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			pushOnly := notification.NewNotification(tt.typ, notification.PriorityHigh, "push-only", "m").
+			// Detection notifications pass the guest filter, so only the
+			// delivery target decides whether each one arrives.
+			pushOnly := notification.NewNotification(notification.TypeDetection, notification.PriorityHigh, "push-only", "m").
 				WithDeliveryTarget(notification.DeliveryTargetPush)
-			forAll := notification.NewNotification(tt.typ, notification.PriorityMedium, "for-all", "m")
-			bellOnly := notification.NewNotification(tt.typ, notification.PriorityMedium, "bell-only", "m").
+			forAll := notification.NewNotification(notification.TypeDetection, notification.PriorityMedium, "for-all", "m")
+			bellOnly := notification.NewNotification(notification.TypeDetection, notification.PriorityMedium, "bell-only", "m").
 				WithDeliveryTarget(notification.DeliveryTargetBell)
 
 			body := runLoopWithNotifications(t, tt.guest, pushOnly, forAll, bellOnly)
