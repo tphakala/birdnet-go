@@ -9,6 +9,9 @@ import {
 import NotificationToast from './NotificationToast.svelte';
 import NotificationToastTestWrapper from './NotificationToast.test.svelte';
 
+// Errors are alerts, every other type is a status message
+const TOAST_SELECTOR = '[role="alert"], [role="status"]';
+
 describe('NotificationToast', () => {
   const toastTest = createComponentTestFactory(NotificationToast);
 
@@ -41,8 +44,8 @@ describe('NotificationToast', () => {
         },
       });
 
-      // The component now uses role="alert" and CSS variable-based type classes
-      const alert = container.querySelector('[role="alert"]');
+      // The toast is an alert for errors, a status otherwise, with CSS variable-based type classes
+      const alert = container.querySelector(TOAST_SELECTOR);
       expect(alert).toBeInTheDocument();
       // Verify it has the appropriate type-based background class
       expect(alert?.className).toContain(`bg-[var(--color-${type})]`);
@@ -134,7 +137,7 @@ describe('NotificationToast', () => {
     type => {
       const { container } = toastTest.render({ props: { type, message: `${type} message` } });
 
-      expect(container.querySelector('[role="alert"]')?.className).toContain(
+      expect(container.querySelector(TOAST_SELECTOR)?.className).toContain(
         `text-[var(--color-${type}-content)]`
       );
     }
@@ -187,7 +190,7 @@ describe('NotificationToast', () => {
       // 2. Individual toasts only handle their content, styling, and animations
       // 3. This separation of concerns allows ToastContainer to manage stacking and grouping
       // Therefore, we verify the toast renders without position-specific classes
-      const alert = container.querySelector('[role="alert"]');
+      const alert = container.querySelector(TOAST_SELECTOR);
       expect(alert).toBeInTheDocument();
 
       // Verify no position-specific classes are applied to individual toasts
@@ -241,31 +244,23 @@ describe('NotificationToast', () => {
       },
     });
 
-    // The inner div with role="alert" should have the custom class
-    const alert = container.querySelector('[role="alert"]');
+    // The inner div with the live-region role should have the custom class
+    const alert = container.querySelector(TOAST_SELECTOR);
     expect(alert).toHaveClass('custom-toast');
   });
 
-  it('sets proper ARIA attributes', () => {
-    toastTest.render({
-      props: {
-        message: 'Info toast',
-        type: 'info',
-      },
-    });
+  it.each([
+    ['error', 'alert'],
+    ['warning', 'status'],
+    ['info', 'status'],
+    ['success', 'status'],
+  ] as const)('gives a %s toast the %s role without aria-live', (type, role) => {
+    toastTest.render({ props: { type, message: `${type} toast` } });
 
-    const alert = screen.getByRole('alert');
-    expect(alert).toHaveAttribute('aria-live', 'polite');
-
-    const { container } = toastTest.render({
-      props: {
-        message: 'Error toast',
-        type: 'error',
-      },
-    });
-
-    const errorAlert = container.querySelector('[role="alert"]');
-    expect(errorAlert).toHaveAttribute('aria-live', 'assertive');
+    const toast = screen.getByRole(role);
+    expect(toast).toHaveTextContent(`${type} toast`);
+    expect(toast).not.toHaveAttribute('aria-live');
+    expect(screen.queryByRole(role === 'alert' ? 'status' : 'alert')).not.toBeInTheDocument();
   });
 
   it('clears timeout when closed manually', async () => {
