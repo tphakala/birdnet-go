@@ -468,6 +468,37 @@ func TestLegacySchemaMonitor_FailedCreateIsRetriedByTheNextTick(t *testing.T) {
 	})
 }
 
+func TestLegacySchemaMonitor_NoNoticeBeforeTheFirstSuccessfulRead(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		rec := newCadenceNoticeRecorder(t, 1, 0)
+		reader := &fakeStateReader{steps: []fakeStateStep{
+			{err: errors.NewStd("unreadable")},
+			{err: errors.NewStd("unreadable")},
+			{state: entities.MigrationStatusIdle},
+		}}
+		m := newLegacySchemaMonitor(reader, time.Second, logger.Global().Module("test"), true)
+		m.setTag = (&tagRecorder{}).set
+		m.service = func() notification.NoticeService { return rec }
+
+		m.start() // first read fails
+		time.Sleep(time.Second)
+		synctest.Wait() // second read fails
+		created, deleted := rec.counts()
+		assert.Zero(t, created, "an unreadable state raises no notice")
+		assert.Zero(t, deleted)
+
+		time.Sleep(time.Second)
+		synctest.Wait() // third read succeeds
+		m.stop()
+
+		created, deleted = rec.counts()
+		assert.Equal(t, 1, created, "the first good read raises the notice")
+		assert.Zero(t, deleted)
+	})
+}
+
 func TestLegacySchemaMonitor_NoNoticeOnV2Schema(t *testing.T) {
 	t.Parallel()
 
