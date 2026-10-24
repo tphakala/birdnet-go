@@ -283,23 +283,56 @@ func TestLegacyReminder_DueAcrossRunsAndRestarts(t *testing.T) {
 func TestLegacyReminder_StoreReadFailureSendsNothingUntilItRecovers(t *testing.T) {
 	t.Parallel()
 
-	store := newFakeMetadataStore(reminderT0.Add(-time.Hour).Format(time.RFC3339))
-	store.setErrors(errors.NewStd("db busy"), nil)
-	svc := &pushNoticeService{}
+	tests := []struct {
+		name       string
+		storedAge  time.Duration
+		wantPushes int
+	}{
+		{"recent stored time is honored after recovery", time.Hour, 0},
+		{"overdue reminder goes out after recovery", 8 * 24 * time.Hour, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			store := newFakeMetadataStore(reminderT0.Add(-tt.storedAge).Format(time.RFC3339))
+			store.setErrors(errors.NewStd("db busy"), nil)
+			svc := &pushNoticeService{}
+			now := reminderT0
+			r := newLegacyReminder(store, func() *conf.Settings { return reminderSettings(pushOn) }, "",
+				testReminderPollInterval, logger.Global().Module("test"))
+			r.now = func() time.Time { return now }
+
+			r.check(migration.LegacyNoticeNotStarted, svc)
+			now = now.Add(legacyReminderStartupDelay)
+			r.check(migration.LegacyNoticeNotStarted, svc)
+			require.Empty(t, svc.pushed(), "an unreadable last-sent time must not cause a send")
+
+			store.setErrors(nil, nil)
+			now = now.Add(testReminderPollInterval)
+			r.check(migration.LegacyNoticeNotStarted, svc)
+			assert.Len(t, svc.pushed(), tt.wantPushes)
+		})
+	}
+}
+
+func TestLegacyReminder_NilServiceSendsAndRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	store := newFakeMetadataStore("")
 	now := reminderT0
 	r := newLegacyReminder(store, func() *conf.Settings { return reminderSettings(pushOn) }, "",
 		testReminderPollInterval, logger.Global().Module("test"))
 	r.now = func() time.Time { return now }
 
-	r.check(migration.LegacyNoticeNotStarted, svc)
+	r.check(migration.LegacyNoticeNotStarted, nil)
 	now = now.Add(legacyReminderStartupDelay)
-	r.check(migration.LegacyNoticeNotStarted, svc)
-	assert.Empty(t, svc.pushed(), "an unreadable last-sent time must not cause a send")
+	assert.NotPanics(t, func() { r.check(migration.LegacyNoticeNotStarted, nil) })
+	assert.Zero(t, store.setCount())
 
-	store.setErrors(nil, nil)
-	now = now.Add(testReminderPollInterval)
+	svc := &pushNoticeService{}
 	r.check(migration.LegacyNoticeNotStarted, svc)
-	assert.Empty(t, svc.pushed(), "the stored time one hour ago is inside the interval")
+	assert.Len(t, svc.pushed(), 1, "the service coming up later still gets the reminder")
 }
 
 func TestLegacyReminder_NotificationShape(t *testing.T) {

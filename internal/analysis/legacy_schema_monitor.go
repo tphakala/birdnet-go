@@ -30,8 +30,8 @@ const (
 	legacySchemaCheckOperation = "legacy_schema_check"
 )
 
-// legacyNoticeText is the bell notice for one legacy notice kind: its priority
-// and its English fallback text, with the keys that let the UI translate it.
+// legacyNoticeText is the notice for one legacy notice kind, used for the bell
+// notice and the push reminder: its priority and its English fallback text, with the keys that let the UI translate it.
 type legacyNoticeText struct {
 	priority             notification.Priority
 	title, message       string
@@ -112,7 +112,8 @@ func migrationStateTagValue(state *entities.MigrationState, err error) string {
 
 // legacySchemaMonitor watches the migration state on installs that still run
 // the legacy schema. It keeps the migration_state telemetry tag current and
-// keeps one bell notice in line with the migration state. It is only built for
+// keeps one bell notice in line with the migration state and, when a reminder
+// is attached, sends the weekly push reminder. It is only built for
 // installs with a readable migration state, so v2 installs pay nothing.
 type legacySchemaMonitor struct {
 	states   migrationStateReader
@@ -131,7 +132,7 @@ type legacySchemaMonitor struct {
 	// while telemetry is off); tests replace it.
 	setTag func(string) bool
 
-	// mu serializes evaluations and guards lastTag, kind and latch. Lock order:
+	// mu serializes evaluations and guards lastTag, kind, latch and the reminder. Lock order:
 	// mu, then the latch's own lock.
 	mu      sync.Mutex
 	lastTag string
@@ -244,7 +245,8 @@ func (m *legacySchemaMonitor) stop() {
 // last publish was not applied (telemetry was off, for example). A failed read
 // keeps the last value, and offers it again while it is not applied; before
 // any successful read it publishes unavailable. It then brings the bell notice
-// in line with the notice kind of the last successful read.
+// in line with the notice kind of the last successful read and offers that kind
+// to the push reminder, on every return path.
 func (m *legacySchemaMonitor) evaluate() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
