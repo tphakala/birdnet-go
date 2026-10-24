@@ -4,8 +4,9 @@
  * The banner renders only for the four legacy notice kinds the migration
  * status endpoint reports. "none", unknown kinds, a failed fetch and guests
  * render nothing, and guests never call the endpoint (a guest fetch would
- * redirect to the login page in private mode). Dismissal is per session and
- * must work when sessionStorage throws.
+ * redirect to the login page in private mode). A dismissal holds for the
+ * session until the notice kind changes, is checked against a fresh fetch on
+ * every mount, and must work when sessionStorage throws.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/svelte';
@@ -119,21 +120,47 @@ describe('LegacyDatabaseBanner', () => {
     expect(container.textContent.trim()).toBe('');
   });
 
-  it('hides on dismiss, remembers it for the session, and stays hidden on remount', async () => {
+  it('keeps a dismissed kind hidden across remounts and shows the banner again when the kind changes', async () => {
+    const dismissButton = (): Promise<HTMLElement> =>
+      screen.findByRole('button', { name: 'common.aria.dismissAlert' });
+
     respondWith('not_started');
     const first = renderTyped(LegacyDatabaseBanner);
-
-    await fireEvent.click(await screen.findByRole('button', { name: 'common.aria.dismissAlert' }));
+    await fireEvent.click(await dismissButton());
     await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
-    expect(sessionStorage.getItem(DISMISS_KEY)).toBe('1');
-
+    expect(sessionStorage.getItem(DISMISS_KEY)).toBe('not_started');
     first.unmount();
+
+    // Same kind after a remount: the status is fetched, the banner stays hidden.
     apiGet.mockClear();
     const second = renderTyped(LegacyDatabaseBanner);
     await settle();
-
-    expect(apiGet).not.toHaveBeenCalled();
+    expect(apiGet).toHaveBeenCalledTimes(1);
     expect(second.container.textContent.trim()).toBe('');
+    second.unmount();
+
+    // A different kind (the migration failed) shows the banner again.
+    respondWith('needs_attention');
+    const third = renderTyped(LegacyDatabaseBanner);
+    await fireEvent.click(await dismissButton());
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+    expect(sessionStorage.getItem(DISMISS_KEY)).toBe('needs_attention');
+    third.unmount();
+
+    // Dismissing one kind does not hide the first kind when it returns.
+    respondWith('not_started');
+    renderTyped(LegacyDatabaseBanner);
+    expect(await screen.findByRole('status')).toHaveTextContent(
+      'notifications.content.migration.legacyNotStartedTitle'
+    );
+  });
+
+  it('shows the banner for a flag stored by an earlier build', async () => {
+    sessionStorage.setItem(DISMISS_KEY, '1');
+    respondWith('not_started');
+    renderTyped(LegacyDatabaseBanner);
+
+    expect(await screen.findByRole('status')).toBeInTheDocument();
   });
 
   it('still hides on dismiss when sessionStorage throws', async () => {
