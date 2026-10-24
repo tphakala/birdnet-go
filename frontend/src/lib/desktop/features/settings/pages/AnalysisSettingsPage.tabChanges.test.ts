@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/svelte';
 import { tick } from 'svelte';
-import type { Writable } from 'svelte/store';
 import type { CatalogEntry, InstalledModel } from '$lib/types/models';
 
 // The Analysis page tabs show an unsaved-change dot when any card badge on the tab would.
@@ -30,10 +29,23 @@ vi.mock('$lib/stores/models.svelte', () => ({
 
 vi.mock('$lib/desktop/features/settings/components/ModelRegionSelector.svelte');
 
+// The mocked store keeps its config as loose sections, so these tests can seed sections the real
+// form type does not list in every case.
+type SectionMap = Record<string, Record<string, unknown>>;
+interface MockSettingsState {
+  isLoading: boolean;
+  isSaving: boolean;
+  error: null;
+  originalData: SectionMap;
+  formData: SectionMap;
+}
+
 // The saved config every test starts from: a birdnet section with a range filter and a realtime
-// section with a dynamic threshold, so those cards have something to compare.
-const { BASE_BIRDNET, BASE_REALTIME } = vi.hoisted(() => ({
-  BASE_BIRDNET: {
+// section with a dynamic threshold, so those cards have something to compare. The store is built
+// here, typed, so the tests and the module mock share one instance without a cast.
+const { BASE_BIRDNET, BASE_REALTIME, mockStore } = await vi.hoisted(async () => {
+  const { writable } = await import('svelte/store');
+  const BASE_BIRDNET = {
     huggingFaceEndpoint: '',
     threshold: 0.03,
     locale: 'en-uk',
@@ -42,48 +54,40 @@ const { BASE_BIRDNET, BASE_REALTIME } = vi.hoisted(() => ({
     sensitivity: 1,
     overlap: 0,
     rangeFilter: { threshold: 0.01 },
-  },
-  BASE_REALTIME: {
+  };
+  const BASE_REALTIME = {
     dynamicThreshold: { enabled: false, debug: false, trigger: 0.8, min: 0.3, validHours: 24 },
-  },
-}));
-
-// The store mock holds the saved copy and the form copy; the section stores are derived from the
-// form copy, as in the real store.
-vi.mock('$lib/stores/settings', async () => {
-  const { writable, derived } =
-    await vi.importActual<typeof import('svelte/store')>('svelte/store');
-  const settingsStore = writable<{
-    isLoading: boolean;
-    isSaving: boolean;
-    error: null;
-    originalData: Record<string, Record<string, unknown>>;
-    formData: Record<string, Record<string, unknown>>;
-  }>({
+  };
+  const mockStore = writable<MockSettingsState>({
     isLoading: false,
     isSaving: false,
     error: null,
     originalData: { birdnet: { ...BASE_BIRDNET }, realtime: { ...BASE_REALTIME } },
     formData: { birdnet: { ...BASE_BIRDNET }, realtime: { ...BASE_REALTIME } },
   });
+  return { BASE_BIRDNET, BASE_REALTIME, mockStore };
+});
+
+// The store mock holds the saved copy and the form copy; the section stores are derived from the
+// form copy, as in the real store.
+vi.mock('$lib/stores/settings', async () => {
+  const { writable, derived } =
+    await vi.importActual<typeof import('svelte/store')>('svelte/store');
   return {
-    settingsStore,
+    settingsStore: mockStore,
     settingsActions: {
       updateSection: vi.fn(),
       refreshKeepingEdits: vi.fn().mockResolvedValue(undefined),
     },
     hasUnsavedChanges: writable(false),
-    birdnetSettings: derived(settingsStore, state => state.formData.birdnet),
-    dynamicThresholdSettings: derived(
-      settingsStore,
-      state => state.formData.realtime.dynamicThreshold
-    ),
-    realtimeSettings: derived(settingsStore, state => state.formData.realtime),
+    birdnetSettings: derived(mockStore, state => state.formData.birdnet),
+    dynamicThresholdSettings: derived(mockStore, state => state.formData.realtime.dynamicThreshold),
+    realtimeSettings: derived(mockStore, state => state.formData.realtime),
     // No bat, Perch or BirdNET v3.0 section in the config unless a test seeds one, as on a
     // default install.
-    batSettings: derived(settingsStore, state => state.formData.bat),
-    perchSettings: derived(settingsStore, state => state.formData.perch),
-    birdNetV3Settings: derived(settingsStore, state => state.formData.birdnetv3),
+    batSettings: derived(mockStore, state => state.formData.bat),
+    perchSettings: derived(mockStore, state => state.formData.perch),
+    birdNetV3Settings: derived(mockStore, state => state.formData.birdnetv3),
   };
 });
 
@@ -103,19 +107,9 @@ vi.mock('$lib/utils/api', async () => {
 
 import AnalysisSettingsPage from './AnalysisSettingsPage.svelte';
 import * as modelsApi from '$lib/utils/modelsApi';
-import { settingsStore } from '$lib/stores/settings';
 import { navigation } from '$lib/stores/navigation.svelte';
 
 const HAS_CHANGES = 'settings.tabs.hasChanges';
-
-// The mocked store keeps its config as loose sections, so these tests can seed sections the real
-// form type does not list in every case.
-type SectionMap = Record<string, Record<string, unknown>>;
-interface MockSettingsState {
-  originalData: SectionMap;
-  formData: SectionMap;
-}
-const mockStore = settingsStore as unknown as Writable<MockSettingsState>;
 
 const SETTINGS_SECTION_TITLE = {
   bat: 'analysis.bat.title',
