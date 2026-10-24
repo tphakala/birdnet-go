@@ -3,7 +3,7 @@
   the legacy database schema, prompting the user to run the migration.
 
   Reads the legacy notice kind from the migration status endpoint once on
-  mount (no polling) and renders for the four kinds that need a notice:
+  every mount (no polling) and renders for the four kinds that need a notice:
   - not_started, in_progress and restart_required: a warning status.
   - needs_attention (migration paused or failed): an error alert.
   Each links to System > Database. "none", unknown kinds, a missing field and
@@ -12,7 +12,10 @@
   signed-in user whose session expired, the shared API client redirects to the
   login page on a 401.
 
-  Dismissal lasts for the browser session (sessionStorage), so the banner
+  Dismissal lasts for the browser session (sessionStorage) and is remembered
+  per kind: the banner stays hidden while the fetched kind equals the
+  dismissed one and returns when the kind changes (for example a dismissed
+  not_started warning followed by a failed run), like the bell notice. It
   returns in the next session until the migration completes.
 
   @component
@@ -37,7 +40,6 @@
 
   const MIGRATION_STATUS_ENDPOINT = '/api/v2/system/database/migration/status';
   const DISMISS_KEY = 'birdnet.legacyDbBannerDismissed';
-  const DISMISSED_VALUE = '1';
 
   interface Variant {
     tone: 'warning' | 'error';
@@ -85,39 +87,45 @@
     ],
   ]);
 
-  // Session-scoped dismissal, guarded so a private-window or blocked
-  // sessionStorage never throws (see frontend/AGENTS.md).
-  function readDismissed(): boolean {
+  // Session-scoped dismissal of one notice kind, guarded so a private-window or
+  // blocked sessionStorage never throws (see frontend/AGENTS.md). A value that
+  // is not a kind, such as the flag an earlier build stored, never matches.
+  function readDismissedKind(): string | null {
     try {
-      return sessionStorage.getItem(DISMISS_KEY) === DISMISSED_VALUE;
+      return sessionStorage.getItem(DISMISS_KEY);
     } catch {
-      return false;
+      return null;
     }
   }
 
-  let dismissed = $state(readDismissed());
+  let dismissedKind = $state(readDismissedKind());
+  let kind = $state<LegacyNoticeKind | undefined>();
   // $state.raw: the variant holds an icon component, which must not be proxied.
   let variant = $state.raw<Variant | undefined>();
   let isError = $derived(variant?.tone === 'error');
 
   function dismiss() {
-    dismissed = true;
+    if (!kind) return;
+    dismissedKind = kind;
     try {
-      sessionStorage.setItem(DISMISS_KEY, DISMISSED_VALUE);
+      sessionStorage.setItem(DISMISS_KEY, kind);
     } catch {
       /* sessionStorage unavailable: dismissal is in-memory only for this mount */
     }
   }
 
   $effect(() => {
-    if (dismissed || isGuestMode()) return;
+    if (isGuestMode()) return;
     let active = true;
     // untrack: api.get reads the CSRF token synchronously, and a token refresh
     // elsewhere must not re-run this effect and fetch the status again.
     untrack(() => api.get<MigrationStatus>(MIGRATION_STATUS_ENDPOINT))
       .then(status => {
         // Unknown kinds and 'none' have no variant, so nothing renders.
-        if (active) variant = VARIANTS.get(status.legacy_notice ?? 'none');
+        if (!active) return;
+        const next = status.legacy_notice ?? 'none';
+        variant = VARIANTS.get(next);
+        kind = variant ? next : undefined;
       })
       .catch(() => {
         /* No banner when the status is unavailable (503, network, a suppressed 401 redirect). */
@@ -128,7 +136,7 @@
   });
 </script>
 
-{#if variant && !dismissed}
+{#if variant && kind !== dismissedKind}
   {@const Icon = variant.icon}
   <div
     role={isError ? 'alert' : 'status'}
