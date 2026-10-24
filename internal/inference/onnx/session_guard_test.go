@@ -1,19 +1,21 @@
 package onnx
 
 import (
-	"sync"
-	"sync/atomic"
 	"testing"
-
-	ort "github.com/yalue/onnxruntime_go"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 const (
 	// concurrentClosers is the number of goroutines that call close at once.
 	concurrentClosers = 8
+
+	// concurrentRunners is the number of Runs that must be inside the session
+	// at the same time for the read lock to count as shared.
+	concurrentRunners = 2
 
 	// testSampleCount, testInputDim and testBatchSize size the inputs of the
 	// closed-session tests so that they pin the closed check, not the input
@@ -21,39 +23,11 @@ const (
 	testSampleCount = 4
 	testInputDim    = 3
 	testBatchSize   = 2
+
+	// testRangeFilterInputWidth is the number of floats per range filter input
+	// (latitude, longitude, week).
+	testRangeFilterInputWidth = 3
 )
-
-// fakeSession is a sessionRunner that records how Run and Destroy interact.
-//
-// destroyed and sawDestroyed are plain fields on purpose: Run reads destroyed
-// after it is released, so a Destroy that is not ordered against Run is a data
-// race the race detector reports. Do not turn them into atomics.
-type fakeSession struct {
-	entered   chan struct{} // closed on the first Run
-	release   chan struct{} // when non-nil, Run blocks until it is closed
-	enterOnce sync.Once
-
-	destroyed    bool
-	sawDestroyed bool
-	destroys     atomic.Int32
-}
-
-func (f *fakeSession) Run(_, _ []ort.Value) error {
-	if f.entered != nil {
-		f.enterOnce.Do(func() { close(f.entered) })
-	}
-	if f.release != nil {
-		<-f.release
-	}
-	f.sawDestroyed = f.destroyed
-	return nil
-}
-
-func (f *fakeSession) Destroy() error {
-	f.destroyed = true
-	f.destroys.Add(1)
-	return nil
-}
 
 func TestGuardedSession_CloseWaitsForInFlightRun(t *testing.T) {
 	t.Parallel()
@@ -61,21 +35,38 @@ func TestGuardedSession_CloseWaitsForInFlightRun(t *testing.T) {
 	fake := &fakeSession{entered: make(chan struct{}), release: make(chan struct{})}
 	g := &guardedSession{s: fake}
 
-	runDone := make(chan error, 1)
-	go func() { runDone <- g.run(nil, nil) }()
-	<-fake.entered
+	runDone := goErr(func() error { return g.run(nil, nil) })
+	testutil.WaitForChannel(t, fake.entered, testutil.DefaultTestTimeout, "Run never started")
 
-	closeDone := make(chan error, 1)
-	go func() { closeDone <- g.close() }()
+	closeDone := goErr(g.close)
 	close(fake.release)
 
-	require.NoError(t, <-runDone)
-	require.NoError(t, <-closeDone)
+	require.NoError(t, awaitErr(t, runDone))
+	require.NoError(t, awaitErr(t, closeDone))
 
 	assert.False(t, fake.sawDestroyed, "Destroy must not run while a Run is in flight")
 	assert.Equal(t, int32(1), fake.destroys.Load())
 	require.ErrorIs(t, g.run(nil, nil), ErrSessionClosed)
 	assert.True(t, g.isClosed())
+}
+
+func TestGuardedSession_ConcurrentRunsShareTheLock(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeSession{allIn: make(chan struct{}), abort: make(chan struct{}), wantInside: concurrentRunners}
+	t.Cleanup(func() { close(fake.abort) })
+	g := &guardedSession{s: fake}
+
+	results := make([]<-chan error, concurrentRunners)
+	for i := range results {
+		results[i] = goErr(func() error { return g.run(nil, nil) })
+	}
+
+	// Every Run blocks until all of them are inside, so they can only finish
+	// when the guard lets them run at the same time.
+	for _, ch := range results {
+		require.NoError(t, awaitErr(t, ch))
+	}
 }
 
 func TestGuardedSession_ConcurrentCloseDestroysOnce(t *testing.T) {
@@ -85,19 +76,33 @@ func TestGuardedSession_ConcurrentCloseDestroysOnce(t *testing.T) {
 	g := &guardedSession{s: fake}
 
 	start := make(chan struct{})
-	results := make(chan error, concurrentClosers)
-	for range concurrentClosers {
-		go func() {
+	results := make([]<-chan error, concurrentClosers)
+	for i := range results {
+		results[i] = goErr(func() error {
 			<-start
-			results <- g.close()
-		}()
+			return g.close()
+		})
 	}
 	close(start)
 
-	for range concurrentClosers {
-		require.NoError(t, <-results)
+	for _, ch := range results {
+		require.NoError(t, awaitErr(t, ch))
 	}
 	assert.Equal(t, int32(1), fake.destroys.Load())
+}
+
+func TestGuardedSession_DestroyErrorReportedOnceThenClosed(t *testing.T) {
+	t.Parallel()
+
+	fake := &fakeSession{destroyErr: errFakeDestroy}
+	g := &guardedSession{s: fake}
+
+	require.ErrorIs(t, g.close(), errFakeDestroy)
+	require.NoError(t, g.close())
+
+	assert.Equal(t, int32(1), fake.destroys.Load())
+	assert.True(t, g.isClosed())
+	require.ErrorIs(t, g.run(nil, nil), ErrSessionClosed)
 }
 
 func TestCloseThenPredict_ReturnsErrSessionClosed(t *testing.T) {
@@ -146,7 +151,7 @@ func TestCloseThenPredict_ReturnsErrSessionClosed(t *testing.T) {
 		require.NoError(t, r.Close())
 		assert.Equal(t, int32(1), fake.destroys.Load())
 
-		_, err := r.PredictBatchRaw(make([]float32, testBatchSize*3), testBatchSize)
+		_, err := r.PredictBatchRaw(make([]float32, testBatchSize*testRangeFilterInputWidth), testBatchSize)
 		require.ErrorIs(t, err, ErrSessionClosed)
 	})
 }
