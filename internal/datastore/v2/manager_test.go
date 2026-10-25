@@ -66,6 +66,7 @@ func TestSQLiteManager_Initialize(t *testing.T) {
 		&entities.DetectionComment{},
 		&entities.DetectionLock{},
 		&entities.MigrationState{},
+		&entities.PrivacyFilterHourly{},
 	}
 
 	for _, table := range tables {
