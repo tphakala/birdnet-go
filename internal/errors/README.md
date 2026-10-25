@@ -379,9 +379,10 @@ Result: "Imageprovider Image Fetch Error Parse Pages From Response"
 
 Errors are automatically assigned appropriate Sentry levels:
 
-- `CategoryValidation`, `CategoryDatabase`: Error level
+- `CategoryValidation`, `CategoryDatabase`: Error level (connectivity failures excepted, see below)
 - `CategoryNetwork`, `CategoryFileIO`: Warning level
 - `CategoryModelInit`, `CategoryModelLoad`: Error level (critical)
+- Connectivity failures (unreachable host, dropped connection) in the database, state, system and image-cache categories: Warning level with `error_origin=environment`; one event per process per hour is sent, shared across those categories, and the rest are dropped
 
 ### Context Data
 
