@@ -1002,3 +1002,40 @@ func TestMixedSchemaGuideDropOrder(t *testing.T) {
 	assert.Equal(t, orphanedBareV2Tables(), dropped("alert_actions"))
 	assert.ElementsMatch(t, legacyDetectionTables, dropped("note_locks"))
 }
+
+// TestCountMixedSchemaRows_CountFailure_RecordsUnknown makes the table listing succeed
+// while every COUNT fails: SQLite gets an attached information_schema that lists
+// detections and notes, but neither table exists. A failed count must come back
+// unknown, never zero, so the hint cannot suggest dropping a side.
+func TestCountMixedSchemaRows_CountFailure_RecordsUnknown(t *testing.T) {
+	t.Parallel()
+
+	const database = "birdnet"
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	// The attached schema lives on one connection.
+	sqlDB.SetMaxOpenConns(1)
+	require.NoError(t, db.Exec("ATTACH DATABASE ':memory:' AS information_schema").Error)
+	require.NoError(t, db.Exec("CREATE TABLE information_schema.tables (table_name TEXT, table_schema TEXT)").Error)
+	require.NoError(t, db.Exec(
+		"INSERT INTO information_schema.tables VALUES ('detections', ?), ('notes', ?)", database, database).Error)
+
+	e := countMixedSchemaRows(db, database)
+	require.NotNil(t, e)
+
+	assert.Equal(t, []tableRowCount{{"detections", mixedSchemaRowCountUnknown}}, e.v2Tables)
+	assert.Equal(t, []tableRowCount{{"notes", mixedSchemaRowCountUnknown}}, e.legacyTables)
+	assert.Equal(t, hintTargetNone, hintDropTarget(mixedSchemaHint(e)))
+	assert.Contains(t, mixedSchemaHint(e), "could not be read")
+}
+
+// TestMixedSchemaLegacyDropList_NamesEveryCountedTable keeps the legacy drop list in the
+// hint text in step with the tables startup counts, since the hint is what a user runs.
+func TestMixedSchemaLegacyDropList_NamesEveryCountedTable(t *testing.T) {
+	t.Parallel()
+
+	dropList := strings.NewReplacer(" and ", ", ").Replace(mixedSchemaLegacyDropList)
+	assert.ElementsMatch(t, legacyDetectionTables, strings.Split(dropList, ", "))
+}

@@ -425,8 +425,9 @@ func TestMySQL_V2Delete_WithLegacyTables_OnlyDeletesV2(t *testing.T) {
 // Startup Detection Tests
 // ============================================================================
 
-// mixedSchemaKeepV2SQL is the recovery SQL of the Database Doctor wiki guide for
-// keeping the enhanced database (step 3a), one statement per entry.
+// mixedSchemaKeepV2SQL is a hand-kept copy of the SQL of step 3a (keep the enhanced
+// database) in the Database Doctor wiki guide, one statement per entry. Only its table
+// names are checked against the guide (TestMixedSchemaGuideDropOrder).
 var mixedSchemaKeepV2SQL = []string{
 	"SET FOREIGN_KEY_CHECKS = 0",
 	"DROP TABLE IF EXISTS note_locks, note_comments, note_reviews, results, notes",
