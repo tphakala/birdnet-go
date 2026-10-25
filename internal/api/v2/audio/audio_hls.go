@@ -1122,9 +1122,11 @@ func (c *Handler) setupAudioCallback(sourceID string, sampleRate int, maxQueuedB
 	eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sampleRate)
 
 	// Determine the actual sample rate of the capture source
-	sourceSampleRate := src.EffectiveSampleRate()
-	if src == nil {
-		apicore.GetLogger().Warn("Audio source not in registry, falling back to the default capture rate", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.Int("fallback_rate", sourceSampleRate))
+	sourceSampleRate := sampleRate // Fallback to target rate
+	if src != nil {
+		sourceSampleRate = src.EffectiveSampleRate()
+	} else {
+		apicore.GetLogger().Warn("Audio source not in registry, falling back to HLS target rate", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.Int("fallback_rate", sampleRate))
 	}
 
 	// Add route on the AudioRouter
