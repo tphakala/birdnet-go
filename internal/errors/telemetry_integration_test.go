@@ -3,6 +3,7 @@ package errors
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 	"syscall"
 	"testing"
@@ -37,13 +38,24 @@ func (t *TransportMock) Events() []*sentry.Event {
 	return t.events
 }
 
-func TestReportError_IncludesStacktrace(t *testing.T) {
+// bindMockTransport points the process-wide Sentry hub at a recording
+// transport and restores the previous client when the test ends. Tests that
+// use it must not run in parallel.
+func bindMockTransport(t *testing.T) *TransportMock {
+	t.Helper()
+	hub := sentry.CurrentHub()
+	original := hub.Client()
+	t.Cleanup(func() { hub.BindClient(original) })
 	transport := &TransportMock{}
-	err := sentry.Init(sentry.ClientOptions{
+	require.NoError(t, sentry.Init(sentry.ClientOptions{
 		Dsn:       "https://examplePublicKey@o0.ingest.sentry.io/0",
 		Transport: transport,
-	})
-	require.NoError(t, err)
+	}))
+	return transport
+}
+
+func TestReportError_IncludesStacktrace(t *testing.T) {
+	transport := bindMockTransport(t)
 
 	reporter := NewSentryReporter(true)
 	ee := New(fmt.Errorf("test error")).
@@ -560,11 +572,7 @@ func TestShouldReportToSentry_FiltersLowPrioritySystemInterruptions(t *testing.T
 func TestReportError_ConnectivityEventIsEnvironmentWarning(t *testing.T) {
 	resetConnectivityWindow(t)
 
-	transport := &TransportMock{}
-	require.NoError(t, sentry.Init(sentry.ClientOptions{
-		Dsn:       "https://examplePublicKey@o0.ingest.sentry.io/0",
-		Transport: transport,
-	}))
+	transport := bindMockTransport(t)
 
 	reporter := NewSentryReporter(true)
 	reporter.ReportError(New(mysql.ErrInvalidConn).
@@ -593,4 +601,31 @@ func TestReportError_ConnectivityEventIsEnvironmentWarning(t *testing.T) {
 	assert.Equal(t, GetErrorOrigin(CategoryIntegration), events[2].Tags["error_origin"])
 	require.NotEmpty(t, events[2].Fingerprint)
 	assert.NotEqual(t, connectivityFingerprintPrefix, events[2].Fingerprint[0])
+}
+
+// dialTimeoutError mimics the timeout error the net package returns from a
+// dial: it reads "i/o timeout" and is also context.DeadlineExceeded.
+type dialTimeoutError struct{}
+
+func (dialTimeoutError) Error() string        { return "i/o timeout" }
+func (dialTimeoutError) Timeout() bool        { return true }
+func (dialTimeoutError) Temporary() bool      { return true }
+func (dialTimeoutError) Is(target error) bool { return target == context.DeadlineExceeded }
+
+func TestReportError_DatabaseDialTimeoutIsReported(t *testing.T) {
+	resetConnectivityWindow(t)
+	transport := bindMockTransport(t)
+
+	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: dialTimeoutError{}}
+	require.ErrorIs(t, dialErr, context.DeadlineExceeded, "the fixture is a context deadline like a real dial timeout")
+
+	reporter := NewSentryReporter(true)
+	reporter.ReportError(New(dialErr).Component("datastore").Category(CategoryDatabase).Context("operation", "mysql_open").Build())
+	sentry.Flush(time.Second)
+
+	events := transport.Events()
+	require.Len(t, events, 1, "an unreachable database host must produce an event")
+	assert.Equal(t, sentry.LevelWarning, events[0].Level)
+	assert.Equal(t, "environment", events[0].Tags["error_origin"])
+	assert.Equal(t, []string{"connectivity", "database", "io_timeout"}, events[0].Fingerprint)
 }
