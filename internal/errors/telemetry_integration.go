@@ -49,9 +49,11 @@ var ResourceSnapshotFunc func() map[string]any
 // future RTSP code paths reaching Sentry when they shouldn't be suppressed.
 const rtspSilenceTimeoutSignature = "stream stopped producing data for 90 seconds"
 
+// diskFullCooldown is the minimum time between disk-full reports.
+const diskFullCooldown = 5 * time.Minute
+
 var (
-	lastDiskFullReport atomic.Int64                           // Unix timestamp of last disk-full report
-	diskFullCooldown   = int64(5 * time.Minute / time.Second) // 5 minutes between disk-full reports
+	diskFullLimiter = reportCooldown{window: diskFullCooldown} // disk-full reports
 
 	// networkNoisePatterns are environmental network errors that indicate
 	// user infrastructure issues, not code bugs.
@@ -232,6 +234,12 @@ func IsSuppressibleOperationalError(ee *EnhancedError) bool {
 // It filters out operational/configuration errors that aren't code bugs and
 // rate limits connectivity failures to one event per cooldown window.
 func shouldReportToSentry(ee *EnhancedError) bool {
+	return shouldReport(ee, isGatedConnectivity(ee))
+}
+
+// shouldReport is shouldReportToSentry with the connectivity verdict of ee
+// already computed, so one report evaluates it once.
+func shouldReport(ee *EnhancedError, connectivity bool) bool {
 	if ee.Err == nil {
 		return true
 	}
@@ -342,7 +350,7 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	// Connectivity failures (database host unreachable, dropped connections)
 	// are environment problems, not code defects. Let one through per cooldown
 	// window so an outage stays visible without one event per failed statement.
-	if isGatedConnectivity(ee) {
+	if connectivity {
 		return allowConnectivityReport()
 	}
 
@@ -350,15 +358,8 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 	// errors across many subsystems (database, FFmpeg, alerting, etc.)
 	if strings.Contains(errorMsg, "disk is full") ||
 		strings.Contains(errorMsg, "no space left on device") {
-		now := time.Now().Unix()
-		last := lastDiskFullReport.Load()
-		if now-last < diskFullCooldown {
-			return false // Suppress during cooldown
-		}
-		// Use CompareAndSwap to prevent concurrent errors from
-		// bypassing the cooldown (TOCTOU race)
-		if !lastDiskFullReport.CompareAndSwap(last, now) {
-			return false // Another goroutine won the race
+		if !diskFullLimiter.Allow(time.Now()) {
+			return false // Suppress during cooldown, or another goroutine won the race
 		}
 		// Allow this one through
 	}
@@ -372,8 +373,10 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		return
 	}
 
+	connectivity := isGatedConnectivity(ee)
+
 	// Skip operational/configuration errors that aren't code bugs
-	if !shouldReportToSentry(ee) {
+	if !shouldReport(ee, connectivity) {
 		ee.MarkReported() // Mark as reported to prevent retry
 		return
 	}
@@ -387,8 +390,6 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 
 	// Scrub the message for privacy (using local function)
 	scrubbedMessage := scrubMessageForPrivacy(enhancedMessage)
-
-	connectivity := isGatedConnectivity(ee)
 
 	sentry.WithScope(func(scope *sentry.Scope) {
 		// Create a meaningful error title for Sentry
@@ -428,7 +429,7 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		scope.SetLevel(level)
 
 		// Set custom fingerprint for better grouping using structured fields
-		scope.SetFingerprint(buildFingerprint(ee))
+		scope.SetFingerprint(buildFingerprint(ee, connectivity))
 
 		// Use the error title as the exception type by creating a custom exception
 		event := sentry.NewEvent()
@@ -452,7 +453,8 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 }
 
 // buildFingerprint creates a structured fingerprint for Sentry issue grouping.
-func buildFingerprint(ee *EnhancedError) []string {
+// connectivity is the isGatedConnectivity verdict for ee.
+func buildFingerprint(ee *EnhancedError, connectivity bool) []string {
 	component := ee.GetComponent()
 	category := string(ee.Category)
 	operation, _ := ee.Context["operation"].(string)
@@ -464,7 +466,7 @@ func buildFingerprint(ee *EnhancedError) []string {
 
 	// Connectivity failures group by category and type only: with one event per
 	// window the operation that happens to go first is arbitrary.
-	if isGatedConnectivity(ee) {
+	if connectivity {
 		return []string{connectivityFingerprintPrefix, category, normalizedType}
 	}
 

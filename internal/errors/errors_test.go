@@ -92,8 +92,8 @@ func TestFingerprintIncludesNormalizedErrorType(t *testing.T) {
 		Context("operation", "save_note").
 		Build()
 
-	fp1 := buildFingerprint(ee1)
-	fp2 := buildFingerprint(ee2)
+	fp1 := buildFingerprint(ee1, false)
+	fp2 := buildFingerprint(ee2, false)
 	assert.NotEqual(t, fp1, fp2, "different root causes should have different fingerprints")
 }
 

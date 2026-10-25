@@ -345,8 +345,8 @@ func TestShouldReportToSentry_AllowsRTSPCodeBugs(t *testing.T) {
 
 func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
 	// Not parallel: mutates package-level state
-	lastDiskFullReport.Store(0)
-	t.Cleanup(func() { lastDiskFullReport.Store(0) })
+	diskFullLimiter.last.Store(0)
+	t.Cleanup(func() { diskFullLimiter.last.Store(0) })
 
 	ee1 := New(fmt.Errorf("database or disk is full")).
 		Component("datastore").Category(CategoryDatabase).Build()
@@ -360,8 +360,8 @@ func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
 func TestShouldReportToSentry_DiskFullCooldownExpiry(t *testing.T) {
 	// Not parallel: mutates package-level state
 	// Simulate a disk-full report from past the cooldown window
-	lastDiskFullReport.Store(time.Now().Unix() - diskFullCooldown - 1)
-	t.Cleanup(func() { lastDiskFullReport.Store(0) })
+	diskFullLimiter.last.Store(time.Now().Add(-diskFullCooldown).Unix() - 1)
+	t.Cleanup(func() { diskFullLimiter.last.Store(0) })
 
 	ee := New(fmt.Errorf("database or disk is full")).
 		Component("datastore").Category(CategoryDatabase).Build()
@@ -558,8 +558,7 @@ func TestShouldReportToSentry_FiltersLowPrioritySystemInterruptions(t *testing.T
 }
 
 func TestReportError_ConnectivityEventIsEnvironmentWarning(t *testing.T) {
-	lastConnectivityReport.Store(0)
-	t.Cleanup(func() { lastConnectivityReport.Store(0) })
+	resetConnectivityWindow(t)
 
 	transport := &TransportMock{}
 	require.NoError(t, sentry.Init(sentry.ClientOptions{

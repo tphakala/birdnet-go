@@ -15,7 +15,7 @@ const (
 	// connectivityReportCooldown is the minimum time between two connectivity
 	// events sent to Sentry from one process, shared across error classes and
 	// categories so one outage yields a bounded number of events.
-	connectivityReportCooldown = int64(time.Hour / time.Second)
+	connectivityReportCooldown = time.Hour
 
 	// mysqlInvalidConnMessage is the text of mysql.ErrInvalidConn in
 	// go-sql-driver/mysql v1.10.1. The driver returns the sentinel bare, without
@@ -26,6 +26,9 @@ const (
 	// dialOp is the net.OpError operation of an outgoing connection attempt.
 	dialOp = "dial"
 
+	// flattenedDialPrefix is the cheap pre-check for flattened dial errors.
+	flattenedDialPrefix = "dial "
+
 	// connectivityFingerprintPrefix leads the Sentry fingerprint of every
 	// connectivity event so they group apart from code defects.
 	connectivityFingerprintPrefix = "connectivity"
@@ -35,9 +38,9 @@ const (
 )
 
 var (
-	// lastConnectivityReport is the Unix time of the last connectivity event
+	// connectivityLimiter holds the window of the last connectivity event
 	// allowed through to Sentry.
-	lastConnectivityReport atomic.Int64
+	connectivityLimiter = reportCooldown{window: connectivityReportCooldown}
 
 	// mysqlServerErrorRegex matches the "Error 1364 (HY000): ..." shape of
 	// mysql.MySQLError. GORM joins a second error into the first as
@@ -78,10 +81,15 @@ func IsConnectivityError(err error) bool {
 	if ee, ok := err.(*EnhancedError); ok && ee.Err == nil { //nolint:errorlint // the nil-cause guard needs the outermost value only
 		return false
 	}
-	if mysqlServerErrorRegex.MatchString(err.Error()) {
-		return false
-	}
+	msg := err.Error()
+	// The MySQL server error veto only runs for a positive match, so
+	// unrecognised errors never reach the regexp.
+	return hasConnectivityShape(err, msg) && !mysqlServerErrorRegex.MatchString(msg)
+}
 
+// hasConnectivityShape reports whether err, whose message is msg, has one of
+// the connectivity shapes, before the server error veto.
+func hasConnectivityShape(err error, msg string) bool {
 	if _, ok := AsType[*net.DNSError](err); ok {
 		return true
 	}
@@ -99,7 +107,7 @@ func IsConnectivityError(err error) bool {
 	if isLeafMessage(err, mysqlInvalidConnMessage) {
 		return true
 	}
-	return isFlattenedDialFailure(err.Error())
+	return isFlattenedDialFailure(msg)
 }
 
 // isConnectSyscall reports whether name is a connect syscall name from net.
@@ -109,11 +117,13 @@ func isConnectSyscall(name string) bool {
 
 // isFlattenedDialFailure matches a dial failure whose typed chain was lost.
 func isFlattenedDialFailure(msg string) bool {
-	lower := strings.ToLower(msg)
-	if !containsAny(lower, flattenedDialAnchors) {
+	// net always writes "dial" in lower case; most messages end here without
+	// being lowered.
+	if !strings.Contains(msg, flattenedDialPrefix) {
 		return false
 	}
-	return containsAny(lower, flattenedDialTokens)
+	lower := strings.ToLower(msg)
+	return containsAny(lower, flattenedDialAnchors) && containsAny(lower, flattenedDialTokens)
 }
 
 // containsAny reports whether s contains any of the substrings.
@@ -131,9 +141,9 @@ func containsAny(s string, substrs []string) bool {
 // are skipped.
 func isLeafMessage(err error, msg string) bool {
 	switch e := err.(type) { //nolint:errorlint // the tree walk inspects each node by design
-	case nil:
-		return false
 	case *EnhancedError:
+		// Reachable through a wrapper whose message omits the child, so
+		// the whole-tree Error() call did not already dereference the nil cause.
 		if e.Err == nil {
 			return false
 		}
@@ -173,13 +183,26 @@ func isGatedConnectivity(ee *EnhancedError) bool {
 	return isConnectivityCategory(ee.Category) && IsConnectivityError(ee.Err)
 }
 
-// allowConnectivityReport lets one connectivity event through per cooldown
-// window. CompareAndSwap keeps concurrent errors from bypassing the window.
+// allowConnectivityReport lets one connectivity event through per cooldown window.
 func allowConnectivityReport() bool {
-	now := time.Now().Unix()
-	last := lastConnectivityReport.Load()
-	if now-last < connectivityReportCooldown {
+	return connectivityLimiter.Allow(time.Now())
+}
+
+// reportCooldown lets one event through per window. It is shared by the
+// connectivity and disk-full limiters.
+type reportCooldown struct {
+	last   atomic.Int64 // Unix time of the last allowed event
+	window time.Duration
+}
+
+// Allow reports whether an event at now may be sent and, if so, starts a new
+// window. CompareAndSwap keeps concurrent errors from bypassing the window
+// (TOCTOU race): the loser of the swap is suppressed.
+func (c *reportCooldown) Allow(now time.Time) bool {
+	nowUnix := now.Unix()
+	last := c.last.Load()
+	if nowUnix-last < int64(c.window/time.Second) {
 		return false
 	}
-	return lastConnectivityReport.CompareAndSwap(last, now)
+	return c.last.CompareAndSwap(last, nowUnix)
 }
