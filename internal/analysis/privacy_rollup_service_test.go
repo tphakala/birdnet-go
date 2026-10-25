@@ -1,6 +1,7 @@
 package analysis
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -32,7 +33,9 @@ func TestStartPrivacyRollup_OnlyInV2OnlyMode(t *testing.T) {
 	v2Only.startPrivacyRollup()
 	require.NotNil(t, v2Only.privacyRollup)
 	assert.Same(t, v2Only.privacyRollup, v2Only.proc.PrivacyRollup(), "the processor records into the started writer")
-	t.Cleanup(func() { _ = v2Only.stopPrivacyRollup(t.Context()) })
+	// t.Context() is already canceled when cleanups run, so Stop would not wait;
+	// WithoutCancel keeps the test context values but not its cancellation.
+	t.Cleanup(func() { require.NoError(t, v2Only.stopPrivacyRollup(context.WithoutCancel(t.Context()))) })
 
 	noDB := &APIServerService{}
 	noDB.startPrivacyRollup()
