@@ -4,6 +4,8 @@ The Database Doctor is a standalone diagnostic and repair tool for BirdNET-Go SQ
 
 **Requirements:** Python 3.9+ (no additional packages needed)
 
+The Database Doctor supports SQLite only. If you use MySQL or MariaDB and BirdNET-Go refuses to start because the database holds both enhanced and legacy tables, see [MySQL and MariaDB: enhanced and legacy tables in one database](#mysql-and-mariadb-enhanced-and-legacy-tables-in-one-database).
+
 ## When to Use
 
 Use the Database Doctor when:
@@ -238,3 +240,62 @@ The doctor output includes platform info, database fingerprint, migration state,
 - **Idempotent.** Running `--fix` multiple times produces the same result.
 - **No data deletion.** The doctor never deletes detection data. Schema repair preserves all rows.
 - **Lock detection.** The script refuses to run fixes if BirdNET-Go is still using the database.
+
+## MySQL and MariaDB: enhanced and legacy tables in one database
+
+BirdNET-Go refuses to start when a MySQL or MariaDB database holds the enhanced database (v2) tables and the legacy tables at the same time. It logs `database holds both enhanced database (v2) tables and legacy tables, refusing to start so that no data is changed` and lists the tables that have rows on each side. BirdNET-Go no longer removes either side by itself, and the Database Doctor script does not support MySQL, so the steps below are manual.
+
+Do not downgrade to an older release while the database is in this state: older releases drop the enhanced database tables at startup.
+
+### Step 1: Stop BirdNET-Go
+
+```bash
+docker stop birdnet-go
+# Or for a systemd install: sudo systemctl stop birdnet-go
+```
+
+### Step 2: Back up the database
+
+```bash
+mysqldump --single-transaction -h <host> -u <user> -p <database> > birdnet-backup.sql
+```
+
+Use `mariadb-dump` instead of `mysqldump` on MariaDB. Check that `birdnet-backup.sql` is not empty before you continue.
+
+### Step 3: Remove one side
+
+Pick the step the log line suggests. Run the SQL in the `mysql` or `mariadb` client connected to your BirdNET-Go database.
+
+**3a: Keep the enhanced database.** The log suggests this when the legacy side lists no detections. First check that the enhanced database is a completed install (if the table does not exist, run the same query on `migration_state`):
+
+```sql
+SELECT state FROM migration_states;
+```
+
+If the result is not `completed`, do not use this step and ask for help as described in step 3c. Otherwise drop the legacy tables:
+
+```sql
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS note_locks, note_comments, note_reviews, results, notes;
+SET FOREIGN_KEY_CHECKS = 1;
+```
+
+**3b: Keep the legacy database.** The log suggests this when the enhanced side lists no detections. Drop the bare enhanced database tables:
+
+```sql
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS alert_actions, alert_conditions, alert_history, alert_histories, alert_rules,
+  detection_locks, detection_comments, detection_reviews, detection_model_contributions,
+  detection_predictions, detections, labels, privacy_filter_hourlies, audio_sources, ai_models,
+  taxonomic_classes, label_types, app_events, app_metadata, migration_dirty_ids, migration_state,
+  migration_states;
+SET FOREIGN_KEY_CHECKS = 1;
+```
+
+The other enhanced database rows listed in the log line are lost with these tables. On the next start the legacy store also recreates any of `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches` that still have the enhanced database shape, and their rows are lost.
+
+**3c: Both sides hold detections, or the log says counts could not be read, or the enhanced side holds detections but is not a completed install.** Keep the backup and drop nothing. Ask on [GitHub Discussions](https://github.com/tphakala/birdnet-go/discussions) and include the log lines. The table names and row counts in them are safe to share.
+
+### Step 4: Start BirdNET-Go
+
+Start BirdNET-Go again. After step 3a the log shows `migration completed, starting in enhanced database mode`. After step 3b BirdNET-Go starts in legacy mode.

@@ -5,17 +5,22 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
+	"gorm.io/gorm/schema"
 )
 
 func TestCheckMigrationState_FreshInstall_SQLite(t *testing.T) {
@@ -881,4 +886,234 @@ func TestCheckSQLiteMigrationStateSetsDecision(t *testing.T) {
 	state := CheckMigrationStateBeforeStartup(settings)
 	assert.True(t, state.FreshInstall)
 	assert.Equal(t, DecisionFreshInstall, state.Decision)
+}
+
+// probedRows builds a probed table entry holding n rows (n < 0 means the count could
+// not be read although the table holds rows).
+func probedRows(table string, n int64) tableRowCount {
+	if n < 0 {
+		return tableRowCount{table: table, rows: mixedSchemaRowCountUnknown, hasRows: true}
+	}
+	return tableRowCount{table: table, rows: n, hasRows: n > 0}
+}
+
+// sharedProbe builds a probed shared table with a label_id column.
+func sharedProbe(table string, rows int64, labelNotNull bool) sharedTableProbe {
+	return sharedTableProbe{tableRowCount: probedRows(table, rows), labelNotNull: labelNotNull}
+}
+
+// TestClassifyMixedSchema pins the verdict for every branch and boundary of the state
+// table: a side is kept only when the other side holds no data and the kept side's own
+// startup drops no rows; everything else, including any unreadable input, refuses.
+func TestClassifyMixedSchema(t *testing.T) {
+	t.Parallel()
+
+	completedMarker := func(p *mixedSchemaProbe) {
+		p.markerTable, p.markerHasRow, p.v2Completed = "migration_states", true, true
+	}
+	idleMarker := func(p *mixedSchemaProbe) {
+		p.markerTable, p.markerHasRow, p.v2Completed = "migration_states", true, false
+	}
+	// build returns a probe with empty legacy and v2 detection tables, then applies opts.
+	build := func(opts ...func(*mixedSchemaProbe)) *mixedSchemaProbe {
+		p := &mixedSchemaProbe{
+			v2Tables:     []tableRowCount{probedRows("detections", 0), probedRows("labels", 0)},
+			legacyTables: []tableRowCount{probedRows("notes", 0), probedRows("results", 0)},
+		}
+		for _, opt := range opts {
+			opt(p)
+		}
+		return p
+	}
+	v2Rows := func(table string, n int64) func(*mixedSchemaProbe) {
+		return func(p *mixedSchemaProbe) {
+			p.v2Tables = append(slices.DeleteFunc(p.v2Tables, func(c tableRowCount) bool { return c.table == table }), probedRows(table, n))
+		}
+	}
+	legacyRows := func(table string, n int64) func(*mixedSchemaProbe) {
+		return func(p *mixedSchemaProbe) {
+			p.legacyTables = append(slices.DeleteFunc(p.legacyTables, func(c tableRowCount) bool { return c.table == table }), probedRows(table, n))
+		}
+	}
+	shared := func(s sharedTableProbe) func(*mixedSchemaProbe) {
+		return func(p *mixedSchemaProbe) { p.sharedTables = append(p.sharedTables, s) }
+	}
+
+	tests := []struct {
+		name string
+		p    *mixedSchemaProbe
+		want mixedSchemaVerdict
+	}{
+		{"R1 v2 detections, empty legacy, completed", build(completedMarker, v2Rows("detections", 3)), verdictKeepV2},
+		{"R1 completed with no v2 rows at all", build(completedMarker), verdictKeepV2},
+		{"R2 both empty, idle marker", build(idleMarker), verdictFreshV2},
+		{"R2 both empty, no marker table (known, not unknown)", build(), verdictFreshV2},
+		{"R3 rows only in detection_predictions, idle marker", build(idleMarker, v2Rows("detection_predictions", 1)), verdictRefuseV2NotCompleted},
+		{"R3 detections but no marker table", build(v2Rows("detections", 1)), verdictRefuseV2NotCompleted},
+		{"R4 rows only in results, v2 rows only in labels", build(legacyRows("results", 5), v2Rows("labels", 37)), verdictKeepLegacy},
+		{"R4 bare alert_rules rows are left in place", build(legacyRows("notes", 2), v2Rows("alert_rules", 11)), verdictKeepLegacy},
+		{"R4 nullable label_id on dynamic_thresholds with rows", build(legacyRows("notes", 2), shared(sharedProbe("dynamic_thresholds", 4, false))), verdictKeepLegacy},
+		{"R4 v2-shaped notification_histories without rows", build(legacyRows("notes", 2), shared(sharedProbe("notification_histories", 0, true))), verdictKeepLegacy},
+		{"R5 both sides hold detections", build(completedMarker, legacyRows("notes", 2), v2Rows("detections", 4)), verdictRefuseBothHoldData},
+		{"R5 legacy rows and detection_locks rows", build(legacyRows("notes", 2), v2Rows("detection_locks", 1)), verdictRefuseBothHoldData},
+		{"R5 legacy rows and a NOT NULL label_id notification_histories row", build(legacyRows("notes", 2), shared(sharedProbe("notification_histories", 1, true))), verdictRefuseSharedTables},
+		{"R5 legacy rows and an image_caches row with a nullable label_id", build(legacyRows("notes", 2), shared(sharedProbe("image_caches", 1, false))), verdictRefuseSharedTables},
+		{"R5 legacy empty, completed, dynamic_thresholds with label_id and rows", build(completedMarker, shared(sharedProbe("dynamic_thresholds", 2, false))), verdictRefuseSharedTables},
+		{"R5 legacy empty, idle, threshold_events with label_id and rows", build(idleMarker, shared(sharedProbe("threshold_events", 2, true))), verdictRefuseSharedTables},
+		{"R0 unknown input", build(completedMarker, func(p *mixedSchemaProbe) { p.unknown = true }), verdictRefuseUnknown},
+		{"R0 unknown beats an otherwise keepable legacy side", build(legacyRows("notes", 2), func(p *mixedSchemaProbe) { p.unknown = true }), verdictRefuseUnknown},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := classifyMixedSchema(tt.p)
+			assert.Equal(t, tt.want, got)
+			if tt.want.refuses() {
+				e := newMixedSchemaError(tt.p, got)
+				assert.Contains(t, e.Error(), mixedSchemaHint(e), "the error text carries the verdict's hint")
+				require.ErrorIs(t, e, ErrMixedSchemaDatabase)
+			}
+		})
+	}
+}
+
+// TestMixedSchemaError_Error pins the message: only tables with rows or an unknown
+// count are listed, an empty side prints none, the shared tables that block the
+// reconcile are named, and the error unwraps to the sentinel.
+func TestMixedSchemaError_Error(t *testing.T) {
+	t.Parallel()
+
+	p := &mixedSchemaProbe{
+		v2Tables:     []tableRowCount{probedRows("detections", 1204), probedRows("alert_rules", 0), probedRows("labels", 37), probedRows("ai_models", -1)},
+		legacyTables: []tableRowCount{probedRows("notes", 0), probedRows("results", 0)},
+		sharedTables: []sharedTableProbe{sharedProbe("notification_histories", 2, true)},
+	}
+	e := newMixedSchemaError(p, verdictRefuseSharedTables)
+	msg := e.Error()
+	assert.Contains(t, msg, "v2 tables with rows: detections=1204, labels=37, ai_models=unknown, notification_histories=2.")
+	assert.Contains(t, msg, "Legacy tables with rows: none.")
+	assert.NotContains(t, msg, "alert_rules")
+	assert.Contains(t, msg, "notification_histories", "the hint names the blocking shared table")
+	require.ErrorIs(t, e, ErrMixedSchemaDatabase)
+}
+
+// TestProbeMixedSchema_ListingFailure_FailsClosed runs the probe against a database with
+// no information_schema (SQLite), so the table listing fails. The probe must report
+// unknown, never an empty side, so the verdict refuses.
+func TestProbeMixedSchema_ListingFailure_FailsClosed(t *testing.T) {
+	t.Parallel()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
+	require.NoError(t, err)
+
+	p := probeMixedSchema(db, "irrelevant")
+	require.NotNil(t, p)
+
+	assert.True(t, p.unknown)
+	assert.Equal(t, verdictRefuseUnknown, classifyMixedSchema(p))
+	assert.Contains(t, newMixedSchemaError(p, verdictRefuseUnknown).Error(), "could not be read")
+}
+
+// TestProbeMixedSchema_ExistsFailure_FailsClosed makes the listing and the label_id
+// column query succeed while every EXISTS probe fails: SQLite gets an attached
+// information_schema that lists detections and notes, but neither table exists. A
+// failed probe must be unknown, never an empty table, or a side holding rows could be
+// dropped.
+func TestProbeMixedSchema_ExistsFailure_FailsClosed(t *testing.T) {
+	t.Parallel()
+
+	const database = "birdnet"
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	// The attached schema lives on one connection.
+	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
+	require.NoError(t, db.Exec("ATTACH DATABASE ':memory:' AS information_schema").Error)
+	require.NoError(t, db.Exec("CREATE TABLE information_schema.tables (table_name TEXT, table_schema TEXT)").Error)
+	require.NoError(t, db.Exec("CREATE TABLE information_schema.columns (table_name TEXT, table_schema TEXT, column_name TEXT, is_nullable TEXT)").Error)
+	require.NoError(t, db.Exec(
+		"INSERT INTO information_schema.tables VALUES ('detections', ?), ('notes', ?)", database, database).Error)
+
+	p := probeMixedSchema(db, database)
+	require.NotNil(t, p)
+
+	assert.True(t, p.unknown)
+	assert.Equal(t, verdictRefuseUnknown, classifyMixedSchema(p))
+}
+
+// TestMixedSchemaGuideDropOrder keeps the wiki guide's SQL in step with the code: the
+// keep-legacy statement must drop exactly orphanedBareV2Tables in order, and the
+// keep-enhanced statement must drop the legacy detection tables. The guide is what
+// users run by hand, so a table added to one and not the other breaks recovery.
+func TestMixedSchemaGuideDropOrder(t *testing.T) {
+	t.Parallel()
+
+	guide, err := os.ReadFile(filepath.Join("..", "..", "..", "doc", "wiki", "database-doctor.md"))
+	require.NoError(t, err)
+
+	dropped := func(firstTable string) []string {
+		_, rest, found := strings.Cut(string(guide), "DROP TABLE IF EXISTS "+firstTable)
+		require.True(t, found, "guide must drop %s", firstTable)
+		stmt, _, found := strings.Cut(rest, ";")
+		require.True(t, found, "drop statement must end with a semicolon")
+		var names []string
+		for name := range strings.FieldsFuncSeq(firstTable+stmt, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' }) {
+			names = append(names, name)
+		}
+		return names
+	}
+
+	assert.Equal(t, orphanedBareV2Tables(), dropped("alert_actions"))
+	assert.ElementsMatch(t, legacyDetectionTables, dropped("note_locks"))
+}
+
+// TestMixedSchemaTableLists_MatchEntities ties the hand-kept table lists to the v2
+// entities. A v2 entity missing from orphanedBareV2Tables and not sharing a legacy
+// name would hold rows the mixed schema probe never sees, so adding an entity without
+// a list entry fails here.
+func TestMixedSchemaTableLists_MatchEntities(t *testing.T) {
+	t.Parallel()
+
+	tableOf := func(model any) string {
+		s, err := schema.Parse(model, &sync.Map{}, schema.NamingStrategy{})
+		require.NoError(t, err)
+		return s.Table
+	}
+
+	sharedNames := make(map[string]struct{})
+	for _, model := range []any{
+		&datastore.DailyEvents{}, &datastore.HourlyWeather{}, &datastore.ImageCache{},
+		&datastore.DynamicThreshold{}, &datastore.ThresholdEvent{}, &datastore.NotificationHistory{},
+	} {
+		sharedNames[tableOf(model)] = struct{}{}
+	}
+	orphaned := orphanedBareV2Tables()
+
+	entityTables := make(map[string]struct{})
+	for _, model := range v2Entities() {
+		table := tableOf(model)
+		entityTables[table] = struct{}{}
+		_, isShared := sharedNames[table]
+		listed := slices.Contains(orphaned, table)
+		assert.NotEqual(t, isShared, listed, "v2 table %s must be in exactly one of orphanedBareV2Tables and the shared legacy names", table)
+	}
+
+	// Names kept for installs created before the TableName overrides were removed (#2165).
+	oldNames := []string{"migration_state", "alert_history"}
+	for _, table := range orphaned {
+		if _, ok := entityTables[table]; !ok {
+			assert.Contains(t, oldNames, table, "orphanedBareV2Tables lists %s, which no v2 entity maps to", table)
+		}
+	}
+
+	assert.Equal(t, "detections", bareDetectionTables[len(bareDetectionTables)-1])
+	for _, table := range bareDetectionTables {
+		assert.Contains(t, orphaned, table)
+	}
+	for _, table := range slices.Concat(legacyRepairedSharedTables, v2DroppedThresholdTables) {
+		assert.Contains(t, sharedNames, table)
+	}
 }
