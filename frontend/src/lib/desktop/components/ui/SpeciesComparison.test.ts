@@ -431,3 +431,76 @@ describe('SpeciesComparison', () => {
     expect(screen.getAllByText('An introduction.')).toHaveLength(1);
   });
 });
+
+describe('SpeciesComparison similar-species loading state', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  // The guide and the similar-species list are fetched concurrently and settle
+  // independently. /similar does a taxonomy lookup plus a guide fetch per
+  // neighbour, so the guide usually wins. The similar rail starts expanded, and
+  // SimilarSpeciesPanel renders "no similar species" for an empty list, so
+  // nothing may claim the list is empty before the request has actually settled.
+  it('does not claim there are no similar species while the request is still in flight', async () => {
+    let resolveSimilar!: (value: SimilarSpeciesResponse) => void;
+    const pendingSimilar = new Promise<SimilarSpeciesResponse>(resolve => {
+      resolveSimilar = resolve;
+    });
+
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/similar')) return pendingSimilar;
+      return Promise.resolve(makeGuide() as never);
+    });
+
+    render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
+    });
+
+    // The guide has rendered, so the spinner is gone and the similar rail is visible.
+    expect(await screen.findByText('An introduction.')).toBeInTheDocument();
+
+    expect(
+      screen.queryByText('analytics.species.similar.empty'),
+      'the empty state must not be shown before /similar settles'
+    ).not.toBeInTheDocument();
+
+    resolveSimilar({
+      scientific_name: 'Turdus merula',
+      genus: 'Turdus',
+      similar: [
+        {
+          scientific_name: 'Turdus pilaris',
+          common_name: 'Fieldfare',
+          relationship: 'same_genus',
+          has_guide: false,
+        },
+      ],
+    });
+
+    // The neighbour appears both as a list row and in the selected card.
+    await waitFor(() => {
+      expect(screen.getAllByText('Fieldfare').length).toBeGreaterThan(0);
+    });
+    expect(screen.queryByText('analytics.species.similar.empty')).not.toBeInTheDocument();
+  });
+
+  // The counterpart: once the request has settled with nothing, saying so is correct.
+  it('shows the empty state once the request settles with no neighbours', async () => {
+    vi.mocked(api.get).mockImplementation((url: string) => {
+      if (url.includes('/similar'))
+        return Promise.resolve({
+          scientific_name: 'Turdus merula',
+          genus: 'Turdus',
+          similar: [],
+        });
+      return Promise.resolve(makeGuide() as never);
+    });
+
+    render(SpeciesComparison, {
+      props: { scientificName: 'Turdus merula', commonName: 'Common Blackbird' },
+    });
+
+    expect(await screen.findByText('analytics.species.similar.empty')).toBeInTheDocument();
+  });
+});

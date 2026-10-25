@@ -107,6 +107,10 @@
   // Whether the similar-species list was actually requested for the current
   // species. Distinguishes "we asked and there are none" from "we never asked".
   let similarRequested = $state(false);
+  // The guide and /similar settle independently and the rail starts expanded, so
+  // the rail must say it is still loading rather than render an empty list as
+  // "no similar species" while the request is in flight.
+  let similarLoading = $state(true);
   // Boolean, not the error text: the raw message is server/network prose in
   // whatever language produced it, and every other string in this panel goes
   // through t(). The detail goes to the logger instead.
@@ -181,6 +185,7 @@
     similarUnavailable = false;
     noGuide = false;
     similarRequested = showSimilarSpecies;
+    similarLoading = true;
     const enc = encodeURIComponent(scientificName);
     const loc = encodeURIComponent(getLocale());
     // The two endpoints are independent on the backend; fetch them independently
@@ -234,6 +239,7 @@
     // guide with the unavailable banner the moment the similar rail came back
     // degraded — the guide request having succeeded seconds earlier.
     similarUnavailable = similarResult?.guide_unavailable ?? false;
+    similarLoading = false;
   }
 
   function toggleBodySection(id: CanonicalSectionId): void {
@@ -305,7 +311,13 @@
       </button>
       {#if similarOpen}
         <div id={`${uid}-similar`} class="pb-3">
-          <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
+          {#if similarLoading}
+            <div role="status" class="text-sm text-[var(--color-base-content)]/70">
+              {t('analytics.species.similar.cardLoading')}
+            </div>
+          {:else}
+            <SimilarSpeciesPanel mainName={commonName || scientificName} {similar} />
+          {/if}
         </div>
       {/if}
     </div>
