@@ -353,6 +353,10 @@ func initializeSentrySDK(settings *conf.Settings) error {
 		// sentry-go v0.46.0 telemetry processor drops event attachments (support dumps).
 		// Scheduler.sendItem() only adds the event envelope item, skipping Attachments.
 		DisableTelemetryBuffer: true,
+
+		// sentry-go has no backoff for network errors; the gate stops DNS and
+		// dial attempts while the ingest host is unreachable (GitHub #4813).
+		HTTPTransport: sentryDeliveryGate,
 	})
 
 	if err != nil {
@@ -1205,6 +1209,9 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 
 		// sentry-go v0.46.0 telemetry processor drops event attachments (support dumps).
 		DisableTelemetryBuffer: true,
+
+		// Same delivery gate as the main client (GitHub #4813).
+		HTTPTransport: sentryDeliveryGate,
 
 		// Only allow support dump events
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
