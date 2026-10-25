@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -1042,6 +1043,35 @@ func TestProbeMixedSchema_ExistsFailure_FailsClosed(t *testing.T) {
 
 	assert.True(t, p.unknown)
 	assert.Equal(t, verdictRefuseUnknown, classifyMixedSchema(p))
+}
+
+// TestDescribeStepFailure pins the cause named in a drop-failure refusal: the driver
+// error number when there is one, "gained rows" for a table that was no longer empty
+// under the lock, and only the step otherwise. The raw error text never appears, because
+// a driver message can hold the database name.
+func TestDescribeStepFailure(t *testing.T) {
+	t.Parallel()
+
+	const step = "removing the empty legacy tables"
+	const secret = "Table 'private_db.notes' doesn't exist"
+	tests := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"lock timeout", fmt.Errorf("lock tables: %w", &mysql.MySQLError{Number: 1205, Message: secret}), step + " failed (MySQL error 1205)"},
+		{"missing table", fmt.Errorf("lock tables: %w", &mysql.MySQLError{Number: mysqlErrNoSuchTable, Message: secret}), step + " failed (MySQL error 1146)"},
+		{"table gained rows", fmt.Errorf("%w: notes", errMixedSchemaTableNotEmpty), step + " stopped because a table gained rows"},
+		{"error without a driver number", fmt.Errorf("list tables: %s", secret), step + " failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := describeStepFailure(step, tt.err)
+			assert.Equal(t, tt.want, got)
+			assert.NotContains(t, got, "private_db")
+		})
+	}
 }
 
 // TestMixedSchemaGuideDropOrder keeps the wiki guide's SQL in step with the code: the
