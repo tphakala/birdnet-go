@@ -473,6 +473,67 @@ func withForeignKeyChecksOff(db *gorm.DB, fn func(tx *gorm.DB) error) error {
 	})
 }
 
+// foreignKeyProbe is a throwaway table for TestWithForeignKeyChecksOff_RestoresOnPinnedConnection.
+type foreignKeyProbe struct {
+	ID   uint `gorm:"primaryKey"`
+	Name string
+}
+
+func (foreignKeyProbe) TableName() string { return "fk_checks_probe" }
+
+// foreignKeyChecksProbeConns is how many pool connections the probe holds at once, so every
+// idle connection the seed could have used is among them.
+const foreignKeyChecksProbeConns = 8
+
+// assertForeignKeyChecksOn fails for every pooled connection that has foreign key checks off.
+func assertForeignKeyChecksOn(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	for i := range foreignKeyChecksProbeConns {
+		conn, err := sqlDB.Conn(t.Context())
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = conn.Close() })
+		var checks int
+		require.NoError(t, conn.QueryRowContext(t.Context(), "SELECT @@foreign_key_checks").Scan(&checks))
+		assert.Equal(t, 1, checks, "connection %d was returned to the pool with foreign key checks off", i)
+	}
+}
+
+// TestWithForeignKeyChecksOff_RestoresOnPinnedConnection pins the helper's contract: whatever fn
+// does (create a row, fail, panic), the checks are back on for every connection in the pool.
+func TestWithForeignKeyChecksOff_RestoresOnPinnedConnection(t *testing.T) {
+	require.NoError(t, coexTestDB.Exec("CREATE TABLE IF NOT EXISTS fk_checks_probe (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(10))").Error)
+	t.Cleanup(func() { assert.NoError(t, coexTestDB.Exec("DROP TABLE IF EXISTS fk_checks_probe").Error) })
+
+	t.Run("create inside fn", func(t *testing.T) {
+		require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+			return tx.Create(&foreignKeyProbe{Name: "a"}).Error
+		}))
+		assertForeignKeyChecksOn(t, coexTestDB)
+	})
+
+	t.Run("fn returns an error", func(t *testing.T) {
+		sentinel := errors.NewStd("seed failed")
+		err := withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+			require.NoError(t, tx.Create(&foreignKeyProbe{Name: "b"}).Error)
+			return sentinel
+		})
+		require.ErrorIs(t, err, sentinel)
+		assertForeignKeyChecksOn(t, coexTestDB)
+	})
+
+	t.Run("fn panics", func(t *testing.T) {
+		assert.Panics(t, func() {
+			_ = withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+				require.NoError(t, tx.Create(&foreignKeyProbe{Name: "c"}).Error)
+				panic("seed exploded")
+			})
+		})
+		assertForeignKeyChecksOn(t, coexTestDB)
+	})
+}
+
 // insertLegacyNote adds one populated legacy notes row.
 func insertLegacyNote(t *testing.T) {
 	t.Helper()
