@@ -112,16 +112,15 @@ func dropAllTables(t *testing.T, db *gorm.DB, database string) {
 		return
 	}
 
-	// Disable FK checks, drop everything, re-enable
-	require.NoError(t, db.Exec("SET FOREIGN_KEY_CHECKS = 0").Error)
-	defer func() {
-		assert.NoError(t, db.Exec("SET FOREIGN_KEY_CHECKS = 1").Error,
-			"failed to re-enable foreign key checks")
-	}()
-	for _, name := range tableNames {
-		require.NoError(t, db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", name)).Error,
-			"failed to drop table %s", name)
-	}
+	// Drop everything with FK checks off, on one connection
+	require.NoError(t, withForeignKeyChecksOff(db, func(tx *gorm.DB) error {
+		for _, name := range tableNames {
+			if err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", name)).Error; err != nil {
+				return fmt.Errorf("failed to drop table %s: %w", name, err)
+			}
+		}
+		return nil
+	}))
 }
 
 // seedLegacyTables creates legacy schema tables with sample data.
@@ -457,15 +456,81 @@ func seedBareV2WithDetections(t *testing.T, detections int, completed bool) {
 
 // withForeignKeyChecksOff runs fn on one pinned connection with foreign key checks off,
 // so the seed statements can insert rows whose references are not under test. The checks
-// are switched back on before the connection returns to the pool, and the error of
-// fn and of the restore are joined.
+// are switched back on before the connection returns to the pool on every exit path,
+// including a require failure or a panic inside fn, and the error of fn and of the
+// restore are joined. fn gets a session that skips GORM's default transaction: a Create on
+// the pinned handle itself begins and commits a transaction and then points the handle back
+// at the pool, so the restore would run on another connection.
 func withForeignKeyChecksOff(db *gorm.DB, fn func(tx *gorm.DB) error) error {
-	return db.Connection(func(tx *gorm.DB) error {
+	return db.Connection(func(tx *gorm.DB) (err error) {
 		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
 			return err
 		}
-		fnErr := fn(tx)
-		return errors.Join(fnErr, tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error)
+		defer func() {
+			err = errors.Join(err, tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error)
+		}()
+		return fn(tx.Session(&gorm.Session{SkipDefaultTransaction: true}))
+	})
+}
+
+// foreignKeyProbe is a throwaway table for TestWithForeignKeyChecksOff_RestoresOnPinnedConnection.
+type foreignKeyProbe struct {
+	ID   uint `gorm:"primaryKey"`
+	Name string
+}
+
+func (foreignKeyProbe) TableName() string { return "fk_checks_probe" }
+
+// foreignKeyChecksProbeConns is how many pool connections the probe holds at once, so every
+// idle connection the seed could have used is among them.
+const foreignKeyChecksProbeConns = 8
+
+// assertForeignKeyChecksOn fails for every pooled connection that has foreign key checks off.
+func assertForeignKeyChecksOn(t *testing.T, db *gorm.DB) {
+	t.Helper()
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	for i := range foreignKeyChecksProbeConns {
+		conn, err := sqlDB.Conn(t.Context())
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = conn.Close() })
+		var checks int
+		require.NoError(t, conn.QueryRowContext(t.Context(), "SELECT @@foreign_key_checks").Scan(&checks))
+		assert.Equal(t, 1, checks, "connection %d was returned to the pool with foreign key checks off", i)
+	}
+}
+
+// TestWithForeignKeyChecksOff_RestoresOnPinnedConnection pins the helper's contract: whatever fn
+// does (create a row, fail, panic), the checks are back on for every connection in the pool.
+func TestWithForeignKeyChecksOff_RestoresOnPinnedConnection(t *testing.T) {
+	require.NoError(t, coexTestDB.Exec("CREATE TABLE IF NOT EXISTS fk_checks_probe (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, name VARCHAR(10))").Error)
+	t.Cleanup(func() { assert.NoError(t, coexTestDB.Exec("DROP TABLE IF EXISTS fk_checks_probe").Error) })
+
+	t.Run("create inside fn", func(t *testing.T) {
+		require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+			return tx.Create(&foreignKeyProbe{Name: "a"}).Error
+		}))
+		assertForeignKeyChecksOn(t, coexTestDB)
+	})
+
+	t.Run("fn returns an error", func(t *testing.T) {
+		sentinel := errors.NewStd("seed failed")
+		err := withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+			require.NoError(t, tx.Create(&foreignKeyProbe{Name: "b"}).Error)
+			return sentinel
+		})
+		require.ErrorIs(t, err, sentinel)
+		assertForeignKeyChecksOn(t, coexTestDB)
+	})
+
+	t.Run("fn panics", func(t *testing.T) {
+		assert.Panics(t, func() {
+			_ = withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+				require.NoError(t, tx.Create(&foreignKeyProbe{Name: "c"}).Error)
+				panic("seed exploded")
+			})
+		})
+		assertForeignKeyChecksOn(t, coexTestDB)
 	})
 }
 
@@ -1046,18 +1111,12 @@ func TestMySQL_V2Initialize_SwapsContributionDetectionIndex(t *testing.T) {
 	// label and model references are not under test, so FK checks are off for the
 	// inserts, on one connection.
 	detection := entities.Detection{ModelID: 1, LabelID: 1, DetectedAt: 1000, Confidence: 0.9}
-	require.NoError(t, db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
-			return err
-		}
+	require.NoError(t, withForeignKeyChecksOff(db, func(tx *gorm.DB) error {
 		if err := tx.Create(&detection).Error; err != nil {
 			return err
 		}
-		if err := tx.Exec("INSERT INTO "+table+" (detection_id, model_id, hit_count, max_confidence) VALUES (?, 1, 3, 0.9)",
-			detection.ID).Error; err != nil {
-			return err
-		}
-		return tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error
+		return tx.Exec("INSERT INTO "+table+" (detection_id, model_id, hit_count, max_confidence) VALUES (?, 1, 3, 0.9)",
+			detection.ID).Error
 	}))
 	require.True(t, db.Migrator().HasIndex(entity, oldIndex))
 
