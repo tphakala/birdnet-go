@@ -29,6 +29,8 @@ const (
 	tableAppMetadata = "app_metadata"
 	// Application event log
 	tableAppEvents = "app_events"
+	// Privacy filter activity
+	tablePrivacyFilterHourlies = "privacy_filter_hourlies"
 )
 
 // Table name constants for v2 prefixed schema (MySQL).
@@ -60,4 +62,6 @@ const (
 	tableV2AppMetadata = "v2_app_metadata"
 	// Application event log
 	tableV2AppEvents = "v2_app_events"
+	// Privacy filter activity
+	tableV2PrivacyFilterHourlies = "v2_privacy_filter_hourlies"
 )

@@ -3,6 +3,7 @@ package analysis
 import (
 	"context"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api"
 	apiv2 "github.com/tphakala/birdnet-go/internal/api/v2"
@@ -64,6 +65,7 @@ type APIServerService struct {
 	systemMonitor  *monitor.SystemMonitor
 	controlChan    chan string
 	audioLevelChan chan audiocore.AudioLevelData
+	privacyRollup  *privacyrollup.Writer
 
 	// cancel stops background goroutines owned by subsystems (e.g. the OAuth2
 	// server's periodic token cleanup). Created in Start, invoked in Stop.
@@ -255,6 +257,8 @@ func (s *APIServerService) Start(ctx context.Context) error {
 		SetResultsQueueDropHealthSink(ctrl.HealthMetricsStore(), ctrl.HealthEventBuffer())
 	}
 
+	s.startPrivacyRollup()
+
 	startSucceeded = true
 	return nil
 }
@@ -316,6 +320,14 @@ func (s *APIServerService) Stop(ctx context.Context) error {
 				logger.String("operation", "shutdown_processor"))
 		}
 		s.proc = nil
+	}
+
+	// Stop the privacy rollup writer after the processor's last flush cycle and
+	// before the database service closes the database.
+	if err := s.stopPrivacyRollup(ctx); err != nil {
+		log.Warn("privacy rollup writer did not stop in time",
+			logger.Error(err),
+			logger.String("operation", "shutdown_privacy_rollup"))
 	}
 
 	// Detach the results-queue drop health sink so it does not retain the

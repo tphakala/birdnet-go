@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/inference/vad"
@@ -530,8 +531,10 @@ func (p *Processor) runVADGate(settings *conf.Settings, chunk *chunkAudio) (span
 		p.Metrics.PrivacyFilter.SetVADLastSpeechProbability(float64(result.prob))
 	}
 
-	d := p.recordVADHit(settings, source, audioEnd, float64(result.prob))
+	thresholdMilli := privacyrollup.ThresholdMilli(threshold)
+	d := p.recordVADHit(settings, source, audioEnd, float64(result.prob), thresholdMilli)
 	p.logLabelHitDecision(settings, source, nil, &d)
+	p.recordVADHitEvents(settings, source, audioEnd, float64(result.prob), thresholdMilli, &d)
 	return result.span, true
 }
 

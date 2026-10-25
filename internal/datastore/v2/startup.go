@@ -1208,6 +1208,7 @@ func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
 		"detections",
 		// Labels before its reference tables (labels has FKs to ai_models, label_types, taxonomic_classes)
 		"labels",
+		"privacy_filter_hourlies",
 		"audio_sources",
 		"ai_models",
 		"taxonomic_classes",

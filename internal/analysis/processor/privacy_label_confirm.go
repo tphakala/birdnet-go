@@ -43,6 +43,10 @@ type heldLabelHit struct {
 	at         time.Time
 	confidence float32
 	modelID    string // model that scored the label, empty when unknown
+	// thresholdMilli is the privacy filter confidence threshold the hit was scored
+	// against, in thousandths, kept so a later confirmation or drop reports the
+	// threshold of the hit and not the one in effect when it resolves.
+	thresholdMilli int
 }
 
 // labelHitDecision is what a hit did to the confirmation state, for logging
@@ -72,7 +76,7 @@ func (p *Processor) takeHeldLocked(source string, at time.Time) labelHitDecision
 	if !withinLabelConfirmWindow(held.at, at) {
 		return labelHitDecision{dropped: &held}
 	}
-	p.recordHumanHitLocked(source, held.at, metrics.TriggerLabel, held.modelID, float64(held.confidence))
+	p.recordHumanHitLocked(source, held.at, metrics.TriggerLabel, held.modelID, float64(held.confidence), held.thresholdMilli)
 	return labelHitDecision{confirmed: &held}
 }
 
@@ -91,13 +95,13 @@ func (p *Processor) recordLabelHit(settings *conf.Settings, source string, hit h
 	defer p.detectionMutex.Unlock()
 
 	if baseOverlap <= labelConfirmMinBaseOverlap {
-		p.recordHumanHitLocked(source, hit.at, metrics.TriggerLabel, hit.modelID, float64(hit.confidence))
+		p.recordHumanHitLocked(source, hit.at, metrics.TriggerLabel, hit.modelID, float64(hit.confidence), hit.thresholdMilli)
 		return labelHitDecision{}
 	}
 
 	d := p.takeHeldLocked(source, hit.at)
 	if last, ok := p.LastHumanDetection[source]; d.confirmed != nil || (ok && withinLabelConfirmWindow(last.Time, hit.at)) {
-		p.recordHumanHitLocked(source, hit.at, metrics.TriggerLabel, hit.modelID, float64(hit.confidence))
+		p.recordHumanHitLocked(source, hit.at, metrics.TriggerLabel, hit.modelID, float64(hit.confidence), hit.thresholdMilli)
 		return d
 	}
 
@@ -110,15 +114,15 @@ func (p *Processor) recordLabelHit(settings *conf.Settings, source string, hit h
 }
 
 // recordVADHit records a VAD speech hit with its speech probability, attributed
-// to vadHitModelID. It always counts on its own and lets it confirm a held label
-// hit of the source.
-func (p *Processor) recordVADHit(settings *conf.Settings, source string, at time.Time, probability float64) labelHitDecision {
+// to vadHitModelID, against the VAD threshold thresholdMilli (in thousandths). It
+// always counts on its own and lets it confirm a held label hit of the source.
+func (p *Processor) recordVADHit(settings *conf.Settings, source string, at time.Time, probability float64, thresholdMilli int) labelHitDecision {
 	baseOverlap := p.effectiveBaseOverlap(settings)
 
 	p.detectionMutex.Lock()
 	defer p.detectionMutex.Unlock()
 
-	p.recordHumanHitLocked(source, at, metrics.TriggerVAD, vadHitModelID, probability)
+	p.recordHumanHitLocked(source, at, metrics.TriggerVAD, vadHitModelID, probability, thresholdMilli)
 	if baseOverlap <= labelConfirmMinBaseOverlap {
 		return labelHitDecision{}
 	}
