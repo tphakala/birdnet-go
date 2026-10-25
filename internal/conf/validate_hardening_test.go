@@ -185,7 +185,7 @@ func TestValidateAudioSettings_ExportPathTraversal(t *testing.T) {
 func TestMaxEQFrequencyIsNyquistOfHighestSampleRate(t *testing.T) {
 	t.Parallel()
 	highest := slices.Max(validSampleRates)
-	assert.Equal(t, maxValidSampleRate, highest)
+	assert.Equal(t, MaxValidSampleRate, highest)
 	assert.InDelta(t, MaxEQFrequency, float64(highest)/2, 0)
 }
 
