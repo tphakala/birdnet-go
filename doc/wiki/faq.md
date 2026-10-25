@@ -213,10 +213,6 @@ The maintainer's recommended starting point: enable the false-positive filter at
 
 ## Database
 
-### How do I move from SQLite to MySQL?
-
-Keep your SQLite database in place, enable MySQL in config, and start BirdNET-Go; it migrates your data into MySQL automatically and shows progress in the UI (it can take a while for large databases, let it finish). Do **not** pre-create tables with your own script, that confuses the startup detection. If a SQLite-to-MySQL switch gets wedged (MySQL ends up empty but the UI thinks migration completed), switch back to SQLite (your data is still there) and wait for the fix.
-
 ### Startup fails after an upgrade with a database/schema error
 
 Use the [Database Doctor](https://github.com/tphakala/birdnet-go/wiki/Database-Doctor) to diagnose and `--fix` (it backs up first). Don't drop tables yourself, several hold real data.
