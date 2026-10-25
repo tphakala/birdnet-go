@@ -70,6 +70,12 @@ yourself before touching code in that area.
   legacy code or moves callers to the repositories, and the legacy to v2
   migration code are allowed. If a change seems to need the legacy store, stop
   and ask the maintainer. Details: `internal/datastore/AGENTS.md`.
+- **Reconcile database problems safely; never migrate data on your own.** When
+  startup or runtime code finds a recoverable database problem, it repairs it
+  automatically as long as no row of user data is lost or hidden and the repair
+  is logged. A data migration (SQLite to MySQL, legacy to v2, copying or
+  consolidating databases) never starts by itself; only an explicit user action
+  starts it. Details: `internal/datastore/AGENTS.md`.
 - **The frontend is for desktop and tablet only; mobile is out of scope.** Do
   not optimize, fix, test or file issues for phone viewports or phone layouts
   (about 640 px wide and below), and do not add phone-specific workarounds.
