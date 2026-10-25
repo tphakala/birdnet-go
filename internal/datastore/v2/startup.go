@@ -40,7 +40,13 @@ func readOnlyDSN(dbPath string) string {
 
 // reportStartupError reports a startup state check failure to Sentry telemetry.
 // The paths parameter lists file paths that should be anonymized in the error message.
+// Connectivity failures (the database host could not be reached) are not sent:
+// they are not code defects, and the open attempt that follows in the same boot
+// reports them once through the rate-limited telemetry filter.
 func reportStartupError(dbType, operation string, err error, paths ...string) {
+	if errors.IsConnectivityError(err) {
+		return
+	}
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", "datastore-startup")
 		scope.SetTag("db_type", dbType)
@@ -551,7 +557,11 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?) LIMIT 1",
 		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationTableName).Error
 	if err != nil || v2MigrationTableName == "" {
-		reportStartupError("mysql", "resolveV2TableName", fmt.Errorf("could not resolve migration state table"), mysqlHost, mysqlDB, mysqlUser)
+		resolveErr := fmt.Errorf("could not resolve migration state table")
+		if err != nil {
+			resolveErr = fmt.Errorf("could not resolve migration state table: %w", err)
+		}
+		reportStartupError("mysql", "resolveV2TableName", resolveErr, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     true,
