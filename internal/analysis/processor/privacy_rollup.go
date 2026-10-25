@@ -73,7 +73,7 @@ func (p *Processor) recordPrivacyEvents(settings *conf.Settings, events ...sourc
 // labelHitEvents builds the rollup events of one label hit decision. The dropped,
 // confirmed and own hit are independent, as in logLabelHitDecision: a held hit
 // is reported under its own stamp, model and threshold, and a VAD hit (own is
-// nil) has its counted event built by vadHitEvents.
+// nil) has its counted event built by recordVADHitEvents.
 func labelHitEvents(source string, own *heldLabelHit, d *labelHitDecision) []sourcedEvent {
 	var events []sourcedEvent
 	add := func(kind privacyrollup.Kind, h *heldLabelHit) {
