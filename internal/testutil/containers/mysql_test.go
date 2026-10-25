@@ -51,6 +51,23 @@ func TestResolveMySQLImage(t *testing.T) {
 			wantErr:  MySQLImageEnvVar,
 		},
 		{
+			name:       "env wins on CI",
+			envImage:   "mariadb:10.11",
+			onCI:       true,
+			wantImage:  "mariadb:10.11",
+			wantFlavor: FlavorMariaDB,
+		},
+		{
+			name:     "env with an empty tag is an error",
+			envImage: "mysql:",
+			wantErr:  MySQLImageEnvVar,
+		},
+		{
+			name:    "unknown config flavor is an error",
+			cfg:     MySQLConfig{Flavor: "postgres"},
+			wantErr: "unknown database flavor",
+		},
+		{
 			name:    "unset env on CI is an error",
 			onCI:    true,
 			wantErr: "must be set on CI",
