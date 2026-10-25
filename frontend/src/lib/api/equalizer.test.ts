@@ -32,6 +32,8 @@ function validBody(overrides: Record<string, unknown> = {}): Record<string, unkn
   return {
     sampleRate: 48000,
     enabled: true,
+    minHz: 20,
+    maxHz: 20000,
     points: [
       { hz: 20, gainDb: 0 },
       { hz: 1000, gainDb: -3 },
@@ -53,6 +55,8 @@ function responseFor(request: EqualizerResponseRequest): EqualizerResponse {
   return {
     sampleRate: request.sampleRate ?? 48000,
     enabled: request.equalizer.enabled,
+    minHz: 20,
+    maxHz: 20000,
     points: [
       { hz: 20, gainDb: 0 },
       { hz: request.equalizer.filters.at(0)?.frequency ?? 1000, gainDb: -3 },
@@ -124,6 +128,8 @@ describe('parseEqualizerResponse', () => {
       1
     );
     expect(parsed.sampleRate).toBe(48000);
+    expect(parsed.minHz).toBe(20);
+    expect(parsed.maxHz).toBe(20000);
     expect(parsed.points).toHaveLength(3);
     expect(parsed.skipped).toEqual([
       { index: 0, type: 'LowPass', reason: 'invalid_parameters', message: 'x' },
@@ -198,6 +204,10 @@ describe('parseEqualizerResponse', () => {
     ['enabled missing', { enabled: undefined }],
     ['enabled not a boolean', { enabled: 'true' }],
     ['sampleRate NaN', { sampleRate: Number.NaN }],
+    ['maxHz missing', { maxHz: undefined }],
+    ['maxHz NaN', { maxHz: Number.NaN }],
+    ['maxHz not above minHz', { minHz: 20, maxHz: 20 }],
+    ['minHz not above 0', { minHz: 0 }],
     ['skipped not an array', { skipped: null }],
     [
       'skipped index not an integer',

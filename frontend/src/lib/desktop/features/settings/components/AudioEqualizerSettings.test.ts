@@ -119,6 +119,23 @@ describe('AudioEqualizerSettings', () => {
     expect(screen.getByText('settings.audio.audioFilters.newFilterType')).toBeInTheDocument();
   });
 
+  it('loads the filter table past the HTTP cache', async () => {
+    render(AudioEqualizerSettings, {
+      props: {
+        equalizerSettings: defaultEqualizerSettings,
+        disabled: false,
+        onUpdate: mockUpdateCallback,
+      },
+    });
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v2/system/audio/equalizer/config'),
+        expect.objectContaining({ cache: 'no-cache' })
+      );
+    });
+  });
+
   it('should display existing HighPass filter', async () => {
     const existingFilter = {
       type: 'HighPass' as const,

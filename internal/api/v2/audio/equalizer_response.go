@@ -68,10 +68,15 @@ type equalizerSkippedFilter struct {
 // equalizerResponseBody is the 200 response.
 type equalizerResponseBody struct {
 	// SampleRate is the rate the curve was computed at.
-	SampleRate int                      `json:"sampleRate"`
-	Enabled    bool                     `json:"enabled"`
-	Points     []equalizerResponsePoint `json:"points"`
-	Skipped    []equalizerSkippedFilter `json:"skipped"`
+	SampleRate int  `json:"sampleRate"`
+	Enabled    bool `json:"enabled"`
+	// MinHz and MaxHz are the swept frequency range in Hz: the request's
+	// values, or the defaults for the rate. Clients size their frequency axis
+	// from them.
+	MinHz   float64                  `json:"minHz"`
+	MaxHz   float64                  `json:"maxHz"`
+	Points  []equalizerResponsePoint `json:"points"`
+	Skipped []equalizerSkippedFilter `json:"skipped"`
 }
 
 // ComputeEqualizerResponse handles POST /api/v2/system/audio/equalizer/response.
@@ -121,6 +126,8 @@ func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 	body := equalizerResponseBody{
 		SampleRate: rate,
 		Enabled:    req.Equalizer.Enabled,
+		MinHz:      minHz,
+		MaxHz:      maxHz,
 		Points:     make([]equalizerResponsePoint, len(freqs)),
 		Skipped:    make([]equalizerSkippedFilter, 0, len(skipped)),
 	}
@@ -166,11 +173,23 @@ func (c *Handler) resolveEQResponseRate(req *equalizerResponseRequest) int {
 	return conf.SampleRate
 }
 
+// defaultEQResponseMaxHzFor returns the default top of the sweep for rate.
+// Rates above the default capture rate (conf.SampleRate) carry content past the
+// audible band, so their default sweep is the full band up to Nyquist; the
+// others stop at the audible limit, or at Nyquist when that is lower.
+func defaultEQResponseMaxHzFor(rate int) float64 {
+	nyquist := float64(rate) / 2
+	if rate > conf.SampleRate {
+		return nyquist
+	}
+	return math.Min(defaultEQResponseMaxHz, nyquist)
+}
+
 // validateEQResponseRange applies the defaults and checks points and the
 // frequency range against the Nyquist frequency of rate.
 func validateEQResponseRange(req *equalizerResponseRequest, rate int) (points int, minHz, maxHz float64, err error) {
 	nyquist := float64(rate) / 2
-	points, minHz, maxHz = defaultEQResponsePoints, defaultEQResponseMinHz, math.Min(defaultEQResponseMaxHz, nyquist)
+	points, minHz, maxHz = defaultEQResponsePoints, defaultEQResponseMinHz, defaultEQResponseMaxHzFor(rate)
 	if req.Points != nil {
 		points = *req.Points
 	}

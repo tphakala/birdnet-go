@@ -208,6 +208,8 @@
 
       const response = await fetch(buildAppUrl('/api/v2/system/audio/equalizer/config'), {
         headers,
+        // Revalidate: a table cached by an older release would clamp new limits.
+        cache: 'no-cache',
         signal: abortController.signal,
       });
 
