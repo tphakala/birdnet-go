@@ -787,91 +787,98 @@ func (p *Processor) processDetections(item classifier.Results) {
 	hitAt, _ := audioEndOrNow(&item)
 
 	for i := range detectionResults {
-		det := detectionResults[i]
-		commonName := strings.ToLower(det.Result.Species.CommonName)
-		confidence := det.Result.Confidence
-
-		// Lock the mutex to ensure thread-safe access to shared resources
-		p.pendingMutex.Lock()
-
-		now := time.Now()
-		mapKey := pendingKeyForDetection(item.Source.ID, &det)
-
-		if existing, exists := p.pendingDetections[mapKey]; exists {
-			// Update the existing detection (may be from same or different model)
-			oldConfidence := existing.Confidence
-			existing.LastUpdated = now
-			existing.AudioCapturedAt = item.AudioCapturedAt
-			if confidence > existing.Confidence {
-				existing.Detection = det
-				existing.Confidence = confidence
-				existing.BestModelID = item.ModelID
-				existing.Source = item.Source.ID
-				GetLogger().Debug("Updated pending detection with higher confidence",
-					logger.String("species", commonName),
-					logger.String("model_id", item.ModelID),
-					logger.Float64("old_confidence", oldConfidence),
-					logger.Float64("new_confidence", confidence),
-					logger.Int("count", existing.Count+1),
-					logger.String("operation", "update_pending_detection"))
-			}
-			existing.Count++
-
-			// Track per-model contribution
-			if existing.ModelContributions == nil {
-				existing.ModelContributions = make(map[string]ModelContribution, 1)
-			}
-			contrib := existing.ModelContributions[item.ModelID]
-			contrib.recordHit(confidence, hitAt)
-			existing.ModelContributions[item.ModelID] = contrib
-
-			p.pendingDetections[mapKey] = existing
-		} else {
-			GetLogger().Info("Created new pending detection",
-				logger.String("species", commonName),
-				logger.Float64("confidence", confidence),
-				logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
-				logger.String("model_id", item.ModelID),
-				logger.Time("flush_deadline", now.Add(detectionWindow)),
-				logger.String("operation", "create_pending_detection"))
-			var contrib ModelContribution
-			contrib.recordHit(confidence, hitAt)
-			p.pendingDetections[mapKey] = PendingDetection{
-				Detection:       det,
-				Confidence:      confidence,
-				Source:          item.Source.ID,
-				BestModelID:     item.ModelID,
-				FirstDetected:   item.StartTime,
-				CreatedAt:       now,
-				AudioCapturedAt: item.AudioCapturedAt,
-				LastUpdated:     item.StartTime,
-				// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
-				// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
-				FlushDeadline:      now.Add(detectionWindow),
-				Count:              1,
-				ModelContributions: map[string]ModelContribution{item.ModelID: contrib},
-			}
-		}
-
-		// Apply extended capture if species qualifies
-		if p.isExtendedCaptureSpecies(det.Result.Species.ScientificName) {
-			p.applyExtendedCapture(mapKey, now, detectionWindow)
-		}
-
-		// Note: the dynamic-threshold expiry timer is renewed only from approved,
-		// filter-passing detections above Trigger in LearnFromApprovedDetection
-		// (via processApprovedDetection). Renewing it here from pending detections
-		// above the model base let sub-trigger noise sustain a lowered gate
-		// indefinitely (#4194), so no renewal happens on the pending path.
-
-		// Unlock the mutex to allow other goroutines to access shared resources
-		p.pendingMutex.Unlock()
+		p.mergePendingHit(&item, &detectionResults[i], hitAt, detectionWindow)
 	}
 
 	// Broadcast updated pending detections snapshot for "currently hearing" UI.
 	// This runs after all new detections are incorporated into pendingDetections.
 	snapshot := p.SnapshotVisiblePending()
 	p.broadcastPendingSnapshot(snapshot)
+}
+
+// mergePendingHit folds one detection of the chunk item into pendingDetections: it
+// updates the pending entry for the detection's source and species (which another
+// model may have created) or creates one, counts the hit, records it in the model's
+// contribution statistics stamped with hitAt, and applies extended capture when the
+// species qualifies. It takes and releases pendingMutex itself; the caller must not
+// hold it.
+func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, hitAt time.Time, detectionWindow time.Duration) {
+	commonName := strings.ToLower(det.Result.Species.CommonName)
+	confidence := det.Result.Confidence
+
+	// Lock the mutex to ensure thread-safe access to shared resources
+	p.pendingMutex.Lock()
+	defer p.pendingMutex.Unlock()
+
+	now := time.Now()
+	mapKey := pendingKeyForDetection(item.Source.ID, det)
+
+	if existing, exists := p.pendingDetections[mapKey]; exists {
+		// Update the existing detection (may be from same or different model)
+		oldConfidence := existing.Confidence
+		existing.LastUpdated = now
+		existing.AudioCapturedAt = item.AudioCapturedAt
+		if confidence > existing.Confidence {
+			existing.Detection = *det
+			existing.Confidence = confidence
+			existing.BestModelID = item.ModelID
+			existing.Source = item.Source.ID
+			GetLogger().Debug("Updated pending detection with higher confidence",
+				logger.String("species", commonName),
+				logger.String("model_id", item.ModelID),
+				logger.Float64("old_confidence", oldConfidence),
+				logger.Float64("new_confidence", confidence),
+				logger.Int("count", existing.Count+1),
+				logger.String("operation", "update_pending_detection"))
+		}
+		existing.Count++
+
+		// Track per-model contribution
+		if existing.ModelContributions == nil {
+			existing.ModelContributions = make(map[string]ModelContribution, 1)
+		}
+		contrib := existing.ModelContributions[item.ModelID]
+		contrib.recordHit(confidence, hitAt)
+		existing.ModelContributions[item.ModelID] = contrib
+
+		p.pendingDetections[mapKey] = existing
+	} else {
+		GetLogger().Info("Created new pending detection",
+			logger.String("species", commonName),
+			logger.Float64("confidence", confidence),
+			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
+			logger.String("model_id", item.ModelID),
+			logger.Time("flush_deadline", now.Add(detectionWindow)),
+			logger.String("operation", "create_pending_detection"))
+		var contrib ModelContribution
+		contrib.recordHit(confidence, hitAt)
+		p.pendingDetections[mapKey] = PendingDetection{
+			Detection:       *det,
+			Confidence:      confidence,
+			Source:          item.Source.ID,
+			BestModelID:     item.ModelID,
+			FirstDetected:   item.StartTime,
+			CreatedAt:       now,
+			AudioCapturedAt: item.AudioCapturedAt,
+			LastUpdated:     item.StartTime,
+			// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
+			// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
+			FlushDeadline:      now.Add(detectionWindow),
+			Count:              1,
+			ModelContributions: map[string]ModelContribution{item.ModelID: contrib},
+		}
+	}
+
+	// Apply extended capture if species qualifies
+	if p.isExtendedCaptureSpecies(det.Result.Species.ScientificName) {
+		p.applyExtendedCapture(mapKey, now, detectionWindow)
+	}
+
+	// Note: the dynamic-threshold expiry timer is renewed only from approved,
+	// filter-passing detections above Trigger in LearnFromApprovedDetection
+	// (via processApprovedDetection). Renewing it here from pending detections
+	// above the model base let sub-trigger noise sustain a lowered gate
+	// indefinitely (#4194), so no renewal happens on the pending path.
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
