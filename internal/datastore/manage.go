@@ -3,6 +3,7 @@ package datastore
 import (
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -30,6 +31,11 @@ const (
 // database holds the enhanced database (v2) schema, so legacy DDL must not run.
 var errV2DatabaseInLegacyMode = errors.NewStd("database holds the enhanced database (v2) schema; refusing legacy schema migration")
 
+// errV2ShapedTablesHoldRows is returned by the legacy schema guard when a table in the
+// enhanced database (v2) shape holds rows, or its rows cannot be counted, so dropping it
+// could lose data.
+var errV2ShapedTablesHoldRows = errors.NewStd("tables in the enhanced database (v2) shape hold rows the legacy store cannot use; refusing to drop them")
+
 const (
 	// v2LabelIDColumn is the label foreign key every v2 table keys on. No legacy
 	// model has ever declared it.
@@ -39,9 +45,10 @@ const (
 	// it carries the bare name.
 	v2DetectionsTable = "detections"
 
-	// rowCountUnknown is logged as the row count of a dropped table whose rows
-	// could not be counted.
-	rowCountUnknown int64 = -1
+	// rowCountUnknown is how the row count of a v2-shaped table whose rows could
+	// not be counted appears in logs and in the refusal error. Such a table is
+	// treated as non-empty.
+	rowCountUnknown = "unknown"
 )
 
 // legacyDataTables lists the legacy data tables. Rows in them next to a bare v2
@@ -53,9 +60,11 @@ var legacyDataTables = []string{"notes", "results"}
 // A v2 table of the same name carries a NOT NULL label_id the legacy store
 // cannot fill, and GORM AutoMigrate over it either fails (duplicate entry on
 // the legacy unique index, or a NOT NULL column add) or leaves a table every
-// legacy insert fails on. A v2-shaped table is unusable by the legacy store, so
-// it is dropped and its rows are lost: notification suppression state, learned
-// thresholds, threshold change history and the image cache.
+// legacy insert fails on. A v2-shaped table is unusable by the legacy store. An
+// empty one is dropped so AutoMigrate recreates it in the legacy shape. One that
+// holds rows, or whose rows cannot be counted, stops legacy startup without any
+// change, because its rows (notification suppression state, learned thresholds,
+// threshold change history, the image cache) must not be dropped.
 var v2ShapedLegacyTables = []string{
 	"notification_histories",
 	"dynamic_thresholds",
@@ -340,9 +349,9 @@ func hasV2ImageCacheContaminationSQLite(db *gorm.DB) bool {
 }
 
 // performAutoMigration automates database migrations with error handling.
-// It first repairs auxiliary tables left in the v2 shape (or refuses when the
-// database holds the v2 schema), then checks the schema of the image_caches
-// table and drops/recreates it if incorrect.
+// It first drops empty auxiliary tables left in the v2 shape (or refuses when
+// they hold rows or the database holds the v2 schema), then checks the schema
+// of the image_caches table and drops/recreates it if incorrect.
 // For MySQL, dbName is the database name used for information_schema queries.
 // For SQLite, dbName is unused (pass "").
 func performAutoMigration(db *gorm.DB, debug bool, dbType, dbName string) error {
@@ -351,9 +360,9 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, dbName string) error 
 
 	migrationLogger.Debug("Starting database migration")
 
-	// Repair auxiliary tables left in the v2 shape, or refuse when the database
-	// holds v2 detections. Runs first so no legacy DDL (index reconcile, the
-	// notes table) touches a live v2 database.
+	// Drop empty auxiliary tables left in the v2 shape, or refuse when they hold
+	// rows or the database holds v2 detections. Runs first so no legacy DDL
+	// (index reconcile, the notes table) touches a live v2 database.
 	if err := repairV2ShapedLegacyTables(db, dbType, migrationLogger); err != nil {
 		return err
 	}
@@ -467,12 +476,44 @@ func isV2Database(db *gorm.DB, tables []string, log logger.Logger) bool {
 	return true
 }
 
+// inspectV2ShapedTables counts the rows of every candidate table. It returns the
+// counts, in candidate order, as "table=rows" pairs (table names and integers
+// only), and whether any table holds rows or could not be counted.
+func inspectV2ShapedTables(db *gorm.DB, candidates []string, log logger.Logger) (summary string, holdsRows bool) {
+	parts := make([]string, 0, len(candidates))
+	for _, name := range candidates {
+		rows := rowCountUnknown
+		var count int64
+		if countErr := db.Table(name).Count(&count).Error; countErr != nil {
+			log.Warn("Could not count rows of v2-shaped table", logger.String("table", name), logger.Error(countErr))
+			holdsRows = true
+		} else {
+			rows = strconv.FormatInt(count, 10)
+			holdsRows = holdsRows || count > 0
+		}
+		parts = append(parts, name+"="+rows)
+	}
+	return strings.Join(parts, ", "), holdsRows
+}
+
+// refuseV2ShapedTables logs and returns the error that stops legacy startup
+// when v2-shaped tables hold rows or cannot be counted.
+func refuseV2ShapedTables(log logger.Logger, dbType, summary string) error {
+	log.Error("Tables in the enhanced database shape hold rows the legacy store cannot use; no rows were dropped. Check earlier fallback to legacy mode log lines",
+		logger.String("tables", summary))
+	return criticalError(fmt.Errorf("%w: %s", errV2ShapedTablesHoldRows, summary),
+		"legacy_schema_guard", "v2_shaped_tables_hold_rows",
+		"db_type", dbType, "tables", summary)
+}
+
 // repairV2ShapedLegacyTables makes legacy startup safe over a database that
 // holds v2 tables. When the database is a v2 database (bare detections table,
 // no legacy data rows) it returns an error before any legacy DDL, so notes is
-// never created over live v2 data. Otherwise a candidate table with a NOT NULL
-// label_id can never take a legacy write, so it is dropped and AutoMigrate
-// recreates it in the legacy shape. A table listing error skips the guard.
+// never created over live v2 data. A candidate table with a NOT NULL label_id
+// can never take a legacy write. If any candidate holds rows or cannot be
+// counted, it returns an error before any DROP. Only when every candidate is
+// empty does it drop them, each after one more emptiness check, so AutoMigrate
+// recreates them in the legacy shape. A table listing error skips the guard.
 func repairV2ShapedLegacyTables(db *gorm.DB, dbType string, log logger.Logger) error {
 	tables, err := db.Migrator().GetTables()
 	if err != nil {
@@ -486,16 +527,27 @@ func repairV2ShapedLegacyTables(db *gorm.DB, dbType string, log logger.Logger) e
 			"db_type", dbType)
 	}
 
-	for _, name := range findV2ShapedLegacyTables(db, tables, log) {
-		rows := rowCountUnknown
-		var count int64
-		if countErr := db.Table(name).Count(&count).Error; countErr != nil {
-			log.Warn("Could not count rows of v2-shaped table", logger.String("table", name), logger.Error(countErr))
-		} else {
-			rows = count
+	candidates := findV2ShapedLegacyTables(db, tables, log)
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	// Decide before any DDL, so a refusal leaves every table as it was found.
+	summary, holdsRows := inspectV2ShapedTables(db, candidates, log)
+	if holdsRows {
+		return refuseV2ShapedTables(log, dbType, summary)
+	}
+
+	for _, name := range candidates {
+		// Read the table again right before its DROP, so rows written since the
+		// count (for example by a second instance) are not lost. A failed read
+		// counts as non-empty.
+		hasRows, probeErr := tableHasRows(db, name)
+		if probeErr != nil || hasRows {
+			return refuseV2ShapedTables(log, dbType, summary)
 		}
-		log.Warn("Dropping v2-shaped table before legacy schema migration",
-			logger.String("table", name), logger.Int64("rows", rows))
+		log.Warn("Dropping empty v2-shaped table before legacy schema migration",
+			logger.String("table", name))
 		// Raw drop: GORM's MySQL DropTable leaves FOREIGN_KEY_CHECKS off on its
 		// connection when the DROP fails. The name comes from v2ShapedLegacyTables.
 		if err := db.Exec("DROP TABLE IF EXISTS `" + name + "`").Error; err != nil {
