@@ -1312,7 +1312,7 @@ func formatTableRowCounts(counts []tableRowCount) string {
 
 // mixedSchemaHint returns the last sentence of the message: what the user may do by
 // hand. The first matching rule wins and an unknown count always comes first, so the
-// hint never suggests dropping a side that holds detections, a side with an unreadable
+// hint never suggests dropping a side whose detections table holds rows, a side with an unreadable
 // count, or keeping a bare v2 schema that is not a completed install.
 func mixedSchemaHint(e *mixedSchemaError) string {
 	var detections, legacyRows int64

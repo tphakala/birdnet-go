@@ -256,13 +256,13 @@ docker stop birdnet-go
 mysqldump --single-transaction -h <host> -u <user> -p <database> > birdnet-backup.sql
 ```
 
-Use `mariadb-dump` instead of `mysqldump` on MariaDB 11. Check that `birdnet-backup.sql` is not empty before you continue.
+Use `mariadb-dump` instead of `mysqldump` on MariaDB. Check that `birdnet-backup.sql` is not empty before you continue.
 
 ### Step 3: Remove one side
 
 Pick the step the log line suggests. Run the SQL in the `mysql` or `mariadb` client connected to your BirdNET-Go database.
 
-**3a: Keep the enhanced database.** The log suggests this when the legacy side lists no detections. First check that the enhanced database is a completed install:
+**3a: Keep the enhanced database.** The log suggests this when the legacy side lists no detections. First check that the enhanced database is a completed install (if the table does not exist, run the same query on `migration_state`):
 
 ```sql
 SELECT state FROM migration_states;
@@ -289,7 +289,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 
 The other enhanced database rows listed in the log line are lost with these tables. On the next start the legacy store also recreates any of `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches` that still have the enhanced database shape, and their rows are lost.
 
-**3c: Both sides hold detections, or the log says counts could not be read, or the enhanced database is not a completed install.** Keep the backup and drop nothing. Ask on [GitHub Discussions](https://github.com/tphakala/birdnet-go/discussions) and include the log lines. The table names and row counts in them are safe to share.
+**3c: Both sides hold detections, or the log says counts could not be read, or the enhanced side holds detections but is not a completed install.** Keep the backup and drop nothing. Ask on [GitHub Discussions](https://github.com/tphakala/birdnet-go/discussions) and include the log lines. The table names and row counts in them are safe to share.
 
 ### Step 4: Start BirdNET-Go
 
