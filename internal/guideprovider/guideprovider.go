@@ -45,6 +45,14 @@ const (
 	PositiveTTL = 7 * 24 * time.Hour
 	// NegativeTTL is how long a "not found" marker stays fresh before retrying.
 	NegativeTTL = 30 * time.Minute
+	// PartialTTL is how long a guide assembled while a provider was failing stays
+	// fresh. A partial entry is still served, so the UI is not blank, but it must
+	// be retried far sooner than a complete one: the provider that dropped out did
+	// so for a transient or non-definitive reason, and because store.Save upserts,
+	// the partial has already replaced whatever complete row was there. At the full
+	// PositiveTTL a single Wikipedia blip during a refresh would cost a week of
+	// description-less guides with no retry; this bounds that to one refresh cycle.
+	PartialTTL = 30 * time.Minute
 	// DBRetention is how long positive entries are kept in the DB before cleanup.
 	DBRetention = 30 * 24 * time.Hour
 	// NegativeDBRetention is how long negative (not-found) entries are kept in the
@@ -815,15 +823,19 @@ func (c *GuideCache) isStaleNegative(g *SpeciesGuide) bool {
 	return g.IsNegativeEntry() && c.isCacheEntryStale(g)
 }
 
-// isCacheEntryStale reports whether a guide needs refreshing. Negative entries
-// have a much shorter TTL than positive ones.
+// isCacheEntryStale reports whether a guide needs refreshing. Negative entries,
+// and positive entries left incomplete by a failing provider, have a much
+// shorter TTL than a complete positive entry.
 func (c *GuideCache) isCacheEntryStale(g *SpeciesGuide) bool {
 	if g == nil {
 		return true
 	}
 	ttl := PositiveTTL
-	if g.IsNegativeEntry() {
+	switch {
+	case g.IsNegativeEntry():
 		ttl = NegativeTTL
+	case g.Partial:
+		ttl = PartialTTL
 	}
 	return time.Since(g.CachedAt) > ttl
 }

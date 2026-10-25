@@ -607,6 +607,13 @@ func TestIsCacheEntryStale(t *testing.T) {
 		{"fresh negative", &SpeciesGuide{Negative: true, CachedAt: time.Now()}, false},
 		{"stale negative", &SpeciesGuide{Negative: true, CachedAt: time.Now().Add(-NegativeTTL - time.Minute)}, true},
 		{"positive within neg TTL but past neg TTL is still fresh", &SpeciesGuide{CachedAt: time.Now().Add(-time.Hour)}, false},
+		// A partial entry is a positive entry that a provider failure left
+		// incomplete. It must retry on the short cycle: store.Save upserts, so it
+		// has already displaced whatever complete row was cached.
+		{"fresh partial", &SpeciesGuide{Partial: true, CachedAt: time.Now()}, false},
+		{"stale partial", &SpeciesGuide{Partial: true, CachedAt: time.Now().Add(-PartialTTL - time.Minute)}, true},
+		{"partial is stale where a complete entry of the same age is fresh", &SpeciesGuide{Partial: true, CachedAt: time.Now().Add(-PositiveTTL / 2)}, true},
+		{"complete entry of that same age is fresh", &SpeciesGuide{CachedAt: time.Now().Add(-PositiveTTL / 2)}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
