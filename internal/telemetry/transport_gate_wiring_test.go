@@ -68,10 +68,10 @@ func openSharedGate(t *testing.T) {
 }
 
 // sharedGateWillProbe reports whether the next request through the shared
-// gate would be let through as a probe.
+// gate is let through. The gate is open, so only a probe is.
 func sharedGateWillProbe() bool {
-	probe, allowed := sentryDeliveryGate.admit()
-	return probe && allowed
+	_, allowed := sentryDeliveryGate.admit()
+	return allowed
 }
 
 // TestSupportCapturesExpediteDeliveryGate pins that a support upload probes an

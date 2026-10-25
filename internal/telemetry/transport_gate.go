@@ -70,6 +70,7 @@ type deliveryGate struct {
 	retryAt             time.Time
 	openedAt            time.Time
 	dropped             uint64
+	probeGen            uint64 // generation of the latest probe admitted
 }
 
 // newDeliveryGate wraps next with a closed gate.
@@ -79,7 +80,7 @@ func newDeliveryGate(next http.RoundTripper, clock TimeSource) *deliveryGate {
 
 // RoundTrip implements http.RoundTripper.
 func (g *deliveryGate) RoundTrip(req *http.Request) (*http.Response, error) {
-	probe, allowed := g.admit()
+	probeGen, allowed := g.admit()
 	if !allowed {
 		if req.Body != nil {
 			_ = req.Body.Close()
@@ -88,41 +89,50 @@ func (g *deliveryGate) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	resp, err := g.next.RoundTrip(req)
-	g.record(err, probe)
+	g.record(err, probeGen)
 	return resp, err
 }
 
-// admit decides whether a request may reach the network and whether it is the
-// probe that tests an open gate.
-func (g *deliveryGate) admit() (probe, allowed bool) {
+// admit decides whether a request may reach the network. A request admitted as
+// the probe that tests an open gate gets a new, nonzero probe generation; every
+// other admitted request gets zero.
+func (g *deliveryGate) admit() (probeGen uint64, allowed bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	switch g.state {
 	case gateOpen:
 		if g.clock.Now().Before(g.retryAt) {
 			g.dropped++
-			return false, false
+			return 0, false
 		}
 		g.state = gateHalfOpen
-		return true, true
+		g.probeGen++
+		return g.probeGen, true
 	case gateHalfOpen:
 		g.dropped++
-		return false, false
+		return 0, false
 	default:
-		return false, true
+		return 0, true
 	}
 }
 
 // record applies the outcome of an inner round trip and logs at most one
-// transition after releasing the lock.
-func (g *deliveryGate) record(err error, probe bool) {
+// transition after releasing the lock. probeGen is the generation admit handed
+// out, or zero for a request that was not a probe.
+func (g *deliveryGate) record(err error, probeGen uint64) {
 	var logFn func()
 
 	g.mu.Lock()
 	now := g.clock.Now()
+	// A newer probe has been admitted since this one: its outcome says nothing
+	// about the current window and must not change state or backoff.
+	if probeGen != 0 && probeGen != g.probeGen {
+		g.mu.Unlock()
+		return
+	}
 	// A success from an earlier request can close the gate while the probe is
 	// still in flight; the probe's outcome then counts like any other request.
-	probe = probe && g.state == gateHalfOpen
+	probe := probeGen != 0 && g.state == gateHalfOpen
 	switch {
 	case err == nil:
 		if g.state != gateClosed {

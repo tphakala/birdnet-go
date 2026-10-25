@@ -494,3 +494,100 @@ func recvWithin[T any](t *testing.T, ch <-chan T) T {
 	var zero T
 	return zero
 }
+
+func TestDeliveryGate_LateOutcomeOfSupersededProbeIsIgnored(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name  string
+		lateA error
+	}{
+		{"late failure", errGateDial},
+		{"late success", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// Calls: 0 stale request admitted while closed, 1 to 3 failures
+			// that open the gate, 4 probe A, 5 to 7 failures that reopen the
+			// gate after a stale success closed it, 8 probe B.
+			const (
+				staleCall  = 0
+				probeACall = deliveryFailureThreshold + 1
+				reopenFrom = probeACall + 1
+				probeBCall = reopenFrom + deliveryFailureThreshold
+			)
+			inner := newScriptedInner(probeBCall + 1)
+			clock := NewFakeTimeSource(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+			g := newDeliveryGate(inner, clock)
+			t.Cleanup(func() {
+				for _, ch := range inner.results {
+					select {
+					case ch <- nil:
+					default:
+					}
+				}
+			})
+
+			var wg sync.WaitGroup
+			start := func(call int) <-chan error {
+				done := make(chan error, 1)
+				req := gateRequest(t)
+				wg.Go(func() {
+					resp, err := g.RoundTrip(req)
+					if resp != nil {
+						_ = resp.Body.Close()
+					}
+					done <- err
+				})
+				require.Equal(t, call, recvWithin(t, inner.entered))
+				return done
+			}
+			fail := func(call int) {
+				done := start(call)
+				inner.results[call] <- errGateDial
+				require.Error(t, recvWithin(t, done))
+			}
+			state := func() (gateState, time.Duration) {
+				g.mu.Lock()
+				defer g.mu.Unlock()
+				return g.state, g.backoff
+			}
+
+			staleDone := start(staleCall)
+			for i := 1; i <= deliveryFailureThreshold; i++ {
+				fail(i)
+			}
+			clock.Advance(deliveryInitialBackoff)
+			aDone := start(probeACall)
+
+			// A stale success closes the gate while probe A is in flight, then
+			// failures reopen it and probe B is admitted.
+			inner.results[staleCall] <- nil
+			require.NoError(t, recvWithin(t, staleDone))
+			for i := reopenFrom; i < reopenFrom+deliveryFailureThreshold; i++ {
+				fail(i)
+			}
+			clock.Advance(deliveryInitialBackoff)
+			bDone := start(probeBCall)
+
+			// A's late outcome must not touch B's window.
+			inner.results[probeACall] <- tt.lateA
+			if tt.lateA == nil {
+				require.NoError(t, recvWithin(t, aDone))
+			} else {
+				require.Error(t, recvWithin(t, aDone))
+			}
+			gotState, gotBackoff := state()
+			assert.Equal(t, gateHalfOpen, gotState)
+			assert.Equal(t, deliveryInitialBackoff, gotBackoff)
+
+			// B alone decides: its failure doubles the backoff once.
+			inner.results[probeBCall] <- errGateDial
+			require.Error(t, recvWithin(t, bDone))
+			gotState, gotBackoff = state()
+			assert.Equal(t, gateOpen, gotState)
+			assert.Equal(t, deliveryInitialBackoff*deliveryBackoffFactor, gotBackoff)
+			wg.Wait()
+		})
+	}
+}
