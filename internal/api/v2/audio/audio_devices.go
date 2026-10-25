@@ -323,6 +323,11 @@ func (c *Handler) GetActiveAudioDevice(ctx echo.Context) error {
 	})
 }
 
+// equalizerConfigCacheControl makes clients revalidate the filter table on every
+// load. The table (limits and defaults) changes between releases, and a copy
+// cached by an older release would make the editor clamp to an old maximum.
+const equalizerConfigCacheControl = "no-cache"
+
 // GetEqualizerConfig handles GET /api/v2/system/audio/equalizer/config
 func (c *Handler) GetEqualizerConfig(ctx echo.Context) error {
 	c.LogInfoIfEnabled("Getting equalizer filter configuration",
@@ -330,8 +335,7 @@ func (c *Handler) GetEqualizerConfig(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Set cache headers for static configuration data
-	ctx.Response().Header().Set("Cache-Control", "public, max-age=3600")
+	ctx.Response().Header().Set("Cache-Control", equalizerConfigCacheControl)
 
 	// Return the equalizer filter configuration
 	return ctx.JSON(http.StatusOK, conf.EqFilterConfig)

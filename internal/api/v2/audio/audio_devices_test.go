@@ -58,8 +58,8 @@ func TestGetEqualizerConfig(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	// Verify cache headers are set
-	assert.Contains(t, rec.Header().Get("Cache-Control"), "public", "Should have public cache header")
+	// Verify the cache header is set
+	assert.Equal(t, "no-cache", rec.Header().Get("Cache-Control"), "table changes between releases, so it must be revalidated")
 
 	// Response should be valid JSON
 	var response any

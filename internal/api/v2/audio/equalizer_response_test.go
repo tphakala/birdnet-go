@@ -21,8 +21,10 @@ import (
 
 // eqResponseBody is the decoded 200 body.
 type eqResponseBody struct {
-	SampleRate int  `json:"sampleRate"`
-	Enabled    bool `json:"enabled"`
+	SampleRate int     `json:"sampleRate"`
+	Enabled    bool    `json:"enabled"`
+	MinHz      float64 `json:"minHz"`
+	MaxHz      float64 `json:"maxHz"`
 	Points     []struct {
 		Hz     float64 `json:"hz"`
 		GainDB float64 `json:"gainDb"`
@@ -407,10 +409,33 @@ func TestEqualizerResponse_DefaultMaxHzFollowsNyquist(t *testing.T) {
 	t.Parallel()
 	_, h := setupSystemTestEnvironment(t)
 
-	out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, "", `"sampleRate":16000`)))
-	assert.Equal(t, 16000, out.SampleRate)
-	require.Len(t, out.Points, defaultEQResponsePoints)
-	assert.InDelta(t, 8000.0, out.Points[len(out.Points)-1].Hz, 0)
+	tests := []struct {
+		name    string
+		extra   string
+		rate    int
+		wantMin float64
+		wantMax float64
+	}{
+		{"below the audible band ends at Nyquist", `"sampleRate":16000`, 16000, 20, 8000},
+		{"default capture rate ends at 20 kHz", `"sampleRate":48000`, 48000, 20, 20000},
+		{"96 kHz gets the full band", `"sampleRate":96000`, 96000, 20, 48000},
+		{"256 kHz gets the full band", `"sampleRate":256000`, 256000, 20, 128000},
+		{"explicit maxHz wins at 256 kHz", `"sampleRate":256000,"maxHz":10000`, 256000, 20, 10000},
+		{"explicit minHz is echoed", `"sampleRate":256000,"minHz":100`, 256000, 100, 128000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			out := decodeEQResponse(t, postEQResponse(t, h, eqBody(true, "", tt.extra)))
+			assert.Equal(t, tt.rate, out.SampleRate)
+			require.Len(t, out.Points, defaultEQResponsePoints)
+			first, last := out.Points[0].Hz, out.Points[len(out.Points)-1].Hz
+			assert.InDelta(t, tt.wantMin, first, 0)
+			assert.InDelta(t, tt.wantMax, last, 0)
+			assert.InDelta(t, first, out.MinHz, 0, "minHz echoes the first point")
+			assert.InDelta(t, last, out.MaxHz, 0, "maxHz echoes the last point")
+		})
+	}
 }
 
 func TestEqualizerResponse_DisabledAddsNoCenters(t *testing.T) {
