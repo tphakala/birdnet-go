@@ -120,7 +120,8 @@ var (
 	// hold data, the kept side's startup would drop rows, a table could not be read, or an
 	// empty table could not be removed). Callers must refuse to start (errors.Is), so that
 	// no table with rows is dropped;
-	// StartupState.Error carries the tables with rows.
+	// StartupState.Error carries the tables with rows, or the failed step when an empty
+	// table could not be removed.
 	ErrMixedSchemaDatabase = errors.NewStd("database holds both enhanced database (v2) tables and legacy tables")
 )
 
