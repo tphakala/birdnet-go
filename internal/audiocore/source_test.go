@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
 func TestSourceType_String(t *testing.T) {
@@ -99,6 +101,25 @@ func TestStreamSourceType(t *testing.T) {
 			gotType, gotOk := StreamSourceType(tt.conn)
 			assert.Equal(t, tt.wantType, gotType)
 			assert.Equal(t, tt.wantStream, gotOk)
+		})
+	}
+}
+
+func TestAudioSource_EffectiveSampleRate(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name string
+		src  *AudioSource
+		want int
+	}{
+		{"nil receiver uses the default rate", nil, conf.SampleRate},
+		{"zero rate uses the default rate", &AudioSource{SampleRate: 0}, conf.SampleRate},
+		{"positive rate is kept", &AudioSource{SampleRate: 256000}, 256000},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, tt.src.EffectiveSampleRate())
 		})
 	}
 }

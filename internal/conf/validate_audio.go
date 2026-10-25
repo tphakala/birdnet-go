@@ -134,7 +134,7 @@ const (
 	// single rate. A filter at or above the Nyquist frequency of the rate its
 	// route runs at passes validation and is skipped with a warning when the
 	// chain is built (internal/audiocore/equalizer).
-	MaxEQFrequency = maxValidSampleRate / 2.0
+	MaxEQFrequency = MaxValidSampleRate / 2.0
 	MaxEQQ         = 100.0 // Maximum Q factor for EQ filters
 )
 
@@ -189,12 +189,22 @@ var ValidStreamTypes = map[string]bool{
 	StreamTypeUDP:  true,
 }
 
-// maxValidSampleRate is the highest supported capture sample rate in Hz, the
+// MaxValidSampleRate is the highest supported capture sample rate in Hz, the
 // last entry of validSampleRates.
-const maxValidSampleRate = 384000
+const MaxValidSampleRate = 384000
 
 // validSampleRates is the canonical list of supported capture sample rates (sorted ascending).
-var validSampleRates = []int{48000, 96000, 192000, 256000, maxValidSampleRate}
+var validSampleRates = []int{48000, 96000, 192000, 256000, MaxValidSampleRate}
+
+// EffectiveSampleRate returns the rate in Hz at which a source delivers frames
+// to the router: rate when positive, else the default capture rate SampleRate
+// (a configured or registered rate of 0 means the default).
+func EffectiveSampleRate(rate int) int {
+	if rate > 0 {
+		return rate
+	}
+	return SampleRate
+}
 
 // ValidSampleRates returns a copy of the canonical sample rate list.
 // Returning a clone prevents callers from mutating the shared source of truth.
