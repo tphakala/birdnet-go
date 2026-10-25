@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Zmieniono ustawienia rozszerzonego nagrywania. Wymagany restart.",
         "equalizerUpdateFailed": "Nie udało się zaktualizować ustawień korektora dźwięku",
         "equalizerUpdated": "Ustawienia korektora dźwięku zaktualizowane",
+        "equalizerFiltersSkipped": "Ustawienia korektora dźwięku zapisane, ale niektóre filtry są pomijane w {count, plural, one {źródle} few {źródłach} many {źródłach} other {źródłach}} {sources}: filtr musi być poprawny przy częstotliwości próbkowania źródła, a jego częstotliwość musi być poniżej jej połowy.",
         "savedSuccessfully": "Ustawienia zapisane pomyślnie",
         "saveFailed": "Nie udało się zapisać ustawień"
       },

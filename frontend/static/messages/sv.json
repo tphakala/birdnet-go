@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Inställningar för utökad inspelning ändrade. Omstart krävs.",
         "equalizerUpdateFailed": "Kunde inte uppdatera ljudequalizerinställningar",
         "equalizerUpdated": "Ljudequalizerinställningar uppdaterade",
+        "equalizerFiltersSkipped": "Ljudequalizerinställningar sparade, men vissa filter hoppas över för {count, plural, one {källan} other {källorna}} {sources}: ett filter måste vara giltigt vid källans samplingsfrekvens, och dess frekvens måste ligga under hälften av den.",
         "savedSuccessfully": "Inställningarna sparades",
         "saveFailed": "Kunde inte spara inställningar"
       },

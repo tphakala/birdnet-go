@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Innstillinger for utvidet opptak endret. Omstart kreves.",
         "equalizerUpdateFailed": "Oppdatering av lydekvaliseringsinnstillinger mislyktes",
         "equalizerUpdated": "Lydekvaliseringsinnstillinger oppdatert",
+        "equalizerFiltersSkipped": "Innstillinger for lydekvaliseringen er lagret, men noen filtre hoppes over på {count, plural, one {kilden} other {kildene}} {sources}: et filter må være gyldig ved kildens samplingsfrekvens, og frekvensen må ligge under halvparten av den.",
         "savedSuccessfully": "Innstillinger lagret",
         "saveFailed": "Lagring av innstillinger mislyktes"
       },

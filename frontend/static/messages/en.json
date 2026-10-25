@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Extended capture settings changed. Restart required.",
         "equalizerUpdateFailed": "Failed to update audio equalizer settings",
         "equalizerUpdated": "Audio equalizer settings updated",
+        "equalizerFiltersSkipped": "Audio equalizer settings saved, but some filters are skipped on {count, plural, one {source} other {sources}} {sources}: a filter must be valid at the source sample rate, with its frequency below half of it.",
         "savedSuccessfully": "Settings saved successfully",
         "saveFailed": "Failed to save settings"
       },

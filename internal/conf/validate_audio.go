@@ -133,7 +133,8 @@ const (
 	// depend on any source's rate, since the global and stream equalizers have no
 	// single rate. A filter at or above the Nyquist frequency of the rate its
 	// route runs at passes validation and is skipped with a warning when the
-	// chain is built (internal/audiocore/equalizer).
+	// chain is built (internal/audiocore/equalizer), and the settings save
+	// reports it in its toast.
 	MaxEQFrequency = MaxValidSampleRate / 2.0
 	MaxEQQ         = 100.0 // Maximum Q factor for EQ filters
 )

@@ -7,6 +7,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 type fakeRegistry struct {
@@ -241,4 +242,201 @@ func TestSyncStreamNames_UpdatesRegistry(t *testing.T) {
 	assert.True(t, syncStreamNames(old, cur, reg))
 	assert.Equal(t, map[string]string{"strm-1": "Garden Cam"}, reg.updates,
 		"should update only streams found in the registry")
+}
+
+func TestEqualizerSaveToast(t *testing.T) {
+	t.Parallel()
+
+	const (
+		batRate      = 256000
+		notchHz      = 60000
+		notchWidthHz = 500
+		audibleHz    = 1000
+		camURL       = "rtsp://cam.example/stream"
+	)
+	notch := func(hz float64) conf.EqualizerSettings {
+		return conf.EqualizerSettings{
+			Enabled: true,
+			Filters: []conf.EqualizerFilter{{Type: "BandReject", Frequency: hz, Width: notchWidthHz, Passes: 1}},
+		}
+	}
+	notchPtr := func(hz float64) *conf.EqualizerSettings {
+		eq := notch(hz)
+		return &eq
+	}
+	cards := func(birdRate int) []conf.AudioSourceConfig {
+		return []conf.AudioSourceConfig{
+			{Name: "Bird", Device: "hw:0,0", SampleRate: birdRate},
+			{Name: "Bat", Device: "hw:1,0", SampleRate: batRate},
+		}
+	}
+	settings := func(global conf.EqualizerSettings, sources []conf.AudioSourceConfig, streams ...conf.StreamConfig) *conf.Settings {
+		s := &conf.Settings{}
+		s.Realtime.Audio.Equalizer = global
+		s.Realtime.Audio.Sources = sources
+		s.Realtime.RTSP.Streams = streams
+		return s
+	}
+	camRegistry := func(rate int) *fakeRegistry {
+		return &fakeRegistry{byConn: map[string]*audiocore.AudioSource{
+			camURL: {SampleRate: rate},
+		}}
+	}
+
+	tests := []struct {
+		name        string
+		old, cur    *conf.Settings
+		registry    *fakeRegistry
+		nilRegistry bool
+		wantWarning bool
+		wantCount   int
+		wantSources string
+	}{
+		{
+			name: "audible notch on every card saves cleanly",
+			old:  settings(conf.EqualizerSettings{}, cards(0)),
+			cur:  settings(notch(audibleHz), cards(0)),
+		},
+		{
+			name:        "global ultrasonic notch names the card that runs at the default rate",
+			old:         settings(conf.EqualizerSettings{}, cards(0)),
+			cur:         settings(notch(notchHz), cards(0)),
+			wantWarning: true, wantCount: 1, wantSources: "Bird",
+		},
+		{
+			name: "raising a card rate in the same save uses the new rate",
+			old:  settings(conf.EqualizerSettings{}, cards(48000)),
+			cur: func() *conf.Settings {
+				c := cards(batRate)
+				c[0].Equalizer = notchPtr(notchHz)
+				return settings(conf.EqualizerSettings{}, c)
+			}(),
+			registry: camRegistry(48000),
+		},
+		{
+			name: "a removed source is not reported",
+			old:  settings(conf.EqualizerSettings{}, cards(0)),
+			cur:  settings(notch(notchHz), cards(0)[1:]),
+		},
+		{
+			name: "per-source override replaces a global ultrasonic notch",
+			old:  settings(conf.EqualizerSettings{}, cards(0)),
+			cur: func() *conf.Settings {
+				c := cards(0)
+				c[0].Equalizer = notchPtr(audibleHz)
+				return settings(notch(notchHz), c)
+			}(),
+		},
+		{
+			name: "per-source override on a default-rate card is judged at that rate",
+			old:  settings(conf.EqualizerSettings{}, cards(0)),
+			cur: func() *conf.Settings {
+				c := cards(0)
+				c[0].Equalizer = notchPtr(notchHz)
+				return settings(conf.EqualizerSettings{}, c)
+			}(),
+			wantWarning: true, wantCount: 1, wantSources: "Bird",
+		},
+		{
+			name: "several skipping cards are named in config order",
+			old:  settings(conf.EqualizerSettings{}, cards(0)),
+			cur: settings(notch(notchHz), []conf.AudioSourceConfig{
+				{Name: "Bird", Device: "hw:0,0"},
+				{Name: "Bat", Device: "hw:1,0", SampleRate: batRate},
+				{Name: "Yard", Device: "hw:2,0", SampleRate: 96000},
+			}),
+			wantWarning: true, wantCount: 2, wantSources: "Bird, Yard",
+		},
+		{
+			name: "card without a device is not reported",
+			old:  settings(conf.EqualizerSettings{}, cards(0)),
+			cur: func() *conf.Settings {
+				c := cards(0)
+				c[0].Device = " "
+				return settings(notch(notchHz), c[:1])
+			}(),
+		},
+		{
+			name: "stream with a new URL is left out even when the registry knows it",
+			old:  settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{Name: "Cam", URL: "rtsp://old.example/stream", Enabled: true}),
+			cur: settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{
+				Name: "Cam", URL: camURL, Enabled: true, Equalizer: notchPtr(notchHz),
+			}),
+			registry: camRegistry(48000),
+		},
+		{
+			name: "disabled stream is not reported",
+			old:  settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{Name: "Cam", URL: camURL, Enabled: true}),
+			cur: settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{
+				Name: "Cam", URL: camURL, Enabled: false, Equalizer: notchPtr(notchHz),
+			}),
+			registry: camRegistry(48000),
+		},
+		{
+			name: "stream without a URL is not reported",
+			old:  settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{Name: "Cam", Enabled: true}),
+			cur: settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{
+				Name: "Cam", Enabled: true, Equalizer: notchPtr(notchHz),
+			}),
+			registry: &fakeRegistry{byConn: map[string]*audiocore.AudioSource{"": {SampleRate: 48000}}},
+		},
+		{
+			name: "without an engine streams are left out",
+			old:  settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{Name: "Cam", URL: camURL, Enabled: true}),
+			cur: settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{
+				Name: "Cam", URL: camURL, Enabled: true, Equalizer: notchPtr(notchHz),
+			}),
+			nilRegistry: true,
+		},
+		{
+			name: "stream with an unchanged URL and models uses its registered rate",
+			old:  settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{Name: "Cam", URL: camURL, Enabled: true, Models: []string{"birdnet"}}),
+			cur: settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{
+				Name: "Cam", URL: camURL, Enabled: true, Models: []string{"birdnet"}, Equalizer: notchPtr(notchHz),
+			}),
+			registry:    camRegistry(48000),
+			wantWarning: true, wantCount: 1, wantSources: "Cam",
+		},
+		{
+			name: "stream whose models change in the same save is left out",
+			old:  settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{Name: "Cam", URL: camURL, Enabled: true, Models: []string{"birdnet"}}),
+			cur: settings(conf.EqualizerSettings{}, nil, conf.StreamConfig{
+				Name: "Cam", URL: camURL, Enabled: true, Models: []string{"bat"}, Equalizer: notchPtr(notchHz),
+			}),
+			registry: camRegistry(48000),
+		},
+		{
+			name: "disabled equalizer holding an ultrasonic filter saves cleanly",
+			old:  settings(conf.EqualizerSettings{}, cards(0)),
+			cur: func() *conf.Settings {
+				eq := notch(notchHz)
+				eq.Enabled = false
+				return settings(eq, cards(0))
+			}(),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var registry streamRateLookup
+			switch {
+			case tt.nilRegistry:
+			case tt.registry != nil:
+				registry = tt.registry
+			default:
+				registry = &fakeRegistry{}
+			}
+			_, toastType, _, key, params := equalizerSaveToast(equalizerSkipReport(tt.old, tt.cur, registry))
+			if !tt.wantWarning {
+				assert.Equal(t, ToastTypeSuccess, toastType)
+				assert.Equal(t, notification.MsgSettingsEqualizerUpdated, key)
+				assert.Nil(t, params)
+				return
+			}
+			assert.Equal(t, ToastTypeWarning, toastType)
+			assert.Equal(t, notification.MsgSettingsEqualizerFiltersSkipped, key)
+			assert.Equal(t, map[string]any{"count": tt.wantCount, "sources": tt.wantSources}, params)
+		})
+	}
 }

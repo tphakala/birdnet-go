@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Definições de captura estendida alteradas. Reinício necessário.",
         "equalizerUpdateFailed": "Falha ao atualizar definições do equalizador de áudio",
         "equalizerUpdated": "Definições do equalizador de áudio atualizadas",
+        "equalizerFiltersSkipped": "Definições do equalizador de áudio guardadas, mas alguns filtros são ignorados {count, plural, one {na fonte} other {nas fontes}} {sources}: um filtro deve ser válido à taxa de amostragem da fonte, e a sua frequência deve estar abaixo de metade dela.",
         "savedSuccessfully": "Definições guardadas com sucesso",
         "saveFailed": "Falha ao guardar as definições"
       },

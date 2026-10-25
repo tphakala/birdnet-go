@@ -53,6 +53,7 @@ const (
 	MsgSettingsExtendedCaptureRestart    = "notifications.content.settings.extendedCaptureRestartRequired"
 	MsgSettingsEqualizerFailed           = "notifications.content.settings.equalizerUpdateFailed"
 	MsgSettingsEqualizerUpdated          = "notifications.content.settings.equalizerUpdated"
+	MsgSettingsEqualizerFiltersSkipped   = "notifications.content.settings.equalizerFiltersSkipped"
 
 	// Database migration notifications
 	MsgMigrationStartedTitle     = "notifications.content.migration.startedTitle"
