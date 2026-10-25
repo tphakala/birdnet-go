@@ -1031,12 +1031,3 @@ func TestCountMixedSchemaRows_CountFailure_RecordsUnknown(t *testing.T) {
 	assert.Equal(t, hintTargetNone, hintDropTarget(mixedSchemaHint(e)))
 	assert.Contains(t, mixedSchemaHint(e), "could not be read")
 }
-
-// TestMixedSchemaLegacyDropList_NamesEveryCountedTable keeps the legacy drop list in the
-// hint text in step with the tables startup counts, since the hint is what a user runs.
-func TestMixedSchemaLegacyDropList_NamesEveryCountedTable(t *testing.T) {
-	t.Parallel()
-
-	dropList := strings.NewReplacer(" and ", ", ").Replace(mixedSchemaLegacyDropList)
-	assert.ElementsMatch(t, legacyDetectionTables, strings.Split(dropList, ", "))
-}

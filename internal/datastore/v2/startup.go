@@ -1246,23 +1246,27 @@ const (
 const (
 	mixedSchemaNone         = "none"
 	mixedSchemaUnknownCount = "unknown"
-	// mixedSchemaLegacyDropList is the legacy tables dropped to keep the bare v2
-	// database, children before parents. The wiki guide lists the same names.
-	mixedSchemaLegacyDropList = "note_locks, note_comments, note_reviews, results and notes"
-	hintBackupFirst           = "Back up the database before removing either side."
-	hintCountsUnknown         = "Some row counts could not be read. " + hintBackupFirst
-	hintBothHoldDetections    = "Both sides hold detections. Back up the database before removing either side; removing a side loses the rows listed for it."
-	hintKeepV2                = "The legacy tables hold no detections. To keep the enhanced database, back up the database and drop the legacy tables " + mixedSchemaLegacyDropList + "."
-	hintV2NotCompleted        = "The enhanced database is not marked as a completed install. " + hintBackupFirst
-	hintKeepLegacy            = "The enhanced database (v2) tables hold no detections. To keep the legacy database, back up the database and drop the bare v2 tables listed in the guide; the other v2 rows listed above are lost with them."
-	hintBothEmptyKeepV2       = "Neither side holds detections. Back up the database and drop the legacy tables " + mixedSchemaLegacyDropList + " to continue with the enhanced database."
-	hintBothEmptyKeepLegacy   = "Neither side holds detections. Back up the database and drop the bare v2 tables listed in the guide to continue with the legacy database."
+	hintBackupFirst         = "Back up the database before removing either side."
+	hintCountsUnknown       = "Some row counts could not be read. " + hintBackupFirst
+	hintBothHoldDetections  = "Both sides hold detections. Back up the database before removing either side; removing a side loses the rows listed for it."
+	hintV2NotCompleted      = "The enhanced database is not marked as a completed install. " + hintBackupFirst
+	hintKeepLegacy          = "The enhanced database (v2) tables hold no detections. To keep the legacy database, back up the database and drop the bare v2 tables listed in the guide; the other v2 rows listed above are lost with them."
+	hintBothEmptyKeepLegacy = "Neither side holds detections. Back up the database and drop the bare v2 tables listed in the guide to continue with the legacy database."
 )
 
 // legacyDetectionTables are the legacy tables that keeping the bare v2 database drops:
-// notes and its foreign key children. Counted only; this is not legacyDataTables, which
+// notes and its foreign key children, in drop order (children before parents). The wiki
+// guide lists the same names. Counted only; this is not legacyDataTables, which
 // hasCompleteFreshV2Schema relies on with a different meaning.
-var legacyDetectionTables = []string{"notes", "results", "note_reviews", "note_comments", "note_locks"}
+var legacyDetectionTables = []string{"note_locks", "note_comments", "note_reviews", "results", "notes"}
+
+// The keep-v2 hints name the legacy tables to drop, taken from legacyDetectionTables so
+// the advice cannot drift from the tables startup counts.
+var (
+	legacyDropList      = strings.Join(legacyDetectionTables, ", ")
+	hintKeepV2          = "The legacy tables hold no detections. To keep the enhanced database, back up the database and drop the legacy tables " + legacyDropList + "."
+	hintBothEmptyKeepV2 = "Neither side holds detections. Back up the database and drop the legacy tables " + legacyDropList + " to continue with the enhanced database."
+)
 
 // tableRowCount is the row count of one table; rows is mixedSchemaRowCountUnknown when
 // the count could not be read.
