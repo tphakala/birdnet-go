@@ -975,7 +975,7 @@ class DatabaseDoctor:
                     f"{table_name}: missing column(s) {sorted(missing)}"
                 )
 
-            if (extra or missing) and table_name in APP_RECREATED_TABLES:
+            if table_name in APP_RECREATED_TABLES and "label_id" in actual_set:
                 issues.append(f"  {APP_RECREATED_HINT}")
 
         if not issues:
@@ -1540,7 +1540,8 @@ class DatabaseDoctor:
                 continue
 
             if table_name in APP_RECREATED_TABLES:
-                fix_details.append(f"{table_name}: {APP_RECREATED_HINT}")
+                if "label_id" in actual_set:
+                    fix_details.append(f"{table_name}: {APP_RECREATED_HINT}")
                 continue
 
             if table_name not in V2_TABLE_SCHEMAS:

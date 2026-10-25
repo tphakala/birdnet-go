@@ -343,46 +343,107 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
             ro.close()
         return doctor, report, check
 
-    def test_current_threshold_tables_pass_and_fix_adds_no_label_id(self):
+    def test_current_threshold_tables_pass_the_schema_check(self):
         conn = sqlite3.connect(self.path)
         conn.execute(_CURRENT_DYNAMIC_THRESHOLDS_DDL)
         conn.execute(_CURRENT_THRESHOLD_EVENTS_DDL)
+        conn.commit()
+        conn.close()
+
+        _, _, check = self._check("_check_schema_contamination")
+        self.assertEqual(check.status, "pass", check.details)
+
+    def test_stale_label_id_threshold_tables_are_reported_and_left_alone(self):
+        conn = sqlite3.connect(self.path)
         conn.execute(
-            "INSERT INTO dynamic_thresholds (species_name, current_value, "
-            "base_threshold, valid_hours, expires_at, last_triggered, "
-            "first_created) VALUES ('robin', 0.5, 0.7, 24, "
-            "'2030-01-01', '2030-01-01', '2030-01-01')"
+            "CREATE TABLE dynamic_thresholds (id INTEGER PRIMARY KEY, "
+            "label_id INTEGER NOT NULL, level INTEGER)"
         )
         conn.execute(
-            "INSERT INTO threshold_events (species_name, previous_level, "
-            "new_level, previous_value, new_value, change_reason) "
-            "VALUES ('robin', 0, 1, 0.7, 0.5, 'high_confidence')"
+            "CREATE TABLE threshold_events (id INTEGER PRIMARY KEY, "
+            "label_id INTEGER NOT NULL, new_level INTEGER)"
         )
+        conn.execute("INSERT INTO dynamic_thresholds VALUES (1, 7, 1)")
+        conn.execute("INSERT INTO threshold_events VALUES (1, 7, 1)")
         conn.commit()
         conn.close()
 
         doctor, report, check = self._check("_check_schema_contamination")
-        self.assertEqual(check.status, "pass", check.details)
+        self.assertEqual(check.status, "fail")
+        self.assertFalse(check.fixable)
+        hints = [d for d in check.details if db_doctor.APP_RECREATED_HINT in d]
+        self.assertEqual(len(hints), 2, check.details)
 
-        # Force the fix path, as the check itself passes.
-        report.checks.append(db_doctor.CheckResult(
-            name="Schema contamination", status="fail",
-            message="forced", fixable=True,
-        ))
+        report.checks.append(check)
         conn = sqlite3.connect(self.path)
         try:
-            doctor._fix_schema_contamination(conn, report)
+            result = doctor._fix_schema_contamination(conn, report)
+            self.assertNotEqual(result.status, "failed", result.details)
             for table in ("dynamic_thresholds", "threshold_events"):
+                self.assertIn(
+                    f"{table}: {db_doctor.APP_RECREATED_HINT}", result.details,
+                )
+            for table, expected in (
+                ("dynamic_thresholds", ["id", "label_id", "level"]),
+                ("threshold_events", ["id", "label_id", "new_level"]),
+            ):
                 columns = [
                     row[1] for row in conn.execute(f"PRAGMA table_info({table})")
                 ]
-                self.assertNotIn("label_id", columns, table)
+                self.assertEqual(columns, expected, table)
                 self.assertEqual(
                     conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
                     1, table,
                 )
         finally:
             conn.close()
+
+    def test_threshold_table_missing_a_column_gets_no_recreation_hint(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            _CURRENT_DYNAMIC_THRESHOLDS_DDL.replace(
+                "    scientific_name TEXT,\n", ""
+            )
+        )
+        conn.commit()
+        conn.close()
+
+        _, _, check = self._check("_check_schema_contamination")
+        self.assertEqual(check.status, "fail")
+        self.assertTrue(
+            any("scientific_name" in d for d in check.details), check.details,
+        )
+        self.assertFalse(
+            any(db_doctor.APP_RECREATED_HINT in d for d in check.details),
+            check.details,
+        )
+
+    def test_fix_leaves_model_name_only_threshold_table_without_a_hint(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            _CURRENT_DYNAMIC_THRESHOLDS_DDL.replace(
+                "    scientific_name TEXT,\n",
+                "    scientific_name TEXT,\n    model_name TEXT,\n",
+            )
+        )
+        conn.commit()
+        conn.close()
+
+        doctor, report, check = self._check("_check_schema_contamination")
+        report.checks.append(check)
+        conn = sqlite3.connect(self.path)
+        try:
+            result = doctor._fix_schema_contamination(conn, report)
+            columns = [
+                row[1] for row in conn.execute("PRAGMA table_info(dynamic_thresholds)")
+            ]
+        finally:
+            conn.close()
+        self.assertIn("model_name", columns)
+        self.assertFalse(
+            any(db_doctor.APP_RECREATED_HINT in d for d in result.details),
+            result.details,
+        )
 
     def test_detections_recreation_keeps_clip_sample_rate_and_spectrogram_name(self):
         conn = sqlite3.connect(self.path)
