@@ -425,47 +425,199 @@ func TestMySQL_V2Delete_WithLegacyTables_OnlyDeletesV2(t *testing.T) {
 // Startup Detection Tests
 // ============================================================================
 
-// TestMySQL_StartupDetection_OrphanedV2WithLegacy_ReturnsLegacyMode verifies
-// that orphaned bare v2 tables alongside legacy data are correctly identified
-// and cleaned up, returning legacy mode. This is the regression test for the
-// secondary bug in #2149 (missing !legacyExists guard).
-func TestMySQL_StartupDetection_OrphanedV2WithLegacy_ReturnsLegacyMode(t *testing.T) {
-	dropAllTables(t, coexTestDB, coexTestDBName)
-	seedLegacyTables(t, coexTestDB)
-	seedOrphanedBareV2Tables(t, coexTestDB)
+// mixedSchemaKeepV2SQL is the recovery SQL of the Database Doctor wiki guide for
+// keeping the enhanced database (step 3a), one statement per entry.
+var mixedSchemaKeepV2SQL = []string{
+	"SET FOREIGN_KEY_CHECKS = 0",
+	"DROP TABLE IF EXISTS note_locks, note_comments, note_reviews, results, notes",
+	"SET FOREIGN_KEY_CHECKS = 1",
+}
 
-	// Confirm orphaned tables exist before calling startup detection
-	assert.True(t, tableExists(t, coexTestDB, coexTestDBName, "detections"),
-		"orphaned detections table should exist before cleanup")
+// seedBareV2WithDetections creates the unprefixed v2 schema the way a real fresh
+// install does, marks it completed or idle, and adds detection rows. Detections
+// are inserted with foreign key checks off on one pinned connection, because the
+// referenced label rows are not under test.
+func seedBareV2WithDetections(t *testing.T, detections int, completed bool) {
+	t.Helper()
 
-	settings := buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, coexTestPassword)
-	state := checkMySQLMigrationState(settings)
+	mgr := newTestMySQLManager(t, false)
+	require.NoError(t, mgr.Initialize(), "fresh unprefixed v2 init should succeed")
+	require.NoError(t, mgr.Close())
 
-	// Should return legacy mode, NOT completed
-	assert.Equal(t, entities.MigrationStatusIdle, state.MigrationStatus,
-		"should return IDLE (legacy mode), not COMPLETED")
-	assert.True(t, state.LegacyRequired, "legacy should be required")
-	assert.False(t, state.V2Available, "v2 should not be available")
-	assert.False(t, state.FreshInstall, "should not be a fresh install")
-	require.NoError(t, state.Error)
+	state := entities.MigrationStatusIdle
+	if completed {
+		state = entities.MigrationStatusCompleted
+	}
+	res := coexTestDB.Exec("UPDATE migration_states SET state = ?", string(state))
+	require.NoError(t, res.Error)
+	require.Positive(t, res.RowsAffected, "the bare migration_states row must exist")
 
-	// All orphaned bare v2 tables should be cleaned up
-	for _, table := range []string{
-		"labels", "label_types", "taxonomic_classes", "ai_models", "audio_sources",
-		"detections", "detection_predictions", "detection_reviews", "detection_comments", "detection_locks",
-		"alert_rules", "alert_conditions", "alert_actions", "alert_history",
-		"migration_state", "migration_dirty_ids",
-	} {
-		assert.False(t, tableExists(t, coexTestDB, coexTestDBName, table),
-			"orphaned %s should be cleaned up", table)
+	require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
+		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
+			return err
+		}
+		var insertErr error
+		for i := range detections {
+			insertErr = errors.Join(insertErr, tx.Exec(
+				"INSERT INTO detections (model_id, label_id, detected_at, confidence) VALUES (1, 1, ?, 0.9)",
+				1000+i).Error)
+		}
+		restoreErr := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error
+		return errors.Join(insertErr, restoreErr)
+	}))
+}
+
+// insertLegacyNote adds one populated legacy notes row.
+func insertLegacyNote(t *testing.T) {
+	t.Helper()
+	sampleTime := time.Date(2026, 1, 15, 8, 30, 0, 0, time.UTC)
+	require.NoError(t, coexTestDB.Create(&datastore.Note{
+		CommonName:     "Common Blackbird",
+		ScientificName: "Turdus merula",
+		Confidence:     0.95,
+		Date:           "2026-01-15",
+		Time:           "08:30:00",
+		BeginTime:      sampleTime,
+		EndTime:        sampleTime.Add(3 * time.Second),
+	}).Error)
+}
+
+// baseTableNames lists the base tables of the test database, sorted.
+func baseTableNames(t *testing.T) []string {
+	t.Helper()
+	var names []string
+	require.NoError(t, coexTestDB.Raw(
+		"SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_type = 'BASE TABLE' ORDER BY 1",
+		coexTestDBName).Scan(&names).Error)
+	return names
+}
+
+// countOf returns the recorded row count of table, and whether it was recorded.
+func countOf(counts []tableRowCount, table string) (int64, bool) {
+	for _, c := range counts {
+		if c.table == table {
+			return c.rows, true
+		}
+	}
+	return 0, false
+}
+
+// TestMySQL_StartupDetection_BareV2BesideLegacyNotes_RefusesWithoutChanges verifies
+// that bare v2 tables beside a legacy notes table are refused in every combination
+// of empty and populated sides, that the counts match the seed, and that nothing in
+// the database changes across two consecutive startup checks.
+func TestMySQL_StartupDetection_BareV2BesideLegacyNotes_RefusesWithoutChanges(t *testing.T) {
+	tests := []struct {
+		name           string
+		seed           func(t *testing.T)
+		wantDetections int64
+		wantNotes      int64
+		wantCompleted  bool
+	}{
+		{
+			name: "v2 detections, empty notes",
+			seed: func(t *testing.T) {
+				t.Helper()
+				seedBareV2WithDetections(t, 2, true)
+				require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
+			},
+			wantDetections: 2, wantNotes: 0, wantCompleted: true,
+		},
+		{
+			name: "empty v2, populated notes",
+			seed: func(t *testing.T) {
+				t.Helper()
+				seedLegacyTables(t, coexTestDB)
+				seedOrphanedBareV2Tables(t, coexTestDB)
+			},
+			wantDetections: 0, wantNotes: 1, wantCompleted: false,
+		},
+		{
+			name: "both populated",
+			seed: func(t *testing.T) {
+				t.Helper()
+				seedBareV2WithDetections(t, 2, true)
+				require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
+				insertLegacyNote(t)
+			},
+			wantDetections: 2, wantNotes: 1, wantCompleted: true,
+		},
+		{
+			name: "both empty",
+			seed: func(t *testing.T) {
+				t.Helper()
+				seedBareV2WithDetections(t, 0, true)
+				require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
+			},
+			wantDetections: 0, wantNotes: 0, wantCompleted: true,
+		},
 	}
 
-	// Legacy/preserved tables should still be intact (even though dynamic_thresholds
-	// had an FK pointing to the now-dropped labels table)
-	assert.True(t, tableExists(t, coexTestDB, coexTestDBName, "notes"),
-		"legacy notes should survive cleanup")
-	assert.True(t, tableExists(t, coexTestDB, coexTestDBName, "dynamic_thresholds"),
-		"legacy dynamic_thresholds should survive cleanup")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dropAllTables(t, coexTestDB, coexTestDBName)
+			tt.seed(t)
+
+			tablesBefore := baseTableNames(t)
+			detectionsBefore := getRowCount(t, coexTestDB, "detections")
+			notesBefore := getRowCount(t, coexTestDB, "notes")
+			require.Equal(t, tt.wantDetections, detectionsBefore, "seed must hold the expected detections")
+			require.Equal(t, tt.wantNotes, notesBefore, "seed must hold the expected notes")
+
+			settings := buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, coexTestPassword)
+			for boot := 1; boot <= 2; boot++ {
+				state := checkMySQLMigrationState(settings)
+
+				assert.Equal(t, DecisionMixedSchemaRefused, state.Decision, "boot %d", boot)
+				require.ErrorIs(t, state.Error, ErrMixedSchemaDatabase, "boot %d", boot)
+				assert.Equal(t, entities.MigrationStatusIdle, state.MigrationStatus)
+				assert.False(t, state.V2Available)
+				assert.False(t, state.LegacyRequired)
+				assert.False(t, state.FreshInstall)
+
+				mixed, ok := errors.AsType[*mixedSchemaError](state.Error)
+				require.True(t, ok, "the error must carry the counts")
+				detections, found := countOf(mixed.v2Tables, "detections")
+				assert.True(t, found)
+				assert.Equal(t, tt.wantDetections, detections, "boot %d detections", boot)
+				notes, found := countOf(mixed.legacyTables, "notes")
+				assert.True(t, found)
+				assert.Equal(t, tt.wantNotes, notes, "boot %d notes", boot)
+				assert.Equal(t, tt.wantCompleted, mixed.v2Completed, "boot %d completed marker", boot)
+
+				assert.Equal(t, tablesBefore, baseTableNames(t), "boot %d must not add or drop a table", boot)
+				assert.Equal(t, detectionsBefore, getRowCount(t, coexTestDB, "detections"), "boot %d detections", boot)
+				assert.Equal(t, notesBefore, getRowCount(t, coexTestDB, "notes"), "boot %d notes", boot)
+			}
+		})
+	}
+}
+
+// TestMySQL_StartupDetection_MixedSchemaKeepV2Steps_RestartsV2 runs the wiki
+// guide's keep-the-enhanced-database SQL on a refused database and verifies the
+// next start uses the bare schema and keeps the detections.
+func TestMySQL_StartupDetection_MixedSchemaKeepV2Steps_RestartsV2(t *testing.T) {
+	dropAllTables(t, coexTestDB, coexTestDBName)
+	seedBareV2WithDetections(t, 2, true)
+	require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
+
+	settings := buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, coexTestPassword)
+	require.Equal(t, DecisionMixedSchemaRefused, checkMySQLMigrationState(settings).Decision)
+
+	require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
+		var err error
+		for _, stmt := range mixedSchemaKeepV2SQL {
+			err = errors.Join(err, tx.Exec(stmt).Error)
+		}
+		return err
+	}))
+
+	state := checkMySQLMigrationState(settings)
+	require.NoError(t, state.Error)
+	assert.Equal(t, DecisionV2Restart, state.Decision)
+	assert.True(t, CheckMySQLHasFreshV2Schema(settings),
+		"the next start must use the bare schema, not the v2_ prefix")
+	assert.Equal(t, int64(2), getRowCount(t, coexTestDB, "detections"), "detections must survive the recovery")
 }
 
 // TestMySQL_StartupDetection_FreshV2Only_ReturnsCompleted verifies that
@@ -605,13 +757,15 @@ func TestMySQL_V2Initialize_SwapsContributionDetectionIndex(t *testing.T) {
 	assert.Zero(t, remaining, "deleting the detection must still cascade to its contributions")
 }
 
-// TestMySQL_LegacyOpen_AfterOrphanCleanup_RepairsV2NotificationHistory covers
+// TestMySQL_LegacyOpen_AfterBareV2TablesDropped_RepairsV2NotificationHistory covers
 // legacy startup over a fresh unprefixed v2 database that holds a v2-shaped
 // notification_histories table with several rows and a notes table left by an
-// earlier legacy boot. Legacy AutoMigrate used to fail with Error 1062 on
+// earlier legacy boot, after the user kept the legacy side by dropping the bare
+// v2 tables (the wiki guide's keep-legacy step, and the shape an older release's
+// cleanup left). Legacy AutoMigrate used to fail with Error 1062 on
 // idx_notification_history_species_type; the startup guard now recreates the
 // table in the legacy shape.
-func TestMySQL_LegacyOpen_AfterOrphanCleanup_RepairsV2NotificationHistory(t *testing.T) {
+func TestMySQL_LegacyOpen_AfterBareV2TablesDropped_RepairsV2NotificationHistory(t *testing.T) {
 	dropAllTables(t, coexTestDB, coexTestDBName)
 
 	mgr := newTestMySQLManager(t, false)
@@ -638,8 +792,20 @@ func TestMySQL_LegacyOpen_AfterOrphanCleanup_RepairsV2NotificationHistory(t *tes
 	// datastore.New picks SQLite first when it is enabled.
 	settings.Output.SQLite.Enabled = false
 
+	require.Equal(t, DecisionMixedSchemaRefused, checkMySQLMigrationState(settings).Decision,
+		"bare v2 tables beside notes must be refused, not cleaned up")
+
+	// Keep the legacy side: drop every bare v2 table by hand.
+	require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
+		err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error
+		for _, table := range orphanedBareV2Tables() {
+			err = errors.Join(err, tx.Exec("DROP TABLE IF EXISTS `"+table+"`").Error)
+		}
+		return errors.Join(err, tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error)
+	}))
+
 	state := checkMySQLMigrationState(settings)
-	require.Equal(t, DecisionLegacyMode, state.Decision, "orphan cleanup should return legacy mode")
+	require.Equal(t, DecisionLegacyMode, state.Decision, "after the bare v2 tables are gone the database is legacy")
 
 	store := datastore.New(settings)
 	require.NoError(t, store.Open(), "legacy Open should repair the v2-shaped table")

@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -881,4 +882,123 @@ func TestCheckSQLiteMigrationStateSetsDecision(t *testing.T) {
 	state := CheckMigrationStateBeforeStartup(settings)
 	assert.True(t, state.FreshInstall)
 	assert.Equal(t, DecisionFreshInstall, state.Decision)
+}
+
+// Drop targets named by a mixed schema hint.
+const (
+	hintTargetNone   = "none"
+	hintTargetLegacy = "legacy"
+	hintTargetV2     = "v2"
+)
+
+// hintDropTarget reports which side of a mixed schema database the hint tells the
+// user to drop, by the table list it names.
+func hintDropTarget(hint string) string {
+	switch {
+	case strings.Contains(hint, "note_locks"):
+		return hintTargetLegacy
+	case strings.Contains(hint, "bare v2 tables"):
+		return hintTargetV2
+	default:
+		return hintTargetNone
+	}
+}
+
+// TestMixedSchemaHint pins the recovery hint rules: the hint must never tell a user
+// to drop a side that holds detections or has an unreadable count, and must only
+// suggest keeping the bare v2 schema when it is a completed install.
+func TestMixedSchemaHint(t *testing.T) {
+	t.Parallel()
+
+	unknown := mixedSchemaRowCountUnknown
+	tests := []struct {
+		name   string
+		v2     []tableRowCount
+		legacy []tableRowCount
+		done   bool
+		want   string
+	}{
+		{"rule 1 unknown detections", []tableRowCount{{"detections", unknown}}, []tableRowCount{{"notes", 0}}, true, hintTargetNone},
+		{"rule 1 unknown on a non-detection v2 table beats rule 5", []tableRowCount{{"detections", 0}, {"alert_rules", unknown}}, []tableRowCount{{"notes", 3}}, true, hintTargetNone},
+		{"rule 1 unknown legacy table beats rule 3", []tableRowCount{{"detections", 4}}, []tableRowCount{{"notes", 0}, {"note_locks", unknown}}, true, hintTargetNone},
+		{"rule 2 both sides hold detections", []tableRowCount{{"detections", 4}}, []tableRowCount{{"notes", 2}}, true, hintTargetNone},
+		{"rule 3 v2 detections, legacy empty, completed", []tableRowCount{{"detections", 4}}, []tableRowCount{{"notes", 0}, {"results", 0}}, true, hintTargetLegacy},
+		{"rule 4 v2 detections, legacy empty, not completed", []tableRowCount{{"detections", 4}}, []tableRowCount{{"notes", 0}}, false, hintTargetNone},
+		{"rule 5 legacy notes only", []tableRowCount{{"detections", 0}}, []tableRowCount{{"notes", 2}}, true, hintTargetV2},
+		{"rule 5 results rows with empty notes are legacy data", []tableRowCount{{"detections", 0}}, []tableRowCount{{"notes", 0}, {"results", 5}}, true, hintTargetV2},
+		{"rule 5 v2 reference rows without detections", []tableRowCount{{"detections", 0}, {"labels", 37}, {"ai_models", 1}}, []tableRowCount{{"notes", 2}}, true, hintTargetV2},
+		{"rule 6 both empty, completed", []tableRowCount{{"detections", 0}}, []tableRowCount{{"notes", 0}}, true, hintTargetLegacy},
+		{"rule 7 both empty, not completed", []tableRowCount{{"detections", 0}}, []tableRowCount{{"notes", 0}}, false, hintTargetV2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			e := &mixedSchemaError{v2Tables: tt.v2, legacyTables: tt.legacy, v2Completed: tt.done}
+			assert.Equal(t, tt.want, hintDropTarget(mixedSchemaHint(e)))
+			assert.Contains(t, e.Error(), mixedSchemaHint(e), "the error text ends with the hint")
+		})
+	}
+}
+
+// TestMixedSchemaError_Error pins the message: only tables with rows or an unknown
+// count are listed, an empty side prints none, and the error unwraps to the sentinel.
+func TestMixedSchemaError_Error(t *testing.T) {
+	t.Parallel()
+
+	e := &mixedSchemaError{
+		v2Tables:     []tableRowCount{{"detections", 1204}, {"alert_rules", 0}, {"labels", 37}, {"ai_models", mixedSchemaRowCountUnknown}},
+		legacyTables: []tableRowCount{{"notes", 0}, {"results", 0}},
+		v2Completed:  true,
+	}
+	msg := e.Error()
+	assert.Contains(t, msg, "v2 tables with rows: detections=1204, labels=37, ai_models=unknown.")
+	assert.Contains(t, msg, "Legacy tables with rows: none.")
+	assert.NotContains(t, msg, "alert_rules")
+	require.ErrorIs(t, e, ErrMixedSchemaDatabase)
+}
+
+// TestCountMixedSchemaRows_ListingFailure_FailsClosed runs the counter against a
+// database with no information_schema (SQLite), so the table listing fails. The
+// counts must come back unknown, never zero, so the hint cannot suggest a drop.
+func TestCountMixedSchemaRows_ListingFailure_FailsClosed(t *testing.T) {
+	t.Parallel()
+
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
+	require.NoError(t, err)
+
+	e := countMixedSchemaRows(db, "irrelevant")
+	require.NotNil(t, e)
+
+	assert.Contains(t, e.v2Tables, tableRowCount{"detections", mixedSchemaRowCountUnknown})
+	assert.Contains(t, e.legacyTables, tableRowCount{"notes", mixedSchemaRowCountUnknown})
+	assert.False(t, e.v2Completed)
+	assert.Equal(t, hintTargetNone, hintDropTarget(mixedSchemaHint(e)))
+	assert.Contains(t, mixedSchemaHint(e), "could not be read")
+}
+
+// TestMixedSchemaGuideDropOrder keeps the wiki guide's SQL in step with the code: the
+// keep-legacy statement must drop exactly orphanedBareV2Tables in order, and the
+// keep-enhanced statement must drop the legacy tables the hint names. The guide is
+// what users run by hand, so a table added to one and not the other breaks recovery.
+func TestMixedSchemaGuideDropOrder(t *testing.T) {
+	t.Parallel()
+
+	guide, err := os.ReadFile(filepath.Join("..", "..", "..", "doc", "wiki", "database-doctor.md"))
+	require.NoError(t, err)
+
+	dropped := func(firstTable string) []string {
+		_, rest, found := strings.Cut(string(guide), "DROP TABLE IF EXISTS "+firstTable)
+		require.True(t, found, "guide must drop %s", firstTable)
+		stmt, _, found := strings.Cut(rest, ";")
+		require.True(t, found, "drop statement must end with a semicolon")
+		var names []string
+		for name := range strings.FieldsFuncSeq(firstTable+stmt, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' }) {
+			names = append(names, name)
+		}
+		return names
+	}
+
+	assert.Equal(t, orphanedBareV2Tables(), dropped("alert_actions"))
+	assert.ElementsMatch(t, legacyDetectionTables, dropped("note_locks"))
 }
