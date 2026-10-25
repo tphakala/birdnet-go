@@ -10,6 +10,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -274,6 +275,26 @@ func TestPrivacyRollup_FlushEvents(t *testing.T) {
 		discards := rec.ofKind(privacyrollup.KindDiscard)
 		require.Len(t, discards, 2)
 		assert.Equal(t, discards[0], discards[1])
+	})
+
+	t.Run("a label hit that causes a discard gives a discard keyed on the label hit and its threshold", func(t *testing.T) {
+		r, rec := rollupRig(t, 45*time.Second)
+		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
+		r.settings.Realtime.PrivacyFilter.Confidence = 0.1
+		r.feed(r.clip, 40*time.Second+sec(11), sec(3))
+		hitEnd := 41 * time.Second
+		item := r.chunk(hitEnd)
+		r.p.handleHumanDetection(r.settings, item, datastore.Results{Species: "Speech", Confidence: 0.9})
+		rec.take()
+		r.pend(40 * time.Second)
+		require.Equal(t, "discarded", r.outcome())
+
+		discards := rec.ofKind(privacyrollup.KindDiscard)
+		require.Len(t, discards, 1)
+		assert.Equal(t, metrics.TriggerLabel, discards[0].Trigger)
+		assert.Equal(t, r.model, discards[0].ModelID)
+		assert.Equal(t, 100, discards[0].ThresholdMilli)
+		assert.True(t, r.at(hitEnd).Equal(discards[0].At))
 	})
 
 	t.Run("a coverage timeout gives one unscanned save keyed on the required detector and the clip start", func(t *testing.T) {
