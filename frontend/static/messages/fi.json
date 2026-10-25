@@ -450,7 +450,15 @@
         "completedTitle": "Tietokannan siirto valmis",
         "completedMessage": "Siirto valmis. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan.",
         "errorTitle": "Tietokannan siirtovirhe",
-        "errorMessage": "Siirto keskeytetty virheiden vuoksi. Tarkista lokit ja yritä jatkaa."
+        "errorMessage": "Siirto keskeytetty virheiden vuoksi. Tarkista lokit ja yritä jatkaa.",
+        "legacyNotStartedTitle": "Tietokannan päivitys vaaditaan",
+        "legacyNotStartedMessage": "Tämä asennus käyttää edelleen vanhaa tietokantamuotoa, joka lakkaa toimimasta tulevassa versiossa. Suorita siirto avaamalla Järjestelmä > Tietokanta.",
+        "legacyInProgressTitle": "Tietokannan siirto käynnissä",
+        "legacyInProgressMessage": "Siirto uuteen tietokantamuotoon on käynnissä. Pidä BirdNET-Go käynnissä, kunnes se on valmis; vanha muoto lakkaa toimimasta tulevassa versiossa.",
+        "legacyNeedsAttentionTitle": "Tietokannan siirto vaatii huomiota",
+        "legacyNeedsAttentionMessage": "Siirto uuteen tietokantamuotoon on keskeytetty tai epäonnistunut. Jatka tai yritä uudelleen avaamalla Järjestelmä > Tietokanta; vanha muoto lakkaa toimimasta tulevassa versiossa.",
+        "legacyRestartRequiredTitle": "Käynnistä uudelleen tietokannan siirron viimeistelemiseksi",
+        "legacyRestartRequiredMessage": "Siirto on valmis. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan. Jos tämä viesti pysyy uudelleenkäynnistyksen jälkeen, tarkista lokista tietokantavirheet."
       },
       "cleanup": {
         "completeTitle": "Vanhan tietokannan siivous valmis",
@@ -794,6 +802,9 @@
       "loadFailedAction": "Näytä Tekoälymallit-tila",
       "failingTitle": "{count, plural, one {Malli epäonnistuu jokaisessa analyysissä} other {# mallia epäonnistuu jokaisessa analyysissä}}",
       "failingMessage": "{count, plural, one {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten se ei tunnista mitään.} other {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten ne eivät tunnista mitään.}} Tekoälymallit-sivulla näkyy taustajärjestelmä ja virhe."
+    },
+    "legacyDatabase": {
+      "action": "Avaa tietokanta-asetukset"
     },
     "banner": {
       "title": "Otsikko",
@@ -4313,7 +4324,6 @@
     },
     "species": {
       "pageLabel": "Lajiasetukset",
-      "saveError": "Lajin \"{species}\" asetusten tallennus epäonnistui. Yritä uudelleen.",
       "configUpdated": "Lajin \"{species}\" asetukset päivitetty",
       "configAdded": "Lajin \"{species}\" asetukset lisätty",
       "duplicateConfigError": "Lajilla \"{species}\" on jo asetukset. Valitse toinen nimi.",

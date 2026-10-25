@@ -450,7 +450,15 @@
         "completedTitle": "Databasmigrering slutförd",
         "completedMessage": "Migreringen slutförd. Starta om BirdNET-Go för att byta till den nya databasen.",
         "errorTitle": "Databasmigreringsfel",
-        "errorMessage": "Migreringen pausad på grund av fel. Kontrollera loggar och försök återuppta."
+        "errorMessage": "Migreringen pausad på grund av fel. Kontrollera loggar och försök återuppta.",
+        "legacyNotStartedTitle": "Databasuppgradering krävs",
+        "legacyNotStartedMessage": "Den här installationen använder fortfarande det gamla databasformatet, som slutar fungera i en framtida version. Öppna System > Databas för att köra migreringen.",
+        "legacyInProgressTitle": "Databasmigrering pågår",
+        "legacyInProgressMessage": "Migreringen till det nya databasformatet körs. Låt BirdNET-Go vara igång tills den är klar; det gamla formatet slutar fungera i en framtida version.",
+        "legacyNeedsAttentionTitle": "Databasmigreringen behöver uppmärksamhet",
+        "legacyNeedsAttentionMessage": "Migreringen till det nya databasformatet är pausad eller har misslyckats. Öppna System > Databas för att återuppta eller försöka igen; det gamla formatet slutar fungera i en framtida version.",
+        "legacyRestartRequiredTitle": "Starta om för att slutföra databasmigreringen",
+        "legacyRestartRequiredMessage": "Migreringen är slutförd. Starta om BirdNET-Go för att byta till den nya databasen. Om det här meddelandet finns kvar efter en omstart, kontrollera loggen efter databasfel."
       },
       "cleanup": {
         "completeTitle": "Rensning av gammal databas slutförd",
@@ -794,6 +802,9 @@
       "loadFailedAction": "Visa status för AI-modeller",
       "failingTitle": "{count, plural, one {En modell misslyckas vid varje analys} other {# modeller misslyckas vid varje analys}}",
       "failingMessage": "{count, plural, one {{models} är inläst, men varje analys misslyckas, så den upptäcker ingenting.} other {{models} är inlästa, men varje analys misslyckas, så de upptäcker ingenting.}} Sidan AI-modeller visar backend och felet."
+    },
+    "legacyDatabase": {
+      "action": "Öppna databasinställningar"
     },
     "banner": {
       "title": "Titel",
@@ -4313,7 +4324,6 @@
     },
     "species": {
       "pageLabel": "Artinställningar",
-      "saveError": "Kunde inte spara konfiguration för \"{species}\". Försök igen.",
       "configUpdated": "Konfiguration uppdaterad för \"{species}\"",
       "configAdded": "Konfiguration tillagd för \"{species}\"",
       "duplicateConfigError": "Arten \"{species}\" har redan en konfiguration. Välj ett annat namn.",

@@ -71,9 +71,9 @@ describe('ToastContainer keyboard focus', () => {
 
   const closeButtons = () => screen.getAllByRole('button', { name: CLOSE_LABEL });
   const closeOf = (text: string): HTMLElement => {
-    const alert = screen.getByText(text).closest<HTMLElement>('[role="alert"]');
-    if (!alert) throw new Error(`The toast "${text}" is not shown`);
-    return within(alert).getByRole('button', { name: CLOSE_LABEL });
+    const toast = screen.getByText(text).closest<HTMLElement>('[role="alert"], [role="status"]');
+    if (!toast) throw new Error(`The toast "${text}" is not shown`);
+    return within(toast).getByRole('button', { name: CLOSE_LABEL });
   };
 
   let pageButton: HTMLButtonElement;

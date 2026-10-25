@@ -35,4 +35,11 @@ type InsightsRepository interface {
 	// (best day, recent dates) buckets by wall-clock date in that zone rather than the
 	// DB/OS-local zone.
 	GetDashboardKPIs(ctx context.Context, todaySince int64, tzOffsetSeconds int, modelID *uint) (*DashboardKPIs, error)
+
+	// GetModelContributionStats returns per-model statistics read from
+	// detection_model_contributions for detections whose detected_at lies in the
+	// half-open Unix-seconds range [start, end). Reviews of every verdict are
+	// included (false positives are not excluded), so outcomes can be counted per
+	// model. The result is never nil on success and its slices are never nil.
+	GetModelContributionStats(ctx context.Context, start, end int64) (*ModelContributionStats, error)
 }

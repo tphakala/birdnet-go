@@ -7,9 +7,10 @@ import (
 )
 
 // Classifier runs bird species classification inference on audio segments.
-// It is safe for concurrent use from multiple goroutines.
+// It is safe for concurrent use from multiple goroutines, and Close may run
+// concurrently with predictions.
 type Classifier struct {
-	session     *ort.DynamicAdvancedSession
+	session     guardedSession
 	config      ModelConfig
 	labels      []string
 	topK        int
@@ -128,7 +129,7 @@ func NewClassifier(modelPath string, opts ...ClassifierOption) (*Classifier, err
 	}
 
 	return &Classifier{
-		session:     session,
+		session:     guardedSession{s: session},
 		config:      modelCfg,
 		labels:      labels,
 		topK:        cfg.topK,
@@ -310,7 +311,7 @@ func (c *Classifier) PredictRaw(audio []float32) ([]float32, error) {
 // PredictRawWithEmbeddings runs inference and returns both raw logits and embedding vector.
 // Returns nil embeddings if the model does not produce embeddings.
 func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddings []float32, err error) {
-	if c.session == nil {
+	if c.session.isClosed() {
 		return nil, nil, ErrSessionClosed
 	}
 	if len(audio) != c.config.SampleCount {
@@ -330,7 +331,7 @@ func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddin
 	}
 	defer destroyTensors(outputs)
 
-	err = c.session.Run([]ort.Value{inputTensor}, outputs)
+	err = c.session.run([]ort.Value{inputTensor}, outputs)
 	if err != nil {
 		return nil, nil, fmt.Errorf("birdnet: inference failed: %w", err)
 	}
@@ -374,7 +375,7 @@ func (c *Classifier) PredictRawWithEmbeddings(audio []float32) (logits, embeddin
 // The audio slice must contain exactly Config().SampleCount float32 samples
 // (mono, at the model's sample rate, normalized to [-1.0, 1.0]).
 func (c *Classifier) Predict(audio []float32) (*Result, error) {
-	if c.session == nil {
+	if c.session.isClosed() {
 		return nil, ErrSessionClosed
 	}
 	if len(audio) != c.config.SampleCount {
@@ -399,7 +400,7 @@ func (c *Classifier) Predict(audio []float32) (*Result, error) {
 	defer destroyTensors(outputs)
 
 	// Run inference
-	err = c.session.Run(
+	err = c.session.run(
 		[]ort.Value{inputTensor},
 		outputs,
 	)
@@ -414,7 +415,7 @@ func (c *Classifier) Predict(audio []float32) (*Result, error) {
 // PredictBatch runs inference on multiple audio segments in a single batch.
 // Each segment must contain exactly Config().SampleCount samples.
 func (c *Classifier) PredictBatch(segments [][]float32) ([]*Result, error) {
-	if c.session == nil {
+	if c.session.isClosed() {
 		return nil, ErrSessionClosed
 	}
 	if len(segments) == 0 {
@@ -454,7 +455,7 @@ func (c *Classifier) PredictBatch(segments [][]float32) ([]*Result, error) {
 	defer destroyTensors(outputs)
 
 	// Run inference
-	err = c.session.Run(
+	err = c.session.run(
 		[]ort.Value{inputTensor},
 		outputs,
 	)
@@ -473,14 +474,11 @@ func (c *Classifier) PredictBatch(segments [][]float32) ([]*Result, error) {
 	return results, nil
 }
 
-// Close releases the ONNX session and associated resources.
+// Close releases the ONNX session. It waits for in-flight inference runs to
+// finish, is safe to call more than once and concurrently with Predict, and
+// every later Predict call returns ErrSessionClosed.
 func (c *Classifier) Close() error {
-	if c.session != nil {
-		err := c.session.Destroy()
-		c.session = nil
-		return err
-	}
-	return nil
+	return c.session.close()
 }
 
 // makeBatchInputShape replaces the batch dimension (first element) in the input shape.

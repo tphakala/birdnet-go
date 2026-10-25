@@ -699,6 +699,42 @@ func TestProcessApprovedDetection_UsesThePassedSettingsSnapshot(t *testing.T) {
 		"EndTime must follow the checked snapshot (15 s - 3 s), not the reloaded one")
 }
 
+// TestProcessApprovedDetection_CopiesModelContributionStats: every per-model
+// statistic of the pending detection must reach the Result that is persisted.
+func TestProcessApprovedDetection_CopiesModelContributionStats(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+	p := &Processor{Settings: e2eSettings()}
+
+	base := time.Date(2026, 6, 11, 8, 0, 0, 0, time.UTC)
+	contribs := map[string]ModelContribution{
+		"BirdNET_V2.4": {
+			HitCount: 3, MaxConfidence: 0.9, MinConfidence: 0.6, ConfidenceSum: 2.2,
+			FirstHitAt: base, LastHitAt: base.Add(4 * time.Second),
+		},
+		"Perch_V2": {
+			HitCount: 2, MaxConfidence: 0.8, MinConfidence: 0.7, ConfidenceSum: 1.5,
+			FirstHitAt: base.Add(time.Second), LastHitAt: base.Add(3 * time.Second),
+		},
+	}
+	item := &PendingDetection{FirstDetected: base, Source: e2eSource, ModelContributions: contribs}
+	p.processApprovedDetection(item, e2eSpecies, e2eSettings())
+
+	got := item.Detection.Result.ModelContributions
+	require.Len(t, got, len(contribs))
+	for id := range contribs {
+		want := contribs[id]
+		g, ok := got[id]
+		require.True(t, ok, "model %s missing from the Result", id)
+		assert.Equal(t, want.HitCount, g.HitCount)
+		assert.InDelta(t, want.MaxConfidence, g.MaxConfidence, 1e-9)
+		assert.InDelta(t, want.MinConfidence, g.MinConfidence, 1e-9)
+		assert.InDelta(t, want.ConfidenceSum, g.ConfidenceSum, 1e-9)
+		assert.True(t, want.FirstHitAt.Equal(g.FirstHitAt), "FirstHitAt for %s", id)
+		assert.True(t, want.LastHitAt.Equal(g.LastHitAt), "LastHitAt for %s", id)
+	}
+}
+
 // TestBuildSaveAudioAction_UsesThePassedSettingsSnapshot: the audio export length
 // and settings come from the snapshot the privacy check used, not from the
 // processor's current configuration.

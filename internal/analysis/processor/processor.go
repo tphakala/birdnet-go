@@ -246,15 +246,43 @@ type Detections struct {
 	Results       []detection.AdditionalResult // Additional BirdNET prediction results
 }
 
-// PendingDetection struct represents a single detection held in memory,
-// including its last updated timestamp and a deadline for flushing it to the worker queue.
 // ModelContribution tracks a single AI model's detection activity for a pending detection.
+// Update it only through recordHit so the statistics stay consistent.
 type ModelContribution struct {
 	HitCount      int       // Number of times this model detected the species
 	MaxConfidence float64   // Highest confidence seen from this model
-	LastHitAt     time.Time // When this model last detected the species
+	MinConfidence float64   // Lowest confidence seen from this model
+	ConfidenceSum float64   // Sum of the confidences of this model's hits
+	FirstHitAt    time.Time // Audio end stamp of the earliest hit window (processing time when the source gave none)
+	LastHitAt     time.Time // Audio end stamp of the latest hit window (processing time when the source gave none)
 }
 
+// recordHit folds one hit into the contribution. Times are folded with min/max
+// rather than first write wins, because two models' windows can arrive out of
+// audio order. A contribution without FirstHitAt has no statistics yet, so they
+// start from this hit.
+func (c *ModelContribution) recordHit(confidence float64, at time.Time) {
+	c.HitCount++
+	c.MaxConfidence = max(c.MaxConfidence, confidence)
+	if c.FirstHitAt.IsZero() {
+		c.MinConfidence = confidence
+		c.ConfidenceSum = confidence
+		c.FirstHitAt = at
+		c.LastHitAt = at
+		return
+	}
+	c.MinConfidence = min(c.MinConfidence, confidence)
+	c.ConfidenceSum += confidence
+	if at.Before(c.FirstHitAt) {
+		c.FirstHitAt = at
+	}
+	if at.After(c.LastHitAt) {
+		c.LastHitAt = at
+	}
+}
+
+// PendingDetection struct represents a single detection held in memory,
+// including its last updated timestamp and a deadline for flushing it to the worker queue.
 type PendingDetection struct {
 	Detection       Detections // The detection data (from the best-confidence model)
 	Confidence      float64    // Best confidence seen across all models
@@ -766,103 +794,105 @@ func (p *Processor) processDetections(item classifier.Results) {
 		p.pipelineStats.RecordInference(item.Source.ID, item.ModelID, len(item.Results), len(detectionResults), maxConf, threshold)
 	}
 
+	// Every result of this chunk shares one window, so one hit stamp serves them all.
+	hitAt, _ := audioEndOrNow(&item)
+
 	for i := range detectionResults {
-		det := detectionResults[i]
-		commonName := strings.ToLower(det.Result.Species.CommonName)
-		confidence := det.Result.Confidence
-
-		// Lock the mutex to ensure thread-safe access to shared resources
-		p.pendingMutex.Lock()
-
-		now := time.Now()
-		mapKey := pendingKeyForDetection(item.Source.ID, &det)
-
-		if existing, exists := p.pendingDetections[mapKey]; exists {
-			// Update the existing detection (may be from same or different model)
-			oldConfidence := existing.Confidence
-			existing.LastUpdated = now
-			existing.AudioCapturedAt = item.AudioCapturedAt
-			if confidence > existing.Confidence {
-				existing.Detection = det
-				existing.Confidence = confidence
-				existing.BestModelID = item.ModelID
-				existing.Source = item.Source.ID
-				GetLogger().Debug("Updated pending detection with higher confidence",
-					logger.String("species", commonName),
-					logger.String("model_id", item.ModelID),
-					logger.Float64("old_confidence", oldConfidence),
-					logger.Float64("new_confidence", confidence),
-					logger.Int("count", existing.Count+1),
-					logger.String("operation", "update_pending_detection"))
-			}
-			existing.Count++
-
-			// Track per-model contribution
-			if existing.ModelContributions == nil {
-				existing.ModelContributions = make(map[string]ModelContribution, 1)
-			}
-			contrib := existing.ModelContributions[item.ModelID]
-			contrib.HitCount++
-			if confidence > contrib.MaxConfidence {
-				contrib.MaxConfidence = confidence
-			}
-			contrib.LastHitAt = now
-			existing.ModelContributions[item.ModelID] = contrib
-
-			p.pendingDetections[mapKey] = existing
-		} else {
-			GetLogger().Info("Created new pending detection",
-				logger.String("species", commonName),
-				logger.Float64("confidence", confidence),
-				logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
-				logger.String("model_id", item.ModelID),
-				logger.Time("flush_deadline", now.Add(detectionWindow)),
-				logger.String("operation", "create_pending_detection"))
-			p.pendingDetections[mapKey] = PendingDetection{
-				Detection:       det,
-				Confidence:      confidence,
-				Source:          item.Source.ID,
-				BestModelID:     item.ModelID,
-				FirstDetected:   item.StartTime,
-				CreatedAt:       now,
-				AudioCapturedAt: item.AudioCapturedAt,
-				LastUpdated:     item.StartTime,
-				// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
-				// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
-				FlushDeadline: now.Add(detectionWindow),
-				Count:         1,
-				ModelContributions: map[string]ModelContribution{
-					item.ModelID: {
-						HitCount:      1,
-						MaxConfidence: confidence,
-						LastHitAt:     now,
-					},
-				},
-			}
-
-			// Newly detected species: warm the guide cache (fire-and-forget).
-			p.firePreFetchGuide(det.Result.Species.ScientificName)
-		}
-
-		// Apply extended capture if species qualifies
-		if p.isExtendedCaptureSpecies(det.Result.Species.ScientificName) {
-			p.applyExtendedCapture(mapKey, now, detectionWindow)
-		}
-
-		// Note: the dynamic-threshold expiry timer is renewed only from approved,
-		// filter-passing detections above Trigger in LearnFromApprovedDetection
-		// (via processApprovedDetection). Renewing it here from pending detections
-		// above the model base let sub-trigger noise sustain a lowered gate
-		// indefinitely (#4194), so no renewal happens on the pending path.
-
-		// Unlock the mutex to allow other goroutines to access shared resources
-		p.pendingMutex.Unlock()
+		p.mergePendingHit(&item, &detectionResults[i], hitAt, detectionWindow)
 	}
 
 	// Broadcast updated pending detections snapshot for "currently hearing" UI.
 	// This runs after all new detections are incorporated into pendingDetections.
 	snapshot := p.SnapshotVisiblePending()
 	p.broadcastPendingSnapshot(snapshot)
+}
+
+// mergePendingHit folds one detection of the chunk item into pendingDetections: it
+// updates the pending entry for the detection's source and species (which another
+// model may have created) or creates one, counts the hit, records it in the model's
+// contribution statistics stamped with hitAt, and applies extended capture when the
+// species qualifies. It takes and releases pendingMutex itself; the caller must not
+// hold it.
+func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, hitAt time.Time, detectionWindow time.Duration) {
+	commonName := strings.ToLower(det.Result.Species.CommonName)
+	confidence := det.Result.Confidence
+
+	// Lock the mutex to ensure thread-safe access to shared resources
+	p.pendingMutex.Lock()
+	defer p.pendingMutex.Unlock()
+
+	now := time.Now()
+	mapKey := pendingKeyForDetection(item.Source.ID, det)
+
+	if existing, exists := p.pendingDetections[mapKey]; exists {
+		// Update the existing detection (may be from same or different model)
+		oldConfidence := existing.Confidence
+		existing.LastUpdated = now
+		existing.AudioCapturedAt = item.AudioCapturedAt
+		if confidence > existing.Confidence {
+			existing.Detection = *det
+			existing.Confidence = confidence
+			existing.BestModelID = item.ModelID
+			existing.Source = item.Source.ID
+			GetLogger().Debug("Updated pending detection with higher confidence",
+				logger.String("species", commonName),
+				logger.String("model_id", item.ModelID),
+				logger.Float64("old_confidence", oldConfidence),
+				logger.Float64("new_confidence", confidence),
+				logger.Int("count", existing.Count+1),
+				logger.String("operation", "update_pending_detection"))
+		}
+		existing.Count++
+
+		// Track per-model contribution
+		if existing.ModelContributions == nil {
+			existing.ModelContributions = make(map[string]ModelContribution, 1)
+		}
+		contrib := existing.ModelContributions[item.ModelID]
+		contrib.recordHit(confidence, hitAt)
+		existing.ModelContributions[item.ModelID] = contrib
+
+		p.pendingDetections[mapKey] = existing
+	} else {
+		GetLogger().Info("Created new pending detection",
+			logger.String("species", commonName),
+			logger.Float64("confidence", confidence),
+			logger.String("source", p.getDisplayNameForSource(item.Source.ID)),
+			logger.String("model_id", item.ModelID),
+			logger.Time("flush_deadline", now.Add(detectionWindow)),
+			logger.String("operation", "create_pending_detection"))
+		var contrib ModelContribution
+		contrib.recordHit(confidence, hitAt)
+		p.pendingDetections[mapKey] = PendingDetection{
+			Detection:       *det,
+			Confidence:      confidence,
+			Source:          item.Source.ID,
+			BestModelID:     item.ModelID,
+			FirstDetected:   item.StartTime,
+			CreatedAt:       now,
+			AudioCapturedAt: item.AudioCapturedAt,
+			LastUpdated:     item.StartTime,
+			// FlushDeadline is relative to NOW (not startTime) to ensure it's always in the future.
+			// startTime is backdated for audio extraction, but FlushDeadline needs to be a future deadline.
+			FlushDeadline:      now.Add(detectionWindow),
+			Count:              1,
+			ModelContributions: map[string]ModelContribution{item.ModelID: contrib},
+		}
+
+		// Newly detected species: warm the guide cache (fire-and-forget).
+		p.firePreFetchGuide(det.Result.Species.ScientificName)
+	}
+
+	// Apply extended capture if species qualifies
+	if p.isExtendedCaptureSpecies(det.Result.Species.ScientificName) {
+		p.applyExtendedCapture(mapKey, now, detectionWindow)
+	}
+
+	// Note: the dynamic-threshold expiry timer is renewed only from approved,
+	// filter-passing detections above Trigger in LearnFromApprovedDetection
+	// (via processApprovedDetection). Renewing it here from pending detections
+	// above the model base let sub-trigger noise sustain a lowered gate
+	// indefinitely (#4194), so no renewal happens on the pending path.
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
@@ -1814,6 +1844,10 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 				Model:         classifier.DetectionModelInfoForID(modelID),
 				HitCount:      contrib.HitCount,
 				MaxConfidence: contrib.MaxConfidence,
+				FirstHitAt:    contrib.FirstHitAt,
+				LastHitAt:     contrib.LastHitAt,
+				MinConfidence: contrib.MinConfidence,
+				ConfidenceSum: contrib.ConfidenceSum,
 			}
 		}
 	}

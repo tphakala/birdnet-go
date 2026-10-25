@@ -450,7 +450,15 @@
         "completedTitle": "Migrace databáze dokončena",
         "completedMessage": "Migrace dokončena. Pro přepnutí na novou databázi restartujte BirdNET-Go.",
         "errorTitle": "Chyba migrace databáze",
-        "errorMessage": "Migrace pozastavena kvůli chybám. Zkontrolujte logy a zkuste pokračovat."
+        "errorMessage": "Migrace pozastavena kvůli chybám. Zkontrolujte logy a zkuste pokračovat.",
+        "legacyNotStartedTitle": "Je nutná aktualizace databáze",
+        "legacyNotStartedMessage": "Tato instalace stále používá starý formát databáze, který v budoucím vydání přestane fungovat. Spusťte migraci v části Systém > Databáze.",
+        "legacyInProgressTitle": "Probíhá migrace databáze",
+        "legacyInProgressMessage": "Probíhá migrace do nového formátu databáze. Nechte BirdNET-Go běžet, dokud neskončí; starý formát v budoucím vydání přestane fungovat.",
+        "legacyNeedsAttentionTitle": "Migrace databáze vyžaduje pozornost",
+        "legacyNeedsAttentionMessage": "Migrace do nového formátu databáze je pozastavena nebo selhala. Obnovte ji nebo zopakujte v části Systém > Databáze; starý formát v budoucím vydání přestane fungovat.",
+        "legacyRestartRequiredTitle": "Dokončete migraci databáze restartem",
+        "legacyRestartRequiredMessage": "Migrace byla dokončena. Restartujte BirdNET-Go, aby se přepnulo na novou databázi. Pokud se tato zpráva zobrazuje i po restartu, zkontrolujte v protokolu chyby databáze."
       },
       "cleanup": {
         "completeTitle": "Vyčištění staré databáze dokončeno",
@@ -794,6 +802,9 @@
       "loadFailedAction": "Zobrazit stav Modely AI",
       "failingTitle": "{count, plural, one {Model selhává při každé analýze} few {# modely selhávají při každé analýze} many {# modelů selhává při každé analýze} other {# modelů selhává při každé analýze}}",
       "failingMessage": "{count, plural, one {{models} je načten, ale každá analýza selhává, takže nic nedetekuje.} few {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.} many {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.} other {{models} jsou načteny, ale každá analýza selhává, takže nic nedetekují.}} Stránka Modely AI ukazuje backend a chybu."
+    },
+    "legacyDatabase": {
+      "action": "Otevřít nastavení databáze"
     },
     "banner": {
       "title": "Název",
@@ -4313,7 +4324,6 @@
     },
     "species": {
       "pageLabel": "Nastavení druhů",
-      "saveError": "Uložení konfigurace pro \"{species}\" selhalo. Zkuste to prosím znovu.",
       "configUpdated": "Konfigurace pro \"{species}\" byla aktualizována",
       "configAdded": "Konfigurace pro \"{species}\" byla přidána",
       "duplicateConfigError": "Druh \"{species}\" již má konfiguraci. Zvolte prosím jiný název.",

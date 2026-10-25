@@ -100,6 +100,15 @@ export function mergeSettingsPatchKeepingEdits(
  * are merged recursively; arrays are whole values. Unedited subtrees are cloned
  * from the snapshot, so their key order follows the server. Keys are visited in
  * the snapshot's order, then keys only the form has. Neither input is mutated.
+ *
+ * A path that both the form and the server changed keeps the form value, so the
+ * last save wins and the server change is overwritten without a warning. This is
+ * deliberate. persistFormData, which saveSettings calls, rebases on a fresh GET
+ * before every full-form send, so it holds for every such save and not only for
+ * the resend after a 412; If-Match covers only the time between that GET and the
+ * PUT. Reporting such overlaps (form differs
+ * from base, fresh differs from base, and form differs from fresh) would need a
+ * collector here and UI to show the list; neither exists.
  */
 export function rebaseSettingsKeepingEdits(
   form: PlainRecord | undefined,

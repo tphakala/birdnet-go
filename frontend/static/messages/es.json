@@ -450,7 +450,15 @@
         "completedTitle": "Migración de base de datos completada",
         "completedMessage": "Migración completada. Por favor, reinicie BirdNET-Go para cambiar a la nueva base de datos.",
         "errorTitle": "Error de migración de base de datos",
-        "errorMessage": "Migración pausada por errores. Revise los registros e intente reanudar."
+        "errorMessage": "Migración pausada por errores. Revise los registros e intente reanudar.",
+        "legacyNotStartedTitle": "Se requiere actualizar la base de datos",
+        "legacyNotStartedMessage": "Esta instalación todavía usa el formato antiguo de base de datos, que dejará de funcionar en una versión futura. Abra Sistema > Base de datos para ejecutar la migración.",
+        "legacyInProgressTitle": "Migración de la base de datos en curso",
+        "legacyInProgressMessage": "La migración al nuevo formato de base de datos se está ejecutando. Mantenga BirdNET-Go en funcionamiento hasta que termine; el formato antiguo dejará de funcionar en una versión futura.",
+        "legacyNeedsAttentionTitle": "La migración de la base de datos necesita atención",
+        "legacyNeedsAttentionMessage": "La migración al nuevo formato de base de datos está en pausa o ha fallado. Abra Sistema > Base de datos para reanudarla o reintentarla; el formato antiguo dejará de funcionar en una versión futura.",
+        "legacyRestartRequiredTitle": "Reinicie para terminar la migración de la base de datos",
+        "legacyRestartRequiredMessage": "La migración ha terminado. Reinicie BirdNET-Go para cambiar a la nueva base de datos. Si este mensaje sigue apareciendo tras reiniciar, revise el registro en busca de errores de la base de datos."
       },
       "cleanup": {
         "completeTitle": "Limpieza de base de datos antigua completada",
@@ -794,6 +802,9 @@
       "loadFailedAction": "Ver estado de Modelos de IA",
       "failingTitle": "{count, plural, one {Un modelo falla en cada análisis} other {# modelos fallan en cada análisis}}",
       "failingMessage": "{count, plural, one {{models} está cargado, pero cada análisis falla, así que no detecta nada.} other {{models} están cargados, pero cada análisis falla, así que no detectan nada.}} La página Modelos de IA muestra el backend y el error."
+    },
+    "legacyDatabase": {
+      "action": "Abrir configuración de la base de datos"
     },
     "banner": {
       "title": "Título",
@@ -4313,7 +4324,6 @@
     },
     "species": {
       "pageLabel": "Configuración de especies",
-      "saveError": "Error al guardar la configuración de \"{species}\". Por favor, inténtelo de nuevo.",
       "configUpdated": "Configuración de \"{species}\" actualizada",
       "configAdded": "Configuración de \"{species}\" añadida",
       "duplicateConfigError": "La especie \"{species}\" ya tiene una configuración. Por favor, elija otro nombre.",

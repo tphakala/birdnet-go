@@ -292,7 +292,7 @@ func (p *Processor) normalizeDetectionTimes(item *PendingDetection, settings *co
 
 // applyExtendedCapture applies extended capture logic to a pending detection.
 // It sets the ExtendedCapture flag, MaxDeadline, and calculates the scaled flush deadline.
-// This is called from processDetections after the pending detection is created/updated.
+// This is called from mergePendingHit after the pending detection is created or updated.
 // Must be called while pendingMutex is held.
 func (p *Processor) applyExtendedCapture(mapKey string, now time.Time, normalDetectionWindow time.Duration) {
 	settings := p.currentSettings()

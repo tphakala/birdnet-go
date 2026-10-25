@@ -450,7 +450,15 @@
         "completedTitle": "Databasemigrering fullført",
         "completedMessage": "Migrering fullført. Start BirdNET-Go på nytt for å bytte til den nye databasen.",
         "errorTitle": "Databasemigrasjonsfeil",
-        "errorMessage": "Migrering satt på pause på grunn av feil. Sjekk logger og prøv å fortsette."
+        "errorMessage": "Migrering satt på pause på grunn av feil. Sjekk logger og prøv å fortsette.",
+        "legacyNotStartedTitle": "Databaseoppgradering kreves",
+        "legacyNotStartedMessage": "Denne installasjonen bruker fortsatt det gamle databaseformatet, som slutter å fungere i en fremtidig versjon. Åpne System > Database for å kjøre migreringen.",
+        "legacyInProgressTitle": "Databasemigrering pågår",
+        "legacyInProgressMessage": "Migreringen til det nye databaseformatet kjører. La BirdNET-Go kjøre til den er ferdig; det gamle formatet slutter å fungere i en fremtidig versjon.",
+        "legacyNeedsAttentionTitle": "Databasemigreringen trenger oppmerksomhet",
+        "legacyNeedsAttentionMessage": "Migreringen til det nye databaseformatet er satt på pause eller har mislyktes. Åpne System > Database for å gjenoppta eller prøve på nytt; det gamle formatet slutter å fungere i en fremtidig versjon.",
+        "legacyRestartRequiredTitle": "Start på nytt for å fullføre databasemigreringen",
+        "legacyRestartRequiredMessage": "Migreringen er fullført. Start BirdNET-Go på nytt for å bytte til den nye databasen. Hvis denne meldingen blir stående etter omstart, sjekk loggen for databasefeil."
       },
       "cleanup": {
         "completeTitle": "Opprydding av eldre database fullført",
@@ -794,6 +802,9 @@
       "loadFailedAction": "Vis status for AI-modeller",
       "failingTitle": "{count, plural, one {En modell feiler i hver analyse} other {# modeller feiler i hver analyse}}",
       "failingMessage": "{count, plural, one {{models} er lastet inn, men hver analyse feiler, så den oppdager ingenting.} other {{models} er lastet inn, men hver analyse feiler, så de oppdager ingenting.}} Siden AI-modeller viser backend og feilen."
+    },
+    "legacyDatabase": {
+      "action": "Åpne databaseinnstillinger"
     },
     "banner": {
       "title": "Tittel",
@@ -4313,7 +4324,6 @@
     },
     "species": {
       "pageLabel": "Artsinnstillinger",
-      "saveError": "Lagring av konfigurasjon for «{species}» mislyktes. Prøv igjen.",
       "configUpdated": "Konfigurasjon for «{species}» oppdatert",
       "configAdded": "Konfigurasjon for «{species}» lagt til",
       "duplicateConfigError": "Art «{species}» har allerede en konfigurasjon. Velg et annet navn.",

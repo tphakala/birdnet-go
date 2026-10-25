@@ -2289,11 +2289,19 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 				Model:         detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
 				HitCount:      8,
 				MaxConfidence: 0.92,
+				MinConfidence: 0.55,
+				ConfidenceSum: 5.4,
+				FirstHitAt:    now,
+				LastHitAt:     now.Add(6 * time.Second),
 			},
 			"BirdNET_V3.0": {
 				Model:         detection.ModelInfo{Name: "BirdNET", Version: "3.0", Variant: "EUNA"},
 				HitCount:      5,
 				MaxConfidence: 0.87,
+				MinConfidence: 0.61,
+				ConfidenceSum: 3.7,
+				FirstHitAt:    now.Add(time.Second),
+				LastHitAt:     now.Add(5 * time.Second),
 			},
 			"Perch_V2": {
 				Model:         detection.ModelInfo{Name: "Perch", Version: "2", Variant: "default"},
@@ -2323,14 +2331,37 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 	require.Contains(t, byModel, "BirdNET_2.4_default")
 	assert.Equal(t, 8, byModel["BirdNET_2.4_default"].HitCount)
 	assert.InDelta(t, 0.92, byModel["BirdNET_2.4_default"].MaxConfidence, 1e-9)
+	v24 := byModel["BirdNET_2.4_default"]
+	require.NotNil(t, v24.MinConfidence)
+	require.NotNil(t, v24.ConfidenceSum)
+	require.NotNil(t, v24.FirstHitAt)
+	require.NotNil(t, v24.LastHitAt)
+	assert.InDelta(t, 0.55, *v24.MinConfidence, 1e-9)
+	assert.InDelta(t, 5.4, *v24.ConfidenceSum, 1e-9)
+	assert.Equal(t, now.UnixMilli(), *v24.FirstHitAt)
+	assert.Equal(t, now.Add(6*time.Second).UnixMilli(), *v24.LastHitAt)
 
 	require.Contains(t, byModel, "BirdNET_3.0_EUNA")
 	assert.Equal(t, 5, byModel["BirdNET_3.0_EUNA"].HitCount)
 	assert.InDelta(t, 0.87, byModel["BirdNET_3.0_EUNA"].MaxConfidence, 1e-9)
+	v30 := byModel["BirdNET_3.0_EUNA"]
+	require.NotNil(t, v30.MinConfidence)
+	require.NotNil(t, v30.ConfidenceSum)
+	require.NotNil(t, v30.FirstHitAt)
+	require.NotNil(t, v30.LastHitAt)
+	assert.InDelta(t, 0.61, *v30.MinConfidence, 1e-9)
+	assert.InDelta(t, 3.7, *v30.ConfidenceSum, 1e-9)
+	assert.Equal(t, now.Add(time.Second).UnixMilli(), *v30.FirstHitAt)
+	assert.Equal(t, now.Add(5*time.Second).UnixMilli(), *v30.LastHitAt)
 
 	require.Contains(t, byModel, "Perch_2_default")
 	assert.Equal(t, 3, byModel["Perch_2_default"].HitCount)
 	assert.InDelta(t, 0.84, byModel["Perch_2_default"].MaxConfidence, 1e-9)
+	perch := byModel["Perch_2_default"]
+	assert.Nil(t, perch.MinConfidence, "unknown stats are stored as NULL, not zero")
+	assert.Nil(t, perch.ConfidenceSum)
+	assert.Nil(t, perch.FirstHitAt)
+	assert.Nil(t, perch.LastHitAt)
 
 	// Also verify deduplication when two contribution entries resolve to the same AIModel row.
 	dupNote := &datastore.Note{
@@ -2344,11 +2375,19 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 				Model:         detection.ModelInfo{}, // resolves via WithDefaults() to BirdNET 2.4 default
 				HitCount:      2,
 				MaxConfidence: 0.81,
+				MinConfidence: 0.7,
+				ConfidenceSum: 1.5,
+				FirstHitAt:    now.Add(2 * time.Second),
+				LastHitAt:     now.Add(9 * time.Second),
 			},
 			"default_b": {
 				Model:         detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
 				HitCount:      4,
 				MaxConfidence: 0.93,
+				MinConfidence: 0.6,
+				ConfidenceSum: 3.1,
+				FirstHitAt:    now.Add(time.Second),
+				LastHitAt:     now.Add(4 * time.Second),
 			},
 		},
 	}
@@ -2362,6 +2401,53 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 	require.Len(t, dupContribs, 1, "colliding ModelIDs must be merged into a single row")
 	assert.Equal(t, 6, dupContribs[0].HitCount)
 	assert.InDelta(t, 0.93, dupContribs[0].MaxConfidence, 1e-9)
+	merged := dupContribs[0]
+	require.NotNil(t, merged.MinConfidence)
+	require.NotNil(t, merged.ConfidenceSum)
+	require.NotNil(t, merged.FirstHitAt)
+	require.NotNil(t, merged.LastHitAt)
+	assert.InDelta(t, 0.6, *merged.MinConfidence, 1e-9, "min of mins")
+	assert.InDelta(t, 4.6, *merged.ConfidenceSum, 1e-9, "sum of sums")
+	assert.Equal(t, now.Add(time.Second).UnixMilli(), *merged.FirstHitAt, "earliest first hit")
+	assert.Equal(t, now.Add(9*time.Second).UnixMilli(), *merged.LastHitAt, "latest last hit")
+
+	// When one side of a collision lacks stats, the merged row has none: a sum
+	// over only some of the hits would give a wrong mean.
+	partialNote := &datastore.Note{
+		ScientificName: "Spizella pusilla",
+		CommonName:     "field sparrow",
+		Date:           "2026-10-17",
+		Time:           "12:02:00",
+		Confidence:     0.9,
+		ModelContributions: map[string]detection.ResultModelContrib{
+			"with_stats": {
+				Model:         detection.ModelInfo{},
+				HitCount:      2,
+				MaxConfidence: 0.8,
+				MinConfidence: 0.7,
+				ConfidenceSum: 1.5,
+				FirstHitAt:    now,
+				LastHitAt:     now.Add(time.Second),
+			},
+			"without_stats": {
+				Model:         detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
+				HitCount:      1,
+				MaxConfidence: 0.9,
+			},
+		},
+	}
+	require.NoError(t, ds.Save(partialNote, nil))
+
+	var partialContribs []entities.DetectionModelContribution
+	require.NoError(t, ds.manager.DB().
+		Where("detection_id = ?", partialNote.ID).
+		Find(&partialContribs).Error)
+	require.Len(t, partialContribs, 1)
+	assert.Equal(t, 3, partialContribs[0].HitCount)
+	assert.Nil(t, partialContribs[0].MinConfidence)
+	assert.Nil(t, partialContribs[0].ConfidenceSum)
+	assert.Nil(t, partialContribs[0].FirstHitAt)
+	assert.Nil(t, partialContribs[0].LastHitAt)
 }
 
 // TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail verifies that model
@@ -2398,4 +2484,57 @@ func TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail(t *testing.T) 
 	require.NoError(t, ds.manager.DB().Model(&entities.Detection{}).
 		Where("id = ?", note.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count, "the detection row must survive a contribution failure")
+}
+
+// TestMergeContribution_Stats pins both orders of a merge, which the map-iteration
+// order of resolveModelContributions leaves random: stats survive only when both
+// sides have them, whichever side arrived first.
+func TestMergeContribution_Stats(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	withStats := detection.ResultModelContrib{
+		HitCount: 2, MaxConfidence: 0.8, MinConfidence: 0.7, ConfidenceSum: 1.5,
+		FirstHitAt: base, LastHitAt: base.Add(time.Second),
+	}
+	withoutStats := detection.ResultModelContrib{HitCount: 1, MaxConfidence: 0.9}
+
+	assertNoStats := func(t *testing.T, e *entities.DetectionModelContribution) {
+		t.Helper()
+		assert.Equal(t, 3, e.HitCount)
+		assert.InDelta(t, 0.9, e.MaxConfidence, 1e-9)
+		assert.Nil(t, e.FirstHitAt)
+		assert.Nil(t, e.LastHitAt)
+		assert.Nil(t, e.MinConfidence)
+		assert.Nil(t, e.ConfidenceSum)
+	}
+
+	t.Run("destination has stats, merged entry lacks them", func(t *testing.T) {
+		t.Parallel()
+		dst := contributionEntity(1, &withStats)
+		mergeContribution(dst, &withoutStats)
+		assertNoStats(t, dst)
+	})
+	t.Run("destination lacks stats, merged entry has them", func(t *testing.T) {
+		t.Parallel()
+		dst := contributionEntity(1, &withoutStats)
+		mergeContribution(dst, &withStats)
+		assertNoStats(t, dst)
+	})
+	t.Run("both have stats", func(t *testing.T) {
+		t.Parallel()
+		other := detection.ResultModelContrib{
+			HitCount: 1, MaxConfidence: 0.6, MinConfidence: 0.6, ConfidenceSum: 0.6,
+			FirstHitAt: base.Add(-time.Second), LastHitAt: base.Add(5 * time.Second),
+		}
+		dst := contributionEntity(1, &withStats)
+		mergeContribution(dst, &other)
+		require.NotNil(t, dst.FirstHitAt)
+		require.NotNil(t, dst.LastHitAt)
+		require.NotNil(t, dst.MinConfidence)
+		require.NotNil(t, dst.ConfidenceSum)
+		assert.Equal(t, base.Add(-time.Second).UnixMilli(), *dst.FirstHitAt)
+		assert.Equal(t, base.Add(5*time.Second).UnixMilli(), *dst.LastHitAt)
+		assert.InDelta(t, 0.6, *dst.MinConfidence, 1e-9)
+		assert.InDelta(t, 2.1, *dst.ConfidenceSum, 1e-9)
+	})
 }

@@ -100,8 +100,7 @@
         safeGet(TOAST_TYPE_CLASSES, type, TOAST_TYPE_CLASSES.info),
         className
       )}
-      role="alert"
-      aria-live={type === 'error' ? 'assertive' : 'polite'}
+      role={type === 'error' ? 'alert' : 'status'}
     >
       {#if showIcon}
         {@const IconComponent = safeGet(alertIcons, type, Info)}

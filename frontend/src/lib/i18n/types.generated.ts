@@ -389,6 +389,14 @@ export type TranslationKey =
   | 'notifications.content.migration.completedMessage'
   | 'notifications.content.migration.errorTitle'
   | 'notifications.content.migration.errorMessage'
+  | 'notifications.content.migration.legacyNotStartedTitle'
+  | 'notifications.content.migration.legacyNotStartedMessage'
+  | 'notifications.content.migration.legacyInProgressTitle'
+  | 'notifications.content.migration.legacyInProgressMessage'
+  | 'notifications.content.migration.legacyNeedsAttentionTitle'
+  | 'notifications.content.migration.legacyNeedsAttentionMessage'
+  | 'notifications.content.migration.legacyRestartRequiredTitle'
+  | 'notifications.content.migration.legacyRestartRequiredMessage'
   | 'notifications.content.cleanup.completeTitle'
   | 'notifications.content.cleanup.completeMessage' // params: space
   | 'notifications.content.cleanup.failedTitle'
@@ -631,6 +639,7 @@ export type TranslationKey =
   | 'dashboard.acousticModels.loadFailedAction'
   | 'dashboard.acousticModels.failingTitle' // params: count
   | 'dashboard.acousticModels.failingMessage' // params: count, models
+  | 'dashboard.legacyDatabase.action'
   | 'dashboard.banner.title'
   | 'dashboard.banner.titlePlaceholder'
   | 'dashboard.banner.description'
@@ -3192,7 +3201,6 @@ export type TranslationKey =
   | 'settings.security.validation.invalidEntry' // params: tab, field
   | 'settings.security.validation.pendingEntry' // params: tab, field
   | 'settings.species.pageLabel'
-  | 'settings.species.saveError' // params: species
   | 'settings.species.configUpdated' // params: species
   | 'settings.species.configAdded' // params: species
   | 'settings.species.duplicateConfigError' // params: species
@@ -4902,7 +4910,6 @@ export type TranslationParams = {
   };
   'settings.security.validation.invalidEntry': { tab: string | number; field: string | number };
   'settings.security.validation.pendingEntry': { tab: string | number; field: string | number };
-  'settings.species.saveError': { species: string | number };
   'settings.species.configUpdated': { species: string | number };
   'settings.species.configAdded': { species: string | number };
   'settings.species.duplicateConfigError': { species: string | number };

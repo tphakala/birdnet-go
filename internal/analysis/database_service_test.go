@@ -1,20 +1,29 @@
 package analysis
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
+	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	importsapi "github.com/tphakala/birdnet-go/internal/api/v2/imports"
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // Compile-time interface compliance check.
@@ -107,6 +116,112 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	// Fresh install goes to v2-only mode.
 	assert.True(t, svc.IsV2OnlyMode(), "should be in v2-only mode for fresh install")
 	assert.NotNil(t, svc.V2Manager(), "V2Manager() should be set for fresh install")
+	assert.Nil(t, svc.legacyMonitor, "no migration state monitor on a v2 install")
+}
+
+// Not parallel: Start publishes the migration state manager and worker to
+// package-level state in the imports API package, so the test resets it.
+func TestDatabaseService_Start_LegacyInstallRunsStateMonitor(t *testing.T) {
+	// Registered first so it runs after the Stop cleanup below.
+	t.Cleanup(func() { importsapi.SetMigrationDependencies(nil, nil) })
+
+	configuredPath := filepath.Join(t.TempDir(), "birdnet.db")
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = configuredPath
+
+	// Create a legacy database so startup does not take the fresh-install path.
+	legacy := datastore.New(settings)
+	require.NoError(t, legacy.Open())
+	require.NoError(t, legacy.Close())
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	svc := NewDatabaseService(settings, metrics)
+	require.NoError(t, svc.Start(t.Context()))
+	t.Cleanup(func() {
+		assert.NoError(t, svc.Stop(t.Context()), "Stop() should succeed")
+		assert.Nil(t, svc.legacyMonitor, "Stop releases the monitor")
+	})
+
+	require.False(t, svc.IsV2OnlyMode(), "an existing legacy database starts in legacy mode")
+	require.NotNil(t, svc.legacyMonitor, "legacy install with a state manager gets the monitor")
+	assert.True(t, svc.legacyMonitor.legacySchema, "the monitor of a legacy install raises the legacy schema notice")
+}
+
+// discardTransport is a sentry.Transport that drops every event; the test below
+// only reads tags off the hub scope.
+type discardTransport struct{}
+
+func (discardTransport) Configure(sentry.ClientOptions)        {}
+func (discardTransport) SendEvent(*sentry.Event)               {}
+func (discardTransport) Flush(time.Duration) bool              { return true }
+func (discardTransport) FlushWithContext(context.Context) bool { return true }
+func (discardTransport) Close()                                {}
+
+// TestDatabaseService_Start_LegacyInstallWithoutStateManager pins the startup
+// path of a legacy install whose migration setup fails: a directory at the v2
+// migration path makes the state manager setup fail, startup still succeeds
+// without a monitor, and the install gets the deprecation warning and the
+// migration_state=unavailable tag together.
+// Not parallel: Start publishes migration state to package-level state in the
+// imports API package, the test swaps the global logger and it binds a client
+// on the process-wide Sentry hub.
+func TestDatabaseService_Start_LegacyInstallWithoutStateManager(t *testing.T) {
+	// Registered first so it runs after the Stop cleanup below.
+	t.Cleanup(func() { importsapi.SetMigrationDependencies(nil, nil) })
+
+	configuredPath := filepath.Join(t.TempDir(), "birdnet.db")
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = configuredPath
+
+	// Create a legacy database so startup does not take the fresh-install path.
+	legacy := datastore.New(settings)
+	require.NoError(t, legacy.Open())
+	require.NoError(t, legacy.Close())
+
+	// A directory where the migration database file belongs makes the state
+	// manager setup fail while the legacy database stays usable.
+	require.NoError(t, os.MkdirAll(datastoreV2.V2MigrationPathFromConfigured(configuredPath), 0o750))
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelWarn)
+
+	// Telemetry reports only when a client is bound; test mode skips the opt-in
+	// and build age checks.
+	telemetry.EnableTestMode()
+	t.Cleanup(telemetry.DisableTestMode)
+	hub := sentry.CurrentHub()
+	original := hub.Client()
+	client, err := sentry.NewClient(sentry.ClientOptions{Transport: discardTransport{}})
+	require.NoError(t, err)
+	hub.BindClient(client)
+	t.Cleanup(func() { hub.BindClient(original) })
+	// The tag lands on the top scope; pop it afterwards so it does not leak.
+	hub.PushScope()
+	t.Cleanup(hub.PopScope)
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	svc := NewDatabaseService(settings, metrics)
+	require.NoError(t, svc.Start(t.Context()))
+	t.Cleanup(func() {
+		assert.NoError(t, svc.Stop(t.Context()), "Stop() should succeed")
+	})
+
+	require.False(t, svc.IsV2OnlyMode(), "an existing legacy database starts in legacy mode")
+	assert.Nil(t, svc.legacyMonitor, "no monitor without a readable migration state")
+
+	logged := buf.String()
+	assert.Contains(t, logged, legacySchemaWarnMessage)
+	assert.Contains(t, logged, "migration_state="+migrationTagUnavailable)
+	assert.Contains(t, logged, "notice_kind="+string(migration.LegacyNoticeNone))
+
+	event := hub.Scope().ApplyToEvent(&sentry.Event{}, nil, client)
+	require.NotNil(t, event)
+	assert.Equal(t, migrationTagUnavailable, event.Tags["migration_state"])
 }
 
 func TestBootParamsFromStartupSQLite(t *testing.T) {

@@ -450,7 +450,15 @@
         "completedTitle": "Migration de la base de données terminée",
         "completedMessage": "Migration terminée. Veuillez redémarrer BirdNET-Go pour basculer vers la nouvelle base de données.",
         "errorTitle": "Erreur de migration de la base de données",
-        "errorMessage": "Migration mise en pause suite à des erreurs. Vérifiez les journaux et réessayez."
+        "errorMessage": "Migration mise en pause suite à des erreurs. Vérifiez les journaux et réessayez.",
+        "legacyNotStartedTitle": "Mise à niveau de la base de données requise",
+        "legacyNotStartedMessage": "Cette installation utilise encore l'ancien format de base de données, qui cessera de fonctionner dans une prochaine version. Ouvrez Système > Base de données pour lancer la migration.",
+        "legacyInProgressTitle": "Migration de la base de données en cours",
+        "legacyInProgressMessage": "La migration vers le nouveau format de base de données est en cours. Laissez BirdNET-Go en marche jusqu'à la fin ; l'ancien format cessera de fonctionner dans une prochaine version.",
+        "legacyNeedsAttentionTitle": "La migration de la base de données demande votre attention",
+        "legacyNeedsAttentionMessage": "La migration vers le nouveau format de base de données est en pause ou a échoué. Ouvrez Système > Base de données pour la reprendre ou la relancer ; l'ancien format cessera de fonctionner dans une prochaine version.",
+        "legacyRestartRequiredTitle": "Redémarrez pour terminer la migration de la base de données",
+        "legacyRestartRequiredMessage": "La migration est terminée. Redémarrez BirdNET-Go pour basculer vers la nouvelle base de données. Si ce message persiste après le redémarrage, consultez le journal pour y trouver des erreurs de base de données."
       },
       "cleanup": {
         "completeTitle": "Nettoyage de l'ancienne base de données terminé",
@@ -794,6 +802,9 @@
       "loadFailedAction": "Voir l'état des Modèles IA",
       "failingTitle": "{count, plural, one {Un modèle échoue à chaque analyse} other {# modèles échouent à chaque analyse}}",
       "failingMessage": "{count, plural, one {{models} est chargé, mais chaque analyse échoue, il ne détecte donc rien.} other {{models} sont chargés, mais chaque analyse échoue, ils ne détectent donc rien.}} La page Modèles IA indique le backend et l'erreur."
+    },
+    "legacyDatabase": {
+      "action": "Ouvrir les paramètres de la base de données"
     },
     "banner": {
       "title": "Titre",
@@ -4313,7 +4324,6 @@
     },
     "species": {
       "pageLabel": "Paramètres des espèces",
-      "saveError": "Échec de l'enregistrement de la configuration pour \"{species}\". Veuillez réessayer.",
       "configUpdated": "Configuration de \"{species}\" mise à jour",
       "configAdded": "Configuration de \"{species}\" ajoutée",
       "duplicateConfigError": "L'espèce \"{species}\" a déjà une configuration. Veuillez choisir un autre nom.",

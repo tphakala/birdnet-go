@@ -12,8 +12,10 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // MigrationStatusResponse represents the migration status for the API.
@@ -44,6 +46,9 @@ type MigrationStatusResponse struct {
 	IsDualWriteActive  bool       `json:"is_dual_write_active"`
 	ShouldReadFromV2   bool       `json:"should_read_from_v2"`
 	IsV2OnlyMode       bool       `json:"is_v2_only_mode"`
+	// LegacyNotice is the legacy-schema notice kind (migration.LegacyNoticeKind)
+	// for the dashboard banner: "none" unless the process runs the legacy schema.
+	LegacyNotice string `json:"legacy_notice"`
 
 	// Cleanup state fields
 	CleanupState           string   `json:"cleanup_state"`            // idle, in_progress, completed, failed
@@ -161,12 +166,19 @@ func getIsV2OnlyMode() bool {
 	return isV2OnlyMode
 }
 
+// migrationNotConfiguredMessage is the 503 message for a request that needs
+// the migration state manager when the install has none.
+const migrationNotConfiguredMessage = "Migration is not configured"
+
+// errMigrationNotConfigured is the error behind migrationNotConfiguredMessage.
+var errMigrationNotConfigured = errors.NewStd("migration not configured")
+
 // requireMigrationStateManager is middleware that returns 503 if the migration state manager is not available.
 func (c *Handler) requireMigrationStateManager(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		if getStateManager() == nil {
-			return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-				"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
+			return c.HandleErrorWithKey(ctx, errMigrationNotConfigured,
+				migrationNotConfiguredMessage, http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
 		}
 		return next(ctx)
 	}
@@ -239,16 +251,23 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 				IsDualWriteActive:      false,
 				ShouldReadFromV2:       true,
 				IsV2OnlyMode:           true,
+				LegacyNotice:           string(migration.LegacyNoticeNone),
 				CleanupState:           cleanupState,
 				CleanupError:           cleanupErr,
 				CleanupTablesRemaining: cleanupRemaining,
 				CleanupSpaceReclaimed:  cleanupReclaimed,
 			})
 		}
-		c.LogWarnIfEnabled("Migration state manager not available",
+		// A legacy install without a state manager answers 503 on every request
+		// here, and the dashboard banner polls this endpoint on each page load.
+		// The condition is expected and was already reported once when migration
+		// setup failed at startup, so respond without the error log and the
+		// server error report that HandleErrorWithKey would add.
+		c.LogDebugIfEnabled("Migration state manager not available",
 			logger.String("path", path), logger.String("ip", ip))
-		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
+		resp := c.NewErrorResponse(errMigrationNotConfigured, migrationNotConfiguredMessage, http.StatusServiceUnavailable)
+		resp.ErrorKey = notification.MsgErrMigrationNotConfigured
+		return ctx.JSON(http.StatusServiceUnavailable, resp)
 	}
 
 	// Get migration state
@@ -349,6 +368,7 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 		IsDualWriteActive:      isDualWriteActive,
 		ShouldReadFromV2:       shouldReadFromV2,
 		IsV2OnlyMode:           v2Only,
+		LegacyNotice:           string(migration.LegacyNotice(!v2Only, state.State)),
 		CleanupState:           cleanupState,
 		CleanupError:           cleanupErr,
 		CleanupTablesRemaining: cleanupRemaining,
@@ -704,6 +724,7 @@ func (c *Handler) runPreflightChecks() error {
 
 // runCriticalPrerequisiteChecks runs all critical checks that must pass before migration.
 // This is used by both GetPrerequisites and runPreflightChecks to ensure consistency.
+// It also records the outcome in the migration_prereq telemetry tag.
 func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
 	checks := make([]PrerequisiteCheck, 0, 6)
 
@@ -729,6 +750,10 @@ func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
 
 	// Record count is also critical
 	checks = append(checks, c.checkRecordCount())
+
+	// Record the outcome for telemetry; this only runs when a user opens the
+	// prerequisites view or starts a migration.
+	telemetry.SetMigrationPrereqTag(prerequisiteTagValue(checks))
 
 	return checks
 }

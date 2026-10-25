@@ -450,7 +450,15 @@
         "completedTitle": "Databasemigratie voltooid",
         "completedMessage": "Migratie voltooid. Herstart BirdNET-Go om over te schakelen naar de nieuwe database.",
         "errorTitle": "Databasemigratiefout",
-        "errorMessage": "Migratie gepauzeerd vanwege fouten. Controleer de logs en probeer te hervatten."
+        "errorMessage": "Migratie gepauzeerd vanwege fouten. Controleer de logs en probeer te hervatten.",
+        "legacyNotStartedTitle": "Database-upgrade vereist",
+        "legacyNotStartedMessage": "Deze installatie gebruikt nog het oude databaseformaat, dat in een toekomstige versie niet meer zal werken. Open Systeem > Database om de migratie uit te voeren.",
+        "legacyInProgressTitle": "Databasemigratie bezig",
+        "legacyInProgressMessage": "De migratie naar het nieuwe databaseformaat wordt uitgevoerd. Laat BirdNET-Go draaien tot deze klaar is; het oude formaat zal in een toekomstige versie niet meer werken.",
+        "legacyNeedsAttentionTitle": "Databasemigratie heeft aandacht nodig",
+        "legacyNeedsAttentionMessage": "De migratie naar het nieuwe databaseformaat is gepauzeerd of mislukt. Open Systeem > Database om te hervatten of opnieuw te proberen; het oude formaat zal in een toekomstige versie niet meer werken.",
+        "legacyRestartRequiredTitle": "Herstart om de databasemigratie af te ronden",
+        "legacyRestartRequiredMessage": "De migratie is voltooid. Herstart BirdNET-Go om over te schakelen naar de nieuwe database. Als dit bericht na een herstart blijft staan, controleer dan het logboek op databasefouten."
       },
       "cleanup": {
         "completeTitle": "Opruiming oude database voltooid",
@@ -794,6 +802,9 @@
       "loadFailedAction": "Bekijk de status van AI-modellen",
       "failingTitle": "{count, plural, one {Een model faalt bij elke analyse} other {# modellen falen bij elke analyse}}",
       "failingMessage": "{count, plural, one {{models} is geladen, maar elke analyse mislukt, dus het detecteert niets.} other {{models} zijn geladen, maar elke analyse mislukt, dus ze detecteren niets.}} De pagina AI-modellen toont de backend en de fout."
+    },
+    "legacyDatabase": {
+      "action": "Database-instellingen openen"
     },
     "banner": {
       "title": "Titel",
@@ -4313,7 +4324,6 @@
     },
     "species": {
       "pageLabel": "Soortinstellingen",
-      "saveError": "Opslaan van configuratie voor \"{species}\" mislukt. Probeer het opnieuw.",
       "configUpdated": "Configuratie voor \"{species}\" bijgewerkt",
       "configAdded": "Configuratie voor \"{species}\" toegevoegd",
       "duplicateConfigError": "Soort \"{species}\" heeft al een configuratie. Kies een andere naam.",

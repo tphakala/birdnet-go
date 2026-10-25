@@ -18,7 +18,10 @@ type StreamManager interface {
 	StartStream(spec *StreamSpec) error
 	// StopStream stops capture for sourceID and forgets it.
 	StopStream(sourceID string) error
-	// StreamHealth returns a point-in-time snapshot for one stream.
+	// StreamHealth returns a point-in-time snapshot for one stream. A sourceID the
+	// manager does not track returns an error wrapping ErrSourceNotFound, which
+	// callers treat as an expected miss, so implementations must not report it to
+	// telemetry.
 	StreamHealth(sourceID string) (*StreamHealth, error)
 	// AllStreamHealth returns snapshots for every tracked stream, keyed by source ID.
 	AllStreamHealth() map[string]*StreamHealth

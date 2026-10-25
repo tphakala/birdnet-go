@@ -11,8 +11,10 @@ import (
 const DefaultRangeFilterThreshold float32 = 0.03
 
 // RangeFilter uses the BirdNET meta model to filter species by geographic location and date.
+// It is safe for concurrent use from multiple goroutines, and Close may run
+// concurrently with predictions.
 type RangeFilter struct {
-	session   *ort.DynamicAdvancedSession
+	session   guardedSession
 	labels    []string
 	threshold float32
 }
@@ -87,7 +89,7 @@ func NewRangeFilter(modelPath string, opts ...RangeFilterOption) (*RangeFilter, 
 	}
 
 	return &RangeFilter{
-		session:   session,
+		session:   guardedSession{s: session},
 		labels:    labels,
 		threshold: cfg.threshold,
 	}, nil
@@ -114,7 +116,7 @@ func (r *RangeFilter) PredictRaw(latitude, longitude, week float32) ([]float32, 
 // inputs is a flat slice of [lat, lon, week] triples: len(inputs) must equal batchSize * 3.
 // Returns a flat slice of [batchSize * numSpecies] scores in row-major order.
 func (r *RangeFilter) PredictBatchRaw(inputs []float32, batchSize int) ([]float32, error) {
-	if r.session == nil {
+	if r.session.isClosed() {
 		return nil, ErrSessionClosed
 	}
 	if batchSize <= 0 {
@@ -139,7 +141,7 @@ func (r *RangeFilter) PredictBatchRaw(inputs []float32, batchSize int) ([]float3
 	}
 	defer func() { _ = outputTensor.Destroy() }()
 
-	if err := r.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor}); err != nil {
+	if err := r.session.run([]ort.Value{inputTensor}, []ort.Value{outputTensor}); err != nil {
 		return nil, fmt.Errorf("birdnet: range filter batch inference failed: %w", err)
 	}
 
@@ -191,14 +193,11 @@ func (r *RangeFilter) FilterBatch(batches [][]Prediction, scores []LocationScore
 	return filterBatchPredictions(batches, scores, r.threshold, rerank)
 }
 
-// Close releases the ONNX session and associated resources.
+// Close releases the ONNX session. It waits for in-flight inference runs to
+// finish, is safe to call more than once and concurrently with Predict, and
+// every later Predict call returns ErrSessionClosed.
 func (r *RangeFilter) Close() error {
-	if r.session != nil {
-		err := r.session.Destroy()
-		r.session = nil
-		return err
-	}
-	return nil
+	return r.session.close()
 }
 
 // CalculateWeek returns the BirdNET 48-week year week number for a given month and day.

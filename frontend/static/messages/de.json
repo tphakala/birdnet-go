@@ -450,7 +450,15 @@
         "completedTitle": "Datenbankmigration abgeschlossen",
         "completedMessage": "Migration abgeschlossen. Bitte starten Sie BirdNET-Go neu, um zur neuen Datenbank zu wechseln.",
         "errorTitle": "Datenbankmigrationsfehler",
-        "errorMessage": "Migration wegen Fehlern pausiert. Überprüfen Sie die Protokolle und versuchen Sie es erneut."
+        "errorMessage": "Migration wegen Fehlern pausiert. Überprüfen Sie die Protokolle und versuchen Sie es erneut.",
+        "legacyNotStartedTitle": "Datenbank-Upgrade erforderlich",
+        "legacyNotStartedMessage": "Diese Installation verwendet noch das alte Datenbankformat, das in einer zukünftigen Version nicht mehr funktionieren wird. Öffnen Sie System > Datenbank, um die Migration auszuführen.",
+        "legacyInProgressTitle": "Datenbankmigration läuft",
+        "legacyInProgressMessage": "Die Migration auf das neue Datenbankformat läuft. Lassen Sie BirdNET-Go laufen, bis sie abgeschlossen ist; das alte Format wird in einer zukünftigen Version nicht mehr funktionieren.",
+        "legacyNeedsAttentionTitle": "Datenbankmigration erfordert Aufmerksamkeit",
+        "legacyNeedsAttentionMessage": "Die Migration auf das neue Datenbankformat ist pausiert oder fehlgeschlagen. Öffnen Sie System > Datenbank, um sie fortzusetzen oder zu wiederholen; das alte Format wird in einer zukünftigen Version nicht mehr funktionieren.",
+        "legacyRestartRequiredTitle": "Neustart zum Abschluss der Datenbankmigration",
+        "legacyRestartRequiredMessage": "Die Migration ist abgeschlossen. Starten Sie BirdNET-Go neu, um zur neuen Datenbank zu wechseln. Wenn diese Meldung nach einem Neustart bestehen bleibt, prüfen Sie das Protokoll auf Datenbankfehler."
       },
       "cleanup": {
         "completeTitle": "Bereinigung der alten Datenbank abgeschlossen",
@@ -794,6 +802,9 @@
       "loadFailedAction": "Status der KI-Modelle anzeigen",
       "failingTitle": "{count, plural, one {Ein Modell scheitert bei jeder Analyse} other {# Modelle scheitern bei jeder Analyse}}",
       "failingMessage": "{count, plural, one {{models} ist geladen, aber jede Analyse schlägt fehl, daher erkennt es nichts.} other {{models} sind geladen, aber jede Analyse schlägt fehl, daher erkennen sie nichts.}} Die Seite KI-Modelle zeigt das Backend und den Fehler."
+    },
+    "legacyDatabase": {
+      "action": "Datenbankeinstellungen öffnen"
     },
     "banner": {
       "title": "Titel",
@@ -4313,7 +4324,6 @@
     },
     "species": {
       "pageLabel": "Arteneinstellungen",
-      "saveError": "Konfiguration für \"{species}\" konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
       "configUpdated": "Konfiguration für \"{species}\" aktualisiert",
       "configAdded": "Konfiguration für \"{species}\" hinzugefügt",
       "duplicateConfigError": "Art \"{species}\" hat bereits eine Konfiguration. Bitte wählen Sie einen anderen Namen.",

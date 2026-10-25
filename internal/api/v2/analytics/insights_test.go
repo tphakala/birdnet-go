@@ -28,6 +28,11 @@ type mockInsightsRepo struct {
 	dashboardKPIs   *repository.DashboardKPIs
 	err             error
 
+	// modelContributionStats is returned by GetModelContributionStats; lastStart and lastEnd
+	// record the range the handler forwarded.
+	modelContributionStats *repository.ModelContributionStats
+	lastStart, lastEnd     int64
+
 	// lastTzOffsetSeconds records the most recent timezone offset forwarded by a handler, so
 	// tests can assert the handler actually threads analyticsTZOffset into the repository rather
 	// than passing 0 or a stale reference time.
@@ -52,6 +57,11 @@ func (m *mockInsightsRepo) GetNewArrivals(_ context.Context, _ int64, _ *uint) (
 
 func (m *mockInsightsRepo) GetGoneQuiet(_ context.Context, _ int64, _ int, _ *uint) ([]repository.GoneQuietSpecies, error) {
 	return m.goneQuiet, m.err
+}
+
+func (m *mockInsightsRepo) GetModelContributionStats(_ context.Context, start, end int64) (*repository.ModelContributionStats, error) {
+	m.lastStart, m.lastEnd = start, end
+	return m.modelContributionStats, m.err
 }
 
 func (m *mockInsightsRepo) GetDashboardKPIs(_ context.Context, _ int64, tzOffsetSeconds int, _ *uint) (*repository.DashboardKPIs, error) {
@@ -231,6 +241,11 @@ func TestInsightsEndpointContextErrors(t *testing.T) {
 			name:   "migration",
 			path:   "/api/v2/insights/migration",
 			invoke: func(c *Handler, ctx echo.Context) error { return c.getMigrationImpl(ctx) },
+		},
+		{
+			name:   "model contributions",
+			path:   "/api/v2/insights/model-contributions?start_date=2026-03-01",
+			invoke: func(c *Handler, ctx echo.Context) error { return c.getModelContributionStatsImpl(ctx) },
 		},
 		{
 			name:   "dashboard kpis",
@@ -480,6 +495,7 @@ func TestInsightsHandlersReturn409WithoutEnhancedDatabase(t *testing.T) {
 		{"phantom species", "/api/v2/insights/phantom-species", (*Handler).GetPhantomSpecies},
 		{"dawn chorus", "/api/v2/insights/dawn-chorus", (*Handler).GetDawnChorus},
 		{"migration", "/api/v2/insights/migration", (*Handler).GetMigration},
+		{"model contributions", "/api/v2/insights/model-contributions?start_date=2026-03-01", (*Handler).GetModelContributionStats},
 		{"dashboard kpis", "/api/v2/dashboard/kpis", (*Handler).GetDashboardKPIs},
 	}
 

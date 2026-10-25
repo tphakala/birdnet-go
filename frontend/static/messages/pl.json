@@ -450,7 +450,15 @@
         "completedTitle": "Migracja bazy danych zakończona",
         "completedMessage": "Migracja zakończona. Uruchom ponownie BirdNET-Go, aby przełączyć się na nową bazę danych.",
         "errorTitle": "Błąd migracji bazy danych",
-        "errorMessage": "Migracja wstrzymana z powodu błędów. Sprawdź logi i spróbuj wznowić."
+        "errorMessage": "Migracja wstrzymana z powodu błędów. Sprawdź logi i spróbuj wznowić.",
+        "legacyNotStartedTitle": "Wymagana aktualizacja bazy danych",
+        "legacyNotStartedMessage": "Ta instalacja nadal używa starego formatu bazy danych, który przestanie działać w przyszłym wydaniu. Otwórz System > Baza danych, aby uruchomić migrację.",
+        "legacyInProgressTitle": "Trwa migracja bazy danych",
+        "legacyInProgressMessage": "Trwa migracja do nowego formatu bazy danych. Pozostaw BirdNET-Go uruchomiony do jej zakończenia; stary format przestanie działać w przyszłym wydaniu.",
+        "legacyNeedsAttentionTitle": "Migracja bazy danych wymaga uwagi",
+        "legacyNeedsAttentionMessage": "Migracja do nowego formatu bazy danych została wstrzymana lub zakończyła się błędem. Otwórz System > Baza danych, aby ją wznowić lub spróbować ponownie; stary format przestanie działać w przyszłym wydaniu.",
+        "legacyRestartRequiredTitle": "Uruchom ponownie, aby zakończyć migrację bazy danych",
+        "legacyRestartRequiredMessage": "Migracja została zakończona. Uruchom ponownie BirdNET-Go, aby przełączyć się na nową bazę danych. Jeśli ten komunikat nie znika po ponownym uruchomieniu, sprawdź w dzienniku błędy bazy danych."
       },
       "cleanup": {
         "completeTitle": "Czyszczenie starej bazy danych zakończone",
@@ -794,6 +802,9 @@
       "loadFailedAction": "Wyświetl status modeli AI",
       "failingTitle": "{count, plural, one {Model zawodzi przy każdej analizie} few {# modele zawodzą przy każdej analizie} many {# modeli zawodzi przy każdej analizie} other {# modeli zawodzi przy każdej analizie}}",
       "failingMessage": "{count, plural, one {{models} jest załadowany, ale każda analiza kończy się błędem, więc niczego nie wykrywa.} few {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.} many {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.} other {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.}} Strona Modele AI pokazuje backend i błąd."
+    },
+    "legacyDatabase": {
+      "action": "Otwórz ustawienia bazy danych"
     },
     "banner": {
       "title": "Tytuł",
@@ -4313,7 +4324,6 @@
     },
     "species": {
       "pageLabel": "Ustawienia gatunków",
-      "saveError": "Nie udało się zapisać konfiguracji dla \"{species}\". Spróbuj ponownie.",
       "configUpdated": "Zaktualizowano konfigurację dla \"{species}\"",
       "configAdded": "Dodano konfigurację dla \"{species}\"",
       "duplicateConfigError": "Gatunek \"{species}\" ma już konfigurację. Wybierz inną nazwę.",
