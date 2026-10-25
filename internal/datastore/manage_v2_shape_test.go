@@ -204,12 +204,19 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 				VALUES (1, 0.5, 0.5, 24, ?, ?, ?, ?)`, now, now, now, now).Error
 		}))
 
-		err := performAutoMigration(db, false, "SQLite", "")
+		// Not parallel: logtest.Capture swaps the process-global logger.
+		var err error
+		out := logtest.Capture(t, func() {
+			err = performAutoMigration(db, false, "SQLite", "")
+		})
 
 		require.ErrorIs(t, err, errV2ShapedTablesHoldRows)
 		assert.True(t, inserted, "the row must have been written after the count pass")
-		assert.Contains(t, err.Error(), "dynamic_thresholds=1", "the refusal must name the table that gained rows")
-		assert.NotContains(t, err.Error(), "dynamic_thresholds=0", "the refusal must not repeat the stale count")
+		assert.Contains(t, err.Error(), "dynamic_thresholds=1, threshold_events=0",
+			"the refusal must list the remaining candidates with fresh counts")
+		assert.NotContains(t, err.Error(), "notification_histories=",
+			"the refusal must not list the table that was already dropped")
+		assert.Contains(t, out, "dropped_empty_tables=1", "the log must say how many empty tables were already dropped")
 		assert.True(t, columnExists(t, db, "dynamic_thresholds", "label_id"), "the table that gained rows must not be dropped")
 		assert.EqualValues(t, 1, countRows(t, db, "dynamic_thresholds"))
 
