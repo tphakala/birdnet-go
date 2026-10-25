@@ -118,8 +118,8 @@ var (
 	// ErrMixedSchemaDatabase indicates the MySQL/MariaDB database holds bare v2 tables
 	// beside a legacy notes table and no side can be kept without losing rows (both sides
 	// hold data, the kept side's startup would drop rows, a table could not be read, or an
-	// empty table could not be removed). Callers must refuse to start (errors.Is) so that
-	// no data is changed;
+	// empty table could not be removed). Callers must refuse to start (errors.Is), so that
+	// no table with rows is dropped;
 	// StartupState.Error carries the tables with rows.
 	ErrMixedSchemaDatabase = errors.NewStd("database holds both enhanced database (v2) tables and legacy tables")
 )
