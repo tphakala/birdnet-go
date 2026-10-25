@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Laajennetun tallennuksen asetukset muuttuneet. Uudelleenkäynnistys vaaditaan.",
         "equalizerUpdateFailed": "Äänen taajuuskorjaimen asetusten päivitys epäonnistui",
         "equalizerUpdated": "Äänen taajuuskorjaimen asetukset päivitetty",
+        "equalizerFiltersSkipped": "Äänen taajuuskorjaimen asetukset tallennettu, mutta joitakin suodattimia ohitetaan {count, plural, one {lähteellä} other {lähteillä}} {sources}: suodattimen on oltava kelvollinen lähteen näytteenottotaajuudella, ja sen taajuuden on oltava alle puolet siitä.",
         "savedSuccessfully": "Asetukset tallennettu onnistuneesti",
         "saveFailed": "Asetusten tallennus epäonnistui"
       },

@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Ajustes de captura extendida cambiados. Se requiere reinicio.",
         "equalizerUpdateFailed": "Error al actualizar los ajustes del ecualizador de audio",
         "equalizerUpdated": "Ajustes del ecualizador de audio actualizados",
+        "equalizerFiltersSkipped": "Ajustes del ecualizador de audio guardados, pero algunos filtros se omiten en {count, plural, one {la fuente} other {las fuentes}} {sources}: un filtro debe ser válido a la frecuencia de muestreo de la fuente, y su frecuencia debe estar por debajo de la mitad de esta.",
         "savedSuccessfully": "Ajustes guardados correctamente",
         "saveFailed": "Error al guardar los ajustes"
       },

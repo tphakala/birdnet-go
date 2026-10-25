@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Instellingen voor uitgebreide opname gewijzigd. Herstart vereist.",
         "equalizerUpdateFailed": "Bijwerken van audio-equalizerinstellingen mislukt",
         "equalizerUpdated": "Audio-equalizerinstellingen bijgewerkt",
+        "equalizerFiltersSkipped": "Audio-equalizerinstellingen opgeslagen, maar sommige filters worden overgeslagen bij {count, plural, one {de bron} other {de bronnen}} {sources}: een filter moet geldig zijn bij de samplefrequentie van de bron, en de frequentie ervan moet onder de helft daarvan liggen.",
         "savedSuccessfully": "Instellingen succesvol opgeslagen",
         "saveFailed": "Opslaan van instellingen mislukt"
       },

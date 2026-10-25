@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Udvidede optagelsesindstillinger ændret. Genstart påkrævet.",
         "equalizerUpdateFailed": "Kunne ikke opdatere lyd-equalizerindstillinger",
         "equalizerUpdated": "Lyd-equalizerindstillinger opdateret",
+        "equalizerFiltersSkipped": "Indstillinger for lyd-equalizeren er gemt, men nogle filtre springes over på {count, plural, one {kilde} other {kilder}} {sources}: et filter skal være gyldigt ved kildens samplingfrekvens, og dets frekvens skal ligge under halvdelen af den.",
         "savedSuccessfully": "Indstillinger gemt",
         "saveFailed": "Kunne ikke gemme indstillinger"
       },

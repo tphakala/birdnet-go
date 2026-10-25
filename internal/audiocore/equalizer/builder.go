@@ -159,30 +159,42 @@ func buildFilterChain(settings conf.EqualizerSettings, sampleRate int, onSkip fu
 	return chain
 }
 
+// resolveEQSettings picks the override when non-nil, else globalEQ, and logs
+// which one applies to sourceName.
+func resolveEQSettings(override *conf.EqualizerSettings, globalEQ conf.EqualizerSettings, sourceName string) conf.EqualizerSettings {
+	if override != nil {
+		eqLog.Debug("using per-source EQ override",
+			logger.String("source", sourceName),
+			logger.Bool("enabled", override.Enabled),
+			logger.Int("filter_count", len(override.Filters)))
+		return *override
+	}
+	eqLog.Debug("using global EQ for source",
+		logger.String("source", sourceName),
+		logger.Bool("enabled", globalEQ.Enabled),
+		logger.Int("filter_count", len(globalEQ.Filters)))
+	return globalEQ
+}
+
+// ResolveEQSettings returns the equalizer settings that apply to the source
+// with the given display name: its per-source or per-stream override
+// (Settings.ResolveEQOverride) when one exists, else the global equalizer.
+// Routes and the save-time skip report resolve through it, so both agree on
+// which filters a source runs.
+func ResolveEQSettings(settings *conf.Settings, sourceName string) conf.EqualizerSettings {
+	return resolveEQSettings(settings.ResolveEQOverride(sourceName), settings.Realtime.Audio.Equalizer, sourceName)
+}
+
 // BuildFilterChainWithOverride builds a library FilterChain from the given EQ
 // override settings, or from globalEQ if override is nil. This is the preferred
 // entry point for callers that have already resolved the per-source/per-stream
 // override via Settings.ResolveEQOverride.
 func BuildFilterChainWithOverride(override *conf.EqualizerSettings, globalEQ conf.EqualizerSettings, sourceName string, sampleRate int) *dspeq.FilterChain {
-	eqSettings := globalEQ
-	if override != nil {
-		eqSettings = *override
-		eqLog.Debug("using per-source EQ override",
-			logger.String("source", sourceName),
-			logger.Bool("enabled", eqSettings.Enabled),
-			logger.Int("filter_count", len(eqSettings.Filters)))
-	} else {
-		eqLog.Debug("using global EQ for source",
-			logger.String("source", sourceName),
-			logger.Bool("enabled", globalEQ.Enabled),
-			logger.Int("filter_count", len(globalEQ.Filters)))
-	}
-	return BuildFilterChain(eqSettings, sampleRate)
+	return BuildFilterChain(resolveEQSettings(override, globalEQ, sourceName), sampleRate)
 }
 
 // ResolveAndBuildFilterChain resolves the per-source EQ override for the given
 // source name and builds the corresponding filter chain.
 func ResolveAndBuildFilterChain(settings *conf.Settings, sourceName string, sampleRate int) *dspeq.FilterChain {
-	override := settings.ResolveEQOverride(sourceName)
-	return BuildFilterChainWithOverride(override, settings.Realtime.Audio.Equalizer, sourceName, sampleRate)
+	return BuildFilterChain(ResolveEQSettings(settings, sourceName), sampleRate)
 }

@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Paplašinātās ierakstīšanas iestatījumi mainīti. Nepieciešama restartēšana.",
         "equalizerUpdateFailed": "Neizdevās atjaunināt audio ekvalaizera iestatījumus",
         "equalizerUpdated": "Audio ekvalaizera iestatījumi atjaunināti",
+        "equalizerFiltersSkipped": "Audio ekvalaizera iestatījumi saglabāti, bet daži filtri tiek izlaisti {count, plural, zero {avotos} one {avotā} other {avotos}} {sources}: filtram jābūt derīgam pie avota diskretizācijas frekvences, un tā frekvencei jābūt zemākai par tās pusi.",
         "savedSuccessfully": "Iestatījumi veiksmīgi saglabāti",
         "saveFailed": "Neizdevās saglabāt iestatījumus"
       },

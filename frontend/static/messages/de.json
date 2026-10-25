@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Erweiterte Aufnahmeeinstellungen geändert. Neustart erforderlich.",
         "equalizerUpdateFailed": "Aktualisierung der Audio-Equalizer-Einstellungen fehlgeschlagen",
         "equalizerUpdated": "Audio-Equalizer-Einstellungen aktualisiert",
+        "equalizerFiltersSkipped": "Audio-Equalizer-Einstellungen gespeichert, aber einige Filter werden bei {count, plural, one {der Quelle} other {den Quellen}} {sources} übersprungen: Ein Filter muss bei der Abtastrate der Quelle gültig sein, und seine Frequenz muss unter deren Hälfte liegen.",
         "savedSuccessfully": "Einstellungen erfolgreich gespeichert",
         "saveFailed": "Einstellungen konnten nicht gespeichert werden"
       },

@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Nastavení rozšířeného nahrávání byla změněna. Je vyžadován restart.",
         "equalizerUpdateFailed": "Nepodařilo se aktualizovat nastavení audio ekvalizéru",
         "equalizerUpdated": "Nastavení audio ekvalizéru aktualizováno",
+        "equalizerFiltersSkipped": "Nastavení audio ekvalizéru uloženo, ale některé filtry se přeskakují na {count, plural, one {zdroji} few {zdrojích} many {zdrojích} other {zdrojích}} {sources}: filtr musí být platný při vzorkovací frekvenci zdroje a jeho frekvence musí být pod její polovinou.",
         "savedSuccessfully": "Nastavení úspěšně uloženo",
         "saveFailed": "Uložení nastavení selhalo"
       },

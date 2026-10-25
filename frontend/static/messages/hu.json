@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Kiterjesztett rögzítés beállítások megváltoztak. Újraindítás szükséges.",
         "equalizerUpdateFailed": "A hang EQ beállítások frissítése sikertelen",
         "equalizerUpdated": "Hang EQ beállítások frissítve",
+        "equalizerFiltersSkipped": "Hang EQ beállítások mentve, de néhány szűrő kimarad ezen a {count, plural, one {forráson} other {forrásokon}}: {sources}. A szűrőnek érvényesnek kell lennie a forrás mintavételi frekvenciáján, és a frekvenciájának annak fele alatt kell lennie.",
         "savedSuccessfully": "Beállítások sikeresen mentve",
         "saveFailed": "A beállítások mentése sikertelen"
       },

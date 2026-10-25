@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Paramètres de capture étendue modifiés. Redémarrage requis.",
         "equalizerUpdateFailed": "Échec de la mise à jour des paramètres de l'égaliseur audio",
         "equalizerUpdated": "Paramètres de l'égaliseur audio mis à jour",
+        "equalizerFiltersSkipped": "Paramètres de l'égaliseur audio enregistrés, mais certains filtres sont ignorés sur {count, plural, one {la source} other {les sources}} {sources} : un filtre doit être valide à la fréquence d'échantillonnage de la source, et sa fréquence doit être inférieure à la moitié de celle-ci.",
         "savedSuccessfully": "Paramètres enregistrés avec succès",
         "saveFailed": "Échec de l'enregistrement des paramètres"
       },

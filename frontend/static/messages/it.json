@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Impostazioni di cattura estesa modificate. Riavvio necessario.",
         "equalizerUpdateFailed": "Aggiornamento delle impostazioni dell'equalizzatore audio non riuscito",
         "equalizerUpdated": "Impostazioni dell'equalizzatore audio aggiornate",
+        "equalizerFiltersSkipped": "Impostazioni dell'equalizzatore audio salvate, ma alcuni filtri vengono ignorati per {count, plural, one {la sorgente} other {le sorgenti}} {sources}: un filtro deve essere valido alla frequenza di campionamento della sorgente, con la sua frequenza inferiore alla metà di essa.",
         "savedSuccessfully": "Impostazioni salvate con successo",
         "saveFailed": "Salvataggio delle impostazioni non riuscito"
       },
