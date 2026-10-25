@@ -31,6 +31,7 @@ func TestStartPrivacyRollup_OnlyInV2OnlyMode(t *testing.T) {
 	v2Only := newPrivacyRollupTestService(t, true)
 	v2Only.startPrivacyRollup()
 	require.NotNil(t, v2Only.privacyRollup)
+	assert.Same(t, v2Only.privacyRollup, v2Only.proc.PrivacyRollup(), "the processor records into the started writer")
 	t.Cleanup(func() { _ = v2Only.stopPrivacyRollup(t.Context()) })
 
 	noDB := &APIServerService{}

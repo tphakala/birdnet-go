@@ -16,9 +16,9 @@ const (
 	// privacyRollupEventBuffer is the capacity of the event channel. It fills only
 	// while a flush is stalled; further events are counted as dropped.
 	privacyRollupEventBuffer = 4096
-	// PrivacyRollupRetention is how long hourly rows are kept. If it ever becomes
+	// privacyRollupRetention is how long hourly rows are kept. If it ever becomes
 	// a setting it must be read in the prune branch of every tick, not at start.
-	PrivacyRollupRetention = 30 * 24 * time.Hour
+	privacyRollupRetention = 30 * 24 * time.Hour
 	// privacyRollupPruneInterval is the time between prunes.
 	privacyRollupPruneInterval = time.Hour
 	// privacyRollupWriteTimeout bounds one resolve, upsert or prune.
@@ -177,19 +177,16 @@ func (w *Writer) flush(ctx context.Context) {
 	taken := w.acc
 	w.acc = accumulator{}
 
-	ids := make(map[sourceKey]uint, len(taken.display))
-	failedSources := make(map[sourceKey]bool)
+	// ids holds the audio_sources id of each source; 0 marks one that could not
+	// be resolved, so it is tried once per flush.
+	ids := make(map[sourceKey]uint)
 	for key, d := range taken.rows {
-		id, ok := ids[key.source]
-		if !ok && !failedSources[key.source] {
-			id, ok = w.resolveSource(ctx, key.source, taken.display[key.source])
-			if ok {
-				ids[key.source] = id
-			} else {
-				failedSources[key.source] = true
-			}
+		id, seen := ids[key.source]
+		if !seen {
+			id = w.resolveSource(ctx, key.source, taken.display[key.source])
+			ids[key.source] = id
 		}
-		if !ok {
+		if id == 0 {
 			w.unresolved.Add(1)
 			continue
 		}
@@ -200,7 +197,9 @@ func (w *Writer) flush(ctx context.Context) {
 	w.reportLosses()
 }
 
-func (w *Writer) resolveSource(ctx context.Context, src sourceKey, display string) (uint, bool) {
+// resolveSource returns the audio_sources id of src, or 0 when it cannot be
+// resolved.
+func (w *Writer) resolveSource(ctx context.Context, src sourceKey, display string) uint {
 	rctx, cancel := context.WithTimeout(ctx, privacyRollupWriteTimeout)
 	defer cancel()
 	var name *string
@@ -208,10 +207,13 @@ func (w *Writer) resolveSource(ctx context.Context, src sourceKey, display strin
 		name = &display
 	}
 	id, err := w.resolve(rctx, src.uri, src.node, name)
-	return id, err == nil && id != 0
+	if err != nil {
+		return 0
+	}
+	return id
 }
 
-func (w *Writer) write(ctx context.Context, sourceID uint, key *rowKey, d *rowDelta) error {
+func (w *Writer) write(ctx context.Context, sourceID uint, key *rowKey, d *counters) error {
 	wctx, cancel := context.WithTimeout(ctx, privacyRollupWriteTimeout)
 	defer cancel()
 	return w.store.AddDelta(wctx, &entities.PrivacyFilterHourly{
@@ -250,7 +252,7 @@ func (w *Writer) maybePrune(ctx context.Context, now time.Time) {
 	}
 	pctx, cancel := context.WithTimeout(ctx, privacyRollupWriteTimeout)
 	defer cancel()
-	deleted, err := w.store.DeleteBefore(pctx, now.Add(-PrivacyRollupRetention).Unix())
+	deleted, err := w.store.DeleteBefore(pctx, now.Add(-privacyRollupRetention).Unix())
 	if err != nil {
 		w.log.Warn("privacy filter rollup prune failed",
 			logger.Error(err),

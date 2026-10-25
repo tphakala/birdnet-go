@@ -909,7 +909,7 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	if note.Source.SafeString != "" && ds.source != nil {
 		nodeName := note.SourceNode
 		if nodeName == "" {
-			nodeName = "default"
+			nodeName = entities.DefaultSourceNodeName
 		}
 		var displayName *string
 		if note.Source.DisplayName != "" {

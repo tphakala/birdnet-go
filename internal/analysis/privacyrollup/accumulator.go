@@ -21,15 +21,10 @@ type counters struct {
 	maxScore                                            float64
 }
 
-// rowDelta is the pending delta of one row.
-type rowDelta struct {
-	counters
-}
-
 // accumulator folds events into per-row deltas. It has no lock: the writer
 // goroutine owns it.
 type accumulator struct {
-	rows map[rowKey]*rowDelta
+	rows map[rowKey]*counters
 	// display is the latest display name seen per source in this accumulator.
 	display map[sourceKey]string
 }
@@ -39,7 +34,7 @@ type accumulator struct {
 //nolint:gocritic // hugeParam: events are small and rare, a copy is cheaper than an escaping pointer
 func (a *accumulator) add(ev Event) {
 	if a.rows == nil {
-		a.rows = make(map[rowKey]*rowDelta)
+		a.rows = make(map[rowKey]*counters)
 		a.display = make(map[sourceKey]string)
 	}
 	src := sourceKey{uri: ev.SourceURI, node: ev.NodeName}
@@ -52,7 +47,7 @@ func (a *accumulator) add(ev Event) {
 	}
 	d := a.rows[key]
 	if d == nil {
-		d = &rowDelta{}
+		d = &counters{}
 		a.rows[key] = d
 	}
 	switch ev.Kind {
@@ -77,7 +72,7 @@ func (a *accumulator) add(ev Event) {
 // bucket raises the maximum score and counts the event in its margin bucket.
 //
 //nolint:gocritic // hugeParam: events are small and rare, a copy is cheaper than an escaping pointer
-func (d *rowDelta) bucket(ev Event) {
+func (d *counters) bucket(ev Event) {
 	if ev.Score > d.maxScore {
 		d.maxScore = ev.Score
 	}

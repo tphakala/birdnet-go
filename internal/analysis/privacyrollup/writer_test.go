@@ -194,7 +194,7 @@ func TestWriter_PrunesOnFirstTickThenHourly(t *testing.T) {
 
 	w.tick(t.Context(), start)
 	require.Len(t, store.cutoffs, 1)
-	assert.Equal(t, start.Add(-PrivacyRollupRetention).Unix(), store.cutoffs[0], "cutoff is not truncated to the hour")
+	assert.Equal(t, start.Add(-privacyRollupRetention).Unix(), store.cutoffs[0], "cutoff is not truncated to the hour")
 
 	w.tick(t.Context(), start.Add(59*time.Minute))
 	assert.Len(t, store.cutoffs, 1)

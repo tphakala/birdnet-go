@@ -47,7 +47,7 @@ func TestMySQL_PrivacyFilterHourlyAdditiveUpsert(t *testing.T) {
 
 			table := "privacy_filter_hourlies"
 			if useV2Prefix {
-				table = "v2_" + table
+				table = V2TableName(table)
 			}
 			var rows []entities.PrivacyFilterHourly
 			require.NoError(t, db.Table(table).Order("id").Find(&rows).Error)

@@ -6,6 +6,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -13,12 +14,6 @@ const (
 	// reasonPrivacyFilter is the discard reason shouldDiscardDetection returns for
 	// a detection the privacy filter dropped.
 	reasonPrivacyFilter = "privacy filter"
-
-	// defaultRollupNodeName is the node name of an event when the node is unnamed.
-	// It must match the fallback of the detection save path
-	// (v2only/datastore.go, "if nodeName == \"default\""), so the rollup resolves
-	// the same audio_sources row as the detections of the source.
-	defaultRollupNodeName = "default"
 )
 
 // sourcedEvent is a rollup event whose source is still the registry id of the
@@ -35,9 +30,14 @@ func (p *Processor) SetPrivacyRollup(r privacyrollup.Recorder) {
 	p.privacyRollup = r
 }
 
-// RegisteredSource looks id up in the source registry, connection string first
+// PrivacyRollup returns the recorder set by SetPrivacyRollup, or nil.
+func (p *Processor) PrivacyRollup() privacyrollup.Recorder {
+	return p.privacyRollup
+}
+
+// registeredSource looks id up in the source registry, connection string first
 // and then ID. It returns false when no registry is set or id is unknown.
-func (p *Processor) RegisteredSource(id string) (*audiocore.AudioSource, bool) {
+func (p *Processor) registeredSource(id string) (*audiocore.AudioSource, bool) {
 	registry := p.Registry()
 	if registry == nil {
 		return nil, false
@@ -57,12 +57,12 @@ func (p *Processor) recordPrivacyEvents(settings *conf.Settings, events ...sourc
 	}
 	node := settings.Main.Name
 	if node == "" {
-		node = defaultRollupNodeName
+		node = entities.DefaultSourceNodeName
 	}
 	for i := range events {
 		ev := events[i].ev
 		ev.NodeName = node
-		if src, ok := p.RegisteredSource(events[i].source); ok {
+		if src, ok := p.registeredSource(events[i].source); ok {
 			ev.SourceURI = src.SafeString
 			ev.DisplayName = src.DisplayName
 		}

@@ -45,7 +45,7 @@ func TestAccumulator_EventKinds(t *testing.T) {
 			a.add(tt.ev)
 			require.Len(t, a.rows, 1)
 			for _, d := range a.rows {
-				assert.Equal(t, tt.want, d.counters)
+				assert.Equal(t, tt.want, *d)
 			}
 		})
 	}
@@ -81,7 +81,7 @@ func TestAccumulator_BucketsSumToHitsMinusConfirmedPlusHeld(t *testing.T) {
 	}
 	require.Len(t, a.rows, 1)
 	for _, d := range a.rows {
-		c := d.counters
+		c := *d
 		assert.Equal(t, c.hits-c.confirmed+c.held, c.lt50+c.lt100+c.lt200+c.ge200)
 		assert.Equal(t, int64(3), c.hits)
 		assert.Equal(t, int64(2), c.held)

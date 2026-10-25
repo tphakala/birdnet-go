@@ -1364,7 +1364,7 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 
 	// Try to get additional details from registry
 	// Use same lookup order as NewWithSpeciesInfo: connection string first, then ID
-	if existingSource, exists := p.RegisteredSource(source.ID); exists {
+	if existingSource, exists := p.registeredSource(source.ID); exists {
 		audioSource.ID = existingSource.ID
 		audioSource.SafeString = existingSource.SafeString
 		audioSource.DisplayName = existingSource.DisplayName

@@ -1,30 +1,18 @@
 package repository
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
-	gorm_logger "gorm.io/gorm/logger"
 )
 
 func setupPrivacyFilterHourlyTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "test.db")
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{
-		Logger: gorm_logger.Default.LogMode(gorm_logger.Silent),
-	})
-	require.NoError(t, err)
-
-	sqlDB, err := db.DB()
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, sqlDB.Close()) })
-
-	require.NoError(t, db.AutoMigrate(&entities.AudioSource{}, &entities.PrivacyFilterHourly{}))
+	db := setupAudioSourceTestDB(t)
+	require.NoError(t, db.AutoMigrate(&entities.PrivacyFilterHourly{}))
 	return db
 }
 

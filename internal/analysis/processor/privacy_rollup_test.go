@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -225,7 +226,7 @@ func TestPrivacyRollup_LabelDecisionEvents(t *testing.T) {
 		events := rec.take()
 		require.Len(t, events, 1)
 		assert.Empty(t, events[0].SourceURI)
-		assert.Equal(t, defaultRollupNodeName, events[0].NodeName)
+		assert.Equal(t, entities.DefaultSourceNodeName, events[0].NodeName)
 	})
 }
 
