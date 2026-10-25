@@ -4,6 +4,8 @@ The Database Doctor is a standalone diagnostic and repair tool for BirdNET-Go SQ
 
 **Requirements:** Python 3.9+ (no additional packages needed)
 
+The Database Doctor supports SQLite only. If you use MySQL or MariaDB, BirdNET-Go resolves a database that holds both enhanced and legacy tables by itself when one side is empty, and refuses to start only when it cannot do that safely; see [MySQL and MariaDB: enhanced and legacy tables in one database](#mysql-and-mariadb-enhanced-and-legacy-tables-in-one-database).
+
 ## When to Use
 
 Use the Database Doctor when:
@@ -238,3 +240,70 @@ The doctor output includes platform info, database fingerprint, migration state,
 - **Idempotent.** Running `--fix` multiple times produces the same result.
 - **No data deletion.** The doctor never deletes detection data. Schema repair preserves all rows.
 - **Lock detection.** The script refuses to run fixes if BirdNET-Go is still using the database.
+
+## MySQL and MariaDB: enhanced and legacy tables in one database
+
+A MySQL or MariaDB database can hold the enhanced database (v2) tables and the legacy tables at the same time, for example after a failed setup or a downgrade. BirdNET-Go resolves this by itself when one side holds no data:
+
+- If the legacy tables are empty and the enhanced database is a completed install, it keeps the enhanced database and removes the empty legacy tables.
+- If the legacy tables hold data and the enhanced detection tables are empty, it keeps the legacy database and removes only the empty enhanced detection tables. Every other enhanced table stays where it is.
+- If both sides are empty, it keeps the enhanced database and marks it as a completed install (when the install has no marker row yet, the first start writes it and the empty legacy tables are removed on the start after that).
+
+BirdNET-Go checks each table for rows again right before it drops it, never drops a table that has rows, and logs one warning that names what it found, kept, removed and left in place.
+
+It refuses to start, and drops no table with rows, only when keeping a side would lose data or the tables cannot be handled safely: both sides hold data, keeping a side would remove rows of a table both schemas use (`notification_histories`, `dynamic_thresholds`, `threshold_events` or `image_caches`), the enhanced side holds detections but is not a completed install, a table cannot be read, or an empty table cannot be removed because another session holds it or the database user lacks the privilege. The error lists the tables that have rows on each side, or the step that failed; in the last case fix the cause (a session that holds the tables, or a missing privilege) and restart. The Database Doctor script does not support MySQL, so the steps below are manual.
+
+Do not downgrade to an older release while the database is in this state: older releases drop the enhanced database tables at startup.
+
+### Step 1: Stop BirdNET-Go
+
+```bash
+docker stop birdnet-go
+# Or for a systemd install: sudo systemctl stop birdnet-go
+```
+
+### Step 2: Back up the database
+
+```bash
+mysqldump --single-transaction -h <host> -u <user> -p <database> > birdnet-backup.sql
+```
+
+Use `mariadb-dump` instead of `mysqldump` on MariaDB. Check that `birdnet-backup.sql` is not empty before you continue.
+
+### Step 3: Remove one side
+
+Choose the side to keep. Dropping a side loses the rows the error lists for it. Run the SQL in the `mysql` or `mariadb` client connected to your BirdNET-Go database.
+
+**3a: Keep the enhanced database.** Choose this when the legacy side lists no rows you need. First check that the enhanced database is a completed install (if the table does not exist, run the same query on `migration_state`):
+
+```sql
+SELECT state FROM migration_states;
+```
+
+If the result is not `completed`, do not use this step and ask for help as described in step 3c. Otherwise drop the legacy tables:
+
+```sql
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS note_locks, note_comments, note_reviews, results, notes;
+SET FOREIGN_KEY_CHECKS = 1;
+```
+
+**3b: Keep the legacy database.** Choose this when the enhanced side lists no rows you need. Drop the bare enhanced database tables:
+
+```sql
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS alert_actions, alert_conditions, alert_history, alert_histories, alert_rules,
+  detection_locks, detection_comments, detection_reviews, detection_model_contributions,
+  detection_predictions, detections, labels, privacy_filter_hourlies, audio_sources, ai_models,
+  taxonomic_classes, label_types, app_events, app_metadata, migration_dirty_ids, migration_state,
+  migration_states;
+SET FOREIGN_KEY_CHECKS = 1;
+```
+
+The enhanced database rows listed in the error are lost with these tables. On the next start the legacy store also recreates any of `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches` that still have the enhanced database shape, and their rows are lost.
+
+**3c: Both sides hold data you need, or the error says tables could not be read, or the enhanced side holds detections but is not a completed install.** Keep the backup and drop nothing. Ask on [GitHub Discussions](https://github.com/tphakala/birdnet-go/discussions) and include the log lines. The table names and row counts in them are safe to share.
+
+### Step 4: Start BirdNET-Go
+
+Start BirdNET-Go again. After step 3a BirdNET-Go starts in enhanced database mode. After step 3b BirdNET-Go starts in legacy mode.

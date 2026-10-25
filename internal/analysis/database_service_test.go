@@ -224,6 +224,38 @@ func TestDatabaseService_Start_LegacyInstallWithoutStateManager(t *testing.T) {
 	assert.Equal(t, migrationTagUnavailable, event.Tags["migration_state"])
 }
 
+// TestDatabaseService_Start_MixedSchemaRefuses pins the wiring of the mixed schema
+// refusal: Start must return the error before any datastore is constructed. Without
+// it the legacy default branch would open the database and create the SQLite file.
+// Not parallel: it swaps the global logger.
+func TestDatabaseService_Start_MixedSchemaRefuses(t *testing.T) {
+	configuredPath := filepath.Join(t.TempDir(), "birdnet.db")
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = configuredPath
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelError)
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	svc := NewDatabaseService(settings, metrics)
+	svc.checkStartupState = func(*conf.Settings) datastoreV2.StartupState {
+		return datastoreV2.StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			Decision:        datastoreV2.DecisionMixedSchemaRefused,
+			Error:           fmt.Errorf("%w: test", datastoreV2.ErrMixedSchemaDatabase),
+		}
+	}
+
+	err = svc.Start(t.Context())
+	require.ErrorIs(t, err, datastoreV2.ErrMixedSchemaDatabase)
+	assert.Nil(t, svc.DataStore(), "no datastore may be constructed for a refused database")
+	assert.False(t, svc.IsV2OnlyMode())
+	assert.NoFileExists(t, configuredPath, "the legacy fallback would have created the database file")
+	assert.Contains(t, buf.String(), mixedSchemaGuideURL, "the log must point the user to the guide")
+}
+
 func TestBootParamsFromStartupSQLite(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

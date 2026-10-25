@@ -54,6 +54,33 @@ func abortOnV2SchemaCorruption(log logger.Logger, err error, operation, modeLabe
 	return fmt.Errorf("v2 schema corrupted in %s mode, refusing silent fallback to legacy mode: %w", modeLabel, err)
 }
 
+// mixedSchemaGuideURL is the wiki section that explains how to resolve a MySQL or
+// MariaDB database holding both enhanced database (v2) and legacy tables. The anchor
+// follows the section heading in doc/wiki/database-doctor.md.
+const mixedSchemaGuideURL = "https://github.com/tphakala/birdnet-go/wiki/Database-Doctor#mysql-and-mariadb-enhanced-and-legacy-tables-in-one-database"
+
+// mixedSchemaRecoveryHint is the user-facing instruction emitted when startup refuses a
+// database that holds both schemas. db-doctor is named only to say it does not cover MySQL.
+// An error that names a failed step needs no manual change: fix its cause and restart.
+const mixedSchemaRecoveryHint = "if the error names a failed step, fix its cause and restart; otherwise stop BirdNET-Go, back up the database with mysqldump (mariadb-dump on MariaDB), then follow " +
+	mixedSchemaGuideURL + "; the db-doctor script supports SQLite only"
+
+// abortOnMixedSchema inspects the error of the startup state check. If it chains to
+// datastoreV2.ErrMixedSchemaDatabase it logs at Error level with the per-table row
+// counts and the recovery hint and returns a wrapped error the caller must propagate.
+// Startup stops before any datastore is constructed and drops no table with rows, so
+// the decision repeats on every boot until the user acts or the cause of a failed step goes away. Returns nil for
+// other errors and for nil input.
+func abortOnMixedSchema(log logger.Logger, err error) error {
+	if err == nil || !errors.Is(err, datastoreV2.ErrMixedSchemaDatabase) {
+		return nil
+	}
+	log.Error("database holds both enhanced database (v2) tables and legacy tables, refusing to start, no table with rows was dropped",
+		logger.Error(err),
+		logger.String("recovery_hint", mixedSchemaRecoveryHint))
+	return fmt.Errorf("refusing to start on a database with both enhanced and legacy tables: %w", err)
+}
+
 // DatabaseService manages the database lifecycle as an app.Service with TierCore shutdown.
 // It owns both the primary datastore (v1) and the optional v2 database manager.
 type DatabaseService struct {
@@ -62,6 +89,10 @@ type DatabaseService struct {
 	dataStore  datastore.Interface
 	v2Manager  datastoreV2.Manager
 	v2OnlyMode bool
+
+	// checkStartupState reads the database state at startup. It is a field so tests
+	// can inject a state; NewDatabaseService sets the real check.
+	checkStartupState func(*conf.Settings) datastoreV2.StartupState
 
 	// legacyMonitor keeps the migration_state telemetry tag, the legacy schema
 	// bell notice and the weekly push reminder current. It exists only while
@@ -73,8 +104,9 @@ type DatabaseService struct {
 // The service is not started; call Start() to initialize the databases.
 func NewDatabaseService(settings *conf.Settings, metrics *observability.Metrics) *DatabaseService {
 	return &DatabaseService{
-		settings: settings,
-		metrics:  metrics,
+		settings:          settings,
+		metrics:           metrics,
+		checkStartupState: datastoreV2.CheckMigrationStateBeforeStartup,
 	}
 }
 
@@ -106,6 +138,11 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 
 // Start initializes and opens the database connections.
 // It handles three startup paths: v2-only (post-migration), fresh install, and legacy mode.
+// When a MySQL or MariaDB database holds both enhanced database (v2) tables and legacy
+// tables, the startup state check keeps the side that holds data and drops only the
+// other side's empty tables. Start refuses, dropping no table with rows, only when no side can be
+// kept without losing rows, a table cannot be read or an empty table cannot be removed
+// (datastoreV2.ErrMixedSchemaDatabase).
 // Migration infrastructure is initialized when not in v2-only mode; on a legacy
 // install with a migration state manager it also starts the monitor that keeps
 // the migration_state telemetry tag, the legacy schema bell notice and the
@@ -155,7 +192,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 
 	// Check migration state before initializing database
 	// This allows us to skip the legacy database when migration is complete
-	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
+	startupState := d.checkStartupState(settings)
 	d.v2OnlyMode = startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
 	freshInstall := startupState.FreshInstall
 
@@ -200,6 +237,13 @@ func (d *DatabaseService) Start(_ context.Context) error {
 			sentry.LevelWarning,
 			"diagnostics",
 		)
+	}
+
+	// A database holding both schemas that cannot be reconciled without losing rows is never
+	// opened: neither the legacy fallback below nor the unmigrated-records override above
+	// may pick a side for the user.
+	if err := abortOnMixedSchema(datastoreLog, startupState.Error); err != nil {
+		return err
 	}
 
 	// Initialize database access based on startup state

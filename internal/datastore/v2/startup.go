@@ -87,6 +87,21 @@ const (
 	DecisionStaleSidecarFallback = "stale_sidecar_fallback"
 	// DecisionV2Corrupted: v2 sidecar exists but is unreadable/incomplete.
 	DecisionV2Corrupted = "v2_corrupted"
+	// DecisionMixedSchemaRefused: MySQL/MariaDB holds bare v2 tables beside a legacy
+	// notes table and no side can be kept without losing rows (both sides hold data, the
+	// chosen side's startup would drop rows, the enhanced side is not a completed install,
+	// a table could not be read, or an empty table could not be removed). Startup drops
+	// no table with rows and refuses.
+	DecisionMixedSchemaRefused = "mixed_schema_refused"
+	// DecisionMixedSchemaKeptV2: bare v2 tables beside empty legacy tables on a completed
+	// enhanced install. Startup kept the enhanced database and dropped the empty legacy tables.
+	DecisionMixedSchemaKeptV2 = "mixed_schema_kept_v2"
+	// DecisionMixedSchemaFreshV2: bare v2 tables beside empty legacy tables, both sides empty
+	// and the enhanced schema not yet marked completed. Startup kept the enhanced database.
+	DecisionMixedSchemaFreshV2 = "mixed_schema_fresh_v2"
+	// DecisionMixedSchemaKeptLegacy: legacy tables hold data and the bare v2 detection tables
+	// are empty. Startup kept the legacy database and dropped the empty bare v2 detection tables.
+	DecisionMixedSchemaKeptLegacy = "mixed_schema_kept_legacy"
 	// DecisionMigrationPrefix prefixes a migration-state decision, e.g. "migration_completed".
 	DecisionMigrationPrefix = "migration_"
 )
@@ -100,6 +115,14 @@ var (
 	// ErrV2SchemaCorrupted indicates the v2 database has contaminated or invalid schema.
 	// Callers can use errors.Is(err, ErrV2SchemaCorrupted) to trigger self-healing.
 	ErrV2SchemaCorrupted = errors.NewStd("v2 database schema corrupted")
+	// ErrMixedSchemaDatabase indicates the MySQL/MariaDB database holds bare v2 tables
+	// beside a legacy notes table and no side can be kept without losing rows (both sides
+	// hold data, the kept side's startup would drop rows, a table could not be read, or an
+	// empty table could not be removed). Callers must refuse to start (errors.Is), so that
+	// no table with rows is dropped;
+	// StartupState.Error carries the tables with rows, or the failed step when an empty
+	// table could not be removed.
+	ErrMixedSchemaDatabase = errors.NewStd("database holds both enhanced database (v2) tables and legacy tables")
 )
 
 // StartupState represents the result of checking migration state at startup.
@@ -504,19 +527,11 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 		}
 	}
 
-	// Fresh v2 exists WITH legacy = orphaned bare v2 tables from failed setup
-	// Clean up orphaned tables so migration infrastructure can start fresh
+	// Bare v2 tables beside a legacy notes table. Keep the side that holds data and drop
+	// only the empty tables of the other, each verified empty under a lock; refuse when
+	// no side can be kept without losing rows. See resolveMixedSchema.
 	if freshV2Exists && !v2MigrationExists && legacyExists {
-		cleanupOrphanedBareV2Tables(db, settings.Output.MySQL.Database)
-		// After cleanup, treat as legacy-only mode
-		return StartupState{
-			MigrationStatus: entities.MigrationStatusIdle,
-			V2Available:     false,
-			LegacyRequired:  true,
-			FreshInstall:    false,
-			Decision:        DecisionLegacyMode,
-			Error:           nil,
-		}
+		return resolveMixedSchema(db, settings.Output.MySQL.Database, mysqlHost, mysqlDB, mysqlUser)
 	}
 
 	// No v2 tables at all but legacy exists = legacy mode
@@ -1125,6 +1140,22 @@ func hasCompleteFreshV2Schema(db *gorm.DB) bool {
 // database masquerading as a completed v2 schema (GitHub #3924).
 var legacyDataTables = []string{"results", "notes"}
 
+// tableHasAnyRow reports whether the named table holds at least one row. It uses SELECT
+// EXISTS, not a full COUNT(*): a contaminated legacy table can hold hundreds of thousands
+// of unmigrated rows (GitHub #3924), and counting all of them on every startup would scan
+// the whole table and could approach the DB startup timeout. EXISTS short-circuits at the
+// first row and yields an explicit 0/1, so it does not depend on GORM populating
+// RowsAffected after Scan (which can vary by version/driver). The name is interpolated, so
+// callers must pass a name from a fixed list, never user input. Backtick quoting works on
+// both SQLite and MySQL (mirrors cleanupLegacySchemaContamination in this package).
+func tableHasAnyRow(db *gorm.DB, name string) (bool, error) {
+	var hasRow int
+	if err := db.Raw("SELECT EXISTS(SELECT 1 FROM `" + name + "`)").Scan(&hasRow).Error; err != nil {
+		return false, err
+	}
+	return hasRow != 0, nil
+}
+
 // legacyDataPresent reports whether any legacy data table exists AND still holds at least one row.
 // Table existence alone is not contamination: a genuine completed migration leaves empty legacy
 // tables behind. The bool is meaningful only when the returned error is nil; because this decision
@@ -1147,51 +1178,29 @@ func legacyDataPresent(db *gorm.DB) (bool, error) {
 		if _, ok := existing[name]; !ok {
 			continue
 		}
-		// Existence probe via SELECT EXISTS, not a full COUNT(*): a contaminated legacy table can
-		// hold hundreds of thousands of unmigrated rows (GitHub #3924), and counting all of them on
-		// every startup would scan the whole table and could approach the DB startup timeout. EXISTS
-		// short-circuits at the first row and yields an explicit 0/1, so it does not depend on GORM
-		// populating RowsAffected after Scan (which can vary by version/driver). The table name comes
-		// from the fixed legacyDataTables allowlist, so the interpolation is safe. Backtick quoting
-		// works on both SQLite and MySQL (mirrors cleanupLegacySchemaContamination in this package).
-		var hasRow int
-		if err := db.Raw("SELECT EXISTS(SELECT 1 FROM `" + name + "`)").Scan(&hasRow).Error; err != nil {
+		hasRow, err := tableHasAnyRow(db, name)
+		if err != nil {
 			return false, err
 		}
-		if hasRow != 0 {
+		if hasRow {
 			return true, nil
 		}
 	}
 	return false, nil
 }
 
-// cleanupOrphanedBareV2Tables removes bare v2 tables that were created by a broken nightly
-// alongside existing legacy tables. These orphaned tables prevent the migration infrastructure
-// from starting fresh. Only v2-specific tables are dropped; legacy tables with real user data
-// (dynamic_thresholds, threshold_events, notification_histories, image_caches, daily_events,
-// hourly_weathers) are preserved.
-func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
-	// Report discovery of orphaned tables to Sentry
-	sentry.WithScope(func(scope *sentry.Scope) {
-		scope.SetTag("component", "datastore-startup")
-		scope.SetTag("db_type", "mysql")
-		scope.SetTag("operation", "cleanupOrphanedBareV2Tables")
-		scope.SetFingerprint([]string{"datastore-startup", "mysql", "cleanupOrphanedBareV2Tables"})
-
-		telemetry.CaptureMessage(
-			"Orphaned bare v2 tables found alongside legacy data, cleaning up",
-			sentry.LevelWarning,
-			"datastore-startup",
-		)
-	})
-
-	// Bare v2-only tables that do NOT collide with legacy tables.
-	// Drop in reverse dependency order (children before parents).
-	// Both naming forms are listed: the OLD singular forms (migration_state,
-	// alert_history) left by pre-PR #2165 code with TableName() overrides, and the
-	// current GORM-pluralized forms (migration_states, alert_histories) that a more
-	// recent broken nightly would leave behind. FK checks are disabled below, so an
-	// entry that does not exist is a harmless no-op (DROP TABLE IF EXISTS).
+// orphanedBareV2Tables lists the bare v2 tables that do not share a name with a legacy
+// table. When bare v2 tables sit beside a legacy notes table, startup checks each of
+// them for rows to decide which side to keep. The order (children before parents) is
+// the manual drop order of the wiki guide (doc/wiki/database-doctor.md,
+// TestMixedSchemaGuideDropOrder); keep the guide, v2Entities (manager.go) and this list
+// in sync (TestMixedSchemaTableLists_MatchEntities).
+//
+// Both naming forms are listed: the OLD singular forms (migration_state, alert_history)
+// left by pre-PR #2165 code with TableName() overrides, and the current GORM-pluralized
+// forms (migration_states, alert_histories). A name that does not exist in the database
+// is skipped when probing.
+func orphanedBareV2Tables() []string {
 	orphanedTables := []string{
 		// Alert children first, then parent
 		"alert_actions",
@@ -1221,51 +1230,659 @@ func cleanupOrphanedBareV2Tables(db *gorm.DB, database string) {
 		"migration_state",
 		"migration_states",
 	}
+	return orphanedTables
+}
 
-	// Use db.Connection to pin all operations to a single pooled connection,
-	// ensuring SET FOREIGN_KEY_CHECKS applies to the same connection as the DROPs.
-	// FK checks must be disabled because preserved legacy tables (dynamic_thresholds,
-	// notification_histories, etc.) may have FK constraints pointing to orphaned tables.
-	if err := db.Connection(func(tx *gorm.DB) (retErr error) {
-		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
-			reportStartupError("mysql", "cleanupOrphanedTables_disableFK", err, database)
-			return err
-		}
-		// Re-enable FK checks via defer so the pooled connection is never returned
-		// with referential integrity disabled, even if a DROP panics. On a clean run,
-		// surface a re-enable failure as the closure error (skipping the success
-		// telemetry below), preserving the original inline behavior.
-		defer func() {
-			if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error; err != nil {
-				reportStartupError("mysql", "cleanupOrphanedTables_enableFK", err, database)
-				if retErr == nil {
-					retErr = err
-				}
-			}
-		}()
-		for _, table := range orphanedTables {
-			if err := tx.Exec(fmt.Sprintf("DROP TABLE IF EXISTS `%s`", table)).Error; err != nil {
-				reportStartupError("mysql", "cleanupOrphanedTable_"+table, err, database)
-			}
-		}
-		return nil
-	}); err != nil {
-		return
-	}
+// reportMixedSchemaRefused sends one opt-in Sentry warning when startup refuses a
+// MySQL/MariaDB database that holds bare v2 tables beside a legacy notes table.
+func reportMixedSchemaRefused() {
+	reportMixedSchemaOutcome("mixedSchemaRefused", "Bare v2 tables found alongside legacy tables, refusing to start")
+}
 
-	// Report successful cleanup
+// reportMixedSchemaReconciled sends one opt-in Sentry warning when startup keeps one side
+// of a MySQL/MariaDB database that holds bare v2 tables beside a legacy notes table.
+func reportMixedSchemaReconciled(decision string) {
+	reportMixedSchemaOutcome(decision, "Bare v2 tables found alongside legacy tables, kept one side and removed the empty tables of the other")
+}
+
+// reportMixedSchemaOutcome sends one Sentry message for the mixed schema startup check.
+// The fingerprint is the operation, so each outcome groups separately.
+func reportMixedSchemaOutcome(operation, message string) {
 	sentry.WithScope(func(scope *sentry.Scope) {
 		scope.SetTag("component", "datastore-startup")
 		scope.SetTag("db_type", "mysql")
-		scope.SetTag("operation", "cleanupOrphanedBareV2TablesComplete")
-		scope.SetFingerprint([]string{"datastore-startup", "mysql", "cleanupOrphanedBareV2TablesComplete"})
+		scope.SetTag("operation", operation)
+		scope.SetFingerprint([]string{"datastore-startup", "mysql", operation})
 
-		telemetry.CaptureMessage(
-			"Orphaned bare v2 tables cleanup completed successfully",
-			sentry.LevelInfo,
-			"datastore-startup",
-		)
+		telemetry.CaptureMessage(message, sentry.LevelWarning, "datastore-startup")
 	})
+}
+
+// mixedSchemaRowCountUnknown marks a table whose row count could not be read.
+const mixedSchemaRowCountUnknown int64 = -1
+
+// Names and limits the mixed schema check keys on.
+const (
+	mixedSchemaDetectionsTable = "detections"
+	mixedSchemaNotesTable      = "notes"
+	mixedSchemaImageCaches     = "image_caches"
+	mixedSchemaLabelIDColumn   = "label_id"
+	mixedSchemaNotNull         = "NO"
+	// mixedSchemaLockWaitSeconds bounds the wait for the table locks of a drop. A
+	// session that holds a write on one of the tables makes the drop fail, and the
+	// startup check refuses, which is the safe outcome.
+	mixedSchemaLockWaitSeconds = 3
+)
+
+// What a failed reconcile step was doing, for the refusal text.
+const (
+	stepDropLegacy     = "removing the empty legacy tables"
+	stepDropDetections = "removing the empty enhanced detection tables"
+	stepMarkCompleted  = "marking the empty enhanced database as completed"
+)
+
+// Fixed parts of the mixed schema error text and recovery hints.
+const (
+	mixedSchemaNone           = "none"
+	mixedSchemaUnknownCount   = "unknown"
+	hintBackupFirst           = "Back up the database before removing either side."
+	hintCountsUnknown         = "Some tables could not be read. " + hintBackupFirst
+	hintBothHoldData          = "Both sides hold data. Back up the database before removing either side; removing a side loses the rows listed for it."
+	hintV2NotCompleted        = "The enhanced database holds detections but is not marked as a completed install. " + hintBackupFirst
+	hintSharedTablesHoldData  = "The tables %s hold rows that the startup of the other side would remove. " + hintBackupFirst
+	hintDropFailed            = "No table with rows was dropped and the next start decides again from what the database holds. If it keeps failing with a lock or privilege error, check that the database user may lock, update and drop tables and that no other session is using them."
+	mixedSchemaDropFailedText = "database holds enhanced database (v2) tables beside a legacy notes table and BirdNET-Go could not remove the empty tables of one side: %s. %s"
+	mixedSchemaErrorFormat    = "database holds enhanced database (v2) tables beside a legacy notes table and BirdNET-Go cannot keep one side without losing data. v2 tables with rows: %s. Legacy tables with rows: %s. %s"
+)
+
+// bareDetectionTables are the bare v2 tables that hold or reference detections: the
+// detections table and the five tables with a foreign key to it, children first and
+// detections last. Dropping them (each verified empty) is how the keep-legacy reconcile
+// removes the state older releases and the prefix decision key on. Same order as the
+// manual drop in the wiki guide.
+var bareDetectionTables = []string{
+	"detection_locks", "detection_comments", "detection_reviews",
+	"detection_model_contributions", "detection_predictions", "detections",
+}
+
+// legacyDetectionTables are the legacy tables that keeping the bare v2 database drops:
+// notes and its foreign key children, in drop order (children before parents). The wiki
+// guide lists the same names. Counted only; this is not legacyDataTables, which
+// hasCompleteFreshV2Schema relies on with a different meaning.
+var legacyDetectionTables = []string{"note_locks", "note_comments", "note_reviews", "results", "notes"}
+
+// legacyRepairedSharedTables are the tables the legacy store drops, rows included, when
+// they have the v2 shape (repairV2ShapedLegacyTables drops those with a NOT NULL label_id,
+// validateAndFixSchema drops image_caches with any label_id). Mirror of
+// v2ShapedLegacyTables in internal/datastore/manage.go; keep in sync.
+var legacyRepairedSharedTables = []string{"notification_histories", "dynamic_thresholds", "threshold_events", mixedSchemaImageCaches}
+
+// v2DroppedThresholdTables are the tables the v2 Initialize drops, rows included, when
+// they still have a label_id column (dropStaleThresholdTables in manager.go).
+var v2DroppedThresholdTables = []string{"dynamic_thresholds", "threshold_events"}
+
+// mixedSchemaMarkerTables are the tables that can hold the bare v2 migration marker:
+// the current plural name and the singular one from releases before #2165.
+var mixedSchemaMarkerTables = []string{"migration_states", "migration_state"}
+
+// tableRowCount is what the probe learned about one table. hasRows is the EXISTS
+// result and decides every verdict; rows is only for the message and is
+// mixedSchemaRowCountUnknown when the COUNT failed.
+type tableRowCount struct {
+	table   string
+	rows    int64
+	hasRows bool
+}
+
+// sharedTableProbe is a table with a label_id column whose name the legacy and the v2
+// schema share, such as notification_histories.
+type sharedTableProbe struct {
+	tableRowCount
+	// labelNotNull is true when the label_id column is NOT NULL.
+	labelNotNull bool
+}
+
+// mixedSchemaProbe is everything the classifier needs, read with SELECTs only.
+type mixedSchemaProbe struct {
+	// v2Tables are the existing orphanedBareV2Tables.
+	v2Tables []tableRowCount
+	// legacyTables are the existing legacyDetectionTables.
+	legacyTables []tableRowCount
+	// sharedTables are the existing legacyRepairedSharedTables that have a label_id column.
+	sharedTables []sharedTableProbe
+	// markerTable is the existing bare migration marker table, empty when there is none.
+	markerTable string
+	// v2Completed is true when the marker row says completed.
+	v2Completed bool
+	// unknown is true when any input could not be read.
+	unknown bool
+}
+
+// mixedSchemaVerdict is the outcome of classifyMixedSchema. The zero value refuses.
+type mixedSchemaVerdict int
+
+const (
+	// verdictRefuseUnknown: an input could not be read.
+	verdictRefuseUnknown mixedSchemaVerdict = iota
+	// verdictKeepV2: legacy tables empty, enhanced install completed.
+	verdictKeepV2
+	// verdictFreshV2: both sides empty, enhanced schema not yet marked completed.
+	verdictFreshV2
+	// verdictKeepLegacy: legacy tables hold data, the bare detection tables are empty.
+	verdictKeepLegacy
+	// verdictRefuseV2NotCompleted: the enhanced side holds detections without a completed
+	// marker. Keeping it would start v2-only mode on the v2_ prefix (database_migration.go,
+	// CheckMySQLHasFreshV2Schema needs a completed marker), which hides these detections.
+	verdictRefuseV2NotCompleted
+	// verdictRefuseBothHoldData: both sides hold detections or legacy data.
+	verdictRefuseBothHoldData
+	// verdictRefuseSharedTables: keeping a side would let its startup drop rows of a shared table.
+	verdictRefuseSharedTables
+	// verdictRefuseDropFailed: an empty table could not be removed.
+	verdictRefuseDropFailed
+)
+
+// mixedSchemaError is the StartupState.Error of DecisionMixedSchemaRefused. It carries
+// the tables with rows on both sides and unwraps to ErrMixedSchemaDatabase.
+type mixedSchemaError struct {
+	verdict mixedSchemaVerdict
+	// v2Tables are the bare v2 tables and the v2-shaped shared tables, with their counts.
+	v2Tables []tableRowCount
+	// legacyTables are the existing legacy detection tables with their counts.
+	legacyTables []tableRowCount
+	// blocking are the shared tables with rows that the startup of the other side would drop.
+	blocking []string
+	// failure says which reconcile step failed, for verdictRefuseDropFailed.
+	failure string
+}
+
+// newMixedSchemaError builds the refusal error for a verdict from the probe.
+func newMixedSchemaError(p *mixedSchemaProbe, verdict mixedSchemaVerdict) *mixedSchemaError {
+	e := &mixedSchemaError{verdict: verdict, v2Tables: slices.Clone(p.v2Tables), legacyTables: p.legacyTables}
+	for _, s := range p.sharedTables {
+		e.v2Tables = append(e.v2Tables, s.tableRowCount)
+		if s.hasRows && (legacyDropsRows(s) || v2DropsRows(s)) {
+			e.blocking = append(e.blocking, s.table)
+		}
+	}
+	return e
+}
+
+// Error returns the deterministic message: tables in list order, only tables with rows
+// or an unknown count, and none for a side with nothing to print. For a failed drop it
+// names the failed step instead, because no table list explains that refusal.
+func (e *mixedSchemaError) Error() string {
+	if e.verdict == verdictRefuseDropFailed {
+		return fmt.Sprintf(mixedSchemaDropFailedText, e.failure, hintDropFailed)
+	}
+	return fmt.Sprintf(mixedSchemaErrorFormat,
+		formatTableRowCounts(e.v2Tables), formatTableRowCounts(e.legacyTables), mixedSchemaHint(e))
+}
+
+// Unwrap lets errors.Is match ErrMixedSchemaDatabase.
+func (e *mixedSchemaError) Unwrap() error { return ErrMixedSchemaDatabase }
+
+// formatTableRowCounts lists the tables with rows or an unknown count as name=count.
+func formatTableRowCounts(counts []tableRowCount) string {
+	parts := make([]string, 0, len(counts))
+	for _, c := range counts {
+		switch {
+		case c.rows == mixedSchemaRowCountUnknown:
+			parts = append(parts, c.table+"="+mixedSchemaUnknownCount)
+		case c.rows > 0:
+			parts = append(parts, fmt.Sprintf("%s=%d", c.table, c.rows))
+		}
+	}
+	if len(parts) == 0 {
+		return mixedSchemaNone
+	}
+	return strings.Join(parts, ", ")
+}
+
+// mixedSchemaHint returns the last sentence of the message: what the user may do by hand.
+func mixedSchemaHint(e *mixedSchemaError) string {
+	switch e.verdict {
+	case verdictRefuseV2NotCompleted:
+		return hintV2NotCompleted
+	case verdictRefuseBothHoldData:
+		return hintBothHoldData
+	case verdictRefuseSharedTables:
+		return fmt.Sprintf(hintSharedTablesHoldData, strings.Join(e.blocking, ", "))
+	case verdictRefuseDropFailed:
+		return hintDropFailed
+	default:
+		return hintCountsUnknown
+	}
+}
+
+// legacyDropsRows reports whether the legacy store would drop the rows of s on its next
+// start: a NOT NULL label_id (repairV2ShapedLegacyTables), or any label_id on image_caches
+// (validateAndFixSchema).
+func legacyDropsRows(s sharedTableProbe) bool {
+	return slices.Contains(legacyRepairedSharedTables, s.table) && (s.labelNotNull || s.table == mixedSchemaImageCaches)
+}
+
+// v2DropsRows reports whether the v2 Initialize would drop the rows of s on its next
+// start: a threshold table that still has a label_id column.
+func v2DropsRows(s sharedTableProbe) bool {
+	return slices.Contains(v2DroppedThresholdTables, s.table)
+}
+
+// detectionFamilyHasRows reports whether any bare detection table holds rows.
+func detectionFamilyHasRows(p *mixedSchemaProbe) bool {
+	return slices.ContainsFunc(p.v2Tables, func(c tableRowCount) bool {
+		return c.hasRows && slices.Contains(bareDetectionTables, c.table)
+	})
+}
+
+// anyRows reports whether any entry holds rows.
+func anyRows(tables []tableRowCount) bool {
+	return slices.ContainsFunc(tables, func(c tableRowCount) bool { return c.hasRows })
+}
+
+// classifyMixedSchema decides what to do with bare v2 tables beside a legacy notes
+// table. It is pure: the verdict depends only on which tables hold rows, never on how
+// many, and on nothing unreadable. First match wins.
+//
+//   - unknown input: refuse.
+//   - legacy tables empty: keep the enhanced database. A completed install is kept; an
+//     uncompleted one is kept only when it holds no detections. Refuse if the v2
+//     startup would drop rows of a threshold table.
+//   - legacy tables hold data: keep the legacy database when the bare detection
+//     tables are empty and the legacy startup would drop no shared table rows.
+func classifyMixedSchema(p *mixedSchemaProbe) mixedSchemaVerdict {
+	if p.unknown {
+		return verdictRefuseUnknown
+	}
+	if !anyRows(p.legacyTables) {
+		if slices.ContainsFunc(p.sharedTables, func(s sharedTableProbe) bool { return s.hasRows && v2DropsRows(s) }) {
+			return verdictRefuseSharedTables
+		}
+		if p.v2Completed {
+			return verdictKeepV2
+		}
+		if detectionFamilyHasRows(p) {
+			return verdictRefuseV2NotCompleted
+		}
+		return verdictFreshV2
+	}
+	if detectionFamilyHasRows(p) {
+		return verdictRefuseBothHoldData
+	}
+	if slices.ContainsFunc(p.sharedTables, func(s sharedTableProbe) bool { return s.hasRows && legacyDropsRows(s) }) {
+		return verdictRefuseSharedTables
+	}
+	return verdictKeepLegacy
+}
+
+// probeTableRows reads whether a table holds rows and, only when it does, how many. The
+// bool is false when the EXISTS probe failed; the entry then reports rows as unknown
+// so the table counts as non-empty. A COUNT failure never changes the verdict: an exact
+// COUNT of a large table can pass the startup read timeout, and the count is only
+// printed. The name comes from a fixed list (see tableHasAnyRow).
+func probeTableRows(db *gorm.DB, name string) (tableRowCount, bool) {
+	hasRow, err := tableHasAnyRow(db, name)
+	if err != nil {
+		return tableRowCount{table: name, rows: mixedSchemaRowCountUnknown, hasRows: true}, false
+	}
+	if !hasRow {
+		return tableRowCount{table: name}, true
+	}
+	var rows int64
+	if err := db.Raw("SELECT COUNT(*) FROM `" + name + "`").Scan(&rows).Error; err != nil {
+		rows = mixedSchemaRowCountUnknown
+	}
+	return tableRowCount{table: name, rows: rows, hasRows: true}, true
+}
+
+// probeTables reads the existing tables of a fixed list, in list order, and marks the
+// probe unknown when one of them cannot be read.
+func (p *mixedSchemaProbe) probeTables(db *gorm.DB, existing map[string]struct{}, tables []string) []tableRowCount {
+	probed := make([]tableRowCount, 0, len(tables))
+	for _, name := range tables {
+		if _, ok := existing[name]; !ok {
+			continue
+		}
+		entry, ok := probeTableRows(db, name)
+		if !ok {
+			p.unknown = true
+		}
+		probed = append(probed, entry)
+	}
+	return probed
+}
+
+// listTableNames lists the tables of a database straight from information_schema as a set
+// of lower-cased names. With baseTablesOnly, views are left out. It returns the error of
+// the listing, so callers can fail closed.
+func listTableNames(db *gorm.DB, database string, baseTablesOnly bool) (map[string]struct{}, error) {
+	query := "SELECT table_name FROM information_schema.tables WHERE table_schema = ?"
+	if baseTablesOnly {
+		query += " AND table_type = 'BASE TABLE'"
+	}
+	var names []string
+	if err := db.Raw(query, database).Scan(&names).Error; err != nil {
+		return nil, err
+	}
+	set := make(map[string]struct{}, len(names))
+	for _, name := range names {
+		set[strings.ToLower(name)] = struct{}{}
+	}
+	return set, nil
+}
+
+// probeMixedSchema reads both sides of a mixed schema database with SELECTs only. It
+// lists the tables straight from information_schema (GORM's Migrator().GetTables()
+// swallows the errors of its CurrentDatabase query on MySQL) and fails closed: when the
+// listing fails or lacks detections or notes (which existed moments ago), or any
+// existence probe fails, the result is marked unknown. It never returns an error.
+func probeMixedSchema(db *gorm.DB, database string) *mixedSchemaProbe {
+	p := &mixedSchemaProbe{}
+
+	existing, listErr := listTableNames(db, database, false)
+	_, hasDetections := existing[mixedSchemaDetectionsTable]
+	_, hasNotes := existing[mixedSchemaNotesTable]
+	if listErr != nil || !hasDetections || !hasNotes {
+		p.unknown = true
+		p.v2Tables = []tableRowCount{{table: mixedSchemaDetectionsTable, rows: mixedSchemaRowCountUnknown, hasRows: true}}
+		p.legacyTables = []tableRowCount{{table: mixedSchemaNotesTable, rows: mixedSchemaRowCountUnknown, hasRows: true}}
+		return p
+	}
+
+	p.v2Tables = p.probeTables(db, existing, orphanedBareV2Tables())
+	p.legacyTables = p.probeTables(db, existing, legacyDetectionTables)
+	p.probeSharedTables(db, database)
+	p.probeMarker(db, existing)
+	return p
+}
+
+// probeSharedTables finds the shared tables that have a label_id column (the v2 shape)
+// and whether they hold rows.
+func (p *mixedSchemaProbe) probeSharedTables(db *gorm.DB, database string) {
+	var columns []struct {
+		Name     string
+		Nullable string
+	}
+	err := db.Raw("SELECT table_name AS name, is_nullable AS nullable FROM information_schema.columns "+
+		"WHERE table_schema = ? AND column_name = ? AND table_name IN ?",
+		database, mixedSchemaLabelIDColumn, legacyRepairedSharedTables).Scan(&columns).Error
+	if err != nil {
+		p.unknown = true
+		return
+	}
+	for _, col := range columns {
+		name := strings.ToLower(col.Name)
+		entry, ok := probeTableRows(db, name)
+		if !ok {
+			p.unknown = true
+		}
+		p.sharedTables = append(p.sharedTables, sharedTableProbe{
+			tableRowCount: entry,
+			labelNotNull:  strings.EqualFold(col.Nullable, mixedSchemaNotNull),
+		})
+	}
+}
+
+// probeMarker reads the bare migration marker. A missing marker table or row is a
+// known "not completed". A query error, or a state other than idle or completed (the
+// bare schema never holds one), is unknown.
+func (p *mixedSchemaProbe) probeMarker(db *gorm.DB, existing map[string]struct{}) {
+	for _, name := range mixedSchemaMarkerTables {
+		if _, ok := existing[name]; !ok {
+			continue
+		}
+		p.markerTable = name
+		var states []string
+		if err := db.Raw("SELECT state FROM `" + name + "` LIMIT 1").Scan(&states).Error; err != nil {
+			p.unknown = true
+			return
+		}
+		if len(states) == 0 {
+			return
+		}
+		switch entities.MigrationStatus(states[0]) {
+		case entities.MigrationStatusCompleted:
+			p.v2Completed = true
+		case entities.MigrationStatusIdle:
+		default:
+			p.unknown = true
+		}
+		return
+	}
+}
+
+// errMixedSchemaTableNotEmpty is returned by dropVerifiedEmptyTables when a table it
+// was asked to drop holds a row; nothing is dropped in that call.
+var errMixedSchemaTableNotEmpty = errors.NewStd("table holds rows")
+
+// dropVerifiedEmptyTables drops the listed tables, and only if every one of them that
+// exists is empty at the moment of the drop. On one pinned connection it turns foreign
+// key checks off (before LOCK TABLES, so a DROP cannot fail on a foreign key while the
+// tables are locked), takes a WRITE lock on every table present, checks each for
+// a row, and drops them in list order. The lock keeps every other session's insert out
+// from the check until after the drop. A row or any error aborts before the first DROP
+// of this call. It returns the tables it dropped. Table names come from the fixed lists
+// above, so the interpolation is safe.
+func dropVerifiedEmptyTables(db *gorm.DB, database string, tables []string) ([]string, error) {
+	var dropped []string
+	err := db.Connection(func(tx *gorm.DB) (retErr error) {
+		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
+			return fmt.Errorf("disable foreign key checks: %w", err)
+		}
+		// Restore the session through defers so the pooled connection is never
+		// returned with checks off or locks held, even when a DROP fails.
+		defer func() {
+			if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error; err != nil && retErr == nil {
+				retErr = fmt.Errorf("restore foreign key checks: %w", err)
+			}
+		}()
+		var previousWait int
+		if err := tx.Raw("SELECT @@SESSION.lock_wait_timeout").Scan(&previousWait).Error; err != nil {
+			return fmt.Errorf("read lock wait timeout: %w", err)
+		}
+		if err := tx.Exec(fmt.Sprintf("SET SESSION lock_wait_timeout = %d", mixedSchemaLockWaitSeconds)).Error; err != nil {
+			return fmt.Errorf("set lock wait timeout: %w", err)
+		}
+		defer func() {
+			if err := tx.Exec(fmt.Sprintf("SET SESSION lock_wait_timeout = %d", previousWait)).Error; err != nil && retErr == nil {
+				retErr = fmt.Errorf("restore lock wait timeout: %w", err)
+			}
+		}()
+
+		existing, listErr := listTableNames(tx, database, true)
+		if listErr != nil {
+			return fmt.Errorf("list tables: %w", listErr)
+		}
+		present := make([]string, 0, len(tables))
+		for _, name := range tables {
+			if _, ok := existing[name]; ok {
+				present = append(present, name)
+			}
+		}
+		if len(present) == 0 {
+			return nil
+		}
+
+		locks := make([]string, len(present))
+		for i, name := range present {
+			locks[i] = "`" + name + "` WRITE"
+		}
+		if err := tx.Exec("LOCK TABLES " + strings.Join(locks, ", ")).Error; err != nil {
+			return fmt.Errorf("lock tables: %w", err)
+		}
+		defer func() {
+			if err := tx.Exec("UNLOCK TABLES").Error; err != nil && retErr == nil {
+				retErr = fmt.Errorf("unlock tables: %w", err)
+			}
+		}()
+
+		for _, name := range present {
+			hasRow, err := tableHasAnyRow(tx, name)
+			if err != nil {
+				return fmt.Errorf("check table %s: %w", name, err)
+			}
+			if hasRow {
+				return fmt.Errorf("%w: %s", errMixedSchemaTableNotEmpty, name)
+			}
+		}
+		for _, name := range present {
+			if err := tx.Exec("DROP TABLE `" + name + "`").Error; err != nil {
+				return fmt.Errorf("drop table %s: %w", name, err)
+			}
+			dropped = append(dropped, name)
+		}
+		return nil
+	})
+	return dropped, err
+}
+
+// markEmptyBareSchemaCompleted marks an empty bare v2 schema as a completed install by
+// updating its idle marker row. It reports true only when exactly one row changed; a
+// missing marker table, a missing row or any other state returns false, and the caller
+// then drops nothing. It is the only row write of the reconcile and changes the
+// regenerable singleton marker only. The table name comes from mixedSchemaMarkerTables.
+func markEmptyBareSchemaCompleted(db *gorm.DB, markerTable string) (bool, error) {
+	if markerTable == "" {
+		return false, nil
+	}
+	res := db.Exec("UPDATE `"+markerTable+"` SET state = ? WHERE id = 1 AND state = ?",
+		string(entities.MigrationStatusCompleted), string(entities.MigrationStatusIdle))
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected == 1, nil
+}
+
+// StartupState shapes returned by the mixed schema check. They match the shapes the
+// non-mixed branches of checkMySQLMigrationState return, so callers need no new case. The
+// keep-v2 outcomes use completedV2StartupState.
+func mixedSchemaLegacyState(decision string) StartupState {
+	return StartupState{
+		MigrationStatus: entities.MigrationStatusIdle,
+		LegacyRequired:  true,
+		Decision:        decision,
+	}
+}
+
+func mixedSchemaFreshState(decision string) StartupState {
+	return StartupState{
+		MigrationStatus: entities.MigrationStatusIdle,
+		FreshInstall:    true,
+		Decision:        decision,
+	}
+}
+
+func mixedSchemaRefusedState(err error) StartupState {
+	return StartupState{
+		MigrationStatus: entities.MigrationStatusIdle,
+		Decision:        DecisionMixedSchemaRefused,
+		Error:           err,
+	}
+}
+
+// logMixedSchemaReconciled writes the one Warn line of a reconcile: what was found with
+// counts, what was kept, what was dropped. Only fixed table names and counts appear.
+func logMixedSchemaReconciled(msg, decision string, p *mixedSchemaProbe, dropped []string, extra ...logger.Field) {
+	v2 := slices.Clone(p.v2Tables)
+	for _, s := range p.sharedTables {
+		v2 = append(v2, s.tableRowCount)
+	}
+	droppedText := mixedSchemaNone
+	if len(dropped) > 0 {
+		droppedText = strings.Join(dropped, ", ")
+	}
+	fields := append([]logger.Field{
+		logger.String("decision", decision),
+		logger.String("v2_tables_with_rows", formatTableRowCounts(v2)),
+		logger.String("legacy_tables_with_rows", formatTableRowCounts(p.legacyTables)),
+		logger.String("dropped_empty_tables", droppedText),
+	}, extra...)
+	if decision == DecisionMixedSchemaKeptLegacy {
+		fields = append(fields, logger.String("left_in_place_with_rows", formatTableRowCounts(v2)))
+	}
+	logger.Global().Module("datastore").Warn(msg, fields...)
+	reportMixedSchemaReconciled(decision)
+}
+
+// describeStepFailure names the failed step and, when the driver reports one, the
+// MySQL error number, so the refusal names a cause without carrying driver text (which
+// can hold the database name).
+func describeStepFailure(step string, err error) string {
+	if errors.Is(err, errMixedSchemaTableNotEmpty) {
+		return step + " stopped because a table gained rows"
+	}
+	if myErr, ok := errors.AsType[*mysql.MySQLError](err); ok {
+		return fmt.Sprintf("%s failed (MySQL error %d)", step, myErr.Number)
+	}
+	return step + " failed"
+}
+
+// resolveMixedSchema handles bare v2 tables beside a legacy notes table. It probes both
+// sides, classifies, and either keeps one side (dropping only the empty tables of the
+// other, each verified empty under a lock) or refuses. Refusing drops no table with
+// rows. A failed drop or marker write refuses the boot too. A marker already written
+// for the fresh shape stays; with no legacy rows the next start classifies the database
+// as keep-v2 and retries the drop. The table the branch keys on is always dropped last.
+func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupState {
+	p := probeMixedSchema(db, database)
+	verdict := classifyMixedSchema(p)
+
+	refuse := func(v mixedSchemaVerdict) StartupState {
+		reportMixedSchemaRefused()
+		return mixedSchemaRefusedState(newMixedSchemaError(p, v))
+	}
+	failed := func(operation, step string, err error) StartupState {
+		reportStartupError("mysql", operation, err, redact...)
+		reportMixedSchemaRefused()
+		refusal := newMixedSchemaError(p, verdictRefuseDropFailed)
+		refusal.failure = describeStepFailure(step, err)
+		return mixedSchemaRefusedState(refusal)
+	}
+
+	switch verdict {
+	case verdictKeepV2:
+		dropped, err := dropVerifiedEmptyTables(db, database, legacyDetectionTables)
+		if err != nil {
+			return failed("mixedSchemaDropLegacy", stepDropLegacy, err)
+		}
+		logMixedSchemaReconciled("database held enhanced database (v2) tables beside empty legacy tables; kept the enhanced database and removed the empty legacy tables",
+			DecisionMixedSchemaKeptV2, p, dropped)
+		return completedV2StartupState(DecisionMixedSchemaKeptV2)
+
+	case verdictFreshV2:
+		marked, err := markEmptyBareSchemaCompleted(db, p.markerTable)
+		if err != nil {
+			return failed("mixedSchemaMarkCompleted", stepMarkCompleted, err)
+		}
+		if !marked {
+			// No marker row to update: the fresh install path writes it. Dropping the
+			// legacy tables over an unmarked schema would leave a state the next boot refuses.
+			logMixedSchemaReconciled("database held empty enhanced database (v2) tables beside empty legacy tables; kept the enhanced database",
+				DecisionMixedSchemaFreshV2, p, nil, logger.Bool("marked_completed", false))
+			return mixedSchemaFreshState(DecisionMixedSchemaFreshV2)
+		}
+		dropped, err := dropVerifiedEmptyTables(db, database, legacyDetectionTables)
+		if err != nil {
+			// The completed marker stays. With no legacy rows the next start classifies this
+			// database as keep-v2 and retries the drop, so there is nothing to undo.
+			return failed("mixedSchemaDropLegacy", stepDropLegacy, err)
+		}
+		logMixedSchemaReconciled("database held empty enhanced database (v2) tables beside empty legacy tables; kept the enhanced database, marked it completed and removed the empty legacy tables",
+			DecisionMixedSchemaFreshV2, p, dropped, logger.Bool("marked_completed", true))
+		return completedV2StartupState(DecisionMixedSchemaFreshV2)
+
+	case verdictKeepLegacy:
+		dropped, err := dropVerifiedEmptyTables(db, database, bareDetectionTables)
+		if err != nil {
+			return failed("mixedSchemaDropDetections", stepDropDetections, err)
+		}
+		logMixedSchemaReconciled("database held legacy tables beside empty enhanced database (v2) detection tables; kept the legacy database and removed the empty detection tables, every other enhanced table was left in place",
+			DecisionMixedSchemaKeptLegacy, p, dropped)
+		return mixedSchemaLegacyState(DecisionMixedSchemaKeptLegacy)
+
+	default:
+		return refuse(verdict)
+	}
 }
 
 // CheckAndConsolidateAtStartup checks for and performs database consolidation at startup.
