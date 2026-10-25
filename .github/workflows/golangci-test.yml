@@ -178,32 +178,10 @@ jobs:
             go install "gotest.tools/gotestsum@${GOTESTSUM_VERSION}"
           fi
 
-      - name: Run MySQL-backed integration tests (serialized)
-        run: |
-          # Serialize package-level parallelism (-p 1) for the MySQL-backed
-          # packages. Running them in parallel spins up several MySQL 8 containers
-          # at once; under the runner's memory ceiling one gets OOM-reaped
-          # mid-test, surfacing as `connection refused` / `No such container` and
-          # looking like a logic bug. One container set at a time removes that
-          # race. gotestsum --rerun-fails still absorbs any residual flake.
-          gotestsum \
-            --format pkgname \
-            --jsonfile events-tc-mysql.json \
-            --junitfile junit-tc-mysql.xml \
-            --rerun-fails=1 \
-            --rerun-fails-abort-on-data-race \
-            --rerun-fails-max-failures=10 \
-            --rerun-fails-report=rerun-tc-mysql.txt \
-            --packages "./internal/datastore/v2 ./internal/datastore/v2/repository/... ./internal/datastore/v2only" \
-            -- -tags=integration -race -timeout 300s -p 1
-        timeout-minutes: 10
-
       - name: Run other container integration tests
-        if: ${{ !cancelled() }}
         run: |
           # Mosquitto / MediaMTX / spectrogram container tests are light enough to
-          # run with default package parallelism. Runs even if the MySQL step
-          # failed (!cancelled) so one flaky suite does not hide the others.
+          # run with default package parallelism.
           gotestsum \
             --format pkgname \
             --jsonfile events-tc-other.json \
@@ -327,6 +305,110 @@ jobs:
             rerun-integration*.txt
           if-no-files-found: warn
 
+  # MySQL-backed integration suites, run once per supported database server.
+  # Debian 12 (bookworm) ships MariaDB 10.11 and Debian 13 (trixie) 11.8, the
+  # servers Raspberry Pi OS and DietPi users get from their package manager.
+  database-tests:
+    name: database-tests (${{ matrix.server }})
+    runs-on: ubuntu-24.04
+    strategy:
+      # Report every server's failures; one server failing must not cancel the rest.
+      fail-fast: false
+      matrix:
+        include:
+          - server: mysql-8.0
+            image: mysql:8.0
+          - server: mariadb-10.11
+            image: mariadb:10.11
+          - server: mariadb-11.8
+            image: mariadb:11.8
+    env:
+      # Read by internal/testutil/containers; it is required on CI so a typo here
+      # fails every leg instead of silently testing the default server.
+      MYSQL_TEST_IMAGE: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Setup TensorFlow Lite
+        uses: ./.github/actions/setup-tensorflow
+
+      - name: Set up gotestsum
+        run: |
+          if ! command -v gotestsum &> /dev/null; then
+            go install "gotest.tools/gotestsum@${GOTESTSUM_VERSION}"
+          fi
+
+      - name: Pull database image
+        run: |
+          # Pull up front, with retries, so a registry blip fails here, clearly
+          # named, instead of in a TestMain that gotestsum cannot rerun.
+          for attempt in 1 2 3; do
+            docker pull "${MYSQL_TEST_IMAGE}" && exit 0
+            echo "docker pull attempt ${attempt} failed, retrying..."
+            sleep 10
+          done
+          exit 1
+        timeout-minutes: 5
+
+      - name: Run database integration tests (serialized)
+        run: |
+          # Serialize package-level parallelism (-p 1). Running the packages in
+          # parallel spins up several database containers at once; under the
+          # runner's memory ceiling one gets OOM-reaped mid-test, surfacing as
+          # `connection refused` / `No such container` and looking like a logic
+          # bug. One container set at a time removes that race. gotestsum
+          # --rerun-fails still absorbs any residual flake.
+          # -count=1: the suites read MYSQL_TEST_IMAGE in TestMain, which go test
+          # does not record in its cache key, so a result cached for another
+          # server could otherwise be replayed.
+          gotestsum \
+            --format pkgname \
+            --jsonfile "events-db-${{ matrix.server }}.json" \
+            --junitfile "junit-db-${{ matrix.server }}.xml" \
+            --rerun-fails=1 \
+            --rerun-fails-abort-on-data-race \
+            --rerun-fails-max-failures=10 \
+            --rerun-fails-report="rerun-db-${{ matrix.server }}.txt" \
+            --packages "./internal/datastore ./internal/datastore/v2 ./internal/datastore/v2/repository/... ./internal/datastore/v2only" \
+            -- -tags=integration -race -count=1 -timeout 300s -p 1
+        timeout-minutes: 15
+
+      - name: Container diagnostics on failure
+        if: failure()
+        run: |
+          # Capture the evidence needed to tell an infra flake (OOM-reaped
+          # container) from a real failure.
+          {
+            echo "## Database test diagnostics (${{ matrix.server }})"
+            echo '```'
+            echo "--- docker ps -a ---"
+            docker ps -a 2>&1 || true
+            echo "--- docker system df ---"
+            docker system df 2>&1 || true
+            echo "--- free -m ---"
+            free -m 2>&1 || true
+            echo "--- df -h ---"
+            df -h 2>&1 || true
+            echo "--- kernel OOM kills ---"
+            sudo dmesg 2>/dev/null | grep -iE "killed process|out of memory|oom-kill" | tail -20 || echo "none found / dmesg unavailable"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test events
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gotest-db-${{ matrix.server }}
+          path: |
+            events-db-*.json
+            junit-db-*.xml
+            rerun-db-*.txt
+          if-no-files-found: warn
+
   # Consolidated, machine-readable result. Runs regardless of upstream outcome so
   # there is ONE place (a single job summary + a single ci-failures.json
   # artifact) for a human or an LLM agent to read: it classifies every failure as
@@ -335,7 +417,7 @@ jobs:
   test-report:
     name: test-report
     if: always()
-    needs: [unit-tests, testcontainer-tests, integration-tests]
+    needs: [unit-tests, testcontainer-tests, database-tests, integration-tests]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -402,9 +484,10 @@ jobs:
           # 2. A real regression survived reruns. Flaky-on-rerun failures stay green.
           UNIT='${{ needs.unit-tests.result }}'
           TC='${{ needs.testcontainer-tests.result }}'
+          DB='${{ needs.database-tests.result }}'
           INTEG='${{ needs.integration-tests.result }}'
-          if [ "$UNIT" != "success" ] || [ "$TC" != "success" ] || [ "$INTEG" != "success" ]; then
-            echo "::error::An upstream test job did not succeed (unit-tests=$UNIT, testcontainer-tests=$TC, integration-tests=$INTEG)"
+          if [ "$UNIT" != "success" ] || [ "$TC" != "success" ] || [ "$DB" != "success" ] || [ "$INTEG" != "success" ]; then
+            echo "::error::An upstream test job did not succeed (unit-tests=$UNIT, testcontainer-tests=$TC, database-tests=$DB, integration-tests=$INTEG)"
             exit 1
           fi
           REG=$(jq 'length' ci-failures.json 2>/dev/null || echo 0)
