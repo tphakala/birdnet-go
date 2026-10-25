@@ -127,7 +127,7 @@ func TestDeliveryGate_OpensAfterThresholdAndRefusesUntilWindowEnds(t *testing.T)
 	clock.Advance(time.Second)
 	err := send(t, g)
 	require.Error(t, err)
-	assert.NotErrorIs(t, err, errDeliverySuspended, "request at the deadline is the probe")
+	require.NotErrorIs(t, err, errDeliverySuspended, "request at the deadline is the probe")
 	assert.Equal(t, opened+1, inner.callCount())
 }
 
