@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -571,10 +572,14 @@ func TestReportError_ConnectivityEventIsEnvironmentWarning(t *testing.T) {
 		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build())
 	reporter.ReportError(New(fmt.Errorf("state row is inconsistent")).
 		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build())
+	// A dial failure outside the gated categories keeps its category's level,
+	// origin and fingerprint.
+	reporter.ReportError(New(refusedDialError(syscall.ECONNREFUSED)).
+		Component("birdweather").Category(CategoryIntegration).Context("operation", "upload").Build())
 	sentry.Flush(time.Second)
 
 	events := transport.Events()
-	require.Len(t, events, 2)
+	require.Len(t, events, 3)
 
 	assert.Equal(t, sentry.LevelWarning, events[0].Level)
 	assert.Equal(t, "environment", events[0].Tags["error_origin"])
@@ -584,4 +589,9 @@ func TestReportError_ConnectivityEventIsEnvironmentWarning(t *testing.T) {
 	assert.Equal(t, "code", events[1].Tags["error_origin"])
 	require.GreaterOrEqual(t, len(events[1].Fingerprint), 4)
 	assert.Equal(t, []string{"datastore", "state", "read_state", "error"}, events[1].Fingerprint[:4])
+
+	assert.Equal(t, getErrorLevel(CategoryIntegration), events[2].Level)
+	assert.Equal(t, GetErrorOrigin(CategoryIntegration), events[2].Tags["error_origin"])
+	require.NotEmpty(t, events[2].Fingerprint)
+	assert.NotEqual(t, connectivityFingerprintPrefix, events[2].Fingerprint[0])
 }
