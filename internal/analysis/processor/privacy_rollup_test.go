@@ -291,6 +291,19 @@ func TestPrivacyRollup_FlushEvents(t *testing.T) {
 		assert.Empty(t, rec.ofKind(privacyrollup.KindDiscard))
 	})
 
+	t.Run("a coverage timeout with the VAD off is keyed on the label detector", func(t *testing.T) {
+		r, rec := rollupRig(t, 100*time.Second)
+		r.settings.Realtime.PrivacyFilter.VAD.Enabled = false
+		// Label coverage stops short of the clip end, and the wait has long expired.
+		r.feed(r.clip, sec(36), sec(1))
+		r.pend(40 * time.Second)
+		require.Equal(t, "approved", r.outcome())
+
+		saves := rec.ofKind(privacyrollup.KindUnscannedSave)
+		require.Len(t, saves, 1)
+		assert.Equal(t, metrics.TriggerLabel, saves[0].Trigger)
+	})
+
 	t.Run("a minimum count discard is not a privacy discard", func(t *testing.T) {
 		r, rec := rollupRig(t, 45*time.Second)
 		r.feed(r.clip, 40*time.Second+sec(11), sec(3))
