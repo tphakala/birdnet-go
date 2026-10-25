@@ -40,7 +40,7 @@ func TestHitContributions_AggregatesAcrossModelsAndDetectors(t *testing.T) {
 	labelHit(p, settings, confirmSource, attrModelPerch, t0)
 	labelHit(p, settings, confirmSource, attrModelBirdNET, t0.Add(time.Second))
 	labelHit(p, settings, confirmSource, attrModelPerch, t0.Add(2*time.Second))
-	p.recordVADHit(settings, confirmSource, t0.Add(3*time.Second), 0.81)
+	p.recordVADHit(settings, confirmSource, t0.Add(3*time.Second), 0.81, 0)
 
 	p.detectionMutex.RLock()
 	all := p.hitContributionsLocked(confirmSource, t0)
@@ -113,8 +113,8 @@ func TestRecordHumanHit_OlderHitStaysInAttributionButDoesNotMoveLastHit(t *testi
 	p := &Processor{LastHumanDetection: map[string]HumanDetection{}}
 	t0 := time.Unix(1000, 0)
 
-	p.recordHumanHitLocked(confirmSource, t0.Add(time.Second), metrics.TriggerLabel, attrModelPerch, 0.2)
-	p.recordHumanHitLocked(confirmSource, t0, metrics.TriggerLabel, attrModelBirdNET, 0.3)
+	p.recordHumanHitLocked(confirmSource, t0.Add(time.Second), metrics.TriggerLabel, attrModelPerch, 0.2, 0)
+	p.recordHumanHitLocked(confirmSource, t0, metrics.TriggerLabel, attrModelBirdNET, 0.3, 0)
 
 	assert.Equal(t, attrModelPerch, p.LastHumanDetection[confirmSource].ModelID, "the stored latest hit never moves backward")
 	assert.Len(t, p.humanHits[confirmSource], 2, "the earlier hit still counts as a contributor")
@@ -142,7 +142,7 @@ func TestLogLabelHitDecision_VADConfirmerAndDroppedModel(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 
 	labelHit(p, settings, confirmSource, attrModelPerch, t0)
-	d := p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0.8)
+	d := p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0.8, 0)
 	p.logLabelHitDecision(settings, confirmSource, nil, &d)
 	assert.Contains(t, infoLog.String(), "confirmed_by="+vadHitModelID)
 
@@ -220,7 +220,7 @@ func TestRecordVADHit_ConfirmationAttributesBothHits(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 
 	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.5, modelID: attrModelPerch})
-	p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0.8125)
+	p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0.8125, 0)
 
 	require.Len(t, p.humanHits[confirmSource], 2)
 	// The VAD hit is recorded first, then the held label hit it confirms.
@@ -304,7 +304,7 @@ func TestShouldDiscardDetection_DebugLineCarriesHitModelAndScore(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 
 	p.detectionMutex.Lock()
-	p.recordHumanHitLocked(confirmSource, t0, metrics.TriggerLabel, attrModelPerch, 0.5)
+	p.recordHumanHitLocked(confirmSource, t0, metrics.TriggerLabel, attrModelPerch, 0.5, 0)
 	p.detectionMutex.Unlock()
 	discard, _ := discardNow(p, newPrivacyFilterDetection(confirmSource, t0), settings, 1)
 

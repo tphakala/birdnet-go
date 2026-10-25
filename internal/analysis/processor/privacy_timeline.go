@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -199,7 +200,7 @@ func (c *chunkAudio) coverage() audioSpan {
 func (p *Processor) recordHumanDetection(source string, at time.Time, trigger string) {
 	p.detectionMutex.Lock()
 	defer p.detectionMutex.Unlock()
-	p.recordHumanHitLocked(source, at, trigger, "", 0)
+	p.recordHumanHitLocked(source, at, trigger, "", 0, privacyrollup.NoThresholdMilli)
 }
 
 // recordHumanHitLocked is recordHumanDetection for a caller that already holds
@@ -207,12 +208,13 @@ func (p *Processor) recordHumanDetection(source string, at time.Time, trigger st
 // its score. The hit joins the per-source attribution list (every counted hit,
 // whichever model produced it, so the discard log can name all contributors)
 // and moves LastHumanDetection forward under the rule of recordHumanDetection.
-func (p *Processor) recordHumanHitLocked(source string, at time.Time, trigger, modelID string, score float64) {
+// thresholdMilli is the threshold the hit was scored against, in thousandths.
+func (p *Processor) recordHumanHitLocked(source string, at time.Time, trigger, modelID string, score float64, thresholdMilli int) {
 	p.appendHumanHitLocked(source, humanHit{at: at, trigger: trigger, modelID: modelID, score: score})
 	if existing, ok := p.LastHumanDetection[source]; ok && !at.After(existing.Time) {
 		return
 	}
-	p.LastHumanDetection[source] = HumanDetection{Time: at, Trigger: trigger, ModelID: modelID, Score: score}
+	p.LastHumanDetection[source] = HumanDetection{Time: at, Trigger: trigger, ModelID: modelID, Score: score, ThresholdMilli: thresholdMilli}
 }
 
 // clipSpan returns the exact audio span the exporter saves for a pending
@@ -399,6 +401,9 @@ type privacyCheck struct {
 	hit     HumanDetection
 	hasHit  bool
 	verdict coverageVerdict
+	// detector is the detector the coverage verdict was computed for
+	// (metrics.TriggerLabel or metrics.TriggerVAD).
+	detector string
 	// contributions lists who produced the counted hits that reach the saved clip
 	// (see hitContributionsLocked). Filled only with privacyfilter.debug on and a
 	// latest hit that reaches the clip, for the discard log.
@@ -430,7 +435,9 @@ func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection
 	p.detectionMutex.RLock()
 	defer p.detectionMutex.RUnlock()
 	hit, hasHit := p.LastHumanDetection[item.Source]
-	check := privacyCheck{clip: clip, hit: hit, hasHit: hasHit, verdict: p.coverageVerdictLocked(settings, item.Source, item.BestModelID, clip, now)}
+	detector := p.requiredDetectorLocked(settings, item.Source, now)
+	check := privacyCheck{clip: clip, hit: hit, hasHit: hasHit, detector: detector,
+		verdict: p.coverageVerdictLocked(settings, detector, item.Source, item.BestModelID, clip, now)}
 	// Only a hit that reaches the clip leads to a discard, so only then is the
 	// contributor list of any use.
 	reachFrom := clip.from.Add(-privacyClipGuard)
@@ -440,15 +447,15 @@ func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection
 	return check
 }
 
-// coverageVerdictLocked is the coverage half of checkPrivacy; model is the model
+// coverageVerdictLocked is the coverage half of checkPrivacy; detector is the
+// required detector of the source (requiredDetectorLocked) and model the model
 // of the pending detection. With the VAD as the required detector, one stream
 // covering the padded clip keeps it; with the label detector one current model
 // must have covered all of it and every current model its own share
 // (labelCoverageCoversLocked). Otherwise the verdict defers
 // until the clip end plus privacyCoverageMaxWait, then reports a timeout. The
 // caller must hold detectionMutex.
-func (p *Processor) coverageVerdictLocked(settings *conf.Settings, source, model string, clip audioSpan, now time.Time) coverageVerdict {
-	detector := p.requiredDetectorLocked(settings, source, now)
+func (p *Processor) coverageVerdictLocked(settings *conf.Settings, detector, source, model string, clip audioSpan, now time.Time) coverageVerdict {
 	if !p.hasRecentCoverageLocked(source, detector, now) && !speechBandModel(model) {
 		// No detector has recently scored the source, and the detection comes from
 		// a model whose audio cannot carry speech (the ultrasonic bat model) or
