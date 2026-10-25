@@ -351,3 +351,87 @@ func TestDeliveryGate_SentryClientDeliversThroughGate(t *testing.T) {
 	require.True(t, client.Flush(time.Second))
 	assert.Equal(t, deliveryFailureThreshold+afterRecovery, inner.callCount())
 }
+
+// scriptedInner answers each call from a per-call channel, so a test can
+// finish overlapping requests in a chosen order.
+type scriptedInner struct {
+	mu      sync.Mutex
+	entered chan int
+	results []chan error
+	next    int
+}
+
+func newScriptedInner(calls int) *scriptedInner {
+	s := &scriptedInner{entered: make(chan int, calls)}
+	for range calls {
+		s.results = append(s.results, make(chan error, 1))
+	}
+	return s
+}
+
+func (s *scriptedInner) RoundTrip(req *http.Request) (*http.Response, error) {
+	s.mu.Lock()
+	idx := s.next
+	s.next++
+	s.mu.Unlock()
+	s.entered <- idx
+	if err := <-s.results[idx]; err != nil {
+		return nil, err
+	}
+	return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("")), Request: req}, nil
+}
+
+func TestDeliveryGate_StaleSuccessDoesNotLetFailedProbeReopenGate(t *testing.T) {
+	t.Parallel()
+	// Calls: 0 slow request admitted while closed, 1 to 3 failures that open
+	// the gate, 4 the probe, 5 a request after the probe resolves.
+	const (
+		slowCall  = 0
+		probeCall = deliveryFailureThreshold + 1
+		lastCall  = probeCall + 1
+	)
+	inner := newScriptedInner(lastCall + 1)
+	clock := NewFakeTimeSource(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+	g := newDeliveryGate(inner, clock)
+
+	var wg sync.WaitGroup
+	start := func() <-chan error {
+		done := make(chan error, 1)
+		req := gateRequest(t)
+		wg.Go(func() {
+			resp, err := g.RoundTrip(req)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			done <- err
+		})
+		return done
+	}
+
+	slowDone := start()
+	require.Equal(t, slowCall, <-inner.entered)
+	for i := 1; i <= deliveryFailureThreshold; i++ {
+		done := start()
+		require.Equal(t, i, <-inner.entered)
+		inner.results[i] <- errGateDial
+		require.Error(t, <-done)
+	}
+
+	clock.Advance(deliveryInitialBackoff)
+	probeDone := start()
+	require.Equal(t, probeCall, <-inner.entered)
+
+	// The stale request succeeds while the probe is still in flight, then the probe fails.
+	inner.results[slowCall] <- nil
+	require.NoError(t, <-slowDone)
+	inner.results[probeCall] <- errGateDial
+	require.Error(t, <-probeDone)
+
+	// One failure after the reset is below the threshold: the gate is still
+	// closed, so this request reaches the inner round tripper.
+	inner.results[lastCall] <- nil
+	resp, err := g.RoundTrip(gateRequest(t))
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	wg.Wait()
+}

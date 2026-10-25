@@ -120,6 +120,9 @@ func (g *deliveryGate) record(err error, probe bool) {
 
 	g.mu.Lock()
 	now := g.clock.Now()
+	// A success from an earlier request can close the gate while the probe is
+	// still in flight; the probe's outcome then counts like any other request.
+	probe = probe && g.state == gateHalfOpen
 	switch {
 	case err == nil:
 		if g.state != gateClosed {
