@@ -1,8 +1,6 @@
 package processor
 
 import (
-	"time"
-
 	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -70,55 +68,13 @@ func (p *Processor) recordPrivacyEvents(settings *conf.Settings, events ...sourc
 	}
 }
 
-// labelHitEvents builds the rollup events of one label hit decision. The dropped,
-// confirmed and own hit are independent, as in logLabelHitDecision: a held hit
-// is reported under its own stamp, model and threshold, and a VAD hit (own is
-// nil) has its counted event built by recordVADHitEvents.
-func labelHitEvents(source string, own *heldLabelHit, d *labelHitDecision) []sourcedEvent {
-	var events []sourcedEvent
-	add := func(kind privacyrollup.Kind, h *heldLabelHit) {
-		events = append(events, sourcedEvent{source: source, ev: privacyrollup.Event{
-			Kind: kind, At: h.at, ModelID: h.modelID, Trigger: metrics.TriggerLabel,
-			ThresholdMilli: h.thresholdMilli, Score: float64(h.confidence),
-		}})
-	}
-	if d.dropped != nil {
-		add(privacyrollup.KindIgnoredHeld, d.dropped)
-	}
-	if d.confirmed != nil {
-		add(privacyrollup.KindConfirmedHeld, d.confirmed)
-	}
-	switch {
-	case own == nil:
-	case d.held:
-		add(privacyrollup.KindHeldHit, own)
-	default:
-		add(privacyrollup.KindCountedHit, own)
-	}
-	return events
-}
-
-// recordLabelHitEvents reports a label hit decision. Call it after
-// recordLabelHit has returned.
-func (p *Processor) recordLabelHitEvents(settings *conf.Settings, source string, own *heldLabelHit, d *labelHitDecision) {
-	if p.privacyRollup == nil {
-		return
-	}
-	p.recordPrivacyEvents(settings, labelHitEvents(source, own, d)...)
-}
-
-// recordVADHitEvents reports a VAD hit, which always counts, and the held label
-// hit it confirmed or dropped. Call it after recordVADHit has returned.
-func (p *Processor) recordVADHitEvents(settings *conf.Settings, source string, at time.Time, probability float64, thresholdMilli int, d *labelHitDecision) {
-	if p.privacyRollup == nil {
-		return
-	}
-	events := labelHitEvents(source, nil, d)
-	events = append(events, sourcedEvent{source: source, ev: privacyrollup.Event{
-		Kind: privacyrollup.KindCountedHit, At: at, ModelID: vadHitModelID, Trigger: metrics.TriggerVAD,
-		ThresholdMilli: thresholdMilli, Score: probability,
-	}})
-	p.recordPrivacyEvents(settings, events...)
+// hitEvent is the rollup event of kind for hit, keyed on the hit's own stamp,
+// detector, threshold and score.
+func hitEvent(source string, kind privacyrollup.Kind, h *humanHit) sourcedEvent {
+	return sourcedEvent{source: source, ev: privacyrollup.Event{
+		Kind: kind, At: h.at, ModelID: h.modelID, Trigger: h.trigger,
+		ThresholdMilli: h.thresholdMilli, Score: h.score,
+	}}
 }
 
 // discardEvent is the event of a detection dropped by the privacy filter,

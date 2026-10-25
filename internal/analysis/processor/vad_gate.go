@@ -531,10 +531,9 @@ func (p *Processor) runVADGate(settings *conf.Settings, chunk *chunkAudio) (span
 		p.Metrics.PrivacyFilter.SetVADLastSpeechProbability(float64(result.prob))
 	}
 
-	thresholdMilli := privacyrollup.ThresholdMilli(threshold)
-	d := p.recordVADHit(settings, source, audioEnd, float64(result.prob), thresholdMilli)
-	p.logLabelHitDecision(settings, source, nil, &d)
-	p.recordVADHitEvents(settings, source, audioEnd, float64(result.prob), thresholdMilli, &d)
+	hit := vadHumanHit(audioEnd, float64(result.prob), privacyrollup.ThresholdMilli(threshold))
+	d := p.recordVADHit(settings, source, hit)
+	p.reportHitDecision(settings, source, &hit, &d)
 	return result.span, true
 }
 

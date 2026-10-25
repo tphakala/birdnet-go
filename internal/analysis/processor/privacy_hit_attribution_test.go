@@ -2,6 +2,7 @@ package processor
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,7 +41,7 @@ func TestHitContributions_AggregatesAcrossModelsAndDetectors(t *testing.T) {
 	labelHit(p, settings, confirmSource, attrModelPerch, t0)
 	labelHit(p, settings, confirmSource, attrModelBirdNET, t0.Add(time.Second))
 	labelHit(p, settings, confirmSource, attrModelPerch, t0.Add(2*time.Second))
-	p.recordVADHit(settings, confirmSource, t0.Add(3*time.Second), 0.81, 0)
+	p.recordVADHit(settings, confirmSource, vadHumanHit(t0.Add(3*time.Second), 0.81, 0))
 
 	p.detectionMutex.RLock()
 	all := p.hitContributionsLocked(confirmSource, t0)
@@ -113,15 +114,15 @@ func TestRecordHumanHit_OlderHitStaysInAttributionButDoesNotMoveLastHit(t *testi
 	p := &Processor{LastHumanDetection: map[string]HumanDetection{}}
 	t0 := time.Unix(1000, 0)
 
-	p.recordHumanHitLocked(confirmSource, t0.Add(time.Second), metrics.TriggerLabel, attrModelPerch, 0.2, 0)
-	p.recordHumanHitLocked(confirmSource, t0, metrics.TriggerLabel, attrModelBirdNET, 0.3, 0)
+	p.recordHumanHitLocked(confirmSource, labelHumanHit(t0.Add(time.Second), attrModelPerch, 0.2, 0))
+	p.recordHumanHitLocked(confirmSource, labelHumanHit(t0, attrModelBirdNET, 0.3, 0))
 
 	assert.Equal(t, attrModelPerch, p.LastHumanDetection[confirmSource].ModelID, "the stored latest hit never moves backward")
 	assert.Len(t, p.humanHits[confirmSource], 2, "the earlier hit still counts as a contributor")
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_NamesModelAndConfirmer(t *testing.T) {
+func TestReportHitDecision_NamesModelAndConfirmer(t *testing.T) {
 	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
@@ -136,15 +137,17 @@ func TestLogLabelHitDecision_NamesModelAndConfirmer(t *testing.T) {
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_VADConfirmerAndDroppedModel(t *testing.T) {
+func TestReportHitDecision_VADConfirmerAndDroppedModel(t *testing.T) {
 	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
 
 	labelHit(p, settings, confirmSource, attrModelPerch, t0)
-	d := p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0.8, 0)
-	p.logLabelHitDecision(settings, confirmSource, nil, &d)
+	vad := vadHumanHit(t0.Add(time.Second), 0.8, 0)
+	d := p.recordVADHit(settings, confirmSource, vad)
+	p.reportHitDecision(settings, confirmSource, &vad, &d)
 	assert.Contains(t, infoLog.String(), "confirmed_by="+vadHitModelID)
+	assert.Equal(t, 1, strings.Count(infoLog.String(), "human detection filtered"), "only the confirmed label hit is logged; the VAD hit logs its own line elsewhere")
 
 	// A held hit whose window runs out is logged with the model that scored it.
 	labelHit(p, settings, confirmSource, attrModelBirdNET, t0.Add(10*labelConfirmWindow))
@@ -195,8 +198,8 @@ func TestRecordLabelHit_ConfirmedHitKeepsItsOwnModelAndScore(t *testing.T) {
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
 
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.5, modelID: attrModelPerch})
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0.Add(5 * time.Second), confidence: 0.25, modelID: attrModelBirdNET})
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, attrModelPerch, 0.5, 0))
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0.Add(5*time.Second), attrModelBirdNET, 0.25, 0))
 
 	require.Len(t, p.humanHits[confirmSource], 2)
 	held, confirming := p.humanHits[confirmSource][0], p.humanHits[confirmSource][1]
@@ -208,7 +211,7 @@ func TestRecordLabelHit_ConfirmedHitKeepsItsOwnModelAndScore(t *testing.T) {
 	assert.InDelta(t, 0.25, last.Score, 1e-9)
 
 	// Once confirmed, a further hit inside the window counts at once under its own model.
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0.Add(10 * time.Second), confidence: 0.75, modelID: attrModelPerch})
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0.Add(10*time.Second), attrModelPerch, 0.75, 0))
 	require.Len(t, p.humanHits[confirmSource], 3)
 	assert.Equal(t, attrModelPerch, p.humanHits[confirmSource][2].modelID)
 	assert.InDelta(t, 0.75, p.humanHits[confirmSource][2].score, 1e-9)
@@ -219,8 +222,8 @@ func TestRecordVADHit_ConfirmationAttributesBothHits(t *testing.T) {
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
 
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.5, modelID: attrModelPerch})
-	p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0.8125, 0)
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, attrModelPerch, 0.5, 0))
+	p.recordVADHit(settings, confirmSource, vadHumanHit(t0.Add(time.Second), 0.8125, 0))
 
 	require.Len(t, p.humanHits[confirmSource], 2)
 	// The VAD hit is recorded first, then the held label hit it confirms.
@@ -269,7 +272,7 @@ func TestCheckPrivacy_ContributionsNeedDebugAndAHitReachingTheClip(t *testing.T)
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_CountedLineCarriesModelAndStamp(t *testing.T) {
+func TestReportHitDecision_CountedLineCarriesModelAndStamp(t *testing.T) {
 	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	p, settings := confirmProcessor(0)
 	t0 := time.Unix(1000, 0).UTC()
@@ -278,13 +281,14 @@ func TestLogLabelHitDecision_CountedLineCarriesModelAndStamp(t *testing.T) {
 
 	out := infoLog.String()
 	assert.Contains(t, out, "human detection filtered")
+	assert.Contains(t, out, "confidence=0.9 ", "the float32 score renders as 0.9, not as the widened float64")
 	assert.Contains(t, out, "model_id="+attrModelPerch)
 	assert.Contains(t, out, "hit_time=1970-01-01T00:16:40")
 	assert.NotContains(t, out, "confirmed_by", "a hit that needed no confirmation names no confirmer")
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_ConfirmedLineCarriesTheHeldStamp(t *testing.T) {
+func TestReportHitDecision_ConfirmedLineCarriesTheHeldStamp(t *testing.T) {
 	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0).UTC()
@@ -304,7 +308,7 @@ func TestShouldDiscardDetection_DebugLineCarriesHitModelAndScore(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 
 	p.detectionMutex.Lock()
-	p.recordHumanHitLocked(confirmSource, t0, metrics.TriggerLabel, attrModelPerch, 0.5, 0)
+	p.recordHumanHitLocked(confirmSource, labelHumanHit(t0, attrModelPerch, 0.5, 0))
 	p.detectionMutex.Unlock()
 	discard, _ := discardNow(p, newPrivacyFilterDetection(confirmSource, t0), settings, 1)
 

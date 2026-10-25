@@ -91,7 +91,7 @@ type Processor struct {
 	privacyCoverage map[coverageKey][]audioSpan
 	// heldLabelHits holds the label hit of each source waiting for a second hit
 	// (see recordLabelHit), guarded by detectionMutex and created lazily.
-	heldLabelHits map[string]heldLabelHit
+	heldLabelHits map[string]humanHit
 	// humanHits lists the counted speech hits of each source with the model or
 	// VAD gate that produced them (see appendHumanHitLocked), guarded by
 	// detectionMutex and created lazily. The discard log reads it to name every
@@ -1490,13 +1490,10 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		// clip. Above the confirmation overlap a lone hit is held (see
 		// recordLabelHit) and counts only when a second hit confirms it.
 		end, _ := audioEndOrNow(&item)
-		hit := heldLabelHit{
-			at: end, confidence: result.Confidence, modelID: item.ModelID,
-			thresholdMilli: privacyrollup.ThresholdMilli(float64(settings.Realtime.PrivacyFilter.Confidence)),
-		}
+		hit := labelHumanHit(end, item.ModelID, result.Confidence,
+			privacyrollup.ThresholdMilli(float64(settings.Realtime.PrivacyFilter.Confidence)))
 		d := p.recordLabelHit(settings, item.Source.ID, hit)
-		p.logLabelHitDecision(settings, item.Source.ID, &hit, &d)
-		p.recordLabelHitEvents(settings, item.Source.ID, &hit, &d)
+		p.reportHitDecision(settings, item.Source.ID, &hit, &d)
 	}
 }
 
