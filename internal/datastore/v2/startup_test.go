@@ -1017,6 +1017,7 @@ func TestCountMixedSchemaRows_CountFailure_RecordsUnknown(t *testing.T) {
 	require.NoError(t, err)
 	// The attached schema lives on one connection.
 	sqlDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = sqlDB.Close() })
 	require.NoError(t, db.Exec("ATTACH DATABASE ':memory:' AS information_schema").Error)
 	require.NoError(t, db.Exec("CREATE TABLE information_schema.tables (table_name TEXT, table_schema TEXT)").Error)
 	require.NoError(t, db.Exec(
