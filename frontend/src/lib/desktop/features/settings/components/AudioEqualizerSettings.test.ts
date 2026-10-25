@@ -11,6 +11,9 @@ import fallbackEqFilterConfig from './eqFilterFallbackConfig.json';
 // Go test), and an entry far above it
 const Q_MAX = fallbackEqFilterConfig.LowPass.Parameters.find(p => p.Name === 'Q')?.Max ?? NaN;
 const Q_ABOVE_MAX = String(Q_MAX * 10);
+const FREQUENCY_MAX =
+  fallbackEqFilterConfig.LowPass.Parameters.find(p => p.Name === 'Frequency')?.Max ?? NaN;
+const FREQUENCY_ABOVE_MAX = String(FREQUENCY_MAX * 10);
 
 // Mock dependencies
 // Common mocks are now handled globally in src/test/setup.ts
@@ -805,7 +808,7 @@ describe('AudioEqualizerSettings', () => {
       });
       const q = screen.getByRole<HTMLInputElement>('spinbutton', { name: NAME.q });
       await user.clear(frequency);
-      await user.type(frequency, '99999');
+      await user.type(frequency, FREQUENCY_ABOVE_MAX);
       await user.tab();
       expect(noticeOf(frequency)).not.toBeNull();
 
@@ -846,7 +849,7 @@ describe('AudioEqualizerSettings', () => {
         name: NAME.cutoff,
       });
       await user.clear(frequency);
-      await user.type(frequency, '99999');
+      await user.type(frequency, FREQUENCY_ABOVE_MAX);
       await user.tab();
       expect(shownNotices()).toHaveLength(1);
       expect(frequency).toHaveAttribute('aria-describedby');
