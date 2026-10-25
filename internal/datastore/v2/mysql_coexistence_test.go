@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/testutil/containers"
 	gormmysql "gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -602,4 +603,71 @@ func TestMySQL_V2Initialize_SwapsContributionDetectionIndex(t *testing.T) {
 	var remaining int64
 	require.NoError(t, db.Model(&entities.DetectionModelContribution{}).Count(&remaining).Error)
 	assert.Zero(t, remaining, "deleting the detection must still cascade to its contributions")
+}
+
+// TestMySQL_LegacyOpen_AfterOrphanCleanup_RepairsV2NotificationHistory covers
+// legacy startup over a fresh unprefixed v2 database that holds a v2-shaped
+// notification_histories table with several rows and a notes table left by an
+// earlier legacy boot. Legacy AutoMigrate used to fail with Error 1062 on
+// idx_notification_history_species_type; the startup guard now recreates the
+// table in the legacy shape.
+func TestMySQL_LegacyOpen_AfterOrphanCleanup_RepairsV2NotificationHistory(t *testing.T) {
+	dropAllTables(t, coexTestDB, coexTestDBName)
+
+	mgr := newTestMySQLManager(t, false)
+	require.NoError(t, mgr.Initialize(), "fresh unprefixed v2 init should succeed")
+	require.NoError(t, mgr.Close())
+
+	// Two v2 rows share notification_type, so the legacy unique index on
+	// (scientific_name, notification_type) would collide once scientific_name
+	// is added with an empty default. Pin one connection so the foreign key
+	// toggle applies to the inserts.
+	require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
+		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
+			return err
+		}
+		insertErr := insertV2NotificationHistories(tx)
+		restoreErr := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error
+		return errors.Join(insertErr, restoreErr)
+	}))
+
+	// The notes table an earlier legacy boot left behind.
+	require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
+
+	settings := buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, coexTestPassword)
+	// datastore.New picks SQLite first when it is enabled.
+	settings.Output.SQLite.Enabled = false
+
+	state := checkMySQLMigrationState(settings)
+	require.Equal(t, DecisionLegacyMode, state.Decision, "orphan cleanup should return legacy mode")
+
+	store := datastore.New(settings)
+	require.NoError(t, store.Open(), "legacy Open should repair the v2-shaped table")
+	t.Cleanup(func() { _ = store.Close() })
+
+	assert.False(t, coexTestDB.Migrator().HasColumn("notification_histories", "label_id"),
+		"notification_histories should be recreated in the legacy shape")
+
+	mysqlStore, ok := store.(*datastore.MySQLStore)
+	require.True(t, ok, "store should be a MySQLStore")
+	now := time.Now()
+	require.NoError(t, mysqlStore.SaveNotificationHistory(t.Context(), &datastore.NotificationHistory{
+		ScientificName: "Parus major",
+		LastSent:       now,
+		ExpiresAt:      now.Add(time.Hour),
+		CreatedAt:      now,
+	}), "legacy notification insert should work after the repair")
+}
+
+// insertV2NotificationHistories inserts two v2-shaped notification_histories
+// rows that share a notification_type.
+func insertV2NotificationHistories(tx *gorm.DB) error {
+	for labelID := 1; labelID <= 2; labelID++ {
+		if err := tx.Exec(`INSERT INTO notification_histories
+			(label_id, notification_type, last_sent, expires_at, created_at, updated_at)
+			VALUES (?, 'new_species', NOW(), NOW() + INTERVAL 1 DAY, NOW(), NOW())`, labelID).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
