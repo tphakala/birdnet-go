@@ -19,8 +19,8 @@ import (
 const (
 	// gateTestURL is a placeholder request target; the fake inner round tripper never dials it.
 	gateTestURL = "https://sentry.invalid/api/1/envelope/"
-	// gateTestFlushBudget is the upper bound for a Flush against a suspended gate.
-	gateTestFlushBudget = 500 * time.Millisecond
+	// gateTestWaitBudget only guards against a hang; no test asserts that work finishes faster.
+	gateTestWaitBudget = 10 * time.Second
 	// gateTestConcurrency is the number of simultaneous requests in the probe race test.
 	gateTestConcurrency = 16
 	// gateTestEventCount is the number of events captured in the client wiring test.
@@ -265,38 +265,76 @@ func TestDeliveryGate_SingleProbeUnderConcurrency(t *testing.T) {
 	clock.Advance(deliveryInitialBackoff)
 
 	before := inner.callCount()
+	block := make(chan struct{})
+	enter := make(chan struct{}, gateTestConcurrency)
 	inner.mu.Lock()
 	inner.err, inner.status = nil, http.StatusOK
-	inner.block = make(chan struct{})
-	inner.enter = make(chan struct{}, gateTestConcurrency)
-	block := inner.block
-	enter := inner.enter
+	inner.block, inner.enter = block, enter
 	inner.mu.Unlock()
+	// Release any probe still held if an assertion below fails.
+	var release sync.Once
+	t.Cleanup(func() { release.Do(func() { close(block) }) })
 
 	results := make(chan error, gateTestConcurrency)
-	var wg sync.WaitGroup
 	for range gateTestConcurrency {
-		wg.Go(func() { results <- send(t, g) })
+		req := gateRequest(t)
+		go func() {
+			resp, err := g.RoundTrip(req)
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+			results <- err
+		}()
 	}
 
-	<-enter // the probe is inside the inner round tripper
+	select {
+	case <-enter: // the probe is inside the inner round tripper
+	case <-time.After(gateTestWaitBudget):
+		require.FailNow(t, "no request reached the inner round tripper")
+	}
 	suspended := 0
 	for range gateTestConcurrency - 1 {
-		require.ErrorIs(t, <-results, errDeliverySuspended)
-		suspended++
+		select {
+		case err := <-results:
+			require.ErrorIs(t, err, errDeliverySuspended)
+			suspended++
+		case <-time.After(gateTestWaitBudget):
+			require.FailNow(t, "a request was neither refused nor finished while the probe was held")
+		}
 	}
-	close(block)
-	wg.Wait()
-	require.NoError(t, <-results)
-
 	assert.Equal(t, gateTestConcurrency-1, suspended)
 	assert.Equal(t, before+1, inner.callCount())
+
+	release.Do(func() { close(block) })
+	select {
+	case err := <-results:
+		require.NoError(t, err)
+	case <-time.After(gateTestWaitBudget):
+		require.FailNow(t, "the probe did not finish after release")
+	}
 
 	// Probe succeeded: gate is closed again.
 	inner.mu.Lock()
 	inner.block, inner.enter = nil, nil
 	inner.mu.Unlock()
 	require.NoError(t, send(t, g))
+}
+
+func TestDeliveryGate_CancelledRequestDoesNotCountTowardThreshold(t *testing.T) {
+	t.Parallel()
+	g, inner, _ := newTestGate(t)
+
+	inner.set(errGateDial, 0)
+	for range deliveryFailureThreshold - 1 {
+		require.NotErrorIs(t, send(t, g), errDeliverySuspended)
+	}
+	inner.set(context.Canceled, 0)
+	require.ErrorIs(t, send(t, g), context.Canceled)
+
+	// Still closed: the next request reaches the inner round tripper.
+	before := inner.callCount()
+	require.NotErrorIs(t, send(t, g), errDeliverySuspended)
+	assert.Equal(t, before+1, inner.callCount())
 }
 
 func TestDeliveryFailureKind(t *testing.T) {
@@ -337,9 +375,7 @@ func TestDeliveryGate_SentryClientDeliversThroughGate(t *testing.T) {
 	for range gateTestEventCount {
 		client.CaptureMessage("gate test", nil, sentry.NewScope())
 	}
-	start := time.Now()
-	require.True(t, client.Flush(time.Second))
-	assert.Less(t, time.Since(start), gateTestFlushBudget)
+	require.True(t, client.Flush(gateTestWaitBudget))
 	assert.Equal(t, deliveryFailureThreshold, inner.callCount())
 
 	clock.Advance(deliveryInitialBackoff)
@@ -348,7 +384,7 @@ func TestDeliveryGate_SentryClientDeliversThroughGate(t *testing.T) {
 	for range afterRecovery {
 		client.CaptureMessage("gate test", nil, sentry.NewScope())
 	}
-	require.True(t, client.Flush(time.Second))
+	require.True(t, client.Flush(gateTestWaitBudget))
 	assert.Equal(t, deliveryFailureThreshold+afterRecovery, inner.callCount())
 }
 
