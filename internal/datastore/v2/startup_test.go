@@ -1098,6 +1098,43 @@ func TestMixedSchemaGuideDropOrder(t *testing.T) {
 
 	assert.Equal(t, orphanedBareV2Tables(), dropped("alert_actions"))
 	assert.ElementsMatch(t, legacyDetectionTables, dropped("note_locks"))
+
+	// Steps 3a and 3b are each run as a block, with the foreign key checks off around the
+	// drop. 3b wraps its long table list over lines, so it is checked at both ends.
+	keepV2 := "SET FOREIGN_KEY_CHECKS = 0;\nDROP TABLE IF EXISTS " + strings.Join(legacyDetectionTables, ", ") + ";\nSET FOREIGN_KEY_CHECKS = 1;"
+	assert.Contains(t, string(guide), keepV2)
+
+	before, afterStart, found := strings.Cut(string(guide), "DROP TABLE IF EXISTS alert_actions")
+	require.True(t, found)
+	assert.True(t, strings.HasSuffix(before, "SET FOREIGN_KEY_CHECKS = 0;\n"), "3b must turn the foreign key checks off first")
+	_, afterDrop, found := strings.Cut(afterStart, ";")
+	require.True(t, found)
+	assert.True(t, strings.HasPrefix(afterDrop, "\nSET FOREIGN_KEY_CHECKS = 1;"), "3b must turn the foreign key checks back on")
+}
+
+// TestMixedSchemaHint_PerVerdict pins the advice each refusal gives to a literal
+// sentence, so a verdict mapped to another verdict's hint fails here.
+func TestMixedSchemaHint_PerVerdict(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		e    *mixedSchemaError
+		want string
+	}{
+		{"unknown", &mixedSchemaError{verdict: verdictRefuseUnknown}, "Some tables could not be read."},
+		{"v2 not completed", &mixedSchemaError{verdict: verdictRefuseV2NotCompleted}, "holds detections but is not marked as a completed install"},
+		{"both hold data", &mixedSchemaError{verdict: verdictRefuseBothHoldData}, "Both sides hold data."},
+		{"shared tables", &mixedSchemaError{verdict: verdictRefuseSharedTables, blocking: []string{"image_caches", "threshold_events"}}, "The tables image_caches, threshold_events hold rows"},
+		{"drop failed", &mixedSchemaError{verdict: verdictRefuseDropFailed, failure: "removing the empty legacy tables failed"}, "No table with rows was dropped"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Contains(t, mixedSchemaHint(tt.e), tt.want)
+			assert.Contains(t, tt.e.Error(), tt.want)
+		})
+	}
 }
 
 // TestMixedSchemaTableLists_MatchEntities ties the hand-kept table lists to the v2
