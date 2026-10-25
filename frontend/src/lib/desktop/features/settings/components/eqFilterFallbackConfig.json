@@ -7,7 +7,7 @@
         "Type": "number",
         "Unit": "Hz",
         "Min": 20,
-        "Max": 24000,
+        "Max": 192000,
         "Default": 1000,
         "Tooltip": "Center frequency of the reject band (notch)"
       },
@@ -42,7 +42,7 @@
         "Type": "number",
         "Unit": "Hz",
         "Min": 20,
-        "Max": 24000,
+        "Max": 192000,
         "Default": 100,
         "Tooltip": "Cutoff frequency below which the signal is attenuated"
       },
@@ -77,7 +77,7 @@
         "Type": "number",
         "Unit": "Hz",
         "Min": 20,
-        "Max": 24000,
+        "Max": 192000,
         "Default": 15000,
         "Tooltip": "Cutoff frequency above which the signal is attenuated"
       },
