@@ -4,7 +4,7 @@ The Database Doctor is a standalone diagnostic and repair tool for BirdNET-Go SQ
 
 **Requirements:** Python 3.9+ (no additional packages needed)
 
-The Database Doctor supports SQLite only. If you use MySQL or MariaDB, BirdNET-Go resolves a database that holds both enhanced and legacy tables by itself when one side is empty, and refuses to start only when it cannot do that without losing data; see [MySQL and MariaDB: enhanced and legacy tables in one database](#mysql-and-mariadb-enhanced-and-legacy-tables-in-one-database).
+The Database Doctor supports SQLite only. If you use MySQL or MariaDB, BirdNET-Go resolves a database that holds both enhanced and legacy tables by itself when one side is empty, and refuses to start only when it cannot do that safely; see [MySQL and MariaDB: enhanced and legacy tables in one database](#mysql-and-mariadb-enhanced-and-legacy-tables-in-one-database).
 
 ## When to Use
 
