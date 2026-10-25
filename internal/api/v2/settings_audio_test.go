@@ -1,9 +1,11 @@
 package api
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -437,6 +439,122 @@ func TestEqualizerSaveToast(t *testing.T) {
 			assert.Equal(t, ToastTypeWarning, toastType)
 			assert.Equal(t, notification.MsgSettingsEqualizerFiltersSkipped, key)
 			assert.Equal(t, map[string]any{"count": tt.wantCount, "sources": tt.wantSources}, params)
+		})
+	}
+}
+
+// TestNewlySkippedSources pins the warning for a save that changes no
+// equalizer setting: only sources that start skipping filters because of the
+// save are reported, and ones that already skipped are not repeated.
+func TestNewlySkippedSources(t *testing.T) {
+	t.Parallel()
+
+	const (
+		batRate = 256000
+		notchHz = 60000
+	)
+	withRate := func(rate int) *conf.Settings {
+		s := &conf.Settings{}
+		s.Realtime.Audio.Equalizer = conf.EqualizerSettings{
+			Enabled: true,
+			Filters: []conf.EqualizerFilter{{Type: "BandReject", Frequency: notchHz, Width: 500, Passes: 1}},
+		}
+		s.Realtime.Audio.Sources = []conf.AudioSourceConfig{{Name: "Bat", Device: "hw:1,0", SampleRate: rate}}
+		return s
+	}
+	report := func(s *conf.Settings) []eqSkippedSource {
+		return equalizerSkipReport(s, s, nil)
+	}
+
+	tests := []struct {
+		name     string
+		old, cur *conf.Settings
+		want     string
+	}{
+		{"lowering the rate below the notch reports the card", withRate(batRate), withRate(0), "Bat"},
+		{"keeping the rate reports nothing", withRate(batRate), withRate(batRate), ""},
+		{"raising the rate reports nothing", withRate(0), withRate(batRate), ""},
+		{"a card that already skipped is not repeated", withRate(0), withRate(48000), ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			added := newlySkippedSources(report(tt.old), report(tt.cur))
+			if tt.want == "" {
+				assert.Empty(t, added)
+				return
+			}
+			require.Len(t, added, 1)
+			assert.Equal(t, tt.want, added[0].name)
+		})
+	}
+}
+
+// TestHandleAudioSettingsChanges_EqualizerToastKey pins which equalizer toast a
+// save sends: the warning when a rate-only save makes a saved filter skip, the
+// success toast when an equalizer setting changed and every filter applies, and
+// none when nothing about the equalizer or its sources changed.
+func TestHandleAudioSettingsChanges_EqualizerToastKey(t *testing.T) {
+	t.Parallel()
+
+	const (
+		batRate = 256000
+		notchHz = 60000
+	)
+	card := func(rate int, notch bool) *conf.Settings {
+		s := &conf.Settings{}
+		s.Realtime.Audio.Sources = []conf.AudioSourceConfig{{Name: "Bat", Device: "hw:1,0", SampleRate: rate}}
+		if notch {
+			s.Realtime.Audio.Equalizer = conf.EqualizerSettings{
+				Enabled: true,
+				Filters: []conf.EqualizerFilter{{Type: "BandReject", Frequency: notchHz, Width: 500, Passes: 1}},
+			}
+		}
+		return s
+	}
+
+	tests := []struct {
+		name     string
+		old, cur *conf.Settings
+		wantKey  string
+	}{
+		{"rate-only save that newly skips a filter warns", card(batRate, true), card(0, true), notification.MsgSettingsEqualizerFiltersSkipped},
+		{"adding a filter that applies reports success", card(batRate, false), card(batRate, true), notification.MsgSettingsEqualizerUpdated},
+		{"rate-only save that skips nothing sends no equalizer toast", card(batRate, true), card(batRate, true), ""},
+		{"a rename in the same save sends no warning", card(0, true), func() *conf.Settings {
+			s := card(0, true)
+			s.Realtime.Audio.Sources[0].Name = "Renamed"
+			s.Realtime.Audio.Sources[0].Models = []string{"perch_v2"}
+			return s
+		}(), ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c, service := newToastTestController(t)
+			ch, _ := service.Subscribe()
+			defer service.Unsubscribe(ch)
+
+			_, err := c.handleAudioSettingsChanges(tt.old, tt.cur)
+			require.NoError(t, err)
+
+			var keys []string
+			for drained := false; !drained; {
+				select {
+				case n := <-ch:
+					keys = append(keys, n.MessageKey)
+				default:
+					drained = true
+				}
+			}
+			eqKeys := slices.DeleteFunc(keys, func(k string) bool {
+				return k != notification.MsgSettingsEqualizerFiltersSkipped && k != notification.MsgSettingsEqualizerUpdated
+			})
+			if tt.wantKey == "" {
+				assert.Empty(t, eqKeys)
+				return
+			}
+			assert.Equal(t, []string{tt.wantKey}, eqKeys)
 		})
 	}
 }
