@@ -444,19 +444,29 @@ func seedBareV2WithDetections(t *testing.T, detections int, completed bool) {
 	require.NoError(t, coexTestDB.Exec("UPDATE migration_states SET state = ?", string(state)).Error)
 	require.Equal(t, int64(1), getRowCount(t, coexTestDB, "migration_states"), "the bare migration_states row must exist")
 
-	require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
-		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
-			return err
-		}
+	require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
 		var insertErr error
 		for i := range detections {
 			insertErr = errors.Join(insertErr, tx.Exec(
 				"INSERT INTO detections (model_id, label_id, detected_at, confidence) VALUES (1, 1, ?, 0.9)",
 				1000+i).Error)
 		}
-		restoreErr := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error
-		return errors.Join(insertErr, restoreErr)
+		return insertErr
 	}))
+}
+
+// withForeignKeyChecksOff runs fn on one pinned connection with foreign key checks off,
+// so the seed statements can insert rows whose references are not under test. The checks
+// are switched back on before the connection returns to the pool, and the error of
+// fn and of the restore are joined.
+func withForeignKeyChecksOff(db *gorm.DB, fn func(tx *gorm.DB) error) error {
+	return db.Connection(func(tx *gorm.DB) error {
+		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
+			return err
+		}
+		fnErr := fn(tx)
+		return errors.Join(fnErr, tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error)
+	})
 }
 
 // insertLegacyNote adds one populated legacy notes row.
@@ -703,12 +713,8 @@ func TestMySQL_StartupDetection_MixedSchema_ReconcilesWithoutLosingRows(t *testi
 				mgr := newTestMySQLManager(t, false)
 				require.NoError(t, mgr.Initialize())
 				require.NoError(t, mgr.Close())
-				require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
-					if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
-						return err
-					}
-					insertErr := insertV2NotificationHistories(tx)
-					return errors.Join(insertErr, tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error)
+				require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+					return insertV2NotificationHistories(tx, 2)
 				}))
 				require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
 				insertLegacyNote(t)
@@ -820,8 +826,8 @@ func TestMySQL_DropVerifiedEmptyTables_RowInAnyTableDropsNothing(t *testing.T) {
 // TestMySQL_StartupDetection_MixedSchema_DropFailureRefusesAndRetries holds a table
 // lock on one table of the drop set from another session so the reconcile cannot take
 // its write locks. The boot must refuse with the failed step and the error number in the
-// text, change nothing (a marker written for the fresh shape goes back to idle), and
-// succeed on the next boot once the lock is gone.
+// text, drop nothing (a marker written for the fresh shape stays completed, so the next
+// boot classifies the same database as keep-v2), and succeed once the lock is gone.
 func TestMySQL_StartupDetection_MixedSchema_DropFailureRefusesAndRetries(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -852,7 +858,7 @@ func TestMySQL_StartupDetection_MixedSchema_DropFailureRefusesAndRetries(t *test
 			},
 			lockTable:    "notes",
 			wantStep:     "removing the empty legacy tables failed",
-			wantDecision: DecisionMixedSchemaFreshV2,
+			wantDecision: DecisionMixedSchemaKeptV2,
 			hasMarker:    true,
 		},
 		{
@@ -882,7 +888,6 @@ func TestMySQL_StartupDetection_MixedSchema_DropFailureRefusesAndRetries(t *test
 				require.NoError(t, coexTestDB.Raw("SELECT state FROM migration_states WHERE id = 1").Scan(&state).Error)
 				return state
 			}
-			markerBefore := markerState()
 			before := tableRowCounts(t)
 
 			// Another session reads the table under a table lock; a write lock must wait for
@@ -901,7 +906,10 @@ func TestMySQL_StartupDetection_MixedSchema_DropFailureRefusesAndRetries(t *test
 			assert.Contains(t, state.Error.Error(), tt.wantStep)
 			assert.Contains(t, state.Error.Error(), "MySQL error 1205", "the error number names the lock timeout")
 			assert.Equal(t, before, tableRowCounts(t), "a failed drop must not drop or add a table or row")
-			assert.Equal(t, markerBefore, markerState(), "a marker written for the reconcile must be put back")
+			if tt.hasMarker {
+				assert.Equal(t, string(entities.MigrationStatusCompleted), markerState(),
+					"the completed marker stays so the next boot keeps the enhanced database")
+			}
 
 			state = checkMySQLMigrationState(settings)
 			require.NoError(t, state.Error)
@@ -1088,15 +1096,10 @@ func seedV2ShapedNotificationHistoryWithoutDetections(t *testing.T, rows int) *c
 	require.NoError(t, mgr.Initialize(), "fresh unprefixed v2 init should succeed")
 	require.NoError(t, mgr.Close())
 
-	// Pin one connection so the foreign key toggle applies to the statements.
-	require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
-		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
-			return err
-		}
+	require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
 		seedErr := insertV2NotificationHistories(tx, rows)
 		dropErr := tx.Exec("DROP TABLE IF EXISTS `detections`").Error
-		restoreErr := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error
-		return errors.Join(seedErr, dropErr, restoreErr)
+		return errors.Join(seedErr, dropErr)
 	}))
 	require.False(t, coexTestDB.Migrator().HasTable("detections"))
 

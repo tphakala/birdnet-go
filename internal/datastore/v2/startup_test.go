@@ -903,6 +903,19 @@ func sharedProbe(table string, rows int64, labelNotNull bool) sharedTableProbe {
 	return sharedTableProbe{tableRowCount: probedRows(table, rows), labelNotNull: labelNotNull}
 }
 
+// mysqlErrNoSuchTableNumber is the MySQL and MariaDB error number for a missing table.
+const mysqlErrNoSuchTableNumber = 1146
+
+// refuses reports whether the verdict stops startup.
+func (v mixedSchemaVerdict) refuses() bool {
+	switch v {
+	case verdictKeepV2, verdictFreshV2, verdictKeepLegacy:
+		return false
+	default:
+		return true
+	}
+}
+
 // TestClassifyMixedSchema pins the verdict for every branch and boundary of the state
 // table: a side is kept only when the other side holds no data and the kept side's own
 // startup drops no rows; everything else, including any unreadable input, refuses.
@@ -910,10 +923,10 @@ func TestClassifyMixedSchema(t *testing.T) {
 	t.Parallel()
 
 	completedMarker := func(p *mixedSchemaProbe) {
-		p.markerTable, p.markerHasRow, p.v2Completed = "migration_states", true, true
+		p.markerTable, p.v2Completed = "migration_states", true
 	}
 	idleMarker := func(p *mixedSchemaProbe) {
-		p.markerTable, p.markerHasRow, p.v2Completed = "migration_states", true, false
+		p.markerTable, p.v2Completed = "migration_states", false
 	}
 	// build returns a probe with empty legacy and v2 detection tables, then applies opts.
 	build := func(opts ...func(*mixedSchemaProbe)) *mixedSchemaProbe {
@@ -1060,7 +1073,7 @@ func TestDescribeStepFailure(t *testing.T) {
 		want string
 	}{
 		{"lock timeout", fmt.Errorf("lock tables: %w", &mysql.MySQLError{Number: 1205, Message: secret}), step + " failed (MySQL error 1205)"},
-		{"missing table", fmt.Errorf("lock tables: %w", &mysql.MySQLError{Number: mysqlErrNoSuchTable, Message: secret}), step + " failed (MySQL error 1146)"},
+		{"missing table", fmt.Errorf("lock tables: %w", &mysql.MySQLError{Number: mysqlErrNoSuchTableNumber, Message: secret}), step + " failed (MySQL error 1146)"},
 		{"table gained rows", fmt.Errorf("%w: notes", errMixedSchemaTableNotEmpty), step + " stopped because a table gained rows"},
 		{"error without a driver number", fmt.Errorf("list tables: %s", secret), step + " failed"},
 	}
