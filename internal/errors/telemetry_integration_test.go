@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -553,4 +554,34 @@ func TestShouldReportToSentry_FiltersLowPrioritySystemInterruptions(t *testing.T
 				"shouldReportToSentry for %q = %v, want %v", tt.name, got, tt.wantReport)
 		})
 	}
+}
+
+func TestReportError_ConnectivityEventIsEnvironmentWarning(t *testing.T) {
+	lastConnectivityReport.Store(0)
+	t.Cleanup(func() { lastConnectivityReport.Store(0) })
+
+	transport := &TransportMock{}
+	require.NoError(t, sentry.Init(sentry.ClientOptions{
+		Dsn:       "https://examplePublicKey@o0.ingest.sentry.io/0",
+		Transport: transport,
+	}))
+
+	reporter := NewSentryReporter(true)
+	reporter.ReportError(New(mysql.ErrInvalidConn).
+		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build())
+	reporter.ReportError(New(fmt.Errorf("state row is inconsistent")).
+		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build())
+	sentry.Flush(time.Second)
+
+	events := transport.Events()
+	require.Len(t, events, 2)
+
+	assert.Equal(t, sentry.LevelWarning, events[0].Level)
+	assert.Equal(t, "environment", events[0].Tags["error_origin"])
+	assert.Equal(t, []string{"connectivity", "state", "invalid_connection"}, events[0].Fingerprint)
+
+	assert.Equal(t, sentry.LevelError, events[1].Level)
+	assert.Equal(t, "code", events[1].Tags["error_origin"])
+	require.GreaterOrEqual(t, len(events[1].Fingerprint), 4)
+	assert.Equal(t, []string{"datastore", "state", "read_state", "error"}, events[1].Fingerprint[:4])
 }

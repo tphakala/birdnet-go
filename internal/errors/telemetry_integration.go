@@ -229,7 +229,8 @@ func IsSuppressibleOperationalError(ee *EnhancedError) bool {
 }
 
 // shouldReportToSentry determines if an error should be sent to Sentry
-// It filters out operational/configuration errors that aren't code bugs
+// It filters out operational/configuration errors that aren't code bugs and
+// rate limits connectivity failures to one event per cooldown window.
 func shouldReportToSentry(ee *EnhancedError) bool {
 	if ee.Err == nil {
 		return true
@@ -338,6 +339,13 @@ func shouldReportToSentry(ee *EnhancedError) bool {
 		return false
 	}
 
+	// Connectivity failures (database host unreachable, dropped connections)
+	// are environment problems, not code defects. Let one through per cooldown
+	// window so an outage stays visible without one event per failed statement.
+	if isGatedConnectivity(ee) {
+		return allowConnectivityReport()
+	}
+
 	// Rate-limit disk-full errors: a single root cause creates cascading
 	// errors across many subsystems (database, FFmpeg, alerting, etc.)
 	if strings.Contains(errorMsg, "disk is full") ||
@@ -380,6 +388,8 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 	// Scrub the message for privacy (using local function)
 	scrubbedMessage := scrubMessageForPrivacy(enhancedMessage)
 
+	connectivity := isGatedConnectivity(ee)
+
 	sentry.WithScope(func(scope *sentry.Scope) {
 		// Create a meaningful error title for Sentry
 		errorTitle := generateErrorTitle(ee)
@@ -388,7 +398,11 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 		scope.SetTag("error_title", errorTitle)
 		scope.SetTag("component", ee.GetComponent())
 		scope.SetTag("category", string(ee.Category))
-		scope.SetTag("error_origin", GetErrorOrigin(ee.Category))
+		errorOrigin := GetErrorOrigin(ee.Category)
+		if connectivity {
+			errorOrigin = errorOriginEnvironment
+		}
+		scope.SetTag("error_origin", errorOrigin)
 		scope.SetTag("error_type", fmt.Sprintf("%T", ee.Err))
 
 		// Add context data with privacy scrubbing
@@ -408,6 +422,9 @@ func (sr *SentryReporter) ReportError(ee *EnhancedError) {
 
 		// Set error level based on category
 		level := getErrorLevel(ee.Category)
+		if connectivity {
+			level = sentry.LevelWarning
+		}
 		scope.SetLevel(level)
 
 		// Set custom fingerprint for better grouping using structured fields
@@ -444,6 +461,12 @@ func buildFingerprint(ee *EnhancedError) []string {
 		errMsg = ee.Err.Error()
 	}
 	normalizedType := NormalizeErrorType(errMsg)
+
+	// Connectivity failures group by category and type only: with one event per
+	// window the operation that happens to go first is arbitrary.
+	if isGatedConnectivity(ee) {
+		return []string{connectivityFingerprintPrefix, category, normalizedType}
+	}
 
 	fp := make([]string, 0, 5)
 	if component != "" && component != ComponentUnknown {
@@ -490,16 +513,25 @@ func NormalizeErrorType(errMsg string) string {
 		{"permission denied", "permission_denied"},
 		{"dns resolution", "dns_error"},
 		{"no such host", "dns_error"},
+		{"dial tcp: lookup", "dns_error"}, // the lookup may end in "i/o timeout"
+		{"server misbehaving", "dns_error"},
+		{"no route to host", "host_unreachable"},
+		{"network is unreachable", "network_unreachable"},
+		{"invalid connection", "invalid_connection"},
+		{"bad connection", "bad_connection"},
+		{"lock wait timeout", "lock_wait_timeout"},
+		{"deadlock found", "deadlock"},
+		{"unknown database", "unknown_database"},
 		{"signal: killed", "signal_killed"},
 		{"ringbuffer is full", "buffer_full"},
 		{"not initialized", "not_initialized"},
 		{"scientific name cannot be empty", "empty_scientific_name"},
 		{"not found", "not_found"},
 		{"is locked", "resource_locked"},
+		{"i/o timeout", "io_timeout"},
 		{"timed out", "timeout"}, //nolint:goconst // normalized error token, not the CategoryTimeout enum value
 		{"timeout", "timeout"},
 		{"disk is full", "disk_full"},
-		{"i/o timeout", "io_timeout"},
 		{"broken pipe", "broken_pipe"},
 		{"exit status", "process_exit"},
 	}
