@@ -1074,6 +1074,16 @@ func TestDescribeStepFailure(t *testing.T) {
 	}
 }
 
+// mixedSchemaKeepV2SQL is the SQL of step 3a (keep the enhanced database) in the Database
+// Doctor wiki guide, one statement per entry. TestMixedSchemaGuideDropOrder checks that
+// the guide holds exactly these statements, and the recovery test in
+// mysql_coexistence_test.go runs them.
+var mixedSchemaKeepV2SQL = []string{
+	"SET FOREIGN_KEY_CHECKS = 0",
+	"DROP TABLE IF EXISTS " + strings.Join(legacyDetectionTables, ", "),
+	"SET FOREIGN_KEY_CHECKS = 1",
+}
+
 // TestMixedSchemaGuideDropOrder keeps the wiki guide's SQL in step with the code: the
 // keep-legacy statement must drop exactly orphanedBareV2Tables in order, and the
 // keep-enhanced statement must drop the legacy detection tables. The guide is what
@@ -1101,8 +1111,7 @@ func TestMixedSchemaGuideDropOrder(t *testing.T) {
 
 	// Steps 3a and 3b are each run as a block, with the foreign key checks off around the
 	// drop. 3b wraps its long table list over lines, so it is checked at both ends.
-	keepV2 := "SET FOREIGN_KEY_CHECKS = 0;\nDROP TABLE IF EXISTS " + strings.Join(legacyDetectionTables, ", ") + ";\nSET FOREIGN_KEY_CHECKS = 1;"
-	assert.Contains(t, string(guide), keepV2)
+	assert.Contains(t, string(guide), strings.Join(mixedSchemaKeepV2SQL, ";\n")+";")
 
 	before, afterStart, found := strings.Cut(string(guide), "DROP TABLE IF EXISTS alert_actions")
 	require.True(t, found)

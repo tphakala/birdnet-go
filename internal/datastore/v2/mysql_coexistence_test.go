@@ -426,15 +426,6 @@ func TestMySQL_V2Delete_WithLegacyTables_OnlyDeletesV2(t *testing.T) {
 // Startup Detection Tests
 // ============================================================================
 
-// mixedSchemaKeepV2SQL is the SQL of step 3a (keep the enhanced database) in the Database
-// Doctor wiki guide, one statement per entry. TestMixedSchemaGuideDropOrder checks that
-// the guide holds exactly these statements, built from the same table list.
-var mixedSchemaKeepV2SQL = []string{
-	"SET FOREIGN_KEY_CHECKS = 0",
-	"DROP TABLE IF EXISTS " + strings.Join(legacyDetectionTables, ", "),
-	"SET FOREIGN_KEY_CHECKS = 1",
-}
-
 // seedBareV2WithDetections creates the unprefixed v2 schema the way a real fresh
 // install does, marks it completed or idle, and adds detection rows. Detections
 // are inserted with foreign key checks off on one pinned connection, because the
