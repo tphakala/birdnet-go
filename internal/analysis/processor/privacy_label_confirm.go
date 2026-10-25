@@ -43,7 +43,11 @@ const (
 type labelHitDecision struct {
 	held      bool      // the label hit was held for confirmation
 	confirmed *humanHit // a held hit that this hit confirmed and was recorded
-	dropped   *humanHit // a held hit whose window expired without a second hit
+	dropped   *humanHit // a held hit that will never count: its window expired without a second hit, or a hit arrived with label confirmation off
+
+	// confirmationOff marks dropped as resolved by a hit that arrived with label
+	// confirmation off.
+	confirmationOff bool
 }
 
 // withinLabelConfirmWindow reports whether two audio-end stamps are close
@@ -52,16 +56,38 @@ func withinLabelConfirmWindow(a, b time.Time) bool {
 	return a.Sub(b).Abs() <= labelConfirmWindow
 }
 
+// popHeldLocked removes and returns the held label hit of source, if any. It is
+// the only place a held hit leaves the map. The caller holds detectionMutex for
+// writing.
+func (p *Processor) popHeldLocked(source string) (humanHit, bool) {
+	held, ok := p.heldLabelHits[source]
+	if ok {
+		delete(p.heldLabelHits, source)
+	}
+	return held, ok
+}
+
+// dropHeldLocked removes the held label hit of source, if any, and returns it as
+// dropped. It resolves a held hit when a hit arrives with label confirmation
+// off: the hit was held under a rule that no longer applies, so it is never
+// confirmed. The caller holds detectionMutex for writing.
+func (p *Processor) dropHeldLocked(source string) labelHitDecision {
+	held, ok := p.popHeldLocked(source)
+	if !ok {
+		return labelHitDecision{}
+	}
+	return labelHitDecision{dropped: &held, confirmationOff: true}
+}
+
 // takeHeldLocked removes the held label hit of source, if any, and resolves it
 // against a counted hit stamped at: inside the window it is confirmed and
 // recorded with its own stamp, model and confidence, otherwise dropped. The
 // caller holds detectionMutex for writing.
 func (p *Processor) takeHeldLocked(source string, at time.Time) labelHitDecision {
-	held, ok := p.heldLabelHits[source]
+	held, ok := p.popHeldLocked(source)
 	if !ok {
 		return labelHitDecision{}
 	}
-	delete(p.heldLabelHits, source)
 	if !withinLabelConfirmWindow(held.at, at) {
 		return labelHitDecision{dropped: &held}
 	}
@@ -71,7 +97,8 @@ func (p *Processor) takeHeldLocked(source string, at time.Time) labelHitDecision
 
 // recordLabelHit applies the confirmation rule to one human label hit, built
 // with labelHumanHit. At or below labelConfirmMinBaseOverlap it is recorded at
-// once. Above it, the hit counts when it confirms a held hit of the source (any
+// once and drops a held hit of the source, which can no longer be confirmed.
+// Above it, the hit counts when it confirms a held hit of the source (any
 // model, even the same chunk) or when a counted hit of the source, label or VAD,
 // is inside the window; otherwise it is held. LastHumanDetection carries the
 // latest counted stamp, so a hit counted while confirmation was off also
@@ -85,8 +112,9 @@ func (p *Processor) recordLabelHit(settings *conf.Settings, source string, hit h
 	defer p.detectionMutex.Unlock()
 
 	if baseOverlap <= labelConfirmMinBaseOverlap {
+		d := p.dropHeldLocked(source)
 		p.recordHumanHitLocked(source, hit)
-		return labelHitDecision{}
+		return d
 	}
 
 	d := p.takeHeldLocked(source, hit.at)
@@ -104,7 +132,8 @@ func (p *Processor) recordLabelHit(settings *conf.Settings, source string, hit h
 }
 
 // recordVADHit records a VAD speech hit, built with vadHumanHit. It always
-// counts on its own and lets it confirm a held label hit of the source.
+// counts on its own. Above labelConfirmMinBaseOverlap it confirms a held label
+// hit of the source; at or below it, it drops the held hit instead.
 func (p *Processor) recordVADHit(settings *conf.Settings, source string, hit humanHit) labelHitDecision {
 	baseOverlap := p.effectiveBaseOverlap(settings)
 
@@ -113,7 +142,7 @@ func (p *Processor) recordVADHit(settings *conf.Settings, source string, hit hum
 
 	p.recordHumanHitLocked(source, hit)
 	if baseOverlap <= labelConfirmMinBaseOverlap {
-		return labelHitDecision{}
+		return p.dropHeldLocked(source)
 	}
 	return p.takeHeldLocked(source, hit.at)
 }
@@ -178,14 +207,21 @@ func (p *Processor) logHitDecision(settings *conf.Settings, source string, hit *
 		GetLogger().Info("human detection filtered", fields...)
 	}
 	if d.dropped != nil {
-		GetLogger().Info("privacy filter: human label hit ignored, no second hit within the confirmation window",
+		msg := "privacy filter: human label hit ignored, no second hit within the confirmation window"
+		fields := []logger.Field{
 			logger.Float32("confidence", float32(d.dropped.score)),
 			logger.Float32("threshold", threshold),
 			logger.String("model_id", d.dropped.modelID),
 			logger.Time("hit_time", d.dropped.at),
-			logger.Duration("window", labelConfirmWindow),
 			logger.String("source", display),
-			logger.String("operation", labelConfirmOperation))
+			logger.String("operation", labelConfirmOperation),
+		}
+		if d.confirmationOff {
+			msg = "privacy filter: human label hit ignored, label confirmation no longer applies"
+		} else {
+			fields = append(fields, logger.Duration("window", labelConfirmWindow))
+		}
+		GetLogger().Info(msg, fields...)
 	}
 	if d.confirmed != nil {
 		// A held hit confirmed by hit, whether a label hit or a VAD hit (whose

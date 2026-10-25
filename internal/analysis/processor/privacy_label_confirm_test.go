@@ -257,6 +257,31 @@ func TestReportHitDecision_OperationAndLevel(t *testing.T) {
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
+func TestReportHitDecision_DropWithConfirmationOffLogsItsReason(t *testing.T) {
+	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
+	p, settings := confirmProcessor(2.4)
+	t0 := time.Unix(1000, 0)
+
+	labelHit(p, settings, confirmSource, testVADModel, t0)
+	settings.BirdNET.Overlap = 0
+	labelHit(p, settings, confirmSource, testVADModel, t0.Add(time.Second))
+
+	// The same drop through a VAD hit, which logs nothing else of its own.
+	vadProc, vadSettings := confirmProcessor(2.4)
+	labelHit(vadProc, vadSettings, confirmSource, testVADModel, t0)
+	vadSettings.BirdNET.Overlap = 0
+	vadHit := vadHumanHit(t0.Add(time.Second), 0, 0)
+	d := vadProc.recordVADHit(vadSettings, confirmSource, vadHit)
+	vadProc.reportHitDecision(vadSettings, confirmSource, &vadHit, &d)
+
+	out := infoLog.String()
+	assert.Equal(t, 2, strings.Count(out, "operation=privacy_filter_label_confirm"), "each dropped hit logs once under the confirm operation")
+	assert.Equal(t, 2, strings.Count(out, "label confirmation no longer applies"), "a label hit and a VAD hit each log the reason")
+	assert.NotContains(t, out, "no second hit", "no window is involved when confirmation is off")
+	assert.NotContains(t, out, "window=", "the window field belongs to the expiry message only")
+}
+
+// Not parallel: logtest.CaptureBufferAt replaces the global logger.
 func TestReportHitDecision_HeldHitLogsAtDebugWithoutCountedOperation(t *testing.T) {
 	debugLog := logtest.CaptureBufferAt(t, slog.LevelDebug)
 	p, settings := confirmProcessor(2.4)
@@ -334,15 +359,17 @@ func TestRecordVADHit_FollowsEffectiveOverlap(t *testing.T) {
 	require.True(t, p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, "", 0.4, 0)).held)
 
 	// The plan is republished with the overlap capped below the boundary while the
-	// configured value stays above it: the VAD hit counts alone and does not
-	// resolve the held label hit.
+	// configured value stays above it: the VAD hit counts alone and drops the held
+	// label hit, even inside the confirmation window, because confirmation is off.
 	attachCadencePlan(t, p, 2.4, 1.0)
 	d := p.recordVADHit(settings, confirmSource, vadHumanHit(t0.Add(time.Second), 0, 0))
 
 	assert.Nil(t, d.confirmed)
-	assert.Nil(t, d.dropped)
+	require.NotNil(t, d.dropped)
+	assert.True(t, t0.Equal(d.dropped.at))
+	assert.True(t, d.confirmationOff)
 	_, stillHeld := held(p, confirmSource)
-	assert.True(t, stillHeld)
+	assert.False(t, stillHeld)
 	got, ok := lastHit(p)
 	require.True(t, ok)
 	assert.Equal(t, metrics.TriggerVAD, got.Trigger)

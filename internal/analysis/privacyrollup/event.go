@@ -21,8 +21,9 @@ const (
 	// carries the held hit's own stamp, model and threshold: hits+1, confirmed+1,
 	// not bucketed (the hit was bucketed when it was held).
 	KindConfirmedHeld
-	// KindIgnoredHeld is a held hit dropped for lack of a second hit, keyed on the
-	// dropped hit: ignored+1.
+	// KindIgnoredHeld is a held hit dropped without counting, because no second hit
+	// came inside the window or a hit arrived with label confirmation off, keyed on
+	// the dropped hit: ignored+1.
 	KindIgnoredHeld
 	// KindDiscard is a pending detection the privacy filter dropped, keyed on the
 	// hit that caused the drop: discards+1.
