@@ -605,64 +605,94 @@ func TestMySQL_V2Initialize_SwapsContributionDetectionIndex(t *testing.T) {
 	assert.Zero(t, remaining, "deleting the detection must still cascade to its contributions")
 }
 
-// TestMySQL_LegacyOpen_AfterOrphanCleanup_RepairsV2NotificationHistory covers
-// legacy startup over a fresh unprefixed v2 database that holds a v2-shaped
-// notification_histories table with several rows and a notes table left by an
-// earlier legacy boot. Legacy AutoMigrate used to fail with Error 1062 on
-// idx_notification_history_species_type; the startup guard now recreates the
-// table in the legacy shape.
-func TestMySQL_LegacyOpen_AfterOrphanCleanup_RepairsV2NotificationHistory(t *testing.T) {
+// seedV2ShapedNotificationHistoryWithoutDetections builds a fresh unprefixed v2
+// database, then drops the bare detections table the way orphan cleanup leaves
+// it, and adds the notes table an earlier legacy boot left behind. The legacy
+// store then sees v2-shaped auxiliary tables and no v2 detections. rows v2 rows
+// are inserted into notification_histories.
+func seedV2ShapedNotificationHistoryWithoutDetections(t *testing.T, rows int) *conf.Settings {
+	t.Helper()
 	dropAllTables(t, coexTestDB, coexTestDBName)
 
 	mgr := newTestMySQLManager(t, false)
 	require.NoError(t, mgr.Initialize(), "fresh unprefixed v2 init should succeed")
 	require.NoError(t, mgr.Close())
 
-	// Two v2 rows share notification_type, so the legacy unique index on
-	// (scientific_name, notification_type) would collide once scientific_name
-	// is added with an empty default. Pin one connection so the foreign key
-	// toggle applies to the inserts.
+	// Pin one connection so the foreign key toggle applies to the statements.
 	require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
 		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
 			return err
 		}
-		insertErr := insertV2NotificationHistories(tx)
+		seedErr := insertV2NotificationHistories(tx, rows)
+		dropErr := tx.Exec("DROP TABLE IF EXISTS `detections`").Error
 		restoreErr := tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error
-		return errors.Join(insertErr, restoreErr)
+		return errors.Join(seedErr, dropErr, restoreErr)
 	}))
+	require.False(t, coexTestDB.Migrator().HasTable("detections"))
 
-	// The notes table an earlier legacy boot left behind.
 	require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
 
 	settings := buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, coexTestPassword)
 	// datastore.New picks SQLite first when it is enabled.
 	settings.Output.SQLite.Enabled = false
-
-	state := checkMySQLMigrationState(settings)
-	require.Equal(t, DecisionLegacyMode, state.Decision, "orphan cleanup should return legacy mode")
-
-	store := datastore.New(settings)
-	require.NoError(t, store.Open(), "legacy Open should repair the v2-shaped table")
-	t.Cleanup(func() { _ = store.Close() })
-
-	assert.False(t, coexTestDB.Migrator().HasColumn("notification_histories", "label_id"),
-		"notification_histories should be recreated in the legacy shape")
-
-	mysqlStore, ok := store.(*datastore.MySQLStore)
-	require.True(t, ok, "store should be a MySQLStore")
-	now := time.Now()
-	require.NoError(t, mysqlStore.SaveNotificationHistory(t.Context(), &datastore.NotificationHistory{
-		ScientificName: "Parus major",
-		LastSent:       now,
-		ExpiresAt:      now.Add(time.Hour),
-		CreatedAt:      now,
-	}), "legacy notification insert should work after the repair")
+	return settings
 }
 
-// insertV2NotificationHistories inserts two v2-shaped notification_histories
+// TestMySQL_LegacyOpen_V2ShapedNotificationHistory covers legacy startup over a
+// fresh unprefixed v2 database that has lost its detections table and holds a
+// v2-shaped notification_histories table. Rows in that table must never be
+// dropped; an empty table is recreated in the legacy shape.
+func TestMySQL_LegacyOpen_V2ShapedNotificationHistory(t *testing.T) {
+	t.Run("holds_rows_refuses_and_keeps_them", func(t *testing.T) {
+		// Two v2 rows share notification_type, which is the state that used to
+		// fail legacy AutoMigrate with Error 1062.
+		settings := seedV2ShapedNotificationHistoryWithoutDetections(t, 2)
+
+		for boot := 1; boot <= 2; boot++ {
+			store := datastore.New(settings)
+			require.ErrorContains(t, store.Open(), "notification_histories=2",
+				"legacy Open must refuse on boot %d with the v2-shaped table guard", boot)
+
+			assert.True(t, coexTestDB.Migrator().HasColumn("notification_histories", "label_id"),
+				"notification_histories must keep its v2 shape on boot %d", boot)
+			assert.EqualValues(t, 2, getRowCount(t, coexTestDB, "notification_histories"),
+				"no row may be dropped on boot %d", boot)
+		}
+	})
+
+	t.Run("empty_is_recreated_in_legacy_shape", func(t *testing.T) {
+		settings := seedV2ShapedNotificationHistoryWithoutDetections(t, 0)
+
+		store := datastore.New(settings)
+		require.NoError(t, store.Open(), "legacy Open should recreate the empty v2-shaped table")
+		t.Cleanup(func() { _ = store.Close() })
+
+		assert.False(t, coexTestDB.Migrator().HasColumn("notification_histories", "label_id"),
+			"notification_histories should be recreated in the legacy shape")
+
+		mysqlStore, ok := store.(*datastore.MySQLStore)
+		require.True(t, ok, "store should be a MySQLStore")
+		now := time.Now()
+		require.NoError(t, mysqlStore.SaveNotificationHistory(t.Context(), &datastore.NotificationHistory{
+			ScientificName: "Parus major",
+			LastSent:       now,
+			ExpiresAt:      now.Add(time.Hour),
+			CreatedAt:      now,
+		}), "legacy notification insert should work on the recreated table")
+		require.NoError(t, store.Close())
+
+		reopened := datastore.New(settings)
+		require.NoError(t, reopened.Open(), "a second legacy Open should succeed")
+		t.Cleanup(func() { _ = reopened.Close() })
+		assert.EqualValues(t, 1, getRowCount(t, coexTestDB, "notification_histories"),
+			"the legacy row must survive the second boot")
+	})
+}
+
+// insertV2NotificationHistories inserts n v2-shaped notification_histories
 // rows that share a notification_type.
-func insertV2NotificationHistories(tx *gorm.DB) error {
-	for labelID := 1; labelID <= 2; labelID++ {
+func insertV2NotificationHistories(tx *gorm.DB, n int) error {
+	for labelID := 1; labelID <= n; labelID++ {
 		if err := tx.Exec(`INSERT INTO notification_histories
 			(label_id, notification_type, last_sent, expires_at, created_at, updated_at)
 			VALUES (?, 'new_species', NOW(), NOW() + INTERVAL 1 DAY, NOW(), NOW())`, labelID).Error; err != nil {
