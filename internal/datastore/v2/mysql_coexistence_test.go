@@ -458,7 +458,9 @@ func seedBareV2WithDetections(t *testing.T, detections int, completed bool) {
 // so the seed statements can insert rows whose references are not under test. The checks
 // are switched back on before the connection returns to the pool on every exit path,
 // including a require failure or a panic inside fn, and the error of fn and of the
-// restore are joined.
+// restore are joined. fn gets a session that skips GORM's default transaction: a Create on
+// the pinned handle itself begins and commits a transaction and then points the handle back
+// at the pool, so the restore would run on another connection.
 func withForeignKeyChecksOff(db *gorm.DB, fn func(tx *gorm.DB) error) error {
 	return db.Connection(func(tx *gorm.DB) (err error) {
 		if err := tx.Exec("SET FOREIGN_KEY_CHECKS = 0").Error; err != nil {
@@ -467,7 +469,7 @@ func withForeignKeyChecksOff(db *gorm.DB, fn func(tx *gorm.DB) error) error {
 		defer func() {
 			err = errors.Join(err, tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error)
 		}()
-		return fn(tx)
+		return fn(tx.Session(&gorm.Session{SkipDefaultTransaction: true}))
 	})
 }
 
