@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -103,12 +104,7 @@ func IsConnectivityError(err error) bool {
 
 // isConnectSyscall reports whether name is a connect syscall name from net.
 func isConnectSyscall(name string) bool {
-	for _, s := range connectSyscalls {
-		if name == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(connectSyscalls, name)
 }
 
 // isFlattenedDialFailure matches a dial failure whose typed chain was lost.

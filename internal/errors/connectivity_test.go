@@ -45,7 +45,7 @@ func TestIsConnectivityError(t *testing.T) {
 		{"invalid connection in nested enhanced error", New(New(mysql.ErrInvalidConn).Build()).Build(), true},
 		{"invalid connection in joined error", Join(NewStd("other"), fmt.Errorf("x: %w", mysql.ErrInvalidConn)), true},
 		{"unix socket missing", &net.OpError{Op: "dial", Net: "unix", Err: os.NewSyscallError("connect", syscall.ENOENT)}, true},
-		{"flattened refused", fmt.Errorf("x: %v", refused), true},
+		{"flattened refused", fmt.Errorf("x: %v", refused), true}, //nolint:errorlint // flattening the chain is the point of this case
 		{"flattened unix socket refused", NewStd("dial unix /run/mysqld.sock: connect: connection refused"), true},
 
 		{"nil", nil, false},
@@ -58,10 +58,10 @@ func TestIsConnectivityError(t *testing.T) {
 		{"fd exhaustion", &net.OpError{Op: "dial", Net: "tcp", Err: os.NewSyscallError("socket", syscall.EMFILE)}, false},
 		{"listener error", &net.OpError{Op: "listen", Net: "tcp", Err: os.NewSyscallError("bind", syscall.EADDRINUSE)}, false},
 		{"syscall error outside the dial error", Join(dialAddrErr, os.NewSyscallError("connect", syscall.EINVAL)), false},
-		{"gorm join, defect first", fmt.Errorf("%v; %w", server1364, mysql.ErrInvalidConn), false},
-		{"gorm join, dial first", fmt.Errorf("%v; %w", refused, &mysql.MySQLError{Number: 1054, Message: "Unknown column"}), false},
+		{"gorm join, defect first", fmt.Errorf("%v; %w", server1364, mysql.ErrInvalidConn), false},                                  //nolint:errorlint // flattening the chain is the point of this case
+		{"gorm join, dial first", fmt.Errorf("%v; %w", refused, &mysql.MySQLError{Number: 1054, Message: "Unknown column"}), false}, //nolint:errorlint // flattening the chain is the point of this case
 		{"words only", NewStd("invalid connection string"), false},
-		{"sentinel text in a non-leaf", fmt.Errorf("%w; %v", sql.ErrTxDone, mysql.ErrInvalidConn), false},
+		{"sentinel text in a non-leaf", fmt.Errorf("%w; %v", sql.ErrTxDone, mysql.ErrInvalidConn), false}, //nolint:errorlint // flattening the chain is the point of this case
 		{"flattened missing port", NewStd("dial tcp: address h: missing port in address"), false},
 	}
 
