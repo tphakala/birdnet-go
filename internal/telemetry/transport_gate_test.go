@@ -429,6 +429,15 @@ func TestDeliveryGate_StaleSuccessDoesNotLetFailedProbeReopenGate(t *testing.T) 
 	inner := newScriptedInner(lastCall + 1)
 	clock := NewFakeTimeSource(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 	g := newDeliveryGate(inner, clock)
+	// Release any request still held in the inner round tripper if an assertion fails.
+	t.Cleanup(func() {
+		for _, ch := range inner.results {
+			select {
+			case ch <- nil:
+			default:
+			}
+		}
+	})
 
 	var wg sync.WaitGroup
 	start := func() <-chan error {
@@ -445,23 +454,23 @@ func TestDeliveryGate_StaleSuccessDoesNotLetFailedProbeReopenGate(t *testing.T) 
 	}
 
 	slowDone := start()
-	require.Equal(t, slowCall, <-inner.entered)
+	require.Equal(t, slowCall, recvWithin(t, inner.entered))
 	for i := 1; i <= deliveryFailureThreshold; i++ {
 		done := start()
-		require.Equal(t, i, <-inner.entered)
+		require.Equal(t, i, recvWithin(t, inner.entered))
 		inner.results[i] <- errGateDial
-		require.Error(t, <-done)
+		require.Error(t, recvWithin(t, done))
 	}
 
 	clock.Advance(deliveryInitialBackoff)
 	probeDone := start()
-	require.Equal(t, probeCall, <-inner.entered)
+	require.Equal(t, probeCall, recvWithin(t, inner.entered))
 
 	// The stale request succeeds while the probe is still in flight, then the probe fails.
 	inner.results[slowCall] <- nil
-	require.NoError(t, <-slowDone)
+	require.NoError(t, recvWithin(t, slowDone))
 	inner.results[probeCall] <- errGateDial
-	require.Error(t, <-probeDone)
+	require.Error(t, recvWithin(t, probeDone))
 
 	// One failure after the reset is below the threshold: the gate is still
 	// closed, so this request reaches the inner round tripper.
@@ -470,4 +479,18 @@ func TestDeliveryGate_StaleSuccessDoesNotLetFailedProbeReopenGate(t *testing.T) 
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	wg.Wait()
+}
+
+// recvWithin receives from ch and fails the test instead of hanging when
+// nothing arrives within the hang guard.
+func recvWithin[T any](t *testing.T, ch <-chan T) T {
+	t.Helper()
+	select {
+	case v := <-ch:
+		return v
+	case <-time.After(gateTestWaitBudget):
+		require.FailNow(t, "timed out waiting for the gate or the inner round tripper")
+	}
+	var zero T
+	return zero
 }
