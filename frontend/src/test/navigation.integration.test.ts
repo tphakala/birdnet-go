@@ -223,7 +223,7 @@ describe('Sidebar Navigation', () => {
   const sidebarRoutes = [
     { name: 'Dashboard', path: '/ui/dashboard', selector: '[href*="dashboard"]' },
     { name: 'Analytics', path: '/ui/analytics', selector: '[href*="analytics"]' },
-    { name: 'Search', path: '/ui/search', selector: '[href*="search"]' },
+    { name: 'Detections', path: '/ui/detections', selector: '[href*="detections"]' },
     { name: 'About', path: '/ui/about', selector: '[href*="about"]' },
     { name: 'System', path: '/ui/system', selector: '[href*="system"]' },
     { name: 'Settings', path: '/ui/settings', selector: '[href*="settings"]' },
@@ -368,7 +368,7 @@ describe('URL State Consistency', () => {
 describe('Search Navigation', () => {
   it('clicking search result navigates to detection detail', async () => {
     // Navigate to search page
-    await navigationUtils.navigateTo('/ui/search');
+    await navigationUtils.navigateTo('/ui/detections');
 
     // Wait for search page to load
     await integrationUtils.waitForElement('input[type="search"], input[type="text"]', 5000);

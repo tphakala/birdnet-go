@@ -1,9 +1,19 @@
 package repository
 
-import "github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+import (
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
+)
 
 // VerificationFilter wraps VerificationStatus for search filters.
 type VerificationFilter entities.VerificationStatus
+
+// TimeOfDayFilter is a set of absolute time windows a detection must fall inside
+// (the union of the windows). An empty Windows slice matches nothing, which is
+// what a period with no sun-event windows in range means.
+type TimeOfDayFilter struct {
+	Windows []suncalc.TimeWindow
+}
 
 // SearchFilters provides advanced search criteria for detections.
 // All timestamps are Unix int64 for consistency and indexing performance.
@@ -36,6 +46,12 @@ type SearchFilters struct {
 	// IncludedHours filters by hour of day (0-23).
 	// Supports non-contiguous ranges (e.g., dawn + night = [5,6,20,21,22,23,0,1,2,3,4]).
 	IncludedHours []int
+
+	// TimeOfDay restricts results to detections inside real sun-event windows
+	// (sunrise, day, sunset, night), which IncludedHours cannot express because the
+	// boundaries move with the date and the station's location. nil means no
+	// time-of-day constraint.
+	TimeOfDay *TimeOfDayFilter
 
 	// TimezoneOffset is the timezone offset in seconds for hour calculation.
 	// Used with IncludedHours to extract local hour from Unix timestamp.

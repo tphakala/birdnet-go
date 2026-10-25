@@ -2,6 +2,7 @@ package apicore
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,4 +123,58 @@ func TestParseConfidenceFilter(t *testing.T) {
 			assert.InDelta(t, tt.wantValue, got.Value, confidenceValueDelta, "value mismatch for param %q", tt.param)
 		})
 	}
+}
+
+// TestParseDateRangeFilter_OneSidedRangeIsOpenEnded pins that setting only a
+// start or only an end date still filters, instead of being dropped (which made
+// the list show every date while the filter panel claimed a date was applied).
+func TestParseDateRangeFilter_OneSidedRangeIsOpenEnded(t *testing.T) {
+	t.Parallel()
+
+	const day = "2024-03-10"
+	dayStart, err := time.Parse(time.DateOnly, day)
+	require.NoError(t, err)
+
+	t.Run("start only runs through today", func(t *testing.T) {
+		t.Parallel()
+		got := ParseDateRangeFilter("", day, "")
+		require.NotNil(t, got)
+		assert.True(t, got.Start.Equal(dayStart))
+		assert.False(t, got.End.Before(time.Now().Add(-24*time.Hour)), "end must be today")
+	})
+
+	t.Run("end only starts at the beginning", func(t *testing.T) {
+		t.Parallel()
+		got := ParseDateRangeFilter("", "", day)
+		require.NotNil(t, got)
+		assert.Equal(t, openRangeStartYear, got.Start.Year())
+		assert.True(t, got.End.Equal(dayStart.AddDate(0, 0, 1).Add(-time.Second)))
+	})
+
+	t.Run("start in the future keeps the filter and matches nothing", func(t *testing.T) {
+		t.Parallel()
+		got := ParseDateRangeFilter("", "2999-01-01", "")
+		require.NotNil(t, got, "dropping the range would return every detection")
+		assert.Equal(t, 2999, got.Start.Year())
+		assert.Equal(t, 2999, got.End.Year())
+	})
+
+	t.Run("end before the open start keeps the filter and matches nothing", func(t *testing.T) {
+		t.Parallel()
+		got := ParseDateRangeFilter("", "", "1960-05-01")
+		require.NotNil(t, got)
+		assert.Equal(t, 1960, got.Start.Year())
+		assert.Equal(t, 1960, got.End.Year())
+	})
+
+	t.Run("two explicit dates in the wrong order are rejected", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, ParseDateRangeFilter("", "2024-06-10", "2024-06-01"))
+	})
+
+	t.Run("unparseable bound is rejected", func(t *testing.T) {
+		t.Parallel()
+		assert.Nil(t, ParseDateRangeFilter("", "nope", ""))
+		assert.Nil(t, ParseDateRangeFilter("", "", "nope"))
+	})
 }

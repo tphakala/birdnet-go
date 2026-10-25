@@ -8,25 +8,26 @@ import { test, expect, type Page } from '@playwright/test';
  * to escape clipping contexts and should always be fully visible within the
  * viewport when opened.
  *
- * Also includes functional tests for date selection on the Search page.
+ * Also includes functional tests for date selection in the detections filter panel.
  */
 
-const SEARCH_URL = '/ui/search';
+const DETECTIONS_URL = '/ui/detections';
 const NAVIGATION_TIMEOUT_MS = 15000;
 const CONTENT_TIMEOUT_MS = 10000;
 const INTERACTION_TIMEOUT_MS = 5000;
-const SEARCH_FORM_SELECTOR = '#searchForm';
-const DATEPICKER_TRIGGER_SELECTOR = '.datepicker-trigger';
+const FILTER_FORM_SELECTOR = 'form[aria-labelledby="detection-filters-heading"]';
+// Scoped to the filter form so any other date control on the page is not picked up.
+const DATEPICKER_TRIGGER_SELECTOR = `${FILTER_FORM_SELECTOR} .datepicker-trigger`;
 const DATEPICKER_CALENDAR_SELECTOR = '.datepicker-calendar';
 const DATEPICKER_WRAPPER_SELECTOR = '.datepicker-wrapper';
 
-/** Navigate to the Search page and wait for it to load. */
-const navigateToSearch = async (page: Page) => {
-  await page.goto(SEARCH_URL, { timeout: NAVIGATION_TIMEOUT_MS });
+/** Navigate to the detections page and wait for the filter form to load. */
+const navigateToDetections = async (page: Page) => {
+  await page.goto(DETECTIONS_URL, { timeout: NAVIGATION_TIMEOUT_MS });
   await page.waitForLoadState('domcontentloaded', { timeout: CONTENT_TIMEOUT_MS });
 
-  // Wait for the search form to be present
-  await expect(page.locator(SEARCH_FORM_SELECTOR)).toBeVisible({
+  // Wait for the filter form to be present
+  await expect(page.locator(FILTER_FORM_SELECTOR)).toBeVisible({
     timeout: CONTENT_TIMEOUT_MS,
   });
 };
@@ -57,11 +58,11 @@ const openEndDatePicker = async (page: Page) => {
   return calendar;
 };
 
-test.describe('Search DatePicker - Overflow and Visibility', () => {
+test.describe('Detections DatePicker - Overflow and Visibility', () => {
   test.setTimeout(30000);
 
   test('start date calendar is fully visible within viewport when opened', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     // Get the calendar's bounding box and viewport size
@@ -93,7 +94,7 @@ test.describe('Search DatePicker - Overflow and Visibility', () => {
   });
 
   test('end date calendar is fully visible within viewport when opened', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openEndDatePicker(page);
 
     const calendarBox = await calendar.boundingBox();
@@ -123,7 +124,7 @@ test.describe('Search DatePicker - Overflow and Visibility', () => {
   });
 
   test('calendar uses position:fixed to escape overflow clipping contexts', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     // Verify the calendar is rendered with position:fixed (the fix for #2513)
@@ -140,7 +141,7 @@ test.describe('Search DatePicker - Overflow and Visibility', () => {
   });
 
   test('calendar is not clipped by parent overflow:hidden containers', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     // The calendar should be actually visible (not hidden by overflow clipping)
@@ -161,7 +162,7 @@ test.describe('Search DatePicker - Overflow and Visibility', () => {
   });
 
   test('calendar renders all expected interactive elements', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     // Verify structural elements are present
@@ -194,11 +195,11 @@ test.describe('Search DatePicker - Overflow and Visibility', () => {
   });
 });
 
-test.describe('Search DatePicker - Functional Tests', () => {
+test.describe('Detections DatePicker - Functional Tests', () => {
   test.setTimeout(30000);
 
   test('clicking a date selects it and closes the calendar', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     // Record the initial trigger text before selecting a date
@@ -224,7 +225,7 @@ test.describe('Search DatePicker - Functional Tests', () => {
   });
 
   test('Today button selects today and closes calendar', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     const todayButton = calendar.locator('.datepicker-today-btn');
@@ -241,7 +242,7 @@ test.describe('Search DatePicker - Functional Tests', () => {
   });
 
   test('Escape key closes the calendar', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     // Press Escape
@@ -252,11 +253,11 @@ test.describe('Search DatePicker - Functional Tests', () => {
   });
 
   test('clicking outside closes the calendar', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     // Click on the page heading (outside the calendar)
-    const heading = page.locator('#search-filters-heading');
+    const heading = page.locator('#detection-filters-heading');
     await heading.click();
 
     // Calendar should close
@@ -264,7 +265,7 @@ test.describe('Search DatePicker - Functional Tests', () => {
   });
 
   test('month navigation works without breaking layout', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
     const viewportSize = page.viewportSize();
 
@@ -292,13 +293,13 @@ test.describe('Search DatePicker - Functional Tests', () => {
   });
 });
 
-test.describe('Search DatePicker - Overflow on Different Viewport Sizes', () => {
+test.describe('Detections DatePicker - Overflow on Different Viewport Sizes', () => {
   test.setTimeout(30000);
 
   test('calendar stays within viewport on narrow screens', async ({ page }) => {
     // Set a narrower viewport to test responsive behavior
     await page.setViewportSize({ width: 768, height: 1024 });
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     const calendarBox = await calendar.boundingBox();
@@ -325,7 +326,7 @@ test.describe('Search DatePicker - Overflow on Different Viewport Sizes', () => 
 
   test('calendar stays within viewport on tablet size', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     const calendar = await openStartDatePicker(page);
 
     const calendarBox = await calendar.boundingBox();
@@ -349,7 +350,7 @@ test.describe('UI Overflow - General Interactive Elements', () => {
   test('card container does not clip datepicker calendar with overflow:hidden', async ({
     page,
   }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
 
     // Verify the card container does not use overflow:hidden which would
     // clip the position:fixed calendar dropdown
@@ -368,7 +369,7 @@ test.describe('UI Overflow - General Interactive Elements', () => {
   });
 
   test('datepicker calendar has correct ARIA dialog role', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
     await openStartDatePicker(page);
 
     const calendar = page.locator(DATEPICKER_CALENDAR_SELECTOR);
@@ -379,7 +380,7 @@ test.describe('UI Overflow - General Interactive Elements', () => {
   });
 
   test('opening one datepicker and then the other closes the first', async ({ page }) => {
-    await navigateToSearch(page);
+    await navigateToDetections(page);
 
     // Scope locators to each picker wrapper for precise assertions
     const startPicker = page.locator(DATEPICKER_WRAPPER_SELECTOR).first();

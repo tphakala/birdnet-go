@@ -564,6 +564,10 @@
       "verifiedStatus": "Stato verifica",
       "lockedStatus": "Stato blocco",
       "timeOfDay": "Momento della giornata",
+      "hourRange": "Ora del giorno",
+      "hourRangeHelp": "Filtra i rilevamenti per ora dell'orologio, indipendentemente da alba e tramonto (lascia vuoto per tutte le ore)",
+      "hourStart": "Ora di inizio",
+      "hourEnd": "Ora di fine",
       "source": "Sorgente audio"
     },
     "advancedFilters": "Filtri avanzati",
@@ -585,6 +589,9 @@
       "night": "Solo notte",
       "sunrise": "Alba +/- 30min",
       "sunset": "Tramonto +/- 30min"
+    },
+    "hourOptions": {
+      "any": "Qualsiasi ora"
     },
     "sourceOptions": {
       "any": "Tutte le fonti"
@@ -627,12 +634,15 @@
       "collapseDetails": "Comprimi dettagli per {species}",
       "playAudio": "Riproduci audio per {species}",
       "viewDetails": "Vedi dettagli per {species}",
+      "detectionDetail": "Dettaglio del rilevamento",
+      "detectionDetailFor": "Dettaglio del rilevamento per {species}",
       "unknownSpecies": "Specie sconosciuta",
       "clickToCollapse": "Clicca per comprimere"
     },
     "errors": {
       "searchFailed": "Ricerca fallita: {error}",
-      "minMaxConfidence": "La confidenza minima non può essere maggiore della confidenza massima."
+      "minMaxConfidence": "La confidenza minima non può essere maggiore della confidenza massima.",
+      "minMaxHour": "L'ora di inizio non può essere successiva all'ora di fine."
     },
     "pagination": {
       "page": "Pagina {current} di {total}",
@@ -776,7 +786,8 @@
         "ignoreSpecies": "Ignora specie",
         "lockDetection": "Blocca rilevamento",
         "unlockDetection": "Sblocca rilevamento",
-        "deleteDetection": "Elimina rilevamento"
+        "deleteDetection": "Elimina rilevamento",
+        "compareSounds": "Suoni di riferimento"
       },
       "noDetections": "Nessun rilevamento recente",
       "errors": {
@@ -880,6 +891,7 @@
       "hourly": "Risultati orari per le {hour}:00 del {date}",
       "hourlyRange": "Risultati orari dalle {startHour}:00 alle {endHour}:00 del {date}",
       "species": "Risultati per {species} il {date}",
+      "speciesAll": "Risultati per {species}",
       "search": "Risultati ricerca per \"{query}\"",
       "allDetections": "Tutti i rilevamenti del {date}"
     },
@@ -888,6 +900,9 @@
       "observation": "Osservazione",
       "aria": {
         "downloadAudioClip": "Scarica clip audio per il rilevamento {name}",
+        "compareSounds": "Ascolta le registrazioni di identificazione per {name} su All About Birds (si apre in una nuova scheda)",
+        "viewOnAllAboutBirds": "Visualizza {name} su All About Birds (si apre in una nuova scheda)",
+        "viewOnWikipedia": "Visualizza {name} su Wikipedia (si apre in una nuova scheda)",
         "audioRecordingFor": "Registrazione audio e spettrogramma per {name}",
         "scientificName": "Nome scientifico",
         "classificationBadges": "Badge di classificazione della specie",
@@ -1034,7 +1049,10 @@
     },
     "media": {
       "title": "Registrazione e Spettrogramma",
-      "clipHint": "Clicca e trascina sullo spettrogramma per selezionare un intervallo da esportare"
+      "clipHint": "Clicca e trascina sullo spettrogramma per selezionare un intervallo da esportare",
+      "compareSounds": "Suoni di riferimento",
+      "viewOnAllAboutBirds": "All About Birds",
+      "viewOnWikipedia": "Wikipedia"
     },
     "tabs": {
       "overview": "Panoramica",
@@ -2083,9 +2101,13 @@
       "speciesList": "Elenco Specie",
       "switchToGrid": "Passa alla vista griglia",
       "switchToList": "Passa alla vista elenco",
+      "openAllAboutBirds": "Visualizza questa specie su All About Birds",
+      "openWikipedia": "Visualizza questa specie su Wikipedia",
+      "viewDetections": "Visualizza tutte le rilevamenti di {species}",
       "noSpeciesFound": "Nessuna specie trovata corrispondente ai tuoi filtri.",
       "headers": {
         "species": "Specie",
+        "links": "Collegamenti",
         "detections": "Rilevamenti",
         "avgConfidence": "Confidenza Media",
         "maxConfidence": "Confidenza Max",

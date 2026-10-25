@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 )
 
 // =============================================================================
@@ -72,9 +74,10 @@ func TestTimeOfDayToHours(t *testing.T) {
 		assert.Nil(t, result)
 	})
 
-	t.Run("dawn returns hours 5-6", func(t *testing.T) {
+	t.Run("dawn aliases sunrise and returns hours 5-6", func(t *testing.T) {
 		result := TimeOfDayToHours([]string{"dawn"})
 		assert.ElementsMatch(t, []int{5, 6}, result)
+		assert.Equal(t, TimeOfDayToHours([]string{"sunrise"}), result)
 	})
 
 	t.Run("day returns hours 7-17", func(t *testing.T) {
@@ -83,9 +86,10 @@ func TestTimeOfDayToHours(t *testing.T) {
 		assert.ElementsMatch(t, expected, result)
 	})
 
-	t.Run("dusk returns hours 18-19", func(t *testing.T) {
+	t.Run("dusk aliases sunset and returns hours 18-19", func(t *testing.T) {
 		result := TimeOfDayToHours([]string{"dusk"})
 		assert.ElementsMatch(t, []int{18, 19}, result)
+		assert.Equal(t, TimeOfDayToHours([]string{"sunset"}), result)
 	})
 
 	t.Run("night returns hours 20-23 and 0-4", func(t *testing.T) {
@@ -109,6 +113,16 @@ func TestTimeOfDayToHours(t *testing.T) {
 	t.Run("unknown period ignored", func(t *testing.T) {
 		result := TimeOfDayToHours([]string{"unknown"})
 		assert.Nil(t, result)
+	})
+
+	t.Run("hours are returned in a stable sorted order", func(t *testing.T) {
+		// Callers build SQL IN clauses and cache keys from this list, so map
+		// iteration order must not leak into the result.
+		first := TimeOfDayToHours([]string{"night", "day"})
+		require.True(t, slices.IsSorted(first))
+		for range 10 {
+			assert.Equal(t, first, TimeOfDayToHours([]string{"night", "day"}))
+		}
 	})
 }
 
@@ -798,28 +812,48 @@ func TestSingleTimeOfDayToHours(t *testing.T) {
 		assert.Nil(t, singleTimeOfDayToHours("ANY"))
 	})
 
-	t.Run("day returns hours 5-19 (all daylight)", func(t *testing.T) {
+	// The simple and advanced search paths now share one period->hours mapping, so
+	// "day" here means the daylight arc *excluding* the sunrise and sunset windows,
+	// matching the advanced path and the sun-event classifier. It previously meant
+	// all daylight hours (5-19), which made the same filter return different sets
+	// depending on which endpoint served it.
+	t.Run("day excludes the sunrise and sunset windows", func(t *testing.T) {
 		result := singleTimeOfDayToHours("day")
-		// day = dawn + day + dusk (DawnStartHour through DuskEndHour)
-		expected := []int{5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}
+		expected := []int{7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("night returns hours 20-23 and 0-4", func(t *testing.T) {
+	t.Run("night returns hours 0-4 and 20-23", func(t *testing.T) {
 		result := singleTimeOfDayToHours("night")
-		// night = NightStartHour (20) through NightEndHour (4)
-		expected := []int{20, 21, 22, 23, 0, 1, 2, 3, 4}
+		expected := []int{0, 1, 2, 3, 4, 20, 21, 22, 23}
 		assert.Equal(t, expected, result)
 	})
 
-	t.Run("sunrise returns hours 5-7", func(t *testing.T) {
+	t.Run("sunrise returns the dawn window", func(t *testing.T) {
 		result := singleTimeOfDayToHours("sunrise")
-		assert.Equal(t, []int{5, 6, 7}, result)
+		assert.Equal(t, []int{5, 6}, result)
 	})
 
-	t.Run("sunset returns hours 17-19", func(t *testing.T) {
+	t.Run("sunset returns the dusk window", func(t *testing.T) {
 		result := singleTimeOfDayToHours("sunset")
-		assert.Equal(t, []int{17, 18, 19}, result)
+		assert.Equal(t, []int{18, 19}, result)
+	})
+
+	t.Run("legacy dawn and dusk aliases resolve to sunrise and sunset", func(t *testing.T) {
+		assert.Equal(t, singleTimeOfDayToHours("sunrise"), singleTimeOfDayToHours("dawn"))
+		assert.Equal(t, singleTimeOfDayToHours("sunset"), singleTimeOfDayToHours("dusk"))
+	})
+
+	t.Run("the four periods partition the day", func(t *testing.T) {
+		all := make([]int, 0, 24)
+		for _, period := range []string{"sunrise", "day", "sunset", "night"} {
+			all = append(all, singleTimeOfDayToHours(period)...)
+		}
+		expected := make([]int, 0, 24)
+		for h := range 24 {
+			expected = append(expected, h)
+		}
+		assert.ElementsMatch(t, expected, all, "every hour belongs to exactly one period")
 	})
 
 	t.Run("case insensitive", func(t *testing.T) {
@@ -1015,7 +1049,8 @@ func TestConvertSearchFilters(t *testing.T) {
 		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
 		require.NoError(t, err)
 
-		assert.Equal(t, []int{5, 6, 7}, result.IncludedHours)
+		// The sunrise window, shared with the advanced search path.
+		assert.Equal(t, []int{5, 6}, result.IncludedHours)
 	})
 
 	t.Run("sort options", func(t *testing.T) {
@@ -1500,4 +1535,77 @@ func TestIntersectSourceIDs(t *testing.T) {
 			assert.Equal(t, tt.want, intersectSourceIDs(tt.a, tt.b))
 		})
 	}
+}
+
+// TestConvertFilters_TimeOfDayUsesSunEventWindowsWhenResolvable pins that a
+// resolver replaces the hour buckets on both conversion paths, receives the
+// canonical periods and the converted time bounds, and that the hour filter then
+// stands alone.
+func TestConvertFilters_TimeOfDayUsesSunEventWindowsWhenResolvable(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	wantWindows := []suncalc.TimeWindow{{Start: 100, End: 200}}
+
+	var gotPeriods []string
+	var gotStart, gotEnd *int64
+	deps := &FilterLookupDeps{
+		TimeOfDayWindows: func(_ context.Context, periods []string, start, end *int64) ([]suncalc.TimeWindow, error) {
+			gotPeriods, gotStart, gotEnd = periods, start, end
+			return wantWindows, nil
+		},
+	}
+
+	t.Run("advanced", func(t *testing.T) {
+		filters := &datastore.AdvancedSearchFilters{
+			TimeOfDay: []string{"dusk", "night"},
+			Hour:      &datastore.HourFilter{Start: 6, End: 7},
+			DateRange: &datastore.DateRange{
+				Start: time.Date(2024, 6, 1, 0, 0, 0, 0, time.UTC),
+				End:   time.Date(2024, 6, 3, 0, 0, 0, 0, time.UTC),
+			},
+		}
+
+		result, err := ConvertAdvancedFilters(ctx, filters, deps, time.UTC)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{datastore.TimeOfDaySunset, datastore.TimeOfDayNight}, gotPeriods,
+			"legacy aliases must be normalized before resolving")
+		require.NotNil(t, gotStart)
+		require.NotNil(t, gotEnd)
+		assert.Equal(t, *result.StartTime, *gotStart)
+		assert.Equal(t, *result.EndTime, *gotEnd)
+		require.NotNil(t, result.TimeOfDay)
+		assert.Equal(t, wantWindows, result.TimeOfDay.Windows)
+		assert.ElementsMatch(t, []int{6, 7}, result.IncludedHours,
+			"the hour filter must not also carry the time-of-day buckets")
+	})
+
+	t.Run("simple", func(t *testing.T) {
+		result, err := ConvertSearchFilters(ctx, &datastore.SearchFilters{TimeOfDay: datastore.TimeOfDaySunrise}, deps, time.UTC)
+		require.NoError(t, err)
+
+		assert.Equal(t, []string{datastore.TimeOfDaySunrise}, gotPeriods)
+		require.NotNil(t, result.TimeOfDay)
+		assert.Equal(t, wantWindows, result.TimeOfDay.Windows)
+		assert.Empty(t, result.IncludedHours)
+	})
+
+	t.Run("no period leaves the resolver unused", func(t *testing.T) {
+		gotPeriods = nil
+		result, err := ConvertAdvancedFilters(ctx, &datastore.AdvancedSearchFilters{TimeOfDay: []string{"any"}}, deps, time.UTC)
+		require.NoError(t, err)
+		assert.Nil(t, gotPeriods)
+		assert.Nil(t, result.TimeOfDay)
+	})
+
+	t.Run("resolver error is returned", func(t *testing.T) {
+		failing := &FilterLookupDeps{
+			TimeOfDayWindows: func(context.Context, []string, *int64, *int64) ([]suncalc.TimeWindow, error) {
+				return nil, assert.AnError
+			},
+		}
+		_, err := ConvertAdvancedFilters(ctx, &datastore.AdvancedSearchFilters{TimeOfDay: []string{"day"}}, failing, time.UTC)
+		require.ErrorIs(t, err, assert.AnError)
+	})
 }

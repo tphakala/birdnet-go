@@ -163,6 +163,11 @@ describe('useAudioPlayback recovery', () => {
 
   it('clears isLoading on loadedmetadata without waiting for canplay', async () => {
     await renderAndWait();
+    // loadstart only reports loading once playback was asked for (preload='none'
+    // fires it on src assignment without fetching anything), so press play first.
+    ctl.setPlayMode('hold');
+    void getState().togglePlayPause();
+    await settle();
     ctl.dispatch('loadstart');
     await settle();
     expect(getState().isLoading).toBe(true);

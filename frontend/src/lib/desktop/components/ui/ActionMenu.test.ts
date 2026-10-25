@@ -485,4 +485,29 @@ describe('ActionMenu', () => {
     const incorrectItem = screen.getByRole('menuitem', { name: /^incorrect/i });
     expect(incorrectItem.textContent).toContain('✗');
   });
+
+  it('renders a "Reference sounds" link built from the common name', async () => {
+    render(ActionMenu, {
+      props: { detection: createMockDetection({ commonName: 'American Robin' }) },
+    });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+
+    const link = screen.getByRole('menuitem', { name: /reference sounds/i });
+    expect(link).toHaveAttribute(
+      'href',
+      'https://www.allaboutbirds.org/guide/American_Robin/sounds'
+    );
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('closes the menu after the reference sounds link is clicked', async () => {
+    render(ActionMenu, { props: { detection: createMockDetection() } });
+    await fireEvent.click(screen.getByRole('button', { name: /actions menu/i }));
+
+    const link = screen.getByRole('menuitem', { name: /reference sounds/i });
+    await fireEvent.click(link);
+
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+  });
 });

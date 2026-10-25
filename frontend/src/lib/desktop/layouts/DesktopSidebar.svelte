@@ -189,7 +189,14 @@ Performance Optimizations:
     analyticsBiodiversity: actualRoute === '/ui/analytics/biodiversity',
     analyticsNocturnal: actualRoute === '/ui/analytics/nocturnal',
     analyticsSpecies: actualRoute === '/ui/analytics/species',
-    search: actualRoute.startsWith('/ui/search'),
+    // The search page was merged into the detections view, so this entry tracks
+    // both: /ui/search still resolves (it redirects) and must not leave the
+    // sidebar with nothing highlighted during the hop. The detection-detail
+    // route (/ui/detections/<id>) is excluded, since that is a different page.
+    detections:
+      actualRoute === '/ui/detections' ||
+      actualRoute === '/ui/detections/' ||
+      actualRoute.startsWith('/ui/search'),
     about: actualRoute.startsWith('/ui/about'),
     system: actualRoute.startsWith('/ui/system'),
     systemOverview: actualRoute === '/ui/system',
@@ -245,7 +252,7 @@ Performance Optimizations:
     analyticsBiodiversity: onNavigate ? '/analytics/biodiversity' : '/ui/analytics/biodiversity',
     analyticsNocturnal: onNavigate ? '/analytics/nocturnal' : '/ui/analytics/nocturnal',
     analyticsSpecies: onNavigate ? '/analytics/species' : '/ui/analytics/species',
-    search: onNavigate ? '/search' : '/ui/search',
+    detections: onNavigate ? '/detections' : '/ui/detections',
     about: onNavigate ? '/about' : '/ui/about',
     help: onNavigate ? '/help' : '/ui/help',
     helpReportBug: onNavigate ? '/help/report-bug' : '/ui/help/report-bug',
@@ -307,10 +314,13 @@ Performance Optimizations:
             routeKey: 'analyticsSpecies',
           },
           {
+            // Formerly "Search", which pointed at a separate page listing the same
+            // detections with a different row layout and a different action set.
+            // Searching is now a filter panel on the detections view itself.
             icon: Search,
-            label: t('navigation.search'),
-            url: navigationUrls.search,
-            routeKey: 'search',
+            label: t('navigation.detections'),
+            url: navigationUrls.detections,
+            routeKey: 'detections',
           },
         ],
       },

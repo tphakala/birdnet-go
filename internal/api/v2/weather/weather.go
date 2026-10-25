@@ -638,8 +638,12 @@ func (c *Handler) GetSunTimes(ctx echo.Context) error {
 			Build(), "Sun calculator not initialized", http.StatusInternalServerError)
 	}
 
-	// Calculate sun times using SunCalc
-	sunTimes, err := c.SunCalc.GetSunEventTimes(parsedDate)
+	// Calculate sun times using SunCalc. The requested date names a day at the
+	// station, so it is resolved in the station's own timezone. parsedDate is
+	// midnight UTC (time.Parse above), and handing that instant straight to
+	// GetSunEventTimes answered for the *previous* station day at every station
+	// west of UTC, where midnight UTC is still the afternoon before.
+	sunTimes, err := c.SunCalc.GetSunEventTimesForDate(parsedDate)
 	if err != nil {
 		c.LogErrorIfEnabled("Failed to calculate sun times",
 			logger.String("date", date),

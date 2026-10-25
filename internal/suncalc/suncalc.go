@@ -159,13 +159,40 @@ func (sc *SunCalc) SetMetrics(m *metrics.SunCalcMetrics) {
 	sc.metrics = m
 }
 
+// noonHour anchors a calendar date in the middle of its day. Midnight is the
+// wrong anchor: GetSunEventTimes re-derives the calendar date in the observer's
+// own timezone, so an instant on a day boundary resolves to the neighbouring
+// date as soon as the caller's zone differs from the station's.
+const noonHour = 12
+
 // GetSunEventTimes returns the sun event times for a given date, using cache if available
 func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
-	start := time.Now()
+	return sc.sunEventTimes(date, sc.current())
+}
 
-	// Take one state snapshot so the observer, timezone and cache used below all
-	// belong to the same coordinates, even if the location changes mid-call.
+// GetSunEventTimesForDate returns the sun events for a calendar date read in the
+// station's own timezone. Only the year, month and day of date are used; its
+// clock time and location are ignored.
+//
+// Callers that mean "the station's day of 2025-03-20" should prefer this over
+// GetSunEventTimes, which takes an instant: handing that a date parsed in the
+// server's timezone silently resolves to the previous or next station date
+// whenever the two zones differ.
+func (sc *SunCalc) GetSunEventTimesForDate(date time.Time) (SunEventTimes, error) {
+	// One snapshot builds the anchor and resolves it, so the anchor can never be
+	// constructed in one station's timezone and then evaluated against another's.
 	st := sc.current()
+	// Build noon on the station's calendar date directly rather than adding 12h to
+	// its midnight, which lands at 11:00 or 13:00 across a DST transition.
+	anchor := time.Date(date.Year(), date.Month(), date.Day(), noonHour, 0, 0, 0, st.location)
+	return sc.sunEventTimes(anchor, st)
+}
+
+// sunEventTimes resolves the sun events for date against one state snapshot, so
+// the observer, timezone and cache used all belong to the same coordinates even
+// if the location changes mid-call.
+func (sc *SunCalc) sunEventTimes(date time.Time, st *sunState) (SunEventTimes, error) {
+	start := time.Now()
 
 	// Snapshot the metrics pointer once into a local so every metrics access
 	// below operates on a stable value. SetMetrics writes sc.metrics under
@@ -180,6 +207,15 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	// even if the input time has a different timezone (e.g., UTC).
 	localDate := date.In(st.location)
 	dateKey := localDate.Format(time.DateOnly)
+
+	// Calculate from noon of that date, not from the instant that happened to be
+	// passed in. The astral calculation reads the clock time as well as the date,
+	// moving sunrise and sunset by a few minutes (and polar-edge dates between
+	// resolvable and not), and the result is cached by date. Without a fixed
+	// anchor, the first caller for a date decides the answer every later caller
+	// gets, so a row's label and a filter built from the same date could disagree
+	// and which one won would depend on the order and age of the cache.
+	anchor := time.Date(localDate.Year(), localDate.Month(), localDate.Day(), noonHour, 0, 0, 0, st.location)
 
 	// Acquire a read lock and check if the date is in the cache.
 	st.lock.RLock()
@@ -224,7 +260,7 @@ func (sc *SunCalc) GetSunEventTimes(date time.Time) (SunEventTimes, error) {
 	}
 
 	// Calculate outside the lock to avoid blocking readers.
-	times, err := st.calculateSunEventTimes(localDate)
+	times, err := st.calculateSunEventTimes(anchor)
 	if err != nil {
 		if m != nil {
 			m.RecordSunCalcOperation(sunEventsOperation, "error")

@@ -27,12 +27,29 @@ type AdvancedSearchFilters struct {
 	// preserving raw scientific/common-name substring matching.
 	SpeciesScientific []string
 	Confidence        *ConfidenceFilter
-	TimeOfDay         []string // ["dawn", "day", "dusk", "night"]
-	Hour              *HourFilter
-	DateRange         *DateRange
-	Verified          *bool
-	Species           []string
-	Location          []string // Maps to source_node column
+	// ConfidenceRange expresses an inclusive [Min, Max] confidence band, which the
+	// single-operator Confidence filter cannot. When both are set, both apply
+	// (they are AND-ed), so a caller should normally supply only one.
+	ConfidenceRange *ConfidenceRangeFilter
+	// TimeOfDay names the periods to keep. The canonical vocabulary is the one the
+	// simple search path uses -- "day", "night", "sunrise", "sunset" (see the
+	// TimeOfDay* constants). The normalized datastore resolves them against the
+	// station's real sun events; the deprecated legacy store approximates them with
+	// fixed clock windows. "dawn" and "dusk" are accepted as legacy aliases for
+	// "sunrise" and "sunset"; NormalizeTimeOfDayPeriods maps them.
+	TimeOfDay []string
+	Hour      *HourFilter
+	DateRange *DateRange
+	// Verified is the legacy two-state review filter: true selects detections that
+	// carry any verdict, false selects those that carry none. It cannot express
+	// "false positives only", so prefer VerifiedStatus. When VerifiedStatus is set
+	// it wins and this field is ignored.
+	Verified *bool
+	// VerifiedStatus selects by review verdict: "" or "any" (no filter), "correct",
+	// "false_positive", or "unverified" (see the VerifiedStatus* constants).
+	VerifiedStatus string
+	Species        []string
+	Location       []string // Maps to source_node column
 	// Source restricts results to audio sources, each given as the source's numeric ID (as listed
 	// by /analytics/sources), its display name, node name, or source URI. The v2 store resolves it
 	// against the audio_sources table; the legacy store, which records only the node name per
@@ -56,6 +73,19 @@ type ConfidenceFilter struct {
 	Value    float64
 }
 
+// ConfidenceUpperBound is the largest confidence fraction. A ConfidenceRangeFilter
+// whose Max is this value has no upper bound.
+const ConfidenceUpperBound = 1.0
+
+// ConfidenceRangeFilter represents an inclusive confidence range. Values are
+// fractions in [0, 1], matching the confidence column, not percentages. Max must
+// be set explicitly: ConfidenceUpperBound means "no upper bound", and 0 is a real
+// cap of "at most 0%", not an unset value.
+type ConfidenceRangeFilter struct {
+	Min float64
+	Max float64
+}
+
 // HourFilter represents hour-based filtering
 type HourFilter struct {
 	Start int // 0-23
@@ -71,6 +101,13 @@ type DateRange struct {
 // SearchNotesAdvanced performs an advanced search with multiple filter support
 // This is a new method that doesn't break the existing SearchNotes method
 func (ds *DataStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note, int64, error) {
+	// Refuse filters this store cannot express rather than ignore them, which would
+	// return rows the caller asked to exclude. The legacy store is deprecated and
+	// does not grow new filter capabilities; the normalized datastore serves them.
+	if err := rejectUnsupportedLegacyFilters(filters); err != nil {
+		return nil, 0, err
+	}
+
 	// Track metrics
 	// TODO: Add metrics tracking when IncrementSearches method is available
 	// ds.metricsMu.RLock()
@@ -293,7 +330,9 @@ func applyHourFilter(query *gorm.DB, hour *HourFilter) *gorm.DB {
 	return query.Where("(time >= ? OR time < ?)", startHourStr, endHourStr)
 }
 
-// applyTimeOfDayFilter applies time of day filtering to the query
+// applyTimeOfDayFilter applies time of day filtering to the query using fixed clock
+// windows. The canonical "sunrise"/"sunset" names map onto the same windows as the
+// historical "dawn"/"dusk"; only the normalized datastore resolves real sun events.
 func applyTimeOfDayFilter(query *gorm.DB, timeOfDay []string) *gorm.DB {
 	if len(timeOfDay) == 0 {
 		return query
@@ -304,7 +343,7 @@ func applyTimeOfDayFilter(query *gorm.DB, timeOfDay []string) *gorm.DB {
 
 	for _, tod := range timeOfDay {
 		switch strings.ToLower(tod) {
-		case "dawn":
+		case TimeOfDayAliasDawn, TimeOfDaySunrise:
 			// Approximate dawn as 5-7 AM
 			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
 			args = append(args, "05:00:00", "07:00:00")
@@ -312,7 +351,7 @@ func applyTimeOfDayFilter(query *gorm.DB, timeOfDay []string) *gorm.DB {
 			// Approximate day as 7 AM - 6 PM
 			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
 			args = append(args, "07:00:00", "18:00:00")
-		case "dusk":
+		case TimeOfDayAliasDusk, TimeOfDaySunset:
 			// Approximate dusk as 6-8 PM
 			timeConditions = append(timeConditions, "(time >= ? AND time < ?)")
 			args = append(args, "18:00:00", "20:00:00")
@@ -356,4 +395,68 @@ func applyLockedFilter(query *gorm.DB, locked *bool) *gorm.DB {
 
 	return query.Joins("LEFT JOIN note_locks ON note_locks.note_id = notes.id").
 		Where("note_locks.id IS NULL")
+}
+
+// NormalizeTimeOfDayPeriods maps a caller-supplied time-of-day period list onto
+// the canonical vocabulary used by the simple search path: "day", "night",
+// "sunrise", "sunset".
+//
+// The advanced path historically spoke "dawn"/"dusk" and meant fixed clock
+// windows, while the simple path spoke "sunrise"/"sunset" and meant real sun
+// events. The two legacy names are accepted as aliases for the canonical ones
+// rather than being a separate, differently-behaving filter.
+// "any" and unrecognized values are dropped (an empty result means "no filter"),
+// and duplicates are collapsed so an aliased list cannot apply a period twice.
+func NormalizeTimeOfDayPeriods(periods []string) []string {
+	if len(periods) == 0 {
+		return nil
+	}
+	normalized := make([]string, 0, len(periods))
+	seen := make(map[string]struct{}, len(periods))
+	for _, p := range periods {
+		var canonical string
+		switch strings.ToLower(strings.TrimSpace(p)) {
+		case TimeOfDayDay:
+			canonical = TimeOfDayDay
+		case TimeOfDayNight:
+			canonical = TimeOfDayNight
+		case TimeOfDaySunrise, TimeOfDayAliasDawn:
+			canonical = TimeOfDaySunrise
+		case TimeOfDaySunset, TimeOfDayAliasDusk:
+			canonical = TimeOfDaySunset
+		default:
+			// "", "any" and anything unrecognized: no constraint.
+			continue
+		}
+		if _, dup := seen[canonical]; dup {
+			continue
+		}
+		seen[canonical] = struct{}{}
+		normalized = append(normalized, canonical)
+	}
+	if len(normalized) == 0 {
+		return nil
+	}
+	return normalized
+}
+
+// rejectUnsupportedLegacyFilters returns a validation error for the filters only
+// the normalized datastore implements: a confidence band and the three-state
+// review verdict.
+func rejectUnsupportedLegacyFilters(filters *AdvancedSearchFilters) error {
+	var unsupported []string
+	if filters.ConfidenceRange != nil {
+		unsupported = append(unsupported, "confidence range")
+	}
+	if status := strings.ToLower(strings.TrimSpace(filters.VerifiedStatus)); status != "" && status != VerifiedStatusAny {
+		unsupported = append(unsupported, "review verdict")
+	}
+	if len(unsupported) == 0 {
+		return nil
+	}
+	return errors.Newf("the legacy datastore does not support the %s filter", strings.Join(unsupported, " and ")).
+		Component("datastore").
+		Category(errors.CategoryValidation).
+		Context("operation", "search_notes_advanced").
+		Build()
 }

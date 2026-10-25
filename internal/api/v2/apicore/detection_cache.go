@@ -51,6 +51,8 @@ type DetectionPageKey struct {
 	StartDate        string
 	EndDate          string
 	Confidence       string
+	ConfidenceMin    string
+	ConfidenceMax    string
 	TimeOfDay        string
 	HourRange        string
 	Verified         string

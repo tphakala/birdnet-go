@@ -6,6 +6,7 @@
 package apicore
 
 import (
+	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -82,6 +83,32 @@ func ParseConfidenceFilter(param string) *ConfidenceFilterResult {
 	}
 }
 
+// ParseConfidenceBound parses a single confidence bound given as a bare
+// percentage in [0, 100] (e.g. "65") and returns it as a fraction in [0, 1],
+// matching the stored confidence column.
+//
+// Unlike ParseConfidenceFilter it takes no operator: the bound's meaning comes
+// from which end of a range it is. An empty parameter yields (nil, nil) so
+// callers can distinguish "not supplied" from "supplied as zero", which matters
+// because a zero minimum is a valid, and different, request from no minimum.
+func ParseConfidenceBound(param string) (*float64, error) {
+	if param == "" {
+		//nolint:nilnil // a nil bound with no error is the documented "not supplied" result; a sentinel error would force every caller to distinguish it from a real failure
+		return nil, nil
+	}
+
+	value, err := strconv.ParseFloat(param, 64)
+	if err != nil {
+		return nil, fmt.Errorf("confidence bound %q is not a number", param)
+	}
+	if math.IsNaN(value) || value < 0 || value > 100 {
+		return nil, fmt.Errorf("confidence bound %q must be between 0 and 100", param)
+	}
+
+	fraction := value / PercentageMultiplier
+	return &fraction, nil
+}
+
 // HourFilterResult holds the parsed hour filter parameters.
 type HourFilterResult struct {
 	Start int
@@ -126,6 +153,10 @@ func ParseHourFilter(param string) *HourFilterResult {
 	return &HourFilterResult{Start: hourVal, End: hourVal}
 }
 
+// openRangeStartYear is the start of a range that has only an end date, early
+// enough to precede any stored detection.
+const openRangeStartYear = 1970
+
 // DateRangeResult holds the parsed date range.
 type DateRangeResult struct {
 	Start time.Time
@@ -133,7 +164,9 @@ type DateRangeResult struct {
 }
 
 // ParseDateRangeFilter parses date range from single date or start/end date parameters.
-// If singleDate is provided, it's used as both start and end.
+// If singleDate is provided, it's used as both start and end. When only one of
+// startDate and endDate is given the range is open on the other side (from
+// openRangeStartYear, or through today).
 // Returns nil if no valid dates are provided.
 func ParseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResult {
 	if singleDate != "" {
@@ -146,20 +179,47 @@ func ParseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResul
 		}
 	}
 
-	if startDate != "" && endDate != "" {
-		start, err1 := time.Parse(time.DateOnly, startDate)
-		end, err2 := time.Parse(time.DateOnly, endDate)
-		if err1 == nil && err2 == nil {
-			// Reject inverted date ranges where start is after end
-			if start.After(end) {
-				return nil
-			}
-			return &DateRangeResult{
-				Start: start,
-				End:   end.AddDate(0, 0, 1).Add(-time.Second),
-			}
-		}
+	if startDate == "" && endDate == "" {
+		return nil
 	}
 
-	return nil
+	// A one-sided range is open-ended on the missing side, so a user who sets only
+	// "from" or only "to" still gets that bound applied instead of no date filter.
+	start := time.Date(openRangeStartYear, time.January, 1, 0, 0, 0, 0, time.UTC)
+	if startDate != "" {
+		parsed, err := time.Parse(time.DateOnly, startDate)
+		if err != nil {
+			return nil
+		}
+		start = parsed
+	}
+	end := time.Now()
+	if endDate != "" {
+		parsed, err := time.Parse(time.DateOnly, endDate)
+		if err != nil {
+			return nil
+		}
+		end = parsed
+	}
+	end = time.Date(end.Year(), end.Month(), end.Day(), 0, 0, 0, 0, time.UTC)
+
+	if start.After(end) {
+		// Two explicit dates in the wrong order are rejected. When one side is only
+		// a default (a start after today, or an end before openRangeStartYear) the
+		// request asked for a range that holds nothing, so collapse it onto the
+		// date it did give. Returning nil here would drop the date filter and
+		// return every detection instead.
+		if startDate != "" && endDate != "" {
+			return nil
+		}
+		if startDate == "" {
+			start = end
+		} else {
+			end = start
+		}
+	}
+	return &DateRangeResult{
+		Start: start,
+		End:   end.AddDate(0, 0, 1).Add(-time.Second),
+	}
 }

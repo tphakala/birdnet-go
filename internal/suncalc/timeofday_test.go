@@ -111,6 +111,38 @@ func TestClassifyTimeOfDay_NilSunEvents(t *testing.T) {
 	assert.Empty(t, ClassifyTimeOfDay(time.Now(), nil))
 }
 
+// TestClassifyTimeOfDay_DetectionTimeInDifferentLocationThanSunEvents is a
+// regression test: detectionTime must be normalized into sunEvents' Location
+// before its wall clock is compared, so classification is correct regardless of
+// what time.Location the caller's timestamp happens to carry. This is the
+// real-world shape of the bug - every caller builds detectionTime in time.Local
+// (the server process's OS timezone, e.g. UTC in a default Docker container)
+// while SunCalc's sun events carry the station's coordinate-derived IANA
+// timezone (see suncalc.NewSunCalc/resolveTimezone). Without the conversion, a
+// clearly-daytime detection can be misclassified as sunset/night whenever those
+// two timezones differ, shifting the apparent sunset by the zone offset.
+func TestClassifyTimeOfDay_DetectionTimeInDifferentLocationThanSunEvents(t *testing.T) {
+	t.Parallel()
+	sc := newTestSunCalc() // Helsinki coordinates (EEST, UTC+3 in September)
+	sunEvents, err := sc.GetSunEventTimes(time.Date(2024, 9, 15, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+
+	// The exact sunset instant, re-tagged with a different Location (UTC) than the
+	// sun events were computed in - as would happen if the detection's timestamp
+	// were built against the server's OS timezone instead of the station's
+	// coordinates. .In() only changes the display Location, not the instant, so the
+	// correct classification is unambiguously "sunset" no matter which Location the
+	// caller's time.Time happens to carry.
+	sunsetInstant := sunEvents.Sunset
+	sunsetTaggedUTC := sunsetInstant.In(time.UTC)
+	require.NotEqual(t, sunsetInstant.Location().String(), sunsetTaggedUTC.Location().String(),
+		"test setup must exercise two different Locations for the same instant")
+	require.True(t, sunsetInstant.Equal(sunsetTaggedUTC), "re-tagging must not change the instant")
+
+	assert.Equal(t, "sunset", ClassifyTimeOfDay(sunsetTaggedUTC, &sunEvents),
+		"the exact sunset instant must classify as sunset regardless of its time.Time's Location")
+}
+
 // TestWithinWindow exercises the circular-distance helper directly, including the
 // midnight wraparound that is the core of the fix.
 func TestWithinWindow(t *testing.T) {

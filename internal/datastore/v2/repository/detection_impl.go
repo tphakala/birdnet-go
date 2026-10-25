@@ -1,15 +1,18 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -693,6 +696,9 @@ func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *Search
 		}
 		query = query.Where(hourExpr+" IN ?", filters.IncludedHours)
 	}
+	if filters.TimeOfDay != nil {
+		query = query.Where(timeWindowsPredicate(r.tableName()+".detected_at", filters.TimeOfDay.Windows))
+	}
 	if filters.MinConfidence != nil {
 		query = query.Where("confidence >= ?", *filters.MinConfidence)
 	}
@@ -902,6 +908,23 @@ func (r *detectionRepository) CountByDateRange(ctx context.Context, start, end i
 // second of the next hour from being counted in both adjacent hours.
 func (r *detectionRepository) CountByHour(ctx context.Context, hourStart int64) (int64, error) {
 	return r.countByHalfOpenRange(ctx, hourStart, hourStart+3600)
+}
+
+// GetDetectedAtBounds returns the earliest and latest detected_at at or after
+// notBefore, or ok=false when there are none.
+func (r *detectionRepository) GetDetectedAtBounds(ctx context.Context, notBefore int64) (earliest, latest int64, ok bool, err error) {
+	var bounds struct {
+		Earliest *int64
+		Latest   *int64
+	}
+	err = r.db.WithContext(ctx).Table(r.tableName()).
+		Select("MIN(detected_at) AS earliest, MAX(detected_at) AS latest").
+		Where("detected_at >= ?", notBefore).
+		Scan(&bounds).Error
+	if err != nil || bounds.Earliest == nil || bounds.Latest == nil {
+		return 0, 0, false, err
+	}
+	return *bounds.Earliest, *bounds.Latest, true, nil
 }
 
 // countByHalfOpenRange counts detections in [start, end).
@@ -2094,4 +2117,73 @@ func (r *detectionRepository) FilterExistingIDs(ctx context.Context, ids []uint)
 		return nil, err
 	}
 	return existingIDs, nil
+}
+
+// timeWindowsPredicate builds a SQL predicate that is true when column falls in
+// any of the half-open windows, and a never-true predicate when there are none.
+//
+// The windows are sorted and merged first, so they are disjoint and ascending,
+// which lets the test be a balanced binary decision tree of CASE expressions:
+// each level compares the column to one window's start and descends into the
+// half that can contain it, so a row costs log2(N) comparisons however many
+// windows there are. A plain chain of ORs is the obvious encoding and is
+// unusable: SQLite parses N ORs into an expression N deep (rejected past 1000)
+// and its planner analyses them in time that grows with the square of N. A
+// parameter per window edge would also reach the driver's variable limit (32766
+// on SQLite) after about two decades, so the edges are written into the SQL as
+// integer literals. They are int64 values formatted by strconv, never caller
+// text, so nothing can be injected.
+//
+// Compiling the statement still costs time quadratic in the number of windows,
+// because SQLite de-duplicates the distinct constants of a statement with a
+// linear scan each. Measured with the tree below that is about 20 ms for a year
+// of daily windows, 0.5 s for ten years and 2 s for twenty, per statement (a
+// search compiles a count and a page). Only an IN list avoids it, and a set of
+// arbitrary windows cannot be written as one. A date range keeps the count small;
+// the cost is only felt by a time-of-day filter over a multi-year archive.
+//
+// The leading bounds are plain comparisons so the planner can still restrict the
+// scan to the span the windows cover.
+func timeWindowsPredicate(column string, windows []suncalc.TimeWindow) string {
+	windows = mergeTimeWindows(windows)
+	if len(windows) == 0 {
+		return "1 = 0"
+	}
+	var build func(ws []suncalc.TimeWindow) string
+	build = func(ws []suncalc.TimeWindow) string {
+		if len(ws) == 1 {
+			return "(" + column + " >= " + strconv.FormatInt(ws[0].Start, 10) +
+				" AND " + column + " < " + strconv.FormatInt(ws[0].End, 10) + ")"
+		}
+		mid := len(ws) / 2
+		return "CASE WHEN " + column + " < " + strconv.FormatInt(ws[mid].Start, 10) +
+			" THEN " + build(ws[:mid]) + " ELSE " + build(ws[mid:]) + " END"
+	}
+	first, last := windows[0], windows[len(windows)-1]
+	return "(" + column + " >= " + strconv.FormatInt(first.Start, 10) +
+		" AND " + column + " < " + strconv.FormatInt(last.End, 10) +
+		" AND " + build(windows) + ")"
+}
+
+// mergeTimeWindows returns the windows sorted by start, with empty windows
+// dropped and overlapping or touching ones merged, leaving a disjoint ascending
+// set. The input is not modified.
+func mergeTimeWindows(windows []suncalc.TimeWindow) []suncalc.TimeWindow {
+	sorted := make([]suncalc.TimeWindow, 0, len(windows))
+	for _, w := range windows {
+		if w.Start < w.End {
+			sorted = append(sorted, w)
+		}
+	}
+	slices.SortFunc(sorted, func(a, b suncalc.TimeWindow) int { return cmp.Compare(a.Start, b.Start) })
+
+	merged := sorted[:0]
+	for _, w := range sorted {
+		if n := len(merged); n > 0 && w.Start <= merged[n-1].End {
+			merged[n-1].End = max(merged[n-1].End, w.End)
+			continue
+		}
+		merged = append(merged, w)
+	}
+	return merged
 }

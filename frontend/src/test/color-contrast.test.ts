@@ -448,15 +448,6 @@ describe('Error text rules', () => {
         { selector: '.error-indicator', declaration: 'color-mix(in srgb, var(--color-error) 10%' },
       ],
     },
-    {
-      file: 'views/Search.svelte',
-      fills: [
-        {
-          selector: '.review-dropdown-item.false-positive:hover',
-          declaration: 'color-mix(in srgb, var(--color-error) 15%',
-        },
-      ],
-    },
   ];
 
   /** Source text of a listed component; read inside each test so a moved file fails only its tests. */

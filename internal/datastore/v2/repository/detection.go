@@ -117,6 +117,11 @@ type DetectionRepository interface {
 	// CountByHour returns the count of detections in a specific hour.
 	CountByHour(ctx context.Context, hourStart int64) (int64, error)
 
+	// GetDetectedAtBounds returns the earliest and latest detected_at (Unix
+	// seconds) among detections at or after notBefore, so rows stamped by a zeroed
+	// clock or a bad import do not widen the span. ok is false when there are none.
+	GetDetectedAtBounds(ctx context.Context, notBefore int64) (earliest, latest int64, ok bool, err error)
+
 	// === Aggregations ===
 
 	// GetTopSpecies returns the most frequently detected species in a time range.
