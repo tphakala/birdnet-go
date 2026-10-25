@@ -247,11 +247,11 @@ A MySQL or MariaDB database can hold the enhanced database (v2) tables and the l
 
 - If the legacy tables are empty and the enhanced database is a completed install, it keeps the enhanced database and removes the empty legacy tables.
 - If the legacy tables hold data and the enhanced detection tables are empty, it keeps the legacy database and removes only the empty enhanced detection tables. Every other enhanced table stays where it is.
-- If both sides are empty, it marks the enhanced database as a completed install and keeps it.
+- If both sides are empty, it keeps the enhanced database and marks it as a completed install (when the install has no marker row yet, the first start writes it and the empty legacy tables are removed on the start after that).
 
 BirdNET-Go checks each table for rows again right before it drops it, never drops a table that has rows, and logs one warning that names what it found, kept, removed and left in place.
 
-It refuses to start, and changes nothing, only when keeping a side would lose data: both sides hold data, keeping a side would remove rows of a table both schemas use (`notification_histories`, `dynamic_thresholds`, `threshold_events` or `image_caches`), the enhanced side holds detections but is not a completed install, or a table cannot be read. The error lists the tables that have rows on each side. The Database Doctor script does not support MySQL, so the steps below are manual.
+It refuses to start, and drops no table with rows, only when keeping a side would lose data or the tables cannot be handled safely: both sides hold data, keeping a side would remove rows of a table both schemas use (`notification_histories`, `dynamic_thresholds`, `threshold_events` or `image_caches`), the enhanced side holds detections but is not a completed install, a table cannot be read, or an empty table cannot be removed because another session holds it or the database user lacks the privilege. The error lists the tables that have rows on each side, or the step that failed; in the last case fix the cause (a session that holds the tables, or a missing privilege) and restart. The Database Doctor script does not support MySQL, so the steps below are manual.
 
 Do not downgrade to an older release while the database is in this state: older releases drop the enhanced database tables at startup.
 

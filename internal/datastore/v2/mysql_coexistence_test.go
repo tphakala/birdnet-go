@@ -826,6 +826,99 @@ func TestMySQL_DropVerifiedEmptyTables_RowInAnyTableDropsNothing(t *testing.T) {
 	}))
 }
 
+// TestMySQL_StartupDetection_MixedSchema_DropFailureRefusesAndRetries holds a table
+// lock on one table of the drop set from another session so the reconcile cannot take
+// its write locks. The boot must refuse with the failed step and the error number in the
+// text, change nothing (a marker written for the fresh shape goes back to idle), and
+// succeed on the next boot once the lock is gone.
+func TestMySQL_StartupDetection_MixedSchema_DropFailureRefusesAndRetries(t *testing.T) {
+	tests := []struct {
+		name         string
+		seed         func(t *testing.T)
+		lockTable    string
+		wantStep     string
+		wantDecision string
+		hasMarker    bool
+	}{
+		{
+			name: "keep v2: v2 detections, empty legacy, completed",
+			seed: func(t *testing.T) {
+				t.Helper()
+				seedBareV2WithDetections(t, 2, true)
+				require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
+			},
+			lockTable:    "notes",
+			wantStep:     "removing the empty legacy tables failed",
+			wantDecision: DecisionMixedSchemaKeptV2,
+			hasMarker:    true,
+		},
+		{
+			name: "fresh v2: both empty, idle marker",
+			seed: func(t *testing.T) {
+				t.Helper()
+				seedBareV2WithDetections(t, 0, false)
+				require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
+			},
+			lockTable:    "notes",
+			wantStep:     "removing the empty legacy tables failed",
+			wantDecision: DecisionMixedSchemaFreshV2,
+			hasMarker:    true,
+		},
+		{
+			name: "keep legacy: empty bare v2, populated legacy",
+			seed: func(t *testing.T) {
+				t.Helper()
+				seedLegacyTables(t, coexTestDB)
+				seedOrphanedBareV2Tables(t, coexTestDB)
+			},
+			lockTable:    "detections",
+			wantStep:     "removing the empty enhanced detection tables failed",
+			wantDecision: DecisionMixedSchemaKeptLegacy,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dropAllTables(t, coexTestDB, coexTestDBName)
+			tt.seed(t)
+			settings := buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, coexTestPassword)
+
+			markerState := func() string {
+				if !tt.hasMarker {
+					return ""
+				}
+				var state string
+				require.NoError(t, coexTestDB.Raw("SELECT state FROM migration_states WHERE id = 1").Scan(&state).Error)
+				return state
+			}
+			markerBefore := markerState()
+			before := tableRowCounts(t)
+
+			// Another session reads the table under a table lock; a write lock must wait for
+			// it. The checks run after the callback so a failed assertion cannot skip the unlock.
+			var state StartupState
+			require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
+				if err := tx.Exec("LOCK TABLES `" + tt.lockTable + "` READ").Error; err != nil {
+					return err
+				}
+				state = checkMySQLMigrationState(settings)
+				return tx.Exec("UNLOCK TABLES").Error
+			}))
+
+			assert.Equal(t, DecisionMixedSchemaRefused, state.Decision)
+			require.ErrorIs(t, state.Error, ErrMixedSchemaDatabase)
+			assert.Contains(t, state.Error.Error(), tt.wantStep)
+			assert.Contains(t, state.Error.Error(), "MySQL error 1205", "the error number names the lock timeout")
+			assert.Equal(t, before, tableRowCounts(t), "a failed drop must not drop or add a table or row")
+			assert.Equal(t, markerBefore, markerState(), "a marker written for the reconcile must be put back")
+
+			state = checkMySQLMigrationState(settings)
+			require.NoError(t, state.Error)
+			assert.Equal(t, tt.wantDecision, state.Decision, "the next boot retries and succeeds")
+		})
+	}
+}
+
 // TestMySQL_StartupDetection_MixedSchemaKeepV2Steps_RestartsV2 runs the wiki
 // guide's keep-the-enhanced-database SQL on a refused database and verifies the
 // next start uses the bare schema and keeps the detections.
