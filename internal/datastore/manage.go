@@ -62,8 +62,8 @@ var legacyDataTables = []string{"notes", "results"}
 // the legacy unique index, or a NOT NULL column add) or leaves a table every
 // legacy insert fails on. A v2-shaped table is unusable by the legacy store. An
 // empty one is dropped so AutoMigrate recreates it in the legacy shape. One that
-// holds rows, or whose rows cannot be counted, stops legacy startup without any
-// change, because its rows (notification suppression state, learned thresholds,
+// holds rows, or whose rows cannot be counted, stops legacy startup before it is
+// dropped, because its rows (notification suppression state, learned thresholds,
 // threshold change history, the image cache) must not be dropped.
 var v2ShapedLegacyTables = []string{
 	"notification_histories",
@@ -497,10 +497,11 @@ func inspectV2ShapedTables(db *gorm.DB, candidates []string, log logger.Logger) 
 }
 
 // refuseV2ShapedTables logs and returns the error that stops legacy startup
-// when v2-shaped tables hold rows or cannot be counted.
-func refuseV2ShapedTables(log logger.Logger, dbType, summary string) error {
+// when v2-shaped tables hold rows or cannot be counted. droppedEmpty is the
+// number of empty tables already dropped before the refusal.
+func refuseV2ShapedTables(log logger.Logger, dbType, summary string, droppedEmpty int) error {
 	log.Error("Tables in the enhanced database shape hold rows the legacy store cannot use; no rows were dropped. Check earlier fallback to legacy mode log lines",
-		logger.String("tables", summary))
+		logger.String("tables", summary), logger.Int("dropped_empty_tables", droppedEmpty))
 	return criticalError(fmt.Errorf("%w: %s", errV2ShapedTablesHoldRows, summary),
 		"legacy_schema_guard", "v2_shaped_tables_hold_rows",
 		"db_type", dbType, "tables", summary)
@@ -513,7 +514,10 @@ func refuseV2ShapedTables(log logger.Logger, dbType, summary string) error {
 // can never take a legacy write. If any candidate holds rows or cannot be
 // counted, it returns an error before any DROP. Only when every candidate is
 // empty does it drop them, each after one more emptiness check, so AutoMigrate
-// recreates them in the legacy shape. A table listing error skips the guard.
+// recreates them in the legacy shape. A table that gains rows, or cannot be
+// read, after the first count also refuses, possibly after earlier empty tables
+// were dropped. A table is dropped only after its last check found it empty. A
+// table listing error skips the guard.
 func repairV2ShapedLegacyTables(db *gorm.DB, dbType string, log logger.Logger) error {
 	tables, err := db.Migrator().GetTables()
 	if err != nil {
@@ -532,19 +536,29 @@ func repairV2ShapedLegacyTables(db *gorm.DB, dbType string, log logger.Logger) e
 		return nil
 	}
 
-	// Decide before any DDL, so a refusal leaves every table as it was found.
+	// Count every candidate before the first DROP, so a refusal here leaves every
+	// table as it was found.
 	summary, holdsRows := inspectV2ShapedTables(db, candidates, log)
 	if holdsRows {
-		return refuseV2ShapedTables(log, dbType, summary)
+		return refuseV2ShapedTables(log, dbType, summary, 0)
 	}
 
-	for _, name := range candidates {
+	for i, name := range candidates {
 		// Read the table again right before its DROP, so rows written since the
 		// count (for example by a second instance) are not lost. A failed read
 		// counts as non-empty.
 		hasRows, probeErr := tableHasRows(db, name)
 		if probeErr != nil || hasRows {
-			return refuseV2ShapedTables(log, dbType, summary)
+			if probeErr != nil {
+				log.Warn("Could not check v2-shaped table before dropping it", logger.String("table", name), logger.Error(probeErr))
+			}
+			// Count what is left, so the refusal names the table that changed
+			// instead of repeating the counts taken before the first DROP.
+			lateSummary, lateRows := inspectV2ShapedTables(db, candidates[i:], log)
+			if !lateRows {
+				lateSummary = name + "=" + rowCountUnknown
+			}
+			return refuseV2ShapedTables(log, dbType, lateSummary, i)
 		}
 		log.Warn("Dropping empty v2-shaped table before legacy schema migration",
 			logger.String("table", name))

@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -153,6 +154,61 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 		assert.Contains(t, err.Error(), "notification_histories=unknown")
 		assert.True(t, db.Migrator().HasTable("notification_histories"))
 		assert.True(t, columnExists(t, db, "notification_histories", "label_id"))
+	})
+
+	t.Run("refuses_when_rows_appear_before_a_drop", func(t *testing.T) {
+		db := openSQLiteTestDB(t)
+		require.NoError(t, db.Exec(testV2NotificationHistoriesDDL).Error)
+		require.NoError(t, db.Exec(testV2NotificationHistoriesIndexDDL).Error)
+		require.NoError(t, db.Exec(testV2DynamicThresholdsDDL).Error)
+		require.NoError(t, db.Exec(testV2ThresholdEventsDDL).Error)
+
+		// A second instance writes dynamic_thresholds after the count pass has
+		// read every table as empty: the insert runs once, right after the count
+		// of the last candidate.
+		inserted := false
+		require.NoError(t, db.Callback().Query().After("gorm:query").Register("test:row_appears", func(tx *gorm.DB) {
+			if inserted || tx.Statement.Table != "threshold_events" {
+				return
+			}
+			inserted = true
+			now := time.Now()
+			_ = tx.Session(&gorm.Session{NewDB: true}).Exec(`INSERT INTO dynamic_thresholds
+				(label_id, current_value, base_threshold, valid_hours, expires_at, last_triggered, first_created, updated_at)
+				VALUES (1, 0.5, 0.5, 24, ?, ?, ?, ?)`, now, now, now, now).Error
+		}))
+
+		err := performAutoMigration(db, false, "SQLite", "")
+
+		require.ErrorIs(t, err, errV2ShapedTablesHoldRows)
+		assert.True(t, inserted, "the row must have been written after the count pass")
+		assert.Contains(t, err.Error(), "dynamic_thresholds=1", "the refusal must name the table that gained rows")
+		assert.NotContains(t, err.Error(), "dynamic_thresholds=0", "the refusal must not repeat the stale count")
+		assert.True(t, columnExists(t, db, "dynamic_thresholds", "label_id"), "the table that gained rows must not be dropped")
+		assert.EqualValues(t, 1, countRows(t, db, "dynamic_thresholds"))
+	})
+
+	t.Run("refuses_when_the_pre_drop_check_fails", func(t *testing.T) {
+		db := openSQLiteTestDB(t)
+		require.NoError(t, db.Exec(testV2NotificationHistoriesDDL).Error)
+		require.NoError(t, db.Exec(testV2NotificationHistoriesIndexDDL).Error)
+		require.NoError(t, db.Exec(testV2DynamicThresholdsDDL).Error)
+
+		// Fail only the emptiness probe of dynamic_thresholds. The count pass runs
+		// through the Query chain and table inspection through other statements.
+		errProbeFailed := errors.NewStd("probe failed")
+		require.NoError(t, db.Callback().Row().Before("gorm:row").Register("test:fail_probe", func(tx *gorm.DB) {
+			sql := tx.Statement.SQL.String()
+			if strings.Contains(sql, "EXISTS") && strings.Contains(sql, "dynamic_thresholds") {
+				_ = tx.AddError(errProbeFailed)
+			}
+		}))
+
+		err := performAutoMigration(db, false, "SQLite", "")
+
+		require.ErrorIs(t, err, errV2ShapedTablesHoldRows)
+		assert.Contains(t, err.Error(), "dynamic_thresholds=unknown", "a failed probe must count as non-empty")
+		assert.True(t, columnExists(t, db, "dynamic_thresholds", "label_id"), "the table must not be dropped")
 	})
 
 	t.Run("refuses_v2_database_and_leaves_it_untouched", func(t *testing.T) {
