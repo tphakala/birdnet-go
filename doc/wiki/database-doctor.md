@@ -37,11 +37,11 @@ python3 tools/db-doctor/db-doctor.py --version
 
 ### Step 1: Find your database file
 
-| Install method | Typical database path |
-|---|---|
-| Docker via install.sh | `~/birdnet-go-app/data/birdnet.db` |
-| Docker Compose | Check your volume mount, usually `./data/birdnet.db` |
-| Manual/binary | In the data directory specified in your config, usually `./birdnet.db` |
+| Install method        | Typical database path                                                  |
+| --------------------- | ---------------------------------------------------------------------- |
+| Docker via install.sh | `~/birdnet-go-app/data/birdnet.db`                                     |
+| Docker Compose        | Check your volume mount, usually `./data/birdnet.db`                   |
+| Manual/binary         | In the data directory specified in your config, usually `./birdnet.db` |
 
 ### Step 2: Run diagnosis
 
@@ -122,6 +122,7 @@ python3 db-doctor.py /path/to/birdnet.db --fix
 ```
 
 The script automatically:
+
 1. Creates a verified backup (e.g., `birdnet.db.20260521-093204.doctor-backup`)
 2. Applies fixes transactionally (rolls back on failure)
 3. Re-runs diagnostics to verify the fix worked
@@ -141,7 +142,9 @@ This is the most common issue when upgrading between nightly builds. Some builds
 
 The doctor uses SQLite's table-recreation algorithm to remove the extra columns while preserving all data. This works on all SQLite versions (no DROP COLUMN support needed).
 
-**Affected tables:** `image_caches`, `dynamic_thresholds`, `notification_histories`
+**Affected tables:** `image_caches`, `notification_histories`
+
+The doctor does not repair `dynamic_thresholds` or `threshold_events`. If they still have the old `label_id` column, BirdNET-Go recreates them itself on its next start and discards their rows. Adding a `label_id` column to a current table would trigger that, so the doctor leaves both tables alone.
 
 ### Corrupted indexes
 
@@ -150,6 +153,7 @@ SD card corruption or power loss during writes can cause SQLite index trees to b
 ### Stuck migration state
 
 If BirdNET-Go crashes during database migration (power loss, OOM kill), the migration state can get stuck. The doctor resets it based on the actual data present:
+
 - If detections exist, sets state to `completed`
 - If only legacy notes exist, resets to `idle` for re-migration
 
@@ -194,12 +198,12 @@ python3 db-doctor.py --version
 
 ### Exit codes
 
-| Code | Meaning |
-|------|---------|
-| 0 | All checks passed (or all fixes applied successfully) |
-| 1 | Issues found (diagnose mode) or a fix failed |
-| 2 | Usage error (bad arguments, file not found) |
-| 3 | Database is locked (BirdNET-Go is still running) |
+| Code | Meaning                                               |
+| ---- | ----------------------------------------------------- |
+| 0    | All checks passed (or all fixes applied successfully) |
+| 1    | Issues found (diagnose mode) or a fix failed          |
+| 2    | Usage error (bad arguments, file not found)           |
+| 3    | Database is locked (BirdNET-Go is still running)      |
 
 ## Docker Users
 

@@ -282,5 +282,166 @@ class HourlyWeatherSchemaTest(unittest.TestCase):
         self.assertEqual(recheck.status, "pass")
 
 
+_CURRENT_DYNAMIC_THRESHOLDS_DDL = """
+CREATE TABLE dynamic_thresholds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    species_name TEXT NOT NULL,
+    scientific_name TEXT,
+    level INTEGER NOT NULL DEFAULT 0,
+    current_value REAL NOT NULL,
+    base_threshold REAL NOT NULL,
+    high_conf_count INTEGER NOT NULL DEFAULT 0,
+    valid_hours INTEGER NOT NULL,
+    expires_at DATETIME NOT NULL,
+    last_triggered DATETIME NOT NULL,
+    first_created DATETIME NOT NULL,
+    trigger_count INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME,
+    updated_at DATETIME
+)
+"""
+
+_CURRENT_THRESHOLD_EVENTS_DDL = """
+CREATE TABLE threshold_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    species_name TEXT NOT NULL,
+    scientific_name TEXT,
+    previous_level INTEGER NOT NULL,
+    new_level INTEGER NOT NULL,
+    previous_value REAL NOT NULL,
+    new_value REAL NOT NULL,
+    change_reason TEXT NOT NULL,
+    confidence REAL DEFAULT 0,
+    created_at DATETIME
+)
+"""
+
+
+class CurrentThresholdSchemaTest(unittest.TestCase):
+    """The species-keyed threshold tables and the privacy rollup FK.
+
+    dynamic_thresholds and threshold_events no longer carry label_id (keyed by
+    species_name since #4195). db-doctor must accept that shape and must never
+    ALTER a label_id column into it: BirdNET-Go drops a threshold table that
+    still has label_id, so adding one would discard the user's learned data.
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.path = os.path.join(self._tmp.name, "birdnet.db")
+
+    def _check(self, method_name):
+        doctor = db_doctor.DatabaseDoctor(self.path)
+        report = db_doctor.DiagnosticReport(db_path=self.path)
+        ro = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+        try:
+            report.tables_present = doctor._get_tables(ro)
+            report.schema_version = "v2"
+            check = getattr(doctor, method_name)(ro, report)
+        finally:
+            ro.close()
+        return doctor, report, check
+
+    def test_current_threshold_tables_pass_and_fix_adds_no_label_id(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute(_CURRENT_DYNAMIC_THRESHOLDS_DDL)
+        conn.execute(_CURRENT_THRESHOLD_EVENTS_DDL)
+        conn.execute(
+            "INSERT INTO dynamic_thresholds (species_name, current_value, "
+            "base_threshold, valid_hours, expires_at, last_triggered, "
+            "first_created) VALUES ('robin', 0.5, 0.7, 24, "
+            "'2030-01-01', '2030-01-01', '2030-01-01')"
+        )
+        conn.execute(
+            "INSERT INTO threshold_events (species_name, previous_level, "
+            "new_level, previous_value, new_value, change_reason) "
+            "VALUES ('robin', 0, 1, 0.7, 0.5, 'high_confidence')"
+        )
+        conn.commit()
+        conn.close()
+
+        doctor, report, check = self._check("_check_schema_contamination")
+        self.assertEqual(check.status, "pass", check.details)
+
+        # Force the fix path, as the check itself passes.
+        report.checks.append(db_doctor.CheckResult(
+            name="Schema contamination", status="fail",
+            message="forced", fixable=True,
+        ))
+        conn = sqlite3.connect(self.path)
+        try:
+            doctor._fix_schema_contamination(conn, report)
+            for table in ("dynamic_thresholds", "threshold_events"):
+                columns = [
+                    row[1] for row in conn.execute(f"PRAGMA table_info({table})")
+                ]
+                self.assertNotIn("label_id", columns, table)
+                self.assertEqual(
+                    conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0],
+                    1, table,
+                )
+        finally:
+            conn.close()
+
+    def test_detections_recreation_keeps_clip_sample_rate_and_spectrogram_name(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            "CREATE TABLE detections (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+            "model_id INTEGER, label_id INTEGER, source_id INTEGER, "
+            "detected_at INTEGER, begin_time INTEGER, end_time INTEGER, "
+            "confidence REAL, latitude REAL, longitude REAL, "
+            "clip_name VARCHAR(500), spectrogram_clip_name VARCHAR(500), "
+            "clip_sample_rate INTEGER, processing_time_ms INTEGER, "
+            "unlikely NUMERIC, legacy_id INTEGER, created_at DATETIME)"
+        )
+        conn.execute(
+            "INSERT INTO detections (model_id, label_id, detected_at, "
+            "confidence, unlikely, spectrogram_clip_name, clip_sample_rate) "
+            "VALUES (1, 1, 1000, 0.9, 0, 'a.png', 48000)"
+        )
+        conn.commit()
+        conn.close()
+
+        doctor, report, check = self._check("_check_schema_contamination")
+        self.assertEqual(check.status, "fail")
+        self.assertTrue(check.fixable)
+        report.checks.append(check)
+
+        conn = sqlite3.connect(self.path)
+        try:
+            fix = doctor._fix_schema_contamination(conn, report)
+            row = conn.execute(
+                "SELECT spectrogram_clip_name, clip_sample_rate FROM detections"
+            ).fetchone()
+        finally:
+            conn.close()
+
+        self.assertEqual(fix.status, "applied", fix.details)
+        self.assertEqual(row, ("a.png", 48000))
+
+    def test_privacy_rollup_fk_orphan_is_reported(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute("CREATE TABLE audio_sources (id INTEGER PRIMARY KEY)")
+        conn.execute(
+            "CREATE TABLE privacy_filter_hourlies ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, source_id INTEGER NOT NULL)"
+        )
+        conn.execute("INSERT INTO audio_sources (id) VALUES (1)")
+        conn.execute("INSERT INTO privacy_filter_hourlies (source_id) VALUES (1)")
+        conn.execute("INSERT INTO privacy_filter_hourlies (source_id) VALUES (99)")
+        conn.commit()
+        conn.close()
+
+        _, _, check = self._check("_check_foreign_keys")
+
+        self.assertEqual(check.message, "Found 1 foreign key violation(s)")
+        self.assertEqual(
+            check.details,
+            ["privacy_filter_hourlies.source_id -> audio_sources.id: "
+             "1 orphaned reference(s)"],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
