@@ -38,6 +38,19 @@ func readOnlyDSN(dbPath string) string {
 	return dsnAppendParams(dbPath, "mode=ro")
 }
 
+// migrationTableResolveErrors returns the error to report and the error for
+// StartupState when the migration state table lookup fails. queryErr is the
+// failed query's error, or nil when the query succeeded without finding a
+// table; a query failure keeps its cause in both errors.
+func migrationTableResolveErrors(queryErr error) (reportErr, stateErr error) {
+	if queryErr != nil {
+		return fmt.Errorf("could not resolve migration state table: %w", queryErr),
+			fmt.Errorf("%w: could not resolve migration state table: %w", ErrV2DatabaseCorrupted, queryErr)
+	}
+	return fmt.Errorf("could not resolve migration state table"),
+		fmt.Errorf("%w: migration state table not found", ErrV2DatabaseCorrupted)
+}
+
 // reportStartupError reports a startup state check failure to Sentry telemetry.
 // The paths parameter lists file paths that should be anonymized in the error message.
 // Connectivity failures (the database host could not be reached) are not sent:
@@ -557,17 +570,14 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?) LIMIT 1",
 		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationTableName).Error
 	if err != nil || v2MigrationTableName == "" {
-		resolveErr := fmt.Errorf("could not resolve migration state table")
-		if err != nil {
-			resolveErr = fmt.Errorf("could not resolve migration state table: %w", err)
-		}
-		reportStartupError("mysql", "resolveV2TableName", resolveErr, mysqlHost, mysqlDB, mysqlUser)
+		reportErr, stateErr := migrationTableResolveErrors(err)
+		reportStartupError("mysql", "resolveV2TableName", reportErr, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
 			V2Available:     true,
 			LegacyRequired:  true,
 			Decision:        DecisionV2Corrupted,
-			Error:           fmt.Errorf("%w: migration state table not found", ErrV2DatabaseCorrupted),
+			Error:           stateErr,
 		}
 	}
 	var state entities.MigrationState

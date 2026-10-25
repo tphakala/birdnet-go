@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gorm.io/driver/sqlite"
@@ -869,6 +870,31 @@ func TestReportStartupError_SkipsConnectivityFailures(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, []string{"datastore-startup", "mysql", "openDatabase"}, events[0].Fingerprint)
 	assert.Equal(t, sentry.LevelWarning, events[0].Level)
+}
+
+// TestMigrationTableResolveErrors pins the errors of the migration state table
+// lookup: a failed query keeps its cause in both the reported and the returned
+// error, an empty result keeps the not-found message, and both still match
+// ErrV2DatabaseCorrupted.
+func TestMigrationTableResolveErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("query failure keeps its cause", func(t *testing.T) {
+		t.Parallel()
+		reportErr, stateErr := migrationTableResolveErrors(mysql.ErrInvalidConn)
+		require.ErrorIs(t, reportErr, mysql.ErrInvalidConn)
+		require.ErrorIs(t, stateErr, mysql.ErrInvalidConn)
+		require.ErrorIs(t, stateErr, ErrV2DatabaseCorrupted)
+		assert.True(t, errors.IsConnectivityError(reportErr), "a dropped connection is a connectivity failure")
+	})
+
+	t.Run("empty result keeps the not-found message", func(t *testing.T) {
+		t.Parallel()
+		reportErr, stateErr := migrationTableResolveErrors(nil)
+		require.ErrorIs(t, stateErr, ErrV2DatabaseCorrupted)
+		assert.Contains(t, stateErr.Error(), "migration state table not found")
+		assert.False(t, errors.IsConnectivityError(reportErr))
+	})
 }
 
 // mysqlTestSettings builds conf.Settings from a MySQLConfig for startup tests.
