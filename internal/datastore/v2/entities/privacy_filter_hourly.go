@@ -44,7 +44,8 @@ type PrivacyFilterHourly struct {
 	// counted as confirmed or ignored (at most one per source at a time).
 	Held int64 `gorm:"not null;default:0"`
 	// Ignored counts held hits dropped because the next hit fell outside the
-	// confirmation window. A subset of Held.
+	// confirmation window, or arrived while label confirmation was off (effective
+	// overlap at or below 1.5 s). A subset of Held.
 	Ignored int64 `gorm:"not null;default:0"`
 	// Confirmed counts held hits later confirmed by a second hit (label or VAD).
 	// A subset of Held; Held >= Confirmed + Ignored.

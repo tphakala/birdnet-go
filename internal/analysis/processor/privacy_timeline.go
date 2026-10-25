@@ -200,7 +200,7 @@ func (c *chunkAudio) coverage() audioSpan {
 func (p *Processor) recordHumanDetection(source string, at time.Time, trigger string) {
 	p.detectionMutex.Lock()
 	defer p.detectionMutex.Unlock()
-	p.recordHumanHitLocked(source, at, trigger, "", 0, privacyrollup.NoThresholdMilli)
+	p.recordHumanHitLocked(source, humanHit{at: at, trigger: trigger, thresholdMilli: privacyrollup.NoThresholdMilli})
 }
 
 // recordHumanHitLocked is recordHumanDetection for a caller that already holds
@@ -208,13 +208,12 @@ func (p *Processor) recordHumanDetection(source string, at time.Time, trigger st
 // its score. The hit joins the per-source attribution list (every counted hit,
 // whichever model produced it, so the discard log can name all contributors)
 // and moves LastHumanDetection forward under the rule of recordHumanDetection.
-// thresholdMilli is the threshold the hit was scored against, in thousandths.
-func (p *Processor) recordHumanHitLocked(source string, at time.Time, trigger, modelID string, score float64, thresholdMilli int) {
-	p.appendHumanHitLocked(source, humanHit{at: at, trigger: trigger, modelID: modelID, score: score})
-	if existing, ok := p.LastHumanDetection[source]; ok && !at.After(existing.Time) {
+func (p *Processor) recordHumanHitLocked(source string, hit humanHit) {
+	p.appendHumanHitLocked(source, hit)
+	if existing, ok := p.LastHumanDetection[source]; ok && !hit.at.After(existing.Time) {
 		return
 	}
-	p.LastHumanDetection[source] = HumanDetection{Time: at, Trigger: trigger, ModelID: modelID, Score: score, ThresholdMilli: thresholdMilli}
+	p.LastHumanDetection[source] = HumanDetection{Time: hit.at, Trigger: hit.trigger, ModelID: hit.modelID, Score: hit.score, ThresholdMilli: hit.thresholdMilli}
 }
 
 // clipSpan returns the exact audio span the exporter saves for a pending
@@ -559,7 +558,7 @@ const (
 	humanHitRetention = time.Duration(conf.MaxExtendedCaptureDuration)*time.Second +
 		humanHitMaxPreCapture + privacyCoverageMaxWait + privacyClipGuard
 
-	// humanHitMaxPerSource bounds the attribution list of one source (about 0.5 MB),
+	// humanHitMaxPerSource bounds the attribution list of one source (about 0.6 MB),
 	// so a long stretch of continuous speech cannot grow it without limit. Once it
 	// is reached the oldest entries by arrival order go first, and contributor
 	// counts are a lower bound.
@@ -570,13 +569,30 @@ const (
 	vadHitModelID = "silero_vad"
 )
 
-// humanHit is one counted speech hit kept for attribution: when it was stamped,
-// what produced it and how strongly.
+// humanHit is the one carrier of a speech hit: the audio end it was stamped
+// with, what produced it (trigger and model), its score and the threshold it was
+// scored against in thousandths. It serves the attribution list, held label hits
+// and the reporting of hit decisions. thresholdMilli is kept so a later
+// confirmation or drop reports the threshold of the hit and not the one in
+// effect when it resolves.
 type humanHit struct {
-	at      time.Time
-	trigger string
-	modelID string
-	score   float64
+	at             time.Time
+	trigger        string
+	modelID        string // model that scored the hit, empty when unknown
+	score          float64
+	thresholdMilli int
+}
+
+// labelHumanHit is a human label hit scored by modelID with confidence, against
+// the privacy filter confidence threshold thresholdMilli (in thousandths).
+func labelHumanHit(at time.Time, modelID string, confidence float32, thresholdMilli int) humanHit {
+	return humanHit{at: at, trigger: metrics.TriggerLabel, modelID: modelID, score: float64(confidence), thresholdMilli: thresholdMilli}
+}
+
+// vadHumanHit is a VAD speech hit with its speech probability, attributed to
+// vadHitModelID, against the VAD threshold thresholdMilli (in thousandths).
+func vadHumanHit(at time.Time, probability float64, thresholdMilli int) humanHit {
+	return humanHit{at: at, trigger: metrics.TriggerVAD, modelID: vadHitModelID, score: probability, thresholdMilli: thresholdMilli}
 }
 
 // appendHumanHitLocked adds hit to the attribution list of source and drops
