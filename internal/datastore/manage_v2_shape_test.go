@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // Raw DDL for tables as the enhanced database (v2) creates them on a fresh
@@ -103,7 +104,7 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 			t.Helper()
 			err := performAutoMigration(db, false, "SQLite", "")
 			require.ErrorIs(t, err, errV2ShapedTablesHoldRows)
-			assert.Contains(t, err.Error(), "notification_histories=2")
+			assert.Contains(t, err.Error(), "notification_histories=2, dynamic_thresholds=0, threshold_events=0")
 			for _, table := range []string{"notification_histories", "dynamic_thresholds", "threshold_events"} {
 				assert.True(t, columnExists(t, db, table, "label_id"), "%s must be left untouched", table)
 			}
@@ -148,12 +149,37 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 			}
 		}))
 
+		// The count keeps failing, so every boot refuses and leaves the table.
+		for boot := 1; boot <= 2; boot++ {
+			err := performAutoMigration(db, false, "SQLite", "")
+
+			require.ErrorIs(t, err, errV2ShapedTablesHoldRows, "boot %d", boot)
+			assert.Contains(t, err.Error(), "notification_histories=unknown", "boot %d", boot)
+			assert.True(t, db.Migrator().HasTable("notification_histories"), "boot %d", boot)
+			assert.True(t, columnExists(t, db, "notification_histories", "label_id"), "boot %d", boot)
+		}
+	})
+
+	t.Run("names_every_candidate_in_the_refusal", func(t *testing.T) {
+		db := openSQLiteTestDB(t)
+		require.NoError(t, db.Exec(testV2NotificationHistoriesDDL).Error)
+		require.NoError(t, db.Exec(testV2NotificationHistoriesIndexDDL).Error)
+		require.NoError(t, db.Exec(testV2DynamicThresholdsDDL).Error)
+		require.NoError(t, db.Exec(testV2ThresholdEventsDDL).Error)
+		now := time.Now()
+		require.NoError(t, db.Exec(`INSERT INTO dynamic_thresholds
+			(label_id, current_value, base_threshold, valid_hours, expires_at, last_triggered, first_created, updated_at)
+			VALUES (1, 0.5, 0.5, 24, ?, ?, ?, ?)`, now, now, now, now).Error)
+		require.NoError(t, db.Exec(`INSERT INTO threshold_events (label_id) VALUES (1)`).Error)
+
 		err := performAutoMigration(db, false, "SQLite", "")
 
 		require.ErrorIs(t, err, errV2ShapedTablesHoldRows)
-		assert.Contains(t, err.Error(), "notification_histories=unknown")
-		assert.True(t, db.Migrator().HasTable("notification_histories"))
-		assert.True(t, columnExists(t, db, "notification_histories", "label_id"))
+		assert.Contains(t, err.Error(), "notification_histories=0, dynamic_thresholds=1, threshold_events=1",
+			"the refusal must list every candidate with its own count")
+		for _, table := range []string{"notification_histories", "dynamic_thresholds", "threshold_events"} {
+			assert.True(t, columnExists(t, db, table, "label_id"), "%s must be left untouched", table)
+		}
 	})
 
 	t.Run("refuses_when_rows_appear_before_a_drop", func(t *testing.T) {
@@ -186,6 +212,16 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 		assert.NotContains(t, err.Error(), "dynamic_thresholds=0", "the refusal must not repeat the stale count")
 		assert.True(t, columnExists(t, db, "dynamic_thresholds", "label_id"), "the table that gained rows must not be dropped")
 		assert.EqualValues(t, 1, countRows(t, db, "dynamic_thresholds"))
+
+		// This boot already dropped the empty candidates before the one that gained
+		// rows. The next boot sees the shorter list and refuses the same way,
+		// leaving the populated table and its row alone.
+		err = performAutoMigration(db, false, "SQLite", "")
+
+		require.ErrorIs(t, err, errV2ShapedTablesHoldRows, "second boot")
+		assert.Contains(t, err.Error(), "dynamic_thresholds=1", "second boot")
+		assert.True(t, columnExists(t, db, "dynamic_thresholds", "label_id"), "second boot")
+		assert.EqualValues(t, 1, countRows(t, db, "dynamic_thresholds"), "second boot")
 	})
 
 	t.Run("refuses_when_the_pre_drop_check_fails", func(t *testing.T) {
@@ -204,11 +240,23 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 			}
 		}))
 
-		err := performAutoMigration(db, false, "SQLite", "")
+		// Not parallel: logtest.Capture swaps the process-global logger.
+		var err error
+		out := logtest.Capture(t, func() {
+			err = performAutoMigration(db, false, "SQLite", "")
+		})
 
 		require.ErrorIs(t, err, errV2ShapedTablesHoldRows)
 		assert.Contains(t, err.Error(), "dynamic_thresholds=unknown", "a failed probe must count as non-empty")
 		assert.True(t, columnExists(t, db, "dynamic_thresholds", "label_id"), "the table must not be dropped")
+		assert.Contains(t, out, "Could not check v2-shaped table before dropping it", "the probe failure must be logged")
+		assert.Contains(t, out, "probe failed", "the log must carry the cause")
+
+		// The next boot starts from the shorter candidate list and refuses again.
+		err = performAutoMigration(db, false, "SQLite", "")
+
+		require.ErrorIs(t, err, errV2ShapedTablesHoldRows, "second boot")
+		assert.True(t, columnExists(t, db, "dynamic_thresholds", "label_id"), "second boot")
 	})
 
 	t.Run("refuses_v2_database_and_leaves_it_untouched", func(t *testing.T) {
@@ -242,12 +290,15 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 		require.NoError(t, db.AutoMigrate(&Note{}))
 		require.NoError(t, db.Create(&Note{ScientificName: "Parus major"}).Error)
 
-		err := performAutoMigration(db, false, "SQLite", "")
+		// Both sides hold data, so every boot refuses and leaves both untouched.
+		for boot := 1; boot <= 2; boot++ {
+			err := performAutoMigration(db, false, "SQLite", "")
 
-		require.ErrorIs(t, err, errV2ShapedTablesHoldRows)
-		assert.True(t, columnExists(t, db, "notification_histories", "label_id"))
-		assert.EqualValues(t, 2, countRows(t, db, "notification_histories"))
-		assert.EqualValues(t, 1, countRows(t, db, "notes"))
+			require.ErrorIs(t, err, errV2ShapedTablesHoldRows, "boot %d", boot)
+			assert.True(t, columnExists(t, db, "notification_histories", "label_id"), "boot %d", boot)
+			assert.EqualValues(t, 2, countRows(t, db, "notification_histories"), "boot %d", boot)
+			assert.EqualValues(t, 1, countRows(t, db, "notes"), "boot %d", boot)
+		}
 	})
 
 	t.Run("leaves_nullable_label_id_alone", func(t *testing.T) {

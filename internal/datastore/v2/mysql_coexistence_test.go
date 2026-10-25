@@ -650,7 +650,8 @@ func TestMySQL_LegacyOpen_V2ShapedNotificationHistory(t *testing.T) {
 
 		for boot := 1; boot <= 2; boot++ {
 			store := datastore.New(settings)
-			require.Error(t, store.Open(), "legacy Open must refuse on boot %d", boot)
+			require.ErrorContains(t, store.Open(), "notification_histories=2",
+				"legacy Open must refuse on boot %d with the v2-shaped table guard", boot)
 
 			assert.True(t, coexTestDB.Migrator().HasColumn("notification_histories", "label_id"),
 				"notification_histories must keep its v2 shape on boot %d", boot)
