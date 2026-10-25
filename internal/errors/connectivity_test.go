@@ -103,11 +103,22 @@ func TestShouldReportToSentry_RateLimitsConnectivity(t *testing.T) {
 	}
 	refused := refusedDialError(syscall.ECONNREFUSED)
 
-	// A real dial timeout is also a context deadline error; the context filter
-	// runs first, so it is dropped without taking the window.
+	// A bare context error is not a connectivity failure and stays dropped
+	// without taking the window, as does a canceled dial.
+	assert.False(t, shouldReportToSentry(build(CategoryDatabase, context.DeadlineExceeded)), "bare context deadline stays dropped")
+	assert.False(t, shouldReportToSentry(build(CategoryDatabase, &net.OpError{Op: "dial", Net: "tcp", Err: context.Canceled})), "canceled dial stays dropped")
+	lowPriority := New(&net.OpError{Op: "dial", Net: "tcp", Err: context.DeadlineExceeded}).
+		Component("test").Category(CategorySystem).Priority(PriorityLow).Build()
+	assert.False(t, shouldReportToSentry(lowPriority), "low priority system errors stay dropped")
+
+	// A real dial timeout is also a context deadline error. It is a connectivity
+	// failure, so it reaches the window instead of being dropped as a context
+	// interruption: the first one is sent, the next ones are rate limited.
 	dialDeadline := &net.OpError{Op: "dial", Net: "tcp", Err: context.DeadlineExceeded}
 	require.True(t, isContextCancellation(dialDeadline), "the real dial timeout is also a context deadline")
-	assert.False(t, shouldReportToSentry(build(CategoryDatabase, dialDeadline)), "context deadline stays dropped")
+	assert.True(t, shouldReportToSentry(build(CategoryDatabase, dialDeadline)), "first dial timeout is sent")
+	assert.False(t, shouldReportToSentry(build(CategorySystem, dialDeadline)), "second dial timeout is rate limited")
+	connectivityLimiter.last.Store(0)
 
 	assert.True(t, shouldReportToSentry(build(CategoryDatabase, refused)), "first connectivity event is sent")
 	assert.False(t, shouldReportToSentry(build(CategoryState, mysql.ErrInvalidConn)), "window is shared across categories and classes")

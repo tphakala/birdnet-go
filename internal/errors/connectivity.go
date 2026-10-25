@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"context"
 	"database/sql/driver"
 	"net"
 	"os"
@@ -176,6 +177,20 @@ func isConnectivityCategory(c ErrorCategory) bool {
 	default:
 		return false
 	}
+}
+
+// isDialDeadlineConnectivity reports whether ee is a connectivity failure whose
+// only context signal is the deadline a failed dial carries: the dial timeout
+// the net package returns is also context.DeadlineExceeded, so an unreachable
+// host would otherwise be dropped as a context interruption and never reach the
+// connectivity window. Canceled contexts, bare deadline errors and PriorityLow
+// system errors stay suppressed.
+func isDialDeadlineConnectivity(ee *EnhancedError, connectivity bool) bool {
+	if !connectivity || (ee.Category == CategorySystem && ee.GetPriority() == PriorityLow) {
+		return false
+	}
+	opErr, ok := AsType[*net.OpError](ee.Err)
+	return ok && opErr.Op == dialOp && !Is(ee.Err, context.Canceled)
 }
 
 // isGatedConnectivity reports whether ee is a connectivity failure in a gated category.

@@ -248,8 +248,9 @@ func shouldReport(ee *EnhancedError, connectivity bool) bool {
 	// (graceful shutdown, client disconnect, request timeout). These are not code
 	// bugs; suppressing prevents hundreds of duplicate events per day from drowning
 	// legitimate errors. See isSuppressibleOperationalError for why PriorityLow is
-	// honored alongside the context sentinels.
-	if isSuppressibleOperationalError(ee) {
+	// honored alongside the context sentinels. A dial timeout is also a context
+	// deadline but is an unreachable host, so it goes on to the connectivity window.
+	if isSuppressibleOperationalError(ee) && !isDialDeadlineConnectivity(ee, connectivity) {
 		return false
 	}
 
