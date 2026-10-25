@@ -334,15 +334,17 @@ func TestRecordVADHit_FollowsEffectiveOverlap(t *testing.T) {
 	require.True(t, p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, "", 0.4, 0)).held)
 
 	// The plan is republished with the overlap capped below the boundary while the
-	// configured value stays above it: the VAD hit counts alone and does not
-	// resolve the held label hit.
+	// configured value stays above it: the VAD hit counts alone and drops the held
+	// label hit, even inside the confirmation window, because confirmation is off.
 	attachCadencePlan(t, p, 2.4, 1.0)
 	d := p.recordVADHit(settings, confirmSource, vadHumanHit(t0.Add(time.Second), 0, 0))
 
 	assert.Nil(t, d.confirmed)
-	assert.Nil(t, d.dropped)
+	require.NotNil(t, d.dropped)
+	assert.True(t, t0.Equal(d.dropped.at))
+	assert.True(t, d.confirmationOff)
 	_, stillHeld := held(p, confirmSource)
-	assert.True(t, stillHeld)
+	assert.False(t, stillHeld)
 	got, ok := lastHit(p)
 	require.True(t, ok)
 	assert.Equal(t, metrics.TriggerVAD, got.Trigger)
