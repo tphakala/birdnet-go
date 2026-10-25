@@ -137,8 +137,10 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 
 // Start initializes and opens the database connections.
 // It handles three startup paths: v2-only (post-migration), fresh install, and legacy mode.
-// It refuses to start, changing nothing, when a MySQL or MariaDB database holds both
-// enhanced database (v2) tables and legacy tables (datastoreV2.ErrMixedSchemaDatabase).
+// When a MySQL or MariaDB database holds both enhanced database (v2) tables and legacy
+// tables, the startup state check keeps the side that holds data and drops only the
+// other side's empty tables. Start refuses, changing nothing, only when no side can be
+// kept without losing rows or a table cannot be read (datastoreV2.ErrMixedSchemaDatabase).
 // Migration infrastructure is initialized when not in v2-only mode; on a legacy
 // install with a migration state manager it also starts the monitor that keeps
 // the migration_state telemetry tag, the legacy schema bell notice and the
@@ -235,8 +237,9 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		)
 	}
 
-	// A database holding both schemas is never opened: neither the legacy fallback below
-	// nor the unmigrated-records override above may pick a side for the user.
+	// A database holding both schemas that cannot be reconciled without losing rows is never
+	// opened: neither the legacy fallback below nor the unmigrated-records override above
+	// may pick a side for the user.
 	if err := abortOnMixedSchema(datastoreLog, startupState.Error); err != nil {
 		return err
 	}
