@@ -172,13 +172,17 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 			VALUES (1, 0.5, 0.5, 24, ?, ?, ?, ?)`, now, now, now, now).Error)
 		require.NoError(t, db.Exec(`INSERT INTO threshold_events (label_id) VALUES (1)`).Error)
 
-		err := performAutoMigration(db, false, "SQLite", "")
+		for boot := 1; boot <= 2; boot++ {
+			err := performAutoMigration(db, false, "SQLite", "")
 
-		require.ErrorIs(t, err, errV2ShapedTablesHoldRows)
-		assert.Contains(t, err.Error(), "notification_histories=0, dynamic_thresholds=1, threshold_events=1",
-			"the refusal must list every candidate with its own count")
-		for _, table := range []string{"notification_histories", "dynamic_thresholds", "threshold_events"} {
-			assert.True(t, columnExists(t, db, table, "label_id"), "%s must be left untouched", table)
+			require.ErrorIs(t, err, errV2ShapedTablesHoldRows, "boot %d", boot)
+			assert.Contains(t, err.Error(), "notification_histories=0, dynamic_thresholds=1, threshold_events=1",
+				"the refusal must list every candidate with its own count on boot %d", boot)
+			for _, table := range []string{"notification_histories", "dynamic_thresholds", "threshold_events"} {
+				assert.True(t, columnExists(t, db, table, "label_id"), "%s must be left untouched on boot %d", table, boot)
+			}
+			assert.EqualValues(t, 1, countRows(t, db, "dynamic_thresholds"), "boot %d", boot)
+			assert.EqualValues(t, 1, countRows(t, db, "threshold_events"), "boot %d", boot)
 		}
 	})
 
