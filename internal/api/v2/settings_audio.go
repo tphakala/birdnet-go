@@ -53,9 +53,8 @@ type streamRateLookup interface {
 // filter above its Nyquist frequency is skipped there without being reported;
 // a sound card that fails to start at its new rate; a save that changes only
 // a source rate, models or URL and no equalizer setting (no toast is sent for
-// it); and any existing config
-// file, whose startup is unchanged and logs a Warn per skipped filter when the
-// chain is built.
+// it); and any existing config file, whose startup is unchanged and logs a
+// Warn per skipped filter when the chain is built.
 func equalizerSkipReport(oldSettings, currentSettings *conf.Settings, registry streamRateLookup) []eqSkippedSource {
 	var report []eqSkippedSource
 	add := func(name string, sampleRate int) {
