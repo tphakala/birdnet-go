@@ -188,6 +188,10 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 		event.Tags["github_issue"] = githubIssue
 	}
 
+	// A user-requested upload should probe the host now rather than wait out
+	// a backoff left by earlier failures.
+	sentryDeliveryGate.expedite()
+
 	// Capture the event with attachment using WithScope
 	var eventID *sentry.EventID
 
@@ -323,6 +327,10 @@ func (au *AttachmentUploader) CreateSupportEvent(ctx context.Context, systemID, 
 		eventTypeTagKey: "support_request",
 		"system_id":     systemID,
 	}
+
+	// A user-requested upload should probe the host now rather than wait out
+	// a backoff left by earlier failures.
+	sentryDeliveryGate.expedite()
 
 	// Capture event
 	log.Debug("capturing support event")

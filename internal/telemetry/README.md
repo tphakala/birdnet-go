@@ -165,6 +165,18 @@ Protects against Sentry outages:
 - **Recovery timeout**: Transitions to half-open after timeout
 - **Gradual recovery**: Limited events in half-open state
 
+### Delivery Backoff
+
+Stops DNS lookups and connection attempts to the Sentry ingest host while it is unreachable. It wraps the HTTP transport used by both Sentry clients and is separate from the worker circuit breaker above, which does not see delivery failures.
+
+- **Opens** after 3 consecutive transport errors (DNS, dial, timeout, reset)
+- **Backoff**: 1 minute, doubling after each failed probe up to 1 hour
+- **While open**: requests fail at once without touching the network and are counted as dropped network errors in Sentry client reports
+- **Probe**: the first request after the window is sent; requests that arrive before it resolves fail at once and are dropped
+- **Reset**: any HTTP response, whatever its status, closes the gate and restores the 1 minute window
+- **Support dumps** probe immediately instead of waiting out the window
+- **Logging**: one line per transition (Warn on open, Debug on a failed probe, Info on recovery) with a failure kind only, never the raw error
+
 ## Initialization
 
 ### Multi-Phase Initialization
