@@ -3,11 +3,14 @@ package errors
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -35,13 +38,24 @@ func (t *TransportMock) Events() []*sentry.Event {
 	return t.events
 }
 
-func TestReportError_IncludesStacktrace(t *testing.T) {
+// bindMockTransport points the process-wide Sentry hub at a recording
+// transport and restores the previous client when the test ends. Tests that
+// use it must not run in parallel.
+func bindMockTransport(t *testing.T) *TransportMock {
+	t.Helper()
+	hub := sentry.CurrentHub()
+	original := hub.Client()
+	t.Cleanup(func() { hub.BindClient(original) })
 	transport := &TransportMock{}
-	err := sentry.Init(sentry.ClientOptions{
+	require.NoError(t, sentry.Init(sentry.ClientOptions{
 		Dsn:       "https://examplePublicKey@o0.ingest.sentry.io/0",
 		Transport: transport,
-	})
-	require.NoError(t, err)
+	}))
+	return transport
+}
+
+func TestReportError_IncludesStacktrace(t *testing.T) {
+	transport := bindMockTransport(t)
 
 	reporter := NewSentryReporter(true)
 	ee := New(fmt.Errorf("test error")).
@@ -343,8 +357,8 @@ func TestShouldReportToSentry_AllowsRTSPCodeBugs(t *testing.T) {
 
 func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
 	// Not parallel: mutates package-level state
-	lastDiskFullReport.Store(0)
-	t.Cleanup(func() { lastDiskFullReport.Store(0) })
+	diskFullLimiter.last.Store(0)
+	t.Cleanup(func() { diskFullLimiter.last.Store(0) })
 
 	ee1 := New(fmt.Errorf("database or disk is full")).
 		Component("datastore").Category(CategoryDatabase).Build()
@@ -358,8 +372,8 @@ func TestShouldReportToSentry_RateLimitsDiskFull(t *testing.T) {
 func TestShouldReportToSentry_DiskFullCooldownExpiry(t *testing.T) {
 	// Not parallel: mutates package-level state
 	// Simulate a disk-full report from past the cooldown window
-	lastDiskFullReport.Store(time.Now().Unix() - diskFullCooldown - 1)
-	t.Cleanup(func() { lastDiskFullReport.Store(0) })
+	diskFullLimiter.last.Store(time.Now().Add(-diskFullCooldown).Unix() - 1)
+	t.Cleanup(func() { diskFullLimiter.last.Store(0) })
 
 	ee := New(fmt.Errorf("database or disk is full")).
 		Component("datastore").Category(CategoryDatabase).Build()
@@ -553,4 +567,65 @@ func TestShouldReportToSentry_FiltersLowPrioritySystemInterruptions(t *testing.T
 				"shouldReportToSentry for %q = %v, want %v", tt.name, got, tt.wantReport)
 		})
 	}
+}
+
+func TestReportError_ConnectivityEventIsEnvironmentWarning(t *testing.T) {
+	resetConnectivityWindow(t)
+
+	transport := bindMockTransport(t)
+
+	reporter := NewSentryReporter(true)
+	reporter.ReportError(New(mysql.ErrInvalidConn).
+		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build())
+	reporter.ReportError(New(fmt.Errorf("state row is inconsistent")).
+		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build())
+	// A dial failure outside the gated categories keeps its category's level,
+	// origin and fingerprint.
+	reporter.ReportError(New(refusedDialError(syscall.ECONNREFUSED)).
+		Component("birdweather").Category(CategoryIntegration).Context("operation", "upload").Build())
+	sentry.Flush(time.Second)
+
+	events := transport.Events()
+	require.Len(t, events, 3)
+
+	assert.Equal(t, sentry.LevelWarning, events[0].Level)
+	assert.Equal(t, "environment", events[0].Tags["error_origin"])
+	assert.Equal(t, []string{"connectivity", "state", "invalid_connection"}, events[0].Fingerprint)
+
+	assert.Equal(t, sentry.LevelError, events[1].Level)
+	assert.Equal(t, "code", events[1].Tags["error_origin"])
+	require.GreaterOrEqual(t, len(events[1].Fingerprint), 4)
+	assert.Equal(t, []string{"datastore", "state", "read_state", "error"}, events[1].Fingerprint[:4])
+
+	assert.Equal(t, getErrorLevel(CategoryIntegration), events[2].Level)
+	assert.Equal(t, GetErrorOrigin(CategoryIntegration), events[2].Tags["error_origin"])
+	require.NotEmpty(t, events[2].Fingerprint)
+	assert.NotEqual(t, connectivityFingerprintPrefix, events[2].Fingerprint[0])
+}
+
+// dialTimeoutError mimics the timeout error the net package returns from a
+// dial: it reads "i/o timeout" and is also context.DeadlineExceeded.
+type dialTimeoutError struct{}
+
+func (dialTimeoutError) Error() string        { return "i/o timeout" }
+func (dialTimeoutError) Timeout() bool        { return true }
+func (dialTimeoutError) Temporary() bool      { return true }
+func (dialTimeoutError) Is(target error) bool { return target == context.DeadlineExceeded }
+
+func TestReportError_DatabaseDialTimeoutIsReported(t *testing.T) {
+	resetConnectivityWindow(t)
+	transport := bindMockTransport(t)
+
+	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: dialTimeoutError{}}
+	require.ErrorIs(t, dialErr, context.DeadlineExceeded, "the fixture is a context deadline like a real dial timeout")
+
+	reporter := NewSentryReporter(true)
+	reporter.ReportError(New(dialErr).Component("datastore").Category(CategoryDatabase).Context("operation", "mysql_open").Build())
+	sentry.Flush(time.Second)
+
+	events := transport.Events()
+	require.Len(t, events, 1, "an unreachable database host must produce an event")
+	assert.Equal(t, sentry.LevelWarning, events[0].Level)
+	assert.Equal(t, "environment", events[0].Tags["error_origin"])
+	assert.Equal(t, []string{"connectivity", "database", "io_timeout"}, events[0].Fingerprint)
 }

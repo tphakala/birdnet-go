@@ -1,23 +1,29 @@
 package v2
 
 import (
+	"context"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -794,6 +800,100 @@ func TestReportStartupError_NilSafe(t *testing.T) {
 	assert.NotPanics(t, func() {
 		reportStartupError("sqlite", "openDatabase", fmt.Errorf("database is locked"))
 		reportStartupError("sqlite", "openV2Database", fmt.Errorf("open /home/user/birdnet_v2.db: denied"), "/home/user/birdnet_v2.db")
+	})
+}
+
+// captureTransport is a sentry.Transport that records every event.
+type captureTransport struct {
+	mu     sync.Mutex
+	events []*sentry.Event
+}
+
+func (*captureTransport) Configure(sentry.ClientOptions)        {}
+func (*captureTransport) Flush(time.Duration) bool              { return true }
+func (*captureTransport) FlushWithContext(context.Context) bool { return true }
+func (*captureTransport) Close()                                {}
+func (c *captureTransport) SendEvent(event *sentry.Event) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.events = append(c.events, event)
+}
+
+func (c *captureTransport) captured() []*sentry.Event {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.events)
+}
+
+// bindCaptureTransport routes Sentry events of the process-wide hub to a
+// recording transport for the duration of the test.
+func bindCaptureTransport(t *testing.T) *captureTransport {
+	t.Helper()
+	telemetry.EnableTestMode()
+	t.Cleanup(telemetry.DisableTestMode)
+	transport := &captureTransport{}
+	hub := sentry.CurrentHub()
+	original := hub.Client()
+	client, err := sentry.NewClient(sentry.ClientOptions{Transport: transport})
+	require.NoError(t, err)
+	hub.BindClient(client)
+	t.Cleanup(func() { hub.BindClient(original) })
+	hub.PushScope()
+	t.Cleanup(hub.PopScope)
+	return transport
+}
+
+// TestReportStartupError_SkipsConnectivityFailures pins that an unreachable
+// MySQL server is not reported from the startup check (the runtime open
+// attempt reports it once), while other startup failures still are.
+// Not parallel: it binds a client on the process-wide Sentry hub.
+func TestReportStartupError_SkipsConnectivityFailures(t *testing.T) {
+	transport := bindCaptureTransport(t)
+
+	// A port that was just released refuses the connection.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := listener.Addr().(*net.TCPAddr).Port
+	require.NoError(t, listener.Close())
+
+	state := checkMySQLMigrationState(mysqlTestSettings(&MySQLConfig{
+		Host: "127.0.0.1", Port: strconv.Itoa(port), Username: "u", Password: "p", Database: "d",
+	}))
+	require.Error(t, state.Error)
+	require.ErrorIs(t, state.Error, ErrV2DatabaseCorrupted)
+	sentry.Flush(time.Second)
+	assert.Empty(t, transport.captured(), "an unreachable server is not a startup defect")
+
+	reportStartupError("mysql", "openDatabase", &mysql.MySQLError{Number: 1049, Message: "Unknown database 'birdnet'"})
+	sentry.Flush(time.Second)
+	events := transport.captured()
+	require.Len(t, events, 1)
+	assert.Equal(t, []string{"datastore-startup", "mysql", "openDatabase"}, events[0].Fingerprint)
+	assert.Equal(t, sentry.LevelWarning, events[0].Level)
+}
+
+// TestMigrationTableResolveErrors pins the errors of the migration state table
+// lookup: a failed query keeps its cause in both the reported and the returned
+// error, an empty result keeps the not-found message, and both still match
+// ErrV2DatabaseCorrupted.
+func TestMigrationTableResolveErrors(t *testing.T) {
+	t.Parallel()
+
+	t.Run("query failure keeps its cause", func(t *testing.T) {
+		t.Parallel()
+		reportErr, stateErr := migrationTableResolveErrors(mysql.ErrInvalidConn)
+		require.ErrorIs(t, reportErr, mysql.ErrInvalidConn)
+		require.ErrorIs(t, stateErr, mysql.ErrInvalidConn)
+		require.ErrorIs(t, stateErr, ErrV2DatabaseCorrupted)
+		assert.True(t, errors.IsConnectivityError(reportErr), "a dropped connection is a connectivity failure")
+	})
+
+	t.Run("empty result keeps the not-found message", func(t *testing.T) {
+		t.Parallel()
+		reportErr, stateErr := migrationTableResolveErrors(nil)
+		require.ErrorIs(t, stateErr, ErrV2DatabaseCorrupted)
+		assert.Contains(t, stateErr.Error(), "migration state table not found")
+		assert.False(t, errors.IsConnectivityError(reportErr))
 	})
 }
 
