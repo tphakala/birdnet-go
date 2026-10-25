@@ -79,14 +79,14 @@ const ciEnvVar = "CI"
 // temporary server logs "port: 0" first, so this matches only the final start.
 const mariaDBReadyLog = "port: 3306  mariadb.org binary distribution"
 
-// DefaultMySQLConfig returns a MySQLConfig with sensible defaults.
+// DefaultMySQLConfig returns a MySQLConfig with sensible defaults. Flavor and
+// ImageTag stay empty so the server resolves to the flavor's default tag.
 func DefaultMySQLConfig() MySQLConfig {
 	return MySQLConfig{
 		Database:     "birdnet_test",
 		RootPassword: "test",
 		Username:     "testuser",
 		Password:     "testpass",
-		ImageTag:     defaultMySQLImageTag,
 	}
 }
 

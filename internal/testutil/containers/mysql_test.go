@@ -9,6 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// defaultMariaDBConfig is DefaultMySQLConfig with the flavor switched to MariaDB.
+func defaultMariaDBConfig() MySQLConfig {
+	cfg := DefaultMySQLConfig()
+	cfg.Flavor = FlavorMariaDB
+	return cfg
+}
+
 // TestResolveMySQLImage pins the server selection order: MYSQL_TEST_IMAGE wins,
 // then the config fields, then the defaults, and invalid input fails loudly
 // instead of falling back to MySQL.
@@ -26,6 +33,24 @@ func TestResolveMySQLImage(t *testing.T) {
 			name:       "defaults to MySQL 8.0",
 			wantImage:  "mysql:8.0",
 			wantFlavor: FlavorMySQL,
+		},
+		{
+			name:       "default config selects MySQL 8.0",
+			cfg:        DefaultMySQLConfig(),
+			wantImage:  "mysql:8.0",
+			wantFlavor: FlavorMySQL,
+		},
+		{
+			name:       "default config with MariaDB flavor uses the MariaDB default tag",
+			cfg:        defaultMariaDBConfig(),
+			wantImage:  "mariadb:11.8",
+			wantFlavor: FlavorMariaDB,
+		},
+		{
+			name:       "explicit tag wins over the flavor default",
+			cfg:        MySQLConfig{Flavor: FlavorMariaDB, ImageTag: "10.11"},
+			wantImage:  "mariadb:10.11",
+			wantFlavor: FlavorMariaDB,
 		},
 		{
 			name:       "env wins over a pinned config tag",
