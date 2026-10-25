@@ -116,6 +116,11 @@
   );
   const rows = $derived(sortRows(filtered, sort, nameOf));
   const maxCount = $derived(Math.max(1, ...unique.map(r => r.count)));
+  // One y-axis for every row chart and expanded card, so a single detection never looks as
+  // tall as a busy hour.
+  const maxHourlyCount = $derived(
+    Math.max(1, ...unique.flatMap(r => r.hourly_counts.slice(0, maxHour + 1)))
+  );
   const totalDetections = $derived(unique.reduce((sum, r) => sum + r.count, 0));
   const newSpecies = $derived(unique.filter(r => noveltyOf(r) === 'lifetime').length);
 
@@ -284,6 +289,7 @@
           item={row}
           displayName={nameOf(row)}
           {novelty}
+          scaleMax={maxHourlyCount}
           speciesUrl={speciesUrl(row)}
           {maxHour}
           {sunriseHour}
@@ -322,7 +328,12 @@
           </span>
           <span class="phone-num">{confidencePercent(row)}%</span>
           <span class="phone-num">{row.count}</span>
-          <HourBars counts={row.hourly_counts} {maxHour} height={ROW_CHART_HEIGHT_PX} />
+          <HourBars
+            counts={row.hourly_counts}
+            {maxHour}
+            height={ROW_CHART_HEIGHT_PX}
+            scaleMax={maxHourlyCount}
+          />
         </button>
       {/if}
     {/each}

@@ -126,4 +126,28 @@ describe('PhoneSpeciesTable', () => {
     renderTable([...rows, summary()]);
     expect(speciesRows()).toHaveLength(3);
   });
+
+  it('draws every row chart and expanded card on one shared y-axis', async () => {
+    const busy = summary({
+      scientific_name: 'Corvus corax',
+      count: 20,
+      hourly_counts: Array.from({ length: 24 }, (_, h) => (h === 6 ? 20 : 0)),
+    });
+    const lone = summary({
+      count: 1,
+      hourly_counts: Array.from({ length: 24 }, (_, h) => (h === 6 ? 1 : 0)),
+    });
+    renderTable([busy, lone]);
+    const barHeight = (row: HTMLElement) =>
+      row.querySelectorAll<HTMLElement>('.hour-bar')[6].style.height;
+    const [busyRow, loneRow] = speciesRows();
+    expect(barHeight(busyRow)).toBe('100%');
+    // 1 of 20 is below the minimum visible bar, so it is floored, not drawn full height.
+    expect(barHeight(loneRow)).toBe('8%');
+
+    // The expanded card keeps the same axis instead of rescaling to the species' own peak.
+    await fireEvent.click(loneRow);
+    const card = screen.getByRole('group', { name: 'Blackbird' });
+    expect(card.querySelectorAll<HTMLElement>('.hour-bar')[6].style.height).toBe('8%');
+  });
 });

@@ -1,8 +1,10 @@
 <!--
   HourBars.svelte - Hourly detection bars for one species, hours 0..maxHour.
 
-  Bars are scaled to the species' own busiest hour. Hours outside sunrise..sunset are
-  dimmed when sun times are known. Decorative: callers put the facts in text.
+  Bars are scaled to the species' own busiest hour, or to `scaleMax` when the caller wants
+  several charts on one shared y-axis so a lone detection reads as small. Hours outside
+  sunrise..sunset are dimmed when sun times are known. Decorative: callers put the facts in
+  text.
 -->
 <script lang="ts">
   interface Props {
@@ -10,17 +12,26 @@
     maxHour: number;
     /** Chart height in px. */
     height: number;
+    /** Count that fills the full chart height; defaults to this species' busiest hour. */
+    scaleMax?: number;
     sunriseHour?: number | null;
     sunsetHour?: number | null;
   }
 
-  let { counts, maxHour, height, sunriseHour = null, sunsetHour = null }: Props = $props();
+  let {
+    counts,
+    maxHour,
+    height,
+    scaleMax,
+    sunriseHour = null,
+    sunsetHour = null,
+  }: Props = $props();
 
   /** Smallest visible bar, so a single detection is never a sliver. */
   const MIN_BAR_PERCENT = 8;
 
   const hours = $derived(counts.slice(0, maxHour + 1));
-  const peak = $derived(Math.max(1, ...hours));
+  const peak = $derived(scaleMax ?? Math.max(1, ...hours));
 
   function isNight(hour: number): boolean {
     if (sunriseHour === null || sunsetHour === null) return false;

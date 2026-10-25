@@ -18,6 +18,8 @@
     item: DailySpeciesSummary;
     displayName: string;
     novelty: NoveltyCategory | null;
+    /** Count that fills the chart height, shared with the table rows. */
+    scaleMax: number;
     speciesUrl: string;
     maxHour: number;
     sunriseHour: number | null;
@@ -30,6 +32,7 @@
     item,
     displayName,
     novelty,
+    scaleMax,
     speciesUrl,
     maxHour,
     sunriseHour,
@@ -102,6 +105,7 @@
       counts={item.hourly_counts}
       {maxHour}
       height={CHART_HEIGHT_PX}
+      {scaleMax}
       {sunriseHour}
       {sunsetHour}
     />
