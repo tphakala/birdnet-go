@@ -154,14 +154,22 @@ func (c *Handler) aggregateDetectionEvents(entries []reader.LogEntry, _ time.Tim
 // hourly pending counts, which index on t.Hour(). time.Time.Truncate operates
 // on absolute (UTC) time, so for offsets that are not a whole number of hours
 // (+05:30, +05:45, -03:30) it floors to 30 or 45 minutes past the local hour.
-// Subtracting the wall-clock minutes, seconds and nanoseconds keeps t's own
-// offset, so the result never falls after t, even inside a repeated DST hour
-// where time.Date would pick one of the two offsets on its own.
+// The result is t minus its wall-clock minutes, seconds and nanoseconds, so it
+// never falls after t, even inside a repeated DST hour where time.Date would
+// pick one of the two offsets on its own. When that instant lies before an
+// offset change inside the same hour (a 30 minute DST shift such as
+// Australia/Lord_Howe), it is shown in t's own offset, so it still reads as
+// the start of t's wall-clock hour.
 func wallClockHourStart(t time.Time) time.Time {
 	sinceHourStart := time.Duration(t.Minute())*time.Minute +
 		time.Duration(t.Second())*time.Second +
 		time.Duration(t.Nanosecond())
-	return t.Add(-sinceHourStart)
+	start := t.Add(-sinceHourStart)
+	name, offset := t.Zone()
+	if _, startOffset := start.Zone(); startOffset != offset {
+		start = start.In(time.FixedZone(name, offset))
+	}
+	return start
 }
 
 // toBucketKey returns the bucket key for a given timestamp (floored to the event's wall-clock hour).

@@ -760,6 +760,8 @@ func TestBucketHourBoundaries(t *testing.T) {
 	acst := time.FixedZone("ACST", int((9*time.Hour + 30*time.Minute).Seconds()))
 	helsinki, err := time.LoadLocation("Europe/Helsinki")
 	require.NoError(t, err)
+	lordHowe, err := time.LoadLocation("Australia/Lord_Howe")
+	require.NoError(t, err)
 
 	tests := []struct {
 		name          string
@@ -830,6 +832,18 @@ func TestBucketHourBoundaries(t *testing.T) {
 			"repeated DST hour keeps the event's own offset",
 			time.Date(2024, 10, 27, 0, 30, 0, 0, time.UTC).In(helsinki),
 			"2024-10-27T03", "2024-10-27T03:00:00+03:00", "",
+		},
+		{
+			// Lord Howe moves from +10:30 to +11:00 at 02:00, so 02:00 to 02:30 never happens.
+			"30 minute DST spring forward stays in the event's hour",
+			time.Date(2024, 10, 5, 15, 45, 0, 0, time.UTC).In(lordHowe),
+			"2024-10-06T02", "2024-10-06T02:00:00+11:00", "02:00\u201303:00",
+		},
+		{
+			// Lord Howe moves from +11:00 back to +10:30 at 02:00, repeating 01:30 to 02:00.
+			"30 minute DST fall back stays on the event's hour start",
+			time.Date(2024, 4, 6, 15, 15, 0, 0, time.UTC).In(lordHowe),
+			"2024-04-07T01", "2024-04-07T01:00:00+10:30", "01:00\u201302:00",
 		},
 	}
 
