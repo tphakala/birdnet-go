@@ -5,6 +5,20 @@ vars:
   BINARY_NAME: birdnet-go
   TFLITE_VERSION: v2.17.1
   ONNXRUNTIME_VERSION: '1.25.1'
+  # SHA256 of each prebuilt runtime-library archive; download-tflite and
+  # download-onnxruntime verify the archive against it before extraction. Bump
+  # them with TFLITE_VERSION / ONNXRUNTIME_VERSION and keep the Dockerfile
+  # TFLITE_SHA256_* / ONNXRUNTIME_SHA256_* ARGs equal to the linux values. The
+  # ONNX Runtime values match the digests on the GitHub release; tflite_c lists
+  # none, so those were computed from the release assets. Neither project
+  # publishes a darwin x86_64 archive for these versions.
+  TFLITE_SHA256_LINUX_AMD64: '8fe21ceb2999128c797f05c8660d5b1d25850b15e1e8c531e8d8e9e050b3fe6f'
+  TFLITE_SHA256_LINUX_ARM64: '665fdfc5372be7eedd8439beef5b5572c4b502c8382087ebf481351599163152'
+  TFLITE_SHA256_WINDOWS_AMD64: '3bc513b1c90afc34d810a5a6db77c64f96aeb005c56ddd8053306810d79e2979'
+  TFLITE_SHA256_DARWIN_ARM64: 'c183be044a6ad0c6976a6ddd2fafb9d723b03c46c9f06870ab9a55201d71c2d0'
+  ONNXRUNTIME_SHA256_LINUX_X64: 'eb566a49cfc49ef0642f809b69340b5bb656c7c4905ba873526d226f2c005816'
+  ONNXRUNTIME_SHA256_LINUX_AARCH64: 'daa71b56b00c4ab34798a3d96ca41a32ece4d3e302dc2386d3cca83fd4491214'
+  ONNXRUNTIME_SHA256_OSX_ARM64: '18987ec3187b5f29ba798109750f6135060560ad4e0a52678fcc753ee8fb3091'
   # golangci-lint version .golangci.yaml is written for; keep in sync with
   # .github/workflows/golangci-lint.yml, .husky/pre-commit and
   # .devcontainer/postCreateCommand.sh;
@@ -1415,11 +1429,34 @@ tasks:
             linux*) echo "libtensorflowlite_c.so.${TFLITE_VERSION#v}";;
             darwin*) echo "libtensorflowlite_c.${TFLITE_VERSION#v}.dylib";;
           esac
+      TFLITE_SHA256:
+        sh: |
+          case "{{.TFLITE_LIB_ARCH}}" in
+            linux_amd64.tar.gz) echo "{{.TFLITE_SHA256_LINUX_AMD64}}";;
+            linux_arm64.tar.gz) echo "{{.TFLITE_SHA256_LINUX_ARM64}}";;
+            windows_amd64.zip) echo "{{.TFLITE_SHA256_WINDOWS_AMD64}}";;
+            darwin_arm64.tar.gz) echo "{{.TFLITE_SHA256_DARWIN_ARM64}}";;
+          esac
     cmds:
       - |
         if [ ! -f "{{.TFLITE_LIB_DIR}}/{{.LIB_FILENAME}}" ]; then
           echo "TensorFlow Lite C library not found. Downloading..."
-          wget -q "https://github.com/tphakala/tflite_c/releases/download/{{.TFLITE_VERSION}}/tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}" -P ./
+          tflite_archive="tflite_c_{{.TFLITE_VERSION}}_{{.TFLITE_LIB_ARCH}}"
+          # -O, not -P: with -P a leftover archive makes wget save the new one as
+          # "<name>.1", and the check below would read the stale file.
+          wget -q "https://github.com/tphakala/tflite_c/releases/download/{{.TFLITE_VERSION}}/${tflite_archive}" -O "${tflite_archive}" || { rm -f "${tflite_archive}"; exit 1; }
+          # Verify the archive against the pinned SHA256 before extraction, as
+          # check-openvino does. sha256sum on Linux, shasum on macOS.
+          if [ -z "{{.TFLITE_SHA256}}" ]; then
+            echo "No SHA256 pinned for ${tflite_archive}" >&2
+            rm -f "${tflite_archive}"
+            exit 1
+          fi
+          if command -v sha256sum >/dev/null 2>&1; then
+            echo "{{.TFLITE_SHA256}}  ${tflite_archive}" | sha256sum -c - || { rm -f "${tflite_archive}"; exit 1; }
+          else
+            echo "{{.TFLITE_SHA256}}  ${tflite_archive}" | shasum -a 256 -c - || { rm -f "${tflite_archive}"; exit 1; }
+          fi
           
           # Only create directory if it doesn't exist
           if [ ! -d "{{.TFLITE_LIB_DIR}}" ]; then
@@ -1656,11 +1693,31 @@ tasks:
             Darwin) echo "libonnxruntime.dylib";;
             *) echo "unsupported: {{.UNAME_S}}" >&2; exit 1;;
           esac
+      ONNX_SHA256:
+        sh: |
+          case "{{.ONNX_ARCHIVE}}" in
+            onnxruntime-linux-x64-*) echo "{{.ONNXRUNTIME_SHA256_LINUX_X64}}";;
+            onnxruntime-linux-aarch64-*) echo "{{.ONNXRUNTIME_SHA256_LINUX_AARCH64}}";;
+            onnxruntime-osx-arm64-*) echo "{{.ONNXRUNTIME_SHA256_OSX_ARM64}}";;
+          esac
     cmds:
       - |
         echo "Downloading ONNX Runtime {{.ONNXRUNTIME_VERSION}}..."
         curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v{{.ONNXRUNTIME_VERSION}}/{{.ONNX_ARCHIVE}}" \
-          -o /tmp/onnxruntime.tgz
+          -o /tmp/onnxruntime.tgz || exit 1
+
+        # Verify the archive against the pinned SHA256 before extraction, as
+        # check-openvino does. sha256sum on Linux, shasum on macOS.
+        if [ -z "{{.ONNX_SHA256}}" ]; then
+          echo "No SHA256 pinned for {{.ONNX_ARCHIVE}}" >&2
+          rm -f /tmp/onnxruntime.tgz
+          exit 1
+        fi
+        if command -v sha256sum >/dev/null 2>&1; then
+          echo "{{.ONNX_SHA256}}  /tmp/onnxruntime.tgz" | sha256sum -c - || { rm -f /tmp/onnxruntime.tgz; exit 1; }
+        else
+          echo "{{.ONNX_SHA256}}  /tmp/onnxruntime.tgz" | shasum -a 256 -c - || { rm -f /tmp/onnxruntime.tgz; exit 1; }
+        fi
 
         mkdir -p /tmp/onnxruntime
         tar -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1

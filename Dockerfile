@@ -13,6 +13,14 @@ ARG TENSORFLOW_VERSION=2.17.1
 # runtime-base stage downloads the matching prebuilt libtensorflowlite_c.so.
 ARG TFLITE_VERSION=v2.17.1
 ARG ONNXRUNTIME_VERSION=1.25.1
+# SHA256s of the per-arch TFLite C and ONNX Runtime archives the runtime-base stage
+# downloads, verified before extraction like the OpenVINO toolkit below. Bump them
+# with TFLITE_VERSION / ONNXRUNTIME_VERSION; they equal the Taskfile
+# TFLITE_SHA256_LINUX_* and ONNXRUNTIME_SHA256_LINUX_* values.
+ARG TFLITE_SHA256_AMD64=8fe21ceb2999128c797f05c8660d5b1d25850b15e1e8c531e8d8e9e050b3fe6f
+ARG TFLITE_SHA256_ARM64=665fdfc5372be7eedd8439beef5b5572c4b502c8382087ebf481351599163152
+ARG ONNXRUNTIME_SHA256_AMD64=eb566a49cfc49ef0642f809b69340b5bb656c7c4905ba873526d226f2c005816
+ARG ONNXRUNTIME_SHA256_ARM64=daa71b56b00c4ab34798a3d96ca41a32ece4d3e302dc2386d3cca83fd4491214
 # OpenVINO toolkit pin for the runtime libraries bundled into the images. Keep the
 # release/build in sync with the Taskfile OPENVINO_RELEASE / OPENVINO_BUILD values;
 # the SHA256s are per-arch (arm64 matches the Taskfile OPENVINO_SHA256 header pin).
@@ -246,15 +254,18 @@ RUN apt-get update -q && apt-get install -q -y --no-install-recommends \
 # sharing an unrelated UID cannot overwrite them. The same flag is used for the
 # TFLite and OpenVINO extractions below for the same reason.
 ARG ONNXRUNTIME_VERSION
+ARG ONNXRUNTIME_SHA256_AMD64
+ARG ONNXRUNTIME_SHA256_ARM64
 RUN set -eu; \
-    ONNX_ARCH=$(case "${TARGETPLATFORM}" in \
-        "linux/amd64") echo "x64" ;; \
-        "linux/arm64") echo "aarch64" ;; \
+    case "${TARGETPLATFORM}" in \
+        "linux/amd64") ONNX_ARCH=x64;     ONNX_SHA256="${ONNXRUNTIME_SHA256_AMD64}" ;; \
+        "linux/arm64") ONNX_ARCH=aarch64; ONNX_SHA256="${ONNXRUNTIME_SHA256_ARM64}" ;; \
         *) echo "Error: unsupported platform ${TARGETPLATFORM}" >&2; exit 1 ;; \
-    esac); \
+    esac; \
     echo "Downloading ONNX Runtime ${ONNXRUNTIME_VERSION} for ${ONNX_ARCH}"; \
     curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${ONNXRUNTIME_VERSION}/onnxruntime-linux-${ONNX_ARCH}-${ONNXRUNTIME_VERSION}.tgz" \
         -o /tmp/onnxruntime.tgz; \
+    echo "${ONNX_SHA256}  /tmp/onnxruntime.tgz" | sha256sum -c -; \
     mkdir -p /tmp/onnxruntime; \
     tar --no-same-owner -xzf /tmp/onnxruntime.tgz -C /tmp/onnxruntime --strip-components=1; \
     cp -a /tmp/onnxruntime/lib/libonnxruntime*.so* /usr/lib/; \
@@ -268,15 +279,18 @@ RUN set -eu; \
 # the same prebuilt release the Taskfile download-tflite task uses; the bare soname
 # symlink is created so a bare-soname dlopen/link resolves.
 ARG TFLITE_VERSION
+ARG TFLITE_SHA256_AMD64
+ARG TFLITE_SHA256_ARM64
 RUN set -eu; \
-    TFA=$(case "${TARGETPLATFORM}" in \
-        "linux/amd64") echo "linux_amd64" ;; \
-        "linux/arm64") echo "linux_arm64" ;; \
+    case "${TARGETPLATFORM}" in \
+        "linux/amd64") TFA=linux_amd64; TF_SHA256="${TFLITE_SHA256_AMD64}" ;; \
+        "linux/arm64") TFA=linux_arm64; TF_SHA256="${TFLITE_SHA256_ARM64}" ;; \
         *) echo "Error: unsupported platform ${TARGETPLATFORM}" >&2; exit 1 ;; \
-    esac); \
+    esac; \
     TF_VER="${TFLITE_VERSION#v}"; \
     echo "Downloading TFLite C library ${TFLITE_VERSION} for ${TFA}"; \
     wget -q "https://github.com/tphakala/tflite_c/releases/download/${TFLITE_VERSION}/tflite_c_${TFLITE_VERSION}_${TFA}.tar.gz" -O /tmp/tflite.tar.gz; \
+    echo "${TF_SHA256}  /tmp/tflite.tar.gz" | sha256sum -c -; \
     tar --no-same-owner -xzf /tmp/tflite.tar.gz -C /tmp; \
     cp -a "/tmp/libtensorflowlite_c.so.${TF_VER}" /usr/lib/; \
     ln -sf "libtensorflowlite_c.so.${TF_VER}" /usr/lib/libtensorflowlite_c.so; \
