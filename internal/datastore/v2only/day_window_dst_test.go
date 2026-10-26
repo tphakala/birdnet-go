@@ -218,8 +218,9 @@ func mustRFC3339(t *testing.T, s string) time.Time {
 	return ts
 }
 
-// TestV2OnlyDatastore_ParseDateRangeOpenBoundsAndErrors pins the arms of parseDateRange that
-// do not depend on a zone's transitions: an empty bound is open, and a bad date names its bound.
+// TestV2OnlyDatastore_ParseDateRangeOpenBoundsAndErrors pins the open bounds and the errors of
+// parseDateRange: an empty bound is open, and a bad date names its bound. The bounded values use
+// Havana, whose midnight is skipped on 2026-03-08.
 func TestV2OnlyDatastore_ParseDateRangeOpenBoundsAndErrors(t *testing.T) {
 	t.Parallel()
 
