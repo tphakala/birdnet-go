@@ -146,7 +146,8 @@ func (r *AuxiliaryMigrationResult) HasErrors() bool {
 }
 
 // Outcome returns the status to persist for this result and, when it failed, a
-// summary with one part per failed section joined by "; ".
+// summary with one part per failed section joined by "; ". Each part holds counts
+// only, never error text.
 func (r *AuxiliaryMigrationResult) Outcome() (status entities.AuxiliaryDataStatus, summary string) {
 	if !r.HasErrors() {
 		return entities.AuxiliaryDataStatusSucceeded, ""
@@ -157,14 +158,14 @@ func (r *AuxiliaryMigrationResult) Outcome() (status entities.AuxiliaryDataStatu
 			continue
 		}
 		parts = append(parts, auxSectionSummary(sec.name,
-			fmt.Sprintf("%d of %d migrated", sec.migrated, sec.total), sec.failed, sec.err))
+			fmt.Sprintf("%d of %d migrated", sec.migrated, sec.total), sec.failed))
 	}
 	if r.Weather.Error != nil {
 		w := &r.Weather
 		counts := fmt.Sprintf("daily events %d of %d migrated%s, hourly weather %d of %d migrated%s",
 			w.DailyEventsMigrated, w.DailyEventsTotal, auxFailedSuffix(w.DailyEventsFailed),
 			w.HourlyWeatherMigrated, w.HourlyWeatherTotal, auxFailedSuffix(w.HourlyWeatherFailed))
-		parts = append(parts, fmt.Sprintf("%s: %s: %v", auxSectionWeather, counts, w.Error))
+		parts = append(parts, fmt.Sprintf("%s: %s", auxSectionWeather, counts))
 	}
 	return entities.AuxiliaryDataStatusFailed, strings.Join(parts, "; ")
 }
@@ -177,12 +178,15 @@ func auxFailedSuffix(failed int) string {
 	return fmt.Sprintf(" (%d failed)", failed)
 }
 
-// auxSectionSummary formats one failed section of the outcome summary.
-func auxSectionSummary(name, counts string, failed int, err error) string {
+// auxSectionSummary formats one failed section of the outcome summary. It carries
+// counts only: the summary is shown by the status API and the support dump, and a
+// section error can name paths, hosts or users. The errors themselves are logged by
+// LogErrors.
+func auxSectionSummary(name, counts string, failed int) string {
 	if failed == 0 {
-		return fmt.Sprintf("%s: %s: %v", name, counts, err)
+		return fmt.Sprintf("%s: %s", name, counts)
 	}
-	return fmt.Sprintf("%s: %s, %d failed: %v", name, counts, failed, err)
+	return fmt.Sprintf("%s: %s, %d failed", name, counts, failed)
 }
 
 // Summary returns a human-readable summary of the migration.

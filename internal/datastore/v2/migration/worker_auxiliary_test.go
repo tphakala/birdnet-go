@@ -492,3 +492,30 @@ func TestAuxiliaryOutcome_ErrorSummaryIsFixed(t *testing.T) {
 	assert.Equal(t, auxRunFailedSummary, summary)
 	assert.NotContains(t, summary, "dbuser")
 }
+
+// The persisted summary keeps counts and never a section's error text, because it is
+// shown by the status API and the support dump.
+func TestAuxiliaryMigrationResult_Outcome_OmitsErrorText(t *testing.T) {
+	t.Parallel()
+
+	const secret = "dial tcp host.example:3306 as dbuser"
+	var result AuxiliaryMigrationResult
+	result.Thresholds.Total = 2
+	result.Thresholds.Failed = 2
+	result.Thresholds.Error = errors.NewStd(secret)
+	result.Weather.DailyEventsTotal = 3
+	result.Weather.DailyEventsMigrated = 1
+	result.Weather.DailyEventsFailed = 2
+	result.Weather.Error = errors.NewStd(secret)
+	// A failed fetch leaves the count unknown, so the section has an error and no failed rows.
+	result.ThresholdEvents.Error = errors.NewStd(secret)
+
+	status, summary := result.Outcome()
+
+	assert.Equal(t, entities.AuxiliaryDataStatusFailed, status)
+	assert.NotContains(t, summary, "dbuser")
+	assert.NotContains(t, summary, "host.example")
+	assert.Contains(t, summary, "0 of 2 migrated, 2 failed")
+	assert.Contains(t, summary, "daily events 1 of 3 migrated (2 failed)")
+	assert.Contains(t, summary, "threshold events: 0 of 0 migrated;")
+}
