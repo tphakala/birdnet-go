@@ -3,6 +3,7 @@
 package system
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/logger/reader"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // baseTime is a fixed reference point for all event tests (2024-06-15 10:30:00 UTC).
@@ -828,10 +830,16 @@ func TestBucketHourBoundaries(t *testing.T) {
 		},
 		{
 			// First occurrence of the repeated 03:00 hour on the DST fall-back day.
-			// The label is not asserted: merging of the repeated hour is a separate defect.
 			"repeated DST hour keeps the event's own offset",
 			time.Date(2024, 10, 27, 0, 30, 0, 0, time.UTC).In(helsinki),
-			"2024-10-27T03", "2024-10-27T03:00:00+03:00", "",
+			"2024-10-27T03", "2024-10-27T03:00:00+03:00", "03:00\u201304:00",
+		},
+		{
+			// 03:00 EET jumps to 04:00 EEST at 01:00 UTC, so 02:00 EET plus one hour reads 04:00.
+			// The label ends at the next wall-clock hour, not at that instant.
+			"hour before a spring forward gap ends at the next wall-clock hour",
+			time.Date(2024, 3, 31, 0, 30, 0, 0, time.UTC).In(helsinki),
+			"2024-03-31T02", "2024-03-31T02:00:00+02:00", "02:00\u201303:00",
 		},
 		{
 			// Lord Howe moves from +10:30 to +11:00 at 02:00, so 02:00 to 02:30 never happens.
@@ -1042,4 +1050,222 @@ func TestBuildSystemEvents(t *testing.T) {
 		assert.Equal(t, 0, metrics.Total)
 		assert.NotNil(t, metrics.ByLevel)
 	})
+}
+
+// TestRepeatedHourBucketIsOrderIndependent pins the merged bucket of a repeated wall-clock hour:
+// both occurrences share one key, and the bucket starts at the first occurrence whichever event
+// is processed first.
+func TestRepeatedHourBucketIsOrderIndependent(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "events")
+	t.Attr("type", "unit")
+
+	zones := testutil.ToolchainZones(t)
+
+	tests := []struct {
+		name string
+		zone string
+		// first and second are fixed instants, one in each occurrence of the repeated hour.
+		first, second time.Time
+		wantKey       string
+		wantTimestamp time.Time
+		wantLabel     string
+		wantHour      int
+	}{
+		{
+			// 04:00 EEST falls back to 03:00 EET at 01:00 UTC, repeating 03:00 to 04:00.
+			name:          "Europe/Helsinki 2024-10-27",
+			zone:          "Europe/Helsinki",
+			first:         time.Date(2024, 10, 27, 0, 30, 0, 0, time.UTC),
+			second:        time.Date(2024, 10, 27, 1, 30, 0, 0, time.UTC),
+			wantKey:       "2024-10-27T03",
+			wantTimestamp: time.Date(2024, 10, 27, 0, 0, 0, 0, time.UTC),
+			wantLabel:     "03:00\u201304:00",
+			wantHour:      3,
+		},
+		{
+			// 02:00 +11:00 falls back to 01:30 +10:30 at 15:00 UTC, repeating 01:30 to 02:00.
+			// The second occurrence floors to 01:00 +10:30, which is later than 01:00 +11:00.
+			name:          "Australia/Lord_Howe 2024-04-07",
+			zone:          "Australia/Lord_Howe",
+			first:         time.Date(2024, 4, 6, 14, 45, 0, 0, time.UTC),
+			second:        time.Date(2024, 4, 6, 15, 15, 0, 0, time.UTC),
+			wantKey:       "2024-04-07T01",
+			wantTimestamp: time.Date(2024, 4, 6, 14, 0, 0, 0, time.UTC),
+			wantLabel:     "01:00\u201302:00",
+			wantHour:      1,
+		},
+		{
+			// 02:00 EDT falls back to 01:00 EST at 06:00 UTC, repeating 01:00 to 02:00.
+			name:          "America/New_York 2024-11-03",
+			zone:          "America/New_York",
+			first:         time.Date(2024, 11, 3, 5, 30, 0, 0, time.UTC),
+			second:        time.Date(2024, 11, 3, 6, 30, 0, 0, time.UTC),
+			wantKey:       "2024-11-03T01",
+			wantTimestamp: time.Date(2024, 11, 3, 5, 0, 0, 0, time.UTC),
+			wantLabel:     "01:00\u201302:00",
+			wantHour:      1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			loc, ok := zones[tt.zone]
+			require.True(t, ok, "zone %s missing from the toolchain database", tt.zone)
+			first, second := tt.first.In(loc), tt.second.In(loc)
+			require.Equal(t, first.Hour(), second.Hour(), "both events must read the same wall-clock hour")
+			require.NotEqual(t, first.Format("-07:00"), second.Format("-07:00"), "events must be in different occurrences")
+
+			entriesFor := func(times ...time.Time) []reader.LogEntry {
+				entries := make([]reader.LogEntry, 0, 2*len(times))
+				for _, ts := range times {
+					entries = append(entries,
+						makeEntry(ts, "create_pending_detection", "Robin", nil),
+						makeEntry(ts, "approve_detection", "Robin", nil))
+				}
+				return entries
+			}
+
+			for _, order := range []struct {
+				name   string
+				events []time.Time
+			}{
+				{"first occurrence first", []time.Time{first, second}},
+				{"second occurrence first", []time.Time{second, first}},
+			} {
+				c := &Handler{Core: &apicore.Core{}}
+				c.Settings.Store(apitest.NewValidTestSettings())
+				result := c.aggregateDetectionEvents(entriesFor(order.events...))
+
+				require.Len(t, result.Buckets, 1, order.name)
+				b := result.Buckets[0]
+				assert.Equal(t, tt.wantKey, b.Key, order.name)
+				assert.True(t, b.Timestamp.Equal(tt.wantTimestamp), "%s: timestamp %s, want %s", order.name, b.Timestamp, tt.wantTimestamp)
+				assert.Equal(t, tt.wantLabel, b.Label, order.name)
+				assert.Equal(t, 2, b.Totals.Approved, order.name)
+				assert.Equal(t, 2, result.Metrics.HourlyPending[tt.wantHour], order.name)
+			}
+		})
+	}
+}
+
+// TestBucketsSharingATimestampSortByKey pins the tie break of the newest-first sort. Pacific/Chatham
+// falls back from 03:45 +13:45 to 02:45 +12:45 on 2024-04-07 local (2024-04-06 UTC), so the events below land in the keys
+// 03 and 02 and both floor to the same instant (13:15 UTC). The bucket map iterates in random
+// order, so without the tie break the order changes from call to call.
+func TestBucketsSharingATimestampSortByKey(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "events")
+	t.Attr("type", "unit")
+
+	chatham, ok := testutil.ToolchainZones(t)["Pacific/Chatham"]
+	require.True(t, ok, "Pacific/Chatham missing from the toolchain database")
+
+	entries := []reader.LogEntry{
+		makeEntry(time.Date(2024, 4, 6, 13, 30, 0, 0, time.UTC).In(chatham), "approve_detection", "Robin", nil),
+		makeEntry(time.Date(2024, 4, 6, 14, 5, 0, 0, time.UTC).In(chatham), "approve_detection", "Robin", nil),
+	}
+
+	// The unlucky order shows up in about one call in seven, so this many calls make a pass by
+	// chance negligible.
+	const calls = 200
+	for range calls {
+		c := &Handler{Core: &apicore.Core{}}
+		c.Settings.Store(apitest.NewValidTestSettings())
+		result := c.aggregateDetectionEvents(entries)
+
+		require.Len(t, result.Buckets, 2)
+		require.True(t, result.Buckets[0].Timestamp.Equal(result.Buckets[1].Timestamp), "fixture must tie on Timestamp")
+		require.Equal(t, "2024-04-07T03", result.Buckets[0].Key)
+		require.Equal(t, "2024-04-07T02", result.Buckets[1].Key)
+	}
+}
+
+// TestRepeatedHourAggregationIgnoresEventOrder feeds every permutation of events that include the
+// transition instant, the last second of the first occurrence and the end of the repeated span,
+// and requires one result.
+func TestRepeatedHourAggregationIgnoresEventOrder(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "events")
+	t.Attr("type", "unit")
+
+	zones := testutil.ToolchainZones(t)
+	utc := func(y int, m time.Month, d, h, mi, s int) time.Time {
+		return time.Date(y, m, d, h, mi, s, 0, time.UTC)
+	}
+
+	tests := []struct {
+		zone   string
+		events []time.Time
+	}{
+		{"Europe/Helsinki", []time.Time{
+			utc(2024, 10, 27, 0, 30, 0), utc(2024, 10, 27, 0, 59, 59), utc(2024, 10, 27, 1, 0, 0),
+			utc(2024, 10, 27, 1, 30, 0), utc(2024, 10, 27, 1, 59, 59), utc(2024, 10, 27, 2, 0, 0),
+		}},
+		{"Australia/Lord_Howe", []time.Time{
+			utc(2024, 4, 6, 14, 45, 0), utc(2024, 4, 6, 14, 59, 59), utc(2024, 4, 6, 15, 0, 0),
+			utc(2024, 4, 6, 15, 15, 0), utc(2024, 4, 6, 15, 29, 59), utc(2024, 4, 6, 15, 30, 0),
+		}},
+		{"Pacific/Chatham", []time.Time{
+			utc(2024, 4, 6, 13, 30, 0), utc(2024, 4, 6, 13, 59, 59), utc(2024, 4, 6, 14, 0, 0),
+			utc(2024, 4, 6, 14, 5, 0), utc(2024, 4, 6, 14, 59, 59), utc(2024, 4, 6, 15, 0, 0),
+		}},
+	}
+
+	// summary leaves out the per-species timestamp lists, which follow the input order by design.
+	type summary struct {
+		Key, Label string
+		Timestamp  string
+		Approved   int
+	}
+	run := func(loc *time.Location, order []time.Time) ([]summary, [24]int) {
+		entries := make([]reader.LogEntry, 0, 2*len(order))
+		for _, ts := range order {
+			entries = append(entries,
+				makeEntry(ts.In(loc), "create_pending_detection", "Robin", nil),
+				makeEntry(ts.In(loc), "approve_detection", "Robin", nil))
+		}
+		c := &Handler{Core: &apicore.Core{}}
+		c.Settings.Store(apitest.NewValidTestSettings())
+		result := c.aggregateDetectionEvents(entries)
+		out := make([]summary, 0, len(result.Buckets))
+		for _, b := range result.Buckets {
+			out = append(out, summary{b.Key, b.Label, b.Timestamp.Format(time.RFC3339), b.Totals.Approved})
+		}
+		return out, result.Metrics.HourlyPending
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.zone, func(t *testing.T) {
+			t.Parallel()
+			loc, ok := zones[tt.zone]
+			require.True(t, ok, "zone %s missing from the toolchain database", tt.zone)
+
+			wantBuckets, wantPending := run(loc, tt.events)
+			total := 0
+			for _, b := range wantBuckets {
+				total += b.Approved
+			}
+			require.Equal(t, len(tt.events), total, "every event must be counted once")
+
+			order := slices.Clone(tt.events)
+			var permute func(k int)
+			permute = func(k int) {
+				if k == len(order) {
+					gotBuckets, gotPending := run(loc, order)
+					if !assert.Equal(t, wantBuckets, gotBuckets, "order %v", order) || !assert.Equal(t, wantPending, gotPending, "order %v", order) {
+						t.FailNow()
+					}
+					return
+				}
+				for i := k; i < len(order); i++ {
+					order[k], order[i] = order[i], order[k]
+					permute(k + 1)
+					order[k], order[i] = order[i], order[k]
+				}
+			}
+			permute(0)
+		})
+	}
 }
