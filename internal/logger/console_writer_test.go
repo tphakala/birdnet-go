@@ -295,15 +295,16 @@ func consoleTestConfig(dir string, withModule bool) *LoggingConfig {
 		Timezone:     "UTC",
 		Console:      &ConsoleOutput{Enabled: true, Level: "info"},
 		FileOutput:   &FileOutput{Enabled: true, Path: filepath.Join(dir, "application.log"), Level: "info"},
+		// Without an explicit map the built-in relative logs/*.log outputs are
+		// seeded into the package directory.
+		ModuleOutputs: DisabledModuleOutputs(),
 	}
 	if withModule {
-		cfg.ModuleOutputs = map[string]ModuleOutput{
-			"analysis.processor": {
-				Enabled:     true,
-				FilePath:    filepath.Join(dir, "processor.log"),
-				Level:       "info",
-				ConsoleAlso: true,
-			},
+		cfg.ModuleOutputs["analysis.processor"] = ModuleOutput{
+			Enabled:     true,
+			FilePath:    filepath.Join(dir, "processor.log"),
+			Level:       "info",
+			ConsoleAlso: true,
 		}
 	}
 	return cfg
