@@ -27,7 +27,7 @@ type speciesIndex struct {
 // aggregateDetectionEvents processes raw log entries into hourly bucketed detection data.
 // Events are assigned to buckets based on their resolution timestamp (approve/discard/flush),
 // not the pending creation time. The returned buckets are sorted newest-first.
-func (c *Handler) aggregateDetectionEvents(entries []reader.LogEntry, _ time.Time) DetectionEventsResponse {
+func (c *Handler) aggregateDetectionEvents(entries []reader.LogEntry) DetectionEventsResponse {
 	bucketMap := make(map[string]*DetectionBucket)
 	speciesIdxMap := make(map[string]*speciesIndex) // bucket key → species index
 	var hourlyPending [24]int
