@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // These tests are NOT parallel: they publish to the process-wide settings
@@ -227,6 +228,80 @@ func TestUpdateSettings_SaveFailureRollsBack(t *testing.T) {
 			assert.Equal(t, http.StatusInternalServerError, rec.Code)
 			assert.Contains(t, rec.Body.String(), msgSaveFailedRolledBack)
 			assertRestoredContent(t, initial, c)
+		})
+	}
+}
+
+// TestUpdateSettings_SaveFailureResendsSentryReconfigure pins that a save
+// failure that rolls back an Error Tracking opt-in change queues
+// reconfigure_sentry a second time, after the rollback. The first signal is
+// queued before the save, so the control monitor may already have bound the
+// client for the snapshot that is then taken back.
+func TestUpdateSettings_SaveFailureResendsSentryReconfigure(t *testing.T) {
+	tests := []struct {
+		name  string
+		write func(e *echo.Echo, c *Controller) *httptest.ResponseRecorder
+	}{
+		{
+			name: "PUT",
+			write: func(e *echo.Echo, c *Controller) *httptest.ResponseRecorder {
+				req := httptest.NewRequest(http.MethodPut, "/api/v2/settings",
+					bytes.NewReader([]byte(`{"sentry":{"enabled":true}}`)))
+				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+				rec := httptest.NewRecorder()
+				require.NoError(t, c.UpdateSettings(e.NewContext(req, rec)))
+				return rec
+			},
+		},
+		{
+			name: "PATCH",
+			write: func(e *echo.Echo, c *Controller) *httptest.ResponseRecorder {
+				req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/sentry",
+					bytes.NewReader([]byte(`{"enabled":true}`)))
+				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+				rec := httptest.NewRecorder()
+				ctx := e.NewContext(req, rec)
+				ctx.SetParamNames("section")
+				ctx.SetParamValues("sentry")
+				require.NoError(t, c.UpdateSectionSettings(ctx))
+				return rec
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial := getTestSettings(t)
+			require.False(t, initial.Sentry.Enabled, "the request must switch the opt-in on")
+			e := echo.New()
+			c := newGlobalOwnerController(t, e, initial)
+			c.SetTestContext(t.Context(), func() {})
+			c.DisableSaveSettings = false
+			failSettingsSave(t)
+
+			// Stand in for the control monitor: record the live opt-in each time
+			// reconfigure_sentry is received, as ReconfigureSentry would read it.
+			ch := make(chan string)
+			c.controlChan = ch
+			var seen []bool
+			readerDone := make(chan struct{})
+			go func() {
+				defer close(readerDone)
+				for action := range ch {
+					if action == telemetry.SignalReconfigureSentry {
+						seen = append(seen, conf.GetSettings().Sentry.Enabled)
+					}
+				}
+			}()
+
+			rec := tt.write(e, c)
+			require.Equal(t, http.StatusInternalServerError, rec.Code)
+			c.Wait()
+			close(ch)
+			<-readerDone
+
+			require.Len(t, seen, 2, "a rolled-back Error Tracking change must queue reconfigure_sentry again")
+			assert.False(t, seen[len(seen)-1], "the last reconfigure must run against the restored opt-in")
 		})
 	}
 }
