@@ -332,7 +332,9 @@ const (
 // determined (polar day / white nights / polar night, or no sun calculator configured). It is
 // injected into buildDailyActivityOnset so the polar-null and min-count paths are unit-testable
 // without a real SunCalc.
-type civilDawnMinuteLookup func(date wallclock.Date) (minuteOfDay int, ok bool) // buildDailyActivityOnset buckets false-positive-excluded detection timestamps (Unix epoch seconds)
+type civilDawnMinuteLookup func(date wallclock.Date) (minuteOfDay int, ok bool)
+
+// buildDailyActivityOnset buckets false-positive-excluded detection timestamps (Unix epoch seconds)
 // by station-local calendar date and computes, for each date in the inclusive [startDate, endDate]
 // range, the dawn-chorus onset relative to civil dawn.
 //

@@ -84,10 +84,8 @@ func TestComputeYearOverYearWindows_SkippedMidnightAnchorsAndBounds(t *testing.T
 		assert.Equal(t, 2026, w.curYear)
 		assert.Equal(t, skippedMidnightDay, w.curEnd, "anchored on the reference date, not the day before")
 		assert.Equal(t, "2025-03-08", w.priorEnd)
-		_, wantEnd := wallclock.DayBounds(wallclock.Date{Year: 2026, Month: time.March, Day: 8}, loc)
-		assert.Equal(t, wantEnd.Unix(), w.curEndEpoch)
-		wantStart, _ := wallclock.DayBounds(wallclock.Date{Year: 2026, Month: time.January, Day: 1}, loc)
-		assert.Equal(t, wantStart.Unix(), w.curStartEpoch)
+		assert.Equal(t, time.Date(2026, time.March, 9, 0, 0, 0, 0, loc).Unix(), w.curEndEpoch)
+		assert.Equal(t, time.Date(2026, time.January, 1, 0, 0, 0, 0, loc).Unix(), w.curStartEpoch)
 	})
 
 	t.Run("day after the end date starts at the transition", func(t *testing.T) {

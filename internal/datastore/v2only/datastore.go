@@ -3850,8 +3850,7 @@ func (ds *Datastore) civilDawnMinuteLookup() civilDawnMinuteLookup {
 		// in its own coordinate-derived zone, so passing midnight could land on the adjacent day
 		// (and return the wrong day's civil dawn) when that zone trails the configured station
 		// timezone. Noon keeps the intended calendar day for any real timezone offset.
-		dayStart, _ := wallclock.DayBounds(date, ds.timezone)
-		civilDawn, ok := ds.suncalc.GetCivilDawn(wallclock.Noon(dayStart))
+		civilDawn, ok := ds.suncalc.GetCivilDawn(wallclock.Noon(wallclock.HourStart(date, 0, ds.timezone)))
 		if !ok {
 			return 0, false
 		}
