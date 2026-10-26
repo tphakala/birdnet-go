@@ -829,10 +829,16 @@ func TestBucketHourBoundaries(t *testing.T) {
 		},
 		{
 			// First occurrence of the repeated 03:00 hour on the DST fall-back day.
-			// The label is not asserted: merging of the repeated hour is a separate defect.
 			"repeated DST hour keeps the event's own offset",
 			time.Date(2024, 10, 27, 0, 30, 0, 0, time.UTC).In(helsinki),
-			"2024-10-27T03", "2024-10-27T03:00:00+03:00", "",
+			"2024-10-27T03", "2024-10-27T03:00:00+03:00", "03:00\u201304:00",
+		},
+		{
+			// 03:00 EET jumps to 04:00 EEST at 01:00 UTC, so 02:00 EET plus one hour reads 04:00.
+			// The label ends at the next wall-clock hour, not at that instant.
+			"hour before a spring forward gap ends at the next wall-clock hour",
+			time.Date(2024, 3, 31, 0, 30, 0, 0, time.UTC).In(helsinki),
+			"2024-03-31T02", "2024-03-31T02:00:00+02:00", "02:00\u201303:00",
 		},
 		{
 			// Lord Howe moves from +10:30 to +11:00 at 02:00, so 02:00 to 02:30 never happens.

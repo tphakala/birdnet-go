@@ -181,8 +181,9 @@ func getOrCreateBucket(bucketMap map[string]*DetectionBucket, idxMap map[string]
 }
 
 // bucketLabel returns the label of the bucket starting at the wall-clock hour start floored. The
-// end is the next wall-clock hour, not the instant an hour later, which reads the same hour again
-// when floored is the first occurrence of a repeated hour.
+// end is the next wall-clock hour, not the instant an hour later: that instant reads the same hour
+// again when floored is the first occurrence of a repeated hour, and the hour after a skipped one
+// before a spring forward gap.
 func bucketLabel(floored time.Time) string {
 	next := time.Date(floored.Year(), floored.Month(), floored.Day(), floored.Hour()+1, 0, 0, 0, time.UTC)
 	return fmt.Sprintf("%s\u2013%s", floored.Format(bucketLabelFormat), next.Format(bucketLabelFormat))
