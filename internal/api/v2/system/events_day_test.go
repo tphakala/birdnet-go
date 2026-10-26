@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/testutil"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 const (
@@ -147,7 +148,7 @@ func TestEventLogEndpointsSelectSkippedMidnightDay(t *testing.T) {
 				var resp DetectionEventsResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 				require.Len(t, resp.Buckets, 1, "only the entry on the requested day is bucketed")
-				assert.Equal(t, tc.earlyOn.Truncate(time.Hour).Unix(), resp.Buckets[0].Timestamp.Unix(), "bucket of the hour the entry falls in")
+				assert.Equal(t, wallclock.FloorToHour(tc.earlyOn).Unix(), resp.Buckets[0].Timestamp.Unix(), "bucket of the hour the entry falls in")
 			})
 		})
 	}
