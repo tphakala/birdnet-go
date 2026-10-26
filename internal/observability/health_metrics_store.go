@@ -63,7 +63,7 @@ func newHourlyRing(capacity int) *hourlyRing {
 
 // bucketStart returns the start-of-hour for a given time.
 func bucketStart(t time.Time) time.Time {
-	return t.Truncate(time.Hour) //nolint:gocritic // UTC hour bucket by contract
+	return t.Truncate(time.Hour) //nolint:gocritic // absolute hour grid for rate counters, independent of the zone (Truncate is zone independent)
 }
 
 // record adds a delta to the current hour's bucket, rolling over as needed.
