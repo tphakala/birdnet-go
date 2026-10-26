@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/testutil"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -804,6 +805,42 @@ func TestGetDawnChorusRaw_WallClockAcrossDST(t *testing.T) {
 			assert.ElementsMatch(t, wantEntries, got)
 		})
 	}
+}
+
+// TestGetDawnChorusRaw_BoundsSegmentQueries pins that the offset enumeration, and so the number
+// of queries, is bounded by wallclock.Span whatever bounds the caller gives: a since before the
+// Unix epoch and an until a century ahead must not add queries for the centuries nobody has
+// rows in, and a detection in the window is still found.
+func TestGetDawnChorusRaw_BoundsSegmentQueries(t *testing.T) {
+	const (
+		// sinceBeforeEpoch is Unix seconds in 1843, well before the first stored row.
+		sinceBeforeEpoch int64 = -4_000_000_000
+		// centuriesAhead is an until about a century past now.
+		centuriesAhead = 100
+		// secondsPerLeapYear is the margin wallclock.Span allows past now.
+		secondsPerLeapYear int64 = 366 * 24 * 60 * 60
+	)
+	helsinki := loadInsightsZone(t, "Europe/Helsinki")
+	now := time.Now()
+
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+
+	var queries int
+	const callbackName = "test:count_dawn_chorus_queries"
+	require.NoError(t, db.Callback().Row().Before("gorm:row").Register(callbackName, func(*gorm.DB) { queries++ }))
+
+	detectedAt := time.Date(2026, time.October, 27, 5, 0, 0, 0, helsinki)
+	seedDetection(t, db, seedLabel(t, db, "A"), detectedAt.Unix(), 0.9)
+
+	until := now.AddDate(centuriesAhead, 0, 0).Unix()
+	queries = 0
+	got, err := repo.GetDawnChorusRaw(t.Context(), sinceBeforeEpoch, until, 4, 10, helsinki, nil)
+	require.NoError(t, err)
+
+	bound := len(wallclock.Segments(helsinki, 0, now.Unix()+secondsPerLeapYear))
+	assert.LessOrEqual(t, queries, bound, "one query per offset period inside the bounded span")
+	assert.Equal(t, []DawnChorusRawEntry{{ScientificName: "A", Date: "2026-10-27", EarliestAt: detectedAt.Unix()}}, got)
 }
 
 // loadInsightsZone returns an IANA zone from the toolchain zone database for the DST tests below.

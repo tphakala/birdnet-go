@@ -217,9 +217,13 @@ type dawnChorusKey struct {
 }
 
 func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since, until int64, startHour, endHour int, loc *time.Location, modelID *uint) ([]DawnChorusRawEntry, error) {
-	segments := wallclock.Segments(loc, since, until)
+	// The enumeration is bounded by wallclock.Span whatever the caller passes, so the number of
+	// queries cannot grow with the span; the first and last segment are stretched to since and
+	// until, so rows outside the bounded span use the offset of the nearest segment.
+	segments := wallclock.CoveringSegments(loc, since, until, time.Now())
 	if len(segments) == 0 {
-		// until <= since: one open segment at the offset in effect at since.
+		// until <= since: CoveringSegments returns none, but the contract keeps every detection
+		// from since on, so use one open segment at the offset in effect at since.
 		segments = []wallclock.Segment{{Start: since, End: since, OffsetSeconds: wallclock.OffsetAt(loc, time.Unix(since, 0))}}
 	}
 
