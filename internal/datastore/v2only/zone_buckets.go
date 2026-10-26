@@ -21,8 +21,9 @@ import (
 // The enumeration is bounded by repository.WallClockSpan (start at the Unix epoch at the
 // earliest, end at one leap year past now at the latest); the first and last segment are then
 // stretched back to start and end, so rows outside the bounded span use the offset of the
-// nearest segment, the same rule dateExpr applies. A range with an open start costs one query
-// per offset period since 1970 in the callers.
+// nearest segment, the same rule dateExpr applies. A range that starts past the bound has no
+// enumerated segment and gets one segment with the offset in effect at its start. A range with
+// an open start costs one query per offset period since 1970 in the callers.
 func (ds *Datastore) zoneSegments(start, end int64) []repository.ZoneOffsetSegment {
 	if start >= end {
 		return nil
