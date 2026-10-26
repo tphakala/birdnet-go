@@ -34,11 +34,11 @@ const rows = [
 
 const table = createComponentTestFactory(PhoneSpeciesTable);
 
-function renderTable(data: DailySpeciesSummary[]) {
+function renderTable(data: DailySpeciesSummary[], showThumbnails = false) {
   return table.render({
     data,
     selectedDate: '2026-03-01',
-    showThumbnails: false,
+    showThumbnails,
     sunriseHour: 6,
     sunsetHour: 20,
     maxHour: 23,
@@ -125,5 +125,23 @@ describe('PhoneSpeciesTable', () => {
   it('renders a species repeated in the payload once', () => {
     renderTable([...rows, summary()]);
     expect(speciesRows()).toHaveLength(3);
+  });
+
+  it('shows a large species picture in the expanded card only when thumbnails are on', async () => {
+    renderTable(rows, true);
+    await fireEvent.click(speciesRows()[0]);
+    const card = screen.getByRole('group', { name: 'Raven' });
+    const image = card.querySelector('img.phone-detail-image');
+    if (!image) throw new Error('expanded card has no species picture');
+    // The name stays at the top, where the collapsed row was, with the picture below it.
+    const name = screen.getByText('Corvus corax');
+    expect(name.compareDocumentPosition(image) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    cleanup();
+
+    renderTable(rows, false);
+    await fireEvent.click(speciesRows()[0]);
+    expect(
+      screen.getByRole('group', { name: 'Raven' }).querySelector('img.phone-detail-image')
+    ).toBeNull();
   });
 });

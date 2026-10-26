@@ -284,6 +284,7 @@
           item={row}
           displayName={nameOf(row)}
           {novelty}
+          imageUrl={showThumbnails ? thumbnailUrl(row) : null}
           speciesUrl={speciesUrl(row)}
           {maxHour}
           {sunriseHour}

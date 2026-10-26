@@ -10,6 +10,7 @@
   import { loggers } from '$lib/utils/logger';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
   import type { NoveltyCategory } from '$lib/desktop/features/dashboard/utils/noveltyCategory';
+  import { handleBirdImageError } from '$lib/desktop/components/ui/image-utils';
   import HourAxis from './HourAxis.svelte';
   import HourBars from './HourBars.svelte';
   import { formatClock, formatHour, peakHour } from './phoneSummary';
@@ -18,6 +19,8 @@
     item: DailySpeciesSummary;
     displayName: string;
     novelty: NoveltyCategory | null;
+    /** Species picture, or null when thumbnails are turned off. */
+    imageUrl: string | null;
     speciesUrl: string;
     maxHour: number;
     sunriseHour: number | null;
@@ -30,6 +33,7 @@
     item,
     displayName,
     novelty,
+    imageUrl,
     speciesUrl,
     maxHour,
     sunriseHour,
@@ -90,6 +94,10 @@
     </button>
   </div>
 
+  {#if imageUrl}
+    <img src={imageUrl} alt="" class="phone-detail-image" onerror={handleBirdImageError} />
+  {/if}
+
   <p class="mt-1 text-sm">
     {t('dashboard.newSpeciesHighlights.detections', { count: item.count })}
     {#if novelty}
@@ -149,6 +157,14 @@
 {/if}
 
 <style>
+  .phone-detail-image {
+    width: 100%;
+    max-height: 16rem;
+    margin-top: 0.5rem;
+    object-fit: cover;
+    border-radius: 0.375rem;
+  }
+
   .phone-detail {
     padding: 0.75rem 0.5rem;
     border-radius: 0.5rem;
