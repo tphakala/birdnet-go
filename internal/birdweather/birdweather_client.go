@@ -811,6 +811,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 // It formats detectedAt, the detection's own instant, as the upload timestamp (note.Date and
 // note.Time are wall-clock strings that cannot tell the two occurrences of a repeated hour
 // apart, so they are not used for it), then uploads the soundscape, and finally posts the detection.
+// It returns a validation error, without sending anything, when pcmData is empty or detectedAt is zero.
 func (b *BwClient) Publish(note *datastore.Note, detectedAt time.Time, pcmData []byte) (err error) {
 	log := GetLogger()
 
@@ -826,6 +827,15 @@ func (b *BwClient) Publish(note *datastore.Note, detectedAt time.Time, pcmData [
 	// Validate input
 	if len(pcmData) == 0 {
 		return errors.Newf("pcmData is empty").
+			Component("birdweather").
+			Category(errors.CategoryValidation).
+			Context("common_name", note.CommonName).
+			Context("scientific_name", note.ScientificName).
+			Build()
+	}
+
+	if detectedAt.IsZero() {
+		return errors.Newf("detection time is not set").
 			Component("birdweather").
 			Category(errors.CategoryValidation).
 			Context("common_name", note.CommonName).

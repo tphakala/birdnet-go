@@ -587,6 +587,25 @@ func TestPublish_EmptyData(t *testing.T) {
 	assert.Equal(t, "pcmData is empty", err.Error())
 }
 
+// TestPublish_ZeroInstant verifies that an unset detection instant is rejected
+// before anything is sent to BirdWeather.
+func TestPublish_ZeroInstant(t *testing.T) {
+	settings := MockSettings()
+	settings.Realtime.Birdweather.Debug = false
+	client, err := New(settings)
+	require.NoError(t, err)
+	client.HTTPClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		assert.Fail(t, "no request expected", "got %s %s", req.Method, req.URL)
+		return nil, fmt.Errorf("unexpected request")
+	})
+
+	note := &datastore.Note{CommonName: "American Robin", ScientificName: "Turdus migratorius", Confidence: 0.95}
+	err = client.Publish(note, time.Time{}, make([]byte, 48000*2))
+
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "detection time is not set")
+}
+
 func TestClose(t *testing.T) {
 	// Create a mock client for testing
 	settings := MockSettings()
