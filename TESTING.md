@@ -430,6 +430,9 @@ forces every unit test to run (on the next push).
   `TestMain` before `m.Run`. A pull request replays main's result for such state.
   Write tests that open or stat their inputs inside the test function. Main runs
   every test, so a change that only such state breaks still shows up on main.
+  The import-guard tests are one known case: they run `go list` with default
+  build tags in a subprocess, so a file the unit job's tags exclude is not part
+  of their cache key.
 - A gotestsum rerun (`-run=^Name$`) can be replayed when main passed the same
   rerun on the same inputs; the report then counts the test as flaky, which it is.
 - Cached packages report an elapsed time of about zero in the JSON events and
