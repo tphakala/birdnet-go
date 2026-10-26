@@ -130,19 +130,19 @@ func (m *SystemInitManager) initializeTelemetry(settings *conf.Settings) error {
 }
 
 // setupNotificationTelemetry configures telemetry integration for notification service
-func (m *SystemInitManager) setupNotificationTelemetry(settings *conf.Settings) {
-	if settings == nil || !settings.Sentry.Enabled {
-		return
-	}
-
+func (m *SystemInitManager) setupNotificationTelemetry() {
 	m.sysLog.Debug("setting up notification telemetry integration")
-	reporter := NewNotificationReporter(settings.Sentry.Enabled)
+	// The reporter is installed whatever the Error Tracking setting: its
+	// IsEnabled and capture methods check the live opt-in, so enabling the
+	// setting at runtime needs no reinstall.
+	reporter := NewNotificationReporter(true)
 	telemetryConfig := notification.DefaultTelemetryConfig()
 	telemetryIntegration := notification.NewNotificationTelemetry(&telemetryConfig, reporter)
 
 	if service := notification.GetService(); service != nil {
 		service.SetTelemetry(telemetryIntegration)
-		m.sysLog.Info("notification telemetry integration enabled")
+		m.sysLog.Info("notification telemetry integration installed",
+			logger.Bool("reporting_active", reportingActive()))
 	} else {
 		m.sysLog.Warn("notification service not available for telemetry integration")
 	}
@@ -165,7 +165,7 @@ func (m *SystemInitManager) initializeNotification() error {
 		}
 		notification.Initialize(config)
 
-		m.setupNotificationTelemetry(settings)
+		m.setupNotificationTelemetry()
 
 		// Initialize push notifications from config (non-fatal on error)
 		if settings != nil {

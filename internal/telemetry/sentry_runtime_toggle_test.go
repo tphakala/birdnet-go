@@ -164,9 +164,21 @@ func TestSentryRuntimeToggle(t *testing.T) {
 	}{
 		{"enable then reconfigure reports", func(h *toggleHarness) {
 			h.set(true)
+			assert.False(h.t, IsTelemetryEnabled(), "the fast path must stay off until a client is bound")
 			h.reconfigure()
 			assert.True(h.t, sentryClientBound())
+			assert.True(h.t, IsTelemetryEnabled(), "reconfigure must open the fast path once the client is bound")
 			assert.Positive(h.t, h.report(), "the harness must see traffic while enabled")
+		}},
+		{"startup init opens the fast path without a settings save", func(h *toggleHarness) {
+			// Deliberately not h.set: it refreshes the flag, which a restart does not.
+			conf.StoreSettings(&conf.Settings{
+				Version: "test",
+				Sentry:  conf.SentrySettings{Enabled: true},
+			})
+			require.NoError(h.t, InitSentry(conf.GetSettings()))
+			assert.True(h.t, sentryClientBound())
+			assert.True(h.t, IsTelemetryEnabled(), "an opted-in install must not wait for a settings save to report")
 		}},
 		{"disable without reconfigure stops every capture path", func(h *toggleHarness) {
 			h.set(true)
@@ -174,6 +186,7 @@ func TestSentryRuntimeToggle(t *testing.T) {
 			require.Positive(h.t, h.report())
 
 			h.set(false)
+			assert.False(h.t, IsTelemetryEnabled(), "an opt-out must close the fast path before the client is closed")
 			assert.Zero(h.t, h.report(), "an opted-out install must send nothing even before the client is closed")
 		}},
 		{"disable then reconfigure closes the transport", func(h *toggleHarness) {
