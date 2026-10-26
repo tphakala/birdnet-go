@@ -704,6 +704,74 @@ func TestGetDawnChorusRaw_WallClockAcrossDST(t *testing.T) {
 				{"F", "2026-10-27", time.Date(2026, time.October, 27, 6, 0, 0, 0, helsinki)},
 			},
 		},
+		{
+			name:      "pre-change detection outside the window is not re-read under the next offset",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 30, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   5,
+			detections: []seeded{
+				// 02:00Z on 24 Oct is 05:00 EEST (out) but would read as 04:00 under EET (in).
+				{"G", time.Date(2026, time.October, 24, 2, 0, 0, 0, time.UTC)},
+			},
+			want: []want{},
+		},
+		{
+			name:      "detection exactly at the change belongs to the later segment only",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 30, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   5,
+			detections: []seeded{
+				// 01:00Z on 25 Oct is 03:00 EET after the change; read under EEST it would be 04:00.
+				{"H", time.Date(2026, time.October, 25, 1, 0, 0, 0, time.UTC)},
+			},
+			want: []want{},
+		},
+		{
+			name:      "detection exactly at the change is kept by the later segment",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 30, 0, 0, 0, 0, helsinki),
+			startHour: 3,
+			endHour:   4,
+			detections: []seeded{
+				{"H", time.Date(2026, time.October, 25, 1, 0, 0, 0, time.UTC)},
+			},
+			want: []want{
+				{"H", "2026-10-25", time.Date(2026, time.October, 25, 1, 0, 0, 0, time.UTC)},
+			},
+		},
+		{
+			name:      "until before since still returns detections from since on",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 10, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"I", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"I", "2026-10-22", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "until equal to since still returns detections from since on",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"I", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"I", "2026-10-22", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+			},
+		},
 	}
 
 	for _, tt := range tests {

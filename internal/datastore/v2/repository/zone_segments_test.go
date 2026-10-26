@@ -8,6 +8,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestZoneOffsetSegments_NilLocationIsLocal swaps time.Local, so it must not run in parallel.
+func TestZoneOffsetSegments_NilLocationIsLocal(t *testing.T) {
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	previous := time.Local
+	time.Local = helsinki
+	t.Cleanup(func() { time.Local = previous })
+
+	start := time.Date(2026, time.March, 20, 0, 0, 0, 0, time.UTC).Unix()
+	end := time.Date(2026, time.November, 1, 0, 0, 0, 0, time.UTC).Unix()
+	got := ZoneOffsetSegments(nil, start, end)
+	assert.Len(t, got, 3, "a nil location uses time.Local, which crosses both Helsinki changes")
+	assert.Equal(t, ZoneOffsetSegments(helsinki, start, end), got)
+}
+
 func TestZoneOffsetSegments(t *testing.T) {
 	t.Parallel()
 
