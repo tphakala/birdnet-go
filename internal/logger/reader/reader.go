@@ -48,7 +48,7 @@ type LogEntry struct {
 
 // ReadOptions controls filtering during log file scanning.
 type ReadOptions struct {
-	Date       wallclock.Date // Optional: only return entries on this calendar date in Location. If zero, no date filtering is applied.
+	Date       wallclock.Date // Optional: only return entries on this calendar date in Location; out-of-range fields are normalised like time.Date. If zero, no date filtering is applied.
 	Location   *time.Location // Optional: timezone in which an entry's date is read. If nil, defaults to UTC.
 	Operations []string       // Optional: filter to these operation values.
 	Level      string         // Optional: minimum level (DEBUG, INFO, WARN, ERROR).
@@ -254,7 +254,7 @@ func prepareOptions(opts *ReadOptions) preparedOptions {
 			loc = time.UTC
 		}
 		p.location = loc
-		p.targetDate = opts.Date
+		p.targetDate = opts.Date.AddDays(0) // normalise, so the comparison with DateOf is by calendar day
 	}
 	if opts.Level != "" {
 		if rank, ok := levelRank[strings.ToUpper(opts.Level)]; ok {

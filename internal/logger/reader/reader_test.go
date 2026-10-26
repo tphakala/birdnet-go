@@ -500,3 +500,34 @@ func TestReadFile_DateFilterSkippedMidnight(t *testing.T) {
 		})
 	}
 }
+
+// TestReadFile_DateFilterNormalisesDate pins that a Date with out-of-range fields selects the
+// date it normalises to, as time.Date does, instead of matching no entry.
+func TestReadFile_DateFilterNormalisesDate(t *testing.T) {
+	t.Parallel()
+
+	path := writeJSONLFile(t, t.TempDir(), "normalise.log", []string{
+		sampleLine(time.Date(2026, time.April, 1, 12, 0, 0, 0, time.UTC), "INFO", "april first", "test", "test_op", ""),
+		sampleLine(time.Date(2026, time.March, 31, 12, 0, 0, 0, time.UTC), "INFO", "march last", "test", "test_op", ""),
+	})
+
+	// March 32 is April 1.
+	entries, err := ReadFile(path, &ReadOptions{Date: wallclock.Date{Year: 2026, Month: time.March, Day: 32}})
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	assert.Equal(t, "april first", entries[0].Msg)
+}
+
+// TestReadFile_ZeroDateDisablesDateFilter pins that an unset Date returns entries of every day.
+func TestReadFile_ZeroDateDisablesDateFilter(t *testing.T) {
+	t.Parallel()
+
+	path := writeJSONLFile(t, t.TempDir(), "nodate.log", []string{
+		sampleLine(testDate.Add(10*time.Hour), "INFO", "day one", "test", "test_op", ""),
+		sampleLine(testDate.AddDate(0, 0, 5).Add(10*time.Hour), "INFO", "day six", "test", "test_op", ""),
+	})
+
+	entries, err := ReadFile(path, &ReadOptions{})
+	require.NoError(t, err)
+	assert.Len(t, entries, 2, "no Date means no date filtering")
+}
