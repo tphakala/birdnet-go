@@ -1244,7 +1244,8 @@ func GetAttachmentUploader() *AttachmentUploader {
 // InitMinimalSentryForSupport initializes a minimal Sentry client just for support uploads
 // This allows support bundle uploads without enabling full telemetry. It
 // serializes with the other client lifecycle operations, so it waits for a
-// running support dump upload or runtime reconfiguration.
+// running support dump upload or runtime reconfiguration. A bound client that
+// this package already closed does not count as initialized and is replaced.
 func InitMinimalSentryForSupport(systemID, version string) error {
 	clientLifecycleMu.Lock()
 	defer clientLifecycleMu.Unlock()
@@ -1257,8 +1258,17 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	// drain deferred messages without initializing the SDK; relying on that flag
 	// here would make support-dump upload a silent no-op for users who keep
 	// telemetry disabled but request an upload.
-	if sentryClientBound() {
-		return nil
+	//
+	// A client this package already closed does not count: sentry-go's capture
+	// helpers push scope layers on the shared hub, so an unbind that raced one
+	// can leave the closed client visible on the base layer. Reusing it would
+	// queue the dump on a dead transport.
+	hub := sentry.CurrentHub()
+	if bound := hub.Client(); bound.IsEnabled() {
+		if _, closed := closedClients[bound]; !closed {
+			return nil
+		}
+		hub.BindClient(nil)
 	}
 
 	// Without a DSN there is no Sentry project to upload to. From-source builds

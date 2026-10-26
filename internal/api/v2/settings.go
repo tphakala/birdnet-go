@@ -2990,8 +2990,8 @@ func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 }
 
 // sentryEnabledChanged reports whether the Error Tracking opt-in changed. Debug
-// is not compared: the capture paths and the BeforeSend hook read it live, and
-// the action only starts or stops the client.
+// is not compared: the BeforeSend hook reads it live, and the action only starts
+// or stops the client. SDK debug logging is decided when the client starts.
 func sentryEnabledChanged(oldSettings, currentSettings *conf.Settings) bool {
 	return oldSettings.Sentry.Enabled != currentSettings.Sentry.Enabled
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/events"
 )
 
 const toggleFlushTimeout = 300 * time.Millisecond
@@ -223,6 +224,22 @@ func TestSentryRuntimeToggle(t *testing.T) {
 			require.NoError(h.t, InitMinimalSentryForSupport("test-system-id", "test"), "support upload must work after a toggle")
 			assert.True(h.t, sentryClientBound())
 		}},
+		{"support init replaces a closed client left bound on the base scope layer", func(h *toggleHarness) {
+			h.set(true)
+			h.reconfigure()
+			stale := h.client()
+			// Model an opt-out that raced a capture: the client was closed but the
+			// hub still reports it as bound once the capture's scope layer pops.
+			clientLifecycleMu.Lock()
+			closeClient(stale)
+			fullClient = nil
+			clientLifecycleMu.Unlock()
+			h.set(false)
+
+			require.NoError(h.t, InitMinimalSentryForSupport("test-system-id", "test"))
+			assert.NotSame(h.t, stale, h.client(), "a closed client must not count as bound for a support upload")
+			assert.Positive(h.t, h.captureSupportEvent(h.client()), "the support client must deliver")
+		}},
 		{"disable closes a leftover minimal support client", func(h *toggleHarness) {
 			require.NoError(h.t, InitMinimalSentryForSupport("test-system-id", "test"))
 			minimal := h.client()
@@ -251,6 +268,13 @@ func TestReconfigureSentryConcurrentWithReporting(t *testing.T) {
 	const rounds = 20
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
+	var stopOnce sync.Once
+	stopWorkers := func() {
+		stopOnce.Do(func() { close(stop) })
+		wg.Wait()
+	}
+	// Runs before the harness cleanup (LIFO) even when an assertion aborts the test.
+	h.t.Cleanup(stopWorkers)
 	for range 3 {
 		wg.Go(func() {
 			for {
@@ -272,10 +296,57 @@ func TestReconfigureSentryConcurrentWithReporting(t *testing.T) {
 		h.set(i%2 == 0)
 		require.NoError(t, ReconfigureSentry())
 	}
-	close(stop)
-	wg.Wait()
+	stopWorkers()
 
 	h.set(false)
 	h.reconfigure()
 	assert.False(t, sentryClientBound(), "the final state must match the final setting")
+}
+
+// TestTelemetryWorkerGateIsEvaluatedPerEvent pins that the worker consults its
+// consent gate for every event instead of capturing the answer at construction.
+func TestTelemetryWorkerGateIsEvaluatedPerEvent(t *testing.T) {
+	var allowed atomic.Bool
+	worker, err := NewTelemetryWorker(allowed.Load, nil)
+	require.NoError(t, err)
+	newEvent := func(msg string) *errors.EnhancedError {
+		return errors.Newf("%s", msg).Component("datastore").Category(errors.CategoryDatabase).
+			Context("operation", "gate_test").Build()
+	}
+
+	require.NoError(t, worker.ProcessEvent(newEvent("gate closed")))
+	require.NoError(t, worker.ProcessBatch([]events.ErrorEvent{newEvent("batch closed")}))
+	stats := worker.GetStats()
+	assert.Zero(t, stats.EventsProcessed+stats.EventsDropped+stats.EventsFailed, "a closed gate must skip before any accounting")
+
+	allowed.Store(true)
+	require.NoError(t, worker.ProcessEvent(newEvent("gate open")))
+	assert.Equal(t, uint64(1), worker.GetStats().EventsProcessed, "an open gate must process the event")
+
+	allowed.Store(false)
+	require.NoError(t, worker.ProcessEvent(newEvent("gate closed again")))
+	assert.Equal(t, uint64(1), worker.GetStats().EventsProcessed, "re-closing the gate must stop processing")
+}
+
+// TestUploadSupportDumpHoldsClientLifecycleLock pins that an upload keeps the
+// client lifecycle lock until it finishes, so an opt-out cannot close the client
+// under a queued dump.
+func TestUploadSupportDumpHoldsClientLifecycleLock(t *testing.T) {
+	h := newToggleHarness(t)
+	require.NoError(t, InitMinimalSentryForSupport("test-system-id", "test"))
+
+	clientLifecycleMu.Lock()
+	done := make(chan error, 1)
+	go func() {
+		done <- NewAttachmentUploader(true).UploadSupportDump(t.Context(), []byte("dump"), "test-system-id", "", "")
+	}()
+	select {
+	case err := <-done:
+		clientLifecycleMu.Unlock()
+		require.Failf(t, "upload ran without the lifecycle lock", "returned %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	clientLifecycleMu.Unlock()
+	require.NoError(t, <-done)
+	assert.Positive(t, h.rec.requests.Load(), "the dump must be delivered once the lock is released")
 }
