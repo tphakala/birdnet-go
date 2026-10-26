@@ -44,7 +44,8 @@ type InsightsRepository interface {
 	// todaySince is the first instant of the local day in loc. The date grouping (best day,
 	// recent dates) buckets by the wall-clock date of loc (UTC when nil), shifting every row by
 	// the UTC offset in effect at its own instant, rather than the DB/OS-local zone. The best
-	// day covers the year before todaySince's local date.
+	// day covers the year before todaySince's local date; rows older than the start of that
+	// window (only the recent-dates list can reach them) take the offset in effect at its start.
 	GetDashboardKPIs(ctx context.Context, todaySince int64, loc *time.Location, modelID *uint) (*DashboardKPIs, error)
 
 	// GetModelContributionStats returns per-model statistics read from
