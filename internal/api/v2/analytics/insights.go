@@ -500,12 +500,16 @@ func (c *Handler) getDawnChorusImpl(ctx echo.Context) error {
 	if err != nil {
 		return c.HandleError(ctx, err, "min_days must be a positive integer", http.StatusBadRequest)
 	}
-	since := time.Now().AddDate(0, 0, -periodDays).Unix()
+	now := time.Now()
+	since := now.AddDate(0, 0, -periodDays)
+	// The station zone: the datastore buckets with time.Local, and the time-of-day
+	// averaging below reads each detection in the same zone.
+	loc := time.Local
 
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
 	defer cancel()
 
-	rawEntries, err := c.insightsRepo.GetDawnChorusRaw(reqCtx, since, dawnChorusStartHour, dawnChorusEndHour, analyticsTZOffset(time.Unix(since, 0)), nil)
+	rawEntries, err := c.insightsRepo.GetDawnChorusRaw(reqCtx, since.Unix(), now.Unix(), dawnChorusStartHour, dawnChorusEndHour, loc, nil)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, "Dawn chorus", "Failed to query dawn chorus")
 	}
@@ -518,7 +522,6 @@ func (c *Handler) getDawnChorusImpl(ctx echo.Context) error {
 		daysObserved    int
 	}
 	speciesMap := make(map[string]*speciesData)
-	loc := time.Local
 
 	for _, entry := range rawEntries {
 		sd, ok := speciesMap[entry.ScientificName]

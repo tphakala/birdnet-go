@@ -211,9 +211,7 @@ func TestGetDawnChorusRaw(t *testing.T) {
 	// Detection before since (should be excluded)
 	seedDetection(t, db, labelA, now.AddDate(0, 0, -45).Add(5*time.Hour).Unix(), 0.8)
 
-	// Anchor the offset to the seeded day (not now, which is up to 5 days later) so the hour
-	// bucketing matches the data's DST state regardless of host zone.
-	results, err := repo.GetDawnChorusRaw(ctx, since, 4, 10, localOffsetAt(day1), nil)
+	results, err := repo.GetDawnChorusRaw(ctx, since, now.Unix(), 4, 10, time.Local, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2) // 2 days
 
@@ -435,8 +433,7 @@ func TestGetDawnChorusRaw_MultiModel(t *testing.T) {
 	seedDetectionForModel(t, db, labelA1, 1, day1.Add(5*time.Hour).Unix(), 0.9)
 	seedDetectionForModel(t, db, labelA2, 2, day1.Add(6*time.Hour).Unix(), 0.85)
 
-	// Anchor the offset to the seeded day so the asserted earliest hour is exact regardless of host.
-	results, err := repo.GetDawnChorusRaw(ctx, since, 4, 10, localOffsetAt(day1), nil)
+	results, err := repo.GetDawnChorusRaw(ctx, since, now.Unix(), 4, 10, time.Local, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1, "same species on same day from two models should produce one result")
 	assert.Equal(t, "Turdus merula", results[0].ScientificName)
@@ -599,4 +596,137 @@ func TestGetExpectedSpeciesToday_TimezoneBucketing(t *testing.T) {
 		assert.Equal(t, 1, got[0].YearsSeen, "at UTC+5 the year-boundary detection rolls into 2024")
 		assert.Equal(t, "2024-03-09", got[0].LastSeenDate, "23:30Z + 5h crosses to the next calendar day")
 	})
+}
+
+// TestGetDawnChorusRaw_WallClockAcrossDST pins that the hour window and the date grouping
+// follow each detection's own wall clock when the period crosses a DST change, rather than
+// the offset in effect at the start of the period.
+func TestGetDawnChorusRaw_WallClockAcrossDST(t *testing.T) {
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	kolkata, err := time.LoadLocation("Asia/Kolkata")
+	require.NoError(t, err)
+
+	type seeded struct {
+		species string
+		at      time.Time
+	}
+	type want struct {
+		species string
+		date    string
+		at      time.Time
+	}
+
+	tests := []struct {
+		name               string
+		loc                *time.Location
+		since, until       time.Time
+		startHour, endHour int
+		detections         []seeded
+		want               []want
+	}{
+		{
+			name:      "Helsinki fall-back: window follows EET after the change",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 30, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"A", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+				{"A", time.Date(2026, time.October, 27, 3, 38, 0, 0, helsinki)},
+				{"A", time.Date(2026, time.October, 27, 4, 10, 0, 0, helsinki)},
+				{"B", time.Date(2026, time.October, 28, 9, 30, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"A", "2026-10-22", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+				{"A", "2026-10-27", time.Date(2026, time.October, 27, 4, 10, 0, 0, helsinki)},
+				{"B", "2026-10-28", time.Date(2026, time.October, 28, 9, 30, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "Helsinki spring-forward: window follows EEST after the change",
+			loc:       helsinki,
+			since:     time.Date(2026, time.March, 25, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.April, 2, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"C", time.Date(2026, time.March, 31, 4, 20, 0, 0, helsinki)},
+				{"C", time.Date(2026, time.March, 31, 10, 15, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"C", "2026-03-31", time.Date(2026, time.March, 31, 4, 20, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "Kolkata has no DST: single segment, half-hour offset at the window edge",
+			loc:       kolkata,
+			since:     time.Date(2026, time.March, 25, 0, 0, 0, 0, kolkata),
+			until:     time.Date(2026, time.April, 2, 0, 0, 0, 0, kolkata),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"D", time.Date(2026, time.March, 28, 3, 50, 0, 0, kolkata)},
+				{"D", time.Date(2026, time.March, 28, 4, 5, 0, 0, kolkata)},
+				{"D", time.Date(2026, time.March, 28, 9, 55, 0, 0, kolkata)},
+			},
+			want: []want{
+				{"D", "2026-03-28", time.Date(2026, time.March, 28, 4, 5, 0, 0, kolkata)},
+			},
+		},
+		{
+			name:      "local date straddling the fall-back merges to one row",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 24, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 26, 0, 0, 0, 0, helsinki),
+			startHour: 0,
+			endHour:   24,
+			detections: []seeded{
+				{"E", time.Date(2026, time.October, 25, 2, 30, 0, 0, helsinki)},
+				{"E", time.Date(2026, time.October, 25, 5, 0, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"E", "2026-10-25", time.Date(2026, time.October, 25, 2, 30, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "detections after until are still included",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 22, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"F", time.Date(2026, time.October, 27, 6, 0, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"F", "2026-10-27", time.Date(2026, time.October, 27, 6, 0, 0, 0, helsinki)},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupInsightsTestDB(t)
+			repo := NewInsightsRepository(db, false, false)
+
+			labels := make(map[string]uint)
+			for _, d := range tt.detections {
+				if _, ok := labels[d.species]; !ok {
+					labels[d.species] = seedLabel(t, db, d.species)
+				}
+				seedDetection(t, db, labels[d.species], d.at.Unix(), 0.9)
+			}
+
+			got, err := repo.GetDawnChorusRaw(t.Context(), tt.since.Unix(), tt.until.Unix(), tt.startHour, tt.endHour, tt.loc, nil)
+			require.NoError(t, err)
+
+			wantEntries := make([]DawnChorusRawEntry, 0, len(tt.want))
+			for _, w := range tt.want {
+				wantEntries = append(wantEntries, DawnChorusRawEntry{ScientificName: w.species, Date: w.date, EarliestAt: w.at.Unix()})
+			}
+			assert.ElementsMatch(t, wantEntries, got)
+		})
+	}
 }

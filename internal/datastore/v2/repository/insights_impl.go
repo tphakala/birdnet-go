@@ -173,15 +173,51 @@ func (r *insightsRepository) GetPhantomSpecies(ctx context.Context, since int64,
 	return results, nil
 }
 
-func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since int64, startHour, endHour, tzOffsetSeconds int, modelID *uint) ([]DawnChorusRawEntry, error) {
+// dawnChorusKey identifies one merged dawn chorus row: a species on a local calendar date.
+type dawnChorusKey struct {
+	scientificName string
+	date           string
+}
+
+func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since, until int64, startHour, endHour int, loc *time.Location, modelID *uint) ([]DawnChorusRawEntry, error) {
+	segments := ZoneOffsetSegments(loc, since, until)
+	if len(segments) == 0 {
+		// until <= since: one open segment at the offset in effect at since.
+		segments = []ZoneOffsetSegment{{Start: since, End: since, OffsetSeconds: GetTimezoneOffsetAt(loc, time.Unix(since, 0))}}
+	}
+
+	merged := make([]DawnChorusRawEntry, 0)
+	index := make(map[dawnChorusKey]int)
+	for i, seg := range segments {
+		// The last segment is open-ended so detections stamped after until are still counted.
+		rows, err := r.dawnChorusSegmentRows(ctx, seg, i == len(segments)-1, startHour, endHour, modelID)
+		if err != nil {
+			return nil, err
+		}
+		for _, row := range rows {
+			key := dawnChorusKey{scientificName: row.ScientificName, date: row.Date}
+			if at, ok := index[key]; ok {
+				// A local date can straddle an offset change, so the same species and
+				// date can come back from two segments: keep the earliest.
+				merged[at].EarliestAt = min(merged[at].EarliestAt, row.EarliestAt)
+				continue
+			}
+			index[key] = len(merged)
+			merged = append(merged, row)
+		}
+	}
+	return merged, nil
+}
+
+// dawnChorusSegmentRows runs the dawn chorus query over one zone segment. The segment's
+// constant UTC offset is applied to both the hour filter and the date grouping, so they
+// agree on every row. The upper bound seg.End is skipped when last is true.
+func (r *insightsRepository) dawnChorusSegmentRows(ctx context.Context, seg ZoneOffsetSegment, last bool, startHour, endHour int, modelID *uint) ([]DawnChorusRawEntry, error) {
 	det := r.detectionsTable()
 	lab := r.labelsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")
-	// Hour filter and date grouping MUST share the same offset to keep the query internally
-	// consistent (otherwise a near-midnight detection could be hour-filtered in one zone and
-	// date-grouped in another).
-	hourExpr := r.hourFromUnixExpr("d.detected_at", tzOffsetSeconds)
-	dateExpr := r.dateFromUnixExpr("d.detected_at", tzOffsetSeconds)
+	hourExpr := r.hourFromUnixExpr("d.detected_at", seg.OffsetSeconds)
+	dateExpr := r.dateFromUnixExpr("d.detected_at", seg.OffsetSeconds)
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
@@ -189,10 +225,13 @@ func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since int64, 
 			lab, dateExpr)).
 		Joins(fmt.Sprintf("JOIN %s ON %s.id = d.label_id", lab, lab)).
 		Joins(fpJoin).
-		Where("d.detected_at >= ?", since).
+		Where("d.detected_at >= ?", seg.Start).
 		Where(fpWhere).
 		Where(fmt.Sprintf("%s >= ? AND %s < ?", hourExpr, hourExpr), startHour, endHour)
 
+	if !last {
+		query = query.Where("d.detected_at < ?", seg.End)
+	}
 	if modelID != nil {
 		query = query.Where("d.model_id = ?", *modelID)
 	}
