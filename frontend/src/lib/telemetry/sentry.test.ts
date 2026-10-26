@@ -5,6 +5,7 @@ vi.mock('@sentry/browser', () => ({
   init: vi.fn(),
   captureException: vi.fn(),
   setTag: vi.fn(),
+  getIsolationScope: vi.fn(() => ({ clearBreadcrumbs: vi.fn() })),
   withScope: vi.fn((callback: (scope: unknown) => void) => {
     const mockScope = {
       setLevel: vi.fn(),

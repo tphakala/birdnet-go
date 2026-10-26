@@ -98,6 +98,7 @@ vi.mock('$lib/utils/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   })),
+  setSentryCaptureError: vi.fn(),
 }));
 
 // Mock transition utilities - transitions don't run in jsdom, use instant duration
