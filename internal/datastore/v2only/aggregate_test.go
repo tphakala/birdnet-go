@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // hours builds a [24]int from (hour, count) pairs for terse test fixtures.
@@ -292,11 +293,11 @@ func TestBuildActivityHeatmap_InvalidDates(t *testing.T) {
 
 // dawnAt returns a civilDawnMinuteLookup that yields a constant civil dawn minute for every date.
 func dawnAt(minute int) civilDawnMinuteLookup {
-	return func(time.Time) (int, bool) { return minute, true }
+	return func(wallclock.Date) (int, bool) { return minute, true }
 }
 
 // noCivilDawn is a civilDawnMinuteLookup that reports civil dawn undefined for every date (polar).
-func noCivilDawn(time.Time) (int, bool) { return 0, false }
+func noCivilDawn(wallclock.Date) (int, bool) { return 0, false }
 
 // onsetByDate maps the returned days by date string for clear, order-independent assertions.
 func onsetByDate(days []datastore.DailyActivityOnset) map[string]datastore.DailyActivityOnset {
@@ -1026,7 +1027,7 @@ func TestComputeYearOverYearWindows_Feb29PriorNonLeapClamps(t *testing.T) {
 	// Requesting Feb 29 of a leap year must clamp the previous window end to Feb 28 (the previous year
 	// is not a leap year), and the exclusive epoch end must be Mar 1 of the previous year - never Mar 2
 	// (which would happen if Feb 29 silently rolled forward before the +1-day step).
-	ref := time.Date(2024, time.February, 29, 12, 0, 0, 0, time.UTC)
+	ref := wallclock.Date{Year: 2024, Month: time.February, Day: 29}
 	w := computeYearOverYearWindows(ref, time.UTC)
 
 	assert.Equal(t, 2024, w.curYear)
@@ -1047,7 +1048,7 @@ func TestComputeYearOverYearWindows_Jan1Boundary(t *testing.T) {
 
 	// On Jan 1 both windows collapse to a single day, and the chart emits exactly one point. This guards
 	// the priorEnd +1-day boundary against an off-by-one that would query zero days.
-	ref := time.Date(2026, time.January, 1, 8, 0, 0, 0, time.UTC)
+	ref := wallclock.Date{Year: 2026, Month: time.January, Day: 1}
 	w := computeYearOverYearWindows(ref, time.UTC)
 
 	assert.Equal(t, "2026-01-01", w.curStart)
@@ -1066,26 +1067,11 @@ func TestComputeYearOverYearWindows_Jan1Boundary(t *testing.T) {
 func TestComputeYearOverYearWindows_MidYearNoClamp(t *testing.T) {
 	t.Parallel()
 
-	ref := time.Date(2026, time.June, 23, 0, 0, 0, 0, time.UTC)
+	ref := wallclock.Date{Year: 2026, Month: time.June, Day: 23}
 	w := computeYearOverYearWindows(ref, time.UTC)
 
 	assert.Equal(t, "2026-06-23", w.curEnd)
 	assert.Equal(t, "2025-06-23", w.priorEnd, "non-leap-edge dates map straight across years")
-}
-
-func TestComputeYearOverYearWindows_ProjectsRefIntoLoc(t *testing.T) {
-	t.Parallel()
-
-	// A ref whose own zone reads Jan 1 2024 but which is Dec 31 2023 in loc must resolve to loc's
-	// calendar date, not ref's. 2024-01-01 06:00 at UTC+12 is 2023-12-31 18:00 UTC.
-	east := time.FixedZone("UTC+12", 12*60*60)
-	ref := time.Date(2024, time.January, 1, 6, 0, 0, 0, east)
-	w := computeYearOverYearWindows(ref, time.UTC)
-
-	assert.Equal(t, 2023, w.curYear, "calendar date derived in loc, not ref's zone")
-	assert.Equal(t, "2023-12-31", w.curEnd)
-	assert.Equal(t, 2022, w.prevYear)
-	assert.Equal(t, "2022-12-31", w.priorEnd)
 }
 
 // sciAsCommon is the identity name resolver for builder tests that do not exercise name resolution.
