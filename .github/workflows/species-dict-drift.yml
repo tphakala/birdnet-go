@@ -37,18 +37,33 @@ jobs:
 
       - name: Check for drift
         run: |
-          if git diff --exit-code -- internal/speciesdict/data; then
-            echo "### Species Dict In Sync" >> $GITHUB_STEP_SUMMARY
+          # Compare the decompressed JSON, not the gzip bytes. The compressed
+          # bytes depend on the Go toolchain's compress/flate implementation, so
+          # a Go upgrade would otherwise fail this check with no change in content.
+          data_dir=internal/speciesdict/data
+          drifted=()
+          while IFS= read -r f; do
+            if ! cmp -s <(git show "HEAD:$f" 2>/dev/null | gzip -dc 2>/dev/null) <(gzip -dc "$f" 2>/dev/null); then
+              drifted+=("$f")
+            fi
+          done < <(git ls-files --cached --others --exclude-standard -- "$data_dir")
+
+          if [ "${#drifted[@]}" -eq 0 ]; then
+            echo "### Species Dict In Sync" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "### Species Dict Out Of Sync" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "The committed \`internal/speciesdict/data/*.json.gz\` files do not match" >> $GITHUB_STEP_SUMMARY
-            echo "the output of \`go generate ./internal/speciesdict\`." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Run the following and commit the result:" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "go generate ./internal/speciesdict" >> $GITHUB_STEP_SUMMARY
-            echo "git add internal/speciesdict/data" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "### Species Dict Out Of Sync" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The decompressed content of these \`internal/speciesdict/data/*.json.gz\` files" >> "$GITHUB_STEP_SUMMARY"
+            echo "does not match the output of \`go generate ./internal/speciesdict\`:" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            for f in "${drifted[@]}"; do
+              echo "- \`$f\`" >> "$GITHUB_STEP_SUMMARY"
+            done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Run the following and commit the result:" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "go generate ./internal/speciesdict" >> "$GITHUB_STEP_SUMMARY"
+            echo "git add internal/speciesdict/data" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi

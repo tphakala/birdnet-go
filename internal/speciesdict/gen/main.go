@@ -4,9 +4,11 @@
 // fallback baked in) and writes it as deterministic, precompressed gzip JSON.
 //
 // Determinism matters: the output is committed and guarded by a CI drift gate, so the
-// generator must produce byte-identical files for a given dataset. json.Marshal sorts
+// generator must produce identical content for a given dataset. json.Marshal sorts
 // map keys, the gzip level is fixed, and the gzip header is left at its zero values
-// (mtime 0, OS 255, no name), so re-running on the same dataset yields the same bytes.
+// (mtime 0, OS 255, no name), so re-running on the same dataset with the same Go
+// toolchain yields the same bytes. A different Go release may compress the same JSON
+// to different bytes, so the drift gate compares the decompressed JSON, not the gzip.
 //
 // Run via: go generate ./internal/speciesdict
 package main
