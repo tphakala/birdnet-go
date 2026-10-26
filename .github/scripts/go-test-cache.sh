@@ -22,7 +22,7 @@
 # Subcommands:
 #   key        needs RUNNER_OS, RUNNER_ARCH, ImageOS, GITHUB_RUN_ID and CI_FILES_HASH
 #              in the environment. Prints key=, restore-prefix= and path= lines for
-#              $GITHUB_OUTPUT; the fingerprinted files are logged to stderr.
+#              $GITHUB_OUTPUT; the fingerprinted libraries are logged to stderr.
 #   normalize  sets atime and mtime of every tracked file, symlink and directory
 #              (untracked paths are left alone). Run it last, right before the tests.
 #   self-test  checks the properties normalize and prune rely on, in a scratch repo.
