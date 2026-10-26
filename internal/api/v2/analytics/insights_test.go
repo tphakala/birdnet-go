@@ -47,7 +47,7 @@ func (m *mockInsightsRepo) GetPhantomSpecies(_ context.Context, _ int64, _ int, 
 	return m.phantomSpecies, m.err
 }
 
-func (m *mockInsightsRepo) GetDawnChorusRaw(_ context.Context, _ int64, _, _, _ int, _ *uint) ([]repository.DawnChorusRawEntry, error) {
+func (m *mockInsightsRepo) GetDawnChorusRaw(_ context.Context, _, _ int64, _, _ int, _ *time.Location, _ *uint) ([]repository.DawnChorusRawEntry, error) {
 	return m.dawnChorusRaw, m.err
 }
 
