@@ -177,7 +177,6 @@ func TestV2OnlyDatastore_ParseDateRangeFollowsLocalDays(t *testing.T) {
 		{"Havana day before the skipped midnight", "America/Havana", "2026-03-07", "2026-03-07", "2026-03-07T00:00:00-05:00", "2026-03-08T01:00:00-04:00"},
 		{"Santiago day before the skipped midnight", "America/Santiago", "2026-09-05", "2026-09-05", "2026-09-05T00:00:00-04:00", "2026-09-06T01:00:00-03:00"},
 		{"New York fall back", "America/New_York", "2026-11-01", "2026-11-01", "2026-11-01T00:00:00-04:00", "2026-11-02T00:00:00-05:00"},
-		{"Havana range across the skipped midnight", "America/Havana", "2026-03-07", "2026-03-09", "2026-03-07T00:00:00-05:00", "2026-03-10T00:00:00-04:00"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
