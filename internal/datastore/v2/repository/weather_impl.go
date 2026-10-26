@@ -7,6 +7,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -104,14 +105,13 @@ func (r *weatherRepository) GetHourlyWeather(ctx context.Context, date string) (
 
 // GetHourlyWeatherInLocation retrieves hourly weather for a date in a specific timezone.
 func (r *weatherRepository) GetHourlyWeatherInLocation(ctx context.Context, date string, loc *time.Location) ([]entities.HourlyWeather, error) {
-	// Parse the date in the given location
-	startOfDay, err := time.ParseInLocation("2006-01-02", date, loc)
+	day, err := wallclock.ParseDate(date)
 	if err != nil {
 		return nil, err
 	}
-	// Use AddDate instead of Add(24*time.Hour) to correctly handle DST transitions
-	// where days can be 23 hours (spring forward) or 25 hours (fall back)
-	endOfDay := startOfDay.AddDate(0, 0, 1)
+	// The local day is [start, end), which is shorter or longer than 24 hours across a DST change and starts
+	// at the transition instant where the change skips midnight.
+	startOfDay, endOfDay := wallclock.DayBounds(day, loc)
 
 	var weather []entities.HourlyWeather
 	// Convert timestamps to Unix epoch seconds for comparison.

@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // =============================================================================
@@ -49,8 +50,9 @@ const (
 // =============================================================================
 
 // DateRangeToUnix converts a DateRange to Unix timestamps.
-// Returns the start of the first day (00:00:00) and the exclusive end of the last day (the
-// start of the day after it), so a detection at 23:59:59 on the last day is inside the range.
+// Returns the start of the first day and the exclusive end of the last day (the start of the
+// day after it), so a detection at 23:59:59 on the last day is inside the range. A day starts at
+// 00:00:00, or at the transition instant when DST skips that midnight.
 // Returns nil, nil if dr is nil.
 func DateRangeToUnix(dr *datastore.DateRange, tz *time.Location) (start, end *int64) {
 	if dr == nil {
@@ -60,15 +62,9 @@ func DateRangeToUnix(dr *datastore.DateRange, tz *time.Location) (start, end *in
 		tz = time.Local
 	}
 
-	// Start of first day (00:00:00)
-	startTime := time.Date(
-		dr.Start.Year(), dr.Start.Month(), dr.Start.Day(),
-		0, 0, 0, 0, tz,
-	)
-	s := startTime.Unix()
-
-	// Exclusive end of the last day
-	e := exclusiveDayEnd(dr.End.Year(), dr.End.Month(), dr.End.Day(), tz)
+	startTime, _ := wallclock.DayBounds(wallclock.DateOf(dr.Start), tz)
+	_, endTime := wallclock.DayBounds(wallclock.DateOf(dr.End), tz)
+	s, e := startTime.Unix(), endTime.Unix()
 
 	return &s, &e
 }
@@ -431,8 +427,9 @@ func ResolveLocationsToSourceIDs(ctx context.Context, deps *FilterLookupDeps, lo
 // =============================================================================
 
 // parseDateString parses a date string in YYYY-MM-DD format to Unix timestamp.
-// Returns the start of day (00:00:00) or the exclusive end of day (the start of the next day,
-// so 23:59:59 is inside the day) in the given timezone.
+// Returns the start of day or the exclusive end of day (the start of the next day, so 23:59:59
+// is inside the day) in the given timezone. A day starts at 00:00:00, or at the transition
+// instant when DST skips that midnight.
 // Returns (nil, nil) if dateStr is empty (no filter, not an error).
 // Returns error if dateStr is non-empty but invalid format.
 func parseDateString(dateStr string, tz *time.Location, endOfDay bool) (*int64, error) {
@@ -443,17 +440,18 @@ func parseDateString(dateStr string, tz *time.Location, endOfDay bool) (*int64, 
 		tz = time.Local
 	}
 
-	t, err := time.ParseInLocation("2006-01-02", dateStr, tz)
+	date, err := wallclock.ParseDate(dateStr)
 	if err != nil {
 		return nil, errors.NewStd("invalid date format: expected YYYY-MM-DD, got " + dateStr)
 	}
 
+	start, end := wallclock.DayBounds(date, tz)
 	if endOfDay {
-		ts := exclusiveDayEnd(t.Year(), t.Month(), t.Day(), tz)
+		ts := end.Unix()
 		return &ts, nil
 	}
 
-	ts := t.Unix()
+	ts := start.Unix()
 	return &ts, nil
 }
 

@@ -11,7 +11,37 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
+
+// dayBoundsCase pins the bounds of one local day in a zone. wantStart and wantEnd are the instants
+// of its first moment and of the first moment of the next day.
+type dayBoundsCase struct {
+	name      string
+	zone      string
+	date      string
+	wantStart time.Time
+	wantEnd   time.Time
+}
+
+// dayBoundsCases cover days whose next midnight is not 24 hours after their own, including zones
+// where the DST change happens at midnight itself: Havana skips 00:00-01:00 on 2026-03-08 and
+// Santiago skips it on 2026-09-06 and repeats 23:00-24:00 on 2026-04-04.
+var dayBoundsCases = []dayBoundsCase{
+	{"Helsinki fall back day is 25 hours long", "Europe/Helsinki", "2026-10-25", utc(2026, time.October, 24, 21, 0, 0), utc(2026, time.October, 25, 22, 0, 0)},
+	{"Helsinki spring forward day is 23 hours long", "Europe/Helsinki", "2026-03-29", utc(2026, time.March, 28, 22, 0, 0), utc(2026, time.March, 29, 21, 0, 0)},
+	{"Havana day before a skipped midnight", "America/Havana", "2026-03-07", utc(2026, time.March, 7, 5, 0, 0), utc(2026, time.March, 8, 5, 0, 0)},
+	{"Havana skipped midnight starts at 01:00", "America/Havana", "2026-03-08", utc(2026, time.March, 8, 5, 0, 0), utc(2026, time.March, 9, 4, 0, 0)},
+	{"Santiago skipped midnight starts at 01:00", "America/Santiago", "2026-09-06", utc(2026, time.September, 6, 4, 0, 0), utc(2026, time.September, 7, 3, 0, 0)},
+	{"Santiago repeated 23:00 hour ends at the next midnight", "America/Santiago", "2026-04-04", utc(2026, time.April, 4, 3, 0, 0), utc(2026, time.April, 5, 4, 0, 0)},
+}
+
+func dayBoundsZone(t *testing.T, name string) *time.Location {
+	t.Helper()
+	zone, ok := testutil.ToolchainZones(t)[name]
+	require.True(t, ok, "zone %s missing from the toolchain zone database", name)
+	return zone
+}
 
 // =============================================================================
 // DateRangeToUnix Tests
@@ -44,6 +74,23 @@ func TestDateRangeToUnix(t *testing.T) {
 		// End is exclusive: the next midnight, so 23:59:59 of the last day is inside the range
 		expectedEnd := time.Date(2024, 6, 18, 0, 0, 0, 0, tz).Unix()
 		assert.Equal(t, expectedEnd, *end)
+	})
+
+	t.Run("day bounds in zones with DST changes", func(t *testing.T) {
+		for _, tc := range dayBoundsCases {
+			t.Run(tc.name, func(t *testing.T) {
+				zone := dayBoundsZone(t, tc.zone)
+				day, err := time.Parse(time.DateOnly, tc.date)
+				require.NoError(t, err)
+
+				start, end := DateRangeToUnix(&datastore.DateRange{Start: day, End: day}, zone)
+
+				require.NotNil(t, start)
+				require.NotNil(t, end)
+				assert.Equal(t, tc.wantStart.Unix(), *start, "start")
+				assert.Equal(t, tc.wantEnd.Unix(), *end, "end")
+			})
+		}
 	})
 
 	t.Run("nil timezone uses local", func(t *testing.T) {
@@ -862,6 +909,24 @@ func TestParseDateString(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 			assert.Equal(t, tc.want, *result, tc.date)
+		}
+	})
+
+	t.Run("day bounds in zones with DST changes", func(t *testing.T) {
+		for _, tc := range dayBoundsCases {
+			t.Run(tc.name, func(t *testing.T) {
+				zone := dayBoundsZone(t, tc.zone)
+
+				start, err := parseDateString(tc.date, zone, false)
+				require.NoError(t, err)
+				require.NotNil(t, start)
+				assert.Equal(t, tc.wantStart.Unix(), *start, "start")
+
+				end, err := parseDateString(tc.date, zone, true)
+				require.NoError(t, err)
+				require.NotNil(t, end)
+				assert.Equal(t, tc.wantEnd.Unix(), *end, "end")
+			})
 		}
 	})
 
