@@ -106,3 +106,38 @@ func (ds *Datastore) dailyCountsByZone(ctx context.Context, start, end int64, la
 	sort.Slice(result, func(i, j int) bool { return result[i].Date > result[j].Date })
 	return result, nil
 }
+
+const (
+	// trendPeriodWeek and trendPeriodMonth name the trend periods of GetDetectionTrends; any other
+	// period means the current day.
+	trendPeriodWeek  = "week"
+	trendPeriodMonth = "month"
+	// trendWeekDays and trendMonthDays are the number of local calendar dates, today included,
+	// that the week and month trend periods cover.
+	trendWeekDays  = 7
+	trendMonthDays = 30
+)
+
+// trendWindow returns the instants [start, end) that a trend period covers at now. The period is a
+// whole number of local calendar dates of loc ending with today: the current day, the last 7
+// dates ("week") or the last 30 dates ("month"), so the first bucket is a whole day and a date is
+// never split. start is the start of the first date (see wallclock.DayBounds); end is now.
+func trendWindow(period string, now time.Time, loc *time.Location) (start, end int64) {
+	days := 1
+	switch period {
+	case trendPeriodWeek:
+		days = trendWeekDays
+	case trendPeriodMonth:
+		days = trendMonthDays
+	}
+	first := wallclock.DateOf(now.In(loc)).AddDays(1 - days)
+	dayStart, _ := wallclock.DayBounds(first, loc)
+	return dayStart.Unix(), now.Unix()
+}
+
+// detectionTrends counts the detections on each local date of the trend period ending at now,
+// newest date first, see trendWindow. Dates without detections are absent.
+func (ds *Datastore) detectionTrends(ctx context.Context, period string, now time.Time) ([]datastore.DailyAnalyticsData, error) {
+	start, end := trendWindow(period, now, ds.timezone)
+	return ds.dailyCountsByZone(ctx, start, end, nil)
+}

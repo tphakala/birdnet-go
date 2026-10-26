@@ -1840,24 +1840,6 @@ func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end 
 	return results, err
 }
 
-// GetDetectionTrends returns detection trends over time.
-func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period string, limit, tzOffsetSeconds int, modelID *uint) ([]DailyAnalyticsData, error) {
-	// Calculate start time based on period
-	var startTime int64
-	now := time.Now().Unix()
-
-	switch period {
-	case "week":
-		startTime = now - (7 * 24 * 3600)
-	case "month":
-		startTime = now - (30 * 24 * 3600)
-	default: // day
-		startTime = now - (24 * 3600)
-	}
-
-	return r.GetDailyAnalytics(ctx, startTime, now, tzOffsetSeconds, nil, modelID)
-}
-
 // GetNewSpecies returns species detected for the first time ever within the range, false positives
 // excluded, so a species whose qualifying detections were all reviewed away is not reported as new.
 // Groups by scientific_name to aggregate across all models for the same species.

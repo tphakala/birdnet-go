@@ -2913,18 +2913,6 @@ func unixTimeOrZero(epoch int64, loc *time.Location) time.Time {
 	return time.Unix(epoch, 0).In(loc)
 }
 
-// zoneOffsetSeconds returns the configured timezone's UTC offset in seconds in effect at
-// the given epoch. Non-positive epochs fall back to the current offset. It is a single
-// offset, so only the trailing-window trends use it; range analytics use zoneSegments and
-// dateExpr, which follow the offset changes inside the range.
-func (ds *Datastore) zoneOffsetSeconds(epoch int64) int {
-	ref := time.Unix(epoch, 0)
-	if epoch <= 0 {
-		ref = time.Now()
-	}
-	return wallclock.OffsetAt(ds.timezone, ref)
-}
-
 // GetSpeciesSummaryData retrieves species summary data.
 func (ds *Datastore) GetSpeciesSummaryData(ctx context.Context, startDate, endDate string) ([]datastore.SpeciesSummaryData, error) {
 	start, end, err := ds.parseDateRange(startDate, endDate)
@@ -3033,22 +3021,12 @@ func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 	return ds.dailyCountsByZone(ctx, start, end, labelIDs)
 }
 
-// GetDetectionTrends retrieves detection trends.
-func (ds *Datastore) GetDetectionTrends(ctx context.Context, period string, limit int) ([]datastore.DailyAnalyticsData, error) {
-	// Trends cover a trailing window ending now, so anchor the offset to the current time.
-	v2Data, err := ds.detection.GetDetectionTrends(ctx, period, limit, ds.zoneOffsetSeconds(0), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]datastore.DailyAnalyticsData, 0, len(v2Data))
-	for _, d := range v2Data {
-		result = append(result, datastore.DailyAnalyticsData{
-			Date:  d.Date,
-			Count: int(d.TotalDetections),
-		})
-	}
-	return result, nil
+// GetDetectionTrends retrieves detection counts per local date for a trend period ending now:
+// "week" is the last 7 local dates including today, "month" the last 30, and any other period
+// (including "day") today's local date. The limit is not applied. Dates without detections are
+// absent and the newest date comes first.
+func (ds *Datastore) GetDetectionTrends(ctx context.Context, period string, _ int) ([]datastore.DailyAnalyticsData, error) {
+	return ds.detectionTrends(ctx, period, time.Now())
 }
 
 // GetHourlyDistribution retrieves hourly distribution data.
