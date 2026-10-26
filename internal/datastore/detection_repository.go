@@ -530,7 +530,7 @@ func (r *detectionRepository) convertFilters(filters *DetectionFilters) (Advance
 		}
 		legacy.DateRange = &DateRange{
 			Start: date,
-			End:   date.Add(24*time.Hour - time.Nanosecond), // End of day (23:59:59.999999999)
+			End:   date.Add(24*time.Hour - time.Nanosecond), //nolint:gocritic // End of day (23:59:59.999999999) from a local midnight; wallclock.DayBounds is the exact form
 		}
 	}
 

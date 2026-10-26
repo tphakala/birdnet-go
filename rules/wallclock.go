@@ -19,6 +19,11 @@ import "github.com/quasilyte/go-ruleguard/dsl"
 // bucket or an elapsed duration shown as days stays as is, with a
 // //nolint:gocritic comment that gives the reason.
 //
+// The Add forms are c*time.Hour, n*c*time.Hour and c*time.Hour plus or minus
+// an offset, with c equal to 24 or -24; a swapped operand order and
+// 24*n*time.Hour are not matched. The receiver may be a time.Time or a
+// *time.Time.
+//
 // Bare n*24*time.Hour durations (cache TTLs, retention windows) are not
 // reported, only the ones added to a time.Time.
 //
@@ -35,16 +40,16 @@ func WallClockArithmetic(m dsl.Matcher) {
 		`$t.Truncate(time.Hour)`,
 		`$t.Round(time.Hour)`,
 	).
-		Where(m["t"].Type.Is("time.Time") &&
+		Where((m["t"].Type.Is("time.Time") || m["t"].Type.Is("*time.Time")) &&
 			!m.File().Name.Matches(`_test\.go$`) &&
 			!m.File().PkgPath.Matches(`(internal/wallclock|/testutil)$`)).
-		Report("Truncate/Round to an hour works on UTC time and is wrong for fractional offsets; use wallclock.FloorToHour or wallclock.HourStart from internal/wallclock")
+		Report("Truncate/Round to an hour works on UTC time and is wrong for fractional offsets; use wallclock.FloorToHour (a Truncate replacement) from internal/wallclock")
 
 	m.Match(
 		`$t.Truncate($c * time.Hour)`,
 		`$t.Round($c * time.Hour)`,
 	).
-		Where(m["t"].Type.Is("time.Time") &&
+		Where((m["t"].Type.Is("time.Time") || m["t"].Type.Is("*time.Time")) &&
 			m["c"].Value.Int() == 24 &&
 			!m.File().Name.Matches(`_test\.go$`) &&
 			!m.File().PkgPath.Matches(`(internal/wallclock|/testutil)$`)).
@@ -64,10 +69,12 @@ func WallClockArithmetic(m dsl.Matcher) {
 	// Moving an instant by whole days.
 	m.Match(
 		`$t.Add($c * time.Hour)`,
+		`$t.Add($c * time.Hour - $x)`,
+		`$t.Add($c * time.Hour + $x)`,
 		`$t.Add($n * $c * time.Hour)`,
 	).
-		Where(m["t"].Type.Is("time.Time") &&
-			m["c"].Value.Int() == 24 &&
+		Where((m["t"].Type.Is("time.Time") || m["t"].Type.Is("*time.Time")) &&
+			(m["c"].Value.Int() == 24 || m["c"].Value.Int() == -24) &&
 			!m.File().Name.Matches(`_test\.go$`) &&
 			!m.File().PkgPath.Matches(`(internal/wallclock|/testutil)$`)).
 		Report("adding 24-hour multiples to an instant does not move by calendar days across a DST change; use Date.AddDays or wallclock.At from internal/wallclock")
