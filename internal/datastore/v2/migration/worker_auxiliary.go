@@ -357,9 +357,12 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *Auxi
 	// Batch resolve all labels to avoid N+1 queries
 	// Labels are keyed by the trimmed name and an empty name has no label.
 	speciesSet := make(map[string]struct{})
+	emptyNameRows := 0
 	for i := range legacyCaches {
 		if name := strings.TrimSpace(legacyCaches[i].ScientificName); name != "" {
 			speciesSet[name] = struct{}{}
+		} else {
+			emptyNameRows++
 		}
 	}
 	speciesNames := slices.Collect(maps.Keys(speciesSet))
@@ -367,7 +370,10 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *Auxi
 	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 	if err != nil {
 		m.logger.Warn("failed to batch resolve labels for image caches", logger.Error(err))
-		result.ImageCaches.Failed += len(legacyCaches)
+		// The per-row loop below skips rows without a name; count them the same
+		// way here, so only the other rows are failures.
+		result.ImageCaches.Skipped += emptyNameRows
+		result.ImageCaches.Failed += len(legacyCaches) - emptyNameRows
 		result.ImageCaches.Error = firstAuxError(result.ImageCaches.Error, err)
 		return
 	}
@@ -561,9 +567,12 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 	// Batch resolve all labels to avoid N+1 queries
 	// Labels are keyed by the trimmed name and an empty name has no label.
 	speciesSet := make(map[string]struct{})
+	emptyNameRows := 0
 	for i := range legacyHistory {
 		if name := strings.TrimSpace(legacyHistory[i].ScientificName); name != "" {
 			speciesSet[name] = struct{}{}
+		} else {
+			emptyNameRows++
 		}
 	}
 	speciesNames := slices.Collect(maps.Keys(speciesSet))
@@ -571,7 +580,10 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 	if err != nil {
 		m.logger.Warn("failed to batch resolve labels for notification history", logger.Error(err))
-		result.Notifications.Failed += len(legacyHistory)
+		// The per-row loop below skips rows without a name; count them the same
+		// way here, so only the other rows are failures.
+		result.Notifications.Skipped += emptyNameRows
+		result.Notifications.Failed += len(legacyHistory) - emptyNameRows
 		result.Notifications.Error = firstAuxError(result.Notifications.Error, err)
 		return
 	}
@@ -689,8 +701,16 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 	v2EventsAll, err := m.weatherRepo.GetAllDailyEvents(ctx)
 	if err != nil {
 		m.logger.Warn("failed to get v2 daily events for ID mapping", logger.Error(err))
-		// Without the mapping no hourly row can be copied.
-		result.Weather.HourlyWeatherFailed += result.Weather.HourlyWeatherTotal
+		// Without the mapping no hourly row can be copied. The per-row loop below
+		// skips orphan rows, whose parent is absent from legacy; count them the same
+		// way here, so only rows with a known parent are failures.
+		for i := range legacyWeather {
+			if _, known := legacyIDToDate[legacyWeather[i].DailyEventsID]; known {
+				result.Weather.HourlyWeatherFailed++
+			} else {
+				result.Weather.Skipped++
+			}
+		}
 		result.Weather.Error = firstAuxError(result.Weather.Error,
 			fmt.Errorf("read v2 daily events for ID mapping: %w", err))
 		return

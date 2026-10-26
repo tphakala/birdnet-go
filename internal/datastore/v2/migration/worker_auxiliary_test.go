@@ -519,3 +519,33 @@ func TestAuxiliaryMigrationResult_Outcome_OmitsErrorText(t *testing.T) {
 	assert.Contains(t, summary, "daily events 1 of 3 migrated (2 failed)")
 	assert.Contains(t, summary, "threshold events: 0 of 0 migrated;")
 }
+
+// When the label batch fails, rows without a name are still skips, as in the per-row
+// loop, and only the named rows are failures.
+func TestAuxiliaryMigrator_MigrateAll_LabelBatchFailureKeepsEmptyNamesAsSkips(t *testing.T) {
+	t.Parallel()
+
+	env := newAuxV2Env(t)
+	rows := defaultAuxLegacyRows()
+	now := time.Now()
+	rows.imageCaches = []datastore.ImageCache{
+		{ProviderName: "wikimedia", ScientificName: auxTestSpeciesImage, SourceProvider: "wikimedia", CachedAt: now},
+		{ProviderName: "wikimedia", ScientificName: "  ", SourceProvider: "wikimedia", CachedAt: now},
+	}
+	rows.notifications = []datastore.NotificationHistory{
+		{ScientificName: auxTestSpeciesNotification, NotificationType: "new_species", LastSent: now, ExpiresAt: now.Add(time.Hour)},
+		{ScientificName: "", NotificationType: "new_species", LastSent: now, ExpiresAt: now.Add(time.Hour)},
+	}
+	cfg := env.config(expectLegacy(t, rows, 1))
+	cfg.LabelRepo = labelMissDecorator{LabelRepository: env.labelRepo, err: assert.AnError}
+
+	result, err := NewAuxiliaryMigrator(cfg).MigrateAll(t.Context())
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, result.ImageCaches.Failed)
+	assert.Equal(t, 1, result.ImageCaches.Skipped)
+	assert.Equal(t, 1, result.Notifications.Failed)
+	assert.Equal(t, 1, result.Notifications.Skipped)
+	status, _ := result.Outcome()
+	assert.Equal(t, entities.AuxiliaryDataStatusFailed, status)
+}
