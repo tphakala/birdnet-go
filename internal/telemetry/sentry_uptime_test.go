@@ -71,7 +71,7 @@ func TestEnrichEventWithUptime_SetsTagAndContext(t *testing.T) {
 }
 
 // TestEnrichEventWithUptime_NilSafe guards against panics when the event's
-// Tags / Contexts maps start out nil — a common case for freshly constructed
+// Tags / Contexts maps start out nil; a common case for freshly constructed
 // *sentry.Event values inside a BeforeSend hook.
 func TestEnrichEventWithUptime_NilSafe(t *testing.T) {
 	initAppStartTime()
@@ -192,7 +192,7 @@ func TestCreateBeforeSendHook_NilEvent(t *testing.T) {
 	})
 	assert.Nil(t, got, "hook must drop a nil event cleanly")
 
-	// Same guarantee in debug mode — the debug privacy filter also
+	// Same guarantee in debug mode: the debug privacy filter also
 	// dereferences event and would panic without the guard.
 	settings.Sentry.Debug = true
 	hook = createBeforeSendHook(func() *conf.Settings { return settings })

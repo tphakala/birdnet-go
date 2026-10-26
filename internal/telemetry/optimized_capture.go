@@ -70,7 +70,7 @@ func FastCaptureMessage(message string, level sentry.Level, component string) {
 		return
 	}
 
-	// Filter out info/debug-level messages — these are operational signals,
+	// Filter out info/debug-level messages: these are operational signals,
 	// not errors. They create noise issues in Sentry's issue list.
 	if level == sentry.LevelInfo || level == sentry.LevelDebug {
 		return
