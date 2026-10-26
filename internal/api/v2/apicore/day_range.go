@@ -1,34 +1,20 @@
 package apicore
 
 import (
+	"fmt"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 const (
-	// DayRangeStartField and DayRangeEndField name the query parameters in the
-	// errors ResolveDayRange returns.
-	DayRangeStartField = "start_date"
-	DayRangeEndField   = "end_date"
+	dayRangeStartField = "start_date"
+	dayRangeEndField   = "end_date"
 )
 
-// DayRangeError is the error ResolveDayRange returns for a date that does not
-// parse as YYYY-MM-DD or an end date before the start date. Its text names the
-// parameter and the reason, so callers wrap it under their own sentinel
-// without the message changing. Unwrap returns the parse error, nil for an
-// inverted range.
-type DayRangeError struct {
-	Field string // the offending parameter, DayRangeStartField or DayRangeEndField
-	Err   error  // the underlying parse error, nil for an inverted range
-	msg   string
-}
-
-// Error implements error.
-func (e *DayRangeError) Error() string { return e.msg }
-
-// Unwrap returns the underlying parse error.
-func (e *DayRangeError) Unwrap() error { return e.Err }
+// errDayRangeInverted is returned when the end date lies before the start date.
+var errDayRangeInverted = errors.NewStd(dayRangeEndField + " before " + dayRangeStartField)
 
 // DayRange is an inclusive range of local calendar dates and the half-open
 // range of instants they cover in one zone.
@@ -45,23 +31,26 @@ type DayRange struct {
 // ResolveDayRange converts inclusive YYYY-MM-DD dates in loc to a DayRange. An
 // empty endDate defaults to startDate plus defaultDays. A date whose midnight
 // does not exist in loc begins at the transition instant, and the days of the
-// range tile exactly. The error is a *DayRangeError. Callers apply their own limits to Days and the years.
+// range tile exactly. The error text is "start_date: <parse error>",
+// "end_date: <parse error>" or "end_date before start_date", so callers wrap it
+// under their own sentinel with %w without the message changing. Callers apply
+// their own limits to Days and the years.
 func ResolveDayRange(startDate, endDate string, defaultDays int, loc *time.Location) (DayRange, error) {
 	startDay, err := wallclock.ParseDate(startDate)
 	if err != nil {
-		return DayRange{}, &DayRangeError{Field: DayRangeStartField, Err: err, msg: DayRangeStartField + ": " + err.Error()}
+		return DayRange{}, fmt.Errorf("%s: %w", dayRangeStartField, err)
 	}
 	endDay := startDay.AddDays(defaultDays)
 	if endDate != "" {
 		endDay, err = wallclock.ParseDate(endDate)
 		if err != nil {
-			return DayRange{}, &DayRangeError{Field: DayRangeEndField, Err: err, msg: DayRangeEndField + ": " + err.Error()}
+			return DayRange{}, fmt.Errorf("%s: %w", dayRangeEndField, err)
 		}
 	}
 
 	days := wallclock.DaysBetween(startDay, endDay) + 1
 	if days < 1 {
-		return DayRange{}, &DayRangeError{Field: DayRangeEndField, msg: DayRangeEndField + " before " + DayRangeStartField}
+		return DayRange{}, errDayRangeInverted
 	}
 
 	start, _ := wallclock.DayBounds(startDay, loc)

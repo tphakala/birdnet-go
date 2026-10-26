@@ -14,9 +14,6 @@ func TestResolveDayRangeErrors(t *testing.T) {
 	t.Run("an unparseable start names start_date and keeps the parse error", func(t *testing.T) {
 		t.Parallel()
 		_, err := ResolveDayRange("2026-02-30", "", 30, time.UTC)
-		var rangeErr *DayRangeError
-		require.ErrorAs(t, err, &rangeErr)
-		assert.Equal(t, DayRangeStartField, rangeErr.Field)
 		var parseErr *time.ParseError
 		require.ErrorAs(t, err, &parseErr)
 		assert.Equal(t, "start_date: "+parseErr.Error(), err.Error())
@@ -25,9 +22,8 @@ func TestResolveDayRangeErrors(t *testing.T) {
 	t.Run("an unparseable end names end_date", func(t *testing.T) {
 		t.Parallel()
 		_, err := ResolveDayRange("2026-03-01", "2026-3-02", 30, time.UTC)
-		var rangeErr *DayRangeError
-		require.ErrorAs(t, err, &rangeErr)
-		assert.Equal(t, DayRangeEndField, rangeErr.Field)
+		require.Error(t, err)
+		assert.ErrorContains(t, err, "end_date: parsing time")
 	})
 
 	t.Run("an end before the start reads end_date before start_date", func(t *testing.T) {
