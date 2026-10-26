@@ -178,6 +178,15 @@ func TestZoneOffsetSQL(t *testing.T) {
 			want: "CASE WHEN c >= 1792890000 THEN 7200 ELSE 10800 END",
 		},
 		{
+			name: "equal offsets that are not adjacent keep every branch",
+			segments: []ZoneOffsetSegment{
+				{Start: 0, End: 100, OffsetSeconds: summer},
+				{Start: 100, End: changeAt, OffsetSeconds: winter},
+				{Start: changeAt, End: changeAt + 100, OffsetSeconds: summer},
+			},
+			want: "CASE WHEN c >= 1792890000 THEN 10800 WHEN c >= 100 THEN 7200 ELSE 10800 END",
+		},
+		{
 			name:     "no segments use the fallback",
 			fallback: -18000,
 			want:     "-18000",
@@ -187,6 +196,34 @@ func TestZoneOffsetSQL(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			assert.Equal(t, tc.want, zoneOffsetSQL("c", tc.segments, tc.fallback))
+		})
+	}
+}
+
+// TestExclusiveDayEnd pins the end of a local day on days where the next midnight is not
+// 24 hours after this one, including a zone whose DST change skips midnight itself.
+func TestExclusiveDayEnd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		zone  string
+		year  int
+		month time.Month
+		day   int
+		want  time.Time
+	}{
+		{"fall back day is 25 hours long", "Europe/Helsinki", 2026, time.October, 25, utc(2026, time.October, 25, 22, 0, 0)},
+		{"spring forward day is 23 hours long", "Europe/Helsinki", 2026, time.March, 29, utc(2026, time.March, 29, 21, 0, 0)},
+		// Havana skips 00:00-01:00 on 2026-03-08, so the day ends when 01:00 -04:00 begins.
+		{"day before a skipped midnight", "America/Havana", 2026, time.March, 7, utc(2026, time.March, 8, 5, 0, 0)},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			zone, err := time.LoadLocation(tc.zone)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want.Unix(), exclusiveDayEnd(tc.year, tc.month, tc.day, zone))
 		})
 	}
 }
