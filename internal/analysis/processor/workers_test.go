@@ -3,6 +3,9 @@ package processor
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -15,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/privacy"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // Mock types are now defined in test_helpers_test.go:
@@ -1327,6 +1331,57 @@ func TestBirdWeatherAction_Execute_RetryReusesEventTrackerDecision(t *testing.T)
 	require.Error(t, action.Execute(t.Context(), nil), "first attempt reaches the client check")
 	require.Error(t, action.Execute(t.Context(), nil), "retry must reach the client check too")
 }
+
+// TestBirdWeatherAction_Execute_UploadsResultInstant verifies that the instant of the
+// detection result, not the time of the upload, reaches BirdWeather with its own offset
+// for the second occurrence of a repeated hour.
+func TestBirdWeatherAction_Execute_UploadsResultInstant(t *testing.T) {
+	t.Parallel()
+
+	newYork := testutil.ToolchainZones(t)["America/New_York"]
+	require.NotNil(t, newYork)
+
+	settings := &conf.Settings{}
+	settings.Realtime.Birdweather.Enabled = true
+	settings.Realtime.Birdweather.ID = "test-station-123"
+
+	var uploadTimestamp string
+	client, err := birdweather.New(settings)
+	require.NoError(t, err)
+	client.HTTPClient.Transport = roundTripperFunc(func(req *http.Request) (*http.Response, error) {
+		body := `{"success": true}`
+		if req.Header.Get("Content-Type") == "application/octet-stream" {
+			uploadTimestamp = req.URL.Query().Get("timestamp")
+			body = `{"success": true, "soundscape": {"id": 12345}}`
+		}
+		return &http.Response{
+			StatusCode: http.StatusCreated,
+			Header:     http.Header{"Content-Type": []string{"application/json"}},
+			Body:       io.NopCloser(strings.NewReader(body)),
+			Request:    req,
+		}, nil
+	})
+
+	det := testDetection()
+	// 2026-11-01 01:30 in New York, second occurrence (EST, 06:30 UTC).
+	det.Result.Timestamp = time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC).In(newYork)
+	action := &BirdWeatherAction{
+		Settings:     settings,
+		Result:       det.Result,
+		pcmData:      make([]byte, 48000*2),
+		BwClient:     client,
+		EventTracker: NewEventTracker(time.Hour),
+	}
+
+	require.NoError(t, action.Execute(t.Context(), nil))
+	assert.Equal(t, "2026-11-01T01:30:00.000-0500", uploadTimestamp)
+}
+
+// roundTripperFunc adapts a function to http.RoundTripper.
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+// RoundTrip calls f.
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
 
 // TestBirdWeatherAction_Execute_ResolvesSettingsOncePerAttempt verifies that one
 // Execute reads one settings snapshot, so the enabled flag, the threshold and the
