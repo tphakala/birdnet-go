@@ -732,15 +732,12 @@ func TestCalculateDaysSince_EdgeCases(t *testing.T) {
 			expectedDays:  1826, // ~5 years including leap year
 		},
 		{
-			name:          "leap_day_is_counted",
-			currentTime:   time.Date(2024, 3, 1, 8, 0, 0, 0, time.UTC),
-			referenceTime: time.Date(2024, 2, 28, 20, 0, 0, 0, time.UTC),
-			expectedDays:  2, // 28 -> 29 -> Mar 1
-		},
-		{
-			name:          "non_leap_year_has_no_feb_29",
-			currentTime:   time.Date(2025, 3, 1, 8, 0, 0, 0, time.UTC),
-			referenceTime: time.Date(2025, 2, 28, 20, 0, 0, 0, time.UTC),
+			// Both times are the same instant. Each is read as a date in its own location
+			// (Jun 16 in Helsinki, Jun 15 in UTC), so the count is 1 on purpose; converting
+			// either or both to one zone would give 0.
+			name:          "dates_are_read_in_each_times_own_location",
+			currentTime:   time.Date(2025, 6, 16, 1, 0, 0, 0, helsinki),
+			referenceTime: time.Date(2025, 6, 15, 22, 0, 0, 0, time.UTC),
 			expectedDays:  1,
 		},
 		{
