@@ -71,7 +71,8 @@ func DayBounds(d Date, loc *time.Location) (start, end time.Time) {
 // hour repeat is not contiguous with its hour) the window is the single range from the first
 // occurrence of hour:00 to the first occurrence of (hour+hours):00. The end is clamped to the
 // next local midnight, so a window never reaches into the next date. hours of zero or less
-// yields an empty window (start == end).
+// yields an empty window (start == end). hour must be 0 to 23: a negative hour starts on
+// the previous date, and an hour of 24 or more gives an empty window.
 //
 // The range is half-open, so adjacent windows share a boundary without overlapping.
 func HourWindow(d Date, hour, hours int, loc *time.Location) (start, end time.Time) {

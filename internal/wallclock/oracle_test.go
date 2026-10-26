@@ -43,7 +43,7 @@ const (
 
 	// scanHalfWindow is the half width of the per-minute scans around each transition.
 	scanHalfWindow = 30 * secondsPerHour
-	// scanStep is the step of the Invariant 3 scan.
+	// scanStep is the step of the bucket agreement scan.
 	scanStep = 15 * secondsPerMinute
 	// segmentScanHalfWindow is the half width of the per-minute segment offset check.
 	segmentScanHalfWindow = 6 * secondsPerHour
@@ -188,7 +188,7 @@ func targetsAround(w, stepSeconds int64) []int64 {
 type zoneCheck struct {
 	fromYear, toYear int
 	targetStep       int64 // seconds between checked wall-clock targets
-	deep             bool  // brute-force cross-check, Invariant 3 and per-minute segment offsets
+	deep             bool  // brute-force cross-check, bucket agreement and per-minute segment offsets
 }
 
 // verifyZone checks wallclock against the oracle for every transition of loc in the years of cfg.
@@ -242,7 +242,7 @@ func verifyZone(t *testing.T, loc *time.Location, cfg zoneCheck) {
 	}
 }
 
-// verifyTiling checks Invariant 2 for the dates around the wall reading w: day windows are
+// verifyTiling checks that windows tile time for the dates around the wall reading w: day windows are
 // contiguous and each is tiled by its 24 one-hour windows.
 func verifyTiling(t *testing.T, loc *time.Location, w int64) {
 	t.Helper()
@@ -268,7 +268,7 @@ func verifyTiling(t *testing.T, loc *time.Location, w int64) {
 // repeatedWithin reports whether every backward shift among trs that lies in [lo, hi] repeats a
 // wall-clock interval inside one unit (an hour or a date) of the given length in seconds. That
 // is the exact condition under which a row's wall-clock bucket and its window agree
-// (Invariant 3).
+// (see the package documentation).
 func repeatedWithin(loc *time.Location, trs []int64, lo, hi, unit int64) bool {
 	for _, tr := range trs {
 		if tr < lo || tr > hi {
@@ -286,7 +286,7 @@ func repeatedWithin(loc *time.Location, trs []int64, lo, hi, unit int64) bool {
 	return true
 }
 
-// verifyBucketAgreement checks Invariant 3 around transition tr: the instant of every scanned
+// verifyBucketAgreement checks that buckets agree with windows around transition tr: the instant of every scanned
 // minute lies in the window of its own wall-clock hour and date exactly when every backward
 // shift nearby repeats an interval inside one hour (one date).
 func verifyBucketAgreement(t *testing.T, loc *time.Location, tr int64, trs []int64) {
@@ -427,8 +427,8 @@ func TestOracleLeapYearEnd(t *testing.T) {
 	}
 }
 
-// TestOracleSkippedAndRepeatedExamples pins the resolution rules on the zones the issue names,
-// with literal expectations, so the oracle itself is not the only witness.
+// TestOracleSkippedAndRepeatedExamples pins the resolution rules on zones with repeated and skipped
+// times, with literal expectations, so the oracle itself is not the only witness.
 func TestOracleSkippedAndRepeatedExamples(t *testing.T) {
 	t.Parallel()
 	zones := testutil.ToolchainZones(t)
