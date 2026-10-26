@@ -11,6 +11,9 @@ on:
       - '.golangci.yaml'
       - '.github/workflows/golangci-test.yml'
       - '.github/scripts/ci-test-report.sh'
+      - '.github/scripts/go-test-cache.sh'
+      - '.github/actions/setup-tensorflow/**'
+      - '.github/actions/setup-onnxruntime/**'
   pull_request:
     paths:
       - '**/*.go'
@@ -19,6 +22,9 @@ on:
       - '.golangci.yaml'
       - '.github/workflows/golangci-test.yml'
       - '.github/scripts/ci-test-report.sh'
+      - '.github/scripts/go-test-cache.sh'
+      - '.github/actions/setup-tensorflow/**'
+      - '.github/actions/setup-onnxruntime/**'
 
 permissions:
   contents: read
@@ -40,6 +46,10 @@ env:
   # Number of parallel shards the portable unit suite is split across. Keep in
   # sync with the matrix below and the `NR % <N>` modulo in the shard step.
   UNIT_SHARDS: 4
+  # Per-shard Go test cache for the unit-tests job (see "Go test cache in CI" in
+  # TESTING.md). Set to 'false' to turn it off: every unit test then runs again
+  # and nothing is restored or saved.
+  GO_TEST_CACHE: 'true'
 
 jobs:
   golangci:
@@ -100,6 +110,14 @@ jobs:
       fail-fast: false
       matrix:
         shard: [0, 1, 2, 3]
+    env:
+      # Only a push to main saves the Go test cache; pull requests and manual
+      # runs only restore it.
+      GO_TEST_CACHE_SAVE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      # PATH is part of the cache input of every test that looks up a binary. The
+      # runner's own PATH carries the Task version setup-task resolved, which
+      # changes without notice, so the tests get a fixed one.
+      UNIT_TEST_SYSTEM_PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     services:
       mosquitto:
         image: eclipse-mosquitto:1.6
@@ -118,6 +136,30 @@ jobs:
 
       - name: Setup ONNX Runtime
         uses: ./.github/actions/setup-onnxruntime
+
+      # The key carries what Go's test cache cannot see: the native libraries and
+      # headers, the Go version, the image family and the files that define this
+      # job. setup-go restores a GOCACHE shared by every Linux job and saved by
+      # whichever job missed first, possibly on a pull request ref; dropping it
+      # means test results reach this job only through its own key.
+      - name: Compute Go test cache key
+        id: go-test-cache
+        if: env.GO_TEST_CACHE == 'true'
+        env:
+          SHARD: ${{ matrix.shard }}
+          CI_FILES_HASH: ${{ hashFiles('.github/workflows/golangci-test.yml', '.github/scripts/go-test-cache.sh', '.github/actions/setup-tensorflow/action.yml', '.github/actions/setup-onnxruntime/action.yml') }}
+        run: |
+          .github/scripts/go-test-cache.sh key "$SHARD" >> "$GITHUB_OUTPUT"
+          rm -rf "$(go env GOCACHE)"
+
+      - name: Restore Go test cache
+        id: go-test-cache-restore
+        if: env.GO_TEST_CACHE == 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.go-test-cache.outputs.path }}
+          key: ${{ steps.go-test-cache.outputs.key }}
+          restore-keys: ${{ steps.go-test-cache.outputs.restore-prefix }}
 
       # notflite is retained as a minimal, strictly-ONNX build option, but after
       # arm64 containers went back to linking libtensorflowlite_c no shipped
@@ -168,11 +210,49 @@ jobs:
           echo "Shard ${{ matrix.shard }} owns $(wc -l < shard_pkgs.txt) packages:"
           cat shard_pkgs.txt
 
+      # Main and manual runs execute every test; a pull request replays only the
+      # results main produced on identical inputs. The run-full-ci label forces a
+      # real run too.
+      - name: Prepare Go test cache
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FULL_CI: ${{ contains(github.event.pull_request.labels.*.name, 'run-full-ci') }}
+        run: |
+          if [ "$GO_TEST_CACHE" != 'true' ]; then
+            echo "Go test cache is off: clearing cached test results"
+            go clean -testcache
+          elif [ "$EVENT_NAME" != 'pull_request' ]; then
+            echo "Not a pull request: clearing cached test results so every test runs"
+            go clean -testcache
+          elif [ "$FULL_CI" == 'true' ]; then
+            echo "run-full-ci label: clearing cached test results so every test runs"
+            go clean -testcache
+          fi
+          if [ "$GO_TEST_CACHE" == 'true' ]; then
+            .github/scripts/go-test-cache.sh self-test
+            # Go identifies the files a test opens by size and mtime, and a fresh
+            # checkout gives every file a new mtime. Tracked files get one derived
+            # from their content instead. This is the last step before the tests;
+            # only gotestsum's own output files land in the repo root after it, and
+            # no unit test lists the root.
+            .github/scripts/go-test-cache.sh normalize
+          fi
+
       - name: Run unit tests
         env:
           CI: true
           MQTT_TEST_BROKER: tcp://localhost:1883
+          # Go hashes file times with the local zone name; keep it equal on every run.
+          TZ: UTC
         run: |
+          # Fixed PATH, see UNIT_TEST_SYSTEM_PATH. gotestsum lives in GOPATH/bin and
+          # the import-guard and gen-schema tests run `go`.
+          GOROOT_DIR=$(go env GOROOT)
+          GOPATH_DIR=$(go env GOPATH)
+          export PATH="${GOROOT_DIR}/bin:${GOPATH_DIR}/bin:${UNIT_TEST_SYSTEM_PATH}"
+
+          # Packages replayed from the Go test cache are reported as `(cached)`;
+          # never add -count=1 here, it disables the cache.
           # gotestsum runs `go test -json` for us. --rerun-fails retries a failed
           # test once; if it then passes it is reported as flaky (not a gate
           # failure). --rerun-fails-abort-on-data-race keeps real data races fatal
@@ -192,6 +272,11 @@ jobs:
             -- -tags noembed,skipfrontend -race -short -timeout 300s
         timeout-minutes: 12
 
+      # Shows per run how many packages were replayed and which ones ran.
+      - name: Summarise Go test cache use
+        if: ${{ !cancelled() && env.GO_TEST_CACHE == 'true' }}
+        run: .github/scripts/go-test-cache.sh report "events-unit-${{ matrix.shard }}.json" "${{ matrix.shard }}"
+
       - name: Cleanup any remaining processes
         if: always()
         run: |
@@ -209,6 +294,31 @@ jobs:
             junit-unit-${{ matrix.shard }}.xml
             rerun-unit-${{ matrix.shard }}.txt
           if-no-files-found: warn
+
+      # Same key the restore used, or the entry's version will not match.
+      - name: Save Go test cache
+        if: success() && env.GO_TEST_CACHE == 'true' && env.GO_TEST_CACHE_SAVE == 'true' && steps.go-test-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.go-test-cache.outputs.path }}
+          key: ${{ steps.go-test-cache.outputs.key }}
+
+  # Deletes the cache entries this run's shards superseded, so the repository
+  # keeps one generation per shard. Runs on main only and executes no tests, so
+  # the token that may delete caches never meets pull request code.
+  unit-tests-cache-prune:
+    needs: unit-tests
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prune superseded Go test cache entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/go-test-cache.sh prune
 
   testcontainer-tests:
     needs: changes
