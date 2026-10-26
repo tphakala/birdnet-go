@@ -597,28 +597,28 @@ func TestSearch_IncludedHoursOnSQLite(t *testing.T) {
 	tests := []struct {
 		name           string
 		includedHours  []int
-		timezoneOffset int
+		timeZone       *time.Location
 		wantTotal      int64
 		wantDetectedAt []int64
 	}{
 		{
 			name:           "single hour UTC",
 			includedHours:  []int{14},
-			timezoneOffset: 0,
+			timeZone:       time.UTC,
 			wantTotal:      1,
 			wantDetectedAt: []int64{t14},
 		},
 		{
 			name:           "multiple hours UTC",
 			includedHours:  []int{8, 22},
-			timezoneOffset: 0,
+			timeZone:       time.UTC,
 			wantTotal:      2,
 			wantDetectedAt: []int64{t08, t22},
 		},
 		{
 			name:           "negative timezone offset UTC-5",
 			includedHours:  []int{9},
-			timezoneOffset: -5 * 3600,
+			timeZone:       time.FixedZone("UTC-5", -5*3600),
 			wantTotal:      1,
 			wantDetectedAt: []int64{t14},
 		},
@@ -627,8 +627,8 @@ func TestSearch_IncludedHoursOnSQLite(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			results, total, err := repo.Search(ctx, &SearchFilters{
-				IncludedHours:  tc.includedHours,
-				TimezoneOffset: tc.timezoneOffset,
+				IncludedHours: tc.includedHours,
+				TimeZone:      tc.timeZone,
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantTotal, total)
