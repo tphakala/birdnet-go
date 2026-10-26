@@ -1,6 +1,10 @@
 package repository
 
-import "github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+import (
+	"time"
+
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+)
 
 // VerificationFilter wraps VerificationStatus for search filters.
 type VerificationFilter entities.VerificationStatus
@@ -30,16 +34,17 @@ type SearchFilters struct {
 	// StartTime filters detections on or after this Unix timestamp (optional).
 	StartTime *int64
 
-	// EndTime filters detections on or before this Unix timestamp (optional).
+	// EndTime filters detections before this Unix timestamp (exclusive, optional).
 	EndTime *int64
 
 	// IncludedHours filters by hour of day (0-23).
 	// Supports non-contiguous ranges (e.g., dawn + night = [5,6,20,21,22,23,0,1,2,3,4]).
 	IncludedHours []int
 
-	// TimezoneOffset is the timezone offset in seconds for hour calculation.
-	// Used with IncludedHours to extract local hour from Unix timestamp.
-	TimezoneOffset int
+	// TimeZone is the station time zone in which IncludedHours are read as
+	// wall-clock hours: each detection is shifted by the UTC offset in effect at
+	// its own detected_at, so DST changes inside the range are handled. nil means UTC.
+	TimeZone *time.Location
 
 	// MinConfidence filters detections with confidence >= this value (optional).
 	MinConfidence *float64

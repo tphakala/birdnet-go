@@ -36,6 +36,7 @@ type detectionRepository struct {
 	metrics     *datastore.Metrics
 	useV2Prefix bool
 	isMySQL     bool
+	now         func() time.Time // clock for open-ended hour filters; nil means time.Now (tests inject it)
 }
 
 // NewDetectionRepository creates a new DetectionRepository.
@@ -141,9 +142,9 @@ func (r *detectionRepository) dateFromUnixExpr(column string, offsetSeconds int)
 // hourFromUnixExpr returns a SQL expression that extracts the wall-clock HOUR (0-23) of a
 // Unix timestamp in the configured timezone. offsetSeconds is that zone's UTC offset; it is
 // added to the epoch before bucketing, so the result is independent of the database/OS-local
-// timezone (unlike the older 'localtime'/FROM_UNIXTIME form). This mirrors the IncludedHours
-// search-filter expression. detected_at is always positive, so the integer division and
-// modulo stay non-negative even for negative (west-of-UTC) offsets.
+// timezone (unlike the older 'localtime'/FROM_UNIXTIME form). This is wallClockHourExpr, the
+// IncludedHours search-filter expression, with a single offset. detected_at is always positive,
+// so the integer division and modulo stay non-negative even for negative (west-of-UTC) offsets.
 // SQLite: CAST((column + offset) / 3600 AS INTEGER) % 24
 // MySQL:  FLOOR((column + offset) / 3600) % 24
 func (r *detectionRepository) hourFromUnixExpr(column string, offsetSeconds int) string {
@@ -683,14 +684,8 @@ func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *Search
 		query = query.Where("detected_at < ?", *filters.EndTime)
 	}
 	if len(filters.IncludedHours) > 0 {
-		// Extract local hour from Unix timestamp using timezone offset.
-		detTable := r.tableName()
-		var hourExpr string
-		if r.isMySQL {
-			hourExpr = fmt.Sprintf("FLOOR((%s.detected_at + %d) / 3600) %% 24", detTable, filters.TimezoneOffset)
-		} else {
-			hourExpr = fmt.Sprintf("CAST((%s.detected_at + %d) / 3600 AS INTEGER) %% 24", detTable, filters.TimezoneOffset)
-		}
+		from, to := r.hourFilterSpan(filters)
+		hourExpr := r.wallClockHourExpr(r.tableName()+".detected_at", filters.TimeZone, from, to)
 		query = query.Where(hourExpr+" IN ?", filters.IncludedHours)
 	}
 	if filters.MinConfidence != nil {

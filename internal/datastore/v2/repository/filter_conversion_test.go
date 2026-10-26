@@ -41,8 +41,8 @@ func TestDateRangeToUnix(t *testing.T) {
 		expectedStart := time.Date(2024, 6, 15, 0, 0, 0, 0, tz).Unix()
 		assert.Equal(t, expectedStart, *start)
 
-		// End should be 23:59:59 of last day
-		expectedEnd := time.Date(2024, 6, 17, 23, 59, 59, 0, tz).Unix()
+		// End is exclusive: the next midnight, so 23:59:59 of the last day is inside the range
+		expectedEnd := time.Date(2024, 6, 18, 0, 0, 0, 0, tz).Unix()
 		assert.Equal(t, expectedEnd, *end)
 	})
 
@@ -180,25 +180,27 @@ func TestMergeHourFilters(t *testing.T) {
 }
 
 // =============================================================================
-// GetTimezoneOffset Tests
+// GetTimezoneOffsetAt Tests
 // =============================================================================
 
-func TestGetTimezoneOffset(t *testing.T) {
+func TestGetTimezoneOffsetAt(t *testing.T) {
+	at := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
+
 	t.Run("UTC returns 0", func(t *testing.T) {
-		offset := GetTimezoneOffset(time.UTC)
+		offset := GetTimezoneOffsetAt(time.UTC, at)
 		assert.Equal(t, 0, offset)
 	})
 
 	t.Run("nil returns local offset", func(t *testing.T) {
-		offset := GetTimezoneOffset(nil)
-		_, expected := time.Now().Local().Zone()
+		offset := GetTimezoneOffsetAt(nil, at)
+		_, expected := at.In(time.Local).Zone()
 		assert.Equal(t, expected, offset)
 	})
 
 	t.Run("fixed offset timezone", func(t *testing.T) {
 		// Create a fixed +5 hours offset timezone
 		loc := time.FixedZone("Test", 5*3600)
-		offset := GetTimezoneOffset(loc)
+		offset := GetTimezoneOffsetAt(loc, at)
 		assert.Equal(t, 5*3600, offset)
 	})
 }
@@ -341,12 +343,8 @@ func TestConvertAdvancedFilters(t *testing.T) {
 		assert.Equal(t, 1, startTime.Day())
 		assert.Equal(t, 0, startTime.Hour())
 
-		// Verify end is end of June 30th
-		endTime := time.Unix(*result.EndTime, 0).In(tz)
-		assert.Equal(t, 2024, endTime.Year())
-		assert.Equal(t, time.June, endTime.Month())
-		assert.Equal(t, 30, endTime.Day())
-		assert.Equal(t, 23, endTime.Hour())
+		// End is exclusive: the start of the day after June 30th
+		assert.Equal(t, time.Date(2024, 7, 1, 0, 0, 0, 0, tz).Unix(), *result.EndTime)
 	})
 
 	t.Run("confidence filter conversion", func(t *testing.T) {
@@ -388,16 +386,6 @@ func TestConvertAdvancedFilters(t *testing.T) {
 
 		require.NotNil(t, result.IsReviewed)
 		assert.True(t, *result.IsReviewed)
-	})
-
-	t.Run("timezone offset is set", func(t *testing.T) {
-		filters := &datastore.AdvancedSearchFilters{}
-
-		result, err := ConvertAdvancedFilters(ctx, filters, nil, tz)
-		require.NoError(t, err)
-
-		// UTC should have offset 0
-		assert.Equal(t, 0, result.TimezoneOffset)
 	})
 
 	t.Run("sort field mapping", func(t *testing.T) {
@@ -866,13 +854,27 @@ func TestParseDateString(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		ts := time.Unix(*result, 0).In(tz)
-		assert.Equal(t, 2024, ts.Year())
-		assert.Equal(t, time.June, ts.Month())
-		assert.Equal(t, 15, ts.Day())
-		assert.Equal(t, 23, ts.Hour())
-		assert.Equal(t, 59, ts.Minute())
-		assert.Equal(t, 59, ts.Second())
+		// End of day is exclusive: the next midnight.
+		assert.Equal(t, time.Date(2024, 6, 16, 0, 0, 0, 0, tz).Unix(), *result)
+	})
+
+	t.Run("end of day on a DST change day is the next local midnight", func(t *testing.T) {
+		helsinki, err := time.LoadLocation("Europe/Helsinki")
+		require.NoError(t, err)
+
+		tests := []struct {
+			date string
+			want int64
+		}{
+			{"2026-03-29", time.Date(2026, 3, 29, 21, 0, 0, 0, time.UTC).Unix()},  // 23h day, next midnight is 00:00 EEST
+			{"2026-10-25", time.Date(2026, 10, 25, 22, 0, 0, 0, time.UTC).Unix()}, // 25h day, next midnight is 00:00 EET
+		}
+		for _, tc := range tests {
+			result, err := parseDateString(tc.date, helsinki, true)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, tc.want, *result, tc.date)
+		}
 	})
 
 	t.Run("invalid date returns error", func(t *testing.T) {
@@ -924,9 +926,7 @@ func TestConvertSearchFilters(t *testing.T) {
 		assert.Equal(t, 1, startTime.Day())
 		assert.Equal(t, 0, startTime.Hour())
 
-		endTime := time.Unix(*result.EndTime, 0).In(tz)
-		assert.Equal(t, 30, endTime.Day())
-		assert.Equal(t, 23, endTime.Hour())
+		assert.Equal(t, time.Date(2024, 7, 1, 0, 0, 0, 0, tz).Unix(), *result.EndTime)
 	})
 
 	t.Run("confidence range conversion", func(t *testing.T) {
@@ -1081,15 +1081,6 @@ func TestConvertSearchFilters(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, 200, result.Limit) // Capped to max, not reset to default
-	})
-
-	t.Run("timezone offset is set", func(t *testing.T) {
-		filters := &datastore.SearchFilters{}
-
-		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
-		require.NoError(t, err)
-
-		assert.Equal(t, 0, result.TimezoneOffset) // UTC = 0
 	})
 
 	t.Run("invalid date start returns error", func(t *testing.T) {
