@@ -232,11 +232,13 @@ type cellKey struct {
 // sparse (date, slot) grid for the seasonal density heatmap.
 //
 // startDate/endDate are inclusive YYYY-MM-DD calendar dates; the returned Dates slice lists
-// every calendar date in [startDate, endDate] exactly once, in order. Each timestamp is placed by its
-// wall-clock date and minute-of-day in loc, so bucketing follows the station timezone and is
-// correct across DST transitions (unlike a single-offset SQL expression). The slot width is
-// downsampled for wide ranges (see heatmapSlotResolution). Timestamps whose local date falls
-// outside the range are ignored. Only non-zero cells are emitted, ordered by (dateIndex, slot).
+// every calendar date in [startDate, endDate] exactly once, in order. The date axis is a plain
+// sequence of calendar dates and is not tied to loc, so a zone whose DST change skips midnight
+// cannot duplicate or drop a date. Each timestamp is placed by its wall-clock date and
+// minute-of-day in loc, so bucketing follows the station timezone and is correct across DST
+// transitions (unlike a single-offset SQL expression). The slot width is downsampled for wide
+// ranges (see heatmapSlotResolution). Timestamps whose local date falls outside the range are
+// ignored. Only non-zero cells are emitted, ordered by (dateIndex, slot).
 func buildActivityHeatmap(timestamps []int64, loc *time.Location, startDate, endDate string) (datastore.ActivityHeatmapData, error) {
 	if loc == nil {
 		loc = time.UTC

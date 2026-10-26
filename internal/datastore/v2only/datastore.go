@@ -3779,7 +3779,7 @@ func (ds *Datastore) GetYearOverYear(ctx context.Context, date string) (datastor
 
 	// Resolve the requested date (default: today in the station timezone) as a calendar date, so
 	// no instant is built for it: a midnight that a DST change skips has no instant of its own.
-	ref := wallclock.DateOf(time.Now().In(loc))
+	ref := defaultReferenceDate(time.Now(), loc)
 	if date != "" {
 		d, parseErr := wallclock.ParseDate(date)
 		if parseErr != nil {
@@ -3838,6 +3838,15 @@ func (ds *Datastore) GetSpeciesPhenology(ctx context.Context, startDate, endDate
 	return buildSpeciesPhenology(rows, ds.timezone, ds.resolveCommonName), nil
 }
 
+// civilDawnAnchorHour is the local hour of the instant handed to SunCalc for a date (noon).
+const civilDawnAnchorHour = 12
+
+// defaultReferenceDate returns the calendar date of now in loc, the year-over-year reference when
+// the caller gives none.
+func defaultReferenceDate(now time.Time, loc *time.Location) wallclock.Date {
+	return wallclock.DateOf(now.In(loc))
+}
+
 // civilDawnMinuteLookup returns a civilDawnMinuteLookup closure over the datastore's SunCalc and
 // station timezone. The closure yields civil dawn's station-local minute-of-day for a date, or
 // ok=false when no SunCalc is configured or civil dawn is undefined for the date (polar day/night).
@@ -3846,11 +3855,9 @@ func (ds *Datastore) civilDawnMinuteLookup() civilDawnMinuteLookup {
 		if ds.suncalc == nil {
 			return 0, false
 		}
-		// Anchor at local noon of the date before the lookup: SunCalc re-derives the calendar date
-		// in its own coordinate-derived zone, so passing midnight could land on the adjacent day
-		// (and return the wrong day's civil dawn) when that zone trails the configured station
-		// timezone. Noon keeps the intended calendar day for any real timezone offset.
-		civilDawn, ok := ds.suncalc.GetCivilDawn(wallclock.Noon(wallclock.HourStart(date, 0, ds.timezone)))
+		// Anchor at local noon of the date: SunCalc re-derives the calendar date in its own
+		// coordinate-derived zone, and noon is the instant furthest from either date boundary.
+		civilDawn, ok := ds.suncalc.GetCivilDawn(wallclock.At(date, civilDawnAnchorHour, 0, 0, ds.timezone))
 		if !ok {
 			return 0, false
 		}

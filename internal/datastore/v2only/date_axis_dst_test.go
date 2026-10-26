@@ -80,7 +80,7 @@ func TestComputeYearOverYearWindows_SkippedMidnightAnchorsAndBounds(t *testing.T
 
 	loc := toolchainZone(t, havanaZone)
 	// The transition instant: the day after 2026-03-07 starts when the clocks jump to 01:00.
-	transition := time.Date(2026, time.March, 8, 1, 0, 0, 0, loc)
+	transition := time.Date(2026, time.March, 8, 5, 0, 0, 0, time.UTC)
 
 	t.Run("reference on the skipped-midnight date", func(t *testing.T) {
 		t.Parallel()
@@ -91,6 +91,15 @@ func TestComputeYearOverYearWindows_SkippedMidnightAnchorsAndBounds(t *testing.T
 		assert.Equal(t, "2025-03-08", w.priorEnd)
 		assert.Equal(t, time.Date(2026, time.March, 9, 0, 0, 0, 0, loc).Unix(), w.curEndEpoch)
 		assert.Equal(t, time.Date(2026, time.January, 1, 0, 0, 0, 0, loc).Unix(), w.curStartEpoch)
+	})
+
+	t.Run("prior window ends at the transition of the same date a year earlier", func(t *testing.T) {
+		t.Parallel()
+		w := computeYearOverYearWindows(wallclock.Date{Year: 2026, Month: time.March, Day: 8}, loc)
+
+		// Cuba started DST at 00:00 on 2025-03-09 (05:00 UTC), so the prior day 2025-03-08 ends there.
+		assert.Equal(t, time.Date(2025, time.March, 9, 5, 0, 0, 0, time.UTC).Unix(), w.priorEndEpoch)
+		assert.Equal(t, time.Date(2025, time.January, 1, 5, 0, 0, 0, time.UTC).Unix(), w.priorStartEpoch)
 	})
 
 	t.Run("day after the end date starts at the transition", func(t *testing.T) {
@@ -114,6 +123,7 @@ func TestV2OnlyDatastore_GetYearOverYearAnchorsOnSkippedMidnightDate(t *testing.
 		"2026-03-08T06:00:00-04:00", // on the requested date
 		"2026-03-09T06:00:00-04:00", // after it
 		"2025-03-08T06:00:00-05:00", // same date a year earlier
+		"2025-03-08T23:30:00-05:00", // last half hour of that date, before its day ends at the transition
 	} {
 		seedDetection(t, ds, species, mustRFC3339(t, at))
 	}
@@ -126,10 +136,9 @@ func TestV2OnlyDatastore_GetYearOverYearAnchorsOnSkippedMidnightDate(t *testing.
 	assert.Equal(t, skippedMidnightDay, last.Date, "the series ends on the requested date")
 	assert.Equal(t, "03-08", last.MonthDay)
 	assert.Equal(t, 2, last.ThisYear, "detections up to and including the requested date")
-	assert.Equal(t, 1, last.LastYear)
+	assert.Equal(t, 2, last.LastYear, "both prior-year detections up to the end of that date")
 
-	// An empty date means today in the station zone and must still resolve to a window. The clock
-	// is not injectable, so which date it picks is not asserted here.
+	// An empty date means today in the station zone and must still resolve to a window.
 	today, err := ds.GetYearOverYear(t.Context(), "")
 	require.NoError(t, err)
 	assert.NotEmpty(t, today.Points)
@@ -155,4 +164,26 @@ func TestCivilDawnMinuteLookup_ReturnsDawnOfTheRequestedDate(t *testing.T) {
 	require.True(t, wantOK)
 	wantLocal := want.In(havana)
 	assert.Equal(t, wantLocal.Hour()*60+wantLocal.Minute(), got)
+}
+
+func TestDefaultReferenceDate_ReadsTheDateInTheStationZone(t *testing.T) {
+	t.Parallel()
+
+	// 23:30 UTC on 2026-03-08 is already 2026-03-09 in Kiritimati (UTC+14) and still 2026-03-08 in
+	// UTC and in Pago_Pago (UTC-11); now carries UTC, so the zone must be applied.
+	now := time.Date(2026, time.March, 8, 23, 30, 0, 0, time.UTC)
+	tests := []struct {
+		zone string
+		want wallclock.Date
+	}{
+		{"Pacific/Kiritimati", wallclock.Date{Year: 2026, Month: time.March, Day: 9}},
+		{"Pacific/Pago_Pago", wallclock.Date{Year: 2026, Month: time.March, Day: 8}},
+		{"UTC", wallclock.Date{Year: 2026, Month: time.March, Day: 8}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.zone, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, defaultReferenceDate(now, toolchainZone(t, tt.zone)))
+		})
+	}
 }
