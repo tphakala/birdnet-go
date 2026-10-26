@@ -95,13 +95,14 @@ func useEventLogs(t *testing.T, zone *time.Location, appLog, detectionLog string
 		},
 	}
 	previousZone := time.Local
+	previousLogger := logger.Global()
 	time.Local = zone
 	cl, err := logger.NewCentralLogger(cfg)
 	require.NoError(t, err)
 	logger.SetGlobal(cl)
 	t.Cleanup(func() {
 		_ = cl.Close()
-		logger.SetGlobal(nil)
+		logger.SetGlobal(previousLogger)
 		time.Local = previousZone
 	})
 }
