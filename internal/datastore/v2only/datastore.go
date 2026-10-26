@@ -744,22 +744,22 @@ func (ds *Datastore) EnsureModelRegistered(info detection.ModelInfo) error {
 // resolvePredictionLabels classifies and batch-resolves labels for all prediction results.
 // It groups predictions by their (labelTypeID, taxClassID), calls BatchGetOrCreate per group,
 // relabels any non-bird groups that were previously stored with the wrong (species) type, and
-// returns a predLabels slice in the same order as results. Returns nil if results is empty.
-func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []datastore.Results, modelID uint, taxonomicClassID *uint) ([]*entities.Label, error) {
-	if len(results) == 0 {
+// returns a predLabels slice in the same order as preds. Returns nil if preds is empty.
+func (ds *Datastore) resolvePredictionLabels(ctx context.Context, preds []predictionWrite, modelID uint, taxonomicClassID *uint) ([]*entities.Label, error) {
+	if len(preds) == 0 {
 		return nil, nil
 	}
 
 	// Collect species names and classify each prediction.
-	// Results.Species may contain concatenated "ScientificName_CommonName" format
+	// predictionWrite.label may contain concatenated "ScientificName_CommonName" format
 	// from legacy code (see AdditionalResultsToDatastoreResults). Extract only
 	// the scientific name portion for v2 label storage.
-	speciesNames := make([]string, len(results))
-	predTypeIDs := make([]uint, len(results))
-	predTaxIDs := make([]*uint, len(results))
-	for i, r := range results {
-		speciesNames[i] = detection.ExtractScientificName(r.Species)
-		predTypeIDs[i], predTaxIDs[i], _ = ds.labelTypeForRawLabel(r.RawLabel, taxonomicClassID)
+	speciesNames := make([]string, len(preds))
+	predTypeIDs := make([]uint, len(preds))
+	predTaxIDs := make([]*uint, len(preds))
+	for i, p := range preds {
+		speciesNames[i] = detection.ExtractScientificName(p.label)
+		predTypeIDs[i], predTaxIDs[i], _ = ds.labelTypeForRawLabel(p.rawLabel, taxonomicClassID)
 	}
 
 	// Group prediction names by (labelTypeID, taxClassID). taxClassID nil is represented
@@ -768,7 +768,7 @@ func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []data
 	type predGroupKey struct{ typeID, taxID uint }
 	groupNames := make(map[predGroupKey][]string)
 	groupTax := make(map[predGroupKey]*uint)
-	for i := range results {
+	for i := range preds {
 		var taxKey uint
 		if predTaxIDs[i] != nil {
 			taxKey = *predTaxIDs[i]
@@ -783,7 +783,7 @@ func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []data
 	// the same name were classified into two groups, both BatchGetOrCreate calls return the same
 	// underlying label (same ID). Downstream uses only the label ID, so the merge is safe
 	// regardless of group iteration order.
-	merged := make(map[string]*entities.Label, len(results))
+	merged := make(map[string]*entities.Label, len(preds))
 	for k, names := range groupNames {
 		m, err := ds.label.BatchGetOrCreate(ctx, names, modelID, k.typeID, groupTax[k])
 		if err != nil {
@@ -803,12 +803,12 @@ func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []data
 	}
 
 	// Resolve predLabels in original order.
-	predLabels := make([]*entities.Label, len(results))
-	for i := range results {
+	predLabels := make([]*entities.Label, len(preds))
+	for i := range preds {
 		sciName := speciesNames[i]
 		lbl, ok := merged[sciName]
 		if !ok {
-			return nil, fmt.Errorf("label not found for species %s after batch creation", results[i].Species)
+			return nil, fmt.Errorf("label not found for species %s after batch creation", preds[i].label)
 		}
 		predLabels[i] = lbl
 	}
@@ -821,18 +821,37 @@ func (ds *Datastore) resolvePredictionLabels(ctx context.Context, results []data
 // partial writes (e.g., detection saved but predictions failed).
 // Model contributions are written after the transaction commits, on a best-effort
 // basis: a failure to resolve or persist them is logged and does not fail the save.
+//
+// This is the datastore.Interface compatibility path: the detection instant comes
+// from the Note's wall-clock Date and Time strings and is ambiguous in a repeated
+// DST hour.
 func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) error {
-	ctx := context.Background()
+	id, err := ds.saveDetection(context.Background(), writeFromNote(note, results, ds.timezone))
+	if err != nil {
+		return err
+	}
 
-	// Use the model info from the note if available, otherwise fall back to the default.
+	// Propagate database-assigned ID back to the caller's Note.
+	// Without this, detection_repository.Save() reads note.ID=0 and
+	// downstream actions (MQTT, SSE) publish detectionId=0 (GitHub #2453).
+	note.ID = id
+	return nil
+}
+
+// saveDetection is the single v2 write path behind every save entry point. It
+// resolves the model, labels and audio source, writes the detection and its
+// predictions in one transaction, then stores model contributions best effort.
+// It returns the database-assigned detection ID.
+func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint, error) {
+	// Use the model info from the write if available, otherwise fall back to the default.
 	// This allows multi-model detections to be attributed to the correct model.
-	modelInfo := note.Model
+	modelInfo := w.model
 	if modelInfo.Name == "" {
 		modelInfo = detection.DefaultModelInfo()
 	}
 	model, err := ds.model.GetOrCreate(ctx, modelInfo.Name, modelInfo.Version, modelInfo.Variant, detection.ResolveModelType(modelInfo.Name, modelInfo.Version), modelInfo.ClassifierPath)
 	if err != nil {
-		return fmt.Errorf("failed to get/create model: %w", err)
+		return 0, fmt.Errorf("failed to get/create model: %w", err)
 	}
 
 	// Resolve taxonomic class based on model type
@@ -845,15 +864,15 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// Classify the primary label: non-bird Perch sound classes get their category's label type
 	// and a nil taxonomic class; birds and unrecognized labels (including empty RawLabel) keep
 	// the species label type and the model's taxonomic class.
-	primaryTypeID, primaryTaxID, primaryNonBird := ds.labelTypeForRawLabel(note.RawLabel, taxonomicClassID)
-	label, err := ds.label.GetOrCreate(ctx, detection.ExtractScientificName(note.ScientificName), model.ID, primaryTypeID, primaryTaxID)
+	primaryTypeID, primaryTaxID, primaryNonBird := ds.labelTypeForRawLabel(w.rawLabel, taxonomicClassID)
+	label, err := ds.label.GetOrCreate(ctx, detection.ExtractScientificName(w.scientificName), model.ID, primaryTypeID, primaryTaxID)
 	if err != nil {
-		return fmt.Errorf("failed to get/create label: %w", err)
+		return 0, fmt.Errorf("failed to get/create label: %w", err)
 	}
 	// First-writer-wins relabel: if this non-bird class was previously created as species, correct its type.
 	if primaryNonBird && label.LabelTypeID != primaryTypeID {
 		if err := ds.label.UpdateLabelType(ctx, label.ID, primaryTypeID); err != nil {
-			return fmt.Errorf("failed to relabel non-bird label %q: %w", label.ScientificName, err)
+			return 0, fmt.Errorf("failed to relabel non-bird label %q: %w", label.ScientificName, err)
 		}
 		label.LabelTypeID = primaryTypeID
 		label.TaxonomicClassID = nil
@@ -863,77 +882,47 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	// Uses batch operation to avoid N+1 queries. Predictions are grouped by their
 	// classified (labelTypeID, taxClassID) so BatchGetOrCreate can be called once per
 	// group. Non-bird groups are relabeled if they were previously stored as species.
-	predLabels, err := ds.resolvePredictionLabels(ctx, results, model.ID, taxonomicClassID)
+	predLabels, err := ds.resolvePredictionLabels(ctx, w.predictions, model.ID, taxonomicClassID)
 	if err != nil {
-		return err
+		return 0, err
 	}
-
-	// Parse the date string and time string to get Unix timestamp
-	detectedAt := parseDetectionTimestamp(note.Date, note.Time, ds.timezone)
 
 	det := &entities.Detection{
 		LabelID:    label.ID,
 		ModelID:    model.ID,
-		DetectedAt: detectedAt,
-		Confidence: note.Confidence,
-		Unlikely:   note.Unlikely,
+		DetectedAt: w.detectedAt,
+		Confidence: w.confidence,
+		Unlikely:   w.unlikely,
 	}
 
-	if note.Latitude != 0 {
-		det.Latitude = &note.Latitude
+	if w.latitude != 0 {
+		det.Latitude = &w.latitude
 	}
-	if note.Longitude != 0 {
-		det.Longitude = &note.Longitude
+	if w.longitude != 0 {
+		det.Longitude = &w.longitude
 	}
-	if note.ClipName != "" {
-		det.ClipName = &note.ClipName
+	if w.clipName != "" {
+		det.ClipName = &w.clipName
 		// The rate describes the clip file, so it is stored only with a clip;
 		// an unknown rate stays NULL rather than 0.
-		if note.ClipSampleRate > 0 {
-			det.ClipSampleRate = &note.ClipSampleRate
+		if w.clipSampleRate > 0 {
+			det.ClipSampleRate = &w.clipSampleRate
 		}
 	}
-	if !note.BeginTime.IsZero() {
-		bt := note.BeginTime.UnixMilli()
+	if !w.beginTime.IsZero() {
+		bt := w.beginTime.UnixMilli()
 		det.BeginTime = &bt
 	}
-	if !note.EndTime.IsZero() {
-		et := note.EndTime.UnixMilli()
+	if !w.endTime.IsZero() {
+		et := w.endTime.UnixMilli()
 		det.EndTime = &et
 	}
-	if note.ProcessingTime > 0 {
-		pt := note.ProcessingTime.Milliseconds()
+	if w.processingTime > 0 {
+		pt := w.processingTime.Milliseconds()
 		det.ProcessingTimeMs = &pt
 	}
 
-	// Resolve audio source if provided (follows same pattern as conversion.go)
-	if note.Source.SafeString != "" && ds.source != nil {
-		nodeName := note.SourceNode
-		if nodeName == "" {
-			nodeName = entities.DefaultSourceNodeName
-		}
-		var displayName *string
-		if note.Source.DisplayName != "" {
-			displayName = &note.Source.DisplayName
-		}
-		source, sourceErr := ds.source.GetOrCreate(ctx,
-			note.Source.SafeString,
-			nodeName,
-			displayName,
-			entities.SourceType(""))
-		if sourceErr != nil {
-			if ds.log != nil {
-				ds.log.Warn("audio source resolution failed during save", logger.Error(sourceErr))
-			}
-			// Continue without source - not fatal
-		} else {
-			det.SourceID = &source.ID
-		}
-	} else if note.Source.SafeString != "" && ds.source == nil {
-		if ds.log != nil {
-			ds.log.Debug("audio source provided but source repository is nil, skipping resolution")
-		}
-	}
+	det.SourceID = ds.resolveSaveSource(ctx, w)
 
 	// Use timeout context for transaction to prevent indefinite lock holding.
 	txCtx, cancel := context.WithTimeout(ctx, saveTransactionTimeout)
@@ -948,8 +937,8 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 			return fmt.Errorf("failed to save detection: %w", err)
 		}
 
-		if len(results) > 0 && len(predLabels) > 0 {
-			preds := buildDedupedPredictions(det.ID, results, predLabels)
+		if len(w.predictions) > 0 && len(predLabels) > 0 {
+			preds := buildDedupedPredictions(det.ID, w.predictions, predLabels)
 			if len(preds) > 0 {
 				if err := tx.Create(&preds).Error; err != nil {
 					return fmt.Errorf("failed to save predictions: %w", err)
@@ -959,19 +948,52 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 
 		return nil
 	}); err != nil {
-		return err
+		return 0, err
 	}
 
-	// Propagate database-assigned ID back to the caller's Note.
-	// Without this, detection_repository.Save() reads note.ID=0 and
-	// downstream actions (MQTT, SSE) publish detectionId=0 (GitHub #2453).
-	note.ID = det.ID
-
-	contribCtx, cancelContribs := context.WithTimeout(ctx, saveContributionsTimeout)
+	// Contributions are supplementary and run after the commit, so they are detached
+	// from the caller's cancellation: the detection is already stored.
+	contribCtx, cancelContribs := context.WithTimeout(context.WithoutCancel(ctx), saveContributionsTimeout)
 	defer cancelContribs()
-	ds.saveModelContributionsBestEffort(contribCtx, det.ID, note.ModelContributions)
+	ds.saveModelContributionsBestEffort(contribCtx, det.ID, w.modelContributions)
 
-	return nil
+	return det.ID, nil
+}
+
+// resolveSaveSource resolves the audio source row for a write and returns its ID,
+// or nil when the write carries no source or resolution fails (not fatal).
+func (ds *Datastore) resolveSaveSource(ctx context.Context, w *detectionWrite) *uint {
+	if w.sourceSafeString == "" {
+		return nil
+	}
+	if ds.source == nil {
+		if ds.log != nil {
+			ds.log.Debug("audio source provided but source repository is nil, skipping resolution")
+		}
+		return nil
+	}
+	// Resolve audio source if provided (follows same pattern as conversion.go)
+	nodeName := w.sourceNode
+	if nodeName == "" {
+		nodeName = entities.DefaultSourceNodeName
+	}
+	var displayName *string
+	if w.sourceDisplayName != "" {
+		displayName = &w.sourceDisplayName
+	}
+	source, err := ds.source.GetOrCreate(ctx,
+		w.sourceSafeString,
+		nodeName,
+		displayName,
+		entities.SourceType(""))
+	if err != nil {
+		if ds.log != nil {
+			ds.log.Warn("audio source resolution failed during save", logger.Error(err))
+		}
+		// Continue without source - not fatal
+		return nil
+	}
+	return &source.ID
 }
 
 // saveModelContributionsBestEffort resolves and persists model contributions for a
@@ -992,14 +1014,14 @@ func (ds *Datastore) saveModelContributionsBestEffort(ctx context.Context, detec
 // buildDedupedPredictions deduplicates predictions by label_id, keeping the highest confidence
 // for each label. This is defense-in-depth against UNIQUE constraint violations when custom
 // BirdNET classifiers have the same species at multiple positions in the label file.
-func buildDedupedPredictions(detectionID uint, results []datastore.Results, predLabels []*entities.Label) []*entities.DetectionPrediction {
-	seen := make(map[uint]int, len(results))
-	preds := make([]*entities.DetectionPrediction, 0, len(results))
-	for i, r := range results {
+func buildDedupedPredictions(detectionID uint, in []predictionWrite, predLabels []*entities.Label) []*entities.DetectionPrediction {
+	seen := make(map[uint]int, len(in))
+	preds := make([]*entities.DetectionPrediction, 0, len(in))
+	for i, p := range in {
 		labelID := predLabels[i].ID
 		if idx, exists := seen[labelID]; exists {
-			if float64(r.Confidence) > preds[idx].Confidence {
-				preds[idx].Confidence = float64(r.Confidence)
+			if p.confidence > preds[idx].Confidence {
+				preds[idx].Confidence = p.confidence
 			}
 			continue
 		}
@@ -1007,14 +1029,12 @@ func buildDedupedPredictions(detectionID uint, results []datastore.Results, pred
 		preds = append(preds, &entities.DetectionPrediction{
 			DetectionID: detectionID,
 			LabelID:     labelID,
-			Confidence:  float64(r.Confidence),
+			Confidence:  p.confidence,
 		})
 	}
 	return preds
 }
 
-// contributionEntity builds the stored row for one model's contribution. The four
-// extended statistics are set only when c.HasHitStats(); otherwise they stay NULL.
 func contributionEntity(modelID uint, c *detection.ResultModelContrib) *entities.DetectionModelContribution {
 	e := &entities.DetectionModelContribution{
 		ModelID:       modelID,

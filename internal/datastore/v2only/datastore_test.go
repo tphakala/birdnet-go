@@ -1678,6 +1678,55 @@ func TestV2OnlyDatastore_Save_DuplicatePredictionLabels(t *testing.T) {
 	assert.Len(t, preds, 2, "duplicate label should be collapsed to single prediction")
 }
 
+// TestV2OnlyDatastore_Save_ResolvesSourceAndKeepsHighestDuplicateConfidence pins
+// two behaviours of the shared v2 write path that the other Save tests leave open:
+// the audio source row takes the note's node name and display name (and a note
+// with no source gets none), and duplicate prediction labels keep the highest
+// confidence.
+func TestV2OnlyDatastore_Save_ResolvesSourceAndKeepsHighestDuplicateConfidence(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	note := &datastore.Note{
+		Date:           "2024-06-15",
+		Time:           "08:30:00",
+		ScientificName: "Periparus ater",
+		Confidence:     0.99,
+		SourceNode:     "garage-node",
+		Source:         datastore.AudioSource{SafeString: "rtsp_garage", DisplayName: "Garage"},
+	}
+	results := []datastore.Results{
+		{Species: "Periparus ater_Coal Tit", Confidence: 0.50},
+		{Species: "Periparus ater_Coal Tit", Confidence: 0.92},
+		{Species: "Periparus ater_Coal Tit", Confidence: 0.70},
+	}
+	require.NoError(t, ds.Save(note, results))
+	require.NotZero(t, note.ID)
+
+	var det entities.Detection
+	require.NoError(t, ds.manager.DB().First(&det, note.ID).Error)
+	require.NotNil(t, det.SourceID, "a note with a source must reference an audio source row")
+	var src entities.AudioSource
+	require.NoError(t, ds.manager.DB().First(&src, *det.SourceID).Error)
+	assert.Equal(t, "rtsp_garage", src.SourceURI)
+	assert.Equal(t, "garage-node", src.NodeName)
+	require.NotNil(t, src.DisplayName)
+	assert.Equal(t, "Garage", *src.DisplayName)
+
+	var preds []entities.DetectionPrediction
+	require.NoError(t, ds.manager.DB().Where("detection_id = ?", note.ID).Find(&preds).Error)
+	require.Len(t, preds, 1, "duplicate labels collapse to one prediction")
+	assert.InDelta(t, float64(float32(0.92)), preds[0].Confidence, 1e-9, "the highest duplicate confidence is kept")
+
+	bare := &datastore.Note{Date: "2024-06-15", Time: "08:31:00", ScientificName: "Parus major", Confidence: 0.8}
+	require.NoError(t, ds.Save(bare, nil))
+	var bareDet entities.Detection
+	require.NoError(t, ds.manager.DB().First(&bareDet, bare.ID).Error)
+	assert.Nil(t, bareDet.SourceID, "a note without a source gets no audio source row")
+}
+
 // TestGetTopBirdsData_SpeciesCode verifies that species codes from eBird taxonomy
 // are populated in the GetTopBirdsData response. Regression test for issue #2191.
 func TestGetTopBirdsData_SpeciesCode(t *testing.T) {
