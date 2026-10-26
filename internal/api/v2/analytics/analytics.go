@@ -132,6 +132,7 @@ type SpeciesDailySummary struct {
 	DaysThisYear    int    `json:"days_this_year,omitempty"`     // Days since first this year
 	DaysThisSeason  int    `json:"days_this_season,omitempty"`   // Days since first this season
 	CurrentSeason   string `json:"current_season,omitempty"`     // Current season name
+	TaxonomicClass  string `json:"taxonomic_class"`              // Label's taxonomic class (e.g. "Aves", "Chiroptera"); "" when the label has none
 }
 
 // SpeciesSummary represents a bird in the overall species summary API response
@@ -243,6 +244,7 @@ func (c *Handler) GetDailySpeciesSummary(ctx echo.Context) error {
 		// Error logged in helper
 		return c.HandleError(ctx, err, "Failed to build response", http.StatusInternalServerError)
 	}
+	c.applyTaxonomicClasses(queryCtx, result)
 
 	// 5. Sort (limit already applied at database level)
 	sort.Slice(result, func(i, j int) bool {
@@ -385,9 +387,9 @@ func (c *Handler) processSingleDateForBatch(ctx context.Context, selectedDate st
 		)
 		return nil, err
 	}
-
 	// Sort and apply limit
 	result = sortAndLimitSpeciesSummary(result, limit)
+	c.applyTaxonomicClasses(ctx, result)
 
 	return result, nil
 }
