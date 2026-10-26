@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 func TestLocalDayRange(t *testing.T) {
@@ -107,4 +108,40 @@ func TestLocalDayRange(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, time.Date(2026, 1, 1, 18, 30, 0, 0, time.UTC), start.UTC())
 	})
+}
+
+// TestLocalDayRangeSkippedMidnight pins the day bounds of dates whose midnight does not exist.
+func TestLocalDayRangeSkippedMidnight(t *testing.T) {
+	t.Parallel()
+	zones := testutil.ToolchainZones(t)
+
+	t.Run("a day starting in a skipped midnight begins at the transition instant", func(t *testing.T) {
+		t.Parallel()
+		// America/Havana springs forward at 00:00 on 2026-03-08, so the day begins at 01:00 CDT.
+		start, end, _, err := localDayRange("2026-03-08", "2026-03-08", zones["America/Havana"])
+		require.NoError(t, err)
+		assert.Equal(t, time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC), start.UTC())
+		assert.Equal(t, time.Date(2026, 3, 9, 4, 0, 0, 0, time.UTC), end.UTC())
+	})
+
+	t.Run("a range ending before a skipped midnight ends at the transition instant", func(t *testing.T) {
+		t.Parallel()
+		// America/Santiago springs forward at 24:00 on 2026-09-05; 2026-09-06 begins at 01:00.
+		start, end, _, err := localDayRange("2026-09-05", "2026-09-05", zones["America/Santiago"])
+		require.NoError(t, err)
+		assert.Equal(t, time.Date(2026, 9, 5, 4, 0, 0, 0, time.UTC), start.UTC())
+		assert.Equal(t, time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC), end.UTC())
+
+		start, _, _, err = localDayRange("2026-09-06", "2026-09-06", zones["America/Santiago"])
+		require.NoError(t, err)
+		assert.Equal(t, end.UTC(), start.UTC(), "consecutive days tile")
+	})
+}
+
+func TestLocalDayRangeReportsTheTrueDayCount(t *testing.T) {
+	t.Parallel()
+	// 1970-01-01 to 9998-12-31 is longer than the 292 years time.Time.Sub can hold.
+	_, _, _, err := localDayRange("1970-01-01", "9998-12-31", time.UTC)
+	require.ErrorIs(t, err, ErrRangeTooLong)
+	assert.ErrorContains(t, err, "2932532 days")
 }
