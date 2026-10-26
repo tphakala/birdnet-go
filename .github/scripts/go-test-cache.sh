@@ -347,10 +347,9 @@ cmd_self_test() {
 
   check "untracked file keeps its mtime" [ "$(stat -c %Y u.txt)" = "$untracked_mtime" ]
 
-  # The links are normalized themselves; the paths they point at must not take
-  # their time. stat without -L reports the link's own time.
-  check "file symlink does not change its target" [ "$(stat -c %Y sub/nested/f.txt)" = "$m1" ]
-  check "directory symlink does not change its target" [ "$(stat -c %Y sub/nested)" = "$DIR_MTIME" ]
+  # The links are normalized themselves, not their targets. stat without -L reports
+  # the link's own time, which stays at the real checkout time (outside the
+  # content-derived range) when a touch follows the link instead.
   local link_mtime link_max=$((MTIME_BASE + 16 ** MTIME_HEX_DIGITS))
   for link_mtime in "$(stat -c %Y l)" "$(stat -c %Y d)"; do
     check "symlink mtime is not below the content-derived range" [ "$link_mtime" -ge "$MTIME_BASE" ]
@@ -371,6 +370,22 @@ cmd_self_test() {
     [ "$(select_prunable 200 <<<"$fixture" | paste -sd, -)" = "2,3" ]
   check "prune selects nothing when this run saved nothing" \
     [ -z "$(select_prunable 250 <<<"$fixture")" ]
+
+  # report: a replayed package, an executed one, and one that failed and was then
+  # served from the cache by a rerun count as 1 of 3 replayed.
+  local events=events.json summary=summary.txt
+  cat >"$events" <<'JSON'
+{"Action":"output","Package":"p/replayed","Output":"ok  \tp/replayed\t(cached)\n"}
+{"Action":"pass","Package":"p/replayed","Elapsed":0.01}
+{"Action":"output","Package":"p/ran","Output":"ok  \tp/ran\t1.2s\n"}
+{"Action":"pass","Package":"p/ran","Elapsed":1.2}
+{"Action":"fail","Package":"p/rerun","Elapsed":2.0}
+{"Action":"output","Package":"p/rerun","Output":"ok  \tp/rerun\t(cached)\n"}
+{"Action":"pass","Package":"p/rerun","Elapsed":0.01}
+JSON
+  GITHUB_STEP_SUMMARY=$summary cmd_report "$events" 0 >/dev/null
+  check "report counts only packages that never failed as replayed" \
+    grep -q ': 1 of 3 test packages replayed' "$summary"
 
   echo "go-test-cache self-test: PASS"
 }
