@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 func TestResolveDayRangeErrors(t *testing.T) {
@@ -49,4 +50,17 @@ func TestResolveDayRangeBounds(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "2026-03-31", r.EndDate.String(), "an empty end adds the default days")
 	assert.Equal(t, 31, r.Days)
+}
+
+// TestResolveDayRangeSkippedDate pins that a date which does not exist in the zone (Samoa skipped
+// 2011-12-30 when it crossed the date line) resolves to an empty window of one day.
+func TestResolveDayRangeSkippedDate(t *testing.T) {
+	t.Parallel()
+	apia := testutil.ToolchainZones(t)["Pacific/Apia"]
+	require.NotNil(t, apia)
+
+	r, err := ResolveDayRange("2011-12-30", "2011-12-30", 1, apia)
+	require.NoError(t, err)
+	assert.True(t, r.Start.Equal(r.End), "a skipped date is an empty window")
+	assert.Equal(t, 1, r.Days)
 }
