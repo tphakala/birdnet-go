@@ -192,7 +192,6 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 			Component("imports").
 			Category(errors.CategoryDatabase).
 			Context("phase", "dedup").
-			Context("source_node", opts.SourceNode).
 			Build()
 	}
 
@@ -369,7 +368,7 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 // When loc is the station zone the two keys are equal.
 //
 // Known limits, accepted: when loc differs from the station zone, a row in the
-// station zone's repeated DST hour can be imported again, as can a re-import
+// station zone's repeated or skipped DST hour can be imported again, as can a re-import
 // whose location differs from that of the first import. A source row can also
 // be skipped as a duplicate of a different stored row that has the same wall
 // second, species and confidence.
