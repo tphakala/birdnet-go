@@ -16,16 +16,16 @@ type privacyFilterDiscardRepository struct {
 	db          *gorm.DB
 	metrics     *datastore.Metrics
 	useV2Prefix bool
-	isMySQL     bool
 }
 
 // NewPrivacyFilterDiscardRepository creates a new PrivacyFilterDiscardRepository.
-func NewPrivacyFilterDiscardRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix, isMySQL bool) PrivacyFilterDiscardRepository {
+// The statements are dialect neutral, so the isMySQL argument of the other
+// repository constructors is not taken.
+func NewPrivacyFilterDiscardRepository(db *gorm.DB, metrics *datastore.Metrics, useV2Prefix bool) PrivacyFilterDiscardRepository {
 	return &privacyFilterDiscardRepository{
 		db:          db,
 		metrics:     metrics,
 		useV2Prefix: useV2Prefix,
-		isMySQL:     isMySQL,
 	}
 }
 

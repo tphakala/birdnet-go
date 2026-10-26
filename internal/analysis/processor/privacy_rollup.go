@@ -48,6 +48,15 @@ func (p *Processor) registeredSource(id string) (*audiocore.AudioSource, bool) {
 	return registry.Get(id)
 }
 
+// nodeOrDefault returns name, or the default source node name when it is empty,
+// as the detection save path does.
+func nodeOrDefault(name string) string {
+	if name == "" {
+		return entities.DefaultSourceNodeName
+	}
+	return name
+}
+
 // recordPrivacyEvents completes the source identity of events and hands them to
 // the recorder. It must run with pendingMutex and detectionMutex released. A
 // processor without a recorder does nothing.
@@ -55,10 +64,7 @@ func (p *Processor) recordPrivacyEvents(settings *conf.Settings, events ...sourc
 	if p.privacyRollup == nil {
 		return
 	}
-	node := settings.Main.Name
-	if node == "" {
-		node = entities.DefaultSourceNodeName
-	}
+	node := nodeOrDefault(settings.Main.Name)
 	for i := range events {
 		ev := events[i].ev
 		ev.NodeName = node
@@ -76,10 +82,6 @@ func (p *Processor) recordPrivacyEvents(settings *conf.Settings, events ...sourc
 func privacyDiscard(settings *conf.Settings, item *PendingDetection, priv *privacyCheck, now time.Time) privacyrollup.Discard {
 	pf := &settings.Realtime.PrivacyFilter
 	res := &item.Detection.Result
-	node := res.SourceNode
-	if node == "" {
-		node = entities.DefaultSourceNodeName
-	}
 	hits := make([]privacyrollup.DiscardHit, len(priv.contributions))
 	for i := range priv.contributions {
 		c := &priv.contributions[i]
@@ -88,7 +90,7 @@ func privacyDiscard(settings *conf.Settings, item *PendingDetection, priv *priva
 	return privacyrollup.Discard{
 		At:                  now,
 		SourceURI:           res.AudioSource.SafeString,
-		NodeName:            node,
+		NodeName:            nodeOrDefault(res.SourceNode),
 		DisplayName:         res.AudioSource.DisplayName,
 		ScientificName:      res.Species.ScientificName,
 		CommonName:          res.Species.CommonName,

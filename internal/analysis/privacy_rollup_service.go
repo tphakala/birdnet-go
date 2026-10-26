@@ -26,7 +26,7 @@ func (s *APIServerService) startPrivacyRollup() {
 	useV2Prefix := mgr.TablePrefix() != ""
 	isMySQL := mgr.IsMySQL()
 	rows := repository.NewPrivacyFilterHourlyRepository(mgr.DB(), nil, useV2Prefix, isMySQL)
-	discards := repository.NewPrivacyFilterDiscardRepository(mgr.DB(), nil, useV2Prefix, isMySQL)
+	discards := repository.NewPrivacyFilterDiscardRepository(mgr.DB(), nil, useV2Prefix)
 	sources := repository.NewAudioSourceRepository(mgr.DB(), nil, useV2Prefix, isMySQL)
 
 	// The resolver captures only the repository: Stop clears s.proc before the

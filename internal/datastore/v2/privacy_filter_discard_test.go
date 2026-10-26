@@ -36,7 +36,7 @@ func TestPrivacyFilterDiscardRepository_SQLite(t *testing.T) {
 func exercisePrivacyDiscardRepository(t *testing.T, db *gorm.DB, useV2Prefix, isMySQL bool) {
 	t.Helper()
 	ctx := t.Context()
-	repo := repository.NewPrivacyFilterDiscardRepository(db, nil, useV2Prefix, isMySQL)
+	repo := repository.NewPrivacyFilterDiscardRepository(db, nil, useV2Prefix)
 	hourly := repository.NewPrivacyFilterHourlyRepository(db, nil, useV2Prefix, isMySQL)
 	sources := repository.NewAudioSourceRepository(db, nil, useV2Prefix, isMySQL)
 
