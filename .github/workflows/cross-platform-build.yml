@@ -39,6 +39,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # The openvino tag only changes the code in the classifier and inference
+  # packages, so a pull request builds it only when those, the dependencies or
+  # the toolchain change. Pushes to main and manual runs always build it, and the
+  # `run-full-ci` label forces it on a PR (it takes effect on the next push).
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    outputs:
+      openvino: ${{ steps.openvino.outputs.matched }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The PR merge commit and its first parent (the base tip).
+          fetch-depth: 2
+      - id: openvino
+        uses: ./.github/actions/changed-paths
+        with:
+          name: openvino-build
+          labels: run-full-ci
+          pattern: '^(internal/(inference|classifier)/|\.github/actions/)|^(go\.mod|go\.sum|Taskfile\.yml|\.github/workflows/cross-platform-build\.yml)$'
+
   cross-build:
     name: cross-build (${{ matrix.goos }}/${{ matrix.goarch }})
     runs-on: ubuntu-24.04
@@ -129,6 +150,8 @@ jobs:
   # this covers linux/amd64 (native) and linux/arm64 (cross).
   openvino-build:
     name: openvino-build (linux/${{ matrix.goarch }})
+    needs: changes
+    if: needs.changes.outputs.openvino == 'true'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false

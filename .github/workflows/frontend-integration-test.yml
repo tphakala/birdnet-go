@@ -11,6 +11,7 @@ on:
     paths:
       - 'frontend/**'
       - 'internal/api/**'
+      - '!internal/api/**/*_test.go'
       - '.github/workflows/frontend-integration-test.yml'
 
 # Only superseded pull request runs are cancelled. A run on main or a manual run
