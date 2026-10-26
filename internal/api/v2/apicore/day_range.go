@@ -31,7 +31,8 @@ type DayRange struct {
 // ResolveDayRange converts inclusive YYYY-MM-DD dates in loc to a DayRange. An
 // empty endDate defaults to startDate plus defaultDays. A date whose midnight
 // does not exist in loc begins at the transition instant, and the days of the
-// range tile exactly. The error text is "start_date: <parse error>",
+// range tile exactly. A date that does not exist at all in loc (a skipped date)
+// gives an empty window with Start equal to End. The error text is "start_date: <parse error>",
 // "end_date: <parse error>" or "end_date before start_date", so callers wrap it
 // under their own sentinel with %w without the message changing. Callers apply
 // their own limits to Days and the years.
