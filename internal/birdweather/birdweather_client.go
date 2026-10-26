@@ -193,7 +193,7 @@ func (b *BwClient) Status() (connected bool, msg string) {
 
 // BirdweatherClientInterface defines what methods a BirdweatherClient must have
 type Interface interface {
-	Publish(note *datastore.Note, pcmData []byte) error
+	Publish(note *datastore.Note, detectedAt time.Time, pcmData []byte) error
 	UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error)
 	PostDetection(soundscapeID, timestamp, commonName, scientificName string, confidence float64) error
 	TestConnection(ctx context.Context, resultChan chan<- TestResult)
@@ -808,16 +808,17 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 }
 
 // Publish function handles the uploading of detected clips and their details to Birdweather.
-// It first parses the timestamp from the note, then uploads the soundscape, and finally posts the detection.
-func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
+// It formats detectedAt, the detection's own instant, as the upload timestamp (note.Date and
+// note.Time are wall-clock strings that cannot tell the two occurrences of a repeated hour
+// apart, so they are not used for it), then uploads the soundscape, and finally posts the detection.
+func (b *BwClient) Publish(note *datastore.Note, detectedAt time.Time, pcmData []byte) (err error) {
 	log := GetLogger()
 
 	// Track performance timing for telemetry
 	defer trackOperationTiming(&err, "publish", time.Now(), "common_name", note.CommonName, "scientific_name", note.ScientificName)()
 
 	log.Info("Starting publish process",
-		logger.String("date", note.Date),
-		logger.String("time", note.Time),
+		logger.Time("detected_at", detectedAt),
 		logger.String("common_name", note.CommonName),
 		logger.String("scientific_name", note.ScientificName),
 		logger.Float64("confidence", note.Confidence))
@@ -832,31 +833,15 @@ func (b *BwClient) Publish(note *datastore.Note, pcmData []byte) (err error) {
 			Build()
 	}
 
-	// Use system's local timezone for timestamp parsing
-	loc := time.Local
-
-	// Combine date and time from note to form a full timestamp string
-	dateTimeString := fmt.Sprintf("%sT%s", note.Date, note.Time)
-
-	// Parse the timestamp using the given format and the system's local timezone
-	parsedTime, err := time.ParseInLocation("2006-01-02T15:04:05", dateTimeString, loc)
-	if err != nil {
-		log.Error("Error parsing date/time for publish",
-			logger.String("date", note.Date),
-			logger.String("time", note.Time),
-			logger.Error(err))
-		return fmt.Errorf("error parsing date: %w", err)
-	}
-
-	// Format the parsed time to the required timestamp format with timezone information
-	timestamp := parsedTime.Format("2006-01-02T15:04:05.000-0700")
+	// Format the instant to the required timestamp format with timezone information
+	timestamp := detectedAt.Format("2006-01-02T15:04:05.000-0700")
 	log.Debug("Formatted timestamp for publish", logger.String("timestamp", timestamp))
 
 	// If debug is enabled, save the raw PCM data to help diagnose issues
 	if b.Settings.Realtime.Birdweather.Debug {
 		debugDir := filepath.Join("debug", "birdweather", "pcm")
 		debugFilename := filepath.Join(debugDir, fmt.Sprintf("bw_pcm_debug_%s.raw",
-			parsedTime.Format("20060102_150405")))
+			detectedAt.Format("20060102_150405")))
 
 		// Create directory if it doesn't exist
 		if err := createDebugDirectory(debugDir); err != nil {

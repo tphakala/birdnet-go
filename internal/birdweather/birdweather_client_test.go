@@ -3,9 +3,11 @@ package birdweather
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // Test constants
@@ -482,10 +485,88 @@ func TestPublish(t *testing.T) {
 	pcmData := make([]byte, 48000*2) // 1 second of 48kHz mono audio (2 bytes per sample)
 
 	// Call the method under test
-	err := client.Publish(note, pcmData)
+	err := client.Publish(note, time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC), pcmData)
 
 	// Check result
 	require.NoError(t, err, "Publish failed")
+}
+
+// roundTripFunc adapts a function to http.RoundTripper.
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+// RoundTrip calls f.
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// TestPublish_SendsDetectionInstant verifies that both the soundscape upload and the
+// detection post carry the detection's own instant, including the offset, for each
+// occurrence of a wall time that repeats when clocks fall back. The expected strings
+// are fixed UTC offsets, not computed from the code under test.
+func TestPublish_SendsDetectionInstant(t *testing.T) {
+	zones := testutil.ToolchainZones(t)
+	newYork := zones["America/New_York"]
+	helsinki := zones["Europe/Helsinki"]
+	require.NotNil(t, newYork)
+	require.NotNil(t, helsinki)
+
+	tests := []struct {
+		name string
+		loc  *time.Location
+		// instant is the detection's own instant.
+		instant time.Time
+		want    string
+	}{
+		{"new york first occurrence", newYork, time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC), "2026-11-01T01:30:00.000-0400"},
+		{"new york second occurrence", newYork, time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC), "2026-11-01T01:30:00.000-0500"},
+		{"helsinki first occurrence", helsinki, time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC), "2026-10-25T03:30:00.000+0300"},
+		{"helsinki second occurrence", helsinki, time.Date(2026, 10, 25, 1, 30, 0, 0, time.UTC), "2026-10-25T03:30:00.000+0200"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var uploadTimestamp, postTimestamp, postSoundscapeStart string
+			transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				body := `{"success": true}`
+				if req.Header.Get("Content-Type") == "application/octet-stream" {
+					uploadTimestamp = req.URL.Query().Get("timestamp")
+					body = `{"success": true, "soundscape": {"id": 12345}}`
+				} else {
+					var posted struct {
+						Timestamp           string `json:"timestamp"`
+						SoundscapeStartTime string `json:"soundscapeStartTime"`
+					}
+					raw, err := io.ReadAll(req.Body)
+					require.NoError(t, err)
+					require.NoError(t, json.Unmarshal(raw, &posted))
+					postTimestamp = posted.Timestamp
+					postSoundscapeStart = posted.SoundscapeStartTime
+				}
+				return &http.Response{
+					StatusCode: http.StatusCreated,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Request:    req,
+				}, nil
+			})
+
+			settings := MockSettings()
+			settings.Realtime.Birdweather.Debug = false
+			client, err := New(settings)
+			require.NoError(t, err)
+			client.HTTPClient.Transport = transport
+
+			note := &datastore.Note{
+				CommonName:     "American Robin",
+				ScientificName: "Turdus migratorius",
+				Confidence:     0.95,
+			}
+			pcmData := make([]byte, 48000*2)
+
+			require.NoError(t, client.Publish(note, tt.instant.In(tt.loc), pcmData))
+			assert.Equal(t, tt.want, uploadTimestamp, "soundscape upload timestamp")
+			assert.Equal(t, tt.want, postTimestamp, "detection post timestamp")
+			assert.Equal(t, tt.want, postSoundscapeStart, "detection post soundscape start")
+		})
+	}
 }
 
 func TestPublish_EmptyData(t *testing.T) {
@@ -500,7 +581,7 @@ func TestPublish_EmptyData(t *testing.T) {
 	}
 
 	// Test with empty PCM data
-	err := client.Publish(note, []byte{})
+	err := client.Publish(note, time.Date(2023, 1, 1, 12, 0, 0, 0, time.UTC), []byte{})
 
 	require.Error(t, err, "Expected error with empty pcmData")
 	assert.Equal(t, "pcmData is empty", err.Error())

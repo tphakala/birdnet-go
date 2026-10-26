@@ -23,14 +23,14 @@ import (
 // =============================================================================
 //
 // The BirdWeather API requires the following fields from Note:
-// - Date: in "YYYY-MM-DD" format
-// - Time: in "HH:MM:SS" format
 // - CommonName: bird's common name
 // - ScientificName: bird's scientific name
 // - Confidence: detection confidence (0-1)
 //
-// The Publish function combines Date and Time to create a timestamp,
-// then calls PostDetection with the extracted fields.
+// The Publish function formats the detection instant it is given as the timestamp,
+// then calls PostDetection with the extracted fields. Note.Date and Note.Time are not
+// used for the timestamp; the date and time format tests below only pin the wall-clock
+// string format.
 // =============================================================================
 
 // createTestNote creates a Note with all BirdWeather-required fields populated.
@@ -60,13 +60,13 @@ func TestBirdWeatherContract_RequiredFields(t *testing.T) {
 	// CONTRACT ASSERTIONS - Required fields must be accessible
 	// ==========================================================================
 
-	// Date field (used to construct timestamp)
+	// Date field
 	assert.NotEmpty(t, note.Date,
 		"BIRDWEATHER CONTRACT: Date field must be accessible and non-empty")
 	assert.Regexp(t, `^\d{4}-\d{2}-\d{2}$`, note.Date,
 		"BIRDWEATHER CONTRACT: Date must be in YYYY-MM-DD format")
 
-	// Time field (used to construct timestamp)
+	// Time field
 	assert.NotEmpty(t, note.Time,
 		"BIRDWEATHER CONTRACT: Time field must be accessible and non-empty")
 	assert.Regexp(t, `^\d{2}:\d{2}:\d{2}$`, note.Time,
@@ -94,7 +94,7 @@ func TestBirdWeatherContract_DateTimeFormat(t *testing.T) {
 
 	note := createTestNote()
 
-	// Simulate timestamp construction as done in Publish function
+	// Wall-clock string handling (Publish takes the instant directly)
 	dateTimeString := note.Date + "T" + note.Time
 
 	// Parse should succeed with this format
@@ -118,7 +118,7 @@ func TestBirdWeatherContract_TimestampFormatForAPI(t *testing.T) {
 
 	note := createTestNote()
 
-	// Simulate timestamp construction as done in Publish function
+	// Wall-clock string handling (Publish takes the instant directly)
 	dateTimeString := note.Date + "T" + note.Time
 	parsedTime, err := time.ParseInLocation("2006-01-02T15:04:05", dateTimeString, time.Local)
 	require.NoError(t, err)
@@ -174,7 +174,7 @@ func TestBirdWeatherContract_FieldAccessPattern(t *testing.T) {
 	// These field accesses verify the exact field names used in Publish and PostDetection.
 	// Any change to Note struct field names would break these accesses and this test.
 
-	// Accessed in Publish for timestamp construction
+	// Wall-clock fields of the note
 	assert.NotEmpty(t, note.Date, "Date field must be accessible")
 	assert.NotEmpty(t, note.Time, "Time field must be accessible")
 
