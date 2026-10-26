@@ -117,7 +117,7 @@ func (a *BirdWeatherAction) Execute(_ context.Context, data any) error {
 	pcmData := a.pcmData
 
 	// Try to publish with appropriate error handling
-	if err := client.Publish(&note, pcmData); err != nil {
+	if err := client.Publish(&note, a.Result.Timestamp, pcmData); err != nil {
 		// Check if this is a CategoryNotFound error (e.g., species not recognized by Birdweather)
 		// These are expected for non-bird species and should not be logged at error level
 		if errors.IsNotFound(err) {
