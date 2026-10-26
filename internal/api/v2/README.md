@@ -690,7 +690,7 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.p
 
 **Query Parameters:**
 
-- Both routes require `start_date` and accept optional `end_date` (`YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 31 days, matching the 30-day retention of both tables)
+- Both routes require `start_date` and accept optional `end_date` (`YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 31 days, matching the 30-day retention of both tables; years 1970 to 9998 only, counting the defaulted `end_date`, otherwise 400)
 - `/privacy-filter/discards` also accepts `limit` (default 100, 1 to 1000) and `offset` (default 0, at most 1000000). Rows are ordered by discard time descending, then id descending. The response is the same paginated envelope as the detections list (`data`, `total`, `limit`, `offset`, `current_page`, `total_pages`)
 
 **Semantics:**
