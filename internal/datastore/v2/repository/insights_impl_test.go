@@ -817,8 +817,6 @@ func TestGetDawnChorusRaw_BoundsSegmentQueries(t *testing.T) {
 		sinceBeforeEpoch int64 = -4_000_000_000
 		// centuriesAhead is an until about a century past now.
 		centuriesAhead = 100
-		// secondsPerLeapYear is the margin wallclock.Span allows past now.
-		secondsPerLeapYear int64 = 366 * 24 * 60 * 60
 	)
 	helsinki := loadInsightsZone(t, "Europe/Helsinki")
 	now := time.Now()
@@ -838,7 +836,8 @@ func TestGetDawnChorusRaw_BoundsSegmentQueries(t *testing.T) {
 	got, err := repo.GetDawnChorusRaw(t.Context(), sinceBeforeEpoch, until, 4, 10, helsinki, nil)
 	require.NoError(t, err)
 
-	bound := len(wallclock.Segments(helsinki, 0, now.Unix()+secondsPerLeapYear))
+	from, to := wallclock.Span(sinceBeforeEpoch, until, now)
+	bound := len(wallclock.Segments(helsinki, from, to))
 	assert.LessOrEqual(t, queries, bound, "one query per offset period inside the bounded span")
 	assert.Equal(t, []DawnChorusRawEntry{{ScientificName: "A", Date: "2026-10-27", EarliestAt: detectedAt.Unix()}}, got)
 }
