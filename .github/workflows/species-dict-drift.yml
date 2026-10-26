@@ -40,13 +40,28 @@ jobs:
           # Compare the decompressed JSON, not the gzip bytes. The compressed
           # bytes depend on the Go toolchain's compress/flate implementation, so
           # a Go upgrade would otherwise fail this check with no change in content.
+          # A file that is missing on either side or does not decompress counts as drift.
+          set -o pipefail
           data_dir=internal/speciesdict/data
+          tmp=$(mktemp -d)
+          checked=0
           drifted=()
           while IFS= read -r f; do
-            if ! cmp -s <(git show "HEAD:$f" 2>/dev/null | gzip -dc 2>/dev/null) <(gzip -dc "$f" 2>/dev/null); then
-              drifted+=("$f")
+            checked=$((checked + 1))
+            if git show "HEAD:$f" 2>/dev/null | gzip -dc > "$tmp/old" 2>/dev/null &&
+              gzip -dc "$f" > "$tmp/new" 2>/dev/null &&
+              cmp -s "$tmp/old" "$tmp/new"; then
+              continue
             fi
+            drifted+=("$f")
           done < <(git ls-files --cached --others --exclude-standard -- "$data_dir")
+
+          if [ "$checked" -eq 0 ]; then
+            echo "### Species Dict Check Found No Files" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No files were listed under \`$data_dir\`, so nothing was compared." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
 
           if [ "${#drifted[@]}" -eq 0 ]; then
             echo "### Species Dict In Sync" >> "$GITHUB_STEP_SUMMARY"
