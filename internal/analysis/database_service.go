@@ -97,6 +97,9 @@ type DatabaseService struct {
 	v2Manager  datastoreV2.Manager
 	v2OnlyMode bool
 
+	// detectionRepo is the detection repository matching dataStore; set in Start.
+	detectionRepo datastore.DetectionRepository
+
 	// checkStartupState reads the database state at startup. It is a field so tests
 	// can inject a state; NewDatabaseService sets the real check.
 	checkStartupState func(*conf.Settings) datastoreV2.StartupState
@@ -139,6 +142,13 @@ func (d *DatabaseService) DataStore() datastore.Interface {
 	return d.dataStore
 }
 
+// DetectionRepository returns the detection repository for the active database, or
+// nil if not yet started. A v2 database gets its own repository, which stores each
+// detection's own instant; the legacy modes get the bridge over the legacy datastore.
+func (d *DatabaseService) DetectionRepository() datastore.DetectionRepository {
+	return d.detectionRepo
+}
+
 // V2Manager returns the v2 database manager, or nil if not yet started.
 func (d *DatabaseService) V2Manager() datastoreV2.Manager {
 	return d.v2Manager
@@ -151,6 +161,8 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 
 // Start initializes and opens the database connections.
 // It handles three startup paths: v2-only (post-migration), fresh install, and legacy mode.
+// It also sets the detection repository that matches the datastore it opened: the v2 repository
+// on a v2 database, the datastore bridge otherwise.
 // When a MySQL or MariaDB database holds both enhanced database (v2) tables and legacy
 // tables, the startup state check keeps the side that holds data and drops only the
 // other side's empty tables. Start refuses, dropping no table with rows, only when no side can be
@@ -352,6 +364,14 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		d.dataStore = datastore.New(settings)
 	}
 
+	// Pick the detection repository for the active database. A v2 database stores each
+	// detection's own instant; the legacy modes keep the bridge over the legacy datastore.
+	if d.v2OnlyMode && v2OnlyDatastore != nil {
+		d.detectionRepo = v2only.NewDetectionRepository(v2OnlyDatastore)
+	} else {
+		d.detectionRepo = datastore.NewDetectionRepository(d.dataStore, nil)
+	}
+
 	// Connect metrics to datastore before opening
 	d.dataStore.SetMetrics(d.metrics.Datastore)
 	d.dataStore.SetSunCalcMetrics(d.metrics.SunCalc)
@@ -504,10 +524,11 @@ func (d *DatabaseService) Stop(_ context.Context) error {
 }
 
 // closeDataStore performs a WAL checkpoint and closes the primary datastore.
-// Safe to call multiple times: nils out the reference after close.
+// Safe to call multiple times: nils out the datastore and detection repository references.
 func (d *DatabaseService) closeDataStore(log logger.Logger) {
 	store := d.dataStore
 	d.dataStore = nil
+	d.detectionRepo = nil
 	if store == nil {
 		return
 	}

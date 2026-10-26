@@ -60,6 +60,7 @@ type Server struct {
 
 	// Dependencies
 	dataStore      datastore.Interface
+	detectionRepo  datastore.DetectionRepository
 	v2Manager      datastoreV2.Manager
 	birdImageCache *imageprovider.BirdImageCache
 	sunCalc        *suncalc.SunCalc
@@ -192,6 +193,14 @@ type ServerOption func(*Server)
 func WithDataStore(ds datastore.Interface) ServerOption {
 	return func(s *Server) {
 		s.dataStore = ds
+	}
+}
+
+// WithDetectionRepository sets the detection repository the API v2 controller
+// uses instead of its default bridge over the datastore.
+func WithDetectionRepository(repo datastore.DetectionRepository) ServerOption {
+	return func(s *Server) {
+		s.detectionRepo = repo
 	}
 }
 
@@ -516,6 +525,9 @@ func (s *Server) setupRoutes() error {
 		apiv2.WithV2Manager(s.v2Manager),
 		apiv2.WithMetricsStore(observability.NewMemoryStore(apiv2.MetricsHistoryMaxPoints)),
 		apiv2.WithAudioEngine(s.engine),
+	}
+	if s.detectionRepo != nil {
+		v2Opts = append(v2Opts, apiv2.WithDetectionRepository(s.detectionRepo))
 	}
 	if s.modelManager != nil {
 		v2Opts = append(v2Opts, apiv2.WithModelManager(s.modelManager))

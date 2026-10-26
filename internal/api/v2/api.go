@@ -371,6 +371,18 @@ func WithV2Manager(mgr datastoreV2.Manager) Option {
 	}
 }
 
+// WithDetectionRepository replaces the controller's default detection repository
+// (the datastore.Interface bridge built by apicore.NewCore) with repo. A nil repo
+// keeps the default. Domain handlers share the controller's core and read its Repo
+// per request, so the replacement reaches every handler.
+func WithDetectionRepository(repo datastore.DetectionRepository) Option {
+	return func(c *Controller) {
+		if repo != nil {
+			c.Repo = repo
+		}
+	}
+}
+
 // WithAudioEngine sets the AudioEngine for audio subsystem access.
 func WithAudioEngine(e *engine.AudioEngine) Option {
 	return func(c *Controller) {

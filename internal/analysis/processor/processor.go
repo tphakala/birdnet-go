@@ -543,7 +543,10 @@ func (p *Processor) initDynamicThresholds(settings *conf.Settings) {
 // New creates a new Processor with the given dependencies.
 // The parentLog parameter should be the analysis package logger, which will be used to create
 // a child logger with ".processor" suffix for hierarchical logging (e.g., "analysis.processor").
-func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchestrator, obsMetrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
+// repo is the detection repository every save goes through; it is required and has no
+// default, because the bridge over ds would store a v2 database's detections with the
+// repeated-DST-hour ambiguity of wall-clock strings.
+func New(settings *conf.Settings, ds datastore.Interface, repo datastore.DetectionRepository, bn *classifier.Orchestrator, obsMetrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
 	// Create child logger from parent for hierarchical logging
 	var procLog logger.Logger
 	if parentLog != nil {
@@ -556,7 +559,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 	p := &Processor{
 		Settings:       settings,
 		Ds:             ds,
-		Repo:           datastore.NewDetectionRepository(ds, nil), // Bridge to new domain model
+		Repo:           repo,
 		Bn:             bn,
 		log:            procLog,
 		BirdImageCache: birdImageCache,

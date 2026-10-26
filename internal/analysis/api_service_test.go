@@ -46,6 +46,7 @@ func TestAPIServerService_Start_FailsFastWithNilBirdNET(t *testing.T) {
 	db := NewDatabaseService(settings, nil)
 	// Set a non-nil dataStore so the first check passes.
 	db.dataStore = mocks.NewMockInterface(t)
+	db.detectionRepo = mocks.NewMockDetectionRepository(t)
 
 	metrics, _ := observability.NewMetrics()
 
