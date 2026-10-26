@@ -20,6 +20,8 @@ type ZoneOffsetSegment struct {
 //
 // The segments are contiguous, do not overlap, and together cover [start, end) exactly once.
 // A range with no offset change yields a single segment, and end <= start yields none.
+// The result has one segment per offset change in the span, so its size and the cost of one
+// query per segment grow with the span; callers must keep [start, end) to a bounded period.
 // Callers that run one query per segment can merge the results without double counting, as
 // long as every row falls in exactly one segment.
 func ZoneOffsetSegments(loc *time.Location, start, end int64) []ZoneOffsetSegment {
