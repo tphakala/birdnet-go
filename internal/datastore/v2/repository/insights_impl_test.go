@@ -872,15 +872,15 @@ func TestGetExpectedSpeciesToday_PerRowOffsets(t *testing.T) {
 					End:   time.Date(2025, 2, 28, 0, 0, 0, 0, newYork).Unix(),
 				},
 				{
-					Start: time.Date(2025, 3, 8, 0, 0, 0, 0, newYork).Unix(),
-					End:   time.Date(2025, 3, 15, 0, 0, 0, 0, newYork).Unix(),
+					Start: time.Date(2025, 3, 20, 0, 0, 0, 0, newYork).Unix(),
+					End:   time.Date(2025, 3, 27, 0, 0, 0, 0, newYork).Unix(),
 				},
 			},
 			rows: []row{
 				{"Turdus merula", time.Date(2025, 2, 10, 23, 30, 0, 0, newYork)},
-				{"Parus major", time.Date(2025, 3, 10, 0, 30, 0, 0, newYork)},
+				{"Parus major", time.Date(2025, 3, 25, 0, 30, 0, 0, newYork)},
 			},
-			wantLast:  map[string]string{"Turdus merula": "2025-02-10", "Parus major": "2025-03-10"},
+			wantLast:  map[string]string{"Turdus merula": "2025-02-10", "Parus major": "2025-03-25"},
 			wantYears: map[string]int{"Turdus merula": 1, "Parus major": 1},
 		},
 	}
