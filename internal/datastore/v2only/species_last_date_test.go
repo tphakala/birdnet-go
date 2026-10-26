@@ -13,8 +13,8 @@ import (
 // cases the per-label lookup has to get right beyond the name matching covered in
 // TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore: the latest detection across
 // every label of the species (one per model), falling back past a false positive to
-// the previous detection, and bucketing the date with the zone offset in effect at
-// the before date even when the detection itself is on the other side of a DST change.
+// the previous detection, and reporting the detection's own local date even when the before date is on the other
+// side of a DST change.
 func TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore_LatestAcrossLabels(t *testing.T) {
 	t.Parallel()
 
@@ -82,21 +82,17 @@ func assertLastDetectionDateAcrossLabels(t *testing.T, ds *Datastore) {
 		assert.Empty(t, got)
 	})
 
-	t.Run("date uses the offset at the before date", func(t *testing.T) {
+	t.Run("date is the detection's local date regardless of the before date", func(t *testing.T) {
 		const species = "Erithacus rubecula"
-		// 00:30 EEST (UTC+3) on 2024-10-01 is 21:30 UTC on 2024-09-30. The before date is
-		// in EET (UTC+2), and the date is bucketed with that single anchored offset, so
-		// the detection reports as 2024-09-30 (23:30 at UTC+2).
+		// 00:30 EEST (UTC+3) on 2024-10-01 is 21:30 UTC on 2024-09-30, but the local date is
+		// 2024-10-01 whichever side of the autumn change the before date is on.
 		seedDetection(t, ds, species, time.Date(2024, 10, 1, 0, 30, 0, 0, helsinki))
 
-		got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, species, "2024-11-15")
-		require.NoError(t, err)
-		assert.Equal(t, "2024-09-30", got)
-
-		// Anchored inside summer time the same detection reports its local date.
-		got, err = ds.GetSpeciesLastDetectionDateBefore(ctx, species, "2024-10-15")
-		require.NoError(t, err)
-		assert.Equal(t, "2024-10-01", got)
+		for _, before := range []string{"2024-11-15", "2024-10-15"} {
+			got, err := ds.GetSpeciesLastDetectionDateBefore(ctx, species, before)
+			require.NoError(t, err)
+			assert.Equal(t, "2024-10-01", got, before)
+		}
 	})
 
 	t.Run("invalid before date is rejected", func(t *testing.T) {

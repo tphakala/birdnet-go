@@ -1,13 +1,13 @@
 package repository
 
 import (
-	"bytes"
-	"encoding/binary"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // TestZoneOffsetSegments_NilLocationIsLocal swaps time.Local, so it must not run in parallel.
@@ -25,53 +25,13 @@ func TestZoneOffsetSegments_NilLocationIsLocal(t *testing.T) {
 	assert.Equal(t, ZoneOffsetSegments(helsinki, start, end), got)
 }
 
-// ruleOnlyZoneRule is the POSIX rule of the rule-only test zone (EET with EEST in summer).
-const ruleOnlyZoneRule = "EET-2EEST,M3.5.0/3,M10.5.0/4"
-
-// ruleOnlyTZif builds a minimal version 2 TZif file whose single transition lies at the epoch,
-// so every later instant is resolved from the POSIX rule in the footer, as it is for the
-// years after the last transition of a slim zone file.
-func ruleOnlyTZif(t *testing.T) []byte {
-	t.Helper()
-
-	const (
-		utcOffsetSeconds = 2 * 3600
-		abbreviations    = "EET\x00"
-	)
-	writeHeader := func(w *bytes.Buffer) {
-		w.WriteString("TZif2")
-		w.Write(make([]byte, 15))
-		// isutcnt, isstdcnt, leapcnt, timecnt, typecnt, charcnt
-		for _, n := range []uint32{0, 0, 0, 1, 1, uint32(len(abbreviations))} {
-			require.NoError(t, binary.Write(w, binary.BigEndian, n))
-		}
-	}
-	writeBody := func(w *bytes.Buffer, transitionTime any) {
-		require.NoError(t, binary.Write(w, binary.BigEndian, transitionTime))
-		w.WriteByte(0) // transition type index
-		require.NoError(t, binary.Write(w, binary.BigEndian, int32(utcOffsetSeconds)))
-		w.WriteByte(0) // not DST
-		w.WriteByte(0) // abbreviation index
-		w.WriteString(abbreviations)
-	}
-
-	var w bytes.Buffer
-	writeHeader(&w)
-	writeBody(&w, int32(0))
-	writeHeader(&w)
-	writeBody(&w, int64(0))
-	w.WriteString("\n" + ruleOnlyZoneRule + "\n")
-	return w.Bytes()
-}
-
 // TestZoneOffsetSegments_RuleOnlyZoneAcrossLeapYearEnd pins that the walk continues past the
 // bound that Go reports on 31 December of a leap year for zones resolved from their POSIX
 // rule: that bound does not move forward, and every later offset change must still be found.
 func TestZoneOffsetSegments_RuleOnlyZoneAcrossLeapYearEnd(t *testing.T) {
 	t.Parallel()
 
-	loc, err := time.LoadLocationFromTZData("Test/RuleOnly", ruleOnlyTZif(t))
-	require.NoError(t, err)
+	loc := testutil.RuleOnlyLocation(t)
 
 	const (
 		offsetEET  = 2 * 3600
