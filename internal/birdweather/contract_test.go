@@ -157,8 +157,6 @@ func TestBirdWeatherContract_SpeciesNameFormats(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			note := &datastore.Note{
-				Date:           "2024-01-15",
-				Time:           "14:30:45",
 				ScientificName: tc.scientificName,
 				CommonName:     tc.commonName,
 				Confidence:     0.85,

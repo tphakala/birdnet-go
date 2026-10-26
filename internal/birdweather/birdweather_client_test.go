@@ -475,8 +475,6 @@ func TestPublish(t *testing.T) {
 
 	// Create test note and PCM data
 	note := &datastore.Note{
-		Date:           "2023-01-01",
-		Time:           "12:00:00",
 		CommonName:     "American Robin",
 		ScientificName: "Turdus migratorius",
 		Confidence:     0.95,
@@ -496,6 +494,17 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 // RoundTrip calls f.
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+// newTestClient returns a client with debug output off whose HTTP requests go to transport.
+func newTestClient(t *testing.T, transport http.RoundTripper) *BwClient {
+	t.Helper()
+	settings := MockSettings()
+	settings.Realtime.Birdweather.Debug = false
+	client, err := New(settings)
+	require.NoError(t, err)
+	client.HTTPClient.Transport = transport
+	return client
+}
 
 // TestPublish_SendsDetectionInstant verifies that both the soundscape upload and the
 // detection post carry the detection's own instant, including the offset, for each
@@ -519,6 +528,7 @@ func TestPublish_SendsDetectionInstant(t *testing.T) {
 		{"new york second occurrence", newYork, time.Date(2026, 11, 1, 6, 30, 0, 0, time.UTC), "2026-11-01T01:30:00.000-0500"},
 		{"helsinki first occurrence", helsinki, time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC), "2026-10-25T03:30:00.000+0300"},
 		{"helsinki second occurrence", helsinki, time.Date(2026, 10, 25, 1, 30, 0, 0, time.UTC), "2026-10-25T03:30:00.000+0200"},
+		{"new york second occurrence with milliseconds", newYork, time.Date(2026, 11, 1, 6, 30, 30, 417*int(time.Millisecond), time.UTC), "2026-11-01T01:30:30.000-0500"},
 	}
 
 	for _, tt := range tests {
@@ -548,11 +558,7 @@ func TestPublish_SendsDetectionInstant(t *testing.T) {
 				}, nil
 			})
 
-			settings := MockSettings()
-			settings.Realtime.Birdweather.Debug = false
-			client, err := New(settings)
-			require.NoError(t, err)
-			client.HTTPClient.Transport = transport
+			client := newTestClient(t, transport)
 
 			note := &datastore.Note{
 				CommonName:     "American Robin",
@@ -573,8 +579,6 @@ func TestPublish_EmptyData(t *testing.T) {
 	client, _ := New(MockSettings())
 
 	note := &datastore.Note{
-		Date:           "2023-01-01",
-		Time:           "12:00:00",
 		CommonName:     "American Robin",
 		ScientificName: "Turdus migratorius",
 		Confidence:     0.95,
@@ -590,17 +594,13 @@ func TestPublish_EmptyData(t *testing.T) {
 // TestPublish_ZeroInstant verifies that an unset detection instant is rejected
 // before anything is sent to BirdWeather.
 func TestPublish_ZeroInstant(t *testing.T) {
-	settings := MockSettings()
-	settings.Realtime.Birdweather.Debug = false
-	client, err := New(settings)
-	require.NoError(t, err)
-	client.HTTPClient.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+	client := newTestClient(t, roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		assert.Fail(t, "no request expected", "got %s %s", req.Method, req.URL)
 		return nil, fmt.Errorf("unexpected request")
-	})
+	}))
 
 	note := &datastore.Note{CommonName: "American Robin", ScientificName: "Turdus migratorius", Confidence: 0.95}
-	err = client.Publish(note, time.Time{}, make([]byte, 48000*2))
+	err := client.Publish(note, time.Time{}, make([]byte, 48000*2))
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "detection time is not set")

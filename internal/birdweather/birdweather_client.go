@@ -811,6 +811,7 @@ func (b *BwClient) PostDetection(soundscapeID, timestamp, commonName, scientific
 // It formats detectedAt, the detection's own instant, as the upload timestamp (note.Date and
 // note.Time are wall-clock strings that cannot tell the two occurrences of a repeated hour
 // apart, so they are not used for it), then uploads the soundscape, and finally posts the detection.
+// The instant is truncated to whole seconds, the precision BirdWeather has always received.
 // It returns a validation error, without sending anything, when pcmData is empty or detectedAt is zero.
 func (b *BwClient) Publish(note *datastore.Note, detectedAt time.Time, pcmData []byte) (err error) {
 	log := GetLogger()
@@ -842,6 +843,10 @@ func (b *BwClient) Publish(note *datastore.Note, detectedAt time.Time, pcmData [
 			Context("scientific_name", note.ScientificName).
 			Build()
 	}
+
+	// Whole seconds only: the upload format always carried ".000" and the soundscape end is
+	// derived from this value. Truncating an instant to the second does not touch the zone.
+	detectedAt = detectedAt.Truncate(time.Second)
 
 	// Format the instant to the required timestamp format with timezone information
 	timestamp := detectedAt.Format("2006-01-02T15:04:05.000-0700")
