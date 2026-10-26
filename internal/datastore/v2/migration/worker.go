@@ -1110,6 +1110,8 @@ func (w *Worker) failOnValidation() {
 // Handles the case where we're still in dual_write by transitioning through migrating first.
 // The ctx parameter is used as the parent context for related data migration, ensuring
 // cancellation from Start(ctx) propagates to the migration.
+// When an auxiliary migrator is configured, its outcome is recorded in the same
+// UPDATE as the transition; it never changes whether the transition happens.
 func (w *Worker) transitionToValidation(ctx context.Context) {
 	w.logger.Info("migration complete, starting validation")
 
@@ -1162,6 +1164,10 @@ func (w *Worker) transitionToValidation(ctx context.Context) {
 	}
 
 	// Migrate auxiliary data (weather, thresholds, image cache, notifications)
+	var (
+		auxStatus entities.AuxiliaryDataStatus
+		auxMsg    string
+	)
 	if w.auxiliaryMigrator != nil {
 		w.logger.Info("starting auxiliary data migration")
 
@@ -1196,6 +1202,9 @@ func (w *Worker) transitionToValidation(ctx context.Context) {
 				auxResult.LogErrors(w.logger)
 			}
 		}
+
+		auxStatus, auxMsg = auxiliaryOutcome(auxResult, auxErr)
+		w.logger.Info("auxiliary data outcome", logger.String("status", string(auxStatus)))
 	}
 
 	// Clear the phase after related data migration (also resets phase_number/total_phases)
@@ -1203,10 +1212,36 @@ func (w *Worker) transitionToValidation(ctx context.Context) {
 		w.logger.Warn("failed to clear migration phase", logger.Error(err))
 	}
 
-	// Now transition to validating
-	if err := w.stateManager.TransitionToValidating(); err != nil {
-		w.logger.Error("failed to transition to validating", logger.Error(err))
+	// Now transition to validating, recording the auxiliary outcome in the same
+	// UPDATE so it exists only if this transition happened after the run above.
+	var transitionErr error
+	if w.auxiliaryMigrator != nil {
+		transitionErr = w.stateManager.TransitionToValidatingWithAuxiliaryOutcome(auxStatus, auxMsg)
+	} else {
+		transitionErr = w.stateManager.TransitionToValidating()
 	}
+	if transitionErr != nil {
+		w.logger.Error("failed to transition to validating", logger.Error(transitionErr))
+	}
+}
+
+// auxRunFailedSummary is the persisted summary when the auxiliary migration returned
+// an error instead of a result.
+const auxRunFailedSummary = "auxiliary migration could not run"
+
+// auxiliaryOutcome maps the auxiliary migration result to the status and error
+// summary persisted with the validating transition. A MigrateAll error means the
+// run did not copy anything reliably and is recorded as failed. The persisted
+// summary is a fixed message because it is shown in the status API and the support
+// dump, and an error text can carry paths or credentials; the caller logs the error.
+func auxiliaryOutcome(result *AuxiliaryMigrationResult, err error) (status entities.AuxiliaryDataStatus, summary string) {
+	if err != nil {
+		return entities.AuxiliaryDataStatusFailed, auxRunFailedSummary
+	}
+	if result == nil {
+		return entities.AuxiliaryDataStatusFailed, "auxiliary migration returned no result"
+	}
+	return result.Outcome()
 }
 
 // updateBatchProgress records rate sample and updates progress.

@@ -210,20 +210,24 @@ func InitializeFreshInstall(settings *conf.Settings, log logger.Logger, speciesC
 }
 
 // initializeMigrationStateAsCompleted sets the migration state to COMPLETED.
-// For fresh installs, migration is effectively "complete" since there's nothing to migrate.
+// For fresh installs, migration is effectively "complete" since there's nothing to migrate,
+// and the auxiliary data outcome is recorded as not required.
 func initializeMigrationStateAsCompleted(manager v2.Manager) error {
 	db := manager.DB()
 
 	now := time.Now()
 	state := entities.MigrationState{
-		ID:              1,
-		State:           entities.MigrationStatusCompleted,
-		StartedAt:       &now,
-		CompletedAt:     &now,
-		TotalRecords:    0,
-		MigratedRecords: 0,
-		LastMigratedID:  0,
-		ErrorMessage:    "",
+		ID:          1,
+		State:       entities.MigrationStatusCompleted,
+		StartedAt:   &now,
+		CompletedAt: &now,
+		// Nothing to migrate: record that, with the attempt marker equal to StartedAt.
+		AuxiliaryDataStatus:    entities.AuxiliaryDataStatusNotRequired,
+		AuxiliaryDataStartedAt: &now,
+		TotalRecords:           0,
+		MigratedRecords:        0,
+		LastMigratedID:         0,
+		ErrorMessage:           "",
 	}
 
 	return db.Save(&state).Error

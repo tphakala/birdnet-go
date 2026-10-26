@@ -20,32 +20,36 @@ import (
 
 // MigrationStatusResponse represents the migration status for the API.
 type MigrationStatusResponse struct {
-	State              string     `json:"state"`
-	CurrentPhase       string     `json:"current_phase,omitempty"` // Current migration phase (detections, predictions, etc.)
-	PhaseNumber        int        `json:"phase_number,omitempty"`  // Current phase number (1-based)
-	TotalPhases        int        `json:"total_phases,omitempty"`  // Total number of phases
-	StartedAt          *time.Time `json:"started_at,omitempty"`
-	CompletedAt        *time.Time `json:"completed_at,omitempty"`
-	TotalRecords       int64      `json:"total_records"`
-	MigratedRecords    int64      `json:"migrated_records"`
-	ProgressPercent    float64    `json:"progress_percent"`
-	LastMigratedID     uint       `json:"last_migrated_id"`
-	ErrorMessage       string     `json:"error_message,omitempty"`
-	RelatedDataError   string     `json:"related_data_error,omitempty"` // Error from related data migration (reviews, comments, locks, predictions)
-	DirtyIDCount       int64      `json:"dirty_id_count"`
-	RecordsPerSecond   float64    `json:"records_per_second,omitempty"`
-	EstimatedRemaining *string    `json:"estimated_remaining,omitempty"`
-	WorkerRunning      bool       `json:"worker_running"`
-	WorkerPaused       bool       `json:"worker_paused"`
-	CanStart           bool       `json:"can_start"`
-	CanPause           bool       `json:"can_pause"`
-	CanResume          bool       `json:"can_resume"`
-	CanRetryValidation bool       `json:"can_retry_validation"`
-	CanCancel          bool       `json:"can_cancel"`
-	CanRollback        bool       `json:"can_rollback"`
-	IsDualWriteActive  bool       `json:"is_dual_write_active"`
-	ShouldReadFromV2   bool       `json:"should_read_from_v2"`
-	IsV2OnlyMode       bool       `json:"is_v2_only_mode"`
+	State            string     `json:"state"`
+	CurrentPhase     string     `json:"current_phase,omitempty"` // Current migration phase (detections, predictions, etc.)
+	PhaseNumber      int        `json:"phase_number,omitempty"`  // Current phase number (1-based)
+	TotalPhases      int        `json:"total_phases,omitempty"`  // Total number of phases
+	StartedAt        *time.Time `json:"started_at,omitempty"`
+	CompletedAt      *time.Time `json:"completed_at,omitempty"`
+	TotalRecords     int64      `json:"total_records"`
+	MigratedRecords  int64      `json:"migrated_records"`
+	ProgressPercent  float64    `json:"progress_percent"`
+	LastMigratedID   uint       `json:"last_migrated_id"`
+	ErrorMessage     string     `json:"error_message,omitempty"`
+	RelatedDataError string     `json:"related_data_error,omitempty"` // Error from related data migration (reviews, comments, locks, predictions)
+	// AuxiliaryDataStatus is the recorded auxiliary data outcome (succeeded, failed,
+	// not_required); absent when unknown. AuxiliaryDataError summarises a failure.
+	AuxiliaryDataStatus string  `json:"auxiliary_data_status,omitempty"`
+	AuxiliaryDataError  string  `json:"auxiliary_data_error,omitempty"`
+	DirtyIDCount        int64   `json:"dirty_id_count"`
+	RecordsPerSecond    float64 `json:"records_per_second,omitempty"`
+	EstimatedRemaining  *string `json:"estimated_remaining,omitempty"`
+	WorkerRunning       bool    `json:"worker_running"`
+	WorkerPaused        bool    `json:"worker_paused"`
+	CanStart            bool    `json:"can_start"`
+	CanPause            bool    `json:"can_pause"`
+	CanResume           bool    `json:"can_resume"`
+	CanRetryValidation  bool    `json:"can_retry_validation"`
+	CanCancel           bool    `json:"can_cancel"`
+	CanRollback         bool    `json:"can_rollback"`
+	IsDualWriteActive   bool    `json:"is_dual_write_active"`
+	ShouldReadFromV2    bool    `json:"should_read_from_v2"`
+	IsV2OnlyMode        bool    `json:"is_v2_only_mode"`
 	// LegacyNotice is the legacy-schema notice kind (migration.LegacyNoticeKind)
 	// for the dashboard banner: "none" unless the process runs the legacy schema.
 	LegacyNotice string `json:"legacy_notice"`
@@ -341,6 +345,12 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 		cleanupState = CleanupStateIdle
 	}
 
+	auxStatus := state.AuxiliaryDataOutcome()
+	auxError := ""
+	if auxStatus == entities.AuxiliaryDataStatusFailed {
+		auxError = state.AuxiliaryDataError
+	}
+
 	response := MigrationStatusResponse{
 		State:                  string(state.State),
 		CurrentPhase:           string(state.CurrentPhase),
@@ -354,6 +364,8 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 		LastMigratedID:         state.LastMigratedID,
 		ErrorMessage:           state.ErrorMessage,
 		RelatedDataError:       state.RelatedDataError,
+		AuxiliaryDataStatus:    string(auxStatus),
+		AuxiliaryDataError:     auxError,
 		DirtyIDCount:           dirtyCount,
 		RecordsPerSecond:       recordsPerSec,
 		EstimatedRemaining:     estimatedRemaining,

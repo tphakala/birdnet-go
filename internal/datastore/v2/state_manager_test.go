@@ -3,6 +3,7 @@ package v2
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -511,3 +512,210 @@ func TestReportStateTransitionError_NilSafe(t *testing.T) {
 		reportStateTransitionError("IDLE", "DUAL_WRITE", fmt.Errorf("no rows affected"))
 	})
 }
+
+// auxOutcomeStep is one step of a TestStateManager_AuxiliaryDataOutcome_Transitions
+// sequence. After run, the outcome read back must equal want, and the state
+// wantState when set. A step with wantErr must fail without changing the state.
+type auxOutcomeStep struct {
+	name      string
+	run       func(sm *StateManager) error
+	wantErr   bool
+	want      entities.AuxiliaryDataStatus
+	wantState entities.MigrationStatus
+	// wantCleared asserts the raw outcome columns are empty.
+	wantCleared bool
+}
+
+// toMigrating drives a fresh state manager from idle to migrating.
+func toMigrating(sm *StateManager) error {
+	if err := sm.StartMigration(10); err != nil {
+		return err
+	}
+	if err := sm.TransitionToDualWrite(); err != nil {
+		return err
+	}
+	return sm.TransitionToMigrating()
+}
+
+// toCompleted drives a validating state manager through cutover to completed.
+func toCompleted(sm *StateManager) error {
+	if err := sm.TransitionToCutover(); err != nil {
+		return err
+	}
+	return sm.Complete()
+}
+
+func TestStateManager_AuxiliaryDataOutcome_Transitions(t *testing.T) {
+	t.Parallel()
+
+	const (
+		failMsg = "threshold: 0 of 2 migrated, 2 failed"
+		unknown = entities.AuxiliaryDataStatusUnknown
+		failed  = entities.AuxiliaryDataStatusFailed
+		okay    = entities.AuxiliaryDataStatusSucceeded
+	)
+	recordFailed := func(sm *StateManager) error {
+		return sm.TransitionToValidatingWithAuxiliaryOutcome(failed, failMsg)
+	}
+	recordSucceeded := func(sm *StateManager) error {
+		return sm.TransitionToValidatingWithAuxiliaryOutcome(okay, "")
+	}
+
+	tests := []struct {
+		name  string
+		steps []auxOutcomeStep
+	}{
+		{
+			name: "failed outcome survives fail, retry, cutover and complete",
+			steps: []auxOutcomeStep{
+				{name: "migrating", run: toMigrating, want: unknown},
+				{name: "validating", run: recordFailed, want: failed},
+				{name: "fail", run: (*StateManager).Fail, want: failed},
+				{name: "retry", run: (*StateManager).RetryValidation, want: failed},
+				{name: "completed", run: toCompleted, want: failed, wantState: entities.MigrationStatusCompleted},
+			},
+		},
+		{
+			name: "rollback and a new migration read as unknown",
+			steps: []auxOutcomeStep{
+				{name: "migrating", run: toMigrating},
+				{name: "validating", run: recordSucceeded, want: okay},
+				{name: "completed", run: toCompleted, want: okay},
+				{name: "rollback", run: (*StateManager).Rollback, want: unknown, wantCleared: true},
+				{name: "new attempt", run: func(sm *StateManager) error { return sm.StartMigration(5) }, want: unknown, wantCleared: true},
+			},
+		},
+		{
+			name: "cancel clears the recorded outcome",
+			steps: []auxOutcomeStep{
+				{name: "migrating", run: toMigrating},
+				{name: "validating", run: recordFailed, want: failed},
+				{name: "cancel", run: (*StateManager).Cancel, want: unknown, wantCleared: true},
+			},
+		},
+		{
+			name: "recording from paused changes nothing",
+			steps: []auxOutcomeStep{
+				{name: "migrating", run: toMigrating},
+				{name: "pause", run: (*StateManager).Pause},
+				{name: "record refused", run: recordSucceeded, wantErr: true, want: unknown, wantState: entities.MigrationStatusPaused, wantCleared: true},
+			},
+		},
+		{
+			name: "recording after cancel changes nothing",
+			steps: []auxOutcomeStep{
+				{name: "migrating", run: toMigrating},
+				{name: "cancel", run: (*StateManager).Cancel},
+				{name: "record refused", run: recordSucceeded, wantErr: true, want: unknown, wantState: entities.MigrationStatusIdle, wantCleared: true},
+			},
+		},
+		{
+			name: "an older binary's new attempt reads as unknown",
+			steps: []auxOutcomeStep{
+				{name: "migrating", run: toMigrating},
+				{name: "validating", run: recordSucceeded, want: okay},
+				{name: "completed", run: toCompleted, want: okay},
+				{name: "older binary rollback and restart", run: func(sm *StateManager) error {
+					// An older binary resets only the columns it knows and sets a
+					// new started_at, leaving the auxiliary columns untouched.
+					return sm.db.Exec(
+						"UPDATE migration_states SET state = ?, started_at = ?, completed_at = NULL WHERE id = 1",
+						entities.MigrationStatusCompleted, time.Now().Add(time.Hour)).Error
+				}, want: unknown},
+			},
+		},
+		{
+			name: "leftover columns on an idle row read as unknown",
+			steps: []auxOutcomeStep{
+				{name: "migrating", run: toMigrating},
+				{name: "validating", run: recordSucceeded, want: okay},
+				{name: "reset to idle by a tool", run: func(sm *StateManager) error {
+					return sm.db.Exec("UPDATE migration_states SET state = ? WHERE id = 1", entities.MigrationStatusIdle).Error
+				}, want: unknown},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sm, cleanup := setupStateManager(t)
+			defer cleanup()
+			for _, step := range tt.steps {
+				err := step.run(sm)
+				if step.wantErr {
+					require.Error(t, err, step.name)
+				} else {
+					require.NoError(t, err, step.name)
+				}
+				state, getErr := sm.GetState()
+				require.NoError(t, getErr, step.name)
+				if step.wantState != "" {
+					assert.Equal(t, step.wantState, state.State, step.name)
+				}
+				assert.Equal(t, step.want, state.AuxiliaryDataOutcome(), step.name)
+				if step.want == failed {
+					assert.Equal(t, failMsg, state.AuxiliaryDataError, step.name)
+				}
+				if step.wantCleared {
+					assert.Empty(t, state.AuxiliaryDataStatus, step.name)
+					assert.Empty(t, state.AuxiliaryDataError, step.name)
+					assert.Nil(t, state.AuxiliaryDataStartedAt, step.name)
+				}
+			}
+		})
+	}
+}
+
+// TestMigrationState_AuxiliaryColumnsOnExistingRow checks that Initialize adds
+// the auxiliary outcome columns to a migration_states table that already holds a
+// completed row, and that the row reads back as an unknown outcome.
+func TestMigrationState_AuxiliaryColumnsOnExistingRow(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	mgr, err := NewSQLiteManager(Config{DataDir: tmpDir})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	// Build the table in its shape before the auxiliary columns existed.
+	db := mgr.DB()
+	require.NoError(t, db.AutoMigrate(&preAuxMigrationState{}))
+	started := time.Now().Add(-time.Hour)
+	require.NoError(t, db.Create(&preAuxMigrationState{
+		ID: 1, State: entities.MigrationStatusCompleted, StartedAt: &started,
+	}).Error)
+
+	require.NoError(t, mgr.Initialize())
+
+	state, err := NewStateManager(mgr.DB()).GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusCompleted, state.State)
+	assert.Equal(t, entities.AuxiliaryDataStatusUnknown, state.AuxiliaryDataOutcome())
+
+	var rawStatus string
+	require.NoError(t, mgr.DB().Raw("SELECT auxiliary_data_status FROM migration_states WHERE id = 1").Scan(&rawStatus).Error)
+	assert.Empty(t, rawStatus)
+}
+
+// preAuxMigrationState mirrors entities.MigrationState before the auxiliary
+// outcome columns were added.
+type preAuxMigrationState struct {
+	ID               uint                     `gorm:"primaryKey"`
+	State            entities.MigrationStatus `gorm:"type:varchar(20);not null;default:'idle'"`
+	CurrentPhase     entities.MigrationPhase  `gorm:"type:varchar(20);not null;default:''"`
+	PhaseNumber      int                      `gorm:"default:0"`
+	TotalPhases      int                      `gorm:"default:0"`
+	StartedAt        *time.Time
+	PhaseStartedAt   *time.Time
+	CompletedAt      *time.Time
+	LastMigratedID   uint      `gorm:"default:0"`
+	TotalRecords     int64     `gorm:"default:0"`
+	MigratedRecords  int64     `gorm:"default:0"`
+	ErrorMessage     string    `gorm:"type:text"`
+	RelatedDataError string    `gorm:"column:related_data_error;type:text"`
+	UpdatedAt        time.Time `gorm:"autoUpdateTime"`
+}
+
+// TableName maps the pre-auxiliary shape onto the real table.
+func (preAuxMigrationState) TableName() string { return "migration_states" }

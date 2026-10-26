@@ -3,6 +3,7 @@ package v2
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 	"time"
 
@@ -56,6 +57,7 @@ func (m *StateManager) GetState() (*entities.MigrationState, error) {
 }
 
 // StartMigration transitions from IDLE to INITIALIZING.
+// It clears the error fields and the recorded auxiliary data outcome.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) StartMigration(totalRecords int64) error {
 	m.mu.Lock()
@@ -63,18 +65,21 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 
 	now := time.Now()
 	updates := map[string]any{
-		"state":              entities.MigrationStatusInitializing,
-		"current_phase":      entities.MigrationPhaseDetections,
-		"phase_number":       MigrationPhaseNumberDetections,
-		"total_phases":       MigrationTotalPhases,
-		"started_at":         &now,
-		"phase_started_at":   &now, // Track phase start for rate calculation
-		"total_records":      totalRecords,
-		"migrated_records":   0,
-		"last_migrated_id":   0,
-		"error_message":      "",
-		"related_data_error": "",
-		"completed_at":       nil,
+		"state":                     entities.MigrationStatusInitializing,
+		"current_phase":             entities.MigrationPhaseDetections,
+		"phase_number":              MigrationPhaseNumberDetections,
+		"total_phases":              MigrationTotalPhases,
+		"started_at":                &now,
+		"phase_started_at":          &now, // Track phase start for rate calculation
+		"total_records":             totalRecords,
+		"migrated_records":          0,
+		"last_migrated_id":          0,
+		"error_message":             "",
+		"related_data_error":        "",
+		"completed_at":              nil,
+		"auxiliary_data_status":     entities.AuxiliaryDataStatusUnknown,
+		"auxiliary_data_error":      "",
+		"auxiliary_data_started_at": nil,
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
@@ -248,6 +253,29 @@ func (m *StateManager) TransitionToValidating() error {
 	return nil
 }
 
+// TransitionToValidatingWithAuxiliaryOutcome transitions from MIGRATING to
+// VALIDATING and records the auxiliary data outcome in the same UPDATE, so the
+// outcome exists if and only if the transition happened after the auxiliary
+// step. The attempt marker (started_at) is copied in SQL. The UPDATE affects no
+// row, and an error is returned, when the state is no longer MIGRATING.
+func (m *StateManager) TransitionToValidatingWithAuxiliaryOutcome(status entities.AuxiliaryDataStatus, errMsg string) error {
+	updates := map[string]any{
+		"auxiliary_data_status":     status,
+		"auxiliary_data_error":      errMsg,
+		"auxiliary_data_started_at": gorm.Expr("started_at"),
+	}
+	if err := m.transitionStateWith(entities.MigrationStatusMigrating, entities.MigrationStatusValidating, updates); err != nil {
+		return err
+	}
+
+	events.Emit(context.Background(), "migration", "state_transition", "Migration state changed", map[string]any{
+		"from_state": "migrating",
+		"to_state":   "validating",
+	})
+
+	return nil
+}
+
 // TransitionToCutover transitions from VALIDATING to CUTOVER.
 // This is called when validation passes.
 func (m *StateManager) TransitionToCutover() error {
@@ -303,6 +331,7 @@ func (m *StateManager) Complete() error {
 }
 
 // Cancel transitions any active state back to IDLE.
+// It clears the recorded auxiliary data outcome.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) Cancel() error {
 	m.mu.Lock()
@@ -319,17 +348,20 @@ func (m *StateManager) Cancel() error {
 	}
 
 	updates := map[string]any{
-		"state":              entities.MigrationStatusIdle,
-		"current_phase":      entities.MigrationPhaseNone,
-		"phase_number":       MigrationPhaseNumberNone,
-		"total_phases":       MigrationPhaseNumberNone,
-		"started_at":         nil,
-		"completed_at":       nil,
-		"total_records":      0,
-		"migrated_records":   0,
-		"last_migrated_id":   0,
-		"error_message":      "",
-		"related_data_error": "",
+		"state":                     entities.MigrationStatusIdle,
+		"current_phase":             entities.MigrationPhaseNone,
+		"phase_number":              MigrationPhaseNumberNone,
+		"total_phases":              MigrationPhaseNumberNone,
+		"started_at":                nil,
+		"completed_at":              nil,
+		"total_records":             0,
+		"migrated_records":          0,
+		"last_migrated_id":          0,
+		"error_message":             "",
+		"related_data_error":        "",
+		"auxiliary_data_status":     entities.AuxiliaryDataStatusUnknown,
+		"auxiliary_data_error":      "",
+		"auxiliary_data_started_at": nil,
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
@@ -355,20 +387,24 @@ func (m *StateManager) Cancel() error {
 }
 
 // Rollback transitions from COMPLETED back to IDLE for rollback scenarios.
+// It clears the recorded auxiliary data outcome.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) Rollback() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	updates := map[string]any{
-		"state":              entities.MigrationStatusIdle,
-		"started_at":         nil,
-		"completed_at":       nil,
-		"total_records":      0,
-		"migrated_records":   0,
-		"last_migrated_id":   0,
-		"error_message":      "",
-		"related_data_error": "",
+		"state":                     entities.MigrationStatusIdle,
+		"started_at":                nil,
+		"completed_at":              nil,
+		"total_records":             0,
+		"migrated_records":          0,
+		"last_migrated_id":          0,
+		"error_message":             "",
+		"related_data_error":        "",
+		"auxiliary_data_status":     entities.AuxiliaryDataStatusUnknown,
+		"auxiliary_data_error":      "",
+		"auxiliary_data_started_at": nil,
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
@@ -500,14 +536,24 @@ func reportStateTransitionError(from, to string, err error) {
 }
 
 // transitionState is a helper that validates and performs a state transition.
+// It sets nothing but the state; transitionStateWith adds columns to the UPDATE.
 // Uses atomic SQL update with WHERE clause for multi-process safety.
 func (m *StateManager) transitionState(from, to entities.MigrationStatus) error {
+	return m.transitionStateWith(from, to, nil)
+}
+
+// transitionStateWith performs the guarded transition and sets extra columns
+// in the same UPDATE.
+func (m *StateManager) transitionStateWith(from, to entities.MigrationStatus, extra map[string]any) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	updates := map[string]any{"state": to}
+	maps.Copy(updates, extra)
+
 	result := m.db.Model(&entities.MigrationState{}).
 		Where("id = ? AND state = ?", migrationStateID, from).
-		Update("state", to)
+		Updates(updates)
 
 	if result.Error != nil {
 		reportStateTransitionError(string(from), string(to), result.Error)
