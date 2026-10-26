@@ -1529,17 +1529,18 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 	return notes, nil
 }
 
-// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species over the
+// inclusive [startDate, endDate] date range, summed across its days.
 // The species parameter holds scientific names. Scientific names map directly to
 // label IDs for every model, so no localized common-name round-trip is performed
 // (that round-trip dropped non-primary-model species such as bats from the daily
 // summary). The returned map is keyed by the same scientific names that were passed in.
 //
-// Label IDs are resolved in a single batched query (no per-species N+1) and the hourly
-// counts are fetched in a single batched query, so this is two queries total regardless
-// of the number of species. A failure in either query is returned to the caller rather
-// than silently zeroing a species, so a cancelled context aborts the request instead of
-// producing partial counts.
+// Label IDs are resolved in a batched query (no per-species N+1), and the hourly counts are
+// fetched in a batched query for each part of the range with a constant UTC offset (see
+// batchHourlyByZone), so the queries are not issued per species. A failure in any query is
+// returned to the caller rather than silently zeroing a species, so a cancelled context
+// aborts the request instead of producing partial counts.
 func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, endDate string, species []string, minConfidence float64) (map[string][24]int, error) {
 	if len(species) == 0 {
 		return make(map[string][24]int), nil
@@ -1620,29 +1621,15 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, e
 		return resultMap, nil
 	}
 
-	// Fetch per-label hourly counts (each query is chunked internally). The hour bucket is computed
-	// from a single fixed UTC offset, so the range is split at every zone transition and each part
-	// queried with its own offset: a range spanning a DST change would otherwise bucket everything
-	// after the transition an hour out. Most ranges yield exactly one segment.
-	hourlyByLabel := make(map[uint][24]int, len(flatLabelIDs))
-	for _, segment := range ds.splitByZoneOffset(startOfDay, endOfDay) {
-		part, err := ds.detection.GetBatchHourlyOccurrences(ctx, flatLabelIDs, segment.start, segment.end, segment.offset, minConfidence)
-		if err != nil {
-			return nil, errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "get_batch_hourly_occurrences").
-				Build()
-		}
-		// Range over keys only to avoid copying the 192-byte [24]int value on every iteration.
-		for labelID := range part {
-			hours := part[labelID]
-			acc := hourlyByLabel[labelID]
-			for h := range hoursPerDay {
-				acc[h] += hours[h]
-			}
-			hourlyByLabel[labelID] = acc
-		}
+	// Fetch per-label hourly counts (each query is chunked internally), bucketed by the offset in
+	// effect at each detection's own instant.
+	hourlyByLabel, err := ds.batchHourlyByZone(ctx, flatLabelIDs, startOfDay, endOfDay, minConfidence)
+	if err != nil {
+		return nil, errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "get_batch_hourly_occurrences").
+			Build()
 	}
 
 	// Aggregate per-label counts into per-species counts, keyed by the input scientific
@@ -2897,94 +2884,15 @@ func unixTimeOrZero(epoch int64, loc *time.Location) time.Time {
 }
 
 // zoneOffsetSeconds returns the configured timezone's UTC offset in seconds in effect at
-// the given epoch. SQL hour bucketing adds this offset to detected_at so detections group
-// by wall-clock hour in ds.timezone rather than the database/OS-local zone. Anchoring the
-// offset to the queried epoch (rather than "now") keeps it correct for historical days.
-//
-// For an open-ended range parseDateRange yields start==0; anchoring to the 1970 epoch would
-// pick an arbitrary historical offset, so non-positive epochs fall back to the current offset
-// (the best single choice for an all-time range). The single-offset approach is still a DST
-// approximation on multi-day ranges; see repository.GetTimezoneOffsetAt for that limitation.
+// the given epoch. Non-positive epochs fall back to the current offset. It is a single
+// offset, so only the trailing-window trends use it; range analytics use zoneSegments and
+// dateExpr, which follow the offset changes inside the range.
 func (ds *Datastore) zoneOffsetSeconds(epoch int64) int {
 	ref := time.Unix(epoch, 0)
 	if epoch <= 0 {
 		ref = time.Now()
 	}
 	return repository.GetTimezoneOffsetAt(ds.timezone, ref)
-}
-
-// zoneOffsetSegment is a half-open [start, end) slice of a query range over which the configured
-// timezone's UTC offset is constant, so the whole slice can be hour-bucketed with `offset`.
-type zoneOffsetSegment struct {
-	start, end int64 // Unix seconds
-	offset     int   // seconds east of UTC, constant across the segment
-}
-
-// maxZoneSegments caps the segment slice's initial capacity: a year crosses at most a couple of
-// DST transitions, so a handful of segments covers any realistic analytics range.
-const maxZoneSegments = 4
-
-// splitByZoneOffset divides [start, end) into segments whose UTC offset is constant.
-//
-// SQL hour bucketing applies one fixed offset to the whole query (see zoneOffsetSeconds), which is
-// exact for a single day but wrong for a range spanning a DST change: every detection after the
-// transition lands an hour off. Splitting at the transitions lets each part be bucketed with the
-// offset actually in effect. A range with no transition returns a single segment, so the common
-// case still issues exactly one query.
-func (ds *Datastore) splitByZoneOffset(start, end int64) []zoneOffsetSegment {
-	segments := make([]zoneOffsetSegment, 0, maxZoneSegments)
-	for cur := start; cur < end; {
-		at := time.Unix(cur, 0).In(ds.timezone)
-		_, offset := at.Zone()
-
-		// ZoneBounds reports when the current zone period ends; zero means it never does.
-		segmentEnd := end
-		if _, zoneEnd := at.ZoneBounds(); !zoneEnd.IsZero() && zoneEnd.Unix() < end {
-			segmentEnd = zoneEnd.Unix()
-		}
-		// Defensive: a non-advancing bound would loop forever.
-		if segmentEnd <= cur {
-			segmentEnd = end
-		}
-
-		segments = append(segments, zoneOffsetSegment{start: cur, end: segmentEnd, offset: offset})
-		cur = segmentEnd
-	}
-	return segments
-}
-
-// dateRangeOffsetAnchor returns the epoch to anchor the timezone offset to for a date-bucketed
-// query over [start, end) (epochs from parseDateRange: start==0 means open-start, end==MaxInt64
-// means open-end). It prefers the start boundary, falls back to the end boundary for a left-open
-// range, and only as a last resort returns 0 (which zoneOffsetSeconds maps to the current offset)
-// for a fully open range. Anchoring to a query boundary rather than "now" keeps an end-only
-// historical query bucketing the same way regardless of when it runs.
-func dateRangeOffsetAnchor(start, end int64) int64 {
-	switch {
-	case start > 0:
-		return start
-	case end > 0 && end != math.MaxInt64:
-		return end
-	default:
-		return 0
-	}
-}
-
-// detectionDateExpr returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD) of
-// d.detected_at in the configured timezone. offsetSeconds is added to the epoch before the date
-// is taken, so the result buckets by date in ds.timezone and is independent of the database
-// session / OS-local zone (the same offset-arithmetic approach as the hour bucketing). The
-// MySQL form uses DATE_ADD on a literal date with an integer day count so it does not depend on
-// the session time_zone; DATE(FROM_UNIXTIME(...)) would apply that zone on top of the offset and
-// double-count. Integer DIV avoids floating-point rounding at exact day boundaries.
-//
-// SQLite: date(d.detected_at + offset, 'unixepoch')
-// MySQL:  DATE_ADD('1970-01-01', INTERVAL (d.detected_at + offset) DIV 86400 DAY)
-func (ds *Datastore) detectionDateExpr(offsetSeconds int) string {
-	if ds.manager.IsMySQL() {
-		return fmt.Sprintf("DATE_ADD('1970-01-01', INTERVAL (d.detected_at + %d) DIV 86400 DAY)", offsetSeconds)
-	}
-	return fmt.Sprintf("date(d.detected_at + %d, 'unixepoch')", offsetSeconds)
 }
 
 // GetSpeciesSummaryData retrieves species summary data.
@@ -3037,16 +2945,17 @@ func (ds *Datastore) GetHourlyAnalyticsData(ctx context.Context, date, species s
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, ds.zoneOffsetSeconds(start), labelIDs, nil)
+	counts, err := ds.hourlyCountsByZone(ctx, start, end, labelIDs)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]datastore.HourlyAnalyticsData, 0, len(v2Data))
-	for _, d := range v2Data {
+	rows := hourlyRows(&counts)
+	result := make([]datastore.HourlyAnalyticsData, 0, len(rows))
+	for _, d := range rows {
 		result = append(result, datastore.HourlyAnalyticsData{
 			Hour:  d.Hour,
-			Count: int(d.Count),
+			Count: d.Count,
 		})
 	}
 	return result, nil
@@ -3091,21 +3000,7 @@ func (ds *Datastore) GetDailyAnalyticsData(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	// Bucket dates by the configured timezone, anchored to a query boundary (start, or end for a
-	// left-open range) so an end-only historical query buckets stably regardless of run time.
-	v2Data, err := ds.detection.GetDailyAnalytics(ctx, start, end, ds.zoneOffsetSeconds(dateRangeOffsetAnchor(start, end)), labelIDs, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]datastore.DailyAnalyticsData, 0, len(v2Data))
-	for _, d := range v2Data {
-		result = append(result, datastore.DailyAnalyticsData{
-			Date:  d.Date,
-			Count: int(d.TotalDetections),
-		})
-	}
-	return result, nil
+	return ds.dailyCountsByZone(ctx, start, end, labelIDs)
 }
 
 // GetDetectionTrends retrieves detection trends.
@@ -3141,19 +3036,11 @@ func (ds *Datastore) GetHourlyDistribution(ctx context.Context, startDate, endDa
 		return nil, err
 	}
 
-	v2Data, err := ds.detection.GetHourlyDistribution(ctx, start, end, ds.zoneOffsetSeconds(start), labelIDs, nil)
+	counts, err := ds.hourlyCountsByZone(ctx, start, end, labelIDs)
 	if err != nil {
 		return nil, err
 	}
-
-	result := make([]datastore.HourlyDistributionData, 0, len(v2Data))
-	for _, d := range v2Data {
-		result = append(result, datastore.HourlyDistributionData{
-			Hour:  d.Hour,
-			Count: int(d.Count),
-		})
-	}
-	return result, nil
+	return hourlyRows(&counts), nil
 }
 
 // speciesFirstSeenInfo holds the common fields for species first detection data.
@@ -3270,9 +3157,9 @@ func (ds *Datastore) GetSpeciesDetectionDatesInPeriod(ctx context.Context, start
 		limit = 10000
 	}
 
-	// Bucket dates by the configured timezone, anchored to a query boundary (start, or end for a
-	// left-open range) so an end-only historical query buckets stably regardless of run time.
-	dateExpr := ds.detectionDateExpr(ds.zoneOffsetSeconds(dateRangeOffsetAnchor(start, end)))
+	// Bucket dates by the local date at each detection's own instant, in one query so the
+	// LIMIT/OFFSET pages stay stable.
+	dateExpr := ds.dateExpr(start, end)
 
 	type result struct {
 		ScientificName string `gorm:"column:scientific_name"`
@@ -3403,10 +3290,8 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 		return "", nil
 	}
 
-	// Bucket the date by the configured timezone, anchored to the before date: the
-	// same fixed-offset calendar date detectionDateExpr computes in SQL.
-	offset := int64(ds.zoneOffsetSeconds(before.Unix()))
-	return time.Unix(*result.LastDetectedAt+offset, 0).UTC().Format(time.DateOnly), nil
+	// The detection's own local date, the same date dateExpr computes in SQL.
+	return time.Unix(*result.LastDetectedAt, 0).In(ds.timezone).Format(time.DateOnly), nil
 }
 
 // GetSpeciesFirstAndLastDetectionTimeBefore returns the earliest and most-recent
@@ -3464,8 +3349,8 @@ func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Conte
 
 // GetSpeciesDiversityData returns unique species count per day.
 func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]datastore.DailyAnalyticsData, error) {
-	// Validate date formats before using in SQL. The parsed values are UTC midnights of the
-	// requested calendar days, used below to derive detected_at bounds.
+	// Validate date formats before using in SQL. Only the calendar day of the parsed values is
+	// used below, to derive detected_at bounds.
 	var startDay, endDay time.Time
 	if startDate != "" {
 		t, err := time.Parse(time.DateOnly, startDate)
@@ -3484,24 +3369,24 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 
 	var results []datastore.DailyAnalyticsData
 
-	// Bucket dates by the configured timezone, anchored to a query boundary: the start of the
-	// window, falling back to the end for a left-open range (and only then to the current offset
-	// for a fully open range), so an end-only historical query buckets stably regardless of run
-	// time. The SELECT and GROUP BY share this single expression, and the range filter below is
-	// derived from the same offset, so a row is in range exactly when its bucketed date is.
-	var refEpoch int64
+	// The range is [first instant of the start date, first instant of the day after the end
+	// date) in the configured timezone, which is where each row's local date changes (also for
+	// zones that skip or repeat local midnight). An open side stays unbounded.
+	var rangeStart int64
+	rangeEnd := int64(math.MaxInt64)
 	if startDate != "" {
-		if t, perr := time.ParseInLocation(time.DateOnly, startDate, ds.timezone); perr == nil {
-			refEpoch = t.Unix()
-		}
+		y, m, d := startDay.Date()
+		rangeStart = wallClockHourStart(y, m, d, 0, ds.timezone).Unix()
 	}
-	if refEpoch == 0 && endDate != "" {
-		if t, perr := time.ParseInLocation(time.DateOnly, endDate, ds.timezone); perr == nil {
-			refEpoch = t.Unix()
-		}
+	if endDate != "" {
+		y, m, d := endDay.Date()
+		rangeEnd = wallClockHourStart(y, m, d, hoursPerDay, ds.timezone).Unix()
 	}
-	offset := ds.zoneOffsetSeconds(refEpoch)
-	dateExpr := ds.detectionDateExpr(offset)
+
+	// Bucket dates by the local date at each row's own instant. The SELECT and GROUP BY share
+	// this expression, and the range filter below uses the date boundaries, so a row is in
+	// range exactly when its bucketed date is.
+	dateExpr := ds.dateExpr(rangeStart, rangeEnd)
 
 	// Build query to count distinct species per day, excluding false positives
 	prefix := ds.manager.TablePrefix()
@@ -3516,15 +3401,11 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 
 	// Apply the date range as bounds on the raw detected_at column so the detected_at index
 	// can narrow the scan; a filter on the date expression could not use any index.
-	// dateExpr is the UTC calendar date of detected_at+offset, so a detection's bucketed date
-	// is on or after startDay exactly when detected_at >= startDay-offset, and on or before
-	// endDay exactly when detected_at < (endDay+1 day)-offset. Using the same fixed offset as
-	// dateExpr keeps the filter and the buckets in agreement, including across DST changes.
 	if startDate != "" {
-		query = query.Where("d.detected_at >= ?", startDay.Unix()-int64(offset))
+		query = query.Where("d.detected_at >= ?", rangeStart)
 	}
 	if endDate != "" {
-		query = query.Where("d.detected_at < ?", endDay.AddDate(0, 0, 1).Unix()-int64(offset))
+		query = query.Where("d.detected_at < ?", rangeEnd)
 	}
 
 	// Execute query
@@ -3624,7 +3505,7 @@ func (ds *Datastore) selectTopSpeciesHourly(ctx context.Context, startDate, endD
 		labelIDs = append(labelIDs, top[i].LabelID)
 	}
 
-	hourlyByLabel, err := ds.detection.GetBatchHourlyOccurrences(ctx, labelIDs, start, end, ds.zoneOffsetSeconds(start), noConfidenceFloor)
+	hourlyByLabel, err := ds.batchHourlyByZone(ctx, labelIDs, start, end, noConfidenceFloor)
 	if err != nil {
 		return nil, nil, errors.New(err).
 			Component("datastore").

@@ -13,6 +13,9 @@ const (
 	wallClockSecondsPerHour = 3600
 	wallClockHoursPerDay    = 24
 
+	// wallClockSecondsPerDay turns a shifted Unix timestamp into a day count since the epoch.
+	wallClockSecondsPerDay = 86400
+
 	// openStartZoneFloor is where offset enumeration starts when a search has no start time: the
 	// Unix epoch, which precedes every stored row because detected_at is positive.
 	openStartZoneFloor int64 = 0
@@ -39,21 +42,52 @@ func (r *detectionRepository) currentTime() time.Time {
 }
 
 // hourFilterSpan returns the span of Unix seconds over which the hour offsets are enumerated:
-// from the start time (or the Unix epoch) to the end time (or now). An explicit start before the
-// epoch and an explicit end more than hourFilterFutureMargin past now are pulled in, so the
-// enumeration, and the SQL built from it, stay bounded whatever dates the caller gives. Rows
-// beyond the end of the span use the newest offset in it.
+// from the start time (or the Unix epoch) to the end time (or now), bounded by WallClockSpan.
 func (r *detectionRepository) hourFilterSpan(filters *SearchFilters) (from, to int64) {
-	now := r.currentTime().Unix()
-	from = openStartZoneFloor
+	now := r.currentTime()
+	start := openStartZoneFloor
 	if filters.StartTime != nil {
-		from = max(*filters.StartTime, openStartZoneFloor)
+		start = *filters.StartTime
 	}
-	to = now
+	end := now.Unix()
 	if filters.EndTime != nil {
-		to = min(*filters.EndTime, now+int64(hourFilterFutureMargin/time.Second))
+		end = *filters.EndTime
 	}
+	return WallClockSpan(start, end, now)
+}
+
+// WallClockSpan returns the span of Unix seconds over which a zone's offset changes are
+// enumerated for a query over [start, end): start pulled up to the Unix epoch and end pulled in
+// to now plus hourFilterFutureMargin, so the enumeration, and the SQL built from it, stay
+// bounded whatever dates the caller gives. Rows beyond the end of the span use the newest
+// offset in it.
+func WallClockSpan(start, end int64, now time.Time) (from, to int64) {
+	from = max(start, openStartZoneFloor)
+	to = min(end, now.Unix()+int64(hourFilterFutureMargin/time.Second))
 	return from, to
+}
+
+// WallClockDateExpr returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD) of
+// column, a Unix timestamp, in loc (nil means UTC). Each row is shifted by the UTC offset in
+// effect at its own instant: the offset changes of loc inside [from, to) become a CASE over the
+// column, see zoneOffsetSQL. from and to normally come from WallClockSpan. The result does not
+// depend on the database session or OS-local time zone.
+//
+// SQLite: date(column + offset, 'unixepoch')
+// MySQL:  DATE_ADD('1970-01-01', INTERVAL (column + offset) DIV 86400 DAY)
+//
+// The MySQL form adds an integer day count to a literal date, because DATE(FROM_UNIXTIME(...))
+// would apply the session time zone on top of the offset. Integer DIV avoids floating-point
+// rounding at exact day boundaries.
+func WallClockDateExpr(column string, loc *time.Location, from, to int64, isMySQL bool) string {
+	if loc == nil {
+		loc = time.UTC
+	}
+	offset := zoneOffsetSQL(column, ZoneOffsetSegments(loc, from, to), GetTimezoneOffsetAt(loc, time.Unix(from, 0)))
+	if isMySQL {
+		return fmt.Sprintf("DATE_ADD('1970-01-01', INTERVAL (%s + %s) DIV %d DAY)", column, offset, wallClockSecondsPerDay)
+	}
+	return fmt.Sprintf("date(%s + %s, 'unixepoch')", column, offset)
 }
 
 // wallClockHourExpr returns a SQL expression for the wall-clock hour (0-23) of column, a Unix
