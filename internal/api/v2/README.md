@@ -679,6 +679,28 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.i
 - `/insights/model-contributions` requires `start_date` and accepts optional `end_date` (both `YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 366 days). It takes no `model_id`. Counts are lower bounds: contribution rows are written best-effort and are absent for detections migrated from the legacy database
 - `/insights/dawn-chorus` also accepts `period_days` (default 30, 1 to 365) and `min_days` (default 3, clamped to `period_days`); the response echoes both as `period_days` and `min_days`
 
+### Privacy Filter Activity (`privacy/privacy.go`)
+
+Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.privacyFilter.v2Required` if not available. Every route requires authentication (not admin only) and is never public. The routes use the protected auth middleware, which follows the instance's own authentication settings (`IsAuthRequired` and `OAuth2Server.IsAuthenticationEnabled`): on an instance with no authentication provider configured, or for a client in an allowed bypass subnet, they pass like every other protected route.
+
+| Method | Route                      | Handler        | Auth | Description                                                                                          |
+| ------ | -------------------------- | -------------- | ---- | ---------------------------------------------------------------------------------------------------- |
+| GET    | `/privacy-filter/activity` | `GetActivity`  | ✅   | Hourly rollup of privacy filter activity per source, detector model, trigger and threshold           |
+| GET    | `/privacy-filter/discards` | `ListDiscards` | ✅   | Detections the privacy filter discarded, with the per-detector hits behind each, newest first, paged |
+
+**Query Parameters:**
+
+- Both routes require `start_date` and accept optional `end_date` (`YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 31 days, matching the 30-day retention of both tables)
+- `/privacy-filter/discards` also accepts `limit` (default 100, 1 to 1000) and `offset` (default 0, at most 1000000). Rows are ordered by discard time descending, then id descending. The response is the same paginated envelope as the detections list (`data`, `total`, `limit`, `offset`, `current_page`, `total_pages`)
+
+**Semantics:**
+
+- Hourly rows are keyed on UTC hours and returned with a UTC `hour_start`. A row is included when its hour overlaps the requested range, so in zones with a half-hour or 45-minute offset the boundary hours belong to both of two adjacent ranges. The response echoes `range_start` and `range_end` (UTC instants, end exclusive) so a client can trim.
+- A discard's time is the wall clock of the flush that dropped the detection, while the rollup counts a discard in the hour of the hit that caused it, so per-hour counts of the two endpoints do not match exactly.
+- All counts are lower bounds. The `margin_*` fields bucket hits by how far the score is above the threshold in effect (`margin_lt_50` below 0.05, `margin_lt_100` 0.05 to 0.10, `margin_lt_200` 0.10 to 0.20, `margin_ge_200` 0.20 or more), not by absolute score. Per row, the sum of the buckets is `hits - confirmed + held`.
+- A row with an empty `model_id` and `threshold` 0 counts unscanned saves. Rows with `trigger_type` `vad` carry the voice activity threshold.
+- Sources appear as `{id, name}`: the display name with any stream URL credentials removed, or `source-<id>` when there is none. The stored source URI is never returned. A discard whose source could not be resolved has `source: null`. No transcript, audio or clip path is returned.
+
 ### Models (`models/models.go`)
 
 | Method | Route                          | Handler                 | Auth | Description                                                                                                                                                                                                                                                                                    |

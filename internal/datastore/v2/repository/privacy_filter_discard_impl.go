@@ -96,3 +96,49 @@ func (r *privacyFilterDiscardRepository) DeleteBefore(ctx context.Context, cutof
 	}, r.metrics)
 	return deleted, err
 }
+
+// ListPage returns one page of the discards in [start, end), newest first, with
+// their hits. Hits are loaded by explicit table name in id batches rather than
+// through Preload, so they use the same table layout as the discards.
+func (r *privacyFilterDiscardRepository) ListPage(ctx context.Context, start, end int64, limit, offset int) ([]entities.PrivacyFilterDiscard, int64, error) {
+	// A fresh query per statement: a chain keeps its count(*) select after Count.
+	inRange := func() *gorm.DB {
+		return r.db.WithContext(ctx).Table(r.discardTable()).
+			Where("discarded_at >= ? AND discarded_at < ?", start, end)
+	}
+
+	var total int64
+	if err := inRange().Count(&total).Error; err != nil {
+		return nil, 0, fmt.Errorf("count privacy filter discards: %w", err)
+	}
+	rows := []entities.PrivacyFilterDiscard{}
+	if total == 0 || int64(offset) >= total {
+		return rows, total, nil
+	}
+	if err := inRange().Order("discarded_at DESC, id DESC").Limit(limit).Offset(offset).Find(&rows).Error; err != nil {
+		return nil, 0, fmt.Errorf("list privacy filter discards: %w", err)
+	}
+
+	ids := make([]uint, 0, len(rows))
+	index := make(map[uint]int, len(rows))
+	for i := range rows {
+		ids = append(ids, rows[i].ID)
+		index[rows[i].ID] = i
+	}
+	for from := 0; from < len(ids); from += batchQuerySize {
+		chunk := ids[from:min(from+batchQuerySize, len(ids))]
+		var hits []entities.PrivacyFilterDiscardHit
+		err := r.db.WithContext(ctx).Table(r.hitTable()).
+			Where("discard_id IN ?", chunk).
+			Order("discard_id, id").
+			Find(&hits).Error
+		if err != nil {
+			return nil, 0, fmt.Errorf("list privacy filter discard hits: %w", err)
+		}
+		for j := range hits {
+			i := index[hits[j].DiscardID]
+			rows[i].Hits = append(rows[i].Hits, hits[j])
+		}
+	}
+	return rows, total, nil
+}
