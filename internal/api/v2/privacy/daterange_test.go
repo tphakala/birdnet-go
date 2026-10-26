@@ -29,6 +29,27 @@ func TestLocalDayRange(t *testing.T) {
 		require.ErrorIs(t, err, ErrRangeTooLong)
 	})
 
+	t.Run("the cap counts calendar dates across a DST change", func(t *testing.T) {
+		t.Parallel()
+		// Europe/Helsinki changes on 2026-03-29 (23 hour day) and 2026-10-25 (25 hour day).
+		for _, tc := range []struct {
+			start, end string
+			wantErr    error
+		}{
+			{"2026-03-10", "2026-04-09", nil},
+			{"2026-03-10", "2026-04-10", ErrRangeTooLong},
+			{"2026-10-10", "2026-11-09", nil},
+			{"2026-10-10", "2026-11-10", ErrRangeTooLong},
+		} {
+			_, _, _, err := localDayRange(tc.start, tc.end, helsinki)
+			if tc.wantErr == nil {
+				require.NoError(t, err, "%s..%s", tc.start, tc.end)
+				continue
+			}
+			require.ErrorIs(t, err, tc.wantErr, "%s..%s", tc.start, tc.end)
+		}
+	})
+
 	t.Run("end before start is rejected", func(t *testing.T) {
 		t.Parallel()
 		_, _, _, err := localDayRange("2026-01-05", "2026-01-04", time.UTC)
