@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -844,4 +845,116 @@ func TestWorker_MigrateRecord_UpdateBranchKeepsClipSampleRate(t *testing.T) {
 
 	require.NoError(t, w.migrateRecord(t.Context(), rateKeepResult()))
 	requireRateKept(t, db)
+}
+
+// pausingThresholdRepo pauses the migration while the auxiliary step saves a
+// threshold, emulating a pause between the auxiliary run and the transition.
+type pausingThresholdRepo struct {
+	repository.DynamicThresholdRepository
+	sm *datastoreV2.StateManager
+}
+
+func (r pausingThresholdRepo) SaveDynamicThreshold(ctx context.Context, threshold *entities.DynamicThreshold) error {
+	if err := r.sm.Pause(); err != nil {
+		return err
+	}
+	return r.DynamicThresholdRepository.SaveDynamicThreshold(ctx, threshold)
+}
+
+func TestWorker_TransitionToValidation_RecordsAuxiliaryOutcome(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// prepare adjusts the migrator config; sm is the migration state manager.
+		prepare      func(env *auxV2Env, cfg *AuxiliaryMigratorConfig, sm *datastoreV2.StateManager)
+		eventFetches int
+		// legacyUntouched means MigrateAll must fail before reading legacy data.
+		legacyUntouched bool
+		wantState       entities.MigrationStatus // after transitionToValidation
+		wantOutcome     entities.AuxiliaryDataStatus
+		wantErrPart     string
+	}{
+		{
+			name: "section failure is recorded and migration completes",
+			prepare: func(env *auxV2Env, _ *AuxiliaryMigratorConfig, _ *datastoreV2.StateManager) {
+				env.dropTable(&entities.DynamicThreshold{})
+			},
+			wantState:   entities.MigrationStatusValidating,
+			wantOutcome: entities.AuxiliaryDataStatusFailed,
+			wantErrPart: "threshold:",
+		},
+		{
+			name: "MigrateAll error is recorded and migration completes",
+			prepare: func(_ *auxV2Env, cfg *AuxiliaryMigratorConfig, _ *datastoreV2.StateManager) {
+				cfg.WeatherRepo = nil
+			},
+			legacyUntouched: true,
+			wantState:       entities.MigrationStatusValidating,
+			wantOutcome:     entities.AuxiliaryDataStatusFailed,
+			wantErrPart:     ErrAuxDependencyNotConfigured.Error(),
+		},
+		{
+			name:         "clean run is recorded as succeeded",
+			prepare:      func(*auxV2Env, *AuxiliaryMigratorConfig, *datastoreV2.StateManager) {},
+			eventFetches: 1,
+			wantState:    entities.MigrationStatusValidating,
+			wantOutcome:  entities.AuxiliaryDataStatusSucceeded,
+		},
+		{
+			name: "pause before the transition records nothing",
+			prepare: func(env *auxV2Env, cfg *AuxiliaryMigratorConfig, sm *datastoreV2.StateManager) {
+				cfg.ThresholdRepo = pausingThresholdRepo{DynamicThresholdRepository: env.thresholdRepo, sm: sm}
+			},
+			eventFetches: 1,
+			wantState:    entities.MigrationStatusPaused,
+			wantOutcome:  entities.AuxiliaryDataStatusUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			env := newAuxV2Env(t)
+			sm := datastoreV2.NewStateManager(env.db)
+			var store datastore.Interface = mocks.NewMockInterface(t)
+			if !tt.legacyUntouched {
+				store = expectLegacy(t, defaultAuxLegacyRows(), tt.eventFetches)
+			}
+			cfg := env.config(store)
+			tt.prepare(env, cfg, sm)
+
+			require.NoError(t, sm.StartMigration(10))
+			require.NoError(t, sm.TransitionToDualWrite())
+
+			w := &Worker{
+				stateManager:      sm,
+				auxiliaryMigrator: NewAuxiliaryMigrator(cfg),
+				logger:            testLogger(),
+				stopCh:            make(chan struct{}),
+			}
+			w.transitionToValidation(t.Context())
+
+			state, err := sm.GetState()
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantState, state.State)
+			assert.Equal(t, tt.wantOutcome, state.AuxiliaryDataOutcome())
+			assert.Empty(t, state.ErrorMessage)
+			assert.Empty(t, state.RelatedDataError)
+			if tt.wantOutcome == entities.AuxiliaryDataStatusUnknown {
+				assert.Empty(t, state.AuxiliaryDataStatus)
+				assert.Empty(t, state.AuxiliaryDataError)
+				assert.Nil(t, state.AuxiliaryDataStartedAt)
+				return
+			}
+			assert.Contains(t, state.AuxiliaryDataError, tt.wantErrPart)
+
+			require.NoError(t, sm.TransitionToCutover())
+			require.NoError(t, sm.Complete())
+			state, err = sm.GetState()
+			require.NoError(t, err)
+			assert.Equal(t, entities.MigrationStatusCompleted, state.State)
+			assert.Equal(t, tt.wantOutcome, state.AuxiliaryDataOutcome())
+		})
+	}
 }

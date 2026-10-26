@@ -39,6 +39,9 @@ CREATE TABLE migration_states (
     migrated_records INTEGER DEFAULT 0,
     error_message TEXT,
     related_data_error TEXT,
+    auxiliary_data_status TEXT NOT NULL DEFAULT '',
+    auxiliary_data_error TEXT,
+    auxiliary_data_started_at DATETIME,
     updated_at DATETIME
 )
 """

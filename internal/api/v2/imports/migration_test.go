@@ -460,7 +460,7 @@ func TestGetMigrationStatus_Failed(t *testing.T) {
 	require.NoError(t, sm.StartMigration(100))
 	require.NoError(t, sm.TransitionToDualWrite())
 	require.NoError(t, sm.TransitionToMigrating())
-	require.NoError(t, sm.TransitionToValidating())
+	require.NoError(t, sm.TransitionToValidatingWithAuxiliaryOutcome(entities.AuxiliaryDataStatusFailed, "weather: boom"))
 	require.NoError(t, sm.Fail())
 	require.NoError(t, sm.SetError("validation failed: v2 count (95) is less than legacy count (100)"))
 
@@ -484,6 +484,8 @@ func TestGetMigrationStatus_Failed(t *testing.T) {
 	assert.True(t, response.CanCancel)
 	assert.Contains(t, response.ErrorMessage, "validation failed")
 	assert.Equal(t, "needs_attention", response.LegacyNotice)
+	assert.Equal(t, string(entities.AuxiliaryDataStatusFailed), response.AuxiliaryDataStatus)
+	assert.Equal(t, "weather: boom", response.AuxiliaryDataError)
 }
 
 // TestFormatDuration tests the duration formatting helper.

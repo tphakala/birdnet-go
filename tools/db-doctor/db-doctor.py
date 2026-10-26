@@ -119,7 +119,8 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
         "id", "state", "current_phase", "phase_number", "total_phases",
         "started_at", "phase_started_at", "completed_at", "last_migrated_id",
         "total_records", "migrated_records", "error_message",
-        "related_data_error", "updated_at",
+        "related_data_error", "auxiliary_data_status", "auxiliary_data_error",
+        "auxiliary_data_started_at", "updated_at",
     ],
     "migration_dirty_ids": ["detection_id", "created_at"],
     "daily_events": [
@@ -502,6 +503,9 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
         "migrated_records": "INTEGER DEFAULT 0",
         "error_message": "TEXT",
         "related_data_error": "TEXT",
+        "auxiliary_data_status": "TEXT NOT NULL DEFAULT ''",
+        "auxiliary_data_error": "TEXT",
+        "auxiliary_data_started_at": "DATETIME",
         "updated_at": "DATETIME",
     },
     "migration_dirty_ids": {

@@ -841,6 +841,27 @@ func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
 	err = ctx.Seeder.SeedDailyEvents([]datastore.DailyEvents{dailyEvent})
 	require.NoError(t, err, "failed to seed daily event")
 
+	// A threshold event, a notification, one valid hourly row and one orphan
+	// hourly row (its daily event does not exist) so that every section runs
+	// against its real repository and the orphan must not count as a failure.
+	err = ctx.Seeder.SeedThresholdEvents([]datastore.ThresholdEvent{
+		testutil.NewThresholdEventBuilder().WithID(1).WithSpeciesName("Parus major").Build(),
+	})
+	require.NoError(t, err, "failed to seed threshold event")
+	err = ctx.Seeder.SeedNotificationHistory([]datastore.NotificationHistory{
+		testutil.NewNotificationHistoryBuilder().
+			WithID(1).
+			WithScientificName("Parus major").
+			WithExpiresAt(time.Now().Add(time.Hour)).
+			Build(),
+	})
+	require.NoError(t, err, "failed to seed notification history")
+	err = ctx.Seeder.SeedHourlyWeather([]datastore.HourlyWeather{
+		testutil.NewHourlyWeatherBuilder().WithID(1).WithDailyEventsID(dailyEvent.ID).Build(),
+		testutil.NewHourlyWeatherBuilder().WithID(2).WithDailyEventsID(dailyEvent.ID + 100).Build(),
+	})
+	require.NoError(t, err, "failed to seed hourly weather")
+
 	// Run migration WITHOUT calling AuxiliaryMigrator directly
 	// This tests that auxiliary migration happens through the worker
 	c := t.Context()
@@ -873,6 +894,22 @@ func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
 	err = ctx.V2Manager.DB().Model(&entities.DailyEvents{}).Count(&dailyEventCount).Error
 	require.NoError(t, err, "failed to count daily events")
 	assert.Equal(t, int64(1), dailyEventCount, "daily event should be migrated through worker")
+
+	for model, name := range map[any]string{
+		&entities.ThresholdEvent{}:      "threshold event",
+		&entities.NotificationHistory{}: "notification history",
+		&entities.HourlyWeather{}:       "valid hourly weather row (the orphan is not copied)",
+	} {
+		var count int64
+		require.NoError(t, ctx.V2Manager.DB().Model(model).Count(&count).Error)
+		assert.Equal(t, int64(1), count, "%s should be migrated through worker", name)
+	}
+
+	// Orphan hourly rows are legacy rows that cannot exist in v2, not failures.
+	state, err := ctx.StateManager.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.AuxiliaryDataStatusSucceeded, state.AuxiliaryDataOutcome())
+	assert.Empty(t, state.AuxiliaryDataError)
 }
 
 // ============================================================================
