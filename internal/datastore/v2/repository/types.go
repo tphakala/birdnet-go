@@ -74,7 +74,8 @@ type SearchFilters struct {
 	// Offset specifies number of results to skip.
 	Offset int
 
-	// MinID filters to records with ID > MinID (cursor-based pagination).
+	// MinID filters to records with ID > MinID (cursor-based pagination). It needs
+	// SortBy "id" with SortDesc false (see SortFieldID), or pages can skip rows.
 	MinID uint
 }
 
