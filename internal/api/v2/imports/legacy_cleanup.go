@@ -138,7 +138,10 @@ func (c *Handler) mysqlCleanupConn(ctx context.Context) (*gorm.DB, *legacyCleanu
 // shared by the status call, the POST pre-check and the background drop, and it
 // fails closed: anything it cannot read refuses. db carries the request or
 // cleanup context and is the connection the caller will also run its DROPs on.
-func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, db *gorm.DB) ([]LegacyTableInfo, *legacyCleanupRefusal) {
+// withCounts adds an exact row count per table, which only the status call
+// reports; the POST pre-check and the drop skip it because COUNT(*) can scan a
+// whole large table.
+func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, db *gorm.DB, withCounts bool) ([]LegacyTableInfo, *legacyCleanupRefusal) {
 	accessFailed := func(reason string) *legacyCleanupRefusal {
 		return &legacyCleanupRefusal{reason: reason, errorKey: notification.MsgErrCleanupAccessFailed}
 	}
@@ -200,15 +203,17 @@ func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, db *gorm.DB) ([]
 			continue
 		}
 		info := LegacyTableInfo{Name: name, SizeBytes: size}
-		if err := db.Raw("SELECT COUNT(*) FROM `" + name + "`").Scan(&info.RowCount).Error; err != nil {
-			if ctx.Err() != nil {
-				return nil, accessFailed("Cleanup was cancelled")
+		if withCounts {
+			if err := db.Raw("SELECT COUNT(*) FROM `" + name + "`").Scan(&info.RowCount).Error; err != nil {
+				if ctx.Err() != nil {
+					return nil, accessFailed("Cleanup was cancelled")
+				}
+				// The count is informational and never decides what is dropped.
+				c.LogWarnIfEnabled("Legacy cleanup: failed to query row count",
+					logger.String("table", name),
+					logger.Error(err))
+				info.RowCount = 0
 			}
-			// The count is informational and never decides what is dropped.
-			c.LogWarnIfEnabled("Legacy cleanup: failed to query row count",
-				logger.String("table", name),
-				logger.Error(err))
-			info.RowCount = 0
 		}
 		tables = append(tables, info)
 	}
@@ -413,7 +418,7 @@ func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusR
 	db, refusal := c.mysqlCleanupConn(reqCtx)
 	if refusal == nil {
 		var tables []LegacyTableInfo
-		tables, refusal = c.resolveMySQLLegacyTables(reqCtx, db)
+		tables, refusal = c.resolveMySQLLegacyTables(reqCtx, db, true)
 		if refusal == nil {
 			var totalRows int64
 			for _, t := range tables {
@@ -461,7 +466,7 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 		db, refusal := c.mysqlCleanupConn(reqCtx)
 		if refusal == nil {
 			var tables []LegacyTableInfo
-			tables, refusal = c.resolveMySQLLegacyTables(reqCtx, db)
+			tables, refusal = c.resolveMySQLLegacyTables(reqCtx, db, false)
 			mysqlSize = sumLegacyTableSizes(tables)
 		}
 		if refusal != nil {
@@ -581,7 +586,7 @@ func (c *Handler) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
 	db, refusal := c.mysqlCleanupConn(ctx)
 	if refusal == nil {
 		var tables []LegacyTableInfo
-		tables, refusal = c.resolveMySQLLegacyTables(ctx, db)
+		tables, refusal = c.resolveMySQLLegacyTables(ctx, db, false)
 		if refusal == nil {
 			return c.dropMySQLLegacyTables(ctx, db, tables)
 		}

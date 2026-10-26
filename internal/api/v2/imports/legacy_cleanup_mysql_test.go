@@ -384,7 +384,7 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		tables, refusal := c.resolveMySQLLegacyTables(ctx, mgr.DB().WithContext(ctx))
+		tables, refusal := c.resolveMySQLLegacyTables(ctx, mgr.DB().WithContext(ctx), true)
 		assert.Empty(t, tables)
 		require.NotNil(t, refusal)
 		assert.Equal(t, notification.MsgErrCleanupAccessFailed, refusal.errorKey)
