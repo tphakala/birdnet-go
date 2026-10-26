@@ -390,6 +390,20 @@ func TestConvertAdvancedFilters(t *testing.T) {
 		}
 	})
 
+	t.Run("cursor pagination sorts by id ascending whatever the sort string", func(t *testing.T) {
+		filters := &datastore.AdvancedSearchFilters{
+			SortBy:           "confidence_desc",
+			CursorPagination: true,
+			SortAscending:    true,
+			MinID:            7,
+		}
+		result, err := ConvertAdvancedFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+		assert.Equal(t, SortFieldID, result.SortBy)
+		assert.False(t, result.SortDesc)
+		assert.Equal(t, uint(7), result.MinID)
+	})
+
 	t.Run("text and explicit scientific alternatives share the OR branch", func(t *testing.T) {
 		deps := &FilterLookupDeps{
 			LabelRepo: &mockLabelRepository{

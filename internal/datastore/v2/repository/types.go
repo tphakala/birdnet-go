@@ -62,7 +62,7 @@ type SearchFilters struct {
 	// IsLocked filters by lock status (optional).
 	IsLocked *bool
 
-	// SortBy specifies sort field: "detected_at", "confidence", "species", or "status".
+	// SortBy specifies sort field: "detected_at", "confidence", "species", "status", or "id".
 	SortBy string
 
 	// SortDesc specifies descending sort order when true.
@@ -74,7 +74,8 @@ type SearchFilters struct {
 	// Offset specifies number of results to skip.
 	Offset int
 
-	// MinID filters to records with ID > MinID (cursor-based pagination).
+	// MinID filters to records with ID > MinID (cursor-based pagination). It needs
+	// SortBy "id" with SortDesc false (see SortFieldID), or pages can skip rows.
 	MinID uint
 }
 

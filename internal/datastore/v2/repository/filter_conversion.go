@@ -786,7 +786,9 @@ func ConvertSearchFilters(
 // =============================================================================
 
 // ConvertAdvancedFilters converts AdvancedSearchFilters to repository SearchFilters.
-// This is the main entry point for filter conversion.
+// This is the main entry point for filter conversion. When
+// filters.CursorPagination is set, the result sorts by id ascending whatever
+// filters.SortBy says.
 //
 // Parameters:
 //   - ctx: Context for database lookups
@@ -849,6 +851,14 @@ func ConvertAdvancedFilters(
 	default: // "date_desc" or empty
 		sf.SortBy = SortFieldDetectedAt
 		// sf.SortDesc already set from !filters.SortAscending above
+	}
+
+	// Cursor pagination pages by id (WHERE id > MinID), so it must sort by id
+	// ascending, as the legacy store does. Any other order skips rows whose id is
+	// below the last id of a page but whose detection time is later.
+	if filters.CursorPagination {
+		sf.SortBy = SortFieldID
+		sf.SortDesc = false
 	}
 
 	// Time conversions
