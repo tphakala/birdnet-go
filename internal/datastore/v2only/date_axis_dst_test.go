@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
@@ -19,6 +20,10 @@ const (
 	// skippedMidnightRangeStart and skippedMidnightRangeEnd are an inclusive range around it.
 	skippedMidnightRangeStart = "2026-03-06"
 	skippedMidnightRangeEnd   = "2026-03-10"
+
+	// Station coordinates of Havana for the civil dawn test.
+	havanaLatitude  = 23.1
+	havanaLongitude = -82.4
 )
 
 var skippedMidnightDates = []string{"2026-03-06", "2026-03-07", "2026-03-08", "2026-03-09", "2026-03-10"}
@@ -123,11 +128,28 @@ func TestV2OnlyDatastore_GetYearOverYearAnchorsOnSkippedMidnightDate(t *testing.
 	assert.Equal(t, 2, last.ThisYear, "detections up to and including the requested date")
 	assert.Equal(t, 1, last.LastYear)
 
-	// An empty date means today in the station zone and must still resolve to a window.
+	// An empty date means today in the station zone and must still resolve to a window. The clock
+	// is not injectable, so which date it picks is not asserted here.
 	today, err := ds.GetYearOverYear(t.Context(), "")
 	require.NoError(t, err)
 	assert.NotEmpty(t, today.Points)
 
 	_, err = ds.GetYearOverYear(t.Context(), "not-a-date")
 	require.Error(t, err)
+}
+
+func TestCivilDawnMinuteLookup_SkippedMidnightDateUsesThatDatesDawn(t *testing.T) {
+	t.Parallel()
+
+	havana := toolchainZone(t, havanaZone)
+	sun := suncalc.NewSunCalc(havanaLatitude, havanaLongitude)
+	ds := &Datastore{timezone: havana, suncalc: sun}
+
+	got, ok := ds.civilDawnMinuteLookup()(wallclock.Date{Year: 2026, Month: time.March, Day: 8})
+
+	require.True(t, ok)
+	want, wantOK := sun.GetCivilDawn(time.Date(2026, time.March, 8, 12, 0, 0, 0, havana))
+	require.True(t, wantOK)
+	wantLocal := want.In(havana)
+	assert.Equal(t, wantLocal.Hour()*60+wantLocal.Minute(), got)
 }
