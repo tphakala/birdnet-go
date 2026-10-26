@@ -991,3 +991,35 @@ func TestCountSearch_MatchesSearchTotal(t *testing.T) {
 		})
 	}
 }
+
+// TestSearch_SortByIDWithMinID verifies that SortFieldID orders by the primary key
+// regardless of detection time and that MinID is an exclusive lower bound, also when
+// a text query joins the labels table (which has its own id column).
+func TestSearch_SortByIDWithMinID(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	label := createTestLabel(t, db, "Corvus corone", 1)
+	// IDs rise while detection times fall.
+	times := []int64{3000, 2000, 1000}
+	ids := make([]uint, 0, len(times))
+	for _, at := range times {
+		ids = append(ids, createDetectionForLabel(t, db, label.ID, at).ID)
+	}
+
+	got := func(filters *SearchFilters) []uint {
+		results, _, err := repo.Search(ctx, filters)
+		require.NoError(t, err)
+		out := make([]uint, 0, len(results))
+		for _, d := range results {
+			out = append(out, d.ID)
+		}
+		return out
+	}
+
+	assert.Equal(t, ids, got(&SearchFilters{SortBy: SortFieldID}), "ascending by id, not by time")
+	assert.Equal(t, ids[1:], got(&SearchFilters{SortBy: SortFieldID, MinID: ids[0]}), "MinID is exclusive")
+	assert.Equal(t, ids[1:], got(&SearchFilters{SortBy: SortFieldID, MinID: ids[0], Query: "Corvus"}),
+		"MinID must not be ambiguous when labels is joined")
+}

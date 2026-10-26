@@ -24,6 +24,9 @@ const (
 	SortFieldSpecies = "species"
 	// SortFieldStatus allows sorting by verification status (requires JOIN on detection_reviews).
 	SortFieldStatus = "status"
+	// SortFieldID sorts by the detection primary key. Cursor pagination (MinID)
+	// pages by id, so it must sort by it for every row to be visited.
+	SortFieldID = "id"
 )
 
 // defaultDBBatchSize is the batch size for bulk database operations.
@@ -695,7 +698,7 @@ func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *Search
 		query = query.Where("confidence <= ?", *filters.MaxConfidence)
 	}
 	if filters.MinID > 0 {
-		query = query.Where("id > ?", filters.MinID)
+		query = query.Where(r.tableName()+".id > ?", filters.MinID)
 	}
 	return query
 }
@@ -779,6 +782,8 @@ func (r *detectionRepository) applySearchOrdering(query *gorm.DB, filters *Searc
 				labTable, labTable, r.tableName()))
 		}
 		query = query.Order(labTable + ".scientific_name" + dir)
+	case SortFieldID:
+		query = query.Order(r.tableName() + ".id" + dir)
 	case SortFieldStatus:
 		// Only add reviews JOIN if not already joined by buildSearchJoins (verified filter)
 		revTable := r.reviewsTable()

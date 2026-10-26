@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
@@ -170,4 +171,51 @@ func TestDetectionRepository_SaveMapsResultFields(t *testing.T) {
 	wantHuman := ds.nonBirdLabelTypeIDs[nonbird.CategoryHuman]
 	require.NotZero(t, wantHuman)
 	assert.Equal(t, wantHuman, preds[0].Label.LabelTypeID, "prediction raw label must classify the label")
+}
+
+// TestDetectionRepository_SearchMinIDCursorVisitsAllRows verifies that cursor
+// pagination (WithMinID) pages by id, so every row is visited even when ids do
+// not follow detection time, as after an import of older recordings.
+func TestDetectionRepository_SearchMinIDCursorVisitsAllRows(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ctx := t.Context()
+
+	// The insert order differs from the time order: every other row is older
+	// than the one inserted before it, so a time-sorted page has a larger last
+	// id than the rows that follow it.
+	const (
+		rowCount = 10
+		pageSize = 3
+		maxPages = 20 // guard against an endless loop on a regression
+	)
+	base := time.Date(2024, 1, 10, 10, 0, 0, 0, time.UTC)
+	wantIDs := make(map[uint]bool, rowCount)
+	for i := range rowCount {
+		at := base.AddDate(0, 0, i)
+		if i%2 == 1 {
+			at = base.AddDate(0, 0, -5-i) // older than every even row
+		}
+		wantIDs[seedDetection(t, ds, "Parus major", at).ID] = true
+	}
+
+	repo := NewDetectionRepository(ds)
+	visited := make(map[uint]bool, rowCount)
+	var last uint
+	for range maxPages {
+		results, _, err := repo.Search(ctx, datastore.NewDetectionFilters().WithMinID(last).WithLimit(pageSize))
+		require.NoError(t, err)
+		if len(results) == 0 {
+			break
+		}
+		for _, r := range results {
+			assert.Greater(t, r.ID, last, "page must continue after the cursor")
+			visited[r.ID] = true
+			last = r.ID
+		}
+	}
+
+	assert.Equal(t, wantIDs, visited, "every row must be visited once by cursor pagination")
 }
