@@ -46,7 +46,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 		c := &Handler{Core: &apicore.Core{}}
 		c.Settings.Store(apitest.NewValidTestSettings())
 
-		result := c.aggregateDetectionEvents(nil, baseTime)
+		result := c.aggregateDetectionEvents(nil)
 
 		assert.Empty(t, result.Buckets)
 		assert.Empty(t, result.Species)
@@ -69,7 +69,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
 		bucket := result.Buckets[0]
@@ -107,7 +107,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime.Add(10*time.Minute), "flush_detection", "Sparrow", nil),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
 		bucket := result.Buckets[0]
@@ -137,7 +137,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime.Add(2*time.Minute), "discard_detection", "Crow", map[string]any{"confidence": 0.4}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
 		assert.Equal(t, 3, result.Buckets[0].SpeciesCount)
@@ -156,7 +156,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(hour14, "approve_detection", "Sparrow", map[string]any{"confidence": 0.8, "match_count": float64(1)}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 2)
 		// Newest first
@@ -176,7 +176,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime.Add(3*time.Minute), "approve_detection", "Robin", map[string]any{"confidence": 0.9, "match_count": float64(1)}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
 		bucket := result.Buckets[0]
@@ -201,7 +201,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC), "create_pending_detection", "", nil),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		assert.Equal(t, 2, result.Metrics.HourlyPending[8])
 		assert.Equal(t, 1, result.Metrics.HourlyPending[10])
@@ -225,7 +225,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime.Add(5*time.Minute), "approve_detection", "Sparrow", map[string]any{"confidence": 0.85, "match_count": float64(2)}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
 		species := result.Buckets[0].Species
@@ -259,7 +259,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime, "discard_detection", "Delta", map[string]any{"confidence": 0.4}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Metrics.TopDiscarded, 3)
 		assert.Equal(t, "Alpha", result.Metrics.TopDiscarded[0].Name)
@@ -283,7 +283,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime.Add(4*time.Minute), "audio_export_success", "Sparrow", map[string]any{"clip_path": "/clips/sparrow_01.wav"}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
 		species := result.Buckets[0].Species
@@ -314,7 +314,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime.Add(2*time.Minute), "discard_detection", "Robin", map[string]any{"confidence": 0.8}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
 		require.Len(t, result.Buckets[0].Species, 1)
@@ -332,7 +332,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime.Add(2*time.Minute), "approve_detection", "Robin", map[string]any{"confidence": 0.85, "match_count": float64(3)}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
 		require.Len(t, result.Buckets[0].Species, 1)
@@ -350,7 +350,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime.Add(2*time.Minute), "flush_detection", "", nil),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		// Buckets may be created (getOrCreateBucket is called before species check)
 		// but no species entries should exist
@@ -374,7 +374,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(hour14, "approve_detection", "Sparrow", map[string]any{"confidence": 0.8, "match_count": float64(1)}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		// 3 approved across 2 active hours = 1.5
 		assert.Equal(t, "1.5", result.Metrics.ApprovedPerHour)
@@ -400,7 +400,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(at(11, 45), "dog_bark_filter", "", nil),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 2)
 		newer, older := result.Buckets[0], result.Buckets[1]
@@ -428,7 +428,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 		for i := range entries {
 			reversed[len(entries)-1-i] = entries[i]
 		}
-		again := c.aggregateDetectionEvents(reversed, baseTime)
+		again := c.aggregateDetectionEvents(reversed)
 		require.Len(t, again.Buckets, len(result.Buckets))
 		for i := range result.Buckets {
 			assert.Equal(t, result.Buckets[i].Key, again.Buckets[i].Key)
@@ -450,7 +450,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(discardTime, "discard_detection", "Robin", map[string]any{"confidence": 0.3, "reason": "low_confidence"}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Buckets, 1)
 		require.Len(t, result.Buckets[0].Species, 1)
@@ -479,7 +479,7 @@ func TestAggregateDetectionEvents(t *testing.T) {
 			makeEntry(baseTime, "discard_detection", "Crow", map[string]any{"confidence": 0.2}),
 		}
 
-		result := c.aggregateDetectionEvents(entries, baseTime)
+		result := c.aggregateDetectionEvents(entries)
 
 		require.Len(t, result.Species, 3)
 		assert.Equal(t, "Crow", result.Species[0].Name)

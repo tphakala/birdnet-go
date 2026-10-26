@@ -10,10 +10,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/testutil"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // testDate is the reference date used across tests.
 var testDate = time.Date(2025, 2, 28, 0, 0, 0, 0, time.UTC)
+
+// testWallDate is testDate as a calendar date, the form ReadOptions.Date takes.
+var testWallDate = wallclock.DateOf(testDate)
 
 // writeJSONLFile writes lines to a temporary JSONL file and returns its path.
 func writeJSONLFile(t *testing.T, dir, name string, lines []string) string {
@@ -54,7 +60,7 @@ func TestReadFile_BasicFiltering(t *testing.T) {
 
 	path := writeJSONLFile(t, dir, "test.log", lines)
 
-	entries, err := ReadFile(path, &ReadOptions{Date: targetDay})
+	entries, err := ReadFile(path, &ReadOptions{Date: wallclock.DateOf(targetDay)})
 	require.NoError(t, err)
 	assert.Len(t, entries, 2, "should only return entries for the target date")
 	assert.Equal(t, "bird detected", entries[0].Msg)
@@ -75,7 +81,7 @@ func TestReadFile_OperationFilter(t *testing.T) {
 	path := writeJSONLFile(t, dir, "test.log", lines)
 
 	entries, err := ReadFile(path, &ReadOptions{
-		Date:       testDate,
+		Date:       testWallDate,
 		Operations: []string{"detect", "reject"},
 	})
 	require.NoError(t, err)
@@ -129,7 +135,7 @@ func TestReadFile_LevelFilter(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			entries, err := ReadFile(path, &ReadOptions{
-				Date:  testDate,
+				Date:  testWallDate,
 				Level: tt.level,
 			})
 			require.NoError(t, err)
@@ -155,7 +161,7 @@ func TestReadFile_ModuleFilter(t *testing.T) {
 	path := writeJSONLFile(t, dir, "test.log", lines)
 
 	entries, err := ReadFile(path, &ReadOptions{
-		Date:   testDate,
+		Date:   testWallDate,
 		Module: "analysis",
 	})
 	require.NoError(t, err)
@@ -176,7 +182,7 @@ func TestReadFile_PreservesAllFields(t *testing.T) {
 
 	path := writeJSONLFile(t, dir, "test.log", lines)
 
-	entries, err := ReadFile(path, &ReadOptions{Date: testDate})
+	entries, err := ReadFile(path, &ReadOptions{Date: testWallDate})
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 
@@ -216,7 +222,7 @@ func TestReadFile_MalformedLines(t *testing.T) {
 
 	path := writeJSONLFile(t, dir, "test.log", lines)
 
-	entries, err := ReadFile(path, &ReadOptions{Date: testDate})
+	entries, err := ReadFile(path, &ReadOptions{Date: testWallDate})
 	require.NoError(t, err, "malformed lines should be skipped, not cause errors")
 	assert.Len(t, entries, 1, "only the valid entry should be returned")
 	assert.Equal(t, "valid entry", entries[0].Msg)
@@ -237,7 +243,7 @@ func TestReadFiles_Deduplication(t *testing.T) {
 	path1 := writeJSONLFile(t, dir, "actions.log", []string{duplicateLine, uniqueLine1})
 	path2 := writeJSONLFile(t, dir, "actions-2025-02-28T09-00-00Z.log", []string{duplicateLine, uniqueLine2})
 
-	entries, err := ReadFiles([]string{path1, path2}, &ReadOptions{Date: testDate})
+	entries, err := ReadFiles([]string{path1, path2}, &ReadOptions{Date: testWallDate})
 	require.NoError(t, err)
 	assert.Len(t, entries, 3, "duplicate should appear only once")
 }
@@ -260,7 +266,7 @@ func TestReadFiles_SortsByTimestamp(t *testing.T) {
 		sampleLine(ts2, "INFO", "morning", "core", "op2", ""),
 	})
 
-	entries, err := ReadFiles([]string{path1, path2}, &ReadOptions{Date: testDate})
+	entries, err := ReadFiles([]string{path1, path2}, &ReadOptions{Date: testWallDate})
 	require.NoError(t, err)
 	require.Len(t, entries, 3)
 	assert.Equal(t, "morning", entries[0].Msg)
@@ -345,7 +351,7 @@ func TestLevelParsing(t *testing.T) {
 				Level: tt.entryLevel,
 			}
 			opts := ReadOptions{
-				Date:  testDate,
+				Date:  testWallDate,
 				Level: tt.minLevel,
 			}
 			prep := prepareOptions(&opts)
@@ -361,7 +367,7 @@ func TestReadFile_EmptyFile(t *testing.T) {
 
 	path := writeJSONLFile(t, dir, "empty.log", []string{})
 
-	entries, err := ReadFile(path, &ReadOptions{Date: testDate})
+	entries, err := ReadFile(path, &ReadOptions{Date: testWallDate})
 	require.NoError(t, err)
 	assert.Empty(t, entries)
 }
@@ -369,7 +375,7 @@ func TestReadFile_EmptyFile(t *testing.T) {
 func TestReadFile_NonExistentFile(t *testing.T) {
 	t.Parallel()
 
-	_, err := ReadFile("/nonexistent/path/file.log", &ReadOptions{Date: testDate})
+	_, err := ReadFile("/nonexistent/path/file.log", &ReadOptions{Date: testWallDate})
 	require.Error(t, err)
 }
 
@@ -391,18 +397,18 @@ func TestReadFile_DateFilterRespectsLocation(t *testing.T) {
 	mar1InLoc := time.Date(2025, 3, 1, 0, 0, 0, 0, loc)
 
 	// With Location=loc, should find the entry (it's Mar 1 in UTC+10)
-	entries, err := ReadFile(path, &ReadOptions{Date: mar1InLoc, Location: loc})
+	entries, err := ReadFile(path, &ReadOptions{Date: wallclock.DateOf(mar1InLoc), Location: loc})
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "should find entry that is Mar 1 in UTC+10")
 
 	// Query for Mar 1 in UTC — the entry is Feb 28 in UTC, so it should NOT match.
 	mar1UTC := time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)
-	entries, err = ReadFile(path, &ReadOptions{Date: mar1UTC, Location: time.UTC})
+	entries, err = ReadFile(path, &ReadOptions{Date: wallclock.DateOf(mar1UTC), Location: time.UTC})
 	require.NoError(t, err)
 	assert.Empty(t, entries, "should not find entry when comparing in UTC (entry is Feb 28 UTC)")
 
 	// With Location=nil (backward compat, defaults to UTC), same result.
-	entries, err = ReadFile(path, &ReadOptions{Date: mar1UTC})
+	entries, err = ReadFile(path, &ReadOptions{Date: wallclock.DateOf(mar1UTC)})
 	require.NoError(t, err)
 	assert.Empty(t, entries, "nil Location should default to UTC for backward compat")
 }
@@ -422,19 +428,19 @@ func TestReadFile_DateFilterRespectsNegativeOffset(t *testing.T) {
 
 	// In UTC-5, this entry is on Feb 28. Query for Mar 1 in UTC-5 should NOT find it.
 	mar1InLoc := time.Date(2025, 3, 1, 0, 0, 0, 0, loc)
-	entries, err := ReadFile(path, &ReadOptions{Date: mar1InLoc, Location: loc})
+	entries, err := ReadFile(path, &ReadOptions{Date: wallclock.DateOf(mar1InLoc), Location: loc})
 	require.NoError(t, err)
 	assert.Empty(t, entries, "entry is Feb 28 in UTC-5, should not match Mar 1 query")
 
 	// Query for Feb 28 in UTC-5 should find it.
 	feb28InLoc := time.Date(2025, 2, 28, 0, 0, 0, 0, loc)
-	entries, err = ReadFile(path, &ReadOptions{Date: feb28InLoc, Location: loc})
+	entries, err = ReadFile(path, &ReadOptions{Date: wallclock.DateOf(feb28InLoc), Location: loc})
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "entry is Feb 28 in UTC-5, should match Feb 28 query")
 
 	// In UTC, this entry is Mar 1. Query for Mar 1 in UTC should find it.
 	mar1UTC := time.Date(2025, 3, 1, 0, 0, 0, 0, time.UTC)
-	entries, err = ReadFile(path, &ReadOptions{Date: mar1UTC, Location: time.UTC})
+	entries, err = ReadFile(path, &ReadOptions{Date: wallclock.DateOf(mar1UTC), Location: time.UTC})
 	require.NoError(t, err)
 	assert.Len(t, entries, 1, "entry is Mar 1 in UTC, should match Mar 1 UTC query")
 }
@@ -442,7 +448,55 @@ func TestReadFile_DateFilterRespectsNegativeOffset(t *testing.T) {
 func TestReadFiles_EmptyPaths(t *testing.T) {
 	t.Parallel()
 
-	entries, err := ReadFiles([]string{}, &ReadOptions{Date: testDate})
+	entries, err := ReadFiles([]string{}, &ReadOptions{Date: testWallDate})
 	require.NoError(t, err)
 	assert.Empty(t, entries)
+}
+
+// TestReadFile_DateFilterSkippedMidnight pins that a date selects the entries whose local
+// calendar date it is, also in a zone whose local midnight does not exist on that date.
+func TestReadFile_DateFilterSkippedMidnight(t *testing.T) {
+	t.Parallel()
+
+	zones := testutil.ToolchainZones(t)
+	tests := []struct {
+		zone       string
+		before     time.Time // late on the day before the skipped midnight
+		after      time.Time // early on the day that has no midnight
+		targetDate wallclock.Date
+	}{
+		{
+			zone:       "America/Havana",
+			before:     time.Date(2026, time.March, 7, 23, 30, 0, 0, zones["America/Havana"]),
+			after:      time.Date(2026, time.March, 8, 1, 30, 0, 0, zones["America/Havana"]),
+			targetDate: wallclock.Date{Year: 2026, Month: time.March, Day: 8},
+		},
+		{
+			zone:       "America/Santiago",
+			before:     time.Date(2026, time.September, 5, 23, 30, 0, 0, zones["America/Santiago"]),
+			after:      time.Date(2026, time.September, 6, 1, 30, 0, 0, zones["America/Santiago"]),
+			targetDate: wallclock.Date{Year: 2026, Month: time.September, Day: 6},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.zone, func(t *testing.T) {
+			t.Parallel()
+			loc := zones[tt.zone]
+			require.NotNil(t, loc)
+			path := writeJSONLFile(t, t.TempDir(), "skipped.log", []string{
+				sampleLine(tt.before, "INFO", "before", "test", "test_op", ""),
+				sampleLine(tt.after, "INFO", "after", "test", "test_op", ""),
+			})
+
+			entries, err := ReadFile(path, &ReadOptions{Date: tt.targetDate, Location: loc})
+			require.NoError(t, err)
+			require.Len(t, entries, 1, "only the entry of the requested local date")
+			assert.Equal(t, "after", entries[0].Msg)
+
+			entries, err = ReadFile(path, &ReadOptions{Date: tt.targetDate.AddDays(-1), Location: loc})
+			require.NoError(t, err)
+			require.Len(t, entries, 1, "the day before has the other entry")
+			assert.Equal(t, "before", entries[0].Msg)
+		})
+	}
 }
