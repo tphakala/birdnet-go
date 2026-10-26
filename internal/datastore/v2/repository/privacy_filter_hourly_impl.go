@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -18,6 +19,12 @@ const (
 
 	// privacyHourlyMaxScoreColumn is the column that keeps a maximum instead of a sum.
 	privacyHourlyMaxScoreColumn = "max_score"
+
+	// privacyHourSeconds is the length of one rollup bucket in Unix seconds.
+	privacyHourSeconds = int64(time.Hour / time.Second)
+
+	// privacyHourlyKeyOrder orders rows by the columns of the unique key, a total order.
+	privacyHourlyKeyOrder = "hour_start, source_id, model_id, trigger_type, threshold_milli"
 )
 
 // privacyHourlyKeyColumns are the columns of the unique index
@@ -118,4 +125,20 @@ func (r *privacyFilterHourlyRepository) DeleteBefore(ctx context.Context, cutoff
 		return nil
 	}, r.metrics)
 	return deleted, err
+}
+
+// ListOverlapping returns the rows whose UTC hour overlaps [start, end).
+func (r *privacyFilterHourlyRepository) ListOverlapping(ctx context.Context, start, end int64) ([]entities.PrivacyFilterHourly, error) {
+	rows := []entities.PrivacyFilterHourly{}
+	if end <= start {
+		return rows, nil
+	}
+	err := r.db.WithContext(ctx).Table(r.tableName()).
+		Where("hour_start > ? AND hour_start < ?", start-privacyHourSeconds, end).
+		Order(privacyHourlyKeyOrder).
+		Find(&rows).Error
+	if err != nil {
+		return nil, fmt.Errorf("list privacy filter hourly rows: %w", err)
+	}
+	return rows, nil
 }

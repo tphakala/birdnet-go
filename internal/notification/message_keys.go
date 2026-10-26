@@ -111,6 +111,10 @@ const (
 	// Insights errors
 	MsgErrInsightsV2Required = "errors.insights.v2Required"
 
+	// Privacy filter errors. No locale entry exists yet because no UI calls the
+	// privacy filter endpoints.
+	MsgErrPrivacyFilterV2Required = "errors.privacyFilter.v2Required"
+
 	// Detection errors
 	MsgErrDetectionInvalidDate = "errors.detection.invalidDate"
 

@@ -19,4 +19,11 @@ type PrivacyFilterDiscardRepository interface {
 	// (Unix milliseconds), their hit rows with them (foreign key cascade), and
 	// returns how many discards were deleted.
 	DeleteBefore(ctx context.Context, cutoffMillis int64) (int64, error)
+
+	// ListPage returns one page of the discards with DiscardedAt in
+	// [start, end) (Unix milliseconds), newest first (DiscardedAt descending, then
+	// ID descending), each with its Hits ordered by ID, and the total number of
+	// discards in the range. limit must be positive and offset non-negative. The
+	// Source association is not loaded.
+	ListPage(ctx context.Context, start, end int64, limit, offset int) ([]entities.PrivacyFilterDiscard, int64, error)
 }

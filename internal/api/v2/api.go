@@ -28,6 +28,7 @@ import (
 	mediaapi "github.com/tphakala/birdnet-go/internal/api/v2/media"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
 	"github.com/tphakala/birdnet-go/internal/api/v2/notifications"
+	privacyapi "github.com/tphakala/birdnet-go/internal/api/v2/privacy"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/api/v2/species"
 	"github.com/tphakala/birdnet-go/internal/api/v2/sse"
@@ -149,6 +150,12 @@ type Controller struct {
 	// calls c.alerts.Shutdown() during teardown to stop the engine and its
 	// global event bus.
 	alerts *alerts.Handler
+
+	// privacyFilter serves the /api/v2/privacy-filter/* endpoints (hourly rollup
+	// and discarded detections, read-only). It needs only the shared
+	// *apicore.Core and builds its repositories in RegisterRoutes when a v2
+	// manager is set.
+	privacyFilter *privacyapi.Handler
 
 	// control serves the /api/v2/control/* endpoints (restart analysis, reload
 	// model, rebuild range filter, restart server/container, restart a single
@@ -540,6 +547,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// the shared core here (V2Manager, auth middleware, and the error/log helpers
 	// all promote from it).
 	c.alerts = alerts.New(c.Core)
+	c.privacyFilter = privacyapi.New(c.Core)
 	// The control handler owns its sourceRestarter and receives the shared
 	// control-signal channel as a send-only injection. c.controlChan is already
 	// set in the Controller literal above; passing it here narrows it to a
@@ -738,6 +746,7 @@ func (c *Controller) initRoutes() {
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", func() { c.tlsHandler.RegisterRoutes(c.Group) }},
 		{"import routes", func() { c.imports.RegisterImportRoutes(c.Group) }},
+		{"privacy filter routes", func() { c.privacyFilter.RegisterRoutes(c.Group) }},
 	}
 
 	for _, initializer := range routeInitializers {
