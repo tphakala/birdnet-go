@@ -67,8 +67,9 @@ TF_HEADERS_DIR=.cache/tensorflow/tensorflow/lite
 FINGERPRINT_HEX=12
 
 # Most cache entries prune reads per shard. A shard holds one entry per main run
-# until the next run prunes it, so a handful is normal.
-PRUNE_LIST_LIMIT=100
+# until the next run prunes it, so a handful is normal; the limit is far above
+# what the seven-day expiry lets pile up, so no older generation is out of reach.
+PRUNE_LIST_LIMIT=1000
 
 # Minimum age, in seconds, a normalized file must have. Go ignores files modified
 # in the last 2 s when caching, so the self-test requires a clear margin.
