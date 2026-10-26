@@ -705,6 +705,21 @@ func TestGetDawnChorusRaw_WallClockAcrossDST(t *testing.T) {
 			},
 		},
 		{
+			name:      "detections after until use the offset in effect at the start of the last segment",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 22, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				// 03:30 EET reads as 04:30 under the EEST offset of the last segment, so it is kept.
+				{"J", time.Date(2026, time.October, 27, 3, 30, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"J", "2026-10-27", time.Date(2026, time.October, 27, 3, 30, 0, 0, helsinki)},
+			},
+		},
+		{
 			name:      "pre-change detection outside the window is not re-read under the next offset",
 			loc:       helsinki,
 			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
