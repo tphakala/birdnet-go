@@ -223,6 +223,16 @@ func TestLegacyTailReconciledInV2(t *testing.T) {
 		assert.False(t, reconciled)
 	})
 
+	t.Run("a failed tail scan is an error", func(t *testing.T) {
+		dir := t.TempDir()
+		legacyDB := openTempIDTable(t, filepath.Join(dir, "legacy.db"), "notes", seq(1, 15))
+		v2DB := openTempIDTable(t, filepath.Join(dir, "v2.db"), "other_table", nil)
+
+		reconciled, err := legacyTailReconciledInV2(legacyDB, v2DB, 10, "notes", "detections", "", testStartupLogger())
+		require.Error(t, err)
+		assert.False(t, reconciled)
+	})
+
 	// MySQL uses ONE database handle for both the legacy notes and the prefixed
 	// v2_detections table (unlike SQLite, which uses two separate files). These
 	// cases exercise that single-handle, prefixed-table shape so the MySQL

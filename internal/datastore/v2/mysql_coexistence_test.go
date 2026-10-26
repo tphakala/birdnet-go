@@ -1074,6 +1074,70 @@ func TestMySQL_HasUnmigratedLegacyRecords_RealCountPath(t *testing.T) {
 	}
 }
 
+// TestMySQL_HasUnmigratedLegacyRecords_Outcomes pins which server-side faults are
+// unknown and which are a definite "none" against a real server.
+func TestMySQL_HasUnmigratedLegacyRecords_Outcomes(t *testing.T) {
+	settings := func() *conf.Settings {
+		return buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, coexTestPassword)
+	}
+	// completedV2 initializes the prefixed v2 tables with a COMPLETED migration state.
+	completedV2 := func(t *testing.T, withLegacy bool) {
+		t.Helper()
+		dropAllTables(t, coexTestDB, coexTestDBName)
+		if withLegacy {
+			seedLegacyTables(t, coexTestDB)
+		}
+		mgr := newTestMySQLManager(t, true)
+		t.Cleanup(func() {
+			_ = mgr.Delete()
+			_ = mgr.Close()
+		})
+		require.NoError(t, mgr.Initialize())
+		require.NoError(t, mgr.DB().Model(&entities.MigrationState{}).
+			Where("id = 1").
+			Updates(map[string]any{"state": entities.MigrationStatusCompleted, "last_migrated_id": 0}).Error)
+	}
+
+	t.Run("migration state row missing is none", func(t *testing.T) {
+		completedV2(t, true)
+		require.NoError(t, coexTestDB.Exec("DELETE FROM v2_migration_states").Error)
+
+		hasUnmigrated, err := HasUnmigratedLegacyRecords(settings(), testStartupLogger())
+		require.NoError(t, err)
+		assert.False(t, hasUnmigrated)
+	})
+
+	t.Run("no legacy notes table is none", func(t *testing.T) {
+		completedV2(t, false)
+
+		hasUnmigrated, err := HasUnmigratedLegacyRecords(settings(), testStartupLogger())
+		require.NoError(t, err)
+		assert.False(t, hasUnmigrated)
+	})
+
+	t.Run("a failing tail query is unknown", func(t *testing.T) {
+		completedV2(t, true)
+		require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+			return tx.Exec("DROP TABLE v2_detections").Error
+		}))
+
+		hasUnmigrated, err := HasUnmigratedLegacyRecords(settings(), testStartupLogger())
+		require.ErrorIs(t, err, ErrLegacyTailUnverified)
+		assert.False(t, hasUnmigrated)
+	})
+
+	t.Run("a rejected login is unknown and names no user or database", func(t *testing.T) {
+		bad := settings()
+		bad.Output.MySQL.Password = "wrong-" + coexTestPassword
+
+		hasUnmigrated, err := HasUnmigratedLegacyRecords(bad, testStartupLogger())
+		require.ErrorIs(t, err, ErrLegacyTailUnverified)
+		assert.False(t, hasUnmigrated)
+		assert.NotContains(t, err.Error(), coexTestUser, "the user name must be scrubbed")
+		assert.NotContains(t, err.Error(), coexTestDBName, "the database name must be scrubbed")
+	})
+}
+
 // TestMySQL_StartupDetection_EmptyDB_ReturnsFreshInstall verifies that
 // an empty database returns fresh install status.
 func TestMySQL_StartupDetection_EmptyDB_ReturnsFreshInstall(t *testing.T) {
