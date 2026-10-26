@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -805,11 +806,11 @@ func TestGetDawnChorusRaw_WallClockAcrossDST(t *testing.T) {
 	}
 }
 
-// loadInsightsZone loads an IANA zone for the DST tests below.
+// loadInsightsZone returns an IANA zone from the toolchain zone database for the DST tests below.
 func loadInsightsZone(t *testing.T, name string) *time.Location {
 	t.Helper()
-	loc, err := time.LoadLocation(name)
-	require.NoError(t, err)
+	loc := testutil.ToolchainZones(t)[name]
+	require.NotNil(t, loc, "zone %s", name)
 	return loc
 }
 

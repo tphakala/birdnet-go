@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
@@ -198,8 +199,8 @@ func TestLocalDayStart(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			loc, err := time.LoadLocation(tt.zone)
-			require.NoError(t, err)
+			loc := testutil.ToolchainZones(t)[tt.zone]
+			require.NotNil(t, loc, "zone %s", tt.zone)
 			start, date := localDayStart(tt.now.In(loc))
 			assert.Equal(t, tt.wantDate, date)
 			assert.Equal(t, tt.wantStart.Unix(), start, "day start %s, want %s", time.Unix(start, 0).UTC(), tt.wantStart)
@@ -527,8 +528,8 @@ func TestBuildYearRangesDayBounds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			loc, err := time.LoadLocation(tt.zone)
-			require.NoError(t, err)
+			loc := testutil.ToolchainZones(t)[tt.zone]
+			require.NotNil(t, loc, "zone %s", tt.zone)
 			now := tt.now.In(loc)
 			require.Equal(t, 7, wallclock.DaysBetween(tt.wantFirst, tt.wantLast)+1, "test window is +/-3 days around today")
 
