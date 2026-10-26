@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -20,6 +21,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/notification"
+	"gorm.io/gorm"
 )
 
 // createTestSettings creates settings for SQLite-based legacy cleanup tests.
@@ -367,69 +372,136 @@ func createMySQLTestSettings() *conf.Settings {
 	return settings
 }
 
-// TestGetLegacyStatus_MySQL_NoDBProvider tests MySQL status when Repo doesn't implement gormDBProvider.
-func TestGetLegacyStatus_MySQL_NoDBProvider(t *testing.T) {
-	t.Attr("component", "legacy_cleanup")
-	t.Attr("type", "unit")
-
-	e := echo.New()
-	settings := createMySQLTestSettings()
-	controller := createLegacyTestHandler(t, e, settings)
-	// Repo is nil, so gormDBProvider cast will fail
-
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err := controller.GetLegacyStatus(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var response LegacyStatusResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	// Without a DB provider, no tables can be queried
-	assert.False(t, response.Exists, "No legacy tables should exist without DB provider")
-	assert.False(t, response.CanCleanup, "Cannot cleanup without DB provider")
+// legacyDBRepo is a test-only repository that exposes a GORM connection through
+// GetDB, the seam the MySQL cleanup reads its connection from. Production
+// repositories do not implement it.
+type legacyDBRepo struct {
+	datastore.DetectionRepository
+	db *gorm.DB
 }
 
-// TestStartLegacyCleanup_MySQL_NoDBProvider tests MySQL cleanup when Repo doesn't implement gormDBProvider.
-func TestStartLegacyCleanup_MySQL_NoDBProvider(t *testing.T) {
+// GetDB returns the wrapped connection.
+func (r *legacyDBRepo) GetDB() *gorm.DB { return r.db }
+
+// enableV2OnlyMode switches the package-wide v2-only flag on for one test.
+func enableV2OnlyMode(t *testing.T) {
+	t.Helper()
+	prev := isV2OnlyMode
+	isV2OnlyMode = true
+	t.Cleanup(func() { isV2OnlyMode = prev })
+}
+
+// TestMySQLLegacyCandidates pins the candidate rule: a bare table prefix means
+// the legacy-named tables are live v2 tables, and bare v2 tables beside a prefixed
+// schema keep the shared names out of the list.
+func TestMySQLLegacyCandidates(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
-	e := echo.New()
-	settings := createMySQLTestSettings()
-	controller := createLegacyTestHandler(t, e, settings)
-	// Repo is nil, so gormDBProvider cast will fail
+	tests := []struct {
+		name          string
+		prefix        string
+		bareV2Present bool
+		want          []string
+	}{
+		{"bare schema offers nothing", "", false, nil},
+		{"prefixed schema without bare v2 offers every legacy table", "v2_", false, slices.Concat(legacyOnlyTables, legacySharedTables)},
+		{"prefixed schema beside bare v2 tables offers legacy-only tables", "v2_", true, legacyOnlyTables},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, mysqlLegacyCandidates(tt.prefix, tt.bareV2Present))
+		})
+	}
+}
 
-	prevV2OnlyMode := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2OnlyMode })
+// TestMySQLLegacyCandidates_DropOrder verifies the children-first order the
+// foreign keys on notes require.
+func TestMySQLLegacyCandidates_DropOrder(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
 
-	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+	got := mysqlLegacyCandidates("v2_", false)
+	for _, child := range []string{"note_reviews", "note_comments", "note_locks", "results"} {
+		assert.Less(t, slices.Index(got, child), slices.Index(got, "notes"), "%s must be dropped before notes", child)
+	}
+}
 
-	err := controller.StartLegacyCleanup(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code) // Request accepted, async will fail
+// TestGetLegacyStatus_MySQL_Refuses verifies the status call fails closed when no
+// connection or no usable MySQL manager is available.
+func TestGetLegacyStatus_MySQL_Refuses(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
 
-	// Wait for async cleanup to complete
-	require.Eventually(t, func() bool {
-		state, _, _, _ := controller.cleanupStatus.Get()
-		return state == CleanupStateCompleted || state == CleanupStateFailed
-	}, 5*time.Second, 10*time.Millisecond, "cleanup should complete")
+	sqliteMgr := newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0)
+	tests := []struct {
+		name string
+		repo func() datastore.DetectionRepository
+		mgr  datastoreV2.Manager
+	}{
+		{"repository without a connection", func() datastore.DetectionRepository { return nil }, nil},
+		{"no v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }, nil},
+		{"non-MySQL v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }, sqliteMgr},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			controller := createLegacyTestHandler(t, e, createMySQLTestSettings())
+			controller.Repo = tt.repo()
+			if tt.mgr != nil {
+				controller.V2Manager = tt.mgr
+			}
+			enableV2OnlyMode(t)
 
-	// Verify cleanup failed due to no DB provider
-	state, errMsg, _, _ := controller.cleanupStatus.Get()
-	assert.Equal(t, CleanupStateFailed, state)
-	assert.Contains(t, errMsg, "cannot access database connection")
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody), rec)
+			require.NoError(t, controller.GetLegacyStatus(ctx))
+			assert.Equal(t, http.StatusOK, rec.Code)
+
+			var response LegacyStatusResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			assert.False(t, response.Exists)
+			assert.False(t, response.CanCleanup)
+			assert.Equal(t, notification.MsgErrCleanupAccessFailed, response.ErrorKey)
+		})
+	}
+}
+
+// TestStartLegacyCleanup_MySQL_Refuses verifies a POST that cannot be resolved is
+// refused synchronously and never schedules work.
+func TestStartLegacyCleanup_MySQL_Refuses(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	sqliteMgr := newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0)
+	tests := []struct {
+		name string
+		repo func() datastore.DetectionRepository
+	}{
+		{"repository without a connection", func() datastore.DetectionRepository { return nil }},
+		{"no v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			controller := createLegacyTestHandler(t, e, createMySQLTestSettings())
+			controller.Repo = tt.repo()
+			enableV2OnlyMode(t)
+
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody), rec)
+			require.NoError(t, controller.StartLegacyCleanup(ctx))
+			controller.Wait()
+
+			assert.Equal(t, http.StatusBadRequest, rec.Code)
+			var response CleanupActionResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			assert.False(t, response.Success)
+			assert.Equal(t, notification.MsgErrCleanupAccessFailed, response.ErrorKey)
+			state, _, _, _ := controller.cleanupStatus.Get()
+			assert.Equal(t, CleanupStateIdle, state, "a refused POST must not enter in_progress")
+		})
+	}
 }
 
 // cleanupContenders is the number of goroutines racing for TryStart.
@@ -500,18 +572,4 @@ func TestCleanupStatus_SetGetReset(t *testing.T) {
 	assert.Empty(t, errMsg)
 	assert.Nil(t, remaining)
 	assert.Equal(t, int64(0), reclaimed)
-}
-
-// TestLegacyTables_Defined tests that the legacy tables list is properly defined.
-func TestLegacyTables_Defined(t *testing.T) {
-	t.Attr("component", "legacy_cleanup")
-	t.Attr("type", "unit")
-
-	assert.NotEmpty(t, legacyTables, "Legacy tables list should not be empty")
-
-	// Verify expected tables are in the list
-	expectedTables := []string{"notes", "results", "hourly_weathers", "daily_events"}
-	for _, expected := range expectedTables {
-		assert.Contains(t, legacyTables, expected, "Legacy tables should contain %s", expected)
-	}
 }
