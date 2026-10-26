@@ -255,24 +255,87 @@ func TestGetHourlyWeatherForDay(t *testing.T) {
 	// Verify mock expectations
 }
 
-// TestWeatherDateRoutes_InvalidDateIsBadRequest checks that every route taking a :date
+// Literal wording of the API messages and the error parameter key. They are repeated here on
+// purpose so the tests pin the text clients see instead of the production constants.
+const (
+	wantInvalidDateMessage = "Invalid date format. Use YYYY-MM-DD"
+	wantNoHourlyData       = "No weather data found for the specified date"
+	wantFutureDate         = "No weather data available for future date"
+	wantParamNameKey       = "paramName"
+	wantParamNameValue     = "date"
+)
+
+// Fixed clock used by the local-calendar test: 2026-03-14 is the base day, and the two
+// instants sit half an hour before and after the following local midnight.
+const (
+	westOffset             = -8 * time.Hour
+	eastOffset             = 13 * time.Hour
+	clockYear              = 2026
+	clockMonth             = time.March
+	clockDay               = 14
+	beforeMidnightHour     = 23
+	afterMidnightHour      = 0
+	clockMinute            = 30
+	yesterdayOffsetDays    = -1
+	todayOffsetDays        = 0
+	tomorrowOffsetDays     = 1
+	leapDay                = "2024-02-29"
+	leapDayHour            = 13
+	leapDayHourParam       = "13"
+	leapDayTemperature     = 7.5
+	leapDayTemperatureJSON = `"temperature":7.5`
+)
+
+// weatherDateRoute describes one route that takes a :date parameter. stubValid sets up the
+// datastore call a valid date makes on that route.
+type weatherDateRoute struct {
+	name       string
+	path       string
+	paramNames []string
+	extra      []string
+	handler    func(*Handler) echo.HandlerFunc
+	stubValid  func(*mocks.MockInterface)
+	wantBody   string
+}
+
+func weatherDateRoutes() []weatherDateRoute {
+	leapDayRows := func(m *mocks.MockInterface) {
+		m.On("GetHourlyWeather", leapDay).Return([]datastore.HourlyWeather{
+			{Time: time.Date(2024, time.February, 29, leapDayHour, 0, 0, 0, time.Local), Temperature: leapDayTemperature},
+		}, nil)
+	}
+	return []weatherDateRoute{
+		{"daily", "/api/v2/weather/daily/:date", []string{"date"}, nil,
+			func(h *Handler) echo.HandlerFunc { return h.GetDailyWeather },
+			func(m *mocks.MockInterface) {
+				m.On("GetDailyEvents", leapDay).Return(datastore.DailyEvents{Date: leapDay}, nil)
+			}, `"date":"` + leapDay + `"`},
+		{"hourly", "/api/v2/weather/hourly/:date", []string{"date"}, nil,
+			func(h *Handler) echo.HandlerFunc { return h.GetHourlyWeatherForDay },
+			leapDayRows, leapDayTemperatureJSON},
+		{"hour", "/api/v2/weather/hourly/:date/:hour", []string{"date", "hour"}, []string{leapDayHourParam},
+			func(h *Handler) echo.HandlerFunc { return h.GetHourlyWeatherForHour },
+			leapDayRows, leapDayTemperatureJSON},
+	}
+}
+
+// serveWeatherDateRoute calls the route's handler directly with date as the :date parameter.
+func serveWeatherDateRoute(t *testing.T, e *echo.Echo, h *Handler, route *weatherDateRoute, date string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath(route.path)
+	c.SetParamNames(route.paramNames...)
+	c.SetParamValues(append([]string{date}, route.extra...)...)
+	require.NoError(t, route.handler(h)(c))
+	return rec
+}
+
+// TestWeatherDateRoutes_InvalidDateIsBadRequest checks that each route in weatherDateRoutes
 // rejects a malformed or impossible date with 400 before the datastore is touched. No mock
 // expectation is set, so any datastore call fails the test.
 func TestWeatherDateRoutes_InvalidDateIsBadRequest(t *testing.T) {
-	routes := []struct {
-		name       string
-		path       string
-		paramNames []string
-		extra      []string
-		handler    func(*Handler) echo.HandlerFunc
-	}{
-		{"daily", "/api/v2/weather/daily/:date", []string{"date"}, nil,
-			func(h *Handler) echo.HandlerFunc { return h.GetDailyWeather }},
-		{"hourly", "/api/v2/weather/hourly/:date", []string{"date"}, nil,
-			func(h *Handler) echo.HandlerFunc { return h.GetHourlyWeatherForDay }},
-		{"hour", "/api/v2/weather/hourly/:date/:hour", []string{"date", "hour"}, []string{"13"},
-			func(h *Handler) echo.HandlerFunc { return h.GetHourlyWeatherForHour }},
-	}
 	invalidDates := []string{
 		"notadate",    // garbage
 		"2026-2-03",   // unpadded month
@@ -282,27 +345,36 @@ func TestWeatherDateRoutes_InvalidDateIsBadRequest(t *testing.T) {
 		"2025-02-29",  // Feb 29 in a non-leap year
 	}
 
-	for _, route := range routes {
+	for _, route := range weatherDateRoutes() {
 		for _, date := range invalidDates {
 			t.Run(route.name+"/"+date, func(t *testing.T) {
 				e, _, h := setupWeatherTestEnvironment(t)
-				req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-				rec := httptest.NewRecorder()
-				c := e.NewContext(req, rec)
-				c.SetPath(route.path)
-				c.SetParamNames(route.paramNames...)
-				c.SetParamValues(append([]string{date}, route.extra...)...)
-
-				require.NoError(t, route.handler(h)(c))
+				rec := serveWeatherDateRoute(t, e, h, &route, date)
 				assert.Equal(t, http.StatusBadRequest, rec.Code)
 
 				var resp apicore.ErrorResponse
 				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-				assert.Equal(t, invalidDateMessage, resp.Message)
+				assert.Equal(t, wantInvalidDateMessage, resp.Message)
 				assert.Equal(t, notification.MsgErrDetectionInvalidDate, resp.ErrorKey)
-				assert.Equal(t, "date", resp.ErrorParams[invalidDateParamKey])
+				assert.Equal(t, wantParamNameValue, resp.ErrorParams[wantParamNameKey])
 			})
 		}
+	}
+}
+
+// TestWeatherDateRoutes_LeapDayReachesDatastore checks that a real date that a strict
+// validator could wrongly reject, a Feb 29 in a leap year, still reaches the datastore on
+// each route in weatherDateRoutes and is answered with its data.
+func TestWeatherDateRoutes_LeapDayReachesDatastore(t *testing.T) {
+	for _, route := range weatherDateRoutes() {
+		t.Run(route.name, func(t *testing.T) {
+			e, mockDS, h := setupWeatherTestEnvironment(t)
+			route.stubValid(mockDS)
+
+			rec := serveWeatherDateRoute(t, e, h, &route, leapDay)
+			assert.Equal(t, http.StatusOK, rec.Code)
+			assert.Contains(t, rec.Body.String(), route.wantBody)
+		})
 	}
 }
 
@@ -311,8 +383,8 @@ func TestWeatherDateRoutes_InvalidDateIsBadRequest(t *testing.T) {
 // on both sides of UTC and on both sides of local midnight. It replaces time.Local, so it
 // must stay sequential (no t.Parallel).
 func TestGetHourlyWeatherForDay_EmptyResultFutureUsesLocalCalendar(t *testing.T) {
-	westZone := time.FixedZone("UTC-8", -8*60*60)
-	eastZone := time.FixedZone("UTC+13", 13*60*60)
+	westZone := time.FixedZone("UTC-8", int(westOffset/time.Second))
+	eastZone := time.FixedZone("UTC+13", int(eastOffset/time.Second))
 
 	zones := []struct {
 		name string
@@ -324,8 +396,12 @@ func TestGetHourlyWeatherForDay_EmptyResultFutureUsesLocalCalendar(t *testing.T)
 		name string
 		at   func(*time.Location) time.Time
 	}{
-		{"beforeMidnight", func(l *time.Location) time.Time { return time.Date(2026, 3, 14, 23, 30, 0, 0, l) }},
-		{"afterMidnight", func(l *time.Location) time.Time { return time.Date(2026, 3, 15, 0, 30, 0, 0, l) }},
+		{"beforeMidnight", func(l *time.Location) time.Time {
+			return time.Date(clockYear, clockMonth, clockDay, beforeMidnightHour, clockMinute, 0, 0, l)
+		}},
+		{"afterMidnight", func(l *time.Location) time.Time {
+			return time.Date(clockYear, clockMonth, clockDay+1, afterMidnightHour, clockMinute, 0, 0, l)
+		}},
 	}
 
 	days := []struct {
@@ -333,9 +409,9 @@ func TestGetHourlyWeatherForDay_EmptyResultFutureUsesLocalCalendar(t *testing.T)
 		offset  int
 		message string
 	}{
-		{"yesterday", -1, noHourlyDataMessage},
-		{"today", 0, noHourlyDataMessage},
-		{"tomorrow", 1, futureDateMessage},
+		{"yesterday", yesterdayOffsetDays, wantNoHourlyData},
+		{"today", todayOffsetDays, wantNoHourlyData},
+		{"tomorrow", tomorrowOffsetDays, wantFutureDate},
 	}
 
 	for _, z := range zones {
