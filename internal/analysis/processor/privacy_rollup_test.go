@@ -69,12 +69,12 @@ func (r *recordingRollup) RecordDiscard(d privacyrollup.Discard) {
 	if r.p.pendingMutex.TryLock() {
 		r.p.pendingMutex.Unlock()
 	} else {
-		r.t.Error("RecordDiscard called with pendingMutex held")
+		assert.Fail(r.t, "RecordDiscard called with pendingMutex held")
 	}
 	if r.p.detectionMutex.TryLock() {
 		r.p.detectionMutex.Unlock()
 	} else {
-		r.t.Error("RecordDiscard called with detectionMutex held")
+		assert.Fail(r.t, "RecordDiscard called with detectionMutex held")
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()

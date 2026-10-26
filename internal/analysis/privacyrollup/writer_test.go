@@ -339,7 +339,7 @@ func TestWriter_RecordDiscardNeverBlocksWhenTheBufferIsFull(t *testing.T) {
 	select {
 	case <-done:
 	case <-time.After(5 * time.Second):
-		t.Fatal("RecordDiscard blocked")
+		require.FailNow(t, "RecordDiscard blocked")
 	}
 	assert.Equal(t, int64(extra), w.discardsDropped.Load())
 
