@@ -94,9 +94,13 @@ type Processor struct {
 	heldLabelHits map[string]humanHit
 	// humanHits lists the counted speech hits of each source with the model or
 	// VAD gate that produced them (see appendHumanHitLocked), guarded by
-	// detectionMutex and created lazily. The discard log reads it to name every
-	// contributor to a verdict.
+	// detectionMutex and created lazily. The discard log and the discard rows read
+	// it to name every contributor to a verdict.
 	humanHits map[string][]humanHit
+	// humanHitsCapDropped holds, per source, the latest stamp of a hit that the cap
+	// (humanHitMaxPerSource) dropped from humanHits. It is guarded by
+	// detectionMutex and created lazily.
+	humanHitsCapDropped map[string]time.Time
 	// privacyRollup receives privacy filter activity for the hourly rollup. It is
 	// set once before Start (SetPrivacyRollup) and never written again, so it needs
 	// no lock; nil leaves every hit site a no-op.
@@ -1658,8 +1662,9 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 // latest speech hit in it is at or after the saved clip's begin less
 // privacyClipGuard. A discard logs the model and score of that hit and, with
 // privacyfilter.debug on, a summary of the detectors that counted hits
-// reaching the clip (priv.contributions); the counts are lower bounds once the
-// attribution list is full (humanHitMaxPerSource).
+// reaching the clip (priv.contributions, which is listed whenever the latest hit
+// reaches the clip); the counts are lower bounds once the attribution list has
+// dropped a reaching hit at its cap (priv.hitCountsLowerBound).
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
@@ -1695,7 +1700,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 			if settings.Realtime.PrivacyFilter.Debug {
 				// With privacyfilter.debug on, say who decided: the detectors that
 				// counted hits reaching the saved clip, with hit counts and best
-				// scores (lower bounds once the attribution list is full), next to
+				// scores (lower bounds when priv.hitCountsLowerBound is set), next to
 				// the detection that was dropped.
 				GetLogger().Info("privacy filter dropped detection",
 					logger.String("species", item.Detection.Result.Species.CommonName),
@@ -1966,6 +1971,8 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	var broadcastSnapshot []SSEPendingDetection
 	// Privacy rollup events, handed off after pendingMutex is released.
 	var rollupEvents []sourcedEvent
+	// Privacy filter discard records, handed off after pendingMutex is released.
+	var discardRecords []privacyrollup.Discard
 
 	p.pendingMutex.Lock()
 
@@ -2006,6 +2013,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 				logger.String("operation", "discard_detection"))
 			if reason == reasonPrivacyFilter && p.privacyRollup != nil {
 				rollupEvents = append(rollupEvents, discardEvent(item.Source, &priv.hit))
+				discardRecords = append(discardRecords, privacyDiscard(settings, &item, &priv, now))
 			}
 			delete(p.pendingDetections, mapKey)
 
@@ -2065,6 +2073,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	p.pendingMutex.Unlock()
 
 	p.recordPrivacyEvents(settings, rollupEvents...)
+	p.recordPrivacyDiscards(discardRecords)
 
 	if broadcastSnapshot != nil {
 		p.broadcastPendingSnapshot(broadcastSnapshot)

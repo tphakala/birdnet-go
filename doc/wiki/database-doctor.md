@@ -294,9 +294,9 @@ SET FOREIGN_KEY_CHECKS = 1;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS alert_actions, alert_conditions, alert_history, alert_histories, alert_rules,
   detection_locks, detection_comments, detection_reviews, detection_model_contributions,
-  detection_predictions, detections, labels, privacy_filter_hourlies, audio_sources, ai_models,
-  taxonomic_classes, label_types, app_events, app_metadata, migration_dirty_ids, migration_state,
-  migration_states;
+  detection_predictions, detections, labels, privacy_filter_discard_hits, privacy_filter_discards,
+  privacy_filter_hourlies, audio_sources, ai_models, taxonomic_classes, label_types, app_events,
+  app_metadata, migration_dirty_ids, migration_state, migration_states;
 SET FOREIGN_KEY_CHECKS = 1;
 ```
 

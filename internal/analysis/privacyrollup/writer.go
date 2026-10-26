@@ -19,6 +19,12 @@ const (
 	// privacyRollupRetention is how long hourly rows are kept. If it ever becomes
 	// a setting it must be read in the prune branch of every tick, not at start.
 	privacyRollupRetention = 30 * 24 * time.Hour
+	// privacyDiscardBuffer is the capacity of the discard channel, the queue between
+	// flushes. A full channel drops the record and counts it.
+	privacyDiscardBuffer = 1024
+	// privacyDiscardRetention is how long discard rows are kept. If it ever becomes
+	// a setting it must be read in the prune branch of every tick, not at start.
+	privacyDiscardRetention = 30 * 24 * time.Hour
 	// privacyRollupPruneInterval is the time between prunes.
 	privacyRollupPruneInterval = time.Hour
 	// privacyRollupWriteTimeout bounds one resolve, upsert or prune.
@@ -34,19 +40,30 @@ type RowStore interface {
 	DeleteBefore(ctx context.Context, cutoffHourStart int64) (int64, error)
 }
 
+// DiscardStore persists the discard rows. The v2 PrivacyFilterDiscardRepository
+// satisfies it.
+type DiscardStore interface {
+	Save(ctx context.Context, discard *entities.PrivacyFilterDiscard) error
+	DeleteBefore(ctx context.Context, cutoffMillis int64) (int64, error)
+}
+
 // SourceResolver returns the audio_sources id of a source, creating the row the
 // detection save path would create.
 type SourceResolver func(ctx context.Context, sourceURI, nodeName string, displayName *string) (uint, error)
 
 // Writer receives events without blocking, folds them in memory and writes
 // additive deltas once a minute. A failed write drops its delta and is never
-// retried, so a count is low rather than doubled.
+// retried, so a count is low rather than doubled. Discards queue in a bounded
+// channel and are saved one row each in the same flush; a failed save drops that
+// row and is never retried either.
 type Writer struct {
-	store   RowStore
-	resolve SourceResolver
-	log     logger.Logger
+	store        RowStore
+	discardStore DiscardStore
+	resolve      SourceResolver
+	log          logger.Logger
 
 	events   chan Event
+	discards chan Discard
 	stop     chan struct{}
 	done     chan struct{}
 	stopOnce sync.Once
@@ -59,21 +76,27 @@ type Writer struct {
 	unresolved atomic.Int64 // events or rows lost because the source could not be resolved
 	failed     atomic.Int64 // rows lost to a failed write
 
+	discardsDropped atomic.Int64 // discards lost because the channel was full
+	discardsFailed  atomic.Int64 // discards lost to a failed write
+
 	reportedDropped, reportedUnresolved, reportedFailed int64
+	reportedDiscardsDropped, reportedDiscardsFailed     int64
 }
 
 // NewWriter creates a Writer. A nil log uses the analysis logger.
-func NewWriter(store RowStore, resolve SourceResolver, log logger.Logger) *Writer {
+func NewWriter(store RowStore, discards DiscardStore, resolve SourceResolver, log logger.Logger) *Writer {
 	if log == nil {
 		log = logger.Global().Module("analysis").Module("privacyrollup")
 	}
 	return &Writer{
-		store:   store,
-		resolve: resolve,
-		log:     log,
-		events:  make(chan Event, privacyRollupEventBuffer),
-		stop:    make(chan struct{}),
-		done:    make(chan struct{}),
+		store:        store,
+		discardStore: discards,
+		resolve:      resolve,
+		log:          log,
+		events:       make(chan Event, privacyRollupEventBuffer),
+		discards:     make(chan Discard, privacyDiscardBuffer),
+		stop:         make(chan struct{}),
+		done:         make(chan struct{}),
 	}
 }
 
@@ -89,6 +112,23 @@ func (w *Writer) Record(ev Event) {
 	case w.events <- ev:
 	default:
 		w.dropped.Add(1)
+	}
+}
+
+// RecordDiscard queues a discarded detection without blocking; a full buffer
+// drops it. Safe on a nil Writer and after Stop (the channel is never closed).
+// The writer goroutine does not read the channel between flushes, so the channel
+// is the whole queue.
+//
+//nolint:gocritic // hugeParam: discards are rare, a copy is cheaper than an escaping pointer
+func (w *Writer) RecordDiscard(d Discard) {
+	if w == nil {
+		return
+	}
+	select {
+	case w.discards <- d:
+	default:
+		w.discardsDropped.Add(1)
 	}
 }
 
@@ -178,14 +218,10 @@ func (w *Writer) flush(ctx context.Context) {
 	w.acc = accumulator{}
 
 	// ids holds the audio_sources id of each source; 0 marks one that could not
-	// be resolved, so it is tried once per flush.
+	// be resolved, so it is tried once per flush. Rollup rows and discards share it.
 	ids := make(map[sourceKey]uint)
 	for key, d := range taken.rows {
-		id, seen := ids[key.source]
-		if !seen {
-			id = w.resolveSource(ctx, key.source, taken.display[key.source])
-			ids[key.source] = id
-		}
+		id := w.sourceID(ctx, ids, key.source, taken.display[key.source])
 		if id == 0 {
 			w.unresolved.Add(1)
 			continue
@@ -194,7 +230,51 @@ func (w *Writer) flush(ctx context.Context) {
 			w.failed.Add(1)
 		}
 	}
+	w.flushDiscards(ctx, ids)
 	w.reportLosses()
+}
+
+// sourceID returns the audio_sources id of src from the per-flush cache ids,
+// resolving and caching it on first use; 0 means the source could not be resolved.
+func (w *Writer) sourceID(ctx context.Context, ids map[sourceKey]uint, src sourceKey, display string) uint {
+	id, seen := ids[src]
+	if !seen {
+		id = w.resolveSource(ctx, src, display)
+		ids[src] = id
+	}
+	return id
+}
+
+// flushDiscards saves the discards queued when the flush started, one
+// transaction each. After the first failed save the rest of that batch is counted
+// failed without being resolved or written, so a locked database costs at most
+// one write timeout per flush here. A discard whose source cannot be resolved is
+// stored with a NULL source, as the detection save path does.
+func (w *Writer) flushDiscards(ctx context.Context, ids map[sourceKey]uint) {
+	stalled := false
+	for range len(w.discards) {
+		d := <-w.discards
+		if stalled {
+			w.discardsFailed.Add(1)
+			continue
+		}
+		var sourceID *uint
+		if d.SourceURI != "" {
+			if id := w.sourceID(ctx, ids, sourceKey{d.SourceURI, d.NodeName}, d.DisplayName); id != 0 {
+				sourceID = &id
+			}
+		}
+		if err := w.saveDiscard(ctx, discardRow(&d, sourceID)); err != nil {
+			w.discardsFailed.Add(1)
+			stalled = true
+		}
+	}
+}
+
+func (w *Writer) saveDiscard(ctx context.Context, row *entities.PrivacyFilterDiscard) error {
+	wctx, cancel := context.WithTimeout(ctx, privacyRollupWriteTimeout)
+	defer cancel()
+	return w.discardStore.Save(wctx, row)
 }
 
 // resolveSource returns the audio_sources id of src, or 0 when it cannot be
@@ -229,40 +309,64 @@ func (w *Writer) write(ctx context.Context, sourceID uint, key *rowKey, d *count
 // the last report. It never names sources or rows.
 func (w *Writer) reportLosses() {
 	dropped, unresolved, failed := w.dropped.Load(), w.unresolved.Load(), w.failed.Load()
-	if dropped == w.reportedDropped && unresolved == w.reportedUnresolved && failed == w.reportedFailed {
+	discardsDropped, discardsFailed := w.discardsDropped.Load(), w.discardsFailed.Load()
+	if dropped == w.reportedDropped && unresolved == w.reportedUnresolved && failed == w.reportedFailed &&
+		discardsDropped == w.reportedDiscardsDropped && discardsFailed == w.reportedDiscardsFailed {
 		return
 	}
-	w.log.Warn("privacy filter rollup lost some counts",
+	w.log.Warn("privacy filter activity lost some records",
 		logger.Int64("dropped_new", dropped-w.reportedDropped),
 		logger.Int64("unresolved_new", unresolved-w.reportedUnresolved),
 		logger.Int64("failed_new", failed-w.reportedFailed),
+		logger.Int64("discards_dropped_new", discardsDropped-w.reportedDiscardsDropped),
+		logger.Int64("discards_failed_new", discardsFailed-w.reportedDiscardsFailed),
 		logger.Int64("dropped_total", dropped),
 		logger.Int64("unresolved_total", unresolved),
 		logger.Int64("failed_total", failed),
+		logger.Int64("discards_dropped_total", discardsDropped),
+		logger.Int64("discards_failed_total", discardsFailed),
 		logger.String("operation", "privacy_rollup_flush"))
 	w.reportedDropped, w.reportedUnresolved, w.reportedFailed = dropped, unresolved, failed
+	w.reportedDiscardsDropped, w.reportedDiscardsFailed = discardsDropped, discardsFailed
 }
 
 // maybePrune deletes expired rows on the first tick and then once an hour. The
-// cutoff is the wall clock, not truncated to the hour, so an expired row does
-// not linger. A failed prune leaves lastPrune alone, so the next tick retries.
+// cutoffs are the wall clock, not truncated to the hour, so an expired row does
+// not linger. Both prunes run every time; a failure of either leaves lastPrune
+// alone, so the next tick retries both (a repeated successful delete is harmless).
 func (w *Writer) maybePrune(ctx context.Context, now time.Time) {
 	if !w.lastPrune.IsZero() && now.Sub(w.lastPrune) < privacyRollupPruneInterval {
 		return
 	}
+	rollupOK := w.prune(ctx, "rollup", func(pctx context.Context) (int64, error) {
+		return w.store.DeleteBefore(pctx, now.Add(-privacyRollupRetention).Unix())
+	})
+	discardsOK := w.prune(ctx, "discard", func(pctx context.Context) (int64, error) {
+		return w.discardStore.DeleteBefore(pctx, now.Add(-privacyDiscardRetention).UnixMilli())
+	})
+	if rollupOK && discardsOK {
+		w.lastPrune = now
+	}
+}
+
+// prune runs one delete under the write timeout and logs its outcome; it reports
+// whether the delete succeeded. kind names the table group in the log.
+func (w *Writer) prune(ctx context.Context, kind string, del func(context.Context) (int64, error)) bool {
 	pctx, cancel := context.WithTimeout(ctx, privacyRollupWriteTimeout)
 	defer cancel()
-	deleted, err := w.store.DeleteBefore(pctx, now.Add(-privacyRollupRetention).Unix())
+	deleted, err := del(pctx)
 	if err != nil {
-		w.log.Warn("privacy filter rollup prune failed",
+		w.log.Warn("privacy filter prune failed",
+			logger.String("kind", kind),
 			logger.Error(err),
 			logger.String("operation", "privacy_rollup_prune"))
-		return
+		return false
 	}
-	w.lastPrune = now
 	if deleted > 0 {
-		w.log.Debug("privacy filter rollup pruned old rows",
+		w.log.Debug("privacy filter pruned old rows",
+			logger.String("kind", kind),
 			logger.Int64("deleted", deleted),
 			logger.String("operation", "privacy_rollup_prune"))
 	}
+	return true
 }

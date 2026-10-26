@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 )
 
@@ -33,6 +34,8 @@ type recordingRollup struct {
 	p      *Processor
 	mu     sync.Mutex
 	events []privacyrollup.Event
+	// discards are the records of RecordDiscard.
+	discards []privacyrollup.Discard
 }
 
 func newRecordingRollup(t *testing.T, p *Processor) *recordingRollup {
@@ -57,6 +60,33 @@ func (r *recordingRollup) Record(ev privacyrollup.Event) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.events = append(r.events, ev)
+}
+
+// RecordDiscard keeps the discard and checks that neither processor mutex is held.
+//
+//nolint:gocritic // hugeParam: must match privacyrollup.Recorder
+func (r *recordingRollup) RecordDiscard(d privacyrollup.Discard) {
+	if r.p.pendingMutex.TryLock() {
+		r.p.pendingMutex.Unlock()
+	} else {
+		assert.Fail(r.t, "RecordDiscard called with pendingMutex held")
+	}
+	if r.p.detectionMutex.TryLock() {
+		r.p.detectionMutex.Unlock()
+	} else {
+		assert.Fail(r.t, "RecordDiscard called with detectionMutex held")
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.discards = append(r.discards, d)
+}
+
+func (r *recordingRollup) takeDiscards() []privacyrollup.Discard {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := r.discards
+	r.discards = nil
+	return out
 }
 
 func (r *recordingRollup) take() []privacyrollup.Event {
@@ -287,6 +317,7 @@ func TestPrivacyRollup_FlushEvents(t *testing.T) {
 		discards := rec.ofKind(privacyrollup.KindDiscard)
 		require.Len(t, discards, 2)
 		assert.Equal(t, discards[0], discards[1])
+		assert.Len(t, rec.takeDiscards(), 2, "one discard record per detection")
 	})
 
 	t.Run("a label hit that causes a discard gives a discard keyed on the label hit and its threshold", func(t *testing.T) {
@@ -347,7 +378,65 @@ func TestPrivacyRollup_FlushEvents(t *testing.T) {
 		r.p.pendingDetections[key] = item
 		require.Equal(t, "discarded", r.outcome())
 		assert.Empty(t, rec.ofKind(privacyrollup.KindDiscard))
+		assert.Empty(t, rec.takeDiscards(), "a count discard is not a privacy discard record")
 	})
+
+	t.Run("a privacy discard gives one discard record with species, model, clip span, settings and hits, debug off", func(t *testing.T) {
+		r, rec := rollupRig(t, 45*time.Second)
+		chunkStart := 40*time.Second - r.clip
+		r.speech = []speechInterval{{chunkStart - sec(1.7), chunkStart - sec(1.2)}}
+		r.feed(r.clip, 40*time.Second+sec(11), sec(3))
+		r.pend(40 * time.Second)
+		withDetectionResult(r)
+		require.False(t, r.settings.Realtime.PrivacyFilter.Debug)
+		key := pendingDetectionKey(e2eSource, e2eSpecies)
+		item := r.p.pendingDetections[key]
+		clip := clipSpan(r.settings, &item)
+
+		before := time.Now()
+		require.Equal(t, "discarded", r.outcome())
+		after := time.Now()
+
+		records := rec.takeDiscards()
+		require.Len(t, records, 1)
+		got := records[0]
+		assert.Equal(t, "Parus major", got.ScientificName)
+		assert.Equal(t, "Great Tit", got.CommonName)
+		assert.InDelta(t, 0.87, got.Confidence, 1e-9)
+		assert.Equal(t, r.model, got.ModelID)
+		assert.Equal(t, rollupTestConnection, got.SourceURI)
+		assert.Equal(t, rollupTestDisplay, got.DisplayName)
+		assert.Equal(t, rollupTestNode, got.NodeName)
+		assert.True(t, clip.from.Equal(got.ClipBegin))
+		assert.True(t, clip.to.Equal(got.ClipEnd))
+		assert.Equal(t, privacyrollup.ThresholdMilli(float64(r.settings.Realtime.PrivacyFilter.Confidence)), got.LabelThresholdMilli)
+		assert.True(t, got.VADEnabled)
+		assert.Equal(t, 350, got.VADThresholdMilli)
+		assert.False(t, got.At.Before(before) || got.At.After(after), "stamped with the flush time")
+		assert.False(t, got.HitCountsLowerBound)
+
+		r.p.detectionMutex.RLock()
+		want := r.p.hitContributionsLocked(e2eSource, clip.from.Add(-privacyClipGuard))
+		r.p.detectionMutex.RUnlock()
+		require.NotEmpty(t, want)
+		require.Len(t, got.Hits, len(want))
+		for i, c := range want {
+			assert.Equal(t, privacyrollup.DiscardHit{Detector: c.modelID, Trigger: c.trigger, Count: c.count, MinScore: c.minScore, MaxScore: c.maxScore}, got.Hits[i])
+			assert.LessOrEqual(t, got.Hits[i].MinScore, got.Hits[i].MaxScore)
+		}
+	})
+}
+
+// withDetectionResult fills the species, confidence and source identity of the
+// pending detection of the rig, which pend leaves zero.
+func withDetectionResult(r *privacyRig) {
+	key := pendingDetectionKey(e2eSource, e2eSpecies)
+	item := r.p.pendingDetections[key]
+	item.Detection.Result.Species = detection.Species{ScientificName: "Parus major", CommonName: "Great Tit"}
+	item.Detection.Result.Confidence = 0.87
+	item.Detection.Result.AudioSource = detection.AudioSource{SafeString: rollupTestConnection, DisplayName: rollupTestDisplay}
+	item.Detection.Result.SourceNode = rollupTestNode
+	r.p.pendingDetections[key] = item
 }
 
 // TestPrivacyRollup_HeldHitsResolveOnceAcrossOverlapReloads checks, after every

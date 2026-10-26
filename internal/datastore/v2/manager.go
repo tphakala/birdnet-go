@@ -313,6 +313,8 @@ func v2Entities() []any {
 		&entities.AppEvent{},
 		// Privacy filter activity
 		&entities.PrivacyFilterHourly{},
+		&entities.PrivacyFilterDiscard{},
+		&entities.PrivacyFilterDiscardHit{},
 	}
 }
 

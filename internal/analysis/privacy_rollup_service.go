@@ -10,7 +10,7 @@ import (
 )
 
 // startPrivacyRollup starts the writer of the hourly privacy filter rollup and
-// hands it to the processor. Only a v2-only process writes: the mode is fixed
+// the discard rows, and hands it to the processor. Only a v2-only process writes: the mode is fixed
 // for the life of the process (a migration that finishes mid-run keeps the
 // legacy store until restart), and in migration mode the v2 manager belongs to
 // the migration. Without a writer the processor's recorder stays nil and every
@@ -26,6 +26,7 @@ func (s *APIServerService) startPrivacyRollup() {
 	useV2Prefix := mgr.TablePrefix() != ""
 	isMySQL := mgr.IsMySQL()
 	rows := repository.NewPrivacyFilterHourlyRepository(mgr.DB(), nil, useV2Prefix, isMySQL)
+	discards := repository.NewPrivacyFilterDiscardRepository(mgr.DB(), nil, useV2Prefix)
 	sources := repository.NewAudioSourceRepository(mgr.DB(), nil, useV2Prefix, isMySQL)
 
 	// The resolver captures only the repository: Stop clears s.proc before the
@@ -38,7 +39,7 @@ func (s *APIServerService) startPrivacyRollup() {
 		return src.ID, nil
 	}
 
-	w := privacyrollup.NewWriter(rows, resolve, nil)
+	w := privacyrollup.NewWriter(rows, discards, resolve, nil)
 	w.Start()
 	s.privacyRollup = w
 	s.proc.SetPrivacyRollup(w)

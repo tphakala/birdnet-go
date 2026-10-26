@@ -259,7 +259,9 @@ func (m *MySQLManager) Delete() error {
 		prefix + "detection_model_contributions",
 		prefix + "detection_predictions",
 		prefix + "detections",
-		// References audio_sources, so it goes first
+		// These reference audio_sources (the hits reference the discards), so they go first
+		prefix + "privacy_filter_discard_hits",
+		prefix + "privacy_filter_discards",
 		prefix + "privacy_filter_hourlies",
 		prefix + "audio_sources",
 		// Alert tables (drop children first)

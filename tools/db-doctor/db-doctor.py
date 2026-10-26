@@ -26,8 +26,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-SCRIPT_VERSION = "1.3.0"
-SCHEMA_VERSION = "v2-2026-10-25"
+SCRIPT_VERSION = "1.4.0"
+SCHEMA_VERSION = "v2-2026-10-26"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -144,6 +144,16 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
         "discards", "unscanned_saves", "max_score", "margin_lt_50",
         "margin_lt_100", "margin_lt_200", "margin_ge_200",
     ],
+    "privacy_filter_discards": [
+        "id", "discarded_at", "source_id", "scientific_name", "common_name",
+        "confidence", "model_id", "clip_begin", "clip_end",
+        "label_threshold_milli", "vad_enabled", "vad_threshold_milli",
+        "hit_counts_lower_bound",
+    ],
+    "privacy_filter_discard_hits": [
+        "id", "discard_id", "detector", "trigger_type", "hit_count",
+        "min_score", "max_score",
+    ],
 }
 
 # Tables that had schema changes between v1 and v2 (used for contamination detection).
@@ -172,7 +182,8 @@ V2_ONLY_TABLES = {
     "detection_model_contributions", "alert_rules", "alert_conditions",
     "alert_actions", "alert_histories", "migration_states",
     "migration_dirty_ids", "app_metadata", "app_events",
-    "privacy_filter_hourlies",
+    "privacy_filter_hourlies", "privacy_filter_discards",
+    "privacy_filter_discard_hits",
 }
 
 # Tables BirdNET-Go recreates itself at startup when they still have the
@@ -546,6 +557,8 @@ FK_CHECKS = [
     ("alert_actions", "rule_id", "alert_rules", "id"),
     ("alert_histories", "rule_id", "alert_rules", "id"),
     ("privacy_filter_hourlies", "source_id", "audio_sources", "id"),
+    ("privacy_filter_discards", "source_id", "audio_sources", "id"),
+    ("privacy_filter_discard_hits", "discard_id", "privacy_filter_discards", "id"),
 ]
 
 # Valid migration table names (for SQL injection prevention)
@@ -1241,6 +1254,7 @@ class DatabaseDoctor:
             "notification_histories", "alert_rules", "daily_events",
             "hourly_weathers", "detection_reviews", "detection_predictions",
             "app_events", "privacy_filter_hourlies",
+            "privacy_filter_discards", "privacy_filter_discard_hits",
             "detection_comments", "detection_locks", "audio_sources",
             "results", "note_reviews",
         ]
