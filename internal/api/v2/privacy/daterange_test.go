@@ -1,6 +1,7 @@
 package privacy
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -38,6 +39,29 @@ func TestLocalDayRange(t *testing.T) {
 		t.Parallel()
 		_, _, _, err := localDayRange("2026-1-05", "", time.UTC)
 		require.ErrorIs(t, err, ErrInvalidDate)
+	})
+
+	t.Run("years that cannot be marshaled are rejected", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct{ start, end string }{
+			{"9999-12-31", "9999-12-31"},
+			{"9999-12-31", ""},
+			{"1969-12-31", "1969-12-31"},
+			{"0000-01-01", "0000-01-01"},
+		} {
+			_, _, _, err := localDayRange(tc.start, tc.end, kolkata)
+			require.ErrorIs(t, err, ErrInvalidDate, "%s..%s", tc.start, tc.end)
+		}
+	})
+
+	t.Run("the edges of the supported years are accepted", func(t *testing.T) {
+		t.Parallel()
+		for _, date := range []string{"1970-01-01", "9998-12-31"} {
+			start, end, _, err := localDayRange(date, date, kolkata)
+			require.NoError(t, err, date)
+			_, err = json.Marshal([]time.Time{start.UTC(), end.UTC()})
+			require.NoError(t, err, date)
+		}
 	})
 
 	t.Run("empty end defaults to 31 dates", func(t *testing.T) {
