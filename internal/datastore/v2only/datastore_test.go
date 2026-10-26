@@ -1679,7 +1679,8 @@ func TestV2OnlyDatastore_Save_DuplicatePredictionLabels(t *testing.T) {
 }
 
 // TestV2OnlyDatastore_Save_ResolvesSourceAndKeepsHighestDuplicateConfidence pins
-// two behaviours of the shared v2 write path that the other Save tests leave open:
+// behaviours of the shared v2 write path that the other Save tests leave open: the
+// unlikely flag,
 // the audio source row takes the note's node name and display name (and a note
 // with no source gets none), and duplicate prediction labels keep the highest
 // confidence.
@@ -1694,6 +1695,7 @@ func TestV2OnlyDatastore_Save_ResolvesSourceAndKeepsHighestDuplicateConfidence(t
 		Time:           "08:30:00",
 		ScientificName: "Periparus ater",
 		Confidence:     0.99,
+		Unlikely:       true,
 		SourceNode:     "garage-node",
 		Source:         datastore.AudioSource{SafeString: "rtsp_garage", DisplayName: "Garage"},
 	}
@@ -1707,6 +1709,7 @@ func TestV2OnlyDatastore_Save_ResolvesSourceAndKeepsHighestDuplicateConfidence(t
 
 	var det entities.Detection
 	require.NoError(t, ds.manager.DB().First(&det, note.ID).Error)
+	assert.True(t, det.Unlikely, "the unlikely flag must reach the stored detection")
 	require.NotNil(t, det.SourceID, "a note with a source must reference an audio source row")
 	var src entities.AudioSource
 	require.NoError(t, ds.manager.DB().First(&src, *det.SourceID).Error)

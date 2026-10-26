@@ -1035,6 +1035,8 @@ func buildDedupedPredictions(detectionID uint, in []predictionWrite, predLabels 
 	return preds
 }
 
+// contributionEntity builds the stored row for one model's contribution. The four
+// extended statistics are set only when c.HasHitStats(); otherwise they stay NULL.
 func contributionEntity(modelID uint, c *detection.ResultModelContrib) *entities.DetectionModelContribution {
 	e := &entities.DetectionModelContribution{
 		ModelID:       modelID,
