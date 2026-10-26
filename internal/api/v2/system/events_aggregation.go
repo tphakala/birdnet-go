@@ -148,9 +148,25 @@ func (c *Handler) aggregateDetectionEvents(entries []reader.LogEntry, _ time.Tim
 	}
 }
 
-// toBucketKey returns the bucket key for a given timestamp (floored to the hour).
+// wallClockHourStart returns the start of the wall-clock hour that contains t,
+// in t's own location and UTC offset. Bucket keys, bucket timestamps and bucket
+// labels all derive from it, so they agree with each other and with the
+// hourly pending counts, which index on t.Hour(). time.Time.Truncate operates
+// on absolute (UTC) time, so for offsets that are not a whole number of hours
+// (+05:30, +05:45, -03:30) it floors to 30 or 45 minutes past the local hour.
+// Subtracting the wall-clock minutes, seconds and nanoseconds keeps t's own
+// offset, so the result never falls after t, even inside a repeated DST hour
+// where time.Date would pick one of the two offsets on its own.
+func wallClockHourStart(t time.Time) time.Time {
+	sinceHourStart := time.Duration(t.Minute())*time.Minute +
+		time.Duration(t.Second())*time.Second +
+		time.Duration(t.Nanosecond())
+	return t.Add(-sinceHourStart)
+}
+
+// toBucketKey returns the bucket key for a given timestamp (floored to the event's wall-clock hour).
 func toBucketKey(t time.Time) string {
-	return t.Truncate(time.Hour).Format(bucketKeyFormat)
+	return wallClockHourStart(t).Format(bucketKeyFormat)
 }
 
 // getOrCreateBucket returns the bucket for the given key, creating it if necessary.
@@ -159,7 +175,7 @@ func getOrCreateBucket(bucketMap map[string]*DetectionBucket, idxMap map[string]
 		return b
 	}
 
-	floored := t.Truncate(time.Hour)
+	floored := wallClockHourStart(t)
 	nextHour := floored.Add(time.Hour)
 	label := fmt.Sprintf("%s\u2013%s", floored.Format(bucketLabelFormat), nextHour.Format(bucketLabelFormat))
 
