@@ -86,6 +86,7 @@ describe('appState browser Sentry lifecycle', () => {
 
     const logger = await import('$lib/utils/logger');
     setHook = vi.mocked(logger.setSentryCaptureError);
+    setHook.mockClear();
     appState = await import('$lib/stores/appState.svelte');
   });
 
