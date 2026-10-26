@@ -24,9 +24,10 @@ func newCaptureLogger(t *testing.T) *bytes.Buffer {
 	capture := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
 	cl, err := logger.NewCentralLogger(
 		&logger.LoggingConfig{
-			Console:      &logger.ConsoleOutput{Enabled: false},
-			FileOutput:   &logger.FileOutput{Enabled: false},
-			DefaultLevel: "debug",
+			Console:       &logger.ConsoleOutput{Enabled: false},
+			FileOutput:    &logger.FileOutput{Enabled: false},
+			ModuleOutputs: logger.DisabledModuleOutputs(),
+			DefaultLevel:  "debug",
 		},
 		capture,
 	)
