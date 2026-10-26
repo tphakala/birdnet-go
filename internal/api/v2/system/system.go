@@ -650,7 +650,7 @@ func (c *Handler) GetDiskInfo(ctx echo.Context) error {
 
 	disks := make([]DiskInfo, 0, len(partitions))
 	for _, partition := range partitions {
-		if skipFilesystem(partition.Fstype) {
+		if skipFilesystem(partition.Fstype) || isFileMount(partition.Mountpoint) {
 			continue
 		}
 		diskInfo := c.buildDiskInfo(partition, ioCounters, uptimeMs)
@@ -1094,6 +1094,17 @@ var fsTypeCategories = map[string]FileSystemCategory{
 
 // skipFsPrefixes lists filesystem type prefixes that indicate virtual or system filesystems.
 var skipFsPrefixes = [...]string{"fuse", "cgroup", "proc", "sys", "dev"}
+
+// isFileMount reports whether a mount point is a regular file rather than a
+// directory. Container runtimes bind-mount single files over the root
+// filesystem: Docker's /etc/hosts, /etc/hostname and /etc/resolv.conf, and the
+// NVIDIA Container Toolkit's nvidia-smi and driver libraries. They report the
+// host filesystem's type and size, so without this check each shows up as a
+// separate disk. A mount point that cannot be inspected is kept.
+func isFileMount(mountpoint string) bool {
+	fi, err := os.Stat(mountpoint)
+	return err == nil && fi.Mode().IsRegular()
+}
 
 // skipFilesystem returns true if the filesystem type should be skipped
 func skipFilesystem(fstype string) bool {
