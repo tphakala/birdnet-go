@@ -22,6 +22,7 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 const (
@@ -303,4 +304,31 @@ func TestPrivacyQueryValidation(t *testing.T) {
 	t.Run("activity missing start_date", func(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, f.get(t, testActivityPath, url.Values{}).Code)
 	})
+}
+
+// TestGetActivity_SkippedDateKeepsRequestedStartDate pins that the response reports the requested
+// start date for a date that does not exist in the station zone (Samoa skipped 2011-12-30), where
+// the range start is a later instant that would format as a different date. It swaps time.Local,
+// so it must not run in parallel.
+func TestGetActivity_SkippedDateKeepsRequestedStartDate(t *testing.T) {
+	apia := testutil.ToolchainZones(t)["Pacific/Apia"]
+	require.NotNil(t, apia)
+	previous := time.Local
+	time.Local = apia
+	t.Cleanup(func() { time.Local = previous })
+
+	datastoreV2.SetEnhancedDatabaseMode()
+	t.Cleanup(datastoreV2.ResetDatabaseMode)
+	f := newFixture(t, passAuth, true)
+
+	const skipped = "2011-12-30"
+	rec := f.get(t, testActivityPath, url.Values{"start_date": {skipped}, "end_date": {skipped}})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+
+	var resp ActivityResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	assert.Equal(t, skipped, resp.StartDate)
+	assert.Equal(t, skipped, resp.EndDate)
+	assert.Empty(t, resp.Rows)
+	assert.True(t, resp.RangeStart.Equal(resp.RangeEnd), "a skipped date is an empty window")
 }

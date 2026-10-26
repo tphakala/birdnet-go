@@ -101,7 +101,9 @@ func (c *Handler) GetActivity(ctx echo.Context) error {
 		out = append(out, activityRow(&rows[i], loaded))
 	}
 	return ctx.JSON(http.StatusOK, ActivityResponse{
-		StartDate:  start.Format(time.DateOnly),
+		// The validated request value: for a date that does not exist in the zone the range
+		// start is a later instant, whose formatted date would contradict EndDate.
+		StartDate:  ctx.QueryParam(paramStartDate),
 		EndDate:    endDate,
 		RangeStart: start.UTC(),
 		RangeEnd:   end.UTC(),
