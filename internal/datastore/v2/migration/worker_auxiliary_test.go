@@ -479,3 +479,16 @@ func TestAuxiliaryMigrationResult_Summary_ReportsFailures(t *testing.T) {
 	assert.Contains(t, summary, "Daily Events: 0/0 migrated, 1 failed, Hourly Weather: 0/0 migrated, 3 skipped, 2 failed (error:")
 	assert.NotContains(t, summary, "fetch error")
 }
+
+// A MigrateAll error is recorded as failed with a fixed summary, never the error text,
+// because the summary is exposed by the status API and the support dump.
+func TestAuxiliaryOutcome_ErrorSummaryIsFixed(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.NewStd("dial tcp host.example:3306 as dbuser failed")
+	status, summary := auxiliaryOutcome(nil, cause)
+
+	assert.Equal(t, entities.AuxiliaryDataStatusFailed, status)
+	assert.Equal(t, auxRunFailedSummary, summary)
+	assert.NotContains(t, summary, "dbuser")
+}

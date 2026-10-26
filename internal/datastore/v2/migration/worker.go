@@ -1225,12 +1225,18 @@ func (w *Worker) transitionToValidation(ctx context.Context) {
 	}
 }
 
+// auxRunFailedSummary is the persisted summary when the auxiliary migration returned
+// an error instead of a result.
+const auxRunFailedSummary = "auxiliary migration could not run"
+
 // auxiliaryOutcome maps the auxiliary migration result to the status and error
 // summary persisted with the validating transition. A MigrateAll error means the
-// run did not copy anything reliably and is recorded as failed.
+// run did not copy anything reliably and is recorded as failed. The persisted
+// summary is a fixed message because it is shown in the status API and the support
+// dump, and an error text can carry paths or credentials; the caller logs the error.
 func auxiliaryOutcome(result *AuxiliaryMigrationResult, err error) (status entities.AuxiliaryDataStatus, summary string) {
 	if err != nil {
-		return entities.AuxiliaryDataStatusFailed, err.Error()
+		return entities.AuxiliaryDataStatusFailed, auxRunFailedSummary
 	}
 	if result == nil {
 		return entities.AuxiliaryDataStatusFailed, "auxiliary migration returned no result"

@@ -892,7 +892,7 @@ func TestWorker_TransitionToValidation_RecordsAuxiliaryOutcome(t *testing.T) {
 			legacyUntouched: true,
 			wantState:       entities.MigrationStatusValidating,
 			wantOutcome:     entities.AuxiliaryDataStatusFailed,
-			wantErrPart:     ErrAuxDependencyNotConfigured.Error(),
+			wantErrPart:     auxRunFailedSummary,
 		},
 		{
 			name:         "clean run is recorded as succeeded",
