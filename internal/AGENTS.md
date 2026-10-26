@@ -90,7 +90,8 @@ day and hour windows, bucketing by local time) goes through
 takes the `*time.Location` on every call and reads no settings, so pass
 `ds.timezone` or `time.Local` per operation and settings changes keep taking
 effect immediately. A nil location means `time.Local`; the repository SQL
-builders (`WallClockDateExpr`, `zoneOffsetSQL`) are the exception and treat nil as UTC.
+builders that take a location (`WallClockDateExpr` and the hour expression
+builder next to it) are the exception and treat nil as UTC.
 
 | You need                                      | Use                                                                                                   |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |

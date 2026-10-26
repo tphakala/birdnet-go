@@ -131,6 +131,10 @@ func TestOffsetAt(t *testing.T) {
 	helsinki := testutil.ToolchainZones(t)["Europe/Helsinki"]
 	assert.Equal(t, 2*secondsPerHour, wallclock.OffsetAt(helsinki, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)))
 	assert.Equal(t, 3*secondsPerHour, wallclock.OffsetAt(helsinki, time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)))
+
+	ref := time.Date(2026, time.July, 1, 0, 0, 0, 0, time.UTC)
+	assert.Equal(t, 0, wallclock.OffsetAt(time.UTC, ref))
+	assert.Equal(t, 5*secondsPerHour, wallclock.OffsetAt(time.FixedZone("fixed", 5*secondsPerHour), ref))
 }
 
 func TestCoveringSegments(t *testing.T) {
