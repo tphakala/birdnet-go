@@ -90,7 +90,7 @@ func (s *APIServerService) Name() string {
 }
 
 // Start initializes and starts the API server and all dependent subsystems.
-// It fails fast if required dependencies (DataStore, BirdNET) are not available.
+// It fails fast if required dependencies (DataStore, DetectionRepository, BirdNET) are not available.
 //
 //nolint:gocognit // Orchestration function that initializes multiple subsystems in sequence.
 func (s *APIServerService) Start(ctx context.Context) error {
@@ -121,7 +121,7 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	}()
 
 	// Fail fast: verify dependencies are initialized by upstream services.
-	if s.dbService == nil || s.dbService.DataStore() == nil {
+	if s.dbService == nil || s.dbService.DataStore() == nil || s.dbService.DetectionRepository() == nil {
 		return errors.Newf("api-server requires an initialized datastore; database service must be started first").
 			Component("analysis.api_service").
 			Category(errors.CategorySystem).
@@ -157,7 +157,7 @@ func (s *APIServerService) Start(ctx context.Context) error {
 	s.sunCalc = newStationSunCalc(s.settings)
 
 	// Create processor.
-	s.proc = processor.New(s.settings, dataStore, bn, s.metrics, s.birdImageCache, GetLogger())
+	s.proc = processor.New(s.settings, dataStore, s.dbService.DetectionRepository(), bn, s.metrics, s.birdImageCache, GetLogger())
 	s.proc.SetSunCalc(s.sunCalc)
 
 	// Initialize backup system (optional; failure is non-fatal).
@@ -212,6 +212,7 @@ func (s *APIServerService) Start(ctx context.Context) error {
 
 	serverOpts := []api.ServerOption{
 		api.WithDataStore(dataStore),
+		api.WithDetectionRepository(s.dbService.DetectionRepository()),
 		api.WithBirdImageCache(s.birdImageCache),
 		api.WithProcessor(s.proc),
 		api.WithMetrics(s.metrics),

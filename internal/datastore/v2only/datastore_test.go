@@ -2324,7 +2324,7 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 	defer cleanup()
 	ctx := t.Context()
 
-	repo := datastore.NewDetectionRepository(ds, time.UTC)
+	repo := NewDetectionRepository(ds)
 
 	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
 	result := &detection.Result{

@@ -81,3 +81,45 @@ func writeFromNote(note *datastore.Note, results []datastore.Results, tz *time.L
 	}
 	return w
 }
+
+// writeFromResult maps a detection.Result and its additional results to a
+// detectionWrite. The detection instant is the Result's own timestamp as Unix
+// seconds, so no wall-clock text is formatted or parsed and a repeated DST hour
+// cannot shift it.
+//
+// The mapping mirrors what datastore.NoteFromResult and
+// datastore.AdditionalResultsToDatastoreResults hand to the Note path, with two
+// differences: result.ID is ignored (a save always inserts a new row), and each
+// prediction keeps its full float64 confidence instead of a float32 round trip.
+func writeFromResult(r *detection.Result, additional []detection.AdditionalResult) *detectionWrite {
+	w := &detectionWrite{
+		detectedAt:         r.Timestamp.Unix(),
+		model:              r.Model,
+		rawLabel:           r.RawLabel,
+		scientificName:     r.Species.ScientificName,
+		confidence:         r.Confidence,
+		unlikely:           r.Unlikely,
+		latitude:           r.Latitude,
+		longitude:          r.Longitude,
+		clipName:           r.ClipName,
+		clipSampleRate:     r.ClipSampleRate,
+		beginTime:          r.BeginTime,
+		endTime:            r.EndTime,
+		processingTime:     r.ProcessingTime,
+		sourceSafeString:   r.AudioSource.SafeString,
+		sourceDisplayName:  r.AudioSource.DisplayName,
+		sourceNode:         r.SourceNode,
+		modelContributions: r.ModelContributions,
+	}
+	if len(additional) > 0 {
+		w.predictions = make([]predictionWrite, len(additional))
+		for i, a := range additional {
+			w.predictions[i] = predictionWrite{
+				label:      a.Species.StoredLabel(),
+				rawLabel:   a.RawLabel,
+				confidence: a.Confidence,
+			}
+		}
+	}
+	return w
+}

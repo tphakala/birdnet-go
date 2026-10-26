@@ -19,6 +19,7 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -29,6 +30,10 @@ import (
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
 )
+
+// probeZoneOffsetSeconds is a UTC offset (+07:17) that no real zone uses, so an
+// instant expressed in it differs from the same wall time read in any host zone.
+const probeZoneOffsetSeconds = 7*3600 + 17*60
 
 // Compile-time interface compliance check.
 var _ app.Service = (*DatabaseService)(nil)
@@ -121,6 +126,25 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	assert.True(t, svc.IsV2OnlyMode(), "should be in v2-only mode for fresh install")
 	assert.NotNil(t, svc.V2Manager(), "V2Manager() should be set for fresh install")
 	assert.Nil(t, svc.legacyMonitor, "no migration state monitor on a v2 install")
+
+	// The repository must be the v2 one: it stores the detection's own instant. The
+	// zone has an offset no real zone uses, so a wall-clock round trip through the
+	// host's time.Local would move the instant.
+	repo := svc.DetectionRepository()
+	require.NotNil(t, repo, "DetectionRepository() should be set after Start()")
+	at := time.Date(2026, 6, 1, 12, 0, 0, 0, time.FixedZone("probe", probeZoneOffsetSeconds))
+	result := &detection.Result{
+		Timestamp: at,
+		Species:   detection.Species{ScientificName: "Parus major", CommonName: "Great Tit"},
+		Model:     detection.DefaultModelInfo(),
+	}
+	require.NoError(t, repo.Save(t.Context(), result, nil))
+	require.NotZero(t, result.ID)
+	var detectedAt int64
+	require.NoError(t, svc.V2Manager().DB().
+		Model(&entities.Detection{}).Select("detected_at").Where("id = ?", result.ID).
+		Scan(&detectedAt).Error)
+	assert.Equal(t, at.Unix(), detectedAt, "stored detected_at must be the detection's own instant")
 }
 
 // Not parallel: Start publishes the migration state manager and worker to
@@ -147,11 +171,13 @@ func TestDatabaseService_Start_LegacyInstallRunsStateMonitor(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, svc.Stop(t.Context()), "Stop() should succeed")
 		assert.Nil(t, svc.legacyMonitor, "Stop releases the monitor")
+		assert.Nil(t, svc.DetectionRepository(), "Stop releases the detection repository")
 	})
 
 	require.False(t, svc.IsV2OnlyMode(), "an existing legacy database starts in legacy mode")
 	require.NotNil(t, svc.legacyMonitor, "legacy install with a state manager gets the monitor")
 	assert.True(t, svc.legacyMonitor.legacySchema, "the monitor of a legacy install raises the legacy schema notice")
+	assert.NotNil(t, svc.DetectionRepository(), "legacy mode must have a detection repository")
 }
 
 // discardTransport is a sentry.Transport that drops every event; the test below

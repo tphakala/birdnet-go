@@ -7,6 +7,7 @@
 package processor
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -318,6 +319,41 @@ func TestDatabaseAction_Execute_WithRepository(t *testing.T) {
 
 	// Verify repository was called
 	assert.Equal(t, 1, mockRepo.GetSavedCount(), "Repository Save should be called once")
+}
+
+// ctxRecordingRepository records whether the context its Save received was already done.
+type ctxRecordingRepository struct {
+	*MockDetectionRepository
+	ctxErr error
+}
+
+func (r *ctxRecordingRepository) Save(ctx context.Context, result *detection.Result, additional []detection.AdditionalResult) error {
+	r.ctxErr = ctx.Err()
+	return r.MockDetectionRepository.Save(ctx, result, additional)
+}
+
+// TestDatabaseAction_Execute_SaveIgnoresCallerCancellation verifies that the repository
+// save is detached from the caller's context: the CompositeAction's per-step deadline must
+// not cancel a save that would otherwise commit late.
+func TestDatabaseAction_Execute_SaveIgnoresCallerCancellation(t *testing.T) {
+	t.Parallel()
+
+	repo := &ctxRecordingRepository{MockDetectionRepository: NewMockDetectionRepository()}
+	det := testDetection()
+	action := &DatabaseAction{
+		Settings:     &conf.Settings{Debug: true},
+		Repo:         repo,
+		Result:       det.Result,
+		Results:      det.Results,
+		EventTracker: NewEventTracker(testEventTrackerInterval),
+	}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	require.NoError(t, action.Execute(ctx, nil))
+	assert.Equal(t, 1, repo.GetSavedCount(), "the save must run")
+	require.NoError(t, repo.ctxErr, "the save must not see the caller's cancellation")
 }
 
 // TestDatabaseAction_Execute_WithRepository_StoresIDInDetectionContext verifies that

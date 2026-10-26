@@ -72,8 +72,9 @@ var (
 //
 // Migration Note: For detection-specific CRUD operations, prefer using DetectionRepository
 // (see repository.go) which works with domain models (detection.Result) instead of
-// persistence models (Note). The DetectionRepository wraps Interface and handles
-// conversion between domain and persistence layers.
+// persistence models (Note). For the legacy store, the DetectionRepository wraps Interface
+// and handles conversion between domain and persistence layers; a v2 database has its own
+// implementation (v2only.NewDetectionRepository).
 //
 // Optional methods:
 // Schema version constants for datastore implementations.
