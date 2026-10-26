@@ -265,3 +265,31 @@ func TestHourFilterSpan(t *testing.T) {
 		})
 	}
 }
+
+// TestWallClockExprNilLocationIsUTC pins that a nil location means UTC in the SQL builders,
+// whatever time.Local is, although wallclock treats a nil location as time.Local. It swaps
+// time.Local, so it must not run in parallel.
+func TestWallClockExprNilLocationIsUTC(t *testing.T) {
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	previous := time.Local
+	time.Local = helsinki
+	t.Cleanup(func() { time.Local = previous })
+
+	// The span crosses both 2026 Helsinki DST changes, so a zone-aware expression would differ.
+	from := utc(2026, time.January, 1, 0, 0, 0).Unix()
+	to := utc(2026, time.December, 31, 0, 0, 0).Unix()
+
+	for _, isMySQL := range []bool{false, true} {
+		assert.Equal(t,
+			WallClockDateExpr("d.detected_at", time.UTC, from, to, isMySQL),
+			WallClockDateExpr("d.detected_at", nil, from, to, isMySQL),
+			"WallClockDateExpr, isMySQL=%v", isMySQL)
+
+		repo := &detectionRepository{isMySQL: isMySQL}
+		assert.Equal(t,
+			repo.wallClockHourExpr("d.detected_at", time.UTC, from, to),
+			repo.wallClockHourExpr("d.detected_at", nil, from, to),
+			"wallClockHourExpr, isMySQL=%v", isMySQL)
+	}
+}
