@@ -109,7 +109,7 @@ func InitForTesting(t TestingTB) (config *TestConfig, cleanup func()) {
 	// Cleanup function
 	cleanup = func() {
 		// Reset telemetry worker first to avoid registration conflicts
-		telemetryWorker = nil
+		telemetryWorker.Store(nil)
 		telemetryInitialized.Store(false)
 
 		// Use the testing reset function which properly cleans up global state
@@ -317,3 +317,7 @@ func NewMockErrorEvent(component, message string, opts ...MockErrorEventOption) 
 	}
 	return event
 }
+
+// alwaysAllowed and neverAllowed are fixed consent gates for worker tests.
+func alwaysAllowed() bool { return true }
+func neverAllowed() bool  { return false }

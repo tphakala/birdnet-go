@@ -668,6 +668,7 @@ The API includes comprehensive endpoints for managing application settings:
    | BirdWeather       | `reconfigure_birdweather`      | ✅           |
    | RTSP sources      | `reconfigure_rtsp_sources`     | ✅           |
    | Telemetry         | `reconfigure_telemetry`        | ✅           |
+   | Error tracking    | `reconfigure_sentry`           | -            |
    | Species tracking  | `reconfigure_species_tracking` | ✅           |
    | Audio/Equalizer   | Various                        | ✅           |
 

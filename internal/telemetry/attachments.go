@@ -188,6 +188,12 @@ func (au *AttachmentUploader) UploadSupportDump(ctx context.Context, dumpData []
 		event.Tags["github_issue"] = githubIssue
 	}
 
+	// Hold the client lifecycle lock from capture through flush so an opt-out
+	// that coincides with this upload waits for it instead of closing the client
+	// under a queued dump.
+	clientLifecycleMu.Lock()
+	defer clientLifecycleMu.Unlock()
+
 	// A user-requested upload should probe the host now rather than wait out
 	// a backoff left by earlier failures.
 	sentryDeliveryGate.expedite()

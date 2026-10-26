@@ -6,20 +6,25 @@ import (
 
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // telemetryEnabled is an atomic flag for fast checking if telemetry is enabled
 var telemetryEnabled atomic.Bool
 
-// UpdateTelemetryEnabled updates the cached telemetry enabled state
+// UpdateTelemetryEnabled updates the cached telemetry enabled state and
+// refreshes the error package's cached active-reporting flag, which depends on
+// the same inputs.
 func UpdateTelemetryEnabled() {
 	// In test mode, telemetry is always enabled
 	if testMode.Load() == testModeEnabled {
 		telemetryEnabled.Store(true)
+		errors.RefreshActiveReporting()
 		return
 	}
 
 	telemetryEnabled.Store(reportingAllowed(conf.GetSettings(), time.Now()))
+	errors.RefreshActiveReporting()
 }
 
 // IsTelemetryEnabled returns true if telemetry is enabled
@@ -65,7 +70,7 @@ func FastCaptureMessage(message string, level sentry.Level, component string) {
 		return
 	}
 
-	// Filter out info/debug-level messages — these are operational signals,
+	// Filter out info/debug-level messages: these are operational signals,
 	// not errors. They create noise issues in Sentry's issue list.
 	if level == sentry.LevelInfo || level == sentry.LevelDebug {
 		return

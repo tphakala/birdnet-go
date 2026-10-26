@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // TestAnalysisOverlapDispatchesRestart guards the actual hot-reload wiring: an
@@ -84,4 +85,31 @@ func TestFalsePositiveFilterCrossingDispatchesReconfigure(t *testing.T) {
 	assert.True(t, entry.changed(withLevel(3), withLevel(0)), "3 to 0 turns the filter off")
 	assert.False(t, entry.changed(withLevel(2), withLevel(4)), "2 to 4 keeps the filter on")
 	assert.False(t, entry.changed(withLevel(0), withLevel(0)), "0 to 0 keeps the filter off")
+}
+
+// TestSentryEnabledChangeTriggersReconfigureSentry guards the table row that
+// starts or stops the Sentry client when Error Tracking is toggled. A Debug-only
+// change must not fire it: Debug is read live and needs no client restart.
+func TestSentryEnabledChangeTriggersReconfigureSentry(t *testing.T) {
+	t.Parallel()
+
+	var entry *settingsChangeCheck
+	for i := range settingsChangeChecks {
+		if settingsChangeChecks[i].action == telemetry.SignalReconfigureSentry {
+			entry = &settingsChangeChecks[i]
+			break
+		}
+	}
+	require.NotNil(t, entry, "settingsChangeChecks must contain a reconfigure_sentry row")
+
+	base := apitest.NewValidTestSettings()
+	base.Sentry.Enabled = false
+	enabled := conf.CloneSettings(base)
+	enabled.Sentry.Enabled = true
+	assert.True(t, entry.changed(base, enabled), "enabling Error Tracking must fire the action")
+	assert.True(t, entry.changed(enabled, base), "disabling Error Tracking must fire the action")
+
+	debugOnly := conf.CloneSettings(base)
+	debugOnly.Sentry.Debug = !base.Sentry.Debug
+	assert.False(t, entry.changed(base, debugOnly), "a Debug-only change must not fire the action")
 }

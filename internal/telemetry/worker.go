@@ -14,7 +14,7 @@ import (
 
 // TelemetryWorker implements EventConsumer to process error events and send them to Sentry
 type TelemetryWorker struct {
-	enabled        bool
+	allowed        func() bool // consent gate, evaluated per event
 	circuitBreaker *CircuitBreaker
 	config         *WorkerConfig
 	configMu       sync.RWMutex // Protects config access
@@ -124,14 +124,16 @@ type RateLimiter struct {
 	timeSource TimeSource // Injectable time source for testing
 }
 
-// NewTelemetryWorker creates a new telemetry worker
-func NewTelemetryWorker(enabled bool, config *WorkerConfig) (*TelemetryWorker, error) {
+// NewTelemetryWorker creates a new telemetry worker. allowed is called per
+// event so a settings change takes effect without a restart; a nil allowed
+// never reports.
+func NewTelemetryWorker(allowed func() bool, config *WorkerConfig) (*TelemetryWorker, error) {
 	if config == nil {
 		config = DefaultWorkerConfig()
 	}
 
 	worker := &TelemetryWorker{
-		enabled: enabled,
+		allowed: allowed,
 		config:  config,
 		circuitBreaker: &CircuitBreaker{
 			state:  circuitStateClosed,
@@ -142,7 +144,7 @@ func NewTelemetryWorker(enabled bool, config *WorkerConfig) (*TelemetryWorker, e
 			maxEvents:  config.RateLimitMaxEvents,
 			timeSource: RealTimeSource{}, // Use real time by default
 		},
-		sentryReporter: errors.NewSentryReporter(enabled),
+		sentryReporter: errors.NewSentryReporter(allowed),
 		logger:         logger.Global().Module("telemetry").Module("worker"),
 	}
 
@@ -154,10 +156,15 @@ func (w *TelemetryWorker) Name() string {
 	return "telemetry-worker"
 }
 
+// isAllowed reports whether the consent gate currently permits reporting.
+func (w *TelemetryWorker) isAllowed() bool {
+	return w.allowed != nil && w.allowed()
+}
+
 // ProcessEvent processes a single error event
 func (w *TelemetryWorker) ProcessEvent(event events.ErrorEvent) error {
-	// Skip if telemetry is disabled
-	if !w.enabled {
+	// Skip if telemetry is not allowed right now
+	if !w.isAllowed() {
 		return nil
 	}
 
@@ -215,7 +222,7 @@ func (w *TelemetryWorker) ProcessEvent(event events.ErrorEvent) error {
 
 // ProcessBatch processes multiple events at once
 func (w *TelemetryWorker) ProcessBatch(errorEvents []events.ErrorEvent) error {
-	if !w.enabled || len(errorEvents) == 0 {
+	if !w.isAllowed() || len(errorEvents) == 0 {
 		return nil
 	}
 

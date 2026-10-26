@@ -25,6 +25,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 const (
@@ -302,6 +303,8 @@ func (cm *ControlMonitor) handleControlSignal(signal string) {
 		cm.handleReconfigureSoundLevel()
 	case "reconfigure_telemetry":
 		cm.handleReconfigureTelemetry()
+	case telemetry.SignalReconfigureSentry:
+		cm.handleReconfigureSentry()
 	case "reconfigure_species_tracking":
 		cm.handleReconfigureSpeciesTracking()
 	case "reconfigure_push_notifications":
@@ -1100,6 +1103,18 @@ func (cm *ControlMonitor) handleReconfigureQuietHours() {
 	} else {
 		GetLogger().Warn("Quiet hours scheduler not available")
 	}
+}
+
+// handleReconfigureSentry applies a changed Error Tracking opt-in by starting or
+// closing the Sentry client.
+func (cm *ControlMonitor) handleReconfigureSentry() {
+	GetLogger().Info("Reconfiguring Sentry error tracking")
+	if err := telemetry.ReconfigureSentry(); err != nil {
+		GetLogger().Error("failed to reconfigure Sentry", logger.Error(err))
+		cm.notifyError("Failed to reconfigure error tracking", err)
+		return
+	}
+	emitHotReload("sentry")
 }
 
 // handleRestartAudioCapture signals a full audio-capture restart. Used for a

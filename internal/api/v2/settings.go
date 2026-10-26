@@ -2411,6 +2411,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"eBird", "reconfigure_ebird", ebirdSettingsChanged, "Reconfiguring eBird integration...", notification.MsgSettingsReconfiguringEbird, ToastTypeInfo, toastDurationMedium},
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, ToastTypeInfo, toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, ToastTypeInfo, toastDurationShort},
+	{"Sentry", telemetry.SignalReconfigureSentry, sentryEnabledChanged, "", "", ToastTypeInfo, toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, ToastTypeInfo, toastDurationShort},
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", ToastTypeInfo, toastDurationShort},
@@ -2986,6 +2987,13 @@ func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	}
 
 	return false
+}
+
+// sentryEnabledChanged reports whether the Error Tracking opt-in changed. Debug
+// is not compared: the BeforeSend hook reads it live, and the action only starts
+// or stops the client. SDK debug logging is decided when the client starts.
+func sentryEnabledChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.Sentry.Enabled != currentSettings.Sentry.Enabled
 }
 
 // yearlyTrackingChanged checks if yearly tracking settings have changed.

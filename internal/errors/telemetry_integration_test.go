@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -54,10 +55,13 @@ func bindMockTransport(t *testing.T) *TransportMock {
 	return transport
 }
 
+// alwaysAllowed is a reporter gate that permits every report.
+func alwaysAllowed() bool { return true }
+
 func TestReportError_IncludesStacktrace(t *testing.T) {
 	transport := bindMockTransport(t)
 
-	reporter := NewSentryReporter(true)
+	reporter := NewSentryReporter(alwaysAllowed)
 	ee := New(fmt.Errorf("test error")).
 		Component("test").
 		Category(CategoryDatabase).
@@ -574,7 +578,7 @@ func TestReportError_ConnectivityEventIsEnvironmentWarning(t *testing.T) {
 
 	transport := bindMockTransport(t)
 
-	reporter := NewSentryReporter(true)
+	reporter := NewSentryReporter(alwaysAllowed)
 	reporter.ReportError(New(mysql.ErrInvalidConn).
 		Component("datastore").Category(CategoryState).Context("operation", "read_state").Build())
 	reporter.ReportError(New(fmt.Errorf("state row is inconsistent")).
@@ -619,7 +623,7 @@ func TestReportError_DatabaseDialTimeoutIsReported(t *testing.T) {
 	dialErr := &net.OpError{Op: "dial", Net: "tcp", Err: dialTimeoutError{}}
 	require.ErrorIs(t, dialErr, context.DeadlineExceeded, "the fixture is a context deadline like a real dial timeout")
 
-	reporter := NewSentryReporter(true)
+	reporter := NewSentryReporter(alwaysAllowed)
 	reporter.ReportError(New(dialErr).Component("datastore").Category(CategoryDatabase).Context("operation", "mysql_open").Build())
 	sentry.Flush(time.Second)
 
@@ -628,4 +632,40 @@ func TestReportError_DatabaseDialTimeoutIsReported(t *testing.T) {
 	assert.Equal(t, sentry.LevelWarning, events[0].Level)
 	assert.Equal(t, "environment", events[0].Tags["error_origin"])
 	assert.Equal(t, []string{"connectivity", "database", "io_timeout"}, events[0].Fingerprint)
+}
+
+// TestBuildReportsOnlyWhileGateAllows pins that the reporter consults its gate
+// per report and that RefreshActiveReporting feeds Build's fast path.
+func TestBuildReportsOnlyWhileGateAllows(t *testing.T) {
+	transport := bindMockTransport(t)
+
+	var allowed atomic.Bool
+	previous := GetTelemetryReporter()
+	SetTelemetryReporter(NewSentryReporter(allowed.Load))
+	t.Cleanup(func() {
+		SetTelemetryReporter(previous)
+	})
+
+	build := func(msg string) {
+		_ = New(fmt.Errorf("%s", msg)).
+			Component("datastore").Category(CategoryDatabase).
+			Context("operation", "gate_test").Build()
+		sentry.Flush(time.Second)
+	}
+
+	allowed.Store(false)
+	RefreshActiveReporting()
+	build("gate closed")
+	assert.Empty(t, transport.Events(), "a closed gate must not report")
+
+	allowed.Store(true)
+	RefreshActiveReporting()
+	build("gate open")
+	assert.Len(t, transport.Events(), 1, "an open gate with a refreshed flag must report")
+
+	// The cached flag is now stale-true; the live check in ReportError must
+	// still stop the report.
+	allowed.Store(false)
+	build("gate closed again")
+	assert.Len(t, transport.Events(), 1, "a gate closed without a refresh must not report")
 }
