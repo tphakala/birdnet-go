@@ -1665,7 +1665,9 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, e
 }
 
 // SpeciesDetections retrieves detections for a species.
-// The species parameter is expected to be a scientific name.
+// The species parameter is expected to be a scientific name. The hour and duration name
+// local wall-clock hours on date (see localHourWindow); a zero duration with an hour
+// means one hour, and an empty hour means the whole date.
 func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
 	ctx := context.Background()
 
@@ -1675,15 +1677,13 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 		if err == nil {
 			if hour != "" {
 				// Specific hour requested - apply hour+duration filter
-				h, err := parseHour(hour)
+				hours := duration
+				if hours == 0 {
+					hours = defaultSpeciesWindowHours
+				}
+				start, end, err := localHourWindow(date, hour, hours, ds.timezone)
 				if err != nil {
 					return nil, err
-				}
-				t = t.Add(time.Duration(h) * time.Hour)
-				start := t.Unix()
-				end := t.Add(time.Duration(duration) * time.Hour).Unix()
-				if duration == 0 {
-					end = t.Add(1 * time.Hour).Unix()
 				}
 				startTime = &start
 				endTime = &end
@@ -2290,20 +2290,14 @@ func (ds *Datastore) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
 // Detection Count/Search Methods
 // ============================================================
 
-// GetHourlyDetections retrieves detections for a specific hour.
+// GetHourlyDetections retrieves detections for a specific hour. The hour and duration
+// name local wall-clock hours on date (see localHourWindow).
 func (ds *Datastore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) {
 	ctx := context.Background()
-	t, err := time.ParseInLocation("2006-01-02", date, ds.timezone)
+	startTime, endTime, err := localHourWindow(date, hour, duration, ds.timezone)
 	if err != nil {
 		return nil, err
 	}
-	h, err := parseHour(hour)
-	if err != nil {
-		return nil, err
-	}
-	t = t.Add(time.Duration(h) * time.Hour)
-	startTime := t.Unix()
-	endTime := t.Add(time.Duration(duration) * time.Hour).Unix()
 
 	filters := &repository.SearchFilters{
 		StartTime: &startTime,
@@ -2329,7 +2323,9 @@ func (ds *Datastore) GetHourlyDetections(date, hour string, duration, limit, off
 }
 
 // CountSpeciesDetections counts detections for a species.
-// The species parameter is expected to be a scientific name.
+// The species parameter is expected to be a scientific name. The hour and duration name
+// local wall-clock hours on date (see localHourWindow); a zero duration with an hour
+// means one hour, and an empty hour means the whole date.
 func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
 	ctx := context.Background()
 	var startTime, endTime *int64
@@ -2338,15 +2334,13 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 		if err == nil {
 			if hour != "" {
 				// Specific hour requested - apply hour+duration filter
-				h, err := parseHour(hour)
+				hours := duration
+				if hours == 0 {
+					hours = defaultSpeciesWindowHours
+				}
+				start, end, err := localHourWindow(date, hour, hours, ds.timezone)
 				if err != nil {
 					return 0, err
-				}
-				t = t.Add(time.Duration(h) * time.Hour)
-				start := t.Unix()
-				end := t.Add(time.Duration(duration) * time.Hour).Unix()
-				if duration == 0 {
-					end = t.Add(1 * time.Hour).Unix()
 				}
 				startTime = &start
 				endTime = &end
@@ -2382,20 +2376,14 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 	return ds.detection.CountSearch(ctx, filters)
 }
 
-// CountHourlyDetections counts detections for a specific hour.
+// CountHourlyDetections counts detections for a specific hour. The hour and duration
+// name local wall-clock hours on date (see localHourWindow).
 func (ds *Datastore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
 	ctx := context.Background()
-	t, err := time.ParseInLocation("2006-01-02", date, ds.timezone)
+	startTime, endTime, err := localHourWindow(date, hour, duration, ds.timezone)
 	if err != nil {
 		return 0, err
 	}
-	h, err := parseHour(hour)
-	if err != nil {
-		return 0, err
-	}
-	t = t.Add(time.Duration(h) * time.Hour)
-	startTime := t.Unix()
-	endTime := t.Add(time.Duration(duration) * time.Hour).Unix()
 
 	filters := &repository.SearchFilters{
 		StartTime: &startTime,
