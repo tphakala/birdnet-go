@@ -110,7 +110,7 @@ func (r *weatherRepository) GetHourlyWeatherInLocation(ctx context.Context, date
 		return nil, err
 	}
 	// The local day is [start, end), which is 23 or 25 hours long across a DST change and starts
-	// at 01:00 where the change skips midnight.
+	// at the transition instant where the change skips midnight.
 	startOfDay, endOfDay := wallclock.DayBounds(day, loc)
 
 	var weather []entities.HourlyWeather
