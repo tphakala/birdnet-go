@@ -11,6 +11,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // These tests are NOT parallel: they publish to the process-wide settings
@@ -104,7 +105,7 @@ func TestSettingsWriters_WaitForHeldWriterLock(t *testing.T) {
 			check: func(t *testing.T, final *conf.Settings, got bool) {
 				t.Helper()
 				assert.True(t, got, "the first caller of the day must get true")
-				assert.False(t, conf.LocalNoon(final.BirdNET.RangeFilter.LastUpdated).Before(conf.LocalNoon(time.Now())))
+				assert.False(t, wallclock.Noon(final.BirdNET.RangeFilter.LastUpdated).Before(wallclock.Noon(time.Now())))
 			},
 		},
 		{

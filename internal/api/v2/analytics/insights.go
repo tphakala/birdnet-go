@@ -10,12 +10,12 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // requireV2 writes the 409 Conflict response the insights handlers in this file
@@ -186,16 +186,16 @@ func buildThumbnailURL(scientificName string) string {
 // Insights date/hour/year SQL adds this offset to detected_at so rows bucket by wall-clock value
 // in the same zone the handlers use (time.Now()/time.Local), independent of the DB session /
 // OS-local zone. This mirrors the datastore's ds.timezone (time.Local in production) and reuses
-// repository.GetTimezoneOffsetAt, the same helper the hourly charts use.
+// wallclock.OffsetAt, the same helper the hourly charts use.
 func analyticsTZOffset(ref time.Time) int {
-	return repository.GetTimezoneOffsetAt(time.Local, ref)
+	return wallclock.OffsetAt(time.Local, ref)
 }
 
 // goneQuietDates returns the local calendar date of lastDetected (Unix seconds) and the
 // number of calendar days from it to now, both read in now's location.
 func goneQuietDates(now time.Time, lastDetected int64) (date string, daysSince int) {
 	last := time.Unix(lastDetected, 0).In(now.Location())
-	return last.Format(time.DateOnly), conf.CalendarDaysBetween(last, now)
+	return last.Format(time.DateOnly), wallclock.CalendarDaysBetween(last, now)
 }
 
 // buildYearRanges computes index-friendly Unix timestamp ranges for the

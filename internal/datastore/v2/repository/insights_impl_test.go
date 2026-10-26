@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -80,11 +81,11 @@ func seedFalsePositiveReview(t *testing.T, db *gorm.DB, detectionID uint) {
 
 // localOffsetAt returns time.Local's UTC offset (seconds) at ref. The tests below seed timestamps
 // in time.Local and assert local-zone bucketing, so they pass the matching offset (the same value
-// production derives via GetTimezoneOffsetAt) to the offset-aware insights queries. Dedicated
+// production derives via wallclock.OffsetAt) to the offset-aware insights queries. Dedicated
 // bucketing tests pass explicit offsets and fixed UTC instants instead, so they are independent of
 // the host's zone.
 func localOffsetAt(ref time.Time) int {
-	return GetTimezoneOffsetAt(time.Local, ref)
+	return wallclock.OffsetAt(time.Local, ref)
 }
 
 func TestGetPhantomSpecies(t *testing.T) {

@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // mockInsightsRepo is a simple mock for handler tests. When err is non-nil every
@@ -148,10 +149,10 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	// Bracket the handler's internal time.Now() so the offset assertion holds even if a DST
 	// transition lands mid-test: the handler's offset must equal the local offset at some instant
 	// during the call (before or after are the only possible values, even across a boundary).
-	beforeOffset := repository.GetTimezoneOffsetAt(time.Local, time.Now())
+	beforeOffset := wallclock.OffsetAt(time.Local, time.Now())
 	err := controller.getDashboardKPIsImpl(ctx)
 	require.NoError(t, err)
-	afterOffset := repository.GetTimezoneOffsetAt(time.Local, time.Now())
+	afterOffset := wallclock.OffsetAt(time.Local, time.Now())
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp DashboardKPIsResponse

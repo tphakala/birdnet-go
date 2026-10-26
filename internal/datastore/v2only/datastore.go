@@ -43,6 +43,7 @@ import (
 	obmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/gorm"
 )
 
@@ -2892,7 +2893,7 @@ func (ds *Datastore) zoneOffsetSeconds(epoch int64) int {
 	if epoch <= 0 {
 		ref = time.Now()
 	}
-	return repository.GetTimezoneOffsetAt(ds.timezone, ref)
+	return wallclock.OffsetAt(ds.timezone, ref)
 }
 
 // GetSpeciesSummaryData retrieves species summary data.
@@ -3351,16 +3352,16 @@ func (ds *Datastore) GetSpeciesFirstAndLastDetectionTimeBefore(ctx context.Conte
 func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, endDate string) ([]datastore.DailyAnalyticsData, error) {
 	// Validate date formats before using in SQL. Only the calendar day of the parsed values is
 	// used below, to derive detected_at bounds.
-	var startDay, endDay time.Time
+	var startDay, endDay wallclock.Date
 	if startDate != "" {
-		t, err := time.Parse(time.DateOnly, startDate)
+		t, err := wallclock.ParseDate(startDate)
 		if err != nil {
 			return nil, fmt.Errorf("invalid start date format (expected YYYY-MM-DD): %w", err)
 		}
 		startDay = t
 	}
 	if endDate != "" {
-		t, err := time.Parse(time.DateOnly, endDate)
+		t, err := wallclock.ParseDate(endDate)
 		if err != nil {
 			return nil, fmt.Errorf("invalid end date format (expected YYYY-MM-DD): %w", err)
 		}
@@ -3375,12 +3376,12 @@ func (ds *Datastore) GetSpeciesDiversityData(ctx context.Context, startDate, end
 	var rangeStart int64
 	rangeEnd := int64(math.MaxInt64)
 	if startDate != "" {
-		y, m, d := startDay.Date()
-		rangeStart = wallClockHourStart(y, m, d, 0, ds.timezone).Unix()
+		start, _ := wallclock.DayBounds(startDay, ds.timezone)
+		rangeStart = start.Unix()
 	}
 	if endDate != "" {
-		y, m, d := endDay.Date()
-		rangeEnd = wallClockHourStart(y, m, d, hoursPerDay, ds.timezone).Unix()
+		_, end := wallclock.DayBounds(endDay, ds.timezone)
+		rangeEnd = end.Unix()
 	}
 
 	// Bucket dates by the local date at each row's own instant. The SELECT and GROUP BY share

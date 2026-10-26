@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/testutil"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // hourRow is a detection instant with the wall-clock hour the station sees it in.
@@ -157,13 +159,13 @@ func TestZoneOffsetSQL(t *testing.T) {
 	)
 	tests := []struct {
 		name     string
-		segments []ZoneOffsetSegment
+		segments []wallclock.Segment
 		fallback int
 		want     string
 	}{
 		{
 			name: "equal offsets collapse to a literal",
-			segments: []ZoneOffsetSegment{
+			segments: []wallclock.Segment{
 				{Start: 0, End: 100, OffsetSeconds: winter},
 				{Start: 100, End: 200, OffsetSeconds: winter},
 			},
@@ -171,7 +173,7 @@ func TestZoneOffsetSQL(t *testing.T) {
 		},
 		{
 			name: "two offsets give a CASE with the newest branch first",
-			segments: []ZoneOffsetSegment{
+			segments: []wallclock.Segment{
 				{Start: 0, End: changeAt, OffsetSeconds: summer},
 				{Start: changeAt, End: changeAt + 100, OffsetSeconds: winter},
 			},
@@ -179,7 +181,7 @@ func TestZoneOffsetSQL(t *testing.T) {
 		},
 		{
 			name: "equal offsets that are not adjacent keep every branch",
-			segments: []ZoneOffsetSegment{
+			segments: []wallclock.Segment{
 				{Start: 0, End: 100, OffsetSeconds: summer},
 				{Start: 100, End: changeAt, OffsetSeconds: winter},
 				{Start: changeAt, End: changeAt + 100, OffsetSeconds: summer},
@@ -262,5 +264,33 @@ func TestHourFilterSpan(t *testing.T) {
 			assert.Equal(t, tc.wantFrom, from, "from")
 			assert.Equal(t, tc.wantTo, to, "to")
 		})
+	}
+}
+
+// TestWallClockExprNilLocationIsUTC pins that a nil location means UTC in the SQL builders,
+// whatever time.Local is, although wallclock treats a nil location as time.Local. It swaps
+// time.Local, so it must not run in parallel.
+func TestWallClockExprNilLocationIsUTC(t *testing.T) {
+	helsinki := testutil.ToolchainZones(t)["Europe/Helsinki"]
+	require.NotNil(t, helsinki)
+	previous := time.Local
+	time.Local = helsinki
+	t.Cleanup(func() { time.Local = previous })
+
+	// The span crosses both 2026 Helsinki DST changes, so a zone-aware expression would differ.
+	from := utc(2026, time.January, 1, 0, 0, 0).Unix()
+	to := utc(2026, time.December, 31, 0, 0, 0).Unix()
+
+	for _, isMySQL := range []bool{false, true} {
+		assert.Equal(t,
+			WallClockDateExpr("d.detected_at", time.UTC, from, to, isMySQL),
+			WallClockDateExpr("d.detected_at", nil, from, to, isMySQL),
+			"WallClockDateExpr, isMySQL=%v", isMySQL)
+
+		repo := &detectionRepository{isMySQL: isMySQL}
+		assert.Equal(t,
+			repo.wallClockHourExpr("d.detected_at", time.UTC, from, to),
+			repo.wallClockHourExpr("d.detected_at", nil, from, to),
+			"wallClockHourExpr, isMySQL=%v", isMySQL)
 	}
 }

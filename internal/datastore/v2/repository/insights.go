@@ -23,7 +23,7 @@ type InsightsRepository interface {
 	// The hour filter and the date grouping both use the wall clock of loc (time.Local when
 	// nil): the UTC offset in effect at each detection inside [since, until), so a DST change
 	// inside the period does not shift the window. The span is split at loc's offset changes
-	// (see ZoneOffsetSegments) and the results are merged to one entry per species and date.
+	// (see wallclock.Segments) and the results are merged to one entry per species and date.
 	// until only bounds that split; detections at or after it are still included (they fall in
 	// the last segment), so coverage is every detection with detected_at >= since. Those
 	// detections use the offset in effect at the start of the last segment, which is the

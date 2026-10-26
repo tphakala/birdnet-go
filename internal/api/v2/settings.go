@@ -2191,7 +2191,7 @@ func restoreBlockedFieldsRecursively(
 // every gap in blockedValuesEqual was a bypass, and it had one: time.Time.Equal
 // ignores Location, so a client could resend BirdNET.RangeFilter.LastUpdated as
 // the same instant in a different offset, have it compare "unchanged", and shift
-// the calendar day conf.LocalNoon derives from it. Writing current's value back
+// the calendar day wallclock.Noon derives from it. Writing current's value back
 // every time makes a comparison bug cost an inaccurate skippedFields list rather
 // than a leaked write.
 func restoreBlockedLeaf(currentField, updatedField reflect.Value, fieldPath string, restored *[]string) {

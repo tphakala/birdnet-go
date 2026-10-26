@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/gorm"
 )
 
@@ -180,10 +181,10 @@ type dawnChorusKey struct {
 }
 
 func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since, until int64, startHour, endHour int, loc *time.Location, modelID *uint) ([]DawnChorusRawEntry, error) {
-	segments := ZoneOffsetSegments(loc, since, until)
+	segments := wallclock.Segments(loc, since, until)
 	if len(segments) == 0 {
 		// until <= since: one open segment at the offset in effect at since.
-		segments = []ZoneOffsetSegment{{Start: since, End: since, OffsetSeconds: GetTimezoneOffsetAt(loc, time.Unix(since, 0))}}
+		segments = []wallclock.Segment{{Start: since, End: since, OffsetSeconds: wallclock.OffsetAt(loc, time.Unix(since, 0))}}
 	}
 
 	merged := make([]DawnChorusRawEntry, 0)
@@ -212,7 +213,7 @@ func (r *insightsRepository) GetDawnChorusRaw(ctx context.Context, since, until 
 // dawnChorusSegmentRows runs the dawn chorus query over one zone segment. The segment's
 // constant UTC offset is applied to both the hour filter and the date grouping, so they
 // agree on every row. The upper bound seg.End is skipped when last is true.
-func (r *insightsRepository) dawnChorusSegmentRows(ctx context.Context, seg ZoneOffsetSegment, last bool, startHour, endHour int, modelID *uint) ([]DawnChorusRawEntry, error) {
+func (r *insightsRepository) dawnChorusSegmentRows(ctx context.Context, seg wallclock.Segment, last bool, startHour, endHour int, modelID *uint) ([]DawnChorusRawEntry, error) {
 	det := r.detectionsTable()
 	lab := r.labelsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")

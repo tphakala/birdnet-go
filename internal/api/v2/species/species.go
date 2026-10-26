@@ -33,12 +33,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/dto"
 	"github.com/tphakala/birdnet-go/internal/classifier"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ebird"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // Handler serves the species domain endpoints. It embeds *apicore.Core BY
@@ -652,7 +652,7 @@ func computeRarity(rc *classifier.RarityContext, snap *speciesindex.Snapshot, ke
 
 func (c *Handler) getSpeciesRarityInfo(backend speciesBackend, snap *speciesindex.Snapshot, speciesLabel string) (SpeciesRarityInfo, error) {
 	// Get current local date
-	today := conf.LocalNoon(time.Now())
+	today := wallclock.Noon(time.Now())
 
 	// Rarity is the geomodel occurrence probability, so use the geomodel-backed
 	// probable-species list, not the multi-model union: the union assigns synthetic

@@ -82,6 +82,53 @@ symlinks. Pass the raw input to `IsLocal` (after any URL decoding) rather than
 cleaning it first: `filepath.Clean("")` is `"."`, which `IsLocal` accepts,
 while `IsLocal("")` is false.
 
+## Wall-clock time
+
+Anything that depends on the station's local calendar (dates, hours, "today",
+day and hour windows, bucketing by local time) goes through
+`internal/wallclock`, a leaf package that imports only `time` and `iter`. It
+takes the `*time.Location` on every call and reads no settings, so pass
+`ds.timezone` or `time.Local` per operation and settings changes keep taking
+effect immediately. A nil location means `time.Local`; the repository SQL
+builders that take a location (`WallClockDateExpr` and the hour expression
+builder next to it) are the exception and treat nil as UTC.
+
+| You need                                      | Use                                                                                                   |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Date-only logic (parse, add days, count days) | `wallclock.Date`: `ParseDate`, `AddDays`, `DaysBetween`, `Dates`                                      |
+| The instants of a local day or hour range     | `DayBounds`, `HourWindow`, `HourStart`, `At`                                                          |
+| Grouping instants by local date or hour       | `DateOf`, `FloorToHour`                                                                               |
+| A stable anchor for "today"                   | `Noon`                                                                                                |
+| SQL that buckets by local time                | `Segments` or `CoveringSegments`, then the repository builders (`WallClockDateExpr`, `zoneOffsetSQL`) |
+| An elapsed duration                           | plain `time.Duration`                                                                                 |
+
+Rules:
+
+- **Repeated and skipped times.** Wall time to instant takes the first
+  occurrence of a repeated time and the transition instant for a skipped time
+  (any shift length, including a skipped midnight or a skipped date). Instant
+  to wall time (`DateOf`, `FloorToHour`) keeps the occurrence the instant is in.
+  Never rely on `time.Date` for this: which occurrence it returns depends on
+  the zone.
+- **Never re-parse a formatted local time to get its instant back.** A wall
+  time without an offset is ambiguous during the repeated hour; carry the
+  instant instead.
+- **No `Truncate` or `Round` to an hour or a day, no `Hours() / 24`, no adding
+  `24 * time.Hour` to move to the next day.** `Truncate` works on UTC time and is
+  wrong for fractional offsets (+05:30, +05:45, -03:30); a day is not 24 hours
+  across a DST change. `time.Time.Sub` saturates at about 292 years, so count
+  days with `DaysBetween` or `CalendarDaysBetween`.
+- **Bucket and window agree** (a row's local hour or date bucket is the window
+  that contains its instant) whenever every backward shift repeats a wall-clock
+  interval that lies inside one hour (one date). That holds for 1 hour shifts at
+  a whole hour and for the 30 minute shifts of Lord Howe and Norfolk. It does
+  not hold for Pacific/Chatham (45 minutes), Antarctica/Troll (2 hours),
+  multi-hour shifts, or shifts that cross midnight (America/St_Johns before
+  2011). This is documented existing behavior, not a bug to work around.
+- **Tests.** Sweep zones with `testutil.ToolchainZones`, which reads the
+  toolchain's own zone database and does not depend on the host, and
+  `testutil.RuleOnlyLocation` for a zone resolved from its POSIX rule.
+
 ## Design Patterns
 
 - Accept interfaces, return concrete types; define minimal interfaces next to
