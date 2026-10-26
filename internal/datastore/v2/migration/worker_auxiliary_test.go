@@ -302,9 +302,14 @@ func TestAuxiliaryMigrator_MigrateAll_RecordsRowFailures(t *testing.T) {
 			prepare: func(env *auxV2Env, cfg *AuxiliaryMigratorConfig) {
 				cfg.LabelRepo = labelMissDecorator{LabelRepository: env.labelRepo, err: assert.AnError}
 			},
+			rows: func(r *auxLegacyRows) {
+				now := time.Now()
+				r.imageCaches = append(r.imageCaches, datastore.ImageCache{ProviderName: "wikimedia", ScientificName: "Corvus corax", SourceProvider: "wikimedia", CachedAt: now})
+				r.notifications = append(r.notifications, datastore.NotificationHistory{ScientificName: "Parus major", NotificationType: "new_species", LastSent: now, ExpiresAt: now.Add(time.Hour)})
+			},
 			eventFetches: 1,
 			wantFailed:   "image cache",
-			wantSummary:  "1 failed",
+			wantSummary:  "2 failed",
 			wantMigrated: [4]int{0, 1, 1, 0},
 		},
 		{
