@@ -2,10 +2,12 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -15,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // These tests are NOT parallel: they publish to the process-wide settings
@@ -229,6 +232,137 @@ func TestUpdateSettings_SaveFailureRollsBack(t *testing.T) {
 			assertRestoredContent(t, initial, c)
 		})
 	}
+}
+
+// recordSentryReconfigures replaces c.controlChan with an unbuffered channel
+// and starts a reader that stands in for the control monitor: each received
+// reconfigure_sentry records the live opt-in, as ReconfigureSentry would read
+// it. Other signals are drained and ignored. The returned stop waits for the
+// controller's goroutines, closes the channel and waits for the reader; it is
+// idempotent, registered as a cleanup (so an early require failure does not
+// leak the reader) and must also be called before the recorded slice is read.
+// Call it after newGlobalOwnerController and failSettingsSave so the cleanup
+// runs before the settings restore.
+func recordSentryReconfigures(t *testing.T, c *Controller) (stop func(), seen *[]bool) {
+	t.Helper()
+	ch := make(chan string)
+	c.controlChan = ch
+	seen = new([]bool)
+	readerDone := make(chan struct{})
+	go func() {
+		defer close(readerDone)
+		for action := range ch {
+			if action == telemetry.SignalReconfigureSentry {
+				*seen = append(*seen, conf.GetSettings().Sentry.Enabled)
+			}
+		}
+	}()
+	stop = sync.OnceFunc(func() {
+		c.Wait()
+		close(ch)
+		<-readerDone
+	})
+	t.Cleanup(stop)
+	return stop, seen
+}
+
+// TestUpdateSettings_SaveFailureResendsSentryReconfigure pins when a save
+// failure queues reconfigure_sentry again. A rolled-back Error Tracking opt-in
+// change queues it a second time, after the rollback: the first signal is
+// queued before the save, so the control monitor may already have bound the
+// client for the snapshot that is then taken back. A rolled-back write that
+// leaves the opt-in alone queues nothing extra.
+func TestUpdateSettings_SaveFailureResendsSentryReconfigure(t *testing.T) {
+	tests := []struct {
+		name    string
+		method  string
+		path    string
+		section string // PATCH section; empty for PUT
+		body    string
+		// wantSignals is the number of reconfigure_sentry signals expected.
+		wantSignals int
+	}{
+		{name: "PUT opt-in change", method: http.MethodPut, path: "/api/v2/settings",
+			body: `{"sentry":{"enabled":true}}`, wantSignals: 2},
+		{name: "PATCH opt-in change", method: http.MethodPatch, path: "/api/v2/settings/sentry",
+			section: "sentry", body: `{"enabled":true}`, wantSignals: 2},
+		{name: "PUT opt-in unchanged", method: http.MethodPut, path: "/api/v2/settings",
+			body: fmt.Sprintf(`{"realtime":{"interval":%d}}`, writeLockTestInterval)},
+		{name: "PATCH opt-in unchanged", method: http.MethodPatch, path: "/api/v2/settings/" + writeLockSectionRealtime,
+			section: writeLockSectionRealtime, body: fmt.Sprintf(`{"interval":%d}`, writeLockTestInterval)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			initial := getTestSettings(t)
+			require.False(t, initial.Sentry.Enabled, "the opt-in starts off")
+			e := echo.New()
+			c := newGlobalOwnerController(t, e, initial)
+			c.SetTestContext(t.Context(), func() {})
+			c.DisableSaveSettings = false
+			failSettingsSave(t)
+			stop, seen := recordSentryReconfigures(t, c)
+
+			req := httptest.NewRequest(tt.method, tt.path, bytes.NewReader([]byte(tt.body)))
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+			if tt.method == http.MethodPut {
+				require.NoError(t, c.UpdateSettings(ctx))
+			} else {
+				ctx.SetParamNames("section")
+				ctx.SetParamValues(tt.section)
+				require.NoError(t, c.UpdateSectionSettings(ctx))
+			}
+			require.Equal(t, http.StatusInternalServerError, rec.Code)
+			require.Contains(t, rec.Body.String(), msgSaveFailedRolledBack)
+			stop()
+
+			require.Len(t, *seen, tt.wantSignals)
+			if tt.wantSignals > 0 {
+				assert.False(t, (*seen)[len(*seen)-1], "the last reconfigure must run against the restored opt-in")
+			}
+		})
+	}
+}
+
+// TestFinishSettingsWrite_SupersededRollbackDoesNotResendSentryReconfigure pins
+// that no reconfigure_sentry is queued again when another writer published on
+// top of an opt-in change before the save failed: the newer snapshot stays, so
+// the signal queued before the save already converges to the live opt-in.
+func TestFinishSettingsWrite_SupersededRollbackDoesNotResendSentryReconfigure(t *testing.T) {
+	initial := getTestSettings(t)
+	require.False(t, initial.Sentry.Enabled, "the opt-in starts off")
+	c := newGlobalOwnerController(t, echo.New(), initial)
+	c.SetTestContext(t.Context(), func() {})
+	c.DisableSaveSettings = false
+	failSettingsSave(t)
+	stop, seen := recordSentryReconfigures(t, c)
+
+	current, updated, err := c.commitSettings(func(_, updated *conf.Settings) error {
+		updated.Sentry.Enabled = true
+		return nil
+	})
+	require.NoError(t, err)
+	require.True(t, sentryEnabledChanged(current, updated))
+
+	// The other writer (a model install) publishes on top of the write, so the
+	// rollback is superseded.
+	apply := func() error {
+		_, _, err := conf.UpdateSettings(func(_, updated *conf.Settings) error {
+			updated.Models.Enabled = stalenessInstalledModels()
+			return nil
+		})
+		return err
+	}
+
+	msg, err := c.finishSettingsWrite(current, updated, apply)
+	stop()
+
+	require.Error(t, err)
+	assert.Equal(t, msgSaveFailedNotRolledBack, msg)
+	assert.True(t, conf.GetSettings().Sentry.Enabled, "the newer snapshot must stay as published")
+	assert.Empty(t, *seen, "a superseded rollback must not queue reconfigure_sentry again")
 }
 
 // failSettingsSave points conf.ConfigPath at a file in a missing directory so
