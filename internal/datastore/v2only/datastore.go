@@ -1529,17 +1529,18 @@ func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, m
 	return notes, nil
 }
 
-// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species on a given date.
+// GetBatchHourlyOccurrences retrieves hourly detection counts for multiple species over the
+// inclusive [startDate, endDate] date range, summed across its days.
 // The species parameter holds scientific names. Scientific names map directly to
 // label IDs for every model, so no localized common-name round-trip is performed
 // (that round-trip dropped non-primary-model species such as bats from the daily
 // summary). The returned map is keyed by the same scientific names that were passed in.
 //
-// Label IDs are resolved in a single batched query (no per-species N+1) and the hourly
-// counts are fetched in a single batched query, so this is two queries total regardless
-// of the number of species. A failure in either query is returned to the caller rather
-// than silently zeroing a species, so a cancelled context aborts the request instead of
-// producing partial counts.
+// Label IDs are resolved in a batched query (no per-species N+1), and the hourly counts are
+// fetched in a batched query for each part of the range with a constant UTC offset (see
+// batchHourlyByZone), so the queries are not issued per species. A failure in any query is
+// returned to the caller rather than silently zeroing a species, so a cancelled context
+// aborts the request instead of producing partial counts.
 func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, endDate string, species []string, minConfidence float64) (map[string][24]int, error) {
 	if len(species) == 0 {
 		return make(map[string][24]int), nil
