@@ -71,7 +71,8 @@ config := notification.DefaultTelemetryConfig()
 ```go
 // Create telemetry reporter (implemented by telemetry package). It is
 // installed at startup whatever the setting; IsEnabled follows the live Error
-// Tracking opt-in, so toggling the setting takes effect without a restart.
+// Tracking opt-in, the build age and a bound client, so toggling the setting
+// takes effect without a restart.
 reporter := telemetry.NewNotificationReporter(true)
 
 // Create telemetry integration
