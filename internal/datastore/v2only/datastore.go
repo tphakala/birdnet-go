@@ -1470,12 +1470,13 @@ func (ds *Datastore) GetAllNotes() ([]datastore.Note, error) {
 
 // GetTopBirdsData retrieves top birds data for a date.
 func (ds *Datastore) GetTopBirdsData(ctx context.Context, selectedDate string, minConfidenceNormalized float64, limit int) ([]datastore.Note, error) {
-	t, err := time.ParseInLocation("2006-01-02", selectedDate, ds.timezone)
+	day, err := wallclock.ParseDate(selectedDate)
 	if err != nil {
 		return nil, err
 	}
-	startTime := t.Unix()
-	endTime := t.AddDate(0, 0, 1).Unix()
+	dayStart, dayEnd := wallclock.DayBounds(day, ds.timezone)
+	startTime := dayStart.Unix()
+	endTime := dayEnd.Unix()
 
 	// Use provided limit or fall back to config value
 	reportCount := limit
@@ -1570,7 +1571,7 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, e
 	}
 
 	// Parse the inclusive range bounds.
-	firstDate, err := time.ParseInLocation(time.DateOnly, startDate, ds.timezone)
+	firstDate, err := wallclock.ParseDate(startDate)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -1579,7 +1580,7 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, e
 			Context("start_date", startDate).
 			Build()
 	}
-	lastDate, err := time.ParseInLocation(time.DateOnly, endDate, ds.timezone)
+	lastDate, err := wallclock.ParseDate(endDate)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -1593,7 +1594,7 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, e
 	// method would return all-zero counts for every species with a nil error - a silent wrong answer
 	// that is painful to debug. The API layer validates the order too, but this is an exported
 	// interface method that other callers can reach without that guard.
-	if lastDate.Before(firstDate) {
+	if lastDate.Compare(firstDate) < 0 {
 		return nil, errors.Newf("end_date %q precedes start_date %q", endDate, startDate).
 			Component("datastore").
 			Category(errors.CategoryValidation).
@@ -1604,9 +1605,11 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, e
 	}
 
 	// Calculate the Unix timestamp range. endDate is inclusive, so the exclusive upper bound is
-	// the start of the day *after* it. Calendar-based arithmetic handles DST transitions correctly.
-	startOfDay := firstDate.Unix()
-	endOfDay := lastDate.AddDate(0, 0, 1).Unix()
+	// the end of its local day, which is the start of the day after it.
+	firstStart, _ := wallclock.DayBounds(firstDate, ds.timezone)
+	_, lastEnd := wallclock.DayBounds(lastDate, ds.timezone)
+	startOfDay := firstStart.Unix()
+	endOfDay := lastEnd.Unix()
 
 	// Resolve all scientific names to label IDs in one batched query (avoids the
 	// per-species N+1 round-trip). The returned map is keyed by the stored scientific
@@ -1683,7 +1686,7 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 
 	var startTime, endTime *int64
 	if date != "" {
-		t, err := time.ParseInLocation("2006-01-02", date, ds.timezone)
+		day, err := wallclock.ParseDate(date)
 		if err == nil {
 			if hour != "" {
 				// Specific hour requested - apply hour+duration filter
@@ -1699,8 +1702,9 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 				endTime = &end
 			} else {
 				// No hour specified - search the full day (matches legacy behavior)
-				start := t.Unix()
-				end := t.AddDate(0, 0, 1).Unix()
+				dayStart, dayEnd := wallclock.DayBounds(day, ds.timezone)
+				start := dayStart.Unix()
+				end := dayEnd.Unix()
 				startTime = &start
 				endTime = &end
 			}
@@ -2340,7 +2344,7 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 	ctx := context.Background()
 	var startTime, endTime *int64
 	if date != "" {
-		t, err := time.ParseInLocation("2006-01-02", date, ds.timezone)
+		day, err := wallclock.ParseDate(date)
 		if err == nil {
 			if hour != "" {
 				// Specific hour requested - apply hour+duration filter
@@ -2356,8 +2360,9 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 				endTime = &end
 			} else {
 				// No hour specified - search the full day (matches legacy behavior)
-				start := t.Unix()
-				end := t.AddDate(0, 0, 1).Unix()
+				dayStart, dayEnd := wallclock.DayBounds(day, ds.timezone)
+				start := dayStart.Unix()
+				end := dayEnd.Unix()
 				startTime = &start
 				endTime = &end
 			}
@@ -2868,19 +2873,21 @@ func (ds *Datastore) GetAllImageCaches(providerName string) ([]datastore.ImageCa
 // The end time is exclusive (start of next day) to be used with < in queries.
 func (ds *Datastore) parseDateRange(startDate, endDate string) (start, end int64, err error) {
 	if startDate != "" {
-		t, parseErr := time.ParseInLocation("2006-01-02", startDate, ds.timezone)
+		day, parseErr := wallclock.ParseDate(startDate)
 		if parseErr != nil {
 			return 0, 0, fmt.Errorf("invalid start date format: %w", parseErr)
 		}
-		start = t.Unix()
+		dayStart, _ := wallclock.DayBounds(day, ds.timezone)
+		start = dayStart.Unix()
 	}
 	if endDate != "" {
-		t, parseErr := time.ParseInLocation("2006-01-02", endDate, ds.timezone)
+		day, parseErr := wallclock.ParseDate(endDate)
 		if parseErr != nil {
 			return 0, 0, fmt.Errorf("invalid end date format: %w", parseErr)
 		}
 		// End time is exclusive (start of next day) - use with < in queries
-		end = t.AddDate(0, 0, 1).Unix()
+		_, dayEnd := wallclock.DayBounds(day, ds.timezone)
+		end = dayEnd.Unix()
 	}
 
 	// When no end date specified, use max int64 to include all records.
@@ -3271,7 +3278,7 @@ func labelMatchForScientificName(scientificName string) (predicate string, args 
 
 // GetSpeciesLastDetectionDateBefore returns the last detection date before the given date.
 func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scientificName, beforeDate string) (string, error) {
-	before, err := time.ParseInLocation(time.DateOnly, beforeDate, ds.timezone)
+	beforeDay, err := wallclock.ParseDate(beforeDate)
 	if err != nil {
 		return "", fmt.Errorf("invalid before date format: %w", err)
 	}
@@ -3285,6 +3292,7 @@ func (ds *Datastore) GetSpeciesLastDetectionDateBefore(ctx context.Context, scie
 	// detected_at) index be walked backwards from the cutoff and stop at the first
 	// qualifying row; aggregating over "label_id IN (...)" would read every earlier
 	// detection of the species, which is most of the table for a dominant species.
+	before, _ := wallclock.DayBounds(beforeDay, ds.timezone)
 	prefix := ds.manager.TablePrefix()
 	latestForLabel := fmt.Sprintf(
 		"SELECT d.detected_at FROM %sdetections d LEFT JOIN %sdetection_reviews dr ON d.id = dr.detection_id"+
