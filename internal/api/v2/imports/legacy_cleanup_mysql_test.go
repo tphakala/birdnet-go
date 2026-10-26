@@ -189,7 +189,14 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 	t.Attr("type", "integration")
 
 	env := newCleanupTestEnv(t)
-	allLegacy := slices.Concat(legacyOnlyTables, legacySharedTables)
+	// The eleven legacy tables in drop order, written out so a name dropped from
+	// the production lists fails the test.
+	allLegacy := []string{
+		"note_reviews", "note_comments", "note_locks", "results", "notes",
+		"hourly_weathers", "daily_events", "image_caches", "dynamic_thresholds",
+		"threshold_events", "notification_histories",
+	}
+	legacyOnly := allLegacy[:5]
 
 	t.Run("bare v2 schema keeps its tables", func(t *testing.T) {
 		mgr := env.newManager(t, false)
@@ -312,6 +319,93 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 		for _, name := range allLegacy {
 			assert.Contains(t, after, name)
 		}
+	})
+
+	t.Run("migration state other than completed blocks cleanup", func(t *testing.T) {
+		mgr := env.newManager(t, true)
+		env.reset(t, mgr)
+		require.NoError(t, mgr.Initialize())
+		createLegacyTables(t, mgr.DB(), allLegacy)
+		c := newCleanupHandler(t, mgr)
+
+		for _, state := range []entities.MigrationStatus{entities.MigrationStatusIdle, entities.MigrationStatusMigrating, entities.MigrationStatusFailed} {
+			markMigration(t, mgr, state, "")
+			status := getStatus(t, c)
+			assert.False(t, status.CanCleanup, string(state))
+			assert.Equal(t, notification.MsgErrCleanupRestartRequired, status.ErrorKey, string(state))
+			assert.Contains(t, status.Reason, "Migration has not completed", "the state gate, not the v2-only gate, refused")
+			code, resp := postCleanup(t, c)
+			assert.Equal(t, http.StatusBadRequest, code, string(state))
+			assert.Equal(t, notification.MsgErrCleanupRestartRequired, resp.ErrorKey, string(state))
+		}
+
+		// Without a state row the state is unreadable, which also refuses.
+		require.NoError(t, mgr.DB().Where("1 = 1").Delete(&entities.MigrationState{}).Error)
+		status := getStatus(t, c)
+		assert.False(t, status.CanCleanup)
+		assert.Equal(t, notification.MsgErrCleanupAccessFailed, status.ErrorKey)
+		code, resp := postCleanup(t, c)
+		assert.Equal(t, http.StatusBadRequest, code)
+		assert.Equal(t, notification.MsgErrCleanupAccessFailed, resp.ErrorKey)
+
+		after := env.tables(t, mgr.DB())
+		for _, name := range allLegacy {
+			assert.Contains(t, after, name)
+		}
+	})
+
+	for _, marker := range []string{"detections", "labels", "migration_states", "migration_state"} {
+		t.Run("single bare marker "+marker+" withholds the shared names", func(t *testing.T) {
+			mgr := env.newManager(t, true)
+			env.reset(t, mgr)
+			require.NoError(t, mgr.Initialize())
+			markMigration(t, mgr, entities.MigrationStatusCompleted, "")
+			createLegacyTables(t, mgr.DB(), allLegacy)
+			require.NoError(t, mgr.DB().Exec("CREATE TABLE `"+marker+"` (id INT PRIMARY KEY)").Error)
+			c := newCleanupHandler(t, mgr)
+
+			status := getStatus(t, c)
+			require.True(t, status.CanCleanup)
+			names := make([]string, 0, len(status.Tables))
+			for _, tbl := range status.Tables {
+				names = append(names, tbl.Name)
+			}
+			assert.Equal(t, legacyOnly, names)
+		})
+	}
+
+	t.Run("cancelled context refuses at the state read", func(t *testing.T) {
+		mgr := env.newManager(t, true)
+		env.reset(t, mgr)
+		require.NoError(t, mgr.Initialize())
+		markMigration(t, mgr, entities.MigrationStatusCompleted, "")
+		createLegacyTables(t, mgr.DB(), allLegacy)
+		c := newCleanupHandler(t, mgr)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		tables, refusal := c.resolveMySQLLegacyTables(ctx, mgr.DB().WithContext(ctx))
+		assert.Empty(t, tables)
+		require.NotNil(t, refusal)
+		assert.Equal(t, notification.MsgErrCleanupAccessFailed, refusal.errorKey)
+		assert.Equal(t, "Cannot read migration state", refusal.reason)
+	})
+
+	t.Run("drop failure reports the tables left", func(t *testing.T) {
+		mgr := env.newManager(t, true)
+		env.reset(t, mgr)
+		require.NoError(t, mgr.Initialize())
+		createLegacyTables(t, mgr.DB(), allLegacy)
+		c := newCleanupHandler(t, mgr)
+
+		// results drops cleanly; notes is still referenced by note_reviews, so the
+		// second drop fails and only notes is reported as left.
+		remaining, err := c.dropMySQLLegacyTables(t.Context(), mgr.DB(), []LegacyTableInfo{{Name: "results"}, {Name: "notes"}})
+		require.Error(t, err)
+		assert.Equal(t, []string{"notes"}, remaining)
+		after := env.tables(t, mgr.DB())
+		assert.NotContains(t, after, "results")
+		assert.Contains(t, after, "notes")
 	})
 }
 

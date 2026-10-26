@@ -2,6 +2,7 @@
 package importsapi
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"net/http"
@@ -391,6 +392,13 @@ func enableV2OnlyMode(t *testing.T) {
 	t.Cleanup(func() { isV2OnlyMode = prev })
 }
 
+// wantLegacyOnly and wantLegacyShared spell out the legacy table names so a name
+// dropped from the production lists fails the test.
+var (
+	wantLegacyOnly   = []string{"note_reviews", "note_comments", "note_locks", "results", "notes"}
+	wantLegacyShared = []string{"hourly_weathers", "daily_events", "image_caches", "dynamic_thresholds", "threshold_events", "notification_histories"}
+)
+
 // TestMySQLLegacyCandidates pins the candidate rule: a bare table prefix means
 // the legacy-named tables are live v2 tables, and bare v2 tables beside a prefixed
 // schema keep the shared names out of the list.
@@ -405,8 +413,8 @@ func TestMySQLLegacyCandidates(t *testing.T) {
 		want          []string
 	}{
 		{"bare schema offers nothing", "", false, nil},
-		{"prefixed schema without bare v2 offers every legacy table", "v2_", false, slices.Concat(legacyOnlyTables, legacySharedTables)},
-		{"prefixed schema beside bare v2 tables offers legacy-only tables", "v2_", true, legacyOnlyTables},
+		{"prefixed schema without bare v2 offers every legacy table", "v2_", false, append(slices.Clone(wantLegacyOnly), wantLegacyShared...)},
+		{"prefixed schema beside bare v2 tables offers legacy-only tables", "v2_", true, wantLegacyOnly},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -425,6 +433,21 @@ func TestMySQLLegacyCandidates_DropOrder(t *testing.T) {
 	for _, child := range []string{"note_reviews", "note_comments", "note_locks", "results"} {
 		assert.Less(t, slices.Index(got, child), slices.Index(got, "notes"), "%s must be dropped before notes", child)
 	}
+}
+
+// TestDropMySQLLegacyTables_Cancelled verifies a cancelled context drops nothing
+// and reports every table as left, without touching the connection.
+func TestDropMySQLLegacyTables_Cancelled(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	controller := createLegacyTestHandler(t, echo.New(), createMySQLTestSettings())
+
+	remaining, err := controller.dropMySQLLegacyTables(ctx, nil, []LegacyTableInfo{{Name: "notes"}, {Name: "results"}})
+	require.ErrorIs(t, err, context.Canceled)
+	assert.Equal(t, []string{"notes", "results"}, remaining)
 }
 
 // TestGetLegacyStatus_MySQL_Refuses verifies the status call fails closed when no
