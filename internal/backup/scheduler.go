@@ -299,27 +299,22 @@ const daysPerWeek = 7
 func (s *Scheduler) calculateNextRun(now time.Time, hour, minute int, weekday time.Weekday, isWeekly bool) time.Time {
 	loc := now.Location()
 	today := wallclock.DateOf(now)
-	next := wallclock.At(today, hour, minute, 0, loc)
+	todayRun := wallclock.At(today, hour, minute, 0, loc)
 	daysAhead := 0
 
 	if isWeekly {
-		// Days until the target weekday; the weekday comes from the calendar date, which is
-		// the same in every zone.
-		todayWeekday := time.Date(today.Year, today.Month, today.Day, 0, 0, 0, 0, time.UTC).Weekday()
-		daysAhead = (int(weekday-todayWeekday) + daysPerWeek) % daysPerWeek
-		if daysAhead == 0 && now.After(next) {
+		// Days until the target weekday, counted on the calendar.
+		daysAhead = (int(weekday-now.Weekday()) + daysPerWeek) % daysPerWeek
+		if daysAhead == 0 && now.After(todayRun) {
 			// The scheduled time has passed today, so schedule for next week
 			daysAhead = daysPerWeek
 		}
-	} else if now.After(next) {
+	} else if now.After(todayRun) {
 		// If we're past the time today, schedule for tomorrow
 		daysAhead = 1
 	}
 
-	if daysAhead > 0 {
-		next = wallclock.At(today.AddDays(daysAhead), hour, minute, 0, loc)
-	}
-	return next
+	return wallclock.At(today.AddDays(daysAhead), hour, minute, 0, loc)
 }
 
 // UpdateSchedules updates all schedules based on new configuration

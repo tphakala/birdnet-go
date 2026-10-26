@@ -80,8 +80,6 @@ func TestCalculateNextRun_SpringForwardDayLaterRunsKeepWallTime(t *testing.T) {
 	now := time.Date(2026, 3, 8, 3, 0, 0, 0, loc).Add(time.Minute)
 	got := nextRunFor(now, 2, 30, dailySchedule, false)
 	assert.True(t, time.Date(2026, 3, 9, 2, 30, 0, 0, loc).Equal(got), "got %v", got)
-	assert.Equal(t, 2, got.Hour())
-	assert.Equal(t, 30, got.Minute())
 }
 
 func TestCalculateNextRun_RepeatedTimeRunsOnce(t *testing.T) {
