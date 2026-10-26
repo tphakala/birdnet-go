@@ -142,6 +142,11 @@ var (
 	// StartupState.Error carries the tables with rows, or the failed step when an empty
 	// table could not be removed.
 	ErrMixedSchemaDatabase = errors.NewStd("database holds both enhanced database (v2) tables and legacy tables")
+	// ErrLegacyTailUnverified indicates the startup check could not tell whether legacy
+	// records beyond the migration watermark are present in the enhanced database (v2):
+	// a database could not be opened or a probe failed. Callers must not consolidate or
+	// start in v2-only mode on it (errors.Is).
+	ErrLegacyTailUnverified = errors.NewStd("could not verify the legacy records beyond the migration watermark")
 )
 
 // StartupState represents the result of checking migration state at startup.
@@ -311,8 +316,8 @@ func checkSQLiteMigrationState(settings *conf.Settings) StartupState {
 	defer func() { _ = sqlDB.Close() }()
 
 	// Read migration state - try both table names (plural is current, singular is pre-PR #2165)
-	migrationTable := resolveSQLiteTableName(db, "migration_states", "migration_state")
-	if migrationTable == "" {
+	migrationTable, lookupErr := resolveSQLiteTableName(db, "migration_states", "migration_state")
+	if lookupErr != nil || migrationTable == "" {
 		// Close the sidecar handle before the fallback may delete the file.
 		// sql.DB.Close is idempotent, so the deferred close remains safe.
 		_ = sqlDB.Close()
@@ -620,81 +625,133 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 //  1. Skip database consolidation (keep files in place)
 //  2. Override v2-only mode so the worker can tail-sync the stragglers
 //
-// It only inspects a COMPLETED migration; every earlier state and every
-// missing-database case returns false (there is nothing to promote yet). Once the
-// COMPLETED marker is confirmed, verification failures fail CLOSED (return true)
-// so an unverifiable state stays in tail-sync mode rather than promoting blindly.
-func HasUnmigratedLegacyRecords(settings *conf.Settings, log logger.Logger) bool {
+// There are three outcomes. (false, nil) means there is nothing to promote or nothing
+// left to sync: every state before COMPLETED, a missing database, a database without
+// the legacy notes table, and a fully reconciled tail. (true, nil) means legacy records
+// are missing from v2. A non-nil error wrapping ErrLegacyTailUnverified means the check
+// could not tell, because a database could not be opened or a probe or query failed;
+// the bool is false then and must not be read as "none". Callers must not consolidate
+// or start in v2-only mode on it.
+func HasUnmigratedLegacyRecords(settings *conf.Settings, log logger.Logger) (bool, error) {
 	if settings.Output.MySQL.Enabled {
 		return hasUnmigratedLegacyMySQL(settings, log)
 	}
 	if settings.Output.SQLite.Enabled {
 		return hasUnmigratedLegacySQLite(settings, log)
 	}
-	return false
+	return false, nil
 }
 
-// hasUnmigratedLegacySQLite checks for unmigrated records in a SQLite legacy database.
-func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) bool {
-	configuredPath := settings.Output.SQLite.Path
-	v2MigrationPath := V2MigrationPathFromConfigured(configuredPath)
+// Steps of the legacy tail check, named in ErrLegacyTailUnverified wraps. Fixed
+// strings, so an error never carries a file path.
+const (
+	tailStepOpenLegacy     = "open legacy database"
+	tailStepLegacyHandle   = "get legacy database handle"
+	tailStepLegacyTable    = "look up legacy notes table"
+	tailStepOpenV2         = "open v2 migration database"
+	tailStepV2Handle       = "get v2 migration database handle"
+	tailStepMigrationTable = "look up migration state table"
+	tailStepReadState      = "read migration state"
+	tailStepDirtyTable     = "look up dirty ID table"
+	tailStepVerifyTail     = "verify legacy tail against v2"
+	tailStepOpenMySQL      = "open MySQL database"
+	tailStepMySQLHandle    = "get MySQL database handle"
+)
 
-	// Both databases must exist for there to be stragglers
-	if _, err := os.Stat(v2MigrationPath); os.IsNotExist(err) {
-		return false
-	}
-	if _, err := os.Stat(configuredPath); os.IsNotExist(err) {
-		return false
-	}
+// tailUnverified wraps cause as an ErrLegacyTailUnverified for the named step.
+func tailUnverified(step string, cause error) error {
+	return fmt.Errorf("%w: %s: %w", ErrLegacyTailUnverified, step, cause)
+}
 
-	// Open v2 migration database read-only to get LastMigratedID
-	v2DSN := readOnlyDSN(v2MigrationPath)
-	v2DB, err := gorm.Open(sqlite.Open(v2DSN), &gorm.Config{
+// mysqlTailUnverified is tailUnverified for a MySQL cause. A connectivity failure keeps
+// its chain so the connectivity policy classifies it. Any other cause is flattened to a
+// scrubbed message: server errors can name the user and the database.
+func mysqlTailUnverified(settings *conf.Settings, step string, cause error) error {
+	if errors.IsConnectivityError(cause) {
+		return tailUnverified(step, cause)
+	}
+	cfg := settings.Output.MySQL
+	scrubbed := scrubErrorWithPaths(cause.Error(), cfg.Host, cfg.Database, cfg.Username)
+	return fmt.Errorf("%w: %s: %s", ErrLegacyTailUnverified, step, scrubbed)
+}
+
+// openReadOnlySQLite opens the SQLite database at path read-only and returns the handle
+// with a function that closes it. A failure is an ErrLegacyTailUnverified naming
+// openStep (the open) or handleStep (the underlying handle).
+func openReadOnlySQLite(path, openStep, handleStep string) (*gorm.DB, func(), error) {
+	db, err := gorm.Open(sqlite.Open(readOnlyDSN(path)), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
-		log.Warn("reconciliation: failed to open v2 migration database", logger.Error(err))
-		return false
+		return nil, nil, tailUnverified(openStep, err)
 	}
-	v2SQL, err := v2DB.DB()
+	sqlDB, err := db.DB()
 	if err != nil {
-		log.Warn("reconciliation: failed to get v2 underlying DB", logger.Error(err))
-		return false
+		return nil, nil, tailUnverified(handleStep, err)
 	}
-	defer func() { _ = v2SQL.Close() }()
+	return db, func() { _ = sqlDB.Close() }, nil
+}
+
+// hasUnmigratedLegacySQLite checks for unmigrated records in a SQLite legacy database.
+// The legacy database is examined before the sidecar, so a configured path that holds no
+// legacy notes table (an already consolidated v2 database) is answered without touching
+// the sidecar beside it.
+func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) (bool, error) {
+	configuredPath := settings.Output.SQLite.Path
+	v2MigrationPath := V2MigrationPathFromConfigured(configuredPath)
+
+	// Both databases must exist for there to be stragglers. Other stat errors fall
+	// through to the open below, which fails without echoing the path.
+	if _, err := os.Stat(v2MigrationPath); os.IsNotExist(err) {
+		return false, nil
+	}
+	if _, err := os.Stat(configuredPath); os.IsNotExist(err) {
+		return false, nil
+	}
+
+	legacyDB, closeLegacy, err := openReadOnlySQLite(configuredPath, tailStepOpenLegacy, tailStepLegacyHandle)
+	if err != nil {
+		return false, err
+	}
+	defer closeLegacy()
+
+	notesTable, err := resolveSQLiteTableName(legacyDB, "notes")
+	if err != nil {
+		return false, tailUnverified(tailStepLegacyTable, err)
+	}
+	if notesTable == "" {
+		// The configured path is not a legacy database, so no legacy tail can exist.
+		return false, nil
+	}
+
+	v2DB, closeV2, err := openReadOnlySQLite(v2MigrationPath, tailStepOpenV2, tailStepV2Handle)
+	if err != nil {
+		return false, err
+	}
+	defer closeV2()
 
 	// Resolve table name (migration_states or migration_state for pre-PR #2165)
-	migrationTable := resolveSQLiteTableName(v2DB, "migration_states", "migration_state")
+	migrationTable, err := resolveSQLiteTableName(v2DB, "migration_states", "migration_state")
+	if err != nil {
+		return false, tailUnverified(tailStepMigrationTable, err)
+	}
 	if migrationTable == "" {
-		return false
+		return false, nil
 	}
 
 	var state entities.MigrationState
 	if err := v2DB.Table(migrationTable).First(&state).Error; err != nil {
-		log.Warn("reconciliation: failed to read migration state", logger.Error(err))
-		return false
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Warn("reconciliation: no migration state row found", logger.Error(err))
+			return false, nil
+		}
+		return false, tailUnverified(tailStepReadState, err)
 	}
 
 	// Only relevant when migration is completed
 	if state.State != entities.MigrationStatusCompleted {
-		return false
+		return false, nil
 	}
-
-	// Open legacy database read-only to count records beyond the watermark
-	legacyDSN := readOnlyDSN(configuredPath)
-	legacyDB, err := gorm.Open(sqlite.Open(legacyDSN), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
-	})
-	if err != nil {
-		log.Warn("reconciliation: failed to open legacy database", logger.Error(err))
-		return false
-	}
-	legacySQL, err := legacyDB.DB()
-	if err != nil {
-		log.Warn("reconciliation: failed to get legacy underlying DB", logger.Error(err))
-		return false
-	}
-	defer func() { _ = legacySQL.Close() }()
 
 	// Until promotion, new detections are saved to legacy notes only and the
 	// migration worker's tail sync copies them to v2 afterwards, so a raw count of
@@ -704,52 +761,64 @@ func hasUnmigratedLegacySQLite(settings *conf.Settings, log logger.Logger) bool 
 	// record is actually ABSENT from v2. Answer it with a targeted primary-key
 	// membership check plus the dirty-ID set. Only genuinely unreconciled records
 	// defer promotion.
-	dirtyTable := resolveSQLiteTableName(v2DB, "migration_dirty_ids", "migration_dirty_id")
-	return !legacyTailReconciledInV2(legacyDB, v2DB, state.LastMigratedID, "notes", "detections", dirtyTable, log)
+	dirtyTable, err := resolveSQLiteTableName(v2DB, "migration_dirty_ids", "migration_dirty_id")
+	if err != nil {
+		return false, tailUnverified(tailStepDirtyTable, err)
+	}
+	reconciled, err := legacyTailReconciledInV2(legacyDB, v2DB, state.LastMigratedID, "notes", "detections", dirtyTable, log)
+	if err != nil {
+		return false, tailUnverified(tailStepVerifyTail, err)
+	}
+	return !reconciled, nil
 }
 
 // hasUnmigratedLegacyMySQL checks for unmigrated records in a MySQL legacy database.
-func hasUnmigratedLegacyMySQL(settings *conf.Settings, log logger.Logger) bool {
+func hasUnmigratedLegacyMySQL(settings *conf.Settings, log logger.Logger) (bool, error) {
 	dsn := buildMySQLStartupDSN(settings)
 
 	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
-		log.Warn("reconciliation: failed to open MySQL database", logger.Error(err))
-		return false
+		return false, mysqlTailUnverified(settings, tailStepOpenMySQL, err)
 	}
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Warn("reconciliation: failed to get MySQL underlying DB", logger.Error(err))
-		return false
+		return false, mysqlTailUnverified(settings, tailStepMySQLHandle, err)
 	}
 	defer func() { _ = sqlDB.Close() }()
 
 	// Check if v2 migration state table exists (try both plural and singular names)
-	tableNameNew := v2TablePrefix + "migration_states"
-	tableNameOld := v2TablePrefix + "migration_state"
-	var v2MigrationTableName string
-	if err := db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?) LIMIT 1",
-		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationTableName).Error; err != nil || v2MigrationTableName == "" {
-		return false
+	v2MigrationTableName, err := resolveMySQLTableName(db, settings.Output.MySQL.Database,
+		v2TablePrefix+"migration_states", v2TablePrefix+"migration_state")
+	if err != nil {
+		return false, mysqlTailUnverified(settings, tailStepMigrationTable, err)
+	}
+	if v2MigrationTableName == "" {
+		return false, nil
 	}
 
 	var state entities.MigrationState
 	if err := db.Table(v2MigrationTableName).First(&state).Error; err != nil {
-		log.Warn("reconciliation: failed to read MySQL migration state", logger.Error(err))
-		return false
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			log.Warn("reconciliation: no MySQL migration state row found", logger.Error(err))
+			return false, nil
+		}
+		return false, mysqlTailUnverified(settings, tailStepReadState, err)
 	}
 
 	if state.State != entities.MigrationStatusCompleted {
-		return false
+		return false, nil
 	}
 
 	// Check if legacy notes table exists
 	var legacyCount int64
 	if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'notes'",
-		settings.Output.MySQL.Database).Scan(&legacyCount).Error; err != nil || legacyCount == 0 {
-		return false
+		settings.Output.MySQL.Database).Scan(&legacyCount).Error; err != nil {
+		return false, mysqlTailUnverified(settings, tailStepLegacyTable, err)
+	}
+	if legacyCount == 0 {
+		return false, nil
 	}
 
 	// Same reasoning as the SQLite path (issue #3991): legacy notes keep growing
@@ -757,9 +826,16 @@ func hasUnmigratedLegacyMySQL(settings *conf.Settings, log logger.Logger) bool {
 	// against v2 by primary key (v2 Detection.ID == legacy notes.id) and check the
 	// dirty-ID set. MySQL keeps both schemas in one database, so a single connection
 	// serves both the legacy and v2 queries; v2 tables carry the v2_ prefix.
-	dirtyTable := resolveMySQLTableName(db, settings.Output.MySQL.Database,
+	dirtyTable, err := resolveMySQLTableName(db, settings.Output.MySQL.Database,
 		v2TablePrefix+"migration_dirty_ids", v2TablePrefix+"migration_dirty_id")
-	return !legacyTailReconciledInV2(db, db, state.LastMigratedID, "notes", v2TablePrefix+"detections", dirtyTable, log)
+	if err != nil {
+		return false, mysqlTailUnverified(settings, tailStepDirtyTable, err)
+	}
+	reconciled, err := legacyTailReconciledInV2(db, db, state.LastMigratedID, "notes", v2TablePrefix+"detections", dirtyTable, log)
+	if err != nil {
+		return false, mysqlTailUnverified(settings, tailStepVerifyTail, err)
+	}
+	return !reconciled, nil
 }
 
 // tailScanBatchSize bounds how many legacy tail IDs are compared against v2 per
@@ -780,9 +856,10 @@ const tailScanMaxBatches = 100_000
 // legacyDB and v2DB may be the same handle (MySQL keeps both schemas in one
 // database) or two handles (SQLite keeps v2 in a separate file). dirtyTable may be
 // empty when the dirty-ID table does not exist (older schema), in which case only
-// the membership check applies. It fails CLOSED: any verification error returns
-// false so an unverifiable state stays in tail-sync mode rather than promoting.
-func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, notesTable, detectionsTable, dirtyTable string, log logger.Logger) bool {
+// the membership check applies. It fails CLOSED: a verification error is returned
+// with a false result, never read as "reconciled", so the caller can tell an
+// unverifiable tail from a genuinely unreconciled one.
+func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, notesTable, detectionsTable, dirtyTable string, log logger.Logger) (bool, error) {
 	// Outstanding dirty IDs mean the migration worker failed to sync some records to
 	// v2 and has not reconciled them yet. Tail sync can advance LastMigratedID past a
 	// record it failed to migrate, so the membership check below would not see those;
@@ -790,28 +867,26 @@ func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, note
 	if dirtyTable != "" {
 		var dirty int64
 		if err := v2DB.Table(dirtyTable).Count(&dirty).Error; err != nil {
-			log.Warn("reconciliation: failed to count dirty IDs, deferring promotion", logger.Error(err))
-			return false
+			return false, fmt.Errorf("count dirty IDs: %w", err)
 		}
 		if dirty > 0 {
 			log.Warn("legacy tail not reconciled: dirty IDs pending sync to v2",
 				logger.Int64("dirty_ids", dirty),
 				logger.Uint64("last_migrated_id", uint64(lastMigratedID)))
-			return false
+			return false, nil
 		}
 	}
 
 	missing, err := legacyTailMissingFromV2(legacyDB, v2DB, lastMigratedID, notesTable, detectionsTable)
 	if err != nil {
-		log.Warn("reconciliation: failed to verify legacy tail against v2, deferring promotion", logger.Error(err))
-		return false
+		return false, fmt.Errorf("scan legacy tail: %w", err)
 	}
 	if missing {
 		log.Warn("legacy tail not reconciled: records absent from v2 after migration completed",
 			logger.Uint64("last_migrated_id", uint64(lastMigratedID)))
-		return false
+		return false, nil
 	}
-	return true
+	return true, nil
 }
 
 // legacyTailMissingFromV2 reports whether any legacy notesTable.id greater than
@@ -859,16 +934,20 @@ func legacyTailMissingFromV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, notes
 // resolveMySQLTableName returns the first of the given table names that exists in the
 // MySQL database, or empty string if none do. It mirrors resolveSQLiteTableName for
 // the MySQL information_schema, handling the migration_dirty_id -> migration_dirty_ids
-// rename from PR #2165.
-func resolveMySQLTableName(db *gorm.DB, database string, names ...string) string {
+// rename from PR #2165. A failed probe returns the error, so "could not look" is not
+// read as "absent".
+func resolveMySQLTableName(db *gorm.DB, database string, names ...string) (string, error) {
 	for _, name := range names {
 		var count int64
 		if err := db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
-			database, name).Scan(&count).Error; err == nil && count > 0 {
-			return name
+			database, name).Scan(&count).Error; err != nil {
+			return "", err
+		}
+		if count > 0 {
+			return name, nil
 		}
 	}
-	return ""
+	return "", nil
 }
 
 // checkpointSQLiteWAL folds any pending write-ahead-log content back into the main
@@ -2106,15 +2185,19 @@ func CheckAndConsolidateAtStartup(configuredPath string, log logger.Logger) (con
 }
 
 // resolveSQLiteTableName checks which of the given SQLite table names exists.
-// Returns the first match or empty string if none exist.
+// Returns the first match, or empty string and a nil error if none exist. A failed
+// probe returns the error, so "could not look" is not read as "absent".
 // This handles the migration_state→migration_states and alert_history→alert_histories
 // rename from PR #2165 where TableName() overrides were removed.
-func resolveSQLiteTableName(db *gorm.DB, names ...string) string {
+func resolveSQLiteTableName(db *gorm.DB, names ...string) (string, error) {
 	for _, name := range names {
 		var count int64
-		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", name).Scan(&count).Error; err == nil && count > 0 {
-			return name
+		if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?", name).Scan(&count).Error; err != nil {
+			return "", err
+		}
+		if count > 0 {
+			return name, nil
 		}
 	}
-	return ""
+	return "", nil
 }

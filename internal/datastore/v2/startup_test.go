@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -700,7 +701,8 @@ func TestHasUnmigratedLegacyRecords_StragglerFound(t *testing.T) {
 	createCompletedV2MigrationDB(t, tmpDir, 10)
 
 	log := testStartupLogger()
-	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	hasUnmigrated, err := HasUnmigratedLegacyRecords(settings, log)
+	require.NoError(t, err)
 	assert.True(t, hasUnmigrated, "should detect 5 unmigrated records")
 }
 
@@ -719,7 +721,8 @@ func TestHasUnmigratedLegacyRecords_NoStragglers(t *testing.T) {
 	createCompletedV2MigrationDB(t, tmpDir, 10)
 
 	log := testStartupLogger()
-	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	hasUnmigrated, err := HasUnmigratedLegacyRecords(settings, log)
+	require.NoError(t, err)
 	assert.False(t, hasUnmigrated, "should not detect stragglers when all migrated")
 }
 
@@ -735,7 +738,8 @@ func TestHasUnmigratedLegacyRecords_NoV2Database(t *testing.T) {
 	createLegacySQLite(t, legacyPath, 10)
 
 	log := testStartupLogger()
-	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	hasUnmigrated, err := HasUnmigratedLegacyRecords(settings, log)
+	require.NoError(t, err)
 	assert.False(t, hasUnmigrated, "should return false when no v2 database")
 }
 
@@ -751,7 +755,8 @@ func TestHasUnmigratedLegacyRecords_NoLegacyDatabase(t *testing.T) {
 	createCompletedV2MigrationDB(t, tmpDir, 10)
 
 	log := testStartupLogger()
-	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	hasUnmigrated, err := HasUnmigratedLegacyRecords(settings, log)
+	require.NoError(t, err)
 	assert.False(t, hasUnmigrated, "should return false when no legacy database")
 }
 
@@ -777,7 +782,8 @@ func TestHasUnmigratedLegacyRecords_MigrationNotCompleted(t *testing.T) {
 	require.NoError(t, mgr.Close())
 
 	log := testStartupLogger()
-	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	hasUnmigrated, err := HasUnmigratedLegacyRecords(settings, log)
+	require.NoError(t, err)
 	assert.False(t, hasUnmigrated, "should return false when migration not completed")
 }
 
@@ -786,8 +792,150 @@ func TestHasUnmigratedLegacyRecords_NeitherDBEnabled(t *testing.T) {
 	// Neither SQLite nor MySQL enabled
 
 	log := testStartupLogger()
-	hasUnmigrated := HasUnmigratedLegacyRecords(settings, log)
+	hasUnmigrated, err := HasUnmigratedLegacyRecords(settings, log)
+	require.NoError(t, err)
 	assert.False(t, hasUnmigrated, "should return false when no DB enabled")
+}
+
+// TestHasUnmigratedLegacyRecords_MySQLUnreachable pins that a server that cannot be
+// reached is "unknown", not "none", and that the dial failure stays in the error chain
+// so the connectivity policy classifies it.
+func TestHasUnmigratedLegacyRecords_MySQLUnreachable(t *testing.T) {
+	t.Parallel()
+
+	// A port that was just released refuses the connection.
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	port := listener.Addr().(*net.TCPAddr).Port
+	require.NoError(t, listener.Close())
+
+	settings := mysqlTestSettings(&MySQLConfig{
+		Host: "127.0.0.1", Port: strconv.Itoa(port), Username: "u", Password: "p", Database: "d",
+	})
+	hasUnmigrated, err := HasUnmigratedLegacyRecords(settings, testStartupLogger())
+	require.ErrorIs(t, err, ErrLegacyTailUnverified)
+	assert.False(t, hasUnmigrated, "the bool is not an answer when the check failed")
+	assert.True(t, errors.IsConnectivityError(err), "the dial failure must stay classifiable")
+}
+
+// TestHasUnmigratedLegacyRecords_SQLiteOutcomes pins which SQLite faults are unknown
+// and which are a definite "none". Each row gets a fresh fixture: 15 legacy notes and
+// a COMPLETED sidecar with watermark 10.
+func TestHasUnmigratedLegacyRecords_SQLiteOutcomes(t *testing.T) {
+	skipIfPermissionsNotEnforced := func(t *testing.T) {
+		t.Helper()
+		if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+			t.Skip("file permissions are not enforced here")
+		}
+	}
+
+	tests := []struct {
+		name        string
+		breakIt     func(t *testing.T, legacyPath, sidecarPath string)
+		wantUnknown bool
+	}{
+		{
+			name: "v2 sidecar is not a database",
+			breakIt: func(t *testing.T, _, sidecarPath string) {
+				t.Helper()
+				require.NoError(t, os.WriteFile(sidecarPath, []byte(strings.Repeat("not a database ", 64)), 0o600))
+			},
+			wantUnknown: true,
+		},
+		{
+			name: "legacy database unreadable",
+			breakIt: func(t *testing.T, legacyPath, _ string) {
+				t.Helper()
+				skipIfPermissionsNotEnforced(t)
+				require.NoError(t, os.Chmod(legacyPath, 0o000))
+				t.Cleanup(func() { _ = os.Chmod(legacyPath, 0o600) })
+			},
+			wantUnknown: true,
+		},
+		{
+			name: "migration state unreadable",
+			breakIt: func(t *testing.T, _, sidecarPath string) {
+				t.Helper()
+				db, err := gorm.Open(sqlite.Open(sidecarPath), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+				require.NoError(t, err)
+				sqlDB, err := db.DB()
+				require.NoError(t, err)
+				defer func() { _ = sqlDB.Close() }()
+				require.NoError(t, db.Exec("UPDATE migration_states SET last_migrated_id = 'abc'").Error)
+			},
+			wantUnknown: true,
+		},
+		{
+			name: "migration state row missing",
+			breakIt: func(t *testing.T, _, sidecarPath string) {
+				t.Helper()
+				db, err := gorm.Open(sqlite.Open(sidecarPath), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+				require.NoError(t, err)
+				sqlDB, err := db.DB()
+				require.NoError(t, err)
+				defer func() { _ = sqlDB.Close() }()
+				require.NoError(t, db.Exec("DELETE FROM migration_states").Error)
+			},
+			wantUnknown: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			legacyPath := filepath.Join(dir, "birdnet.db")
+			createLegacySQLite(t, legacyPath, 15)
+			createCompletedV2MigrationDB(t, dir, 10)
+			tt.breakIt(t, legacyPath, V2MigrationPathFromConfigured(legacyPath))
+
+			hasUnmigrated, err := HasUnmigratedLegacyRecords(sqliteSettings(legacyPath), testStartupLogger())
+			if tt.wantUnknown {
+				require.ErrorIs(t, err, ErrLegacyTailUnverified)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.False(t, hasUnmigrated)
+		})
+	}
+
+	t.Run("consolidated v2 database beside an unreadable sidecar is none", func(t *testing.T) {
+		dir := t.TempDir()
+		configuredPath := filepath.Join(dir, "birdnet.db")
+		createConsolidatedV2DBAt(t, configuredPath)
+		require.NoError(t, os.WriteFile(V2MigrationPathFromConfigured(configuredPath),
+			[]byte(strings.Repeat("not a database ", 64)), 0o600))
+
+		hasUnmigrated, err := HasUnmigratedLegacyRecords(sqliteSettings(configuredPath), testStartupLogger())
+		require.NoError(t, err, "a stale sidecar must not make a consolidated install unknown")
+		assert.False(t, hasUnmigrated)
+	})
+}
+
+// TestResolveSQLiteTableName_ReturnsProbeError pins that a failed probe is an error,
+// distinct from a table that does not exist.
+func TestResolveSQLiteTableName_ReturnsProbeError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("closed handle is an error", func(t *testing.T) {
+		t.Parallel()
+		db := openTempIDTable(t, filepath.Join(t.TempDir(), "a.db"), "notes", nil)
+		sqlDB, err := db.DB()
+		require.NoError(t, err)
+		require.NoError(t, sqlDB.Close())
+
+		name, err := resolveSQLiteTableName(db, "notes")
+		require.Error(t, err)
+		assert.Empty(t, name)
+	})
+
+	t.Run("absent table is not an error", func(t *testing.T) {
+		t.Parallel()
+		db := openTempIDTable(t, filepath.Join(t.TempDir(), "b.db"), "notes", nil)
+
+		name, err := resolveSQLiteTableName(db, "missing", "migration_state")
+		require.NoError(t, err)
+		assert.Empty(t, name)
+	})
 }
 
 // testStartupLogger returns a silent logger for startup tests.
@@ -921,17 +1069,6 @@ func TestCheckMySQLMigrationState_NativePasswordAuth(t *testing.T) {
 	// ErrV2DatabaseCorrupted because AllowNativePasswords defaulted to false.
 	require.NoError(t, state.Error, "startup check must not fail due to auth plugin rejection")
 	assert.NotEmpty(t, string(state.MigrationStatus), "migration status should be set")
-}
-
-// TestHasUnmigratedLegacyMySQL_NativePasswordAuth verifies that the unmigrated
-// records check connects successfully with mysql_native_password.
-func TestHasUnmigratedLegacyMySQL_NativePasswordAuth(t *testing.T) {
-	settings := mysqlTestSettings(skipIfNoMySQL(t))
-
-	// Should not panic or fail due to auth plugin rejection.
-	assert.NotPanics(t, func() {
-		_ = hasUnmigratedLegacyMySQL(settings, testStartupLogger())
-	})
 }
 
 // TestCheckMySQLHasFreshV2Schema_NativePasswordAuth verifies that the fresh v2
