@@ -293,9 +293,11 @@ func (s *Scheduler) runBackup(schedule *BackupSchedule) {
 const daysPerWeek = 7
 
 // calculateNextRun determines the next run time for a schedule, reading the wall clock in the
-// location of now. A time of day that a DST change skips runs at the transition instant, and
-// one that it repeats runs at its first occurrence only, because the next run is always
-// resolved from the calendar date and never by adding 24 hours to an earlier run.
+// location of now. A now that is exactly the run time of today counts as reached, so the tick
+// that fires a run does not schedule it again. A time of day that a DST change skips runs at
+// the transition instant, and one that it repeats runs at its first occurrence only, because
+// the next run is always resolved from the calendar date and never by adding 24 hours to an
+// earlier run.
 func (s *Scheduler) calculateNextRun(now time.Time, hour, minute int, weekday time.Weekday, isWeekly bool) time.Time {
 	loc := now.Location()
 	today := wallclock.DateOf(now)
@@ -305,12 +307,12 @@ func (s *Scheduler) calculateNextRun(now time.Time, hour, minute int, weekday ti
 	if isWeekly {
 		// Days until the target weekday, counted on the calendar.
 		daysAhead = (int(weekday-now.Weekday()) + daysPerWeek) % daysPerWeek
-		if daysAhead == 0 && now.After(todayRun) {
-			// The scheduled time has passed today, so schedule for next week
+		if daysAhead == 0 && !now.Before(todayRun) {
+			// The scheduled time has been reached today, so schedule for next week
 			daysAhead = daysPerWeek
 		}
-	} else if now.After(todayRun) {
-		// If we're past the time today, schedule for tomorrow
+	} else if !now.Before(todayRun) {
+		// If we're at or past the time today, schedule for tomorrow
 		daysAhead = 1
 	}
 

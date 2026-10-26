@@ -97,6 +97,7 @@ func TestCalculateNextRun_RepeatedTimeRunsOnce(t *testing.T) {
 	// The scheduler fires on the first tick after it, then recomputes from that tick. Ticks in
 	// the repeated hour, including the second 01:30 (EST), must not schedule today again.
 	for _, tick := range []time.Time{
+		first, // the tick that fires the run lands exactly on it
 		first.Add(time.Second),
 		first.Add(30 * time.Minute),
 		second,
@@ -112,8 +113,12 @@ func TestCalculateNextRun_WeeklyRepeatedTimeRunsOnce(t *testing.T) {
 	loc := testutil.ToolchainZones(t)[zoneNewYork]
 	first := time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC) // Sunday 01:30 EDT
 
-	tick := first.Add(time.Second).In(loc)
+	tick := first.In(loc) // the tick that fires the run lands exactly on it
 	got := nextRunFor(tick, 1, 30, time.Sunday, true)
+	assert.True(t, time.Date(2026, 11, 8, 1, 30, 0, 0, loc).Equal(got), "got %v", got)
+
+	tick = first.Add(time.Second).In(loc)
+	got = nextRunFor(tick, 1, 30, time.Sunday, true)
 	assert.True(t, time.Date(2026, 11, 8, 1, 30, 0, 0, loc).Equal(got), "got %v", got)
 
 	tick = first.Add(time.Hour).Add(time.Second).In(loc) // after the second 01:30
@@ -134,6 +139,10 @@ func TestCalculateNextRun_OrdinaryDays(t *testing.T) {
 	// 02:30 on Helsinki's spring-forward day is not skipped (03:00 to 04:00 is), so it keeps its time.
 	spring := time.Date(2026, 3, 29, 0, 10, 0, 0, loc)
 	assert.True(t, time.Date(2026, 3, 29, 2, 30, 0, 0, loc).Equal(nextRunFor(spring, 2, 30, dailySchedule, false)))
+	// A recompute exactly at the run time moves on, so a tick that fires a run cannot fire it again.
+	atRun := time.Date(2026, 6, 10, 13, 15, 0, 0, loc)
+	assert.True(t, time.Date(2026, 6, 11, 13, 15, 0, 0, loc).Equal(nextRunFor(atRun, 13, 15, dailySchedule, false)))
+	assert.True(t, time.Date(2026, 6, 17, 13, 15, 0, 0, loc).Equal(nextRunFor(atRun, 13, 15, time.Wednesday, true)))
 	assert.True(t, time.Date(2026, 6, 14, 3, 0, 0, 0, loc).Equal(nextRunFor(now, 3, 0, time.Sunday, true)))
 	assert.True(t, time.Date(2026, 6, 15, 3, 0, 0, 0, loc).Equal(nextRunFor(now, 3, 0, time.Monday, true)))
 }
