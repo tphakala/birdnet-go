@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	// DefaultSourceNode is the provenance tag written to SourceNode for imported rows.
+	// DefaultSourceNode is the provenance tag set as SourceNode on imported rows.
 	DefaultSourceNode = "birdnet-pi"
 
 	// defaultBatchSize is the number of source rows read per Iterate call.
@@ -71,7 +71,8 @@ type ProgressReporter interface {
 
 // ImportOptions controls engine behaviour.
 type ImportOptions struct {
-	// SourceNode is the provenance tag written to every imported detection.
+	// SourceNode is the provenance tag set on every imported detection. Only the
+	// legacy store persists it (see mapToResult).
 	// Defaults to DefaultSourceNode.
 	SourceNode string
 
@@ -131,8 +132,9 @@ func NewEngine(repo datastore.DetectionRepository) *Engine {
 // detectionKey returns a stable composite key for duplicate detection: the
 // wall-clock text of ts in its own location, the scientific name, and the
 // confidence rounded to 4 decimal places. Run builds it from each source row
-// parsed in the import location, so the text is the row's own wall time;
-// loadExistingKeys builds the keys of the stored rows it is compared with.
+// parsed in the import location, so the text is the row's own wall time except
+// in a DST gap (see parseTimestamp); loadExistingKeys builds the keys of the
+// stored rows it is compared with.
 func detectionKey(ts time.Time, scientificName string, confidence float64) string {
 	return fmt.Sprintf("%s|%s|%.4f", ts.Format(time.DateTime), scientificName, confidence)
 }
