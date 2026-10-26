@@ -36,9 +36,12 @@ on:
 permissions:
   contents: read
 
+# Only superseded pull request runs are cancelled. A run on main or a manual run
+# gets its own group per commit, so a burst of merges cannot cancel the run that
+# is the authoritative check of main.
 concurrency:
-  group: windows-test-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: windows-test-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unit-tests-windows:
