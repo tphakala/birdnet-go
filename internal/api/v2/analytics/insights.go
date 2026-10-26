@@ -182,15 +182,6 @@ func buildThumbnailURL(scientificName string) string {
 	return imageprovider.ProxyImageURL(scientificName)
 }
 
-// analyticsTZOffset returns the server local timezone's UTC offset (seconds) in effect at ref.
-// Insights date/hour/year SQL adds this offset to detected_at so rows bucket by wall-clock value
-// in the same zone the handlers use (time.Now()/time.Local), independent of the DB session /
-// OS-local zone. This mirrors the datastore's ds.timezone (time.Local in production) and reuses
-// wallclock.OffsetAt, the same helper the hourly charts use.
-func analyticsTZOffset(ref time.Time) int {
-	return wallclock.OffsetAt(time.Local, ref)
-}
-
 // goneQuietDates returns the local calendar date of lastDetected (Unix seconds) and the
 // number of calendar days from it to now, both read in now's location.
 func goneQuietDates(now time.Time, lastDetected int64) (date string, daysSince int) {
@@ -199,7 +190,8 @@ func goneQuietDates(now time.Time, lastDetected int64) (date string, daysSince i
 }
 
 // buildYearRanges computes index-friendly Unix timestamp ranges for the
-// +/- windowDays around today's day-of-year in each previous year.
+// +/- windowDays around today's day-of-year in each previous year. Each range is the half-open
+// span [start of its first local day, start of the day after its last), in now's location.
 func buildYearRanges(now time.Time, windowDays int) []repository.TimeRange {
 	loc := now.Location()
 	currentYear := now.Year()
@@ -207,56 +199,40 @@ func buildYearRanges(now time.Time, windowDays int) []repository.TimeRange {
 
 	firstYear := currentYear - expectedTodayMaxYears
 
+	days := func(first, last wallclock.Date) repository.TimeRange {
+		start, _ := wallclock.DayBounds(first, loc)
+		_, end := wallclock.DayBounds(last, loc)
+		return repository.TimeRange{Start: start.Unix(), End: end.Unix()}
+	}
+
 	ranges := make([]repository.TimeRange, 0, currentYear-firstYear)
 	for year := firstYear; year < currentYear; year++ {
-		jan1 := time.Date(year, 1, 1, 0, 0, 0, 0, loc)
-		dec31 := time.Date(year, 12, 31, 23, 59, 59, 0, loc)
-		daysInYear := dec31.YearDay()
+		jan1 := wallclock.Date{Year: year, Month: time.January, Day: 1}
+		dec31 := wallclock.Date{Year: year, Month: time.December, Day: 31}
+		daysInYear := wallclock.DaysBetween(jan1, dec31) + 1
+		dateOfDOY := func(n int) wallclock.Date { return jan1.AddDays(n - 1) }
 
 		startDOY := doy - windowDays
 		endDOY := doy + windowDays
 
 		if startDOY < 1 && endDOY > daysInYear {
-			ranges = append(ranges, repository.TimeRange{
-				Start: jan1.Unix(),
-				End:   dec31.Unix(),
-			})
+			ranges = append(ranges, days(jan1, dec31))
 			continue
 		}
 
 		switch {
 		case startDOY < 1:
-			wrapStart := time.Date(year, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, daysInYear+startDOY-1)
-			ranges = append(ranges, repository.TimeRange{
-				Start: wrapStart.Unix(),
-				End:   dec31.Unix(),
-			})
-			wrapEnd := time.Date(year, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, endDOY-1)
-			ranges = append(ranges, repository.TimeRange{
-				Start: jan1.Unix(),
-				End:   time.Date(wrapEnd.Year(), wrapEnd.Month(), wrapEnd.Day(), 23, 59, 59, 0, loc).Unix(),
-			})
+			ranges = append(ranges,
+				days(dateOfDOY(daysInYear+startDOY), dec31),
+				days(jan1, dateOfDOY(endDOY)))
 		case endDOY > daysInYear:
-			rangeStart := time.Date(year, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, startDOY-1)
-			ranges = append(ranges, repository.TimeRange{
-				Start: rangeStart.Unix(),
-				End:   dec31.Unix(),
-			})
+			ranges = append(ranges, days(dateOfDOY(startDOY), dec31))
 			if year+1 < currentYear {
-				wrapEndDOY := endDOY - daysInYear
-				wrapEnd := time.Date(year+1, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, wrapEndDOY-1)
-				ranges = append(ranges, repository.TimeRange{
-					Start: time.Date(year+1, 1, 1, 0, 0, 0, 0, loc).Unix(),
-					End:   time.Date(wrapEnd.Year(), wrapEnd.Month(), wrapEnd.Day(), 23, 59, 59, 0, loc).Unix(),
-				})
+				nextJan1 := wallclock.Date{Year: year + 1, Month: time.January, Day: 1}
+				ranges = append(ranges, days(nextJan1, nextJan1.AddDays(endDOY-daysInYear-1)))
 			}
 		default:
-			rangeStart := time.Date(year, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, startDOY-1)
-			rangeEnd := time.Date(year, 1, 1, 0, 0, 0, 0, loc).AddDate(0, 0, endDOY-1)
-			ranges = append(ranges, repository.TimeRange{
-				Start: rangeStart.Unix(),
-				End:   time.Date(rangeEnd.Year(), rangeEnd.Month(), rangeEnd.Day(), 23, 59, 59, 0, loc).Unix(),
-			})
+			ranges = append(ranges, days(dateOfDOY(startDOY), dateOfDOY(endDOY)))
 		}
 	}
 
@@ -321,7 +297,7 @@ func (c *Handler) getExpectedTodayImpl(ctx echo.Context) error {
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
 	defer cancel()
 
-	results, err := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, analyticsTZOffset(now), nil)
+	results, err := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, now.Location(), nil)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, "Expected species", "Failed to query expected species")
 	}
@@ -397,7 +373,7 @@ func (c *Handler) getExpectedTodayRegionalImpl(ctx echo.Context) error {
 	// Get local species to deduplicate against (best-effort; if this fails, show all eBird results)
 	now := time.Now()
 	yearRanges := buildYearRanges(now, expectedTodayWindowDays)
-	localSpecies, localErr := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, analyticsTZOffset(now), nil)
+	localSpecies, localErr := c.insightsRepo.GetExpectedSpeciesToday(reqCtx, yearRanges, now.Location(), nil)
 	if localErr != nil {
 		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Failed to query local species for deduplication",
 			logger.Error(localErr))
@@ -649,19 +625,27 @@ func (c *Handler) GetDashboardKPIs(ctx echo.Context) error {
 	return c.getDashboardKPIsImpl(ctx)
 }
 
+// localDayStart returns the first instant of now's local day, in Unix seconds, and the day's
+// date as YYYY-MM-DD, both in now's location. Where the zone skips midnight the day starts at
+// the transition.
+func localDayStart(now time.Time) (start int64, date string) {
+	day := wallclock.DateOf(now)
+	startOfDay, _ := wallclock.DayBounds(day, now.Location())
+	return startOfDay.Unix(), day.String()
+}
+
 func (c *Handler) getDashboardKPIsImpl(ctx echo.Context) error {
 	now := time.Now()
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	todayStart, today := localDayStart(now)
 
 	reqCtx, cancel := context.WithTimeout(ctx.Request().Context(), insightsQueryTimeout)
 	defer cancel()
 
-	kpis, err := c.insightsRepo.GetDashboardKPIs(reqCtx, todayStart.Unix(), analyticsTZOffset(now), nil)
+	kpis, err := c.insightsRepo.GetDashboardKPIs(reqCtx, todayStart, now.Location(), nil)
 	if err != nil {
 		return c.handleAnalyticsQueryError(ctx, err, "Dashboard KPIs", "Failed to query dashboard KPIs")
 	}
 
-	today := todayStart.Format(time.DateOnly)
 	streakDays, streakStart := calculateStreak(kpis.RecentDates, today)
 
 	return ctx.JSON(http.StatusOK, DashboardKPIsResponse{

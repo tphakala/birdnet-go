@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
-	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -77,15 +76,6 @@ func seedFalsePositiveReview(t *testing.T, db *gorm.DB, detectionID uint) {
 		Verified:    "false_positive",
 	}
 	require.NoError(t, db.Create(&review).Error)
-}
-
-// localOffsetAt returns time.Local's UTC offset (seconds) at ref. The tests below seed timestamps
-// in time.Local and assert local-zone bucketing, so they pass the matching offset (the same value
-// production derives via wallclock.OffsetAt) to the offset-aware insights queries. Dedicated
-// bucketing tests pass explicit offsets and fixed UTC instants instead, so they are independent of
-// the host's zone.
-func localOffsetAt(ref time.Time) int {
-	return wallclock.OffsetAt(time.Local, ref)
 }
 
 func TestGetPhantomSpecies(t *testing.T) {
@@ -169,7 +159,7 @@ func TestGetExpectedSpeciesToday(t *testing.T) {
 		},
 	}
 
-	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, localOffsetAt(y2Start), nil)
+	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, time.Local, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 
@@ -317,7 +307,7 @@ func TestGetDashboardKPIs(t *testing.T) {
 		seedDetection(t, db, labelC, bestDay.Add(time.Duration(i+10)*time.Hour).Unix(), 0.9)
 	}
 
-	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), localOffsetAt(today), nil)
+	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), time.Local, nil)
 	require.NoError(t, err)
 	require.NotNil(t, kpis)
 
@@ -333,7 +323,7 @@ func TestGetDashboardKPIs_Empty(t *testing.T) {
 	repo := NewInsightsRepository(db, false, false)
 	ctx := t.Context()
 
-	kpis, err := repo.GetDashboardKPIs(ctx, time.Now().Unix(), localOffsetAt(time.Now()), nil)
+	kpis, err := repo.GetDashboardKPIs(ctx, time.Now().Unix(), nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, kpis)
 	assert.Equal(t, int64(0), kpis.LifetimeSpecies)
@@ -491,7 +481,7 @@ func TestGetExpectedSpeciesToday_MultiModel(t *testing.T) {
 		},
 	}
 
-	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, localOffsetAt(y2Start), nil)
+	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, time.Local, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1, "same species from two models should produce one result")
 	assert.Equal(t, "Turdus merula", results[0].ScientificName)
@@ -515,7 +505,7 @@ func TestGetDashboardKPIs_MultiModel(t *testing.T) {
 	labelB := seedLabelForModel(t, db, "Parus major", 1)
 	seedDetectionForModel(t, db, labelB, 1, today.Add(4*time.Hour).Unix(), 0.8)
 
-	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), localOffsetAt(today), nil)
+	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), time.Local, nil)
 	require.NoError(t, err)
 	require.NotNil(t, kpis)
 	assert.Equal(t, int64(2), kpis.LifetimeSpecies, "same species from two models should count as one")
@@ -549,7 +539,7 @@ func TestGetExpectedSpeciesToday_EmptyRanges(t *testing.T) {
 	repo := NewInsightsRepository(db, false, false)
 	ctx := t.Context()
 
-	results, err := repo.GetExpectedSpeciesToday(ctx, nil, 0, nil)
+	results, err := repo.GetExpectedSpeciesToday(ctx, nil, time.UTC, nil)
 	require.NoError(t, err)
 	assert.Nil(t, results)
 }
@@ -580,10 +570,10 @@ func TestGetExpectedSpeciesToday_TimezoneBucketing(t *testing.T) {
 		End:   time.Date(2024, 4, 1, 0, 0, 0, 0, time.UTC).Unix(),
 	}}
 
-	const offsetEast = 5 * 3600 // UTC+5
+	eastZone := time.FixedZone("UTC+5", 5*3600)
 
-	t.Run("utc buckets the two detections as distinct years", func(t *testing.T) {
-		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, 0, nil)
+	t.Run("nil zone (UTC) buckets the two detections as distinct years", func(t *testing.T) {
+		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, nil, nil)
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		assert.Equal(t, 2, got[0].YearsSeen, "2023-12-31 and 2024-03-08 are distinct years at UTC")
@@ -591,7 +581,7 @@ func TestGetExpectedSpeciesToday_TimezoneBucketing(t *testing.T) {
 	})
 
 	t.Run("east offset rolls both detections into 2024", func(t *testing.T) {
-		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, offsetEast, nil)
+		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, eastZone, nil)
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		assert.Equal(t, 1, got[0].YearsSeen, "at UTC+5 the year-boundary detection rolls into 2024")
@@ -813,4 +803,130 @@ func TestGetDawnChorusRaw_WallClockAcrossDST(t *testing.T) {
 			assert.ElementsMatch(t, wantEntries, got)
 		})
 	}
+}
+
+// loadInsightsZone loads an IANA zone for the DST tests below.
+func loadInsightsZone(t *testing.T, name string) *time.Location {
+	t.Helper()
+	loc, err := time.LoadLocation(name)
+	require.NoError(t, err)
+	return loc
+}
+
+// TestGetExpectedSpeciesToday_PerRowOffsets pins that the date and year buckets use the UTC
+// offset in effect at each row, not one offset for the whole span: every case has rows on both
+// sides of a DST change 30 minutes from local midnight, so any single offset misplaces one of
+// them.
+func TestGetExpectedSpeciesToday_PerRowOffsets(t *testing.T) {
+	newYork := loadInsightsZone(t, "America/New_York")
+	sydney := loadInsightsZone(t, "Australia/Sydney")
+
+	type row struct {
+		species string
+		at      time.Time
+	}
+	tests := []struct {
+		name      string
+		loc       *time.Location
+		span      TimeRange
+		rows      []row
+		wantLast  map[string]string
+		wantYears map[string]int
+	}{
+		{
+			name: "New York spring forward, rows either side of local midnight",
+			loc:  newYork,
+			span: TimeRange{
+				Start: time.Date(2025, 2, 1, 0, 0, 0, 0, newYork).Unix(),
+				End:   time.Date(2025, 4, 30, 23, 59, 59, 0, newYork).Unix(),
+			},
+			rows: []row{
+				{"Turdus merula", time.Date(2025, 3, 5, 23, 30, 0, 0, newYork)},
+				{"Parus major", time.Date(2025, 3, 10, 0, 30, 0, 0, newYork)},
+			},
+			wantLast:  map[string]string{"Turdus merula": "2025-03-05", "Parus major": "2025-03-10"},
+			wantYears: map[string]int{"Turdus merula": 1, "Parus major": 1},
+		},
+		{
+			name: "Sydney new year and autumn change, rows either side of local midnight",
+			loc:  sydney,
+			span: TimeRange{
+				Start: time.Date(2024, 10, 1, 0, 0, 0, 0, sydney).Unix(),
+				End:   time.Date(2025, 5, 1, 0, 0, 0, 0, sydney).Unix(),
+			},
+			rows: []row{
+				{"Turdus merula", time.Date(2024, 12, 31, 23, 30, 0, 0, sydney)},
+				{"Turdus merula", time.Date(2025, 1, 1, 0, 30, 0, 0, sydney)},
+				{"Parus major", time.Date(2025, 4, 6, 23, 30, 0, 0, sydney)},
+			},
+			wantLast:  map[string]string{"Turdus merula": "2025-01-01", "Parus major": "2025-04-06"},
+			wantYears: map[string]int{"Turdus merula": 2, "Parus major": 1},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupInsightsTestDB(t)
+			repo := NewInsightsRepository(db, false, false)
+			labels := map[string]uint{}
+			for _, r := range tt.rows {
+				if _, ok := labels[r.species]; !ok {
+					labels[r.species] = seedLabel(t, db, r.species)
+				}
+				seedDetection(t, db, labels[r.species], r.at.Unix(), 0.9)
+			}
+
+			got, err := repo.GetExpectedSpeciesToday(t.Context(), []TimeRange{tt.span}, tt.loc, nil)
+			require.NoError(t, err)
+			require.Len(t, got, len(tt.wantLast))
+			for _, sp := range got {
+				assert.Equal(t, tt.wantLast[sp.ScientificName], sp.LastSeenDate, "last seen date of %s", sp.ScientificName)
+				assert.Equal(t, tt.wantYears[sp.ScientificName], sp.YearsSeen, "years seen of %s", sp.ScientificName)
+			}
+		})
+	}
+}
+
+// TestGetDashboardKPIs_PerRowOffsets pins that the best day and the recent dates use the offset
+// in effect at each row. The two seeded days lie on either side of the New York spring-forward
+// change, with rows 30 minutes before local midnight (EST) and after it (EDT).
+func TestGetDashboardKPIs_PerRowOffsets(t *testing.T) {
+	newYork := loadInsightsZone(t, "America/New_York")
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+
+	label := seedLabel(t, db, "Turdus merula")
+	for _, at := range []time.Time{
+		time.Date(2025, 3, 5, 23, 30, 0, 0, newYork),
+		time.Date(2025, 3, 5, 23, 45, 0, 0, newYork),
+		time.Date(2025, 3, 10, 0, 30, 0, 0, newYork),
+	} {
+		seedDetection(t, db, label, at.Unix(), 0.9)
+	}
+
+	todaySince := time.Date(2025, 4, 1, 0, 0, 0, 0, newYork).Unix()
+	kpis, err := repo.GetDashboardKPIs(t.Context(), todaySince, newYork, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "2025-03-05", kpis.BestDayDate)
+	assert.Equal(t, int64(2), kpis.BestDayCount)
+	assert.Equal(t, []string{"2025-03-10", "2025-03-05"}, kpis.RecentDates)
+}
+
+// TestGetExpectedSpeciesToday_RangeIsHalfOpen pins that a range includes a detection at its
+// Start and excludes one at its End, the first instant of the next local day.
+func TestGetExpectedSpeciesToday_RangeIsHalfOpen(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+
+	start := time.Date(2025, 3, 6, 0, 0, 0, 0, time.UTC).Unix()
+	end := time.Date(2025, 3, 7, 0, 0, 0, 0, time.UTC).Unix()
+	atStart := seedLabel(t, db, "Turdus merula")
+	atEnd := seedLabel(t, db, "Parus major")
+	seedDetection(t, db, atStart, start, 0.9)
+	seedDetection(t, db, atEnd, end, 0.9)
+
+	got, err := repo.GetExpectedSpeciesToday(t.Context(), []TimeRange{{Start: start, End: end}}, time.UTC, nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Turdus merula", got[0].ScientificName)
 }

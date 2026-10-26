@@ -9,10 +9,11 @@ import (
 // Separated from DetectionRepository to keep interfaces focused.
 type InsightsRepository interface {
 	// GetExpectedSpeciesToday returns species detected within the given
-	// Unix timestamp ranges (one per previous year, pre-calculated for index usage).
-	// tzOffsetSeconds is the configured timezone's UTC offset, applied so the date and
-	// year grouping bucket by wall-clock value in that zone rather than the DB/OS-local zone.
-	GetExpectedSpeciesToday(ctx context.Context, yearRanges []TimeRange, tzOffsetSeconds int, modelID *uint) ([]ExpectedSpecies, error)
+	// half-open Unix timestamp ranges (one per previous year, pre-calculated for index usage).
+	// The date and year grouping bucket by the wall clock of loc (UTC when nil), not the
+	// DB/OS-local zone: every row is shifted by the UTC offset in effect at its own instant, so
+	// a DST change inside the ranges does not move a row onto the wrong date or year.
+	GetExpectedSpeciesToday(ctx context.Context, yearRanges []TimeRange, loc *time.Location, modelID *uint) ([]ExpectedSpecies, error)
 
 	// GetPhantomSpecies returns species with minDetections+ in the period
 	// but average confidence below maxAvgConfidence.
@@ -40,10 +41,11 @@ type InsightsRepository interface {
 
 	// GetDashboardKPIs returns lifetime species count, today's detections,
 	// best day, and recent distinct dates for streak calculation.
-	// tzOffsetSeconds is the configured timezone's UTC offset, applied so the date grouping
-	// (best day, recent dates) buckets by wall-clock date in that zone rather than the
-	// DB/OS-local zone.
-	GetDashboardKPIs(ctx context.Context, todaySince int64, tzOffsetSeconds int, modelID *uint) (*DashboardKPIs, error)
+	// todaySince is the first instant of the local day in loc. The date grouping (best day,
+	// recent dates) buckets by the wall-clock date of loc (UTC when nil), shifting every row by
+	// the UTC offset in effect at its own instant, rather than the DB/OS-local zone. The best
+	// day covers the year before todaySince's local date.
+	GetDashboardKPIs(ctx context.Context, todaySince int64, loc *time.Location, modelID *uint) (*DashboardKPIs, error)
 
 	// GetModelContributionStats returns per-model statistics read from
 	// detection_model_contributions for detections whose detected_at lies in the
