@@ -118,6 +118,26 @@ export function getDateInTimezone(timezone: string): string {
 }
 
 /**
+ * Get the current hour (0-23) in a specific IANA timezone.
+ * Uses Intl.DateTimeFormat for correct DST handling.
+ *
+ * @param timezone - IANA timezone name (e.g., "Australia/Sydney")
+ * @returns Hour 0-23, or the browser local hour if timezone is invalid
+ */
+export function getHourInTimezone(timezone: string): number {
+  try {
+    const hour = new Intl.DateTimeFormat('en-GB', {
+      timeZone: timezone,
+      hour: '2-digit',
+      hourCycle: 'h23',
+    }).format(new Date());
+    return parseInt(hour, 10);
+  } catch {
+    return new Date().getHours();
+  }
+}
+
+/**
  * Parse a time string (HH:MM:SS) and extract the hour component
  *
  * @param timeString - Time string in HH:MM:SS format
