@@ -29,6 +29,7 @@ func TestCalendarDaysBetween(t *testing.T) {
 		{"fall-back in span", time.Date(2026, 10, 24, 12, 0, 0, 0, helsinki), time.Date(2026, 10, 26, 9, 0, 0, 0, helsinki), 2},
 		{"southern spring-forward", time.Date(2026, 10, 3, 12, 0, 0, 0, sydney), time.Date(2026, 10, 5, 9, 0, 0, 0, sydney), 2},
 		{"no DST zone", time.Date(2026, 3, 28, 0, 0, 0, 0, kolkata), time.Date(2026, 3, 30, 0, 0, 0, 0, kolkata), 2},
+		{"span longer than the Duration range", time.Date(1700, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), 119069},
 		{"reversed order is negative", time.Date(2026, 3, 30, 9, 0, 0, 0, helsinki), time.Date(2026, 3, 28, 12, 0, 0, 0, helsinki), -2},
 	}
 	for _, tt := range tests {

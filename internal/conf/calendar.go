@@ -5,6 +5,10 @@ import "time"
 // calendarDay is the length of a day on the UTC calendar, which has no DST.
 const calendarDay = 24 * time.Hour
 
+// calendarDaySeconds is calendarDay in whole seconds. Day counts use Unix seconds
+// because time.Time.Sub saturates at about 292 years.
+const calendarDaySeconds = int64(calendarDay / time.Second)
+
 // CalendarDaysBetween returns the number of calendar days from the date of from to the
 // date of to, each read in its own location (convert both to the same zone first). It is
 // negative when to's date is before from's. It counts dates, not elapsed time, so a span
@@ -14,5 +18,5 @@ func CalendarDaysBetween(from, to time.Time) int {
 	ty, tm, td := to.Date()
 	start := time.Date(fy, fm, fd, 0, 0, 0, 0, time.UTC)
 	end := time.Date(ty, tm, td, 0, 0, 0, 0, time.UTC)
-	return int(end.Sub(start) / calendarDay)
+	return int((end.Unix() - start.Unix()) / calendarDaySeconds)
 }
