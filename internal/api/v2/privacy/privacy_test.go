@@ -97,8 +97,8 @@ func (f *fixture) seed(t *testing.T) (named, unnamed *entities.AudioSource) {
 	hour := localNoon().UTC().Truncate(time.Hour).Unix()
 	require.NoError(t, hourly.AddDelta(ctx, &entities.PrivacyFilterHourly{
 		HourStart: hour, SourceID: named.ID, ModelID: "m1", TriggerType: "label", ThresholdMilli: 50,
-		Hits: 5, Held: 2, Confirmed: 1, Discards: 1, MaxScore: 0.9,
-		MarginLt50: 1, MarginLt100: 2, MarginLt200: 3, MarginGe200: 4,
+		Hits: 5, Held: 3, Ignored: 1, Confirmed: 2, Discards: 4, MaxScore: 0.9,
+		MarginLt50: 3, MarginLt100: 2, MarginLt200: 1, MarginGe200: 0,
 	}))
 	require.NoError(t, hourly.AddDelta(ctx, &entities.PrivacyFilterHourly{
 		HourStart: hour, SourceID: unnamed.ID, ModelID: "", TriggerType: "vad", ThresholdMilli: 0, UnscannedSaves: 3,
@@ -167,6 +167,8 @@ func TestGetActivity(t *testing.T) {
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
 	assert.Equal(t, testDate, resp.StartDate)
 	assert.Equal(t, testDate, resp.EndDate)
+	assert.Equal(t, time.Date(2026, 3, 10, 0, 0, 0, 0, time.Local).UTC(), resp.RangeStart)
+	assert.Equal(t, time.Date(2026, 3, 11, 0, 0, 0, 0, time.Local).UTC(), resp.RangeEnd)
 	require.Len(t, resp.Rows, 2)
 
 	byTrigger := map[string]ActivityRow{}
@@ -177,10 +179,13 @@ func TestGetActivity(t *testing.T) {
 	assert.InDelta(t, 0.05, label.Threshold, 1e-9)
 	assert.Equal(t, "m1", label.ModelID)
 	assert.Equal(t, int64(5), label.Hits)
-	assert.Equal(t, int64(2), label.Held)
-	assert.Equal(t, int64(1), label.Confirmed)
-	assert.Equal(t, int64(1), label.Discards)
-	assert.Equal(t, []int64{1, 2, 3, 4}, []int64{label.MarginLt50, label.MarginLt100, label.MarginLt200, label.MarginGe200})
+	assert.Equal(t, int64(3), label.Held)
+	assert.Equal(t, int64(1), label.Ignored)
+	assert.Equal(t, int64(2), label.Confirmed)
+	assert.InDelta(t, 0.9, label.MaxScore, 1e-9)
+	assert.Equal(t, localNoon().UTC().Truncate(time.Hour), label.HourStart)
+	assert.Equal(t, int64(4), label.Discards)
+	assert.Equal(t, []int64{3, 2, 1, 0}, []int64{label.MarginLt50, label.MarginLt100, label.MarginLt200, label.MarginGe200})
 	require.NotNil(t, label.Source)
 	assert.Equal(t, named.ID, label.Source.ID)
 	assert.Contains(t, label.Source.Name, "cam.local")
@@ -193,11 +198,22 @@ func TestGetActivity(t *testing.T) {
 	assert.Equal(t, "source-"+strconv.FormatUint(uint64(unnamed.ID), 10), vad.Source.Name)
 }
 
-func TestListDiscards(t *testing.T) {
+func TestGetActivity_EmptyRangeHasEmptyRows(t *testing.T) {
 	datastoreV2.SetEnhancedDatabaseMode()
 	t.Cleanup(datastoreV2.ResetDatabaseMode)
 	f := newFixture(t, passAuth, true)
 	f.seed(t)
+
+	rec := f.get(t, testActivityPath, url.Values{"start_date": {"2026-03-20"}, "end_date": {"2026-03-20"}})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Contains(t, rec.Body.String(), `"rows":[]`)
+}
+
+func TestListDiscards(t *testing.T) {
+	datastoreV2.SetEnhancedDatabaseMode()
+	t.Cleanup(datastoreV2.ResetDatabaseMode)
+	f := newFixture(t, passAuth, true)
+	named, unnamed := f.seed(t)
 
 	rec := f.get(t, testDiscardsPath, url.Values{"start_date": {testDate}, "end_date": {testDate}, "limit": {"2"}})
 	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
@@ -224,6 +240,18 @@ func TestListDiscards(t *testing.T) {
 	require.NoError(t, json.Unmarshal(raw.Data[0], &first))
 	require.NoError(t, json.Unmarshal(raw.Data[1], &second))
 	require.NotNil(t, first.Source)
+	assert.Equal(t, unnamed.ID, first.Source.ID)
+	assert.Equal(t, "source-"+strconv.FormatUint(uint64(unnamed.ID), 10), first.Source.Name)
+	assert.Equal(t, localNoon().Add(3*time.Millisecond).UTC(), first.DiscardedAt)
+	assert.Equal(t, localNoon().Add(3*time.Millisecond-3*time.Second).UTC(), first.ClipBegin)
+	assert.Equal(t, localNoon().Add(3*time.Millisecond+3*time.Second).UTC(), first.ClipEnd)
+	assert.Equal(t, "m1", first.ModelID)
+	assert.Equal(t, "Great Tit", first.CommonName)
+	assert.InDelta(t, 0.8, first.Confidence, 1e-9)
+	require.Len(t, first.Hits, 1)
+	assert.Equal(t, 1, first.Hits[0].HitCount)
+	assert.InDelta(t, 0.5, first.Hits[0].MinScore, 1e-9)
+	assert.InDelta(t, 0.5, first.Hits[0].MaxScore, 1e-9)
 	assert.Equal(t, "silero_vad", first.Hits[0].Detector)
 	assert.Equal(t, "vad", first.Hits[0].TriggerType)
 	assert.InDelta(t, 0.05, first.Settings.LabelThreshold, 1e-9)
@@ -235,6 +263,45 @@ func TestListDiscards(t *testing.T) {
 	assert.Nil(t, second.Source)
 	assert.Contains(t, string(raw.Data[1]), `"source":null`)
 	assert.Contains(t, string(raw.Data[1]), `"hits":[]`)
+
+	// The oldest discard belongs to the source named with a credentialed URL.
+	last := f.get(t, testDiscardsPath, url.Values{"start_date": {testDate}, "end_date": {testDate}, "limit": {"1"}, "offset": {"2"}})
+	require.Equal(t, http.StatusOK, last.Code, last.Body.String())
+	for _, leaked := range []string{testMarkerURI, "marker-uri-host", "s3cret", "admin", "source_uri", "node_name", "node-marker"} {
+		assert.NotContains(t, last.Body.String(), leaked)
+	}
+	var lastPage struct {
+		Data        []DiscardItem `json:"data"`
+		CurrentPage int           `json:"current_page"`
+		TotalPages  int           `json:"total_pages"`
+	}
+	require.NoError(t, json.Unmarshal(last.Body.Bytes(), &lastPage))
+	assert.Equal(t, 3, lastPage.CurrentPage)
+	assert.Equal(t, 3, lastPage.TotalPages)
+	require.Len(t, lastPage.Data, 1)
+	require.NotNil(t, lastPage.Data[0].Source)
+	assert.Equal(t, named.ID, lastPage.Data[0].Source.ID)
+	assert.Contains(t, lastPage.Data[0].Source.Name, "cam.local")
+	assert.Equal(t, 2, lastPage.Data[0].Hits[0].HitCount)
+	assert.InDelta(t, 0.2, lastPage.Data[0].Hits[0].MinScore, 1e-9)
+	assert.InDelta(t, 0.7, lastPage.Data[0].Hits[0].MaxScore, 1e-9)
+
+	// An offset past the end returns an empty list, not null, with the true total.
+	past := f.get(t, testDiscardsPath, url.Values{"start_date": {testDate}, "end_date": {testDate}, "limit": {"2"}, "offset": {"10"}})
+	require.Equal(t, http.StatusOK, past.Code, past.Body.String())
+	assert.Contains(t, past.Body.String(), `"data":[]`)
+	assert.Contains(t, past.Body.String(), `"total":3`)
+}
+
+func TestPrivacyRoutes_QueryFailureGives500(t *testing.T) {
+	datastoreV2.SetEnhancedDatabaseMode()
+	t.Cleanup(datastoreV2.ResetDatabaseMode)
+	f := newFixture(t, passAuth, true)
+	require.NoError(t, f.db.Close())
+
+	for _, path := range []string{testActivityPath, testDiscardsPath} {
+		assert.Equal(t, http.StatusInternalServerError, f.get(t, path, url.Values{"start_date": {testDate}}).Code, path)
+	}
 }
 
 func TestPrivacyQueryValidation(t *testing.T) {
