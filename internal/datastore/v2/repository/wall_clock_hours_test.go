@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
@@ -270,8 +271,8 @@ func TestHourFilterSpan(t *testing.T) {
 // whatever time.Local is, although wallclock treats a nil location as time.Local. It swaps
 // time.Local, so it must not run in parallel.
 func TestWallClockExprNilLocationIsUTC(t *testing.T) {
-	helsinki, err := time.LoadLocation("Europe/Helsinki")
-	require.NoError(t, err)
+	helsinki := testutil.ToolchainZones(t)["Europe/Helsinki"]
+	require.NotNil(t, helsinki)
 	previous := time.Local
 	time.Local = helsinki
 	t.Cleanup(func() { time.Local = previous })
