@@ -829,7 +829,7 @@ func TestGetExpectedSpeciesToday_PerRowOffsets(t *testing.T) {
 	tests := []struct {
 		name      string
 		loc       *time.Location
-		span      TimeRange
+		spans     []TimeRange
 		rows      []row
 		wantLast  map[string]string
 		wantYears map[string]int
@@ -837,10 +837,10 @@ func TestGetExpectedSpeciesToday_PerRowOffsets(t *testing.T) {
 		{
 			name: "New York spring forward, rows either side of local midnight",
 			loc:  newYork,
-			span: TimeRange{
+			spans: []TimeRange{{
 				Start: time.Date(2025, 2, 1, 0, 0, 0, 0, newYork).Unix(),
 				End:   time.Date(2025, 4, 30, 23, 59, 59, 0, newYork).Unix(),
-			},
+			}},
 			rows: []row{
 				{"Turdus merula", time.Date(2025, 3, 5, 23, 30, 0, 0, newYork)},
 				{"Parus major", time.Date(2025, 3, 10, 0, 30, 0, 0, newYork)},
@@ -851,10 +851,10 @@ func TestGetExpectedSpeciesToday_PerRowOffsets(t *testing.T) {
 		{
 			name: "Sydney new year and autumn change, rows either side of local midnight",
 			loc:  sydney,
-			span: TimeRange{
+			spans: []TimeRange{{
 				Start: time.Date(2024, 10, 1, 0, 0, 0, 0, sydney).Unix(),
 				End:   time.Date(2025, 5, 1, 0, 0, 0, 0, sydney).Unix(),
-			},
+			}},
 			rows: []row{
 				{"Turdus merula", time.Date(2024, 12, 31, 23, 30, 0, 0, sydney)},
 				{"Turdus merula", time.Date(2025, 1, 1, 0, 30, 0, 0, sydney)},
@@ -862,6 +862,26 @@ func TestGetExpectedSpeciesToday_PerRowOffsets(t *testing.T) {
 			},
 			wantLast:  map[string]string{"Turdus merula": "2025-01-01", "Parus major": "2025-04-06"},
 			wantYears: map[string]int{"Turdus merula": 2, "Parus major": 1},
+		},
+		{
+			name: "New York two disjoint ranges, the change lies between them",
+			loc:  newYork,
+			spans: []TimeRange{
+				{
+					Start: time.Date(2025, 2, 1, 0, 0, 0, 0, newYork).Unix(),
+					End:   time.Date(2025, 2, 28, 0, 0, 0, 0, newYork).Unix(),
+				},
+				{
+					Start: time.Date(2025, 3, 8, 0, 0, 0, 0, newYork).Unix(),
+					End:   time.Date(2025, 3, 15, 0, 0, 0, 0, newYork).Unix(),
+				},
+			},
+			rows: []row{
+				{"Turdus merula", time.Date(2025, 2, 10, 23, 30, 0, 0, newYork)},
+				{"Parus major", time.Date(2025, 3, 10, 0, 30, 0, 0, newYork)},
+			},
+			wantLast:  map[string]string{"Turdus merula": "2025-02-10", "Parus major": "2025-03-10"},
+			wantYears: map[string]int{"Turdus merula": 1, "Parus major": 1},
 		},
 	}
 	for _, tt := range tests {
@@ -876,7 +896,7 @@ func TestGetExpectedSpeciesToday_PerRowOffsets(t *testing.T) {
 				seedDetection(t, db, labels[r.species], r.at.Unix(), 0.9)
 			}
 
-			got, err := repo.GetExpectedSpeciesToday(t.Context(), []TimeRange{tt.span}, tt.loc, nil)
+			got, err := repo.GetExpectedSpeciesToday(t.Context(), tt.spans, tt.loc, nil)
 			require.NoError(t, err)
 			require.Len(t, got, len(tt.wantLast))
 			for _, sp := range got {
@@ -930,4 +950,60 @@ func TestGetExpectedSpeciesToday_RangeIsHalfOpen(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, got, 1)
 	assert.Equal(t, "Turdus merula", got[0].ScientificName)
+}
+
+// TestGetDashboardKPIs_LookbackAndZone pins the start of the best-day window (the local date one
+// year before today, 29 February becoming 1 March) and that a nil zone buckets in UTC.
+func TestGetDashboardKPIs_LookbackAndZone(t *testing.T) {
+	newYork := loadInsightsZone(t, "America/New_York")
+	tests := []struct {
+		name      string
+		today     time.Time
+		inside    time.Time
+		outside   time.Time
+		wantDate  string
+		queryZone *time.Location
+	}{
+		{
+			name:      "window starts at local midnight one year back",
+			today:     time.Date(2025, 3, 20, 0, 0, 0, 0, newYork),
+			inside:    time.Date(2024, 3, 20, 0, 30, 0, 0, newYork),
+			outside:   time.Date(2024, 3, 19, 23, 30, 0, 0, newYork),
+			wantDate:  "2024-03-20",
+			queryZone: newYork,
+		},
+		{
+			name:      "29 February looks back to 1 March",
+			today:     time.Date(2028, 2, 29, 0, 0, 0, 0, newYork),
+			inside:    time.Date(2027, 3, 1, 0, 30, 0, 0, newYork),
+			outside:   time.Date(2027, 2, 28, 23, 30, 0, 0, newYork),
+			wantDate:  "2027-03-01",
+			queryZone: newYork,
+		},
+		{
+			name:      "nil zone is UTC",
+			today:     time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
+			inside:    time.Date(2025, 3, 5, 23, 30, 0, 0, time.UTC),
+			outside:   time.Date(2024, 3, 31, 23, 30, 0, 0, time.UTC),
+			wantDate:  "2025-03-05",
+			queryZone: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupInsightsTestDB(t)
+			repo := NewInsightsRepository(db, false, false)
+			label := seedLabel(t, db, "Turdus merula")
+			// Two rows outside the window on one day outweigh the single row inside it, so the
+			// best day is the inside one only when the window excludes them.
+			seedDetection(t, db, label, tt.outside.Unix(), 0.9)
+			seedDetection(t, db, label, tt.outside.Add(time.Minute).Unix(), 0.9)
+			seedDetection(t, db, label, tt.inside.Unix(), 0.9)
+
+			kpis, err := repo.GetDashboardKPIs(t.Context(), tt.today.Unix(), tt.queryZone, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantDate, kpis.BestDayDate)
+			assert.Equal(t, int64(1), kpis.BestDayCount)
+		})
+	}
 }

@@ -39,9 +39,13 @@ type mockInsightsRepo struct {
 	// so tests can assert it hands the repository the zone it computed the day in.
 	lastLoc        *time.Location
 	lastTodaySince int64
+
+	// lastExpectedLoc is the zone the expected-today handler forwarded.
+	lastExpectedLoc *time.Location
 }
 
-func (m *mockInsightsRepo) GetExpectedSpeciesToday(_ context.Context, _ []repository.TimeRange, _ *time.Location, _ *uint) ([]repository.ExpectedSpecies, error) {
+func (m *mockInsightsRepo) GetExpectedSpeciesToday(_ context.Context, _ []repository.TimeRange, loc *time.Location, _ *uint) ([]repository.ExpectedSpecies, error) {
+	m.lastExpectedLoc = loc
 	return m.expectedSpecies, m.err
 }
 
@@ -147,8 +151,11 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
+	// Bracket the handler's own clock read so the day-start assertion holds across local midnight.
+	before, _ := localDayStart(time.Now())
 	err := controller.getDashboardKPIsImpl(ctx)
 	require.NoError(t, err)
+	after, _ := localDayStart(time.Now())
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp DashboardKPIsResponse
@@ -160,6 +167,21 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	// The handler must forward the zone it computed the day boundary in, so the repository
 	// buckets "today" with that zone's offsets rather than a single offset.
 	assert.Same(t, time.Local, mockRepo.lastLoc, "handler must pass the local zone to GetDashboardKPIs")
+	assert.Contains(t, []int64{before, after}, mockRepo.lastTodaySince, "handler must pass the start of the local day")
+}
+
+// TestGetExpectedToday_HandlerPassesLocalZone pins that the expected-today handler hands the
+// repository the local zone it built the year ranges in.
+func TestGetExpectedToday_HandlerPassesLocalZone(t *testing.T) {
+	t.Parallel()
+	mockRepo := &mockInsightsRepo{}
+	e, controller := setupInsightsTestController(t, mockRepo)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/insights/expected-today", http.NoBody)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.getExpectedTodayImpl(e.NewContext(req, rec)))
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Same(t, time.Local, mockRepo.lastExpectedLoc)
 }
 
 // TestLocalDayStart pins the dashboard's "today": the first instant of the local day and its
@@ -544,6 +566,56 @@ func TestBuildYearRangesDayBounds(t *testing.T) {
 				}
 			}
 			assert.Equal(t, []repository.TimeRange{want}, inYear)
+		})
+	}
+}
+
+// TestBuildYearRangesWrapAndLeapDay pins the exact ranges of the branches that wrap over a year
+// end and of a window starting on a leap day, in UTC so the expected instants are literal.
+func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
+	t.Parallel()
+	at := func(y int, m time.Month, d int) int64 { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() }
+	tests := []struct {
+		name   string
+		now    time.Time
+		window int
+		// tail is the end of the result, compared in full.
+		tail []repository.TimeRange
+	}{
+		{
+			name:   "early January splits a year into its tail and its head",
+			now:    time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC),
+			window: 3,
+			tail: []repository.TimeRange{
+				{Start: at(2025, time.December, 30), End: at(2026, time.January, 1)},
+				{Start: at(2025, time.January, 1), End: at(2025, time.January, 6)},
+			},
+		},
+		{
+			name:   "late December continues into the next year, not past the current one",
+			now:    time.Date(2026, 12, 30, 12, 0, 0, 0, time.UTC),
+			window: 3,
+			tail: []repository.TimeRange{
+				{Start: at(2024, time.December, 26), End: at(2025, time.January, 1)},
+				{Start: at(2025, time.January, 1), End: at(2025, time.January, 2)},
+				{Start: at(2025, time.December, 27), End: at(2026, time.January, 1)},
+			},
+		},
+		{
+			name:   "leap day window in a non-leap year",
+			now:    time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC),
+			window: 3,
+			tail: []repository.TimeRange{
+				{Start: at(2023, time.February, 26), End: at(2023, time.March, 5)},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ranges := buildYearRanges(tt.now, tt.window)
+			require.GreaterOrEqual(t, len(ranges), len(tt.tail))
+			assert.Equal(t, tt.tail, ranges[len(ranges)-len(tt.tail):])
 		})
 	}
 }
