@@ -18,10 +18,6 @@ const (
 	// wallClockSecondsPerDay turns a shifted Unix timestamp into a day count since the epoch.
 	wallClockSecondsPerDay = 86400
 
-	// openStartZoneFloor is where offset enumeration starts when a search has no start time: the
-	// Unix epoch, which precedes every stored row because detected_at is positive.
-	openStartZoneFloor int64 = 0
-
 	// Clock fields of the last second of a day, see exclusiveDayEnd.
 	lastHourOfDay      = 23
 	lastMinuteOfHour   = 59
@@ -40,7 +36,9 @@ func (r *detectionRepository) currentTime() time.Time {
 // from the start time (or the Unix epoch) to the end time (or now), bounded by wallclock.Span.
 func (r *detectionRepository) hourFilterSpan(filters *SearchFilters) (from, to int64) {
 	now := r.currentTime()
-	start := openStartZoneFloor
+	// An open start stays 0, the Unix epoch, which precedes every stored row because detected_at
+	// is positive; wallclock.Span clamps the start to the epoch in any case.
+	var start int64
 	if filters.StartTime != nil {
 		start = *filters.StartTime
 	}

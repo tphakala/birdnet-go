@@ -2,8 +2,8 @@
 // dates, wall time to instant, day and hour windows, hour floors, UTC offsets and offset
 // segments. It imports only the standard time and iter packages, so any layer may use it.
 //
-// Every function treats a nil location as time.Local and reads no settings, so a caller keeps
-// passing its location per call and settings changes take effect immediately.
+// Every function that takes a location treats nil as time.Local, and none reads settings, so a
+// caller keeps passing its location per call and settings changes take effect immediately.
 //
 // # Contract
 //

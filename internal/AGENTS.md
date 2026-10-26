@@ -89,7 +89,8 @@ day and hour windows, bucketing by local time) goes through
 `internal/wallclock`, a leaf package that imports only `time` and `iter`. It
 takes the `*time.Location` on every call and reads no settings, so pass
 `ds.timezone` or `time.Local` per operation and settings changes keep taking
-effect immediately. A nil location means `time.Local`.
+effect immediately. A nil location means `time.Local`; the repository SQL
+builders (`WallClockDateExpr`, `zoneOffsetSQL`) are the exception and treat nil as UTC.
 
 | You need                                      | Use                                                                                                   |
 | --------------------------------------------- | ----------------------------------------------------------------------------------------------------- |

@@ -23,15 +23,8 @@ const (
 	zoneinfoZipFile = "zoneinfo.zip"
 )
 
-// toolchainZoneData holds the zones parsed from the toolchain's zone database, or the error
-// that stopped it.
-type toolchainZoneData struct {
-	zones map[string]*time.Location
-	err   error
-}
-
 // loadToolchainZones is evaluated once per test binary.
-var loadToolchainZones = sync.OnceValue(readToolchainZones)
+var loadToolchainZones = sync.OnceValues(readToolchainZones)
 
 // ToolchainZones returns every zone of the Go toolchain's own zone database
 // ($(go env GOROOT)/lib/time/zoneinfo.zip), aliases included, keyed by IANA name.
@@ -43,22 +36,22 @@ var loadToolchainZones = sync.OnceValue(readToolchainZones)
 // without it cannot silently drop the coverage. The returned map is shared, do not modify it.
 func ToolchainZones(tb testing.TB) map[string]*time.Location {
 	tb.Helper()
-	data := loadToolchainZones()
-	if data.err != nil {
-		tb.Fatalf("load toolchain zones: %v", data.err)
+	zones, err := loadToolchainZones()
+	if err != nil {
+		tb.Fatalf("load toolchain zones: %v", err)
 	}
-	return data.zones
+	return zones
 }
 
-func readToolchainZones() toolchainZoneData {
+func readToolchainZones() (map[string]*time.Location, error) {
 	out, err := exec.Command(goCommand, goEnvCommand, goRootVar).Output()
 	if err != nil {
-		return toolchainZoneData{err: err}
+		return nil, err
 	}
 	goroot := strings.TrimSpace(string(out))
 	reader, err := zip.OpenReader(filepath.Join(goroot, zoneinfoZipLib, zoneinfoZipDir, zoneinfoZipFile))
 	if err != nil {
-		return toolchainZoneData{err: err}
+		return nil, err
 	}
 	defer func() { _ = reader.Close() }()
 
@@ -69,18 +62,18 @@ func readToolchainZones() toolchainZoneData {
 		}
 		rc, err := f.Open()
 		if err != nil {
-			return toolchainZoneData{err: err}
+			return nil, err
 		}
 		raw, err := io.ReadAll(rc)
 		_ = rc.Close()
 		if err != nil {
-			return toolchainZoneData{err: err}
+			return nil, err
 		}
 		loc, err := time.LoadLocationFromTZData(f.Name, raw)
 		if err != nil {
-			return toolchainZoneData{err: err}
+			return nil, err
 		}
 		zones[f.Name] = loc
 	}
-	return toolchainZoneData{zones: zones}
+	return zones, nil
 }
