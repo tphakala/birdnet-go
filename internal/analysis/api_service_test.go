@@ -36,6 +36,25 @@ func TestAPIServerService_Start_FailsFastWithNilDataStore(t *testing.T) {
 	assert.Contains(t, err.Error(), "datastore", "error should mention datastore")
 }
 
+func TestAPIServerService_Start_FailsFastWithNilDetectionRepository(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	bn := NewBirdNETAnalyzer(settings)
+
+	db := NewDatabaseService(settings, nil)
+	// A datastore without a detection repository must be refused: the processor would
+	// otherwise save through the legacy datastore path.
+	db.dataStore = mocks.NewMockInterface(t)
+
+	metrics, _ := observability.NewMetrics()
+
+	svc := NewAPIServerService(settings, bn, db, metrics, nil)
+	err := svc.Start(t.Context())
+	require.Error(t, err, "Start() should fail when the detection repository is nil")
+	assert.Contains(t, err.Error(), "datastore", "error should be the datastore precondition error")
+}
+
 func TestAPIServerService_Start_FailsFastWithNilBirdNET(t *testing.T) {
 	t.Parallel()
 
