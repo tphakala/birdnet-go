@@ -158,19 +158,22 @@ type TelemetryReporter interface {
 
 // SentryReporter implements TelemetryReporter for Sentry
 type SentryReporter struct {
-	enabled bool
+	allowed func() bool
 }
 
-// NewSentryReporter creates a new Sentry telemetry reporter
-func NewSentryReporter(enabled bool) *SentryReporter {
+// NewSentryReporter creates a new Sentry telemetry reporter. allowed is called
+// per report so a settings change takes effect without a restart; a nil allowed
+// never reports.
+func NewSentryReporter(allowed func() bool) *SentryReporter {
 	return &SentryReporter{
-		enabled: enabled,
+		allowed: allowed,
 	}
 }
 
-// IsEnabled returns whether Sentry telemetry is enabled
+// IsEnabled returns whether Sentry telemetry is currently allowed. The answer
+// is evaluated live on every call.
 func (sr *SentryReporter) IsEnabled() bool {
-	return sr.enabled
+	return sr.allowed != nil && sr.allowed()
 }
 
 // isContextCancellation reports whether err (or any wrapped error in its
@@ -370,7 +373,7 @@ func shouldReport(ee *EnhancedError, connectivity bool) bool {
 
 // ReportError reports an enhanced error to Sentry with privacy protection
 func (sr *SentryReporter) ReportError(ee *EnhancedError) {
-	if !sr.enabled || ee.IsReported() {
+	if !sr.IsEnabled() || ee.IsReported() {
 		return
 	}
 
@@ -727,6 +730,13 @@ func updateActiveReportingStatus() {
 
 	telemetryActive := globalTelemetryReporter != nil && globalTelemetryReporter.IsEnabled()
 	hasActiveReporting.Store(hooksExist || telemetryActive)
+}
+
+// RefreshActiveReporting recomputes the cached flag that lets Build skip all
+// reporting work. Call it after anything that changes the reporter's IsEnabled
+// result (a settings change, or a Sentry client being bound or unbound).
+func RefreshActiveReporting() {
+	updateActiveReportingStatus()
 }
 
 // reportToTelemetry reports an error to the configured telemetry system

@@ -273,7 +273,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Security": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Sentry ---
-	"Sentry": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_telemetry"},
+	// Enabled: the capture paths and BeforeSend check consent live; the action
+	// starts or stops the client. Debug is read live by BeforeSend, no action.
+	"Sentry.Enabled": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_sentry"},
+	"Sentry.Debug":   {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Diagnostics ---
 	// Two different mechanisms, both actionless, which is why this stays one

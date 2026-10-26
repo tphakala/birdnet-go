@@ -194,6 +194,58 @@ var (
 	testMode               atomic.Int32 // testMode allows tests to bypass settings checks
 )
 
+// SignalReconfigureSentry is the control signal that applies a changed
+// Sentry.Enabled setting at runtime by starting or closing the Sentry client.
+const SignalReconfigureSentry = "reconfigure_sentry"
+
+// Client lifecycle state. clientLifecycleMu serializes every bind, unbind and
+// close of the Sentry client, and a support dump upload holds it from capture
+// through flush so a concurrent opt-out cannot close the client under a queued
+// dump. Lock order: clientLifecycleMu before deferredMutex, never the reverse.
+var (
+	clientLifecycleMu sync.Mutex
+	// fullClient is the telemetry client bound by InitSentry; nil while none is
+	// bound. Guarded by clientLifecycleMu.
+	fullClient *sentry.Client
+	// closedClients remembers clients this package closed. sentry-go's capture
+	// helpers push scope layers on the shared hub, and BindClient only changes
+	// the top layer, so a bind or unbind that races with an in-flight capture can
+	// leave a closed client visible on the base layer once that layer pops.
+	// Flushing a closed client blocks for the whole timeout, so it is skipped.
+	// Guarded by clientLifecycleMu and bounded by maxRememberedClosedClients.
+	closedClients = make(map[*sentry.Client]struct{})
+)
+
+// maxRememberedClosedClients bounds closedClients; the set is cleared when it
+// grows past this, which only risks one avoidable flush wait.
+const maxRememberedClosedClients = 16
+
+// closeClient closes client and remembers it as closed. The caller holds
+// clientLifecycleMu.
+func closeClient(client *sentry.Client) {
+	if len(closedClients) >= maxRememberedClosedClients {
+		clear(closedClients)
+	}
+	closedClients[client] = struct{}{}
+	client.Close()
+}
+
+// flushAndCloseClient flushes client unless it was already closed, then closes
+// it. The caller holds clientLifecycleMu.
+func flushAndCloseClient(client *sentry.Client) {
+	if _, closed := closedClients[client]; !closed {
+		client.Flush(sentryFlushTimeout)
+	}
+	closeClient(client)
+}
+
+// reportingActive is the single consent check for every capture path: test
+// mode, the live opt-in setting, build age and a bound client. It is evaluated
+// per event, so a settings change takes effect without a restart.
+func reportingActive() bool {
+	return !shouldSkipTelemetry()
+}
+
 // shouldSkipTelemetry returns true if telemetry should be skipped.
 // It checks test mode, whether Sentry is enabled in settings, whether this build
 // is still young enough to report, and whether the Sentry SDK is actually
@@ -264,8 +316,20 @@ func collectPlatformInfo() PlatformInfo {
 // InitSentry initializes Sentry SDK with privacy-compliant settings
 // This function will only initialize Sentry if explicitly enabled by the user,
 // a DSN is configured for this build, and the build is not older than
-// maxTelemetryBuildAge.
+// maxTelemetryBuildAge. It serializes with the other client lifecycle
+// operations and refreshes the error package's cached reporting flag.
 func InitSentry(settings *conf.Settings) error {
+	clientLifecycleMu.Lock()
+	err := initSentryLocked(settings)
+	clientLifecycleMu.Unlock()
+
+	// The cached active-reporting flag depends on whether a client is bound.
+	errors.RefreshActiveReporting()
+	return err
+}
+
+// initSentryLocked is InitSentry for a caller that holds clientLifecycleMu.
+func initSentryLocked(settings *conf.Settings) error {
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		GetLogger().Info("Sentry telemetry is disabled (opt-in required)")
@@ -304,6 +368,7 @@ func InitSentry(settings *conf.Settings) error {
 	if err := initializeSentrySDK(settings); err != nil {
 		return err
 	}
+	fullClient = sentry.CurrentHub().Client()
 
 	// Configure global scope
 	configureSentryScope(settings)
@@ -348,7 +413,7 @@ func initializeSentrySDK(settings *conf.Settings) error {
 		Release: fmt.Sprintf("birdnet-go@%s", settings.Version),
 
 		// BeforeSend allows us to filter sensitive data
-		BeforeSend: createBeforeSendHook(settings),
+		BeforeSend: createBeforeSendHook(conf.GetSettings),
 
 		// sentry-go v0.46.0 telemetry processor drops event attachments (support dumps).
 		// Scheduler.sendItem() only adds the event envelope item, skipping Attachments.
@@ -369,8 +434,10 @@ func initializeSentrySDK(settings *conf.Settings) error {
 // createBeforeSendHook creates the BeforeSend hook for privacy filtering and
 // uptime enrichment. Only one BeforeSend can be attached to the Sentry client,
 // so uptime annotation runs inside this hook after privacy filtering. It also
-// drops every event from a build past its telemetry age, except support dumps.
-func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
+// drops every event while the user has opted out or the build is past its
+// telemetry age, except support dumps. currentSettings is read per event so an
+// opt-out takes effect on a running client.
+func createBeforeSendHook(currentSettings func() *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
 	return func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 		// Guard against a nil event before the privacy filters dereference
 		// it. `enrichEventWithUptime` is already nil-safe, but the filter
@@ -380,14 +447,16 @@ func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.E
 			return nil
 		}
 
-		// Per event: direct sentry.* callers bypass shouldSkipTelemetry, and a
-		// running process can cross the age limit after init.
-		if buildTooOld(settings.BuildDate, time.Now()) && !isSupportDumpEvent(event) {
+		// Per event: direct sentry.* callers bypass shouldSkipTelemetry, a
+		// running process can cross the age limit after init, and the user can
+		// opt out while the client is still bound.
+		live := currentSettings()
+		if !isSupportDumpEvent(event) && !reportingAllowed(live, time.Now()) {
 			return nil
 		}
 
 		var filtered *sentry.Event
-		if settings.Sentry.Debug {
+		if live != nil && live.Sentry.Debug {
 			filtered = applyPrivacyFiltersWithLogging(event)
 		} else {
 			filtered = applyPrivacyFilters(event)
@@ -1173,8 +1242,12 @@ func GetAttachmentUploader() *AttachmentUploader {
 }
 
 // InitMinimalSentryForSupport initializes a minimal Sentry client just for support uploads
-// This allows support bundle uploads without enabling full telemetry
+// This allows support bundle uploads without enabling full telemetry. It
+// serializes with the other client lifecycle operations, so it waits for a
+// running support dump upload or runtime reconfiguration.
 func InitMinimalSentryForSupport(systemID, version string) error {
+	clientLifecycleMu.Lock()
+	defer clientLifecycleMu.Unlock()
 	deferredMutex.Lock()
 	defer deferredMutex.Unlock()
 
@@ -1244,5 +1317,73 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	GetLogger().Info("minimal Sentry initialized for support uploads only",
 		logger.String("system_id", systemID))
 
+	return nil
+}
+
+// ReconfigureSentry applies the current Sentry.Enabled setting to the running
+// process. It is level-triggered: it reads the live settings snapshot and
+// converges to it, so running it any number of times, in any order, ends in the
+// state of the latest settings.
+//
+// When reporting is allowed and no full client is bound, it initializes the
+// client (flushing and closing a minimal support client it replaces) and
+// registers the telemetry worker. Otherwise it unbinds and closes whatever
+// client is bound, without flushing, so no further traffic leaves the process.
+func ReconfigureSentry() error {
+	log := GetLogger()
+
+	clientLifecycleMu.Lock()
+	settings := conf.GetSettings()
+	hub := sentry.CurrentHub()
+
+	if reportingAllowed(settings, time.Now()) {
+		if fullClient == nil || hub.Client() != fullClient {
+			previous := hub.Client() // no-op client, or the minimal support client
+			stale := fullClient      // non-nil only if something rebound the hub
+			if err := initSentryLocked(settings); err != nil {
+				clientLifecycleMu.Unlock()
+				return errors.New(err).
+					Component("telemetry").
+					Category(errors.CategoryConfiguration).
+					Context("operation", "reconfigure_sentry").
+					Build()
+			}
+			current := hub.Client()
+			if previous.IsEnabled() && previous != current {
+				flushAndCloseClient(previous)
+			}
+			if stale != nil && stale != current {
+				closeClient(stale)
+			}
+			if fullClient != nil && fullClient != previous {
+				log.Info("Sentry telemetry enabled at runtime")
+			}
+		}
+		clientLifecycleMu.Unlock()
+
+		if err := InitializeEventBusIntegration(); err != nil {
+			log.Warn("telemetry event bus integration failed after enabling Sentry", logger.Error(err))
+		}
+	} else {
+		bound := hub.Client()
+		closed := false
+		if bound.IsEnabled() {
+			hub.BindClient(nil)
+			closeClient(bound) // no flush: consent withdrawn
+			closed = true
+		}
+		if fullClient != nil && fullClient != bound {
+			closeClient(fullClient)
+			closed = true
+		}
+		fullClient = nil
+		clientLifecycleMu.Unlock()
+		if closed {
+			log.Info("Sentry telemetry disabled; client closed")
+		}
+	}
+
+	// Refresh the fast-path flag and the error package's cached flag.
+	UpdateTelemetryEnabled()
 	return nil
 }

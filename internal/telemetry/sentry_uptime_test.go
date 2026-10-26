@@ -184,7 +184,7 @@ func TestCreateBeforeSendHook_NilEvent(t *testing.T) {
 	settings := &conf.Settings{
 		Sentry: conf.SentrySettings{Enabled: true, Debug: false},
 	}
-	hook := createBeforeSendHook(settings)
+	hook := createBeforeSendHook(func() *conf.Settings { return settings })
 
 	var got *sentry.Event
 	require.NotPanics(t, func() {
@@ -195,7 +195,7 @@ func TestCreateBeforeSendHook_NilEvent(t *testing.T) {
 	// Same guarantee in debug mode — the debug privacy filter also
 	// dereferences event and would panic without the guard.
 	settings.Sentry.Debug = true
-	hook = createBeforeSendHook(settings)
+	hook = createBeforeSendHook(func() *conf.Settings { return settings })
 	require.NotPanics(t, func() {
 		got = hook(nil, nil)
 	})
@@ -211,7 +211,7 @@ func TestCreateBeforeSendHook_EnrichesEvent(t *testing.T) {
 	settings := &conf.Settings{
 		Sentry: conf.SentrySettings{Enabled: true, Debug: false},
 	}
-	hook := createBeforeSendHook(settings)
+	hook := createBeforeSendHook(func() *conf.Settings { return settings })
 
 	event := &sentry.Event{}
 	got := hook(event, nil)
@@ -229,12 +229,31 @@ func TestCreateBeforeSendHook_OldBuildDropsAllButSupportDumps(t *testing.T) {
 
 	settings := &conf.Settings{
 		BuildDate: expiredBuildDate(),
+		Sentry:    conf.SentrySettings{Enabled: true},
 	}
-	hook := createBeforeSendHook(settings)
+	hook := createBeforeSendHook(func() *conf.Settings { return settings })
 
 	assert.Nil(t, hook(sentry.NewEvent(), nil), "plain events from an expired build must be dropped")
 
 	dump := sentry.NewEvent()
 	dump.Tags = map[string]string{eventTypeTagKey: supportDumpEventType}
 	assert.NotNil(t, hook(dump, nil), "support dump events must pass on an expired build")
+}
+
+// TestCreateBeforeSendHook_OptOutDropsAllButSupportDumps verifies the hook reads
+// consent per event: flipping the setting after the hook was created drops plain
+// events while support dumps still pass.
+func TestCreateBeforeSendHook_OptOutDropsAllButSupportDumps(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{Sentry: conf.SentrySettings{Enabled: true}}
+	hook := createBeforeSendHook(func() *conf.Settings { return settings })
+	require.NotNil(t, hook(sentry.NewEvent(), nil), "plain events pass while opted in")
+
+	settings = &conf.Settings{Sentry: conf.SentrySettings{Enabled: false}}
+	assert.Nil(t, hook(sentry.NewEvent(), nil), "plain events must be dropped after an opt-out")
+
+	dump := sentry.NewEvent()
+	dump.Tags = map[string]string{eventTypeTagKey: supportDumpEventType}
+	assert.NotNil(t, hook(dump, nil), "support dump events must pass after an opt-out")
 }
