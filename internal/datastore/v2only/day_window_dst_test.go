@@ -264,8 +264,8 @@ func TestV2OnlyDatastore_ParseDateRangeDaysTile(t *testing.T) {
 }
 
 // TestV2OnlyDatastore_GetBatchHourlyOccurrencesRangeAtSkippedMidnight pins that a multi-day
-// range ending on the day before a skipped midnight, or starting on the skipped day, takes each
-// bound from its own day, and that a malformed date is a validation error.
+// range that ends on the day before a skipped midnight, starts on the skipped day, or ends on it,
+// takes each bound from its own day, and that a malformed date is an error.
 func TestV2OnlyDatastore_GetBatchHourlyOccurrencesRangeAtSkippedMidnight(t *testing.T) {
 	t.Parallel()
 
