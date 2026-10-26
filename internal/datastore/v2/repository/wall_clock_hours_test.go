@@ -190,3 +190,40 @@ func TestZoneOffsetSQL(t *testing.T) {
 		})
 	}
 }
+
+// TestHourFilterSpan pins the span the hour offsets are enumerated over: an open end follows the
+// repository clock, and an explicit bound is kept within the epoch and one leap year past the
+// clock, so the SQL does not grow with the date a caller types.
+func TestHourFilterSpan(t *testing.T) {
+	t.Parallel()
+
+	clock := utc(2026, time.June, 1, 12, 0, 0)
+	const leapYearSeconds = 366 * 24 * 3600
+	repo := &detectionRepository{now: func() time.Time { return clock }}
+	at := func(year int) *int64 {
+		unix := utc(year, time.January, 1, 0, 0, 0).Unix()
+		return &unix
+	}
+	farFuture := utc(9999, time.December, 31, 0, 0, 0).Unix()
+	beforeEpoch := utc(1, time.January, 1, 0, 0, 0).Unix()
+
+	tests := []struct {
+		name     string
+		filters  SearchFilters
+		wantFrom int64
+		wantTo   int64
+	}{
+		{"open range runs from the epoch to the clock", SearchFilters{}, 0, clock.Unix()},
+		{"start and end inside the window are kept", SearchFilters{StartTime: at(2020), EndTime: at(2026)}, *at(2020), *at(2026)},
+		{"end past the margin is clamped", SearchFilters{EndTime: &farFuture}, 0, clock.Unix() + leapYearSeconds},
+		{"start before the epoch is clamped", SearchFilters{StartTime: &beforeEpoch}, 0, clock.Unix()},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			from, to := repo.hourFilterSpan(&tc.filters)
+			assert.Equal(t, tc.wantFrom, from, "from")
+			assert.Equal(t, tc.wantTo, to, "to")
+		})
+	}
+}

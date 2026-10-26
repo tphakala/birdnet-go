@@ -17,6 +17,13 @@ const (
 	// Unix epoch, which precedes every stored row because detected_at is positive.
 	openStartZoneFloor int64 = 0
 
+	// hourFilterFutureMargin is how far past now an explicit end time still gets its own offsets:
+	// one leap year.
+	hourFilterFutureMargin = daysInLeapYear * 24 * time.Hour
+
+	// daysInLeapYear is the length of the longest calendar year.
+	daysInLeapYear = 366
+
 	// Clock fields of the last second of a day, see exclusiveDayEnd.
 	lastHourOfDay      = 23
 	lastMinuteOfHour   = 59
@@ -31,17 +38,20 @@ func (r *detectionRepository) currentTime() time.Time {
 	return time.Now()
 }
 
-// hourFilterSpan returns the span of Unix seconds in which the range predicates of filters
-// admit rows: from the start time (or the Unix epoch) to the end time (or now).
+// hourFilterSpan returns the span of Unix seconds over which the hour offsets are enumerated:
+// from the start time (or the Unix epoch) to the end time (or now). An explicit start before the
+// epoch and an explicit end more than hourFilterFutureMargin past now are pulled in, so the
+// enumeration, and the SQL built from it, stay bounded whatever dates the caller gives. Rows
+// beyond the end of the span use the newest offset in it.
 func (r *detectionRepository) hourFilterSpan(filters *SearchFilters) (from, to int64) {
+	now := r.currentTime().Unix()
 	from = openStartZoneFloor
 	if filters.StartTime != nil {
-		from = *filters.StartTime
+		from = max(*filters.StartTime, openStartZoneFloor)
 	}
+	to = now
 	if filters.EndTime != nil {
-		to = *filters.EndTime
-	} else {
-		to = r.currentTime().Unix()
+		to = min(*filters.EndTime, now+int64(hourFilterFutureMargin/time.Second))
 	}
 	return from, to
 }
