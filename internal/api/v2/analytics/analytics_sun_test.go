@@ -264,3 +264,32 @@ func TestHourlyDistribution_BackCompatUnchanged(t *testing.T) {
 	assert.Equal(t, 3, resp[20].Count)
 	mockDS.AssertExpectations(t)
 }
+
+func TestResolveSunRepresentativeDate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name                          string
+		dateParam, startDate, endDate string
+		want                          string
+	}{
+		{"single_date_wins", "2026-03-10", "2026-03-01", "2026-03-31", "2026-03-10"},
+		{"even_span_midpoint", "", "2026-03-01", "2026-03-31", "2026-03-16"},
+		{"odd_span_rounds_down", "", "2026-03-01", "2026-03-04", "2026-03-02"},
+		{"same_day", "", "2026-03-05", "2026-03-05", "2026-03-05"},
+		{"across_leap_day", "", "2024-02-20", "2024-03-05", "2024-02-27"},
+		{"across_year_end", "", "2025-12-20", "2026-01-10", "2025-12-30"},
+		// time.Time.Sub saturates at about 292 years, so a subtraction based count put this
+		// midpoint in year 147 instead of the middle of the span.
+		{"span_beyond_292_years", "", "0001-01-01", "9999-12-31", "5000-07-02"},
+		{"lone_start_date", "", "2026-03-01", "", "2026-03-01"},
+		{"unparseable_range_falls_back_to_start", "", "2026-03-01", "garbage", "2026-03-01"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, resolveSunRepresentativeDate(tt.dateParam, tt.startDate, tt.endDate))
+		})
+	}
+}

@@ -731,6 +731,23 @@ func TestCalculateDaysSince_EdgeCases(t *testing.T) {
 			referenceTime: time.Date(2020, 6, 15, 10, 0, 0, 0, time.UTC),
 			expectedDays:  1826, // ~5 years including leap year
 		},
+		{
+			// Both times are the same instant. Each is read as a date in its own location
+			// (Jun 16 in Helsinki, Jun 15 in UTC), so the count is 1 on purpose; converting
+			// either or both to one zone would give 0.
+			name:          "dates_are_read_in_each_times_own_location",
+			currentTime:   time.Date(2025, 6, 16, 1, 0, 0, 0, helsinki),
+			referenceTime: time.Date(2025, 6, 15, 22, 0, 0, 0, time.UTC),
+			expectedDays:  1,
+		},
+		{
+			// time.Time.Sub saturates at about 292 years, so a subtraction based count
+			// returned 106751 here instead of the exact number of days.
+			name:          "span_beyond_292_years_is_exact",
+			currentTime:   time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC),
+			referenceTime: time.Date(1, 1, 1, 0, 0, 0, 0, time.UTC),
+			expectedDays:  739_416,
+		},
 		// 120 hours across a 25-hour day is four calendar days and across a
 		// 23-hour day it is six, so tests must build day offsets with AddDate.
 		{
