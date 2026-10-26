@@ -19,7 +19,7 @@ const (
 
 	// hourFilterFutureMargin is how far past now an explicit end time still gets its own offsets:
 	// one leap year.
-	hourFilterFutureMargin = daysInLeapYear * 24 * time.Hour
+	hourFilterFutureMargin = daysInLeapYear * wallClockHoursPerDay * time.Hour
 
 	// daysInLeapYear is the length of the longest calendar year.
 	daysInLeapYear = 366
