@@ -19,35 +19,53 @@ import "github.com/quasilyte/go-ruleguard/dsl"
 // bucket or an elapsed duration shown as days stays as is, with a
 // //nolint:gocritic comment that gives the reason.
 //
-// The Add forms are c*time.Hour, n*c*time.Hour and c*time.Hour plus or minus
-// an offset, with c equal to 24 or -24; a swapped operand order and
-// 24*n*time.Hour are not matched. The receiver may be a time.Time or a
-// *time.Time.
-//
-// Bare n*24*time.Hour durations (cache TTLs, retention windows) are not
-// reported, only the ones added to a time.Time.
+// Matched forms:
+//   - Truncate or Round of a time.Time or *time.Time to time.Hour, or to c
+//     hours with c equal to 24 (in either operand order);
+//   - Hours() divided by 24, with a time.Duration receiver (a literal 24, 24.0
+//     or a name ending in HoursPerDay), and int(d.Hours()) / 24;
+//   - Duration division d / (24 * time.Hour) or d / (time.Hour * 24);
+//   - Add to a time.Time or *time.Time of c*time.Hour, time.Hour*c,
+//     n*c*time.Hour, c*n*time.Hour, and c*time.Hour plus or minus an offset,
+//     with c equal to 24 or -24.
 //
 // The constant 24 is matched by value (Value.Int), so named constants such as
 // hoursPerDay are covered. Value.Int does not evaluate a float constant, so the
-// divisor of a float Hours() division is also matched by text: the literal 24
-// or 24.0, or a name ending in HoursPerDay.
+// divisor of a float Hours() division is matched by text instead.
+//
+// Not detected: a duration held in a variable (const day = 24 * time.Hour),
+// multi-day constants other than 24 (48h, 72h, 168h), other operand orders
+// (time.Hour*24*n, time.Hour*n*24), offsets on the left (24h + x - y), a
+// receiver reached through an embedded struct, a method value, or a renamed
+// time import. Bare n*24*time.Hour durations that are not added to a time.Time
+// (cache TTLs, retention windows) are intentionally not reported.
 //
 // Test files, the package internal/wallclock and every package named testutil
-// (test support) are exempt.
+// are exempt. Other test-support packages (such as conftest, securitytest)
+// are not.
 func WallClockArithmetic(m dsl.Matcher) {
 	// Truncate and Round to an hour or a day.
 	m.Match(
 		`$t.Truncate(time.Hour)`,
+	).
+		Where((m["t"].Type.Is("time.Time") || m["t"].Type.Is("*time.Time")) &&
+			!m.File().Name.Matches(`_test\.go$`) &&
+			!m.File().PkgPath.Matches(`(internal/wallclock|/testutil)$`)).
+		Report("Truncate to an hour works on UTC time and is wrong for fractional offsets; use wallclock.FloorToHour from internal/wallclock")
+
+	m.Match(
 		`$t.Round(time.Hour)`,
 	).
 		Where((m["t"].Type.Is("time.Time") || m["t"].Type.Is("*time.Time")) &&
 			!m.File().Name.Matches(`_test\.go$`) &&
 			!m.File().PkgPath.Matches(`(internal/wallclock|/testutil)$`)).
-		Report("Truncate/Round to an hour works on UTC time and is wrong for fractional offsets; use wallclock.FloorToHour (a Truncate replacement) from internal/wallclock")
+		Report("Round to an hour works on UTC time and is wrong for fractional offsets; wallclock.FloorToHour floors rather than rounds, so decide which is meant before replacing it (internal/wallclock)")
 
 	m.Match(
 		`$t.Truncate($c * time.Hour)`,
 		`$t.Round($c * time.Hour)`,
+		`$t.Truncate(time.Hour * $c)`,
+		`$t.Round(time.Hour * $c)`,
 	).
 		Where((m["t"].Type.Is("time.Time") || m["t"].Type.Is("*time.Time")) &&
 			m["c"].Value.Int() == 24 &&
@@ -60,15 +78,29 @@ func WallClockArithmetic(m dsl.Matcher) {
 		`$d.Hours() / $c`,
 		`int($d.Hours()) / $c`,
 	).
-		Where((m["c"].Value.Int() == 24 ||
-			m["c"].Text.Matches(`^(24(\.0*)?|([A-Za-z]+\.)?[A-Za-z]*[Hh]oursPerDay)$`)) &&
+		Where(m["d"].Type.Is("time.Duration") &&
+			(m["c"].Value.Int() == 24 ||
+				m["c"].Text.Matches(`^(24(\.0*)?|([A-Za-z]+\.)?[A-Za-z]*[Hh]oursPerDay)$`)) &&
 			!m.File().Name.Matches(`_test\.go$`) &&
 			!m.File().PkgPath.Matches(`(internal/wallclock|/testutil)$`)).
 		Report("a day is not 24 hours across a DST change and Time.Sub saturates; count days with wallclock.DaysBetween or wallclock.CalendarDaysBetween from internal/wallclock")
 
+	// Whole-day counts by Duration division.
+	m.Match(
+		`$d / ($c * time.Hour)`,
+		`$d / (time.Hour * $c)`,
+	).
+		Where(m["d"].Type.Is("time.Duration") &&
+			m["c"].Value.Int() == 24 &&
+			!m.File().Name.Matches(`_test\.go$`) &&
+			!m.File().PkgPath.Matches(`(internal/wallclock|/testutil)$`)).
+		Report("a day is not 24 hours across a DST change; count days with wallclock.DaysBetween or wallclock.CalendarDaysBetween from internal/wallclock")
+
 	// Moving an instant by whole days.
 	m.Match(
 		`$t.Add($c * time.Hour)`,
+		`$t.Add(time.Hour * $c)`,
+		`$t.Add($c * $n * time.Hour)`,
 		`$t.Add($c * time.Hour - $x)`,
 		`$t.Add($c * time.Hour + $x)`,
 		`$t.Add($n * $c * time.Hour)`,

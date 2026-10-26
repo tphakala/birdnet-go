@@ -352,7 +352,7 @@ func checkNameLabel(name string) string {
 func formatDuration(d time.Duration) string {
 	switch {
 	case d >= 24*time.Hour:
-		days := int(d / (24 * time.Hour))
+		days := int(d / (24 * time.Hour)) //nolint:gocritic // elapsed duration shown as a day count, not a calendar count
 		return fmt.Sprintf("%dd", days)
 	case d >= time.Hour:
 		hours := int(d / time.Hour)
@@ -434,7 +434,7 @@ func countActiveHours(buckets []observability.HourlyBucket, window time.Duration
 // Returns velocityStable when fewer than two in-window buckets are found.
 func detectVelocity(buckets []observability.HourlyBucket, window time.Duration, now time.Time) velocityTrend {
 	cutoff := now.Add(-window)
-	currentHourStart := now.Truncate(time.Hour) //nolint:gocritic // UTC hour bucket by contract, matches the store
+	currentHourStart := now.Truncate(time.Hour) //nolint:gocritic // absolute hour grid, independent of the zone; matches the store buckets
 
 	var prev, curr observability.HourlyBucket
 	n := 0
@@ -492,7 +492,7 @@ func velocityString(v velocityTrend) string {
 // buildMergedSparkline merges multiple metric keys into a single sparkline
 // of n hourly buckets, with zeros for hours without data.
 func buildMergedSparkline(store *observability.HealthMetricsStore, keys []string, n int, now time.Time) []observability.HourlyBucket {
-	startHour := now.Truncate(time.Hour).Add(-time.Duration(n-1) * time.Hour) //nolint:gocritic // UTC hour bucket by contract, matches the store
+	startHour := now.Truncate(time.Hour).Add(-time.Duration(n-1) * time.Hour) //nolint:gocritic // absolute hour grid, independent of the zone; matches the store buckets
 
 	merged := make([]observability.HourlyBucket, n)
 	for i := range n {
