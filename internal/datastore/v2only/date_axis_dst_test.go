@@ -138,7 +138,10 @@ func TestV2OnlyDatastore_GetYearOverYearAnchorsOnSkippedMidnightDate(t *testing.
 	require.Error(t, err)
 }
 
-func TestCivilDawnMinuteLookup_SkippedMidnightDateUsesThatDatesDawn(t *testing.T) {
+// TestCivilDawnMinuteLookup_ReturnsDawnOfTheRequestedDate pins that the lookup answers for the
+// requested date (not a neighbouring one) and in the station zone. It does not distinguish a noon
+// anchor from a midnight one: SunCalc resolves both to the same date in Havana.
+func TestCivilDawnMinuteLookup_ReturnsDawnOfTheRequestedDate(t *testing.T) {
 	t.Parallel()
 
 	havana := toolchainZone(t, havanaZone)
