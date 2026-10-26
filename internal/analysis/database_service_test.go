@@ -171,12 +171,13 @@ func TestDatabaseService_Start_LegacyInstallRunsStateMonitor(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, svc.Stop(t.Context()), "Stop() should succeed")
 		assert.Nil(t, svc.legacyMonitor, "Stop releases the monitor")
+		assert.Nil(t, svc.DetectionRepository(), "Stop releases the detection repository")
 	})
 
 	require.False(t, svc.IsV2OnlyMode(), "an existing legacy database starts in legacy mode")
 	require.NotNil(t, svc.legacyMonitor, "legacy install with a state manager gets the monitor")
 	assert.True(t, svc.legacyMonitor.legacySchema, "the monitor of a legacy install raises the legacy schema notice")
-	assert.NotNil(t, svc.DetectionRepository(), "legacy mode serves detections through the bridge repository")
+	assert.NotNil(t, svc.DetectionRepository(), "legacy mode must have a detection repository")
 }
 
 // discardTransport is a sentry.Transport that drops every event; the test below
