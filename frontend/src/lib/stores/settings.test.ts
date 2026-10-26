@@ -1521,6 +1521,29 @@ describe('Settings Store - restart status refresh after a save', () => {
 describe('Settings Store - browser error tracking follows the saved setting', () => {
   const withSentry = (enabled: boolean) => ({ ...serverSettings(), sentry: { enabled } });
 
+  // The shared mock implementations, saved before any override and put back after each test.
+  // The file-level beforeEach has already installed serveConfirmedSettings on load.
+  let originalLoad: (typeof settingsAPI)['load'] | undefined;
+  let originalSave: (typeof settingsAPI)['save'] | undefined;
+  let originalPatchSection: (typeof settingsAPI)['patchSection'] | undefined;
+
+  beforeEach(() => {
+    originalLoad = vi.mocked(settingsAPI.load).getMockImplementation();
+    originalSave = vi.mocked(settingsAPI.save).getMockImplementation();
+    originalPatchSection = vi.mocked(settingsAPI.patchSection).getMockImplementation();
+  });
+
+  afterEach(() => {
+    vi.mocked(settingsAPI.load).mockReset();
+    if (originalLoad) vi.mocked(settingsAPI.load).mockImplementation(originalLoad);
+    vi.mocked(settingsAPI.save).mockReset();
+    if (originalSave) vi.mocked(settingsAPI.save).mockImplementation(originalSave);
+    vi.mocked(settingsAPI.patchSection).mockReset();
+    if (originalPatchSection) {
+      vi.mocked(settingsAPI.patchSection).mockImplementation(originalPatchSection);
+    }
+  });
+
   const load = async (loaded: boolean, rebased?: boolean) => {
     vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
     vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
@@ -1598,6 +1621,31 @@ describe('Settings Store - browser error tracking follows the saved setting', ()
       const state = get(settingsStore);
       expect(state.isSaving).toBe(false);
       expect(state.error).toBeNull();
+    } finally {
+      apply.mockRestore();
+    }
+  });
+
+  it('a save does not wait for the browser to apply Error Tracking', async () => {
+    await load(false);
+    const appState = await import('$lib/stores/appState.svelte');
+    // Never settles: the save must not await the apply
+    const apply = vi
+      .spyOn(appState, 'applySavedSentrySetting')
+      .mockReturnValue(new Promise(() => {}));
+    try {
+      settingsActions.updateSection('sentry', { enabled: true });
+      const saved = settingsActions.saveSettings({ notify: false }).then((): string => 'saved');
+      // Resolves only after the imports and a macrotask, by which time a save that does
+      // not wait for the apply has finished
+      const sentinel = (async (): Promise<string> => {
+        await vi.dynamicImportSettled();
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+        return 'still waiting';
+      })();
+
+      expect(await Promise.race([saved, sentinel])).toBe('saved');
+      expect(apply).toHaveBeenCalledWith(true);
     } finally {
       apply.mockRestore();
     }
