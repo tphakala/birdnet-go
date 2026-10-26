@@ -154,19 +154,22 @@ func toBucketKey(t time.Time) string {
 	return wallclock.FloorToHour(t).Format(bucketKeyFormat)
 }
 
-// getOrCreateBucket returns the bucket for the given key, creating it if necessary.
+// getOrCreateBucket returns the bucket for the given key, creating it if necessary. A repeated
+// wall-clock hour (a DST fall-back) maps both occurrences to one key, so the bucket starts at the
+// earliest hour start seen and does not depend on the order the events arrive in.
 func getOrCreateBucket(bucketMap map[string]*DetectionBucket, idxMap map[string]*speciesIndex, t time.Time, key string) *DetectionBucket {
+	floored := wallclock.FloorToHour(t)
 	if b, ok := bucketMap[key]; ok {
+		if floored.Before(b.Timestamp) {
+			b.Timestamp = floored
+			b.Label = bucketLabel(floored)
+		}
 		return b
 	}
 
-	floored := wallclock.FloorToHour(t)
-	nextHour := floored.Add(time.Hour)
-	label := fmt.Sprintf("%s\u2013%s", floored.Format(bucketLabelFormat), nextHour.Format(bucketLabelFormat))
-
 	b := &DetectionBucket{
 		Key:       key,
-		Label:     label,
+		Label:     bucketLabel(floored),
 		Timestamp: floored,
 		Species:   []SpeciesEntry{},
 	}
@@ -175,6 +178,14 @@ func getOrCreateBucket(bucketMap map[string]*DetectionBucket, idxMap map[string]
 		byName: make(map[string]int),
 	}
 	return b
+}
+
+// bucketLabel returns the label of the bucket starting at the wall-clock hour start floored. The
+// end is the next wall-clock hour, not the instant an hour later, which reads the same hour again
+// when floored is the first occurrence of a repeated hour.
+func bucketLabel(floored time.Time) string {
+	next := time.Date(floored.Year(), floored.Month(), floored.Day(), floored.Hour()+1, 0, 0, 0, time.UTC)
+	return fmt.Sprintf("%s\u2013%s", floored.Format(bucketLabelFormat), next.Format(bucketLabelFormat))
 }
 
 // getOrCreateSpecies returns a pointer to the species entry within the bucket,
