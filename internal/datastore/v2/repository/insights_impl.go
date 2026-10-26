@@ -90,11 +90,41 @@ func (r *insightsRepository) hourFromUnixExpr(column string, offsetSeconds int) 
 	return fmt.Sprintf("CAST((%s + %d) / 3600 AS INTEGER) %% 24", column, offsetSeconds)
 }
 
-func (r *insightsRepository) yearFromUnixExpr(column string, offsetSeconds int) string {
+// yearFromOffsetExpr returns a SQL expression for the wall-clock calendar year of column, with
+// offsetSQL the SQL expression for the UTC offset in seconds that applies to each row (see
+// zoneOffsetSQL).
+func (r *insightsRepository) yearFromOffsetExpr(column, offsetSQL string) string {
 	if r.isMySQL {
-		return fmt.Sprintf("YEAR(DATE_ADD('1970-01-01', INTERVAL (%s + %d) DIV 86400 DAY))", column, offsetSeconds)
+		return fmt.Sprintf("YEAR(DATE_ADD('1970-01-01', INTERVAL (%s + %s) DIV 86400 DAY))", column, offsetSQL)
 	}
-	return fmt.Sprintf("CAST(strftime('%%Y', %s + %d, 'unixepoch') AS INTEGER)", column, offsetSeconds)
+	return fmt.Sprintf("CAST(strftime('%%Y', %s + %s, 'unixepoch') AS INTEGER)", column, offsetSQL)
+}
+
+// perRowOffsetSQL returns the SQL expression for the UTC offset of loc (UTC when nil) at each
+// row of column, for rows whose instants lie in [start, end): a CASE over the offset changes
+// of loc in the span, or a literal when there are none. Rows outside the span use the offset of
+// the nearest segment, see wallclock.CoveringSegments.
+func perRowOffsetSQL(column string, loc *time.Location, start, end int64, now time.Time) string {
+	if loc == nil {
+		loc = time.UTC
+	}
+	return zoneOffsetSQL(column, wallclock.CoveringSegments(loc, start, end, now), wallclock.OffsetAt(loc, time.Unix(start, 0)))
+}
+
+// yearRangesSpan returns the smallest Unix-seconds span that contains every range.
+func yearRangesSpan(ranges []TimeRange) (start, end int64) {
+	start, end = ranges[0].Start, ranges[0].End
+	for _, tr := range ranges[1:] {
+		start = min(start, tr.Start)
+		end = max(end, tr.End)
+	}
+	return start, end
+}
+
+// dateOneYearBefore returns the same month and day one year earlier; 29 February becomes
+// 1 March once the date is resolved, as time.Date normalises it (wallclock.DayBounds does).
+func dateOneYearBefore(d wallclock.Date) wallclock.Date {
+	return wallclock.Date{Year: d.Year - 1, Month: d.Month, Day: d.Day}
 }
 
 // falsePositiveExclusion returns the standard LEFT JOIN + WHERE clause
@@ -107,7 +137,7 @@ func (r *insightsRepository) falsePositiveExclusion(detAlias string) (joinClause
 	return joinClause, whereClause
 }
 
-func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRanges []TimeRange, tzOffsetSeconds int, modelID *uint) ([]ExpectedSpecies, error) {
+func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRanges []TimeRange, loc *time.Location, modelID *uint) ([]ExpectedSpecies, error) {
 	if len(yearRanges) == 0 {
 		return nil, nil
 	}
@@ -115,8 +145,14 @@ func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRa
 	det := r.detectionsTable()
 	lab := r.labelsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")
-	dateExpr := r.dateFromUnixExpr("d.detected_at", tzOffsetSeconds)
-	yearExpr := r.yearFromUnixExpr("d.detected_at", tzOffsetSeconds)
+
+	// The ranges are disjoint stretches of a few days, but one DST change inside the covered
+	// span is enough to give rows different offsets, so the buckets follow each row's own.
+	spanStart, spanEnd := yearRangesSpan(yearRanges)
+	now := time.Now()
+	from, to := wallclock.Span(spanStart, spanEnd, now)
+	dateExpr := WallClockDateExpr("d.detected_at", loc, from, to, r.isMySQL)
+	yearExpr := r.yearFromOffsetExpr("d.detected_at", perRowOffsetSQL("d.detected_at", loc, spanStart, spanEnd, now))
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
@@ -129,7 +165,7 @@ func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRa
 	// Add year range conditions as OR clauses
 	orScope := r.db.Where("1 = 0")
 	for _, tr := range yearRanges {
-		orScope = orScope.Or("d.detected_at BETWEEN ? AND ?", tr.Start, tr.End)
+		orScope = orScope.Or("d.detected_at >= ? AND d.detected_at < ?", tr.Start, tr.End)
 	}
 	query = query.Where(orScope)
 
@@ -300,10 +336,20 @@ func (r *insightsRepository) GetGoneQuiet(ctx context.Context, recentSince int64
 	return results, nil
 }
 
-func (r *insightsRepository) GetDashboardKPIs(ctx context.Context, todaySince int64, tzOffsetSeconds int, modelID *uint) (*DashboardKPIs, error) {
+func (r *insightsRepository) GetDashboardKPIs(ctx context.Context, todaySince int64, loc *time.Location, modelID *uint) (*DashboardKPIs, error) {
 	det := r.detectionsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")
-	dateExpr := r.dateFromUnixExpr("d.detected_at", tzOffsetSeconds)
+
+	// Best day and recent dates bucket by each row's own offset over the year before today. Older
+	// rows use the offset at the start of that year; they are outside the best-day window and past
+	// the recent dates the streak reads.
+	if loc == nil {
+		loc = time.UTC
+	}
+	oneYearAgo, _ := wallclock.DayBounds(dateOneYearBefore(wallclock.DateOf(time.Unix(todaySince, 0).In(loc))), loc)
+	now := time.Now()
+	from, to := wallclock.Span(oneYearAgo.Unix(), now.Unix(), now)
+	dateExpr := WallClockDateExpr("d.detected_at", loc, from, to, r.isMySQL)
 
 	kpis := &DashboardKPIs{}
 
@@ -332,13 +378,12 @@ func (r *insightsRepository) GetDashboardKPIs(ctx context.Context, todaySince in
 	}
 
 	// 3. Best day (scoped to last year for performance)
-	oneYearAgo := time.Unix(todaySince, 0).AddDate(-1, 0, 0).Unix()
 	var bestDay struct {
 		Date  string
 		Count int64
 	}
 	if err := baseQuery().
-		Where("d.detected_at >= ?", oneYearAgo).
+		Where("d.detected_at >= ?", oneYearAgo.Unix()).
 		Select(fmt.Sprintf("%s as date, COUNT(*) as count", dateExpr)).
 		Group("date").Order("count DESC").Limit(1).
 		Scan(&bestDay).Error; err != nil {
