@@ -7,8 +7,10 @@ import "time"
 const zoneSegmentsInitialCap = 4
 
 // zoneBoundStuckStepSeconds is how far ZoneOffsetSegments moves on when a zone bound does not
-// advance past the instant it was asked for. The stuck bound is a year-end instant, and the
-// walk resumes one day later, which passes it.
+// advance past the instant it was asked for. For zones resolved from their POSIX rule Go
+// computes that bound as 365 days after the start of the year, which is 31 December 00:00 in a
+// leap year, so every instant on that day sees a bound at or before itself. Resuming one day
+// later lands on or after 1 January, where the bound advances again.
 const zoneBoundStuckStepSeconds = 24 * 60 * 60
 
 // ZoneOffsetSegment is a half-open span [Start, End) of Unix seconds over which a
@@ -46,10 +48,9 @@ func ZoneOffsetSegments(loc *time.Location, start, end int64) []ZoneOffsetSegmen
 			if bound := zoneEnd.Unix(); bound > cur {
 				next = min(bound, end)
 			} else {
-				// For zones resolved from their POSIX rule, Go reports the end of the year as
-				// the bound, and on 31 December of a leap year that bound is the instant
-				// itself. It is not a real offset change, so step past it by a day and keep
-				// walking instead of treating the rest of the span as one period.
+				// The bound is at or before cur (see zoneBoundStuckStepSeconds). It is not a
+				// real offset change, so step a day and keep walking instead of treating the
+				// rest of the span as one period.
 				next = min(cur+zoneBoundStuckStepSeconds, end)
 			}
 		}
