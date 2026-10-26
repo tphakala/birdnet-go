@@ -214,9 +214,13 @@ func (e *auxV2Env) dropTable(model any) {
 type labelMissDecorator struct {
 	repository.LabelRepository
 	omit string
+	err  error // when set, BatchGetOrCreate fails with it instead
 }
 
 func (d labelMissDecorator) BatchGetOrCreate(ctx context.Context, names []string, modelID, labelTypeID uint, classID *uint) (map[string]*entities.Label, error) {
+	if d.err != nil {
+		return nil, d.err
+	}
 	labels, err := d.LabelRepository.BatchGetOrCreate(ctx, names, modelID, labelTypeID, classID)
 	delete(labels, d.omit)
 	return labels, err
@@ -275,8 +279,34 @@ func TestAuxiliaryMigrator_MigrateAll_RecordsRowFailures(t *testing.T) {
 		prepare      func(env *auxV2Env, cfg *AuxiliaryMigratorConfig)
 		eventFetches int
 		wantFailed   string // section named in the summary; empty means succeeded
+		wantSummary  string // extra text the summary must contain
 		wantMigrated [4]int
+		// rows adjusts the legacy rows.
+		rows func(r *auxLegacyRows)
 	}{
+		{
+			name: "image cache save fails for every row",
+			prepare: func(env *auxV2Env, _ *AuxiliaryMigratorConfig) {
+				env.dropTable(&entities.ImageCache{})
+			},
+			rows: func(r *auxLegacyRows) {
+				r.imageCaches = append(r.imageCaches, datastore.ImageCache{ProviderName: "wikimedia", ScientificName: "Corvus corax", SourceProvider: "wikimedia", CachedAt: time.Now()})
+			},
+			eventFetches: 1,
+			wantFailed:   "image cache",
+			wantSummary:  "2 failed",
+			wantMigrated: [4]int{0, 1, 1, 1},
+		},
+		{
+			name: "image cache label batch fails",
+			prepare: func(env *auxV2Env, cfg *AuxiliaryMigratorConfig) {
+				cfg.LabelRepo = labelMissDecorator{LabelRepository: env.labelRepo, err: assert.AnError}
+			},
+			eventFetches: 1,
+			wantFailed:   "image cache",
+			wantSummary:  "1 failed",
+			wantMigrated: [4]int{0, 1, 1, 0},
+		},
 		{
 			name: "image cache save fails",
 			prepare: func(env *auxV2Env, _ *AuxiliaryMigratorConfig) {
@@ -343,7 +373,11 @@ func TestAuxiliaryMigrator_MigrateAll_RecordsRowFailures(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			env := newAuxV2Env(t)
-			cfg := env.config(expectLegacy(t, defaultAuxLegacyRows(), tt.eventFetches))
+			rows := defaultAuxLegacyRows()
+			if tt.rows != nil {
+				tt.rows(rows)
+			}
+			cfg := env.config(expectLegacy(t, rows, tt.eventFetches))
 			tt.prepare(env, cfg)
 
 			result, err := NewAuxiliaryMigrator(cfg).MigrateAll(t.Context())
@@ -356,6 +390,7 @@ func TestAuxiliaryMigrator_MigrateAll_RecordsRowFailures(t *testing.T) {
 			} else {
 				assert.Equal(t, entities.AuxiliaryDataStatusFailed, status)
 				assert.Contains(t, summary, tt.wantFailed+":")
+				assert.Contains(t, summary, tt.wantSummary)
 				assert.True(t, result.HasErrors())
 			}
 			assert.Equal(t, tt.wantMigrated, [4]int{
@@ -379,6 +414,10 @@ func TestAuxiliaryMigrator_MigrateAll_LegitimateSkipsAreNotFailures(t *testing.T
 		{ProviderName: "wikimedia", ScientificName: "  " + auxTestSpeciesImage + " ", SourceProvider: "wikimedia", CachedAt: now},
 		{ProviderName: "wikimedia", ScientificName: "", SourceProvider: "wikimedia", CachedAt: now},
 	}
+	rows.notifications = []datastore.NotificationHistory{
+		{ScientificName: " " + auxTestSpeciesNotification + "  ", NotificationType: "new_species", LastSent: now, ExpiresAt: now.Add(time.Hour)},
+		{ScientificName: "", NotificationType: "new_species", LastSent: now, ExpiresAt: now.Add(time.Hour)},
+	}
 	rows.thresholds = append(rows.thresholds, datastore.DynamicThreshold{ExpiresAt: now, LastTriggered: now, FirstCreated: now})
 	cfg := env.config(expectLegacy(t, rows, 1))
 
@@ -390,6 +429,9 @@ func TestAuxiliaryMigrator_MigrateAll_LegitimateSkipsAreNotFailures(t *testing.T
 	assert.Equal(t, 1, result.ImageCaches.Migrated)
 	assert.Equal(t, 1, result.ImageCaches.Skipped)
 	assert.Zero(t, result.ImageCaches.Failed)
+	assert.Equal(t, 1, result.Notifications.Migrated)
+	assert.Equal(t, 1, result.Notifications.Skipped)
+	assert.Zero(t, result.Notifications.Failed)
 	assert.Equal(t, 1, result.Thresholds.Migrated)
 	assert.Equal(t, 1, result.Thresholds.Skipped)
 	assert.Zero(t, result.Thresholds.Failed)
@@ -410,4 +452,25 @@ func TestAuxiliaryMigrator_MigrateAll_RequiresDependencies(t *testing.T) {
 			require.ErrorIs(t, err, ErrAuxDependencyNotConfigured)
 		})
 	}
+}
+
+func TestAuxiliaryMigrationResult_Summary_ReportsFailures(t *testing.T) {
+	t.Parallel()
+
+	r := &AuxiliaryMigrationResult{}
+	r.ImageCaches.Total, r.ImageCaches.Failed, r.ImageCaches.Error = 3, 3, assert.AnError
+	r.Thresholds.Total, r.Thresholds.Skipped = 2, 1
+	r.ThresholdEvents.Total, r.ThresholdEvents.Failed, r.ThresholdEvents.Error = 4, 1, assert.AnError
+	r.Notifications.Total, r.Notifications.Failed, r.Notifications.Error = 5, 2, assert.AnError
+	r.Weather.DailyEventsFailed, r.Weather.HourlyWeatherFailed, r.Weather.Skipped = 1, 2, 3
+	r.Weather.Error = assert.AnError
+
+	summary := r.Summary()
+
+	assert.Contains(t, summary, "Image Caches: 0/3 migrated, 0 skipped, 3 failed (error:")
+	assert.Contains(t, summary, "Thresholds: 0/2 migrated, 1 skipped, 0 failed\n")
+	assert.Contains(t, summary, "Threshold Events: 0/4 migrated, 0 skipped, 1 failed (error:")
+	assert.Contains(t, summary, "Notifications: 0/5 migrated, 0 skipped, 2 failed (error:")
+	assert.Contains(t, summary, "Daily Events: 0/0 migrated, 1 failed, Hourly Weather: 0/0 migrated, 3 skipped, 2 failed (error:")
+	assert.NotContains(t, summary, "fetch error")
 }

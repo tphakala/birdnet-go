@@ -562,4 +562,62 @@ func TestMigrateWeatherData_ErrorHandling(t *testing.T) {
 		assert.Equal(t, result.Weather.HourlyWeatherTotal, result.Weather.HourlyWeatherFailed)
 		mockWeather.AssertNotCalled(t, "SaveAllHourlyWeather")
 	})
+	t.Run("counts rows not saved when daily event and hourly saves fail", func(t *testing.T) {
+		mockStore := mocks.NewMockInterface(t)
+		mockWeather := new(mockWeatherRepo)
+
+		testTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+		mockStore.EXPECT().GetAllDailyEvents().Return([]datastore.DailyEvents{
+			{ID: 1, Date: "2024-01-01"}, {ID: 2, Date: "2024-01-02"},
+		}, nil)
+		mockStore.EXPECT().GetAllHourlyWeather().Return([]datastore.HourlyWeather{
+			{ID: 1, DailyEventsID: 1, Time: testTime},
+			{ID: 2, DailyEventsID: 2, Time: testTime.Add(24 * time.Hour)},
+		}, nil)
+		// One of two daily events saved; only 2024-01-01 exists in v2.
+		mockWeather.On("SaveAllDailyEvents", mock.Anything, mock.Anything).Return(1, assert.AnError)
+		mockWeather.On("GetAllDailyEvents", mock.Anything).Return([]entities.DailyEvents{{ID: 7, Date: "2024-01-01"}}, nil)
+		// The one mappable hourly row is not saved either.
+		mockWeather.On("SaveAllHourlyWeather", mock.Anything, mock.Anything).Return(0, assert.AnError)
+
+		migrator := NewAuxiliaryMigrator(&AuxiliaryMigratorConfig{
+			LegacyStore: mockStore,
+			WeatherRepo: mockWeather,
+			Logger:      testLogger(),
+		})
+
+		result := &AuxiliaryMigrationResult{}
+		migrator.migrateWeatherData(t.Context(), result)
+
+		require.ErrorIs(t, result.Weather.Error, assert.AnError)
+		assert.Equal(t, 1, result.Weather.DailyEventsFailed)
+		// One row has no daily event in v2, one failed to save.
+		assert.Equal(t, 2, result.Weather.HourlyWeatherFailed)
+		assert.Zero(t, result.Weather.Skipped)
+	})
+
+	t.Run("hourly rows without any daily event are skipped, not failed", func(t *testing.T) {
+		mockStore := mocks.NewMockInterface(t)
+		mockWeather := new(mockWeatherRepo)
+
+		testTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+		mockStore.EXPECT().GetAllDailyEvents().Return(nil, nil)
+		mockStore.EXPECT().GetAllHourlyWeather().Return([]datastore.HourlyWeather{
+			{ID: 1, DailyEventsID: 9, Time: testTime},
+			{ID: 2, DailyEventsID: 9, Time: testTime.Add(time.Hour)},
+		}, nil)
+
+		migrator := NewAuxiliaryMigrator(&AuxiliaryMigratorConfig{
+			LegacyStore: mockStore,
+			WeatherRepo: mockWeather,
+			Logger:      testLogger(),
+		})
+
+		result := &AuxiliaryMigrationResult{}
+		migrator.migrateWeatherData(t.Context(), result)
+
+		assert.False(t, result.HasErrors())
+		assert.Equal(t, 2, result.Weather.Skipped)
+		assert.Zero(t, result.Weather.HourlyWeatherFailed)
+	})
 }

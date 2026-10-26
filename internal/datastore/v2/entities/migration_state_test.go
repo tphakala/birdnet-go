@@ -22,6 +22,8 @@ func TestMigrationState_AuxiliaryDataOutcome(t *testing.T) {
 		want  AuxiliaryDataStatus
 	}{
 		{"recorded for the current attempt", state(AuxiliaryDataStatusSucceeded, MigrationStatusCompleted, &started, &started), AuxiliaryDataStatusSucceeded},
+		{"recorded while in cutover", state(AuxiliaryDataStatusSucceeded, MigrationStatusCutover, &started, &started), AuxiliaryDataStatusSucceeded},
+		{"recorded on a failed migration", state(AuxiliaryDataStatusFailed, MigrationStatusFailed, &started, &started), AuxiliaryDataStatusFailed},
 		{"failed while validating", state(AuxiliaryDataStatusFailed, MigrationStatusValidating, &started, &started), AuxiliaryDataStatusFailed},
 		{"not required", state(AuxiliaryDataStatusNotRequired, MigrationStatusCompleted, &started, &started), AuxiliaryDataStatusNotRequired},
 		{"nothing stored", state(AuxiliaryDataStatusUnknown, MigrationStatusCompleted, &started, &started), AuxiliaryDataStatusUnknown},

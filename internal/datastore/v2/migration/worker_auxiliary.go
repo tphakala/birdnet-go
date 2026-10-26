@@ -190,34 +190,34 @@ func (r *AuxiliaryMigrationResult) Summary() string {
 	var b strings.Builder
 	b.WriteString("Auxiliary Migration Summary:\n")
 
-	fmt.Fprintf(&b, "  Image Caches: %d/%d migrated", r.ImageCaches.Migrated, r.ImageCaches.Total)
+	fmt.Fprintf(&b, "  Image Caches: %d/%d migrated, %d skipped, %d failed", r.ImageCaches.Migrated, r.ImageCaches.Total, r.ImageCaches.Skipped, r.ImageCaches.Failed)
 	if r.ImageCaches.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.ImageCaches.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.ImageCaches.Error)
 	}
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "  Thresholds: %d/%d migrated", r.Thresholds.Migrated, r.Thresholds.Total)
+	fmt.Fprintf(&b, "  Thresholds: %d/%d migrated, %d skipped, %d failed", r.Thresholds.Migrated, r.Thresholds.Total, r.Thresholds.Skipped, r.Thresholds.Failed)
 	if r.Thresholds.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.Thresholds.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.Thresholds.Error)
 	}
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "  Threshold Events: %d/%d migrated", r.ThresholdEvents.Migrated, r.ThresholdEvents.Total)
+	fmt.Fprintf(&b, "  Threshold Events: %d/%d migrated, %d skipped, %d failed", r.ThresholdEvents.Migrated, r.ThresholdEvents.Total, r.ThresholdEvents.Skipped, r.ThresholdEvents.Failed)
 	if r.ThresholdEvents.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.ThresholdEvents.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.ThresholdEvents.Error)
 	}
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "  Notifications: %d/%d migrated", r.Notifications.Migrated, r.Notifications.Total)
+	fmt.Fprintf(&b, "  Notifications: %d/%d migrated, %d skipped, %d failed", r.Notifications.Migrated, r.Notifications.Total, r.Notifications.Skipped, r.Notifications.Failed)
 	if r.Notifications.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.Notifications.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.Notifications.Error)
 	}
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "  Daily Events: %d/%d migrated", r.Weather.DailyEventsMigrated, r.Weather.DailyEventsTotal)
-	fmt.Fprintf(&b, ", Hourly Weather: %d/%d migrated", r.Weather.HourlyWeatherMigrated, r.Weather.HourlyWeatherTotal)
+	fmt.Fprintf(&b, "  Daily Events: %d/%d migrated, %d failed", r.Weather.DailyEventsMigrated, r.Weather.DailyEventsTotal, r.Weather.DailyEventsFailed)
+	fmt.Fprintf(&b, ", Hourly Weather: %d/%d migrated, %d skipped, %d failed", r.Weather.HourlyWeatherMigrated, r.Weather.HourlyWeatherTotal, r.Weather.Skipped, r.Weather.HourlyWeatherFailed)
 	if r.Weather.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.Weather.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.Weather.Error)
 	}
 	b.WriteString("\n")
 
