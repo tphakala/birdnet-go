@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
-	"github.com/tphakala/birdnet-go/internal/testutil"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -29,40 +28,28 @@ func setupWeatherTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestGetHourlyWeatherInLocation_DayBoundsFollowTheLocalDay pins the weather window of a local day
-// whose midnight is skipped (Havana 2026-03-08, Santiago 2026-09-06): a row one minute before the
-// day starts is excluded, the first instant of the day is included, and the first instant of the
-// next day is excluded.
+// TestGetHourlyWeatherInLocation_DayBoundsFollowTheLocalDay pins the weather window of the local
+// days in dayBoundsCases, including the skipped-midnight days (Havana 2026-03-08, Santiago
+// 2026-09-06): a row one minute before the day starts is excluded, the first instant of the day
+// is included, and the first instant of the next day is excluded.
 func TestGetHourlyWeatherInLocation_DayBoundsFollowTheLocalDay(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name  string
-		zone  string
-		date  string
-		start time.Time // first instant of the day
-		end   time.Time // first instant of the next day
-	}{
-		{"Havana skipped midnight", "America/Havana", "2026-03-08", utc(2026, time.March, 8, 5, 0, 0), utc(2026, time.March, 9, 4, 0, 0)},
-		{"Santiago skipped midnight", "America/Santiago", "2026-09-06", utc(2026, time.September, 6, 4, 0, 0), utc(2026, time.September, 7, 3, 0, 0)},
-	}
-	for _, tc := range tests {
+	for _, tc := range dayBoundsCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			zone, ok := testutil.ToolchainZones(t)[tc.zone]
-			require.True(t, ok, "zone %s missing from the toolchain zone database", tc.zone)
+			zone := dayBoundsZone(t, tc.zone)
 
 			db := setupWeatherTestDB(t)
 			repo := NewWeatherRepository(db, nil, false, false)
 			ctx := t.Context()
 
-			rows := map[string]time.Time{
-				"before start": tc.start.Add(-time.Minute),
-				"at start":     tc.start,
-				"at end":       tc.end,
-				"before end":   tc.end.Add(-time.Minute),
-			}
-			for _, at := range rows {
+			for _, at := range []time.Time{
+				tc.wantStart.Add(-time.Minute),
+				tc.wantStart,
+				tc.wantEnd,
+				tc.wantEnd.Add(-time.Minute),
+			} {
 				require.NoError(t, repo.SaveHourlyWeather(ctx, &entities.HourlyWeather{Time: at.UTC()}))
 			}
 
@@ -73,7 +60,7 @@ func TestGetHourlyWeatherInLocation_DayBoundsFollowTheLocalDay(t *testing.T) {
 			for _, w := range got {
 				gotTimes = append(gotTimes, w.Time.Unix())
 			}
-			assert.Equal(t, []int64{tc.start.Unix(), tc.end.Add(-time.Minute).Unix()}, gotTimes)
+			assert.Equal(t, []int64{tc.wantStart.Unix(), tc.wantEnd.Add(-time.Minute).Unix()}, gotTimes)
 		})
 	}
 }
