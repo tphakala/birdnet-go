@@ -122,7 +122,7 @@ func TestV2OnlyDatastore_DetectionTrendsBucketByLocalDate(t *testing.T) {
 			},
 		},
 		{
-			// Unknown periods behave like "day", the repository's existing default.
+			// Any period other than "week" and "month" is the current day, see trendWindow.
 			name:   "Helsinki unknown period is the current day",
 			zone:   "Europe/Helsinki",
 			period: "year",
@@ -155,7 +155,8 @@ func TestV2OnlyDatastore_DetectionTrendsBucketByLocalDate(t *testing.T) {
 }
 
 // TestV2OnlyDatastore_GetDetectionTrendsKeepsResponseShape pins the public method: dates are
-// YYYY-MM-DD strings, newest first, and an empty result is a non-nil list and a detection from now is counted on today's date.
+// YYYY-MM-DD strings, an empty result is a non-nil list, and a detection from now is counted on
+// today's date. Newest-first order is pinned by the table test.
 func TestV2OnlyDatastore_GetDetectionTrendsKeepsResponseShape(t *testing.T) {
 	t.Parallel()
 
