@@ -10,6 +10,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
@@ -188,6 +189,13 @@ func buildThumbnailURL(scientificName string) string {
 // repository.GetTimezoneOffsetAt, the same helper the hourly charts use.
 func analyticsTZOffset(ref time.Time) int {
 	return repository.GetTimezoneOffsetAt(time.Local, ref)
+}
+
+// goneQuietDates returns the local calendar date of lastDetected (Unix seconds) and the
+// number of calendar days from it to now, both read in now's location.
+func goneQuietDates(now time.Time, lastDetected int64) (date string, daysSince int) {
+	last := time.Unix(lastDetected, 0).In(now.Location())
+	return last.Format(time.DateOnly), conf.CalendarDaysBetween(last, now)
 }
 
 // buildYearRanges computes index-friendly Unix timestamp ranges for the
@@ -611,14 +619,11 @@ func (c *Handler) getMigrationImpl(ctx echo.Context) error {
 
 	quietItems := make([]GoneQuietItem, 0, len(quiet))
 	for _, q := range quiet {
-		lastDetectedLocal := time.Unix(q.LastDetected, 0).In(now.Location())
-		todayDate := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-		lastDate := time.Date(lastDetectedLocal.Year(), lastDetectedLocal.Month(), lastDetectedLocal.Day(), 0, 0, 0, 0, now.Location())
-		daysSince := int(todayDate.Sub(lastDate).Hours() / 24)
+		lastDate, daysSince := goneQuietDates(now, q.LastDetected)
 		quietItems = append(quietItems, GoneQuietItem{
 			ScientificName:  q.ScientificName,
 			CommonName:      apicore.ResolveCommonName(nameMap, q.ScientificName),
-			LastDetected:    lastDetectedLocal.Format(time.DateOnly),
+			LastDetected:    lastDate,
 			DaysSince:       daysSince,
 			TotalDetections: q.TotalDetections,
 			ThumbnailURL:    buildThumbnailURL(q.ScientificName),
