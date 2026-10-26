@@ -3770,18 +3770,18 @@ func (ds *Datastore) GetAudioSources(ctx context.Context, startDate, endDate str
 // today in the station timezone. It fetches raw detection timestamps for each window in two separate
 // grouped queries (GetDetectionTimestamps) - which skips scanning the multi-month gap between the
 // windows - then aligns and cumulates them in a shared, table-tested Go helper (buildYearOverYear).
-// Bucketing uses the station timezone while the date axis is enumerated in UTC for DST safety.
+// Bucketing uses the station timezone; the date axis is a plain calendar date sequence.
 func (ds *Datastore) GetYearOverYear(ctx context.Context, date string) (datastore.YearOverYearResult, error) {
 	loc := ds.timezone
 	if loc == nil {
 		loc = time.UTC
 	}
 
-	// Resolve the requested date (default: today in the station timezone). Only ref's calendar date
-	// (year/month/day) is used downstream by computeYearOverYearWindows; the intraday clock is ignored.
-	ref := time.Now().In(loc)
+	// Resolve the requested date (default: today in the station timezone) as a calendar date, so
+	// no instant is built for it: a midnight that a DST change skips has no instant of its own.
+	ref := wallclock.DateOf(time.Now().In(loc))
 	if date != "" {
-		t, parseErr := time.ParseInLocation(time.DateOnly, date, loc)
+		d, parseErr := wallclock.ParseDate(date)
 		if parseErr != nil {
 			return datastore.YearOverYearResult{}, errors.New(parseErr).
 				Component("datastore").
@@ -3790,7 +3790,7 @@ func (ds *Datastore) GetYearOverYear(ctx context.Context, date string) (datastor
 				Context("date", date).
 				Build()
 		}
-		ref = t
+		ref = d
 	}
 	w := computeYearOverYearWindows(ref, loc)
 
@@ -3842,15 +3842,16 @@ func (ds *Datastore) GetSpeciesPhenology(ctx context.Context, startDate, endDate
 // station timezone. The closure yields civil dawn's station-local minute-of-day for a date, or
 // ok=false when no SunCalc is configured or civil dawn is undefined for the date (polar day/night).
 func (ds *Datastore) civilDawnMinuteLookup() civilDawnMinuteLookup {
-	return func(date time.Time) (int, bool) {
+	return func(date wallclock.Date) (int, bool) {
 		if ds.suncalc == nil {
 			return 0, false
 		}
-		// Anchor at local noon before the lookup: SunCalc re-derives the calendar date in its own
-		// coordinate-derived zone, so passing midnight could land on the adjacent day (and return
-		// the wrong day's civil dawn) when that zone trails the configured station timezone. Noon
-		// keeps the intended calendar day for any real timezone offset.
-		civilDawn, ok := ds.suncalc.GetCivilDawn(date.Add(12 * time.Hour))
+		// Anchor at local noon of the date before the lookup: SunCalc re-derives the calendar date
+		// in its own coordinate-derived zone, so passing midnight could land on the adjacent day
+		// (and return the wrong day's civil dawn) when that zone trails the configured station
+		// timezone. Noon keeps the intended calendar day for any real timezone offset.
+		dayStart, _ := wallclock.DayBounds(date, ds.timezone)
+		civilDawn, ok := ds.suncalc.GetCivilDawn(wallclock.Noon(dayStart))
 		if !ok {
 			return 0, false
 		}
