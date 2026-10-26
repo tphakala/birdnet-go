@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 const (
@@ -19,13 +21,6 @@ const (
 	// openStartZoneFloor is where offset enumeration starts when a search has no start time: the
 	// Unix epoch, which precedes every stored row because detected_at is positive.
 	openStartZoneFloor int64 = 0
-
-	// hourFilterFutureMargin is how far past now an explicit end time still gets its own offsets:
-	// one leap year.
-	hourFilterFutureMargin = daysInLeapYear * wallClockHoursPerDay * time.Hour
-
-	// daysInLeapYear is the length of the longest calendar year.
-	daysInLeapYear = 366
 
 	// Clock fields of the last second of a day, see exclusiveDayEnd.
 	lastHourOfDay      = 23
@@ -42,7 +37,7 @@ func (r *detectionRepository) currentTime() time.Time {
 }
 
 // hourFilterSpan returns the span of Unix seconds over which the hour offsets are enumerated:
-// from the start time (or the Unix epoch) to the end time (or now), bounded by WallClockSpan.
+// from the start time (or the Unix epoch) to the end time (or now), bounded by wallclock.Span.
 func (r *detectionRepository) hourFilterSpan(filters *SearchFilters) (from, to int64) {
 	now := r.currentTime()
 	start := openStartZoneFloor
@@ -53,24 +48,13 @@ func (r *detectionRepository) hourFilterSpan(filters *SearchFilters) (from, to i
 	if filters.EndTime != nil {
 		end = *filters.EndTime
 	}
-	return WallClockSpan(start, end, now)
-}
-
-// WallClockSpan returns the span of Unix seconds over which a zone's offset changes are
-// enumerated for a query over [start, end): start pulled up to the Unix epoch and end pulled in
-// to now plus hourFilterFutureMargin, so the enumeration, and the SQL built from it, stay
-// bounded whatever dates the caller gives. Rows beyond the end of the span use the newest
-// offset in it.
-func WallClockSpan(start, end int64, now time.Time) (from, to int64) {
-	from = max(start, openStartZoneFloor)
-	to = min(end, now.Unix()+int64(hourFilterFutureMargin/time.Second))
-	return from, to
+	return wallclock.Span(start, end, now)
 }
 
 // WallClockDateExpr returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD) of
 // column, a Unix timestamp, in loc (nil means UTC). Each row is shifted by the UTC offset in
 // effect at its own instant: the offset changes of loc inside [from, to) become a CASE over the
-// column, see zoneOffsetSQL. from and to normally come from WallClockSpan. The result does not
+// column, see zoneOffsetSQL. from and to normally come from wallclock.Span. The result does not
 // depend on the database session or OS-local time zone.
 //
 // SQLite: date(column + offset, 'unixepoch')
@@ -83,7 +67,7 @@ func WallClockDateExpr(column string, loc *time.Location, from, to int64, isMySQ
 	if loc == nil {
 		loc = time.UTC
 	}
-	offset := zoneOffsetSQL(column, ZoneOffsetSegments(loc, from, to), GetTimezoneOffsetAt(loc, time.Unix(from, 0)))
+	offset := zoneOffsetSQL(column, wallclock.Segments(loc, from, to), wallclock.OffsetAt(loc, time.Unix(from, 0)))
 	if isMySQL {
 		return fmt.Sprintf("DATE_ADD('1970-01-01', INTERVAL (%s + %s) DIV %d DAY)", column, offset, wallClockSecondsPerDay)
 	}
@@ -104,7 +88,7 @@ func (r *detectionRepository) wallClockHourExpr(column string, loc *time.Locatio
 	if loc == nil {
 		loc = time.UTC
 	}
-	offset := zoneOffsetSQL(column, ZoneOffsetSegments(loc, from, to), GetTimezoneOffsetAt(loc, time.Unix(from, 0)))
+	offset := zoneOffsetSQL(column, wallclock.Segments(loc, from, to), wallclock.OffsetAt(loc, time.Unix(from, 0)))
 	if r.isMySQL {
 		return fmt.Sprintf("((%s + %s) DIV %d) %% %d", column, offset, wallClockSecondsPerHour, wallClockHoursPerDay)
 	}
@@ -120,8 +104,8 @@ func (r *detectionRepository) wallClockHourExpr(column string, loc *time.Locatio
 // The numbers are written into the SQL text rather than bound, so the hour filter does not add
 // bind variables next to the label ID list of buildSearchJoins. The numbers come from strconv;
 // column is written as given.
-func zoneOffsetSQL(column string, segments []ZoneOffsetSegment, fallback int) string {
-	var distinct []ZoneOffsetSegment
+func zoneOffsetSQL(column string, segments []wallclock.Segment, fallback int) string {
+	var distinct []wallclock.Segment
 	for _, seg := range segments {
 		if n := len(distinct); n > 0 && distinct[n-1].OffsetSeconds == seg.OffsetSeconds {
 			continue

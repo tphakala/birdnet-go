@@ -17,6 +17,7 @@ import (
 	onnx "github.com/tphakala/birdnet-go/internal/inference/onnx"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 const syntheticOverrideScore = 1.0
@@ -105,7 +106,7 @@ func writeIncludedSpeciesDebug(includedSpecies []string) {
 // which is limited to the BirdNET classifier's label set.
 func BuildRangeFilter(o *Orchestrator) error {
 	start := time.Now()
-	today := conf.LocalNoon(start)
+	today := wallclock.Noon(start)
 	// Read settings via the atomic-safe accessor: o.Settings is reassigned at
 	// runtime by Orchestrator.ReloadModel (under o.mu), so a raw field read here
 	// would race with concurrent reloads.

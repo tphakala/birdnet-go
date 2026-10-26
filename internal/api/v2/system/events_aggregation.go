@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger/reader"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // topDiscardedCount is the number of most-discarded species to include in metrics.
@@ -148,33 +149,9 @@ func (c *Handler) aggregateDetectionEvents(entries []reader.LogEntry, _ time.Tim
 	}
 }
 
-// wallClockHourStart returns the start of the wall-clock hour that contains t,
-// in t's own location and UTC offset. Bucket keys, bucket timestamps and bucket
-// labels all derive from it, so they agree with each other and with the
-// hourly pending counts, which index on t.Hour(). time.Time.Truncate operates
-// on absolute (UTC) time, so for offsets that are not a whole number of hours
-// (+05:30, +05:45, -03:30) it floors to 30 or 45 minutes past the local hour.
-// The result is t minus its wall-clock minutes, seconds and nanoseconds, so it
-// never falls after t, even inside a repeated DST hour where time.Date would
-// pick one of the two offsets on its own. When that instant lies before an
-// offset change inside the same hour (a 30 minute DST shift such as
-// Australia/Lord_Howe), it is shown in t's own offset, so it still reads as
-// the start of t's wall-clock hour.
-func wallClockHourStart(t time.Time) time.Time {
-	sinceHourStart := time.Duration(t.Minute())*time.Minute +
-		time.Duration(t.Second())*time.Second +
-		time.Duration(t.Nanosecond())
-	start := t.Add(-sinceHourStart)
-	name, offset := t.Zone()
-	if _, startOffset := start.Zone(); startOffset != offset {
-		start = start.In(time.FixedZone(name, offset))
-	}
-	return start
-}
-
 // toBucketKey returns the bucket key for a given timestamp (floored to the event's wall-clock hour).
 func toBucketKey(t time.Time) string {
-	return wallClockHourStart(t).Format(bucketKeyFormat)
+	return wallclock.FloorToHour(t).Format(bucketKeyFormat)
 }
 
 // getOrCreateBucket returns the bucket for the given key, creating it if necessary.
@@ -183,7 +160,7 @@ func getOrCreateBucket(bucketMap map[string]*DetectionBucket, idxMap map[string]
 		return b
 	}
 
-	floored := wallClockHourStart(t)
+	floored := wallclock.FloorToHour(t)
 	nextHour := floored.Add(time.Hour)
 	label := fmt.Sprintf("%s\u2013%s", floored.Format(bucketLabelFormat), nextHour.Format(bucketLabelFormat))
 

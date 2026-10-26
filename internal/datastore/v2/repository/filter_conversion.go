@@ -194,22 +194,6 @@ func MergeHourFilters(timeOfDay []string, hour *datastore.HourFilter) []int {
 	return intersection
 }
 
-// GetTimezoneOffsetAt returns the timezone offset in seconds for the given location at the
-// instant t (handles DST for that instant).
-//
-// LIMITATION: a single offset is applied to a whole query. When bucketing data that spans a
-// DST transition, hours may be off by up to 1 hour for rows recorded in a different DST state
-// than t. Search hour filters do not have this limitation: they apply the offset in effect at
-// each row (wallClockHourExpr). Analytics that need the same precision can split their range
-// with ZoneOffsetSegments.
-func GetTimezoneOffsetAt(tz *time.Location, t time.Time) int {
-	if tz == nil {
-		tz = time.Local
-	}
-	_, offset := t.In(tz).Zone()
-	return offset
-}
-
 // =============================================================================
 // Confidence Conversion Helpers
 // =============================================================================

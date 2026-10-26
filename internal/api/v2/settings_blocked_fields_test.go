@@ -313,7 +313,7 @@ func TestPatchCannotChangeBlockedFields(t *testing.T) {
 // equal and is deliberately NOT reported in skippedFields. It is still fully
 // overwritten from the snapshot, Location included. Make the restore conditional
 // on that comparison again and the attacker's Location survives, moving the
-// calendar day conf.LocalNoon derives from it, which gates the daily
+// calendar day wallclock.Noon derives from it, which gates the daily
 // range-filter rebuild and is reported to the UI by GET /api/v2/range/status.
 //
 // This is also the TZ-independent guard on that comparison: the +14:00 offset

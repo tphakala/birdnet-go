@@ -180,32 +180,6 @@ func TestMergeHourFilters(t *testing.T) {
 }
 
 // =============================================================================
-// GetTimezoneOffsetAt Tests
-// =============================================================================
-
-func TestGetTimezoneOffsetAt(t *testing.T) {
-	at := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
-
-	t.Run("UTC returns 0", func(t *testing.T) {
-		offset := GetTimezoneOffsetAt(time.UTC, at)
-		assert.Equal(t, 0, offset)
-	})
-
-	t.Run("nil returns local offset", func(t *testing.T) {
-		offset := GetTimezoneOffsetAt(nil, at)
-		_, expected := at.In(time.Local).Zone()
-		assert.Equal(t, expected, offset)
-	})
-
-	t.Run("fixed offset timezone", func(t *testing.T) {
-		// Create a fixed +5 hours offset timezone
-		loc := time.FixedZone("Test", 5*3600)
-		offset := GetTimezoneOffsetAt(loc, at)
-		assert.Equal(t, 5*3600, offset)
-	})
-}
-
-// =============================================================================
 // ConfidenceFilterToMinMax Tests
 // =============================================================================
 

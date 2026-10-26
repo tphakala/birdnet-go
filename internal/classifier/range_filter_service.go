@@ -38,6 +38,7 @@ import (
 	onnx "github.com/tphakala/birdnet-go/internal/inference/onnx"
 	"github.com/tphakala/birdnet-go/internal/inference/tflite"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // debugFunc gates a formatted debug line the way BirdNET.Debug does, so relocated
@@ -896,7 +897,7 @@ func (rfs *rangeFilterService) occurrenceAtTime(species string, detectionTime ti
 
 	// Fallback on cache miss. Anchor to the local calendar day (matching
 	// getCachedSpeciesScores, which keys on the local DateOnly of detectionTime).
-	day := conf.LocalNoon(detectionTime)
+	day := wallclock.Noon(detectionTime)
 	speciesScores, _, _, _, err := rfs.probableSpecies(day, 0.0, settings)
 	if err != nil {
 		rfs.Debug("Error getting probable species for occurrence: %v", err)

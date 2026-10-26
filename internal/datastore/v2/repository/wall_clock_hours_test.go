@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // hourRow is a detection instant with the wall-clock hour the station sees it in.
@@ -157,13 +158,13 @@ func TestZoneOffsetSQL(t *testing.T) {
 	)
 	tests := []struct {
 		name     string
-		segments []ZoneOffsetSegment
+		segments []wallclock.Segment
 		fallback int
 		want     string
 	}{
 		{
 			name: "equal offsets collapse to a literal",
-			segments: []ZoneOffsetSegment{
+			segments: []wallclock.Segment{
 				{Start: 0, End: 100, OffsetSeconds: winter},
 				{Start: 100, End: 200, OffsetSeconds: winter},
 			},
@@ -171,7 +172,7 @@ func TestZoneOffsetSQL(t *testing.T) {
 		},
 		{
 			name: "two offsets give a CASE with the newest branch first",
-			segments: []ZoneOffsetSegment{
+			segments: []wallclock.Segment{
 				{Start: 0, End: changeAt, OffsetSeconds: summer},
 				{Start: changeAt, End: changeAt + 100, OffsetSeconds: winter},
 			},
@@ -179,7 +180,7 @@ func TestZoneOffsetSQL(t *testing.T) {
 		},
 		{
 			name: "equal offsets that are not adjacent keep every branch",
-			segments: []ZoneOffsetSegment{
+			segments: []wallclock.Segment{
 				{Start: 0, End: 100, OffsetSeconds: summer},
 				{Start: 100, End: changeAt, OffsetSeconds: winter},
 				{Start: changeAt, End: changeAt + 100, OffsetSeconds: summer},

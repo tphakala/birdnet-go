@@ -7,6 +7,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // Range analytics bucket each detection by the wall clock in ds.timezone at the detection's own
@@ -15,38 +16,19 @@ import (
 // results are summed (counts are additive), while queries that cannot be merged (distinct counts,
 // pagination) use a per-row CASE offset in SQL instead, see dateExpr.
 
-// zoneSegments splits [start, end) at the offset changes of the configured timezone. The
-// segments tile [start, end) exactly, so every row of the range falls in exactly one segment.
-//
-// The enumeration is bounded by repository.WallClockSpan (start at the Unix epoch at the
-// earliest, end at one leap year past now at the latest); the first and last segment are then
-// stretched back to start and end, so rows outside the bounded span use the offset of the
-// nearest segment, the same rule dateExpr applies. A range that starts past the bound has no
-// enumerated segment and gets one segment with the offset in effect at its start. A range with
-// an open start costs one query per offset period since 1970 in the callers.
-func (ds *Datastore) zoneSegments(start, end int64) []repository.ZoneOffsetSegment {
-	if start >= end {
-		return nil
-	}
-	from, to := repository.WallClockSpan(start, end, time.Now())
-	segments := repository.ZoneOffsetSegments(ds.timezone, from, to)
-	if len(segments) == 0 {
-		// The range starts at or past the bound, so no offset change is enumerated.
-		return []repository.ZoneOffsetSegment{{
-			Start:         start,
-			End:           end,
-			OffsetSeconds: repository.GetTimezoneOffsetAt(ds.timezone, time.Unix(from, 0)),
-		}}
-	}
-	segments[0].Start = start
-	segments[len(segments)-1].End = end
-	return segments
+// zoneSegments splits [start, end) at the offset changes of the configured timezone, see
+// wallclock.CoveringSegments: the segments tile [start, end) exactly, so every row of the range
+// falls in exactly one segment, and rows outside the bounded span use the offset of the nearest
+// segment, the same rule dateExpr applies. A range with an open start costs one query per offset
+// period since 1970 in the callers.
+func (ds *Datastore) zoneSegments(start, end int64) []wallclock.Segment {
+	return wallclock.CoveringSegments(ds.timezone, start, end, time.Now())
 }
 
 // dateExpr returns the SQL expression for the local calendar date of d.detected_at over rows in
 // [start, end), see repository.WallClockDateExpr.
 func (ds *Datastore) dateExpr(start, end int64) string {
-	from, to := repository.WallClockSpan(start, end, time.Now())
+	from, to := wallclock.Span(start, end, time.Now())
 	return repository.WallClockDateExpr("d.detected_at", ds.timezone, from, to, ds.manager.IsMySQL())
 }
 
