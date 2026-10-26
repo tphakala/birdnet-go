@@ -567,8 +567,9 @@ const (
 
 	// humanHitMaxPerSource bounds the attribution list of one source (about 0.6 MB),
 	// so a long stretch of continuous speech cannot grow it without limit. Once it
-	// is reached the oldest entries by arrival order go first, and contributor
-	// counts are a lower bound.
+	// is reached the oldest entries by arrival order go first; contributor
+	// counts are lower bounds only when a dropped hit reaches the clip
+	// (privacyCheck.hitCountsLowerBound).
 	humanHitMaxPerSource = 8192
 
 	// vadHitModelID names the VAD gate in hit attribution, next to classifier

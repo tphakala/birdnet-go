@@ -1700,7 +1700,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 			if settings.Realtime.PrivacyFilter.Debug {
 				// With privacyfilter.debug on, say who decided: the detectors that
 				// counted hits reaching the saved clip, with hit counts and best
-				// scores (lower bounds once the attribution list is full), next to
+				// scores (lower bounds when priv.hitCountsLowerBound is set), next to
 				// the detection that was dropped.
 				GetLogger().Info("privacy filter dropped detection",
 					logger.String("species", item.Detection.Result.Species.CommonName),
