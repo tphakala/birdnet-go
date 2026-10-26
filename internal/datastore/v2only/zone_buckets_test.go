@@ -1,6 +1,7 @@
 package v2only
 
 import (
+	"math"
 	"slices"
 	"sort"
 	"testing"
@@ -321,4 +322,52 @@ func compareStrings(a, b string) int {
 		return 1
 	}
 	return 0
+}
+
+// TestV2OnlyDatastore_ZoneSegmentsCoverTheWholeRange pins that the segments tile the requested
+// range exactly even where the enumeration is bounded: an open start and end, a start before
+// the epoch, and a range that starts beyond the bound.
+func TestV2OnlyDatastore_ZoneSegmentsCoverTheWholeRange(t *testing.T) {
+	t.Parallel()
+
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	ds := &Datastore{timezone: helsinki}
+
+	const (
+		farFutureYears = 20
+		beyondSpan     = 1000
+	)
+	farFuture := time.Now().AddDate(farFutureYears, 0, 0).Unix()
+	cases := []struct {
+		name       string
+		start, end int64
+		minLen     int
+	}{
+		{"open start and end", 0, math.MaxInt64, 3},
+		{"start before the epoch", -beyondSpan, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC).Unix(), 3},
+		{"range beyond the bound", farFuture, farFuture + beyondSpan, 1},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			segs := ds.zoneSegments(c.start, c.end)
+			require.GreaterOrEqual(t, len(segs), c.minLen)
+			assert.Equal(t, c.start, segs[0].Start, "first segment starts at the range start")
+			assert.Equal(t, c.end, segs[len(segs)-1].End, "last segment ends at the range end")
+			for i := 1; i < len(segs); i++ {
+				assert.Equal(t, segs[i-1].End, segs[i].Start, "segments are contiguous")
+			}
+		})
+	}
+
+	t.Run("range beyond the bound uses the offset in effect at its start", func(t *testing.T) {
+		segs := ds.zoneSegments(farFuture, farFuture+beyondSpan)
+		require.Len(t, segs, 1)
+		_, want := time.Unix(farFuture, 0).In(helsinki).Zone()
+		assert.Equal(t, want, segs[0].OffsetSeconds)
+	})
+
+	t.Run("empty range has no segments", func(t *testing.T) {
+		assert.Empty(t, ds.zoneSegments(10, 10))
+	})
 }
