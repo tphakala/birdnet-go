@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/formatutil"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -53,13 +55,21 @@ const (
 	CleanupStateFailed     = "failed"
 )
 
-// Legacy tables to clean up (in dependency order - children first).
-var legacyTables = []string{
+// legacyOnlyTables are legacy-schema tables that no v2 schema (bare or
+// prefixed) ever has, in dependency order (children first).
+var legacyOnlyTables = []string{
 	"note_reviews",
 	"note_comments",
 	"note_locks",
 	"results",
 	"notes",
+}
+
+// legacySharedTables are legacy-schema tables whose names are also the live
+// tables of an unprefixed (bare) v2 schema, because the v2 entities have no
+// TableName overrides. They are legacy only when the active v2 schema carries a
+// table prefix and no bare v2 schema exists beside it.
+var legacySharedTables = []string{
 	"hourly_weathers",
 	"daily_events",
 	"image_caches",
@@ -68,17 +78,158 @@ var legacyTables = []string{
 	"notification_histories",
 }
 
-// tableExistsMySQL checks if a table exists in the MySQL database.
-func (c *Handler) tableExistsMySQL(db *gorm.DB, tableName string) (bool, error) {
-	var count int64
-	err := db.Raw(
-		"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = ?",
-		c.CurrentSettings().Output.MySQL.Database, tableName,
-	).Scan(&count).Error
-	if err != nil {
-		return false, err
+// bareV2MarkerTables are bare v2 tables the legacy schema never has. Any of them
+// in the database means an unprefixed v2 schema lives there. "detections" is the
+// startup probe's own signal; "labels" is the foreign key parent of the bare
+// "image_caches" and "notification_histories", so it survives a half-deleted
+// bare schema; both spellings of the migration state table are listed because
+// earlier releases used the singular name.
+var bareV2MarkerTables = []string{
+	"detections",
+	"labels",
+	"migration_states",
+	"migration_state",
+}
+
+// mysqlLegacyCandidates returns the legacy table names that may be dropped for a
+// v2 schema with the given table prefix, in drop order. A bare prefix means the
+// legacy-named tables are live v2 tables, so nothing is offered. Beside bare v2
+// tables the shared names are withheld. The result is a fresh slice.
+func mysqlLegacyCandidates(tablePrefix string, bareV2Present bool) []string {
+	if tablePrefix == "" {
+		return nil
 	}
-	return count > 0, nil
+	if bareV2Present {
+		return slices.Clone(legacyOnlyTables)
+	}
+	return slices.Concat(legacyOnlyTables, legacySharedTables)
+}
+
+// legacyCleanupRefusal describes why the MySQL legacy cleanup is not offered.
+type legacyCleanupRefusal struct {
+	exists   bool
+	reason   string
+	errorKey string
+}
+
+// legacyTableListing is one row of the information_schema table listing.
+type legacyTableListing struct {
+	Name string
+	Size int64
+}
+
+// mysqlCleanupConn returns the connection the MySQL cleanup runs on. It is
+// the repository's GORM connection, bound to ctx, and a refusal when the
+// repository does not provide one.
+func (c *Handler) mysqlCleanupConn(ctx context.Context) (*gorm.DB, *legacyCleanupRefusal) {
+	provider, ok := c.Repo.(gormDBProvider)
+	if !ok {
+		return nil, &legacyCleanupRefusal{reason: "Cannot access database connection", errorKey: notification.MsgErrCleanupAccessFailed}
+	}
+	db := provider.GetDB()
+	if db == nil {
+		return nil, &legacyCleanupRefusal{reason: "Cannot access database connection", errorKey: notification.MsgErrCleanupAccessFailed}
+	}
+	return db.WithContext(ctx), nil
+}
+
+// resolveMySQLLegacyTables decides which legacy tables the MySQL cleanup may
+// list and drop, from the v2 manager's actual schema. It is the single decision
+// shared by the status call, the POST pre-check and the background drop, and it
+// fails closed: anything it cannot read refuses. db carries the request or
+// cleanup context and is the connection the caller will also run its DROPs on.
+// withCounts adds an exact row count per table, which only the status call
+// reports; the POST pre-check and the drop skip it because COUNT(*) can scan a
+// whole large table.
+func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, db *gorm.DB, withCounts bool) ([]LegacyTableInfo, *legacyCleanupRefusal) {
+	accessFailed := func(reason string) *legacyCleanupRefusal {
+		return &legacyCleanupRefusal{reason: reason, errorKey: notification.MsgErrCleanupAccessFailed}
+	}
+
+	mgr := c.V2Manager
+	if mgr == nil || !mgr.IsMySQL() || mgr.DB() == nil {
+		return nil, accessFailed("MySQL v2 database manager is not available")
+	}
+
+	prefix := mgr.TablePrefix()
+	if prefix == "" {
+		return nil, &legacyCleanupRefusal{reason: "No legacy tables found", errorKey: notification.MsgErrCleanupNoLegacyTables}
+	}
+
+	migrationState, err := datastoreV2.NewStateManager(mgr.DB().WithContext(ctx)).GetState()
+	if err != nil {
+		c.LogWarnIfEnabled("Legacy cleanup: failed to read migration state", logger.Error(err))
+		return nil, accessFailed("Cannot read migration state")
+	}
+	if migrationState.State != entities.MigrationStatusCompleted {
+		return nil, &legacyCleanupRefusal{
+			exists:   true,
+			reason:   "Migration has not completed, cleanup is not available",
+			errorKey: notification.MsgErrCleanupRestartRequired,
+		}
+	}
+	if migrationState.RelatedDataError != "" {
+		return nil, &legacyCleanupRefusal{
+			exists:   true,
+			reason:   "Migration recorded an error in related data, cleanup is not allowed for safety",
+			errorKey: notification.MsgErrCleanupSafetyCheck,
+		}
+	}
+
+	var listing []legacyTableListing
+	err = db.Raw(`
+		SELECT table_name AS name, COALESCE(data_length, 0) + COALESCE(index_length, 0) AS size
+		FROM information_schema.tables
+		WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'`).Scan(&listing).Error
+	if err != nil {
+		c.LogWarnIfEnabled("Legacy cleanup: failed to list tables", logger.Error(err))
+		return nil, accessFailed("Cannot list database tables")
+	}
+	// MySQL 8 and MariaDB differ in the case of returned names.
+	sizes := make(map[string]int64, len(listing))
+	for _, row := range listing {
+		sizes[strings.ToLower(row.Name)] = row.Size
+	}
+
+	bareV2Present := slices.ContainsFunc(bareV2MarkerTables, func(name string) bool {
+		_, ok := sizes[name]
+		return ok
+	})
+
+	var tables []LegacyTableInfo
+	for _, name := range mysqlLegacyCandidates(prefix, bareV2Present) {
+		size, ok := sizes[name]
+		if !ok {
+			continue
+		}
+		info := LegacyTableInfo{Name: name, SizeBytes: size}
+		if withCounts {
+			if err := db.Raw("SELECT COUNT(*) FROM `" + name + "`").Scan(&info.RowCount).Error; err != nil {
+				if ctx.Err() != nil {
+					return nil, accessFailed("Cleanup was cancelled")
+				}
+				// The count is informational and never decides what is dropped.
+				c.LogWarnIfEnabled("Legacy cleanup: failed to query row count",
+					logger.String("table", name),
+					logger.Error(err))
+				info.RowCount = 0
+			}
+		}
+		tables = append(tables, info)
+	}
+	if len(tables) == 0 {
+		return nil, &legacyCleanupRefusal{reason: "No legacy tables found", errorKey: notification.MsgErrCleanupNoLegacyTables}
+	}
+	return tables, nil
+}
+
+// sumLegacyTableSizes returns the total size of the resolved tables.
+func sumLegacyTableSizes(tables []LegacyTableInfo) int64 {
+	var total int64
+	for _, t := range tables {
+		total += t.SizeBytes
+	}
+	return total
 }
 
 // CleanupStatus tracks the state of legacy database cleanup.
@@ -261,96 +412,38 @@ func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusR
 		return ctx.JSON(http.StatusOK, response)
 	}
 
-	// Get GORM DB for MySQL queries
-	dbProvider, ok := c.Repo.(gormDBProvider)
-	if !ok {
-		response.Exists = false
-		response.CanCleanup = false
-		response.Reason = "Cannot access database connection"
-		return ctx.JSON(http.StatusOK, response)
-	}
-	// Bind the request context so the existence checks and information_schema
-	// queries below abort if the client disconnects, rather than running
-	// unbounded on the request thread.
+	// Bind the request context so the schema queries below abort if the
+	// client disconnects, rather than running unbounded on the request thread.
 	reqCtx := ctx.Request().Context()
-	db := dbProvider.GetDB().WithContext(reqCtx)
-
-	// Check each legacy table and get its size
-	var totalSize int64
-	var totalRows int64
-	existingTables := make([]LegacyTableInfo, 0, len(legacyTables))
-
-	for _, tableName := range legacyTables {
-		var tableInfo LegacyTableInfo
-		tableInfo.Name = tableName
-
-		// Check if table exists
-		exists, err := c.tableExistsMySQL(db, tableName)
-		if err != nil {
-			// Client disconnected: the request context is cancelled and every
-			// remaining table query would fail the same way, so stop quietly
-			// instead of logging a warning per table.
-			if reqCtx.Err() != nil {
-				c.LogDebugIfEnabled("Legacy status query cancelled by client", logger.Error(reqCtx.Err()))
-				break
+	db, refusal := c.mysqlCleanupConn(reqCtx)
+	if refusal == nil {
+		var tables []LegacyTableInfo
+		tables, refusal = c.resolveMySQLLegacyTables(reqCtx, db, true)
+		if refusal == nil {
+			var totalRows int64
+			for _, t := range tables {
+				totalRows += t.RowCount
 			}
-			c.LogWarnIfEnabled("Legacy cleanup: failed to check table existence",
-				logger.String("table", tableName),
-				logger.Error(err))
-			continue
+			response.Exists = true
+			response.CanCleanup = true
+			response.SizeBytes = sumLegacyTableSizes(tables)
+			response.TotalRecords = totalRows
+			response.Tables = tables
+			return ctx.JSON(http.StatusOK, response)
 		}
-		if !exists {
-			continue
-		}
-
-		// Get row count
-		err = db.Raw(fmt.Sprintf("SELECT COUNT(*) FROM %s", tableName)).Scan(&tableInfo.RowCount).Error
-		if err != nil {
-			c.LogWarnIfEnabled("Legacy cleanup: failed to query row count",
-				logger.String("table", tableName),
-				logger.Error(err))
-			tableInfo.RowCount = 0
-		}
-		totalRows += tableInfo.RowCount
-
-		// Get table size
-		var dataLength, indexLength int64
-		err = db.Raw(`
-			SELECT COALESCE(data_length, 0), COALESCE(index_length, 0)
-			FROM information_schema.tables
-			WHERE table_schema = ? AND table_name = ?`,
-			c.CurrentSettings().Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
-		if err != nil {
-			c.LogWarnIfEnabled("Legacy cleanup: failed to query table size",
-				logger.String("table", tableName),
-				logger.Error(err))
-		} else {
-			tableInfo.SizeBytes = dataLength + indexLength
-			totalSize += tableInfo.SizeBytes
-		}
-
-		existingTables = append(existingTables, tableInfo)
 	}
 
-	if len(existingTables) == 0 {
-		response.Exists = false
-		response.CanCleanup = false
-		response.Reason = "No legacy tables found"
-		response.ErrorKey = notification.MsgErrCleanupNoLegacyTables
-		return ctx.JSON(http.StatusOK, response)
-	}
-
-	response.Exists = true
-	response.CanCleanup = true
-	response.SizeBytes = totalSize
-	response.TotalRecords = totalRows
-	response.Tables = existingTables
-
+	response.Exists = refusal.exists
+	response.CanCleanup = false
+	response.Reason = refusal.reason
+	response.ErrorKey = refusal.errorKey
 	return ctx.JSON(http.StatusOK, response)
 }
 
 // StartLegacyCleanup handles POST /api/v2/system/database/legacy/cleanup
-// Initiates asynchronous legacy database cleanup.
+// Initiates asynchronous legacy database cleanup. For MySQL the tables are
+// resolved first and a refusal answers 400 without starting anything; the
+// background drop resolves again before it drops.
 func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Starting legacy database cleanup", logger.String("path", path), logger.String("ip", ip))
@@ -364,6 +457,27 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 		})
 	}
 
+	// Resolve the MySQL tables before scheduling anything, so a refusal is a
+	// synchronous answer and leaves the cleanup state idle.
+	usingMySQL := c.isUsingMySQL()
+	var mysqlSize int64
+	if usingMySQL {
+		reqCtx := ctx.Request().Context()
+		db, refusal := c.mysqlCleanupConn(reqCtx)
+		if refusal == nil {
+			var tables []LegacyTableInfo
+			tables, refusal = c.resolveMySQLLegacyTables(reqCtx, db, false)
+			mysqlSize = sumLegacyTableSizes(tables)
+		}
+		if refusal != nil {
+			return ctx.JSON(http.StatusBadRequest, CleanupActionResponse{
+				Success:  false,
+				Message:  refusal.reason,
+				ErrorKey: refusal.errorKey,
+			})
+		}
+	}
+
 	// Atomically check and set cleanup state to prevent race conditions
 	if !c.cleanupStatus.TryStart() {
 		return ctx.JSON(http.StatusConflict, CleanupActionResponse{
@@ -374,10 +488,8 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 	}
 
 	// Get size before deletion for reporting
-	var sizeBytes int64
-	if c.isUsingMySQL() {
-		sizeBytes = c.getMySQLLegacySize(ctx.Request().Context())
-	} else {
+	sizeBytes := mysqlSize
+	if !usingMySQL {
 		sizeBytes = c.getSQLiteLegacySize()
 	}
 
@@ -462,65 +574,62 @@ func (c *Handler) cleanupSQLiteLegacy(ctx context.Context) error {
 	return nil
 }
 
-// cleanupMySQLLegacy drops legacy tables from MySQL.
+// cleanupMySQLLegacy drops the legacy tables the resolver allows. It resolves
+// again, because the database may have changed since the POST was accepted, and
+// drops nothing when the resolver refuses. On a failure or cancellation it
+// returns the names not dropped.
 func (c *Handler) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
-	c.LogInfoIfEnabled("Starting MySQL legacy tables cleanup",
-		logger.Int("total_tables", len(legacyTables)))
-
-	dbProvider, ok := c.Repo.(gormDBProvider)
-	if !ok {
-		return legacyTables, fmt.Errorf("cannot access database connection")
+	// Bind the cleanup context to the GORM session so the listing and the DROP
+	// TABLE Exec below observe cancellation. Without this, an in-flight DROP
+	// cannot abort on shutdown, stalling graceful shutdown and leaking the
+	// cleanup goroutine.
+	db, refusal := c.mysqlCleanupConn(ctx)
+	if refusal == nil {
+		var tables []LegacyTableInfo
+		tables, refusal = c.resolveMySQLLegacyTables(ctx, db, false)
+		if refusal == nil {
+			return c.dropMySQLLegacyTables(ctx, db, tables)
+		}
 	}
-	// Bind the cleanup context to the GORM session so both the per-table
-	// existence check (tableExistsMySQL's Raw) and the DROP TABLE Exec below
-	// observe cancellation. Without this, an in-flight DROP cannot abort on
-	// shutdown, stalling graceful shutdown and leaking the cleanup goroutine.
-	db := dbProvider.GetDB().WithContext(ctx)
+	return nil, fmt.Errorf("legacy cleanup refused: %s", refusal.reason)
+}
 
-	var remaining []string
-	var droppedCount int
+// dropMySQLLegacyTables drops the resolved tables in order and stops at the first
+// error or cancellation, returning the names left behind.
+func (c *Handler) dropMySQLLegacyTables(ctx context.Context, db *gorm.DB, tables []LegacyTableInfo) ([]string, error) {
+	names := make([]string, len(tables))
+	for i, t := range tables {
+		names[i] = t.Name
+	}
+	c.LogInfoIfEnabled("Starting MySQL legacy tables cleanup",
+		logger.Int("total_tables", len(names)))
 
-	for i, tableName := range legacyTables {
+	for i, tableName := range names {
 		// Check for cancellation before each table
 		select {
 		case <-ctx.Done():
 			c.LogWarnIfEnabled("MySQL cleanup cancelled",
-				logger.Int("tables_dropped", droppedCount),
-				logger.Int("tables_remaining", len(legacyTables)-i))
-			return legacyTables[i:], ctx.Err()
+				logger.Int("tables_dropped", i),
+				logger.Int("tables_remaining", len(names)-i))
+			return names[i:], ctx.Err()
 		default:
 		}
 
-		// Check if table exists first
-		exists, err := c.tableExistsMySQL(db, tableName)
-		if err != nil {
-			c.LogWarnIfEnabled("Legacy cleanup: failed to check table existence",
-				logger.String("table", tableName),
-				logger.Error(err))
-			continue
-		}
-		if !exists {
-			continue
-		}
-
-		// Drop the table
-		err = db.Exec(fmt.Sprintf("DROP TABLE IF EXISTS %s", tableName)).Error
-		if err != nil {
+		// Names come only from the fixed legacy lists.
+		if err := db.Exec("DROP TABLE IF EXISTS `" + tableName + "`").Error; err != nil {
 			c.LogErrorIfEnabled("Failed to drop legacy table",
 				logger.String("table", tableName),
 				logger.Error(err))
 			// Stop on first error, return remaining tables
-			remaining = legacyTables[i:]
-			return remaining, fmt.Errorf("failed to drop table %s: %w", tableName, err)
+			return names[i:], fmt.Errorf("failed to drop table %s: %w", tableName, err)
 		}
 
-		droppedCount++
 		c.LogInfoIfEnabled("Dropped legacy table",
 			logger.String("table", tableName))
 	}
 
 	c.LogInfoIfEnabled("MySQL legacy cleanup completed",
-		logger.Int("tables_dropped", droppedCount))
+		logger.Int("tables_dropped", len(names)))
 
 	return nil, nil
 }
@@ -538,52 +647,6 @@ func (c *Handler) getSQLiteLegacySize() int64 {
 	}
 	if info, err := os.Stat(legacyPath + "-shm"); err == nil {
 		totalSize += info.Size()
-	}
-
-	return totalSize
-}
-
-// getMySQLLegacySize returns the total size of MySQL legacy tables. ctx (the
-// request context) bounds the information_schema queries so they abort if the
-// caller disconnects instead of running unbounded on the request thread.
-func (c *Handler) getMySQLLegacySize(ctx context.Context) int64 {
-	dbProvider, ok := c.Repo.(gormDBProvider)
-	if !ok {
-		return 0
-	}
-	db := dbProvider.GetDB().WithContext(ctx)
-
-	var totalSize int64
-	for _, tableName := range legacyTables {
-		exists, err := c.tableExistsMySQL(db, tableName)
-		if err != nil {
-			// Client disconnected: stop quietly instead of warning per table.
-			if ctx.Err() != nil {
-				c.LogDebugIfEnabled("Legacy size query cancelled by client", logger.Error(ctx.Err()))
-				break
-			}
-			c.LogWarnIfEnabled("Legacy cleanup: failed to check table existence",
-				logger.String("table", tableName),
-				logger.Error(err))
-			continue
-		}
-		if !exists {
-			continue
-		}
-
-		var dataLength, indexLength int64
-		err = db.Raw(`
-			SELECT COALESCE(data_length, 0), COALESCE(index_length, 0)
-			FROM information_schema.tables
-			WHERE table_schema = ? AND table_name = ?`,
-			c.CurrentSettings().Output.MySQL.Database, tableName).Row().Scan(&dataLength, &indexLength)
-		if err != nil {
-			c.LogWarnIfEnabled("Legacy cleanup: failed to query table size",
-				logger.String("table", tableName),
-				logger.Error(err))
-		} else {
-			totalSize += dataLength + indexLength
-		}
 	}
 
 	return totalSize
