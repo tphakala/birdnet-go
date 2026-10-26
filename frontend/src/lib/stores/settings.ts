@@ -1732,13 +1732,13 @@ async function afterSettingsPersisted(
     });
 
   if (typeof savedSentryEnabled === 'boolean') {
+    const logApplyFailure = (e: unknown) =>
+      logger.error('Failed to apply the Error Tracking setting in the browser after save:', e);
     try {
       const { applySavedSentrySetting } = await import('$lib/stores/appState.svelte');
-      void applySavedSentrySetting(savedSentryEnabled).catch(e => {
-        logger.error('Failed to apply the Error Tracking setting in the browser after save:', e);
-      });
+      void applySavedSentrySetting(savedSentryEnabled).catch(logApplyFailure);
     } catch (e) {
-      logger.error('Failed to apply the Error Tracking setting in the browser after save:', e);
+      logApplyFailure(e);
     }
   }
 
