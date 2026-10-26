@@ -20,7 +20,7 @@ type ActivityResponse struct {
 	StartDate string `json:"start_date"`
 	// EndDate is the inclusive end date after the default is applied.
 	EndDate string `json:"end_date"`
-	// RangeStart is the UTC instant of the local midnight that starts the range.
+	// RangeStart is the UTC instant that starts the first local day of the range: its local midnight, or the transition instant when that midnight is skipped.
 	RangeStart time.Time `json:"range_start"`
 	// RangeEnd is the UTC instant that ends the range, exclusive.
 	RangeEnd time.Time `json:"range_end"`

@@ -70,6 +70,8 @@ func TestLocalDayRange(t *testing.T) {
 			{"9999-12-31", ""},
 			{"1969-12-31", "1969-12-31"},
 			{"0000-01-01", "0000-01-01"},
+			// Out of the year bounds and over the day cap: the year bounds win.
+			{"0001-01-01", "9999-12-31"},
 		} {
 			_, _, _, err := localDayRange(tc.start, tc.end, kolkata)
 			require.ErrorIs(t, err, ErrInvalidDate, "%s..%s", tc.start, tc.end)
