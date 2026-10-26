@@ -146,3 +146,62 @@ func TestCalculateNextRun_OrdinaryDays(t *testing.T) {
 	assert.True(t, time.Date(2026, 6, 14, 3, 0, 0, 0, loc).Equal(nextRunFor(now, 3, 0, time.Sunday, true)))
 	assert.True(t, time.Date(2026, 6, 15, 3, 0, 0, 0, loc).Equal(nextRunFor(now, 3, 0, time.Monday, true)))
 }
+
+// Europe/Helsinki 2026-10-25 (a Sunday) repeats 03:00 to 04:00: 03:30 EEST is 00:30 UTC and
+// 03:30 EET is 01:30 UTC. Unlike New York, time.Date returns the second occurrence there, so
+// these tests fail if the run time is resolved with time.Date instead of wallclock.At.
+func TestCalculateNextRun_HelsinkiRepeatedTimeRunsOnce(t *testing.T) {
+	t.Parallel()
+	loc := testutil.ToolchainZones(t)[zoneHelsinki]
+	first := time.Date(2026, 10, 25, 0, 30, 0, 0, time.UTC)
+	second := first.Add(time.Hour)
+
+	tests := []struct {
+		name    string
+		weekday time.Weekday
+		weekly  bool
+		next    time.Time
+	}{
+		{"daily", dailySchedule, false, time.Date(2026, 10, 26, 1, 30, 0, 0, time.UTC)},
+		{"weekly", time.Sunday, true, time.Date(2026, 11, 1, 1, 30, 0, 0, time.UTC)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// Before the repeated hour the run is the first 03:30.
+			before := time.Date(2026, 10, 25, 0, 0, 0, 0, loc)
+			got := nextRunFor(before, 3, 30, tt.weekday, tt.weekly)
+			require.True(t, first.Equal(got), "before: got %v", got)
+
+			for _, tick := range []time.Time{first, first.Add(time.Second), second, second.Add(time.Second)} {
+				got := nextRunFor(tick.In(loc), 3, 30, tt.weekday, tt.weekly)
+				assert.True(t, tt.next.Equal(got), "tick %v: got %v, want %v", tick, got, tt.next)
+			}
+		})
+	}
+}
+
+// A tick exactly on the transition instant of a skipped time fires the run once and moves on.
+func TestCalculateNextRun_SkippedTimeTransitionTickMovesOn(t *testing.T) {
+	t.Parallel()
+	zones := testutil.ToolchainZones(t)
+
+	tests := []struct {
+		name   string
+		zone   string
+		hour   int
+		minute int
+		tick   time.Time
+		next   time.Time
+	}{
+		{"New York", zoneNewYork, 2, 30, time.Date(2026, 3, 8, 7, 0, 0, 0, time.UTC), time.Date(2026, 3, 9, 6, 30, 0, 0, time.UTC)},
+		{"Helsinki", zoneHelsinki, 3, 30, time.Date(2026, 3, 29, 1, 0, 0, 0, time.UTC), time.Date(2026, 3, 30, 0, 30, 0, 0, time.UTC)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := nextRunFor(tt.tick.In(zones[tt.zone]), tt.hour, tt.minute, dailySchedule, false)
+			assert.True(t, tt.next.Equal(got), "got %v, want %v", got, tt.next)
+		})
+	}
+}
