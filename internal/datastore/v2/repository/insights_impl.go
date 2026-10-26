@@ -122,9 +122,9 @@ func yearRangesSpan(ranges []TimeRange) (start, end int64) {
 }
 
 // dateOneYearBefore returns the same month and day one year earlier; 29 February becomes
-// 1 March, like time.Date normalises it.
+// 1 March once the date is resolved, as time.Date normalises it (wallclock.DayBounds does).
 func dateOneYearBefore(d wallclock.Date) wallclock.Date {
-	return wallclock.DateOf(time.Date(d.Year-1, d.Month, d.Day, 12, 0, 0, 0, time.UTC))
+	return wallclock.Date{Year: d.Year - 1, Month: d.Month, Day: d.Day}
 }
 
 // falsePositiveExclusion returns the standard LEFT JOIN + WHERE clause
