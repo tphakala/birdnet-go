@@ -335,18 +335,25 @@ func TestV2OnlyDatastore_ZoneSegmentsCoverTheWholeRange(t *testing.T) {
 	ds := &Datastore{timezone: helsinki}
 
 	const (
-		farFutureYears = 20
-		beyondSpan     = 1000
+		farFutureYears = 20   // far past the bound of one leap year after now
+		spanSeconds    = 1000 // length of the short ranges
+		unixEpoch      = 0
+		// Helsinki changes offset twice a year, so any range of several years crosses more than
+		// two offset periods; a short range beyond the bound has exactly one segment.
+		minSegmentsAcrossYears = 3
+		singleSegment          = 1
+		emptyRangeInstant      = 10
 	)
+	pastEnd := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC).Unix()
 	farFuture := time.Now().AddDate(farFutureYears, 0, 0).Unix()
 	cases := []struct {
 		name       string
 		start, end int64
 		minLen     int
 	}{
-		{"open start and end", 0, math.MaxInt64, 3},
-		{"start before the epoch", -beyondSpan, time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC).Unix(), 3},
-		{"range beyond the bound", farFuture, farFuture + beyondSpan, 1},
+		{"open start and end", unixEpoch, math.MaxInt64, minSegmentsAcrossYears},
+		{"start before the epoch", unixEpoch - spanSeconds, pastEnd, minSegmentsAcrossYears},
+		{"range beyond the bound", farFuture, farFuture + spanSeconds, singleSegment},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -361,13 +368,13 @@ func TestV2OnlyDatastore_ZoneSegmentsCoverTheWholeRange(t *testing.T) {
 	}
 
 	t.Run("range beyond the bound uses the offset in effect at its start", func(t *testing.T) {
-		segs := ds.zoneSegments(farFuture, farFuture+beyondSpan)
-		require.Len(t, segs, 1)
+		segs := ds.zoneSegments(farFuture, farFuture+spanSeconds)
+		require.Len(t, segs, singleSegment)
 		_, want := time.Unix(farFuture, 0).In(helsinki).Zone()
 		assert.Equal(t, want, segs[0].OffsetSeconds)
 	})
 
 	t.Run("empty range has no segments", func(t *testing.T) {
-		assert.Empty(t, ds.zoneSegments(10, 10))
+		assert.Empty(t, ds.zoneSegments(emptyRangeInstant, emptyRangeInstant))
 	})
 }
