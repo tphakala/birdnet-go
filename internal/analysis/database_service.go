@@ -161,8 +161,10 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 // the migration_state telemetry tag, the legacy schema bell notice and the
 // weekly push reminder current, and logs the legacy schema startup WARN once
 // (the monitor logs it, or this method when no state manager exists).
-// It refuses to start, consolidating nothing and opening no datastore, when the migration
-// is complete but the legacy records beyond the watermark cannot be verified.
+// When the legacy records beyond the migration watermark cannot be verified it skips
+// SQLite consolidation, and refuses to start before any datastore is constructed if the
+// migration is complete. The startup state check runs first and may already have
+// reconciled empty tables.
 //
 //nolint:gocognit,gocyclo // Database initialization requires handling multiple startup paths with detailed logging
 func (d *DatabaseService) Start(_ context.Context) error {
@@ -217,7 +219,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	if tailErr != nil {
 		if d.v2OnlyMode {
 			d.v2OnlyMode = false
-			datastoreLog.Error("could not verify legacy records beyond the migration watermark, refusing to start in enhanced database mode, nothing was consolidated and no datastore was opened",
+			datastoreLog.Error("could not verify legacy records beyond the migration watermark, refusing to start in enhanced database mode, no SQLite consolidation was run and no datastore was constructed",
 				logger.Error(tailErr),
 				logger.String("operation", operationStartupReconciliation),
 				logger.String("recovery_hint", legacyTailRecoveryHint))
