@@ -374,6 +374,8 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 // be skipped as a duplicate of a different stored row that has the same wall
 // second, species and confidence.
 func (e *Engine) loadExistingKeys(ctx context.Context, loc *time.Location) (map[string]struct{}, error) {
+	// TestImport_ReimportV2_LoadsEveryPage stores pageSize+1 rows; keep its
+	// row count above this value.
 	const pageSize = 1000
 	seen := make(map[string]struct{})
 	var minID uint

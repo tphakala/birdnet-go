@@ -498,6 +498,47 @@ func TestImport_ReimportV2_SkipsStoredRows(t *testing.T) {
 	}
 }
 
+// TestImport_ReimportV2_LoadsEveryPage verifies that a re-import on a v2
+// database finds every stored row when the stored rows span more than one page
+// of the key load. The source lists its rows from the latest time to the
+// earliest, so the ids of the stored rows ascend while their times descend: a
+// key load that pages by time instead of by id misses rows.
+func TestImport_ReimportV2_LoadsEveryPage(t *testing.T) {
+	const rowCount = 1001 // one more than the page size in loadExistingKeys
+	base := time.Date(2025, time.June, 1, 12, 0, 0, 0, time.UTC)
+	rows := make([]birdnetPiRow, 0, rowCount)
+	for i := range rowCount {
+		ts := base.Add(time.Duration(rowCount-i) * time.Second)
+		rows = append(rows, birdnetPiRow{
+			Date: ts.Format(time.DateOnly), Time: ts.Format(time.TimeOnly),
+			SciName: "Sylvia atricapilla", ComName: "Eurasian Blackcap",
+			Confidence: 0.8800, Lat: 60.0, Lon: 24.0, Cutoff: 0.5, Sens: 1.0,
+			FileName: "blackcap.mp3",
+		})
+	}
+	path := newFixtureDB(t, rows)
+
+	repo, _ := newV2DetectionRepo(t, time.UTC)
+	opts := imports.ImportOptions{SourceNode: imports.DefaultSourceNode, Location: time.UTC}
+
+	src1, err := newBirdNetPiSource(t, path)
+	require.NoError(t, err)
+	stats1, err := imports.NewEngine(repo).Run(t.Context(), src1, &opts, nil)
+	require.NoError(t, err)
+	require.Equal(t, rowCount, stats1.Inserted, "first run must insert every row")
+
+	src2, err := newBirdNetPiSource(t, path)
+	require.NoError(t, err)
+	stats2, err := imports.NewEngine(repo).Run(t.Context(), src2, &opts, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, stats2.Inserted, "re-run must insert no row")
+	assert.Equal(t, rowCount, stats2.Skipped, "re-run must skip every stored row")
+
+	_, total, err := repo.Search(t.Context(), datastore.NewDetectionFilters().WithLimit(1))
+	require.NoError(t, err)
+	assert.Equal(t, int64(rowCount), total, "the store must not hold duplicates")
+}
+
 // TestValidate_MissingColumn verifies that Validate rejects a database whose
 // detections table is missing a required column.
 func TestValidate_MissingColumn(t *testing.T) {
