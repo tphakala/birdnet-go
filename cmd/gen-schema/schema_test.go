@@ -51,6 +51,17 @@ func TestSchemaUpToDate(t *testing.T) {
 	tmpSchema := filepath.Join(tmpDir, "config.schema.json")
 	tmpMd := filepath.Join(tmpDir, "configuration-reference.md")
 
+	// The generator runs in a subprocess and reads the Go sources it extracts
+	// comments from, which Go's test cache does not track. The cache does hash
+	// the size and mtime of each entry in a directory the test opens, and
+	// WalkDir opens every directory under the roots, so a comment-only edit
+	// there invalidates a cached pass.
+	for _, dir := range commentSourceDirs {
+		require.NoError(t, filepath.WalkDir(filepath.Join(repoRoot, dir),
+			func(_ string, _ os.DirEntry, err error) error { return err }),
+			"recording %s as a test input", dir)
+	}
+
 	cmd := exec.Command("go", "run", "./cmd/gen-schema/", tmpSchema, tmpMd)
 	cmd.Dir = repoRoot
 	out, err := cmd.CombinedOutput()
