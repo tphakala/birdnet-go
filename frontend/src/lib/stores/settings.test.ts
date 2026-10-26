@@ -1518,6 +1518,92 @@ describe('Settings Store - restart status refresh after a save', () => {
   );
 });
 
+describe('Settings Store - browser error tracking follows the saved setting', () => {
+  const withSentry = (enabled: boolean) => ({ ...serverSettings(), sentry: { enabled } });
+
+  const load = async (loaded: boolean, rebased?: boolean) => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
+    vi.mocked(settingsAPI.load)
+      .mockReset()
+      .mockResolvedValueOnce(withSentry(loaded))
+      .mockResolvedValue(withSentry(rebased ?? loaded));
+    await settingsActions.loadSettings();
+  };
+
+  const spyApply = async () => {
+    const appState = await import('$lib/stores/appState.svelte');
+    return vi.spyOn(appState, 'applySavedSentrySetting').mockResolvedValue(undefined);
+  };
+
+  it.each([
+    {
+      name: 'saveSettings passes an edit that survives the rebase',
+      loaded: false,
+      rebased: false,
+      run: async () => {
+        settingsActions.updateSection('sentry', { enabled: true });
+        await settingsActions.saveSettings({ notify: false });
+      },
+      expected: [true],
+    },
+    {
+      name: 'saveSettings passes the rebased value that was sent, not the pre-rebase one',
+      loaded: true,
+      rebased: false,
+      run: () => settingsActions.saveSettings({ notify: false }),
+      expected: [false],
+    },
+    {
+      name: 'saveSection sentry passes the patched value',
+      loaded: true,
+      rebased: true,
+      run: () => settingsActions.saveSection('sentry', { enabled: false }),
+      expected: [false],
+    },
+    {
+      name: 'saveSection sentry without enabled passes nothing',
+      loaded: true,
+      rebased: true,
+      run: () => settingsActions.saveSection('sentry', { environment: 'staging' }),
+      expected: [],
+    },
+    {
+      name: 'saveSection of another section carrying enabled passes nothing',
+      loaded: true,
+      rebased: true,
+      run: () => settingsActions.saveSection('privacyfilter', { enabled: false }),
+      expected: [],
+    },
+  ])('$name', async ({ loaded, rebased, run, expected }) => {
+    await load(loaded, rebased);
+    const apply = await spyApply();
+    try {
+      await run();
+      expect(apply.mock.calls).toEqual(expected.map(value => [value]));
+    } finally {
+      apply.mockRestore();
+    }
+  });
+
+  it('a failure applying Error Tracking in the browser does not fail the save', async () => {
+    await load(false);
+    const appState = await import('$lib/stores/appState.svelte');
+    const apply = vi
+      .spyOn(appState, 'applySavedSentrySetting')
+      .mockRejectedValue(new Error('boom'));
+    try {
+      settingsActions.updateSection('sentry', { enabled: true });
+      await expect(settingsActions.saveSettings({ notify: false })).resolves.toBeUndefined();
+      const state = get(settingsStore);
+      expect(state.isSaving).toBe(false);
+      expect(state.error).toBeNull();
+    } finally {
+      apply.mockRestore();
+    }
+  });
+});
+
 describe('Settings Store - equalizer values the backend accepts', () => {
   // Values the editor never offers but the backend stores: a disabled equalizer is not
   // validated at all, and an enabled one only bounds frequency and Q

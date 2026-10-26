@@ -1628,7 +1628,11 @@ async function persistFormData(notify: boolean): Promise<void> {
 
         // Read newLocale from coercedFormData (the value we actually persisted)
         // and compare to originalData (the snapshot rebased on the backend).
-        await afterSettingsPersisted(coercedFormData.realtime?.dashboard?.locale, loadedLocale);
+        await afterSettingsPersisted(
+          coercedFormData.realtime?.dashboard?.locale,
+          loadedLocale,
+          coercedFormData.sentry?.enabled
+        );
 
         // Mark what was sent as saved, not formData as it is now, so an edit typed
         // while the request was in flight stays unsaved. Restart-required state is
@@ -1709,16 +1713,34 @@ function applySectionPatch(
  * from the one previously saved, so a locale chosen via the sidebar
  * LanguageSelector (which updates localStorage but not the backend) is not
  * clobbered by whatever stale value the backend still holds.
+ *
+ * When the save carried an Error Tracking value, the browser Sentry SDK is
+ * reconciled with it. Only the import of the already loaded appState module is
+ * awaited, so an opt-out has stopped sending before the save resolves; the
+ * reconcile itself (which may fetch the app config) is never awaited and its
+ * failure is logged, not thrown.
  */
 async function afterSettingsPersisted(
   newLocale: string | undefined,
-  origLocale: string | undefined
+  origLocale: string | undefined,
+  savedSentryEnabled: boolean | undefined
 ): Promise<void> {
   void import('$lib/stores/restart.svelte')
     .then(({ fetchRestartStatus }) => fetchRestartStatus())
     .catch(e => {
       logger.error('Failed to refresh restart status after settings save:', e);
     });
+
+  if (typeof savedSentryEnabled === 'boolean') {
+    try {
+      const { applySavedSentrySetting } = await import('$lib/stores/appState.svelte');
+      void applySavedSentrySetting(savedSentryEnabled).catch(e => {
+        logger.error('Failed to apply the Error Tracking setting in the browser after save:', e);
+      });
+    } catch (e) {
+      logger.error('Failed to apply the Error Tracking setting in the browser after save:', e);
+    }
+  }
 
   if (newLocale && newLocale !== origLocale) {
     try {
@@ -1836,9 +1858,12 @@ export const settingsActions = {
       settingsStore.update(state => ({ ...state, ...applySectionPatch(state, section, patch) }));
 
       const newLocale = section === 'dashboard' ? patch.locale : undefined;
+      const savedSentryEnabled =
+        section === 'sentry' && typeof patch.enabled === 'boolean' ? patch.enabled : undefined;
       await afterSettingsPersisted(
         typeof newLocale === 'string' ? newLocale : undefined,
-        origLocale
+        origLocale,
+        savedSentryEnabled
       );
     })();
 

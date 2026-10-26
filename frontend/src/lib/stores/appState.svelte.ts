@@ -209,8 +209,103 @@ const DEFAULT_STATE: AppState = {
  */
 export const appState: AppState = $state({ ...DEFAULT_STATE });
 
-/** Whether frontend telemetry is enabled (set during initApp). */
+/**
+ * Whether the browser Sentry SDK is started or starting. Set when the SDK starts
+ * (initApp, or applySavedSentrySetting after Error Tracking is turned on) and cleared
+ * when it stops.
+ */
 let sentryEnabled = false;
+
+/**
+ * Bumped by every start, stop and enable request. An async continuation whose
+ * generation is no longer current does nothing, so the latest request wins.
+ */
+let sentryGeneration = 0;
+
+/** Stops the client that initSentry started; null while no client is live. */
+let shutdownLiveSentry: (() => Promise<void>) | null = null;
+
+type SentryAppConfig = NonNullable<AppConfigResponse['sentry']>;
+
+/**
+ * Starts the browser Sentry SDK. A no-op while it is already started or starting, so
+ * Sentry.init never runs over a live client.
+ */
+function startBrowserSentry(config: SentryAppConfig, version: string): void {
+  if (sentryEnabled) return;
+  const generation = ++sentryGeneration;
+  sentryEnabled = true;
+  import('$lib/telemetry/sentry')
+    .then(mod => {
+      if (generation !== sentryGeneration) return;
+      mod.initSentry({ dsn: config.dsn, systemId: config.systemId, version });
+      shutdownLiveSentry = mod.shutdownSentry;
+      setSentryCaptureError(mod.captureError);
+      logger.info('Frontend Sentry initialized');
+    })
+    .catch(err => {
+      if (generation !== sentryGeneration) return;
+      // Allow a later enable to retry and stop api.ts importing the failed chunk per error.
+      sentryEnabled = false;
+      setSentryCaptureError(null);
+      logger.warn('Failed to initialize Sentry', err);
+    });
+}
+
+/**
+ * Stops the browser Sentry SDK. The capture hooks are detached and the live client is
+ * disabled synchronously; the bounded flush that follows completes in the background.
+ * A start still loading its chunk is cancelled.
+ */
+function stopBrowserSentry(): void {
+  sentryGeneration++;
+  sentryEnabled = false;
+  setSentryCaptureError(null);
+  const shutdown = shutdownLiveSentry;
+  shutdownLiveSentry = null;
+  if (shutdown) {
+    void shutdown()
+      .then(() => logger.info('Frontend Sentry stopped'))
+      .catch(err => logger.warn('Failed to stop Sentry', err));
+  }
+}
+
+/**
+ * Reconciles the browser Sentry SDK with a saved Error Tracking value, without a
+ * page reload.
+ *
+ * - false: stops the SDK synchronously, before the first await, so no further
+ *   envelope is sent once the caller's save resolves.
+ * - true: when the SDK is off, re-fetches the app config and starts the SDK only if
+ *   the server hands out a DSN (it withholds it for builds that may not report).
+ *   A later call supersedes one still waiting on that fetch.
+ *
+ * Does not touch the loading, security or appearance state.
+ *
+ * @param enabled - the saved `sentry.enabled` value
+ * @throws if the app config re-fetch fails
+ */
+export async function applySavedSentrySetting(enabled: boolean): Promise<void> {
+  if (!enabled) {
+    stopBrowserSentry();
+    return;
+  }
+  if (sentryEnabled) return;
+
+  const generation = ++sentryGeneration;
+  const config = await fetchConfig();
+  if (generation !== sentryGeneration) return;
+
+  if (typeof config.csrfToken === 'string' && config.csrfToken) {
+    appState.csrfToken = config.csrfToken;
+  }
+
+  if (config.sentry?.enabled && config.sentry.dsn) {
+    startBrowserSentry(config.sentry, config.version);
+  } else {
+    logger.debug('Server offers no browser error reporting; Sentry stays off');
+  }
+}
 
 /** Synchronous check for whether frontend telemetry is enabled. */
 export function isSentryEnabled(): boolean {
@@ -331,24 +426,10 @@ export async function initApp(): Promise<boolean> {
 
       // Initialize frontend Sentry when telemetry is enabled
       const sentryConfig = config.sentry;
-      sentryEnabled = false;
-      setSentryCaptureError(null); // Clear any stale hook from previous init
       if (sentryConfig?.enabled && sentryConfig.dsn) {
-        sentryEnabled = true;
-        import('$lib/telemetry/sentry')
-          .then(({ initSentry, captureError }) => {
-            initSentry({
-              dsn: sentryConfig.dsn,
-              systemId: sentryConfig.systemId,
-              version: config.version,
-            });
-            setSentryCaptureError(captureError);
-            logger.info('Frontend Sentry initialized');
-          })
-          .catch(err => {
-            setSentryCaptureError(null);
-            logger.warn('Failed to initialize Sentry', err);
-          });
+        startBrowserSentry(sentryConfig, config.version);
+      } else {
+        stopBrowserSentry();
       }
 
       appState.initialized = true;

@@ -171,7 +171,9 @@ function isBrowserExtensionError(event: Sentry.ErrorEvent): boolean {
 
 /**
  * Initialize Sentry with privacy filtering.
- * Called once from appState.svelte.ts when telemetry is enabled.
+ * Called by appState.svelte.ts when the browser SDK starts, at page load or after
+ * Error Tracking is turned on. It must not be called while a client it started is
+ * still live; appState guards this.
  */
 export function initSentry(config: SentryConfig): void {
   Sentry.init({
@@ -189,6 +191,32 @@ export function initSentry(config: SentryConfig): void {
       },
     },
   });
+}
+
+/**
+ * Upper bound in milliseconds for the flush that follows shutdownSentry.
+ * Sentry.close treats 0 (or no value) as "no limit", so a positive bound keeps the
+ * flush from hanging. Sending is already off before it runs; this only bounds how
+ * long requests already on the wire are awaited.
+ */
+const SENTRY_CLOSE_TIMEOUT_MS = 2000;
+
+/**
+ * Stop the Sentry client: nothing more is sent from the moment this is called.
+ *
+ * The client is disabled synchronously first, because Sentry.close only disables it
+ * after its flush completes, leaving a window in which sessions, client reports and
+ * errors still send. Do not put an await before the options flip. Stored breadcrumbs
+ * are cleared so activity from the opted-out period is never reported after a later
+ * re-enable. The returned promise resolves once the bounded flush has finished.
+ */
+export function shutdownSentry(): Promise<void> {
+  const client = Sentry.getClient();
+  if (client) {
+    client.getOptions().enabled = false;
+  }
+  Sentry.getIsolationScope().clearBreadcrumbs();
+  return Sentry.close(SENTRY_CLOSE_TIMEOUT_MS).then(() => undefined);
 }
 
 /**
