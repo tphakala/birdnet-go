@@ -410,6 +410,32 @@ Pushes to `main` and manual runs always run everything. The unit tests and lint
 run on every pull request. To force the gated jobs on a pull request, add the
 `run-full-ci` label (or `run-db-tests` for the database job only) and push.
 
+### Go test cache in CI
+
+Each unit-tests shard restores the Go build and test cache saved by the last push
+to `main` (one entry per shard). On a pull request, a package whose inputs match
+main's run is shown as `(cached)` and is not run again. Main and manual runs run
+`go clean -testcache` first, so they run every test. The `run-full-ci` label also
+forces every unit test to run (on the next push).
+
+- Before the tests, every tracked file gets an mtime derived from its content,
+  because Go identifies the files a test opens by size and mtime.
+- The cache key carries the TFLite and ONNX Runtime libraries and headers, the Go
+  version, the runner image family and the files that define the job (the
+  workflow, `.github/scripts/go-test-cache.sh` and the two setup actions). A
+  change to any of them runs everything.
+- The cache cannot see anything outside the repository (other runner software,
+  binaries on `PATH`, the Mosquitto service), files a test reads only through a
+  subprocess or C code, and anything read in `init`, a package-level variable or
+  `TestMain` before `m.Run`. A pull request replays main's result for such state.
+  Write tests that open or stat their inputs inside the test function. Main runs
+  every test, so a change that only such state breaks still shows up on main.
+- A gotestsum rerun (`-run=^Name$`) can be replayed when main passed the same
+  rerun on the same inputs; the report then counts the test as flaky, which it is.
+- Cached packages report an elapsed time of about zero in the JSON events and
+  JUnit files. The job summary of each shard counts the cached packages.
+- To turn the cache off, set `GO_TEST_CACHE` to `'false'` in `golangci-test.yml`.
+
 ## Mocking with testify/mock
 
 ### When to Use Mocks
