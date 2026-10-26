@@ -3,6 +3,7 @@
 package system
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -1145,6 +1146,126 @@ func TestRepeatedHourBucketIsOrderIndependent(t *testing.T) {
 				assert.Equal(t, 2, b.Totals.Approved, order.name)
 				assert.Equal(t, 2, result.Metrics.HourlyPending[tt.wantHour], order.name)
 			}
+		})
+	}
+}
+
+// TestBucketsSharingATimestampSortByKey pins the tie break of the newest-first sort. Pacific/Chatham
+// falls back from 03:45 +13:45 to 02:45 +12:45 on 2024-04-07 local (2024-04-06 UTC), so the events below land in the keys
+// 03 and 02 and both floor to the same instant (13:15 UTC). The bucket map iterates in random
+// order, so without the tie break the order changes from call to call.
+func TestBucketsSharingATimestampSortByKey(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "events")
+	t.Attr("type", "unit")
+
+	chatham, ok := testutil.ToolchainZones(t)["Pacific/Chatham"]
+	require.True(t, ok, "Pacific/Chatham missing from the toolchain database")
+
+	entries := []reader.LogEntry{
+		makeEntry(time.Date(2024, 4, 6, 13, 30, 0, 0, time.UTC).In(chatham), "approve_detection", "Robin", nil),
+		makeEntry(time.Date(2024, 4, 6, 14, 5, 0, 0, time.UTC).In(chatham), "approve_detection", "Robin", nil),
+	}
+
+	// The unlucky order shows up in about one call in seven, so this many calls make a pass by
+	// chance negligible.
+	const calls = 200
+	for range calls {
+		c := &Handler{Core: &apicore.Core{}}
+		c.Settings.Store(apitest.NewValidTestSettings())
+		result := c.aggregateDetectionEvents(entries)
+
+		require.Len(t, result.Buckets, 2)
+		require.True(t, result.Buckets[0].Timestamp.Equal(result.Buckets[1].Timestamp), "fixture must tie on Timestamp")
+		require.Equal(t, "2024-04-07T03", result.Buckets[0].Key)
+		require.Equal(t, "2024-04-07T02", result.Buckets[1].Key)
+	}
+}
+
+// TestRepeatedHourAggregationIgnoresEventOrder feeds every permutation of events that include the
+// transition instant, the last second of the first occurrence and the end of the repeated span,
+// and requires one result.
+func TestRepeatedHourAggregationIgnoresEventOrder(t *testing.T) {
+	t.Parallel()
+	t.Attr("component", "events")
+	t.Attr("type", "unit")
+
+	zones := testutil.ToolchainZones(t)
+	utc := func(y int, m time.Month, d, h, mi, s int) time.Time {
+		return time.Date(y, m, d, h, mi, s, 0, time.UTC)
+	}
+
+	tests := []struct {
+		zone   string
+		events []time.Time
+	}{
+		{"Europe/Helsinki", []time.Time{
+			utc(2024, 10, 27, 0, 30, 0), utc(2024, 10, 27, 0, 59, 59), utc(2024, 10, 27, 1, 0, 0),
+			utc(2024, 10, 27, 1, 30, 0), utc(2024, 10, 27, 1, 59, 59), utc(2024, 10, 27, 2, 0, 0),
+		}},
+		{"Australia/Lord_Howe", []time.Time{
+			utc(2024, 4, 6, 14, 45, 0), utc(2024, 4, 6, 14, 59, 59), utc(2024, 4, 6, 15, 0, 0),
+			utc(2024, 4, 6, 15, 15, 0), utc(2024, 4, 6, 15, 29, 59), utc(2024, 4, 6, 15, 30, 0),
+		}},
+		{"Pacific/Chatham", []time.Time{
+			utc(2024, 4, 6, 13, 30, 0), utc(2024, 4, 6, 13, 59, 59), utc(2024, 4, 6, 14, 0, 0),
+			utc(2024, 4, 6, 14, 5, 0), utc(2024, 4, 6, 14, 59, 59), utc(2024, 4, 6, 15, 0, 0),
+		}},
+	}
+
+	// summary leaves out the per-species timestamp lists, which follow the input order by design.
+	type summary struct {
+		Key, Label string
+		Timestamp  string
+		Approved   int
+	}
+	run := func(loc *time.Location, order []time.Time) ([]summary, [24]int) {
+		entries := make([]reader.LogEntry, 0, 2*len(order))
+		for _, ts := range order {
+			entries = append(entries,
+				makeEntry(ts.In(loc), "create_pending_detection", "Robin", nil),
+				makeEntry(ts.In(loc), "approve_detection", "Robin", nil))
+		}
+		c := &Handler{Core: &apicore.Core{}}
+		c.Settings.Store(apitest.NewValidTestSettings())
+		result := c.aggregateDetectionEvents(entries)
+		out := make([]summary, 0, len(result.Buckets))
+		for _, b := range result.Buckets {
+			out = append(out, summary{b.Key, b.Label, b.Timestamp.Format(time.RFC3339), b.Totals.Approved})
+		}
+		return out, result.Metrics.HourlyPending
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.zone, func(t *testing.T) {
+			t.Parallel()
+			loc, ok := zones[tt.zone]
+			require.True(t, ok, "zone %s missing from the toolchain database", tt.zone)
+
+			wantBuckets, wantPending := run(loc, tt.events)
+			total := 0
+			for _, b := range wantBuckets {
+				total += b.Approved
+			}
+			require.Equal(t, len(tt.events), total, "every event must be counted once")
+
+			order := slices.Clone(tt.events)
+			var permute func(k int)
+			permute = func(k int) {
+				if k == len(order) {
+					gotBuckets, gotPending := run(loc, order)
+					if !assert.Equal(t, wantBuckets, gotBuckets, "order %v", order) || !assert.Equal(t, wantPending, gotPending, "order %v", order) {
+						t.FailNow()
+					}
+					return
+				}
+				for i := k; i < len(order); i++ {
+					order[k], order[i] = order[i], order[k]
+					permute(k + 1)
+					order[k], order[i] = order[i], order[k]
+				}
+			}
+			permute(0)
 		})
 	}
 }

@@ -2,8 +2,10 @@
 package system
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger/reader"
@@ -131,9 +133,11 @@ func (c *Handler) aggregateDetectionEvents(entries []reader.LogEntry) DetectionE
 		buckets = append(buckets, *bucket)
 	}
 
-	// Sort buckets newest-first
+	// Sort buckets newest-first. Two keys can share a Timestamp (Pacific/Chatham repeats a
+	// 45 minute span across two hours), and the map above iterates in random order, so the key
+	// breaks the tie.
 	slices.SortFunc(buckets, func(a, b DetectionBucket) int {
-		return b.Timestamp.Compare(a.Timestamp)
+		return cmp.Or(b.Timestamp.Compare(a.Timestamp), strings.Compare(b.Key, a.Key))
 	})
 
 	// Build metrics
@@ -156,13 +160,13 @@ func toBucketKey(t time.Time) string {
 
 // getOrCreateBucket returns the bucket for the given key, creating it if necessary. A repeated
 // wall-clock hour (a DST fall-back) maps both occurrences to one key, so the bucket starts at the
-// earliest hour start seen and does not depend on the order the events arrive in.
+// earliest hour start seen and does not depend on the order the events arrive in. Both occurrences
+// share the date and the wall-clock hour, so the label is the same whichever one created the bucket.
 func getOrCreateBucket(bucketMap map[string]*DetectionBucket, idxMap map[string]*speciesIndex, t time.Time, key string) *DetectionBucket {
 	floored := wallclock.FloorToHour(t)
 	if b, ok := bucketMap[key]; ok {
 		if floored.Before(b.Timestamp) {
 			b.Timestamp = floored
-			b.Label = bucketLabel(floored)
 		}
 		return b
 	}
