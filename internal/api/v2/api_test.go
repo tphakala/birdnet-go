@@ -164,3 +164,19 @@ func TestNewErrorResponseDebugMode(t *testing.T) {
 	assert.Equal(t, "code=400, message=Test error", resp.Error, "Debug mode should expose raw error")
 	assert.Equal(t, "Safe message", resp.Message)
 }
+
+// TestWithDetectionRepository verifies the option replaces the controller's default
+// detection repository and that a nil repository keeps it.
+func TestWithDetectionRepository(t *testing.T) {
+	t.Parallel()
+
+	defaultRepo := mocks.NewMockDetectionRepository(t)
+	replacement := mocks.NewMockDetectionRepository(t)
+	c := &Controller{Core: &apicore.Core{Repo: defaultRepo}}
+
+	WithDetectionRepository(nil)(c)
+	assert.Same(t, defaultRepo, c.Repo, "a nil repository must keep the default")
+
+	WithDetectionRepository(replacement)(c)
+	assert.Same(t, replacement, c.Repo, "a repository must replace the default")
+}
