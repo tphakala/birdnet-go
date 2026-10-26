@@ -381,6 +381,62 @@ func TestAggregateDetectionEvents(t *testing.T) {
 		assert.Equal(t, 3, result.Metrics.ApprovedTotal)
 	})
 
+	t.Run("half-hour offset events bucket by wall-clock hour", func(t *testing.T) {
+		t.Parallel()
+		c := &Handler{Core: &apicore.Core{}}
+		c.Settings.Store(apitest.NewValidTestSettings())
+
+		ist := time.FixedZone("IST", int((5*time.Hour + 30*time.Minute).Seconds()))
+		at := func(hour, minute int) time.Time {
+			return time.Date(2024, 6, 15, hour, minute, 0, 0, ist)
+		}
+
+		entries := []reader.LogEntry{
+			makeEntry(at(10, 15), "create_pending_detection", "Robin", nil),
+			makeEntry(at(10, 15), "approve_detection", "Robin", map[string]any{"confidence": 0.9, "match_count": float64(1)}),
+			makeEntry(at(10, 45), "discard_detection", "Robin", map[string]any{"confidence": 0.5, "reason": "low confidence"}),
+			makeEntry(at(11, 0), "approve_detection", "Sparrow", map[string]any{"confidence": 0.8, "match_count": float64(1)}),
+			makeEntry(at(11, 0), "create_pending_detection", "Sparrow", nil),
+			makeEntry(at(11, 45), "dog_bark_filter", "", nil),
+		}
+
+		result := c.aggregateDetectionEvents(entries, baseTime)
+
+		require.Len(t, result.Buckets, 2)
+		newer, older := result.Buckets[0], result.Buckets[1]
+
+		assert.Equal(t, "2024-06-15T11", newer.Key)
+		assert.Equal(t, "11:00\u201312:00", newer.Label)
+		assert.Equal(t, 1, newer.Totals.Approved)
+		assert.Equal(t, 1, newer.PreFilters.DogBark)
+
+		assert.Equal(t, "2024-06-15T10", older.Key)
+		assert.Equal(t, "10:00\u201311:00", older.Label)
+		assert.Equal(t, 1, older.Totals.Approved)
+		assert.Equal(t, 1, older.Totals.Discarded)
+
+		// Bucket hours agree with the hourly pending index, which uses the wall clock.
+		assert.Equal(t, 1, result.Metrics.HourlyPending[10])
+		assert.Equal(t, 1, result.Metrics.HourlyPending[11])
+		for _, b := range result.Buckets {
+			assert.NotZero(t, result.Metrics.HourlyPending[b.Timestamp.Hour()])
+		}
+		assert.Equal(t, "1.0", result.Metrics.ApprovedPerHour)
+
+		// Bucket identity must not depend on which event creates the bucket first.
+		reversed := make([]reader.LogEntry, len(entries))
+		for i := range entries {
+			reversed[len(entries)-1-i] = entries[i]
+		}
+		again := c.aggregateDetectionEvents(reversed, baseTime)
+		require.Len(t, again.Buckets, len(result.Buckets))
+		for i := range result.Buckets {
+			assert.Equal(t, result.Buckets[i].Key, again.Buckets[i].Key)
+			assert.Equal(t, result.Buckets[i].Label, again.Buckets[i].Label)
+			assert.True(t, result.Buckets[i].Timestamp.Equal(again.Buckets[i].Timestamp))
+		}
+	})
+
 	t.Run("timestamps are recorded for approve and discard", func(t *testing.T) {
 		t.Parallel()
 		c := &Handler{Core: &apicore.Core{}}
@@ -693,43 +749,117 @@ func TestGenerateEventID(t *testing.T) {
 
 // --- Bucket Operations Tests ---
 
-func TestBucketKey(t *testing.T) {
+func TestBucketHourBoundaries(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "events")
 	t.Attr("type", "unit")
 
+	ist := time.FixedZone("IST", int((5*time.Hour + 30*time.Minute).Seconds()))
+	npt := time.FixedZone("NPT", int((5*time.Hour + 45*time.Minute).Seconds()))
+	nst := time.FixedZone("NST", -int((3*time.Hour + 30*time.Minute).Seconds()))
+	acst := time.FixedZone("ACST", int((9*time.Hour + 30*time.Minute).Seconds()))
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	lordHowe, err := time.LoadLocation("Australia/Lord_Howe")
+	require.NoError(t, err)
+
 	tests := []struct {
-		name     string
-		input    time.Time
-		expected string
+		name          string
+		input         time.Time
+		wantKey       string
+		wantTimestamp string
+		// wantLabel is not checked when empty.
+		wantLabel string
 	}{
 		{
 			"floors to hour correctly",
 			time.Date(2024, 6, 15, 10, 45, 30, 0, time.UTC),
-			"2024-06-15T10",
+			"2024-06-15T10", "2024-06-15T10:00:00Z", "10:00\u201311:00",
 		},
 		{
 			"exact hour stays same",
 			time.Date(2024, 6, 15, 10, 0, 0, 0, time.UTC),
-			"2024-06-15T10",
+			"2024-06-15T10", "2024-06-15T10:00:00Z", "10:00\u201311:00",
 		},
 		{
 			"midnight",
 			time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC),
-			"2024-06-15T00",
+			"2024-06-15T00", "2024-06-15T00:00:00Z", "00:00\u201301:00",
 		},
 		{
 			"end of day",
 			time.Date(2024, 6, 15, 23, 59, 59, 0, time.UTC),
-			"2024-06-15T23",
+			"2024-06-15T23", "2024-06-15T23:00:00Z", "23:00\u201300:00",
+		},
+		{
+			"+05:30 first half of the hour",
+			time.Date(2024, 6, 15, 10, 15, 0, 0, ist),
+			"2024-06-15T10", "2024-06-15T10:00:00+05:30", "10:00\u201311:00",
+		},
+		{
+			"+05:30 second half of the hour",
+			time.Date(2024, 6, 15, 10, 45, 0, 0, ist),
+			"2024-06-15T10", "2024-06-15T10:00:00+05:30", "10:00\u201311:00",
+		},
+		{
+			"+05:30 just after midnight stays on the same day",
+			time.Date(2024, 6, 15, 0, 10, 0, 0, ist),
+			"2024-06-15T00", "2024-06-15T00:00:00+05:30", "00:00\u201301:00",
+		},
+		{
+			"+05:45 offset",
+			time.Date(2024, 6, 15, 10, 15, 0, 0, npt),
+			"2024-06-15T10", "2024-06-15T10:00:00+05:45", "10:00\u201311:00",
+		},
+		{
+			"-03:30 offset",
+			time.Date(2024, 6, 15, 10, 15, 0, 0, nst),
+			"2024-06-15T10", "2024-06-15T10:00:00-03:30", "10:00\u201311:00",
+		},
+		{
+			"+09:30 offset",
+			time.Date(2024, 6, 15, 10, 15, 0, 0, acst),
+			"2024-06-15T10", "2024-06-15T10:00:00+09:30", "10:00\u201311:00",
+		},
+		{
+			"+05:30 last nanosecond of the hour",
+			time.Date(2024, 6, 15, 10, 59, 59, 999999999, ist),
+			"2024-06-15T10", "2024-06-15T10:00:00+05:30", "10:00\u201311:00",
+		},
+		{
+			// First occurrence of the repeated 03:00 hour on the DST fall-back day.
+			// The label is not asserted: merging of the repeated hour is a separate defect.
+			"repeated DST hour keeps the event's own offset",
+			time.Date(2024, 10, 27, 0, 30, 0, 0, time.UTC).In(helsinki),
+			"2024-10-27T03", "2024-10-27T03:00:00+03:00", "",
+		},
+		{
+			// Lord Howe moves from +10:30 to +11:00 at 02:00, so 02:00 to 02:30 never happens.
+			"30 minute DST spring forward stays in the event's hour",
+			time.Date(2024, 10, 5, 15, 45, 0, 0, time.UTC).In(lordHowe),
+			"2024-10-06T02", "2024-10-06T02:00:00+11:00", "02:00\u201303:00",
+		},
+		{
+			// Lord Howe moves from +11:00 back to +10:30 at 02:00, repeating 01:30 to 02:00.
+			"30 minute DST fall back stays on the event's hour start",
+			time.Date(2024, 4, 6, 15, 15, 0, 0, time.UTC).In(lordHowe),
+			"2024-04-07T01", "2024-04-07T01:00:00+10:30", "01:00\u201302:00",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := toBucketKey(tt.input)
-			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.wantKey, toBucketKey(tt.input))
+
+			b := getOrCreateBucket(map[string]*DetectionBucket{}, map[string]*speciesIndex{}, tt.input, tt.wantKey)
+			assert.Equal(t, tt.wantKey, b.Key)
+			assert.Equal(t, tt.wantTimestamp, b.Timestamp.Format(time.RFC3339))
+			if tt.wantLabel != "" {
+				assert.Equal(t, tt.wantLabel, b.Label)
+			}
+			assert.False(t, b.Timestamp.After(tt.input), "bucket must not start after the event")
+			assert.True(t, tt.input.Before(b.Timestamp.Add(time.Hour)), "bucket must contain the event")
 		})
 	}
 }
