@@ -237,6 +237,44 @@ func TestListDiscards(t *testing.T) {
 	assert.Contains(t, string(raw.Data[1]), `"hits":[]`)
 }
 
+// TestListDiscards_CredentialedSource pins the source rendering on the discard
+// list: the discard of the source named with a credentialed URL must show the
+// sanitized name and leak neither the credentials nor the stored URI.
+func TestListDiscards_CredentialedSource(t *testing.T) {
+	datastoreV2.SetEnhancedDatabaseMode()
+	t.Cleanup(datastoreV2.ResetDatabaseMode)
+	f := newFixture(t, passAuth, true)
+	named, _ := f.seed(t)
+
+	rec := f.get(t, testDiscardsPath, url.Values{"start_date": {testDate}, "end_date": {testDate}})
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	body := rec.Body.String()
+	for _, leaked := range []string{testMarkerURI, "marker-uri-host", "s3cret", "admin", "source_uri", "node_name", "node-marker"} {
+		assert.NotContains(t, body, leaked)
+	}
+
+	var resp struct {
+		Data []DiscardItem `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	require.Len(t, resp.Data, 3)
+
+	var found bool
+	for i := range resp.Data {
+		src := resp.Data[i].Source
+		if src == nil || src.ID != named.ID {
+			continue
+		}
+		found = true
+		assert.Contains(t, src.Name, "Garden")
+		assert.Contains(t, src.Name, "cam.local")
+		require.Len(t, resp.Data[i].Hits, 1)
+		assert.Equal(t, "m1", resp.Data[i].Hits[0].Detector)
+		assert.Equal(t, 2, resp.Data[i].Hits[0].HitCount)
+	}
+	assert.True(t, found, "discard of the credentialed source is listed")
+}
+
 func TestPrivacyQueryValidation(t *testing.T) {
 	datastoreV2.SetEnhancedDatabaseMode()
 	t.Cleanup(datastoreV2.ResetDatabaseMode)
