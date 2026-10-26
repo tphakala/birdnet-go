@@ -11,6 +11,14 @@ import (
 // in summer.
 const RuleOnlyZoneRule = "EET-2EEST,M3.5.0/3,M10.5.0/4"
 
+const (
+	secondsPerHour = 3600
+
+	// tzifHeaderReservedBytes is the length of the unused area that follows the magic and
+	// version in a TZif header.
+	tzifHeaderReservedBytes = 15
+)
+
 // RuleOnlyLocation returns a location whose only transition lies at the Unix epoch, so every
 // later instant is resolved from its POSIX rule (RuleOnlyZoneRule), as it is for the years after
 // the last transition of a slim zone file. The result does not depend on the zone files of the
@@ -29,7 +37,7 @@ func ruleOnlyTZif(tb testing.TB) []byte {
 	tb.Helper()
 
 	const (
-		utcOffsetSeconds = 2 * 3600
+		utcOffsetSeconds = 2 * secondsPerHour
 		abbreviations    = "EET\x00"
 	)
 	put := func(w *bytes.Buffer, v any) {
@@ -39,7 +47,7 @@ func ruleOnlyTZif(tb testing.TB) []byte {
 	}
 	writeHeader := func(w *bytes.Buffer) {
 		w.WriteString("TZif2")
-		w.Write(make([]byte, 15))
+		w.Write(make([]byte, tzifHeaderReservedBytes))
 		// isutcnt, isstdcnt, leapcnt, timecnt, typecnt, charcnt
 		for _, n := range []uint32{0, 0, 0, 1, 1, uint32(len(abbreviations))} {
 			put(w, n)
