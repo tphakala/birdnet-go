@@ -1009,6 +1009,7 @@ func TestSearch_SortByIDWithMinID(t *testing.T) {
 	}
 
 	got := func(filters *SearchFilters) []uint {
+		t.Helper()
 		results, _, err := repo.Search(ctx, filters)
 		require.NoError(t, err)
 		out := make([]uint, 0, len(results))
