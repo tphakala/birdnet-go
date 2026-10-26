@@ -65,6 +65,10 @@ const mixedSchemaGuideURL = "https://github.com/tphakala/birdnet-go/wiki/Databas
 const mixedSchemaRecoveryHint = "if the error names a failed step, fix its cause and restart; otherwise stop BirdNET-Go, back up the database with mysqldump (mariadb-dump on MariaDB), then follow " +
 	mixedSchemaGuideURL + "; the db-doctor script supports SQLite only"
 
+// legacyTailRecoveryHint is the user-facing instruction emitted when startup refuses to
+// continue because the legacy records beyond the migration watermark could not be verified.
+const legacyTailRecoveryHint = "make sure the database files are readable by the BirdNET-Go user and not damaged, or that the database server is reachable, then restart BirdNET-Go"
+
 // abortOnMixedSchema inspects the error of the startup state check. If it chains to
 // datastoreV2.ErrMixedSchemaDatabase it logs at Error level with the per-table row
 // counts and the recovery hint and returns a wrapped error the caller must propagate.
@@ -94,6 +98,11 @@ type DatabaseService struct {
 	// can inject a state; NewDatabaseService sets the real check.
 	checkStartupState func(*conf.Settings) datastoreV2.StartupState
 
+	// checkLegacyTail reports whether legacy records beyond the migration watermark are
+	// missing from v2. It is a field so tests can inject an outcome; NewDatabaseService
+	// sets the real check.
+	checkLegacyTail func(*conf.Settings, logger.Logger) (bool, error)
+
 	// legacyMonitor keeps the migration_state telemetry tag, the legacy schema
 	// bell notice and the weekly push reminder current. It exists only while
 	// the process runs the legacy schema with a state manager.
@@ -107,6 +116,7 @@ func NewDatabaseService(settings *conf.Settings, metrics *observability.Metrics)
 		settings:          settings,
 		metrics:           metrics,
 		checkStartupState: datastoreV2.CheckMigrationStateBeforeStartup,
+		checkLegacyTail:   datastoreV2.HasUnmigratedLegacyRecords,
 	}
 }
 
@@ -148,6 +158,8 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 // the migration_state telemetry tag, the legacy schema bell notice and the
 // weekly push reminder current, and logs the legacy schema startup WARN once
 // (the monitor logs it, or this method when no state manager exists).
+// It refuses to start, changing no database, when the migration is complete but the
+// legacy records beyond the watermark cannot be verified.
 //
 //nolint:gocognit,gocyclo // Database initialization requires handling multiple startup paths with detailed logging
 func (d *DatabaseService) Start(_ context.Context) error {
@@ -169,11 +181,12 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	// Must run BEFORE consolidation to prevent renaming the legacy DB while it still
 	// has unmigrated records that the worker needs to sync.
 	datastoreLog := logger.Global().Module("datastore")
-	hasUnmigrated := datastoreV2.HasUnmigratedLegacyRecords(settings, datastoreLog)
+	hasUnmigrated, tailErr := d.checkLegacyTail(settings, datastoreLog)
 
 	// Check for and perform database consolidation if needed (SQLite only)
-	// Skip consolidation when unmigrated records found; let the worker tail-sync them first
-	if settings.Output.SQLite.Enabled && !hasUnmigrated {
+	// Skip consolidation when unmigrated records found, or when the tail could not be
+	// verified: consolidation renames the legacy database and is never re-examined.
+	if settings.Output.SQLite.Enabled && !hasUnmigrated && tailErr == nil {
 		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
 		if err != nil {
 			datastoreLog.Error("database consolidation failed", logger.Error(err))
@@ -195,6 +208,22 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	startupState := d.checkStartupState(settings)
 	d.v2OnlyMode = startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
 	freshInstall := startupState.FreshInstall
+
+	// An unverified legacy tail only matters when it would let the install start in
+	// v2-only mode, which skips the tail-sync worker. Refuse before anything is opened.
+	if tailErr != nil {
+		if d.v2OnlyMode {
+			d.v2OnlyMode = false
+			datastoreLog.Error("could not verify legacy records beyond the migration watermark, refusing to start in enhanced database mode, no database was changed",
+				logger.Error(tailErr),
+				logger.String("operation", "startup_reconciliation"),
+				logger.String("recovery_hint", legacyTailRecoveryHint))
+			return fmt.Errorf("refusing to start before the legacy records are verified: %w", tailErr)
+		}
+		datastoreLog.Warn("could not verify legacy records beyond the migration watermark, not needed for this start",
+			logger.Error(tailErr),
+			logger.String("operation", "startup_reconciliation"))
+	}
 
 	// Override v2-only mode when unmigrated legacy records were found. This forces
 	// the system to start with the legacy DB so the worker can tail-sync the stragglers.

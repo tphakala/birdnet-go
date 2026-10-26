@@ -1037,6 +1037,43 @@ func TestMySQL_StartupDetection_FreshV2Only_ReturnsCompleted(t *testing.T) {
 	require.NoError(t, state.Error)
 }
 
+// TestMySQL_HasUnmigratedLegacyRecords_RealCountPath runs the legacy tail check against
+// a real server: the information_schema lookups, the prefixed v2 tables and the tail
+// scan. The legacy notes table holds one row (id 1) and v2_detections is empty, so the
+// watermark decides the answer.
+func TestMySQL_HasUnmigratedLegacyRecords_RealCountPath(t *testing.T) {
+	tests := []struct {
+		name          string
+		lastMigrated  uint
+		wantUnmigrate bool
+	}{
+		{name: "watermark before the legacy row reports a tail", lastMigrated: 0, wantUnmigrate: true},
+		{name: "watermark at the legacy row reports none", lastMigrated: 1, wantUnmigrate: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dropAllTables(t, coexTestDB, coexTestDBName)
+			seedLegacyTables(t, coexTestDB)
+
+			mgr := newTestMySQLManager(t, true)
+			t.Cleanup(func() {
+				_ = mgr.Delete()
+				_ = mgr.Close()
+			})
+			require.NoError(t, mgr.Initialize())
+			require.NoError(t, mgr.DB().Model(&entities.MigrationState{}).
+				Where("id = 1").
+				Updates(map[string]any{"state": entities.MigrationStatusCompleted, "last_migrated_id": tt.lastMigrated}).Error)
+
+			settings := buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, coexTestPassword)
+			hasUnmigrated, err := HasUnmigratedLegacyRecords(settings, testStartupLogger())
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantUnmigrate, hasUnmigrated)
+		})
+	}
+}
+
 // TestMySQL_StartupDetection_EmptyDB_ReturnsFreshInstall verifies that
 // an empty database returns fresh install status.
 func TestMySQL_StartupDetection_EmptyDB_ReturnsFreshInstall(t *testing.T) {
