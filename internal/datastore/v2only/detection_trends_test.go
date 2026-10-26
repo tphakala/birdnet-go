@@ -179,3 +179,23 @@ func TestV2OnlyDatastore_GetDetectionTrendsKeepsResponseShape(t *testing.T) {
 	assert.Equal(t, now.Add(-time.Second).In(loc).Format(time.DateOnly), got[0].Date)
 	assert.Equal(t, 1, got[0].Count)
 }
+
+// TestV2OnlyDatastore_DetectionTrendsCountDetectionOfTheCurrentSecond pins that the half-open
+// trend range includes a detection stamped with the current second.
+func TestV2OnlyDatastore_DetectionTrendsCountDetectionOfTheCurrentSecond(t *testing.T) {
+	t.Parallel()
+
+	loc := toolchainZone(t, "Europe/Helsinki")
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ds.timezone = loc
+
+	now := time.Date(2026, time.October, 27, 12, 0, 0, 500_000_000, loc)
+	seedDetection(t, ds, trendsSpecies, time.Unix(now.Unix(), 0))
+
+	got, err := ds.detectionTrends(t.Context(), "week", now)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "2026-10-27", got[0].Date)
+	assert.Equal(t, 1, got[0].Count)
+}

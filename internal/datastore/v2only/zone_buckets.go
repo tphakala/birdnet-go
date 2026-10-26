@@ -121,7 +121,9 @@ const (
 // trendWindow returns the instants [start, end) that a trend period covers at now. The period is a
 // whole number of local calendar dates of loc ending with today: the current day, the last 7
 // dates ("week") or the last 30 dates ("month"), so the first bucket is a whole day and a date is
-// never split. start is the start of the first date (see wallclock.DayBounds); end is now.
+// never split. start is the start of the first date (see wallclock.DayBounds); end is the second
+// after now, because the range is half-open and a detection stamped with the current second
+// belongs to the period.
 func trendWindow(period string, now time.Time, loc *time.Location) (start, end int64) {
 	days := 1
 	switch period {
@@ -132,7 +134,7 @@ func trendWindow(period string, now time.Time, loc *time.Location) (start, end i
 	}
 	first := wallclock.DateOf(now.In(loc)).AddDays(1 - days)
 	dayStart, _ := wallclock.DayBounds(first, loc)
-	return dayStart.Unix(), now.Unix()
+	return dayStart.Unix(), now.Unix() + 1
 }
 
 // detectionTrends counts the detections on each local date of the trend period ending at now,
