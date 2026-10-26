@@ -17,11 +17,6 @@ const (
 
 	// wallClockSecondsPerDay turns a shifted Unix timestamp into a day count since the epoch.
 	wallClockSecondsPerDay = 86400
-
-	// Clock fields of the last second of a day, see exclusiveDayEnd.
-	lastHourOfDay      = 23
-	lastMinuteOfHour   = 59
-	lastSecondOfMinute = 59
 )
 
 // currentTime returns the repository clock, which is time.Now unless a test injected one.
@@ -132,12 +127,4 @@ func zoneOffsetSQL(column string, segments []wallclock.Segment, fallback int) st
 	sb.WriteString(strconv.Itoa(distinct[0].OffsetSeconds))
 	sb.WriteString(" END")
 	return sb.String()
-}
-
-// exclusiveDayEnd returns the exclusive end of the given local day as Unix seconds: the next
-// local midnight in every zone whose midnight DST does not move. It adds one second to
-// 23:59:59 instead of asking time.Date for 00:00 of the next day, because in a zone where DST
-// skips midnight time.Date resolves that midnight to 23:00 of the same day.
-func exclusiveDayEnd(year int, month time.Month, day int, tz *time.Location) int64 {
-	return time.Date(year, month, day, lastHourOfDay, lastMinuteOfHour, lastSecondOfMinute, 0, tz).Add(time.Second).Unix()
 }
