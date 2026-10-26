@@ -21,6 +21,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 const maxSpeciesBatch = 10
@@ -1334,7 +1335,6 @@ func (c *Handler) GetDawnChorusOnset(ctx echo.Context) error {
 // Nocturnal activity clock sun endpoint constants (design spec section 6.4).
 const (
 	sunNoonHour       = 12 // anchor a date at local noon before a SunCalc lookup (see GetAnalyticsSun)
-	sunHoursPerDay    = 24 // for the range-midpoint day count
 	sunMinutesPerHour = 60 // minute-of-day conversion
 )
 
@@ -1366,21 +1366,19 @@ func localMinuteOfDay(t time.Time) int {
 // resolveSunRepresentativeDate picks the single date the nocturnal clock's sun times represent.
 // A multi-day range collapses to its calendar midpoint (the chart notes this in its tooltip); a
 // single `date` (or a lone `start_date`) is used directly; absent all three, today is used. The
-// range bounds are parsed in UTC so every day is exactly 24h (DST-free), making the day count
-// exact; the midpoint is then a pure calendar offset (AddDate), and only its Y-M-D is used
-// downstream. Inputs are pre-validated by the handler.
+// range bounds are calendar dates, so the day count and the midpoint offset are pure date
+// arithmetic with no zone or DST involved. Inputs are pre-validated by the handler.
 func resolveSunRepresentativeDate(dateParam, startDate, endDate string) string {
 	switch {
 	case dateParam != "":
 		return dateParam
 	case startDate != "" && endDate != "":
-		start, errS := time.Parse(time.DateOnly, startDate)
-		end, errE := time.Parse(time.DateOnly, endDate)
+		start, errS := wallclock.ParseDate(startDate)
+		end, errE := wallclock.ParseDate(endDate)
 		if errS != nil || errE != nil {
 			return startDate // defensive: handler validated both already
 		}
-		days := int(end.Sub(start).Hours()) / sunHoursPerDay
-		return start.AddDate(0, 0, days/2).Format(time.DateOnly)
+		return start.AddDays(wallclock.DaysBetween(start, end) / 2).String()
 	case startDate != "":
 		return startDate
 	default:
