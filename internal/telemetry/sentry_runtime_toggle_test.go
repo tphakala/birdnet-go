@@ -214,6 +214,18 @@ func TestSentryRuntimeToggle(t *testing.T) {
 			assert.Same(h.t, first, h.client(), "a second reconfigure must not replace the client")
 			assert.Positive(h.t, h.report())
 		}},
+		{"reconfigure that fails to initialize still refreshes the fast path", func(h *toggleHarness) {
+			h.set(true)
+			h.reconfigure()
+			require.True(h.t, IsTelemetryEnabled(), "setup: the fast path must be open")
+
+			// Something unbound the hub client behind the cached flag's back; the
+			// DSN no longer parses, so the re-initialization fails.
+			sentry.CurrentHub().BindClient(nil)
+			h.t.Setenv(sentryDSNEnvVar, "not a dsn")
+			require.Error(h.t, ReconfigureSentry())
+			assert.False(h.t, IsTelemetryEnabled(), "a failed reconfigure must not leave the fast path open without a client")
+		}},
 		{"out-of-order delivery converges to the latest setting", func(h *toggleHarness) {
 			h.set(true)
 			h.set(false)
