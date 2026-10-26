@@ -170,7 +170,7 @@ func calculateDateRangeComplexity(startDate, endDate string) float64 {
 	}
 
 	// Calculate the difference in days
-	daysDiff := end.Sub(start).Hours() / 24
+	daysDiff := end.Sub(start).Hours() / 24 //nolint:gocritic // fractional day count for a complexity heuristic, DST changes it by under 0.05
 	if daysDiff < 0 {
 		daysDiff = -daysDiff // Take absolute value
 	}

@@ -89,5 +89,5 @@ func ThresholdMilli(v float64) int {
 
 // HourStart returns the Unix seconds of the start of the UTC hour containing t.
 func HourStart(t time.Time) int64 {
-	return t.Truncate(time.Hour).Unix()
+	return t.Truncate(time.Hour).Unix() //nolint:gocritic // UTC hour bucket by contract
 }
