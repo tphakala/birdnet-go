@@ -42,6 +42,59 @@ jobs:
   golangci:
     uses: ./.github/workflows/golangci-lint.yml
 
+  # Decides whether the MySQL/MariaDB suites run. They cost about 20 runner
+  # minutes per run, so a PR runs them only when it touches code or dependencies
+  # that can change database behaviour. Pushes to main and manual runs always run
+  # them as the backstop for anything this filter misses; the `run-db-tests`
+  # label forces them on a PR (applied before the next push, like
+  # `run-full-integration`). Any failure to compute the diff runs them too.
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    outputs:
+      database: ${{ steps.filter.outputs.database }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The PR merge commit and its first parent (the base tip).
+          fetch-depth: 2
+      - name: Detect database-related changes
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_DB_TESTS: ${{ contains(github.event.pull_request.labels.*.name, 'run-db-tests') }}
+        run: |
+          # Paths that can change what the MySQL suites see: the datastore, the
+          # import code the legacy cleanup test drives, the container helper,
+          # the driver and gorm versions (go.mod, go.sum) and this workflow.
+          PATTERN='^(internal/datastore/|internal/api/v2/imports/|internal/imports/|internal/testutil/containers/)|^(go\.mod|go\.sum|\.github/workflows/golangci-test\.yml)$'
+
+          run_db() {
+            echo "database=true" >> "$GITHUB_OUTPUT"
+            echo "database-tests will run: $1"
+            exit 0
+          }
+
+          [ "$EVENT_NAME" = "pull_request" ] || run_db "event is ${EVENT_NAME}, not a pull request"
+          [ "$FORCE_DB_TESTS" != "true" ] || run_db "run-db-tests label is set"
+
+          # HEAD is the PR merge commit, so HEAD^1 is the base tip and the diff
+          # is the whole PR, not just the latest push.
+          CHANGED=$(git diff --name-only HEAD^1 HEAD) || run_db "could not diff against the base"
+
+          MATCHED=$(printf '%s\n' "$CHANGED" | grep -E "$PATTERN" || true)
+          if [ -n "$MATCHED" ]; then
+            echo "Database-related files changed:"
+            echo "$MATCHED"
+            run_db "database-related files changed"
+          fi
+
+          echo "database=false" >> "$GITHUB_OUTPUT"
+          {
+            echo "### database-tests skipped"
+            echo "No database-related files changed. Add the \`run-db-tests\` label and push to force them."
+          } >> "$GITHUB_STEP_SUMMARY"
+
   unit-tests:
     name: unit-tests (shard ${{ matrix.shard }})
     runs-on: ubuntu-24.04
@@ -308,8 +361,11 @@ jobs:
   # MySQL-backed integration suites, run once per supported database server.
   # Debian 12 (bookworm) ships MariaDB 10.11 and Debian 13 (trixie) 11.8, the
   # servers Raspberry Pi OS and DietPi users get from their package manager.
+  # Skipped on pull requests that touch no database-related files (see `changes`).
   database-tests:
     name: database-tests (${{ matrix.server }})
+    needs: changes
+    if: needs.changes.outputs.database == 'true'
     runs-on: ubuntu-24.04
     strategy:
       # Report every server's failures; one server failing must not cancel the rest.
@@ -417,7 +473,7 @@ jobs:
   test-report:
     name: test-report
     if: always()
-    needs: [unit-tests, testcontainer-tests, database-tests, integration-tests]
+    needs: [changes, unit-tests, testcontainer-tests, database-tests, integration-tests]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -486,8 +542,19 @@ jobs:
           TC='${{ needs.testcontainer-tests.result }}'
           DB='${{ needs.database-tests.result }}'
           INTEG='${{ needs.integration-tests.result }}'
-          if [ "$UNIT" != "success" ] || [ "$TC" != "success" ] || [ "$DB" != "success" ] || [ "$INTEG" != "success" ]; then
-            echo "::error::An upstream test job did not succeed (unit-tests=$UNIT, testcontainer-tests=$TC, database-tests=$DB, integration-tests=$INTEG)"
+          CHANGES='${{ needs.changes.result }}'
+          DB_WANTED='${{ needs.changes.outputs.database }}'
+          # database-tests may be skipped only when the changes job ran and said
+          # no database files changed. A skip caused by a failed or cancelled
+          # changes job must not pass.
+          DB_OK=false
+          if [ "$DB" = "success" ]; then
+            DB_OK=true
+          elif [ "$DB" = "skipped" ] && [ "$CHANGES" = "success" ] && [ "$DB_WANTED" = "false" ]; then
+            DB_OK=true
+          fi
+          if [ "$CHANGES" != "success" ] || [ "$UNIT" != "success" ] || [ "$TC" != "success" ] || [ "$DB_OK" != "true" ] || [ "$INTEG" != "success" ]; then
+            echo "::error::An upstream test job did not succeed (changes=$CHANGES, unit-tests=$UNIT, testcontainer-tests=$TC, database-tests=$DB, integration-tests=$INTEG)"
             exit 1
           fi
           REG=$(jq 'length' ci-failures.json 2>/dev/null || echo 0)

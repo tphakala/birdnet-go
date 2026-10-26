@@ -385,6 +385,11 @@ relying on the retry.
   without it.
   Pass `-count=1` when switching servers: the suites read it in `TestMain`, and
   `go test` can replay a result cached for another server.
+  In CI the `database-tests` job runs these suites on MySQL 8.0, MariaDB 10.11
+  and MariaDB 11.8. A pull request runs it only when it changes the datastore,
+  the import code, the container helper, `go.mod`, `go.sum` or the test
+  workflow (the `changes` job holds the exact list); add the `run-db-tests`
+  label and push to force it. Pushes to `main` and manual runs always run it.
 
 ## Mocking with testify/mock
 
