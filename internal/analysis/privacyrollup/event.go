@@ -1,6 +1,8 @@
 // Package privacyrollup aggregates privacy filter activity into hourly rows of
-// the v2 database. The processor reports small events through a Recorder; a
-// Writer folds them in memory and writes additive deltas once a minute.
+// the v2 database and stores one row per detection the privacy filter
+// discarded. The processor reports small events and discards through a Recorder;
+// a Writer folds the events in memory and writes additive deltas once a minute,
+// and saves the queued discards in the same flush.
 package privacyrollup
 
 import (
@@ -75,6 +77,8 @@ type Event struct {
 // Recorder receives events from the processor. Implementations must not block.
 type Recorder interface {
 	Record(Event)
+	// RecordDiscard queues one discarded detection for storage.
+	RecordDiscard(Discard)
 }
 
 // ThresholdMilli converts a threshold or score in 0..1 to thousandths, rounded

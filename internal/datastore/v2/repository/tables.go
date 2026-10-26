@@ -30,7 +30,9 @@ const (
 	// Application event log
 	tableAppEvents = "app_events"
 	// Privacy filter activity
-	tablePrivacyFilterHourlies = "privacy_filter_hourlies"
+	tablePrivacyFilterHourlies    = "privacy_filter_hourlies"
+	tablePrivacyFilterDiscards    = "privacy_filter_discards"
+	tablePrivacyFilterDiscardHits = "privacy_filter_discard_hits"
 )
 
 // Table name constants for v2 prefixed schema (MySQL).
@@ -63,5 +65,7 @@ const (
 	// Application event log
 	tableV2AppEvents = "v2_app_events"
 	// Privacy filter activity
-	tableV2PrivacyFilterHourlies = "v2_privacy_filter_hourlies"
+	tableV2PrivacyFilterHourlies    = "v2_privacy_filter_hourlies"
+	tableV2PrivacyFilterDiscards    = "v2_privacy_filter_discards"
+	tableV2PrivacyFilterDiscardHits = "v2_privacy_filter_discard_hits"
 )

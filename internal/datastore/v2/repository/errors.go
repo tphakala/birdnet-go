@@ -73,4 +73,7 @@ var (
 
 	// ErrPrivacyRollupNoSource indicates a privacy filter rollup row has no audio source.
 	ErrPrivacyRollupNoSource = errors.NewStd("privacy filter rollup row has no audio source")
+
+	// ErrPrivacyDiscardNil indicates a nil privacy filter discard was passed to Save.
+	ErrPrivacyDiscardNil = errors.NewStd("privacy filter discard is nil")
 )

@@ -503,6 +503,37 @@ class CurrentThresholdSchemaTest(unittest.TestCase):
              "1 orphaned reference(s)"],
         )
 
+    def test_privacy_discard_fk_orphans_are_reported(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute("CREATE TABLE audio_sources (id INTEGER PRIMARY KEY)")
+        conn.execute(
+            "CREATE TABLE privacy_filter_discards ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, source_id INTEGER)"
+        )
+        conn.execute(
+            "CREATE TABLE privacy_filter_discard_hits ("
+            "id INTEGER PRIMARY KEY AUTOINCREMENT, discard_id INTEGER NOT NULL)"
+        )
+        conn.execute("INSERT INTO audio_sources (id) VALUES (1)")
+        conn.execute("INSERT INTO privacy_filter_discards (id, source_id) VALUES (1, 1)")
+        conn.execute("INSERT INTO privacy_filter_discards (id, source_id) VALUES (2, NULL)")
+        conn.execute("INSERT INTO privacy_filter_discards (id, source_id) VALUES (3, 99)")
+        conn.execute("INSERT INTO privacy_filter_discard_hits (discard_id) VALUES (1)")
+        conn.execute("INSERT INTO privacy_filter_discard_hits (discard_id) VALUES (99)")
+        conn.commit()
+        conn.close()
+
+        _, _, check = self._check("_check_foreign_keys")
+
+        self.assertEqual(check.message, "Found 2 foreign key violation(s)")
+        self.assertEqual(
+            sorted(check.details),
+            ["privacy_filter_discard_hits.discard_id -> privacy_filter_discards.id: "
+             "1 orphaned reference(s)",
+             "privacy_filter_discards.source_id -> audio_sources.id: "
+             "1 orphaned reference(s)"],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -404,9 +404,13 @@ type privacyCheck struct {
 	// (metrics.TriggerLabel or metrics.TriggerVAD).
 	detector string
 	// contributions lists who produced the counted hits that reach the saved clip
-	// (see hitContributionsLocked). Filled only with privacyfilter.debug on and a
-	// latest hit that reaches the clip, for the discard log.
+	// (see hitContributionsLocked). Filled whenever the latest hit reaches the
+	// clip, for the discard log and the discard row.
 	contributions []hitContribution
+	// hitCountsLowerBound is true when the attribution list dropped, at its cap, a
+	// hit stamped at or after the start of the reach window, so the counts in
+	// contributions are lower bounds. Set together with contributions.
+	hitCountsLowerBound bool
 }
 
 // checkPrivacy takes the privacyCheck for a pending detection at now. With the
@@ -423,8 +427,8 @@ type privacyCheck struct {
 // end by privacyCoverageMaxWait. A detection by a model that cannot carry speech
 // (the bat model) or an unregistered one keeps at once only when no detector has
 // recently scored its source; otherwise it waits for coverage like any other.
-// With privacyfilter.debug on and a latest hit that reaches the clip, the check
-// also lists who produced the counted hits that reach it, for the discard log.
+// When the latest hit reaches the clip, the check also lists who produced the
+// counted hits that reach it, for the discard log and the discard row.
 func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection, now time.Time) privacyCheck {
 	clip := clipSpan(settings, item)
 	if !settings.Realtime.PrivacyFilter.Enabled {
@@ -438,10 +442,13 @@ func (p *Processor) checkPrivacy(settings *conf.Settings, item *PendingDetection
 	check := privacyCheck{clip: clip, hit: hit, hasHit: hasHit, detector: detector,
 		verdict: p.coverageVerdictLocked(settings, detector, item.Source, item.BestModelID, clip, now)}
 	// Only a hit that reaches the clip leads to a discard, so only then is the
-	// contributor list of any use.
+	// contributor list of any use. This is the privacy discard condition of
+	// shouldDiscardDetection, and a detection that meets it is decided in the same
+	// tick, so the list is built at most once per detection.
 	reachFrom := clip.from.Add(-privacyClipGuard)
-	if hasHit && settings.Realtime.PrivacyFilter.Debug && !hit.Time.Before(reachFrom) {
+	if hasHit && !hit.Time.Before(reachFrom) {
 		check.contributions = p.hitContributionsLocked(item.Source, reachFrom)
+		check.hitCountsLowerBound = p.capDroppedReachesLocked(item.Source, reachFrom)
 	}
 	return check
 }
@@ -606,9 +613,33 @@ func (p *Processor) appendHumanHitLocked(source string, hit humanHit) {
 	kept := slices.DeleteFunc(p.humanHits[source], func(h humanHit) bool { return h.at.Before(cutoff) })
 	kept = append(kept, hit)
 	if over := len(kept) - humanHitMaxPerSource; over > 0 {
+		// Note the latest stamp the cap drops before Delete zeroes the tail.
+		dropped := kept[0].at
+		for _, h := range kept[1:over] {
+			if h.at.After(dropped) {
+				dropped = h.at
+			}
+		}
+		if p.humanHitsCapDropped == nil {
+			p.humanHitsCapDropped = make(map[string]time.Time)
+		}
+		if dropped.After(p.humanHitsCapDropped[source]) {
+			p.humanHitsCapDropped[source] = dropped
+		}
 		kept = slices.Delete(kept, 0, over)
 	}
 	p.humanHits[source] = kept
+}
+
+// capDroppedReachesLocked reports whether the cap of the attribution list has
+// dropped, for source, a hit stamped at or after since. The list drops by arrival
+// order while stamps can arrive out of order, so the latest dropped stamp is
+// tracked instead of looking at the oldest survivor. Time-based drops are not
+// counted: they fall before any clip a pending detection can still reach. The
+// caller holds detectionMutex.
+func (p *Processor) capDroppedReachesLocked(source string, since time.Time) bool {
+	w, ok := p.humanHitsCapDropped[source]
+	return ok && !w.Before(since)
 }
 
 // hitContribution totals the counted hits one detector (a classifier model with
@@ -617,6 +648,7 @@ type hitContribution struct {
 	trigger  string
 	modelID  string
 	count    int
+	minScore float64
 	maxScore float64
 }
 
@@ -628,18 +660,14 @@ func (p *Processor) hitContributionsLocked(source string, since time.Time) []hit
 		if h.at.Before(since) {
 			continue
 		}
-		found := false
-		for i := range out {
-			if out[i].trigger == h.trigger && out[i].modelID == h.modelID {
-				out[i].count++
-				out[i].maxScore = max(out[i].maxScore, h.score)
-				found = true
-				break
-			}
+		i := slices.IndexFunc(out, func(c hitContribution) bool { return c.trigger == h.trigger && c.modelID == h.modelID })
+		if i < 0 {
+			out = append(out, hitContribution{trigger: h.trigger, modelID: h.modelID, count: 1, minScore: h.score, maxScore: h.score})
+			continue
 		}
-		if !found {
-			out = append(out, hitContribution{trigger: h.trigger, modelID: h.modelID, count: 1, maxScore: h.score})
-		}
+		out[i].count++
+		out[i].minScore = min(out[i].minScore, h.score)
+		out[i].maxScore = max(out[i].maxScore, h.score)
 	}
 	slices.SortStableFunc(out, func(a, b hitContribution) int { return cmp.Compare(b.count, a.count) })
 	return out

@@ -40,7 +40,9 @@ func TestHitContributions_AggregatesAcrossModelsAndDetectors(t *testing.T) {
 
 	labelHit(p, settings, confirmSource, attrModelPerch, t0)
 	labelHit(p, settings, confirmSource, attrModelBirdNET, t0.Add(time.Second))
-	labelHit(p, settings, confirmSource, attrModelPerch, t0.Add(2*time.Second))
+	p.detectionMutex.Lock()
+	p.recordHumanHitLocked(confirmSource, labelHumanHit(t0.Add(2*time.Second), attrModelPerch, 0.5, 0))
+	p.detectionMutex.Unlock()
 	p.recordVADHit(settings, confirmSource, vadHumanHit(t0.Add(3*time.Second), 0.81, 0))
 
 	p.detectionMutex.RLock()
@@ -49,7 +51,7 @@ func TestHitContributions_AggregatesAcrossModelsAndDetectors(t *testing.T) {
 	p.detectionMutex.RUnlock()
 
 	require.Len(t, all, 3)
-	assert.Equal(t, hitContribution{trigger: metrics.TriggerLabel, modelID: attrModelPerch, count: 2, maxScore: float64(float32(0.9))}, all[0], "most hits first")
+	assert.Equal(t, hitContribution{trigger: metrics.TriggerLabel, modelID: attrModelPerch, count: 2, minScore: 0.5, maxScore: float64(float32(0.9))}, all[0], "most hits first")
 	assert.Equal(t, 1, all[1].count)
 	assert.Equal(t, 1, all[2].count)
 	assert.Contains(t, formatHitContributions(all), "Perch_V2/label x2 max 0.900")
@@ -235,27 +237,25 @@ func TestRecordVADHit_ConfirmationAttributesBothHits(t *testing.T) {
 	assert.InDelta(t, 0.8125, last.Score, 1e-9)
 }
 
-func TestCheckPrivacy_ContributionsNeedDebugAndAHitReachingTheClip(t *testing.T) {
+func TestCheckPrivacy_ContributionsNeedAHitReachingTheClip(t *testing.T) {
 	t.Parallel()
 	t0 := time.Unix(1000, 0)
 	item := newPrivacyFilterDetection(confirmSource, t0)
 	tests := []struct {
 		name  string
-		debug bool
 		hitAt func(clipFrom time.Time) time.Time
 		want  bool
 	}{
-		{"debug off", false, func(from time.Time) time.Time { return from }, false},
-		{"hit reaches the clip", true, func(from time.Time) time.Time { return from }, true},
-		{"hit exactly at the guard boundary", true, func(from time.Time) time.Time { return from.Add(-privacyClipGuard) }, true},
-		{"hit one tick before the guard", true, func(from time.Time) time.Time { return from.Add(-privacyClipGuard - time.Nanosecond) }, false},
-		{"hit long before the clip", true, func(from time.Time) time.Time { return from.Add(-time.Minute) }, false},
+		{"hit reaches the clip with debug off", func(from time.Time) time.Time { return from }, true},
+		{"hit exactly at the guard boundary", func(from time.Time) time.Time { return from.Add(-privacyClipGuard) }, true},
+		{"hit one tick before the guard", func(from time.Time) time.Time { return from.Add(-privacyClipGuard - time.Nanosecond) }, false},
+		{"hit long before the clip", func(from time.Time) time.Time { return from.Add(-time.Minute) }, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			p, settings := confirmProcessor(0)
-			settings.Realtime.PrivacyFilter.Debug = tt.debug
+			require.False(t, settings.Realtime.PrivacyFilter.Debug)
 			from := clipSpan(settings, item).from
 			labelHit(p, settings, confirmSource, attrModelPerch, tt.hitAt(from))
 
@@ -263,12 +263,68 @@ func TestCheckPrivacy_ContributionsNeedDebugAndAHitReachingTheClip(t *testing.T)
 
 			require.True(t, got.hasHit)
 			if tt.want {
-				assert.Equal(t, []hitContribution{{trigger: metrics.TriggerLabel, modelID: attrModelPerch, count: 1, maxScore: float64(float32(0.9))}}, got.contributions)
+				assert.Equal(t, []hitContribution{{trigger: metrics.TriggerLabel, modelID: attrModelPerch, count: 1, minScore: float64(float32(0.9)), maxScore: float64(float32(0.9))}}, got.contributions)
 			} else {
 				assert.Empty(t, got.contributions)
 			}
 		})
 	}
+}
+
+// TestCheckPrivacy_HitCountsLowerBoundOnlyWhenTheCapDroppedAReachingHit feeds hit
+// sequences past the attribution cap and checks the lower-bound flag. Row (d) is
+// the one an "oldest survivor reaches the clip" rule gets wrong: the list drops by
+// arrival order while stamps arrive out of order.
+func TestCheckPrivacy_HitCountsLowerBoundOnlyWhenTheCapDroppedAReachingHit(t *testing.T) {
+	t.Parallel()
+	item := newPrivacyFilterDetection(confirmSource, time.Unix(1000, 0))
+	const farBefore = 10 * time.Second
+	tests := []struct {
+		name string
+		// stamps returns the hit stamps in arrival order, given reachFrom.
+		stamps func(reachFrom time.Time) []time.Time
+		want   bool
+	}{
+		{"under the cap", func(r time.Time) []time.Time {
+			return []time.Time{r, r.Add(time.Second)}
+		}, false},
+		{"cap drops only hits before the clip", func(r time.Time) []time.Time {
+			return append(hitStamps(r.Add(-farBefore), 3), hitStamps(r, humanHitMaxPerSource)...)
+		}, false},
+		{"cap drops a hit stamped exactly at the reach boundary", func(r time.Time) []time.Time {
+			return append([]time.Time{r}, hitStamps(r.Add(time.Second), humanHitMaxPerSource)...)
+		}, true},
+		{"cap drops a reaching hit that arrived first while every survivor is earlier", func(r time.Time) []time.Time {
+			return append([]time.Time{r.Add(5 * time.Second)}, hitStamps(r.Add(-farBefore), humanHitMaxPerSource)...)
+		}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p, settings := confirmProcessor(0)
+			reachFrom := clipSpan(settings, item).from.Add(-privacyClipGuard)
+			p.detectionMutex.Lock()
+			for _, at := range tt.stamps(reachFrom) {
+				p.recordHumanHitLocked(confirmSource, labelHumanHit(at, attrModelPerch, 0.9, 0))
+			}
+			p.detectionMutex.Unlock()
+
+			got := p.checkPrivacy(settings, item, time.Now())
+
+			require.True(t, got.hasHit)
+			require.False(t, got.hit.Time.Before(reachFrom), "the latest hit reaches the clip, so the flag is computed")
+			assert.Equal(t, tt.want, got.hitCountsLowerBound)
+		})
+	}
+}
+
+// hitStamps returns n stamps one millisecond apart starting at from.
+func hitStamps(from time.Time, n int) []time.Time {
+	out := make([]time.Time, n)
+	for i := range out {
+		out[i] = from.Add(time.Duration(i) * time.Millisecond)
+	}
+	return out
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.

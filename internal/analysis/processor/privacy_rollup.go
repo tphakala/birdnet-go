@@ -1,6 +1,8 @@
 package processor
 
 import (
+	"time"
+
 	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -65,6 +67,52 @@ func (p *Processor) recordPrivacyEvents(settings *conf.Settings, events ...sourc
 			ev.DisplayName = src.DisplayName
 		}
 		p.privacyRollup.Record(ev)
+	}
+}
+
+// privacyDiscard builds the discard record of a detection the privacy filter
+// dropped. It is pure: the source identity comes from the detection itself, as the
+// save path reads it, so no lock or registry is needed under pendingMutex.
+func privacyDiscard(settings *conf.Settings, item *PendingDetection, priv *privacyCheck, now time.Time) privacyrollup.Discard {
+	pf := &settings.Realtime.PrivacyFilter
+	res := &item.Detection.Result
+	node := res.SourceNode
+	if node == "" {
+		node = entities.DefaultSourceNodeName
+	}
+	hits := make([]privacyrollup.DiscardHit, len(priv.contributions))
+	for i := range priv.contributions {
+		c := &priv.contributions[i]
+		hits[i] = privacyrollup.DiscardHit{Detector: c.modelID, Trigger: c.trigger, Count: c.count, MinScore: c.minScore, MaxScore: c.maxScore}
+	}
+	return privacyrollup.Discard{
+		At:                  now,
+		SourceURI:           res.AudioSource.SafeString,
+		NodeName:            node,
+		DisplayName:         res.AudioSource.DisplayName,
+		ScientificName:      res.Species.ScientificName,
+		CommonName:          res.Species.CommonName,
+		Confidence:          res.Confidence,
+		ModelID:             item.BestModelID,
+		ClipBegin:           priv.clip.from,
+		ClipEnd:             priv.clip.to,
+		LabelThresholdMilli: privacyrollup.ThresholdMilli(float64(pf.Confidence)),
+		VADThresholdMilli:   privacyrollup.ThresholdMilli(clampVADThreshold(pf.VAD.Threshold)),
+		VADEnabled:          pf.VAD.Enabled,
+		HitCountsLowerBound: priv.hitCountsLowerBound,
+		Hits:                hits,
+	}
+}
+
+// recordPrivacyDiscards hands discard records to the recorder. It must run with
+// pendingMutex and detectionMutex released. A processor without a recorder does
+// nothing.
+func (p *Processor) recordPrivacyDiscards(records []privacyrollup.Discard) {
+	if p.privacyRollup == nil {
+		return
+	}
+	for i := range records {
+		p.privacyRollup.RecordDiscard(records[i])
 	}
 }
 

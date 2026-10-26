@@ -1237,6 +1237,8 @@ func orphanedBareV2Tables() []string {
 		"detections",
 		// Labels before its reference tables (labels has FKs to ai_models, label_types, taxonomic_classes)
 		"labels",
+		"privacy_filter_discard_hits",
+		"privacy_filter_discards",
 		"privacy_filter_hourlies",
 		"audio_sources",
 		"ai_models",
