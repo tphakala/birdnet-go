@@ -973,6 +973,14 @@ func TestGetDashboardKPIs_LookbackAndZone(t *testing.T) {
 			queryZone: newYork,
 		},
 		{
+			name:      "window start follows the offset of the date a year back, not of today",
+			today:     time.Date(2025, 3, 10, 0, 0, 0, 0, newYork),
+			inside:    time.Date(2024, 3, 10, 0, 30, 0, 0, newYork),
+			outside:   time.Date(2024, 3, 9, 23, 30, 0, 0, newYork),
+			wantDate:  "2024-03-10",
+			queryZone: newYork,
+		},
+		{
 			name:      "29 February looks back to 1 March",
 			today:     time.Date(2028, 2, 29, 0, 0, 0, 0, newYork),
 			inside:    time.Date(2027, 3, 1, 0, 30, 0, 0, newYork),
