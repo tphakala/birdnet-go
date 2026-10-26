@@ -142,7 +142,7 @@ func (r *detectionRepository) dateFromUnixExpr(column string, offsetSeconds int)
 // hourFromUnixExpr returns a SQL expression that extracts the wall-clock HOUR (0-23) of a
 // Unix timestamp in the configured timezone. offsetSeconds is that zone's UTC offset; it is
 // added to the epoch before bucketing, so the result is independent of the database/OS-local
-// timezone (unlike the older 'localtime'/FROM_UNIXTIME form). This is wallClockHourExpr, the
+// timezone (unlike the older 'localtime'/FROM_UNIXTIME form). This mirrors wallClockHourExpr, the
 // IncludedHours search-filter expression, with a single offset. detected_at is always positive,
 // so the integer division and modulo stay non-negative even for negative (west-of-UTC) offsets.
 // SQLite: CAST((column + offset) / 3600 AS INTEGER) % 24

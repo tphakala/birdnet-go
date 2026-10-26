@@ -80,11 +80,12 @@ func (r *detectionRepository) wallClockHourExpr(column string, loc *time.Locatio
 // zoneOffsetSQL returns a SQL expression for the UTC offset in seconds that applies to column,
 // a Unix timestamp. Adjacent segments with the same offset are merged. With no offset change the
 // result is a plain integer literal (fallback when there are no segments), otherwise a CASE
-// that tests the newest segment first, so recent rows leave after one or two comparisons; the oldest segment is the ELSE branch and the newest is open upward.
+// that tests the newest segment first, so recent rows leave after one or two comparisons;
+// the oldest segment is the ELSE branch and the newest is open upward.
 //
 // The numbers are written into the SQL text rather than bound, so the hour filter does not add
-// bind variables next to the label ID list of buildSearchJoins. Only integers produced by
-// strconv reach the SQL.
+// bind variables next to the label ID list of buildSearchJoins. The numbers come from strconv;
+// column is written as given.
 func zoneOffsetSQL(column string, segments []ZoneOffsetSegment, fallback int) string {
 	var distinct []ZoneOffsetSegment
 	for _, seg := range segments {
