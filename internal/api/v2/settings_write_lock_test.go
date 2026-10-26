@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -286,9 +287,9 @@ func TestUpdateSettings_SaveFailureResendsSentryReconfigure(t *testing.T) {
 		{name: "PATCH opt-in change", method: http.MethodPatch, path: "/api/v2/settings/sentry",
 			section: "sentry", body: `{"enabled":true}`, wantSignals: 2},
 		{name: "PUT opt-in unchanged", method: http.MethodPut, path: "/api/v2/settings",
-			body: `{"realtime":{"interval":20}}`},
+			body: fmt.Sprintf(`{"realtime":{"interval":%d}}`, writeLockTestInterval)},
 		{name: "PATCH opt-in unchanged", method: http.MethodPatch, path: "/api/v2/settings/" + writeLockSectionRealtime,
-			section: writeLockSectionRealtime, body: `{"interval":20}`},
+			section: writeLockSectionRealtime, body: fmt.Sprintf(`{"interval":%d}`, writeLockTestInterval)},
 	}
 
 	for _, tt := range tests {
