@@ -173,9 +173,11 @@ function isBrowserExtensionError(event: Sentry.ErrorEvent): boolean {
  * Initialize Sentry with privacy filtering.
  * Called by appState.svelte.ts when the browser SDK starts, at page load or after
  * Error Tracking is turned on. It must not be called while a client it started is
- * still live; appState guards this.
+ * still live; appState guards this. Breadcrumbs left over from before the start are
+ * dropped: a client stopped by shutdownSentry stays bound and keeps recording them.
  */
 export function initSentry(config: SentryConfig): void {
+  Sentry.getIsolationScope().clearBreadcrumbs();
   Sentry.init({
     dsn: config.dsn,
     release: `birdnet-go@${config.version}`,
@@ -207,8 +209,9 @@ const SENTRY_CLOSE_TIMEOUT_MS = 2000;
  * The client is disabled synchronously first, because Sentry.close only disables it
  * after its flush completes, leaving a window in which sessions, client reports and
  * errors still send. Do not put an await before the options flip. Stored breadcrumbs
- * are cleared so activity from the opted-out period is never reported after a later
- * re-enable. The returned promise resolves once the bounded flush has finished.
+ * are cleared now; the stopped client keeps recording more, so initSentry clears them
+ * again when the SDK starts. The returned promise resolves once the bounded flush has
+ * finished.
  */
 export function shutdownSentry(): Promise<void> {
   const client = Sentry.getClient();
