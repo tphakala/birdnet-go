@@ -623,6 +623,11 @@ Registered under the system route group. All endpoints require authentication.
 | GET    | `/weather/detection/:id`      | `GetWeatherForDetection`  | ❌   | Weather for detection time          |
 | GET    | `/weather/latest`             | `GetLatestWeather`        | ❌   | Latest weather data                 |
 | GET    | `/weather/sun/:date`          | `GetSunTimes`             | ❌   | Sun times (sunrise/sunset) for date |
+| GET    | `/weather/moon/:date`         | `GetMoonPhase`            | ❌   | Moon phase for date                 |
+
+`:date` on `/weather/daily/:date`, `/weather/hourly/:date` and `/weather/hourly/:date/:hour` must be a real calendar date in `YYYY-MM-DD` form. Anything else answers **400** before the database is queried, with `error_key` `errors.detection.invalidDate` and `error_params` `{paramName: "date"}`. `/weather/sun/:date` and `/weather/moon/:date` also answer 400 for an invalid date (without an `error_key`).
+
+`/weather/hourly/:date` answers 200 with an empty `data` array and a `message` when no rows exist for the date. The message says the date is in the future when it is after the server's local date.
 
 ### Alert Rules (`alerts/alerts.go`)
 
