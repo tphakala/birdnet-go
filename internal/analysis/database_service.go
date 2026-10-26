@@ -65,6 +65,9 @@ const mixedSchemaGuideURL = "https://github.com/tphakala/birdnet-go/wiki/Databas
 const mixedSchemaRecoveryHint = "if the error names a failed step, fix its cause and restart; otherwise stop BirdNET-Go, back up the database with mysqldump (mariadb-dump on MariaDB), then follow " +
 	mixedSchemaGuideURL + "; the db-doctor script supports SQLite only"
 
+// operationStartupReconciliation is the operation field of the startup reconciliation logs.
+const operationStartupReconciliation = "startup_reconciliation"
+
 // legacyTailRecoveryHint is the user-facing instruction emitted when startup refuses to
 // continue because the legacy records beyond the migration watermark could not be verified.
 const legacyTailRecoveryHint = "make sure the database files are readable by the BirdNET-Go user and not damaged, or that the database server is reachable, then restart BirdNET-Go"
@@ -158,8 +161,8 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 // the migration_state telemetry tag, the legacy schema bell notice and the
 // weekly push reminder current, and logs the legacy schema startup WARN once
 // (the monitor logs it, or this method when no state manager exists).
-// It refuses to start, changing no database, when the migration is complete but the
-// legacy records beyond the watermark cannot be verified.
+// It refuses to start, consolidating nothing and opening no datastore, when the migration
+// is complete but the legacy records beyond the watermark cannot be verified.
 //
 //nolint:gocognit,gocyclo // Database initialization requires handling multiple startup paths with detailed logging
 func (d *DatabaseService) Start(_ context.Context) error {
@@ -214,15 +217,15 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	if tailErr != nil {
 		if d.v2OnlyMode {
 			d.v2OnlyMode = false
-			datastoreLog.Error("could not verify legacy records beyond the migration watermark, refusing to start in enhanced database mode, no database was changed",
+			datastoreLog.Error("could not verify legacy records beyond the migration watermark, refusing to start in enhanced database mode, nothing was consolidated and no datastore was opened",
 				logger.Error(tailErr),
-				logger.String("operation", "startup_reconciliation"),
+				logger.String("operation", operationStartupReconciliation),
 				logger.String("recovery_hint", legacyTailRecoveryHint))
 			return fmt.Errorf("refusing to start before the legacy records are verified: %w", tailErr)
 		}
 		datastoreLog.Warn("could not verify legacy records beyond the migration watermark, not needed for this start",
 			logger.Error(tailErr),
-			logger.String("operation", "startup_reconciliation"))
+			logger.String("operation", operationStartupReconciliation))
 	}
 
 	// Override v2-only mode when unmigrated legacy records were found. This forces
@@ -230,7 +233,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	// Consolidation will complete on the next clean restart.
 	if hasUnmigrated && d.v2OnlyMode {
 		datastoreLog.Warn("deferring v2-only mode: unmigrated legacy records found, will sync via tail sync",
-			logger.String("operation", "startup_reconciliation"))
+			logger.String("operation", operationStartupReconciliation))
 		d.v2OnlyMode = false
 		startupState.LegacyRequired = true
 	}
