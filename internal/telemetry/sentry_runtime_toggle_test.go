@@ -328,10 +328,10 @@ func TestTelemetryWorkerGateIsEvaluatedPerEvent(t *testing.T) {
 	assert.Equal(t, uint64(1), worker.GetStats().EventsProcessed, "re-closing the gate must stop processing")
 }
 
-// TestUploadSupportDumpHoldsClientLifecycleLock pins that an upload keeps the
-// client lifecycle lock until it finishes, so an opt-out cannot close the client
-// under a queued dump.
-func TestUploadSupportDumpHoldsClientLifecycleLock(t *testing.T) {
+// TestUploadSupportDumpTakesClientLifecycleLock pins that an upload waits for
+// the client lifecycle lock before capturing. That the lock then stays held
+// through the flush is not pinned here.
+func TestUploadSupportDumpTakesClientLifecycleLock(t *testing.T) {
 	h := newToggleHarness(t)
 	require.NoError(t, InitMinimalSentryForSupport("test-system-id", "test"))
 

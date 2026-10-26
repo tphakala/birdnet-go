@@ -217,7 +217,8 @@ var (
 )
 
 // maxRememberedClosedClients bounds closedClients; the set is cleared when it
-// grows past this, which only risks one avoidable flush wait.
+// grows past this. A forgotten closed client counts as live again, so a
+// lingering one costs a flush wait or a support upload on a dead transport.
 const maxRememberedClosedClients = 16
 
 // closeClient closes client and remembers it as closed. The caller holds
