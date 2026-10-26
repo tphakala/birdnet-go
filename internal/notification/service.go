@@ -112,7 +112,7 @@ func NewService(config *ServiceConfig) *Service {
 // This must be called after service creation to enable telemetry reporting.
 func (s *Service) SetTelemetry(telemetry *NotificationTelemetry) {
 	s.telemetry = telemetry
-	s.logger.Info("telemetry integration enabled for notification service",
+	s.logger.Info("telemetry integration installed for notification service",
 		logger.Bool("enabled", telemetry != nil && telemetry.IsEnabled()))
 }
 

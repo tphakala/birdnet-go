@@ -1,29 +1,32 @@
 package telemetry
 
 import (
+	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // telemetryEnabled is an atomic flag for fast checking if telemetry is enabled
 var telemetryEnabled atomic.Bool
 
-// UpdateTelemetryEnabled updates the cached telemetry enabled state and
-// refreshes the error package's cached active-reporting flag, which depends on
-// the same inputs.
-func UpdateTelemetryEnabled() {
-	// In test mode, telemetry is always enabled
-	if testMode.Load() == testModeEnabled {
-		telemetryEnabled.Store(true)
-		errors.RefreshActiveReporting()
-		return
-	}
+// telemetryFlagsMu serializes computing and storing the cached flags, so the
+// value stored last is the one computed last. Without it a refresh that
+// computed false before a client was bound could store after the refresh that
+// computed true and leave the flag stuck false. It is a leaf lock: it is never
+// held while taking clientLifecycleMu, and nothing under it takes that lock.
+var telemetryFlagsMu sync.Mutex
 
-	telemetryEnabled.Store(reportingAllowed(conf.GetSettings(), time.Now()))
+// UpdateTelemetryEnabled refreshes the cached telemetry enabled state and the
+// error package's cached active-reporting flag. The fast-path flag mirrors
+// reportingActive: opt-in, build age, a bound client and test mode. Call it
+// after a settings change and after a client is bound or unbound.
+func UpdateTelemetryEnabled() {
+	telemetryFlagsMu.Lock()
+	defer telemetryFlagsMu.Unlock()
+
+	telemetryEnabled.Store(reportingActive())
 	errors.RefreshActiveReporting()
 }
 

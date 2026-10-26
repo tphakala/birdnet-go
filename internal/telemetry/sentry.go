@@ -318,14 +318,15 @@ func collectPlatformInfo() PlatformInfo {
 // This function will only initialize Sentry if explicitly enabled by the user,
 // a DSN is configured for this build, and the build is not older than
 // maxTelemetryBuildAge. It serializes with the other client lifecycle
-// operations and refreshes the error package's cached reporting flag.
+// operations and refreshes the cached reporting flags.
 func InitSentry(settings *conf.Settings) error {
 	clientLifecycleMu.Lock()
 	err := initSentryLocked(settings)
 	clientLifecycleMu.Unlock()
 
-	// The cached active-reporting flag depends on whether a client is bound.
-	errors.RefreshActiveReporting()
+	// The cached reporting flags depend on whether a client is bound. This
+	// also opens the fast path at startup, before any settings save.
+	UpdateTelemetryEnabled()
 	return err
 }
 
@@ -1343,6 +1344,10 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 func ReconfigureSentry() error {
 	log := GetLogger()
 
+	// Refresh the fast-path flag and the error package's cached flag on every
+	// exit. Every return path has released clientLifecycleMu by then.
+	defer UpdateTelemetryEnabled()
+
 	clientLifecycleMu.Lock()
 	settings := conf.GetSettings()
 	hub := sentry.CurrentHub()
@@ -1394,7 +1399,5 @@ func ReconfigureSentry() error {
 		}
 	}
 
-	// Refresh the fast-path flag and the error package's cached flag.
-	UpdateTelemetryEnabled()
 	return nil
 }
