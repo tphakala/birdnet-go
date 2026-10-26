@@ -685,11 +685,15 @@ func TestLoadSingleSeasonData_ErrorPaths(t *testing.T) {
 
 // ============================================================================
 // Test: calculateDaysSince edge cases
-// Target: status.go:110 - ensure max(0, days) is applied correctly
+// Target: calculateDaysSince - ensure max(0, days) is applied correctly and
+// that calendar days are counted across DST changes
 // ============================================================================
 
 func TestCalculateDaysSince_EdgeCases(t *testing.T) {
 	t.Parallel()
+
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
 
 	tests := []struct {
 		name          string
@@ -726,6 +730,32 @@ func TestCalculateDaysSince_EdgeCases(t *testing.T) {
 			currentTime:   time.Date(2025, 6, 15, 10, 0, 0, 0, time.UTC),
 			referenceTime: time.Date(2020, 6, 15, 10, 0, 0, 0, time.UTC),
 			expectedDays:  1826, // ~5 years including leap year
+		},
+		// 120 hours across a 25-hour day is four calendar days and across a
+		// 23-hour day it is six, so tests must build day offsets with AddDate.
+		{
+			name:          "fall_back_five_calendar_days_from_0009",
+			currentTime:   time.Date(2025, 10, 31, 0, 9, 0, 0, helsinki), // 121 hours later
+			referenceTime: time.Date(2025, 10, 26, 0, 9, 0, 0, helsinki),
+			expectedDays:  5,
+		},
+		{
+			name:          "fall_back_120_hours_from_0009_is_four_calendar_days",
+			currentTime:   time.Date(2025, 10, 30, 23, 9, 0, 0, helsinki), // 120 hours later
+			referenceTime: time.Date(2025, 10, 26, 0, 9, 0, 0, helsinki),
+			expectedDays:  4,
+		},
+		{
+			name:          "spring_forward_five_calendar_days_from_2330",
+			currentTime:   time.Date(2025, 4, 3, 23, 30, 0, 0, helsinki), // 119 hours later
+			referenceTime: time.Date(2025, 3, 29, 23, 30, 0, 0, helsinki),
+			expectedDays:  5,
+		},
+		{
+			name:          "spring_forward_120_hours_from_2330_is_six_calendar_days",
+			currentTime:   time.Date(2025, 4, 4, 0, 30, 0, 0, helsinki), // 120 hours later
+			referenceTime: time.Date(2025, 3, 29, 23, 30, 0, 0, helsinki),
+			expectedDays:  6,
 		},
 	}
 

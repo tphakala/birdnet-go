@@ -32,12 +32,12 @@ func TestSpeciesTracker_NewSpecies(t *testing.T) {
 		{
 			ScientificName: testSpeciesParusMajor,
 			CommonName:     "Great Tit",
-			FirstSeenDate:  time.Now().Add(-oldSpeciesDays * 24 * time.Hour).Format(time.DateOnly),
+			FirstSeenDate:  time.Now().AddDate(0, 0, -oldSpeciesDays).Format(time.DateOnly),
 		},
 		{
 			ScientificName: "Turdus merula",
 			CommonName:     "Common Blackbird",
-			FirstSeenDate:  time.Now().Add(-recentSpeciesDays * 24 * time.Hour).Format(time.DateOnly),
+			FirstSeenDate:  time.Now().AddDate(0, 0, -recentSpeciesDays).Format(time.DateOnly),
 		},
 	}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
@@ -190,7 +190,7 @@ func TestSpeciesTracker_EdgeCases(t *testing.T) {
 		historicalData := []datastore.NewSpeciesData{
 			{
 				ScientificName: testSpeciesParusMajor,
-				FirstSeenDate:  time.Now().Add(-14 * 24 * time.Hour).Format(time.DateOnly), // Exactly 14 days ago
+				FirstSeenDate:  time.Now().AddDate(0, 0, -newSpeciesWindow).Format(time.DateOnly), // Exactly at the window boundary
 			},
 		}
 		ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
