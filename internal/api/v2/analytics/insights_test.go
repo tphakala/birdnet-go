@@ -571,7 +571,7 @@ func TestBuildYearRangesDayBounds(t *testing.T) {
 }
 
 // TestBuildYearRangesWrapAndLeapDay pins the exact ranges of the branches that wrap over a year
-// end and of a window starting on a leap day, in UTC so the expected instants are literal.
+// end and of a window centred on a leap day, in UTC so the expected instants are literal.
 func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 	t.Parallel()
 	at := func(y int, m time.Month, d int) int64 { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() }
@@ -602,7 +602,7 @@ func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 			},
 		},
 		{
-			name:   "leap day window in a non-leap year",
+			name:   "window centred on a leap day, in the non-leap year before",
 			now:    time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC),
 			window: 3,
 			tail: []repository.TimeRange{
