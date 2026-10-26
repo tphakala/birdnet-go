@@ -290,13 +290,6 @@ type DetectionRepository interface {
 	// empty labelIDs means no label filter (see GetHourlyDistribution).
 	GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelIDs []uint, modelID *uint) ([]DailyAnalyticsData, error)
 
-	// GetDetectionTrends returns detection trends over time.
-	// period is "day", "week", or "month".
-	// tzOffsetSeconds is the configured timezone's UTC offset, applied so detections bucket by
-	// wall-clock date in that zone rather than the database/OS-local zone.
-	// modelID is optional.
-	GetDetectionTrends(ctx context.Context, period string, limit, tzOffsetSeconds int, modelID *uint) ([]DailyAnalyticsData, error)
-
 	// GetNewSpecies returns species detected for the first time ever within the range.
 	GetNewSpecies(ctx context.Context, start, end int64, limit, offset int) ([]NewSpeciesData, error)
 
