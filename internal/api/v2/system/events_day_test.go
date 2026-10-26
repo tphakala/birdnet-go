@@ -35,6 +35,7 @@ const (
 // previous day and EarlyOn a local time early on Date.
 type skippedMidnightCase struct {
 	zone       string
+	loc        *time.Location
 	date       string
 	lateBefore time.Time
 	earlyOn    time.Time
@@ -50,12 +51,14 @@ func skippedMidnightCases(t *testing.T) []skippedMidnightCase {
 	return []skippedMidnightCase{
 		{
 			zone:       "America/Havana",
+			loc:        havana,
 			date:       "2026-03-08",
 			lateBefore: time.Date(2026, time.March, 7, 23, 30, 0, 0, havana),
 			earlyOn:    time.Date(2026, time.March, 8, 1, 30, 0, 0, havana),
 		},
 		{
 			zone:       "America/Santiago",
+			loc:        santiago,
 			date:       "2026-09-06",
 			lateBefore: time.Date(2026, time.September, 5, 23, 30, 0, 0, santiago),
 			earlyOn:    time.Date(2026, time.September, 6, 1, 30, 0, 0, santiago),
@@ -121,12 +124,11 @@ func getEvents(t *testing.T, handle func(echo.Context) error, query string) *htt
 func TestEventLogEndpointsSelectSkippedMidnightDay(t *testing.T) {
 	for _, tc := range skippedMidnightCases(t) {
 		t.Run(tc.zone, func(t *testing.T) {
-			zone := testutil.ToolchainZones(t)[tc.zone]
 			appLog := eventLogLine(tc.lateBefore, "before_op", "") + eventLogLine(tc.earlyOn, "on_op", "")
 			species := `"species":"Parus major"`
 			detectionLog := eventLogLine(tc.lateBefore, "approve_detection", species) +
 				eventLogLine(tc.earlyOn, "approve_detection", species)
-			useEventLogs(t, zone, appLog, detectionLog)
+			useEventLogs(t, tc.loc, appLog, detectionLog)
 			c := &Handler{Core: &apicore.Core{}}
 
 			t.Run("operational", func(t *testing.T) {
