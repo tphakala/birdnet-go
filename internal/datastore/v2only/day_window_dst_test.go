@@ -2,12 +2,14 @@ package v2only
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/testutil"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
@@ -70,8 +72,7 @@ func TestV2OnlyDatastore_DashboardCellsMatchDrillDownOnDSTDays(t *testing.T) {
 	for _, zone := range dstDayWindowZones {
 		t.Run(zone, func(t *testing.T) {
 			t.Parallel()
-			loc, err := time.LoadLocation(zone)
-			require.NoError(t, err)
+			loc := toolchainZone(t, zone)
 
 			ds, cleanup := setupTestDatastore(t)
 			defer cleanup()
@@ -160,7 +161,7 @@ func TestV2OnlyDatastore_DashboardCellsMatchDrillDownOnDSTDays(t *testing.T) {
 
 // TestV2OnlyDatastore_ParseDateRangeFollowsLocalDays pins parseDateRange on the days where a
 // local midnight does not exist or is shifted: the range is [start of first day, start of the
-// day after the last), and consecutive days share a boundary.
+// day after the last).
 func TestV2OnlyDatastore_ParseDateRangeFollowsLocalDays(t *testing.T) {
 	t.Parallel()
 
@@ -176,13 +177,12 @@ func TestV2OnlyDatastore_ParseDateRangeFollowsLocalDays(t *testing.T) {
 		{"Havana day before the skipped midnight", "America/Havana", "2026-03-07", "2026-03-07", "2026-03-07T00:00:00-05:00", "2026-03-08T01:00:00-04:00"},
 		{"Santiago day before the skipped midnight", "America/Santiago", "2026-09-05", "2026-09-05", "2026-09-05T00:00:00-04:00", "2026-09-06T01:00:00-03:00"},
 		{"New York fall back", "America/New_York", "2026-11-01", "2026-11-01", "2026-11-01T00:00:00-04:00", "2026-11-02T00:00:00-05:00"},
+		{"Havana range across the skipped midnight", "America/Havana", "2026-03-07", "2026-03-09", "2026-03-07T00:00:00-05:00", "2026-03-10T00:00:00-04:00"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			loc, err := time.LoadLocation(tt.zone)
-			require.NoError(t, err)
-			ds := &Datastore{timezone: loc}
+			ds := &Datastore{timezone: toolchainZone(t, tt.zone)}
 
 			start, end, err := ds.parseDateRange(tt.start, tt.end)
 			require.NoError(t, err)
@@ -200,9 +200,7 @@ func TestV2OnlyDatastore_GetSpeciesLastDetectionDateBeforeSkippedMidnight(t *tes
 
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
-	havana, err := time.LoadLocation("America/Havana")
-	require.NoError(t, err)
-	ds.timezone = havana
+	ds.timezone = toolchainZone(t, "America/Havana")
 
 	const species = "Fringilla coelebs"
 	// 23:30 on 2026-03-07 Havana time, 30 minutes before the clock jumps from 00:00 to 01:00.
@@ -218,4 +216,99 @@ func mustRFC3339(t *testing.T, s string) time.Time {
 	ts, err := time.Parse(time.RFC3339, s)
 	require.NoError(t, err)
 	return ts
+}
+
+// TestV2OnlyDatastore_ParseDateRangeOpenBoundsAndErrors pins the arms of parseDateRange that
+// do not depend on a zone's transitions: an empty bound is open, and a bad date names its bound.
+func TestV2OnlyDatastore_ParseDateRangeOpenBoundsAndErrors(t *testing.T) {
+	t.Parallel()
+
+	ds := &Datastore{timezone: toolchainZone(t, "America/Havana")}
+
+	start, end, err := ds.parseDateRange("", "")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), start, "empty start is open")
+	assert.Equal(t, int64(math.MaxInt64), end, "empty end is open")
+
+	start, end, err = ds.parseDateRange("2026-03-08", "")
+	require.NoError(t, err)
+	assert.Equal(t, mustRFC3339(t, "2026-03-08T01:00:00-04:00").Unix(), start, "start without end")
+	assert.Equal(t, int64(math.MaxInt64), end, "end stays open without an end date")
+
+	start, end, err = ds.parseDateRange("", "2026-03-08")
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), start, "start stays open without a start date")
+	assert.Equal(t, mustRFC3339(t, "2026-03-09T00:00:00-04:00").Unix(), end, "end without start")
+
+	_, _, err = ds.parseDateRange("not-a-date", "2026-03-08")
+	require.ErrorContains(t, err, "invalid start date format")
+	_, _, err = ds.parseDateRange("2026-03-08", "2026-13-01")
+	require.ErrorContains(t, err, "invalid end date format")
+}
+
+// TestV2OnlyDatastore_ParseDateRangeDaysTile pins that, on days around a skipped midnight, one
+// day's exclusive end is the next day's start, so a range never counts a row twice or drops one.
+func TestV2OnlyDatastore_ParseDateRangeDaysTile(t *testing.T) {
+	t.Parallel()
+
+	ds := &Datastore{timezone: toolchainZone(t, "America/Havana")}
+	dates := []string{"2026-03-06", "2026-03-07", "2026-03-08", "2026-03-09"}
+	for i := 1; i < len(dates); i++ {
+		_, prevEnd, err := ds.parseDateRange(dates[i-1], dates[i-1])
+		require.NoError(t, err)
+		start, _, err := ds.parseDateRange(dates[i], dates[i])
+		require.NoError(t, err)
+		assert.Equal(t, prevEnd, start, "end of %s is the start of %s", dates[i-1], dates[i])
+	}
+}
+
+// TestV2OnlyDatastore_GetBatchHourlyOccurrencesRangeAtSkippedMidnight pins that a multi-day
+// range ending on the day before a skipped midnight, or starting on the skipped day, takes each
+// bound from its own day, and that a malformed date is a validation error.
+func TestV2OnlyDatastore_GetBatchHourlyOccurrencesRangeAtSkippedMidnight(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	havana := toolchainZone(t, "America/Havana")
+	ds.timezone = havana
+
+	const species = "Fringilla coelebs"
+	date := func(day int) wallclock.Date { return wallclock.Date{Year: 2026, Month: time.March, Day: day} }
+	seedFrom, _ := wallclock.DayBounds(date(5), havana)
+	_, seedTo := wallclock.DayBounds(date(10), havana)
+	var instants []time.Time
+	for at := seedFrom.Add(dayWindowSeedOffset); at.Before(seedTo); at = at.Add(dayWindowSeedStep) {
+		seedDetection(t, ds, species, at)
+		instants = append(instants, at)
+	}
+
+	// The 8th is the skipped-midnight day: its local day starts at 01:00.
+	for _, rng := range []struct{ first, last int }{{6, 7}, {8, 9}, {7, 8}} {
+		var want [hoursPerWallDay]int
+		for _, at := range instants {
+			local := at.In(havana)
+			day := wallclock.DateOf(local)
+			if day.Compare(date(rng.first)) >= 0 && day.Compare(date(rng.last)) <= 0 {
+				want[local.Hour()]++
+			}
+		}
+		got, err := ds.GetBatchHourlyOccurrences(t.Context(), date(rng.first).String(), date(rng.last).String(), []string{species}, 0)
+		require.NoError(t, err)
+		assert.Equal(t, want, got[species], "range %d..%d", rng.first, rng.last)
+	}
+
+	_, err := ds.GetBatchHourlyOccurrences(t.Context(), "not-a-date", date(9).String(), []string{species}, 0)
+	require.Error(t, err)
+	_, err = ds.GetBatchHourlyOccurrences(t.Context(), date(6).String(), "2026-02-30", []string{species}, 0)
+	require.Error(t, err)
+}
+
+// toolchainZone returns a zone from the Go toolchain's zone database, so the tests do not depend
+// on the host's zone files.
+func toolchainZone(t *testing.T, name string) *time.Location {
+	t.Helper()
+	loc, ok := testutil.ToolchainZones(t)[name]
+	require.True(t, ok, "zone %s is missing from the toolchain database", name)
+	return loc
 }
