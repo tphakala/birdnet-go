@@ -166,6 +166,44 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 		"handler must thread analyticsTZOffset into GetDashboardKPIs")
 }
 
+func TestGoneQuietDates(t *testing.T) {
+	t.Parallel()
+
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		now          time.Time
+		lastDetected time.Time
+		wantDate     string
+		wantDays     int
+	}{
+		{
+			name:         "span crosses spring-forward",
+			now:          time.Date(2026, 3, 30, 9, 0, 0, 0, helsinki),
+			lastDetected: time.Date(2026, 3, 15, 12, 0, 0, 0, helsinki),
+			wantDate:     "2026-03-15",
+			wantDays:     15,
+		},
+		{
+			name:         "date is read in the zone of now, not UTC",
+			now:          time.Date(2026, 7, 1, 10, 0, 0, 0, helsinki),
+			lastDetected: time.Date(2026, 6, 10, 0, 30, 0, 0, helsinki),
+			wantDate:     "2026-06-10",
+			wantDays:     21,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			date, days := goneQuietDates(tt.now, tt.lastDetected.Unix())
+			assert.Equal(t, tt.wantDate, date)
+			assert.Equal(t, tt.wantDays, days)
+		})
+	}
+}
+
 func TestGetMigration_Handler(t *testing.T) {
 	t.Parallel()
 	now := time.Now()
