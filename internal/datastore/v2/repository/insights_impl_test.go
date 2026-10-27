@@ -135,7 +135,7 @@ func TestGetExpectedSpeciesToday(t *testing.T) {
 	// Year 1 (2024): March 8-9 (noon)
 	y1Start := time.Date(2024, 3, 8, 12, 0, 0, 0, time.Local)
 	seedDetection(t, db, labelA, y1Start.Unix(), 0.9)
-	seedDetection(t, db, labelA, y1Start.Add(24*time.Hour).Unix(), 0.85)
+	seedDetection(t, db, labelA, y1Start.AddDate(0, 0, 1).Unix(), 0.85)
 
 	// Year 2 (2025): March 7 (noon)
 	y2Start := time.Date(2025, 3, 7, 12, 0, 0, 0, time.Local)

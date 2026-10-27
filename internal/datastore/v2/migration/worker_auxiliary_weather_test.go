@@ -81,7 +81,7 @@ func TestMigrateWeatherData_IDRemapping(t *testing.T) {
 	testTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	legacyWeather := []datastore.HourlyWeather{
 		{ID: 1, DailyEventsID: 100, Time: testTime, Temperature: 5.5},
-		{ID: 2, DailyEventsID: 101, Time: testTime.Add(24 * time.Hour), Temperature: 3.2},
+		{ID: 2, DailyEventsID: 101, Time: testTime.AddDate(0, 0, 1), Temperature: 3.2},
 	}
 
 	// V2 after migration: Different IDs for same dates!
@@ -231,7 +231,7 @@ func TestMigrateWeatherData_DateNotInV2(t *testing.T) {
 	testTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	legacyWeather := []datastore.HourlyWeather{
 		{ID: 1, DailyEventsID: 100, Time: testTime, Temperature: 5.5},
-		{ID: 2, DailyEventsID: 101, Time: testTime.Add(24 * time.Hour), Temperature: 3.2},
+		{ID: 2, DailyEventsID: 101, Time: testTime.AddDate(0, 0, 1), Temperature: 3.2},
 	}
 
 	// V2 only has one date (2024-01-01) - 2024-01-02 is missing
@@ -435,7 +435,7 @@ func TestMigrateWeatherData_ComplexIDMapping(t *testing.T) {
 	legacyWeather := []datastore.HourlyWeather{
 		{ID: 10, DailyEventsID: 50, Time: testTime, Temperature: 1.0},
 		{ID: 20, DailyEventsID: 50, Time: testTime.Add(time.Hour), Temperature: 2.0},
-		{ID: 30, DailyEventsID: 75, Time: testTime.Add(24 * time.Hour), Temperature: 3.0},
+		{ID: 30, DailyEventsID: 75, Time: testTime.AddDate(0, 0, 1), Temperature: 3.0},
 		{ID: 40, DailyEventsID: 200, Time: testTime.Add(48 * time.Hour), Temperature: 4.0},
 		{ID: 50, DailyEventsID: 200, Time: testTime.Add(49 * time.Hour), Temperature: 5.0},
 	}
@@ -567,7 +567,7 @@ func TestMigrateWeatherData_ErrorHandling(t *testing.T) {
 		}, nil)
 		mockStore.EXPECT().GetAllHourlyWeather().Return([]datastore.HourlyWeather{
 			{ID: 1, DailyEventsID: 1, Time: testTime},
-			{ID: 2, DailyEventsID: 2, Time: testTime.Add(24 * time.Hour)},
+			{ID: 2, DailyEventsID: 2, Time: testTime.AddDate(0, 0, 1)},
 		}, nil)
 		// One of two daily events saved; only 2024-01-01 exists in v2.
 		mockWeather.On("SaveAllDailyEvents", mock.Anything, mock.Anything).Return(1, assert.AnError)

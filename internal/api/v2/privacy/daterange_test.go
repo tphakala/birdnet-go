@@ -93,7 +93,7 @@ func TestLocalDayRange(t *testing.T) {
 		start, end, endOut, err := localDayRange("2026-01-01", "", time.UTC)
 		require.NoError(t, err)
 		assert.Equal(t, "2026-01-31", endOut)
-		assert.Equal(t, 31*24*time.Hour, end.Sub(start))
+		assert.Equal(t, start.AddDate(0, 0, 31), end)
 	})
 
 	t.Run("DST day is 23 hours", func(t *testing.T) {

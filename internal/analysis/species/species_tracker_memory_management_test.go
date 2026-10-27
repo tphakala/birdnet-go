@@ -416,15 +416,15 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 				var firstSeen time.Time
 				switch tt.expectedDaysSince {
 				case 10:
-					firstSeen = tt.currentTime.Add(-10 * 24 * time.Hour)
+					firstSeen = tt.currentTime.AddDate(0, 0, -10)
 				case 30:
-					firstSeen = tt.currentTime.Add(-30 * 24 * time.Hour)
+					firstSeen = tt.currentTime.AddDate(0, 0, -30)
 				case 100:
-					firstSeen = tt.currentTime.Add(-100 * 24 * time.Hour)
+					firstSeen = tt.currentTime.AddDate(0, 0, -100)
 				case 14:
-					firstSeen = tt.currentTime.Add(-14 * 24 * time.Hour)
+					firstSeen = tt.currentTime.AddDate(0, 0, -14)
 				case 15:
-					firstSeen = tt.currentTime.Add(-15 * 24 * time.Hour)
+					firstSeen = tt.currentTime.AddDate(0, 0, -15)
 				default:
 					firstSeen = tt.currentTime
 				}
@@ -434,14 +434,14 @@ func TestBuildSpeciesStatusWithBuffer_CriticalReliability(t *testing.T) {
 
 			// Only populate yearly tracking if we expect IsNewThisYear = false
 			if tt.yearlyFirstSeen != nil && tt.expectedDaysSince <= 30 && !tt.expectedIsNewYear {
-				yearFirst := tt.currentTime.Add(-time.Duration(tt.expectedDaysSince) * 24 * time.Hour)
+				yearFirst := tt.currentTime.AddDate(0, 0, -tt.expectedDaysSince)
 				tracker.speciesThisYear[tt.speciesName] = yearFirst
 				*tt.yearlyFirstSeen = yearFirst
 			}
 
 			// Only populate seasonal tracking if we expect IsNewThisSeason = false
 			if tt.seasonalFirstSeen != nil && tt.expectedDaysSince <= 30 && !tt.expectedIsNewSeason {
-				seasonFirst := tt.currentTime.Add(-time.Duration(tt.expectedDaysSince) * 24 * time.Hour)
+				seasonFirst := tt.currentTime.AddDate(0, 0, -tt.expectedDaysSince)
 				currentSeason := tracker.getCurrentSeason(tt.currentTime)
 				if tracker.speciesBySeason[currentSeason] == nil {
 					tracker.speciesBySeason[currentSeason] = make(map[string]time.Time)
