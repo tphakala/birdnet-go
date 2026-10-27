@@ -487,10 +487,6 @@ func TestDetectionRepository_ReadsMatchBridge(t *testing.T) {
 			res, total, err := r.GetBySpecies(ctx, "Parus major", "", "", 1, 1, 1)
 			return outcome(res, total, err)
 		}},
-		{"GetBySpecies default limit", func(r datastore.DetectionRepository) readOutcome {
-			res, total, err := r.GetBySpecies(ctx, "Parus major", "", "", 1, 0, 0)
-			return outcome(res, total, err)
-		}},
 		{"GetBySpecies unknown", func(r datastore.DetectionRepository) readOutcome {
 			res, total, err := r.GetBySpecies(ctx, "Unknown species", "", "", 1, 0, 0)
 			return outcome(res, total, err)

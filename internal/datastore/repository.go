@@ -44,9 +44,12 @@ type DetectionRepository interface {
 	// SearchAdvanced finds detections matching the filters as given, including the sort
 	// order, scientific-name list and source list that DetectionFilters cannot express; this
 	// is the query the detection list API builds from request parameters. SortBy
-	// SortBySearchDefault orders newest first, as the plain text search does. A nil filters
-	// returns ErrNilAdvancedSearchFilters. A Limit of zero or less is not capped: every
-	// match is returned. Returns results, total count before pagination, and any error.
+	// SortBySearchDefault orders as the plain text search does: newest first by detection
+	// time on the v2 store and by id on the legacy store. Unlike the plain text search on the
+	// legacy store, an empty query does not drop rows whose names are both NULL. A nil
+	// filters returns ErrNilAdvancedSearchFilters. A Limit of zero or less is not capped:
+	// every match is returned. Returns results, total count before pagination, and any
+	// error.
 	SearchAdvanced(ctx context.Context, filters *AdvancedSearchFilters) ([]*detection.Result, int64, error)
 
 	// GetBySpecies retrieves detections for a specific species, newest first, with the
@@ -54,7 +57,10 @@ type DetectionRepository interface {
 	// an empty hour means that whole day; a date with an hour restricts to duration hours
 	// from that hour. A limit of zero or less means DefaultDetectionLimit. The legacy store
 	// matches only rows whose date equals the given date, so on it an empty date finds
-	// nothing.
+	// nothing. The v2 store ignores a date that is not YYYY-MM-DD, as it ignores an hour
+	// without a date, and returns every date, so callers must validate the date first. A
+	// duration of zero means one hour on the v2 store and an empty window on the legacy
+	// store; callers should pass a positive duration.
 	GetBySpecies(ctx context.Context, species, date, hour string, duration, limit, offset int) ([]*detection.Result, int64, error)
 
 	// GetByDateRange retrieves detections within a date range.
