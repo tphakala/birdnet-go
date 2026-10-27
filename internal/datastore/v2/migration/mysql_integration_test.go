@@ -222,3 +222,13 @@ func TestMySQL_TailSync_DrainsDirtyIDsOfRowsAlreadyInV2(t *testing.T) {
 	require.NoError(t, lockErr)
 	assert.True(t, locked)
 }
+
+// TestMySQL_RerunAfterRollbackPassesValidation pins that a migration run after
+// a rollback is not failed by dirty IDs from the earlier run, with the
+// transactional clear on the v2_ prefixed dirty table.
+func TestMySQL_RerunAfterRollbackPassesValidation(t *testing.T) {
+	skipIfNoMySQL(t)
+
+	ctx := testutil.SetupMySQLIntegrationTest(t, getMySQLConfig())
+	assertRerunAfterRollbackPassesValidation(t, ctx, mysqlMigrationTimeout)
+}

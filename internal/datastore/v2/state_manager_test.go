@@ -742,3 +742,138 @@ type preAuxMigrationState struct {
 
 // TableName maps the pre-auxiliary shape onto the real table.
 func (preAuxMigrationState) TableName() string { return "migration_states" }
+
+// dirtyIDStep is one step of a TestStateManager_DirtyIDs_Transitions sequence.
+// After run, the number of dirty-ID markers must equal wantDirty (when
+// checkDirty is set) and the state wantState (when set). The markers in
+// addDirty are recorded after the count is checked. A step with wantErr must
+// fail.
+type dirtyIDStep struct {
+	name       string
+	run        func(sm *StateManager) error
+	addDirty   []uint
+	wantErr    bool
+	wantState  entities.MigrationStatus
+	checkDirty bool
+	wantDirty  int64
+}
+
+func TestStateManager_DirtyIDs_Transitions(t *testing.T) {
+	t.Parallel()
+
+	start := func(sm *StateManager) error { return sm.StartMigration(5) }
+	noop := func(*StateManager) error { return nil }
+	const (
+		idle      = entities.MigrationStatusIdle
+		migrating = entities.MigrationStatusMigrating
+	)
+
+	// A dirty-ID marker belongs to one migration run: Start and Rollback clear
+	// the set, and no other transition may touch it.
+	tests := []struct {
+		name  string
+		steps []dirtyIDStep
+	}{
+		{
+			name: "start clears markers left in idle",
+			steps: []dirtyIDStep{
+				{name: "markers in idle", run: noop, addDirty: []uint{3, 4}, wantState: idle, checkDirty: true, wantDirty: 0},
+				{name: "start", run: start, wantState: entities.MigrationStatusInitializing, checkDirty: true, wantDirty: 0},
+			},
+		},
+		{
+			name: "a running migration keeps its markers",
+			steps: []dirtyIDStep{
+				{name: "migrating", run: toMigrating, addDirty: []uint{1, 2}, wantState: migrating, checkDirty: true, wantDirty: 0},
+				{name: "pause", run: (*StateManager).Pause, checkDirty: true, wantDirty: 2},
+				{name: "resume", run: (*StateManager).Resume, checkDirty: true, wantDirty: 2},
+				{name: "back to migrating", run: (*StateManager).TransitionToMigrating, checkDirty: true, wantDirty: 2},
+				{name: "validating", run: (*StateManager).TransitionToValidating, checkDirty: true, wantDirty: 2},
+				{name: "fail", run: (*StateManager).Fail, checkDirty: true, wantDirty: 2},
+				{name: "retry", run: (*StateManager).RetryValidation, checkDirty: true, wantDirty: 2},
+				{name: "completed", run: toCompleted, wantState: entities.MigrationStatusCompleted, checkDirty: true, wantDirty: 2},
+			},
+		},
+		{
+			name: "rollback clears tail sync markers and the next start begins clean",
+			steps: []dirtyIDStep{
+				{name: "migrating", run: toMigrating},
+				{name: "validating", run: (*StateManager).TransitionToValidating},
+				{name: "completed", run: toCompleted, addDirty: []uint{5}, wantState: entities.MigrationStatusCompleted},
+				{name: "rollback", run: (*StateManager).Rollback, addDirty: []uint{6}, wantState: idle, checkDirty: true, wantDirty: 0},
+				{name: "start", run: start, wantState: entities.MigrationStatusInitializing, checkDirty: true, wantDirty: 0},
+			},
+		},
+		{
+			name: "a refused start keeps the running migration's markers",
+			steps: []dirtyIDStep{
+				{name: "migrating", run: toMigrating, addDirty: []uint{7}},
+				{name: "start refused", run: start, wantErr: true, wantState: migrating, checkDirty: true, wantDirty: 1},
+			},
+		},
+		{
+			name: "a refused rollback keeps the markers",
+			steps: []dirtyIDStep{
+				{name: "migrating", run: toMigrating, addDirty: []uint{7}},
+				{name: "rollback refused", run: (*StateManager).Rollback, wantErr: true, wantState: migrating, checkDirty: true, wantDirty: 1},
+			},
+		},
+		{
+			name: "cancel in the state manager keeps the markers",
+			steps: []dirtyIDStep{
+				{name: "migrating", run: toMigrating, addDirty: []uint{8}},
+				{name: "cancel", run: (*StateManager).Cancel, wantState: idle, checkDirty: true, wantDirty: 1},
+			},
+		},
+		{
+			name: "a failed clear rolls the rollback back",
+			steps: []dirtyIDStep{
+				{name: "migrating", run: toMigrating},
+				{name: "validating", run: (*StateManager).TransitionToValidating},
+				{name: "completed", run: toCompleted, wantState: entities.MigrationStatusCompleted},
+				{name: "dirty table dropped", run: func(sm *StateManager) error {
+					return sm.db.Migrator().DropTable(&entities.MigrationDirtyID{})
+				}},
+				{name: "rollback fails", run: (*StateManager).Rollback, wantErr: true, wantState: entities.MigrationStatusCompleted},
+			},
+		},
+		{
+			name: "a failed clear rolls the transition back",
+			steps: []dirtyIDStep{
+				{name: "dirty table dropped", run: func(sm *StateManager) error {
+					return sm.db.Migrator().DropTable(&entities.MigrationDirtyID{})
+				}},
+				{name: "start fails", run: start, wantErr: true, wantState: idle},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sm, cleanup := setupStateManager(t)
+			defer cleanup()
+			for _, step := range tt.steps {
+				err := step.run(sm)
+				if step.wantErr {
+					require.Error(t, err, step.name)
+				} else {
+					require.NoError(t, err, step.name)
+				}
+				if step.wantState != "" {
+					state, getErr := sm.GetState()
+					require.NoError(t, getErr, step.name)
+					assert.Equal(t, step.wantState, state.State, step.name)
+				}
+				if step.checkDirty {
+					count, countErr := sm.GetDirtyIDCount()
+					require.NoError(t, countErr, step.name)
+					assert.Equal(t, step.wantDirty, count, step.name)
+				}
+				for _, id := range step.addDirty {
+					require.NoError(t, sm.AddDirtyID(id), step.name)
+				}
+			}
+		})
+	}
+}

@@ -57,7 +57,9 @@ func (m *StateManager) GetState() (*entities.MigrationState, error) {
 }
 
 // StartMigration transitions from IDLE to INITIALIZING.
-// It clears the error fields and the recorded auxiliary data outcome.
+// It clears the error fields and the recorded auxiliary data outcome, and the
+// dirty-ID set left by an earlier run, in the same transaction. A refused
+// transition leaves the dirty-ID set untouched.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) StartMigration(totalRecords int64) error {
 	m.mu.Lock()
@@ -82,16 +84,13 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 		"auxiliary_data_started_at": nil,
 	}
 
-	result := m.db.Model(&entities.MigrationState{}).
-		Where("id = ? AND state = ?", migrationStateID, entities.MigrationStatusIdle).
-		Updates(updates)
-
-	if result.Error != nil {
-		reportStateTransitionError(string(entities.MigrationStatusIdle), string(entities.MigrationStatusInitializing), result.Error)
-		return fmt.Errorf("failed to start migration: %w", result.Error)
+	matched, err := m.updateGuardedClearingDirtyIDs(entities.MigrationStatusIdle, updates)
+	if err != nil {
+		reportStateTransitionError(string(entities.MigrationStatusIdle), string(entities.MigrationStatusInitializing), err)
+		return fmt.Errorf("failed to start migration: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	if matched == 0 {
 		var current entities.MigrationState
 		if err := m.db.First(&current).Error; err != nil {
 			return fmt.Errorf("failed to get current state: %w", err)
@@ -387,7 +386,9 @@ func (m *StateManager) Cancel() error {
 }
 
 // Rollback transitions from COMPLETED back to IDLE for rollback scenarios.
-// It clears the recorded auxiliary data outcome.
+// It clears the recorded auxiliary data outcome, and the dirty-ID set (the tail
+// sync markers of the abandoned v2 data), in the same transaction. A refused
+// transition leaves the dirty-ID set untouched.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) Rollback() error {
 	m.mu.Lock()
@@ -407,16 +408,13 @@ func (m *StateManager) Rollback() error {
 		"auxiliary_data_started_at": nil,
 	}
 
-	result := m.db.Model(&entities.MigrationState{}).
-		Where("id = ? AND state = ?", migrationStateID, entities.MigrationStatusCompleted).
-		Updates(updates)
-
-	if result.Error != nil {
-		reportStateTransitionError(string(entities.MigrationStatusCompleted), string(entities.MigrationStatusIdle), result.Error)
-		return fmt.Errorf("failed to rollback migration: %w", result.Error)
+	matched, err := m.updateGuardedClearingDirtyIDs(entities.MigrationStatusCompleted, updates)
+	if err != nil {
+		reportStateTransitionError(string(entities.MigrationStatusCompleted), string(entities.MigrationStatusIdle), err)
+		return fmt.Errorf("failed to rollback migration: %w", err)
 	}
 
-	if result.RowsAffected == 0 {
+	if matched == 0 {
 		var current entities.MigrationState
 		if err := m.db.First(&current).Error; err != nil {
 			return fmt.Errorf("failed to get current state: %w", err)
@@ -646,6 +644,9 @@ func (m *StateManager) GetProgress() (migratedRecords, totalRecords int64, lastM
 // ============================================================================
 // These methods track detection IDs the migration worker failed to write to V2.
 // Unlike in-memory tracking, these persist across restarts.
+// A marker belongs to one migration run: StartMigration and Rollback clear the
+// set in their own transaction, and the cancel handler clears it after Cancel.
+// StateManager.Cancel itself leaves it alone.
 
 // AddDirtyID records a detection ID that failed to write to V2.
 // The migration worker calls it when copying a record to V2 fails.
@@ -696,7 +697,42 @@ func (m *StateManager) GetDirtyIDCount() (int64, error) {
 	return count, nil
 }
 
-// ClearDirtyIDs removes all dirty IDs (used after successful full reconciliation).
+// ClearDirtyIDs removes all dirty IDs. CancelMigration calls it; StartMigration
+// and Rollback clear the set in their own transaction.
 func (m *StateManager) ClearDirtyIDs() error {
-	return m.db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&entities.MigrationDirtyID{}).Error
+	return deleteAllDirtyIDs(m.db)
+}
+
+// deleteAllDirtyIDs removes every dirty ID through db, which may be a
+// transaction handle.
+func deleteAllDirtyIDs(db *gorm.DB) error {
+	return db.Session(&gorm.Session{AllowGlobalUpdate: true}).Delete(&entities.MigrationDirtyID{}).Error
+}
+
+// updateGuardedClearingDirtyIDs applies updates to the migration state row when
+// it is in the from state, and removes every dirty ID in the same transaction.
+// It returns the number of matched state rows; with 0 nothing was changed or
+// deleted. The caller holds m.mu. Everything inside the transaction must use
+// tx, not m.db: the SQLite handle has a single pooled connection.
+func (m *StateManager) updateGuardedClearingDirtyIDs(from entities.MigrationStatus, updates map[string]any) (matched int64, err error) {
+	err = m.db.Transaction(func(tx *gorm.DB) error {
+		result := tx.Model(&entities.MigrationState{}).
+			Where("id = ? AND state = ?", migrationStateID, from).
+			Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		matched = result.RowsAffected
+		if matched == 0 {
+			return nil
+		}
+		if err := deleteAllDirtyIDs(tx); err != nil {
+			return fmt.Errorf("clear dirty IDs: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return matched, nil
 }
