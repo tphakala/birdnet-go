@@ -158,7 +158,7 @@ func TestStateManager_FullMigrationCycle(t *testing.T) {
 	require.NoError(t, err)
 
 	// Update progress
-	err = sm.UpdateProgress(500, 500)
+	err = sm.IncrementProgress(500, 500)
 	require.NoError(t, err)
 
 	state, err := sm.GetState()
@@ -346,13 +346,36 @@ func TestStateManager_ShouldReadFromV2(t *testing.T) {
 	assert.True(t, shouldRead)
 }
 
+// TestStateManager_UpdatePhaseProgress_KeepsWatermark verifies that the
+// phase progress write sets only the migrated record count and leaves the
+// detections cursor (last_migrated_id) alone.
+func TestStateManager_UpdatePhaseProgress_KeepsWatermark(t *testing.T) {
+	sm, cleanup := setupStateManager(t)
+	defer cleanup()
+
+	require.NoError(t, sm.StartMigration(1000))
+	require.NoError(t, sm.TransitionToDualWrite())
+	require.NoError(t, sm.TransitionToMigrating())
+	require.NoError(t, sm.IncrementProgress(500, 500))
+	require.NoError(t, sm.SetPhaseWithProgress(
+		entities.MigrationPhasePredictions, MigrationPhaseNumberPredictions, MigrationTotalPhases, 3000))
+
+	require.NoError(t, sm.UpdatePhaseProgress(1200))
+
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, uint(500), state.LastMigratedID, "phase progress must not move the detections watermark")
+	assert.Equal(t, int64(1200), state.MigratedRecords)
+	assert.Equal(t, int64(3000), state.TotalRecords)
+}
+
 func TestStateManager_GetProgress(t *testing.T) {
 	sm, cleanup := setupStateManager(t)
 	defer cleanup()
 
 	require.NoError(t, sm.StartMigration(1000))
 	require.NoError(t, sm.TransitionToDualWrite())
-	require.NoError(t, sm.UpdateProgress(500, 500))
+	require.NoError(t, sm.IncrementProgress(500, 500))
 
 	migrated, total, lastID, err := sm.GetProgress()
 	require.NoError(t, err)
