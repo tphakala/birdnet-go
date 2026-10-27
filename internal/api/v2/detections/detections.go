@@ -283,11 +283,11 @@ func searchPageKey(search string, scientific []string, numResults, offset int) *
 	}
 }
 
-// advancedPageKey builds the cache key for a SearchNotesAdvanced page. It
+// advancedPageKey builds the cache key for a SearchAdvanced page. It
 // carries every request field buildAdvancedSearchFilters reads, so two requests
 // that differ in any filter never share a page. QueryType and IncludeWeather
 // are deliberately absent: the filters do not read them, so requests that
-// differ only in those run the identical datastore call and share one entry.
+// differ only in those run the identical repository call and share one entry.
 func (p *detectionQueryParams) advancedPageKey() *apicore.DetectionPageKey {
 	return &apicore.DetectionPageKey{
 		Kind:             apicore.DetectionPageAdvanced,
