@@ -460,6 +460,10 @@
         "legacyRestartRequiredTitle": "Restartējiet, lai pabeigtu datubāzes migrāciju",
         "legacyRestartRequiredMessage": "Migrācija ir pabeigta. Restartējiet BirdNET-Go, lai pārslēgtos uz jauno datubāzi. Ja šis ziņojums paliek arī pēc restartēšanas, pārbaudiet žurnālā datubāzes kļūdas."
       },
+      "database": {
+        "serverAttentionTitle": "Datubāzes serverim nepieciešama uzmanība",
+        "serverAttentionMessage": "MySQL vai MariaDB serveris ir sasniedzis atbalsta beigas vai tuvojas tām, vai arī datubāze neizmanto rakstzīmju kopu utf8mb4. Sīkāku informāciju skatiet sadaļā Sistēma > Sistēmas veselība."
+      },
       "cleanup": {
         "completeTitle": "Mantotās datubāzes tīrīšana pabeigta",
         "completeMessage": "Atbrīvoti {space} diska vietas.",

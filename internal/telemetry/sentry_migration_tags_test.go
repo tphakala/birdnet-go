@@ -65,3 +65,28 @@ func TestMigrationTagSetters(t *testing.T) {
 		})
 	}
 }
+
+// TestSetDatabaseServerTags pins the contract of the three-value setter: all
+// tags are set together, an empty value or telemetry off sets none. Not
+// parallel: it changes the telemetry test mode and the process-wide Sentry hub.
+func TestSetDatabaseServerTags(t *testing.T) {
+	t.Run("applied", func(t *testing.T) {
+		useIsolatedHub(t, testModeEnabled)
+		assert.True(t, SetDatabaseServerTags("mariadb-11.4", "supported", "utf8mb4"))
+		assert.Equal(t, "mariadb-11.4", hubTag(t, databaseServerTagKey))
+		assert.Equal(t, "supported", hubTag(t, databaseServerSupportTagKey))
+		assert.Equal(t, "utf8mb4", hubTag(t, databaseCharsetTagKey))
+	})
+	t.Run("empty value", func(t *testing.T) {
+		useIsolatedHub(t, testModeEnabled)
+		assert.False(t, SetDatabaseServerTags("mysql-8.4", "", "latin1"))
+		assert.Empty(t, hubTag(t, databaseServerTagKey))
+		assert.Empty(t, hubTag(t, databaseCharsetTagKey))
+	})
+	t.Run("telemetry off", func(t *testing.T) {
+		useIsolatedHub(t, testModeDisabled)
+		bindTestClient(t, nil)
+		assert.False(t, SetDatabaseServerTags("mysql-8.4", "supported", "utf8mb4"))
+		assert.Empty(t, hubTag(t, databaseServerTagKey))
+	})
+}

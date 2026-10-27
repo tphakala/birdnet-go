@@ -460,6 +460,10 @@
         "legacyRestartRequiredTitle": "Herstart om de databasemigratie af te ronden",
         "legacyRestartRequiredMessage": "De migratie is voltooid. Herstart BirdNET-Go om over te schakelen naar de nieuwe database. Als dit bericht na een herstart blijft staan, controleer dan het logboek op databasefouten."
       },
+      "database": {
+        "serverAttentionTitle": "De databaseserver heeft aandacht nodig",
+        "serverAttentionMessage": "De MySQL- of MariaDB-server heeft het einde van zijn levensduur bereikt of nadert dat, of de database gebruikt niet de tekenset utf8mb4. Open Systeem > Gezondheid voor details."
+      },
       "cleanup": {
         "completeTitle": "Opruiming oude database voltooid",
         "completeMessage": "{space} schijfruimte vrijgemaakt.",

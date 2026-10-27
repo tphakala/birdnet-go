@@ -460,6 +460,10 @@
         "legacyRestartRequiredTitle": "Dokončete migraci databáze restartem",
         "legacyRestartRequiredMessage": "Migrace byla dokončena. Restartujte BirdNET-Go, aby se přepnulo na novou databázi. Pokud se tato zpráva zobrazuje i po restartu, zkontrolujte v protokolu chyby databáze."
       },
+      "database": {
+        "serverAttentionTitle": "Databázový server vyžaduje pozornost",
+        "serverAttentionMessage": "Server MySQL nebo MariaDB je za koncem životnosti nebo se k němu blíží, nebo databáze nepoužívá znakovou sadu utf8mb4. Podrobnosti najdete v části Systém > Zdraví."
+      },
       "cleanup": {
         "completeTitle": "Vyčištění staré databáze dokončeno",
         "completeMessage": "Uvolněno {space} místa na disku.",

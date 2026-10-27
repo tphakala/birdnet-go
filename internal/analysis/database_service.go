@@ -113,6 +113,15 @@ type DatabaseService struct {
 	// bell notice and the weekly push reminder current. It exists only while
 	// the process runs the legacy schema with a state manager.
 	legacyMonitor *legacySchemaMonitor
+
+	// probeServer reads the MySQL or MariaDB server version and character sets
+	// at startup. It is a field so tests can inject a result; NewDatabaseService
+	// sets the real probe.
+	probeServer databaseServerProbe
+
+	// serverNotice logs the server probe, sets its telemetry tags and raises
+	// the bell notice. It exists only after a MySQL or MariaDB probe.
+	serverNotice *databaseServerNotice
 }
 
 // NewDatabaseService creates a new DatabaseService with the given settings and metrics.
@@ -123,6 +132,7 @@ func NewDatabaseService(settings *conf.Settings, metrics *observability.Metrics)
 		metrics:           metrics,
 		checkStartupState: datastoreV2.CheckMigrationStateBeforeStartup,
 		checkLegacyTail:   datastoreV2.HasUnmigratedLegacyRecords,
+		probeServer:       probeDatabaseServer,
 	}
 }
 
@@ -450,8 +460,24 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		d.legacyMonitor.start()
 	}
 
+	d.probeDatabaseServer(datastoreLog)
+
 	startSucceeded = true
 	return nil
+}
+
+// probeDatabaseServer runs the one-shot MySQL or MariaDB server check. It
+// does nothing for SQLite or without a v2 manager, runs under its own bounded
+// context, and only logs: a failed probe never fails startup.
+func (d *DatabaseService) probeDatabaseServer(log logger.Logger) {
+	if d.probeServer == nil || d.v2Manager == nil || !d.v2Manager.IsMySQL() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), databaseServerProbeTimeout)
+	defer cancel()
+	report := d.probeServer(ctx, d.v2Manager.DB(), time.Now())
+	d.serverNotice = newDatabaseServerNotice(log)
+	d.serverNotice.report(&report)
 }
 
 // bootParamsFromStartup maps settings and the datastore startup state into
@@ -503,6 +529,11 @@ func bootParamsFromStartup(settings *conf.Settings, st datastoreV2.StartupState)
 // the primary datastore.
 func (d *DatabaseService) Stop(ctx context.Context) error {
 	log := GetLogger()
+
+	if d.serverNotice != nil {
+		d.serverNotice.stop()
+		d.serverNotice = nil
+	}
 
 	// Stop the state monitor first so nothing reads the database after it closes.
 	if d.legacyMonitor != nil {

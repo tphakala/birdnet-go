@@ -246,6 +246,8 @@ type DatabaseInfoProvider interface {
 type DatabaseInfo struct {
 	Dialect           string                `json:"dialect"`
 	EngineVersion     string                `json:"engine_version"`
+	ServerSupport     string                `json:"server_support,omitempty"`
+	SchemaCharset     string                `json:"schema_charset,omitempty"`
 	DatabasePath      string                `json:"database_path"`
 	DatabaseSizeBytes int64                 `json:"database_size_bytes"`
 	WALSizeBytes      int64                 `json:"wal_size_bytes,omitempty"`

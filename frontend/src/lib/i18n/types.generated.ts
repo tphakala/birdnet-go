@@ -397,6 +397,8 @@ export type TranslationKey =
   | 'notifications.content.migration.legacyNeedsAttentionMessage'
   | 'notifications.content.migration.legacyRestartRequiredTitle'
   | 'notifications.content.migration.legacyRestartRequiredMessage'
+  | 'notifications.content.database.serverAttentionTitle'
+  | 'notifications.content.database.serverAttentionMessage'
   | 'notifications.content.cleanup.completeTitle'
   | 'notifications.content.cleanup.completeMessage' // params: space
   | 'notifications.content.cleanup.failedTitle'

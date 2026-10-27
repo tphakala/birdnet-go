@@ -113,8 +113,15 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	require.NoError(t, err, "metrics initialization should succeed")
 
 	svc := NewDatabaseService(settings, metrics)
+	probed := 0
+	svc.probeServer = func(context.Context, *gorm.DB, time.Time) databaseServerReport {
+		probed++
+		return databaseServerReport{}
+	}
 	err = svc.Start(t.Context())
 	require.NoError(t, err, "Start() should succeed for fresh install")
+	assert.Zero(t, probed, "a SQLite install must not probe a MySQL server")
+	assert.Nil(t, svc.serverNotice, "no database server notice on SQLite")
 	t.Cleanup(func() {
 		assert.NoError(t, svc.Stop(t.Context()), "Stop() should succeed")
 	})
