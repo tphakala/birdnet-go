@@ -1207,8 +1207,10 @@ func TestClassifyMixedSchema(t *testing.T) {
 		{"R4 v2-shaped notification_histories without rows", build(legacyRows("notes", 2), shared(sharedProbe("notification_histories", 0, true))), verdictKeepLegacy},
 		{"R5 both sides hold detections", build(completedMarker, legacyRows("notes", 2), v2Rows("detections", 4)), verdictRefuseBothHoldData},
 		{"R5 legacy rows and detection_locks rows", build(legacyRows("notes", 2), v2Rows("detection_locks", 1)), verdictRefuseBothHoldData},
-		{"R5 legacy rows and a NOT NULL label_id notification_histories row", build(legacyRows("notes", 2), shared(sharedProbe("notification_histories", 1, true))), verdictRefuseSharedTables},
-		{"R5 legacy rows and an image_caches row with a nullable label_id", build(legacyRows("notes", 2), shared(sharedProbe("image_caches", 1, false))), verdictRefuseSharedTables},
+		{"R4 legacy rows and a NOT NULL label_id notification_histories row (regenerable)", build(legacyRows("notes", 2), shared(sharedProbe("notification_histories", 1, true))), verdictKeepLegacy},
+		{"R4 legacy rows and an image_caches row with a nullable label_id (regenerable)", build(legacyRows("notes", 2), shared(sharedProbe("image_caches", 1, false))), verdictKeepLegacy},
+		{"R5 legacy rows and a NOT NULL label_id threshold_events row", build(legacyRows("notes", 2), shared(sharedProbe("threshold_events", 1, true))), verdictRefuseSharedTables},
+		{"R5 legacy rows and a NOT NULL label_id dynamic_thresholds row", build(legacyRows("notes", 2), shared(sharedProbe("dynamic_thresholds", 1, true))), verdictRefuseSharedTables},
 		{"R5 legacy empty, completed, dynamic_thresholds with label_id and rows", build(completedMarker, shared(sharedProbe("dynamic_thresholds", 2, false))), verdictRefuseSharedTables},
 		{"R5 legacy empty, idle, threshold_events with label_id and rows", build(idleMarker, shared(sharedProbe("threshold_events", 2, true))), verdictRefuseSharedTables},
 		{"R0 unknown input", build(completedMarker, func(p *mixedSchemaProbe) { p.unknown = true }), verdictRefuseUnknown},
@@ -1238,14 +1240,14 @@ func TestMixedSchemaError_Error(t *testing.T) {
 	p := &mixedSchemaProbe{
 		v2Tables:     []tableRowCount{probedRows("detections", 1204), probedRows("alert_rules", 0), probedRows("labels", 37), probedRows("ai_models", -1)},
 		legacyTables: []tableRowCount{probedRows("notes", 0), probedRows("results", 0)},
-		sharedTables: []sharedTableProbe{sharedProbe("notification_histories", 2, true)},
+		sharedTables: []sharedTableProbe{sharedProbe("threshold_events", 2, true)},
 	}
 	e := newMixedSchemaError(p, verdictRefuseSharedTables)
 	msg := e.Error()
-	assert.Contains(t, msg, "v2 tables with rows: detections=1204, labels=37, ai_models=unknown, notification_histories=2.")
+	assert.Contains(t, msg, "v2 tables with rows: detections=1204, labels=37, ai_models=unknown, threshold_events=2.")
 	assert.Contains(t, msg, "Legacy tables with rows: none.")
 	assert.NotContains(t, msg, "alert_rules")
-	assert.Contains(t, msg, "notification_histories", "the hint names the blocking shared table")
+	assert.Contains(t, msg, "The tables threshold_events hold rows", "the hint names the blocking shared table")
 	require.ErrorIs(t, e, ErrMixedSchemaDatabase)
 }
 
@@ -1407,6 +1409,16 @@ func TestMixedSchemaTableLists_MatchEntities(t *testing.T) {
 		s, err := schema.Parse(model, &sync.Map{}, schema.NamingStrategy{})
 		require.NoError(t, err)
 		return s.Table
+	}
+
+	// The same literal is asserted for disposableV2ShapedTables in the datastore
+	// package (TestDisposableV2ShapedTables_AreTheRegenerablePair), so a change to
+	// one list alone fails a test.
+	assert.ElementsMatch(t, []string{"notification_histories", "image_caches"}, legacyDisposableSharedTables,
+		"the mirror must hold exactly the regenerable tables named in internal/datastore/AGENTS.md")
+	for _, table := range legacyDisposableSharedTables {
+		assert.Contains(t, legacyRepairedSharedTables, table,
+			"a disposable shared table must be one of the tables the legacy store repairs")
 	}
 
 	sharedNames := make(map[string]struct{})

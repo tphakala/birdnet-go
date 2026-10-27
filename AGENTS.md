@@ -73,7 +73,8 @@ yourself before touching code in that area.
 - **Reconcile database problems safely; never migrate data on your own.** When
   startup or runtime code finds a recoverable database problem, it repairs it
   automatically as long as no row of user data is lost or hidden and the repair
-  is logged. A data migration (SQLite to MySQL, legacy to v2, copying or
+  is logged (two regenerable cache tables are not user data; the exception and
+  its conditions are in `internal/datastore/AGENTS.md`). A data migration (SQLite to MySQL, legacy to v2, copying or
   consolidating databases) never starts by itself; only an explicit user action
   starts it. Details: `internal/datastore/AGENTS.md`.
 - **HARD RULE: support only MySQL and MariaDB releases that upstream still

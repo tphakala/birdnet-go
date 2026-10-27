@@ -1390,7 +1390,7 @@ const (
 	hintCountsUnknown         = "Some tables could not be read. " + hintBackupFirst
 	hintBothHoldData          = "Both sides hold data. Back up the database before removing either side; removing a side loses the rows listed for it."
 	hintV2NotCompleted        = "The enhanced database holds detections but is not marked as a completed install. " + hintBackupFirst
-	hintSharedTablesHoldData  = "The tables %s hold rows that the startup of the other side would remove. " + hintBackupFirst
+	hintSharedTablesHoldData  = "The tables %s hold rows that the startup of the other side would refuse or remove. " + hintBackupFirst
 	hintDropFailed            = "No table with rows was dropped and the next start decides again from what the database holds. If it keeps failing with a lock or privilege error, check that the database user may lock, update and drop tables and that no other session is using them."
 	mixedSchemaDropFailedText = "database holds enhanced database (v2) tables beside a legacy notes table and BirdNET-Go could not remove the empty tables of one side: %s. %s"
 	mixedSchemaErrorFormat    = "database holds enhanced database (v2) tables beside a legacy notes table and BirdNET-Go cannot keep one side without losing data. v2 tables with rows: %s. Legacy tables with rows: %s. %s"
@@ -1412,11 +1412,19 @@ var bareDetectionTables = []string{
 // hasCompleteFreshV2Schema relies on with a different meaning.
 var legacyDetectionTables = []string{"note_locks", "note_comments", "note_reviews", "results", "notes"}
 
-// legacyRepairedSharedTables are the tables the legacy store drops, rows included, when
-// they have the v2 shape (repairV2ShapedLegacyTables drops those with a NOT NULL label_id,
-// validateAndFixSchema drops image_caches with any label_id). Mirror of
-// v2ShapedLegacyTables in internal/datastore/manage.go; keep in sync.
+// legacyRepairedSharedTables are the tables the legacy store repairs when they have the v2
+// shape. repairV2ShapedLegacyTables drops one with a NOT NULL label_id when it is empty,
+// drops the disposable ones (legacyDisposableSharedTables) with their rows, and refuses
+// to start when any other holds rows. validateAndFixSchema drops image_caches with any
+// label_id, rows included. Mirror of v2ShapedLegacyTables in
+// internal/datastore/manage.go; keep in sync.
 var legacyRepairedSharedTables = []string{"notification_histories", "dynamic_thresholds", "threshold_events", mixedSchemaImageCaches}
+
+// legacyDisposableSharedTables are the shared tables whose rows the legacy store drops
+// without refusing, because BirdNET-Go rebuilds them (see the exception in
+// internal/datastore/AGENTS.md). Mirror of disposableV2ShapedTables in
+// internal/datastore/manage.go; keep in sync.
+var legacyDisposableSharedTables = []string{"notification_histories", mixedSchemaImageCaches}
 
 // v2DroppedThresholdTables are the tables the v2 Initialize drops, rows included, when
 // they still have a label_id column (dropStaleThresholdTables in manager.go).
@@ -1477,7 +1485,8 @@ const (
 	verdictRefuseV2NotCompleted
 	// verdictRefuseBothHoldData: both sides hold detections or legacy data.
 	verdictRefuseBothHoldData
-	// verdictRefuseSharedTables: keeping a side would let its startup drop rows of a shared table.
+	// verdictRefuseSharedTables: keeping a side would let its startup refuse over, or drop
+	// rows of, a shared table.
 	verdictRefuseSharedTables
 	// verdictRefuseDropFailed: an empty table could not be removed.
 	verdictRefuseDropFailed
@@ -1491,7 +1500,8 @@ type mixedSchemaError struct {
 	v2Tables []tableRowCount
 	// legacyTables are the existing legacy detection tables with their counts.
 	legacyTables []tableRowCount
-	// blocking are the shared tables with rows that the startup of the other side would drop.
+	// blocking are the shared tables with rows that the startup of the other side would
+	// refuse over or drop.
 	blocking []string
 	// failure says which reconcile step failed, for verdictRefuseDropFailed.
 	failure string
@@ -1502,7 +1512,7 @@ func newMixedSchemaError(p *mixedSchemaProbe, verdict mixedSchemaVerdict) *mixed
 	e := &mixedSchemaError{verdict: verdict, v2Tables: slices.Clone(p.v2Tables), legacyTables: p.legacyTables}
 	for _, s := range p.sharedTables {
 		e.v2Tables = append(e.v2Tables, s.tableRowCount)
-		if s.hasRows && (legacyDropsRows(s) || v2DropsRows(s)) {
+		if s.hasRows && (legacyRefusesRows(s) || v2DropsRows(s)) {
 			e.blocking = append(e.blocking, s.table)
 		}
 	}
@@ -1556,11 +1566,13 @@ func mixedSchemaHint(e *mixedSchemaError) string {
 	}
 }
 
-// legacyDropsRows reports whether the legacy store would drop the rows of s on its next
-// start: a NOT NULL label_id (repairV2ShapedLegacyTables), or any label_id on image_caches
-// (validateAndFixSchema).
-func legacyDropsRows(s sharedTableProbe) bool {
-	return slices.Contains(legacyRepairedSharedTables, s.table) && (s.labelNotNull || s.table == mixedSchemaImageCaches)
+// legacyRefusesRows reports whether the legacy startup would refuse to start over the
+// rows of s: a non-disposable shared table with a NOT NULL label_id
+// (repairV2ShapedLegacyTables). The disposable tables are dropped with their rows
+// instead, image_caches also with a nullable label_id (validateAndFixSchema).
+func legacyRefusesRows(s sharedTableProbe) bool {
+	return s.labelNotNull && slices.Contains(legacyRepairedSharedTables, s.table) &&
+		!slices.Contains(legacyDisposableSharedTables, s.table)
 }
 
 // v2DropsRows reports whether the v2 Initialize would drop the rows of s on its next
@@ -1590,7 +1602,7 @@ func anyRows(tables []tableRowCount) bool {
 //     uncompleted one is kept only when it holds no detections. Refuse if the v2
 //     startup would drop rows of a threshold table.
 //   - legacy tables hold data: keep the legacy database when the bare detection
-//     tables are empty and the legacy startup would drop no shared table rows.
+//     tables are empty and the legacy startup would not refuse over a shared table.
 func classifyMixedSchema(p *mixedSchemaProbe) mixedSchemaVerdict {
 	if p.unknown {
 		return verdictRefuseUnknown
@@ -1610,7 +1622,7 @@ func classifyMixedSchema(p *mixedSchemaProbe) mixedSchemaVerdict {
 	if detectionFamilyHasRows(p) {
 		return verdictRefuseBothHoldData
 	}
-	if slices.ContainsFunc(p.sharedTables, func(s sharedTableProbe) bool { return s.hasRows && legacyDropsRows(s) }) {
+	if slices.ContainsFunc(p.sharedTables, func(s sharedTableProbe) bool { return s.hasRows && legacyRefusesRows(s) }) {
 		return verdictRefuseSharedTables
 	}
 	return verdictKeepLegacy
