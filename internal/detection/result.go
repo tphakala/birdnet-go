@@ -45,6 +45,10 @@ type Result struct {
 	ClipSampleRate int           // Sample rate in Hz of the saved clip file; 0 when unknown or without a clip
 	ProcessingTime time.Duration // How long analysis took
 
+	// SpectrogramClipName is the clip name a detection kept for its spectrogram image after
+	// retention removed its audio. Repository reads set it; Save ignores it.
+	SpectrogramClipName string
+
 	// Validation flags
 	Unlikely bool // Tagged by the ultrasonic validation filter when source audio lacks bat echolocation characteristics
 
@@ -61,6 +65,12 @@ type Result struct {
 	Verified string
 	Locked   bool
 	Comments []Comment
+}
+
+// IsSpectrogramOnly reports whether retention removed the detection's audio but a
+// spectrogram image was kept.
+func (r *Result) IsSpectrogramOnly() bool {
+	return r.ClipName == "" && r.SpectrogramClipName != ""
 }
 
 // ResultModelContrib records a single AI model's contribution to a detection.

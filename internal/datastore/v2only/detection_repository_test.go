@@ -252,8 +252,11 @@ func listReadCalls(date, hour string) []readCall {
 		{"Search", withoutTotal(func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, int64, error) {
 			return repo.Search(ctx, datastore.NewDetectionFilters().WithLimit(listLimit))
 		})},
+		{"SearchAdvanced", withoutTotal(func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, int64, error) {
+			return repo.SearchAdvanced(ctx, &datastore.AdvancedSearchFilters{Limit: listLimit})
+		})},
 		{"GetBySpecies", withoutTotal(func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, int64, error) {
-			return repo.GetBySpecies(ctx, "Parus major", nil)
+			return repo.GetBySpecies(ctx, "Parus major", date, hour, 1, listLimit, 0)
 		})},
 		{"GetByDateRange", withoutTotal(func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, int64, error) {
 			return repo.GetByDateRange(ctx, date, date, listLimit, 0)
@@ -369,6 +372,15 @@ func TestDetectionRepository_ReadsMatchBridge(t *testing.T) {
 	require.NoError(t, ds.SaveNoteComment(&datastore.NoteComment{NoteID: full.ID, Entry: "a comment", CreatedAt: at}))
 	bare := seedDetection(t, ds, "Parus major", at.Add(time.Hour))
 	bareID := strconv.FormatUint(uint64(bare.ID), 10)
+	// A detection whose audio retention removed while its spectrogram was kept.
+	const spectrogramClip = "2026/06/blue-tit.wav"
+	spectrogramOnly := seedDetection(t, ds, "Cyanistes caeruleus", at.AddDate(0, 0, 1))
+	require.NoError(t, ds.manager.DB().Model(&entities.Detection{}).
+		Where("id = ?", spectrogramOnly.ID).Update("clip_name", spectrogramClip).Error)
+	retained, err := ds.RetainNoteSpectrogramsByClipNames([]string{spectrogramClip})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), retained)
+	spectrogramOnlyID := strconv.FormatUint(uint64(spectrogramOnly.ID), 10)
 
 	// readOutcome is everything one read returns. Errors compare by text.
 	type readOutcome struct {
@@ -395,6 +407,13 @@ func TestDetectionRepository_ReadsMatchBridge(t *testing.T) {
 		}},
 		{"Get bare", func(r datastore.DetectionRepository) readOutcome {
 			res, err := r.Get(ctx, bareID)
+			return outcome([]*detection.Result{res}, 0, err)
+		}},
+		{"Get spectrogram only", func(r datastore.DetectionRepository) readOutcome {
+			res, err := r.Get(ctx, spectrogramOnlyID)
+			require.NoError(t, err)
+			assert.Equal(t, spectrogramClip, res.SpectrogramClipName)
+			assert.True(t, res.IsSpectrogramOnly())
 			return outcome([]*detection.Result{res}, 0, err)
 		}},
 		{"Get missing", func(r datastore.DetectionRepository) readOutcome {
@@ -430,12 +449,57 @@ func TestDetectionRepository_ReadsMatchBridge(t *testing.T) {
 			res, total, err := r.Search(ctx, datastore.NewDetectionFilters().WithSpecies("Turdus merula"))
 			return outcome(res, total, err)
 		}},
+		{"SearchAdvanced empty filters", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.SearchAdvanced(ctx, &datastore.AdvancedSearchFilters{Limit: listLimit})
+			return outcome(res, total, err)
+		}},
+		{"SearchAdvanced species confidence sorted", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.SearchAdvanced(ctx, &datastore.AdvancedSearchFilters{
+				Species:    []string{"Parus major", "Cyanistes caeruleus"},
+				Confidence: &datastore.ConfidenceFilter{Operator: ">=", Value: 0.5},
+				SortBy:     "species_asc",
+				Limit:      listLimit,
+			})
+			return outcome(res, total, err)
+		}},
+		{"SearchAdvanced scientific names", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.SearchAdvanced(ctx, &datastore.AdvancedSearchFilters{
+				SpeciesScientific: []string{"Cyanistes caeruleus"}, Limit: listLimit,
+			})
+			return outcome(res, total, err)
+		}},
+		{"SearchAdvanced source", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.SearchAdvanced(ctx, &datastore.AdvancedSearchFilters{
+				Source: []string{"rtsp_garage"}, Limit: listLimit,
+			})
+			return outcome(res, total, err)
+		}},
+		{"SearchAdvanced second page", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.SearchAdvanced(ctx, &datastore.AdvancedSearchFilters{Limit: 1, Offset: 1})
+			return outcome(res, total, err)
+		}},
 		{"GetBySpecies known", func(r datastore.DetectionRepository) readOutcome {
-			res, total, err := r.GetBySpecies(ctx, "Parus major", datastore.NewDetectionFilters().WithLimit(1).WithOffset(1))
+			res, total, err := r.GetBySpecies(ctx, "Parus major", "", "", 1, 1, 1)
+			return outcome(res, total, err)
+		}},
+		{"GetBySpecies default limit", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetBySpecies(ctx, "Parus major", "", "", 1, 0, 0)
 			return outcome(res, total, err)
 		}},
 		{"GetBySpecies unknown", func(r datastore.DetectionRepository) readOutcome {
-			res, total, err := r.GetBySpecies(ctx, "Unknown species", nil)
+			res, total, err := r.GetBySpecies(ctx, "Unknown species", "", "", 1, 0, 0)
+			return outcome(res, total, err)
+		}},
+		{"GetBySpecies date", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetBySpecies(ctx, "Parus major", "2026-06-01", "", 1, listLimit, 0)
+			return outcome(res, total, err)
+		}},
+		{"GetBySpecies hour and duration", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetBySpecies(ctx, "Parus major", "2026-06-01", "12", 2, listLimit, 0)
+			return outcome(res, total, err)
+		}},
+		{"GetBySpecies hour without match", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetBySpecies(ctx, "Parus major", "2026-06-01", "03", 1, listLimit, 0)
 			return outcome(res, total, err)
 		}},
 		{"GetByDateRange dates", func(r datastore.DetectionRepository) readOutcome {
@@ -464,10 +528,24 @@ func TestDetectionRepository_ReadsMatchBridge(t *testing.T) {
 		}},
 	}
 
+	// wantTotals pins the new reads to rows, so two empty outcomes cannot match vacuously.
+	wantTotals := map[string]int64{
+		"SearchAdvanced empty filters":             3,
+		"SearchAdvanced species confidence sorted": 3,
+		"SearchAdvanced scientific names":          1,
+		"SearchAdvanced source":                    1,
+		"GetBySpecies date":                        2,
+		"GetBySpecies hour and duration":           2,
+		"GetBySpecies hour without match":          0,
+	}
+
 	for _, rd := range reads {
 		t.Run(rd.name, func(t *testing.T) {
 			want := rd.read(bridge)
 			got := rd.read(v2)
+			if total, ok := wantTotals[rd.name]; ok {
+				assert.Equal(t, total, got.Total, "total")
+			}
 			// Whole values compare equal: both paths build times from Unix seconds or a
 			// wall time parsed in the same *time.Location, with no monotonic reading.
 			assert.Equal(t, want, got)
@@ -553,5 +631,73 @@ func TestDetectionRepository_ListReadsNeverReturnUnresolvedSpecies(t *testing.T)
 			}
 			assert.True(t, completed, "no cancel point let the read finish")
 		})
+	}
+}
+
+// TestSearchAdvanced_DefaultSortMatchesSearchNotes verifies that the repository's
+// SearchAdvanced with SortBySearchDefault returns the same IDs, in the same order, with
+// the same total as SearchNotes, for the plain text queries the detection list API
+// serves, at the first and a second page.
+func TestSearchAdvanced_DefaultSortMatchesSearchNotes(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastoreWithLabels(t, []string{
+		"Corvus corone_Corneille noire",
+		"Corvus frugilegus_Corbeau freux",
+		"Erithacus rubecula_Rougegorge familier",
+	})
+	defer cleanup()
+	ds.timezone = time.UTC
+	ctx := t.Context()
+	repo := NewDetectionRepository(ds)
+
+	// Later rows are older, so an id-ordered result differs from a time-ordered one.
+	base := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	names := []string{
+		"Corvus corone", "Erithacus rubecula", "Corvus frugilegus",
+		"Corvus corone", "Erithacus rubecula", "Corvus corone",
+	}
+	for i, name := range names {
+		seedDetection(t, ds, name, base.Add(-time.Duration(i)*time.Hour))
+	}
+
+	const pageSize = 2
+	queries := []struct {
+		name  string
+		query string
+		want  int64
+	}{
+		{"empty query", "", 6},
+		{"scientific substring", "Corvus", 4},
+		{"common name substring", "Rougegorge", 2},
+		{"no match", "Pinson", 0},
+	}
+	for _, q := range queries {
+		for _, offset := range []int{0, pageSize} {
+			t.Run(q.name+" offset "+strconv.Itoa(offset), func(t *testing.T) {
+				notes, noteTotal, err := ds.SearchNotes(q.query, false, pageSize, offset)
+				require.NoError(t, err)
+				require.Equal(t, q.want, noteTotal, "SearchNotes total")
+
+				results, total, err := repo.SearchAdvanced(ctx, &datastore.AdvancedSearchFilters{
+					TextQuery: q.query,
+					SortBy:    datastore.SortBySearchDefault,
+					Limit:     pageSize,
+					Offset:    offset,
+				})
+				require.NoError(t, err)
+
+				assert.Equal(t, noteTotal, total, "total")
+				wantIDs := make([]uint, len(notes))
+				for i := range notes {
+					wantIDs[i] = notes[i].ID
+				}
+				gotIDs := make([]uint, len(results))
+				for i := range results {
+					gotIDs[i] = results[i].ID
+				}
+				assert.Equal(t, wantIDs, gotIDs, "IDs in order")
+			})
+		}
 	}
 }

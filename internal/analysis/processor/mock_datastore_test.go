@@ -524,7 +524,10 @@ func (m *MockDetectionRepository) GetRecent(_ context.Context, _ int) ([]*detect
 func (m *MockDetectionRepository) Search(_ context.Context, _ *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
 	return nil, 0, nil
 }
-func (m *MockDetectionRepository) GetBySpecies(_ context.Context, _ string, _ *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+func (m *MockDetectionRepository) SearchAdvanced(_ context.Context, _ *datastore.AdvancedSearchFilters) ([]*detection.Result, int64, error) {
+	return nil, 0, nil
+}
+func (m *MockDetectionRepository) GetBySpecies(_ context.Context, _, _, _ string, _, _, _ int) ([]*detection.Result, int64, error) {
 	return nil, 0, nil
 }
 func (m *MockDetectionRepository) GetByDateRange(_ context.Context, _, _ string, _, _ int) ([]*detection.Result, int64, error) {

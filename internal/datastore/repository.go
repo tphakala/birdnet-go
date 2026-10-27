@@ -36,8 +36,18 @@ type DetectionRepository interface {
 	// Returns results, total count, and any error.
 	Search(ctx context.Context, filters *DetectionFilters) ([]*detection.Result, int64, error)
 
-	// GetBySpecies retrieves detections for a specific species.
-	GetBySpecies(ctx context.Context, species string, filters *DetectionFilters) ([]*detection.Result, int64, error)
+	// SearchAdvanced finds detections matching the filters as given, including the sort
+	// order, scientific-name list and source list that DetectionFilters cannot express; this
+	// is the query the detection list API builds from request parameters. SortBy
+	// SortBySearchDefault orders newest first, as the plain text search does. filters must
+	// not be nil. Returns results, total count before pagination, and any error.
+	SearchAdvanced(ctx context.Context, filters *AdvancedSearchFilters) ([]*detection.Result, int64, error)
+
+	// GetBySpecies retrieves detections for a specific species, newest first, with the
+	// total count of matches before pagination. An empty date means all dates; a date with
+	// an empty hour means that whole day; a date with an hour restricts to duration hours
+	// from that hour. A limit of zero or less means DefaultDetectionLimit.
+	GetBySpecies(ctx context.Context, species, date, hour string, duration, limit, offset int) ([]*detection.Result, int64, error)
 
 	// GetByDateRange retrieves detections within a date range.
 	GetByDateRange(ctx context.Context, startDate, endDate string, limit, offset int) ([]*detection.Result, int64, error)

@@ -574,7 +574,11 @@ func (r *testDetectionRepo) GetRecent(_ context.Context, _ int) ([]*detection.Re
 	return nil, nil
 }
 
-func (r *testDetectionRepo) GetBySpecies(_ context.Context, _ string, _ *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+func (r *testDetectionRepo) SearchAdvanced(_ context.Context, _ *datastore.AdvancedSearchFilters) ([]*detection.Result, int64, error) {
+	return nil, 0, nil
+}
+
+func (r *testDetectionRepo) GetBySpecies(_ context.Context, _, _, _ string, _, _, _ int) ([]*detection.Result, int64, error) {
 	return nil, 0, nil
 }
 

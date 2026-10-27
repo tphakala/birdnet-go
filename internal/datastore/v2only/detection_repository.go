@@ -44,10 +44,6 @@ func (r *detectionRepository) Save(ctx context.Context, result *detection.Result
 	return nil
 }
 
-// speciesWindowHours is the hour duration passed for a species query without a date; the
-// query ignores it then, as the bridge passes the same value.
-const speciesWindowHours = 1
-
 // Get retrieves a detection by ID with the instant stored for it.
 func (r *detectionRepository) Get(ctx context.Context, id string) (*detection.Result, error) {
 	det, err := r.ds.getDetection(ctx, id)
@@ -87,22 +83,30 @@ func (r *detectionRepository) Search(ctx context.Context, filters *datastore.Det
 	return results, total, nil
 }
 
+// SearchAdvanced finds detections matching the filters as given.
+func (r *detectionRepository) SearchAdvanced(ctx context.Context, filters *datastore.AdvancedSearchFilters) ([]*detection.Result, int64, error) {
+	dets, total, err := r.ds.searchAdvanced(ctx, filters)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search detections: %w", err)
+	}
+	results, err := r.ds.detectionsToResults(ctx, dets)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search detections: %w", err)
+	}
+	return results, total, nil
+}
+
 // GetBySpecies retrieves detections for a specific species.
-func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, filters *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
-	limit := datastore.DefaultDetectionLimit
-	offset := 0
-	if filters != nil {
-		if filters.Limit > 0 {
-			limit = filters.Limit
-		}
-		offset = filters.Offset
+func (r *detectionRepository) GetBySpecies(ctx context.Context, species, date, hour string, duration, limit, offset int) ([]*detection.Result, int64, error) {
+	if limit <= 0 {
+		limit = datastore.DefaultDetectionLimit
 	}
 
-	dets, err := r.ds.speciesDetections(ctx, species, "", "", speciesWindowHours, false, limit, offset)
+	dets, err := r.ds.speciesDetections(ctx, species, date, hour, duration, false, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get species detections: %w", err)
 	}
-	total, err := r.ds.countSpeciesDetections(ctx, species, "", "", speciesWindowHours)
+	total, err := r.ds.countSpeciesDetections(ctx, species, date, hour, duration)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count species detections: %w", err)
 	}
