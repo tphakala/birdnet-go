@@ -288,7 +288,18 @@ func searchPageKey(search string, scientific []string, numResults, offset int) *
 // that differ in any filter never share a page. QueryType and IncludeWeather
 // are deliberately absent: the filters do not read them, so requests that
 // differ only in those run the identical repository call and share one entry.
-func (p *detectionQueryParams) advancedPageKey() *apicore.DetectionPageKey {
+//
+// The date filter is keyed by the range it resolves to at now in loc, not by the
+// raw date token: "today" means a different range after local midnight, and a
+// page cached under the token would be served for the wrong day. When a range
+// resolves, Date is cleared and StartDate and EndDate carry the resolved dates,
+// so "today", "Today" and the same explicit date share one entry. With no valid
+// range the raw fields stay in the key, as the filters ignore them alike.
+func (p *detectionQueryParams) advancedPageKey(now time.Time, loc *time.Location) *apicore.DetectionPageKey {
+	date, startDate, endDate := p.Date, p.StartDate, p.EndDate
+	if r := apicore.ParseDateRangeFilter(p.Date, p.StartDate, p.EndDate, now, loc); r != nil {
+		date, startDate, endDate = "", r.Start.Format(time.DateOnly), r.End.Format(time.DateOnly)
+	}
 	return &apicore.DetectionPageKey{
 		Kind:             apicore.DetectionPageAdvanced,
 		Search:           p.Search,
@@ -303,9 +314,9 @@ func (p *detectionQueryParams) advancedPageKey() *apicore.DetectionPageKey {
 		Source:           p.Source,
 		Locked:           p.Locked,
 		Species:          p.Species,
-		Date:             p.Date,
-		StartDate:        p.StartDate,
-		EndDate:          p.EndDate,
+		Date:             date,
+		StartDate:        startDate,
+		EndDate:          endDate,
 		SortBy:           p.SortBy,
 		Hour:             p.Hour,
 		Duration:         p.Duration,
@@ -1106,8 +1117,11 @@ func (c *Handler) getSpeciesDetections(ctx context.Context, species, date, hour 
 
 // getSearchDetectionsAdvanced handles advanced search with filters
 func (c *Handler) getSearchDetectionsAdvanced(ctx context.Context, params *detectionQueryParams) ([]*detectionPkg.Result, int64, error) {
-	return c.cachedPage(ctx, params.advancedPageKey(), func(loadCtx context.Context) ([]*detectionPkg.Result, int64, error) {
-		filters := c.buildAdvancedSearchFilters(params)
+	// One clock reading feeds both the cache key and the loader, so a request
+	// that straddles midnight cannot be keyed for one day and loaded for another.
+	now := time.Now()
+	return c.cachedPage(ctx, params.advancedPageKey(now, datastore.Timezone()), func(loadCtx context.Context) ([]*detectionPkg.Result, int64, error) {
+		filters := c.buildAdvancedSearchFilters(params, now)
 
 		results, totalCount, err := c.Repo.SearchAdvanced(loadCtx, &filters)
 		if err != nil {
@@ -1128,8 +1142,9 @@ func (c *Handler) getSearchDetectionsAdvanced(ctx context.Context, params *detec
 	})
 }
 
-// buildAdvancedSearchFilters constructs search filters from query parameters
-func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datastore.AdvancedSearchFilters {
+// buildAdvancedSearchFilters constructs search filters from query parameters,
+// resolving date shortcuts at now.
+func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams, now time.Time) datastore.AdvancedSearchFilters {
 	filters := datastore.AdvancedSearchFilters{
 		TextQuery:         params.Search,
 		SpeciesScientific: params.SearchScientific,
@@ -1168,7 +1183,7 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	}
 
 	// Apply date range filter using shared helper; datastore.Timezone() is the station zone the datastore resolves dates in
-	if dateRange := apicore.ParseDateRangeFilter(params.Date, params.StartDate, params.EndDate, time.Now(), datastore.Timezone()); dateRange != nil {
+	if dateRange := apicore.ParseDateRangeFilter(params.Date, params.StartDate, params.EndDate, now, datastore.Timezone()); dateRange != nil {
 		filters.DateRange = &datastore.DateRange{
 			Start: dateRange.Start,
 			End:   dateRange.End,

@@ -65,7 +65,7 @@ func TestParseDetectionQueryParams_DateShortcuts(t *testing.T) {
 			require.NotNil(t, params)
 
 			beforeFirst, beforeLast := shortcutWindow(tt.days)
-			filters := c.buildAdvancedSearchFilters(params)
+			filters := c.buildAdvancedSearchFilters(params, time.Now())
 			afterFirst, afterLast := shortcutWindow(tt.days)
 			require.NotNil(t, filters.DateRange)
 
@@ -85,7 +85,7 @@ func TestParseDetectionQueryParams_DateShortcuts(t *testing.T) {
 		ctx := echo.New().NewContext(req, httptest.NewRecorder())
 		params, err := c.parseDetectionQueryParams(ctx)
 		require.NoError(t, err)
-		filters := c.buildAdvancedSearchFilters(params)
+		filters := c.buildAdvancedSearchFilters(params, time.Now())
 		require.NotNil(t, filters.DateRange)
 		assert.Equal(t, "2026-01-15", wallclock.DateOf(filters.DateRange.Start).String())
 		assert.Equal(t, "2026-01-15", wallclock.DateOf(filters.DateRange.End).String())
