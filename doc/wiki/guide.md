@@ -331,7 +331,7 @@ realtime:
     newSpeciesWindowDays: 7 # Days to show "New Species" badge after first detection (default: 7)
     syncIntervalMinutes: 60 # How often to sync tracking data with database in minutes (default: 60)
 
-    # Yearly tracking - tracks first arrivals each calendar year
+    # Yearly tracking - tracks first arrivals each year, counted from the reset date
     yearlyTracking:
       enabled: true # Enable yearly "New This Year" tracking (default: true)
       resetMonth: 1 # Month when yearly tracking resets (1-12, default: 1 for January)
@@ -2870,7 +2870,7 @@ The system tracks three different types of "new" species appearances:
 
 ##### 📅 **New This Year** (Annual First)
 
-- **What it means**: A bird species detected for the first time this calendar year
+- **What it means**: A bird species detected for the first time since the yearly reset date (January 1 by default)
 - **Visual indicator**: Blue calendar icon
 - **When shown**: For 7 days after the first detection of the year (configurable via `yearlyTracking.windowDays`)
 - **Resets**: January 1st each year (configurable via `yearlyTracking.resetMonth` and `resetDay`)
@@ -2914,7 +2914,7 @@ The species tracking system is enabled by default with sensible settings. You ca
 
 ##### Yearly Tracking Settings
 
-Configure how the system tracks first arrivals each calendar year:
+Configure how the system tracks first arrivals each year, counted from the reset date:
 
 - **Enable Yearly Tracking** (`yearlyTracking.enabled`): Turn yearly tracking on/off (default: `true`)
 - **Reset Date** (`yearlyTracking.resetMonth` and `resetDay`): When to reset the yearly list
