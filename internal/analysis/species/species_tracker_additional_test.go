@@ -50,7 +50,7 @@ func TestUpdateSpeciesComprehensive(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024)
-	err := tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2024, 7, 15, 10, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	t.Run("first detection of species", func(t *testing.T) {

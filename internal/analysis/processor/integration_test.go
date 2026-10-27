@@ -136,15 +136,8 @@ func TestIntegration_DatabaseToTracker(t *testing.T) {
 
 	tracker := species.NewTrackerFromSettings(adapter, settings)
 	speciestest.SetCurrentYearForTesting(t, tracker, 2024) // Set to 2024 for test data
-	err := tracker.InitFromDatabase()
-	require.NoError(t, err)
+	require.NoError(t, speciestest.InitFromDatabaseAt(t, tracker, time.Date(2024, 7, 30, 10, 0, 0, 0, time.UTC)))
 
-	// Since InitFromDatabase uses time.Now() which is 2025, manually update the tracker
-	// with the 2024 detections to simulate proper loading
-	tracker.UpdateSpecies("Parus major", time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC))
-	tracker.UpdateSpecies("Hirundo rustica", time.Date(2024, 4, 15, 6, 0, 0, 0, time.UTC))
-	tracker.UpdateSpecies("Sylvia atricapilla", time.Date(2024, 7, 28, 18, 47, 0, 0, time.UTC))
-	tracker.UpdateSpecies("Turdus merula", time.Date(2024, 3, 25, 7, 30, 0, 0, time.UTC))
 	// Add a recent summer detection for Turdus merula so it's not new in summer
 	tracker.UpdateSpecies("Turdus merula", time.Date(2024, 7, 10, 8, 0, 0, 0, time.UTC))
 

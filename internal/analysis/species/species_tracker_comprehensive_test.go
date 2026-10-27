@@ -226,7 +226,7 @@ func TestYearResetLogic(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023)
-	err := tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2023, 12, 31, 23, 59, 59, 0, time.UTC))
 	require.NoError(t, err)
 
 	// Add species in 2023
