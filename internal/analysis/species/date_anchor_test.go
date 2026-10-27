@@ -156,6 +156,92 @@ func TestYearlyTracking_ResetDateFollowsLocalDate(t *testing.T) {
 			"a configured February 29 resets on March 1 in a common year")
 		assert.False(t, tracker.shouldResetYear(time.Date(2027, time.February, 28, 12, 0, 0, 0, time.UTC)))
 	})
+
+	t.Run("february_29_reset_year_ranges_and_prune_follow_the_normalised_date", func(t *testing.T) {
+		t.Parallel()
+
+		feb29 := wallclock.Date{Year: 2027, Month: time.February, Day: anchorYearlyFeb29}
+		tests := []struct {
+			name      string
+			now       time.Time
+			wantYear  int
+			wantStart string
+			wantEnd   string
+		}{
+			{
+				name:      "common_year_before_march_1",
+				now:       time.Date(2027, time.February, 28, 12, 0, 0, 0, time.UTC),
+				wantYear:  2026,
+				wantStart: "2026-03-01",
+				wantEnd:   "2027-02-28",
+			},
+			{
+				name:      "common_year_on_march_1",
+				now:       time.Date(2027, time.March, 1, 12, 0, 0, 0, time.UTC),
+				wantYear:  2027,
+				wantStart: "2027-03-01",
+				wantEnd:   "2028-02-28",
+			},
+			{
+				name:      "leap_year_on_february_29",
+				now:       time.Date(2028, time.February, 29, 12, 0, 0, 0, time.UTC),
+				wantYear:  2028,
+				wantStart: "2028-02-29",
+				wantEnd:   "2029-02-28",
+			},
+			{
+				name:      "leap_year_before_february_29",
+				now:       time.Date(2028, time.February, 28, 12, 0, 0, 0, time.UTC),
+				wantYear:  2027,
+				wantStart: "2027-03-01",
+				wantEnd:   "2028-02-28",
+			},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				t.Parallel()
+
+				tracker := newAnchorYearTracker(feb29)
+				assert.Equal(t, tt.wantYear, tracker.getTrackingYear(tt.now))
+				start, end := tracker.getYearDateRange(tt.now)
+				assert.Equal(t, tt.wantStart, start)
+				assert.Equal(t, tt.wantEnd, end)
+
+				// The prune cutoff is the range start: the day before it is pruned.
+				startDate, err := wallclock.ParseDate(tt.wantStart)
+				require.NoError(t, err)
+				beforeStart := time.Date(startDate.Year, startDate.Month, startDate.Day-1, 12, 0, 0, 0, time.UTC)
+				onStart := time.Date(startDate.Year, startDate.Month, startDate.Day, 12, 0, 0, 0, time.UTC)
+				tracker.speciesThisYear["previous"] = beforeStart
+				tracker.speciesThisYear["current"] = onStart
+				assert.Equal(t, 1, tracker.pruneYearlyEntriesLocked(tt.now))
+				assert.Contains(t, tracker.speciesThisYear, "current")
+			})
+		}
+	})
+}
+
+// newAnchorSeasonTracker returns a seasonal tracker whose spring starts on date.
+// It computes seasons for the given time instead of reusing the season cached
+// for the real clock at construction, and skips the test year override.
+func newAnchorSeasonTracker(ds SpeciesDatastore, date wallclock.Date) *SpeciesTracker {
+	tracker := NewTrackerFromSettings(ds, &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: anchorWindowDays,
+		SeasonalTracking: conf.SeasonalTrackingSettings{
+			Enabled:    true,
+			WindowDays: anchorWindowDays,
+			Seasons: map[string]conf.Season{
+				"winter":         {StartMonth: 12, StartDay: 21},
+				"summer":         {StartMonth: 6, StartDay: 21},
+				"fall":           {StartMonth: 9, StartDay: 22},
+				anchorSpringName: {StartMonth: int(date.Month), StartDay: date.Day},
+			},
+		},
+	})
+	tracker.seasonCacheTTL = 0
+	tracker.currentYear = 0
+	return tracker
 }
 
 func TestSeasons_StartOnLocalDate(t *testing.T) {
@@ -168,24 +254,7 @@ func TestSeasons_StartOnLocalDate(t *testing.T) {
 			_, first, before := anchorEdges(t, row)
 			d := row.date
 			ds := &carryoverHistoryDatastore{}
-			tracker := NewTrackerFromSettings(ds, &conf.SpeciesTrackingSettings{
-				Enabled:              true,
-				NewSpeciesWindowDays: anchorWindowDays,
-				SeasonalTracking: conf.SeasonalTrackingSettings{
-					Enabled:    true,
-					WindowDays: anchorWindowDays,
-					Seasons: map[string]conf.Season{
-						"winter":         {StartMonth: 12, StartDay: 21},
-						"summer":         {StartMonth: 6, StartDay: 21},
-						"fall":           {StartMonth: 9, StartDay: 22},
-						anchorSpringName: {StartMonth: int(d.Month), StartDay: d.Day},
-					},
-				},
-			})
-			// Compute for the given time instead of reusing the season cached
-			// for the real clock at construction, and skip the test year override.
-			tracker.seasonCacheTTL = 0
-			tracker.currentYear = 0
+			tracker := newAnchorSeasonTracker(ds, d)
 
 			assert.Equal(t, anchorSpringName, tracker.computeCurrentSeason(first), "season starts on its date")
 			assert.NotEqual(t, anchorSpringName, tracker.computeCurrentSeason(before), "season not started the instant before")
@@ -198,6 +267,59 @@ func TestSeasons_StartOnLocalDate(t *testing.T) {
 			assert.Equal(t, d.AddDays(-1).String(), ds.gotEndDate, "carry-over lookback ends the day before the season")
 		})
 	}
+}
+
+func TestSeasonCarryover_LiveRolloverOnLocalDate(t *testing.T) {
+	t.Parallel()
+
+	rows := []anchorRow{
+		{"America/Havana", anchorDate(time.March, 8)},
+		{"America/Santiago", anchorDate(time.September, 6)},
+	}
+	for _, row := range rows {
+		t.Run(row.zone+"/"+row.date.String(), func(t *testing.T) {
+			t.Parallel()
+
+			loc := testutil.ToolchainZones(t)[row.zone]
+			require.NotNil(t, loc)
+			d := row.date
+			lookbackFirst, _ := wallclock.DayBounds(d.AddDays(-anchorWindowDays), loc)
+			first, _ := wallclock.DayBounds(d, loc)
+
+			const (
+				justBefore = "Cyanocitta cristata" // last heard the final instant before the season
+				lookbackIn = "Hirundo rustica"     // last heard the first instant of the lookback
+				tooOld     = "Setophaga palmarum"  // last heard the instant before the lookback
+			)
+			tracker := newAnchorSeasonTracker(nil, d)
+			tracker.UpdateSpecies(tooOld, lookbackFirst.Add(-time.Nanosecond))
+			tracker.UpdateSpecies(lookbackIn, lookbackFirst)
+			tracker.UpdateSpecies(justBefore, first.Add(-time.Nanosecond))
+
+			// The first detection of the season triggers the rollover.
+			tracker.UpdateSpecies("Turdus migratorius", first)
+
+			assert.Contains(t, tracker.seasonCarryover, justBefore, "heard the day before the season")
+			assert.Contains(t, tracker.seasonCarryover, lookbackIn, "the lookback starts a whole window before the season")
+			assert.NotContains(t, tracker.seasonCarryover, tooOld, "heard before the lookback")
+			assert.Equal(t, d, tracker.seasonCarryoverStart)
+		})
+	}
+}
+
+func TestIsSameSeasonPeriod_BoundaryIsLocalCalendarDay(t *testing.T) {
+	t.Parallel()
+
+	havana := testutil.ToolchainZones(t)["America/Havana"]
+	require.NotNil(t, havana)
+	d := anchorDate(time.March, 8) // Havana skips midnight on this date
+	tracker := newAnchorSeasonTracker(nil, d)
+
+	onBoundaryDay, _ := wallclock.DayBounds(d, havana)
+	nextDay, _ := wallclock.DayBounds(d.AddDays(1), havana)
+
+	assert.False(t, tracker.isSameSeasonPeriod(onBoundaryDay, nextDay),
+		"a season boundary on the first date of the pair makes the pair cross it")
 }
 
 func TestGetSeasonDateRange_EndNormalisesLikeTimeDate(t *testing.T) {

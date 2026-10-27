@@ -122,7 +122,7 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 			expectedFirstSeenTime: time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC),
 		},
 		{
-			name:                  "skipped_midnight_window_is_a_24h_multiple_not_calendar_days",
+			name:                  "skipped_midnight_deadline_is_exclusive_at_first_instant_plus_window",
 			windowDays:            7,
 			existingFirstSeen:     new(time.Date(2026, 3, 8, 12, 0, 0, 0, havana)),
 			detectionTime:         time.Date(2026, 3, 15, 1, 0, 0, 0, havana),
