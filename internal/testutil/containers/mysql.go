@@ -43,7 +43,7 @@ type MySQLConfig struct {
 	Password string
 	// Server flavor (default: FlavorMySQL). Ignored when MYSQL_TEST_IMAGE is set.
 	Flavor MySQLFlavor
-	// Image tag (default: "8.0" for MySQL, "11.8" for MariaDB). Ignored when
+	// Image tag (default: "8.4" for MySQL, "11.8" for MariaDB). Ignored when
 	// MYSQL_TEST_IMAGE is set, which wins over Flavor and ImageTag.
 	ImageTag string
 	// Scripts to execute on startup (path to .sql files)
@@ -62,7 +62,7 @@ const (
 )
 
 // defaultMySQLImageTag is the MySQL image tag used when a config does not set one.
-const defaultMySQLImageTag = "8.0"
+const defaultMySQLImageTag = "8.4"
 
 // defaultMariaDBImageTag is the MariaDB image tag used when a config selects
 // MariaDB without a tag.

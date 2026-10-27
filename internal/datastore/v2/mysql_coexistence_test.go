@@ -52,7 +52,7 @@ func testMain(m *testing.M) int {
 		RootPassword: "test",
 		Username:     "testuser",
 		Password:     "testpass",
-		ImageTag:     "8.0",
+		ImageTag:     "8.4",
 	}
 
 	var err error

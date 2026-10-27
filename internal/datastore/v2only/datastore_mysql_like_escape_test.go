@@ -29,7 +29,7 @@ func setupMySQLDatastore(t *testing.T) *Datastore {
 		RootPassword: "test",
 		Username:     "testuser",
 		Password:     "testpass",
-		ImageTag:     "8.0",
+		ImageTag:     "8.4",
 	}
 	container, err := containers.NewMySQLContainer(ctx, cfg)
 	require.NoError(t, err, "failed to start MySQL container")
