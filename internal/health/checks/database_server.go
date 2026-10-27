@@ -167,7 +167,7 @@ func (c *DatabaseCharsetCheck) Run(ctx context.Context) health.Result {
 	var msg strings.Builder
 	fmt.Fprintf(&msg, "The database default character set is %s", report.SchemaCharset)
 	if len(bad) > 0 {
-		fmt.Fprintf(&msg, " and %d table(s) use another one: %s", len(bad), strings.Join(named, ", "))
+		fmt.Fprintf(&msg, " and %d table(s) are not utf8mb4: %s", len(bad), strings.Join(named, ", "))
 		if len(bad) > len(named) {
 			fmt.Fprintf(&msg, " and %d more", len(bad)-len(named))
 		}
