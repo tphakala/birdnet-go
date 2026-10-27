@@ -1142,8 +1142,8 @@ func clipSampleRateValue(rate *int) int {
 	return *rate
 }
 
-// detectionFields holds the values derived from a v2 Detection that every read mapper
-// needs. decodeDetection computes it once so the mappers cannot drift apart.
+// detectionFields holds the values derived from a v2 Detection for the read mappers.
+// decodeDetection computes it; detectionToNote is its only consumer so far.
 type detectionFields struct {
 	// instant is the stored detection time (detected_at) in the station zone.
 	instant time.Time
@@ -1177,7 +1177,9 @@ type detectionFields struct {
 
 // decodeDetection derives the detectionFields of det. The instant comes from the stored
 // detected_at column and never from formatted text. det must not be nil.
-// Common name is looked up from the name maps which are built at startup.
+// Common name is looked up from the name maps which are built at startup. When the label is not
+// preloaded it is fetched from the label repository, which queries the database on a background
+// context because decodeDetection takes no ctx.
 func (ds *Datastore) decodeDetection(det *entities.Detection) detectionFields {
 	f := detectionFields{}
 
