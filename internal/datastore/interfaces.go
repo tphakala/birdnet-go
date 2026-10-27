@@ -1183,9 +1183,9 @@ func (ds *DataStore) GetHourlyWeather(date string) ([]HourlyWeather, error) {
 	return ds.GetHourlyWeatherInLocation(date, time.Local)
 }
 
-// GetHourlyWeatherInLocation retrieves hourly weather data by date using a specific timezone.
-// This is primarily used for testing timezone behavior. In production, use GetHourlyWeather
-// which automatically uses the system's local timezone.
+// GetHourlyWeatherInLocation retrieves hourly weather data by date, matching dates in the given timezone.
+// GetHourlyWeather calls it with time.Local, so it serves the legacy weather path in production;
+// tests call it directly to cover other timezones.
 func (ds *DataStore) GetHourlyWeatherInLocation(date string, loc *time.Location) ([]HourlyWeather, error) {
 	if loc == nil {
 		return nil, errors.Newf("location cannot be nil for GetHourlyWeatherInLocation").
