@@ -10,6 +10,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // hoursPerDay is the number of hour-of-day buckets in a species distribution (0..23).
@@ -227,29 +228,23 @@ type cellKey struct {
 	slot      int
 }
 
-// dateKey identifies a calendar day. Keying the date index by this struct (rather than a
-// formatted string) lets the per-timestamp lookup avoid a string allocation on every row.
-type dateKey struct {
-	year  int
-	month time.Month
-	day   int
-}
-
 // buildActivityHeatmap buckets raw detection timestamps (Unix epoch seconds) into a columnar,
 // sparse (date, slot) grid for the seasonal density heatmap.
 //
-// startDate/endDate are inclusive YYYY-MM-DD bounds interpreted in loc; the returned Dates
-// slice lists every calendar date in [startDate, endDate]. Each timestamp is placed by its
-// wall-clock date and minute-of-day in loc, so bucketing follows the station timezone and is
-// correct across DST transitions (unlike a single-offset SQL expression). The slot width is
-// downsampled for wide ranges (see heatmapSlotResolution). Timestamps whose local date falls
-// outside the range are ignored. Only non-zero cells are emitted, ordered by (dateIndex, slot).
+// startDate/endDate are inclusive YYYY-MM-DD calendar dates; the returned Dates slice lists
+// every calendar date in [startDate, endDate] exactly once, in order. The date axis is a plain
+// sequence of calendar dates and is not tied to loc, so a zone whose DST change skips midnight
+// cannot duplicate or drop a date. Each timestamp is placed by its wall-clock date and
+// minute-of-day in loc, so bucketing follows the station timezone and is correct across DST
+// transitions (unlike a single-offset SQL expression). The slot width is downsampled for wide
+// ranges (see heatmapSlotResolution). Timestamps whose local date falls outside the range are
+// ignored. Only non-zero cells are emitted, ordered by (dateIndex, slot).
 func buildActivityHeatmap(timestamps []int64, loc *time.Location, startDate, endDate string) (datastore.ActivityHeatmapData, error) {
 	if loc == nil {
 		loc = time.UTC
 	}
 
-	start, err := time.ParseInLocation(time.DateOnly, startDate, loc)
+	start, err := wallclock.ParseDate(startDate)
 	if err != nil {
 		return datastore.ActivityHeatmapData{}, errors.New(err).
 			Component("datastore").
@@ -258,7 +253,7 @@ func buildActivityHeatmap(timestamps []int64, loc *time.Location, startDate, end
 			Context("start_date", startDate).
 			Build()
 	}
-	end, err := time.ParseInLocation(time.DateOnly, endDate, loc)
+	end, err := wallclock.ParseDate(endDate)
 	if err != nil {
 		return datastore.ActivityHeatmapData{}, errors.New(err).
 			Component("datastore").
@@ -269,14 +264,13 @@ func buildActivityHeatmap(timestamps []int64, loc *time.Location, startDate, end
 	}
 
 	// Enumerate every calendar date in the inclusive range and index it for O(1) lookup. The
-	// index is keyed by a (year, month, day) struct so the per-timestamp lookup below allocates
-	// nothing; the human-readable date string is formatted just once per day here.
+	// index is keyed by the date value so the per-timestamp lookup below allocates nothing; the
+	// human-readable date string is formatted just once per day here.
 	dates := make([]string, 0)
-	dateIndex := make(map[dateKey]int)
-	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
-		y, m, day := d.Date()
-		dateIndex[dateKey{year: y, month: m, day: day}] = len(dates)
-		dates = append(dates, d.Format(time.DateOnly))
+	dateIndex := make(map[wallclock.Date]int)
+	for d := range wallclock.Dates(start, end) {
+		dateIndex[d] = len(dates)
+		dates = append(dates, d.String())
 	}
 
 	resolution := heatmapSlotResolution(len(dates))
@@ -288,8 +282,7 @@ func buildActivityHeatmap(timestamps []int64, loc *time.Location, startDate, end
 	counts := make(map[cellKey]int)
 	for _, ts := range timestamps {
 		lt := time.Unix(ts, 0).In(loc)
-		y, m, day := lt.Date()
-		idx, ok := dateIndex[dateKey{year: y, month: m, day: day}]
+		idx, ok := dateIndex[wallclock.DateOf(lt)]
 		if !ok {
 			continue // detection falls outside the requested range in loc
 		}
@@ -341,7 +334,7 @@ const (
 // determined (polar day / white nights / polar night, or no sun calculator configured). It is
 // injected into buildDailyActivityOnset so the polar-null and min-count paths are unit-testable
 // without a real SunCalc.
-type civilDawnMinuteLookup func(date time.Time) (minuteOfDay int, ok bool)
+type civilDawnMinuteLookup func(date wallclock.Date) (minuteOfDay int, ok bool)
 
 // buildDailyActivityOnset buckets false-positive-excluded detection timestamps (Unix epoch seconds)
 // by station-local calendar date and computes, for each date in the inclusive [startDate, endDate]
@@ -353,15 +346,16 @@ type civilDawnMinuteLookup func(date time.Time) (minuteOfDay int, ok bool)
 // detections (too sparse) or when dawn reports civil dawn undefined for the date (polar day /
 // night). Every date in the range is emitted with its DetectionCount (0 on quiet days) so the
 // client has a continuous date axis and its trend line breaks over gaps rather than interpolating
-// across them. startDate/endDate are inclusive YYYY-MM-DD bounds interpreted in loc (nil -> UTC);
-// civil dawn is resolved in the same loc frame as the bucketed detections so the subtraction is a
-// true duration. The result is always non-nil.
+// across them. startDate/endDate are inclusive YYYY-MM-DD calendar dates, and detections are
+// bucketed by their date in loc (nil -> UTC); civil dawn is looked up by calendar date and expressed
+// in the same frame as the bucketed detections so the subtraction is a true duration. The result is
+// always non-nil.
 func buildDailyActivityOnset(timestamps []int64, loc *time.Location, startDate, endDate string, rank, minDetections int, dawn civilDawnMinuteLookup) ([]datastore.DailyActivityOnset, error) {
 	if loc == nil {
 		loc = time.UTC
 	}
 
-	start, err := time.ParseInLocation(time.DateOnly, startDate, loc)
+	start, err := wallclock.ParseDate(startDate)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -370,7 +364,7 @@ func buildDailyActivityOnset(timestamps []int64, loc *time.Location, startDate, 
 			Context("start_date", startDate).
 			Build()
 	}
-	end, err := time.ParseInLocation(time.DateOnly, endDate, loc)
+	end, err := wallclock.ParseDate(endDate)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -382,19 +376,17 @@ func buildDailyActivityOnset(timestamps []int64, loc *time.Location, startDate, 
 
 	// Group each detection's station-local minute-of-day by its local calendar date. Detections
 	// whose local date falls outside the enumerated range simply never get looked up.
-	minutesByDate := make(map[dateKey][]int)
+	minutesByDate := make(map[wallclock.Date][]int)
 	for _, ts := range timestamps {
 		lt := time.Unix(ts, 0).In(loc)
-		y, m, day := lt.Date()
-		k := dateKey{year: y, month: m, day: day}
+		k := wallclock.DateOf(lt)
 		minutesByDate[k] = append(minutesByDate[k], lt.Hour()*60+lt.Minute())
 	}
 
 	result := make([]datastore.DailyActivityOnset, 0)
-	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
-		y, m, day := d.Date()
-		mins := minutesByDate[dateKey{year: y, month: m, day: day}]
-		item := datastore.DailyActivityOnset{Date: d.Format(time.DateOnly), DetectionCount: len(mins)}
+	for d := range wallclock.Dates(start, end) {
+		mins := minutesByDate[d]
+		item := datastore.DailyActivityOnset{Date: d.String(), DetectionCount: len(mins)}
 
 		if rank >= 1 && len(mins) >= minDetections && len(mins) >= rank {
 			slices.Sort(mins)
@@ -420,20 +412,15 @@ func buildDailyActivityOnset(timestamps []int64, loc *time.Location, startDate, 
 // curve's asymptote. First-seen dates outside the enumerated range are ignored (the SQL already bounds
 // them, but a row skewed by loc onto an out-of-range day must never inflate the curve or index past
 // the axis). startDate/endDate are inclusive YYYY-MM-DD bounds; the per-detection bucketing is done
-// in loc (nil -> UTC), while the date axis is enumerated in UTC (see below). The result is always
-// non-nil.
+// in loc (nil -> UTC). The result is always non-nil.
 func buildSpeciesAccumulation(firstSeen []repository.SpeciesFirstSeen, loc *time.Location, startDate, endDate string) ([]datastore.SpeciesAccumulationPoint, error) {
 	if loc == nil {
 		loc = time.UTC
 	}
 
-	// Enumerate the date axis in UTC, not loc. We only need the sequence of calendar dates from
-	// startDate to endDate, and UTC has no DST, so AddDate(0,0,1) steps exactly one calendar day every
-	// iteration. Parsing the bounds in a loc whose DST transition skips midnight (clocks jump
-	// 23:59:59 -> 01:00:00, e.g. America/Havana) would normalize the skipped 00:00 forward to 01:00,
-	// drift the loop's wall-clock hour, and drop the final day at the !d.After(end) comparison. The
-	// per-detection bucketing below stays in loc, which is the only place the station timezone matters.
-	start, err := time.Parse(time.DateOnly, startDate)
+	// The axis is a plain sequence of calendar dates; only the per-detection bucketing below
+	// depends on the station timezone.
+	start, err := wallclock.ParseDate(startDate)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -442,7 +429,7 @@ func buildSpeciesAccumulation(firstSeen []repository.SpeciesFirstSeen, loc *time
 			Context("start_date", startDate).
 			Build()
 	}
-	end, err := time.Parse(time.DateOnly, endDate)
+	end, err := wallclock.ParseDate(endDate)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -453,24 +440,20 @@ func buildSpeciesAccumulation(firstSeen []repository.SpeciesFirstSeen, loc *time
 	}
 
 	// Tally how many species are first seen on each station-local calendar date. Dates outside the
-	// enumerated range are never looked up below, so they are ignored without an explicit filter. The
-	// (year, month, day) key is timezone-frame-independent, so the loc-bucketed keys here line up with
-	// the UTC-enumerated lookups below for the same calendar date.
-	newByDate := make(map[dateKey]int, len(firstSeen))
+	// enumerated range are never looked up below, so they are ignored without an explicit filter.
+	newByDate := make(map[wallclock.Date]int, len(firstSeen))
 	for i := range firstSeen {
 		lt := time.Unix(firstSeen[i].FirstDetected, 0).In(loc)
-		y, m, day := lt.Date()
-		newByDate[dateKey{year: y, month: m, day: day}]++
+		newByDate[wallclock.DateOf(lt)]++
 	}
 
 	result := make([]datastore.SpeciesAccumulationPoint, 0)
 	cumulative := 0
-	for d := start; !d.After(end); d = d.AddDate(0, 0, 1) {
-		y, m, day := d.Date()
-		n := newByDate[dateKey{year: y, month: m, day: day}]
+	for d := range wallclock.Dates(start, end) {
+		n := newByDate[d]
 		cumulative += n
 		result = append(result, datastore.SpeciesAccumulationPoint{
-			Date:              d.Format(time.DateOnly),
+			Date:              d.String(),
 			CumulativeSpecies: cumulative,
 			NewSpecies:        n,
 		})
@@ -483,20 +466,19 @@ func isLeapYear(year int) bool {
 	return year%4 == 0 && (year%100 != 0 || year%400 == 0)
 }
 
-// parseAnalyticsDate parses an inclusive YYYY-MM-DD axis bound in UTC (the date axis is enumerated in
-// UTC to avoid the DST midnight-skip drift; see buildSpeciesAccumulation). It wraps a parse failure as
-// a validation error tagged with the operation and field for diagnostics.
-func parseAnalyticsDate(value, operation, field string) (time.Time, error) {
-	t, err := time.Parse(time.DateOnly, value)
+// parseAnalyticsDate parses an inclusive YYYY-MM-DD axis bound. It wraps a parse failure as a
+// validation error tagged with the operation and field for diagnostics.
+func parseAnalyticsDate(value, operation, field string) (wallclock.Date, error) {
+	d, err := wallclock.ParseDate(value)
 	if err != nil {
-		return time.Time{}, errors.New(err).
+		return wallclock.Date{}, errors.New(err).
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", operation).
 			Context(field, value).
 			Build()
 	}
-	return t, nil
+	return d, nil
 }
 
 // monthDay is the year-independent calendar alignment key (month, day) for the year-over-year tracker,
@@ -508,7 +490,7 @@ type monthDay struct {
 
 // yearOverYearWindow describes the two comparison windows for the year-over-year tracker: the current
 // year-to-date span and the same calendar span one year earlier. The date bounds (inclusive
-// YYYY-MM-DD) drive the helper's UTC axis enumeration; the epoch bounds are half-open [start, end) in
+// YYYY-MM-DD) drive the helper's date axis enumeration; the epoch bounds are half-open [start, end) in
 // the station timezone for the SQL queries.
 type yearOverYearWindow struct {
 	curStart, curEnd     string
@@ -520,37 +502,44 @@ type yearOverYearWindow struct {
 	curYear, prevYear    int
 }
 
-// computeYearOverYearWindows derives both comparison windows from ref (the requested date) projected
-// into loc. The previous window ends on the same calendar (month, day) one year earlier, clamping
-// Feb 29 -> Feb 28 when the previous year is not a leap year (otherwise time.Date would roll Feb 29
-// forward to Mar 1 and the +1-day exclusive end would pull an extra prior day into the window). Epoch
-// ends are the start of the day after the inclusive end date, matching the parseDateRange convention.
-func computeYearOverYearWindows(ref time.Time, loc *time.Location) yearOverYearWindow {
+// computeYearOverYearWindows derives both comparison windows from ref (the requested calendar date
+// in the station timezone). The previous window ends on the same calendar (month, day) one year
+// earlier, clamping Feb 29 -> Feb 28 when the previous year is not a leap year (otherwise the date
+// would roll Feb 29 forward to Mar 1 and the exclusive end would pull an extra prior day into the
+// window). Epoch bounds are the day bounds of the window's first and last dates in loc (nil -> UTC),
+// so each end is the start of the day after the inclusive end date, exactly as in parseDateRange, even
+// when that day starts at a DST transition (a skipped midnight).
+func computeYearOverYearWindows(ref wallclock.Date, loc *time.Location) yearOverYearWindow {
 	if loc == nil {
 		loc = time.UTC
 	}
-	// Derive the calendar date in loc, not in ref's own zone: a ref near a day boundary in a
-	// different zone (e.g. just past midnight UTC+12 while loc is UTC) must resolve to loc's date.
-	ref = ref.In(loc)
-	curYear, curMonth, curDay := ref.Date()
+	curYear := ref.Year
 	prevYear := curYear - 1
 
-	prevMonth, prevDay := curMonth, curDay
-	if curMonth == time.February && curDay == 29 && !isLeapYear(prevYear) {
+	prevMonth, prevDay := ref.Month, ref.Day
+	if ref.Month == time.February && ref.Day == 29 && !isLeapYear(prevYear) {
 		prevDay = 28
 	}
+
+	curFirst := wallclock.Date{Year: curYear, Month: time.January, Day: 1}
+	priorFirst := wallclock.Date{Year: prevYear, Month: time.January, Day: 1}
+	priorLast := wallclock.Date{Year: prevYear, Month: prevMonth, Day: prevDay}
+	curStartTime, _ := wallclock.DayBounds(curFirst, loc)
+	_, curEndTime := wallclock.DayBounds(ref, loc)
+	priorStartTime, _ := wallclock.DayBounds(priorFirst, loc)
+	_, priorEndTime := wallclock.DayBounds(priorLast, loc)
 
 	return yearOverYearWindow{
 		curYear:         curYear,
 		prevYear:        prevYear,
-		curStart:        fmt.Sprintf("%04d-01-01", curYear),
-		curEnd:          fmt.Sprintf("%04d-%02d-%02d", curYear, curMonth, curDay),
-		priorStart:      fmt.Sprintf("%04d-01-01", prevYear),
-		priorEnd:        fmt.Sprintf("%04d-%02d-%02d", prevYear, prevMonth, prevDay),
-		curStartEpoch:   time.Date(curYear, time.January, 1, 0, 0, 0, 0, loc).Unix(),
-		curEndEpoch:     time.Date(curYear, curMonth, curDay, 0, 0, 0, 0, loc).AddDate(0, 0, 1).Unix(),
-		priorStartEpoch: time.Date(prevYear, time.January, 1, 0, 0, 0, 0, loc).Unix(),
-		priorEndEpoch:   time.Date(prevYear, prevMonth, prevDay, 0, 0, 0, 0, loc).AddDate(0, 0, 1).Unix(),
+		curStart:        curFirst.String(),
+		curEnd:          ref.String(),
+		priorStart:      priorFirst.String(),
+		priorEnd:        priorLast.String(),
+		curStartEpoch:   curStartTime.Unix(),
+		curEndEpoch:     curEndTime.Unix(),
+		priorStartEpoch: priorStartTime.Unix(),
+		priorEndEpoch:   priorEndTime.Unix(),
 	}
 }
 
@@ -560,9 +549,8 @@ func computeYearOverYearWindows(ref time.Time, loc *time.Location) yearOverYearW
 // thisTs/lastTs are raw detection epochs (Unix seconds, false positives already excluded) for the
 // current and previous windows respectively. Each timestamp is bucketed to its station-local calendar
 // day in loc (nil -> UTC), so per-day counts respect the station timezone including DST. Both date
-// axes are enumerated in UTC (curStart..curEnd and priorStart..priorEnd are inclusive YYYY-MM-DD
-// bounds): UTC has no DST, so AddDate(0,0,1) steps exactly one calendar day, avoiding the midnight-skip
-// drift that parsing the bounds in a DST-transitioning loc (e.g. America/Havana) would cause.
+// axes are plain calendar date sequences (curStart..curEnd and priorStart..priorEnd are inclusive
+// YYYY-MM-DD bounds).
 //
 // Years are aligned by calendar (month, day), not day-of-year ordinal, so seasonality lines up across
 // a leap boundary. Feb 29 is handled in both directions: when the current year is a leap year but the
@@ -588,7 +576,7 @@ func buildYearOverYear(thisTs, lastTs []int64, loc *time.Location, curStart, cur
 	lastDaily := bucketByMonthDay(lastTs, loc)
 
 	// Running cumulative of the previous year, sampled by calendar (month, day). Enumerating the prior
-	// axis in UTC and summing in order means priorCumByMonthDay[{m,d}] is the previous-year cumulative
+	// axis and summing in order means priorCumByMonthDay[{m,d}] is the previous-year cumulative
 	// through that calendar date, with any previous Feb 29 already folded into the running total.
 	pStart, err := parseAnalyticsDate(priorStart, operation, "prior_start")
 	if err != nil {
@@ -600,13 +588,13 @@ func buildYearOverYear(thisTs, lastTs []int64, loc *time.Location, curStart, cur
 	}
 	priorCumByMonthDay := make(map[monthDay]int)
 	priorCum := 0
-	for d := pStart; !d.After(pEnd); d = d.AddDate(0, 0, 1) {
-		_, mo, dy := d.Date()
-		priorCum += lastDaily[monthDay{month: mo, day: dy}]
-		priorCumByMonthDay[monthDay{month: mo, day: dy}] = priorCum
+	for d := range wallclock.Dates(pStart, pEnd) {
+		key := monthDay{month: d.Month, day: d.Day}
+		priorCum += lastDaily[key]
+		priorCumByMonthDay[key] = priorCum
 	}
 
-	// Walk the current axis (UTC-enumerated) and build aligned cumulative points. When the current
+	// Walk the current axis and build aligned cumulative points. When the current
 	// calendar date has no counterpart in the previous year (current Feb 29 vs a non-leap previous
 	// year), carry forward the last known previous cumulative so the previous series stays flat and
 	// monotonic for that day.
@@ -620,16 +608,15 @@ func buildYearOverYear(thisTs, lastTs []int64, loc *time.Location, curStart, cur
 	}
 	thisCum := 0
 	lastKnownPriorCum := 0
-	for d := cStart; !d.After(cEnd); d = d.AddDate(0, 0, 1) {
-		_, mo, dy := d.Date()
-		key := monthDay{month: mo, day: dy}
+	for d := range wallclock.Dates(cStart, cEnd) {
+		key := monthDay{month: d.Month, day: d.Day}
 		thisCum += thisDaily[key]
 		if pc, ok := priorCumByMonthDay[key]; ok {
 			lastKnownPriorCum = pc
 		}
 		result.Points = append(result.Points, datastore.YearOverYearPoint{
-			Date:     d.Format(time.DateOnly),
-			MonthDay: d.Format("01-02"),
+			Date:     d.String(),
+			MonthDay: fmt.Sprintf("%02d-%02d", int(d.Month), d.Day),
 			ThisYear: thisCum,
 			LastYear: lastKnownPriorCum,
 			Delta:    thisCum - lastKnownPriorCum,

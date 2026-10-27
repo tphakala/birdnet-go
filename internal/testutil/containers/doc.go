@@ -3,7 +3,7 @@
 // This package offers helpers for starting and managing Docker containers
 // during integration testing using testcontainers-go. It includes support for:
 //
-//   - MySQL 8.0 database containers
+//   - MySQL and MariaDB database containers (`MYSQL_TEST_IMAGE` selects the server, for example `mariadb:11.8`)
 //nolint:misspell // Mosquitto is the official Eclipse project name
 //   - Eclipse Mosquitto MQTT broker containers
 //   - nginx reverse proxy containers

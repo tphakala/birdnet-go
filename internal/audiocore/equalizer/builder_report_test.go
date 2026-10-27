@@ -109,3 +109,29 @@ func TestBuildFilterChainReport_BypassedFilterIsNotReported(t *testing.T) {
 	assert.Equal(t, 3, skipped[1].Index)
 	assert.Equal(t, equalizer.SkipUnknownType, skipped[1].Reason, "an unknown type is reported even at passes 0")
 }
+
+// TestBuildFilterChainReport_UltrasonicNotchFollowsSampleRate pins that a notch
+// above 24 kHz, which validation now accepts, is applied at an ultrasonic
+// capture rate and skipped, not failed, at 48 kHz.
+func TestBuildFilterChainReport_UltrasonicNotchFollowsSampleRate(t *testing.T) {
+	t.Parallel()
+	const batRate = 256000
+	notch := conf.EqualizerFilter{Type: "BandReject", Frequency: 60000, Width: 1000, Passes: 1}
+
+	t.Run("applied at the bat rate", func(t *testing.T) {
+		t.Parallel()
+		chain, skipped := equalizer.BuildFilterChainReport(enabled(notch), batRate)
+		require.NotNil(t, chain)
+		assert.Equal(t, 1, chain.Len())
+		assert.Empty(t, skipped)
+	})
+
+	t.Run("skipped at 48 kHz", func(t *testing.T) {
+		t.Parallel()
+		chain, skipped := equalizer.BuildFilterChainReport(enabled(notch), testRate)
+		assert.Nil(t, chain)
+		require.Len(t, skipped, 1)
+		assert.Equal(t, equalizer.SkipInvalidParameters, skipped[0].Reason)
+		require.Error(t, skipped[0].Err)
+	})
+}

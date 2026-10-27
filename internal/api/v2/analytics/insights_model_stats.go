@@ -83,37 +83,19 @@ type ModelAgreementItem struct {
 }
 
 // modelStatsRange converts inclusive YYYY-MM-DD dates to the half-open Unix
-// seconds range [start, end) of local midnights in loc, the way every other
-// analytics range is built. An empty endDate defaults to startDate plus
+// seconds range [start, end) of local day starts in loc (a day whose midnight
+// is skipped starts at the transition instant), the way every other analytics
+// range is built. An empty endDate defaults to startDate plus
 // defaultAnalyticsDays. endDateOut is the inclusive end date after defaulting.
 func modelStatsRange(startDate, endDate string, loc *time.Location) (start, end int64, endDateOut string, err error) {
-	startDay, err := time.ParseInLocation(time.DateOnly, startDate, loc)
+	r, err := apicore.ResolveDayRange(startDate, endDate, defaultAnalyticsDays, loc)
 	if err != nil {
-		return 0, 0, "", fmt.Errorf("%w: start_date: %w", ErrModelStatsInvalidDate, err)
+		return 0, 0, "", fmt.Errorf("%w: %w", ErrModelStatsInvalidDate, err)
 	}
-	var endDay time.Time
-	if endDate == "" {
-		endDay = startDay.AddDate(0, 0, defaultAnalyticsDays)
-	} else {
-		endDay, err = time.ParseInLocation(time.DateOnly, endDate, loc)
-		if err != nil {
-			return 0, 0, "", fmt.Errorf("%w: end_date: %w", ErrModelStatsInvalidDate, err)
-		}
+	if r.Days > modelStatsMaxRangeDays {
+		return 0, 0, "", fmt.Errorf("%w: %d days", ErrModelStatsRangeTooLong, r.Days)
 	}
-
-	// Count days on the UTC calendar so DST changes cannot skew the cap.
-	startUTC := time.Date(startDay.Year(), startDay.Month(), startDay.Day(), 0, 0, 0, 0, time.UTC)
-	endUTC := time.Date(endDay.Year(), endDay.Month(), endDay.Day(), 0, 0, 0, 0, time.UTC)
-	days := int(endUTC.Sub(startUTC).Hours()/apicore.HoursPerDay) + 1
-	if days < 1 {
-		return 0, 0, "", fmt.Errorf("%w: end_date before start_date", ErrModelStatsInvalidDate)
-	}
-	if days > modelStatsMaxRangeDays {
-		return 0, 0, "", fmt.Errorf("%w: %d days", ErrModelStatsRangeTooLong, days)
-	}
-
-	// AddDate, never +86400: a DST day is not 24 hours long.
-	return startDay.Unix(), endDay.AddDate(0, 0, 1).Unix(), endDay.Format(time.DateOnly), nil
+	return r.Start.Unix(), r.End.Unix(), r.EndDate.String(), nil
 }
 
 // GetModelContributionStats returns per-model contribution statistics for

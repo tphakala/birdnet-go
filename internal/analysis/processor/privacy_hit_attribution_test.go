@@ -2,6 +2,7 @@ package processor
 
 import (
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,8 +40,10 @@ func TestHitContributions_AggregatesAcrossModelsAndDetectors(t *testing.T) {
 
 	labelHit(p, settings, confirmSource, attrModelPerch, t0)
 	labelHit(p, settings, confirmSource, attrModelBirdNET, t0.Add(time.Second))
-	labelHit(p, settings, confirmSource, attrModelPerch, t0.Add(2*time.Second))
-	p.recordVADHit(settings, confirmSource, t0.Add(3*time.Second), 0.81)
+	p.detectionMutex.Lock()
+	p.recordHumanHitLocked(confirmSource, labelHumanHit(t0.Add(2*time.Second), attrModelPerch, 0.5, 0))
+	p.detectionMutex.Unlock()
+	p.recordVADHit(settings, confirmSource, vadHumanHit(t0.Add(3*time.Second), 0.81, 0))
 
 	p.detectionMutex.RLock()
 	all := p.hitContributionsLocked(confirmSource, t0)
@@ -48,7 +51,7 @@ func TestHitContributions_AggregatesAcrossModelsAndDetectors(t *testing.T) {
 	p.detectionMutex.RUnlock()
 
 	require.Len(t, all, 3)
-	assert.Equal(t, hitContribution{trigger: metrics.TriggerLabel, modelID: attrModelPerch, count: 2, maxScore: float64(float32(0.9))}, all[0], "most hits first")
+	assert.Equal(t, hitContribution{trigger: metrics.TriggerLabel, modelID: attrModelPerch, count: 2, minScore: 0.5, maxScore: float64(float32(0.9))}, all[0], "most hits first")
 	assert.Equal(t, 1, all[1].count)
 	assert.Equal(t, 1, all[2].count)
 	assert.Contains(t, formatHitContributions(all), "Perch_V2/label x2 max 0.900")
@@ -113,15 +116,15 @@ func TestRecordHumanHit_OlderHitStaysInAttributionButDoesNotMoveLastHit(t *testi
 	p := &Processor{LastHumanDetection: map[string]HumanDetection{}}
 	t0 := time.Unix(1000, 0)
 
-	p.recordHumanHitLocked(confirmSource, t0.Add(time.Second), metrics.TriggerLabel, attrModelPerch, 0.2)
-	p.recordHumanHitLocked(confirmSource, t0, metrics.TriggerLabel, attrModelBirdNET, 0.3)
+	p.recordHumanHitLocked(confirmSource, labelHumanHit(t0.Add(time.Second), attrModelPerch, 0.2, 0))
+	p.recordHumanHitLocked(confirmSource, labelHumanHit(t0, attrModelBirdNET, 0.3, 0))
 
 	assert.Equal(t, attrModelPerch, p.LastHumanDetection[confirmSource].ModelID, "the stored latest hit never moves backward")
 	assert.Len(t, p.humanHits[confirmSource], 2, "the earlier hit still counts as a contributor")
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_NamesModelAndConfirmer(t *testing.T) {
+func TestReportHitDecision_NamesModelAndConfirmer(t *testing.T) {
 	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
@@ -136,15 +139,17 @@ func TestLogLabelHitDecision_NamesModelAndConfirmer(t *testing.T) {
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_VADConfirmerAndDroppedModel(t *testing.T) {
+func TestReportHitDecision_VADConfirmerAndDroppedModel(t *testing.T) {
 	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
 
 	labelHit(p, settings, confirmSource, attrModelPerch, t0)
-	d := p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0.8)
-	p.logLabelHitDecision(settings, confirmSource, nil, &d)
+	vad := vadHumanHit(t0.Add(time.Second), 0.8, 0)
+	d := p.recordVADHit(settings, confirmSource, vad)
+	p.reportHitDecision(settings, confirmSource, &vad, &d)
 	assert.Contains(t, infoLog.String(), "confirmed_by="+vadHitModelID)
+	assert.Equal(t, 1, strings.Count(infoLog.String(), "human detection filtered"), "only the confirmed label hit is logged; the VAD hit logs its own line elsewhere")
 
 	// A held hit whose window runs out is logged with the model that scored it.
 	labelHit(p, settings, confirmSource, attrModelBirdNET, t0.Add(10*labelConfirmWindow))
@@ -195,8 +200,8 @@ func TestRecordLabelHit_ConfirmedHitKeepsItsOwnModelAndScore(t *testing.T) {
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
 
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.5, modelID: attrModelPerch})
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0.Add(5 * time.Second), confidence: 0.25, modelID: attrModelBirdNET})
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, attrModelPerch, 0.5, 0))
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0.Add(5*time.Second), attrModelBirdNET, 0.25, 0))
 
 	require.Len(t, p.humanHits[confirmSource], 2)
 	held, confirming := p.humanHits[confirmSource][0], p.humanHits[confirmSource][1]
@@ -208,7 +213,7 @@ func TestRecordLabelHit_ConfirmedHitKeepsItsOwnModelAndScore(t *testing.T) {
 	assert.InDelta(t, 0.25, last.Score, 1e-9)
 
 	// Once confirmed, a further hit inside the window counts at once under its own model.
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0.Add(10 * time.Second), confidence: 0.75, modelID: attrModelPerch})
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0.Add(10*time.Second), attrModelPerch, 0.75, 0))
 	require.Len(t, p.humanHits[confirmSource], 3)
 	assert.Equal(t, attrModelPerch, p.humanHits[confirmSource][2].modelID)
 	assert.InDelta(t, 0.75, p.humanHits[confirmSource][2].score, 1e-9)
@@ -219,8 +224,8 @@ func TestRecordVADHit_ConfirmationAttributesBothHits(t *testing.T) {
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
 
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.5, modelID: attrModelPerch})
-	p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0.8125)
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, attrModelPerch, 0.5, 0))
+	p.recordVADHit(settings, confirmSource, vadHumanHit(t0.Add(time.Second), 0.8125, 0))
 
 	require.Len(t, p.humanHits[confirmSource], 2)
 	// The VAD hit is recorded first, then the held label hit it confirms.
@@ -232,27 +237,25 @@ func TestRecordVADHit_ConfirmationAttributesBothHits(t *testing.T) {
 	assert.InDelta(t, 0.8125, last.Score, 1e-9)
 }
 
-func TestCheckPrivacy_ContributionsNeedDebugAndAHitReachingTheClip(t *testing.T) {
+func TestCheckPrivacy_ContributionsNeedAHitReachingTheClip(t *testing.T) {
 	t.Parallel()
 	t0 := time.Unix(1000, 0)
 	item := newPrivacyFilterDetection(confirmSource, t0)
 	tests := []struct {
 		name  string
-		debug bool
 		hitAt func(clipFrom time.Time) time.Time
 		want  bool
 	}{
-		{"debug off", false, func(from time.Time) time.Time { return from }, false},
-		{"hit reaches the clip", true, func(from time.Time) time.Time { return from }, true},
-		{"hit exactly at the guard boundary", true, func(from time.Time) time.Time { return from.Add(-privacyClipGuard) }, true},
-		{"hit one tick before the guard", true, func(from time.Time) time.Time { return from.Add(-privacyClipGuard - time.Nanosecond) }, false},
-		{"hit long before the clip", true, func(from time.Time) time.Time { return from.Add(-time.Minute) }, false},
+		{"hit reaches the clip with debug off", func(from time.Time) time.Time { return from }, true},
+		{"hit exactly at the guard boundary", func(from time.Time) time.Time { return from.Add(-privacyClipGuard) }, true},
+		{"hit one tick before the guard", func(from time.Time) time.Time { return from.Add(-privacyClipGuard - time.Nanosecond) }, false},
+		{"hit long before the clip", func(from time.Time) time.Time { return from.Add(-time.Minute) }, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			p, settings := confirmProcessor(0)
-			settings.Realtime.PrivacyFilter.Debug = tt.debug
+			require.False(t, settings.Realtime.PrivacyFilter.Debug)
 			from := clipSpan(settings, item).from
 			labelHit(p, settings, confirmSource, attrModelPerch, tt.hitAt(from))
 
@@ -260,7 +263,7 @@ func TestCheckPrivacy_ContributionsNeedDebugAndAHitReachingTheClip(t *testing.T)
 
 			require.True(t, got.hasHit)
 			if tt.want {
-				assert.Equal(t, []hitContribution{{trigger: metrics.TriggerLabel, modelID: attrModelPerch, count: 1, maxScore: float64(float32(0.9))}}, got.contributions)
+				assert.Equal(t, []hitContribution{{trigger: metrics.TriggerLabel, modelID: attrModelPerch, count: 1, minScore: float64(float32(0.9)), maxScore: float64(float32(0.9))}}, got.contributions)
 			} else {
 				assert.Empty(t, got.contributions)
 			}
@@ -268,8 +271,64 @@ func TestCheckPrivacy_ContributionsNeedDebugAndAHitReachingTheClip(t *testing.T)
 	}
 }
 
+// TestCheckPrivacy_HitCountsLowerBoundOnlyWhenTheCapDroppedAReachingHit feeds hit
+// sequences past the attribution cap and checks the lower-bound flag. Row (d) is
+// the one an "oldest survivor reaches the clip" rule gets wrong: the list drops by
+// arrival order while stamps arrive out of order.
+func TestCheckPrivacy_HitCountsLowerBoundOnlyWhenTheCapDroppedAReachingHit(t *testing.T) {
+	t.Parallel()
+	item := newPrivacyFilterDetection(confirmSource, time.Unix(1000, 0))
+	const farBefore = 10 * time.Second
+	tests := []struct {
+		name string
+		// stamps returns the hit stamps in arrival order, given reachFrom.
+		stamps func(reachFrom time.Time) []time.Time
+		want   bool
+	}{
+		{"under the cap", func(r time.Time) []time.Time {
+			return []time.Time{r, r.Add(time.Second)}
+		}, false},
+		{"cap drops only hits before the clip", func(r time.Time) []time.Time {
+			return append(hitStamps(r.Add(-farBefore), 3), hitStamps(r, humanHitMaxPerSource)...)
+		}, false},
+		{"cap drops a hit stamped exactly at the reach boundary", func(r time.Time) []time.Time {
+			return append([]time.Time{r}, hitStamps(r.Add(time.Second), humanHitMaxPerSource)...)
+		}, true},
+		{"cap drops a reaching hit that arrived first while every survivor is earlier", func(r time.Time) []time.Time {
+			return append([]time.Time{r.Add(5 * time.Second)}, hitStamps(r.Add(-farBefore), humanHitMaxPerSource)...)
+		}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			p, settings := confirmProcessor(0)
+			reachFrom := clipSpan(settings, item).from.Add(-privacyClipGuard)
+			p.detectionMutex.Lock()
+			for _, at := range tt.stamps(reachFrom) {
+				p.recordHumanHitLocked(confirmSource, labelHumanHit(at, attrModelPerch, 0.9, 0))
+			}
+			p.detectionMutex.Unlock()
+
+			got := p.checkPrivacy(settings, item, time.Now())
+
+			require.True(t, got.hasHit)
+			require.False(t, got.hit.Time.Before(reachFrom), "the latest hit reaches the clip, so the flag is computed")
+			assert.Equal(t, tt.want, got.hitCountsLowerBound)
+		})
+	}
+}
+
+// hitStamps returns n stamps one millisecond apart starting at from.
+func hitStamps(from time.Time, n int) []time.Time {
+	out := make([]time.Time, n)
+	for i := range out {
+		out[i] = from.Add(time.Duration(i) * time.Millisecond)
+	}
+	return out
+}
+
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_CountedLineCarriesModelAndStamp(t *testing.T) {
+func TestReportHitDecision_CountedLineCarriesModelAndStamp(t *testing.T) {
 	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	p, settings := confirmProcessor(0)
 	t0 := time.Unix(1000, 0).UTC()
@@ -278,13 +337,14 @@ func TestLogLabelHitDecision_CountedLineCarriesModelAndStamp(t *testing.T) {
 
 	out := infoLog.String()
 	assert.Contains(t, out, "human detection filtered")
+	assert.Contains(t, out, "confidence=0.9 ", "the float32 score renders as 0.9, not as the widened float64")
 	assert.Contains(t, out, "model_id="+attrModelPerch)
 	assert.Contains(t, out, "hit_time=1970-01-01T00:16:40")
 	assert.NotContains(t, out, "confirmed_by", "a hit that needed no confirmation names no confirmer")
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_ConfirmedLineCarriesTheHeldStamp(t *testing.T) {
+func TestReportHitDecision_ConfirmedLineCarriesTheHeldStamp(t *testing.T) {
 	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0).UTC()
@@ -304,7 +364,7 @@ func TestShouldDiscardDetection_DebugLineCarriesHitModelAndScore(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 
 	p.detectionMutex.Lock()
-	p.recordHumanHitLocked(confirmSource, t0, metrics.TriggerLabel, attrModelPerch, 0.5)
+	p.recordHumanHitLocked(confirmSource, labelHumanHit(t0, attrModelPerch, 0.5, 0))
 	p.detectionMutex.Unlock()
 	discard, _ := discardNow(p, newPrivacyFilterDetection(confirmSource, t0), settings, 1)
 

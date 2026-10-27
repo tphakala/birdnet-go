@@ -306,7 +306,11 @@ type MigrationStateInfo struct {
 	MigratedRecords  int64   `json:"migrated_records"`
 	ErrorMessage     string  `json:"error_message,omitempty"`
 	RelatedDataError string  `json:"related_data_error,omitempty"`
-	DirtyRecordCount int64   `json:"dirty_record_count,omitempty"`
+	// AuxiliaryDataStatus and AuxiliaryDataError are the recorded auxiliary data
+	// outcome; the status is absent when unknown.
+	AuxiliaryDataStatus string `json:"auxiliary_data_status,omitempty"`
+	AuxiliaryDataError  string `json:"auxiliary_data_error,omitempty"`
+	DirtyRecordCount    int64  `json:"dirty_record_count,omitempty"`
 }
 
 // DeploymentInfo contains deployment context for troubleshooting path mismatches

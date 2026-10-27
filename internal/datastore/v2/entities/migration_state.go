@@ -29,6 +29,27 @@ const (
 	MigrationPhasePredictions MigrationPhase = "predictions" // Migrating predictions (largest)
 )
 
+// AuxiliaryDataStatus is the recorded outcome of the auxiliary data migration
+// (image cache, dynamic thresholds, threshold events, notification history,
+// daily events and hourly weather).
+type AuxiliaryDataStatus string
+
+const (
+	// AuxiliaryDataStatusUnknown means no outcome was recorded for the current
+	// migration attempt (rows from before the outcome was recorded, or an
+	// attempt that never reached the auxiliary step).
+	AuxiliaryDataStatusUnknown AuxiliaryDataStatus = ""
+	// AuxiliaryDataStatusSucceeded means every selected row was copied or was a
+	// legacy row that cannot exist in v2.
+	AuxiliaryDataStatusSucceeded AuxiliaryDataStatus = "succeeded"
+	// AuxiliaryDataStatusFailed means at least one section failed to copy rows
+	// that should have been copied; AuxiliaryDataError summarises the sections.
+	AuxiliaryDataStatusFailed AuxiliaryDataStatus = "failed"
+	// AuxiliaryDataStatusNotRequired means there was nothing to migrate (fresh
+	// v2-only install).
+	AuxiliaryDataStatusNotRequired AuxiliaryDataStatus = "not_required"
+)
+
 // MigrationState tracks the progress of database migration.
 // This is a singleton table (only one row with ID=1).
 type MigrationState struct {
@@ -40,12 +61,45 @@ type MigrationState struct {
 	StartedAt        *time.Time
 	PhaseStartedAt   *time.Time // When current phase started (for rate calculation)
 	CompletedAt      *time.Time
-	LastMigratedID   uint      `gorm:"default:0"` // Last legacy notes.id processed
-	TotalRecords     int64     `gorm:"default:0"` // Total records for current phase
-	MigratedRecords  int64     `gorm:"default:0"` // Records migrated in current phase
-	ErrorMessage     string    `gorm:"type:text"`
-	RelatedDataError string    `gorm:"column:related_data_error;type:text"` // Error from related data migration (reviews, comments, locks, predictions)
-	UpdatedAt        time.Time `gorm:"autoUpdateTime"`
+	LastMigratedID   uint   `gorm:"default:0"` // Last legacy notes.id processed
+	TotalRecords     int64  `gorm:"default:0"` // Total records for current phase
+	MigratedRecords  int64  `gorm:"default:0"` // Records migrated in current phase
+	ErrorMessage     string `gorm:"type:text"`
+	RelatedDataError string `gorm:"column:related_data_error;type:text"` // Error from related data migration (reviews, comments, locks, predictions)
+	// AuxiliaryDataStatus is the auxiliary data outcome. Read it only through
+	// AuxiliaryDataOutcome. "succeeded" promises that the rows the auxiliary
+	// step selected were copied at that step. It does not cover rows written to
+	// the legacy database afterwards, nor rows the step never selects (image
+	// caches of providers other than wikimedia, inactive notification history,
+	// threshold events beyond the 100 most recent per species).
+	AuxiliaryDataStatus AuxiliaryDataStatus `gorm:"column:auxiliary_data_status;type:varchar(20);not null;default:''"`
+	// AuxiliaryDataError summarises the failed sections; empty unless failed.
+	AuxiliaryDataError string `gorm:"column:auxiliary_data_error;type:text"`
+	// AuxiliaryDataStartedAt is a copy of StartedAt taken in the same UPDATE that
+	// recorded the outcome. It ties the outcome to one migration attempt.
+	AuxiliaryDataStartedAt *time.Time `gorm:"column:auxiliary_data_started_at"`
+	UpdatedAt              time.Time  `gorm:"autoUpdateTime"`
+}
+
+// AuxiliaryDataOutcome returns the auxiliary data outcome recorded for the
+// current migration attempt, or AuxiliaryDataStatusUnknown when it cannot be
+// shown to belong to it: no status stored, a state that cannot hold an
+// outcome, or AuxiliaryDataStartedAt differing from StartedAt. Both
+// timestamps come from database columns, so compare them only after a round
+// trip through the database.
+func (m *MigrationState) AuxiliaryDataOutcome() AuxiliaryDataStatus {
+	if m.AuxiliaryDataStatus == AuxiliaryDataStatusUnknown {
+		return AuxiliaryDataStatusUnknown
+	}
+	switch m.State {
+	case MigrationStatusValidating, MigrationStatusFailed, MigrationStatusCutover, MigrationStatusCompleted:
+	default:
+		return AuxiliaryDataStatusUnknown
+	}
+	if m.AuxiliaryDataStartedAt == nil || m.StartedAt == nil || !m.AuxiliaryDataStartedAt.Equal(*m.StartedAt) {
+		return AuxiliaryDataStatusUnknown
+	}
+	return m.AuxiliaryDataStatus
 }
 
 // Progress returns the migration progress as a percentage (0-100).

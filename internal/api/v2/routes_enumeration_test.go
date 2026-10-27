@@ -98,6 +98,7 @@ var criticalRoutes = []string{
 	"DELETE /api/v2/tls/certificate",
 	"POST /api/v2/tls/certificate/generate",
 	"GET /api/v2/tls/certificate/download",
+	"GET /api/v2/privacy-filter/discards",
 }
 
 // publicMutationRoutes lists the routes that change state (any method other
@@ -121,6 +122,7 @@ var authOnlyPrefixes = []string{
 	apiV2Prefix + "/filesystem",
 	apiV2Prefix + "/import",
 	apiV2Prefix + "/integrations",
+	apiV2Prefix + "/privacy-filter",
 	apiV2Prefix + "/settings",
 	apiV2Prefix + "/support",
 	apiV2Prefix + "/system",
@@ -140,6 +142,9 @@ var publicReadRoutes = map[string]bool{
 var protectedReadRoutes = map[string]bool{
 	// Registered in the auth domain's protected group (auth/auth.go, RegisterRoutes).
 	"GET /api/v2/auth/status": true,
+	// Registered in the privacy domain's protected group (privacy/privacy.go, RegisterRoutes).
+	"GET /api/v2/privacy-filter/activity": true,
+	"GET /api/v2/privacy-filter/discards": true,
 }
 
 // authGate stands in for the real auth middleware. It records the matched

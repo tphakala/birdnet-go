@@ -20,6 +20,9 @@ type HumanDetection struct {
 	ModelID string
 	// Score is the label confidence or VAD speech probability of that hit.
 	Score float64
+	// ThresholdMilli is the confidence or VAD threshold the hit was scored
+	// against, in thousandths. 0 when the writer gave none.
+	ThresholdMilli int
 }
 
 // VADSpeechHit is one entry in the recent-speech-hit history feed.

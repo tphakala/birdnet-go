@@ -228,6 +228,10 @@ func TestCollectDatabaseInfo_MigrationState(t *testing.T) {
 		CompletedAt:     &now,
 		TotalRecords:    1000,
 		MigratedRecords: 1000,
+
+		AuxiliaryDataStatus:    entities.AuxiliaryDataStatusFailed,
+		AuxiliaryDataError:     "weather: boom",
+		AuxiliaryDataStartedAt: &now,
 	}
 	require.NoError(t, db.Save(&state).Error)
 
@@ -237,6 +241,8 @@ func TestCollectDatabaseInfo_MigrationState(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, info.MigrationState)
 
+	assert.Equal(t, "failed", info.MigrationState.AuxiliaryDataStatus)
+	assert.Equal(t, "weather: boom", info.MigrationState.AuxiliaryDataError)
 	assert.Equal(t, "completed", info.MigrationState.State)
 	assert.Equal(t, int64(1000), info.MigrationState.TotalRecords)
 	assert.Equal(t, int64(1000), info.MigrationState.MigratedRecords)

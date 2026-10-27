@@ -808,10 +808,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 		}
 
 		// Use per-source sample rate when available; fall back to global constant.
-		sourceSampleRate := conf.SampleRate
-		if src != nil && src.SampleRate > 0 {
-			sourceSampleRate = src.SampleRate
-		}
+		sourceSampleRate := src.EffectiveSampleRate()
 
 		eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sourceSampleRate)
 
@@ -1193,7 +1190,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 		// Resolve per-source/per-stream EQ config for building per-route filter
 		// chains. Each route needs its own FilterChain because biquad filters
-		// have mutable state (in1/in2/out1/out2); sharing would cause a data race.
+		// have mutable per-filter state; sharing would cause a data race.
 		src, _ := p.engine.Registry().Get(sid)
 		sourceName := sid
 		if src != nil {
@@ -1260,10 +1257,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			logger.String("operation", operation))
 
 		// Use per-source sample rate when available; fall back to global constant.
-		sourceSampleRate := conf.SampleRate
-		if src != nil && src.SampleRate > 0 {
-			sourceSampleRate = src.SampleRate
-		}
+		sourceSampleRate := src.EffectiveSampleRate()
 
 		consumerOK, bufferRouteOK := p.wireSourceBufferRoute(
 			sid, sourceName, sourceSampleRate, gainDB, targets, currentSettings, operation)
@@ -2066,10 +2060,7 @@ func (p *AudioPipelineService) buildSourceConfigs(fallbackSources map[string]str
 		if device == "" {
 			continue
 		}
-		sampleRate := conf.SampleRate
-		if src.SampleRate > 0 {
-			sampleRate = src.SampleRate
-		}
+		sampleRate := conf.EffectiveSampleRate(src.SampleRate)
 
 		// Default to an ALSA audio card; promote to a stream type only when the
 		// device is actually a network stream URL. This keeps a misplaced

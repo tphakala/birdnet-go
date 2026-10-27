@@ -3,6 +3,7 @@ package conf
 import (
 	"math"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -178,6 +179,16 @@ func TestValidateAudioSettings_ExportPathTraversal(t *testing.T) {
 // Issue #501: EQ filter negative frequency and zero Q
 // -----------------------------------------------------------------------
 
+// TestMaxEQFrequencyIsNyquistOfHighestSampleRate keeps the equalizer frequency
+// ceiling tied to the supported capture rates, so adding a higher rate cannot
+// leave the ceiling behind.
+func TestMaxEQFrequencyIsNyquistOfHighestSampleRate(t *testing.T) {
+	t.Parallel()
+	highest := slices.Max(validSampleRates)
+	assert.Equal(t, MaxValidSampleRate, highest)
+	assert.InDelta(t, MaxEQFrequency, float64(highest)/2, 0)
+}
+
 func TestValidateEQFilters(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -218,6 +229,17 @@ func TestValidateEQFilters(t *testing.T) {
 			name:    "boundary: max frequency accepted",
 			filters: []EqualizerFilter{{Frequency: MaxEQFrequency, Q: 1.0}},
 			wantErr: false,
+		},
+		{
+			name:    "ultrasonic notch above the 48 kHz Nyquist accepted",
+			filters: []EqualizerFilter{{Type: "BandReject", Frequency: 60000, Width: 1000, Q: 1.0}},
+			wantErr: false,
+		},
+		{
+			name:    "positive infinity frequency rejected",
+			filters: []EqualizerFilter{{Frequency: math.Inf(1), Q: 1.0}},
+			wantErr: true,
+			errMsg:  "exceeds maximum",
 		},
 		{
 			name:    "zero Q rejected",

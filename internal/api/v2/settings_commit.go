@@ -12,6 +12,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
 )
 
 // Client-facing messages for a settings write whose side effects or disk save
@@ -184,17 +185,21 @@ func (c *Controller) persistsSettings() bool {
 // optional apply step (handleSettingsChanges for the HTTP handlers) and, for the
 // owner of the global snapshot unless DisableSaveSettings is set, the disk save.
 // When either fails the published snapshot is taken back by rollbackSettings, and
-// the profiling sampling rates are restored after a rolled-back save failure. It
-// returns the client message that matches the outcome (a "not rolled back"
-// variant when another writer published on top, see rollbackMessage) together
-// with the failure, or "", nil on success. Each failure is logged through the
-// API logger when it is enabled. Callers hold c.settingsMutex.
+// the profiling sampling rates are restored after a rolled-back save failure, and
+// reconfigure_sentry is queued again when the rolled-back write changed the Error
+// Tracking opt-in. It returns the client message that matches the outcome (a
+// "not rolled back" variant when another writer published on top, see
+// rollbackMessage) together with the failure, or "", nil on success. Each
+// failure is logged through the API logger when it is enabled. Callers hold
+// c.settingsMutex.
 //
 // It runs outside the settings writer lock, because apply reaches into the
 // classifier; never call it from a commitSettings mutate.
 func (c *Controller) finishSettingsWrite(current, updated *conf.Settings, apply func() error) (clientMsg string, err error) {
 	if apply != nil {
 		if err := apply(); err != nil {
+			// Nothing to re-send here: handleSettingsChanges dispatches its async
+			// actions after its only error return, so none were queued.
 			// Take back our own snapshot so in-memory state matches what is on disk
 			// (which was never overwritten), unless another writer published on top.
 			rbErr := c.rollbackSettings(current, updated)
@@ -214,6 +219,7 @@ func (c *Controller) finishSettingsWrite(current, updated *conf.Settings, apply 
 			rbErr := c.rollbackSettings(current, updated)
 			if rbErr == nil {
 				restoreProfilingRates(current)
+				c.resendSentryReconfigure(current, updated)
 			}
 			c.LogErrorIfEnabled("Failed to save settings to disk, rolling back",
 				logger.Error(err), logger.Bool("rolled_back", rbErr == nil))
@@ -221,6 +227,23 @@ func (c *Controller) finishSettingsWrite(current, updated *conf.Settings, apply 
 		}
 	}
 	return "", nil
+}
+
+// resendSentryReconfigure queues reconfigure_sentry again after a save failure
+// rolled back a write that changed the Error Tracking opt-in. The apply step
+// queued the signal before the save, so the control monitor may already have
+// started or stopped the client for the snapshot that was taken back.
+// ReconfigureSentry reads the live settings, so a run queued after the rollback
+// converges to the restored opt-in and refreshes the cached reporting flags.
+// Callers hold c.settingsMutex.
+func (c *Controller) resendSentryReconfigure(current, updated *conf.Settings) {
+	if !sentryEnabledChanged(current, updated) {
+		return
+	}
+	debugEnabled := current.WebServer.Debug
+	c.Go(func() {
+		c.sendReconfigActions([]string{telemetry.SignalReconfigureSentry}, debugEnabled)
+	})
 }
 
 // updateAndSaveSettings publishes a settings change built by mutate and

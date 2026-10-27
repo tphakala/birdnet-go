@@ -54,6 +54,7 @@ const (
 	MsgSettingsExtendedCaptureRestart    = "notifications.content.settings.extendedCaptureRestartRequired"
 	MsgSettingsEqualizerFailed           = "notifications.content.settings.equalizerUpdateFailed"
 	MsgSettingsEqualizerUpdated          = "notifications.content.settings.equalizerUpdated"
+	MsgSettingsEqualizerFiltersSkipped   = "notifications.content.settings.equalizerFiltersSkipped"
 
 	// Database migration notifications
 	MsgMigrationStartedTitle     = "notifications.content.migration.startedTitle"
@@ -110,6 +111,10 @@ const (
 
 	// Insights errors
 	MsgErrInsightsV2Required = "errors.insights.v2Required"
+
+	// Privacy filter errors. No locale entry exists yet because no UI calls the
+	// privacy filter endpoints.
+	MsgErrPrivacyFilterV2Required = "errors.privacyFilter.v2Required"
 
 	// Detection errors
 	MsgErrDetectionInvalidDate = "errors.detection.invalidDate"

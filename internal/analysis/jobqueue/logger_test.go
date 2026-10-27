@@ -65,9 +65,10 @@ func TestLogJobFailed(t *testing.T) {
 	var buf bytes.Buffer
 	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
 	cl, err := logger.NewCentralLogger(&logger.LoggingConfig{
-		DefaultLevel: "debug",
-		Console:      &logger.ConsoleOutput{Enabled: false},
-		FileOutput:   &logger.FileOutput{Enabled: false},
+		DefaultLevel:  "debug",
+		Console:       &logger.ConsoleOutput{Enabled: false},
+		FileOutput:    &logger.FileOutput{Enabled: false},
+		ModuleOutputs: logger.DisabledModuleOutputs(),
 	}, handler)
 	require.NoError(t, err)
 	// assert, not require: a require inside a cleanup func calls runtime.Goexit
@@ -179,9 +180,10 @@ func TestLogJobRetryScheduled_Level(t *testing.T) {
 			var buf bytes.Buffer
 			handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})
 			cfg := &logger.LoggingConfig{
-				DefaultLevel: "debug",
-				Console:      &logger.ConsoleOutput{Enabled: false},
-				FileOutput:   &logger.FileOutput{Enabled: false},
+				DefaultLevel:  "debug",
+				Console:       &logger.ConsoleOutput{Enabled: false},
+				FileOutput:    &logger.FileOutput{Enabled: false},
+				ModuleOutputs: logger.DisabledModuleOutputs(),
 			}
 			cl, err := logger.NewCentralLogger(cfg, handler)
 			require.NoError(t, err)

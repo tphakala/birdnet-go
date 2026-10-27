@@ -11,7 +11,37 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
+
+// dayBoundsCase pins the bounds of one local day in a zone. wantStart and wantEnd are the instants
+// of its first moment and of the first moment of the next day.
+type dayBoundsCase struct {
+	name      string
+	zone      string
+	date      string
+	wantStart time.Time
+	wantEnd   time.Time
+}
+
+// dayBoundsCases cover days whose next midnight is not 24 hours after their own, including zones
+// where the DST change happens at midnight itself: Havana skips 00:00-01:00 on 2026-03-08 and
+// Santiago skips it on 2026-09-06 and repeats 23:00-24:00 on 2026-04-04.
+var dayBoundsCases = []dayBoundsCase{
+	{"Helsinki fall back day is 25 hours long", "Europe/Helsinki", "2026-10-25", utc(2026, time.October, 24, 21, 0, 0), utc(2026, time.October, 25, 22, 0, 0)},
+	{"Helsinki spring forward day is 23 hours long", "Europe/Helsinki", "2026-03-29", utc(2026, time.March, 28, 22, 0, 0), utc(2026, time.March, 29, 21, 0, 0)},
+	{"Havana day before a skipped midnight", "America/Havana", "2026-03-07", utc(2026, time.March, 7, 5, 0, 0), utc(2026, time.March, 8, 5, 0, 0)},
+	{"Havana skipped midnight starts at 01:00", "America/Havana", "2026-03-08", utc(2026, time.March, 8, 5, 0, 0), utc(2026, time.March, 9, 4, 0, 0)},
+	{"Santiago skipped midnight starts at 01:00", "America/Santiago", "2026-09-06", utc(2026, time.September, 6, 4, 0, 0), utc(2026, time.September, 7, 3, 0, 0)},
+	{"Santiago repeated 23:00 hour ends at the next midnight", "America/Santiago", "2026-04-04", utc(2026, time.April, 4, 3, 0, 0), utc(2026, time.April, 5, 4, 0, 0)},
+}
+
+func dayBoundsZone(t *testing.T, name string) *time.Location {
+	t.Helper()
+	zone, ok := testutil.ToolchainZones(t)[name]
+	require.True(t, ok, "zone %s missing from the toolchain zone database", name)
+	return zone
+}
 
 // =============================================================================
 // DateRangeToUnix Tests
@@ -41,9 +71,26 @@ func TestDateRangeToUnix(t *testing.T) {
 		expectedStart := time.Date(2024, 6, 15, 0, 0, 0, 0, tz).Unix()
 		assert.Equal(t, expectedStart, *start)
 
-		// End should be 23:59:59 of last day
-		expectedEnd := time.Date(2024, 6, 17, 23, 59, 59, 0, tz).Unix()
+		// End is exclusive: the next midnight, so 23:59:59 of the last day is inside the range
+		expectedEnd := time.Date(2024, 6, 18, 0, 0, 0, 0, tz).Unix()
 		assert.Equal(t, expectedEnd, *end)
+	})
+
+	t.Run("day bounds in zones with DST changes", func(t *testing.T) {
+		for _, tc := range dayBoundsCases {
+			t.Run(tc.name, func(t *testing.T) {
+				zone := dayBoundsZone(t, tc.zone)
+				day, err := time.Parse(time.DateOnly, tc.date)
+				require.NoError(t, err)
+
+				start, end := DateRangeToUnix(&datastore.DateRange{Start: day, End: day}, zone)
+
+				require.NotNil(t, start)
+				require.NotNil(t, end)
+				assert.Equal(t, tc.wantStart.Unix(), *start, "start")
+				assert.Equal(t, tc.wantEnd.Unix(), *end, "end")
+			})
+		}
 	})
 
 	t.Run("nil timezone uses local", func(t *testing.T) {
@@ -176,30 +223,6 @@ func TestMergeHourFilters(t *testing.T) {
 		result := MergeHourFilters([]string{"dawn"}, hf)
 		// Should return sentinel [-1] for empty intersection
 		assert.Equal(t, []int{-1}, result)
-	})
-}
-
-// =============================================================================
-// GetTimezoneOffset Tests
-// =============================================================================
-
-func TestGetTimezoneOffset(t *testing.T) {
-	t.Run("UTC returns 0", func(t *testing.T) {
-		offset := GetTimezoneOffset(time.UTC)
-		assert.Equal(t, 0, offset)
-	})
-
-	t.Run("nil returns local offset", func(t *testing.T) {
-		offset := GetTimezoneOffset(nil)
-		_, expected := time.Now().Local().Zone()
-		assert.Equal(t, expected, offset)
-	})
-
-	t.Run("fixed offset timezone", func(t *testing.T) {
-		// Create a fixed +5 hours offset timezone
-		loc := time.FixedZone("Test", 5*3600)
-		offset := GetTimezoneOffset(loc)
-		assert.Equal(t, 5*3600, offset)
 	})
 }
 
@@ -341,12 +364,8 @@ func TestConvertAdvancedFilters(t *testing.T) {
 		assert.Equal(t, 1, startTime.Day())
 		assert.Equal(t, 0, startTime.Hour())
 
-		// Verify end is end of June 30th
-		endTime := time.Unix(*result.EndTime, 0).In(tz)
-		assert.Equal(t, 2024, endTime.Year())
-		assert.Equal(t, time.June, endTime.Month())
-		assert.Equal(t, 30, endTime.Day())
-		assert.Equal(t, 23, endTime.Hour())
+		// End is exclusive: the start of the day after June 30th
+		assert.Equal(t, time.Date(2024, 7, 1, 0, 0, 0, 0, tz).Unix(), *result.EndTime)
 	})
 
 	t.Run("confidence filter conversion", func(t *testing.T) {
@@ -390,16 +409,6 @@ func TestConvertAdvancedFilters(t *testing.T) {
 		assert.True(t, *result.IsReviewed)
 	})
 
-	t.Run("timezone offset is set", func(t *testing.T) {
-		filters := &datastore.AdvancedSearchFilters{}
-
-		result, err := ConvertAdvancedFilters(ctx, filters, nil, tz)
-		require.NoError(t, err)
-
-		// UTC should have offset 0
-		assert.Equal(t, 0, result.TimezoneOffset)
-	})
-
 	t.Run("sort field mapping", func(t *testing.T) {
 		tests := []struct {
 			sortBy   string
@@ -426,6 +435,20 @@ func TestConvertAdvancedFilters(t *testing.T) {
 				assert.Equal(t, tt.wantDesc, result.SortDesc)
 			})
 		}
+	})
+
+	t.Run("cursor pagination sorts by id ascending whatever the sort string", func(t *testing.T) {
+		filters := &datastore.AdvancedSearchFilters{
+			SortBy:           "confidence_desc",
+			CursorPagination: true,
+			SortAscending:    true,
+			MinID:            7,
+		}
+		result, err := ConvertAdvancedFilters(ctx, filters, nil, tz)
+		require.NoError(t, err)
+		assert.Equal(t, SortFieldID, result.SortBy)
+		assert.False(t, result.SortDesc)
+		assert.Equal(t, uint(7), result.MinID)
 	})
 
 	t.Run("text and explicit scientific alternatives share the OR branch", func(t *testing.T) {
@@ -866,13 +889,45 @@ func TestParseDateString(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		ts := time.Unix(*result, 0).In(tz)
-		assert.Equal(t, 2024, ts.Year())
-		assert.Equal(t, time.June, ts.Month())
-		assert.Equal(t, 15, ts.Day())
-		assert.Equal(t, 23, ts.Hour())
-		assert.Equal(t, 59, ts.Minute())
-		assert.Equal(t, 59, ts.Second())
+		// End of day is exclusive: the next midnight.
+		assert.Equal(t, time.Date(2024, 6, 16, 0, 0, 0, 0, tz).Unix(), *result)
+	})
+
+	t.Run("end of day on a DST change day is the next local midnight", func(t *testing.T) {
+		helsinki, err := time.LoadLocation("Europe/Helsinki")
+		require.NoError(t, err)
+
+		tests := []struct {
+			date string
+			want int64
+		}{
+			{"2026-03-29", time.Date(2026, 3, 29, 21, 0, 0, 0, time.UTC).Unix()},  // 23h day, next midnight is 00:00 EEST
+			{"2026-10-25", time.Date(2026, 10, 25, 22, 0, 0, 0, time.UTC).Unix()}, // 25h day, next midnight is 00:00 EET
+		}
+		for _, tc := range tests {
+			result, err := parseDateString(tc.date, helsinki, true)
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			assert.Equal(t, tc.want, *result, tc.date)
+		}
+	})
+
+	t.Run("day bounds in zones with DST changes", func(t *testing.T) {
+		for _, tc := range dayBoundsCases {
+			t.Run(tc.name, func(t *testing.T) {
+				zone := dayBoundsZone(t, tc.zone)
+
+				start, err := parseDateString(tc.date, zone, false)
+				require.NoError(t, err)
+				require.NotNil(t, start)
+				assert.Equal(t, tc.wantStart.Unix(), *start, "start")
+
+				end, err := parseDateString(tc.date, zone, true)
+				require.NoError(t, err)
+				require.NotNil(t, end)
+				assert.Equal(t, tc.wantEnd.Unix(), *end, "end")
+			})
+		}
 	})
 
 	t.Run("invalid date returns error", func(t *testing.T) {
@@ -924,9 +979,7 @@ func TestConvertSearchFilters(t *testing.T) {
 		assert.Equal(t, 1, startTime.Day())
 		assert.Equal(t, 0, startTime.Hour())
 
-		endTime := time.Unix(*result.EndTime, 0).In(tz)
-		assert.Equal(t, 30, endTime.Day())
-		assert.Equal(t, 23, endTime.Hour())
+		assert.Equal(t, time.Date(2024, 7, 1, 0, 0, 0, 0, tz).Unix(), *result.EndTime)
 	})
 
 	t.Run("confidence range conversion", func(t *testing.T) {
@@ -1081,15 +1134,6 @@ func TestConvertSearchFilters(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, 200, result.Limit) // Capped to max, not reset to default
-	})
-
-	t.Run("timezone offset is set", func(t *testing.T) {
-		filters := &datastore.SearchFilters{}
-
-		result, err := ConvertSearchFilters(ctx, filters, nil, tz)
-		require.NoError(t, err)
-
-		assert.Equal(t, 0, result.TimezoneOffset) // UTC = 0
 	})
 
 	t.Run("invalid date start returns error", func(t *testing.T) {

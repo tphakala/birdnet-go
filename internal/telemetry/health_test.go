@@ -137,7 +137,7 @@ func TestWorkerHealthCheck_Isolated(t *testing.T) {
 	t.Run("worker_stats_healthy", func(t *testing.T) {
 		t.Parallel()
 		config := DefaultWorkerConfig()
-		worker, err := NewTelemetryWorker(false, config)
+		worker, err := NewTelemetryWorker(neverAllowed, config)
 		require.NoError(t, err)
 
 		stats := worker.GetStats()
@@ -151,7 +151,7 @@ func TestWorkerHealthCheck_Isolated(t *testing.T) {
 		t.Parallel()
 		config := DefaultWorkerConfig()
 		config.FailureThreshold = 2 // Low threshold for testing
-		worker, err := NewTelemetryWorker(false, config)
+		worker, err := NewTelemetryWorker(neverAllowed, config)
 		require.NoError(t, err)
 
 		// Force failures to trip the circuit breaker

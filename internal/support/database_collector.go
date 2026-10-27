@@ -527,6 +527,12 @@ func (c *GormDatabaseInfoCollector) collectMigrationState(ctx context.Context, i
 		ErrorMessage:     state.ErrorMessage,
 		RelatedDataError: state.RelatedDataError,
 	}
+	if outcome := state.AuxiliaryDataOutcome(); outcome != entities.AuxiliaryDataStatusUnknown {
+		msi.AuxiliaryDataStatus = string(outcome)
+		if outcome == entities.AuxiliaryDataStatusFailed {
+			msi.AuxiliaryDataError = state.AuxiliaryDataError
+		}
+	}
 	if state.StartedAt != nil {
 		s := state.StartedAt.UTC().Format(time.RFC3339)
 		msi.StartedAt = &s

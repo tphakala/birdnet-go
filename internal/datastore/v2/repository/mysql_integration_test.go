@@ -605,3 +605,21 @@ func TestMySQL_ForeignKeyConstraint(t *testing.T) {
 // - Connection pool exhaustion scenarios
 // - JSON column operations (MySQL 5.7+)
 // - Full-text search capabilities
+
+// TestMySQLContainerReset_RestoresForeignKeyChecksOnFailure pins that a failed truncate does not
+// leave foreign key checks off on a connection that goes back to the pool.
+func TestMySQLContainerReset_RestoresForeignKeyChecksOnFailure(t *testing.T) {
+	err := mysqlContainer.Reset(t.Context(), []string{"test_detections", "no_such_table"})
+	require.Error(t, err, "truncating a missing table must fail")
+
+	// Hold more connections than the pool keeps idle, so the one Reset used is among them.
+	const probeConns = 8
+	for i := range probeConns {
+		conn, err := testDB.Conn(t.Context())
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = conn.Close() })
+		var checks int
+		require.NoError(t, conn.QueryRowContext(t.Context(), "SELECT @@foreign_key_checks").Scan(&checks))
+		assert.Equal(t, 1, checks, "connection %d was returned to the pool with foreign key checks off", i)
+	}
+}

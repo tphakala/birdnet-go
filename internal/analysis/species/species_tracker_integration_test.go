@@ -62,7 +62,7 @@ func TestFullWorkflow_BasicTracking(t *testing.T) {
 	assert.Equal(t, 0, status.DaysSinceFirst)
 
 	// Test detection after window expires
-	laterTime := newDetectionTime.Add(15 * 24 * time.Hour)
+	laterTime := newDetectionTime.AddDate(0, 0, 15)
 	isNew, days = tracker.CheckAndUpdateSpecies("New_Species", laterTime)
 	assert.False(t, isNew, "Species should no longer be new after window")
 	assert.Equal(t, 15, days)

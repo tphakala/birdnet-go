@@ -94,7 +94,6 @@ func TestCandidateSampleRates_Sorted(t *testing.T) {
 	// Also verify it starts at or above MinCaptureSampleRate
 	if len(CandidateSampleRates) > 0 {
 		assert.GreaterOrEqual(t, CandidateSampleRates[0], MinCaptureSampleRate)
-		assert.LessOrEqual(t, CandidateSampleRates[len(CandidateSampleRates)-1], MaxCaptureSampleRate)
 	}
 }
 

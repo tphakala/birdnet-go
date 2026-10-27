@@ -92,8 +92,8 @@ func TestFingerprintIncludesNormalizedErrorType(t *testing.T) {
 		Context("operation", "save_note").
 		Build()
 
-	fp1 := buildFingerprint(ee1)
-	fp2 := buildFingerprint(ee2)
+	fp1 := buildFingerprint(ee1, false)
+	fp2 := buildFingerprint(ee2, false)
 	assert.NotEqual(t, fp1, fp2, "different root causes should have different fingerprints")
 }
 
@@ -275,6 +275,38 @@ func TestDetectCategoryComponentMapping(t *testing.T) {
 			t.Parallel()
 			got := detectCategory(fmt.Errorf("request rejected"), tt.component)
 			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestNormalizeErrorType(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		msg  string
+		want string
+	}{
+		{"Error 1205 (HY000): Lock wait timeout exceeded; try restarting transaction", "lock_wait_timeout"},
+		{"Error 1213 (40001): Deadlock found when trying to get lock", "deadlock"},
+		{"Error 1049 (42000): Unknown database 'x'", "unknown_database"},
+		{"dial tcp: lookup db on 127.0.0.11:53: read udp 1.2.3.4:5->6.7.8.9:53: i/o timeout", "dns_error"},
+		{"dial tcp: lookup db on r:53: server misbehaving", "dns_error"},
+		{"dial tcp 10.0.0.1:3306: connect: no route to host", "host_unreachable"},
+		{"dial tcp 10.0.0.1:3306: connect: network is unreachable", "network_unreachable"},
+		{"invalid connection", "invalid_connection"},
+		{"driver: bad connection", "bad_connection"},
+		{"dial tcp 10.0.0.1:3306: i/o timeout", "io_timeout"},
+		{"operation timed out", "timeout"},
+		{"dial tcp: lookup db: context deadline exceeded", "context_deadline"},
+		{"invalid connection string: no such file or directory", "file_not_found"},
+		{"Cannot add a NOT NULL column with default value NULL", "error"},
+		{"connection refused", "connection_refused"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.msg, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, NormalizeErrorType(tt.msg))
 		})
 	}
 }

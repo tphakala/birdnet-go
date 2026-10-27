@@ -1,6 +1,7 @@
 package v2only
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -30,8 +31,8 @@ func TestV2OnlyDatastore_CountDetectionsMatchListing(t *testing.T) {
 		return time.Date(2024, time.March, day, hour, minute, 0, 0, helsinki)
 	}
 	// 2024-03-31 skips 03:00-04:00 local in Helsinki, so that day is 23 hours long. The
-	// hour windows are offsets from local midnight (an "hour" of 05 starts 5 hours after
-	// midnight, which is 06:00 local on that day).
+	// hour windows are wall-clock hours (an "hour" of 06 is 06:00-07:00 on the clock),
+	// so hour 03 does not exist on that day and its window is empty.
 	seeds := []struct {
 		species string
 		at      time.Time
@@ -61,10 +62,11 @@ func TestV2OnlyDatastore_CountDetectionsMatchListing(t *testing.T) {
 			{"whole DST day", finch, "2024-03-31", "", 0, 6},
 			{"hour before the gap", finch, "2024-03-31", "02", 1, 1},
 			{"window across the gap", finch, "2024-03-31", "02", 3, 3},
-			{"zero duration defaults to one hour", finch, "2024-03-31", "03", 0, 2},
+			{"skipped hour is empty", finch, "2024-03-31", "03", 1, 0},
+			{"zero duration defaults to one hour", finch, "2024-03-31", "04", 0, 2},
 			{"other species same day", robin, "2024-03-31", "", 0, 2},
 			{"unknown species", "Nonexistent species", "2024-03-31", "", 0, 0},
-			{"all species one hour", "", "2024-03-31", "05", 1, 2},
+			{"all species one hour", "", "2024-03-31", "06", 1, 2},
 			{"unparsable date means all time", finch, "not-a-date", "", 0, 8},
 		}
 		for _, tt := range tests {
@@ -86,12 +88,12 @@ func TestV2OnlyDatastore_CountDetectionsMatchListing(t *testing.T) {
 			duration         int
 			want             int64
 		}{
-			{"one hour", "2024-03-31", "05", 1, 2},
+			{"one hour", "2024-03-31", "06", 1, 2},
 			{"window across the gap", "2024-03-31", "02", 3, 4},
-			// The window is 24 elapsed hours from local midnight, and 2024-03-31 is only
-			// 23 hours long in Helsinki, so it also takes in the 2024-04-01 00:00 finch:
-			// 8 rows on the 31st plus that one.
-			{"24 hours from midnight spills into the next day", "2024-03-31", "00", 24, 9},
+			// The window ends at the next local midnight, so the 2024-04-01 00:00 finch is
+			// not included: 8 rows on the 31st.
+			{"24 hours from midnight is exactly the local day", "2024-03-31", "00", 24, 8},
+			{"window ending past midnight stops at the end of the day", "2024-03-31", "23", 2, 1},
 			{"zero duration is empty", "2024-03-31", "06", 0, 0},
 			{"day before", "2024-03-30", "23", 1, 1},
 		}
@@ -116,4 +118,87 @@ func TestV2OnlyDatastore_CountDetectionsMatchListing(t *testing.T) {
 		_, err = ds.CountSpeciesDetections(finch, "2024-03-31", "xx", 1)
 		require.Error(t, err)
 	})
+}
+
+// TestV2OnlyDatastore_HourWindowsMatchDashboardBuckets pins the hour drill-down to the
+// wall-clock hours the dashboard buckets detections into, on days where a zone
+// transition skips or repeats an hour. For every hour of the day the count, the
+// listing and the dashboard cell must agree, and every listed row must read that hour on
+// the clock.
+func TestV2OnlyDatastore_HourWindowsMatchDashboardBuckets(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sci          = "Fringilla coelebs"
+		seedStep     = 15 * time.Minute
+		seedMargin   = time.Hour
+		perHourSeeds = 4 // one seed every seedStep
+	)
+	tests := []struct {
+		name     string
+		zone     string
+		date     string
+		wantHour map[int]int // hours that differ from perHourSeeds
+	}{
+		{"spring gap after time.Date", "Europe/Helsinki", "2024-03-31", map[int]int{3: 0}},
+		{"fall overlap second occurrence", "Europe/Helsinki", "2026-10-25", map[int]int{3: 2 * perHourSeeds}},
+		{"spring gap before time.Date", "America/New_York", "2026-03-08", map[int]int{2: 0}},
+		{"southern fall overlap", "Australia/Sydney", "2026-04-05", map[int]int{2: 2 * perHourSeeds}},
+		{"half-hour offset control", "Asia/Kolkata", "2026-10-25", nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			ds, cleanup := setupTestDatastore(t)
+			defer cleanup()
+			loc, err := time.LoadLocation(tt.zone)
+			require.NoError(t, err)
+			ds.timezone = loc
+
+			day, err := time.ParseInLocation(time.DateOnly, tt.date, loc)
+			require.NoError(t, err)
+			// Seed from before the day to after it, so nothing outside the date may leak in.
+			for at := day.Add(-seedMargin); at.Before(day.AddDate(0, 0, 1).Add(seedMargin)); at = at.Add(seedStep) {
+				seedDetection(t, ds, sci, at)
+			}
+
+			cells, err := ds.GetBatchHourlyOccurrences(t.Context(), tt.date, tt.date, []string{sci}, 0)
+			require.NoError(t, err)
+			cell := cells[sci]
+
+			total := 0
+			for h := range hoursPerDay {
+				want := perHourSeeds
+				if w, ok := tt.wantHour[h]; ok {
+					want = w
+				}
+				hour := fmt.Sprintf("%02d", h)
+				assert.Equal(t, want, cell[h], "dashboard cell for hour %s", hour)
+				total += cell[h]
+
+				hourly, err := ds.CountHourlyDetections(tt.date, hour, 1)
+				require.NoError(t, err)
+				assert.EqualValues(t, want, hourly, "hourly count for hour %s", hour)
+				species, err := ds.CountSpeciesDetections(sci, tt.date, hour, 1)
+				require.NoError(t, err)
+				assert.EqualValues(t, want, species, "species count for hour %s", hour)
+
+				hourlyRows, err := ds.GetHourlyDetections(tt.date, hour, 1, 0, 0)
+				require.NoError(t, err)
+				speciesRows, err := ds.SpeciesDetections(sci, tt.date, hour, 1, false, 0, 0)
+				require.NoError(t, err)
+				assert.Len(t, hourlyRows, want, "hourly listing for hour %s", hour)
+				assert.Len(t, speciesRows, want, "species listing for hour %s", hour)
+				for _, n := range append(hourlyRows, speciesRows...) {
+					assert.Equal(t, tt.date, n.Date)
+					assert.Equal(t, hour, n.Time[:2], "listed row %s must read hour %s", n.Time, hour)
+				}
+			}
+
+			dayCount, err := ds.CountSpeciesDetections(sci, tt.date, "", 0)
+			require.NoError(t, err)
+			assert.EqualValues(t, total, dayCount, "hour windows must partition the day window")
+		})
+	}
 }

@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
@@ -16,7 +15,6 @@ type WeatherRepository interface {
 	// HourlyWeather operations
 	SaveHourlyWeather(ctx context.Context, weather *entities.HourlyWeather) error
 	GetHourlyWeather(ctx context.Context, date string) ([]entities.HourlyWeather, error)
-	GetHourlyWeatherInLocation(ctx context.Context, date string, loc *time.Location) ([]entities.HourlyWeather, error)
 	LatestHourlyWeather(ctx context.Context) (*entities.HourlyWeather, error)
 
 	// Bulk operations for migration

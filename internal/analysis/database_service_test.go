@@ -19,12 +19,21 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
+
+// probeZoneOffsetSeconds is a UTC offset (+07:17) that no real zone uses, so an
+// instant expressed in it differs from the same wall time read in any host zone.
+const probeZoneOffsetSeconds = 7*3600 + 17*60
 
 // Compile-time interface compliance check.
 var _ app.Service = (*DatabaseService)(nil)
@@ -117,6 +126,25 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	assert.True(t, svc.IsV2OnlyMode(), "should be in v2-only mode for fresh install")
 	assert.NotNil(t, svc.V2Manager(), "V2Manager() should be set for fresh install")
 	assert.Nil(t, svc.legacyMonitor, "no migration state monitor on a v2 install")
+
+	// The repository must be the v2 one: it stores the detection's own instant. The
+	// zone has an offset no real zone uses, so a wall-clock round trip through the
+	// host's time.Local would move the instant.
+	repo := svc.DetectionRepository()
+	require.NotNil(t, repo, "DetectionRepository() should be set after Start()")
+	at := time.Date(2026, 6, 1, 12, 0, 0, 0, time.FixedZone("probe", probeZoneOffsetSeconds))
+	result := &detection.Result{
+		Timestamp: at,
+		Species:   detection.Species{ScientificName: "Parus major", CommonName: "Great Tit"},
+		Model:     detection.DefaultModelInfo(),
+	}
+	require.NoError(t, repo.Save(t.Context(), result, nil))
+	require.NotZero(t, result.ID)
+	var detectedAt int64
+	require.NoError(t, svc.V2Manager().DB().
+		Model(&entities.Detection{}).Select("detected_at").Where("id = ?", result.ID).
+		Scan(&detectedAt).Error)
+	assert.Equal(t, at.Unix(), detectedAt, "stored detected_at must be the detection's own instant")
 }
 
 // Not parallel: Start publishes the migration state manager and worker to
@@ -143,11 +171,13 @@ func TestDatabaseService_Start_LegacyInstallRunsStateMonitor(t *testing.T) {
 	t.Cleanup(func() {
 		assert.NoError(t, svc.Stop(t.Context()), "Stop() should succeed")
 		assert.Nil(t, svc.legacyMonitor, "Stop releases the monitor")
+		assert.Nil(t, svc.DetectionRepository(), "Stop releases the detection repository")
 	})
 
 	require.False(t, svc.IsV2OnlyMode(), "an existing legacy database starts in legacy mode")
 	require.NotNil(t, svc.legacyMonitor, "legacy install with a state manager gets the monitor")
 	assert.True(t, svc.legacyMonitor.legacySchema, "the monitor of a legacy install raises the legacy schema notice")
+	assert.NotNil(t, svc.DetectionRepository(), "legacy mode must have a detection repository")
 }
 
 // discardTransport is a sentry.Transport that drops every event; the test below
@@ -222,6 +252,152 @@ func TestDatabaseService_Start_LegacyInstallWithoutStateManager(t *testing.T) {
 	event := hub.Scope().ApplyToEvent(&sentry.Event{}, nil, client)
 	require.NotNil(t, event)
 	assert.Equal(t, migrationTagUnavailable, event.Tags["migration_state"])
+}
+
+// TestDatabaseService_Start_MixedSchemaRefuses pins the wiring of the mixed schema
+// refusal: Start must return the error before any datastore is constructed. Without
+// it the legacy default branch would open the database and create the SQLite file.
+// Not parallel: it swaps the global logger.
+func TestDatabaseService_Start_MixedSchemaRefuses(t *testing.T) {
+	configuredPath := filepath.Join(t.TempDir(), "birdnet.db")
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = configuredPath
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelError)
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	svc := NewDatabaseService(settings, metrics)
+	svc.checkStartupState = func(*conf.Settings) datastoreV2.StartupState {
+		return datastoreV2.StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			Decision:        datastoreV2.DecisionMixedSchemaRefused,
+			Error:           fmt.Errorf("%w: test", datastoreV2.ErrMixedSchemaDatabase),
+		}
+	}
+
+	err = svc.Start(t.Context())
+	require.ErrorIs(t, err, datastoreV2.ErrMixedSchemaDatabase)
+	assert.Nil(t, svc.DataStore(), "no datastore may be constructed for a refused database")
+	assert.False(t, svc.IsV2OnlyMode())
+	assert.NoFileExists(t, configuredPath, "the legacy fallback would have created the database file")
+	assert.Contains(t, buf.String(), mixedSchemaGuideURL, "the log must point the user to the guide")
+}
+
+// legacyTailFixture builds a SQLite install whose migration is COMPLETED with watermark
+// 10 while the legacy notes table holds 15 rows, and returns the settings and the
+// configured legacy path.
+func legacyTailFixture(t *testing.T) (settings *conf.Settings, legacyPath string) {
+	t.Helper()
+	dir := t.TempDir()
+	legacyPath = filepath.Join(dir, "birdnet.db")
+
+	legacyDB, err := gorm.Open(sqlite.Open(legacyPath), &gorm.Config{Logger: gormlogger.Default.LogMode(gormlogger.Silent)})
+	require.NoError(t, err)
+	require.NoError(t, legacyDB.Exec("CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, source_node TEXT)").Error)
+	for i := range 15 {
+		require.NoError(t, legacyDB.Exec("INSERT INTO notes (id, source_node) VALUES (?, 'test')", i+1).Error)
+	}
+	legacySQL, err := legacyDB.DB()
+	require.NoError(t, err)
+	require.NoError(t, legacySQL.Close())
+
+	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{ConfiguredPath: legacyPath})
+	require.NoError(t, err)
+	require.NoError(t, mgr.Initialize())
+	sm := datastoreV2.NewStateManager(mgr.DB())
+	require.NoError(t, sm.StartMigration(10))
+	require.NoError(t, sm.TransitionToDualWrite())
+	require.NoError(t, sm.TransitionToMigrating())
+	require.NoError(t, mgr.DB().Model(&entities.MigrationState{}).
+		Where("id = 1").Update("last_migrated_id", 10).Error)
+	require.NoError(t, sm.TransitionToValidating())
+	require.NoError(t, sm.TransitionToCutover())
+	require.NoError(t, sm.Complete())
+	require.NoError(t, mgr.Close())
+
+	settings = &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = legacyPath
+	return settings, legacyPath
+}
+
+// dirEntryNames lists the file names in dir.
+func dirEntryNames(t *testing.T, dir string) []string {
+	t.Helper()
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	names := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		names = append(names, entry.Name())
+	}
+	return names
+}
+
+// TestDatabaseService_Start_UnverifiedLegacyTail pins what Start does when the legacy
+// tail check cannot tell whether records beyond the watermark are missing from v2.
+// Not parallel: it swaps the global logger and Start sets process globals.
+func TestDatabaseService_Start_UnverifiedLegacyTail(t *testing.T) {
+	tests := []struct {
+		name          string
+		stateOverride func(*conf.Settings) datastoreV2.StartupState
+		wantRefused   bool
+	}{
+		{
+			name:        "refuses when the install would start in enhanced mode",
+			wantRefused: true,
+		},
+		{
+			name: "is ignored when the install is not complete",
+			stateOverride: func(*conf.Settings) datastoreV2.StartupState {
+				return datastoreV2.StartupState{
+					MigrationStatus: entities.MigrationStatusIdle,
+					LegacyRequired:  true,
+					Decision:        datastoreV2.DecisionLegacyMode,
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			logtest.CaptureBufferAt(t, slog.LevelError)
+			settings, legacyPath := legacyTailFixture(t)
+			dir := filepath.Dir(legacyPath)
+			before := dirEntryNames(t, dir)
+
+			metrics, err := observability.NewMetrics()
+			require.NoError(t, err)
+			svc := NewDatabaseService(settings, metrics)
+			svc.checkLegacyTail = func(*conf.Settings, logger.Logger) (bool, error) {
+				return false, fmt.Errorf("%w: test", datastoreV2.ErrLegacyTailUnverified)
+			}
+			if tt.stateOverride != nil {
+				svc.checkStartupState = tt.stateOverride
+			}
+
+			err = svc.Start(t.Context())
+			if tt.wantRefused {
+				require.ErrorIs(t, err, datastoreV2.ErrLegacyTailUnverified)
+				assert.Nil(t, svc.DataStore(), "no datastore may be constructed for a refused start")
+				assert.False(t, svc.IsV2OnlyMode())
+				assert.ElementsMatch(t, before, dirEntryNames(t, dir),
+					"a refused start must not rename or create any database file")
+				return
+			}
+
+			require.NoError(t, err)
+			t.Cleanup(func() { assert.NoError(t, svc.Stop(t.Context())) })
+			assert.False(t, svc.IsV2OnlyMode())
+			assert.NotNil(t, svc.DataStore())
+			assert.FileExists(t, legacyPath, "consolidation must not run on an unverified tail")
+			for _, name := range dirEntryNames(t, dir) {
+				assert.NotContains(t, name, ".old", "no backup means no consolidation ran")
+			}
+		})
+	}
 }
 
 func TestBootParamsFromStartupSQLite(t *testing.T) {

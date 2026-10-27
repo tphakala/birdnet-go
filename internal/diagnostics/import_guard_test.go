@@ -46,6 +46,10 @@ var allowedInternalDeps = map[string]struct{}{
 	// Reached through conf; a stdlib-only leaf that imports nothing internal,
 	// so it cannot bring diagnostics' importers into the closure.
 	internalPrefix + "labels/nonbird": {},
+	// Reached through conf (range filter date logic); a leaf that imports only
+	// the standard time and iter packages, so it cannot bring diagnostics'
+	// importers into the closure.
+	internalPrefix + "wallclock": {},
 }
 
 // TestDiagnosticsImportGuard enforces two invariants: (a) diagnostics

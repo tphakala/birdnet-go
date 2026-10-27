@@ -72,8 +72,9 @@ key and arrays replace, as on the server, so `partial` carries only the keys it
 changes, with each nested value typed as a complete object and each array sent
 whole; a failed request leaves the store untouched. It shows no toast and does
 not touch `isSaving`, so the caller owns busy and error UI. Like `saveSettings`
-it refreshes the restart status and applies a changed dashboard locale to the
-UI. `section` is the lowercase backend section name from
+it refreshes the restart status, applies a changed dashboard locale to the UI
+and applies a saved Error Tracking value to the browser Sentry SDK without a
+reload. `section` is the lowercase backend section name from
 `SettingsSectionPayloads` (for example `privacyfilter`, `rtsp`), not a store
 key such as `realtime` or `privacyFilter`.
 

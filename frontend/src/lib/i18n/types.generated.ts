@@ -376,6 +376,7 @@ export type TranslationKey =
   | 'notifications.content.settings.extendedCaptureRestartRequired'
   | 'notifications.content.settings.equalizerUpdateFailed'
   | 'notifications.content.settings.equalizerUpdated'
+  | 'notifications.content.settings.equalizerFiltersSkipped' // params: count, sources
   | 'notifications.content.settings.savedSuccessfully'
   | 'notifications.content.settings.saveFailed'
   | 'notifications.content.settings.reconfiguringSpeciesGuide'
@@ -4500,6 +4501,10 @@ export type TranslationParams = {
     count: string | number;
     window_minutes: string | number;
     sample_error: string | number;
+  };
+  'notifications.content.settings.equalizerFiltersSkipped': {
+    count: string | number;
+    sources: string | number;
   };
   'notifications.content.cleanup.completeMessage': { space: string | number };
   'notifications.content.buffer.overloadMessage': {

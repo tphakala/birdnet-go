@@ -43,6 +43,8 @@ type AudioSourceRepository interface {
 	// Delete removes an audio source by ID.
 	// Returns ErrAudioSourceNotFound if not found.
 	// Note: Detections referencing this source will have their source_id set to NULL.
+	// Privacy filter hourly rollup rows and discard rows (with their hit rows) of
+	// the source are deleted with it.
 	Delete(ctx context.Context, id uint) error
 
 	// Update modifies an audio source's display name or config.

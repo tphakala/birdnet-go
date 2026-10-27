@@ -20,27 +20,16 @@ type diversitySeed struct {
 }
 
 // expectedDiversity computes GetSpeciesDiversityData's documented result in Go: each
-// non-false-positive detection is bucketed on the UTC calendar date of
-// detected_at+offset, where offset is the zone offset at the range anchor (start
-// date, else end date, else now), and the days within [startDate, endDate] report
-// their distinct species count in date order.
+// non-false-positive detection is bucketed on its own local calendar date in the
+// datastore's zone, and the days within [startDate, endDate] report their distinct
+// species count in date order.
 func expectedDiversity(ds *Datastore, seeds []diversitySeed, startDate, endDate string) []datastore.DailyAnalyticsData {
-	var refEpoch int64
-	if startDate != "" {
-		t, _ := time.ParseInLocation(time.DateOnly, startDate, ds.timezone)
-		refEpoch = t.Unix()
-	} else if endDate != "" {
-		t, _ := time.ParseInLocation(time.DateOnly, endDate, ds.timezone)
-		refEpoch = t.Unix()
-	}
-	offset := int64(ds.zoneOffsetSeconds(refEpoch))
-
 	species := map[string]map[string]bool{}
 	for _, s := range seeds {
 		if s.falsePositive {
 			continue
 		}
-		day := time.Unix(s.at.Unix()+offset, 0).UTC().Format(time.DateOnly)
+		day := s.at.In(ds.timezone).Format(time.DateOnly)
 		if (startDate != "" && day < startDate) || (endDate != "" && day > endDate) {
 			continue
 		}
@@ -62,7 +51,7 @@ func expectedDiversity(ds *Datastore, seeds []diversitySeed, startDate, endDate 
 // filter to the date buckets: a detection is included exactly when its bucketed
 // date lies within the requested range. Detections sit on both sides of local
 // midnight at each range edge and around both Europe/Helsinki DST changes, where
-// the single anchored offset differs from the true local offset.
+// a single offset for the whole range would differ from the true local offset.
 func TestV2OnlyDatastore_GetSpeciesDiversityData_RangeBoundaries(t *testing.T) {
 	t.Parallel()
 
@@ -98,7 +87,7 @@ func assertDiversityRangeBoundaries(t *testing.T, ds *Datastore) {
 		{species: robin, at: local(time.March, 31, 2, 59)},
 		{species: tit, at: local(time.March, 31, 4, 0)},
 		{species: finch, at: local(time.April, 2, 23, 30)},
-		{species: robin, at: local(time.April, 3, 0, 30)}, // 2024-04-02 under the EET (+2) anchor
+		{species: robin, at: local(time.April, 3, 0, 30)},
 		{species: tit, at: local(time.April, 3, 1, 0)},
 		{species: finch, at: local(time.October, 26, 23, 30)},
 		{species: robin, at: local(time.October, 27, 0, 30)},
@@ -116,14 +105,14 @@ func assertDiversityRangeBoundaries(t *testing.T, ds *Datastore) {
 		}
 	}
 
-	t.Run("end edge across spring forward keeps the anchored bucket", func(t *testing.T) {
+	t.Run("end edge across spring forward uses the local date", func(t *testing.T) {
 		got, err := ds.GetSpeciesDiversityData(ctx, "2024-03-25", "2024-04-02")
 		require.NoError(t, err)
 		assert.Equal(t, []datastore.DailyAnalyticsData{
 			{Date: "2024-03-25", Count: 1},
 			{Date: "2024-03-30", Count: 1},
 			{Date: "2024-03-31", Count: 2},
-			{Date: "2024-04-02", Count: 2},
+			{Date: "2024-04-02", Count: 1},
 		}, got)
 	})
 
@@ -143,6 +132,27 @@ func assertDiversityRangeBoundaries(t *testing.T, ds *Datastore) {
 			assert.Equal(t, want, got, "range %q..%q", start, end)
 		}
 	}
+
+	// Santiago skips local midnight in spring (2026-09-06 00:00 -04 becomes 01:00 -03), so the
+	// first instant of a local date is not its midnight.
+	t.Run("zone that skips midnight keeps each row on its own date", func(t *testing.T) {
+		santiago, err := time.LoadLocation("America/Santiago")
+		require.NoError(t, err)
+		ds.timezone = santiago
+		gapSeeds := []diversitySeed{
+			{species: finch, at: time.Date(2026, time.September, 5, 23, 30, 0, 0, santiago)},
+			{species: robin, at: time.Date(2026, time.September, 6, 1, 30, 0, 0, santiago)},
+			{species: tit, at: time.Date(2026, time.September, 7, 0, 30, 0, 0, santiago)},
+		}
+		for _, s := range gapSeeds {
+			seedDetection(t, ds, s.species, s.at)
+		}
+		for _, day := range []string{"2026-09-05", "2026-09-06", "2026-09-07"} {
+			got, err := ds.GetSpeciesDiversityData(ctx, day, day)
+			require.NoError(t, err)
+			assert.Equal(t, []datastore.DailyAnalyticsData{{Date: day, Count: 1}}, got, day)
+		}
+	})
 
 	t.Run("invalid dates are rejected", func(t *testing.T) {
 		_, err := ds.GetSpeciesDiversityData(ctx, "2024-3-1", "")

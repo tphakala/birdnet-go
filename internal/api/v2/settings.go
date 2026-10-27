@@ -2191,7 +2191,7 @@ func restoreBlockedFieldsRecursively(
 // every gap in blockedValuesEqual was a bypass, and it had one: time.Time.Equal
 // ignores Location, so a client could resend BirdNET.RangeFilter.LastUpdated as
 // the same instant in a different offset, have it compare "unchanged", and shift
-// the calendar day conf.LocalNoon derives from it. Writing current's value back
+// the calendar day wallclock.Noon derives from it. Writing current's value back
 // every time makes a comparison bug cost an inaccurate skippedFields list rather
 // than a leaked write.
 func restoreBlockedLeaf(currentField, updatedField reflect.Value, fieldPath string, restored *[]string) {
@@ -2419,6 +2419,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"eBird", "reconfigure_ebird", ebirdSettingsChanged, "Reconfiguring eBird integration...", notification.MsgSettingsReconfiguringEbird, ToastTypeInfo, toastDurationMedium},
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, ToastTypeInfo, toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, ToastTypeInfo, toastDurationShort},
+	{"Sentry", telemetry.SignalReconfigureSentry, sentryEnabledChanged, "", "", ToastTypeInfo, toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, ToastTypeInfo, toastDurationShort},
 	{"Species guide", SignalReconfigureSpeciesGuide, speciesGuideSettingsChanged, "Reconfiguring species guide...", notification.MsgSettingsReconfiguringSpeciesGuide, ToastTypeInfo, toastDurationShort},
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
@@ -2995,6 +2996,13 @@ func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	}
 
 	return false
+}
+
+// sentryEnabledChanged reports whether the Error Tracking opt-in changed. Debug
+// is not compared: the BeforeSend hook reads it live, and the action only starts
+// or stops the client. SDK debug logging is decided when the client starts.
+func sentryEnabledChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.Sentry.Enabled != currentSettings.Sentry.Enabled
 }
 
 // yearlyTrackingChanged checks if yearly tracking settings have changed.

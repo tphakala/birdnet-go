@@ -72,8 +72,9 @@ var (
 //
 // Migration Note: For detection-specific CRUD operations, prefer using DetectionRepository
 // (see repository.go) which works with domain models (detection.Result) instead of
-// persistence models (Note). The DetectionRepository wraps Interface and handles
-// conversion between domain and persistence layers.
+// persistence models (Note). For the legacy store, the DetectionRepository wraps Interface
+// and handles conversion between domain and persistence layers; a v2 database has its own
+// implementation (v2only.NewDetectionRepository).
 //
 // Optional methods:
 // Schema version constants for datastore implementations.
@@ -2431,7 +2432,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	}
 
 	// Pre-allocate conditions slice based on date range
-	dayCount := int(endDate.Sub(startDate).Hours()/24) + 1
+	dayCount := int(endDate.Sub(startDate).Hours()/24) + 1 //nolint:gocritic // legacy store: elapsed hours between local midnights, used only as a capacity hint and a log value
 	conditions := make([]*gorm.DB, 0, dayCount)
 	window := suncalc.SunEventWindow // sunrise/sunset transition half-width (single source of truth)
 
@@ -2474,7 +2475,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	// Log summary of how many conditions were created
 	GetLogger().Info("Created date-specific conditions for TimeOfDay filter",
 		logger.Int("condition_count", len(conditions)),
-		logger.Int("day_range", int(endDate.Sub(startDate).Hours()/24)+1))
+		logger.Int("day_range", int(endDate.Sub(startDate).Hours()/24)+1)) //nolint:gocritic // legacy store: elapsed hours between local midnights, used only as a capacity hint and a log value
 
 	return conditions, nil
 }

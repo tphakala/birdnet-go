@@ -1518,6 +1518,140 @@ describe('Settings Store - restart status refresh after a save', () => {
   );
 });
 
+describe('Settings Store - browser error tracking follows the saved setting', () => {
+  const withSentry = (enabled: boolean) => ({ ...serverSettings(), sentry: { enabled } });
+
+  // The shared mock implementations, saved before any override and put back after each test.
+  // The file-level beforeEach has already installed serveConfirmedSettings on load.
+  let originalLoad: (typeof settingsAPI)['load'] | undefined;
+  let originalSave: (typeof settingsAPI)['save'] | undefined;
+  let originalPatchSection: (typeof settingsAPI)['patchSection'] | undefined;
+
+  beforeEach(() => {
+    originalLoad = vi.mocked(settingsAPI.load).getMockImplementation();
+    originalSave = vi.mocked(settingsAPI.save).getMockImplementation();
+    originalPatchSection = vi.mocked(settingsAPI.patchSection).getMockImplementation();
+  });
+
+  afterEach(() => {
+    vi.mocked(settingsAPI.load).mockReset();
+    if (originalLoad) vi.mocked(settingsAPI.load).mockImplementation(originalLoad);
+    vi.mocked(settingsAPI.save).mockReset();
+    if (originalSave) vi.mocked(settingsAPI.save).mockImplementation(originalSave);
+    vi.mocked(settingsAPI.patchSection).mockReset();
+    if (originalPatchSection) {
+      vi.mocked(settingsAPI.patchSection).mockImplementation(originalPatchSection);
+    }
+  });
+
+  const load = async (loaded: boolean, rebased?: boolean) => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
+    vi.mocked(settingsAPI.load)
+      .mockReset()
+      .mockResolvedValueOnce(withSentry(loaded))
+      .mockResolvedValue(withSentry(rebased ?? loaded));
+    await settingsActions.loadSettings();
+  };
+
+  const spyApply = async () => {
+    const appState = await import('$lib/stores/appState.svelte');
+    return vi.spyOn(appState, 'applySavedSentrySetting').mockResolvedValue(undefined);
+  };
+
+  it.each([
+    {
+      name: 'saveSettings passes an edit that survives the rebase',
+      loaded: false,
+      rebased: false,
+      run: async () => {
+        settingsActions.updateSection('sentry', { enabled: true });
+        await settingsActions.saveSettings({ notify: false });
+      },
+      expected: [true],
+    },
+    {
+      name: 'saveSettings passes the rebased value that was sent, not the pre-rebase one',
+      loaded: true,
+      rebased: false,
+      run: () => settingsActions.saveSettings({ notify: false }),
+      expected: [false],
+    },
+    {
+      name: 'saveSection sentry passes the patched value',
+      loaded: true,
+      rebased: true,
+      run: () => settingsActions.saveSection('sentry', { enabled: false }),
+      expected: [false],
+    },
+    {
+      name: 'saveSection sentry without enabled passes nothing',
+      loaded: true,
+      rebased: true,
+      run: () => settingsActions.saveSection('sentry', { environment: 'staging' }),
+      expected: [],
+    },
+    {
+      name: 'saveSection of another section carrying enabled passes nothing',
+      loaded: true,
+      rebased: true,
+      run: () => settingsActions.saveSection('privacyfilter', { enabled: false }),
+      expected: [],
+    },
+  ])('$name', async ({ loaded, rebased, run, expected }) => {
+    await load(loaded, rebased);
+    const apply = await spyApply();
+    try {
+      await run();
+      expect(apply.mock.calls).toEqual(expected.map(value => [value]));
+    } finally {
+      apply.mockRestore();
+    }
+  });
+
+  it('a failure applying Error Tracking in the browser does not fail the save', async () => {
+    await load(false);
+    const appState = await import('$lib/stores/appState.svelte');
+    const apply = vi
+      .spyOn(appState, 'applySavedSentrySetting')
+      .mockRejectedValue(new Error('boom'));
+    try {
+      settingsActions.updateSection('sentry', { enabled: true });
+      await expect(settingsActions.saveSettings({ notify: false })).resolves.toBeUndefined();
+      const state = get(settingsStore);
+      expect(state.isSaving).toBe(false);
+      expect(state.error).toBeNull();
+    } finally {
+      apply.mockRestore();
+    }
+  });
+
+  it('a save does not wait for the browser to apply Error Tracking', async () => {
+    await load(false);
+    const appState = await import('$lib/stores/appState.svelte');
+    // Never settles: the save must not await the apply
+    const apply = vi
+      .spyOn(appState, 'applySavedSentrySetting')
+      .mockReturnValue(new Promise(() => {}));
+    try {
+      settingsActions.updateSection('sentry', { enabled: true });
+      const saved = settingsActions.saveSettings({ notify: false }).then((): string => 'saved');
+      // Resolves only after the imports and a macrotask, by which time a save that does
+      // not wait for the apply has finished
+      const sentinel = (async (): Promise<string> => {
+        await vi.dynamicImportSettled();
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+        return 'still waiting';
+      })();
+
+      expect(await Promise.race([saved, sentinel])).toBe('saved');
+      expect(apply).toHaveBeenCalledWith(true);
+    } finally {
+      apply.mockRestore();
+    }
+  });
+});
+
 describe('Settings Store - equalizer values the backend accepts', () => {
   // Values the editor never offers but the backend stores: a disabled equalizer is not
   // validated at all, and an enabled one only bounds frequency and Q

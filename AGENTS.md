@@ -70,6 +70,12 @@ yourself before touching code in that area.
   legacy code or moves callers to the repositories, and the legacy to v2
   migration code are allowed. If a change seems to need the legacy store, stop
   and ask the maintainer. Details: `internal/datastore/AGENTS.md`.
+- **Reconcile database problems safely; never migrate data on your own.** When
+  startup or runtime code finds a recoverable database problem, it repairs it
+  automatically as long as no row of user data is lost or hidden and the repair
+  is logged. A data migration (SQLite to MySQL, legacy to v2, copying or
+  consolidating databases) never starts by itself; only an explicit user action
+  starts it. Details: `internal/datastore/AGENTS.md`.
 - **The frontend is for desktop and tablet only; mobile is out of scope.** Do
   not optimize, fix, test or file issues for phone viewports or phone layouts
   (about 640 px wide and below), and do not add phone-specific workarounds.
@@ -199,8 +205,13 @@ automatic rerun of any failed test, then publishes a consolidated result in the
      regression. Do not "fix" them; re-run or report instead.
    - `PASS`: all green.
 2. For machine-readable detail, download the `ci-failures` artifact:
-   - `ci-failures.json`: array of real regressions (`{pkg, test, output}`).
-   - `ci-flaky.json`: tests that passed on rerun (informational).
+   - `ci-failures.json`: array of real regressions (`{run, pkg, test, output}`).
+   - `ci-flaky.json`: tests that passed on rerun (`{run, pkg, test}`, informational).
+
+   `run` names the test run (the event file without its `events-` prefix and
+   `.json` suffix). A test that fails in one run and passes in another is a
+   regression in the first, not a flake; only a fail followed by a pass inside
+   one run counts as flaky.
 
    Prefer these small files over scrolling multi-thousand-line raw logs.
 

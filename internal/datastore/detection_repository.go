@@ -18,7 +18,9 @@ const (
 
 // detectionRepository implements DetectionRepository using the existing Interface.
 // This is a bridge implementation that allows gradual migration to the new domain model
-// while preserving compatibility with existing database operations.
+// while preserving compatibility with existing database operations. It serves the legacy
+// store; a v2 database uses v2only.NewDetectionRepository, whose Save keeps the detection's
+// own instant instead of formatting it as wall-clock text.
 type detectionRepository struct {
 	store Interface
 	tz    *time.Location
@@ -520,15 +522,6 @@ func (r *detectionRepository) convertFilters(filters *DetectionFilters) (Advance
 		legacy.DateRange = &DateRange{
 			Start: start,
 			End:   end,
-		}
-	} else if filters.Date != "" {
-		date, err := r.parseDateWithDefault(filters.Date, false)
-		if err != nil {
-			return AdvancedSearchFilters{}, err
-		}
-		legacy.DateRange = &DateRange{
-			Start: date,
-			End:   date.Add(24*time.Hour - time.Nanosecond), // End of day (23:59:59.999999999)
 		}
 	}
 

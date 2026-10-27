@@ -16,6 +16,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/notification"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
 	"gorm.io/gorm"
 )
@@ -23,6 +24,13 @@ import (
 // Weather constants (package-local)
 const (
 	minTimeStringLength = 2 // Minimum length for parsing hour from time string
+
+	invalidDateMessage  = "Invalid date format. Use YYYY-MM-DD"
+	noHourlyDataMessage = "No weather data found for the specified date"
+	futureDateMessage   = "No weather data available for future date"
+
+	// invalidDateParamKey is the error_params key the invalid-date translation interpolates.
+	invalidDateParamKey = "paramName"
 )
 
 // Handler serves the weather domain endpoints. It embeds *apicore.Core BY
@@ -127,6 +135,28 @@ func (c *Handler) buildDailyWeatherResponse(dailyEvents *datastore.DailyEvents) 
 	}
 }
 
+// parseDateParam parses a :date route parameter as a calendar date in YYYY-MM-DD form
+// (time.DateOnly), returning midnight of that date in the server's local zone. Any other
+// shape and any impossible date, such as 2026-02-30, is an error.
+func parseDateParam(date string) (time.Time, error) {
+	return time.ParseInLocation(time.DateOnly, date, time.Local)
+}
+
+// respondInvalidDate writes the 400 response for a :date parameter that parseDateParam
+// rejected, with the shared invalid-date translation key.
+func (c *Handler) respondInvalidDate(ctx echo.Context, err error) error {
+	return c.HandleErrorWithKey(ctx, err, invalidDateMessage, http.StatusBadRequest,
+		notification.MsgErrDetectionInvalidDate, map[string]any{invalidDateParamKey: "date"})
+}
+
+// isFutureDate reports whether requested, a midnight returned by parseDateParam, falls on a
+// calendar day after the day now falls on in requested's zone.
+func isFutureDate(requested, now time.Time) bool {
+	loc := requested.Location()
+	y, m, d := now.In(loc).Date()
+	return requested.After(time.Date(y, m, d, 0, 0, 0, 0, loc))
+}
+
 // GetDailyWeather handles GET /api/v2/weather/daily/:date
 // Retrieves daily weather data for a specific date
 func (c *Handler) GetDailyWeather(ctx echo.Context) error {
@@ -137,6 +167,10 @@ func (c *Handler) GetDailyWeather(ctx echo.Context) error {
 			logger.String("ip", ctx.RealIP()),
 		)
 		return c.HandleError(ctx, echo.NewHTTPError(http.StatusBadRequest), "Date parameter is required", http.StatusBadRequest)
+	}
+
+	if _, err := parseDateParam(date); err != nil {
+		return c.respondInvalidDate(ctx, err)
 	}
 
 	c.LogInfoIfEnabled("Getting daily weather",
@@ -181,6 +215,11 @@ func (c *Handler) GetHourlyWeatherForDay(ctx echo.Context) error {
 		return c.HandleError(ctx, echo.NewHTTPError(http.StatusBadRequest), "Date parameter is required", http.StatusBadRequest)
 	}
 
+	requested, err := parseDateParam(date)
+	if err != nil {
+		return c.respondInvalidDate(ctx, err)
+	}
+
 	c.LogInfoIfEnabled("Getting hourly weather for day", logger.String("date", date), logger.String("path", path), logger.String("ip", ip))
 
 	hourlyWeather, err := c.DS.GetHourlyWeather(date)
@@ -190,7 +229,7 @@ func (c *Handler) GetHourlyWeatherForDay(ctx echo.Context) error {
 	}
 
 	if len(hourlyWeather) == 0 {
-		return c.handleEmptyHourlyWeather(ctx, date, ip, path)
+		return c.handleEmptyHourlyWeather(ctx, date, requested, ip, path)
 	}
 
 	response := c.buildHourlyWeatherResponseList(hourlyWeather)
@@ -203,8 +242,9 @@ func (c *Handler) GetHourlyWeatherForDay(ctx echo.Context) error {
 	})
 }
 
-// handleEmptyHourlyWeather handles the case when no hourly weather data is found
-func (c *Handler) handleEmptyHourlyWeather(ctx echo.Context, date, ip, path string) error {
+// handleEmptyHourlyWeather handles the case when no hourly weather data is found. The caller
+// has validated date and passes its parsed local midnight as requested.
+func (c *Handler) handleEmptyHourlyWeather(ctx echo.Context, date string, requested time.Time, ip, path string) error {
 	emptyResponse := struct {
 		Message string                  `json:"message"`
 		Data    []hourlyWeatherResponse `json:"data"`
@@ -213,21 +253,14 @@ func (c *Handler) handleEmptyHourlyWeather(ctx echo.Context, date, ip, path stri
 	}
 
 	// Check if it's a future date
-	requestedDate, parseErr := time.Parse(time.DateOnly, date)
-	if parseErr != nil {
-		c.LogErrorIfEnabled("Invalid date format in hourly weather request", logger.String("date", date), logger.Error(parseErr), logger.String("path", path), logger.String("ip", ip))
-		emptyResponse.Message = "No weather data found for the specified date"
-		return ctx.JSON(http.StatusOK, emptyResponse)
-	}
-
-	if requestedDate.After(time.Now()) {
+	if isFutureDate(requested, time.Now()) {
 		c.LogWarnIfEnabled("No hourly weather data for future date", logger.String("date", date), logger.String("reason", "future_date"), logger.String("path", path), logger.String("ip", ip))
-		emptyResponse.Message = "No weather data available for future date"
+		emptyResponse.Message = futureDateMessage
 		return ctx.JSON(http.StatusOK, emptyResponse)
 	}
 
 	c.LogWarnIfEnabled("No hourly weather data found", logger.String("date", date), logger.String("reason", "missing_data"), logger.String("path", path), logger.String("ip", ip))
-	emptyResponse.Message = "No weather data found for the specified date"
+	emptyResponse.Message = noHourlyDataMessage
 	return ctx.JSON(http.StatusOK, emptyResponse)
 }
 
@@ -248,6 +281,10 @@ func (c *Handler) GetHourlyWeatherForHour(ctx echo.Context) error {
 
 	if date == "" || hour == "" {
 		return c.HandleError(ctx, echo.NewHTTPError(http.StatusBadRequest), "Date and hour parameters are required", http.StatusBadRequest)
+	}
+
+	if _, err := parseDateParam(date); err != nil {
+		return c.respondInvalidDate(ctx, err)
 	}
 
 	// Parse the requested hour to an integer
@@ -617,7 +654,7 @@ func (c *Handler) GetSunTimes(ctx echo.Context) error {
 			logger.String("path", ctx.Request().URL.Path),
 			logger.String("ip", ctx.RealIP()),
 		)
-		return c.HandleError(ctx, err, "Invalid date format. Use YYYY-MM-DD", http.StatusBadRequest)
+		return c.HandleError(ctx, err, invalidDateMessage, http.StatusBadRequest)
 	}
 
 	c.LogInfoIfEnabled("Getting sun times",

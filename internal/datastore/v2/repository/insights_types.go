@@ -1,6 +1,6 @@
 package repository
 
-// TimeRange represents a Unix timestamp range for index-friendly queries.
+// TimeRange represents a half-open Unix timestamp range [Start, End) for index-friendly queries.
 type TimeRange struct {
 	Start int64
 	End   int64

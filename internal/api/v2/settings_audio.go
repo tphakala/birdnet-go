@@ -2,8 +2,10 @@
 package api
 
 import (
+	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 
 	dspeq "github.com/tphakala/go-audio-dsp/equalizer"
 
@@ -18,6 +20,116 @@ import (
 type sourceNameUpdater interface {
 	GetByConnection(connStr string) (*audiocore.AudioSource, bool)
 	UpdateDisplayName(sourceID, newName string) bool
+}
+
+// eqSkippedSource names one configured source whose equalizer chain skips at
+// least one filter at the sample rate the source will run at.
+type eqSkippedSource struct {
+	name       string
+	sampleRate int
+	skipped    int
+}
+
+// streamRateLookup finds the registered source for a stream URL.
+type streamRateLookup interface {
+	GetByConnection(connStr string) (*audiocore.AudioSource, bool)
+}
+
+// equalizerSkipReport lists the configured sources whose equalizer chain skips
+// at least one filter at the sample rate the source will run at. It walks the
+// settings being saved, not the source registry, because the registry still
+// holds the old rates, names and sources until the queued reconfigure runs.
+// Sources come in config order: sound cards, then streams.
+//
+// A sound card runs at conf.EffectiveSampleRate of its configured rate, which
+// is the rate the audio pipeline registers it with. A stream's rate is probed
+// at runtime and not in the config, so it is read from the registry entry for
+// its URL, and only when the previous settings had a stream with the same URL
+// and models (a model change can switch the stream between the default and a
+// probed rate in the later reconfigure). Other streams are left out, and so
+// are all streams when registry is nil (the engine is not running).
+//
+// Not covered: the HLS listen route always runs at the default rate, so a
+// filter above its Nyquist frequency is skipped there without being reported;
+// a sound card that fails to start at its new rate; a save that changes only
+// a stream URL or models and no equalizer setting; and any existing config
+// file, whose startup is unchanged and logs a Warn per skipped filter when the
+// chain is built.
+func equalizerSkipReport(oldSettings, currentSettings *conf.Settings, registry streamRateLookup) []eqSkippedSource {
+	var report []eqSkippedSource
+	add := func(name string, sampleRate int) {
+		eq := equalizer.ResolveEQSettings(currentSettings, name)
+		if _, skipped := equalizer.BuildFilterChainReport(eq, sampleRate); len(skipped) > 0 {
+			report = append(report, eqSkippedSource{name: name, sampleRate: sampleRate, skipped: len(skipped)})
+		}
+	}
+
+	for i := range currentSettings.Realtime.Audio.Sources {
+		cfg := &currentSettings.Realtime.Audio.Sources[i]
+		if strings.TrimSpace(cfg.Device) == "" {
+			continue
+		}
+		add(cfg.Name, conf.EffectiveSampleRate(cfg.SampleRate))
+	}
+
+	if registry == nil {
+		return report
+	}
+	for i := range currentSettings.Realtime.RTSP.Streams {
+		stream := &currentSettings.Realtime.RTSP.Streams[i]
+		if !stream.IsEnabled() || stream.URL == "" || !streamUnchanged(oldSettings, stream) {
+			continue
+		}
+		if src, ok := registry.GetByConnection(stream.URL); ok {
+			add(stream.Name, src.EffectiveSampleRate())
+		}
+	}
+	return report
+}
+
+// streamUnchanged reports whether oldSettings has a stream with the same URL
+// and models as stream, so its registered sample rate still applies.
+func streamUnchanged(oldSettings *conf.Settings, stream *conf.StreamConfig) bool {
+	for i := range oldSettings.Realtime.RTSP.Streams {
+		old := &oldSettings.Realtime.RTSP.Streams[i]
+		if old.URL == stream.URL && slices.Equal(old.Models, stream.Models) {
+			return true
+		}
+	}
+	return false
+}
+
+// newlySkippedSources returns the sources in current that are not in previous,
+// by name: the sources that start skipping filters in a save that changed no
+// equalizer setting (for example a lower sample rate). A source that already
+// skipped before the save is not reported again.
+func newlySkippedSources(previous, current []eqSkippedSource) []eqSkippedSource {
+	var added []eqSkippedSource
+	for i := range current {
+		if !slices.ContainsFunc(previous, func(p eqSkippedSource) bool { return p.name == current[i].name }) {
+			added = append(added, current[i])
+		}
+	}
+	return added
+}
+
+// equalizerSaveToast builds the toast that reports the outcome of an equalizer
+// save: a success toast when every filter applies, else a warning naming the
+// sources that skip filters. key and params are the translation key and its
+// parameters, count and sources.
+func equalizerSaveToast(report []eqSkippedSource) (message, toastType string, duration int, key string, params map[string]any) {
+	if len(report) == 0 {
+		return "Audio equalizer settings updated.", ToastTypeSuccess, toastDurationShort,
+			notification.MsgSettingsEqualizerUpdated, nil
+	}
+	names := make([]string, len(report))
+	for i := range report {
+		names[i] = report[i].name
+	}
+	joined := strings.Join(names, ", ")
+	return fmt.Sprintf("Audio equalizer settings saved, but some filters are skipped on %s: a filter must be valid at the source sample rate, with its frequency below half of it.", joined),
+		ToastTypeWarning, toastDurationExtended, notification.MsgSettingsEqualizerFiltersSkipped,
+		map[string]any{"count": len(names), "sources": joined}
 }
 
 // audioDeviceSettingChanged checks if audio device pipeline settings have changed.
@@ -267,7 +379,8 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 	}
 
 	// Check audio device settings
-	if audioDeviceSettingChanged(oldSettings, currentSettings) {
+	sourcesChanged := audioDeviceSettingChanged(oldSettings, currentSettings)
+	if sourcesChanged {
 		audiocore.GetLogger().Info("audio device settings changed, triggering reconfiguration")
 		reconfigActions = append(reconfigActions, actionReconfigureAudioSources)
 		_ = c.SendToastWithKey("Reconfiguring audio sources...", "info", toastDurationMedium,
@@ -327,7 +440,23 @@ func (c *Controller) handleAudioSettingsChanges(oldSettings, currentSettings *co
 			c.Debug("Failed to update EQ filter chains: %v", err)
 		}
 		if globalEQChanged || perSourceEQChanged || perStreamEQChanged {
-			_ = c.SendToast("Audio equalizer settings updated.", "success", toastDurationShort)
+			message, toastType, duration, key, params := equalizerSaveToast(equalizerSkipReport(oldSettings, currentSettings, registry))
+			_ = c.SendToastWithKey(message, toastType, duration, key, params)
+			return reconfigActions, nil
+		}
+	}
+
+	// No equalizer setting changed, but a source setting did: warn about the
+	// sources whose existing filters this save newly makes skip (a lower rate).
+	// Sources are matched by name, so a save that also renames a source cannot
+	// tell a renamed source from a new one and sends no warning.
+	if sourcesChanged && !nameChanged {
+		added := newlySkippedSources(
+			equalizerSkipReport(oldSettings, oldSettings, registry),
+			equalizerSkipReport(oldSettings, currentSettings, registry))
+		if len(added) > 0 {
+			message, toastType, duration, key, params := equalizerSaveToast(added)
+			_ = c.SendToastWithKey(message, toastType, duration, key, params)
 		}
 	}
 

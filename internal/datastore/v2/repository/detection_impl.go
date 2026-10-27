@@ -24,6 +24,9 @@ const (
 	SortFieldSpecies = "species"
 	// SortFieldStatus allows sorting by verification status (requires JOIN on detection_reviews).
 	SortFieldStatus = "status"
+	// SortFieldID sorts by the detection primary key. Cursor pagination (MinID)
+	// pages by id, so it must sort by it for every row to be visited.
+	SortFieldID = "id"
 )
 
 // defaultDBBatchSize is the batch size for bulk database operations.
@@ -36,6 +39,7 @@ type detectionRepository struct {
 	metrics     *datastore.Metrics
 	useV2Prefix bool
 	isMySQL     bool
+	now         func() time.Time // clock for open-ended hour filters; nil means time.Now (tests inject it)
 }
 
 // NewDetectionRepository creates a new DetectionRepository.
@@ -141,9 +145,9 @@ func (r *detectionRepository) dateFromUnixExpr(column string, offsetSeconds int)
 // hourFromUnixExpr returns a SQL expression that extracts the wall-clock HOUR (0-23) of a
 // Unix timestamp in the configured timezone. offsetSeconds is that zone's UTC offset; it is
 // added to the epoch before bucketing, so the result is independent of the database/OS-local
-// timezone (unlike the older 'localtime'/FROM_UNIXTIME form). This mirrors the IncludedHours
-// search-filter expression. detected_at is always positive, so the integer division and
-// modulo stay non-negative even for negative (west-of-UTC) offsets.
+// timezone (unlike the older 'localtime'/FROM_UNIXTIME form). This mirrors wallClockHourExpr, the
+// IncludedHours search-filter expression, with a single offset. detected_at is always positive,
+// so the integer division and modulo stay non-negative even for negative (west-of-UTC) offsets.
 // SQLite: CAST((column + offset) / 3600 AS INTEGER) % 24
 // MySQL:  FLOOR((column + offset) / 3600) % 24
 func (r *detectionRepository) hourFromUnixExpr(column string, offsetSeconds int) string {
@@ -621,31 +625,6 @@ func (r *detectionRepository) GetByDateRange(ctx context.Context, start, end int
 	return dets, total, err
 }
 
-// GetByHour retrieves detections in the half-open interval [hourStart, hourStart+3600).
-// The exclusive upper bound prevents the first second of the next hour from being
-// counted in both adjacent hours.
-func (r *detectionRepository) GetByHour(ctx context.Context, hourStart int64, limit, offset int) ([]*entities.Detection, int64, error) {
-	return r.listByHalfOpenRange(ctx, hourStart, hourStart+3600, limit, offset)
-}
-
-// listByHalfOpenRange retrieves detections in [start, end) and returns the total count.
-func (r *detectionRepository) listByHalfOpenRange(ctx context.Context, start, end int64, limit, offset int) ([]*entities.Detection, int64, error) {
-	var dets []*entities.Detection
-	var total int64
-
-	query := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("detected_at >= ? AND detected_at < ?", start, end)
-
-	// Count on a cloned session so the Count finisher does not mutate the query that is
-	// reused for the paginated Find below (mirrors the Search method's pattern).
-	if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	err := query.Order("detected_at DESC").Limit(limit).Offset(offset).Find(&dets).Error
-	return dets, total, err
-}
-
 // GetByAudioSource retrieves detections for a specific audio source.
 func (r *detectionRepository) GetByAudioSource(ctx context.Context, sourceID uint, limit, offset int) ([]*entities.Detection, int64, error) {
 	var dets []*entities.Detection
@@ -683,14 +662,8 @@ func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *Search
 		query = query.Where("detected_at < ?", *filters.EndTime)
 	}
 	if len(filters.IncludedHours) > 0 {
-		// Extract local hour from Unix timestamp using timezone offset.
-		detTable := r.tableName()
-		var hourExpr string
-		if r.isMySQL {
-			hourExpr = fmt.Sprintf("FLOOR((%s.detected_at + %d) / 3600) %% 24", detTable, filters.TimezoneOffset)
-		} else {
-			hourExpr = fmt.Sprintf("CAST((%s.detected_at + %d) / 3600 AS INTEGER) %% 24", detTable, filters.TimezoneOffset)
-		}
+		from, to := r.hourFilterSpan(filters)
+		hourExpr := r.wallClockHourExpr(r.tableName()+".detected_at", filters.TimeZone, from, to)
 		query = query.Where(hourExpr+" IN ?", filters.IncludedHours)
 	}
 	if filters.MinConfidence != nil {
@@ -700,7 +673,7 @@ func (r *detectionRepository) buildSearchFilters(query *gorm.DB, filters *Search
 		query = query.Where("confidence <= ?", *filters.MaxConfidence)
 	}
 	if filters.MinID > 0 {
-		query = query.Where("id > ?", filters.MinID)
+		query = query.Where(r.tableName()+".id > ?", filters.MinID)
 	}
 	return query
 }
@@ -784,6 +757,8 @@ func (r *detectionRepository) applySearchOrdering(query *gorm.DB, filters *Searc
 				labTable, labTable, r.tableName()))
 		}
 		query = query.Order(labTable + ".scientific_name" + dir)
+	case SortFieldID:
+		query = query.Order(r.tableName() + ".id" + dir)
 	case SortFieldStatus:
 		// Only add reviews JOIN if not already joined by buildSearchJoins (verified filter)
 		revTable := r.reviewsTable()
@@ -893,22 +868,6 @@ func (r *detectionRepository) CountByDateRange(ctx context.Context, start, end i
 	var count int64
 	err := r.db.WithContext(ctx).Table(r.tableName()).
 		Where("detected_at >= ? AND detected_at <= ?", start, end).
-		Count(&count).Error
-	return count, err
-}
-
-// CountByHour returns the count of detections in the half-open interval
-// [hourStart, hourStart+3600). The exclusive upper bound prevents the first
-// second of the next hour from being counted in both adjacent hours.
-func (r *detectionRepository) CountByHour(ctx context.Context, hourStart int64) (int64, error) {
-	return r.countByHalfOpenRange(ctx, hourStart, hourStart+3600)
-}
-
-// countByHalfOpenRange counts detections in [start, end).
-func (r *detectionRepository) countByHalfOpenRange(ctx context.Context, start, end int64) (int64, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("detected_at >= ? AND detected_at < ?", start, end).
 		Count(&count).Error
 	return count, err
 }
@@ -1078,22 +1037,6 @@ func (r *detectionRepository) GetBatchConfidences(ctx context.Context, labelIDs 
 	}
 
 	return result, nil
-}
-
-// GetDailyOccurrences returns daily detection counts for a label.
-func (r *detectionRepository) GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64, tzOffsetSeconds int) ([]DailyCount, error) {
-	var results []DailyCount
-
-	// Group by wall-clock date in the configured timezone (offset-adjusted).
-	dateExpr := r.dateFromUnixExpr("detected_at", tzOffsetSeconds)
-	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Select(fmt.Sprintf("%s as date, COUNT(*) as count", dateExpr)).
-		Where("label_id = ? AND detected_at >= ? AND detected_at <= ?", labelID, start, end).
-		Group("date").
-		Order("date ASC").
-		Scan(&results).Error
-
-	return results, err
 }
 
 // GetSpeciesFirstDetection returns the first-ever detection of a species.
@@ -1838,24 +1781,6 @@ func (r *detectionRepository) GetDailyAnalytics(ctx context.Context, start, end 
 
 	err := query.Scan(&results).Error
 	return results, err
-}
-
-// GetDetectionTrends returns detection trends over time.
-func (r *detectionRepository) GetDetectionTrends(ctx context.Context, period string, limit, tzOffsetSeconds int, modelID *uint) ([]DailyAnalyticsData, error) {
-	// Calculate start time based on period
-	var startTime int64
-	now := time.Now().Unix()
-
-	switch period {
-	case "week":
-		startTime = now - (7 * 24 * 3600)
-	case "month":
-		startTime = now - (30 * 24 * 3600)
-	default: // day
-		startTime = now - (24 * 3600)
-	}
-
-	return r.GetDailyAnalytics(ctx, startTime, now, tzOffsetSeconds, nil, modelID)
 }
 
 // GetNewSpecies returns species detected for the first time ever within the range, false positives

@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // =============================================================================
@@ -49,7 +50,9 @@ const (
 // =============================================================================
 
 // DateRangeToUnix converts a DateRange to Unix timestamps.
-// Returns start of first day (00:00:00) and end of last day (23:59:59).
+// Returns the start of the first day and the exclusive end of the last day (the start of the
+// day after it), so a detection at 23:59:59 on the last day is inside the range. A day starts at
+// 00:00:00, or at the transition instant when DST skips that midnight.
 // Returns nil, nil if dr is nil.
 func DateRangeToUnix(dr *datastore.DateRange, tz *time.Location) (start, end *int64) {
 	if dr == nil {
@@ -59,19 +62,9 @@ func DateRangeToUnix(dr *datastore.DateRange, tz *time.Location) (start, end *in
 		tz = time.Local
 	}
 
-	// Start of first day (00:00:00)
-	startTime := time.Date(
-		dr.Start.Year(), dr.Start.Month(), dr.Start.Day(),
-		0, 0, 0, 0, tz,
-	)
-	s := startTime.Unix()
-
-	// End of last day (23:59:59)
-	endTime := time.Date(
-		dr.End.Year(), dr.End.Month(), dr.End.Day(),
-		23, 59, 59, 0, tz,
-	)
-	e := endTime.Unix()
+	startTime, _ := wallclock.DayBounds(wallclock.DateOf(dr.Start), tz)
+	_, endTime := wallclock.DayBounds(wallclock.DateOf(dr.End), tz)
+	s, e := startTime.Unix(), endTime.Unix()
 
 	return &s, &e
 }
@@ -195,30 +188,6 @@ func MergeHourFilters(timeOfDay []string, hour *datastore.HourFilter) []int {
 	}
 
 	return intersection
-}
-
-// GetTimezoneOffset returns the timezone offset in seconds for the given location at the
-// current time (handles DST for "now"). See GetTimezoneOffsetAt for the DST limitation.
-func GetTimezoneOffset(tz *time.Location) int {
-	return GetTimezoneOffsetAt(tz, time.Now())
-}
-
-// GetTimezoneOffsetAt returns the timezone offset in seconds for the given location at the
-// instant t (handles DST for that instant). Prefer this over GetTimezoneOffset when the
-// query has a known reference time (e.g. the start of the queried day), so the offset
-// reflects the data's DST state rather than the current one.
-//
-// LIMITATION: a single offset is applied to a whole query. When bucketing or filtering data
-// that spans a DST transition, hours may be off by up to 1 hour for rows recorded in a
-// different DST state than t. For most use cases (recent data, single-day windows, non-DST
-// timezones) this is acceptable; for precise historical conversion across DST boundaries,
-// use database-native timezone conversion functions.
-func GetTimezoneOffsetAt(tz *time.Location, t time.Time) int {
-	if tz == nil {
-		tz = time.Local
-	}
-	_, offset := t.In(tz).Zone()
-	return offset
 }
 
 // =============================================================================
@@ -458,7 +427,9 @@ func ResolveLocationsToSourceIDs(ctx context.Context, deps *FilterLookupDeps, lo
 // =============================================================================
 
 // parseDateString parses a date string in YYYY-MM-DD format to Unix timestamp.
-// Returns the start of day (00:00:00) or end of day (23:59:59) in the given timezone.
+// Returns the start of day or the exclusive end of day (the start of the next day, so 23:59:59
+// is inside the day) in the given timezone. A day starts at 00:00:00, or at the transition
+// instant when DST skips that midnight.
 // Returns (nil, nil) if dateStr is empty (no filter, not an error).
 // Returns error if dateStr is non-empty but invalid format.
 func parseDateString(dateStr string, tz *time.Location, endOfDay bool) (*int64, error) {
@@ -469,16 +440,18 @@ func parseDateString(dateStr string, tz *time.Location, endOfDay bool) (*int64, 
 		tz = time.Local
 	}
 
-	t, err := time.ParseInLocation("2006-01-02", dateStr, tz)
+	date, err := wallclock.ParseDate(dateStr)
 	if err != nil {
 		return nil, errors.NewStd("invalid date format: expected YYYY-MM-DD, got " + dateStr)
 	}
 
+	start, end := wallclock.DayBounds(date, tz)
 	if endOfDay {
-		t = t.Add(23*time.Hour + 59*time.Minute + 59*time.Second)
+		ts := end.Unix()
+		return &ts, nil
 	}
 
-	ts := t.Unix()
+	ts := start.Unix()
 	return &ts, nil
 }
 
@@ -682,7 +655,7 @@ func ConvertSearchFilters(
 
 	sf := &SearchFilters{
 		// Timezone for hour calculations
-		TimezoneOffset: GetTimezoneOffset(tz),
+		TimeZone: tz,
 	}
 
 	// Date range conversion
@@ -811,7 +784,9 @@ func ConvertSearchFilters(
 // =============================================================================
 
 // ConvertAdvancedFilters converts AdvancedSearchFilters to repository SearchFilters.
-// This is the main entry point for filter conversion.
+// This is the main entry point for filter conversion. When
+// filters.CursorPagination is set, the result sorts by id ascending whatever
+// filters.SortBy says.
 //
 // Parameters:
 //   - ctx: Context for database lookups
@@ -843,7 +818,7 @@ func ConvertAdvancedFilters(
 		SortDesc: !filters.SortAscending,
 
 		// Timezone for hour calculations
-		TimezoneOffset: GetTimezoneOffset(tz),
+		TimeZone: tz,
 	}
 
 	// Map SortBy string to v2 sort field constants
@@ -874,6 +849,14 @@ func ConvertAdvancedFilters(
 	default: // "date_desc" or empty
 		sf.SortBy = SortFieldDetectedAt
 		// sf.SortDesc already set from !filters.SortAscending above
+	}
+
+	// Cursor pagination pages by id (WHERE id > MinID), so it must sort by id
+	// ascending, as the legacy store does. Any other order skips rows whose id is
+	// below the last id of a page but whose detection time is later.
+	if filters.CursorPagination {
+		sf.SortBy = SortFieldID
+		sf.SortDesc = false
 	}
 
 	// Time conversions

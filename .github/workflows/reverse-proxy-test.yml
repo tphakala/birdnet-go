@@ -7,15 +7,25 @@ on:
       - 'frontend/**'
       - 'internal/api/**'
       - '.github/workflows/reverse-proxy-test.yml'
+  # Pull requests run this only when routing, base path or static serving can
+  # change: the frontend, the top-level API server files and the v2 route and
+  # core files. Handler bodies and tests do not affect nginx proxying. Pushes to
+  # main keep the broad filter above.
   pull_request:
     paths:
       - 'frontend/**'
-      - 'internal/api/**'
+      - 'internal/api/*.go'
+      - 'internal/api/v2/*route*.go'
+      - 'internal/api/v2/apicore/**'
+      - '!**/*_test.go'
       - '.github/workflows/reverse-proxy-test.yml'
 
+# Only superseded pull request runs are cancelled. A run on main or a manual run
+# gets its own group per commit, so a burst of merges cannot cancel the run that
+# is the authoritative check of main.
 concurrency:
-  group: reverse-proxy-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: reverse-proxy-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

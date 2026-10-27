@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	// DefaultSourceNode is the provenance tag written to SourceNode for imported rows.
+	// DefaultSourceNode is the provenance tag set as SourceNode on imported rows.
 	DefaultSourceNode = "birdnet-pi"
 
 	// defaultBatchSize is the number of source rows read per Iterate call.
@@ -71,7 +71,8 @@ type ProgressReporter interface {
 
 // ImportOptions controls engine behaviour.
 type ImportOptions struct {
-	// SourceNode is the provenance tag written to every imported detection.
+	// SourceNode is the provenance tag set on every imported detection. Only the
+	// legacy store persists it (see mapToResult).
 	// Defaults to DefaultSourceNode.
 	SourceNode string
 
@@ -128,11 +129,12 @@ func NewEngine(repo datastore.DetectionRepository) *Engine {
 	}
 }
 
-// detectionKey returns a stable composite key for duplicate detection.
-// Components: wall-clock timestamp (timezone-independent), scientific name, confidence rounded to 4 decimal places.
-// Using the wall-clock representation ensures idempotency even when opts.Location differs
-// from the timezone used during read-back (the datastore reconstructs Timestamp from
-// the stored Date/Time strings in its own timezone).
+// detectionKey returns a stable composite key for duplicate detection: the
+// wall-clock text of ts in its own location, the scientific name, and the
+// confidence rounded to 4 decimal places. Run builds it from each source row
+// parsed in the import location, so the text is the row's own wall time except
+// in a DST gap (see parseTimestamp); loadExistingKeys builds the keys of the
+// stored rows it is compared with.
 func detectionKey(ts time.Time, scientificName string, confidence float64) string {
 	return fmt.Sprintf("%s|%s|%.4f", ts.Format(time.DateTime), scientificName, confidence)
 }
@@ -183,14 +185,13 @@ func (e *Engine) Run(ctx context.Context, src Source, opts *ImportOptions, repor
 	stats.Phase = "dedup"
 	e.report(reporter, stats)
 
-	// Pre-load existing import-source keys to avoid per-row queries.
-	seen, err := e.loadExistingKeys(ctx, opts.SourceNode)
+	// Pre-load the keys of every stored detection to avoid per-row queries.
+	seen, err := e.loadExistingKeys(ctx, opts.Location)
 	if err != nil {
 		return stats, errors.New(err).
 			Component("imports").
 			Category(errors.CategoryDatabase).
 			Context("phase", "dedup").
-			Context("source_node", opts.SourceNode).
 			Build()
 	}
 
@@ -348,9 +349,32 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 	return nil
 }
 
-// loadExistingKeys pages through all detections attributed to sourceNode
-// and returns their dedup keys in a set.
-func (e *Engine) loadExistingKeys(ctx context.Context, sourceNode string) (map[string]struct{}, error) {
+// loadExistingKeys pages through every stored detection and returns their dedup
+// keys in a set. The search is not limited to imported rows: the v2 database
+// keeps a node name only on an audio source and imported rows have none, so a
+// node filter would find nothing there, and a stored row that matches a source
+// row on wall time, species and confidence is the same detection whatever
+// wrote it.
+//
+// The read-back timestamp is the stored value as wall-clock time in the
+// station zone, and rows reach the store in two representations, so each
+// stored row adds two keys:
+//   - r.Timestamp matches rows whose source wall time was stored as station
+//     wall-clock time: the legacy store, and v2 rows imported before the
+//     detection's own instant was stored.
+//   - r.Timestamp.In(loc) matches v2 rows that store the detection's own
+//     instant, parsed in the import location loc.
+//
+// When loc is the station zone the two keys are equal.
+//
+// Known limits, accepted: when loc differs from the station zone, a row in the
+// station zone's repeated or skipped DST hour can be imported again, as can a re-import
+// whose location differs from that of the first import. A source row can also
+// be skipped as a duplicate of a different stored row that has the same wall
+// second, species and confidence.
+func (e *Engine) loadExistingKeys(ctx context.Context, loc *time.Location) (map[string]struct{}, error) {
+	// TestImport_ReimportV2_LoadsEveryPage stores pageSize+1 rows; keep its
+	// row count above this value.
 	const pageSize = 1000
 	seen := make(map[string]struct{})
 	var minID uint
@@ -363,7 +387,6 @@ func (e *Engine) loadExistingKeys(ctx context.Context, sourceNode string) (map[s
 		filters := datastore.NewDetectionFilters().
 			WithMinID(minID).
 			WithLimit(pageSize)
-		filters.Location = []string{sourceNode}
 
 		results, _, err := e.repo.Search(ctx, filters)
 		if err != nil {
@@ -375,8 +398,8 @@ func (e *Engine) loadExistingKeys(ctx context.Context, sourceNode string) (map[s
 		}
 
 		for _, r := range results {
-			key := detectionKey(r.Timestamp, r.Species.ScientificName, r.Confidence)
-			seen[key] = struct{}{}
+			seen[detectionKey(r.Timestamp, r.Species.ScientificName, r.Confidence)] = struct{}{}
+			seen[detectionKey(r.Timestamp.In(loc), r.Species.ScientificName, r.Confidence)] = struct{}{}
 			if r.ID > minID {
 				minID = r.ID
 			}
@@ -391,6 +414,16 @@ func (e *Engine) loadExistingKeys(ctx context.Context, sourceNode string) (map[s
 }
 
 // parseTimestamp parses "YYYY-MM-DD HH:MM:SS" in loc.
+//
+// BirdNET-Pi rows carry no UTC offset. A wall time in the hour that repeats
+// when DST ends names two instants and cannot be resolved from the row, and
+// one in the hour skipped when DST starts names none. time.ParseInLocation
+// picks one of the two instants (which one depends on the zone) and moves a
+// skipped time to a real instant whose wall text differs from the row's;
+// internal/wallclock resolves both differently. The parse is kept as it is on
+// purpose: its result is formatted into the dedup key (detectionKey), so
+// resolving these times another way would change the key of a skipped-time
+// row imported earlier, and a re-import would insert it again.
 func parseTimestamp(date, timeStr string, loc *time.Location) (time.Time, error) {
 	return time.ParseInLocation("2006-01-02 15:04:05", date+" "+timeStr, loc)
 }
@@ -405,9 +438,11 @@ func parseTimestamp(date, timeStr string, loc *time.Location) (time.Time, error)
 //     "audio not available" links.
 //   - Model is set to a synthetic marker so imported rows are distinguishable from
 //     live detections in queries or analytics.
-//   - Provenance is carried solely by SourceNode (a persisted column). AudioSource is
-//     gorm:"-" runtime-only and is not persisted on the legacy save path, so it is left
-//     zero rather than used as a provenance marker.
+//   - Provenance: SourceNode is set, but only the legacy store persists it (the
+//     notes.source_node column). The v2 store keeps a node name only on an
+//     audio source, and AudioSource is left zero (it is runtime-only on the
+//     legacy save path), so on v2 imported rows carry no node name. Duplicate
+//     detection does not depend on it (see loadExistingKeys).
 //   - Week and Overlap from BirdNET-Pi are dropped; birdnet-go does not use them.
 func mapToResult(row *SourceDetection, ts time.Time, sourceNode string) *detection.Result {
 	return &detection.Result{

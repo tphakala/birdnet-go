@@ -152,6 +152,8 @@ func TestGetMigrationStatus_Idle(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, string(entities.MigrationStatusIdle), response.State)
+	assert.Empty(t, response.AuxiliaryDataStatus, "no outcome recorded reads as unknown")
+	assert.Empty(t, response.AuxiliaryDataError)
 	assert.True(t, response.CanStart)
 	assert.False(t, response.CanPause)
 	assert.False(t, response.CanResume)
@@ -460,7 +462,7 @@ func TestGetMigrationStatus_Failed(t *testing.T) {
 	require.NoError(t, sm.StartMigration(100))
 	require.NoError(t, sm.TransitionToDualWrite())
 	require.NoError(t, sm.TransitionToMigrating())
-	require.NoError(t, sm.TransitionToValidating())
+	require.NoError(t, sm.TransitionToValidatingWithAuxiliaryOutcome(entities.AuxiliaryDataStatusFailed, "weather: boom"))
 	require.NoError(t, sm.Fail())
 	require.NoError(t, sm.SetError("validation failed: v2 count (95) is less than legacy count (100)"))
 
@@ -484,6 +486,32 @@ func TestGetMigrationStatus_Failed(t *testing.T) {
 	assert.True(t, response.CanCancel)
 	assert.Contains(t, response.ErrorMessage, "validation failed")
 	assert.Equal(t, "needs_attention", response.LegacyNotice)
+	assert.Equal(t, string(entities.AuxiliaryDataStatusFailed), response.AuxiliaryDataStatus)
+	assert.Equal(t, "weather: boom", response.AuxiliaryDataError)
+}
+
+// TestGetMigrationStatus_AuxiliaryDataSucceeded checks that a recorded success
+// is reported without an error text.
+func TestGetMigrationStatus_AuxiliaryDataSucceeded(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "status")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+
+	require.NoError(t, sm.StartMigration(100))
+	require.NoError(t, sm.TransitionToDualWrite())
+	require.NoError(t, sm.TransitionToMigrating())
+	require.NoError(t, sm.TransitionToValidatingWithAuxiliaryOutcome(entities.AuxiliaryDataStatusSucceeded, ""))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/status", http.NoBody)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.GetMigrationStatus(e.NewContext(req, rec)))
+
+	var response MigrationStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+	assert.Equal(t, string(entities.AuxiliaryDataStatusSucceeded), response.AuxiliaryDataStatus)
+	assert.Empty(t, response.AuxiliaryDataError)
 }
 
 // TestFormatDuration tests the duration formatting helper.

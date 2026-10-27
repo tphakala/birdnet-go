@@ -15,6 +15,9 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/imports"
 	"github.com/tphakala/birdnet-go/internal/imports/birdnetpi"
@@ -97,6 +100,31 @@ func newTestStore(t *testing.T) datastore.Interface {
 func newDetectionRepo(t *testing.T, store datastore.Interface) datastore.DetectionRepository {
 	t.Helper()
 	return datastore.NewDetectionRepository(store, time.UTC)
+}
+
+// newV2DetectionRepo opens a v2-only SQLite datastore whose station zone is
+// station and returns its detection repository and the raw database handle.
+func newV2DetectionRepo(t *testing.T, station *time.Location) (datastore.DetectionRepository, *gorm.DB) {
+	t.Helper()
+	manager, err := v2.NewSQLiteManager(v2.Config{
+		DirectPath: filepath.Join(t.TempDir(), "birdnet.db"),
+	})
+	require.NoError(t, err)
+	require.NoError(t, manager.Initialize())
+
+	db := manager.DB()
+	ds, err := v2only.New(&v2only.Config{
+		Manager:   manager,
+		Detection: repository.NewDetectionRepository(db, nil, false, false),
+		Label:     repository.NewLabelRepository(db, nil, false, false),
+		Model:     repository.NewModelRepository(db, nil, false, false),
+		Source:    repository.NewAudioSourceRepository(db, nil, false, false),
+		Timezone:  station,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, ds.Close()) })
+
+	return v2only.NewDetectionRepository(ds), db
 }
 
 // newBirdNetPiSource opens a birdnetpi source from path and registers cleanup.
@@ -400,6 +428,115 @@ func TestImport_Idempotent_TimezoneMismatch(t *testing.T) {
 	assert.Equal(t, 0, stats2.Inserted, "re-run must insert zero rows even with non-UTC import location")
 	assert.Equal(t, 1, stats2.Skipped, "re-run must skip the already-imported row")
 	assert.Equal(t, 0, stats2.Errors, "re-run must not produce any errors")
+}
+
+// TestImport_ReimportV2_SkipsStoredRows verifies that a re-import on a v2
+// database skips the rows it already stored and inserts only the new one. v2
+// keeps no node name for imported rows, so the stored rows must be found without
+// a source node filter, and the key of a stored row depends on how its instant
+// was written.
+func TestImport_ReimportV2_SkipsStoredRows(t *testing.T) {
+	stationZone := time.FixedZone("station", 3*3600)
+	importZone := time.FixedZone("import", -4*3600)
+
+	const (
+		storedDate = "2025-06-01"
+		storedTime = "12:00:00"
+	)
+	stored := birdnetPiRow{
+		Date: storedDate, Time: storedTime,
+		SciName: "Sylvia atricapilla", ComName: "Eurasian Blackcap",
+		Confidence: 0.8800, Lat: 60.0, Lon: 24.0, Cutoff: 0.5, Sens: 1.0,
+		FileName: "blackcap.mp3",
+	}
+	added := birdnetPiRow{
+		Date: "2025-06-01", Time: "13:00:00",
+		SciName: "Turdus merula", ComName: "Common Blackbird",
+		Confidence: 0.9100, Lat: 60.0, Lon: 24.0, Cutoff: 0.5, Sens: 1.0,
+		FileName: "blackbird.mp3",
+	}
+
+	tests := []struct {
+		name string
+		// storeAsStationWallTime rewrites the stored row the way the write path
+		// before the detection's own instant was stored did.
+		storeAsStationWallTime bool
+	}{
+		{name: "location differs from station zone"},
+		{name: "row stored as station wall time", storeAsStationWallTime: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, db := newV2DetectionRepo(t, stationZone)
+			opts := imports.ImportOptions{SourceNode: imports.DefaultSourceNode, Location: importZone}
+
+			src1, err := newBirdNetPiSource(t, newFixtureDB(t, []birdnetPiRow{stored}))
+			require.NoError(t, err)
+			stats1, err := imports.NewEngine(repo).Run(t.Context(), src1, &opts, nil)
+			require.NoError(t, err)
+			require.Equal(t, 1, stats1.Inserted, "first run must insert the row")
+
+			if tt.storeAsStationWallTime {
+				wall, err := time.ParseInLocation(time.DateTime, storedDate+" "+storedTime, stationZone)
+				require.NoError(t, err)
+				require.NoError(t, db.Exec("UPDATE detections SET detected_at = ?", wall.Unix()).Error)
+			}
+
+			src2, err := newBirdNetPiSource(t, newFixtureDB(t, []birdnetPiRow{stored, added}))
+			require.NoError(t, err)
+			stats2, err := imports.NewEngine(repo).Run(t.Context(), src2, &opts, nil)
+			require.NoError(t, err)
+			assert.Equal(t, 1, stats2.Inserted, "only the new row must be inserted")
+			assert.Equal(t, 1, stats2.Skipped, "the stored row must be skipped")
+			assert.Equal(t, 0, stats2.Errors)
+
+			_, total, err := repo.Search(t.Context(), datastore.NewDetectionFilters().WithLimit(10))
+			require.NoError(t, err)
+			assert.Equal(t, int64(2), total, "the store must hold the stored row and the new one")
+		})
+	}
+}
+
+// TestImport_ReimportV2_LoadsEveryPage verifies that a re-import on a v2
+// database finds every stored row when the stored rows span more than one page
+// of the key load. The source lists its rows from the latest time to the
+// earliest, so the ids of the stored rows ascend while their times descend: a
+// key load that pages by time instead of by id misses rows.
+func TestImport_ReimportV2_LoadsEveryPage(t *testing.T) {
+	const rowCount = 1001 // one more than the page size in loadExistingKeys
+	base := time.Date(2025, time.June, 1, 12, 0, 0, 0, time.UTC)
+	rows := make([]birdnetPiRow, 0, rowCount)
+	for i := range rowCount {
+		ts := base.Add(time.Duration(rowCount-i) * time.Second)
+		rows = append(rows, birdnetPiRow{
+			Date: ts.Format(time.DateOnly), Time: ts.Format(time.TimeOnly),
+			SciName: "Sylvia atricapilla", ComName: "Eurasian Blackcap",
+			Confidence: 0.8800, Lat: 60.0, Lon: 24.0, Cutoff: 0.5, Sens: 1.0,
+			FileName: "blackcap.mp3",
+		})
+	}
+	path := newFixtureDB(t, rows)
+
+	repo, _ := newV2DetectionRepo(t, time.UTC)
+	opts := imports.ImportOptions{SourceNode: imports.DefaultSourceNode, Location: time.UTC}
+
+	src1, err := newBirdNetPiSource(t, path)
+	require.NoError(t, err)
+	stats1, err := imports.NewEngine(repo).Run(t.Context(), src1, &opts, nil)
+	require.NoError(t, err)
+	require.Equal(t, rowCount, stats1.Inserted, "first run must insert every row")
+
+	src2, err := newBirdNetPiSource(t, path)
+	require.NoError(t, err)
+	stats2, err := imports.NewEngine(repo).Run(t.Context(), src2, &opts, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 0, stats2.Inserted, "re-run must insert no row")
+	assert.Equal(t, rowCount, stats2.Skipped, "re-run must skip every stored row")
+
+	_, total, err := repo.Search(t.Context(), datastore.NewDetectionFilters().WithLimit(1))
+	require.NoError(t, err)
+	assert.Equal(t, int64(rowCount), total, "the store must not hold duplicates")
 }
 
 // TestValidate_MissingColumn verifies that Validate rejects a database whose

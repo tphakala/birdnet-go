@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
+	"github.com/tphakala/birdnet-go/internal/analysis/privacyrollup"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
@@ -90,12 +91,20 @@ type Processor struct {
 	privacyCoverage map[coverageKey][]audioSpan
 	// heldLabelHits holds the label hit of each source waiting for a second hit
 	// (see recordLabelHit), guarded by detectionMutex and created lazily.
-	heldLabelHits map[string]heldLabelHit
+	heldLabelHits map[string]humanHit
 	// humanHits lists the counted speech hits of each source with the model or
 	// VAD gate that produced them (see appendHumanHitLocked), guarded by
-	// detectionMutex and created lazily. The discard log reads it to name every
-	// contributor to a verdict.
-	humanHits        map[string][]humanHit
+	// detectionMutex and created lazily. The discard log and the discard rows read
+	// it to name every contributor to a verdict.
+	humanHits map[string][]humanHit
+	// humanHitsCapDropped holds, per source, the latest stamp of a hit that the cap
+	// (humanHitMaxPerSource) dropped from humanHits. It is guarded by
+	// detectionMutex and created lazily.
+	humanHitsCapDropped map[string]time.Time
+	// privacyRollup receives privacy filter activity for the hourly rollup. It is
+	// set once before Start (SetPrivacyRollup) and never written again, so it needs
+	// no lock; nil leaves every hit site a no-op.
+	privacyRollup    privacyrollup.Recorder
 	controlChan      chan string
 	JobQueue         *jobqueue.JobQueue // Queue for managing job retries
 	workerCancel     context.CancelFunc // Function to cancel worker goroutines
@@ -540,7 +549,10 @@ func (p *Processor) initDynamicThresholds(settings *conf.Settings) {
 // New creates a new Processor with the given dependencies.
 // The parentLog parameter should be the analysis package logger, which will be used to create
 // a child logger with ".processor" suffix for hierarchical logging (e.g., "analysis.processor").
-func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchestrator, obsMetrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
+// repo is the detection repository every save goes through; it is required and has no
+// default, because the bridge over ds would store a v2 database's detections with the
+// repeated-DST-hour ambiguity of wall-clock strings.
+func New(settings *conf.Settings, ds datastore.Interface, repo datastore.DetectionRepository, bn *classifier.Orchestrator, obsMetrics *observability.Metrics, birdImageCache *imageprovider.BirdImageCache, parentLog logger.Logger) *Processor {
 	// Create child logger from parent for hierarchical logging
 	var procLog logger.Logger
 	if parentLog != nil {
@@ -553,7 +565,7 @@ func New(settings *conf.Settings, ds datastore.Interface, bn *classifier.Orchest
 	p := &Processor{
 		Settings:       settings,
 		Ds:             ds,
-		Repo:           datastore.NewDetectionRepository(ds, nil), // Bridge to new domain model
+		Repo:           repo,
 		Bn:             bn,
 		log:            procLog,
 		BirdImageCache: birdImageCache,
@@ -1373,21 +1385,12 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 
 	// Try to get additional details from registry
 	// Use same lookup order as NewWithSpeciesInfo: connection string first, then ID
-	registry := p.Registry()
-	if registry != nil {
-		if existingSource, exists := registry.GetByConnection(source.ID); exists {
-			audioSource.ID = existingSource.ID
-			audioSource.SafeString = existingSource.SafeString
-			audioSource.DisplayName = existingSource.DisplayName
-			audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
-			audioSource.SampleRate = existingSource.SampleRate
-		} else if existingSource, exists := registry.Get(source.ID); exists {
-			audioSource.ID = existingSource.ID
-			audioSource.SafeString = existingSource.SafeString
-			audioSource.DisplayName = existingSource.DisplayName
-			audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
-			audioSource.SampleRate = existingSource.SampleRate
-		}
+	if existingSource, exists := p.registeredSource(source.ID); exists {
+		audioSource.ID = existingSource.ID
+		audioSource.SafeString = existingSource.SafeString
+		audioSource.DisplayName = existingSource.DisplayName
+		audioSource.Type = detection.DetermineSourceType(existingSource.SafeString)
+		audioSource.SampleRate = existingSource.SampleRate
 	}
 
 	if audioSource.SampleRate <= 0 && p.BufferMgr != nil {
@@ -1508,9 +1511,10 @@ func (p *Processor) handleHumanDetection(settings *conf.Settings, item classifie
 		// clip. Above the confirmation overlap a lone hit is held (see
 		// recordLabelHit) and counts only when a second hit confirms it.
 		end, _ := audioEndOrNow(&item)
-		hit := heldLabelHit{at: end, confidence: result.Confidence, modelID: item.ModelID}
+		hit := labelHumanHit(end, item.ModelID, result.Confidence,
+			privacyrollup.ThresholdMilli(float64(settings.Realtime.PrivacyFilter.Confidence)))
 		d := p.recordLabelHit(settings, item.Source.ID, hit)
-		p.logLabelHitDecision(settings, item.Source.ID, &hit, &d)
+		p.reportHitDecision(settings, item.Source.ID, &hit, &d)
 	}
 }
 
@@ -1675,8 +1679,9 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 // latest speech hit in it is at or after the saved clip's begin less
 // privacyClipGuard. A discard logs the model and score of that hit and, with
 // privacyfilter.debug on, a summary of the detectors that counted hits
-// reaching the clip (priv.contributions); the counts are lower bounds once the
-// attribution list is full (humanHitMaxPerSource).
+// reaching the clip (priv.contributions, which is listed whenever the latest hit
+// reaches the clip); the counts are lower bounds once the attribution list has
+// dropped a reaching hit at its cap (priv.hitCountsLowerBound).
 func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
@@ -1712,7 +1717,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 			if settings.Realtime.PrivacyFilter.Debug {
 				// With privacyfilter.debug on, say who decided: the detectors that
 				// counted hits reaching the saved clip, with hit counts and best
-				// scores (lower bounds once the attribution list is full), next to
+				// scores (lower bounds when priv.hitCountsLowerBound is set), next to
 				// the detection that was dropped.
 				GetLogger().Info("privacy filter dropped detection",
 					logger.String("species", item.Detection.Result.Species.CommonName),
@@ -1738,7 +1743,7 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 				}
 				p.Metrics.PrivacyFilter.RecordDiscard(trigger)
 			}
-			return true, "privacy filter"
+			return true, reasonPrivacyFilter
 		}
 	}
 
@@ -1981,6 +1986,10 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 
 	var terminalNotifs []SSEPendingDetection
 	var broadcastSnapshot []SSEPendingDetection
+	// Privacy rollup events, handed off after pendingMutex is released.
+	var rollupEvents []sourcedEvent
+	// Privacy filter discard records, handed off after pendingMutex is released.
+	var discardRecords []privacyrollup.Discard
 
 	p.pendingMutex.Lock()
 
@@ -2019,6 +2028,10 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 				logger.Int("model_count", len(item.ModelContributions)),
 				logger.String("reason", reason),
 				logger.String("operation", "discard_detection"))
+			if reason == reasonPrivacyFilter && p.privacyRollup != nil {
+				rollupEvents = append(rollupEvents, discardEvent(item.Source, &priv.hit))
+				discardRecords = append(discardRecords, privacyDiscard(settings, &item, &priv, now))
+			}
 			delete(p.pendingDetections, mapKey)
 
 			if item.Count >= visThresholds.getThreshold(item.BestModelID) {
@@ -2035,6 +2048,9 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 			continue
 		case coverageTimedOut:
 			p.recordUnscannedSave(settings, &item, priv.clip, speciesName)
+			if p.privacyRollup != nil {
+				rollupEvents = append(rollupEvents, unscannedSaveEvent(item.Source, &priv))
+			}
 		case coverageKeep:
 		}
 
@@ -2072,6 +2088,9 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	}
 
 	p.pendingMutex.Unlock()
+
+	p.recordPrivacyEvents(settings, rollupEvents...)
+	p.recordPrivacyDiscards(discardRecords)
 
 	if broadcastSnapshot != nil {
 		p.broadcastPendingSnapshot(broadcastSnapshot)

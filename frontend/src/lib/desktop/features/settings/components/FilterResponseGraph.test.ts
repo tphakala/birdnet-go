@@ -11,10 +11,17 @@ import { t } from '$lib/i18n';
 import { isPlainObject } from '$lib/utils/security';
 import { renderTyped } from '../../../../../test/render-helpers';
 import FilterResponseGraph, {
+  AUDIBLE_MAX_HZ,
+  AUDIBLE_GRID_HZ,
   BASE_MAX_DB,
   DB_GRID_STEP,
   MAX_TOP_DB,
   MIN_DB,
+  MIN_FREQ_HZ,
+  axisMaxHz,
+  frequencyGridLines,
+  frequencyToFraction,
+  fractionToFrequency,
   gainAxis,
   gainGridLines,
 } from './FilterResponseGraph.svelte';
@@ -45,6 +52,8 @@ function responseBody(overrides: Record<string, unknown> = {}): Record<string, u
   return {
     sampleRate: 48000,
     enabled: true,
+    minHz: 20,
+    maxHz: 20000,
     points: [
       { hz: 20, gainDb: -12 },
       { hz: 1000, gainDb: 0 },
@@ -163,6 +172,19 @@ function peakBody(...gains: number[]): Record<string, unknown> {
   });
 }
 
+/** A 256 kHz response swept over the full band, with points past 20 kHz. */
+function fullBandBody(): Record<string, unknown> {
+  return responseBody({
+    sampleRate: 256000,
+    maxHz: 128000,
+    points: [
+      { hz: 1000, gainDb: 0 },
+      { hz: 60000, gainDb: -20 },
+      { hz: 128000, gainDb: -3 },
+    ],
+  });
+}
+
 /** dB tick labels drawn by the most recent draw. */
 function dbLabelsInLastDraw(ctx: ReturnType<typeof createContextMock>): string[] {
   return labelsInLastDraw(ctx).filter(
@@ -223,6 +245,77 @@ describe('gainGridLines', () => {
 
   it('has ten lines for the default axis', () => {
     expect(gainGridLines(BASE_MAX_DB)).toHaveLength(10);
+  });
+});
+
+describe('frequency axis', () => {
+  const FULL_BAND_MAX_HZ = 128000;
+  const ROUND_TRIP_TOLERANCE = 1e-9;
+
+  /** The audible scale the graph used before the axis followed the response. */
+  function audibleFraction(hz: number): number {
+    if (hz <= 1000)
+      return ((Math.log10(hz) - Math.log10(20)) / (Math.log10(1000) - Math.log10(20))) * 0.3;
+    return 0.3 + 0.7 * Math.log10(1 + ((hz - 1000) / 19000) * 9);
+  }
+
+  it('keeps the audible scale for an axis that ends at 20 kHz', () => {
+    for (const hz of [20, 100, 1000, 3000, 10000, 20000]) {
+      expect(frequencyToFraction(hz, AUDIBLE_MAX_HZ)).toBeCloseTo(audibleFraction(hz), 12);
+    }
+  });
+
+  it.each([AUDIBLE_MAX_HZ, FULL_BAND_MAX_HZ])(
+    'inverts the scale for an axis ending at %d Hz',
+    maxHz => {
+      for (const hz of [100, 1000, 10000]) {
+        expect(fractionToFrequency(frequencyToFraction(hz, maxHz), maxHz)).toBeCloseTo(hz, 6);
+        expect(
+          Math.abs(frequencyToFraction(fractionToFrequency(0.5, maxHz), maxHz) - 0.5)
+        ).toBeLessThan(ROUND_TRIP_TOLERANCE);
+      }
+    }
+  );
+
+  it.each([AUDIBLE_MAX_HZ, FULL_BAND_MAX_HZ])(
+    'puts the edges of a %d Hz axis at 0 and 1',
+    maxHz => {
+      expect(frequencyToFraction(MIN_FREQ_HZ, maxHz)).toBeCloseTo(0, 12);
+      expect(frequencyToFraction(maxHz, maxHz)).toBeCloseTo(1, 12);
+    }
+  );
+
+  it('uses a plain log scale past 20 kHz', () => {
+    // 20 Hz to 128 kHz: 1 kHz is log(50) of log(6400) of the way.
+    expect(frequencyToFraction(1000, FULL_BAND_MAX_HZ)).toBeCloseTo(
+      Math.log(1000 / 20) / Math.log(FULL_BAND_MAX_HZ / 20),
+      12
+    );
+  });
+
+  it('gives the audible axis its 16 grid lines', () => {
+    expect(frequencyGridLines(AUDIBLE_MAX_HZ)).toEqual(AUDIBLE_GRID_HZ);
+    expect(AUDIBLE_GRID_HZ).toHaveLength(16);
+  });
+
+  it('adds an end label when the last grid line is far below the axis end', () => {
+    const lines = frequencyGridLines(48000);
+    expect(lines.slice(-2)).toEqual([20000, 48000]);
+  });
+
+  it.each([128000, 192000])('ends the grid of a %d Hz axis at 100 kHz', maxHz => {
+    const lines = frequencyGridLines(maxHz);
+    expect(lines.at(-1)).toBe(100000);
+    expect(lines.every(hz => hz <= maxHz)).toBe(true);
+  });
+
+  it.each([
+    ['below the audible band', 8000, AUDIBLE_MAX_HZ],
+    ['at the audible limit', 20000, AUDIBLE_MAX_HZ],
+    ['above the audible limit', 128000, 128000],
+    ['not yet known', undefined, AUDIBLE_MAX_HZ],
+  ])('sizes the axis for a response swept %s', (_name, responseMaxHz, expected) => {
+    expect(axisMaxHz(responseMaxHz)).toBe(expected);
   });
 });
 
@@ -609,6 +702,35 @@ describe('FilterResponseGraph', () => {
     expect(screen.getByTestId('eq-graph-updating')).toBeInTheDocument();
     expect(screen.getByTestId('eq-graph-clipped')).toBeInTheDocument();
     expect(dbLabelsInLastDraw(ctx)).toContain('48dB');
+  });
+
+  it('draws every point of a full-band response on an axis that follows the response', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValueOnce(fullBandBody());
+    renderTyped(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] }, sampleRate: 256000 },
+    });
+    await settle();
+    const fullBandGridLines = frequencyGridLines(128000).length;
+    // Three vertices: one moveTo and two lineTo calls beyond the grid lines.
+    expect(lineToInLastDraw(ctx)).toBe(fullBandGridLines + DB_GRID_LINES + REFERENCE_LINES + 2);
+    expect(labelsInLastDraw(ctx)).toContain('100k');
+  });
+
+  it('keeps the previous response axis while a new request is pending', async () => {
+    const ctx = useFullCanvas();
+    apiPost.mockResolvedValueOnce(fullBandBody());
+    const view = render(FilterResponseGraph, {
+      props: { equalizer: { enabled: true, filters: [LOW_PASS] }, sampleRate: 256000 },
+    });
+    await settle();
+    expect(labelsInLastDraw(ctx)).toContain('100k');
+
+    apiPost.mockImplementation(() => new Promise(() => {}));
+    await view.rerender({ equalizer: { enabled: true, filters: [HIGH_PASS] }, sampleRate: 48000 });
+    await settle();
+    expect(screen.getByTestId('eq-graph-updating')).toBeInTheDocument();
+    expect(labelsInLastDraw(ctx)).toContain('100k');
   });
 
   it('clamps a peak above the cap to the top edge and shows the caption with the peak', async () => {

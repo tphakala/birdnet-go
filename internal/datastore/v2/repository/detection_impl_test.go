@@ -597,28 +597,28 @@ func TestSearch_IncludedHoursOnSQLite(t *testing.T) {
 	tests := []struct {
 		name           string
 		includedHours  []int
-		timezoneOffset int
+		timeZone       *time.Location
 		wantTotal      int64
 		wantDetectedAt []int64
 	}{
 		{
 			name:           "single hour UTC",
 			includedHours:  []int{14},
-			timezoneOffset: 0,
+			timeZone:       time.UTC,
 			wantTotal:      1,
 			wantDetectedAt: []int64{t14},
 		},
 		{
 			name:           "multiple hours UTC",
 			includedHours:  []int{8, 22},
-			timezoneOffset: 0,
+			timeZone:       time.UTC,
 			wantTotal:      2,
 			wantDetectedAt: []int64{t08, t22},
 		},
 		{
 			name:           "negative timezone offset UTC-5",
 			includedHours:  []int{9},
-			timezoneOffset: -5 * 3600,
+			timeZone:       time.FixedZone("UTC-5", -5*3600),
 			wantTotal:      1,
 			wantDetectedAt: []int64{t14},
 		},
@@ -627,8 +627,8 @@ func TestSearch_IncludedHoursOnSQLite(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			results, total, err := repo.Search(ctx, &SearchFilters{
-				IncludedHours:  tc.includedHours,
-				TimezoneOffset: tc.timezoneOffset,
+				IncludedHours: tc.includedHours,
+				TimeZone:      tc.timeZone,
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantTotal, total)
@@ -677,81 +677,6 @@ func TestSaveReview_ConcurrentUpsertNoDuplicates(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Table(tableDetectionReviews).Where("detection_id = ?", det.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
-}
-
-// ============================================================================
-// GetByHour / CountByHour boundary tests
-// ============================================================================
-
-// TestGetByHour_HalfOpenBoundary verifies that GetByHour and CountByHour use
-// a half-open interval [hourStart, hourStart+3600) so a detection whose
-// detected_at equals the next hour's start is not double-counted.
-//
-// Three detections are seeded:
-//   - t+10    (inside the hour, clearly included)
-//   - t+3599  (last second of the hour, included)
-//   - t+3600  (next hour's first second, must be EXCLUDED from the current hour)
-//
-// The current hour must return exactly 2. The next hour must return exactly 1.
-func TestGetByHour_HalfOpenBoundary(t *testing.T) {
-	db := setupDetectionTestDB(t)
-	ctx := t.Context()
-	repo := &detectionRepository{db: db}
-
-	const hourStart = int64(1_700_000_000)
-
-	createTestDetection(t, db, hourStart+10)
-	createTestDetection(t, db, hourStart+3599)
-	createTestDetection(t, db, hourStart+3600) // boundary: next hour's first second
-
-	t.Run("GetByHour current hour excludes boundary second", func(t *testing.T) {
-		dets, total, err := repo.GetByHour(ctx, hourStart, 100, 0)
-		require.NoError(t, err)
-		assert.Equal(t, int64(2), total,
-			"GetByHour must use half-open [hourStart, hourStart+3600): expected 2, got %d", total)
-		assert.Len(t, dets, 2)
-	})
-
-	t.Run("CountByHour current hour excludes boundary second", func(t *testing.T) {
-		n, err := repo.CountByHour(ctx, hourStart)
-		require.NoError(t, err)
-		assert.Equal(t, int64(2), n,
-			"CountByHour must use half-open [hourStart, hourStart+3600): expected 2, got %d", n)
-	})
-
-	t.Run("GetByHour next hour includes boundary second exactly once", func(t *testing.T) {
-		dets, total, err := repo.GetByHour(ctx, hourStart+3600, 100, 0)
-		require.NoError(t, err)
-		assert.Equal(t, int64(1), total,
-			"boundary second must belong to the next hour exactly once: expected 1, got %d", total)
-		assert.Len(t, dets, 1)
-	})
-
-	t.Run("CountByHour next hour includes boundary second exactly once", func(t *testing.T) {
-		n, err := repo.CountByHour(ctx, hourStart+3600)
-		require.NoError(t, err)
-		assert.Equal(t, int64(1), n,
-			"boundary second must belong to the next hour exactly once: expected 1, got %d", n)
-	})
-}
-
-// TestGetByHour_PaginationHonored verifies that LIMIT is applied by GetByHour even
-// though the query is used for a Count first. If the GORM query object's state leaked
-// across the Count/Find boundary, LIMIT would be ignored and all rows returned.
-func TestGetByHour_PaginationHonored(t *testing.T) {
-	db := setupDetectionTestDB(t)
-	ctx := t.Context()
-	repo := &detectionRepository{db: db}
-
-	const hourStart = int64(1_700_000_000)
-	for i := range int64(5) {
-		createTestDetection(t, db, hourStart+i*60)
-	}
-
-	dets, total, err := repo.GetByHour(ctx, hourStart, 2, 0)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5), total, "total must count all rows in the hour")
-	assert.Len(t, dets, 2, "LIMIT must be honored; query reuse after Count would return all 5")
 }
 
 func TestGetTopSpecies_DeterministicOrder(t *testing.T) {
@@ -990,4 +915,37 @@ func TestCountSearch_MatchesSearchTotal(t *testing.T) {
 			assert.Len(t, rows, int(got), "CountSearch must equal the unpaginated row count")
 		})
 	}
+}
+
+// TestSearch_SortByIDWithMinID verifies that SortFieldID orders by the primary key
+// regardless of detection time and that MinID is an exclusive lower bound, also when
+// a text query joins the labels table (which has its own id column).
+func TestSearch_SortByIDWithMinID(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	label := createTestLabel(t, db, "Corvus corone", 1)
+	// IDs rise while detection times fall.
+	times := []int64{3000, 2000, 1000}
+	ids := make([]uint, 0, len(times))
+	for _, at := range times {
+		ids = append(ids, createDetectionForLabel(t, db, label.ID, at).ID)
+	}
+
+	got := func(filters *SearchFilters) []uint {
+		t.Helper()
+		results, _, err := repo.Search(ctx, filters)
+		require.NoError(t, err)
+		out := make([]uint, 0, len(results))
+		for _, d := range results {
+			out = append(out, d.ID)
+		}
+		return out
+	}
+
+	assert.Equal(t, ids, got(&SearchFilters{SortBy: SortFieldID}), "ascending by id, not by time")
+	assert.Equal(t, ids[1:], got(&SearchFilters{SortBy: SortFieldID, MinID: ids[0]}), "MinID is exclusive")
+	assert.Equal(t, ids[1:], got(&SearchFilters{SortBy: SortFieldID, MinID: ids[0], Query: "Corvus"}),
+		"MinID must not be ambiguous when labels is joined")
 }

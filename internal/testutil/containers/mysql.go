@@ -8,19 +8,23 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
 	_ "github.com/go-sql-driver/mysql" // Registers the "mysql" database/sql driver.
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/mysql"
+	"github.com/testcontainers/testcontainers-go/wait"
+
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // validTableNameRe matches valid MySQL identifier names.
 // MySQL identifier rules: letters, digits, underscore, dollar sign; must not start with a digit.
 var validTableNameRe = regexp.MustCompile(`^[a-zA-Z_$][a-zA-Z0-9_$]*$`)
 
-// MySQLContainer wraps a testcontainers MySQL instance with helper methods.
+// MySQLContainer wraps a testcontainers MySQL or MariaDB instance with helper methods.
 type MySQLContainer struct {
 	container *mysql.MySQLContainer
 	db        *sql.DB
@@ -37,27 +41,95 @@ type MySQLConfig struct {
 	Username string
 	// Password for non-root user (default: "testpass")
 	Password string
-	// Image tag (default: "8.0")
+	// Server flavor (default: FlavorMySQL). Ignored when MYSQL_TEST_IMAGE is set.
+	Flavor MySQLFlavor
+	// Image tag (default: "8.0" for MySQL, "11.8" for MariaDB). Ignored when
+	// MYSQL_TEST_IMAGE is set, which wins over Flavor and ImageTag.
 	ImageTag string
 	// Scripts to execute on startup (path to .sql files)
 	InitScripts []string
 }
 
+// MySQLFlavor names the database server a MySQLContainer runs. The values are
+// also the Docker Hub repository names of the images.
+type MySQLFlavor string
+
+const (
+	// FlavorMySQL selects the official MySQL image.
+	FlavorMySQL MySQLFlavor = "mysql"
+	// FlavorMariaDB selects the official MariaDB image.
+	FlavorMariaDB MySQLFlavor = "mariadb"
+)
+
 // defaultMySQLImageTag is the MySQL image tag used when a config does not set one.
 const defaultMySQLImageTag = "8.0"
 
-// DefaultMySQLConfig returns a MySQLConfig with sensible defaults.
+// defaultMariaDBImageTag is the MariaDB image tag used when a config selects
+// MariaDB without a tag.
+const defaultMariaDBImageTag = "11.8"
+
+// MySQLImageEnvVar names the environment variable that selects the server image
+// for every MySQLContainer, as "mysql:<tag>" or "mariadb:<tag>".
+const MySQLImageEnvVar = "MYSQL_TEST_IMAGE"
+
+// ciEnvVar is set to a non-empty value by GitHub Actions and most CI systems.
+const ciEnvVar = "CI"
+
+// mariaDBReadyLog is logged once by the real MariaDB server. The entrypoint's
+// temporary server logs "port: 0" first, so this matches only the final start.
+const mariaDBReadyLog = "port: 3306  mariadb.org binary distribution"
+
+// DefaultMySQLConfig returns a MySQLConfig with sensible defaults. Flavor and
+// ImageTag stay empty so the server resolves to the flavor's default tag.
 func DefaultMySQLConfig() MySQLConfig {
 	return MySQLConfig{
 		Database:     "birdnet_test",
 		RootPassword: "test",
 		Username:     "testuser",
 		Password:     "testpass",
-		ImageTag:     defaultMySQLImageTag,
 	}
 }
 
-// NewMySQLContainer creates and starts a MySQL container with the given config.
+// resolveMySQLImage picks the server image. A non-empty envImage
+// (MYSQL_TEST_IMAGE) wins over the config; without it, running on CI is an
+// error so a misspelled variable cannot make every CI leg test the default
+// server; otherwise the config's Flavor and ImageTag apply, then the defaults.
+func resolveMySQLImage(cfg *MySQLConfig, envImage string, onCI bool) (image string, flavor MySQLFlavor, err error) {
+	if envImage != "" {
+		repo, tag, ok := strings.Cut(envImage, ":")
+		flavor = MySQLFlavor(repo)
+		if !ok || tag == "" || (flavor != FlavorMySQL && flavor != FlavorMariaDB) {
+			return "", "", fmt.Errorf("invalid %s %q: want \"mysql:<tag>\" or \"mariadb:<tag>\"", MySQLImageEnvVar, envImage)
+		}
+		return envImage, flavor, nil
+	}
+	if onCI {
+		return "", "", fmt.Errorf("%s must be set on CI so each leg tests the server it names", MySQLImageEnvVar)
+	}
+
+	flavor = cfg.Flavor
+	if flavor == "" {
+		flavor = FlavorMySQL
+	}
+	tag := cfg.ImageTag
+	switch flavor {
+	case FlavorMySQL:
+		if tag == "" {
+			tag = defaultMySQLImageTag
+		}
+	case FlavorMariaDB:
+		if tag == "" {
+			tag = defaultMariaDBImageTag
+		}
+	default:
+		return "", "", fmt.Errorf("unknown database flavor %q", flavor)
+	}
+	return string(flavor) + ":" + tag, flavor, nil
+}
+
+// NewMySQLContainer creates and starts a MySQL or MariaDB container with the
+// given config. The server is chosen by MYSQL_TEST_IMAGE when set, otherwise by
+// the config's Flavor and ImageTag (see resolveMySQLImage).
 // If config is nil, uses DefaultMySQLConfig().
 func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContainer, error) {
 	if config == nil {
@@ -65,8 +137,13 @@ func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContaine
 		config = &defaultCfg
 	}
 
+	image, flavor, err := resolveMySQLImage(config, os.Getenv(MySQLImageEnvVar), os.Getenv(ciEnvVar) != "")
+	if err != nil {
+		return nil, fmt.Errorf("failed to select database image: %w", err)
+	}
+
 	// Build container request
-	opts := make([]testcontainers.ContainerCustomizer, 0, 3+len(config.InitScripts))
+	opts := make([]testcontainers.ContainerCustomizer, 0, 4+len(config.InitScripts))
 	opts = append(opts,
 		mysql.WithDatabase(config.Database),
 		mysql.WithUsername(config.Username),
@@ -78,21 +155,27 @@ func NewMySQLContainer(ctx context.Context, config *MySQLConfig) (*MySQLContaine
 		opts = append(opts, mysql.WithScripts(script))
 	}
 
+	// The module's MySQL readiness log never appears on MariaDB, so wait for
+	// the MariaDB server banner instead. User options follow the module's own
+	// defaults, so this one wins.
+	if flavor == FlavorMariaDB {
+		opts = append(opts, testcontainers.WithWaitStrategy(wait.ForLog(mariaDBReadyLog)))
+	}
+
 	// Note: Container reuse is not supported by the MySQL module at this time.
 	// Containers are created fresh for each test run to ensure isolation.
 
 	// Create and start container
 	// Note: mysql.Run already handles waiting for the container to be ready.
-	// Fall back to the default tag when a caller supplies a config without one,
-	// so the image is never the invalid "mysql:".
-	imageTag := config.ImageTag
-	if imageTag == "" {
-		imageTag = defaultMySQLImageTag
-	}
-	image := fmt.Sprintf("mysql:%s", imageTag)
 	mysqlContainer, err := mysql.Run(ctx, image, opts...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to start MySQL container: %w", err)
+		// mysql.Run returns the container when only the wait failed; terminate it
+		// so a failed start leaves nothing running (local runs disable Ryuk).
+		if mysqlContainer != nil {
+			// Use background context for cleanup to ensure it succeeds even if parent ctx expired
+			_ = mysqlContainer.Terminate(context.Background())
+		}
+		return nil, fmt.Errorf("failed to start %s container: %w", image, err)
 	}
 
 	// Get connection string with multiStatements enabled for script execution
@@ -200,8 +283,10 @@ func isValidTableName(name string) bool {
 }
 
 // Reset truncates all tables in the database with foreign key checks disabled.
-// This is useful for resetting state between tests.
-func (c *MySQLContainer) Reset(ctx context.Context, tables []string) error {
+// This is useful for resetting state between tests. It runs on one pinned
+// connection and restores the checks on every exit path, so a failed truncate
+// never leaves them off on a pooled connection.
+func (c *MySQLContainer) Reset(ctx context.Context, tables []string) (err error) {
 	if c.db == nil {
 		return fmt.Errorf("database connection is nil")
 	}
@@ -213,32 +298,29 @@ func (c *MySQLContainer) Reset(ctx context.Context, tables []string) error {
 		}
 	}
 
-	tx, err := c.db.BeginTx(ctx, nil)
+	conn, err := c.db.Conn(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to begin transaction: %w", err)
+		return fmt.Errorf("failed to get connection: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	defer func() { _ = conn.Close() }()
 
 	// Disable foreign key checks
-	if _, err := tx.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 0"); err != nil {
+	if _, err := conn.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 0"); err != nil {
 		return fmt.Errorf("failed to disable foreign key checks: %w", err)
 	}
+	// Runs before conn.Close (LIFO) and must not be skipped by a cancelled ctx.
+	defer func() {
+		if _, restoreErr := conn.ExecContext(context.WithoutCancel(ctx), "SET FOREIGN_KEY_CHECKS = 1"); restoreErr != nil {
+			err = errors.Join(err, fmt.Errorf("failed to enable foreign key checks: %w", restoreErr))
+		}
+	}()
 
 	// Truncate all specified tables (names already validated)
 	for _, table := range tables {
 		// Use backticks for identifier quoting
-		if _, err := tx.ExecContext(ctx, fmt.Sprintf("TRUNCATE TABLE `%s`", table)); err != nil {
+		if _, err := conn.ExecContext(ctx, fmt.Sprintf("TRUNCATE TABLE `%s`", table)); err != nil {
 			return fmt.Errorf("failed to truncate table %s: %w", table, err)
 		}
-	}
-
-	// Re-enable foreign key checks
-	if _, err := tx.ExecContext(ctx, "SET FOREIGN_KEY_CHECKS = 1"); err != nil {
-		return fmt.Errorf("failed to enable foreign key checks: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
 	return nil

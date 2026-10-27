@@ -47,9 +47,10 @@ func CaptureBufferAt(tb testing.TB, level slog.Level) *bytes.Buffer {
 	var buf bytes.Buffer
 	handler := slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: level})
 	cl, err := logger.NewCentralLogger(&logger.LoggingConfig{
-		DefaultLevel: levelName(level),
-		Console:      &logger.ConsoleOutput{Enabled: false},
-		FileOutput:   &logger.FileOutput{Enabled: false},
+		DefaultLevel:  levelName(level),
+		Console:       &logger.ConsoleOutput{Enabled: false},
+		FileOutput:    &logger.FileOutput{Enabled: false},
+		ModuleOutputs: logger.DisabledModuleOutputs(),
 	}, handler)
 	if err != nil {
 		tb.Fatalf("logtest: failed to create capture logger: %v", err)

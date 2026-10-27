@@ -123,7 +123,8 @@ func (a *DatabaseAction) Execute(ctx context.Context, data any) error {
 }
 
 // ExecuteContext implements the ContextAction interface for proper context propagation.
-// This allows CompositeAction to pass timeout and cancellation signals to the database save.
+// CompositeAction passes its timeout and cancellation signals through ctx, but the repository
+// save is detached from them so a detection that commits late is not rolled back and lost.
 func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -145,8 +146,11 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 
 	// Save detection to database using preferred path
 	if a.Repo != nil {
-		// New path: Use DetectionRepository (handles conversion internally)
-		if err := a.Repo.Save(ctx, &a.Result, a.Results); err != nil {
+		// New path: Use DetectionRepository (handles conversion internally).
+		// The CompositeAction gives each step 10 s and does not retry, so a save
+		// that honoured that deadline would roll back and lose a detection that
+		// commits late today; the repository keeps its own transaction timeout.
+		if err := a.Repo.Save(context.WithoutCancel(ctx), &a.Result, a.Results); err != nil {
 			GetLogger().Error("Failed to save detection to database",
 				logger.String("component", "analysis.processor.actions"),
 				logger.String("detection_id", a.CorrelationID),
@@ -158,7 +162,7 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 				logger.String("operation", "database_save_repository"))
 			return err
 		}
-		// Repo.Save() updates a.Result.ID internally via result.ID = note.ID.
+		// Repo.Save() sets a.Result.ID to the stored row's ID.
 		// Defensive check: warn if ID is unexpectedly 0 after a successful save.
 		// This aids diagnosis of GitHub #2453 (MQTT detectionId always 0).
 		if a.Result.ID == 0 {

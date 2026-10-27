@@ -10,6 +10,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // BackupSchedule represents a scheduled backup task
@@ -288,45 +289,34 @@ func (s *Scheduler) runBackup(schedule *BackupSchedule) {
 	}
 }
 
-// calculateNextRun determines the next run time for a schedule
+// daysPerWeek is the number of days between two runs of a weekly schedule.
+const daysPerWeek = 7
+
+// calculateNextRun determines the next run time for a schedule, reading the wall clock in the
+// location of now. A now that is exactly the run time of today counts as reached, so the tick
+// that fires a run does not schedule it again. A time of day that a DST change skips runs at
+// the transition instant, and one that it repeats runs at its first occurrence only, because
+// the next run is always resolved from the calendar date and never by adding 24 hours to an
+// earlier run.
 func (s *Scheduler) calculateNextRun(now time.Time, hour, minute int, weekday time.Weekday, isWeekly bool) time.Time {
-	var next time.Time
+	loc := now.Location()
+	today := wallclock.DateOf(now)
+	todayRun := wallclock.At(today, hour, minute, 0, loc)
+	daysAhead := 0
 
 	if isWeekly {
-		// For weekly backups
-		next = time.Date(
-			now.Year(), now.Month(), now.Day(),
-			hour, minute, 0, 0, now.Location(),
-		)
-
-		// Adjust to next occurrence of weekday
-		daysUntilWeekday := int(weekday - next.Weekday())
-		if daysUntilWeekday < 0 {
-			// We're past the target weekday, so add days to get to next week
-			daysUntilWeekday += 7
-		} else if daysUntilWeekday == 0 {
-			// We're on the target weekday
-			if now.After(next) {
-				// The scheduled time has passed today, so schedule for next week
-				daysUntilWeekday = 7
-			}
-			// Otherwise, daysUntilWeekday remains 0 (today)
+		// Days until the target weekday, counted on the calendar.
+		daysAhead = (int(weekday-now.Weekday()) + daysPerWeek) % daysPerWeek
+		if daysAhead == 0 && !now.Before(todayRun) {
+			// The scheduled time has been reached today, so schedule for next week
+			daysAhead = daysPerWeek
 		}
-		next = next.AddDate(0, 0, daysUntilWeekday)
-	} else {
-		// For daily backups
-		next = time.Date(
-			now.Year(), now.Month(), now.Day(),
-			hour, minute, 0, 0, now.Location(),
-		)
-
-		// If we're past the time today, schedule for tomorrow
-		if now.After(next) {
-			next = next.AddDate(0, 0, 1)
-		}
+	} else if !now.Before(todayRun) {
+		// If we're at or past the time today, schedule for tomorrow
+		daysAhead = 1
 	}
 
-	return next
+	return wallclock.At(today.AddDays(daysAhead), hour, minute, 0, loc)
 }
 
 // UpdateSchedules updates all schedules based on new configuration

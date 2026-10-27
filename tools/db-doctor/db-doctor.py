@@ -26,8 +26,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-SCRIPT_VERSION = "1.2.1"
-SCHEMA_VERSION = "v2-2026-06-14"
+SCRIPT_VERSION = "1.4.0"
+SCHEMA_VERSION = "v2-2026-10-26"
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -61,13 +61,15 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
     "detections": [
         "id", "model_id", "label_id", "source_id", "detected_at",
         "begin_time", "end_time", "confidence", "latitude", "longitude",
-        "clip_name", "processing_time_ms", "unlikely", "legacy_id",
+        "clip_name", "spectrogram_clip_name", "clip_sample_rate",
+        "processing_time_ms", "unlikely", "legacy_id",
     ],
     "detection_predictions": [
         "id", "detection_id", "label_id", "confidence", "rank",
     ],
     "detection_model_contributions": [
         "id", "detection_id", "model_id", "hit_count", "max_confidence",
+        "first_hit_at", "last_hit_at", "min_confidence", "confidence_sum",
     ],
     "detection_reviews": [
         "id", "detection_id", "verified", "created_at", "updated_at",
@@ -82,13 +84,15 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
         "cached_at", "created_at", "updated_at",
     ],
     "dynamic_thresholds": [
-        "id", "label_id", "level", "current_value", "base_threshold",
-        "high_conf_count", "valid_hours", "expires_at", "last_triggered",
-        "first_created", "trigger_count", "created_at", "updated_at",
+        "id", "species_name", "scientific_name", "level", "current_value",
+        "base_threshold", "high_conf_count", "valid_hours", "expires_at",
+        "last_triggered", "first_created", "trigger_count", "created_at",
+        "updated_at",
     ],
     "threshold_events": [
-        "id", "label_id", "previous_level", "new_level", "previous_value",
-        "new_value", "change_reason", "confidence", "created_at",
+        "id", "species_name", "scientific_name", "previous_level",
+        "new_level", "previous_value", "new_value", "change_reason",
+        "confidence", "created_at",
     ],
     "notification_histories": [
         "id", "label_id", "notification_type", "last_sent",
@@ -115,7 +119,8 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
         "id", "state", "current_phase", "phase_number", "total_phases",
         "started_at", "phase_started_at", "completed_at", "last_migrated_id",
         "total_records", "migrated_records", "error_message",
-        "related_data_error", "updated_at",
+        "related_data_error", "auxiliary_data_status", "auxiliary_data_error",
+        "auxiliary_data_started_at", "updated_at",
     ],
     "migration_dirty_ids": ["detection_id", "created_at"],
     "daily_events": [
@@ -130,6 +135,26 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
         "created_at",
     ],
     "app_metadata": ["key", "value"],
+    "app_events": [
+        "id", "timestamp", "category", "event_type", "message", "metadata",
+        "created_at",
+    ],
+    "privacy_filter_hourlies": [
+        "id", "hour_start", "source_id", "model_id", "trigger_type",
+        "threshold_milli", "hits", "held", "ignored", "confirmed",
+        "discards", "unscanned_saves", "max_score", "margin_lt_50",
+        "margin_lt_100", "margin_lt_200", "margin_ge_200",
+    ],
+    "privacy_filter_discards": [
+        "id", "discarded_at", "source_id", "scientific_name", "common_name",
+        "confidence", "model_id", "clip_begin", "clip_end",
+        "label_threshold_milli", "vad_enabled", "vad_threshold_milli",
+        "hit_counts_lower_bound",
+    ],
+    "privacy_filter_discard_hits": [
+        "id", "discard_id", "detector", "trigger_type", "hit_count",
+        "min_score", "max_score",
+    ],
 }
 
 # Tables that had schema changes between v1 and v2 (used for contamination detection).
@@ -138,7 +163,9 @@ V2_EXPECTED_COLUMNS: dict[str, list[str]] = {
 # schema evolution leftovers (columns that existed in earlier v2 entity versions).
 V2_CONTAMINATION_COLUMNS: dict[str, list[str]] = {
     "image_caches": ["scientific_name"],
-    "dynamic_thresholds": ["species_name", "model_name", "scientific_name"],
+    # Keyed by species_name since #4195; label_id is the pre-#4195 shape.
+    "dynamic_thresholds": ["model_name", "label_id"],
+    "threshold_events": ["label_id"],
     "notification_histories": ["scientific_name"],
     # Schema evolution: columns removed from v2 entities between builds
     "ai_models": ["label_count"],
@@ -155,8 +182,19 @@ V2_ONLY_TABLES = {
     "audio_sources", "label_types", "taxonomic_classes",
     "detection_model_contributions", "alert_rules", "alert_conditions",
     "alert_actions", "alert_histories", "migration_states",
-    "migration_dirty_ids", "app_metadata",
+    "migration_dirty_ids", "app_metadata", "app_events",
+    "privacy_filter_hourlies", "privacy_filter_discards",
+    "privacy_filter_discard_hits",
 }
+
+# Tables BirdNET-Go recreates itself at startup when they still have the
+# pre-#4195 label_id shape. db-doctor never alters or recreates them: adding
+# label_id to a current table would make the app drop it and its rows.
+APP_RECREATED_TABLES = {"dynamic_thresholds", "threshold_events"}
+APP_RECREATED_HINT = (
+    "BirdNET-Go recreates this table on its next start and discards its "
+    "rows; db-doctor leaves it alone"
+)
 
 TABLE_RENAMES = {
     "migration_state": "migration_states",
@@ -195,31 +233,6 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
             "ON image_caches (provider_name, label_id)",
             "CREATE INDEX IF NOT EXISTS idx_image_caches_cached_at "
             "ON image_caches (cached_at)",
-        ],
-    ),
-    "dynamic_thresholds": (
-        """CREATE TABLE dynamic_thresholds_new (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            label_id INTEGER NOT NULL,
-            level INTEGER NOT NULL DEFAULT 0,
-            current_value REAL NOT NULL,
-            base_threshold REAL NOT NULL,
-            high_conf_count INTEGER NOT NULL DEFAULT 0,
-            valid_hours INTEGER NOT NULL,
-            expires_at DATETIME NOT NULL,
-            last_triggered DATETIME NOT NULL,
-            first_created DATETIME NOT NULL,
-            trigger_count INTEGER NOT NULL DEFAULT 0,
-            created_at DATETIME,
-            updated_at DATETIME,
-            CONSTRAINT uni_dynamic_thresholds_label_id UNIQUE (label_id),
-            FOREIGN KEY(label_id) REFERENCES labels(id)
-        )""",
-        [
-            "CREATE INDEX IF NOT EXISTS idx_dynamic_thresholds_expires_at "
-            "ON dynamic_thresholds (expires_at)",
-            "CREATE INDEX IF NOT EXISTS idx_dynamic_thresholds_last_triggered "
-            "ON dynamic_thresholds (last_triggered)",
         ],
     ),
     "notification_histories": (
@@ -294,6 +307,8 @@ V2_TABLE_SCHEMAS: dict[str, tuple[str, list[str]]] = {
             latitude REAL,
             longitude REAL,
             clip_name VARCHAR(500),
+            spectrogram_clip_name VARCHAR(500),
+            clip_sample_rate INTEGER,
             processing_time_ms INTEGER,
             unlikely NUMERIC NOT NULL DEFAULT 0,
             legacy_id INTEGER,
@@ -378,6 +393,8 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
         "latitude": "REAL",
         "longitude": "REAL",
         "clip_name": "TEXT",
+        "spectrogram_clip_name": "TEXT",
+        "clip_sample_rate": "INTEGER",
         "processing_time_ms": "INTEGER",
         "unlikely": "NUMERIC NOT NULL DEFAULT 0",
         "legacy_id": "INTEGER",
@@ -393,6 +410,10 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
         "model_id": "INTEGER NOT NULL DEFAULT 0",
         "hit_count": "INTEGER NOT NULL DEFAULT 0",
         "max_confidence": "REAL NOT NULL DEFAULT 0",
+        "first_hit_at": "INTEGER",
+        "last_hit_at": "INTEGER",
+        "min_confidence": "REAL",
+        "confidence_sum": "REAL",
     },
     "detection_reviews": {
         "detection_id": "INTEGER NOT NULL DEFAULT 0",
@@ -422,30 +443,6 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
         "cached_at": "DATETIME",
         "created_at": "DATETIME",
         "updated_at": "DATETIME",
-    },
-    "dynamic_thresholds": {
-        "label_id": "INTEGER NOT NULL DEFAULT 0",
-        "level": "INTEGER NOT NULL DEFAULT 0",
-        "current_value": "REAL NOT NULL DEFAULT 0",
-        "base_threshold": "REAL NOT NULL DEFAULT 0",
-        "high_conf_count": "INTEGER NOT NULL DEFAULT 0",
-        "valid_hours": "INTEGER NOT NULL DEFAULT 0",
-        "expires_at": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
-        "last_triggered": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
-        "first_created": "DATETIME NOT NULL DEFAULT '1970-01-01 00:00:00'",
-        "trigger_count": "INTEGER NOT NULL DEFAULT 0",
-        "created_at": "DATETIME",
-        "updated_at": "DATETIME",
-    },
-    "threshold_events": {
-        "label_id": "INTEGER NOT NULL DEFAULT 0",
-        "previous_level": "INTEGER NOT NULL DEFAULT 0",
-        "new_level": "INTEGER NOT NULL DEFAULT 0",
-        "previous_value": "REAL NOT NULL DEFAULT 0",
-        "new_value": "REAL NOT NULL DEFAULT 0",
-        "change_reason": "TEXT NOT NULL DEFAULT ''",
-        "confidence": "REAL DEFAULT 0",
-        "created_at": "DATETIME",
     },
     "notification_histories": {
         "label_id": "INTEGER NOT NULL DEFAULT 0",
@@ -506,6 +503,9 @@ V2_COLUMN_DEFS: dict[str, dict[str, str]] = {
         "migrated_records": "INTEGER DEFAULT 0",
         "error_message": "TEXT",
         "related_data_error": "TEXT",
+        "auxiliary_data_status": "TEXT NOT NULL DEFAULT ''",
+        "auxiliary_data_error": "TEXT",
+        "auxiliary_data_started_at": "DATETIME",
         "updated_at": "DATETIME",
     },
     "migration_dirty_ids": {
@@ -551,9 +551,7 @@ FK_CHECKS = [
     ("detections", "label_id", "labels", "id"),
     ("detections", "model_id", "ai_models", "id"),
     ("image_caches", "label_id", "labels", "id"),
-    ("dynamic_thresholds", "label_id", "labels", "id"),
     ("notification_histories", "label_id", "labels", "id"),
-    ("threshold_events", "label_id", "labels", "id"),
     ("detection_predictions", "detection_id", "detections", "id"),
     ("detection_reviews", "detection_id", "detections", "id"),
     ("detection_comments", "detection_id", "detections", "id"),
@@ -562,6 +560,9 @@ FK_CHECKS = [
     ("alert_conditions", "rule_id", "alert_rules", "id"),
     ("alert_actions", "rule_id", "alert_rules", "id"),
     ("alert_histories", "rule_id", "alert_rules", "id"),
+    ("privacy_filter_hourlies", "source_id", "audio_sources", "id"),
+    ("privacy_filter_discards", "source_id", "audio_sources", "id"),
+    ("privacy_filter_discard_hits", "discard_id", "privacy_filter_discards", "id"),
 ]
 
 # Valid migration table names (for SQL injection prevention)
@@ -991,6 +992,9 @@ class DatabaseDoctor:
                     f"{table_name}: missing column(s) {sorted(missing)}"
                 )
 
+            if table_name in APP_RECREATED_TABLES and "label_id" in actual_set:
+                issues.append(f"  {APP_RECREATED_HINT}")
+
         if not issues:
             return CheckResult(
                 name="Schema contamination", status="pass",
@@ -1253,6 +1257,8 @@ class DatabaseDoctor:
             "image_caches", "dynamic_thresholds", "threshold_events",
             "notification_histories", "alert_rules", "daily_events",
             "hourly_weathers", "detection_reviews", "detection_predictions",
+            "app_events", "privacy_filter_hourlies",
+            "privacy_filter_discards", "privacy_filter_discard_hits",
             "detection_comments", "detection_locks", "audio_sources",
             "results", "note_reviews",
         ]
@@ -1551,6 +1557,11 @@ class DatabaseDoctor:
             if not contam_present:
                 continue
 
+            if table_name in APP_RECREATED_TABLES:
+                if "label_id" in actual_set:
+                    fix_details.append(f"{table_name}: {APP_RECREATED_HINT}")
+                continue
+
             if table_name not in V2_TABLE_SCHEMAS:
                 fix_details.append(
                     f"{table_name}: no recreation template, skipped"
@@ -1644,6 +1655,9 @@ class DatabaseDoctor:
 
             missing = set(expected_cols) - set(actual_cols)
             if not missing:
+                continue
+
+            if table_name in APP_RECREATED_TABLES:
                 continue
 
             table_defs = V2_COLUMN_DEFS.get(table_name, {})

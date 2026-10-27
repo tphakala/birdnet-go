@@ -119,6 +119,23 @@ func DefaultModuleOutput(module string) (ModuleOutput, bool) {
 	return out, ok
 }
 
+// DisabledModuleOutputs returns a ModuleOutputs map with every built-in module
+// output switched off.
+//
+// NewCentralLogger seeds the built-in module outputs for any module the config
+// does not list, so FileOutput{Enabled: false} alone still opens relative
+// logs/*.log files in the working directory. Tests that capture output through
+// a handler set ModuleOutputs to this map, otherwise every package using a
+// logger writes into its own package directory, which also defeats the go test
+// result cache.
+func DisabledModuleOutputs() map[string]ModuleOutput {
+	outputs := make(map[string]ModuleOutput, len(defaultModuleOutputs))
+	for module := range defaultModuleOutputs {
+		outputs[module] = ModuleOutput{Enabled: false}
+	}
+	return outputs
+}
+
 // applyConfigDefaults applies sensible defaults for nil configuration sections.
 // This ensures backwards compatibility when users upgrade - their existing configs
 // without explicit file_output or console sections will get file and console logging
