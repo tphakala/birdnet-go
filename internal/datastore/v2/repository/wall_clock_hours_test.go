@@ -294,7 +294,7 @@ func TestWallClockSQLText(t *testing.T) {
 		mysql bool
 		want  string
 	}{
-		{"sqlite hour", wallClockHourSQL, false, "((((d.detected_at + -18000) % 86400) + 86400) % 86400) / 3600"},
+		{"sqlite hour", wallClockHourSQL, false, "CAST(((((d.detected_at + -18000) % 86400) + 86400) % 86400) / 3600 AS INTEGER)"},
 		{"mysql hour", wallClockHourSQL, true, "((((d.detected_at + -18000) % 86400) + 86400) % 86400) DIV 3600"},
 		{"sqlite date", wallClockDateSQL, false, "date(d.detected_at + -18000, 'unixepoch')"},
 		{"mysql date", wallClockDateSQL, true, "DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL (d.detected_at + -18000) SECOND), '%Y-%m-%d')"},

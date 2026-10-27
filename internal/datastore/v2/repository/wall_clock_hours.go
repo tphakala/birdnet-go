@@ -10,10 +10,10 @@ import (
 )
 
 const (
-	// wallClockSecondsPerHour and wallClockHoursPerDay turn a second of the day into an hour of
-	// day.
+	// wallClockSecondsPerHour turns a second of the day into an hour of day in the SQL builders.
 	wallClockSecondsPerHour = 3600
-	wallClockHoursPerDay    = 24
+	// wallClockHoursPerDay bounds an hour of day in Go code that consumes the SQL results.
+	wallClockHoursPerDay = 24
 
 	// wallClockSecondsPerDay is the modulus that reduces a shifted Unix timestamp to its second
 	// of the day.
@@ -51,18 +51,19 @@ func wallClockDateSQL(column, offsetSQL string, isMySQL bool) string {
 // like Go's time package). It uses only integer arithmetic, so it depends on no session
 // setting. It has no outer parentheses and is safe as the left side of a comparison or IN.
 //
-// SQLite: ((((column + offset) % 86400) + 86400) % 86400) / 3600
+// SQLite: CAST(((((column + offset) % 86400) + 86400) % 86400) / 3600 AS INTEGER)
 // MySQL:  ((((column + offset) % 86400) + 86400) % 86400) DIV 3600
 //
 // The second of the day is reduced first: % takes the sign of the dividend, so adding a day and
-// reducing again makes it non-negative before the division.
+// reducing again makes it non-negative before the division. The SQLite form is cast to an
+// integer so that a REAL column value or an overflowing sum still yields an integer hour.
 func wallClockHourSQL(column, offsetSQL string, isMySQL bool) string {
-	divide := "/"
+	secondOfDay := fmt.Sprintf("(((%s + %s) %% %d) + %d) %% %d",
+		column, offsetSQL, wallClockSecondsPerDay, wallClockSecondsPerDay, wallClockSecondsPerDay)
 	if isMySQL {
-		divide = "DIV"
+		return fmt.Sprintf("(%s) DIV %d", secondOfDay, wallClockSecondsPerHour)
 	}
-	return fmt.Sprintf("((((%s + %s) %% %d) + %d) %% %d) %s %d",
-		column, offsetSQL, wallClockSecondsPerDay, wallClockSecondsPerDay, wallClockSecondsPerDay, divide, wallClockSecondsPerHour)
+	return fmt.Sprintf("CAST((%s) / %d AS INTEGER)", secondOfDay, wallClockSecondsPerHour)
 }
 
 // wallClockYearSQL returns a SQL expression for the wall-clock calendar year of column, a Unix
@@ -117,8 +118,8 @@ func (r *detectionRepository) currentTime() time.Time {
 // from the start time (or the Unix epoch) to the end time (or now), bounded by wallclock.Span.
 func (r *detectionRepository) hourFilterSpan(filters *SearchFilters) (from, to int64) {
 	now := r.currentTime()
-	// An open start stays 0, the Unix epoch, which precedes every stored row because detected_at
-	// is positive; wallclock.Span clamps the start to the epoch in any case.
+	// An open start stays 0, the Unix epoch; rows before it use the oldest segment's offset, and
+	// wallclock.Span clamps the start to the epoch in any case.
 	var start int64
 	if filters.StartTime != nil {
 		start = *filters.StartTime
