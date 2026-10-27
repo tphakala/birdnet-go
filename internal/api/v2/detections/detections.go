@@ -786,9 +786,12 @@ func (c *Handler) convertResultsToDetectionResponses(ctx context.Context, result
 }
 
 // resultToDetectionResponse converts a single repository result to a detection response.
-// Every time field comes from the stored instant r.Timestamp, so the two detections of a
-// repeated DST hour keep their own UTC offsets even though their date and time text is
-// identical. It never writes through r, which the page cache may share.
+// The timestamp, date, time, weather match and moon phase come from the instant
+// r.Timestamp, and the begin and end times from r.BeginTime and r.EndTime. On the v2 store
+// r.Timestamp is the stored instant, so the two detections of a repeated DST hour keep their
+// own UTC offsets even though their date and time text is identical. The legacy bridge can
+// only rebuild the instant from offset-free text, so it gives both the first occurrence's
+// offset. It never writes through r, which the page cache may share.
 //
 // A legacy-store row whose date and time text does not parse never reaches here: the
 // legacy bridge fails the read (list: 500, detail: 404). That is accepted legacy

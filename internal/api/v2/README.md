@@ -282,9 +282,10 @@ player or download.
 
 **Detection timestamps.** Detection list, detail and recent responses carry `timestamp`, the stored
 instant of the detection as RFC3339 with the UTC offset in effect at that instant. `date` and `time` are the
-station-local wall clock text of the same instant, so the two detections in the repeated hour at the end of
-daylight saving time show the same `date` and `time` and differ in `timestamp`. The weather match and moon
-phase of a response use the same instant.
+station-local wall clock text of the same instant, so on a v2 database the two detections in the repeated hour
+at the end of daylight saving time show the same `date` and `time` and differ in `timestamp`. The weather
+match and moon phase of a response use the same instant. A legacy database stores only offset-free date and
+time text, so there both detections get the first occurrence's offset.
 
 **Spectrogram frequency range.** Bird spectrograms span 0 to 12 kHz. Bat
 spectrograms render at the clip's own sample rate and span 0 to half of it (a 384 kHz clip shows 0 to
