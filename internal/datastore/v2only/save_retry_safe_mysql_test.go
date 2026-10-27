@@ -234,6 +234,20 @@ func TestSaveDetection_RetrySafeMarkerMatchesCommitOutcome_MySQL(t *testing.T) {
 		}
 	}
 
+	// A species the store has not seen: the failure comes from the reference
+	// data lookups that run before the transaction.
+	t.Run("refused_during_reference_lookup", func(t *testing.T) {
+		proxy.stop()
+		note := newNote("lookup.wav")
+		note.ScientificName, note.CommonName = "Parus major", "Great Tit"
+		err := ds.Save(note, nil)
+		require.Error(t, err)
+		require.ErrorIs(t, err, datastore.ErrDetectionSaveRetrySafe, "a failed lookup stored nothing")
+		assert.Contains(t, err.Error(), "failed to get/create", "the failure came from the lookups")
+		assert.Equal(t, 0, countRows("lookup.wav"))
+		proxy.restart(t)
+	})
+
 	// Warm the model and label caches so the faults below hit the transaction.
 	require.NoError(t, ds.Save(newNote("warmup.wav"), nil))
 

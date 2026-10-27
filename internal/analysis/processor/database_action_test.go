@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -22,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/analysis/species"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
@@ -930,4 +932,102 @@ func TestDatabaseAction_LastAttemptOutlivingItsStepIsLoggedAsLate(t *testing.T) 
 		require.NoError(t, <-done)
 		assert.True(t, action.windowEnded.Load(), "the late landing is recorded as the end of the window")
 	})
+}
+
+// TestDatabaseAction_SaveRetryConfigCoversTheRetryWindow verifies that the retry
+// schedule outlasts a typical database restart, and that the action expects as
+// many attempts as the queue will make.
+func TestDatabaseAction_SaveRetryConfigCoversTheRetryWindow(t *testing.T) {
+	t.Parallel()
+
+	const minimumOutage = 5 * time.Minute
+	action := &DatabaseAction{}
+	cfg := action.saveRetryConfig()
+
+	require.True(t, cfg.Enabled)
+	total := time.Duration(0)
+	delay := cfg.InitialDelay
+	for range cfg.MaxRetries {
+		total += delay
+		delay = min(time.Duration(float64(delay)*cfg.Multiplier), cfg.MaxDelay)
+	}
+	assert.GreaterOrEqual(t, total, minimumOutage, "the backoff schedule must cover the outage window")
+	assert.EqualValues(t, cfg.MaxRetries+1, action.maxAttempts.Load(), "the action counts the queue's attempts")
+}
+
+// TestDatabaseJobs_RetryWiring verifies that the real action builder gives the
+// database job a retry policy, both as part of the composite (SSE or MQTT on)
+// and as a bare action (both off). Not parallel: getJobQueueRetryConfig reads
+// testRetryConfigOverride, a package global.
+func TestDatabaseJobs_RetryWiring(t *testing.T) {
+	t.Run("composite", func(t *testing.T) {
+		p, _, _, _, settings := newMQTTPipelineProcessor(t, true)
+		det := testDetection()
+		var composite *CompositeAction
+		for _, action := range p.getDefaultActions(&det, settings) {
+			if c, ok := action.(*CompositeAction); ok {
+				composite = c
+			}
+		}
+		require.NotNil(t, composite, "database with MQTT and SSE builds the composite")
+		cfg := getJobQueueRetryConfig(composite)
+		assert.True(t, cfg.Enabled)
+		assert.NotNil(t, cfg.Retryable, "the composite retries only while its save is pending")
+	})
+
+	t.Run("bare_database_action", func(t *testing.T) {
+		p, _, _, _, settings := newMQTTPipelineProcessor(t, true)
+		settings.Realtime.MQTT.Enabled = false
+		p.SSEBroadcaster = nil
+		det := testDetection()
+		var bare *DatabaseAction
+		for _, action := range p.getDefaultActions(&det, settings) {
+			if d, ok := action.(*DatabaseAction); ok {
+				bare = d
+			}
+		}
+		require.NotNil(t, bare, "database alone builds a bare action")
+		cfg := getJobQueueRetryConfig(bare)
+		assert.True(t, cfg.Enabled)
+		assert.NotNil(t, cfg.Retryable)
+	})
+}
+
+// TestProcessApprovedDetection_DatabaseJobCarriesNoPCM verifies that the job
+// queued for the database save does not hold the detection's audio, while the
+// other jobs of the detection keep it.
+func TestProcessApprovedDetection_DatabaseJobCarriesNoPCM(t *testing.T) {
+	conf.StoreSettings(nil)
+	t.Cleanup(func() { conf.StoreSettings(nil) })
+
+	p, _, _, _, settings := newMQTTPipelineProcessor(t, true)
+	// A queue that ticks once an hour keeps the jobs pending.
+	queue := jobqueue.NewJobQueue()
+	queue.SetProcessingInterval(time.Hour)
+	queue.StartWithContext(t.Context())
+	t.Cleanup(func() { _ = queue.Stop() })
+	p.JobQueue = queue
+	settings.Realtime.Audio.Export.Enabled = true
+
+	det := testDetection()
+	det.pcmData3s = []byte{1, 2, 3, 4}
+	item := &PendingDetection{Detection: det, FirstDetected: time.Now(), Source: e2eSource}
+	p.processApprovedDetection(item, det.Result.Species.CommonName, settings)
+
+	jobs := p.JobQueue.GetPendingJobs()
+	require.NotEmpty(t, jobs)
+	var sawDatabase, sawOther bool
+	for _, job := range jobs {
+		data, ok := job.Data.(Detections)
+		require.True(t, ok, "job payload is a Detections value")
+		if strings.Contains(job.Action.GetDescription(), "Database save") {
+			sawDatabase = true
+			assert.Empty(t, data.pcmData3s, "the database job must not hold the audio")
+		} else {
+			sawOther = true
+			assert.NotEmpty(t, data.pcmData3s, "other jobs keep the audio: %s", job.Action.GetDescription())
+		}
+	}
+	assert.True(t, sawDatabase, "a database job was queued")
+	assert.True(t, sawOther, "an audio job was queued")
 }
