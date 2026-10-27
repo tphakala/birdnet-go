@@ -307,9 +307,24 @@ func TestCancelMigration_CompletedKeepsTailSync(t *testing.T) {
 	})
 }
 
+// tailSyncWait exceeds the worker tail sync interval (10s, migration/worker.go:73).
+const tailSyncWait = 15 * time.Second
+
 func TestRollbackMigration_TimeoutKeepsState(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		env, gate := newCancelEnv(t)
+		const watermark = 5
+		release := make(chan struct{})
+		env := newStopTestEnv(t, nil)
+		env.legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				<-release
+				return nil, 0, nil
+			}).Once()
+		env.toCompleted(t, watermark)
+		env.startWorker(t)
+		time.Sleep(tailSyncWait) // the periodic batch blocks in Search
+		synctest.Wait()
+
 		done := make(chan struct{})
 		var rec *httptest.ResponseRecorder
 		go func() {
@@ -323,9 +338,9 @@ func TestRollbackMigration_TimeoutKeepsState(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, rec.Code)
 		state, err := env.sm.GetState()
 		require.NoError(t, err)
-		assert.Equal(t, entities.MigrationStatusDualWrite, state.State, "the state action must not run after a stop timeout")
+		assert.Equal(t, entities.MigrationStatusCompleted, state.State, "rollback must not reset the state while the worker is still running")
 
-		close(gate.release)
+		close(release)
 		synctest.Wait()
 	})
 }
