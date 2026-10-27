@@ -3,6 +3,7 @@ package v2only
 import (
 	"context"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 	_ "time/tzdata" // zone data for the named locations, independent of the host
@@ -490,4 +491,56 @@ func TestDetectionRepository_ReadsHonourCancelledContext(t *testing.T) {
 	_, err := repo.Get(ctx, strconv.FormatUint(uint64(det.ID), 10))
 	require.Error(t, err)
 	assert.ErrorIs(t, err, context.Canceled)
+}
+
+// cancelAfterChecks is a context that cancels itself once Err has been called more than
+// limit times, so a test can end the context at every point of a read.
+type cancelAfterChecks struct {
+	context.Context
+	cancel context.CancelFunc
+	limit  int64
+	checks atomic.Int64
+}
+
+func (c *cancelAfterChecks) Err() error {
+	if c.checks.Add(1) > c.limit {
+		c.cancel()
+	}
+	return c.Context.Err()
+}
+
+// TestDetectionRepository_SearchNeverReturnsUnresolvedSpecies verifies that a list read
+// whose context ends part way returns an error, not rows whose species were not loaded.
+func TestDetectionRepository_SearchNeverReturnsUnresolvedSpecies(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	const (
+		species  = "Parus major"
+		rowCount = 3
+		// maxCancelPoint is far above the number of context checks one Search makes.
+		maxCancelPoint = 500
+	)
+	for i := range rowCount {
+		seedDetection(t, ds, species, time.Date(2026, 6, 1, 12+i, 0, 0, 0, time.UTC))
+	}
+	repo := NewDetectionRepository(ds)
+
+	completed := false
+	for limit := range maxCancelPoint {
+		base, cancel := context.WithCancel(t.Context())
+		ctx := &cancelAfterChecks{Context: base, cancel: cancel, limit: int64(limit)}
+		results, _, err := repo.Search(ctx, datastore.NewDetectionFilters().WithLimit(rowCount))
+		cancel()
+		if err != nil {
+			continue
+		}
+		require.Len(t, results, rowCount, "context ended after %d checks", limit)
+		for _, r := range results {
+			require.Equal(t, species, r.Species.ScientificName, "context ended after %d checks", limit)
+		}
+		completed = true
+	}
+	assert.True(t, completed, "no cancel point let the read finish")
 }

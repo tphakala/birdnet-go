@@ -63,7 +63,11 @@ func (r *detectionRepository) GetRecent(ctx context.Context, limit int) ([]*dete
 	if err != nil {
 		return nil, fmt.Errorf("failed to get recent detections: %w", err)
 	}
-	return r.ds.detectionsToResults(ctx, dets), nil
+	results, err := r.ds.detectionsToResults(ctx, dets)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent detections: %w", err)
+	}
+	return results, nil
 }
 
 // Search finds detections matching the given filters.
@@ -76,7 +80,11 @@ func (r *detectionRepository) Search(ctx context.Context, filters *datastore.Det
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to search detections: %w", err)
 	}
-	return r.ds.detectionsToResults(ctx, dets), total, nil
+	results, err := r.ds.detectionsToResults(ctx, dets)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search detections: %w", err)
+	}
+	return results, total, nil
 }
 
 // GetBySpecies retrieves detections for a specific species.
@@ -98,7 +106,11 @@ func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, 
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count species detections: %w", err)
 	}
-	return r.ds.detectionsToResults(ctx, dets), total, nil
+	results, err := r.ds.detectionsToResults(ctx, dets)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get species detections: %w", err)
+	}
+	return results, total, nil
 }
 
 // GetByDateRange retrieves detections within a date range.
@@ -111,7 +123,11 @@ func (r *detectionRepository) GetByDateRange(ctx context.Context, startDate, end
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get detections by date range: %w", err)
 	}
-	return r.ds.detectionsToResults(ctx, dets), total, nil
+	results, err := r.ds.detectionsToResults(ctx, dets)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get detections by date range: %w", err)
+	}
+	return results, total, nil
 }
 
 // GetHourly retrieves detections for a specific hour on a date.
@@ -124,5 +140,9 @@ func (r *detectionRepository) GetHourly(ctx context.Context, date, hour string, 
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count hourly detections: %w", err)
 	}
-	return r.ds.detectionsToResults(ctx, dets), total, nil
+	results, err := r.ds.detectionsToResults(ctx, dets)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get hourly detections: %w", err)
+	}
+	return results, total, nil
 }

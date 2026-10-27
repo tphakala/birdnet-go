@@ -64,11 +64,16 @@ func (ds *Datastore) detectionToResult(ctx context.Context, det *entities.Detect
 	return result
 }
 
-// detectionsToResults maps detections to results. It always returns a non-nil slice.
-func (ds *Datastore) detectionsToResults(ctx context.Context, dets []*entities.Detection) []*detection.Result {
+// detectionsToResults maps detections to results. It returns a non-nil slice on success.
+// It returns ctx.Err() when ctx ended while the relations were loaded or the rows
+// mapped, because those lookups skip their own errors and would leave species unresolved.
+func (ds *Datastore) detectionsToResults(ctx context.Context, dets []*entities.Detection) ([]*detection.Result, error) {
 	results := make([]*detection.Result, 0, len(dets))
 	for _, det := range dets {
 		results = append(results, ds.detectionToResult(ctx, det))
 	}
-	return results
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return results, nil
 }
