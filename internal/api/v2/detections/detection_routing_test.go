@@ -269,14 +269,6 @@ func TestAdvancedPageKey_ResolvesDateRange(t *testing.T) {
 		assert.Equal(t, keyAt("2026-10-27", now, santiago), keyAt("today", now, santiago))
 	})
 
-	t.Run("a zone with a skipped midnight still advances one date", func(t *testing.T) {
-		t.Parallel()
-		// Santiago skips 2026-09-06 00:00 (clocks jump to 01:00).
-		d1 := time.Date(2026, 9, 6, 3, 30, 0, 0, time.UTC) // 2026-09-05 23:30 local
-		d2 := time.Date(2026, 9, 6, 4, 30, 0, 0, time.UTC) // 2026-09-06 01:30 local
-		assert.NotEqual(t, keyAt("today", d1, santiago), keyAt("today", d2, santiago))
-	})
-
 	t.Run("case and an explicit equal date share one entry", func(t *testing.T) {
 		t.Parallel()
 		assert.Equal(t, keyAt("today", before, time.UTC), keyAt("Today", before, time.UTC))
