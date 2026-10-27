@@ -133,7 +133,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 10, 0).Return(mockNotes, int64(2), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("", 10, 0)).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -180,7 +180,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "Crow", false, 10, 0).Return(mockNotes[:1], int64(1), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("Crow", 10, 0)).Return(mockNotes[:1], int64(1), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
@@ -282,7 +282,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "Crow", false, 10, 0).Return(mockNotes[:1], int64(1), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("Crow", 10, 0)).Return(mockNotes[:1], int64(1), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
@@ -311,7 +311,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":    "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 5, 0).Return(mockNotes, int64(2), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("", 5, 0)).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -326,7 +326,7 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 10, 0).Return(mockNotes, int64(2), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("", 10, 0)).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -1906,10 +1906,10 @@ func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
 	}
 }
 
-// TestNoteToDetectionResponse_SourceInfo verifies that noteToDetectionResponse
-// populates DetectionResponse.Source as *SourceInfo when note.Source.ID is set,
+// TestResultToDetectionResponse_SourceInfo verifies that resultToDetectionResponse
+// populates DetectionResponse.Source as *SourceInfo when the result's audio source ID is set,
 // leaves it nil when ID is empty, and derives Type from the SafeString.
-func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
+func TestResultToDetectionResponse_SourceInfo(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "detections")
 	t.Attr("type", "unit")
@@ -1920,7 +1920,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		source      datastore.AudioSource
+		source      detection.AudioSource
 		wantNil     bool
 		wantID      string
 		wantType    string
@@ -1928,12 +1928,12 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 	}{
 		{
 			name:    "empty source stays nil",
-			source:  datastore.AudioSource{},
+			source:  detection.AudioSource{},
 			wantNil: true,
 		},
 		{
 			name: "rtsp source populates id, type, and display name",
-			source: datastore.AudioSource{
+			source: detection.AudioSource{
 				ID:          "rtsp_87b89761",
 				SafeString:  "rtsp://camera.local/stream",
 				DisplayName: "Front Yard",
@@ -1944,7 +1944,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 		},
 		{
 			name: "alsa source without friendly name falls back to raw device",
-			source: datastore.AudioSource{
+			source: detection.AudioSource{
 				ID:          "hw:1,0",
 				SafeString:  "hw:1,0",
 				DisplayName: "hw:1,0",
@@ -1955,7 +1955,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 		},
 		{
 			name: "unknown safe string yields type unknown",
-			source: datastore.AudioSource{
+			source: detection.AudioSource{
 				ID:         "custom-source",
 				SafeString: "file:///tmp/audio.wav",
 			},
@@ -1967,19 +1967,18 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			note := &datastore.Note{
-				ID:     42,
-				Date:   "2026-04-14",
-				Time:   "09:30:00",
-				Source: tt.source,
+			r := &detection.Result{
+				ID:          42,
+				Timestamp:   time.Date(2026, time.April, 14, 9, 30, 0, 0, time.UTC),
+				AudioSource: tt.source,
 			}
-			resp := controller.noteToDetectionResponse(note, false, nil)
+			resp := controller.resultToDetectionResponse(r, false, nil)
 
 			if tt.wantNil {
-				assert.Nil(t, resp.Source, "Source should be nil when note.Source.ID is empty")
+				assert.Nil(t, resp.Source, "Source should be nil when the source ID is empty")
 				return
 			}
-			require.NotNil(t, resp.Source, "Source should be populated when note.Source.ID is set")
+			require.NotNil(t, resp.Source, "Source should be populated when the source ID is set")
 			assert.Equal(t, tt.wantID, resp.Source.ID)
 			assert.Equal(t, tt.wantType, resp.Source.Type)
 			assert.Equal(t, tt.wantDisplay, resp.Source.DisplayName)

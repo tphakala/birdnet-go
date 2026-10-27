@@ -23,11 +23,15 @@ import (
 const defaultDetectionPageSize = 100
 
 // searchNotesExactMock returns a mockSetup function that expects exactly one
-// SearchNotes call carrying term unchanged, with the default first page. The
+// SearchNotesAdvanced call carrying term unchanged as the text query with the default
+// sort, with the default first page. The
 // detections handler trims the term and passes it on without escaping.
 func searchNotesExactMock(term string) func(*mock.Mock) {
 	return func(m *mock.Mock) {
-		m.On("SearchNotes", term, false, defaultDetectionPageSize, 0).
+		m.On("SearchNotesAdvanced", mock.MatchedBy(func(f *datastore.AdvancedSearchFilters) bool {
+			return f.TextQuery == term && len(f.SpeciesScientific) == 0 && f.Limit == defaultDetectionPageSize &&
+				f.Offset == 0 && f.SortBy == datastore.SortBySearchDefault
+		})).
 			Return([]datastore.Note{}, int64(0), nil).Once()
 	}
 }

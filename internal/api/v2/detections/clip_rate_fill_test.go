@@ -123,10 +123,14 @@ func (p *fakeProber) probe(context.Context, *os.File, string) (int, error) {
 
 func batNote(clip string, rate int) *datastore.Note {
 	return &datastore.Note{
-		ID:             rateTestNoteID,
+		ID: rateTestNoteID,
+		// The legacy bridge parses Date and Time into the result instant, and keeps the
+		// note's model only when it has a name.
+		Date:           "2026-01-02",
+		Time:           "03:04:05",
 		ClipName:       clip,
 		ClipSampleRate: rate,
-		Model:          detection.ModelInfo{ModelType: rateTestModelBat},
+		Model:          detection.ModelInfo{Name: "bat-model", ModelType: rateTestModelBat},
 	}
 }
 
@@ -138,6 +142,8 @@ func newRateHandler(t *testing.T, note *datastore.Note, prober *fakeProber) (*ec
 	t.Helper()
 	e := echo.New()
 	store := &rateStore{MockInterface: mocks.NewMockInterface(t), note: *note}
+	// GetDetection includes weather, which the dated fixture now looks up.
+	store.MockInterface.EXPECT().GetHourlyWeather(mock.Anything).Return(nil, nil).Maybe()
 	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(store))
 	h := buildTestHandler(t, core, map[string]string{}, map[string]string{})
 	h.clipRateWait = rateTestWait
@@ -518,7 +524,7 @@ func TestListAndSearch_NeverProbe(t *testing.T) {
 	e, h, store := newRateHandler(t, batNote(rateTestClipName, 0), prober)
 	mockDS := store.MockInterface
 	notes := []datastore.Note{*batNote(rateTestClipName, 0)}
-	mockDS.On("SearchNotes", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(notes, int64(len(notes)), nil)
+	mockDS.On("SearchNotesAdvanced", mock.Anything).Return(notes, int64(len(notes)), nil)
 	mockDS.On("GetLastDetections", mock.Anything).Return(notes, nil)
 	mockDS.On("SearchDetections", mock.Anything).Return([]datastore.DetectionRecord{{ID: "1", ModelType: rateTestModelBat}}, 1, nil)
 
@@ -543,16 +549,16 @@ func TestListAndSearch_NeverProbe(t *testing.T) {
 	assert.Zero(t, store.fills())
 }
 
-func TestNoteToDetectionResponse_ClipSampleRate(t *testing.T) {
+func TestResultToDetectionResponse_ClipSampleRate(t *testing.T) {
 	_, _, h := setupTestEnvironment(t)
 
-	resp := h.noteToDetectionResponse(&datastore.Note{ClipName: rateTestClipName, ClipSampleRate: rateTestBatRate}, false, nil)
+	resp := h.resultToDetectionResponse(&detection.Result{ClipName: rateTestClipName, ClipSampleRate: rateTestBatRate}, false, nil)
 	assert.Equal(t, rateTestBatRate, resp.ClipSampleRate)
 	body, err := json.Marshal(resp)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), `"clipSampleRate":384000`)
 
-	resp = h.noteToDetectionResponse(&datastore.Note{ClipName: rateTestClipName}, false, nil)
+	resp = h.resultToDetectionResponse(&detection.Result{ClipName: rateTestClipName}, false, nil)
 	assert.Zero(t, resp.ClipSampleRate)
 	body, err = json.Marshal(resp)
 	require.NoError(t, err)

@@ -5,34 +5,35 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/ttlcache"
 )
 
 // DetectionPage is one cached page of detections together with the total
-// number of matches for the query that produced it. Notes is shared by every
-// caller served from the same entry and must be treated as read-only.
+// number of matches for the query that produced it. Results is shared by every
+// caller served from the same entry: the slice holds pointers, so nobody may
+// write through them or modify the slice; copy a Result before changing it.
 type DetectionPage struct {
-	Notes []datastore.Note
-	Total int64
+	Results []*detection.Result
+	Total   int64
 }
 
-// DetectionPageKind names the datastore call a cached detection page comes
+// DetectionPageKind names the repository call a cached detection page comes
 // from.
 type DetectionPageKind string
 
 // Page kinds used as DetectionPageKey.Kind. The detections handler picks the
-// kind from the datastore call a request resolves to, so two kinds never share
+// kind from the repository call a request resolves to, so two kinds never share
 // an entry unless they run the identical call.
 const (
-	// DetectionPageHourly keys GetHourlyDetections pages.
+	// DetectionPageHourly keys GetHourly pages.
 	DetectionPageHourly DetectionPageKind = "hourly"
-	// DetectionPageSpecies keys SpeciesDetections pages.
+	// DetectionPageSpecies keys GetBySpecies pages.
 	DetectionPageSpecies DetectionPageKind = "species"
-	// DetectionPageSearch keys SearchNotes and its common-name variant,
-	// including the empty search that lists everything.
+	// DetectionPageSearch keys the SearchAdvanced text search and its
+	// common-name variant, including the empty search that lists everything.
 	DetectionPageSearch DetectionPageKind = "search"
-	// DetectionPageAdvanced keys SearchNotesAdvanced pages built from the
+	// DetectionPageAdvanced keys SearchAdvanced pages built from the
 	// request filters.
 	DetectionPageAdvanced DetectionPageKind = "advanced"
 )

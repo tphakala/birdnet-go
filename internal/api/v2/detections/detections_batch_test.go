@@ -289,8 +289,8 @@ func TestBatchLockDetections(t *testing.T) {
 // TestBatchResolveDetections tests the BatchResolveDetections endpoint.
 func TestBatchResolveDetections(t *testing.T) {
 	mockNotes := []datastore.Note{
-		{ID: 1, ScientificName: "Turdus merula"},
-		{ID: 2, ScientificName: "Turdus merula"},
+		{ID: 1, Date: "2025-03-07", Time: "08:15:00", ScientificName: "Turdus merula"},
+		{ID: 2, Date: "2025-03-07", Time: "08:16:00", ScientificName: "Turdus merula"},
 	}
 
 	testCases := []struct {
@@ -320,7 +320,7 @@ func TestBatchResolveDetections(t *testing.T) {
 			name: "resolves all query to IDs",
 			body: BatchResolveRequest{QueryType: "all"},
 			mockSetup: func(m *mocks.MockInterface) {
-				m.EXPECT().SearchNotes("", false, maxBatchSize+1, 0).Return(mockNotes, int64(2), nil).Once()
+				m.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("", maxBatchSize+1, 0)).Return(mockNotes, int64(2), nil).Once()
 			},
 			expectedStatus: http.StatusOK,
 			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
