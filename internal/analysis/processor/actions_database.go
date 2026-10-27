@@ -146,6 +146,8 @@ var errDetectionSaveInFlight = errors.NewStd("detection save still running from 
 // first call and reused, so a retry is neither rate limited into a no-op nor sees
 // the species as already known. Only one attempt runs a save at a time: an attempt
 // that cannot get the slot before ctx ends returns errDetectionSaveInFlight.
+// A save that panics is not repeated, and neither is one whose follow-up steps
+// panic after the row is stored.
 func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	attempt := int(a.attempts.Add(1))
 	if !a.acquireSaveSlot(ctx) {
@@ -177,9 +179,13 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 		a.gated = true
 	}
 
-	if err := a.saveDetection(ctx); err != nil {
+	if err := a.saveGuarded(ctx); err != nil {
 		return a.recordSaveFailure(err, attempt)
 	}
+	// Deferred so that a panic in the follow-up steps still leaves the detection
+	// done: it is stored, and a retry would save it again. A step that merely
+	// times out keeps the state pending, and the next attempt then finds it done.
+	defer a.saveState.Store(saveStateDone)
 	a.recordSaveSuccess(ctx, attempt)
 	return nil
 }
@@ -215,6 +221,25 @@ func (a *DatabaseAction) saveInFlight(attempt int) error {
 			logger.String("operation", "database_save_window_ended"))
 	}
 	return errDetectionSaveInFlight
+}
+
+// errDetectionSavePanicked is recorded when a save attempt panics: whether the
+// row was stored is unknown, so the detection is not saved again.
+var errDetectionSavePanicked = errors.NewStd("detection save panicked, outcome unknown")
+
+// saveGuarded runs saveDetection and, if it panics, ends the detection as
+// terminal before the panic continues, so the queue does not retry a save whose
+// outcome is unknown.
+func (a *DatabaseAction) saveGuarded(ctx context.Context) error {
+	returned := false
+	defer func() {
+		if !returned {
+			a.terminate(errDetectionSavePanicked)
+		}
+	}()
+	err := a.saveDetection(ctx)
+	returned = true
+	return err
 }
 
 // saveDetection runs one save attempt through the repository, or through the
@@ -302,8 +327,8 @@ func (a *DatabaseAction) terminate(err error) {
 	a.saveState.Store(saveStateTerminal)
 }
 
-// recordSaveSuccess runs the steps that follow a stored detection, once, and
-// marks the action done. Callers hold the save slot.
+// recordSaveSuccess runs the steps that follow a stored detection, once. The
+// caller holds the save slot and marks the action done when this returns.
 func (a *DatabaseAction) recordSaveSuccess(ctx context.Context, attempt int) {
 	// Repo.Save() sets a.Result.ID to the stored row's ID.
 	// Defensive check: warn if ID is unexpectedly 0 after a successful save.
@@ -358,7 +383,6 @@ func (a *DatabaseAction) recordSaveSuccess(ctx context.Context, attempt int) {
 
 	// After successful save, publish detection event to the event bus.
 	a.publishDetectionEvent(ctx, a.isNewSpecies, a.daysSinceFirstSeen, a.novelty)
-	a.saveState.Store(saveStateDone)
 
 	// NOTE: Audio export is intentionally NOT performed here.
 	// It runs as a separate action (SaveAudioAction) outside the CompositeAction

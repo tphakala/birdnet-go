@@ -849,3 +849,58 @@ func TestDatabaseAction_UnlikelyCommentAfterRetry(t *testing.T) {
 	assert.Equal(t, 1, repo.GetSavedCount())
 	assert.Equal(t, 1, int(repo.comments.Load()), "the unlikely comment is added once")
 }
+
+// panickingCommentRepository panics when the unlikely comment is added, which
+// happens after the detection is stored.
+type panickingCommentRepository struct {
+	*scriptedSaveRepository
+}
+
+func (panickingCommentRepository) AddComment(context.Context, string, string) error {
+	panic("comment failure after the save")
+}
+
+// TestDatabaseAction_PanicAfterStoredSaveIsNotRetried verifies that a failure in
+// a step that follows a stored save does not leave the job retrying, because the
+// next attempt would store the detection again.
+func TestDatabaseAction_PanicAfterStoredSaveIsNotRetried(t *testing.T) {
+	t.Parallel()
+
+	repo := &scriptedSaveRepository{MockDetectionRepository: NewMockDetectionRepository()}
+	det := testDetection()
+	det.Result.Unlikely = true
+	action := &DatabaseAction{
+		Settings: &conf.Settings{Debug: true}, Repo: panickingCommentRepository{repo},
+		Result: det.Result, Results: det.Results, EventTracker: NewEventTracker(time.Hour),
+	}
+	retry := action.saveRetryConfig()
+
+	require.Panics(t, func() { _ = action.ExecuteContext(t.Context(), nil) })
+	assert.Equal(t, 1, repo.GetSavedCount(), "the detection is stored")
+	assert.False(t, retry.Retryable(nil), "a stored detection must not be saved again")
+}
+
+// panickingSaveRepository panics inside Save, so whether a row was stored is unknown.
+type panickingSaveRepository struct {
+	*MockDetectionRepository
+}
+
+func (panickingSaveRepository) Save(context.Context, *detection.Result, []detection.AdditionalResult) error {
+	panic("save failure")
+}
+
+// TestDatabaseAction_PanicInsideSaveIsNotRetried verifies that a panic inside the
+// save call, which leaves the stored outcome unknown, ends the job.
+func TestDatabaseAction_PanicInsideSaveIsNotRetried(t *testing.T) {
+	t.Parallel()
+
+	det := testDetection()
+	action := &DatabaseAction{
+		Settings: &conf.Settings{Debug: true}, Repo: panickingSaveRepository{NewMockDetectionRepository()},
+		Result: det.Result, Results: det.Results, EventTracker: NewEventTracker(time.Hour),
+	}
+	retry := action.saveRetryConfig()
+
+	require.Panics(t, func() { _ = action.ExecuteContext(t.Context(), nil) })
+	assert.False(t, retry.Retryable(nil), "a save with an unknown outcome must not be repeated")
+}
