@@ -146,7 +146,7 @@ The doctor uses SQLite's table-recreation algorithm to remove the extra columns 
 
 **Affected tables:** `image_caches`, `notification_histories`
 
-The doctor does not repair `dynamic_thresholds` or `threshold_events`. If they still have the old `label_id` column, BirdNET-Go recreates them itself on its next start when they are empty. If they hold rows, startup stops and names them; see [Legacy startup and tables in the enhanced database shape](#legacy-startup-and-tables-in-the-enhanced-database-shape). Adding a `label_id` column to a current table would trigger that, so the doctor leaves both tables alone.
+The doctor does not repair `dynamic_thresholds` or `threshold_events`. If they still have the old `label_id` column, BirdNET-Go recreates them itself on its next start in enhanced database mode and discards their rows. Adding a `label_id` column to a current table would trigger that, so the doctor leaves both tables alone.
 
 ### Corrupted indexes
 
