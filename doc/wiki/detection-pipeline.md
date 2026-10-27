@@ -294,7 +294,7 @@ flowchart LR
     GA --> CMDA[Custom Command]
 ```
 
-**CompositeAction** runs the database save, a step that enqueues the MQTT publish as its own job, and the SSE broadcast, in that order. MQTT is a separate job so that `realtime.mqtt.retrysettings` applies to it, and it still starts after the save so the payload carries the database id; the composite itself is never retried because that would save the detection again. Without a database, SSE and MQTT are queued as independent actions. `SaveAudioAction` is queued as a separate job that runs alongside it, so slow clip encoding never blocks the real-time broadcast. A client can therefore request a clip before its file exists; the media API waits briefly for it and answers 503 with `Retry-After` while the export is still pending.
+**CompositeAction** runs the database save, a step that enqueues the MQTT publish as its own job, and the SSE broadcast, in that order. MQTT is a separate job so that `realtime.mqtt.retrysettings` applies to it, and it still starts after the save so the payload carries the database id; the composite is retried only while the database save has stored nothing. If the database is unreachable (connection refused, host unreachable, a connection that dropped before the commit was sent), the save is retried for about five minutes before the detection is dropped, and MQTT and SSE then run once after the save that lands. Database lock and deadlock errors that happen before the commit are retried the same way. The composite also stays pending while an earlier attempt is still saving or still running the steps after the save, and the next attempt then continues from the stored row instead of saving again. A save that finishes only after the last attempt has ended keeps its row, but MQTT and SSE do not run for it; the log says so. A failure whose commit outcome is unknown, such as a connection lost while the commit was in flight, is logged and not retried, because the row may already be stored. Without a database, SSE and MQTT are queued as independent actions. `SaveAudioAction` is queued as a separate job that runs alongside it, so slow clip encoding never blocks the real-time broadcast. A client can therefore request a clip before its file exists; the media API waits briefly for it and answers 503 with `Retry-After` while the export is still pending.
 
 ### Audio Export
 
@@ -304,7 +304,7 @@ flowchart LR
 
 ### JobQueue
 
-The `JobQueue` is a bounded queue with retry/backoff support. BirdWeather and MQTT actions have configurable retry policies. `SaveAudioAction` for Extended Capture uses exponential backoff (1s to 30s, up to ~20 minutes for long captures).
+The `JobQueue` is a bounded queue with retry/backoff support. BirdWeather and MQTT actions have configurable retry policies, and the database save composite retries for about five minutes while the database is unreachable. `SaveAudioAction` for Extended Capture uses exponential backoff (1s to 30s, up to ~20 minutes for long captures).
 
 ## Complete Data Flow Summary
 

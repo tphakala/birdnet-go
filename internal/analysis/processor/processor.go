@@ -249,6 +249,29 @@ type Detections struct {
 	Results       []detection.AdditionalResult // Additional BirdNET prediction results
 }
 
+// taskDetectionFor returns the detection payload to queue with action. The
+// database save can sit in the queue for a whole retry window and reads nothing
+// from the payload, so it gets a copy without the PCM audio instead of pinning
+// it.
+func taskDetectionFor(det *Detections, action Action) Detections {
+	switch a := action.(type) {
+	case *DatabaseAction:
+	case *CompositeAction:
+		if len(a.Actions) == 0 || !isDatabaseAction(a.Actions[0]) {
+			return *det
+		}
+	default:
+		return *det
+	}
+	return Detections{CorrelationID: det.CorrelationID, Result: det.Result, Results: det.Results}
+}
+
+// isDatabaseAction reports whether action is a DatabaseAction.
+func isDatabaseAction(action Action) bool {
+	_, ok := action.(*DatabaseAction)
+	return ok
+}
+
 // ModelContribution tracks a single AI model's detection activity for a pending detection.
 // Update it only through recordHit so the statistics stay consistent.
 type ModelContribution struct {
@@ -1800,7 +1823,9 @@ func (p *Processor) recordUnscannedSave(settings *conf.Settings, item *PendingDe
 	}
 }
 
-// processApprovedDetection handles an approved detection by sending it to the worker queue
+// processApprovedDetection handles an approved detection by sending it to the worker queue.
+// Jobs whose action is the database save are queued without the PCM audio, since
+// they can wait out a retry window and read nothing from the payload.
 //
 // settings is the snapshot the privacy check used for this detection, so the saved
 // clip is built from the same configuration that was checked.
@@ -1845,7 +1870,7 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 
 	actionList := p.getActionsForItem(&item.Detection, settings)
 	for _, action := range actionList {
-		task := &Task{Type: TaskTypeAction, Detection: item.Detection, Action: action}
+		task := &Task{Type: TaskTypeAction, Detection: taskDetectionFor(&item.Detection, action), Action: action}
 		if err := p.EnqueueTask(task); err != nil {
 			// Check error message instead of using errors.Is to avoid import cycle
 			if err.Error() == "worker queue is full" {
@@ -2394,9 +2419,11 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 	//    realtime.mqtt.retrysettings, which a step inside the composite cannot have.
 	//    The job starts after the save, so it still reads the database ID.
 	// 3. SSEAction broadcasts inline.
-	// The composite itself must never be retried: a retry would run DatabaseAction
-	// again and store a duplicate row. Without a database there is no ID to wait
-	// for, so SSE and MQTT are queued as independent actions.
+	// The composite is retried only while its database step reports a save that
+	// stored nothing (DatabaseAction.retryPending), so a retry cannot store a
+	// second row; MQTT and SSE run once, after the save that lands. A failure whose
+	// commit outcome is unknown ends the job. Without a database there is no ID to
+	// wait for, so SSE and MQTT are queued as independent actions.
 	//
 	// This ensures:
 	// - Database save completes before downstream actions
@@ -2431,6 +2458,7 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 				Actions:       sequentialActions,
 				Description:   "Database save, MQTT enqueue, and SSE broadcast (sequential)",
 				CorrelationID: det.CorrelationID,
+				RetryConfig:   databaseAction.saveRetryConfig(),
 			})
 		} else {
 			actions = append(actions, databaseAction)

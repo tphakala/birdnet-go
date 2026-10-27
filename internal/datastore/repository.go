@@ -15,6 +15,13 @@ import (
 // is called without filters.
 var ErrNilAdvancedSearchFilters = errors.NewStd("advanced search filters must not be nil")
 
+// ErrDetectionSaveRetrySafe is wrapped by a DetectionRepository.Save error when
+// the failure happened before the write could have been committed, so repeating
+// the same save cannot store a second row. An error without it says nothing about
+// whether a row was stored (for example a connection lost while committing).
+// Only the v2 repository sets it; callers test for it with errors.Is.
+var ErrDetectionSaveRetrySafe = errors.NewStd("detection save failed before it could be committed")
+
 // DefaultDetectionLimit is the default number of detections returned by queries.
 const DefaultDetectionLimit = 100
 

@@ -139,6 +139,10 @@ config := jobqueue.RetryConfig{
     InitialDelay: 5 * time.Second,
     MaxDelay:     1 * time.Minute,
     Multiplier:   2.0,
+    // Optional: return false to fail the job at once, even though attempts
+    // remain. It is called with the queue lock held, so it must not block.
+    // Nil means every error may be retried.
+    Retryable: func(err error) bool { return !errors.Is(err, errPermanent) },
 }
 
 // Enqueue a job with the custom retry configuration

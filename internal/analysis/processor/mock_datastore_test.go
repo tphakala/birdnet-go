@@ -27,6 +27,9 @@ type ActionMockDatastore struct {
 	savedNotes   []*datastore.Note
 	savedResults [][]datastore.Results
 	saveErr      error
+	failSaves    int   // number of upcoming Save calls that fail with failSavesErr
+	failSavesErr error // error returned by those calls
+	saveCalls    int   // number of Save calls, failed or not
 	getErr       error
 	notes        map[uint]*datastore.Note // For Get() lookups
 }
@@ -45,6 +48,11 @@ func (m *ActionMockDatastore) Save(note *datastore.Note, results []datastore.Res
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	m.saveCalls++
+	if m.failSaves > 0 {
+		m.failSaves--
+		return m.failSavesErr
+	}
 	if m.saveErr != nil {
 		return m.saveErr
 	}
@@ -64,6 +72,21 @@ func (m *ActionMockDatastore) Save(note *datastore.Note, results []datastore.Res
 	m.notes[note.ID] = &noteCopy
 
 	return nil
+}
+
+// FailNextSaves makes the next n Save calls return err; later calls behave as usual.
+func (m *ActionMockDatastore) FailNextSaves(n int, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.failSaves = n
+	m.failSavesErr = err
+}
+
+// GetSaveCalls returns the number of Save calls, failed or not.
+func (m *ActionMockDatastore) GetSaveCalls() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.saveCalls
 }
 
 // Get implements datastore.Interface.Get.

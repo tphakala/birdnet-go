@@ -79,9 +79,16 @@ func TestDatabaseAction_NewSpeciesWindow(t *testing.T) {
 				if restart {
 					tracker = species.NewTrackerFromSettings(ds, settings)
 					require.NoError(t, tracker.InitFromDatabase())
-					action.NewSpeciesTracker = tracker
 				}
 
+				// An action serves one detection, so the repeat gets its own.
+				action = &DatabaseAction{
+					Settings:          action.Settings,
+					Repo:              action.Repo,
+					Result:            det.Result,
+					EventTracker:      action.EventTracker,
+					NewSpeciesTracker: tracker,
+				}
 				repeat := tt.first.Add(time.Duration(conf.DefaultNotificationSuppressionHours) * time.Hour)
 				action.Result.Timestamp = repeat.Add(15 * time.Second)
 				action.Result.BeginTime = repeat

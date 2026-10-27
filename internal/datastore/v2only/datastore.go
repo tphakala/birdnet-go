@@ -838,10 +838,32 @@ func (ds *Datastore) Save(note *datastore.Note, results []datastore.Results) err
 	return nil
 }
 
+// retrySafeError marks a save failure that happened before COMMIT was sent. Its
+// message is the wrapped error's, so logs and existing errors.Is checks see no
+// change; it additionally matches datastore.ErrDetectionSaveRetrySafe.
+type retrySafeError struct{ err error }
+
+func (e *retrySafeError) Error() string { return e.err.Error() }
+
+func (e *retrySafeError) Unwrap() []error {
+	return []error{datastore.ErrDetectionSaveRetrySafe, e.err}
+}
+
+// retrySafe marks err as a failure after which repeating the save cannot store a
+// second row. A nil err stays nil.
+func retrySafe(err error) error {
+	if err == nil {
+		return nil
+	}
+	return &retrySafeError{err: err}
+}
+
 // saveDetection is the single v2 write path behind every save entry point. It
 // resolves the model, labels and audio source, writes the detection and its
 // predictions in one transaction, then stores model contributions best effort.
-// It returns the database-assigned detection ID.
+// It returns the database-assigned detection ID. A failure that happened before
+// COMMIT was sent wraps datastore.ErrDetectionSaveRetrySafe; a failure of COMMIT
+// itself does not, because the server may have applied it.
 func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint, error) {
 	// Use the model info from the write if available, otherwise fall back to the default.
 	// This allows multi-model detections to be attributed to the correct model.
@@ -851,7 +873,7 @@ func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint
 	}
 	model, err := ds.model.GetOrCreate(ctx, modelInfo.Name, modelInfo.Version, modelInfo.Variant, detection.ResolveModelType(modelInfo.Name, modelInfo.Version), modelInfo.ClassifierPath)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get/create model: %w", err)
+		return 0, retrySafe(fmt.Errorf("failed to get/create model: %w", err))
 	}
 
 	// Resolve taxonomic class based on model type
@@ -867,12 +889,12 @@ func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint
 	primaryTypeID, primaryTaxID, primaryNonBird := ds.labelTypeForRawLabel(w.rawLabel, taxonomicClassID)
 	label, err := ds.label.GetOrCreate(ctx, detection.ExtractScientificName(w.scientificName), model.ID, primaryTypeID, primaryTaxID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get/create label: %w", err)
+		return 0, retrySafe(fmt.Errorf("failed to get/create label: %w", err))
 	}
 	// First-writer-wins relabel: if this non-bird class was previously created as species, correct its type.
 	if primaryNonBird && label.LabelTypeID != primaryTypeID {
 		if err := ds.label.UpdateLabelType(ctx, label.ID, primaryTypeID); err != nil {
-			return 0, fmt.Errorf("failed to relabel non-bird label %q: %w", label.ScientificName, err)
+			return 0, retrySafe(fmt.Errorf("failed to relabel non-bird label %q: %w", label.ScientificName, err))
 		}
 		label.LabelTypeID = primaryTypeID
 		label.TaxonomicClassID = nil
@@ -884,7 +906,7 @@ func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint
 	// group. Non-bird groups are relabeled if they were previously stored as species.
 	predLabels, err := ds.resolvePredictionLabels(ctx, w.predictions, model.ID, taxonomicClassID)
 	if err != nil {
-		return 0, err
+		return 0, retrySafe(err)
 	}
 
 	det := &entities.Detection{
@@ -932,6 +954,12 @@ func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint
 	// DIRECT DB WRITE: We use tx.Create directly instead of ds.detection.Save()
 	// to ensure both detection and predictions are in the same transaction.
 	// The repository doesn't currently support transaction injection.
+	//
+	// bodyDone is set as the last statement of the transaction function, so a
+	// Transaction error with bodyDone set came from COMMIT: the server may or may
+	// not have applied it, and the error is not marked retry safe. Every earlier
+	// failure (reference data, Begin, the inserts, which roll back) stored nothing.
+	var bodyDone bool
 	if err := ds.manager.DB().WithContext(txCtx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(det).Error; err != nil {
 			return fmt.Errorf("failed to save detection: %w", err)
@@ -946,9 +974,13 @@ func (ds *Datastore) saveDetection(ctx context.Context, w *detectionWrite) (uint
 			}
 		}
 
+		bodyDone = true
 		return nil
 	}); err != nil {
-		return 0, err
+		if bodyDone {
+			return 0, err
+		}
+		return 0, retrySafe(err)
 	}
 
 	// Contributions are supplementary and run after the commit, so they are detached

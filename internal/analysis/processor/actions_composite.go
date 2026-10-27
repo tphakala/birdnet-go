@@ -254,36 +254,52 @@ func (a *CompositeAction) handleExecutionError(err error, action Action, timeout
 		return a.logAndReturnTimeoutError(action, timeout, step, total)
 	}
 
-	GetLogger().Error("Composite action failed",
+	a.logStepFailure("Composite action failed", "composite_action_execute", err, action, step, total)
+	return err
+}
+
+// logAndReturnTimeoutError logs a timeout error and returns a structured timeout error.
+func (a *CompositeAction) logAndReturnTimeoutError(action Action, timeout time.Duration, step, total int) error {
+	err := buildTimeoutError(action, timeout, step, total)
+	a.logStepFailure("Composite action timed out", "composite_action_timeout", err, action, step, total,
+		logger.Float64("timeout_seconds", timeout.Seconds()))
+	return err
+}
+
+// willRetry reports whether the job queue will run the composite again after err:
+// the composite has a retry policy whose check still allows it. The queue's own
+// log line announces such a retry, so the step failure is not an Error yet.
+func (a *CompositeAction) willRetry(err error) bool {
+	return a.RetryConfig.Enabled && a.RetryConfig.Retryable != nil && a.RetryConfig.Retryable(err)
+}
+
+// logStepFailure logs a failed or timed out step at Error, or at Debug when the
+// queue is about to retry the composite, so an outage does not produce an Error
+// line for every retry attempt.
+func (a *CompositeAction) logStepFailure(msg, operation string, err error, action Action, step, total int, extra ...logger.Field) {
+	fields := append([]logger.Field{
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", a.CorrelationID),
 		logger.Int("step", step),
 		logger.Int("total_steps", total),
 		logger.String("action_description", action.GetDescription()),
 		logger.Error(err),
-		logger.String("operation", "composite_action_execute"))
-	return err
-}
-
-// logAndReturnTimeoutError logs a timeout error and returns a structured timeout error.
-func (a *CompositeAction) logAndReturnTimeoutError(action Action, timeout time.Duration, step, total int) error {
-	GetLogger().Error("Composite action timed out",
-		logger.String("component", "analysis.processor.actions"),
-		logger.String("detection_id", a.CorrelationID),
-		logger.Int("step", step),
-		logger.Int("total_steps", total),
-		logger.String("action_description", action.GetDescription()),
-		logger.Float64("timeout_seconds", timeout.Seconds()),
-		logger.String("operation", "composite_action_timeout"))
-	return buildTimeoutError(action, timeout, step, total)
+		logger.String("operation", operation),
+	}, extra...)
+	if a.willRetry(err) {
+		GetLogger().Debug(msg+", will be retried", fields...)
+		return
+	}
+	GetLogger().Error(msg, fields...)
 }
 
 // enqueueAction is a CompositeAction step that hands another action to the job
 // queue as its own job instead of running it inline. It lets an action that
 // depends on an earlier composite step (for example MQTT, which needs the
 // database ID) still get its own retry policy from the queue, which a step
-// inside the composite cannot have because the composite itself is never
-// retried (a retry would run the database save again).
+// inside the composite cannot have: the composite is retried only while its
+// database step reports a save that stored nothing, and this step runs only after
+// the save has landed, so a retried composite never enqueues it twice.
 //
 // Like every composite step it runs only when all earlier steps returned nil.
 type enqueueAction struct {

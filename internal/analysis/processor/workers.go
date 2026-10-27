@@ -51,7 +51,14 @@ const (
 // cover a capture window of durationSeconds, so a short clip fails fast while
 // a long Extended Capture tail has time to finish writing to the ring buffer.
 func saveAudioDeferredMaxRetries(durationSeconds int) int {
-	budget := time.Duration(durationSeconds+saveAudioDeferredMarginSeconds) * time.Second
+	return retriesForBackoffBudget(time.Duration(durationSeconds+saveAudioDeferredMarginSeconds) * time.Second)
+}
+
+// retriesForBackoffBudget returns the number of retries whose backoff delays
+// add up to at least budget on the 1 s to 30 s schedule above (the exponential
+// phase, then 30 s per retry). Delays are the nominal ones: queue jitter and
+// the time each attempt takes come on top.
+func retriesForBackoffBudget(budget time.Duration) int {
 	if budget <= saveAudioDeferredExpPhaseSpan {
 		return saveAudioDeferredExpPhaseRetries
 	}
@@ -133,6 +140,11 @@ func getJobQueueRetryConfig(action Action) jobqueue.RetryConfig {
 		return a.RetryConfig // Now directly returns jobqueue.RetryConfig
 	case *MqttAction:
 		return a.RetryConfig // Now directly returns jobqueue.RetryConfig
+	case *CompositeAction:
+		return a.RetryConfig // Zero value (disabled) unless the builder set one
+	case *DatabaseAction:
+		// A bare database job (no SSE, no MQTT) retries like the composite does.
+		return a.saveRetryConfig()
 	case *SaveAudioAction:
 		// Only deferred SaveAudioActions (those waiting for an Extended
 		// Capture tail) need retry. Regular eager-read actions return

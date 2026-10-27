@@ -122,83 +122,253 @@ func (a *DatabaseAction) Execute(ctx context.Context, data any) error {
 	return a.ExecuteContext(ctx, data)
 }
 
+// Save states of a DatabaseAction. The zero value is pending.
+const (
+	// saveStatePending: nothing is stored and a repeat of the save is allowed, or an
+	// earlier attempt is still running, including its follow-up steps after the row is
+	// stored (the next attempt then finds the state done). The job queue keeps
+	// retrying the job.
+	saveStatePending int32 = iota
+	// saveStateDone: the detection is stored, or the event tracker skipped it.
+	saveStateDone
+	// saveStateTerminal: the save failed in a way that must not be repeated.
+	saveStateTerminal
+)
+
+// errDetectionSaveInFlight is returned by an attempt that gave up waiting for an
+// earlier attempt whose save is still running.
+var errDetectionSaveInFlight = errors.NewStd("detection save still running from an earlier attempt")
+
 // ExecuteContext implements the ContextAction interface for proper context propagation.
 // CompositeAction passes its timeout and cancellation signals through ctx, but the repository
 // save is detached from them so a detection that commits late is not rolled back and lost.
+//
+// The queue may call it again for the same detection while saveStatePending holds
+// (see retryPending). The event-tracker and new-species decisions are taken on the
+// first call and reused, so a retry is neither rate limited into a no-op nor sees
+// the species as already known. Only one attempt runs a save at a time: an attempt
+// that cannot get the slot before ctx ends returns errDetectionSaveInFlight.
+// A save that panics is not repeated, and neither is one whose follow-up steps
+// panic after the row is stored.
 func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	attempt := int(a.attempts.Add(1))
+	if !a.acquireSaveSlot(ctx) {
+		return a.saveInFlight(attempt)
+	}
+	defer func() { <-a.saveSlot }()
 
-	// Check event frequency (supports scientific name lookup)
-	if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, DatabaseSave) {
+	switch a.saveState.Load() {
+	case saveStateDone:
+		// An earlier attempt stored the detection after its own job step ended;
+		// returning nil lets the composite run the steps after the save.
 		return nil
+	case saveStateTerminal:
+		return a.terminalErr
 	}
 
-	// Check if this is a new species and update atomically to prevent race conditions
-	var isNewSpecies bool
-	var daysSinceFirstSeen int
-	var novelty species.NoveltyStatus
-	if a.NewSpeciesTracker != nil {
-		// Use atomic check-and-update to prevent duplicate "new species" notifications
-		// when multiple detections of the same species arrive concurrently
-		isNewSpecies, daysSinceFirstSeen, novelty = a.NewSpeciesTracker.CheckAndUpdateSpeciesWithNovelty(a.Result.Species.ScientificName, a.Result.BeginTime)
+	if !a.gated {
+		// Check event frequency (supports scientific name lookup)
+		if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, DatabaseSave) {
+			a.saveState.Store(saveStateDone)
+			return nil
+		}
+		// Check if this is a new species and update atomically to prevent race conditions
+		if a.NewSpeciesTracker != nil {
+			// Use atomic check-and-update to prevent duplicate "new species" notifications
+			// when multiple detections of the same species arrive concurrently
+			a.isNewSpecies, a.daysSinceFirstSeen, a.novelty = a.NewSpeciesTracker.CheckAndUpdateSpeciesWithNovelty(a.Result.Species.ScientificName, a.Result.BeginTime)
+		}
+		a.gated = true
 	}
 
-	// Save detection to database using preferred path
+	if err := a.saveGuarded(ctx); err != nil {
+		return a.recordSaveFailure(err, attempt)
+	}
+	// Deferred so that a panic in the follow-up steps still leaves the detection
+	// done: it is stored, and a retry would save it again. A step that merely
+	// times out keeps the state pending, and the next attempt then finds it done.
+	defer a.saveState.Store(saveStateDone)
+	a.recordSaveSuccess(ctx, attempt)
+	return nil
+}
+
+// acquireSaveSlot takes the save slot, or reports false when ctx ends first. A
+// free slot is taken even when ctx is already done.
+func (a *DatabaseAction) acquireSaveSlot(ctx context.Context) bool {
+	a.saveSlotOnce.Do(func() { a.saveSlot = make(chan struct{}, 1) })
+	select {
+	case a.saveSlot <- struct{}{}:
+		return true
+	default:
+	}
+	select {
+	case a.saveSlot <- struct{}{}:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// saveInFlight handles an attempt that found an earlier save still running. The
+// job stays pending, so the queue tries again unless this was the last attempt.
+func (a *DatabaseAction) saveInFlight(attempt int) error {
+	if maxAttempts := int(a.maxAttempts.Load()); maxAttempts > 0 && attempt >= maxAttempts {
+		a.windowEnded.Store(true)
+		GetLogger().Warn("Retry window ended while a detection save is still running",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.Int("attempt", attempt),
+			logger.Int("max_attempts", maxAttempts),
+			logger.String("operation", "database_save_window_ended"))
+	}
+	return errDetectionSaveInFlight
+}
+
+// errDetectionSavePanicked is recorded when a save attempt panics: whether the
+// row was stored is unknown, so the detection is not saved again.
+var errDetectionSavePanicked = errors.NewStd("detection save panicked, outcome unknown")
+
+// saveGuarded runs saveDetection and, if it panics, ends the detection as
+// terminal before the panic continues, so the queue does not retry a save whose
+// outcome is unknown.
+func (a *DatabaseAction) saveGuarded(ctx context.Context) error {
+	returned := false
+	defer func() {
+		if !returned {
+			a.terminate(errDetectionSavePanicked)
+		}
+	}()
+	err := a.saveDetection(ctx)
+	returned = true
+	return err
+}
+
+// saveDetection runs one save attempt through the repository, or through the
+// legacy datastore when no repository is set.
+func (a *DatabaseAction) saveDetection(ctx context.Context) error {
 	if a.Repo != nil {
 		// New path: Use DetectionRepository (handles conversion internally).
-		// The CompositeAction gives each step 10 s and does not retry, so a save
-		// that honoured that deadline would roll back and lose a detection that
-		// commits late today; the repository keeps its own transaction timeout.
-		if err := a.Repo.Save(context.WithoutCancel(ctx), &a.Result, a.Results); err != nil {
-			GetLogger().Error("Failed to save detection to database",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
-				logger.String("species", a.Result.Species.CommonName),
-				logger.String("scientific_name", a.Result.Species.ScientificName),
-				logger.Float64("confidence", a.Result.Confidence),
-				logger.String("clip_name", a.Result.ClipName),
-				logger.String("operation", "database_save_repository"))
-			return err
-		}
-		// Repo.Save() sets a.Result.ID to the stored row's ID.
-		// Defensive check: warn if ID is unexpectedly 0 after a successful save.
-		// This aids diagnosis of GitHub #2453 (MQTT detectionId always 0).
-		if a.Result.ID == 0 {
-			GetLogger().Warn("Detection ID is 0 after successful Repo.Save(), downstream actions will not have a valid ID",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.String("species", a.Result.Species.CommonName),
-				logger.String("scientific_name", a.Result.Species.ScientificName),
-				logger.String("operation", "database_save_id_check"))
-		}
-	} else {
-		// Legacy path: Use datastore.Interface directly
-		// Convert Result to Note for GORM persistence
-		note := datastore.NoteFromResult(&a.Result)
+		// The CompositeAction gives each step 10 s, so a save that honoured that
+		// deadline would roll back and lose a detection that commits late; the
+		// repository keeps its own transaction timeout. A queue retry only follows
+		// a failure the repository reports as having stored nothing.
+		return a.Repo.Save(context.WithoutCancel(ctx), &a.Result, a.Results)
+	}
 
-		// Convert domain AdditionalResults to legacy datastore.Results format for GORM.
-		// Results are passed separately to Save() - not assigned to note.Results because
-		// saveNoteInTransaction uses Omit("Results") to prevent GORM auto-save.
-		legacyResults := datastore.AdditionalResultsToDatastoreResults(a.Results)
+	// Legacy path: Use datastore.Interface directly
+	// Convert Result to Note for GORM persistence
+	note := datastore.NoteFromResult(&a.Result)
 
-		// Save note to database
-		if err := a.Ds.Save(&note, legacyResults); err != nil {
-			GetLogger().Error("Failed to save note and results to database",
-				logger.String("component", "analysis.processor.actions"),
-				logger.String("detection_id", a.CorrelationID),
-				logger.Error(err),
-				logger.String("species", a.Result.Species.CommonName),
-				logger.String("scientific_name", a.Result.Species.ScientificName),
-				logger.Float64("confidence", a.Result.Confidence),
-				logger.String("clip_name", a.Result.ClipName),
-				logger.String("operation", "database_save"))
-			return err
+	// Convert domain AdditionalResults to legacy datastore.Results format for GORM.
+	// Results are passed separately to Save() - not assigned to note.Results because
+	// saveNoteInTransaction uses Omit("Results") to prevent GORM auto-save.
+	legacyResults := datastore.AdditionalResultsToDatastoreResults(a.Results)
+
+	if err := a.Ds.Save(&note, legacyResults); err != nil {
+		return err
+	}
+	// Sync database-assigned ID back to Result
+	a.Result.ID = note.ID
+	return nil
+}
+
+// recordSaveFailure classifies a failed save, logs it and moves the state. The
+// returned error is the save error. Callers hold the save slot.
+func (a *DatabaseAction) recordSaveFailure(err error, attempt int) error {
+	maxAttempts := int(a.maxAttempts.Load())
+	fields := func(operation string) []logger.Field {
+		return []logger.Field{
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.Error(err),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("scientific_name", a.Result.Species.ScientificName),
+			logger.Float64("confidence", a.Result.Confidence),
+			logger.String("clip_name", a.Result.ClipName),
+			logger.Int("attempt", attempt),
+			logger.Int("max_attempts", maxAttempts),
+			logger.String("operation", operation),
 		}
+	}
 
-		// Sync database-assigned ID back to Result
-		a.Result.ID = note.ID
+	switch {
+	case a.Repo != nil && maxAttempts > 1 && isRetryableSaveError(err) && attempt < maxAttempts && !a.windowEnded.Load():
+		// The state stays pending, so the queue schedules the next attempt.
+		if attempt == 1 {
+			GetLogger().Warn("Database unavailable, detection save will be retried",
+				append(fields("database_save_retry_scheduled"), logger.Duration("retry_window", databaseSaveRetryWindow))...)
+		} else {
+			// The queue already warns once per retry.
+			GetLogger().Debug("Detection save failed again, will be retried", fields("database_save_retry_scheduled")...)
+		}
+		return err
+	case a.windowEnded.Load():
+		a.terminate(err)
+		GetLogger().Error("Detection not saved: the save failed after its job ended", fields("database_save_abandoned")...)
+	case a.Repo != nil && maxAttempts > 1 && isRetryableSaveError(err):
+		a.terminate(err)
+		GetLogger().Error("Detection not saved: database unavailable for the whole retry window",
+			append(fields("database_save_retry_exhausted"), logger.Duration("retry_window", databaseSaveRetryWindow))...)
+	case a.Repo != nil && errors.IsConnectivityError(err) && !isRepeatableSaveError(err):
+		a.terminate(err)
+		GetLogger().Error("Detection save outcome unknown, not retried to avoid a duplicate", fields("database_save_outcome_unknown")...)
+	case a.Repo != nil:
+		a.terminate(err)
+		GetLogger().Error("Failed to save detection to database", fields("database_save_repository")...)
+	default:
+		a.terminate(err)
+		GetLogger().Error("Failed to save note and results to database", fields("database_save")...)
+	}
+	return err
+}
+
+// terminate records err as the final failure of the detection.
+func (a *DatabaseAction) terminate(err error) {
+	a.terminalErr = err
+	a.saveState.Store(saveStateTerminal)
+}
+
+// recordSaveSuccess runs the steps that follow a stored detection, once. The
+// caller holds the save slot and marks the action done when this returns.
+// A save that lands after the last job attempt ended is logged as late, and the
+// steps that need the job (MQTT, SSE) do not run for it.
+func (a *DatabaseAction) recordSaveSuccess(ctx context.Context, attempt int) {
+	// Repo.Save() sets a.Result.ID to the stored row's ID.
+	// Defensive check: warn if ID is unexpectedly 0 after a successful save.
+	// This aids diagnosis of GitHub #2453 (MQTT detectionId always 0).
+	if a.Repo != nil && a.Result.ID == 0 {
+		GetLogger().Warn("Detection ID is 0 after successful Repo.Save(), downstream actions will not have a valid ID",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.String("scientific_name", a.Result.Species.ScientificName),
+			logger.String("operation", "database_save_id_check"))
+	}
+
+	// The last attempt whose own step ended while the save was running: no
+	// attempt follows, so MQTT and SSE will not run for this detection.
+	if maxAttempts := int(a.maxAttempts.Load()); maxAttempts > 0 && attempt >= maxAttempts && ctx.Err() != nil {
+		a.windowEnded.Store(true)
+	}
+
+	switch {
+	case a.windowEnded.Load():
+		GetLogger().Warn("Detection saved after its job ended, any MQTT and SSE steps skipped",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.Uint64("note_id", uint64(a.Result.ID)),
+			logger.Int("attempt", attempt),
+			logger.String("operation", "database_save_late"))
+	case attempt > 1:
+		GetLogger().Info("Detection saved after the database recovered",
+			logger.String("component", "analysis.processor.actions"),
+			logger.String("detection_id", a.CorrelationID),
+			logger.String("species", a.Result.Species.CommonName),
+			logger.Uint64("note_id", uint64(a.Result.ID)),
+			logger.Int("attempts", attempt),
+			logger.String("operation", "database_save_recovered"))
 	}
 
 	// Share the database ID with downstream actions (MQTT, SSE) immediately.
@@ -222,7 +392,7 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	}
 
 	// After successful save, publish detection event to the event bus.
-	a.publishDetectionEvent(ctx, isNewSpecies, daysSinceFirstSeen, novelty)
+	a.publishDetectionEvent(ctx, a.isNewSpecies, a.daysSinceFirstSeen, a.novelty)
 
 	// NOTE: Audio export is intentionally NOT performed here.
 	// It runs as a separate action (SaveAudioAction) outside the CompositeAction
@@ -233,8 +403,42 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	// The media API already handles the race where SSE broadcasts a ClipName
 	// before the audio file is on disk, using waitForAudioFile() with retries
 	// and 503 + Retry-After responses.
+}
 
-	return nil
+// isRepeatableSaveError reports whether err proves that repeating the save cannot
+// store a second row: the store marked it, or the connection was never made.
+func isRepeatableSaveError(err error) bool {
+	return errors.Is(err, datastore.ErrDetectionSaveRetrySafe) || errors.IsUnsentError(err)
+}
+
+// isRetryableSaveError reports whether a failed save should be retried later: a
+// repeat is safe and the failure looks transient. The legacy bridge carries no
+// store marker, so only its never-connected errors qualify there.
+func isRetryableSaveError(err error) bool {
+	return isRepeatableSaveError(err) && (errors.IsConnectivityError(err) || datastore.IsTransientDBError(err))
+}
+
+// retryPending reports whether the job should run again after a failure: nothing
+// is stored yet and a repeat is allowed, or an earlier attempt is still running.
+// It reads one atomic, because the job queue calls it with its lock held.
+func (a *DatabaseAction) retryPending() bool {
+	return a.saveState.Load() == saveStatePending
+}
+
+// saveRetryConfig returns the queue retry policy of the database job and records
+// how many attempts the queue will make. The job is retried only while
+// retryPending holds, so a failure that may have stored the row ends it.
+func (a *DatabaseAction) saveRetryConfig() jobqueue.RetryConfig {
+	retries := retriesForBackoffBudget(databaseSaveRetryWindow)
+	a.maxAttempts.Store(int32(retries + 1)) //nolint:gosec // G115: a retry count of a few dozen
+	return jobqueue.RetryConfig{
+		Enabled:      true,
+		MaxRetries:   retries,
+		InitialDelay: databaseSaveRetryInitialDelay,
+		MaxDelay:     databaseSaveRetryMaxDelay,
+		Multiplier:   databaseSaveRetryMultiplier,
+		Retryable:    func(error) bool { return a.retryPending() },
+	}
 }
 
 // shouldSuppressNewSpeciesNotification checks if a new species notification should be suppressed.

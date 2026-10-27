@@ -461,6 +461,55 @@ func TestEnqueue_DisabledRetryMeansSingleAttempt(t *testing.T) {
 	assert.Equal(t, 0, queue.GetStats().RetryAttempts, "no retry may be scheduled")
 }
 
+// TestEnqueue_RetryablePredicateStopsRetries verifies that RetryConfig.Retryable
+// is consulted after a failed attempt that has attempts left: a false verdict fails the job at once,
+// even though attempts remain.
+func TestEnqueue_RetryablePredicateStopsRetries(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	tests := []struct {
+		name         string
+		retryable    func(calls int) bool
+		wantAttempts int
+	}{
+		{"never retryable fails on the first attempt", func(int) bool { return false }, 1},
+		{"retryable once then stops", func(calls int) bool { return calls == 1 }, 2},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			queue := setupTestQueue(t, 100, false)
+			defer teardownTestQueue(t, queue)
+
+			action := &MockAction{
+				ExecuteFunc: func(data any) error { return errors.NewStd("simulated failure") },
+			}
+			var calls atomic.Int32
+			config := RetryConfig{
+				Enabled:      true,
+				MaxRetries:   3,
+				InitialDelay: 1 * time.Millisecond,
+				MaxDelay:     10 * time.Millisecond,
+				Multiplier:   1.2,
+				Retryable:    func(error) bool { return tt.retryable(int(calls.Add(1))) },
+			}
+
+			_, err := queue.Enqueue(ctx, action, &TestData{ID: "retryable"}, config)
+			require.NoError(t, err)
+
+			require.Eventually(t, func() bool {
+				queue.ProcessImmediately(ctx)
+				return queue.GetStats().FailedJobs == 1
+			}, DefaultTestTimeout, 10*time.Millisecond, "job should fail once the predicate refuses")
+
+			assert.Equal(t, tt.wantAttempts, action.GetExecuteCount(), "attempts made")
+			assert.Equal(t, tt.wantAttempts-1, queue.GetStats().RetryAttempts, "retries scheduled")
+		})
+	}
+}
+
 // TestRetryBackoff tests that the retry backoff mechanism works correctly
 func TestRetryBackoff(t *testing.T) {
 	// This test asserts counts and final stats only; the delays between
