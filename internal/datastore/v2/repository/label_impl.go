@@ -11,7 +11,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 )
 
 // labelRepository implements LabelRepository.
@@ -225,7 +224,7 @@ func (r *labelRepository) BatchGetOrCreate(ctx context.Context, scientificNames 
 
 	if err := datastore.RetryOnLock(ctx, "v2_batch_create_labels", func() error {
 		return r.db.WithContext(ctx).Table(r.tableName()).
-			Clauses(clause.OnConflict{DoNothing: true}).
+			Clauses(onConflictSkip(r.isMySQL, scientificNameColumn)).
 			CreateInBatches(newLabels, batchQuerySize).Error
 	}, r.metrics); err != nil {
 		return nil, fmt.Errorf("batch create labels: %w", err)

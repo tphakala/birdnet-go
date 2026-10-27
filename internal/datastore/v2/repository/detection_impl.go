@@ -1286,14 +1286,15 @@ func (r *detectionRepository) GetModelContributionsByDetectionIDs(ctx context.Co
 }
 
 // SavePredictionsBatch stores predictions for multiple detections efficiently.
-// Uses ON CONFLICT DO NOTHING for idempotent migration support.
+// Rows that repeat a stored or earlier (detection, label) pair are skipped on
+// every dialect, which keeps migration reruns idempotent.
 func (r *detectionRepository) SavePredictionsBatch(ctx context.Context, preds []*entities.DetectionPrediction) error {
 	if len(preds) == 0 {
 		return nil
 	}
 	return datastore.RetryOnLock(ctx, "v2_save_predictions_batch", func() error {
 		return r.db.WithContext(ctx).Table(r.predictionsTable()).
-			Clauses(clause.OnConflict{DoNothing: true}).
+			Clauses(onConflictSkip(r.isMySQL, detectionIDColumn)).
 			CreateInBatches(preds, defaultDBBatchSize).Error
 	}, r.metrics)
 }
@@ -1406,7 +1407,7 @@ func (r *detectionRepository) SaveReviewsBatch(ctx context.Context, reviews []*e
 	}
 	return datastore.RetryOnLock(ctx, "v2_save_reviews_batch", func() error {
 		return r.db.WithContext(ctx).Table(r.reviewsTable()).
-			Clauses(clause.OnConflict{DoNothing: true}).
+			Clauses(onConflictSkip(r.isMySQL, detectionIDColumn)).
 			CreateInBatches(reviews, defaultDBBatchSize).Error
 	}, r.metrics)
 }
@@ -1511,7 +1512,7 @@ func (r *detectionRepository) SaveCommentsBatch(ctx context.Context, comments []
 	}
 	return datastore.RetryOnLock(ctx, "v2_save_comments_batch", func() error {
 		return r.db.WithContext(ctx).Table(r.commentsTable()).
-			Clauses(clause.OnConflict{DoNothing: true}).
+			Clauses(onConflictSkip(r.isMySQL, detectionIDColumn)).
 			CreateInBatches(comments, defaultDBBatchSize).Error
 	}, r.metrics)
 }
@@ -1613,7 +1614,7 @@ func (r *detectionRepository) SaveLocksBatch(ctx context.Context, locks []*entit
 	}
 	return datastore.RetryOnLock(ctx, "v2_save_locks_batch", func() error {
 		return r.db.WithContext(ctx).Table(r.locksTable()).
-			Clauses(clause.OnConflict{DoNothing: true}).
+			Clauses(onConflictSkip(r.isMySQL, detectionIDColumn)).
 			CreateInBatches(locks, defaultDBBatchSize).Error
 	}, r.metrics)
 }
