@@ -31,6 +31,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/suncalc" // Import suncalc
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	gormlogger "gorm.io/gorm/logger"
@@ -2310,7 +2311,7 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 
 	// --- Dynamic TimeOfDay Filter ---
 	if (filters.TimeOfDay == TimeOfDayDay || filters.TimeOfDay == TimeOfDayNight || filters.TimeOfDay == TimeOfDaySunrise || filters.TimeOfDay == TimeOfDaySunset) && ds.SunCalc != nil && ds.DB != nil { // Include sunrise/sunset
-		dateConditions, err := buildTimeOfDayConditions(filters, ds.SunCalc, ds.DB)
+		dateConditions, err := buildTimeOfDayConditions(filters, ds.SunCalc, ds.DB, time.Local)
 		switch {
 		case err != nil:
 			GetLogger().Warn("Failed to build TimeOfDay conditions, skipping filter",
@@ -2342,8 +2343,16 @@ func applyCommonFilters(query *gorm.DB, filters *SearchFilters, ds *DataStore) *
 	return query
 }
 
-// buildTimeOfDayConditions generates the WHERE conditions for day/night/sunrise/sunset filtering
-func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *gorm.DB) ([]*gorm.DB, error) {
+// maxTimeOfDayFilterSpanDays caps the days between the first and last date of a
+// TimeOfDay filter range. The filter adds one OR condition per date and SQLite rejects
+// an expression tree deeper than 1000, so the range must stay bounded. A default
+// one-year range that spans Feb 29 is 366 days and is rejected by this cap; that is
+// pre-existing behavior left for the maintainer to decide.
+const maxTimeOfDayFilterSpanDays = 365
+
+// buildTimeOfDayConditions generates the WHERE conditions for day/night/sunrise/sunset filtering.
+// loc is the zone the notes' wall-clock dates and times are in.
+func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *gorm.DB, loc *time.Location) ([]*gorm.DB, error) {
 	startDateStr := filters.DateStart
 	endDateStr := filters.DateEnd
 
@@ -2380,10 +2389,10 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 		}
 	}
 
-	// Parse dates in local timezone to match how notes store their times.
-	// Using time.Parse would return UTC, causing a ~1 second discrepancy in
-	// sunrise/sunset calculations vs the actual note timestamps.
-	startDate, err := time.ParseInLocation(time.DateOnly, startDateStr, time.Local)
+	// Read the range as calendar dates. Counting or stepping through instants is wrong
+	// across a DST change: a day is 23 or 25 hours long, and a skipped local midnight
+	// parses to an instant on a neighboring date.
+	startDate, err := wallclock.ParseDate(startDateStr)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -2392,7 +2401,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 			Context("start_date", startDateStr).
 			Build()
 	}
-	endDate, err := time.ParseInLocation(time.DateOnly, endDateStr, time.Local)
+	endDate, err := wallclock.ParseDate(endDateStr)
 	if err != nil {
 		return nil, errors.New(err).
 			Component("datastore").
@@ -2402,7 +2411,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 			Build()
 	}
 
-	if endDate.Before(startDate) {
+	if endDate.Compare(startDate) < 0 {
 		return nil, errors.Newf("end date cannot be before start date").
 			Component("datastore").
 			Category(errors.CategoryValidation).
@@ -2412,9 +2421,10 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 			Build()
 	}
 
-	// Limit date range to avoid excessively long queries (increased to 365 days)
-	if endDate.Sub(startDate).Hours() > 365*24 {
-		return nil, errors.Newf("date range for TimeOfDay filter cannot exceed 365 days").
+	// Limit date range to avoid excessively long queries
+	spanDays := wallclock.DaysBetween(startDate, endDate)
+	if spanDays > maxTimeOfDayFilterSpanDays {
+		return nil, errors.Newf("date range for TimeOfDay filter cannot exceed %d days", maxTimeOfDayFilterSpanDays).
 			Component("datastore").
 			Category(errors.CategoryValidation).
 			Context("operation", "build_time_of_day_conditions").
@@ -2424,7 +2434,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	}
 
 	// Pre-allocate conditions slice based on date range
-	dayCount := int(endDate.Sub(startDate).Hours()/24) + 1 //nolint:gocritic // legacy store: elapsed hours between local midnights, used only as a capacity hint and a log value
+	dayCount := spanDays + 1
 	conditions := make([]*gorm.DB, 0, dayCount)
 	window := suncalc.SunEventWindow // sunrise/sunset transition half-width (single source of truth)
 
@@ -2435,9 +2445,13 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	// week day adds no meaningful cost while removing the day-to-day drift that let
 	// the filter diverge from the per-row label near the solstices (where sunrise
 	// and sunset shift enough within a week to flip a window across midnight).
-	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
-		dateStr := d.Format(time.DateOnly)
-		sunTimes, err := sc.GetSunEventTimes(d)
+	for date := range wallclock.Dates(startDate, endDate) {
+		dateStr := date.String()
+		// Local midnight of the date, the instant the filter has always used: parsing in
+		// UTC would shift sunrise/sunset by about a second against the note timestamps.
+		// DayBounds resolves a skipped midnight onto its own date.
+		dayStart, _ := wallclock.DayBounds(date, loc)
+		sunTimes, err := sc.GetSunEventTimes(dayStart)
 		if err != nil {
 			GetLogger().Warn("Could not get sun times for date, skipping for TimeOfDay filter",
 				logger.String("date", dateStr),
@@ -2467,7 +2481,7 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	// Log summary of how many conditions were created
 	GetLogger().Info("Created date-specific conditions for TimeOfDay filter",
 		logger.Int("condition_count", len(conditions)),
-		logger.Int("day_range", int(endDate.Sub(startDate).Hours()/24)+1)) //nolint:gocritic // legacy store: elapsed hours between local midnights, used only as a capacity hint and a log value
+		logger.Int("day_range", dayCount))
 
 	return conditions, nil
 }

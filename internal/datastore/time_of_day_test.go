@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/testutil"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // TestNightFilterExcludesSunriseSunsetWindows verifies that the "Night" time-of-day
@@ -325,4 +327,87 @@ func TestClassifyTimeOfDayMatchesDatastoreConstants(t *testing.T) {
 	assert.Equal(t, TimeOfDaySunset, suncalc.ClassifyTimeOfDay(base.Add(21*time.Hour), sun))
 	assert.Equal(t, TimeOfDayDay, suncalc.ClassifyTimeOfDay(base.Add(12*time.Hour), sun))
 	assert.Equal(t, TimeOfDayNight, suncalc.ClassifyTimeOfDay(base.Add(2*time.Hour), sun))
+}
+
+// timeOfDayDecoyOffset separates each decoy note from its date's sunrise note by
+// more than the sunrise window, so a decoy matches only when the filter is dropped.
+const timeOfDayDecoyOffset = 3 * time.Hour
+
+// timeOfDayFixtureNoonHour is the hour used to ask the sun calculator about a date.
+const timeOfDayFixtureNoonHour = 12
+
+// TestBuildTimeOfDayConditions_CoversEveryCalendarDate checks that a sunrise filter over a
+// date range selects exactly the notes of every calendar date in the range, once, across
+// DST changes and skipped local midnights. The zone is passed in, so the process zone is
+// never modified.
+func TestBuildTimeOfDayConditions_CoversEveryCalendarDate(t *testing.T) {
+	tests := []struct {
+		name      string
+		zone      string
+		lat, lon  float64
+		dateStart string
+		dateEnd   string
+		wantDates int
+	}{
+		{"fall-back year", "Europe/Helsinki", 60.17, 24.94, "2025-10-26", "2026-10-26", 366},
+		{"half-hour shift year", "Australia/Lord_Howe", -31.55, 159.08, "2025-04-06", "2026-04-06", 366},
+		{"spring-forward month", "Europe/Helsinki", 60.17, 24.94, "2026-03-01", "2026-04-01", 32},
+		{"skipped midnight year", "America/Santiago", -33.45, -70.67, "2025-09-07", "2026-09-07", 366},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			zone := testutil.ToolchainZones(t)[tt.zone]
+			require.NotNil(t, zone)
+			sc := suncalc.NewSunCalc(tt.lat, tt.lon)
+			require.Equal(t, tt.zone, sc.LocationName())
+
+			start, err := wallclock.ParseDate(tt.dateStart)
+			require.NoError(t, err)
+			end, err := wallclock.ParseDate(tt.dateEnd)
+			require.NoError(t, err)
+
+			ds := setupTestDB(t)
+			var want []string
+			for d := range wallclock.Dates(start.AddDays(-1), end.AddDays(1)) {
+				sunrise, err := sc.GetSunEventTimes(wallclock.At(d, timeOfDayFixtureNoonHour, 0, 0, zone))
+				require.NoError(t, err)
+				decoy := sunrise.Sunrise.Add(timeOfDayDecoyOffset)
+				require.NoError(t, ds.DB.Create(&[]Note{
+					{Date: d.String(), Time: sunrise.Sunrise.Format(time.TimeOnly), ScientificName: "Parus major"},
+					{Date: d.String(), Time: decoy.Format(time.TimeOnly), ScientificName: "Parus major"},
+				}).Error)
+				if d.Compare(start) >= 0 && d.Compare(end) <= 0 {
+					want = append(want, d.String())
+				}
+			}
+			require.Len(t, want, tt.wantDates)
+
+			conds, err := buildTimeOfDayConditions(&SearchFilters{
+				TimeOfDay: TimeOfDaySunrise, DateStart: tt.dateStart, DateEnd: tt.dateEnd,
+			}, sc, ds.DB, zone)
+			require.NoError(t, err)
+			require.NotEmpty(t, conds)
+
+			combined := ds.DB.Where(conds[0])
+			for _, c := range conds[1:] {
+				combined = combined.Or(c)
+			}
+			var got []string
+			require.NoError(t, ds.DB.Model(&Note{}).Where(combined).Order("date").Pluck("date", &got).Error)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+// TestBuildTimeOfDayConditions_RejectsRangeOverCap checks that a range one day longer
+// than the cap is refused before the sun calculator or the database is used.
+func TestBuildTimeOfDayConditions_RejectsRangeOverCap(t *testing.T) {
+	start, err := wallclock.ParseDate("2027-03-01")
+	require.NoError(t, err)
+	end := start.AddDays(maxTimeOfDayFilterSpanDays + 1)
+
+	_, err = buildTimeOfDayConditions(&SearchFilters{
+		TimeOfDay: TimeOfDaySunrise, DateStart: start.String(), DateEnd: end.String(),
+	}, nil, nil, time.UTC)
+	require.Error(t, err)
 }
