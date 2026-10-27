@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -8,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
 // TestSetupFlags_KeepsNormalizedLocale guards the ordering bug that made every
@@ -39,4 +42,62 @@ func TestSetupFlags_KeepsNormalizedLocale(t *testing.T) {
 	// An explicit override still wins over the validated value.
 	require.NoError(t, rootCmd.PersistentFlags().Parse([]string{"--locale", "de"}))
 	assert.Equal(t, "de", settings.BirdNET.Locale, "--locale must still override")
+}
+
+// TestSilenceUsageOnRunErrors pins where cobra prints usage: errors found before
+// RunE (unknown flag, missing required flag) keep the usage text, an error that
+// RunE itself returns does not. Cobra still prints the error line in every case.
+func TestSilenceUsageOnRunErrors(t *testing.T) {
+	t.Parallel()
+
+	errRuntime := errors.NewStd("runtime failure")
+
+	newRoot := func() *cobra.Command {
+		root := &cobra.Command{Use: "app"}
+		group := &cobra.Command{Use: "group"}
+		group.AddCommand(&cobra.Command{
+			Use:  "fail",
+			RunE: func(*cobra.Command, []string) error { return errRuntime },
+		})
+		needsFlag := &cobra.Command{
+			Use:  "needs-flag",
+			RunE: func(*cobra.Command, []string) error { return nil },
+		}
+		needsFlag.Flags().String("src", "", "source")
+		require.NoError(t, needsFlag.MarkFlagRequired("src"))
+		root.AddCommand(group, needsFlag)
+		silenceUsageOnRunErrors(root)
+		return root
+	}
+
+	tests := []struct {
+		name      string
+		args      []string
+		wantErr   error
+		wantUsage bool
+	}{
+		{name: "nested runtime error prints no usage", args: []string{"group", "fail"}, wantErr: errRuntime},
+		{name: "unknown flag prints usage", args: []string{"group", "fail", "--nosuchflag"}, wantUsage: true},
+		{name: "missing required flag prints usage", args: []string{"needs-flag"}, wantUsage: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			root := newRoot()
+			var out bytes.Buffer
+			root.SetOut(&out)
+			root.SetErr(&out)
+			root.SetArgs(tt.args)
+
+			err := root.Execute()
+			require.Error(t, err)
+			if tt.wantErr != nil {
+				require.ErrorIs(t, err, tt.wantErr)
+			}
+			assert.Equal(t, tt.wantUsage, strings.Contains(out.String(), "Usage:"), "output: %s", out.String())
+			assert.Contains(t, out.String(), "Error:", "cobra must still print the error line")
+		})
+	}
 }

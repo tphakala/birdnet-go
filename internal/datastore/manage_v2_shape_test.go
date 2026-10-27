@@ -1,6 +1,8 @@
 package datastore
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -102,9 +104,15 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 
 		assertRefused := func(t *testing.T) {
 			t.Helper()
-			err := performAutoMigration(db, false, "SQLite", "")
+			var err error
+			out := logtest.Capture(t, func() {
+				err = performAutoMigration(db, false, "SQLite", "")
+			})
 			require.ErrorIs(t, err, errV2ShapedTablesHoldRows)
 			assert.Contains(t, err.Error(), "notification_histories=2, dynamic_thresholds=0, threshold_events=0")
+			assert.Contains(t, err.Error(), v2ShapedTablesGuideURL, "the error must point at the recovery guide")
+			assert.Contains(t, out, "recovery_hint=", "the log line must carry the recovery hint")
+			assert.Contains(t, out, v2ShapedTablesGuideURL, "the recovery hint must carry the guide URL")
 			for _, table := range []string{"notification_histories", "dynamic_thresholds", "threshold_events"} {
 				assert.True(t, columnExists(t, db, table, "label_id"), "%s must be left untouched", table)
 			}
@@ -331,4 +339,43 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 		assert.True(t, columnExists(t, db, "dynamic_thresholds", "label_id"))
 		assert.EqualValues(t, 1, countRows(t, db, "dynamic_thresholds"))
 	})
+}
+
+// TestV2ShapedTablesGuideURL_PointsAtWikiHeading keeps the link in the refusal
+// message and log in step with the wiki: rewording the section heading would
+// otherwise leave users on a page that does not scroll to the explanation.
+func TestV2ShapedTablesGuideURL_PointsAtWikiHeading(t *testing.T) {
+	t.Parallel()
+
+	_, anchor, found := strings.Cut(v2ShapedTablesGuideURL, "#")
+	require.True(t, found, "the guide URL must carry a section anchor")
+	require.NotEmpty(t, anchor)
+
+	wiki, err := os.ReadFile(filepath.Join("..", "..", "doc", "wiki", "database-doctor.md"))
+	require.NoError(t, err)
+
+	var slugs []string
+	for line := range strings.SplitSeq(string(wiki), "\n") {
+		heading, isHeading := strings.CutPrefix(line, "## ")
+		if !isHeading {
+			continue
+		}
+		slugs = append(slugs, headingSlug(heading))
+	}
+	assert.Contains(t, slugs, anchor, "no second-level wiki heading produces the anchor of v2ShapedTablesGuideURL")
+}
+
+// headingSlug mirrors how GitHub derives a heading anchor: lower case, spaces
+// to hyphens, every other character outside [a-z0-9-] removed.
+func headingSlug(heading string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(heading) {
+		switch {
+		case r == ' ':
+			b.WriteByte('-')
+		case r == '-', r >= 'a' && r <= 'z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
