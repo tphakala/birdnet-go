@@ -918,7 +918,7 @@ func (r *detectionRepository) GetBatchHourlyOccurrences(ctx context.Context, lab
 	}
 
 	// Bucket by wall-clock hour in the configured timezone (offset-adjusted); exclude false positives.
-	hourExpr := wallClockHourSQL("d.detected_at", segmentOffsetSQL(seg), r.isMySQL, mysqlHourDivFloor)
+	hourExpr := wallClockHourSQL("d.detected_at", segmentOffsetSQL(seg), r.isMySQL)
 	detTable := r.tableName()
 	revTable := r.reviewsTable()
 
@@ -1706,7 +1706,7 @@ func (r *detectionRepository) GetHourlyDistribution(ctx context.Context, seg wal
 
 	// Bucket by wall-clock hour at the segment's offset via wallClockHourSQL.
 	// Exclude detections marked as false_positive
-	hourExpr := wallClockHourSQL("d.detected_at", segmentOffsetSQL(seg), r.isMySQL, mysqlHourDivFloor)
+	hourExpr := wallClockHourSQL("d.detected_at", segmentOffsetSQL(seg), r.isMySQL)
 	query := r.buildAnalyticsBaseQuery(ctx, seg.Start, seg.End, labelIDs, modelID).
 		Select(fmt.Sprintf("%s as hour, COUNT(*) as count", hourExpr)).
 		Group("hour").

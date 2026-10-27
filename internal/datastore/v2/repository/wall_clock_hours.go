@@ -10,79 +10,70 @@ import (
 )
 
 const (
-	// wallClockSecondsPerHour and wallClockHoursPerDay turn a shifted Unix timestamp into an
-	// hour of day.
+	// wallClockSecondsPerHour and wallClockHoursPerDay turn a second of the day into an hour of
+	// day.
 	wallClockSecondsPerHour = 3600
 	wallClockHoursPerDay    = 24
 
-	// wallClockSecondsPerDay turns a shifted Unix timestamp into a day count since the epoch,
-	// which gives the calendar date and the calendar year.
+	// wallClockSecondsPerDay is the modulus that reduces a shifted Unix timestamp to its second
+	// of the day.
 	wallClockSecondsPerDay = 86400
-)
 
-// mysqlHourDivision selects how the MySQL hour expression divides the shifted timestamp by
-// the seconds in an hour. Both forms give the same hour while column + offset is not negative.
-// Below that, the truncating form returns 0 for the last hour before the shifted epoch and the
-// floor form returns -1; SQLite truncates like the first. The two are kept apart so that moving
-// the SQL into one builder moves no row between buckets. They are meant to be replaced by one
-// floor-modulo form, which removes this choice.
-type mysqlHourDivision int
-
-const (
-	// mysqlHourDivTruncate writes the hour as ((x DIV 3600) % 24), the form of the hour filter.
-	mysqlHourDivTruncate mysqlHourDivision = iota
-	// mysqlHourDivFloor writes the hour as FLOOR(x / 3600) % 24, the form of the per-segment
-	// analytics queries.
-	mysqlHourDivFloor
+	// sqlUnixEpochDate is the literal date the MySQL date and year expressions add seconds to.
+	sqlUnixEpochDate = "1970-01-01"
+	// mysqlDateOnlyFormat is the DATE_FORMAT pattern that writes a date as YYYY-MM-DD.
+	mysqlDateOnlyFormat = "%Y-%m-%d"
 )
 
 // wallClockDateSQL returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD) of
 // column, a Unix timestamp, shifted by offsetSQL, a SQL expression for the UTC offset in
-// seconds (an integer literal or the CASE of zoneOffsetSQL). The result does not depend on the
-// database session or OS-local time zone. It is exact while column + offset is not negative.
+// seconds (an integer literal or the CASE of zoneOffsetSQL). The result is exact for every
+// value of column + offset, including those before 1970, and does not depend on the database
+// session or OS-local time zone.
 //
 // SQLite: date(column + offset, 'unixepoch')
-// MySQL:  DATE_ADD('1970-01-01', INTERVAL (column + offset) DIV 86400 DAY)
+// MySQL:  DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL (column + offset) SECOND), '%Y-%m-%d')
 //
-// The MySQL form adds an integer day count to a literal date, because DATE(FROM_UNIXTIME(...))
-// would apply the session time zone on top of the offset. Integer DIV avoids floating-point
-// rounding at exact day boundaries.
+// The MySQL form adds the seconds to a literal date, which applies no session time zone
+// (DATE(FROM_UNIXTIME(...)) would) and takes floor semantics from the server's calendar.
+// DATE_FORMAT keeps the result a string: connections use parseTime=True, which would turn a
+// DATE into a time.Time and change every date string the repositories return.
 func wallClockDateSQL(column, offsetSQL string, isMySQL bool) string {
 	if isMySQL {
-		return fmt.Sprintf("DATE_ADD('1970-01-01', INTERVAL (%s + %s) DIV %d DAY)", column, offsetSQL, wallClockSecondsPerDay)
+		return fmt.Sprintf("DATE_FORMAT(DATE_ADD('%s', INTERVAL (%s + %s) SECOND), '%s')", sqlUnixEpochDate, column, offsetSQL, mysqlDateOnlyFormat)
 	}
 	return fmt.Sprintf("date(%s + %s, 'unixepoch')", column, offsetSQL)
 }
 
 // wallClockHourSQL returns a SQL expression for the wall-clock hour (0-23) of column, a Unix
 // timestamp, shifted by offsetSQL, a SQL expression for the UTC offset in seconds. The result
-// is in 0-23 while column + offset is not negative; div only matters for MySQL below that, see
-// mysqlHourDivision.
+// is in 0-23 for every value of column + offset, including those before 1970 (floor semantics,
+// like Go's time package). It uses only integer arithmetic, so it depends on no session
+// setting. It has no outer parentheses and is safe as the left side of a comparison or IN.
 //
-// SQLite: CAST((column + offset) / 3600 AS INTEGER) % 24
-// MySQL:  ((column + offset) DIV 3600) % 24  or  FLOOR((column + offset) / 3600) % 24
+// SQLite: ((((column + offset) % 86400) + 86400) % 86400) / 3600
+// MySQL:  ((((column + offset) % 86400) + 86400) % 86400) DIV 3600
 //
-// The truncating MySQL form uses DIV, which is integer division whatever
-// div_precision_increment is set to.
-func wallClockHourSQL(column, offsetSQL string, isMySQL bool, div mysqlHourDivision) string {
-	if !isMySQL {
-		return fmt.Sprintf("CAST((%s + %s) / %d AS INTEGER) %% %d", column, offsetSQL, wallClockSecondsPerHour, wallClockHoursPerDay)
+// The second of the day is reduced first: % takes the sign of the dividend, so adding a day and
+// reducing again makes it non-negative before the division.
+func wallClockHourSQL(column, offsetSQL string, isMySQL bool) string {
+	divide := "/"
+	if isMySQL {
+		divide = "DIV"
 	}
-	if div == mysqlHourDivFloor {
-		return fmt.Sprintf("FLOOR((%s + %s) / %d) %% %d", column, offsetSQL, wallClockSecondsPerHour, wallClockHoursPerDay)
-	}
-	return fmt.Sprintf("((%s + %s) DIV %d) %% %d", column, offsetSQL, wallClockSecondsPerHour, wallClockHoursPerDay)
+	return fmt.Sprintf("((((%s + %s) %% %d) + %d) %% %d) %s %d",
+		column, offsetSQL, wallClockSecondsPerDay, wallClockSecondsPerDay, wallClockSecondsPerDay, divide, wallClockSecondsPerHour)
 }
 
 // wallClockYearSQL returns a SQL expression for the wall-clock calendar year of column, a Unix
 // timestamp, shifted by offsetSQL, a SQL expression for the UTC offset in seconds. It is exact
-// while column + offset is not negative.
+// for every value of column + offset, including those before 1970.
 //
 // SQLite: CAST(strftime('%Y', column + offset, 'unixepoch') AS INTEGER)
-// MySQL:  YEAR(DATE_ADD('1970-01-01', INTERVAL (column + offset) DIV 86400 DAY))
+// MySQL:  YEAR(DATE_ADD('1970-01-01', INTERVAL (column + offset) SECOND))
 func wallClockYearSQL(column, offsetSQL string, isMySQL bool) string {
 	if isMySQL {
-		return fmt.Sprintf("YEAR(DATE_ADD('1970-01-01', INTERVAL (%s + %s) DIV %d DAY))", column, offsetSQL, wallClockSecondsPerDay)
+		return fmt.Sprintf("YEAR(DATE_ADD('%s', INTERVAL (%s + %s) SECOND))", sqlUnixEpochDate, column, offsetSQL)
 	}
 	return fmt.Sprintf("CAST(strftime('%%Y', %s + %s, 'unixepoch') AS INTEGER)", column, offsetSQL)
 }
@@ -153,9 +144,9 @@ func WallClockDateExpr(column string, loc *time.Location, from, to int64, isMySQ
 // timestamp, in loc (nil means UTC). Each row is shifted by the UTC offset in effect at its own
 // instant: the offset changes of loc inside [from, to) become a CASE over the column, see
 // zoneOffsetSQL. Rows outside [from, to) are not excluded here; the range predicates do that.
-// The SQL forms are those of wallClockHourSQL, with the truncating MySQL division.
+// The SQL forms are those of wallClockHourSQL.
 func (r *detectionRepository) wallClockHourExpr(column string, loc *time.Location, from, to int64) string {
-	return wallClockHourSQL(column, spanOffsetSQL(column, loc, from, to), r.isMySQL, mysqlHourDivTruncate)
+	return wallClockHourSQL(column, spanOffsetSQL(column, loc, from, to), r.isMySQL)
 }
 
 // zoneOffsetSQL returns a SQL expression for the UTC offset in seconds that applies to column,
