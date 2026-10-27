@@ -42,8 +42,8 @@ func TestGetDetections_CommonNameSubstringUnion(t *testing.T) {
 		RunAndReturn(func(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
 			captured = filters
 			return []datastore.Note{
-				{ID: 1, ScientificName: "Tyto alba", CommonName: "Barn Owl"},
-				{ID: 2, ScientificName: "Tyto furcata", CommonName: "American Barn Owl"},
+				{ID: 1, Date: "2025-03-07", Time: "08:15:00", ScientificName: "Tyto alba", CommonName: "Barn Owl"},
+				{ID: 2, Date: "2025-03-07", Time: "08:16:00", ScientificName: "Tyto furcata", CommonName: "American Barn Owl"},
 			}, 2, nil
 		}).Once()
 
