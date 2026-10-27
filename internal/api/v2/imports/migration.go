@@ -742,7 +742,7 @@ func (c *Handler) CancelMigration(ctx echo.Context) error {
 // Rolls back a completed migration to use the legacy database. A running worker
 // is abandoned (no final drain) and waited for before the state is reset; if it
 // does not exit within migrationWorkerStopTimeout the request fails with 409 and
-// the state is left unchanged.
+// the state is left unchanged. The state reset also clears the dirty-ID set.
 func (c *Handler) RollbackMigration(ctx echo.Context) error {
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()

@@ -10,6 +10,7 @@ package migration_test
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -1018,4 +1019,55 @@ func TestMigration_TailSyncResumesFromCompletionWatermark(t *testing.T) {
 	dirty, err := ctx.StateManager.GetDirtyIDCount()
 	require.NoError(t, err)
 	assert.Equal(t, int64(0), dirty)
+}
+
+// assertRerunAfterRollbackPassesValidation completes a migration, leaves a
+// tail sync marker, abandons the worker, rolls back, leaves a marker in idle
+// like an older version did, and then runs the migration again. Both resets
+// must clear the markers, or validation of the second run fails on them.
+func assertRerunAfterRollbackPassesValidation(t *testing.T, ctx *testutil.TestContext, timeout time.Duration) {
+	t.Helper()
+
+	const total = 10
+	require.NoError(t, ctx.Seeder.SeedDetections(testutil.GenerateDetections(total)))
+
+	ctx.StartMigration(t, total)
+	ctx.WaitForCompletion(t, timeout)
+
+	// A marker like the ones tail sync leaves on a row already in v2.
+	const tailSyncMarkerID = uint(4)
+	require.NoError(t, ctx.StateManager.AddDirtyID(tailSyncMarkerID))
+
+	require.NoError(t, ctx.Worker.Abandon(t.Context()))
+	require.NoError(t, ctx.StateManager.Rollback())
+
+	state, err := ctx.StateManager.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State)
+	dirty, err := ctx.StateManager.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), dirty, "rollback must clear the dirty IDs")
+
+	// A marker an older version left behind in idle.
+	const idleMarkerID = uint(6)
+	require.NoError(t, ctx.StateManager.AddDirtyID(idleMarkerID))
+
+	ctx.StartMigration(t, total)
+	ctx.WaitForCompletion(t, timeout)
+
+	dirty, err = ctx.StateManager.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), dirty, "the second run must not fail validation on stale dirty IDs")
+	assert.Equal(t, int64(total), ctx.GetV2DetectionCount(t))
+}
+
+// TestMigration_RerunAfterRollbackPassesValidation pins that a migration run
+// after a rollback is not failed by dirty IDs from the earlier run.
+func TestMigration_RerunAfterRollbackPassesValidation(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		ctx := testutil.SetupIntegrationTest(t)
+		assertRerunAfterRollbackPassesValidation(t, ctx, 30*time.Second)
+	})
 }
