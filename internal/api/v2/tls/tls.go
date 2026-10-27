@@ -418,7 +418,7 @@ func ParseCertificateInfo(certPath string) (*TLSCertificateInfo, error) {
 		sans = append(sans, ip.String())
 	}
 
-	daysUntilExpiry := int(math.Floor(time.Until(cert.NotAfter).Hours() / 24))
+	daysUntilExpiry := int(math.Floor(time.Until(cert.NotAfter).Hours() / 24)) //nolint:gocritic // time until expiry is an elapsed duration, not a calendar count
 
 	return &TLSCertificateInfo{
 		Installed:       true,

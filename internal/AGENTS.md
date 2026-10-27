@@ -117,7 +117,16 @@ Rules:
   `24 * time.Hour` to move to the next day.** `Truncate` works on UTC time and is
   wrong for fractional offsets (+05:30, +05:45, -03:30); a day is not 24 hours
   across a DST change. `time.Time.Sub` saturates at about 292 years, so count
-  days with `DaysBetween` or `CalendarDaysBetween`.
+  days with `DaysBetween` or `CalendarDaysBetween`. The `WallClockArithmetic`
+  rule in `rules/wallclock.go` reports `Truncate` and `Round` to an hour or a
+  day, `Hours() / 24`, `d / (24 * time.Hour)` on a `time.Duration`, and adding
+  `24 * time.Hour` multiples to a `time.Time` (non-test code outside
+  `internal/wallclock` and the `testutil` packages). It does not see a duration
+  held in a variable, multi-day constants other than 24, an embedded struct,
+  a method value or a renamed `time` import, so a clean lint run is not proof.
+  Suppress a hit with `//nolint:gocritic // <specific reason>` only where the
+  arithmetic is an absolute hour grid or an elapsed duration; a known wrong hit
+  that is tracked elsewhere may be annotated only with a reason that says so.
 - **Bucket and window agree** (a row's local hour or date bucket is the window
   that contains its instant) whenever every backward shift repeats a wall-clock
   interval that lies inside one hour (one date). That holds for 1 hour shifts at
