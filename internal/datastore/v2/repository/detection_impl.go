@@ -574,22 +574,6 @@ func (r *detectionRepository) GetByModel(ctx context.Context, modelID uint, limi
 	return dets, total, err
 }
 
-// GetByDateRange retrieves detections within a Unix timestamp range.
-func (r *detectionRepository) GetByDateRange(ctx context.Context, start, end int64, limit, offset int) ([]*entities.Detection, int64, error) {
-	var dets []*entities.Detection
-	var total int64
-
-	query := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("detected_at >= ? AND detected_at <= ?", start, end)
-
-	if err := query.Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	err := query.Order("detected_at DESC").Limit(limit).Offset(offset).Find(&dets).Error
-	return dets, total, err
-}
-
 // GetByAudioSource retrieves detections for a specific audio source.
 func (r *detectionRepository) GetByAudioSource(ctx context.Context, sourceID uint, limit, offset int) ([]*entities.Detection, int64, error) {
 	var dets []*entities.Detection
@@ -830,15 +814,6 @@ func (r *detectionRepository) CountByModel(ctx context.Context, modelID uint) (i
 	var count int64
 	err := r.db.WithContext(ctx).Table(r.tableName()).
 		Where("model_id = ?", modelID).
-		Count(&count).Error
-	return count, err
-}
-
-// CountByDateRange returns the count of detections in a Unix timestamp range.
-func (r *detectionRepository) CountByDateRange(ctx context.Context, start, end int64) (int64, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("detected_at >= ? AND detected_at <= ?", start, end).
 		Count(&count).Error
 	return count, err
 }

@@ -77,10 +77,6 @@ type DetectionRepository interface {
 	// Returns results, total count, and any error.
 	GetByModel(ctx context.Context, modelID uint, limit, offset int) ([]*entities.Detection, int64, error)
 
-	// GetByDateRange retrieves detections within a Unix timestamp range.
-	// Returns results, total count, and any error.
-	GetByDateRange(ctx context.Context, start, end int64, limit, offset int) ([]*entities.Detection, int64, error)
-
 	// GetByAudioSource retrieves detections for a specific audio source.
 	// Returns results, total count, and any error.
 	GetByAudioSource(ctx context.Context, sourceID uint, limit, offset int) ([]*entities.Detection, int64, error)
@@ -106,9 +102,6 @@ type DetectionRepository interface {
 
 	// CountByModel returns the count of detections for a specific model.
 	CountByModel(ctx context.Context, modelID uint) (int64, error)
-
-	// CountByDateRange returns the count of detections in a Unix timestamp range.
-	CountByDateRange(ctx context.Context, start, end int64) (int64, error)
 
 	// === Aggregations ===
 
