@@ -378,7 +378,7 @@ relying on the retry.
   the repository so the output cannot be committed.
 - Test containers (MySQL or MariaDB, Mosquitto, MediaMTX, ntfy, Pebble) live in
   `internal/testutil/containers`. `MYSQL_TEST_IMAGE` (`mysql:<tag>` or
-  `mariadb:<tag>`, default `mysql:8.0`) selects the server for the MySQL-backed
+  `mariadb:<tag>`, default `mysql:8.4`) selects the server for the MySQL-backed
   container suites and overrides any tag a test sets; it does not affect the
   external-server tests gated by `MYSQL_TEST_HOST` and `MYSQL_TEST_PASSWORD`.
   When `CI` is set the variable is required, and the suites fail at startup
@@ -387,7 +387,7 @@ relying on the retry.
   point `MYSQL_TEST_DATABASE` at a dedicated database whose name ends in `_test`.
   Pass `-count=1` when switching servers: the suites read it in `TestMain`, and
   `go test` can replay a result cached for another server.
-  In CI the `database-tests` job runs these suites on MySQL 8.0, MariaDB 10.11
+  In CI the `database-tests` job runs these suites on MySQL 8.4, MariaDB 10.11
   and MariaDB 11.8.
 
 ### Which CI jobs a pull request runs
