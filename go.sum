@@ -233,8 +233,8 @@ github.com/sirupsen/logrus v1.10.2 h1:G2SED73/qrAu6YwbdxOD6peLkCBI3z7L+ykJFTXJBB
 github.com/sirupsen/logrus v1.10.2/go.mod h1:SLEg8TqYulVKKfIGHldVp2K2aYz2DKSVBq4g/H5bR7Q=
 github.com/sj14/astral v0.2.3 h1:SpNESGR6TqpcuMRmjJcYV+ymdghKd/f1Q+i3/FfoyR4=
 github.com/sj14/astral v0.2.3/go.mod h1:Kcm3NS9p3FkCunmDgkMQ7IXgSy+9IiKsoZIt0CQOP5A=
-github.com/smallnest/ringbuffer v0.1.1 h1:KL2iILLdDCr9nWxYrNcsQ7Px7EVnoNBDJ0r/M/hEksA=
-github.com/smallnest/ringbuffer v0.1.1/go.mod h1:tAG61zBM1DYRaGIPloumExGvScf08oHuo0kFoOqdbT0=
+github.com/smallnest/ringbuffer v0.2.0 h1:oBEkMMEGA9xi4AwAwt4srPlvyrbcuhMUDhnUQYwvfQE=
+github.com/smallnest/ringbuffer v0.2.0/go.mod h1:bJQOhvCZe/d27P1bYJf24+ie4q7Fhv1F2fy+NuWT6Pk=
 github.com/spf13/afero v1.15.0 h1:b/YBCLWAJdFWJTN9cLhiXXcD7mzKn9Dm86dNnfyQw1I=
 github.com/spf13/afero v1.15.0/go.mod h1:NC2ByUVxtQs4b3sIUphxK0NioZnmxgyCrfzeuq8lxMg=
 github.com/spf13/cast v1.10.0 h1:h2x0u2shc1QuLHfxi+cTJvs30+ZAHOGRic8uyGTDWxY=
