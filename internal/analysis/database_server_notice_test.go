@@ -29,6 +29,20 @@ func serverReportFor(raw, schemaCharset string) databaseServerReport {
 	}
 }
 
+// endingSoonReport is MariaDB 10.11 assessed 30 days before its end of life.
+func endingSoonReport() databaseServerReport {
+	r := serverReportFor("10.11.19-MariaDB", "utf8mb4")
+	r.assessment = dbserver.AssessRaw("10.11.19-MariaDB", time.Date(2028, time.January, 17, 0, 0, 0, 0, time.UTC))
+	return r
+}
+
+// mixedCharsetReport has a utf8mb4 schema default and one latin1 table.
+func mixedCharsetReport() databaseServerReport {
+	r := serverReportFor("11.4.13-MariaDB", "utf8mb4")
+	r.charset.Tables = []dbserver.TableCharsets{{Name: "legacy", Charsets: []string{"latin1"}}}
+	return r
+}
+
 // tagCapture records the values passed to setTags.
 type tagCapture struct {
 	mu   sync.Mutex
@@ -62,6 +76,9 @@ func TestDatabaseServerNotice_RaisesOnlyForAttention(t *testing.T) {
 		{"end of life", serverReportFor("8.0.46", "utf8mb4"), true, [3]string{"mysql-8.0", "end_of_life", "utf8mb4"}},
 		{"untabled end of life", serverReportFor("10.5.29-MariaDB", "utf8mb4"), true, [3]string{"mariadb-end_of_life", "end_of_life", "utf8mb4"}},
 		{"latin1 charset", serverReportFor("8.4.13", "latin1"), true, [3]string{"mysql-8.4", "supported", "latin1"}},
+		{"ending soon", endingSoonReport(), true, [3]string{"mariadb-10.11", "ending_soon", "utf8mb4"}},
+		{"utf8mb4 schema with a latin1 table", mixedCharsetReport(), true, [3]string{"mariadb-11.4", "supported", "mixed"}},
+		{"no schema row", serverReportFor("11.4.13-MariaDB", ""), false, [3]string{"mariadb-11.4", "supported", "unknown"}},
 		{"supported", serverReportFor("11.4.13-MariaDB", "utf8mb4"), false, [3]string{"mariadb-11.4", "supported", "utf8mb4"}},
 		{"untracked", serverReportFor("9.7.4", "utf8mb4"), false, [3]string{"mysql-untracked", "untracked", "utf8mb4"}},
 		{"unknown", serverReportFor("garbage", "utf8mb4"), false, [3]string{"unknown", "unknown", "utf8mb4"}},
@@ -180,8 +197,10 @@ func TestDatabaseService_ProbeDatabaseServer_OnlyOnMySQL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &DatabaseService{v2Manager: tt.manager}
 			probes := 0
-			svc.probeServer = func(context.Context, *gorm.DB, time.Time) databaseServerReport {
+			svc.probeServer = func(ctx context.Context, _ *gorm.DB, _ time.Time) databaseServerReport {
 				probes++
+				_, bounded := ctx.Deadline()
+				assert.True(t, bounded, "the probe must run under a deadline")
 				return serverReportFor("11.4.13-MariaDB", "utf8mb4")
 			}
 			svc.probeDatabaseServer(logger.Global().Module("test"))
