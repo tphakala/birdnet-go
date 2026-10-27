@@ -8,7 +8,7 @@ BirdNET-Go is an application inspired by BirdNET-Pi and BirdNET Analyzer. It aim
 - 24/7 real-time analysis of soundcard capture
 - Real-time analysis output compatible with OBS chat log input for wildlife streams
 - BirdWeather API support for real-time analysis
-- Analysis output options: SQLite or MySQL database
+- Analysis output options: SQLite or MySQL/MariaDB database
 - Localized species labels, with extensive language support (over 30 languages)
 - Runs on Windows, Linux (including Raspberry Pi), and macOS
 - Minimal runtime dependencies; the BirdNET TensorFlow Lite model and other supporting files are embedded in the executable
@@ -409,9 +409,9 @@ output:
     enabled: false # Enable SQLite output
     path: birdnet.db # Path to SQLite database
 
-  # MySQL database output settings
+  # MySQL or MariaDB database output settings
   mysql:
-    enabled: false # Enable MySQL output
+    enabled: false # Enable MySQL or MariaDB output
     username: birdnet # MySQL database username
     password: secret # MySQL database user password
     database: birdnet # MySQL database name

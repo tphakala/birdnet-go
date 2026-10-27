@@ -217,6 +217,10 @@ The maintainer's recommended starting point: enable the false-positive filter at
 
 Use the [Database Doctor](https://github.com/tphakala/birdnet-go/wiki/Database-Doctor) to diagnose and `--fix` (it backs up first). Don't drop tables yourself, several hold real data.
 
+### Which MySQL and MariaDB versions are supported?
+
+Only releases that their upstream projects still maintain: MySQL 8.4 LTS, and MariaDB 10.11, 11.4, 11.8 or 12.3 (checked October 2026). MySQL 5.7, MySQL 8.0 and MariaDB 10.6 or older have reached end of life. They are not tested, and problems that show up only on them will not be fixed, so upgrade the database server first. SQLite is the default and needs no server. Run `SELECT VERSION();` in the `mysql` or `mariadb` client to see which release you have, and create the database with the `utf8mb4` character set.
+
 ## Remote access, TLS, and authentication
 
 ### What's the recommended way to expose BirdNET-Go to the internet?

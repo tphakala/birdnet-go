@@ -2,24 +2,27 @@ Real-time analysis requires an audio capture device from which audio is ingested
 
 Real-time analysis is conducted by loading PCM audio into a memory buffer. This buffer is then accessed every 1.5 seconds by a dedicated thread, which continues until there are 3 seconds of unprocessed audio accumulated. These 3-second audio segments are subsequently fed into the BirdNET model for analysis. This process repeats continuously until the application is terminated.
 
-Results of real-time analysis can be saved to a log file and to SQLite or MySQL databases. The log file format is suitable for use as a chat log overlay in [Open Broadcaster Software](https://obsproject.com/fi) for wildlife streams and similar applications. The database format is suitable for a BirdNET-Pi-like interface, allowing for the visualization of bird observations.
+Results of real-time analysis can be saved to a log file and to SQLite or MySQL/MariaDB databases. The log file format is suitable for use as a chat log overlay in [Open Broadcaster Software](https://obsproject.com/fi) for wildlife streams and similar applications. The database format is suitable for a BirdNET-Pi-like interface, allowing for the visualization of bird observations.
 
 ## Setting up audio device
 
-BirdNET-Go uses miniaudio library for audio device access, supported audio backends for miniaudio are 
+BirdNET-Go uses miniaudio library for audio device access, supported audio backends for miniaudio are
 
 ### Linux
-* ALSA
-* Pulse Audio
-* JACK
+
+- ALSA
+- Pulse Audio
+- JACK
 
 ### Windows
-* WASAPI
-* DirectSound
-* WinMM
+
+- WASAPI
+- DirectSound
+- WinMM
 
 ### macOS
-* Core Audio
+
+- Core Audio
 
 For Linux users, the PulseAudio backend is recommended. Additionally, Linux distributions that use PipeWire, specifically with the 'Pipewire-pulse' and 'libpulse' components, have also been tested and confirmed to work.
 
@@ -97,7 +100,7 @@ Setting (**processingtime: true**) prints the time it took for BirdNET analysis 
 
 Setting (**audio export enabled: true**) allows 3-second audio clips containing identified bird calls to be saved to disk. The **type** setting picks the file format: **wav** and **flac** are lossless, while **mp3**, **aac** and **opus** are lossy. The default path for audio clip exports is **clips**, which is relative to the directory where BirdNET-Go is executed.
 
-Setting (**log enabled: true**) saves the timestamp and common name of identified birds to a log file, which can be used as a chat log overlay in OBS. 
+Setting (**log enabled: true**) saves the timestamp and common name of identified birds to a log file, which can be used as a chat log overlay in OBS.
 
 ```yaml
 output:
@@ -115,7 +118,9 @@ output:
 
 Enabling the SQLite option (**sqlite enabled: true**) allows real-time detection results to be stored in a SQLite database. The (**sqlite path**) setting determines the location of the SQLite database. By default, the location is birdnet.db in the directory where BirdNET-Go is executed.
 
-Enabling the MySQL option (**mysql enabled: true**) allows real-time detection results to be stored in a MySQL database. Please note that if both SQLite and MySQL are set to enabled, only the SQLite output will be used.
+Enabling the MySQL option (**mysql enabled: true**) allows real-time detection results to be stored in a MySQL or MariaDB database. Please note that if both SQLite and MySQL are set to enabled, only the SQLite output will be used.
+
+MySQL and MariaDB are supported only in releases that their upstream projects still maintain: MySQL 8.4 LTS, and MariaDB 10.11, 11.4, 11.8 or 12.3 (checked October 2026). MySQL 5.7, MySQL 8.0 and MariaDB 10.6 or older have reached end of life and are not supported. See the [User Guide](guide.md) for details on creating the database.
 
 ## BirdWeather support
 
@@ -141,4 +146,3 @@ Thank you so much!
 Disclaimer: By requesting this BirdWeather ID, I acknowledge that my location
 and recording data will be made public.
 ```
-
