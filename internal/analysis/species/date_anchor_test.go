@@ -574,6 +574,16 @@ func TestYearlyTracking_ResetFollowsTrackingYear(t *testing.T) {
 			},
 		},
 		{
+			// An empty result after the reset must not keep the previous year's set.
+			name:        "empty_load_after_reset_drops_old_year_set",
+			startYear:   2026,
+			constructAt: resetNoon(2027, time.June, 30),
+			steps: []resetStep{
+				{"detect", "A", resetNoon(2027, time.June, 30), 2026, []string{"A"}},
+				{"load", "", time.Date(2027, time.July, 1, 0, 0, 30, 0, time.UTC), 2027, nil},
+			},
+		},
+		{
 			// A load whose now was read before a call that already crossed the reset
 			// holds the previous year's rows, so it labels them with that year.
 			name:        "stale_load_behind_current_year",
