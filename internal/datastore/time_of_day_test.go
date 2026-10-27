@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"github.com/tphakala/birdnet-go/internal/testutil"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // TestNightFilterExcludesSunriseSunsetWindows verifies that the "Night" time-of-day
@@ -23,8 +25,9 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 	// Two constraints to make the test truly timezone-agnostic:
 	//
 	// 1. **testDate must be UTC midnight, not Local.** The production filter
-	//    parses filters.DateStart with time.Parse(time.DateOnly, ...) which
-	//    returns UTC midnight. SunCalc caches by date.Equal() and
+	//    asks SunCalc about the start of each calendar date in the process
+	//    zone (wallclock.DayBounds), and this test queries the same dates in
+	//    UTC. SunCalc caches by date.Equal() and
 	//    astral.julianday() does date.UTC() and uses the UTC calendar day
 	//    components. If the test passes a Local-midnight date, astral computes
 	//    sunrise/sunset for a different UTC calendar day than the filter does
@@ -325,4 +328,105 @@ func TestClassifyTimeOfDayMatchesDatastoreConstants(t *testing.T) {
 	assert.Equal(t, TimeOfDaySunset, suncalc.ClassifyTimeOfDay(base.Add(21*time.Hour), sun))
 	assert.Equal(t, TimeOfDayDay, suncalc.ClassifyTimeOfDay(base.Add(12*time.Hour), sun))
 	assert.Equal(t, TimeOfDayNight, suncalc.ClassifyTimeOfDay(base.Add(2*time.Hour), sun))
+}
+
+// timeOfDayDecoyOffset separates each decoy note from its date's sunrise note by
+// more than the sunrise window, so a decoy matches only when the filter is dropped.
+const timeOfDayDecoyOffset = 3 * time.Hour
+
+// timeOfDayFixtureNoonHour is the hour used to ask the sun calculator about a date. The
+// fixtures prime the calculator's per-date cache at local noon, so these tests isolate which
+// dates the filter enumerates. They do not exercise the filter's own sun-time lookup at local
+// midnight, which fails for a few dates in some southern zones (tracked separately).
+const timeOfDayFixtureNoonHour = 12
+
+// TestBuildTimeOfDayConditions_CoversEveryCalendarDate checks that a sunrise filter over a
+// date range selects exactly the notes of every calendar date in the range, once, across
+// DST changes and skipped local midnights. The zone is passed in, so the process zone is
+// never modified.
+func TestBuildTimeOfDayConditions_CoversEveryCalendarDate(t *testing.T) {
+	tests := []struct {
+		name      string
+		zone      string
+		lat, lon  float64
+		dateStart string
+		dateEnd   string
+		wantDates int
+	}{
+		{"fall-back year", "Europe/Helsinki", 60.17, 24.94, "2025-10-26", "2026-10-26", 366},
+		{"half-hour shift year", "Australia/Lord_Howe", -31.55, 159.08, "2025-04-06", "2026-04-06", 366},
+		{"spring-forward month", "Europe/Helsinki", 60.17, 24.94, "2026-03-01", "2026-04-01", 32},
+		{"skipped midnight year", "America/Santiago", -33.45, -70.67, "2025-09-07", "2026-09-07", 366},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			zone := testutil.ToolchainZones(t)[tt.zone]
+			require.NotNil(t, zone)
+			sc := suncalc.NewSunCalc(tt.lat, tt.lon)
+			require.Equal(t, tt.zone, sc.LocationName())
+
+			start, err := wallclock.ParseDate(tt.dateStart)
+			require.NoError(t, err)
+			end, err := wallclock.ParseDate(tt.dateEnd)
+			require.NoError(t, err)
+
+			ds := setupTestDB(t)
+			var want []string
+			for d := range wallclock.Dates(start.AddDays(-1), end.AddDays(1)) {
+				sunrise, err := sc.GetSunEventTimes(wallclock.At(d, timeOfDayFixtureNoonHour, 0, 0, zone))
+				require.NoError(t, err)
+				decoy := sunrise.Sunrise.Add(timeOfDayDecoyOffset)
+				require.NoError(t, ds.DB.Create(&[]Note{
+					{Date: d.String(), Time: sunrise.Sunrise.Format(time.TimeOnly), ScientificName: "Parus major"},
+					{Date: d.String(), Time: decoy.Format(time.TimeOnly), ScientificName: "Parus major"},
+				}).Error)
+				if d.Compare(start) >= 0 && d.Compare(end) <= 0 {
+					want = append(want, d.String())
+				}
+			}
+			require.Len(t, want, tt.wantDates)
+
+			conds, err := buildTimeOfDayConditions(&SearchFilters{
+				TimeOfDay: TimeOfDaySunrise, DateStart: tt.dateStart, DateEnd: tt.dateEnd,
+			}, sc, ds.DB, zone)
+			require.NoError(t, err)
+			require.NotEmpty(t, conds)
+
+			combined := ds.DB.Where(conds[0])
+			for _, c := range conds[1:] {
+				combined = combined.Or(c)
+			}
+			var got []string
+			require.NoError(t, ds.DB.Model(&Note{}).Where(combined).Order("date").Pluck("date", &got).Error)
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+// TestBuildTimeOfDayConditions_RejectsInvalidRanges checks that a range one day over the
+// cap, a reversed range and a malformed date are each refused with their own validation
+// error before the sun calculator or the database is used.
+func TestBuildTimeOfDayConditions_RejectsInvalidRanges(t *testing.T) {
+	start, err := wallclock.ParseDate("2027-03-01")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name      string
+		dateStart string
+		dateEnd   string
+		wantErr   string
+	}{
+		{"one day over the cap", start.String(), start.AddDays(maxTimeOfDayFilterSpanDays + 1).String(), "cannot exceed 365 days"},
+		{"end before start", start.String(), start.AddDays(-1).String(), "end date cannot be before start date"},
+		{"malformed start", "2027-13-01", start.String(), "parsing time"},
+		{"malformed end", start.String(), "not-a-date", "parsing time"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := buildTimeOfDayConditions(&SearchFilters{
+				TimeOfDay: TimeOfDaySunrise, DateStart: tt.dateStart, DateEnd: tt.dateEnd,
+			}, nil, nil, time.UTC)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
 }
