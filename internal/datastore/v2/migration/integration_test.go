@@ -24,6 +24,9 @@ import (
 // Test: Empty Legacy Database
 // ============================================================================
 
+// workerStopTimeout bounds the wait for a stopped worker to exit.
+const workerStopTimeout = 5 * time.Second
+
 func TestMigration_EmptyLegacyDatabase(t *testing.T) {
 	t.Parallel()
 
@@ -316,7 +319,7 @@ func TestMigration_CrashRecovery(t *testing.T) {
 	require.Positive(t, checkpointID, "should have a checkpoint ID")
 
 	// Stop worker (simulating crash)
-	stopCtx, stopCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	stopCtx, stopCancel := context.WithTimeout(t.Context(), workerStopTimeout)
 	defer stopCancel()
 	require.NoError(t, ctx.Worker.Stop(stopCtx))
 	require.False(t, ctx.Worker.IsRunning(), "worker should have stopped")

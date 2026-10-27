@@ -21,25 +21,16 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	repomocks "github.com/tphakala/birdnet-go/internal/datastore/v2/repository/mocks"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// errGatedModelRepo is returned by gatedModelRepo after its gate opens.
-var errGatedModelRepo = io.ErrUnexpectedEOF
-
-// gatedModelRepo blocks GetOrCreate so a test can hold the worker inside a
-// record while a handler runs.
-type gatedModelRepo struct {
-	repository.ModelRepository
+// recordGate holds the worker inside a record: entered receives once the worker
+// reaches the model lookup, and the lookup returns after release is closed.
+type recordGate struct {
 	entered chan struct{}
 	release chan struct{}
-}
-
-func (g *gatedModelRepo) GetOrCreate(_ context.Context, _, _, _ string, _ entities.ModelType, _ *string) (*entities.AIModel, error) {
-	g.entered <- struct{}{}
-	<-g.release
-	return nil, errGatedModelRepo
 }
 
 // stopTestEnv is a migration worker wired to a file-backed v2 SQLite database
@@ -153,10 +144,17 @@ func TestRollbackMigration_DoesNotDrainAfterReset(t *testing.T) {
 
 // newCancelEnv returns an environment in DUAL_WRITE whose worker is held
 // inside the first record of a three-record batch.
-func newCancelEnv(t *testing.T) (*stopTestEnv, *gatedModelRepo) {
+func newCancelEnv(t *testing.T) (*stopTestEnv, *recordGate) {
 	t.Helper()
-	gate := &gatedModelRepo{entered: make(chan struct{}), release: make(chan struct{})}
-	env := newStopTestEnv(t, gate)
+	gate := &recordGate{entered: make(chan struct{}), release: make(chan struct{})}
+	models := repomocks.NewMockModelRepository(t)
+	models.EXPECT().GetOrCreate(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		RunAndReturn(func(context.Context, string, string, string, entities.ModelType, *string) (*entities.AIModel, error) {
+			gate.entered <- struct{}{}
+			<-gate.release
+			return nil, io.ErrUnexpectedEOF
+		})
+	env := newStopTestEnv(t, models)
 	env.legacy.EXPECT().Search(mock.Anything, mock.Anything).
 		Return([]*detection.Result{{ID: 1}, {ID: 2}, {ID: 3}}, int64(3), nil).Once()
 	require.NoError(t, env.sm.StartMigration(3))
@@ -242,8 +240,11 @@ func completedEnvWithBlockedDrain(t *testing.T) (env *stopTestEnv, release chan 
 	env.toCompleted(t, watermark)
 	env.startWorker(t)
 	synctest.Wait() // worker parked in tail sync
+	migrationMu.RLock()
+	prevCancel := migrationWorkerCancel
+	migrationMu.RUnlock()
 	SetMigrationWorkerCancel(env.cancelWorker)
-	t.Cleanup(func() { SetMigrationWorkerCancel(nil) })
+	t.Cleanup(func() { SetMigrationWorkerCancel(prevCancel) })
 	return env, release
 }
 
