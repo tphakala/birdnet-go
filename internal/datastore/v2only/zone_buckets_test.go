@@ -312,7 +312,7 @@ func assertRangeAnalyticsWallClock(t *testing.T, ds *Datastore) {
 		})
 	}
 
-	t.Run("open range keeps every row", func(t *testing.T) {
+	t.Run("open range keeps every row from the epoch on", func(t *testing.T) {
 		daily, err := ds.GetDailyAnalyticsData(ctx, "", "", "")
 		require.NoError(t, err)
 		sum := 0
