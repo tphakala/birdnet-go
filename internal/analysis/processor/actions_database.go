@@ -125,7 +125,9 @@ func (a *DatabaseAction) Execute(ctx context.Context, data any) error {
 // Save states of a DatabaseAction. The zero value is pending.
 const (
 	// saveStatePending: nothing is stored and a repeat of the save is allowed, or an
-	// earlier attempt is still running. The job queue keeps retrying the job.
+	// earlier attempt is still running, including its follow-up steps after the row is
+	// stored (the next attempt then finds the state done). The job queue keeps
+	// retrying the job.
 	saveStatePending int32 = iota
 	// saveStateDone: the detection is stored, or the event tracker skipped it.
 	saveStateDone
