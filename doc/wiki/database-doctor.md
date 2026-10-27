@@ -332,7 +332,7 @@ A number after a table name is its row count. `unknown` means the count failed. 
 To resolve it:
 
 1. Stop BirdNET-Go.
-2. Back up the database. For SQLite, copy the database file while BirdNET-Go is stopped. For MySQL and MariaDB, use the `mysqldump` (`mariadb-dump` on MariaDB) command from [Step 2](#step-2-back-up-the-database) above.
+2. Back up the database. For SQLite, while BirdNET-Go is stopped, run `sqlite3 /path/to/birdnet.db ".backup /path/to/birdnet-backup.db"`. For MySQL and MariaDB, use the `mysqldump` (`mariadb-dump` on MariaDB) command from [Step 2](#step-2-back-up-the-database) above.
 3. Check whether the database also has a `detections` table. On SQLite run `sqlite3 /path/to/birdnet.db ".tables"`; on MySQL and MariaDB run `SHOW TABLES LIKE 'detections';`. If it does, these tables belong to an enhanced database: drop nothing and ask on [GitHub Discussions](https://github.com/tphakala/birdnet-go/discussions) with the log lines. On MySQL and MariaDB see also the section above.
 4. If a count is `unknown`, check that the database user can read the table and that the database file or server is healthy, then start BirdNET-Go again.
 5. Otherwise drop each listed table that holds rows you can lose, one statement per table. On SQLite run `sqlite3 /path/to/birdnet.db "DROP TABLE notification_histories;"`. On MySQL and MariaDB run `DROP TABLE notification_histories;` in the `mysql` or `mariadb` client.

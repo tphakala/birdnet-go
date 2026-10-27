@@ -52,7 +52,8 @@ func TestSilenceUsageOnRunErrors(t *testing.T) {
 
 	errRuntime := errors.NewStd("runtime failure")
 
-	newRoot := func() *cobra.Command {
+	newRoot := func(t *testing.T) *cobra.Command {
+		t.Helper()
 		root := &cobra.Command{Use: "app"}
 		group := &cobra.Command{Use: "group"}
 		group.AddCommand(&cobra.Command{
@@ -85,7 +86,7 @@ func TestSilenceUsageOnRunErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			root := newRoot()
+			root := newRoot(t)
 			var out bytes.Buffer
 			root.SetOut(&out)
 			root.SetErr(&out)
