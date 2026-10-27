@@ -64,13 +64,44 @@ SQL. Reconciling is safe only when all of these hold:
   delete a table or file that holds rows, and never drop a table on the strength
   of a guess about which side is "the real one". Check that a table is empty
   immediately before dropping it. A count or listing that fails is treated as
-  non-empty (fail closed).
+  non-empty (fail closed). The only exception is the regenerable tables below.
 - The result is idempotent: the same state leads to the same decision on every
   boot, with no flapping and nothing recreated that the next boot has to fix.
 - The action is visible: log one clear line saying what was found (with row
   counts), what was chosen and what was dropped, if anything. Use the typed
   logger helpers and include no personal data.
 - Prefer choosing a side and leaving the other untouched over dropping it.
+
+**Exception: regenerable tables at legacy startup.** Two tables hold only data
+BirdNET-Go rebuilds by itself, so their rows are not user data:
+`notification_histories` (when each new species notification was last sent;
+the rows expire on their own) and `image_caches` (species image links, fetched
+again from the provider). When one of them has the enhanced database (v2) shape
+(a NOT NULL `label_id`), `repairV2ShapedLegacyTables` in `manage.go` may drop
+it with its rows so the legacy schema migration recreates it, and only when all
+of these hold:
+
+- The table listing shows no bare `detections` table, at the first listing and
+  in the listing right before the drop. Beside one, a table that holds rows
+  belongs to an enhanced database and is kept.
+- Every other v2-shaped table it checks is empty, and every count succeeded.
+  Otherwise it refuses and drops nothing that holds rows.
+- Immediately before each such drop it lists the tables again and counts the
+  table again, and it refuses when the listing or the count fails, when the
+  table is missing from the listing, or when the table holds rows and a
+  `detections` table is listed.
+- It drops the other, empty tables first, so a refusal caused by any other table
+  never follows the drop of one of these two.
+- It logs one Warn line per table with the table name and its row count.
+
+`dynamic_thresholds` (learned thresholds) and `threshold_events` (threshold
+history) are user data and keep the refusal. A table joins this list only with
+the maintainer's approval in the pull request that adds it. The list in the code
+(`disposableV2ShapedTables` in `manage.go`, mirrored as
+`legacyDisposableSharedTables` in `internal/datastore/v2/startup.go`) must match
+this paragraph. `validateAndFixSchema` may also recreate a legacy `image_caches`
+with a wrong index or a stray `label_id` column, rows included, and logs its row
+count.
 
 Refuse to start, with an error that names the cause, only when no safe automatic
 choice exists, for example when both candidate sides hold data. Never destroy

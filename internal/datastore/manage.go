@@ -45,7 +45,7 @@ const (
 	// v2ShapedTablesRecoveryHint is the user-facing instruction emitted when legacy
 	// startup refuses to drop v2-shaped tables that hold rows.
 	v2ShapedTablesRecoveryHint = "stop BirdNET-Go and back up the database, then follow " + v2ShapedTablesGuideURL +
-		", which says what each listed table holds and which ones can be dropped by hand"
+		", which says what each listed table holds and when it is safe to drop one by hand"
 
 	// v2LabelIDColumn is the label foreign key every v2 table keys on. No legacy
 	// model has ever declared it.
@@ -71,15 +71,28 @@ var legacyDataTables = []string{"notes", "results"}
 // cannot fill, and GORM AutoMigrate over it either fails (duplicate entry on
 // the legacy unique index, or a NOT NULL column add) or leaves a table every
 // legacy insert fails on. A v2-shaped table is unusable by the legacy store. An
-// empty one is dropped so AutoMigrate recreates it in the legacy shape. One that
-// holds rows, or whose rows cannot be counted, stops legacy startup before it is
-// dropped, because its rows (notification suppression state, learned thresholds,
-// threshold change history, the image cache) must not be dropped.
+// empty one is dropped so AutoMigrate recreates it in the legacy shape. One in
+// disposableV2ShapedTables is also dropped with its rows, under the conditions
+// in internal/datastore/AGENTS.md. Any other candidate that holds rows, or whose
+// rows cannot be counted, stops legacy startup before anything with rows is
+// dropped, because its rows (learned thresholds, threshold change history) must
+// not be dropped.
 var v2ShapedLegacyTables = []string{
 	"notification_histories",
 	"dynamic_thresholds",
 	"threshold_events",
 	"image_caches",
+}
+
+// disposableV2ShapedTables are the v2ShapedLegacyTables whose rows are not user
+// data: BirdNET-Go rebuilds them by itself. The value says what the rows hold,
+// for the log line that reports a drop. The exception in
+// internal/datastore/AGENTS.md names this list and must match it. It is
+// mirrored as legacyDisposableSharedTables in internal/datastore/v2/startup.go;
+// keep the two in sync.
+var disposableV2ShapedTables = map[string]string{
+	"notification_histories": "new species notification cooldowns",
+	"image_caches":           "cached species image links",
 }
 
 // createGormLogger configures and returns a new GORM logger instance.
@@ -359,8 +372,9 @@ func hasV2ImageCacheContaminationSQLite(db *gorm.DB) bool {
 }
 
 // performAutoMigration automates database migrations with error handling.
-// It first drops empty auxiliary tables left in the v2 shape (or refuses when
-// they hold rows or the database holds the v2 schema), then checks the schema
+// It first drops auxiliary tables left in the v2 shape (the empty ones, and the
+// regenerable notification_histories and image_caches with their rows; it refuses
+// when any other holds rows or the database holds the v2 schema), then checks the schema
 // of the image_caches table and drops/recreates it if incorrect.
 // For MySQL, dbName is the database name used for information_schema queries.
 // For SQLite, dbName is unused (pass "").
@@ -370,8 +384,9 @@ func performAutoMigration(db *gorm.DB, debug bool, dbType, dbName string) error 
 
 	migrationLogger.Debug("Starting database migration")
 
-	// Drop empty auxiliary tables left in the v2 shape, or refuse when they hold
-	// rows or the database holds v2 detections. Runs first so no legacy DDL
+	// Drop auxiliary tables left in the v2 shape (empty ones, and the regenerable
+	// ones with rows), or refuse when other tables hold rows or the database holds
+	// v2 detections. Runs first so no legacy DDL
 	// (index reconcile, the notes table) touches a live v2 database.
 	if err := repairV2ShapedLegacyTables(db, dbType, migrationLogger); err != nil {
 		return err
@@ -486,49 +501,203 @@ func isV2Database(db *gorm.DB, tables []string, log logger.Logger) bool {
 	return true
 }
 
-// inspectV2ShapedTables counts the rows of every candidate table. It returns the
-// counts, in candidate order, as "table=rows" pairs (table names and integers
-// only), and whether any table holds rows or could not be counted.
-func inspectV2ShapedTables(db *gorm.DB, candidates []string, log logger.Logger) (summary string, holdsRows bool) {
-	parts := make([]string, 0, len(candidates))
+// v2ShapedTableCount is the row count of one candidate table. counted is false
+// when the count failed; rows is meaningful only when counted is true.
+type v2ShapedTableCount struct {
+	name    string
+	rows    int64
+	counted bool
+}
+
+// countV2ShapedTables counts the rows of every candidate table, in candidate
+// order. A failed count is logged and recorded as not counted.
+func countV2ShapedTables(db *gorm.DB, candidates []string, log logger.Logger) []v2ShapedTableCount {
+	counts := make([]v2ShapedTableCount, 0, len(candidates))
 	for _, name := range candidates {
-		rows := rowCountUnknown
-		var count int64
-		if countErr := db.Table(name).Count(&count).Error; countErr != nil {
+		var rows int64
+		countErr := db.Table(name).Count(&rows).Error
+		if countErr != nil {
 			log.Warn("Could not count rows of v2-shaped table", logger.String("table", name), logger.Error(countErr))
-			holdsRows = true
-		} else {
-			rows = strconv.FormatInt(count, 10)
-			holdsRows = holdsRows || count > 0
 		}
-		parts = append(parts, name+"="+rows)
+		counts = append(counts, v2ShapedTableCount{name: name, rows: rows, counted: countErr == nil})
 	}
-	return strings.Join(parts, ", "), holdsRows
+	return counts
+}
+
+// formatV2ShapedCounts renders the counts, in the order given, as "table=rows"
+// pairs (table names and integers only; "table=unknown" for a failed count).
+func formatV2ShapedCounts(counts []v2ShapedTableCount) string {
+	parts := make([]string, 0, len(counts))
+	for _, c := range counts {
+		rows := rowCountUnknown
+		if c.counted {
+			rows = strconv.FormatInt(c.rows, 10)
+		}
+		parts = append(parts, c.name+"="+rows)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// holdsRowsOrUnknown reports whether any table holds rows or could not be counted.
+func holdsRowsOrUnknown(counts []v2ShapedTableCount) bool {
+	return slices.ContainsFunc(counts, func(c v2ShapedTableCount) bool { return !c.counted || c.rows > 0 })
+}
+
+// blocksAutomaticDrop reports whether the counts forbid dropping any table with
+// rows: a count failed, a table outside disposableV2ShapedTables holds rows, or
+// a table holds rows while a bare detections table exists. Empty tables are
+// dropped regardless.
+func blocksAutomaticDrop(counts []v2ShapedTableCount, hasDetections bool) bool {
+	return slices.ContainsFunc(counts, func(c v2ShapedTableCount) bool {
+		if !c.counted {
+			return true
+		}
+		if c.rows == 0 {
+			return false
+		}
+		_, disposable := disposableV2ShapedTables[c.name]
+		return !disposable || hasDetections
+	})
+}
+
+// v2ShapedDropOrder returns the candidates in the order they are dropped: the
+// tables outside disposableV2ShapedTables first, so a refusal caused by one of
+// them never follows the drop of a disposable table. Each group keeps candidate
+// order.
+func v2ShapedDropOrder(candidates []string) []string {
+	isDisposable := func(name string) bool {
+		_, ok := disposableV2ShapedTables[name]
+		return ok
+	}
+	other := slices.DeleteFunc(slices.Clone(candidates), isDisposable)
+	disposable := slices.DeleteFunc(slices.Clone(candidates), func(name string) bool { return !isDisposable(name) })
+	return slices.Concat(other, disposable)
 }
 
 // refuseV2ShapedTables logs and returns the error that stops legacy startup
-// when v2-shaped tables hold rows or cannot be counted. droppedEmpty is the
-// number of empty tables already dropped before the refusal.
-func refuseV2ShapedTables(log logger.Logger, dbType, summary string, droppedEmpty int) error {
-	log.Error("Tables in the enhanced database shape hold rows the legacy store cannot use; no rows were dropped. Check earlier fallback to legacy mode log lines",
-		logger.String("tables", summary), logger.Int("dropped_empty_tables", droppedEmpty),
+// when v2-shaped tables hold rows or cannot be counted. dropped is the number
+// of tables already dropped before the refusal.
+func refuseV2ShapedTables(log logger.Logger, dbType, summary string, dropped int) error {
+	log.Error("Tables in the enhanced database shape hold rows the legacy store cannot use, or could not be checked; startup stops. Check earlier fallback to legacy mode log lines",
+		logger.String("tables", summary), logger.Int("dropped_tables", dropped),
 		logger.String("recovery_hint", v2ShapedTablesRecoveryHint))
 	return criticalError(fmt.Errorf("%w: %s; see %s", errV2ShapedTablesHoldRows, summary, v2ShapedTablesGuideURL),
 		"legacy_schema_guard", "v2_shaped_tables_hold_rows",
 		"db_type", dbType, "tables", summary)
 }
 
+// refuseV2ShapedTablesLate refuses after a check right before the DROP of
+// order[i] failed. It counts what is left (order[i:]), so the refusal names the
+// table that changed instead of repeating the counts taken before the first
+// DROP. i is the number of tables already dropped.
+func refuseV2ShapedTablesLate(db *gorm.DB, log logger.Logger, dbType string, order []string, i int) error {
+	counts := countV2ShapedTables(db, order[i:], log)
+	summary := formatV2ShapedCounts(counts)
+	if !holdsRowsOrUnknown(counts) {
+		summary = order[i] + "=" + rowCountUnknown
+	}
+	return refuseV2ShapedTables(log, dbType, summary, i)
+}
+
+// errV2ShapedTableGainedRows is the pre-drop check result for a table that holds
+// rows although the count pass found it empty.
+var errV2ShapedTableGainedRows = errors.NewStd("v2-shaped table gained rows after the count pass")
+
+// checkV2ShapedTableBeforeDrop is the last look at a table right before its
+// DROP. It returns the row count to log, or an error that must stop startup. A
+// table outside disposableV2ShapedTables must still be empty. A disposable one is
+// checked by recheckDisposableV2ShapedTable.
+func checkV2ShapedTableBeforeDrop(db *gorm.DB, name string, log logger.Logger) (int64, error) {
+	if _, disposable := disposableV2ShapedTables[name]; disposable {
+		return recheckDisposableV2ShapedTable(db, name, log)
+	}
+	// Read the table again right before its DROP, so rows written since the
+	// count (for example by a second instance) are not lost. A failed read
+	// counts as non-empty.
+	hasRows, probeErr := tableHasRows(db, name)
+	if probeErr != nil {
+		log.Warn("Could not check v2-shaped table before dropping it", logger.String("table", name), logger.Error(probeErr))
+		return 0, probeErr
+	}
+	if hasRows {
+		return 0, errV2ShapedTableGainedRows
+	}
+	return 0, nil
+}
+
+// errV2ShapedRecheckFailed marks a failed listing-based check before dropping a
+// disposable table.
+var errV2ShapedRecheckFailed = errors.NewStd("could not confirm the table set before dropping a v2-shaped table")
+
+// recheckDisposableV2ShapedTable lists the tables and counts the named
+// disposable table again right before its DROP, and returns the fresh count. It
+// fails closed: an error from the listing or the count, the table missing from
+// the fresh listing (the MySQL migrator returns an empty list with no error when
+// it cannot read the database name), or rows in the table while a bare detections
+// table is listed all return an error and the table is kept.
+func recheckDisposableV2ShapedTable(db *gorm.DB, name string, log logger.Logger) (int64, error) {
+	tables, err := db.Migrator().GetTables()
+	if err != nil {
+		log.Warn("Could not list tables before dropping v2-shaped table",
+			logger.String("table", name), logger.Error(err))
+		return 0, err
+	}
+	if !slices.Contains(tables, name) {
+		log.Warn("Table is missing from the fresh table listing, keeping it",
+			logger.String("table", name))
+		return 0, errV2ShapedRecheckFailed
+	}
+	var rows int64
+	if err := db.Table(name).Count(&rows).Error; err != nil {
+		log.Warn("Could not count rows of v2-shaped table before dropping it",
+			logger.String("table", name), logger.Error(err))
+		return 0, err
+	}
+	if rows > 0 && slices.Contains(tables, v2DetectionsTable) {
+		log.Warn("A detections table exists beside a v2-shaped table with rows, keeping it",
+			logger.String("table", name), logger.Int64("rows", rows))
+		return 0, errV2ShapedRecheckFailed
+	}
+	return rows, nil
+}
+
+// dropV2ShapedTable logs and drops one v2-shaped table. rows is the count taken
+// right before the drop.
+func dropV2ShapedTable(db *gorm.DB, name string, rows int64, log logger.Logger) error {
+	if rows > 0 {
+		log.Warn("Dropping v2-shaped table with rows before legacy schema migration; it holds only data BirdNET-Go rebuilds",
+			logger.String("table", name), logger.Int64("rows", rows),
+			logger.String("contents", disposableV2ShapedTables[name]))
+	} else {
+		log.Warn("Dropping empty v2-shaped table before legacy schema migration",
+			logger.String("table", name))
+	}
+	// Raw drop: GORM's MySQL DropTable leaves FOREIGN_KEY_CHECKS off on its
+	// connection when the DROP fails. The name comes from v2ShapedLegacyTables.
+	if err := db.Exec("DROP TABLE IF EXISTS `" + name + "`").Error; err != nil {
+		return errors.New(err).
+			Component("datastore").
+			Category(errors.CategoryDatabase).
+			Context("operation", "drop_v2_shaped_table").
+			Context("table", name).
+			Build()
+	}
+	return nil
+}
+
 // repairV2ShapedLegacyTables makes legacy startup safe over a database that
 // holds v2 tables. When the database is a v2 database (bare detections table,
 // no legacy data rows) it returns an error before any legacy DDL, so notes is
 // never created over live v2 data. A candidate table with a NOT NULL label_id
-// can never take a legacy write. If any candidate holds rows or cannot be
-// counted, it returns an error before any DROP. Only when every candidate is
-// empty does it drop them, each after one more emptiness check, so AutoMigrate
-// recreates them in the legacy shape. A table that gains rows, or cannot be
-// read, after the first count also refuses, possibly after earlier empty tables
-// were dropped. A table is dropped only after its last check found it empty. A
-// table listing error skips the guard.
+// can never take a legacy write. If any candidate cannot be counted, or one
+// outside disposableV2ShapedTables holds rows, or any holds rows beside a bare
+// detections table, it returns an error before any DROP. Otherwise it drops the
+// candidates so AutoMigrate recreates them in the legacy shape: the tables
+// outside disposableV2ShapedTables first (all empty), then the disposable ones,
+// with their rows. Every table is checked once more right before its DROP; a
+// table that gains rows, or cannot be read, after the first count refuses, and
+// only disposable tables can already have been dropped by then. A table listing
+// error skips the guard.
 func repairV2ShapedLegacyTables(db *gorm.DB, dbType string, log logger.Logger) error {
 	tables, err := db.Migrator().GetTables()
 	if err != nil {
@@ -549,45 +718,27 @@ func repairV2ShapedLegacyTables(db *gorm.DB, dbType string, log logger.Logger) e
 
 	// Count every candidate before the first DROP, so a refusal here leaves every
 	// table as it was found.
-	summary, holdsRows := inspectV2ShapedTables(db, candidates, log)
-	if holdsRows {
-		return refuseV2ShapedTables(log, dbType, summary, 0)
+	counts := countV2ShapedTables(db, candidates, log)
+	if blocksAutomaticDrop(counts, slices.Contains(tables, v2DetectionsTable)) {
+		return refuseV2ShapedTables(log, dbType, formatV2ShapedCounts(counts), 0)
 	}
 
-	for i, name := range candidates {
-		// Read the table again right before its DROP, so rows written since the
-		// count (for example by a second instance) are not lost. A failed read
-		// counts as non-empty.
-		hasRows, probeErr := tableHasRows(db, name)
-		if probeErr != nil || hasRows {
-			if probeErr != nil {
-				log.Warn("Could not check v2-shaped table before dropping it", logger.String("table", name), logger.Error(probeErr))
-			}
-			// Count what is left, so the refusal names the table that changed
-			// instead of repeating the counts taken before the first DROP.
-			lateSummary, lateRows := inspectV2ShapedTables(db, candidates[i:], log)
-			if !lateRows {
-				lateSummary = name + "=" + rowCountUnknown
-			}
-			return refuseV2ShapedTables(log, dbType, lateSummary, i)
+	order := v2ShapedDropOrder(candidates)
+	for i, name := range order {
+		rows, checkErr := checkV2ShapedTableBeforeDrop(db, name, log)
+		if checkErr != nil {
+			return refuseV2ShapedTablesLate(db, log, dbType, order, i)
 		}
-		log.Warn("Dropping empty v2-shaped table before legacy schema migration",
-			logger.String("table", name))
-		// Raw drop: GORM's MySQL DropTable leaves FOREIGN_KEY_CHECKS off on its
-		// connection when the DROP fails. The name comes from v2ShapedLegacyTables.
-		if err := db.Exec("DROP TABLE IF EXISTS `" + name + "`").Error; err != nil {
-			return errors.New(err).
-				Component("datastore").
-				Category(errors.CategoryDatabase).
-				Context("operation", "drop_v2_shaped_table").
-				Context("table", name).
-				Build()
+		if err := dropV2ShapedTable(db, name, rows, log); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
-// validateAndFixSchema checks and fixes the database schema if needed.
+// validateAndFixSchema checks and fixes the database schema if needed. An
+// image_caches table with a wrong index or a stray label_id column is dropped with
+// its rows (a cache AutoMigrate recreates) and the row count is logged at Warn.
 // For MySQL, dbName is the database name used for information_schema queries.
 // For SQLite, dbName is unused.
 func validateAndFixSchema(db *gorm.DB, dbType, dbName string, debug bool, log logger.Logger) error {
@@ -649,6 +800,13 @@ func validateAndFixSchema(db *gorm.DB, dbType, dbName string, debug bool, log lo
 			if debug {
 				GetLogger().Debug("Incorrect schema detected for 'image_caches'. Dropping table")
 			}
+			rows := rowCountUnknown
+			var count int64
+			if countErr := db.Model(&ImageCache{}).Count(&count).Error; countErr == nil {
+				rows = strconv.FormatInt(count, 10)
+			}
+			log.Warn("Dropping image_caches with an incorrect schema; the cache is rebuilt",
+				logger.String("table", "image_caches"), logger.String("rows", rows))
 			if err := migrator.DropTable(&ImageCache{}); err != nil {
 				return errors.New(err).
 					Component("datastore").

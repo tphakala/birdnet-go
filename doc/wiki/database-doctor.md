@@ -248,12 +248,12 @@ This applies to the MySQL and MariaDB releases that upstream still maintains: My
 A MySQL or MariaDB database can hold the enhanced database (v2) tables and the legacy tables at the same time, for example after a failed setup or a downgrade. BirdNET-Go resolves this by itself when one side holds no data:
 
 - If the legacy tables are empty and the enhanced database is a completed install, it keeps the enhanced database and removes the empty legacy tables.
-- If the legacy tables hold data and the enhanced detection tables are empty, it keeps the legacy database and removes only the empty enhanced detection tables. Every other enhanced table stays where it is.
+- If the legacy tables hold data and the enhanced detection tables are empty, it keeps the legacy database and removes only the empty enhanced detection tables. Every other enhanced table stays where it is. If `notification_histories` or `image_caches` still has the enhanced database shape, the legacy store then drops it with its rows and recreates it; both hold only data BirdNET-Go rebuilds (see [Legacy startup and tables in the enhanced database shape](#legacy-startup-and-tables-in-the-enhanced-database-shape)).
 - If both sides are empty, it keeps the enhanced database and marks it as a completed install (when the install has no marker row yet, the first start writes it and the empty legacy tables are removed on the start after that).
 
-BirdNET-Go checks each table for rows again right before it drops it, never drops a table that has rows, and logs one warning that names what it found, kept, removed and left in place.
+BirdNET-Go checks each table for rows again right before it drops it, never drops a table that has rows (the legacy store's own start may then drop the two regenerable tables described below), and logs one warning that names what it found, kept, removed and left in place.
 
-It refuses to start, and drops no table with rows, only when keeping a side would lose data or the tables cannot be handled safely: both sides hold data, keeping a side would remove rows of a table both schemas use (`notification_histories`, `dynamic_thresholds`, `threshold_events` or `image_caches`), the enhanced side holds detections but is not a completed install, a table cannot be read, or an empty table cannot be removed because another session holds it or the database user lacks the privilege. The error lists the tables that have rows on each side, or the step that failed; in the last case fix the cause (a session that holds the tables, or a missing privilege) and restart. The Database Doctor script does not support MySQL, so the steps below are manual.
+It refuses to start, and drops no table with rows, only when keeping a side would lose data or the tables cannot be handled safely: both sides hold data, keeping a side would remove or refuse rows of `dynamic_thresholds` or `threshold_events` that have the shape of the other side, the enhanced side holds detections but is not a completed install, a table cannot be read, or an empty table cannot be removed because another session holds it or the database user lacks the privilege. The error lists the tables that have rows on each side, or the step that failed; in the last case fix the cause (a session that holds the tables, or a missing privilege) and restart. The Database Doctor script does not support MySQL, so the steps below are manual.
 
 Do not downgrade to an older release while the database is in this state: older releases drop the enhanced database tables at startup.
 
@@ -302,7 +302,7 @@ DROP TABLE IF EXISTS alert_actions, alert_conditions, alert_history, alert_histo
 SET FOREIGN_KEY_CHECKS = 1;
 ```
 
-The enhanced database rows listed in the error are lost with these tables. On the next start the legacy store recreates those of `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches` that still have the enhanced database shape and are empty. If one of them holds rows, startup stops and names it; see [Legacy startup and tables in the enhanced database shape](#legacy-startup-and-tables-in-the-enhanced-database-shape).
+The enhanced database rows listed in the error are lost with these tables. On the next start the legacy store recreates those of the four tables that still have the enhanced database shape: the empty ones, and `notification_histories` and `image_caches` with their rows. If `dynamic_thresholds` or `threshold_events` holds rows, startup stops and names it; see [Legacy startup and tables in the enhanced database shape](#legacy-startup-and-tables-in-the-enhanced-database-shape).
 
 **3c: Both sides hold data you need, or the error says tables could not be read, or the enhanced side holds detections but is not a completed install.** Keep the backup and drop nothing. Ask on [GitHub Discussions](https://github.com/tphakala/birdnet-go/discussions) and include the log lines. The table names and row counts in them are safe to share.
 
@@ -314,20 +314,24 @@ Start BirdNET-Go again. After step 3a BirdNET-Go starts in enhanced database mod
 
 Four tables share their names between the legacy database and the enhanced database (v2): `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches`. When one of them has the enhanced database shape (a required `label_id` column) and BirdNET-Go starts with the legacy store, the legacy store cannot write to it or read its rows. BirdNET-Go drops such a table by itself when it is empty, and the legacy store recreates it.
 
-When one of these tables holds rows, or its rows cannot be counted, startup stops, drops no table that holds rows and prints an error like this:
+`notification_histories` and `image_caches` hold only data BirdNET-Go rebuilds by itself, so BirdNET-Go drops them with their rows too, unless the database also has a `detections` table. It logs a warning for each dropped table with the table name and its row count.
+
+When `dynamic_thresholds` or `threshold_events` holds rows, a row count fails, or a `detections` table exists beside a table that holds rows, startup stops, drops no table that holds rows and prints an error like this:
 
 ```text
-tables in the enhanced database (v2) shape hold rows the legacy store cannot use; refusing to drop them: notification_histories=2, dynamic_thresholds=0; see https://github.com/tphakala/birdnet-go/wiki/Database-Doctor#legacy-startup-and-tables-in-the-enhanced-database-shape
+tables in the enhanced database (v2) shape hold rows the legacy store cannot use; refusing to drop them: notification_histories=2, dynamic_thresholds=1, threshold_events=0, image_caches=0; see https://github.com/tphakala/birdnet-go/wiki/Database-Doctor#legacy-startup-and-tables-in-the-enhanced-database-shape
 ```
 
 A number after a table name is its row count. `unknown` means the count failed. The error repeats on every start until you act.
 
-| Table                    | What it holds                                    | What is lost when you drop it                                  |
-| ------------------------ | ------------------------------------------------ | -------------------------------------------------------------- |
-| `notification_histories` | When each new species notification was last sent | At most one repeated new species notification per species      |
-| `image_caches`           | Links to species images and their credits        | Nothing, BirdNET-Go fetches them again                         |
-| `dynamic_thresholds`     | The learned dynamic threshold levels             | The thresholds start from the base value and are learned again |
-| `threshold_events`       | The history of dynamic threshold changes         | That history in the web interface                              |
+The table says what each table holds and what is lost when it is dropped.
+
+| Table                    | What it holds                                    | What is lost when you drop it                                                             |
+| ------------------------ | ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `notification_histories` | When each new species notification was last sent | At most one repeated new species notification per species (BirdNET-Go drops it by itself) |
+| `image_caches`           | Links to species images and their credits        | Nothing, BirdNET-Go fetches them again (BirdNET-Go drops it by itself)                    |
+| `dynamic_thresholds`     | The learned dynamic threshold levels             | The thresholds start from the base value and are learned again                            |
+| `threshold_events`       | The history of dynamic threshold changes         | That history in the web interface                                                         |
 
 To resolve it:
 
@@ -335,5 +339,5 @@ To resolve it:
 2. Back up the database. For SQLite, while BirdNET-Go is stopped, run `sqlite3 /path/to/birdnet.db ".backup /path/to/birdnet-backup.db"`. For MySQL and MariaDB, use the `mysqldump` (`mariadb-dump` on MariaDB) command from [Step 2](#step-2-back-up-the-database) above.
 3. Check whether the database also has a `detections` table. On SQLite run `sqlite3 /path/to/birdnet.db ".tables"`; on MySQL and MariaDB run `SHOW TABLES LIKE 'detections';`. If it does, these tables belong to an enhanced database: drop nothing and ask on [GitHub Discussions](https://github.com/tphakala/birdnet-go/discussions) with the log lines. On MySQL and MariaDB see also the section above.
 4. If a count is `unknown`, check that the database user can read the table and that the database file or server is healthy, then start BirdNET-Go again.
-5. Otherwise drop each listed table that holds rows you can lose, one statement per table. On SQLite run `sqlite3 /path/to/birdnet.db "DROP TABLE notification_histories;"`. On MySQL and MariaDB run `DROP TABLE notification_histories;` in the `mysql` or `mariadb` client.
+5. Otherwise drop each of `dynamic_thresholds` and `threshold_events` that holds rows you can lose, one statement per table. On SQLite run `sqlite3 /path/to/birdnet.db "DROP TABLE dynamic_thresholds;"`. On MySQL and MariaDB run `DROP TABLE dynamic_thresholds;` in the `mysql` or `mariadb` client. If the error lists `notification_histories` or `image_caches` with rows, they are dropped for you on the next start once nothing else blocks.
 6. Start BirdNET-Go. The legacy store recreates the dropped tables.

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -572,9 +573,19 @@ func tableRowCounts(t *testing.T) map[string]int64 {
 // assertNoRowsLost fails when a table that held rows before is missing now or holds
 // fewer rows (seed tables may grow when the chosen mode starts), or when a table that
 // disappeared held rows at all.
-func assertNoRowsLost(t *testing.T, before, after map[string]int64, msg string) {
+//
+// regenerable names tables exempt from the check: the disposable shared tables the
+// legacy startup drops with their rows. Anything else in it fails the test, so the
+// exemption cannot hide a real loss.
+func assertNoRowsLost(t *testing.T, before, after map[string]int64, msg string, regenerable ...string) {
 	t.Helper()
+	for _, table := range regenerable {
+		require.Contains(t, legacyDisposableSharedTables, table, "%s: %s is not a regenerable table", msg, table)
+	}
 	for table, rows := range before {
+		if slices.Contains(regenerable, table) {
+			continue
+		}
 		now, exists := after[table]
 		if !exists {
 			assert.Zero(t, rows, "%s: table %s held %d rows and is gone", msg, table, rows)
@@ -661,9 +672,13 @@ func TestMySQL_StartupDetection_MixedSchema_ReconcilesWithoutLosingRows(t *testi
 		{DecisionMixedSchemaRefused, effectNone, nil},
 	}
 	tests := []struct {
-		name  string
-		seed  func(t *testing.T)
-		boots []boot
+		name string
+		seed func(t *testing.T)
+		// regenerable lists the tables the legacy startup may drop with their rows
+		// (legacyDisposableSharedTables); assertNoRowsLost does not count them as lost
+		// after the chosen mode started.
+		regenerable []string
+		boots       []boot
 	}{
 		{
 			name: "v2 detections, empty notes, completed",
@@ -772,7 +787,7 @@ func TestMySQL_StartupDetection_MixedSchema_ReconcilesWithoutLosingRows(t *testi
 			boots: refusedTwice,
 		},
 		{
-			name: "legacy populated, v2-shaped notification_histories rows",
+			name: "legacy populated, v2-shaped notification_histories rows (regenerable)",
 			seed: func(t *testing.T) {
 				t.Helper()
 				mgr := newTestMySQLManager(t, false)
@@ -784,7 +799,17 @@ func TestMySQL_StartupDetection_MixedSchema_ReconcilesWithoutLosingRows(t *testi
 				require.NoError(t, coexTestDB.AutoMigrate(&datastore.Note{}))
 				insertLegacyNote(t)
 			},
-			boots: refusedTwice,
+			regenerable: []string{"notification_histories"},
+			boots: []boot{
+				{DecisionMixedSchemaKeptLegacy, effectLegacy, func(t *testing.T) {
+					t.Helper()
+					for _, table := range bareDetectionTables {
+						assert.False(t, tableExists(t, coexTestDB, coexTestDBName, table), "%s must be dropped", table)
+					}
+					assert.Equal(t, int64(1), getRowCount(t, coexTestDB, "notes"))
+				}},
+				{DecisionMigrationPrefix + string(entities.MigrationStatusIdle), effectLegacy, nil},
+			},
 		},
 		{
 			name: "v2 detections, empty legacy, idle marker",
@@ -841,7 +866,13 @@ func TestMySQL_StartupDetection_MixedSchema_ReconcilesWithoutLosingRows(t *testi
 				}
 
 				applyBootEffect(t, settings, b.effect)
-				assertNoRowsLost(t, before, tableRowCounts(t), msg+" after the chosen mode started")
+				assertNoRowsLost(t, before, tableRowCounts(t), msg+" after the chosen mode started", tt.regenerable...)
+				for _, table := range tt.regenerable {
+					if b.effect == effectLegacy {
+						assert.False(t, coexTestDB.Migrator().HasColumn(table, "label_id"),
+							"%s: %s must be recreated in the legacy shape", msg, table)
+					}
+				}
 			}
 		})
 	}
@@ -1273,23 +1304,67 @@ func seedV2ShapedNotificationHistoryWithoutDetections(t *testing.T, rows int) *c
 
 // TestMySQL_LegacyOpen_V2ShapedNotificationHistory covers legacy startup over a
 // fresh unprefixed v2 database that has lost its detections table and holds a
-// v2-shaped notification_histories table. Rows in that table must never be
-// dropped; an empty table is recreated in the legacy shape.
+// v2-shaped notification_histories table. Rows of the regenerable
+// notification_histories and image_caches are dropped and the tables recreated
+// in the legacy shape; an empty table is recreated too; rows of any other
+// v2-shaped table stop startup and nothing is dropped.
 func TestMySQL_LegacyOpen_V2ShapedNotificationHistory(t *testing.T) {
-	t.Run("holds_rows_refuses_and_keeps_them", func(t *testing.T) {
+	t.Run("holds_rows_is_dropped_and_recreated", func(t *testing.T) {
 		// Two v2 rows share notification_type, which is the state that used to
 		// fail legacy AutoMigrate with Error 1062.
 		settings := seedV2ShapedNotificationHistoryWithoutDetections(t, 2)
+		require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+			return tx.Exec("INSERT INTO image_caches (label_id) VALUES (1)").Error
+		}))
+		require.EqualValues(t, 1, getRowCount(t, coexTestDB, "image_caches"))
+
+		store := datastore.New(settings)
+		require.NoError(t, store.Open(), "legacy Open must drop the regenerable tables and start")
+		for _, table := range []string{"notification_histories", "image_caches"} {
+			assert.False(t, coexTestDB.Migrator().HasColumn(table, "label_id"),
+				"%s must be recreated in the legacy shape", table)
+		}
+
+		mysqlStore, ok := store.(*datastore.MySQLStore)
+		require.True(t, ok, "store should be a MySQLStore")
+		now := time.Now()
+		require.NoError(t, mysqlStore.SaveNotificationHistory(t.Context(), &datastore.NotificationHistory{
+			ScientificName: "Parus major",
+			LastSent:       now,
+			ExpiresAt:      now.Add(time.Hour),
+			CreatedAt:      now,
+		}))
+		require.NoError(t, store.Close())
+
+		reopened := datastore.New(settings)
+		require.NoError(t, reopened.Open(), "a second legacy Open must succeed")
+		t.Cleanup(func() { _ = reopened.Close() })
+		assert.EqualValues(t, 1, getRowCount(t, coexTestDB, "notification_histories"),
+			"the legacy row must survive the second boot")
+	})
+
+	t.Run("non_regenerable_rows_refuse_and_drop_nothing", func(t *testing.T) {
+		settings := seedV2ShapedNotificationHistoryWithoutDetections(t, 2)
+		// A v2-shaped threshold_events with a row, as an older v2 release created it.
+		for _, stmt := range []string{
+			"DROP TABLE threshold_events",
+			"CREATE TABLE threshold_events (id BIGINT AUTO_INCREMENT PRIMARY KEY, label_id BIGINT NOT NULL, previous_level INT NOT NULL DEFAULT 0)",
+			"INSERT INTO threshold_events (label_id) VALUES (1)",
+		} {
+			require.NoError(t, coexTestDB.Exec(stmt).Error)
+		}
 
 		for boot := 1; boot <= 2; boot++ {
 			store := datastore.New(settings)
-			require.ErrorContains(t, store.Open(), "notification_histories=2",
-				"legacy Open must refuse on boot %d with the v2-shaped table guard", boot)
+			require.ErrorContains(t, store.Open(), "threshold_events=1",
+				"legacy Open must refuse on boot %d", boot)
 
-			assert.True(t, coexTestDB.Migrator().HasColumn("notification_histories", "label_id"),
-				"notification_histories must keep its v2 shape on boot %d", boot)
-			assert.EqualValues(t, 2, getRowCount(t, coexTestDB, "notification_histories"),
-				"no row may be dropped on boot %d", boot)
+			for table, rows := range map[string]int64{"notification_histories": 2, "threshold_events": 1} {
+				assert.True(t, coexTestDB.Migrator().HasColumn(table, "label_id"),
+					"%s must keep its v2 shape on boot %d", table, boot)
+				assert.Equal(t, rows, getRowCount(t, coexTestDB, table),
+					"no row of %s may be dropped on boot %d", table, boot)
+			}
 		}
 	})
 
