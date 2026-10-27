@@ -101,3 +101,25 @@ func TestSilenceUsageOnRunErrors(t *testing.T) {
 		})
 	}
 }
+
+// TestRootCommand_SilencesUsageForRunErrors guards the wiring in RootCommand: a
+// real subcommand whose RunE rejects its input must not print usage. The
+// startup hook is cleared so the test does not initialize the application;
+// notify validates --type before it touches any service.
+func TestRootCommand_SilencesUsageForRunErrors(t *testing.T) {
+	// RootCommand binds flags to the global viper registry.
+	t.Cleanup(viper.Reset)
+
+	root := RootCommand(&conf.Settings{})
+	root.PersistentPreRunE = nil
+
+	var out bytes.Buffer
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"notify", "--type=bogus"})
+
+	err := root.Execute()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid type")
+	assert.NotContains(t, out.String(), "Usage:")
+}
