@@ -196,6 +196,15 @@ func TestYearlyTracking_ResetDateFollowsLocalDate(t *testing.T) {
 				wantStart: "2027-03-01",
 				wantEnd:   "2028-02-28",
 			},
+			{
+				// The year after a leap year, before the normalised reset date: the tracking year
+				// started on the real February 29, so the prune cutoff is that day and not March 1.
+				name:      "year_after_a_leap_year_before_the_reset",
+				now:       time.Date(2025, time.February, 14, 12, 0, 0, 0, time.UTC),
+				wantYear:  2024,
+				wantStart: "2024-02-29",
+				wantEnd:   "2025-02-28",
+			},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
