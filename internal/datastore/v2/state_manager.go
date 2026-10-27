@@ -644,8 +644,9 @@ func (m *StateManager) GetProgress() (migratedRecords, totalRecords int64, lastM
 // ============================================================================
 // These methods track detection IDs the migration worker failed to write to V2.
 // Unlike in-memory tracking, these persist across restarts.
-// A marker belongs to one migration run: the set is cleared when a run starts,
-// is rolled back, or is cancelled.
+// A marker belongs to one migration run: StartMigration and Rollback clear the
+// set in their own transaction, and the cancel handler clears it after Cancel.
+// StateManager.Cancel itself leaves it alone.
 
 // AddDirtyID records a detection ID that failed to write to V2.
 // The migration worker calls it when copying a record to V2 fails.

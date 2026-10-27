@@ -819,6 +819,25 @@ func TestStateManager_DirtyIDs_Transitions(t *testing.T) {
 			},
 		},
 		{
+			name: "cancel in the state manager keeps the markers",
+			steps: []dirtyIDStep{
+				{name: "migrating", run: toMigrating, addDirty: []uint{8}},
+				{name: "cancel", run: (*StateManager).Cancel, wantState: idle, checkDirty: true, wantDirty: 1},
+			},
+		},
+		{
+			name: "a failed clear rolls the rollback back",
+			steps: []dirtyIDStep{
+				{name: "migrating", run: toMigrating},
+				{name: "validating", run: (*StateManager).TransitionToValidating},
+				{name: "completed", run: toCompleted, wantState: entities.MigrationStatusCompleted},
+				{name: "dirty table dropped", run: func(sm *StateManager) error {
+					return sm.db.Migrator().DropTable(&entities.MigrationDirtyID{})
+				}},
+				{name: "rollback fails", run: (*StateManager).Rollback, wantErr: true, wantState: entities.MigrationStatusCompleted},
+			},
+		},
+		{
 			name: "a failed clear rolls the transition back",
 			steps: []dirtyIDStep{
 				{name: "dirty table dropped", run: func(sm *StateManager) error {
