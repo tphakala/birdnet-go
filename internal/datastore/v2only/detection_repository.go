@@ -9,20 +9,21 @@ import (
 )
 
 // detectionRepository is the datastore.DetectionRepository of a v2 database.
-// Save writes the detection's own instant through the shared v2 write path; every
-// other method is served by the datastore.Interface bridge over the same Datastore
-// until it moves to v2 reads.
+// Save writes the detection's own instant through the shared v2 write path, and the
+// read methods map v2 entities straight to results with that stored instant. The
+// remaining methods are served by the datastore.Interface bridge over the same
+// Datastore.
 type detectionRepository struct {
 	datastore.DetectionRepository
 	ds *Datastore
 }
 
 // NewDetectionRepository returns the detection repository for a v2 database.
-// Save stores Result.Timestamp.Unix() as the detection instant (the bridge used
-// for legacy stores formats and re-parses wall-clock text, which shifts one
-// occurrence of a repeated DST hour), and stores each additional result's full
-// float64 confidence. The remaining methods go through the datastore.Interface
-// bridge in the datastore's timezone.
+// Save stores Result.Timestamp.Unix() as the detection instant, and stores each
+// additional result's full float64 confidence. The reads return that stored instant
+// in the datastore's timezone as Result.Timestamp (the bridge used for legacy stores
+// formats and re-parses wall-clock text, which shifts one occurrence of a repeated
+// DST hour). The remaining methods go through the datastore.Interface bridge.
 func NewDetectionRepository(ds *Datastore) datastore.DetectionRepository {
 	return &detectionRepository{
 		DetectionRepository: datastore.NewDetectionRepository(ds, ds.timezone),
@@ -41,4 +42,87 @@ func (r *detectionRepository) Save(ctx context.Context, result *detection.Result
 	}
 	result.ID = id
 	return nil
+}
+
+// speciesWindowHours is the hour duration passed for a species query without a date; the
+// query ignores it then, as the bridge passes the same value.
+const speciesWindowHours = 1
+
+// Get retrieves a detection by ID with the instant stored for it.
+func (r *detectionRepository) Get(ctx context.Context, id string) (*detection.Result, error) {
+	det, err := r.ds.getDetection(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get detection %s: %w", id, err)
+	}
+	return r.ds.detectionToResult(ctx, det), nil
+}
+
+// GetRecent retrieves the most recent detections.
+func (r *detectionRepository) GetRecent(ctx context.Context, limit int) ([]*detection.Result, error) {
+	dets, err := r.ds.recentDetections(ctx, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent detections: %w", err)
+	}
+	return r.ds.detectionsToResults(ctx, dets), nil
+}
+
+// Search finds detections matching the given filters.
+func (r *detectionRepository) Search(ctx context.Context, filters *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+	advanced, err := filters.ToAdvancedSearchFilters(r.ds.timezone)
+	if err != nil {
+		return nil, 0, err
+	}
+	dets, total, err := r.ds.searchAdvanced(ctx, &advanced)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search detections: %w", err)
+	}
+	return r.ds.detectionsToResults(ctx, dets), total, nil
+}
+
+// GetBySpecies retrieves detections for a specific species.
+func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, filters *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+	limit := datastore.DefaultDetectionLimit
+	offset := 0
+	if filters != nil {
+		if filters.Limit > 0 {
+			limit = filters.Limit
+		}
+		offset = filters.Offset
+	}
+
+	dets, err := r.ds.speciesDetections(ctx, species, "", "", speciesWindowHours, false, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get species detections: %w", err)
+	}
+	total, err := r.ds.countSpeciesDetections(ctx, species, "", "", speciesWindowHours)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count species detections: %w", err)
+	}
+	return r.ds.detectionsToResults(ctx, dets), total, nil
+}
+
+// GetByDateRange retrieves detections within a date range.
+func (r *detectionRepository) GetByDateRange(ctx context.Context, startDate, endDate string, limit, offset int) ([]*detection.Result, int64, error) {
+	advanced, err := datastore.DateRangeSearchFilters(startDate, endDate, limit, offset, r.ds.timezone)
+	if err != nil {
+		return nil, 0, err
+	}
+	dets, total, err := r.ds.searchAdvanced(ctx, &advanced)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get detections by date range: %w", err)
+	}
+	return r.ds.detectionsToResults(ctx, dets), total, nil
+}
+
+// GetHourly retrieves detections for a specific hour on a date.
+func (r *detectionRepository) GetHourly(ctx context.Context, date, hour string, duration, limit, offset int) ([]*detection.Result, int64, error) {
+	dets, err := r.ds.hourlyDetections(ctx, date, hour, duration, limit, offset)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get hourly detections: %w", err)
+	}
+	total, err := r.ds.countHourlyDetections(ctx, date, hour, duration)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to count hourly detections: %w", err)
+	}
+	return r.ds.detectionsToResults(ctx, dets), total, nil
 }

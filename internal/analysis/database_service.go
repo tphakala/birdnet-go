@@ -143,8 +143,8 @@ func (d *DatabaseService) DataStore() datastore.Interface {
 }
 
 // DetectionRepository returns the detection repository for the active database, or
-// nil if not yet started. A v2 database gets its own repository, which stores each
-// detection's own instant; the legacy modes get the bridge over the legacy datastore.
+// nil if not yet started. A v2 database gets its own repository, which stores and
+// reads back each detection's own instant; the legacy modes get the bridge over the legacy datastore.
 func (d *DatabaseService) DetectionRepository() datastore.DetectionRepository {
 	return d.detectionRepo
 }
@@ -364,8 +364,8 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		d.dataStore = datastore.New(settings)
 	}
 
-	// Pick the detection repository for the active database. A v2 database stores each
-	// detection's own instant; the legacy modes keep the bridge over the legacy datastore.
+	// Pick the detection repository for the active database. A v2 database stores and
+	// reads back each detection's own instant; the legacy modes keep the bridge over the legacy datastore.
 	if d.v2OnlyMode && v2OnlyDatastore != nil {
 		d.detectionRepo = v2only.NewDetectionRepository(v2OnlyDatastore)
 	} else {
