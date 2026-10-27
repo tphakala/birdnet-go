@@ -489,8 +489,14 @@ func TestDetectionRepository_ReadsHonourCancelledContext(t *testing.T) {
 	cancel()
 
 	_, err := repo.Get(ctx, strconv.FormatUint(uint64(det.ID), 10))
-	require.Error(t, err)
-	assert.ErrorIs(t, err, context.Canceled)
+	require.Error(t, err, "Get")
+	require.ErrorIs(t, err, context.Canceled, "Get")
+
+	for _, rc := range listReadCalls("2026-06-01", "12") {
+		_, err := rc.call(ctx, repo)
+		require.Error(t, err, rc.name)
+		assert.ErrorIs(t, err, context.Canceled, rc.name)
+	}
 }
 
 // cancelAfterChecks is a context that cancels itself once Err has been called more than
