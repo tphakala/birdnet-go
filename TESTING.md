@@ -384,7 +384,7 @@ relying on the retry.
   When `CI` is set the variable is required, and the suites fail at startup
   without it. The migration package's external-server suite (`-tags=integration,mysql`,
   `MYSQL_TEST_*` variables) is not run by CI and drops and recreates tables, so
-  point `MYSQL_TEST_DATABASE` at a dedicated database.
+  point `MYSQL_TEST_DATABASE` at a dedicated database whose name ends in `_test`.
   Pass `-count=1` when switching servers: the suites read it in `TestMain`, and
   `go test` can replay a result cached for another server.
   In CI the `database-tests` job runs these suites on MySQL 8.0, MariaDB 10.11

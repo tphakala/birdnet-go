@@ -3,6 +3,7 @@ package testutil
 import (
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,16 +20,24 @@ import (
 // as it does in production.
 const legacyMySQLDSNParams = "charset=utf8mb4&parseTime=True&loc=Local"
 
+// testDatabaseSuffix is the suffix a database name needs for the harness to
+// drop tables in it.
+const testDatabaseSuffix = "_test"
+
 // SetupMySQLIntegrationTest creates a migration test environment on a MySQL or
 // MariaDB server: legacy tables without a prefix and v2 tables with the "v2_"
 // prefix in the same database, as in a production migration. The worker runs
 // in batch mode, as it does for MySQL in production.
 //
 // It drops and recreates every legacy and v2 table in cfg.Database, so cfg must
-// point at a dedicated database. cfg.UseV2Prefix is forced on. Tables are
+// point at a dedicated database whose name ends in "_test"; any other name
+// fails the test before a connection is opened. cfg.UseV2Prefix is forced on. Tables are
 // removed again when the test ends.
 func SetupMySQLIntegrationTest(t *testing.T, cfg *datastoreV2.MySQLConfig) *TestContext {
 	t.Helper()
+
+	require.True(t, strings.HasSuffix(cfg.Database, testDatabaseSuffix),
+		"refusing to drop tables in database %q: its name must end in %q", cfg.Database, testDatabaseSuffix)
 
 	log := logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)
 	ctx := &TestContext{

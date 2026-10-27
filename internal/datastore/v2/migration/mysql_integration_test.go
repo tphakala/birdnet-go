@@ -12,7 +12,8 @@
 //	MYSQL_TEST_DATABASE (default: birdnet_test)
 //
 // The migration tests drop and recreate the legacy and v2_ tables in
-// MYSQL_TEST_DATABASE, so it must be a dedicated database.
+// MYSQL_TEST_DATABASE, so it must be a dedicated database whose name ends in
+// "_test"; the harness refuses any other name.
 package migration_test
 
 import (
