@@ -429,17 +429,17 @@ func (m *StateManager) Rollback() error {
 	return nil
 }
 
-// UpdateProgress updates the migration progress counters.
-func (m *StateManager) UpdateProgress(lastMigratedID uint, migratedRecords int64) error {
+// UpdatePhaseProgress sets the progress numerator of the current migration
+// phase. It never touches last_migrated_id, because that column is the
+// detections cursor used by resume, tail sync and the startup reconciliation
+// scan, and only the detections pass and tail sync may move it.
+func (m *StateManager) UpdatePhaseProgress(migratedRecords int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	updates := map[string]any{
-		"last_migrated_id": lastMigratedID,
-		"migrated_records": migratedRecords,
-	}
-
-	return m.db.Model(&entities.MigrationState{}).Where("id = ?", migrationStateID).Updates(updates).Error
+	return m.db.Model(&entities.MigrationState{}).
+		Where("id = ?", migrationStateID).
+		Update("migrated_records", migratedRecords).Error
 }
 
 // IncrementProgress increments the migrated records count by delta.

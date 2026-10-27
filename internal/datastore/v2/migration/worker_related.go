@@ -629,7 +629,7 @@ func (m *RelatedDataMigrator) migratePredictions(ctx context.Context) (migrated,
 	// Use migrated+skipped as "processed" for accurate progress percentage
 	if m.stateManager != nil {
 		processed := int64(migrated + skipped)
-		if updateErr := m.stateManager.UpdateProgress(0, processed); updateErr != nil {
+		if updateErr := m.stateManager.UpdatePhaseProgress(processed); updateErr != nil {
 			m.logger.Warn("failed to update final predictions progress", logger.Error(updateErr))
 		}
 	}
@@ -696,7 +696,7 @@ func (m *RelatedDataMigrator) updatePredictionsProgress(batchCount, migrated, sk
 	// Update state manager for UI (every N batches to reduce DB writes)
 	if m.stateManager != nil && batchCount%progressUpdateInterval == 0 {
 		processed := int64(migrated + skipped)
-		if err := m.stateManager.UpdateProgress(0, processed); err != nil {
+		if err := m.stateManager.UpdatePhaseProgress(processed); err != nil {
 			m.logger.Warn("failed to update predictions progress", logger.Error(err))
 		}
 	}

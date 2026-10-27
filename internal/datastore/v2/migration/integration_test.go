@@ -951,19 +951,32 @@ func TestMigration_OutOfOrderIDs_AllRecordsMigrated(t *testing.T) {
 // Test: Post-Completion Tail Sync (Issue #2442)
 // ============================================================================
 
-// TestMigration_TailSyncCatchesPostCompletionRecords verifies that detections
-// written to the legacy database AFTER migration completes are synced to v2
-// by the tail sync loop. This is the fix for issue #2442 where hours of
-// detections were lost between migration completion and system restart.
-func TestMigration_TailSyncCatchesPostCompletionRecords(t *testing.T) {
+// TestMigration_TailSyncResumesFromCompletionWatermark verifies that
+// detections written to the legacy database AFTER migration completes are
+// synced to v2 by the tail sync loop (issue #2442), and that tail sync resumes
+// from the watermark the detections pass reached: the predictions phase must
+// not reset it, otherwise tail sync re-walks the whole legacy table.
+func TestMigration_TailSyncResumesFromCompletionWatermark(t *testing.T) {
 	t.Parallel()
 
 	ctx := testutil.SetupIntegrationTest(t)
 
-	// Seed 10 initial detections
+	// Seed 10 initial detections, each with one result so the predictions
+	// phase writes its progress.
 	notes := testutil.GenerateDetections(10)
 	err := ctx.Seeder.SeedDetections(notes)
 	require.NoError(t, err)
+
+	results := make([]datastore.Results, 0, len(notes))
+	for i := range notes {
+		id := uint(i + 1) //nolint:gosec // G115: test data uses small values
+		results = append(results, testutil.NewResultsBuilder().
+			WithID(id).
+			WithNoteID(id).
+			WithConfidence(0.6).
+			Build())
+	}
+	require.NoError(t, ctx.Seeder.SeedResults(results))
 
 	// Run migration to completion
 	ctx.StartMigration(t, len(notes))
@@ -972,6 +985,12 @@ func TestMigration_TailSyncCatchesPostCompletionRecords(t *testing.T) {
 	// Verify initial migration
 	v2Count := ctx.GetV2DetectionCount(t)
 	assert.Equal(t, int64(10), v2Count, "should have 10 detections after migration")
+
+	// The watermark must survive the predictions phase. This is checked right
+	// after completion, before the first tail sync cycle (10s interval) runs.
+	state, err := ctx.StateManager.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, uint(10), state.LastMigratedID, "predictions phase must not reset the watermark")
 
 	// Simulate post-completion detections: seed 5 more into legacy DB.
 	// In production, the processor writes these while waiting for restart.
@@ -986,8 +1005,20 @@ func TestMigration_TailSyncCatchesPostCompletionRecords(t *testing.T) {
 	// Wait for tail sync to pick up the new records.
 	// Tail sync interval is 10s, give it up to 30s for safety.
 	require.Eventually(t, func() bool {
-		v2Count = ctx.GetV2DetectionCount(t)
-		return v2Count >= 15
+		st, stErr := ctx.StateManager.GetState()
+		return stErr == nil && st.LastMigratedID == 15
 	}, 30*time.Second, time.Second,
-		"tail sync should have migrated the 5 post-completion detections to v2")
+		"tail sync should have advanced the watermark over the 5 post-completion detections")
+
+	assert.Equal(t, int64(15), ctx.GetV2DetectionCount(t))
+
+	// Tail sync migrated only the post-completion rows; a re-walk from 0
+	// would count all 15 here.
+	state, err = ctx.StateManager.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), state.MigratedRecords)
+
+	dirty, err := ctx.StateManager.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), dirty)
 }
