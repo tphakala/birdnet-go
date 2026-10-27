@@ -436,8 +436,8 @@ func TestMigrateWeatherData_ComplexIDMapping(t *testing.T) {
 		{ID: 10, DailyEventsID: 50, Time: testTime, Temperature: 1.0},
 		{ID: 20, DailyEventsID: 50, Time: testTime.Add(time.Hour), Temperature: 2.0},
 		{ID: 30, DailyEventsID: 75, Time: testTime.AddDate(0, 0, 1), Temperature: 3.0},
-		{ID: 40, DailyEventsID: 200, Time: testTime.Add(48 * time.Hour), Temperature: 4.0},
-		{ID: 50, DailyEventsID: 200, Time: testTime.Add(49 * time.Hour), Temperature: 5.0},
+		{ID: 40, DailyEventsID: 200, Time: testTime.AddDate(0, 0, 2), Temperature: 4.0},
+		{ID: 50, DailyEventsID: 200, Time: testTime.AddDate(0, 0, 2).Add(time.Hour), Temperature: 5.0},
 	}
 
 	// V2: sequential IDs starting from 1
