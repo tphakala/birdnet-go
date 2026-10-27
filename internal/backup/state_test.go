@@ -2,6 +2,7 @@ package backup
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -9,20 +10,15 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 const (
-	// stateFileName is the state file name used by the StateManager tests.
-	stateFileName = "backup-state.json"
-
 	// concurrentTargetWriters is the number of goroutines updating distinct targets.
 	concurrentTargetWriters = 16
 	// concurrentMissedWriters is the number of goroutines recording missed backups.
 	concurrentMissedWriters = 8
 	// concurrentScheduleWriters is the number of goroutines per schedule type
-	// updating schedule state and stats.
+	// updating schedule state.
 	concurrentScheduleWriters = 4
 	// concurrentReaders is the number of goroutines looping over the getters.
 	concurrentReaders = 4
@@ -32,27 +28,6 @@ const (
 	// testMissedReason is the reason recorded by missed backup tests.
 	testMissedReason = "test reason"
 )
-
-// newTestStateManager returns a manager backed by a file in a temp directory
-// together with that file's path.
-func newTestStateManager(t *testing.T) (sm *StateManager, path string) {
-	t.Helper()
-	path = filepath.Join(t.TempDir(), stateFileName)
-	return newStateManagerAt(path), path
-}
-
-// requireReturns runs fn and fails the test if it has not returned by the
-// default test timeout, so a deadlock fails fast instead of hanging the run.
-// fn must not make assertions: it runs on another goroutine.
-func requireReturns(t *testing.T, fn func(), msg string) {
-	t.Helper()
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		fn()
-	}()
-	testutil.WaitForChannel(t, done, testutil.DefaultTestTimeout, msg)
-}
 
 func TestStateManager_MutatorsDoNotDeadlockAndPersist(t *testing.T) {
 	t.Parallel()
@@ -152,6 +127,46 @@ func TestStateManager_MutatorsDoNotDeadlockAndPersist(t *testing.T) {
 	}
 }
 
+func TestStateManager_PanicInMutationReleasesLock(t *testing.T) {
+	t.Parallel()
+	sm, _ := newTestStateManager(t)
+
+	var recovered any
+	requireReturns(t, func() {
+		defer func() { recovered = recover() }()
+		_ = sm.update(func(*BackupState) { panic("mutation failed") })
+	}, "update did not return after a panicking mutation")
+	require.NotNil(t, recovered)
+
+	var err error
+	requireReturns(t, func() {
+		_ = sm.GetMissedBackups()
+		err = sm.ClearMissedBackups()
+	}, "state lock was left held after a panicking mutation")
+	require.NoError(t, err)
+}
+
+func TestStateManager_FailedSaveReturnsErrorAndReleasesLocks(t *testing.T) {
+	t.Parallel()
+
+	// The state file's parent is a regular file, so creating the directory fails.
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	require.NoError(t, os.WriteFile(blocker, nil, 0o600))
+	sm := newStateManagerAt(filepath.Join(blocker, stateFileName))
+	metadata := &Metadata{ID: "backup-1"}
+
+	// Twice: the second call needs saveMu, which the first failed save must release.
+	for call := range 2 {
+		var err error
+		requireReturns(t, func() { err = sm.UpdateTargetState(testTargetName, metadata, "success") },
+			fmt.Sprintf("UpdateTargetState call %d did not return after a failed save", call+1))
+		require.Error(t, err)
+	}
+
+	// The mutation stays in memory.
+	assert.Equal(t, 2, sm.GetTargetState(testTargetName).TotalBackups)
+}
+
 func TestStateManager_UpdateStatsDoesNotAliasCallerMap(t *testing.T) {
 	t.Parallel()
 	sm, _ := newTestStateManager(t)
@@ -227,4 +242,10 @@ func TestStateManager_ConcurrentMutationsAllPersisted(t *testing.T) {
 		assert.Equal(t, name, reloaded.GetTargetState(name).LastBackupID, "target %s missing from the saved file", name)
 	}
 	assert.Len(t, reloaded.GetMissedBackups(), concurrentMissedWriters)
+
+	dailyState := reloaded.GetScheduleState(daily)
+	assert.Zero(t, dailyState.FailureCount)
+	assert.False(t, dailyState.LastSuccessful.IsZero(), "daily schedule success missing from the saved file")
+	assert.Equal(t, concurrentScheduleWriters, reloaded.GetScheduleState(weekly).FailureCount)
+	assert.Equal(t, 1, reloaded.GetStats()[testTargetName].TotalBackups)
 }
