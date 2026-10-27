@@ -393,7 +393,7 @@ func TestGetSeasonDateRange_EndNormalisesLikeTimeDate(t *testing.T) {
 // resetStep is one operation in a tracking-year reset sequence and the state
 // expected after it.
 type resetStep struct {
-	op       string // "detect", "status" or "seed"
+	op       string // "detect", "status", "batch" or "seed"
 	species  string
 	at       time.Time
 	wantYear int
@@ -427,6 +427,8 @@ func runResetSteps(t *testing.T, tracker *SpeciesTracker, steps []resetStep) {
 			tracker.UpdateSpecies(step.species, step.at)
 		case "status":
 			tracker.GetSpeciesStatus(step.species, step.at)
+		case "batch":
+			tracker.GetBatchSpeciesStatus([]string{step.species}, step.at)
 		case "seed":
 			tracker.mu.Lock()
 			tracker.speciesThisYear[step.species] = step.at
@@ -508,6 +510,18 @@ func TestYearlyTracking_ResetFollowsTrackingYear(t *testing.T) {
 				{"status", "A", time.Date(2027, time.June, 30, 23, 59, 45, 0, time.UTC), 2026, []string{"A"}},
 				// Within the status cache TTL of the read above, but in the next tracking year.
 				{"status", "A", time.Date(2027, time.July, 1, 0, 0, 5, 0, time.UTC), 2027, nil},
+			},
+		},
+		{
+			name:        "later_tracking_year_batch_read_does_not_reset",
+			startYear:   2026,
+			constructAt: resetNoon(2027, time.February, 10),
+			steps: []resetStep{
+				{"detect", "A", resetNoon(2027, time.February, 10), 2026, []string{"A"}},
+				// A dashboard read for a date in the next tracking year.
+				{"batch", "A", resetNoon(2027, time.July, 5), 2026, []string{"A"}},
+				{"detect", "B", resetNoon(2027, time.March, 1), 2026, []string{"A", "B"}},
+				{"detect", "C", resetNoon(2027, time.July, 2), 2027, []string{"C"}},
 			},
 		},
 	}

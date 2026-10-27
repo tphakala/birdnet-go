@@ -253,6 +253,8 @@ All public methods use read-write mutex for safe concurrent access:
 - Automatic when season changes
 - Initializes new season map if needed
 
+**What moves the periods**: only live detections (`UpdateSpecies`, `CheckAndUpdateSpecies*`) and the single-species `GetSpeciesStatus`. `GetBatchSpeciesStatus`, which backs the dashboard daily summary, never moves them: it computes the periods for the requested date once per batch and returns the statuses a reset for that date would give, so viewing any past or future date does not change tracking.
+
 ### Database Synchronization
 
 **Initial Load**:
