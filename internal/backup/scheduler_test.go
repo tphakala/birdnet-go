@@ -238,13 +238,141 @@ func TestScheduler_RunBackupReleasesRunningBackup(t *testing.T) {
 
 			// checkSchedules takes this lock before it spawns runBackup.
 			s.runningBackup.Lock()
-			requireReturns(t, func() { s.runBackup(&schedule) }, "runBackup did not return")
+			requireReturns(t, func() { s.runBackup(&schedule, schedule.NextRun) }, "runBackup did not return")
 			require.True(t, s.runningBackup.TryLock(), "runBackup must release runningBackup")
 
 			got := sm.GetScheduleState(&schedule)
 			assert.Equal(t, tt.wantFailures, got.FailureCount)
 			assert.Equal(t, tt.wantFailures == 0, !got.LastSuccessful.IsZero())
 			assert.Len(t, sm.GetMissedBackups(), tt.wantMissed)
+		})
+	}
+}
+
+// newDueScheduler returns a scheduler with one daily 03:00 schedule due at due.
+// Its manager has a target and no source, so a scheduled run fails at once. It
+// also returns the manager, whose lock a test can hold to keep a run in flight.
+func newDueScheduler(t *testing.T, due time.Time) (*Scheduler, *Manager, *StateManager) {
+	t.Helper()
+	sm, _ := newTestStateManager(t)
+	m := &Manager{
+		config:       &conf.BackupConfig{Enabled: true},
+		sources:      map[string]Source{},
+		targets:      map[string]Target{"t": dummyTarget{}},
+		logger:       GetLogger().Module("test"),
+		stateManager: sm,
+	}
+	s, err := NewScheduler(m, nil, sm)
+	require.NoError(t, err)
+	s.schedules = []BackupSchedule{{Weekday: dailySchedule, Hour: 3, Minute: 0, NextRun: due}}
+	return s, m, sm
+}
+
+func TestScheduler_CheckSchedulesRecordsTheRunsOwnScheduledTime(t *testing.T) {
+	t.Parallel()
+
+	due := time.Date(2026, 6, 15, 3, 0, 0, 0, time.UTC)
+	next := time.Date(2026, 6, 16, 3, 0, 0, 0, time.UTC)
+	const lateBy = 10 * time.Minute // beyond the five minute grace period
+
+	tests := []struct {
+		name         string
+		now          time.Time
+		wantRun      bool
+		wantFailures int
+	}{
+		{name: "failed run", now: due, wantRun: true, wantFailures: 1},
+		{name: "late tick", now: due.Add(lateBy)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s, _, sm := newDueScheduler(t, due)
+
+			s.checkSchedules(tt.now)
+
+			if tt.wantRun {
+				// checkSchedules takes runningBackup before it spawns the run, so this
+				// returns only after runBackup's deferred unlock.
+				requireReturns(t, func() {
+					s.runningBackup.Lock()
+					defer s.runningBackup.Unlock()
+				}, "run did not finish")
+			} else {
+				require.True(t, s.runningBackup.TryLock(), "a late tick must not start a run")
+			}
+
+			missed := sm.GetMissedBackups()
+			require.Len(t, missed, 1)
+			assert.True(t, missed[0].ScheduledTime.Equal(due), "ScheduledTime = %v, want %v", missed[0].ScheduledTime, due)
+
+			if tt.wantRun {
+				got := sm.GetScheduleState(&s.schedules[0])
+				assert.Equal(t, tt.wantFailures, got.FailureCount)
+				assert.True(t, got.NextScheduled.Equal(next), "NextScheduled = %v, want %v", got.NextScheduled, next)
+			}
+		})
+	}
+}
+
+func TestScheduler_RunOwnsItsScheduleWhileLaterTicksAdvanceIt(t *testing.T) {
+	t.Parallel()
+
+	due := time.Date(2026, 6, 15, 3, 0, 0, 0, time.UTC)
+	next := time.Date(2026, 6, 16, 3, 0, 0, 0, time.UTC)
+
+	s, m, sm := newDueScheduler(t, due)
+
+	// Holding the manager lock keeps the started run in flight, because RunBackup
+	// takes it to read the registered sources.
+	m.mu.Lock()
+	s.checkSchedules(due)
+
+	// A second tick while that run is still going advances the live element again.
+	s.checkSchedules(next)
+	m.mu.Unlock()
+
+	requireReturns(t, func() {
+		s.runningBackup.Lock()
+		defer s.runningBackup.Unlock()
+	}, "run did not finish")
+
+	got := sm.GetScheduleState(&BackupSchedule{Weekday: dailySchedule})
+	assert.True(t, got.NextScheduled.Equal(next), "NextScheduled = %v, want %v from the run's own snapshot", got.NextScheduled, next)
+}
+
+func TestScheduler_CheckSchedulesAdvancesWhenNoRunStarts(t *testing.T) {
+	t.Parallel()
+
+	due := time.Date(2026, 6, 15, 3, 0, 0, 0, time.UTC)
+	next := time.Date(2026, 6, 16, 3, 0, 0, 0, time.UTC)
+	const lateBy = 10 * time.Minute // beyond the five minute grace period
+
+	tests := []struct {
+		name string
+		now  time.Time
+		busy bool
+	}{
+		{name: "late tick", now: due.Add(lateBy)},
+		{name: "busy tick", now: due, busy: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s, _, sm := newDueScheduler(t, due)
+			if tt.busy {
+				s.runningBackup.Lock()
+			}
+
+			s.checkSchedules(tt.now)
+
+			assert.True(t, s.schedules[0].NextRun.Equal(next), "NextRun = %v, want %v", s.schedules[0].NextRun, next)
+			assert.True(t, s.schedules[0].LastRun.Equal(tt.now), "LastRun = %v, want %v", s.schedules[0].LastRun, tt.now)
+			if !tt.busy {
+				assert.Len(t, sm.GetMissedBackups(), 1)
+			}
 		})
 	}
 }

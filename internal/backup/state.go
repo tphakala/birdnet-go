@@ -211,7 +211,9 @@ func (sm *StateManager) update(mutate func(state *BackupState)) error {
 	return sm.saveState()
 }
 
-// UpdateScheduleState updates the state for a specific schedule
+// UpdateScheduleState updates the state for a specific schedule. NextScheduled is
+// set from schedule.NextRun, which the caller sets to the schedule's next upcoming
+// run. schedule must not be shared with a goroutine that writes it.
 func (sm *StateManager) UpdateScheduleState(schedule *BackupSchedule, successful bool) error {
 	// Generate schedule key
 	key := "daily"
@@ -241,10 +243,12 @@ func (sm *StateManager) UpdateScheduleState(schedule *BackupSchedule, successful
 	return nil
 }
 
-// AddMissedBackup records a missed backup
-func (sm *StateManager) AddMissedBackup(schedule *BackupSchedule, reason string) error {
+// AddMissedBackup records the run due at scheduledTime as missed. schedule supplies
+// only the identity (IsWeekly, Weekday) and must not be shared with a goroutine
+// that writes it.
+func (sm *StateManager) AddMissedBackup(schedule *BackupSchedule, scheduledTime time.Time, reason string) error {
 	missed := MissedBackup{
-		ScheduledTime: schedule.NextRun,
+		ScheduledTime: scheduledTime,
 		Reason:        reason,
 		IsWeekly:      schedule.IsWeekly,
 	}

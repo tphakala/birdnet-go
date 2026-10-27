@@ -33,6 +33,7 @@ func TestStateManager_MutatorsDoNotDeadlockAndPersist(t *testing.T) {
 	t.Parallel()
 
 	nextRun := time.Date(2026, 6, 16, 3, 0, 0, 0, time.UTC)
+	dueTime := time.Date(2026, 6, 15, 3, 0, 0, 0, time.UTC)
 	schedule := &BackupSchedule{Hour: 3, Weekday: dailySchedule, NextRun: nextRun}
 	metadata := &Metadata{ID: "backup-1", Timestamp: nextRun, Size: 10}
 
@@ -55,7 +56,7 @@ func TestStateManager_MutatorsDoNotDeadlockAndPersist(t *testing.T) {
 		{
 			name: "AddMissedBackup",
 			mutate: func(sm *StateManager) error {
-				return sm.AddMissedBackup(schedule, testMissedReason)
+				return sm.AddMissedBackup(schedule, dueTime, testMissedReason)
 			},
 			verify: func(t *testing.T, sm *StateManager) {
 				t.Helper()
@@ -63,6 +64,7 @@ func TestStateManager_MutatorsDoNotDeadlockAndPersist(t *testing.T) {
 				require.Len(t, missed, 2)
 				for _, m := range missed {
 					assert.Equal(t, testMissedReason, m.Reason)
+					assert.True(t, m.ScheduledTime.Equal(dueTime), "ScheduledTime = %v, want %v", m.ScheduledTime, dueTime)
 				}
 			},
 		},
@@ -201,7 +203,7 @@ func TestStateManager_ConcurrentMutationsAllPersisted(t *testing.T) {
 			})
 		}
 		for range concurrentMissedWriters {
-			writers.Go(func() { errCh <- sm.AddMissedBackup(daily, testMissedReason) })
+			writers.Go(func() { errCh <- sm.AddMissedBackup(daily, daily.NextRun, testMissedReason) })
 		}
 		for range concurrentScheduleWriters {
 			writers.Go(func() { errCh <- sm.UpdateScheduleState(daily, true) })
