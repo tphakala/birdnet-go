@@ -11,11 +11,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
-const (
-	// allHoursDuration indicates no hour-based filtering (all hours).
-	allHoursDuration = 1
-)
-
 // detectionRepository implements DetectionRepository using the existing Interface.
 // This is a bridge implementation that allows gradual migration to the new domain model
 // while preserving compatibility with existing database operations. It serves the legacy
@@ -105,26 +100,38 @@ func (r *detectionRepository) Search(ctx context.Context, filters *DetectionFilt
 	return results, total, nil
 }
 
+// SearchAdvanced finds detections matching the filters as given.
+func (r *detectionRepository) SearchAdvanced(ctx context.Context, filters *AdvancedSearchFilters) ([]*detection.Result, int64, error) {
+	if filters == nil {
+		return nil, 0, ErrNilAdvancedSearchFilters
+	}
+	notes, total, err := r.store.SearchNotesAdvanced(filters)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search detections: %w", err)
+	}
+
+	results, err := r.notesToResults(notes)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return results, total, nil
+}
+
 // GetBySpecies retrieves detections for a specific species.
-func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, filters *DetectionFilters) ([]*detection.Result, int64, error) {
-	limit := DefaultDetectionLimit
-	offset := 0
-	if filters != nil {
-		if filters.Limit > 0 {
-			limit = filters.Limit
-		}
-		offset = filters.Offset
+func (r *detectionRepository) GetBySpecies(ctx context.Context, species, date, hour string, duration, limit, offset int) ([]*detection.Result, int64, error) {
+	if limit <= 0 {
+		limit = DefaultDetectionLimit
 	}
 
 	// SpeciesDetections params: species, date, hour, duration, sortAscending, limit, offset
-	// Empty date/hour means all dates/hours; allHoursDuration means no hour-based filtering
-	notes, err := r.store.SpeciesDetections(species, "", "", allHoursDuration, false, limit, offset)
+	notes, err := r.store.SpeciesDetections(species, date, hour, duration, false, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get species detections: %w", err)
 	}
 
 	// CountSpeciesDetections params: species, date, hour, duration
-	total, err := r.store.CountSpeciesDetections(species, "", "", allHoursDuration)
+	total, err := r.store.CountSpeciesDetections(species, date, hour, duration)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count species detections: %w", err)
 	}
@@ -422,18 +429,19 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 			CommonName:        note.CommonName,
 			Code:              note.SpeciesCode,
 		},
-		Confidence:     note.Confidence,
-		Latitude:       note.Latitude,
-		Longitude:      note.Longitude,
-		Threshold:      note.Threshold,
-		Sensitivity:    note.Sensitivity,
-		ClipName:       note.ClipName,
-		ClipSampleRate: note.ClipSampleRate,
-		ProcessingTime: note.ProcessingTime,
-		Unlikely:       note.Unlikely,
-		Occurrence:     note.Occurrence,
-		Verified:       note.Verified,
-		Locked:         note.Locked,
+		Confidence:          note.Confidence,
+		Latitude:            note.Latitude,
+		Longitude:           note.Longitude,
+		Threshold:           note.Threshold,
+		Sensitivity:         note.Sensitivity,
+		ClipName:            note.ClipName,
+		SpectrogramClipName: note.SpectrogramClipName,
+		ClipSampleRate:      note.ClipSampleRate,
+		ProcessingTime:      note.ProcessingTime,
+		Unlikely:            note.Unlikely,
+		Occurrence:          note.Occurrence,
+		Verified:            note.Verified,
+		Locked:              note.Locked,
 	}
 
 	// Use the note's model info if populated, otherwise fall back to default.
