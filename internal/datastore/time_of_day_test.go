@@ -25,8 +25,9 @@ func TestNightFilterExcludesSunriseSunsetWindows(t *testing.T) {
 	// Two constraints to make the test truly timezone-agnostic:
 	//
 	// 1. **testDate must be UTC midnight, not Local.** The production filter
-	//    parses filters.DateStart with time.Parse(time.DateOnly, ...) which
-	//    returns UTC midnight. SunCalc caches by date.Equal() and
+	//    asks SunCalc about the start of each calendar date in the process
+	//    zone (wallclock.DayBounds), and this test queries the same dates in
+	//    UTC. SunCalc caches by date.Equal() and
 	//    astral.julianday() does date.UTC() and uses the UTC calendar day
 	//    components. If the test passes a Local-midnight date, astral computes
 	//    sunrise/sunset for a different UTC calendar day than the filter does
@@ -333,7 +334,10 @@ func TestClassifyTimeOfDayMatchesDatastoreConstants(t *testing.T) {
 // more than the sunrise window, so a decoy matches only when the filter is dropped.
 const timeOfDayDecoyOffset = 3 * time.Hour
 
-// timeOfDayFixtureNoonHour is the hour used to ask the sun calculator about a date.
+// timeOfDayFixtureNoonHour is the hour used to ask the sun calculator about a date. The
+// fixtures prime the calculator's per-date cache at local noon, so these tests isolate which
+// dates the filter enumerates. They do not exercise the filter's own sun-time lookup at local
+// midnight, which fails for a few dates in some southern zones (tracked separately).
 const timeOfDayFixtureNoonHour = 12
 
 // TestBuildTimeOfDayConditions_CoversEveryCalendarDate checks that a sunrise filter over a
