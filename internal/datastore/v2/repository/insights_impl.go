@@ -61,56 +61,6 @@ func (r *insightsRepository) modelsTable() string {
 	return tableAIModels
 }
 
-// SQL expression helpers, same offset-arithmetic pattern as detectionRepository.hourFromUnixExpr.
-// offsetSeconds is the configured timezone's UTC offset; it is added to the epoch before the
-// date/hour/year is extracted, so the result buckets by wall-clock value in that zone and is
-// independent of the database session / OS-local timezone (unlike the older 'localtime' /
-// FROM_UNIXTIME forms). detected_at is always positive and offsets are bounded, so the
-// arithmetic stays non-negative even for west-of-UTC (negative) offsets.
-
-// dateFromUnixExpr returns a SQL expression for the wall-clock calendar date (YYYY-MM-DD).
-// SQLite: date(column + offset, 'unixepoch')
-// MySQL:  DATE_ADD('1970-01-01', INTERVAL (column + offset) DIV 86400 DAY)
-//
-// The MySQL form computes the civil date arithmetically (DATE_ADD on a literal date with an
-// integer day count) so it does not depend on the session time_zone; DATE(FROM_UNIXTIME(...))
-// would apply the session zone on top of the offset and double-count. Integer DIV avoids any
-// floating-point rounding at exact day boundaries.
-func (r *insightsRepository) dateFromUnixExpr(column string, offsetSeconds int) string {
-	if r.isMySQL {
-		return fmt.Sprintf("DATE_ADD('1970-01-01', INTERVAL (%s + %d) DIV 86400 DAY)", column, offsetSeconds)
-	}
-	return fmt.Sprintf("date(%s + %d, 'unixepoch')", column, offsetSeconds)
-}
-
-func (r *insightsRepository) hourFromUnixExpr(column string, offsetSeconds int) string {
-	if r.isMySQL {
-		return fmt.Sprintf("FLOOR((%s + %d) / 3600) %% 24", column, offsetSeconds)
-	}
-	return fmt.Sprintf("CAST((%s + %d) / 3600 AS INTEGER) %% 24", column, offsetSeconds)
-}
-
-// yearFromOffsetExpr returns a SQL expression for the wall-clock calendar year of column, with
-// offsetSQL the SQL expression for the UTC offset in seconds that applies to each row (see
-// zoneOffsetSQL).
-func (r *insightsRepository) yearFromOffsetExpr(column, offsetSQL string) string {
-	if r.isMySQL {
-		return fmt.Sprintf("YEAR(DATE_ADD('1970-01-01', INTERVAL (%s + %s) DIV 86400 DAY))", column, offsetSQL)
-	}
-	return fmt.Sprintf("CAST(strftime('%%Y', %s + %s, 'unixepoch') AS INTEGER)", column, offsetSQL)
-}
-
-// perRowOffsetSQL returns the SQL expression for the UTC offset of loc (UTC when nil) at each
-// row of column, for rows whose instants lie in [start, end): a CASE over the offset changes
-// of loc in the span, or a literal when there are none. Rows outside the span use the offset of
-// the nearest segment, see wallclock.CoveringSegments.
-func perRowOffsetSQL(column string, loc *time.Location, start, end int64, now time.Time) string {
-	if loc == nil {
-		loc = time.UTC
-	}
-	return zoneOffsetSQL(column, wallclock.CoveringSegments(loc, start, end, now), wallclock.OffsetAt(loc, time.Unix(start, 0)))
-}
-
 // yearRangesSpan returns the smallest Unix-seconds span that contains every range.
 func yearRangesSpan(ranges []TimeRange) (start, end int64) {
 	start, end = ranges[0].Start, ranges[0].End
@@ -152,7 +102,7 @@ func (r *insightsRepository) GetExpectedSpeciesToday(ctx context.Context, yearRa
 	now := time.Now()
 	from, to := wallclock.Span(spanStart, spanEnd, now)
 	dateExpr := WallClockDateExpr("d.detected_at", loc, from, to, r.isMySQL)
-	yearExpr := r.yearFromOffsetExpr("d.detected_at", perRowOffsetSQL("d.detected_at", loc, spanStart, spanEnd, now))
+	yearExpr := wallClockYearSQL("d.detected_at", perRowOffsetSQL("d.detected_at", loc, spanStart, spanEnd, now), r.isMySQL)
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).
@@ -257,8 +207,9 @@ func (r *insightsRepository) dawnChorusSegmentRows(ctx context.Context, seg wall
 	det := r.detectionsTable()
 	lab := r.labelsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")
-	hourExpr := r.hourFromUnixExpr("d.detected_at", seg.OffsetSeconds)
-	dateExpr := r.dateFromUnixExpr("d.detected_at", seg.OffsetSeconds)
+	offset := segmentOffsetSQL(seg)
+	hourExpr := wallClockHourSQL("d.detected_at", offset, r.isMySQL, mysqlHourDivFloor)
+	dateExpr := wallClockDateSQL("d.detected_at", offset, r.isMySQL)
 
 	query := r.db.WithContext(ctx).
 		Table(fmt.Sprintf("%s d", det)).

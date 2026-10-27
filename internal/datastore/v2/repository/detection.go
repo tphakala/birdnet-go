@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // DetectionRepository provides access to the normalized v2 detections schema.
@@ -119,10 +120,12 @@ type DetectionRepository interface {
 	// for the given label IDs in a single grouped query (per chunk). The result maps
 	// each label ID to its [24]int hourly counts; callers that span one species across
 	// multiple model label IDs sum the per-label arrays themselves. False positives are
-	// excluded and minConfidence filters by minimum confidence threshold. tzOffsetSeconds is
-	// the configured timezone's UTC offset, applied so detections bucket by wall-clock hour in
-	// that zone rather than the database/OS-local zone.
-	GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, tzOffsetSeconds int, minConfidence float64) (map[uint][24]int, error)
+	// excluded and minConfidence filters by minimum confidence threshold. Rows in
+	// [seg.Start, seg.End) bucket by wall-clock hour at seg.OffsetSeconds rather than the
+	// database/OS-local zone. That is exact only when the offset is constant over the segment, so
+	// callers split a range with wallclock.Segments or wallclock.CoveringSegments and merge the
+	// per-segment results.
+	GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, seg wallclock.Segment, minConfidence float64) (map[uint][24]int, error)
 
 	// GetSpeciesFirstDetection returns the first-ever detection of a species.
 	// Returns ErrDetectionNotFound if the species has never been detected.
@@ -249,13 +252,14 @@ type DetectionRepository interface {
 	// modelID is optional; pass nil to include all models.
 	GetSpeciesSummary(ctx context.Context, start, end int64, modelID *uint) ([]SpeciesSummaryData, error)
 
-	// GetHourlyDistribution returns detection counts by hour. tzOffsetSeconds is the
-	// configured timezone's UTC offset, applied so detections bucket by wall-clock hour in
-	// that zone rather than the database/OS-local zone. labelIDs (every label of one species across
+	// GetHourlyDistribution returns detection counts by hour. Rows in
+	// [seg.Start, seg.End) bucket by wall-clock hour at seg.OffsetSeconds rather than the
+	// database/OS-local zone; see GetBatchHourlyOccurrences for splitting a range into segments.
+	// labelIDs (every label of one species across
 	// models) and modelID are optional filters: nil or empty labelIDs means no label filter, so a
 	// caller that resolved a species to no labels must return its own empty result (or pass the
 	// no-match sentinel) rather than forward the empty slice.
-	GetHourlyDistribution(ctx context.Context, start, end int64, tzOffsetSeconds int, labelIDs []uint, modelID *uint) ([]HourlyDistributionData, error)
+	GetHourlyDistribution(ctx context.Context, seg wallclock.Segment, labelIDs []uint, modelID *uint) ([]HourlyDistributionData, error)
 
 	// GetDetectionTimestamps returns the raw detected_at epochs (seconds) for the half-open
 	// range [start, end), excluding false positives, in no particular order. labelIDs is an
@@ -271,11 +275,11 @@ type DetectionRepository interface {
 	GetBatchConfidences(ctx context.Context, labelIDs []uint, start, end int64, minConfidence float64) (map[uint][]float64, error)
 
 	// GetDailyAnalytics returns daily statistics.
-	// tzOffsetSeconds is the configured timezone's UTC offset, applied so detections bucket by
-	// wall-clock date in that zone rather than the database/OS-local zone.
+	// Rows in [seg.Start, seg.End) bucket by wall-clock date at seg.OffsetSeconds rather than the
+	// database/OS-local zone; see GetBatchHourlyOccurrences for splitting a range into segments.
 	// labelIDs (every label of one species across models) and modelID are optional filters; nil or
 	// empty labelIDs means no label filter (see GetHourlyDistribution).
-	GetDailyAnalytics(ctx context.Context, start, end int64, tzOffsetSeconds int, labelIDs []uint, modelID *uint) ([]DailyAnalyticsData, error)
+	GetDailyAnalytics(ctx context.Context, seg wallclock.Segment, labelIDs []uint, modelID *uint) ([]DailyAnalyticsData, error)
 
 	// GetNewSpecies returns species detected for the first time ever within the range.
 	GetNewSpecies(ctx context.Context, start, end int64, limit, offset int) ([]NewSpeciesData, error)
