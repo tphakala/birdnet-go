@@ -133,19 +133,6 @@ type SpeciesCount struct {
 	Count int64
 }
 
-// DailyCount represents detection count for a specific date.
-// Note: Date uses string format (YYYY-MM-DD) rather than Unix timestamp
-// because daily aggregations are timezone-dependent and the string format
-// is more natural for display and grouping purposes.
-type DailyCount struct {
-	// Date in YYYY-MM-DD format, bucketed in the configured timezone (offset-adjusted),
-	// not necessarily the database/OS-local zone.
-	Date string
-
-	// Count is the number of detections on this date.
-	Count int64
-}
-
 // SpeciesFirstSeen represents the first detection of a species in a time period.
 type SpeciesFirstSeen struct {
 	// LabelID is the label identifier.
