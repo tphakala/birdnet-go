@@ -293,26 +293,73 @@ func TestGetDetection_RequestEndedIsNotNotFound(t *testing.T) {
 	assert.Equal(t, apicore.StatusClientClosedRequest, rec.Code)
 }
 
-// TestGetDetections_DirectLoadCancellation verifies that a page above the cache
-// size loads on the request context and that a query cancelled while it runs is
-// answered as an ended request instead of a 500.
+// TestGetDetections_DirectLoadCancellation verifies, for each loader, that a page
+// above the cache size loads on the request context and that a query cancelled while
+// it runs is answered as an ended request, without an error log, instead of a 500.
 func TestGetDetections_DirectLoadCancellation(t *testing.T) {
-	e, _, repo, h := detectionsRepoHandler(t)
-	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(cancel)
-	repo.EXPECT().GetHourly(mock.Anything, "2026-11-01", "01", 1, 500, 0).
-		Run(func(loadCtx context.Context, _, _ string, _, _, _ int) {
-			assert.Equal(t, ctx, loadCtx, "a direct load runs on the request context")
-			cancel()
-		}).
-		Return(nil, int64(0), context.Canceled)
-	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/detections?queryType=hourly&date=2026-11-01&hour=01&numResults=500", http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/detections")
-	require.NoError(t, h.GetDetections(c))
-	assert.Equal(t, apicore.StatusClientClosedRequest, rec.Code)
+	cases := []struct {
+		name   string
+		query  url.Values
+		expect func(repo *mocks.MockDetectionRepository, cancel context.CancelFunc)
+	}{
+		{
+			name:  "hourly",
+			query: url.Values{"queryType": {"hourly"}, "date": {"2026-11-01"}, "hour": {"01"}},
+			expect: func(repo *mocks.MockDetectionRepository, cancel context.CancelFunc) {
+				repo.EXPECT().GetHourly(mock.Anything, "2026-11-01", "01", 1, 500, 0).
+					Run(func(context.Context, string, string, int, int, int) { cancel() }).
+					Return(nil, int64(0), context.Canceled)
+			},
+		},
+		{
+			name:  "species",
+			query: url.Values{"queryType": {"species"}, "species": {"Parus major"}, "date": {"2026-11-01"}},
+			expect: func(repo *mocks.MockDetectionRepository, cancel context.CancelFunc) {
+				repo.EXPECT().GetBySpecies(mock.Anything, "Parus major", "2026-11-01", "", 1, 500, 0).
+					Run(func(context.Context, string, string, string, int, int, int) { cancel() }).
+					Return(nil, int64(0), context.Canceled)
+			},
+		},
+		{
+			name:  "all",
+			query: url.Values{"queryType": {"all"}},
+			expect: func(repo *mocks.MockDetectionRepository, cancel context.CancelFunc) {
+				repo.EXPECT().SearchAdvanced(mock.Anything, mock.Anything).
+					Run(func(context.Context, *datastore.AdvancedSearchFilters) { cancel() }).
+					Return(nil, int64(0), context.Canceled)
+			},
+		},
+		{
+			name:  "advanced",
+			query: url.Values{"queryType": {"search"}, "search": {"Parus"}, "confidence": {">0.5"}},
+			expect: func(repo *mocks.MockDetectionRepository, cancel context.CancelFunc) {
+				repo.EXPECT().SearchAdvanced(mock.Anything, mock.Anything).
+					Run(func(context.Context, *datastore.AdvancedSearchFilters) { cancel() }).
+					Return(nil, int64(0), context.Canceled)
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _, repo, h := detectionsRepoHandler(t)
+			rec := newLevelRecorder()
+			h.APILogger = rec
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+			tc.expect(repo, cancel)
+			query := tc.query
+			query.Set("numResults", "500")
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections?"+query.Encode(), http.NoBody).WithContext(ctx)
+			resp := httptest.NewRecorder()
+			c := e.NewContext(req, resp)
+			c.SetPath("/api/v2/detections")
+			require.NoError(t, h.GetDetections(c))
+			assert.Equal(t, apicore.StatusClientClosedRequest, resp.Code)
+			rec.mu.Lock()
+			defer rec.mu.Unlock()
+			assert.Empty(t, rec.errs, "an ended request is not an error")
+		})
+	}
 }
 
 // TestResultToDetectionResponse_MatchesBridgeNote verifies that a fully populated
@@ -459,4 +506,49 @@ func TestGetDetections_InvalidSpeciesDateIsRejectedBeforeTheRepository(t *testin
 		"queryType": {"species"}, "species": {"Parus major"}, "date": {"2026-13-45"},
 	})
 	assert.Equal(t, http.StatusBadRequest, status)
+}
+
+// TestGetRecentDetections_RequestEnded verifies that a recent-detections request
+// whose context ended is answered as an ended request, not as a server error.
+func TestGetRecentDetections_RequestEnded(t *testing.T) {
+	e, _, repo, h := detectionsRepoHandler(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	t.Cleanup(cancel)
+	repo.EXPECT().GetRecent(mock.Anything, 5).
+		Run(func(context.Context, int) { cancel() }).
+		Return(nil, context.Canceled)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/recent?limit=5", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.SetPath("/api/v2/detections/recent")
+	require.NoError(t, h.GetRecentDetections(c))
+	assert.Equal(t, apicore.StatusClientClosedRequest, rec.Code)
+}
+
+// TestLegacyRowWithUnparseableTimeDegrades pins the documented legacy degradation: a
+// legacy row whose date and time text does not parse fails its whole list read (500)
+// and its detail read (404) through the bridge, instead of showing a row without a
+// timestamp.
+func TestLegacyRowWithUnparseableTimeDegrades(t *testing.T) {
+	bad := datastore.Note{ID: 5, Date: "not-a-date", Time: "08:15:00", ScientificName: "Parus major"}
+
+	t.Run("list", func(t *testing.T) {
+		e, mockDS, h := setupTestEnvironment(t)
+		mockDS.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("", 10, 0)).Return([]datastore.Note{bad}, int64(1), nil)
+		status, _ := getDetectionsBody(t, e, h, url.Values{"queryType": {"all"}, "numResults": {"10"}})
+		assert.Equal(t, http.StatusInternalServerError, status)
+	})
+
+	t.Run("detail", func(t *testing.T) {
+		e, mockDS, h := setupTestEnvironment(t)
+		mockDS.EXPECT().Get("5").Return(bad, nil)
+		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/5", http.NoBody)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		c.SetPath("/api/v2/detections/:id")
+		c.SetParamNames("id")
+		c.SetParamValues("5")
+		require.NoError(t, h.GetDetection(c))
+		assert.Equal(t, http.StatusNotFound, rec.Code)
+	})
 }

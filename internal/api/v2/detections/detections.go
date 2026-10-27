@@ -256,7 +256,7 @@ type detectionQueryParams struct {
 	IncludeWeather bool
 }
 
-// hourlyPageKey builds the cache key for a GetHourlyDetections page.
+// hourlyPageKey builds the cache key for a GetHourly page.
 func hourlyPageKey(date, hour string, duration, numResults, offset int) *apicore.DetectionPageKey {
 	return &apicore.DetectionPageKey{
 		Kind: apicore.DetectionPageHourly, Date: date, Hour: hour,
@@ -264,7 +264,7 @@ func hourlyPageKey(date, hour string, duration, numResults, offset int) *apicore
 	}
 }
 
-// speciesPageKey builds the cache key for a SpeciesDetections page.
+// speciesPageKey builds the cache key for a GetBySpecies page.
 func speciesPageKey(species, date, hour string, duration, numResults, offset int) *apicore.DetectionPageKey {
 	return &apicore.DetectionPageKey{
 		Kind: apicore.DetectionPageSpecies, Species: species, Date: date, Hour: hour,
@@ -272,9 +272,9 @@ func speciesPageKey(species, date, hour string, duration, numResults, offset int
 	}
 }
 
-// searchPageKey builds the cache key for a SearchNotes page. The text query and
-// the scientific-name alternatives are the only inputs the datastore call reads
-// besides the page window.
+// searchPageKey builds the cache key for a plain text search page. The text query
+// and the scientific-name alternatives are the only inputs the SearchAdvanced call
+// reads besides the page window.
 func searchPageKey(search string, scientific []string, numResults, offset int) *apicore.DetectionPageKey {
 	return &apicore.DetectionPageKey{
 		Kind: apicore.DetectionPageSearch, Search: search,
@@ -719,9 +719,10 @@ func (c *Handler) respondIfRequestEnded(ctx echo.Context, err error, logMsg stri
 	return true, ctx.JSON(code, resp)
 }
 
-// getDetectionsByQueryType retrieves detections based on the query type. The
-// context bounds how long the caller waits for a shared load; it does not
-// cancel the load itself.
+// getDetectionsByQueryType retrieves detections based on the query type. On the
+// cached path the context bounds how long the caller waits for a shared load; it
+// does not cancel that load. A page that is not cached loads on this context, so
+// cancelling it ends the query.
 func (c *Handler) getDetectionsByQueryType(ctx context.Context, params *detectionQueryParams) ([]*detectionPkg.Result, int64, error) {
 	// Species filtering is exact, so an unambiguous common name can be replaced
 	// with its scientific name directly.
@@ -1034,6 +1035,11 @@ func (c *Handler) getHourlyDetections(ctx context.Context, date, hour string, du
 	return c.cachedPage(ctx, hourlyPageKey(date, hour, duration, numResults, offset), func(loadCtx context.Context) ([]*detectionPkg.Result, int64, error) {
 		results, totalCount, err := c.Repo.GetHourly(loadCtx, date, hour, duration, numResults, offset)
 		if err != nil {
+			// A direct load runs on the request context; when that ended, GetDetections
+			// answers it at debug level, so it is not an error here.
+			if loadCtx.Err() != nil {
+				return nil, 0, err
+			}
 			c.LogErrorIfEnabled("Failed to get hourly detections",
 				logger.String("date", date),
 				logger.String("hour", hour),
@@ -1057,13 +1063,19 @@ func (c *Handler) getHourlyDetections(ctx context.Context, date, hour string, du
 	})
 }
 
-// getSpeciesDetections handles species query type logic. The date was validated as
-// YYYY-MM-DD or empty by parseDetectionQueryParams, so the repository never sees a
-// date it would ignore; the duration is at least one hour there.
+// getSpeciesDetections handles species query type logic. GetDetections validates the
+// date as YYYY-MM-DD or empty and sets the duration to at least one hour in
+// parseDetectionQueryParams, so the repository does not see a date it would ignore
+// there. BatchResolveDetections builds its parameters without that validation.
 func (c *Handler) getSpeciesDetections(ctx context.Context, species, date, hour string, duration, numResults, offset int) ([]*detectionPkg.Result, int64, error) {
 	return c.cachedPage(ctx, speciesPageKey(species, date, hour, duration, numResults, offset), func(loadCtx context.Context) ([]*detectionPkg.Result, int64, error) {
 		results, totalCount, err := c.Repo.GetBySpecies(loadCtx, species, date, hour, duration, numResults, offset)
 		if err != nil {
+			// A direct load runs on the request context; when that ended, GetDetections
+			// answers it at debug level, so it is not an error here.
+			if loadCtx.Err() != nil {
+				return nil, 0, err
+			}
 			c.LogErrorIfEnabled("Failed to get species detections",
 				logger.String("species", species),
 				logger.String("date", date),
@@ -1096,6 +1108,11 @@ func (c *Handler) getSearchDetectionsAdvanced(ctx context.Context, params *detec
 
 		results, totalCount, err := c.Repo.SearchAdvanced(loadCtx, &filters)
 		if err != nil {
+			// A direct load runs on the request context; when that ended, GetDetections
+			// answers it at debug level, so it is not an error here.
+			if loadCtx.Err() != nil {
+				return nil, 0, err
+			}
 			// Filters carry request text, and a source value may be a URI with credentials.
 			c.LogErrorIfEnabled("Failed to perform advanced search",
 				logger.String("filters", privacy.ScrubMessage(fmt.Sprintf("%+v", filters))),
@@ -1207,6 +1224,11 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 			queryFields = []logger.Field{logger.String("query", search)}
 		}
 		if err != nil {
+			// A direct load runs on the request context; when that ended, GetDetections
+			// answers it at debug level, so it is not an error here.
+			if loadCtx.Err() != nil {
+				return nil, 0, err
+			}
 			c.LogErrorIfEnabled(errMsg, append(queryFields,
 				logger.Int("limit", numResults),
 				logger.Int("offset", offset),
@@ -1276,6 +1298,9 @@ func (c *Handler) GetRecentDetections(ctx echo.Context) error {
 	// On the v2 store these rows carry no verification, lock or comment data, as before.
 	results, err := c.Repo.GetRecent(ctx.Request().Context(), limit)
 	if err != nil {
+		if ended, respErr := c.respondIfRequestEnded(ctx, err, "Recent detections request ended before completion"); ended {
+			return respErr
+		}
 		return c.HandleError(ctx, err, "Failed to get recent detections", http.StatusInternalServerError)
 	}
 

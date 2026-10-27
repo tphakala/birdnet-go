@@ -76,10 +76,10 @@ const DetectionPageNameSeparator = "\x00"
 // datastore.
 //
 // TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget measures the heap a
-// page retains: about 144 KB for 100 fully populated notes on linux/amd64. The
-// worst case of 48 such pages is about 6.9 MB, within the 8 MiB budget
+// page retains: about 124 KB for 100 fully populated results on linux/amd64. The
+// worst case of 48 such pages is about 6.0 MB, within the 8 MiB budget
 // (detectionCacheMaxBytes) for a Raspberry Pi. Bounding the entry count alone
-// would have allowed only six 1000-note pages (about 1.4 MB each), too few to
+// would have allowed only six 1000-result pages (about 1.2 MB each), too few to
 // help normal paging.
 const (
 	detectionCacheExpiry = 5 * time.Minute // Detection-query cache expiration
