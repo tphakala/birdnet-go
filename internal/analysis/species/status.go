@@ -50,17 +50,17 @@ func (t *SpeciesTracker) GetSpeciesStatus(scientificName string, currentTime tim
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Check cache first - if valid entry exists within TTL and same year, return it
+	// Check cache first - if valid entry exists within TTL and same tracking year, return it
 	if cached, exists := t.statusCache[scientificName]; exists {
-		// Check if cache is still valid (within TTL and same year)
+		// Check if cache is still valid (within TTL and same tracking year)
 		cacheValid := currentTime.Sub(cached.timestamp) < t.cacheTTL
-		sameYear := currentTime.Year() == cached.timestamp.Year()
+		sameTrackingYear := t.getTrackingYear(currentTime) == t.getTrackingYear(cached.timestamp)
 
-		if cacheValid && sameYear {
+		if cacheValid && sameTrackingYear {
 			// Cache hit - return cached result directly
 			return cached.status
 		}
-		// Cache expired or year changed - will recompute and update cache below
+		// Cache expired or tracking year changed - will recompute and update cache below
 	}
 
 	// Perform periodic cache cleanup to prevent unbounded growth

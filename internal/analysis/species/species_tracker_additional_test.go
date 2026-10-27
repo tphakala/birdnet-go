@@ -213,9 +213,9 @@ func TestShouldResetYear(t *testing.T) {
 			expected:    false,
 		},
 		{
-			name:        "new year before reset date",
+			name:        "next calendar year before reset date stays in tracking year",
 			currentTime: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
-			expected:    true,
+			expected:    false,
 		},
 		{
 			name:        "new year after reset date",
