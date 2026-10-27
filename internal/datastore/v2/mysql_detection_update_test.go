@@ -55,7 +55,9 @@ func TestMySQL_DetectionUpdate_OutcomeByRowState(t *testing.T) {
 		id      uint
 		updates map[string]any
 		wantErr error
-		check   func(t *testing.T)
+		// checkClip asserts the stored clip_name afterwards: wantClip, or NULL when empty.
+		checkClip bool
+		wantClip  string
 	}{
 		{
 			name:    "values equal to the stored ones succeed",
@@ -68,21 +70,18 @@ func TestMySQL_DetectionUpdate_OutcomeByRowState(t *testing.T) {
 			updates: map[string]any{"clip_name": nil},
 		},
 		{
-			name:    "clearing an already cleared clip name succeeds",
-			id:      openID,
-			updates: map[string]any{"clip_name": nil},
-			check:   func(t *testing.T) { assert.Nil(t, storedClip(openID)) },
+			name:      "clearing an already cleared clip name succeeds",
+			id:        openID,
+			updates:   map[string]any{"clip_name": nil},
+			checkClip: true,
 		},
 		{
-			name:    "a changed value on a locked detection is refused",
-			id:      lockedID,
-			updates: map[string]any{"clip_name": "other.wav"},
-			wantErr: repository.ErrDetectionLocked,
-			check: func(t *testing.T) {
-				got := storedClip(lockedID)
-				require.NotNil(t, got)
-				assert.Equal(t, clipName, *got)
-			},
+			name:      "a changed value on a locked detection is refused",
+			id:        lockedID,
+			updates:   map[string]any{"clip_name": "other.wav"},
+			wantErr:   repository.ErrDetectionLocked,
+			checkClip: true,
+			wantClip:  clipName,
 		},
 		{
 			name:    "an unchanged value on a locked detection is still refused",
@@ -106,9 +105,50 @@ func TestMySQL_DetectionUpdate_OutcomeByRowState(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
-			if tt.check != nil {
-				tt.check(t)
+			if !tt.checkClip {
+				return
 			}
+			got := storedClip(tt.id)
+			if tt.wantClip == "" {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantClip, *got)
 		})
 	}
+}
+
+// TestMySQL_ClipSampleRate_ReportsOnlyRealChanges pins that, with matched-row
+// counting, FillClipSampleRate still reports true only when it filled a NULL
+// rate, and that RecordClipSampleRate overwriting a stored value is not an error.
+func TestMySQL_ClipSampleRate_ReportsOnlyRealChanges(t *testing.T) {
+	dropAllTables(t, coexTestDB, coexTestDBName)
+
+	mgr := newTestMySQLManager(t, true)
+	require.NoError(t, mgr.Initialize())
+	t.Cleanup(func() { _ = mgr.Close() })
+
+	repo := repository.NewDetectionRepository(mgr.DB(), nil, true, true)
+
+	const (
+		detectionID = uint(1)
+		clipName    = "clip.wav"
+		sampleRate  = 48000
+	)
+	require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+		return tx.Exec(
+			"INSERT INTO v2_detections (id, model_id, label_id, detected_at, confidence, clip_name) VALUES (?, 1, 1, 1000, 0.9, ?)",
+			detectionID, clipName).Error
+	}))
+
+	filled, err := repo.FillClipSampleRate(t.Context(), detectionID, clipName, sampleRate)
+	require.NoError(t, err)
+	assert.True(t, filled, "a NULL rate is filled")
+
+	filled, err = repo.FillClipSampleRate(t.Context(), detectionID, clipName, sampleRate)
+	require.NoError(t, err)
+	assert.False(t, filled, "a stored rate is not filled again")
+
+	require.NoError(t, repo.RecordClipSampleRate(t.Context(), detectionID, clipName, sampleRate))
 }

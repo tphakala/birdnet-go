@@ -34,8 +34,8 @@ type TestContext struct {
 	Seeder     *LegacySeeder // Seeder for legacy data
 
 	// V2 database components
-	V2Manager    *datastoreV2.SQLiteManager // V2 SQLite manager
-	StateManager *datastoreV2.StateManager  // Migration state manager
+	V2Manager    datastoreV2.Manager       // V2 manager (SQLite, or MySQL from SetupMySQLIntegrationTest)
+	StateManager *datastoreV2.StateManager // Migration state manager
 
 	// V2 Repositories
 	DetectionRepo    repository.DetectionRepository
@@ -59,6 +59,9 @@ type TestContext struct {
 	// Adapters for migration interfaces
 	legacyDetectionRepo datastore.DetectionRepository
 	legacyInterface     datastore.Interface
+
+	// useBatchMode is passed to the worker as UseBatchMode (set for MySQL, as in production).
+	useBatchMode bool
 
 	// Logger
 	Logger logger.Logger
@@ -123,19 +126,7 @@ func (ctx *TestContext) setupLegacyDB(t *testing.T, tmpDir string) {
 	require.NoError(t, err, "failed to create legacy GORM DB")
 
 	// Auto-migrate the legacy schema
-	err = gormDB.AutoMigrate(
-		&datastore.Note{},
-		&datastore.Results{},
-		&datastore.NoteReview{},
-		&datastore.NoteComment{},
-		&datastore.NoteLock{},
-		&datastore.DailyEvents{},
-		&datastore.HourlyWeather{},
-		&datastore.DynamicThreshold{},
-		&datastore.ThresholdEvent{},
-		&datastore.ImageCache{},
-		&datastore.NotificationHistory{},
-	)
+	err = gormDB.AutoMigrate(legacyModels()...)
 	require.NoError(t, err, "failed to migrate legacy schema")
 
 	// Get the underlying sql.DB for the seeder
@@ -187,15 +178,7 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 	ctx.StateManager = datastoreV2.NewStateManager(mgr.DB())
 
 	// Create repositories (useV2Prefix = false for direct table access in tests, isMySQL = false for SQLite)
-	db := mgr.DB()
-	ctx.DetectionRepo = repository.NewDetectionRepository(db, nil, false, false)
-	ctx.LabelRepo = repository.NewLabelRepository(db, nil, false, false)
-	ctx.ModelRepo = repository.NewModelRepository(db, nil, false, false)
-	ctx.SourceRepo = repository.NewAudioSourceRepository(db, nil, false, false)
-	ctx.WeatherRepo = repository.NewWeatherRepository(db, nil, false, false)
-	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, nil, ctx.LabelRepo, false, false)
-	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, false, false)
-	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, nil, ctx.LabelRepo, false, false)
+	ctx.createRepositories(mgr.DB(), false, false)
 
 	// Populate lookup tables for V2 normalized schema
 	ctx.setupLookupTables(t)
@@ -207,6 +190,35 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 			oldCleanup()
 		}
 		_ = mgr.Close()
+	}
+}
+
+// createRepositories builds the v2 repositories on db.
+func (ctx *TestContext) createRepositories(db *gorm.DB, useV2Prefix, isMySQL bool) {
+	ctx.DetectionRepo = repository.NewDetectionRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.LabelRepo = repository.NewLabelRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.ModelRepo = repository.NewModelRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.SourceRepo = repository.NewAudioSourceRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.WeatherRepo = repository.NewWeatherRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, nil, ctx.LabelRepo, useV2Prefix, isMySQL)
+	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, nil, ctx.LabelRepo, useV2Prefix, isMySQL)
+}
+
+// legacyModels lists the legacy tables the migration reads, in AutoMigrate order.
+func legacyModels() []any {
+	return []any{
+		&datastore.Note{},
+		&datastore.Results{},
+		&datastore.NoteReview{},
+		&datastore.NoteComment{},
+		&datastore.NoteLock{},
+		&datastore.DailyEvents{},
+		&datastore.HourlyWeather{},
+		&datastore.DynamicThreshold{},
+		&datastore.ThresholdEvent{},
+		&datastore.ImageCache{},
+		&datastore.NotificationHistory{},
 	}
 }
 
@@ -277,6 +289,7 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 		MaxConsecErrors:    5,
 		SpeciesLabelTypeID: ctx.SpeciesLabelTypeID,
 		AvesClassID:        ctx.AvesClassID,
+		UseBatchMode:       ctx.useBatchMode,
 	})
 	require.NoError(t, err, "failed to create migration worker")
 

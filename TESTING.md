@@ -382,7 +382,9 @@ relying on the retry.
   container suites and overrides any tag a test sets; it does not affect the
   external-server tests gated by `MYSQL_TEST_HOST` and `MYSQL_TEST_PASSWORD`.
   When `CI` is set the variable is required, and the suites fail at startup
-  without it.
+  without it. The migration package's external-server suite (`-tags=integration,mysql`,
+  `MYSQL_TEST_*` variables) is not run by CI and drops and recreates tables, so
+  point `MYSQL_TEST_DATABASE` at a dedicated database.
   Pass `-count=1` when switching servers: the suites read it in `TestMain`, and
   `go test` can replay a result cached for another server.
   In CI the `database-tests` job runs these suites on MySQL 8.0, MariaDB 10.11
