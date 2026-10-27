@@ -2,8 +2,8 @@ package repository
 
 import "gorm.io/gorm/clause"
 
-// No-op columns for onConflictSkip. Each is a plain NOT NULL column of the
-// table's unique key, never the auto-increment column.
+// No-op columns for onConflictSkip. Each is a plain column of its table, never
+// the auto-increment column or a generated column.
 const (
 	// detectionIDColumn is used for predictions, reviews, comments and locks.
 	detectionIDColumn = "detection_id"

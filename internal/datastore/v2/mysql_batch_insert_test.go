@@ -3,7 +3,6 @@
 package v2
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,7 +24,7 @@ func TestMySQL_BatchInserts_SkipRowsDuplicatedInOneStatement(t *testing.T) {
 	require.NoError(t, mgr.Initialize())
 	t.Cleanup(func() { _ = mgr.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 	db := mgr.DB()
 
 	labelType := entities.LabelType{Name: "batch_insert_species"}
@@ -67,6 +66,22 @@ func TestMySQL_BatchInserts_SkipRowsDuplicatedInOneStatement(t *testing.T) {
 		require.NoError(t, db.Table("v2_detection_predictions").
 			Where("detection_id = ? AND label_id = ?", predID, labelA.ID).First(&kept).Error)
 		assert.InDelta(t, firstConfidence, kept.Confidence, 1e-9)
+
+		// A pair that is already stored is skipped and the stored row is untouched.
+		require.NoError(t, detRepo.SavePredictionsBatch(ctx, []*entities.DetectionPrediction{
+			{DetectionID: predID, LabelID: labelA.ID, Confidence: 0.1, Rank: 4},
+		}))
+		require.NoError(t, db.Table("v2_detection_predictions").
+			Where("detection_id = ? AND label_id = ?", predID, labelA.ID).First(&kept).Error)
+		assert.InDelta(t, firstConfidence, kept.Confidence, 1e-9)
+	})
+
+	t.Run("a foreign key violation still fails the statement", func(t *testing.T) {
+		const missingLabelID = uint(9999)
+		err := detRepo.SavePredictionsBatch(ctx, []*entities.DetectionPrediction{
+			{DetectionID: predID, LabelID: missingLabelID, Confidence: 0.5, Rank: 5},
+		})
+		require.Error(t, err)
 	})
 
 	t.Run("labels differing only in case", func(t *testing.T) {
@@ -86,9 +101,10 @@ func TestMySQL_BatchInserts_SkipRowsDuplicatedInOneStatement(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		var count int64
-		require.NoError(t, db.Table("v2_detection_reviews").Where("detection_id = ?", reviewID).Count(&count).Error)
-		assert.Equal(t, int64(1), count)
+		var kept []entities.DetectionReview
+		require.NoError(t, db.Table("v2_detection_reviews").Where("detection_id = ?", reviewID).Find(&kept).Error)
+		require.Len(t, kept, 1)
+		assert.Equal(t, entities.VerificationCorrect, kept[0].Verified)
 	})
 
 	t.Run("locks", func(t *testing.T) {
@@ -111,9 +127,10 @@ func TestMySQL_BatchInserts_SkipRowsDuplicatedInOneStatement(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		var count int64
-		require.NoError(t, db.Table("v2_daily_events").Where("date = ?", date).Count(&count).Error)
-		assert.Equal(t, int64(1), count)
+		var kept []entities.DailyEvents
+		require.NoError(t, db.Table("v2_daily_events").Where("date = ?", date).Find(&kept).Error)
+		require.Len(t, kept, 1)
+		assert.Equal(t, int64(1), kept[0].Sunrise)
 	})
 
 	t.Run("comments without a unique key are all kept", func(t *testing.T) {
