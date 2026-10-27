@@ -97,7 +97,7 @@ func TestLoadNoveltyEpisodesFromDatabase_RestoresActiveEpisode(t *testing.T) {
 
 	const scientificName = "Setophaga castanea"
 	now := time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC)
-	runStart := trackerDateOnly(now)
+	runStart := time.Date(2026, 5, 23, 0, 0, 0, 0, time.UTC)
 	previousDate := runStart.AddDate(0, 0, -12)
 
 	ds := &noveltyHistoryDatastore{
@@ -135,7 +135,7 @@ func TestLoadNoveltyEpisodesFromDatabase(t *testing.T) {
 
 	const scientificName = "Setophaga castanea"
 	now := time.Date(2026, 5, 23, 10, 0, 0, 0, time.UTC)
-	runStart := trackerDateOnly(now)
+	runStart := time.Date(2026, 5, 23, 0, 0, 0, 0, time.UTC)
 	previousDate := runStart.AddDate(0, 0, -12)
 
 	tests := []struct {

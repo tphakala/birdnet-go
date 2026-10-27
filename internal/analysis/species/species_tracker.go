@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // Constants for better maintainability and avoiding magic numbers
@@ -176,7 +177,7 @@ type SpeciesTracker struct {
 	// they are not "new this season". seasonCarryoverStart is the (date-only)
 	// start of the season the set describes; zero until first computed.
 	seasonCarryover      map[string]struct{}
-	seasonCarryoverStart time.Time
+	seasonCarryoverStart wallclock.Date
 
 	// Configuration
 	ds                 SpeciesDatastore

@@ -17,6 +17,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
 // ============================================================================
@@ -26,6 +27,10 @@ import (
 
 func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 	t.Parallel()
+
+	// Havana skips midnight on 2026-03-08: the first local instant of that date is 01:00.
+	havana := testutil.ToolchainZones(t)["America/Havana"]
+	require.NotNil(t, havana)
 
 	tests := []struct {
 		name                  string
@@ -97,6 +102,33 @@ func TestCheckAndUpdateLifetimeLocked_EdgeCases(t *testing.T) {
 			expectedIsNew:         false,
 			expectedDaysSince:     1992, // ~5.5 years
 			expectedFirstSeenTime: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:                  "skipped_midnight_live_first_day_window_starts_at_first_instant",
+			windowDays:            7,
+			existingFirstSeen:     new(time.Date(2026, 3, 8, 12, 0, 0, 0, havana)),
+			detectionTime:         time.Date(2026, 3, 15, 0, 30, 0, 0, havana),
+			expectedIsNew:         true,
+			expectedDaysSince:     7,
+			expectedFirstSeenTime: time.Date(2026, 3, 8, 12, 0, 0, 0, havana),
+		},
+		{
+			name:                  "skipped_midnight_loaded_first_day_window_starts_at_first_instant",
+			windowDays:            7,
+			existingFirstSeen:     new(time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC)),
+			detectionTime:         time.Date(2026, 3, 15, 0, 30, 0, 0, havana),
+			expectedIsNew:         true,
+			expectedDaysSince:     7,
+			expectedFirstSeenTime: time.Date(2026, 3, 8, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			name:                  "skipped_midnight_window_is_a_24h_multiple_not_calendar_days",
+			windowDays:            7,
+			existingFirstSeen:     new(time.Date(2026, 3, 8, 12, 0, 0, 0, havana)),
+			detectionTime:         time.Date(2026, 3, 15, 1, 0, 0, 0, havana),
+			expectedIsNew:         false,
+			expectedDaysSince:     7,
+			expectedFirstSeenTime: time.Date(2026, 3, 8, 12, 0, 0, 0, havana),
 		},
 		{
 			name:                  "zero_window_days_always_not_new",
