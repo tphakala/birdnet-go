@@ -90,7 +90,8 @@ type rangeCase struct {
 }
 
 // rangeCases lists the zones and ranges checked: both directions in the northern and southern
-// hemispheres, a half-hour shift, a single fall-back day and a zone without daylight saving.
+// hemispheres, a half-hour shift, a single fall-back day, a zone without daylight saving and the days around
+// the Unix epoch.
 func rangeCases() []rangeCase {
 	utc := func(y int, m time.Month, d, h int) time.Time { return time.Date(y, m, d, h, 0, 0, 0, time.UTC) }
 	return []rangeCase{
@@ -101,6 +102,9 @@ func rangeCases() []rangeCase {
 		{"sydney spring", "Australia/Sydney", "2026-09-30", "2026-10-08", []time.Time{utc(2026, time.October, 3, 16)}},
 		{"lord howe autumn", "Australia/Lord_Howe", "2026-04-01", "2026-04-08", []time.Time{utc(2026, time.April, 4, 15)}},
 		{"tokyo control", "Asia/Tokyo", "2026-03-25", "2026-04-02", nil},
+		// The local days around the Unix epoch in a zone west of UTC: seeded rows have negative
+		// detected_at, and local time before 1970 for detected_at below 18000.
+		{"new york epoch", "America/New_York", "1969-12-31", "1970-01-01", nil},
 	}
 }
 
@@ -219,7 +223,12 @@ func assertRangeAnalyticsWallClock(t *testing.T, ds *Datastore) {
 		}
 		seedRangeDetections(t, ds, fresh)
 		seeded = append(seeded, fresh...)
-		total += len(fresh)
+		// An open range starts at the Unix epoch, so rows with a negative detected_at are not in it.
+		for _, s := range fresh {
+			if s.at.Unix() >= 0 {
+				total++
+			}
+		}
 
 		// One false positive that must not be counted anywhere.
 		fp := seedDetection(t, ds, rangeSpeciesA, first.Add(time.Hour))
@@ -303,7 +312,7 @@ func assertRangeAnalyticsWallClock(t *testing.T, ds *Datastore) {
 		})
 	}
 
-	t.Run("open range keeps every row", func(t *testing.T) {
+	t.Run("open range keeps every row from the epoch on", func(t *testing.T) {
 		daily, err := ds.GetDailyAnalyticsData(ctx, "", "", "")
 		require.NoError(t, err)
 		sum := 0

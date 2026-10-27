@@ -54,6 +54,18 @@ func wallClockZoneCases() []struct {
 			},
 		},
 		{
+			// The Unix epoch is 19:00 on 1969-12-31 in New York (UTC-5): rows whose local time is
+			// before 1970 must still land in their true hour.
+			zone: "America/New_York",
+			rows: []hourRow{
+				{utc(1969, time.December, 31, 23, 59, 59), 18},
+				{utc(1970, time.January, 1, 0, 30, 0), 19},
+				{utc(1970, time.January, 1, 4, 59, 59), 23},
+				{utc(1970, time.January, 1, 5, 0, 0), 0},
+				{utc(2026, time.January, 15, 17, 0, 0), 12},
+			},
+		},
+		{
 			zone: "Australia/Lord_Howe",
 			rows: []hourRow{
 				// Fall back 2026-04-05 02:00 +11 becomes 01:30 +10:30.
@@ -99,7 +111,7 @@ func TestSearch_IncludedHoursUseEachDetectionsWallClockHour(t *testing.T) {
 				jan1 := time.Date(2026, time.January, 1, 0, 0, 0, 0, zone).Unix()
 				windows := []window{
 					{"open ended", nil, nil, func(hourRow) bool { return true }},
-					{"start only", &jan1, nil, func(hourRow) bool { return true }},
+					{"start only", &jan1, nil, func(r hourRow) bool { return r.at.Unix() >= jan1 }},
 				}
 				seenDays := map[string]bool{}
 				for _, row := range zc.rows {
@@ -264,5 +276,35 @@ func TestWallClockExprNilLocationIsUTC(t *testing.T) {
 			repo.wallClockHourExpr("d.detected_at", time.UTC, from, to),
 			repo.wallClockHourExpr("d.detected_at", nil, from, to),
 			"wallClockHourExpr, isMySQL=%v", isMySQL)
+	}
+}
+
+// TestWallClockSQLText pins the exact text of the hour, date and year builders for both
+// dialects. The MySQL forms are otherwise only exercised by the integration suites, and small
+// edits to them change behaviour: DATE() instead of DATE_FORMAT turns the date into a time.Time
+// under parseTime=True, FLOOR(x / n) depends on div_precision_increment, and naming the shifted
+// column twice doubles a long offset CASE.
+func TestWallClockSQLText(t *testing.T) {
+	t.Parallel()
+
+	const column, offset = "d.detected_at", "-18000"
+	tests := []struct {
+		name  string
+		build func(column, offsetSQL string, isMySQL bool) string
+		mysql bool
+		want  string
+	}{
+		{"sqlite hour", wallClockHourSQL, false, "CAST(((((d.detected_at + -18000) % 86400) + 86400) % 86400) / 3600 AS INTEGER)"},
+		{"mysql hour", wallClockHourSQL, true, "((((d.detected_at + -18000) % 86400) + 86400) % 86400) DIV 3600"},
+		{"sqlite date", wallClockDateSQL, false, "date(d.detected_at + -18000, 'unixepoch')"},
+		{"mysql date", wallClockDateSQL, true, "DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL (d.detected_at + -18000) SECOND), '%Y-%m-%d')"},
+		{"sqlite year", wallClockYearSQL, false, "CAST(strftime('%Y', d.detected_at + -18000, 'unixepoch') AS INTEGER)"},
+		{"mysql year", wallClockYearSQL, true, "YEAR(DATE_ADD('1970-01-01', INTERVAL (d.detected_at + -18000) SECOND))"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, tc.build(column, offset, tc.mysql))
+		})
 	}
 }

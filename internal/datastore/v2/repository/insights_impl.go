@@ -208,7 +208,7 @@ func (r *insightsRepository) dawnChorusSegmentRows(ctx context.Context, seg wall
 	lab := r.labelsTable()
 	fpJoin, fpWhere := r.falsePositiveExclusion("d")
 	offset := segmentOffsetSQL(seg)
-	hourExpr := wallClockHourSQL("d.detected_at", offset, r.isMySQL, mysqlHourDivFloor)
+	hourExpr := wallClockHourSQL("d.detected_at", offset, r.isMySQL)
 	dateExpr := wallClockDateSQL("d.detected_at", offset, r.isMySQL)
 
 	query := r.db.WithContext(ctx).
