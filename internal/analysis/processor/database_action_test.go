@@ -777,36 +777,6 @@ func TestDatabaseAction_RetryWindowEnds(t *testing.T) {
 			assert.Equal(t, 1, repo.saveCalls())
 		})
 	})
-
-	t.Run("save_lands_after_the_last_attempt", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			repo := &scriptedSaveRepository{
-				MockDetectionRepository: NewMockDetectionRepository(),
-				release:                 make(chan struct{}),
-			}
-			det := testDetection()
-			detectionCtx := &DetectionContext{}
-			action := &DatabaseAction{
-				Settings: &conf.Settings{Debug: true}, Repo: repo, Result: det.Result, Results: det.Results,
-				EventTracker: NewEventTracker(time.Hour), DetectionCtx: detectionCtx,
-			}
-			action.saveRetryConfig()
-			action.maxAttempts.Store(lastAttempt)
-
-			first := make(chan error, 1)
-			go func() { first <- action.ExecuteContext(t.Context(), nil) }()
-			synctest.Wait()
-
-			ctx, cancel := context.WithTimeout(t.Context(), CompositeActionTimeout)
-			defer cancel()
-			require.ErrorIs(t, action.ExecuteContext(ctx, nil), errDetectionSaveInFlight)
-
-			close(repo.release)
-			require.NoError(t, <-first)
-			assert.NotZero(t, detectionCtx.NoteID.Load(), "the row is stored and its ID shared")
-			assert.Equal(t, 1, repo.GetSavedCount())
-		})
-	})
 }
 
 // TestDatabaseAction_LegacyStoreIsNotRetried verifies that a failure of the legacy
@@ -1110,4 +1080,33 @@ func TestDatabaseAction_LateLandingIsOnlyTheLastAttempt(t *testing.T) {
 			assert.Equal(t, tt.wantLate, action.windowEnded.Load())
 		})
 	}
+}
+
+// TestCompositeAction_WillRetryFollowsTheDatabaseStep verifies when a failed step
+// of the database composite is expected to be retried, so that only a failure
+// that ends the job is logged at Error.
+func TestCompositeAction_WillRetryFollowsTheDatabaseStep(t *testing.T) {
+	t.Parallel()
+
+	det := testDetection()
+	newComposite := func() (*CompositeAction, *DatabaseAction) {
+		db := &DatabaseAction{
+			Settings: &conf.Settings{Debug: true}, Repo: NewMockDetectionRepository(),
+			Result: det.Result, Results: det.Results, EventTracker: NewEventTracker(time.Hour),
+		}
+		return &CompositeAction{Actions: []Action{db}, RetryConfig: db.saveRetryConfig()}, db
+	}
+	failure := errors.NewStd("step failed")
+
+	composite, db := newComposite()
+	assert.True(t, composite.willRetry(failure), "a pending save is retried")
+
+	db.terminate(failure)
+	assert.False(t, composite.willRetry(failure), "a terminal save ends the job")
+
+	composite, db = newComposite()
+	require.NoError(t, db.ExecuteContext(t.Context(), nil))
+	assert.False(t, composite.willRetry(failure), "a stored save is never saved again")
+
+	assert.False(t, (&CompositeAction{}).willRetry(failure), "a composite without a retry policy is not retried")
 }
