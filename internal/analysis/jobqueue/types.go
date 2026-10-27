@@ -60,6 +60,13 @@ type RetryConfig struct {
 	InitialDelay time.Duration // Initial delay before first retry
 	MaxDelay     time.Duration // Maximum delay between retries
 	Multiplier   float64       // Backoff multiplier for each subsequent retry
+
+	// Retryable, when non-nil, is asked after every failed attempt whether
+	// another attempt may run; a false answer fails the job at once even though
+	// attempts remain. Nil means every error may be retried. It is called with
+	// the queue lock held, so it must be fast, must not block and must not call
+	// back into the queue.
+	Retryable func(err error) bool
 }
 
 // Action defines the interface that must be implemented by any action

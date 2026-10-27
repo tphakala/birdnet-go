@@ -88,9 +88,37 @@ func IsConnectivityError(err error) bool {
 	return hasConnectivityShape(err, msg) && !mysqlServerErrorRegex.MatchString(msg)
 }
 
+// IsUnsentError reports whether err means no byte of the failed operation
+// reached the database server: a failed dial (connect refused, host or network
+// unreachable, dial timeout, DNS lookup failure) or driver.ErrBadConn. The
+// database/sql/driver contract returns ErrBadConn only when the driver is sure
+// the server did not perform the operation, so a single-transaction write that
+// failed this way stored nothing and can be repeated without creating a
+// duplicate. Unlike IsConnectivityError it does not accept the MySQL driver's
+// "invalid connection" sentinel, which the driver also returns when a COMMIT
+// was sent and its reply was lost, a case where the server may have applied the
+// write. Errors carrying a MySQL server error marker are not unsent errors.
+func IsUnsentError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if ee, ok := err.(*EnhancedError); ok && ee.Err == nil { //nolint:errorlint // the nil-cause guard needs the outermost value only
+		return false
+	}
+	msg := err.Error()
+	return hasUnsentShape(err, msg) && !mysqlServerErrorRegex.MatchString(msg)
+}
+
 // hasConnectivityShape reports whether err, whose message is msg, has one of
-// the connectivity shapes, before the server error veto.
+// the connectivity shapes, before the server error veto: an unsent shape
+// (hasUnsentShape) or the MySQL driver's "invalid connection" sentinel.
 func hasConnectivityShape(err error, msg string) bool {
+	return hasUnsentShape(err, msg) || isLeafMessage(err, mysqlInvalidConnMessage)
+}
+
+// hasUnsentShape reports whether err, whose message is msg, shows that the
+// operation never reached the server, before the server error veto.
+func hasUnsentShape(err error, msg string) bool {
 	if _, ok := AsType[*net.DNSError](err); ok {
 		return true
 	}
@@ -103,9 +131,6 @@ func hasConnectivityShape(err error, msg string) bool {
 		}
 	}
 	if Is(err, driver.ErrBadConn) {
-		return true
-	}
-	if isLeafMessage(err, mysqlInvalidConnMessage) {
 		return true
 	}
 	return isFlattenedDialFailure(msg)

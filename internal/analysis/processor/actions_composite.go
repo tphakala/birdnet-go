@@ -282,8 +282,9 @@ func (a *CompositeAction) logAndReturnTimeoutError(action Action, timeout time.D
 // queue as its own job instead of running it inline. It lets an action that
 // depends on an earlier composite step (for example MQTT, which needs the
 // database ID) still get its own retry policy from the queue, which a step
-// inside the composite cannot have because the composite itself is never
-// retried (a retry would run the database save again).
+// inside the composite cannot have: the composite is retried only while its
+// database step reports a save that stored nothing, and this step runs only after
+// the save has landed, so a retried composite never enqueues it twice.
 //
 // Like every composite step it runs only when all earlier steps returned nil.
 type enqueueAction struct {
