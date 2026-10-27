@@ -515,17 +515,18 @@ func (c *cancelAfterChecks) Err() error {
 	return c.Context.Err()
 }
 
-// TestDetectionRepository_SearchNeverReturnsUnresolvedSpecies verifies that a list read
+// TestDetectionRepository_ListReadsNeverReturnUnresolvedSpecies verifies that a list read
 // whose context ends part way returns an error, not rows whose species were not loaded.
-func TestDetectionRepository_SearchNeverReturnsUnresolvedSpecies(t *testing.T) {
+func TestDetectionRepository_ListReadsNeverReturnUnresolvedSpecies(t *testing.T) {
 	t.Parallel()
 
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
+	ds.timezone = time.UTC
 	const (
 		species  = "Parus major"
 		rowCount = 3
-		// maxCancelPoint is far above the number of context checks one Search makes.
+		// maxCancelPoint is far above the number of context checks one read makes.
 		maxCancelPoint = 500
 	)
 	for i := range rowCount {
@@ -533,20 +534,24 @@ func TestDetectionRepository_SearchNeverReturnsUnresolvedSpecies(t *testing.T) {
 	}
 	repo := NewDetectionRepository(ds)
 
-	completed := false
-	for limit := range maxCancelPoint {
-		base, cancel := context.WithCancel(t.Context())
-		ctx := &cancelAfterChecks{Context: base, cancel: cancel, limit: int64(limit)}
-		results, _, err := repo.Search(ctx, datastore.NewDetectionFilters().WithLimit(rowCount))
-		cancel()
-		if err != nil {
-			continue
-		}
-		require.Len(t, results, rowCount, "context ended after %d checks", limit)
-		for _, r := range results {
-			require.Equal(t, species, r.Species.ScientificName, "context ended after %d checks", limit)
-		}
-		completed = true
+	for _, rc := range listReadCalls("2026-06-01", "12") {
+		t.Run(rc.name, func(t *testing.T) {
+			completed := false
+			for limit := range maxCancelPoint {
+				base, cancel := context.WithCancel(t.Context())
+				ctx := &cancelAfterChecks{Context: base, cancel: cancel, limit: int64(limit)}
+				results, err := rc.call(ctx, repo)
+				cancel()
+				if err != nil {
+					continue
+				}
+				require.NotEmpty(t, results, "context ended after %d checks", limit)
+				for _, r := range results {
+					require.Equal(t, species, r.Species.ScientificName, "context ended after %d checks", limit)
+				}
+				completed = true
+			}
+			assert.True(t, completed, "no cancel point let the read finish")
+		})
 	}
-	assert.True(t, completed, "no cancel point let the read finish")
 }
