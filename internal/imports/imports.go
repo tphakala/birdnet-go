@@ -369,10 +369,10 @@ func (e *Engine) copyAudioBatch(ctx context.Context, opts *ImportOptions, rows [
 // When loc is the station zone the two keys are equal.
 //
 // Known limits, accepted: when loc differs from the station zone, a row in the
-// station zone's skipped DST hour (a gap wall time that reads back shifted, for rows
-// stored as station wall time before the detection's own instant was stored) can be
-// imported again, as can a legacy-store row in the repeated hour, and a re-import
-// whose location differs from that of the first import. A source row can also
+// station zone's skipped DST hour (a gap wall time that reads back shifted) can be
+// imported again on the legacy store and for v2 rows imported before the detection's
+// own instant was stored, and so can a re-import whose location differs from that of
+// the first import. A source row can also
 // be skipped as a duplicate of a different stored row that has the same wall
 // second, species and confidence.
 func (e *Engine) loadExistingKeys(ctx context.Context, loc *time.Location) (map[string]struct{}, error) {
