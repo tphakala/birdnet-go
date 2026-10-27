@@ -346,9 +346,17 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 	}
 	params.Duration = duration
 
-	// Validate dates
-	if err := validateDateParam(params.Date, "date"); err != nil {
-		return nil, &dateValidationError{message: err.Error(), paramName: "date"}
+	// Validate dates. The advanced search path resolves the search box shortcuts (today,
+	// week, ...) itself; the hourly and species query types parse date natively and take
+	// only YYYY-MM-DD, and start_date and end_date never take shortcuts.
+	// A species parameter without an explicit query type is inferred as a species query below,
+	// so it takes the strict format as well.
+	inferredSpecies := params.QueryType == "" && params.Species != ""
+	acceptsShortcut := params.QueryType != queryTypeHourly && params.QueryType != queryTypeSpecies && !inferredSpecies
+	if !acceptsShortcut || !apicore.IsDateShortcut(params.Date) {
+		if err := validateDateParam(params.Date, "date"); err != nil {
+			return nil, &dateValidationError{message: err.Error(), paramName: "date"}
+		}
 	}
 	if err := c.validateDateParameters(params.StartDate, params.EndDate, ctx); err != nil {
 		return nil, err
@@ -1166,8 +1174,8 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 		}
 	}
 
-	// Apply date range filter using shared helper
-	if dateRange := apicore.ParseDateRangeFilter(params.Date, params.StartDate, params.EndDate); dateRange != nil {
+	// Apply date range filter using shared helper; datastore.Timezone() is the station zone the datastore resolves dates in
+	if dateRange := apicore.ParseDateRangeFilter(params.Date, params.StartDate, params.EndDate, time.Now(), datastore.Timezone()); dateRange != nil {
 		filters.DateRange = &datastore.DateRange{
 			Start: dateRange.Start,
 			End:   dateRange.End,
