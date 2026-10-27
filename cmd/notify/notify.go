@@ -52,7 +52,7 @@ Examples:
 			case "system":
 				ntype = notification.TypeSystem
 			default:
-				return fmt.Errorf("invalid type: %s", typ)
+				return fmt.Errorf("invalid type: %s (valid: error, warning, info, detection, system)", typ)
 			}
 
 			// Map priority
@@ -67,7 +67,7 @@ Examples:
 			case "low":
 				nprio = notification.PriorityLow
 			default:
-				return fmt.Errorf("invalid priority: %s", prio)
+				return fmt.Errorf("invalid priority: %s (valid: critical, high, medium, low)", prio)
 			}
 
 			service := notification.GetService()

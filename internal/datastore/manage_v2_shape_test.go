@@ -355,7 +355,14 @@ func TestV2ShapedTablesGuideURL_PointsAtWikiHeading(t *testing.T) {
 	require.NoError(t, err)
 
 	var slugs []string
+	inFence := false
 	for line := range strings.SplitSeq(string(wiki), "\n") {
+		if strings.HasPrefix(line, "```") {
+			inFence = !inFence
+		}
+		if inFence {
+			continue
+		}
 		heading, isHeading := strings.CutPrefix(line, "## ")
 		if !isHeading {
 			continue

@@ -146,7 +146,7 @@ The doctor uses SQLite's table-recreation algorithm to remove the extra columns 
 
 **Affected tables:** `image_caches`, `notification_histories`
 
-The doctor does not repair `dynamic_thresholds` or `threshold_events`. If they still have the old `label_id` column, BirdNET-Go recreates them itself on its next start and discards their rows. Adding a `label_id` column to a current table would trigger that, so the doctor leaves both tables alone.
+The doctor does not repair `dynamic_thresholds` or `threshold_events`. If they still have the old `label_id` column, BirdNET-Go recreates them itself on its next start when they are empty. If they hold rows, startup stops and names them; see [Legacy startup and tables in the enhanced database shape](#legacy-startup-and-tables-in-the-enhanced-database-shape). Adding a `label_id` column to a current table would trigger that, so the doctor leaves both tables alone.
 
 ### Corrupted indexes
 
@@ -314,7 +314,7 @@ Start BirdNET-Go again. After step 3a BirdNET-Go starts in enhanced database mod
 
 Four tables share their names between the legacy database and the enhanced database (v2): `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches`. When one of them has the enhanced database shape (a required `label_id` column) and BirdNET-Go starts with the legacy store, the legacy store cannot write to it or read its rows. BirdNET-Go drops such a table by itself when it is empty, and the legacy store recreates it.
 
-When one of these tables holds rows, or its rows cannot be counted, startup stops, drops nothing and prints an error like this:
+When one of these tables holds rows, or its rows cannot be counted, startup stops, drops no table that holds rows and prints an error like this:
 
 ```text
 tables in the enhanced database (v2) shape hold rows the legacy store cannot use; refusing to drop them: notification_histories=2, dynamic_thresholds=0; see https://github.com/tphakala/birdnet-go/wiki/Database-Doctor#legacy-startup-and-tables-in-the-enhanced-database-shape
