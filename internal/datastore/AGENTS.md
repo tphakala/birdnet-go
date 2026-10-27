@@ -146,6 +146,10 @@ still maintain, and nothing older. This is a standing maintainer decision.
   workarounds, version checks that keep them working, SQL rewrites or tests for
   them, and do not fix bugs that only show on them. A bug that also reproduces on
   a supported release is a real bug, whatever release it was first reported on.
+- **One table in code.** The release table (series and end-of-life dates) lives
+  in `internal/datastore/dbserver`; change it together with the list above. The
+  health checks, the startup log and notice, the telemetry tags and the support
+  dump all read that one table.
 - **When a release reaches end of life, drop it:** take it out of the CI test
   matrix and the testcontainer defaults, and remove code that exists only for it.
 - Test MySQL and MariaDB changes against supported releases only, and keep the

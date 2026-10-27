@@ -540,7 +540,7 @@ jobs:
             --rerun-fails-abort-on-data-race \
             --rerun-fails-max-failures=10 \
             --rerun-fails-report="rerun-db-${{ matrix.server }}.txt" \
-            --packages "./internal/datastore ./internal/datastore/v2 ./internal/datastore/v2/repository/... ./internal/datastore/v2only ./internal/api/v2/imports" \
+            --packages "./internal/datastore ./internal/datastore/dbserver ./internal/datastore/v2 ./internal/datastore/v2/repository/... ./internal/datastore/v2only ./internal/api/v2/imports" \
             -- -tags=integration -race -count=1 -timeout 300s -p 1
         timeout-minutes: 15
 
