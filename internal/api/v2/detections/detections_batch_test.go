@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -17,6 +18,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// weekShortcutSpanDays is the number of days between the first and last date of the "week"
+// search shortcut, the last 7 local dates including today.
+const weekShortcutSpanDays = 6
 
 // TestBatchDeleteDetections tests the BatchDeleteDetections endpoint.
 func TestBatchDeleteDetections(t *testing.T) {
@@ -350,7 +355,12 @@ func TestBatchResolveDetections(t *testing.T) {
 			name: "an all query accepts a search box shortcut",
 			body: BatchResolveRequest{QueryType: "all", Date: "week"},
 			mockSetup: func(m *mocks.MockInterface) {
-				m.EXPECT().SearchNotesAdvanced(mock.Anything).Return(mockNotes, int64(2), nil).Once()
+				// "week" is the last 7 local dates including today, so the forwarded range spans
+				// 6 days between its first and last date.
+				m.EXPECT().SearchNotesAdvanced(mock.MatchedBy(func(f *datastore.AdvancedSearchFilters) bool {
+					return f.DateRange != nil &&
+						f.DateRange.End.Sub(f.DateRange.Start) == weekShortcutSpanDays*24*time.Hour
+				})).Return(mockNotes, int64(2), nil).Once()
 			},
 			expectedStatus: http.StatusOK,
 			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
