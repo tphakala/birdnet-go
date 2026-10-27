@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -90,6 +91,11 @@ func TestDetectionFilters_ToAdvancedSearchFilters(t *testing.T) {
 			wantErr: `invalid date "05/04/2026"`,
 		},
 		{
+			name:    "the start date error is reported before the end date error",
+			filters: &DetectionFilters{StartDate: "bad-start", EndDate: "bad-end"},
+			wantErr: `invalid date "bad-start"`,
+		},
+		{
 			name:    "an invalid end date is an error",
 			filters: &DetectionFilters{StartDate: "2026-04-05", EndDate: "tomorrow"},
 			wantErr: `invalid date "tomorrow"`,
@@ -168,9 +174,69 @@ func TestDateRangeSearchFilters(t *testing.T) {
 		require.ErrorContains(t, err, `invalid date "x"`)
 	})
 
+	t.Run("the start error is reported before the end error", func(t *testing.T) {
+		t.Parallel()
+		_, err := DateRangeSearchFilters("bad-start", "bad-end", 1, 0, loc)
+		require.ErrorContains(t, err, `invalid date "bad-start"`)
+	})
+
 	t.Run("an invalid end is an error", func(t *testing.T) {
 		t.Parallel()
 		_, err := DateRangeSearchFilters("2026-11-01", "y", 1, 0, loc)
 		require.ErrorContains(t, err, `invalid date "y"`)
 	})
+}
+
+// searchCapturingStore records the filters the bridge passes to SearchNotesAdvanced.
+// The embedded Interface is nil: the bridge methods under test call nothing else.
+type searchCapturingStore struct {
+	Interface
+	got *AdvancedSearchFilters
+}
+
+func (s *searchCapturingStore) SearchNotesAdvanced(filters *AdvancedSearchFilters) ([]Note, int64, error) {
+	s.got = filters
+	return nil, 0, nil
+}
+
+func TestDetectionRepository_DateFiltersUseRepositoryZone(t *testing.T) {
+	t.Parallel()
+
+	loc, err := time.LoadLocation("Pacific/Auckland")
+	require.NoError(t, err)
+	wantStart := time.Date(2026, 4, 5, 0, 0, 0, 0, loc)
+	wantEnd := time.Date(2026, 4, 6, 0, 0, 0, 0, loc)
+
+	tests := []struct {
+		name string
+		call func(ctx context.Context, repo DetectionRepository) error
+	}{
+		{
+			name: "Search",
+			call: func(ctx context.Context, repo DetectionRepository) error {
+				_, _, err := repo.Search(ctx, &DetectionFilters{StartDate: "2026-04-05", EndDate: "2026-04-06"})
+				return err
+			},
+		},
+		{
+			name: "GetByDateRange",
+			call: func(ctx context.Context, repo DetectionRepository) error {
+				_, _, err := repo.GetByDateRange(ctx, "2026-04-05", "2026-04-06", 10, 0)
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			store := &searchCapturingStore{}
+			require.NoError(t, tt.call(t.Context(), NewDetectionRepository(store, loc)))
+
+			require.NotNil(t, store.got)
+			require.NotNil(t, store.got.DateRange)
+			assert.True(t, wantStart.Equal(store.got.DateRange.Start), "start %v", store.got.DateRange.Start)
+			assert.True(t, wantEnd.Equal(store.got.DateRange.End), "end %v", store.got.DateRange.End)
+		})
+	}
 }
