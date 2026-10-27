@@ -1031,3 +1031,48 @@ func TestProcessApprovedDetection_DatabaseJobCarriesNoPCM(t *testing.T) {
 	assert.True(t, sawDatabase, "a database job was queued")
 	assert.True(t, sawOther, "an audio job was queued")
 }
+
+// blockingCommentRepository blocks AddComment until releaseComment is closed.
+type blockingCommentRepository struct {
+	*scriptedSaveRepository
+	releaseComment chan struct{}
+}
+
+func (r blockingCommentRepository) AddComment(context.Context, string, string) error {
+	<-r.releaseComment
+	return nil
+}
+
+// TestDatabaseAction_SlowFollowUpStepKeepsTheJobRetrying verifies that a step
+// after a stored save which outlasts its attempt leaves the job retrying, so the
+// next attempt finds the detection done and lets MQTT and SSE run.
+func TestDatabaseAction_SlowFollowUpStepKeepsTheJobRetrying(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		repo := &scriptedSaveRepository{MockDetectionRepository: NewMockDetectionRepository()}
+		slow := blockingCommentRepository{scriptedSaveRepository: repo, releaseComment: make(chan struct{})}
+		det := testDetection()
+		det.Result.Unlikely = true
+		action := &DatabaseAction{
+			Settings: &conf.Settings{Debug: true}, Repo: slow, Result: det.Result, Results: det.Results,
+			EventTracker: NewEventTracker(time.Hour),
+		}
+		retry := action.saveRetryConfig()
+
+		first := make(chan error, 1)
+		go func() { first <- action.ExecuteContext(t.Context(), nil) }()
+		synctest.Wait() // the save is stored and the comment step is blocked
+		require.Equal(t, 1, repo.GetSavedCount())
+
+		ctx, cancel := context.WithTimeout(t.Context(), CompositeActionTimeout)
+		defer cancel()
+		err := action.ExecuteContext(ctx, nil)
+		require.ErrorIs(t, err, errDetectionSaveInFlight)
+		assert.True(t, retry.Retryable(err), "a slow follow-up step must not end the job")
+
+		close(slow.releaseComment)
+		require.NoError(t, <-first)
+		require.NoError(t, action.ExecuteContext(t.Context(), nil), "the next attempt lets the composite continue")
+		assert.Equal(t, 1, repo.saveCalls(), "the detection is saved once")
+		assert.False(t, retry.Retryable(nil))
+	})
+}
