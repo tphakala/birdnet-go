@@ -53,9 +53,17 @@ func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
 	w.mu.Unlock()
 
 	// run() should recover from the panic without itself panicking
+	done := make(chan struct{})
 	assert.NotPanics(t, func() {
-		w.run(t.Context(), make(chan struct{}))
+		w.run(t.Context(), done)
 	})
+
+	// A caller waiting in Stop must be released after a panic
+	select {
+	case <-done:
+	default:
+		t.Error("done must be closed after the run goroutine panicked")
+	}
 
 	// Verify the worker recorded the panic error
 	state, err := sm.GetState()
@@ -993,5 +1001,95 @@ func TestWorker_AbandonDuringValidationDelay(t *testing.T) {
 			assert.Equal(t, before, time.Now(), "abandon must not wait out the validation delay")
 			assert.False(t, w.IsRunning())
 		}
+	})
+}
+
+// newTailSyncWorker returns a worker in COMPLETED state with a mocked legacy
+// repository, built inside the current synctest bubble.
+func newTailSyncWorker(t *testing.T) (*Worker, *mocks.MockDetectionRepository) {
+	t.Helper()
+	sm, cleanup := setupWorkerTest(t)
+	t.Cleanup(cleanup)
+	transitionToCompleted(t, sm)
+	legacy := mocks.NewMockDetectionRepository(t)
+	return &Worker{
+		stateManager:    sm,
+		legacy:          legacy,
+		logger:          testLogger(),
+		batchSize:       DefaultBatchSize,
+		pauseCh:         make(chan struct{}),
+		resumeCh:        make(chan struct{}),
+		stopCh:          make(chan struct{}),
+		maxConsecErrors: DefaultMaxConsecutiveErrors,
+		rateSamples:     make([]rateSample, DefaultRateWindowSize),
+	}, legacy
+}
+
+func TestWorker_StopLifecycle(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, legacy := newTailSyncWorker(t)
+
+		// Abandon in tail sync exits without draining: Search has no expectation yet.
+		require.NoError(t, w.Start(t.Context()))
+		synctest.Wait()
+		require.NoError(t, w.Abandon(t.Context()))
+		assert.False(t, w.IsRunning())
+
+		// A restart resets the abandon request, so a graceful Stop drains.
+		release := make(chan struct{})
+		legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				<-release
+				return nil, 0, nil
+			}).Once()
+		require.NoError(t, w.Start(t.Context()))
+		synctest.Wait()
+
+		stopErrs := make(chan error, 2)
+		go func() { stopErrs <- w.Stop(t.Context()) }()
+		synctest.Wait() // first Stop is waiting inside the drain
+
+		// While the worker is stopping, it still counts as running and cannot be restarted.
+		assert.True(t, w.IsRunning())
+		require.Error(t, w.Start(t.Context()))
+
+		// A second, concurrent Stop must not close the stop channel again.
+		go func() { stopErrs <- w.Stop(t.Context()) }()
+		synctest.Wait()
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, <-stopErrs)
+		require.NoError(t, <-stopErrs)
+		assert.False(t, w.IsRunning())
+		legacy.AssertNumberOfCalls(t, "Search", 1)
+	})
+}
+
+func TestWorker_AbandonDuringTailSyncBatch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, legacy := newTailSyncWorker(t)
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				entered <- struct{}{}
+				<-release
+				return nil, 0, nil
+			}).Once()
+
+		require.NoError(t, w.Start(t.Context()))
+		<-entered // the periodic batch is inside the legacy search
+
+		abandoned := make(chan error, 1)
+		go func() { abandoned <- w.Abandon(t.Context()) }()
+		synctest.Wait()
+		assert.True(t, w.IsRunning(), "abandon waits for the batch in flight")
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, <-abandoned)
+		assert.False(t, w.IsRunning())
+		legacy.AssertNumberOfCalls(t, "Search", 1) // no final drain after the batch
 	})
 }

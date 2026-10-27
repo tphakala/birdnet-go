@@ -306,3 +306,26 @@ func TestCancelMigration_CompletedKeepsTailSync(t *testing.T) {
 		assert.True(t, env.worker.IsRunning(), "a rejected cancel must leave tail sync running")
 	})
 }
+
+func TestRollbackMigration_TimeoutKeepsState(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		env, gate := newCancelEnv(t)
+		done := make(chan struct{})
+		var rec *httptest.ResponseRecorder
+		go func() {
+			defer close(done)
+			rec = env.call(env.h.RollbackMigration, "/rollback")
+		}()
+		synctest.Wait()
+		time.Sleep(migrationWorkerStopTimeout)
+		<-done
+
+		assert.Equal(t, http.StatusConflict, rec.Code)
+		state, err := env.sm.GetState()
+		require.NoError(t, err)
+		assert.Equal(t, entities.MigrationStatusDualWrite, state.State, "the state action must not run after a stop timeout")
+
+		close(gate.release)
+		synctest.Wait()
+	})
+}
