@@ -186,9 +186,14 @@ func TestParseDateRangeFilter(t *testing.T) {
 			single: "today", first: "2026-07-09", last: "2026-07-09",
 		},
 		{
-			name: "month across a half-hour DST shift", zone: "Australia/Lord_Howe",
-			now:    "2026-10-04 12:00",
-			single: "month", first: "2026-09-05", last: "2026-10-04",
+			name: "week across a year boundary", zone: "UTC",
+			now:    "2026-01-03 12:00",
+			single: "week", first: "2025-12-28", last: "2026-01-03",
+		},
+		{
+			name: "month across a leap day", zone: "UTC",
+			now:    "2028-03-05 12:00",
+			single: "month", first: "2028-02-05", last: "2028-03-05",
 		},
 		{
 			name: "shortcut matching is case-insensitive", zone: "UTC",
@@ -216,8 +221,15 @@ func TestParseDateRangeFilter(t *testing.T) {
 			single: "yesterday", start: "2026-03-01", end: "2026-03-02", first: "2026-03-07", last: "2026-03-07",
 		},
 		{
-			name: "a nil loc reads the date in time.Local", zone: "", nilLoc: true,
-			now:    "2026-03-08 12:00",
+			// A nil loc must read the date in time.Local, not UTC. Near local midnight a UTC
+			// reading lands on another date on any host east of UTC (00:30) or west of it (23:30).
+			name: "a nil loc reads the date in time.Local just after midnight", zone: "", nilLoc: true,
+			now:    "2026-03-08 00:30",
+			single: "today", first: "2026-03-08", last: "2026-03-08",
+		},
+		{
+			name: "a nil loc reads the date in time.Local just before midnight", zone: "", nilLoc: true,
+			now:    "2026-03-08 23:30",
 			single: "today", first: "2026-03-08", last: "2026-03-08",
 		},
 		{
@@ -259,5 +271,16 @@ func TestParseDateRangeFilter(t *testing.T) {
 			assert.Equal(t, tt.first, wallclock.DateOf(r.Start).String(), "first date")
 			assert.Equal(t, tt.last, wallclock.DateOf(r.End).String(), "last date")
 		})
+	}
+}
+
+// TestIsDateShortcut pins that request validation accepts exactly the tokens the resolver does.
+func TestIsDateShortcut(t *testing.T) {
+	t.Parallel()
+	for _, token := range []string{"today", "yesterday", "week", "month", "TODAY", "WeEk"} {
+		assert.True(t, IsDateShortcut(token), token)
+	}
+	for _, token := range []string{"", "2026-03-08", "fortnight", " today", "today "} {
+		assert.False(t, IsDateShortcut(token), token)
 	}
 }

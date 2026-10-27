@@ -153,6 +153,8 @@ func FuzzParseDateRangeFilter(f *testing.F) {
 		{"2024-01-15", "", ""},
 		{"today", "", ""},
 		{"yesterday", "", ""},
+		{"week", "", ""},
+		{"month", "", ""},
 		// Valid ranges
 		{"", "2024-01-01", "2024-01-31"},
 		{"", "2024-01-01", "2024-12-31"},

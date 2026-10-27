@@ -170,6 +170,14 @@ func resolveDateShortcut(token string, now time.Time, loc *time.Location) (first
 	}
 }
 
+// IsDateShortcut reports whether token is a date shortcut that ParseDateRangeFilter resolves
+// (today, yesterday, week or month, matched case-insensitively). It shares resolveDateShortcut
+// with the resolver, so request validation and resolution accept the same tokens.
+func IsDateShortcut(token string) bool {
+	_, _, ok := resolveDateShortcut(token, time.Time{}, time.UTC)
+	return ok
+}
+
 // dateCarrier returns 00:00 UTC on d. See DateRangeResult.
 func dateCarrier(d wallclock.Date) time.Time {
 	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.UTC)
