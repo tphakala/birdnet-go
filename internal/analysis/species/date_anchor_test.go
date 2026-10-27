@@ -431,7 +431,6 @@ func runResetSteps(t *testing.T, tracker *SpeciesTracker, steps []resetStep) {
 			tracker.mu.Lock()
 			tracker.speciesThisYear[step.species] = step.at
 			tracker.mu.Unlock()
-			continue
 		default:
 			t.Fatalf("step %d: unknown op %q", i, step.op)
 		}
@@ -487,7 +486,7 @@ func TestYearlyTracking_ResetFollowsTrackingYear(t *testing.T) {
 			constructAt: resetNoon(2027, time.February, 10),
 			steps: []resetStep{
 				{"detect", "A", resetNoon(2027, time.February, 10), 2026, []string{"A"}},
-				{"seed", "Stale", resetNoon(2027, time.February, 1), 0, nil},
+				{"seed", "Stale", resetNoon(2027, time.February, 1), 2026, []string{"A", "Stale"}},
 				{"detect", "A2", resetNoon(2027, time.June, 28), 2026, []string{"A", "Stale", "A2"}},
 				// Nothing is detected on the reset day; the first later call resets.
 				{"detect", "B", resetNoon(2027, time.July, 3), 2027, []string{"B"}},
