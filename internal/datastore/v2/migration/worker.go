@@ -315,8 +315,9 @@ func (w *Worker) Resume() {
 }
 
 // Stop asks the worker to stop and waits until its goroutine has exited or ctx
-// ends. In tail sync mode the worker first drains legacy rows written since the
-// last sync. It is safe to call repeatedly and concurrently, and returns nil when
+// ends. In tail sync mode, a stop that arrives while the worker waits for the
+// next sync first drains legacy rows written since the last sync; a stop during
+// a sync batch exits without that drain. It is safe to call repeatedly and concurrently, and returns nil when
 // the worker is not running. On timeout it returns an error wrapping
 // ErrWorkerStopTimeout and the worker keeps stopping in the background.
 func (w *Worker) Stop(ctx context.Context) error {
@@ -978,8 +979,8 @@ func (w *Worker) finalDrain(reason string) {
 // (issue #2442).
 //
 // The method sleeps for tailSyncInterval between checks, responding to stop
-// signals during the wait. On shutdown it drains legacy records one last time,
-// except after Abandon. Returns runActionContinue to keep the worker loop
+// signals during the wait. A stop that arrives during the wait drains legacy
+// records one last time, except after Abandon. Returns runActionContinue to keep the worker loop
 // alive, or runActionReturn on shutdown.
 func (w *Worker) runTailSync(ctx context.Context) runAction {
 	// If legacy repository is not available, nothing to sync

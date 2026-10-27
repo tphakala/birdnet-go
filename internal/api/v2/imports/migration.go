@@ -132,8 +132,9 @@ func SetV2OnlyMode() {
 // StopMigrationWorker stops the migration worker if it's running.
 // This should be called during graceful shutdown before closing the v2 database.
 // It cancels the worker's context, then calls Stop() and waits, bounded by
-// migrationWorkerShutdownWait and ctx, so the final tail sync drain finishes
-// before the databases close. It returns an error wrapping
+// migrationWorkerShutdownWait and ctx. A final tail sync drain that finishes
+// within that wait completes before the databases close; after it the caller
+// closes them regardless. It returns an error wrapping
 // migration.ErrWorkerStopTimeout when the worker is still running at the deadline.
 // Note: We snapshot the variables under lock then release before calling methods
 // to prevent potential deadlocks if Stop() blocks.

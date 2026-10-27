@@ -499,7 +499,7 @@ func bootParamsFromStartup(settings *conf.Settings, st datastoreV2.StartupState)
 
 // Stop gracefully shuts down the database connections with WAL checkpoints.
 // It stops the migration state monitor and the migration worker (waiting for it,
-// bounded, so its final drain finishes first), closes the v2 database, then closes
+// bounded, so a final drain that finishes in time completes first), closes the v2 database, then closes
 // the primary datastore.
 func (d *DatabaseService) Stop(ctx context.Context) error {
 	log := GetLogger()
