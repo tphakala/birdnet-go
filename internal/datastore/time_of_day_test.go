@@ -399,15 +399,30 @@ func TestBuildTimeOfDayConditions_CoversEveryCalendarDate(t *testing.T) {
 	}
 }
 
-// TestBuildTimeOfDayConditions_RejectsRangeOverCap checks that a range one day longer
-// than the cap is refused before the sun calculator or the database is used.
-func TestBuildTimeOfDayConditions_RejectsRangeOverCap(t *testing.T) {
+// TestBuildTimeOfDayConditions_RejectsInvalidRanges checks that a range one day over the
+// cap, a reversed range and a malformed date are each refused with their own validation
+// error before the sun calculator or the database is used.
+func TestBuildTimeOfDayConditions_RejectsInvalidRanges(t *testing.T) {
 	start, err := wallclock.ParseDate("2027-03-01")
 	require.NoError(t, err)
-	end := start.AddDays(maxTimeOfDayFilterSpanDays + 1)
 
-	_, err = buildTimeOfDayConditions(&SearchFilters{
-		TimeOfDay: TimeOfDaySunrise, DateStart: start.String(), DateEnd: end.String(),
-	}, nil, nil, time.UTC)
-	require.Error(t, err)
+	tests := []struct {
+		name      string
+		dateStart string
+		dateEnd   string
+		wantErr   string
+	}{
+		{"one day over the cap", start.String(), start.AddDays(maxTimeOfDayFilterSpanDays + 1).String(), "cannot exceed 365 days"},
+		{"end before start", start.String(), start.AddDays(-1).String(), "end date cannot be before start date"},
+		{"malformed start", "2027-13-01", start.String(), "parsing time"},
+		{"malformed end", start.String(), "not-a-date", "parsing time"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := buildTimeOfDayConditions(&SearchFilters{
+				TimeOfDay: TimeOfDaySunrise, DateStart: tt.dateStart, DateEnd: tt.dateEnd,
+			}, nil, nil, time.UTC)
+			require.ErrorContains(t, err, tt.wantErr)
+		})
+	}
 }
