@@ -85,6 +85,9 @@ func (r *detectionRepository) Search(ctx context.Context, filters *datastore.Det
 
 // SearchAdvanced finds detections matching the filters as given.
 func (r *detectionRepository) SearchAdvanced(ctx context.Context, filters *datastore.AdvancedSearchFilters) ([]*detection.Result, int64, error) {
+	if filters == nil {
+		return nil, 0, datastore.ErrNilAdvancedSearchFilters
+	}
 	dets, total, err := r.ds.searchAdvanced(ctx, filters)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to search detections: %w", err)

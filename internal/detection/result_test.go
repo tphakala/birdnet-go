@@ -7,6 +7,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// TestResult_IsSpectrogramOnly pins that only a missing audio clip with a kept
+// spectrogram counts as spectrogram-only.
+func TestResult_IsSpectrogramOnly(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name                string
+		clipName            string
+		spectrogramClipName string
+		want                bool
+	}{
+		{"no audio, spectrogram kept", "", "2026/06/a.wav", true},
+		{"audio and spectrogram", "2026/06/a.wav", "2026/06/a.wav", false},
+		{"audio only", "2026/06/a.wav", "", false},
+		{"neither", "", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			r := &Result{ClipName: tt.clipName, SpectrogramClipName: tt.spectrogramClipName}
+			assert.Equal(t, tt.want, r.IsSpectrogramOnly())
+		})
+	}
+}
+
 // TestResultModelContrib_HasHitStats pins each condition of the extended-statistics
 // unit: a missing hit count or either missing hit time must read as "no stats", so
 // the datastore stores NULL instead of a year-0001 Unix millisecond value.

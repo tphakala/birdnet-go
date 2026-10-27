@@ -8,7 +8,12 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore/mapper"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// ErrNilAdvancedSearchFilters is returned by DetectionRepository.SearchAdvanced when it
+// is called without filters.
+var ErrNilAdvancedSearchFilters = errors.NewStd("advanced search filters must not be nil")
 
 // DefaultDetectionLimit is the default number of detections returned by queries.
 const DefaultDetectionLimit = 100
@@ -39,14 +44,17 @@ type DetectionRepository interface {
 	// SearchAdvanced finds detections matching the filters as given, including the sort
 	// order, scientific-name list and source list that DetectionFilters cannot express; this
 	// is the query the detection list API builds from request parameters. SortBy
-	// SortBySearchDefault orders newest first, as the plain text search does. filters must
-	// not be nil. Returns results, total count before pagination, and any error.
+	// SortBySearchDefault orders newest first, as the plain text search does. A nil filters
+	// returns ErrNilAdvancedSearchFilters. A Limit of zero or less is not capped: every
+	// match is returned. Returns results, total count before pagination, and any error.
 	SearchAdvanced(ctx context.Context, filters *AdvancedSearchFilters) ([]*detection.Result, int64, error)
 
 	// GetBySpecies retrieves detections for a specific species, newest first, with the
 	// total count of matches before pagination. An empty date means all dates; a date with
 	// an empty hour means that whole day; a date with an hour restricts to duration hours
-	// from that hour. A limit of zero or less means DefaultDetectionLimit.
+	// from that hour. A limit of zero or less means DefaultDetectionLimit. The legacy store
+	// matches only rows whose date equals the given date, so on it an empty date finds
+	// nothing.
 	GetBySpecies(ctx context.Context, species, date, hour string, duration, limit, offset int) ([]*detection.Result, int64, error)
 
 	// GetByDateRange retrieves detections within a date range.

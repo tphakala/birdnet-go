@@ -474,6 +474,11 @@ func TestDetectionRepository_ReadsMatchBridge(t *testing.T) {
 			})
 			return outcome(res, total, err)
 		}},
+		{"SearchAdvanced nil filters", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.SearchAdvanced(ctx, nil)
+			require.ErrorIs(t, err, datastore.ErrNilAdvancedSearchFilters)
+			return outcome(res, total, err)
+		}},
 		{"SearchAdvanced second page", func(r datastore.DetectionRepository) readOutcome {
 			res, total, err := r.SearchAdvanced(ctx, &datastore.AdvancedSearchFilters{Limit: 1, Offset: 1})
 			return outcome(res, total, err)
@@ -698,6 +703,32 @@ func TestSearchAdvanced_DefaultSortMatchesSearchNotes(t *testing.T) {
 				}
 				assert.Equal(t, wantIDs, gotIDs, "IDs in order")
 			})
+		}
+	}
+}
+
+// TestDetectionRepository_GetBySpeciesDefaultLimit verifies that a limit of zero or less
+// returns DefaultDetectionLimit rows while the total counts every match.
+func TestDetectionRepository_GetBySpeciesDefaultLimit(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ds.timezone = time.UTC
+	const extraRows = 1
+	base := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	for i := range datastore.DefaultDetectionLimit + extraRows {
+		seedDetection(t, ds, "Parus major", base.Add(time.Duration(i)*time.Minute))
+	}
+	repo := NewDetectionRepository(ds)
+	bridge := datastore.NewDetectionRepository(ds, ds.timezone)
+
+	for name, r := range map[string]datastore.DetectionRepository{"v2": repo, "bridge": bridge} {
+		for _, limit := range []int{0, -1} {
+			results, total, err := r.GetBySpecies(t.Context(), "Parus major", "", "", 1, limit, 0)
+			require.NoError(t, err, name)
+			assert.Len(t, results, datastore.DefaultDetectionLimit, "%s limit %d", name, limit)
+			assert.Equal(t, int64(datastore.DefaultDetectionLimit+extraRows), total, "%s limit %d total", name, limit)
 		}
 	}
 }

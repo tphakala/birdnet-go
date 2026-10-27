@@ -102,6 +102,9 @@ func (r *detectionRepository) Search(ctx context.Context, filters *DetectionFilt
 
 // SearchAdvanced finds detections matching the filters as given.
 func (r *detectionRepository) SearchAdvanced(ctx context.Context, filters *AdvancedSearchFilters) ([]*detection.Result, int64, error) {
+	if filters == nil {
+		return nil, 0, ErrNilAdvancedSearchFilters
+	}
 	notes, total, err := r.store.SearchNotesAdvanced(filters)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to search detections: %w", err)

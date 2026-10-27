@@ -315,3 +315,13 @@ func TestDetectionRepository_SearchAdvancedDefaultSortMatchesSearchNotes(t *test
 		}
 	}
 }
+
+func TestDetectionRepository_SearchAdvancedRejectsNilFilters(t *testing.T) {
+	t.Parallel()
+
+	store := &searchCapturingStore{}
+	_, _, err := NewDetectionRepository(store, time.UTC).SearchAdvanced(t.Context(), nil)
+
+	require.ErrorIs(t, err, ErrNilAdvancedSearchFilters)
+	assert.Nil(t, store.got, "the store must not be called")
+}
