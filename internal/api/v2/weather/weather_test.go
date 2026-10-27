@@ -18,9 +18,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"gorm.io/gorm"
 )
 
 // setupWeatherTestEnvironment creates a test environment with Echo, a mock
@@ -804,6 +806,38 @@ func TestGetWeatherForDetection_RepeatedHourMatchesOwnInstant(t *testing.T) {
 }
 
 // TestGetWeatherForDetectionMissingID tests the weather for detection endpoint with missing ID
+// TestGetWeatherForDetection_NotFound checks that a detection missing from either store
+// answers 404: the legacy bridge reports gorm.ErrRecordNotFound and the v2 repository
+// reports repository.ErrDetectionNotFound.
+func TestGetWeatherForDetection_NotFound(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"legacy bridge", gorm.ErrRecordNotFound},
+		{"v2 repository", repository.ErrDetectionNotFound},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _, controller := setupWeatherTestEnvironment(t)
+			repo := mocks.NewMockDetectionRepository(t)
+			controller.Repo = repo
+			repo.EXPECT().Get(mock.Anything, "404").Return(nil, tc.err)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/weather/detection/404", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetPath("/api/v2/weather/detection/:id")
+			c.SetParamNames("id")
+			c.SetParamValues("404")
+
+			require.NoError(t, controller.GetWeatherForDetection(c))
+			assert.Equal(t, http.StatusNotFound, rec.Code)
+		})
+	}
+}
+
 func TestGetWeatherForDetectionMissingID(t *testing.T) {
 	// Setup
 	e, _, controller := setupWeatherTestEnvironment(t)

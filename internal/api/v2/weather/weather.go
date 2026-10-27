@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -366,7 +367,9 @@ func (c *Handler) GetWeatherForDetection(ctx echo.Context) error {
 // handleDetectionFetchError handles errors when fetching a detection
 func (c *Handler) handleDetectionFetchError(ctx echo.Context, err error, id, ip, path string) error {
 	c.LogErrorIfEnabled("Failed to get detection", logger.String("detection_id", id), logger.Error(err), logger.String("path", path), logger.String("ip", ip))
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	// The legacy bridge reports a missing row as gorm.ErrRecordNotFound, the v2 repository as
+	// repository.ErrDetectionNotFound.
+	if errors.Is(err, gorm.ErrRecordNotFound) || errors.Is(err, repository.ErrDetectionNotFound) {
 		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
 	return c.HandleError(ctx, err, "Failed to get detection", http.StatusInternalServerError)
