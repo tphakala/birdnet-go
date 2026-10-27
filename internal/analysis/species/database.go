@@ -9,6 +9,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // InitFromDatabase populates the tracker from historical data.
@@ -211,17 +212,17 @@ func (t *SpeciesTracker) loadNoveltyEpisodesFromDatabase(ctx context.Context, no
 		return nil
 	}
 
-	endDate := trackerDateOnly(now)
-	startDate := endDate.AddDate(0, 0, -(t.windowDays + 1))
+	endDate := wallclock.DateOf(now)
+	startDate := endDate.AddDays(-(t.windowDays + 1))
 
-	detections, err := history.GetSpeciesDetectionDatesInPeriod(ctx, startDate.Format(time.DateOnly), endDate.Format(time.DateOnly), defaultDBQueryLimit, 0)
+	detections, err := history.GetSpeciesDetectionDatesInPeriod(ctx, startDate.String(), endDate.String(), defaultDBQueryLimit, 0)
 	if err != nil {
 		return errors.Newf("failed to load novelty detection dates from database: %w", err).
 			Component("new-species-tracker").
 			Category(errors.CategoryDatabase).
 			Context("operation", "load_novelty_detection_dates").
-			Context("start_date", startDate.Format(time.DateOnly)).
-			Context("end_date", endDate.Format(time.DateOnly)).
+			Context("start_date", startDate.String()).
+			Context("end_date", endDate.String()).
 			Build()
 	}
 
@@ -359,11 +360,6 @@ func normalizeNoveltyDetectionDates(dates []time.Time) []time.Time {
 		lastDate = dateKey
 	}
 	return unique
-}
-
-func trackerDateOnly(ts time.Time) time.Time {
-	year, month, day := ts.Date()
-	return time.Date(year, month, day, 0, 0, 0, 0, ts.Location())
 }
 
 func sameTrackerDate(a, b time.Time) bool {
@@ -534,8 +530,8 @@ func (t *SpeciesTracker) loadSeasonCarryoverFromDatabase(ctx context.Context, no
 		return nil
 	}
 
-	startDate := t.seasonCarryoverLookbackStart(seasonStart).Format(time.DateOnly)
-	endDate := seasonStart.AddDate(0, 0, -1).Format(time.DateOnly)
+	startDate := t.seasonCarryoverLookbackStart(seasonStart).String()
+	endDate := seasonStart.AddDays(-1).String()
 	detections, err := t.ds.GetSpeciesFirstDetectionInPeriod(ctx, startDate, endDate, defaultDBQueryLimit, 0)
 	if err != nil {
 		return errors.Newf("failed to load season carry-over species from database: %w", err).
@@ -552,10 +548,10 @@ func (t *SpeciesTracker) loadSeasonCarryoverFromDatabase(ctx context.Context, no
 	// sync, not just startup) than a genuine "nothing was heard before this
 	// season" - keep the existing set rather than wiping it, matching the
 	// other loaders' empty-result handling.
-	hasExistingData := len(t.seasonCarryover) > 0 && sameTrackerDate(t.seasonCarryoverStart, seasonStart)
+	hasExistingData := len(t.seasonCarryover) > 0 && t.seasonCarryoverStart == seasonStart
 	if len(detections) == 0 && hasExistingData {
 		getLog().Debug("No season carry-over detections returned, preserving existing tracking data",
-			logger.String("season_start", seasonStart.Format(time.DateOnly)),
+			logger.String("season_start", seasonStart.String()),
 			logger.Int("existing_species", len(t.seasonCarryover)))
 		return nil
 	}
@@ -570,7 +566,7 @@ func (t *SpeciesTracker) loadSeasonCarryoverFromDatabase(ctx context.Context, no
 	t.seasonCarryoverStart = seasonStart
 
 	getLog().Debug("Loaded season carry-over species from database",
-		logger.String("season_start", seasonStart.Format(time.DateOnly)),
+		logger.String("season_start", seasonStart.String()),
 		logger.Int("species", len(carryover)))
 
 	return nil
