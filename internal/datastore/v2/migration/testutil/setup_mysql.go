@@ -33,7 +33,7 @@ const testDatabaseSuffix = "_test"
 // It drops and recreates every legacy and v2 table in cfg.Database, so cfg must
 // point at a dedicated database whose name ends in "_test"; any other name
 // fails the test before a connection is opened. cfg.UseV2Prefix is forced on. Tables are
-// removed again when the test ends.
+// removed again when the test ends, after the migration worker has stopped.
 func SetupMySQLIntegrationTest(t *testing.T, cfg *datastoreV2.MySQLConfig) *TestContext {
 	t.Helper()
 
@@ -94,9 +94,7 @@ func SetupMySQLIntegrationTest(t *testing.T, cfg *datastoreV2.MySQLConfig) *Test
 	// Registered last, so it runs first: stop the worker before the tables are
 	// dropped and the connections close.
 	t.Cleanup(func() {
-		if ctx.Worker != nil {
-			ctx.Worker.Stop()
-		}
+		ctx.stopWorker()
 	})
 
 	return ctx

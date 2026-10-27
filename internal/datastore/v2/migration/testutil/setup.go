@@ -23,6 +23,10 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+// workerStopTimeout bounds how long test cleanup waits for the migration worker
+// to exit before the databases are closed.
+const workerStopTimeout = 10 * time.Second
+
 // TestContext contains all dependencies needed for migration integration tests.
 type TestContext struct {
 	// Temporary directory for test databases
@@ -71,8 +75,21 @@ type TestContext struct {
 	cleanup func()
 }
 
+// stopWorker stops the migration worker and waits for it to exit, so nothing
+// writes to the databases while the caller tears them down.
+func (ctx *TestContext) stopWorker() {
+	if ctx.Worker == nil {
+		return
+	}
+	// The test context is already cancelled during cleanup, so use a fresh one.
+	stopCtx, cancel := context.WithTimeout(context.Background(), workerStopTimeout)
+	defer cancel()
+	_ = ctx.Worker.Stop(stopCtx)
+}
+
 // SetupIntegrationTest creates a complete test environment for migration integration tests.
-// Call this at the start of each test. The cleanup function is registered with t.Cleanup().
+// Call this at the start of each test. The cleanup function is registered with t.Cleanup();
+// it stops the migration worker and waits for it before closing the databases.
 func SetupIntegrationTest(t *testing.T) *TestContext {
 	t.Helper()
 
@@ -102,9 +119,7 @@ func SetupIntegrationTest(t *testing.T) *TestContext {
 	// Register cleanup: stop worker before closing databases to prevent
 	// goroutine leaks from tail sync running after COMPLETED state.
 	t.Cleanup(func() {
-		if ctx.Worker != nil {
-			ctx.Worker.Stop()
-		}
+		ctx.stopWorker()
 		if ctx.cleanup != nil {
 			ctx.cleanup()
 		}
