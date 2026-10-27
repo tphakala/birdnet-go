@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // PercentageMultiplier converts a fraction to a percentage (and divides a
@@ -126,38 +126,85 @@ func ParseHourFilter(param string) *HourFilterResult {
 	return &HourFilterResult{Start: hourVal, End: hourVal}
 }
 
-// DateRangeResult holds the parsed date range.
+// Date shortcut tokens accepted by ParseDateRangeFilter (matched case-insensitively).
+const (
+	dateShortcutToday     = "today"
+	dateShortcutYesterday = "yesterday"
+	dateShortcutWeek      = "week"
+	dateShortcutMonth     = "month"
+)
+
+// The number of local calendar dates, today included, that the week and month shortcuts cover.
+const (
+	dateShortcutWeekDays  = 7
+	dateShortcutMonthDays = 30
+)
+
+// DateRangeResult holds the parsed date range. Start and End carry the first and last date, both
+// inclusive, as 00:00 UTC on that date. They are carriers for the dates, not instants of the
+// station's clock: resolve them to instants in the station zone with wallclock.DayBounds, as
+// repository.DateRangeToUnix does.
 type DateRangeResult struct {
 	Start time.Time
 	End   time.Time
 }
 
-// ParseDateRangeFilter parses date range from single date or start/end date parameters.
-// If singleDate is provided, it's used as both start and end.
-// Returns nil if no valid dates are provided.
-func ParseDateRangeFilter(singleDate, startDate, endDate string) *DateRangeResult {
+// resolveDateShortcut maps a shortcut token to an inclusive run of local dates: today is [D, D],
+// yesterday [D-1, D-1], week [D-6, D] and month [D-29, D], where D is the date of now in loc.
+// No local instant is built, so dates whose midnight does not exist in loc resolve correctly.
+// ok is false when token is not a shortcut. loc must not be nil.
+func resolveDateShortcut(token string, now time.Time, loc *time.Location) (first, last wallclock.Date, ok bool) {
+	today := wallclock.DateOf(now.In(loc))
+	switch strings.ToLower(token) {
+	case dateShortcutToday:
+		return today, today, true
+	case dateShortcutYesterday:
+		yesterday := today.AddDays(-1)
+		return yesterday, yesterday, true
+	case dateShortcutWeek:
+		return today.AddDays(1 - dateShortcutWeekDays), today, true
+	case dateShortcutMonth:
+		return today.AddDays(1 - dateShortcutMonthDays), today, true
+	default:
+		return wallclock.Date{}, wallclock.Date{}, false
+	}
+}
+
+// dateCarrier returns 00:00 UTC on d. See DateRangeResult.
+func dateCarrier(d wallclock.Date) time.Time {
+	return time.Date(d.Year, d.Month, d.Day, 0, 0, 0, 0, time.UTC)
+}
+
+// ParseDateRangeFilter parses a date range from a single date or start/end date parameters.
+// singleDate is a shortcut (today, yesterday, week, month; case-insensitive) or a YYYY-MM-DD
+// date. Shortcuts are resolved on the calendar of loc, the station zone, from now: today and
+// yesterday are one date, week is the last 7 dates and month the last 30 dates, both ending today.
+// A nil loc means time.Local. A parseable singleDate wins over startDate and endDate; otherwise a
+// valid startDate/endDate pair is an inclusive range. Returns nil when no valid range is given,
+// including a start after the end.
+func ParseDateRangeFilter(singleDate, startDate, endDate string, now time.Time, loc *time.Location) *DateRangeResult {
+	if loc == nil {
+		loc = time.Local
+	}
+
 	if singleDate != "" {
-		// Try date shortcuts first (today, yesterday, etc.)
-		if date, err := datastore.ParseDateShortcut(singleDate); err == nil {
-			return &DateRangeResult{
-				Start: date,
-				End:   date.AddDate(0, 0, 1).Add(-time.Second),
-			}
+		if first, last, ok := resolveDateShortcut(singleDate, now, loc); ok {
+			return &DateRangeResult{Start: dateCarrier(first), End: dateCarrier(last)}
+		}
+		if date, err := wallclock.ParseDate(singleDate); err == nil {
+			return &DateRangeResult{Start: dateCarrier(date), End: dateCarrier(date)}
 		}
 	}
 
 	if startDate != "" && endDate != "" {
-		start, err1 := time.Parse(time.DateOnly, startDate)
-		end, err2 := time.Parse(time.DateOnly, endDate)
+		start, err1 := wallclock.ParseDate(startDate)
+		end, err2 := wallclock.ParseDate(endDate)
 		if err1 == nil && err2 == nil {
 			// Reject inverted date ranges where start is after end
-			if start.After(end) {
+			if start.Compare(end) > 0 {
 				return nil
 			}
-			return &DateRangeResult{
-				Start: start,
-				End:   end.AddDate(0, 0, 1).Add(-time.Second),
-			}
+			return &DateRangeResult{Start: dateCarrier(start), End: dateCarrier(end)}
 		}
 	}
 

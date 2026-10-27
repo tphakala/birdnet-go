@@ -1166,8 +1166,8 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 		}
 	}
 
-	// Apply date range filter using shared helper
-	if dateRange := apicore.ParseDateRangeFilter(params.Date, params.StartDate, params.EndDate); dateRange != nil {
+	// Apply date range filter using shared helper; time.Local is the station zone the datastore resolves dates in
+	if dateRange := apicore.ParseDateRangeFilter(params.Date, params.StartDate, params.EndDate, time.Now(), time.Local); dateRange != nil {
 		filters.DateRange = &datastore.DateRange{
 			Start: dateRange.Start,
 			End:   dateRange.End,
