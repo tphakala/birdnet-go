@@ -460,6 +460,10 @@
         "legacyRestartRequiredTitle": "Riavvia per completare la migrazione del database",
         "legacyRestartRequiredMessage": "La migrazione è terminata. Riavvia BirdNET-Go per passare al nuovo database. Se questo messaggio resta dopo il riavvio, controlla il log per errori del database."
       },
+      "database": {
+        "serverAttentionTitle": "Il server del database richiede attenzione",
+        "serverAttentionMessage": "Il server MySQL o MariaDB ha raggiunto o sta per raggiungere la fine del supporto, oppure il database non usa il set di caratteri utf8mb4. Apri Sistema > Salute per i dettagli."
+      },
       "cleanup": {
         "completeTitle": "Pulizia del vecchio database completata",
         "completeMessage": "{space} di spazio su disco recuperato.",

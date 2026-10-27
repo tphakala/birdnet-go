@@ -460,6 +460,10 @@
         "legacyRestartRequiredTitle": "Starta om för att slutföra databasmigreringen",
         "legacyRestartRequiredMessage": "Migreringen är slutförd. Starta om BirdNET-Go för att byta till den nya databasen. Om det här meddelandet finns kvar efter en omstart, kontrollera loggen efter databasfel."
       },
+      "database": {
+        "serverAttentionTitle": "Databasservern behöver uppmärksamhet",
+        "serverAttentionMessage": "MySQL- eller MariaDB-servern har nått eller närmar sig slutet av sin livslängd, eller så använder databasen inte teckenuppsättningen utf8mb4. Öppna System > Hälsa för detaljer."
+      },
       "cleanup": {
         "completeTitle": "Rensning av gammal databas slutförd",
         "completeMessage": "{space} diskutrymme frigjort.",

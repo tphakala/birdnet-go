@@ -460,6 +460,10 @@
         "legacyRestartRequiredTitle": "Indítsa újra az adatbázis-migráció befejezéséhez",
         "legacyRestartRequiredMessage": "A migráció befejeződött. Indítsa újra a BirdNET-Go-t az új adatbázis használatához. Ha ez az üzenet újraindítás után is megmarad, ellenőrizze a naplóban az adatbázishibákat."
       },
+      "database": {
+        "serverAttentionTitle": "Az adatbázis-kiszolgáló figyelmet igényel",
+        "serverAttentionMessage": "A MySQL vagy MariaDB kiszolgáló elérte vagy közel van a támogatása végéhez, vagy az adatbázis nem az utf8mb4 karakterkészletet használja. A részletekért nyissa meg a Rendszer > Rendszerállapot oldalt."
+      },
       "cleanup": {
         "completeTitle": "Régi adatbázis karbantartás befejezve",
         "completeMessage": "{space} lemezterület felszabadítva.",
