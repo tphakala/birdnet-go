@@ -257,7 +257,7 @@ func TestStopMigrationWorker_DrainsBeforeReturning(t *testing.T) {
 			synctest.Wait()
 			select {
 			case err := <-returned:
-				t.Errorf("StopMigrationWorker returned (%v) while the final drain was still running", err)
+				assert.Fail(t, "StopMigrationWorker returned while the final drain was still running", "error: %v", err)
 			default:
 			}
 

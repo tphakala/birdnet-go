@@ -62,7 +62,7 @@ func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
 	select {
 	case <-done:
 	default:
-		t.Error("done must be closed after the run goroutine panicked")
+		assert.Fail(t, "done must be closed after the run goroutine panicked")
 	}
 
 	// Verify the worker recorded the panic error
