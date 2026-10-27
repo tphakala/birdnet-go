@@ -796,6 +796,12 @@ const (
 	migrationStateTagKey = "migration_state"
 	// migrationPrereqTagKey is the Sentry tag holding the outcome of the migration prerequisite checks.
 	migrationPrereqTagKey = "migration_prereq"
+	// databaseServerTagKey is the Sentry tag holding the database server release series.
+	databaseServerTagKey = "db_server"
+	// databaseServerSupportTagKey is the Sentry tag holding the upstream support level of the database server.
+	databaseServerSupportTagKey = "db_server_support"
+	// databaseCharsetTagKey is the Sentry tag holding the database character set class.
+	databaseCharsetTagKey = "db_charset"
 )
 
 // SetMigrationStateTag sets a global Sentry tag with the legacy-to-v2 migration
@@ -823,6 +829,25 @@ func SetMigrationPrereqTag(value string) bool {
 	}
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTag(migrationPrereqTagKey, value)
+	})
+	return true
+}
+
+// SetDatabaseServerTags sets the global Sentry tags describing the MySQL or
+// MariaDB server: its release series, its upstream support level and the
+// character set class of the schema. The caller must pass values from closed
+// sets (see dbserver.ServerTag, the dbserver support levels and
+// dbserver.CharsetTag), never the raw version string, error text or a path.
+// It reports whether the tags were applied; false means telemetry is currently
+// off or a value is empty, and nothing is set.
+func SetDatabaseServerTags(server, support, charset string) bool {
+	if shouldSkipTelemetry() || server == "" || support == "" || charset == "" {
+		return false
+	}
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTag(databaseServerTagKey, server)
+		scope.SetTag(databaseServerSupportTagKey, support)
+		scope.SetTag(databaseCharsetTagKey, charset)
 	})
 	return true
 }
