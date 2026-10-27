@@ -228,11 +228,24 @@ func (c *Handler) BatchLockDetections(ctx echo.Context) error {
 }
 
 // BatchResolveDetections resolves a query to a list of detection IDs without modifying any data.
-// Returns an error if the matching set exceeds maxBatchSize.
+// Returns an error if the matching set exceeds maxBatchSize, or, for species and hourly
+// queries, if the date is not YYYY-MM-DD.
 func (c *Handler) BatchResolveDetections(ctx echo.Context) error {
 	var req BatchResolveRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
+	}
+
+	// The species and hourly queries take the date natively, and on a v2 database a date
+	// that does not parse selects every date. The resolved IDs feed bulk delete, review and
+	// lock operations, so a malformed date must be refused here, as it is for the list
+	// endpoint.
+	if req.QueryType == queryTypeSpecies || req.QueryType == queryTypeHourly {
+		if err := validateDateParam(req.Date, "date"); err != nil {
+			return c.HandleError(ctx,
+				&dateValidationError{message: err.Error(), paramName: "date"},
+				"Invalid date", http.StatusBadRequest)
+		}
 	}
 
 	duration := req.Duration

@@ -317,6 +317,18 @@ func TestBatchResolveDetections(t *testing.T) {
 			},
 		},
 		{
+			name:           "refuses a malformed date on a species query before any lookup",
+			body:           BatchResolveRequest{QueryType: "species", Species: "Turdus merula", Date: "2025-3-7"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a malformed date on an hourly query before any lookup",
+			body:           BatchResolveRequest{QueryType: "hourly", Date: "yesterday", Hour: "8"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
 			name: "resolves all query to IDs",
 			body: BatchResolveRequest{QueryType: "all"},
 			mockSetup: func(m *mocks.MockInterface) {
