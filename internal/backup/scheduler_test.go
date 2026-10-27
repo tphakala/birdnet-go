@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/testutil"
 )
 
@@ -202,6 +203,48 @@ func TestCalculateNextRun_SkippedTimeTransitionTickMovesOn(t *testing.T) {
 			t.Parallel()
 			got := nextRunFor(tt.tick.In(zones[tt.zone]), tt.hour, tt.minute, dailySchedule, false)
 			assert.True(t, tt.next.Equal(got), "got %v, want %v", got, tt.next)
+		})
+	}
+}
+
+func TestScheduler_RunBackupReleasesRunningBackup(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		targets      map[string]Target
+		wantFailures int
+		wantMissed   int
+	}{
+		{name: "successful run", targets: map[string]Target{}},
+		{name: "failed run", targets: map[string]Target{"t": dummyTarget{}}, wantFailures: 1, wantMissed: 1},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			sm, _ := newTestStateManager(t)
+			m := &Manager{
+				config:       &conf.BackupConfig{Enabled: true},
+				sources:      map[string]Source{},
+				targets:      tt.targets,
+				logger:       GetLogger().Module("test"),
+				stateManager: sm,
+			}
+			s, err := NewScheduler(m, nil, sm)
+			require.NoError(t, err)
+
+			schedule := BackupSchedule{Weekday: dailySchedule, NextRun: time.Date(2026, 6, 16, 3, 0, 0, 0, time.UTC)}
+
+			// checkSchedules takes this lock before it spawns runBackup.
+			s.runningBackup.Lock()
+			requireReturns(t, func() { s.runBackup(&schedule) }, "runBackup did not return")
+			require.True(t, s.runningBackup.TryLock(), "runBackup must release runningBackup")
+
+			got := sm.GetScheduleState(&schedule)
+			assert.Equal(t, tt.wantFailures, got.FailureCount)
+			assert.Equal(t, tt.wantFailures == 0, !got.LastSuccessful.IsZero())
+			assert.Len(t, sm.GetMissedBackups(), tt.wantMissed)
 		})
 	}
 }
