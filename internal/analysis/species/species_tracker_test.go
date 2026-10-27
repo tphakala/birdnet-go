@@ -264,15 +264,15 @@ func TestSpeciesTracker_PruneOldEntries(t *testing.T) {
 	historicalData := []datastore.NewSpeciesData{
 		{
 			ScientificName: "Very Old Species",
-			FirstSeenDate:  time.Now().Add(-11 * 365 * 24 * time.Hour).Format(time.DateOnly), // 11 years ago (should be pruned)
+			FirstSeenDate:  time.Now().AddDate(-11, 0, 0).Format(time.DateOnly), // 11 years ago (should be pruned)
 		},
 		{
 			ScientificName: "Old Species",
-			FirstSeenDate:  time.Now().Add(-30 * 24 * time.Hour).Format(time.DateOnly), // 30 days ago (should NOT be pruned)
+			FirstSeenDate:  time.Now().AddDate(0, 0, -30).Format(time.DateOnly), // 30 days ago (should NOT be pruned)
 		},
 		{
 			ScientificName: "Recent Species",
-			FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format(time.DateOnly), // 5 days ago (should NOT be pruned)
+			FirstSeenDate:  time.Now().AddDate(0, 0, -5).Format(time.DateOnly), // 5 days ago (should NOT be pruned)
 		},
 	}
 	ds.On("GetNewSpeciesDetections", mock.Anything, mock.AnythingOfType("string"), mock.AnythingOfType("string"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
@@ -347,7 +347,7 @@ func BenchmarkSpeciesTracker_GetSpeciesStatus(b *testing.B) {
 	species := make([]string, 100)
 	for i := range 100 {
 		species[i] = fmt.Sprintf("Species%d", i)
-		tracker.UpdateSpecies(species[i], currentTime.Add(time.Duration(-i)*24*time.Hour))
+		tracker.UpdateSpecies(species[i], currentTime.AddDate(0, 0, -i))
 	}
 
 	b.ResetTimer()
@@ -994,7 +994,7 @@ func TestMultiPeriodTracking_YearReset(t *testing.T) {
 	assert.InDelta(t, expectedDays, status.DaysSinceFirst, 1, "Expected DaysSinceFirst to be around %d", expectedDays)
 
 	// Test that species becomes "not new this year" after the yearly window expires
-	laterTime := year2024Time.Add(35 * 24 * time.Hour) // 35 days later (beyond 30-day window)
+	laterTime := year2024Time.AddDate(0, 0, 35) // 35 days later (beyond 30-day window)
 	status = tracker.GetSpeciesStatus(speciesName, laterTime)
 
 	assert.False(t, status.IsNewThisYear, "Expected species to not be new this year after yearly window expires")

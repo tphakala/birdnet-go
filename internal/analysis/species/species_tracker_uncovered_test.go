@@ -146,12 +146,12 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 			{
 				ScientificName: "Robin",
 				CommonName:     "American Robin",
-				FirstSeenDate:  time.Now().Add(-10 * 24 * time.Hour).Format(time.DateOnly),
+				FirstSeenDate:  time.Now().AddDate(0, 0, -10).Format(time.DateOnly),
 			},
 			{
 				ScientificName: "Sparrow",
 				CommonName:     "House Sparrow",
-				FirstSeenDate:  time.Now().Add(-5 * 24 * time.Hour).Format(time.DateOnly),
+				FirstSeenDate:  time.Now().AddDate(0, 0, -5).Format(time.DateOnly),
 			},
 		}
 
@@ -195,7 +195,7 @@ func TestSpeciesTracker_loadYearlyDataFromDatabase(t *testing.T) {
 		tracker := NewTrackerFromSettings(ds, settings)
 
 		// Pre-populate some data
-		tracker.speciesThisYear["Existing"] = time.Now().Add(-20 * 24 * time.Hour)
+		tracker.speciesThisYear["Existing"] = time.Now().AddDate(0, 0, -20)
 
 		now := time.Now()
 		err := tracker.loadYearlyDataFromDatabase(t.Context(), now)
@@ -238,12 +238,12 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 			{
 				ScientificName: "Cardinal",
 				CommonName:     "Northern Cardinal",
-				FirstSeenDate:  time.Now().Add(-3 * 24 * time.Hour).Format(time.DateOnly),
+				FirstSeenDate:  time.Now().AddDate(0, 0, -3).Format(time.DateOnly),
 			},
 			{
 				ScientificName: "BlueJay",
 				CommonName:     "Blue Jay",
-				FirstSeenDate:  time.Now().Add(-1 * 24 * time.Hour).Format(time.DateOnly),
+				FirstSeenDate:  time.Now().AddDate(0, 0, -1).Format(time.DateOnly),
 			},
 		}
 
@@ -331,7 +331,7 @@ func TestSpeciesTracker_loadSeasonalDataFromDatabase(t *testing.T) {
 		if tracker.speciesBySeason[testSeasonSpring] == nil {
 			tracker.speciesBySeason[testSeasonSpring] = make(map[string]time.Time)
 		}
-		tracker.speciesBySeason[testSeasonSpring]["Existing"] = time.Now().Add(-10 * 24 * time.Hour)
+		tracker.speciesBySeason[testSeasonSpring]["Existing"] = time.Now().AddDate(0, 0, -10)
 
 		now := time.Now()
 		err := tracker.loadSeasonalDataFromDatabase(t.Context(), now)
