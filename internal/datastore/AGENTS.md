@@ -97,6 +97,28 @@ Tests for startup and repair code run against a real database (SQLite in a temp
 directory, MySQL and MariaDB through the testcontainer suites), assert that no
 row is ever dropped, and boot twice to assert the same result both times.
 
+## HARD RULE: support only MySQL and MariaDB releases under upstream support
+
+BirdNET-Go targets the MySQL and MariaDB releases that their upstream projects
+still maintain, and nothing older. This is a standing maintainer decision.
+
+- **Supported** (checked October 2026): MySQL 8.4 LTS, and the MariaDB community
+  LTS series 10.11, 11.4, 11.8 and 12.3. A MariaDB rolling release or a MySQL
+  Innovation release counts only while upstream still maintains it. Re-check the
+  upstream lifecycle pages (the MySQL release policy, the mariadb.org maintenance
+  policy) when this list is more than a few months old: a new LTS joins, and a
+  release past its end of life leaves.
+- **Not supported:** MySQL 5.7, MySQL 8.0 (community support ended 2026-04-30),
+  MariaDB 10.6 (end of life 2026-07-06) and every older release. Do not add
+  workarounds, version checks that keep them working, SQL rewrites or tests for
+  them, and do not fix bugs that only show on them. A bug that also reproduces on
+  a supported release is a real bug, whatever release it was first reported on.
+- **When a release reaches end of life, drop it:** take it out of the CI test
+  matrix and the testcontainer defaults, and remove code that exists only for it.
+- Test MySQL and MariaDB changes against supported releases only, and keep the
+  testcontainer images (`MYSQL_TEST_IMAGE` and its defaults) on supported
+  releases.
+
 ## How to add persistence (v2 only)
 
 1. Add the column or entity to the v2 schema in `internal/datastore/v2/entities`.

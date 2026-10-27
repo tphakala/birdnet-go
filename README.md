@@ -122,7 +122,9 @@ Docker images are published for `linux/amd64` and `linux/arm64`. Pre-built binar
 
 ### Storage and data
 
-- SQLite (default) or MySQL with retry-aware write paths for contention
+- SQLite (default) or MySQL/MariaDB with retry-aware write paths for contention;
+  only releases still supported upstream (MySQL 8.4 LTS, MariaDB 10.11 or newer
+  LTS)
 - Automatic backups with real-time status polling
 - Format-aware audio clip export
 - Embedded eBird/Clements taxonomy (2,374 genera, 254 families, 11,145 species) for fast offline lookups
