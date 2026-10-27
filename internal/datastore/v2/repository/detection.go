@@ -80,11 +80,6 @@ type DetectionRepository interface {
 	// Returns results, total count, and any error.
 	GetByDateRange(ctx context.Context, start, end int64, limit, offset int) ([]*entities.Detection, int64, error)
 
-	// GetByHour retrieves detections starting at a specific Unix timestamp hour.
-	// The hourStart should be the beginning of the hour (e.g., 1640000000 for a full hour).
-	// Returns results, total count, and any error.
-	GetByHour(ctx context.Context, hourStart int64, limit, offset int) ([]*entities.Detection, int64, error)
-
 	// GetByAudioSource retrieves detections for a specific audio source.
 	// Returns results, total count, and any error.
 	GetByAudioSource(ctx context.Context, sourceID uint, limit, offset int) ([]*entities.Detection, int64, error)
@@ -114,9 +109,6 @@ type DetectionRepository interface {
 	// CountByDateRange returns the count of detections in a Unix timestamp range.
 	CountByDateRange(ctx context.Context, start, end int64) (int64, error)
 
-	// CountByHour returns the count of detections in a specific hour.
-	CountByHour(ctx context.Context, hourStart int64) (int64, error)
-
 	// === Aggregations ===
 
 	// GetTopSpecies returns the most frequently detected species in a time range.
@@ -131,11 +123,6 @@ type DetectionRepository interface {
 	// the configured timezone's UTC offset, applied so detections bucket by wall-clock hour in
 	// that zone rather than the database/OS-local zone.
 	GetBatchHourlyOccurrences(ctx context.Context, labelIDs []uint, start, end int64, tzOffsetSeconds int, minConfidence float64) (map[uint][24]int, error)
-
-	// GetDailyOccurrences returns daily detection counts for a label.
-	// tzOffsetSeconds is the configured timezone's UTC offset, applied so detections bucket by
-	// wall-clock date in that zone rather than the database/OS-local zone.
-	GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64, tzOffsetSeconds int) ([]DailyCount, error)
 
 	// GetSpeciesFirstDetection returns the first-ever detection of a species.
 	// Returns ErrDetectionNotFound if the species has never been detected.

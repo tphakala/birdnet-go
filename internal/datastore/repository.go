@@ -88,12 +88,10 @@ type DetectionFilters struct {
 	Species []string
 
 	// Date filters
-	Date      string
 	StartDate string
 	EndDate   string
 
 	// Time filters
-	Hour      string
 	HourRange *HourRange
 	TimeOfDay []string // "day", "night", "sunrise", "sunset"
 

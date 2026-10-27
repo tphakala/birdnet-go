@@ -625,31 +625,6 @@ func (r *detectionRepository) GetByDateRange(ctx context.Context, start, end int
 	return dets, total, err
 }
 
-// GetByHour retrieves detections in the half-open interval [hourStart, hourStart+3600).
-// The exclusive upper bound prevents the first second of the next hour from being
-// counted in both adjacent hours.
-func (r *detectionRepository) GetByHour(ctx context.Context, hourStart int64, limit, offset int) ([]*entities.Detection, int64, error) {
-	return r.listByHalfOpenRange(ctx, hourStart, hourStart+3600, limit, offset)
-}
-
-// listByHalfOpenRange retrieves detections in [start, end) and returns the total count.
-func (r *detectionRepository) listByHalfOpenRange(ctx context.Context, start, end int64, limit, offset int) ([]*entities.Detection, int64, error) {
-	var dets []*entities.Detection
-	var total int64
-
-	query := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("detected_at >= ? AND detected_at < ?", start, end)
-
-	// Count on a cloned session so the Count finisher does not mutate the query that is
-	// reused for the paginated Find below (mirrors the Search method's pattern).
-	if err := query.Session(&gorm.Session{}).Count(&total).Error; err != nil {
-		return nil, 0, err
-	}
-
-	err := query.Order("detected_at DESC").Limit(limit).Offset(offset).Find(&dets).Error
-	return dets, total, err
-}
-
 // GetByAudioSource retrieves detections for a specific audio source.
 func (r *detectionRepository) GetByAudioSource(ctx context.Context, sourceID uint, limit, offset int) ([]*entities.Detection, int64, error) {
 	var dets []*entities.Detection
@@ -897,22 +872,6 @@ func (r *detectionRepository) CountByDateRange(ctx context.Context, start, end i
 	return count, err
 }
 
-// CountByHour returns the count of detections in the half-open interval
-// [hourStart, hourStart+3600). The exclusive upper bound prevents the first
-// second of the next hour from being counted in both adjacent hours.
-func (r *detectionRepository) CountByHour(ctx context.Context, hourStart int64) (int64, error) {
-	return r.countByHalfOpenRange(ctx, hourStart, hourStart+3600)
-}
-
-// countByHalfOpenRange counts detections in [start, end).
-func (r *detectionRepository) countByHalfOpenRange(ctx context.Context, start, end int64) (int64, error) {
-	var count int64
-	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Where("detected_at >= ? AND detected_at < ?", start, end).
-		Count(&count).Error
-	return count, err
-}
-
 // ============================================================================
 // Aggregations
 // ============================================================================
@@ -1078,22 +1037,6 @@ func (r *detectionRepository) GetBatchConfidences(ctx context.Context, labelIDs 
 	}
 
 	return result, nil
-}
-
-// GetDailyOccurrences returns daily detection counts for a label.
-func (r *detectionRepository) GetDailyOccurrences(ctx context.Context, labelID uint, start, end int64, tzOffsetSeconds int) ([]DailyCount, error) {
-	var results []DailyCount
-
-	// Group by wall-clock date in the configured timezone (offset-adjusted).
-	dateExpr := r.dateFromUnixExpr("detected_at", tzOffsetSeconds)
-	err := r.db.WithContext(ctx).Table(r.tableName()).
-		Select(fmt.Sprintf("%s as date, COUNT(*) as count", dateExpr)).
-		Where("label_id = ? AND detected_at >= ? AND detected_at <= ?", labelID, start, end).
-		Group("date").
-		Order("date ASC").
-		Scan(&results).Error
-
-	return results, err
 }
 
 // GetSpeciesFirstDetection returns the first-ever detection of a species.
