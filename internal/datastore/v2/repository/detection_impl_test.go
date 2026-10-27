@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -310,7 +311,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 		&entities.Detection{LabelID: 30, ModelID: 1, Confidence: 0.2, DetectedAt: base}).Error)
 
 	t.Run("per-label counts with confidence filter", func(t *testing.T) {
-		got, err := repo.GetBatchHourlyOccurrences(t.Context(), []uint{10, 20, 30, 99}, base-1, base+10_000, 0, 0.5)
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), []uint{10, 20, 30, 99}, wallclock.Segment{Start: base - 1, End: base + 10_000}, 0.5)
 		require.NoError(t, err)
 
 		require.Contains(t, got, uint(10))
@@ -322,7 +323,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 	})
 
 	t.Run("empty input returns empty map", func(t *testing.T) {
-		got, err := repo.GetBatchHourlyOccurrences(t.Context(), nil, base-1, base+10_000, 0, 0.0)
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), nil, wallclock.Segment{Start: base - 1, End: base + 10_000}, 0.0)
 		require.NoError(t, err)
 		assert.Empty(t, got)
 	})
@@ -330,7 +331,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 	t.Run("cancelled context surfaces an error", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		_, err := repo.GetBatchHourlyOccurrences(ctx, []uint{10}, base-1, base+10_000, 0, 0.0)
+		_, err := repo.GetBatchHourlyOccurrences(ctx, []uint{10}, wallclock.Segment{Start: base - 1, End: base + 10_000}, 0.0)
 		require.ErrorIs(t, err, context.Canceled, "a cancelled context must abort the query with context.Canceled, not return zeros")
 	})
 }
@@ -371,7 +372,8 @@ func TestGetBatchHourlyOccurrences_TimezoneOffset(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := repo.GetBatchHourlyOccurrences(
-				t.Context(), []uint{10}, utcMidnight-86_400, utcMidnight+86_400, tc.offsetSecs, 0.0)
+				t.Context(), []uint{10},
+				wallclock.Segment{Start: utcMidnight - 86_400, End: utcMidnight + 86_400, OffsetSeconds: tc.offsetSecs}, 0.0)
 			require.NoError(t, err)
 			require.Equal(t, 1, totalBatchHourly(got, 10), "exactly one detection regardless of offset")
 			counts := got[10]
@@ -406,7 +408,8 @@ func TestGetDailyAnalytics_TimezoneOffset(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := repo.GetDailyAnalytics(
-				t.Context(), nearMidnight-86_400, nearMidnight+86_400, tc.offsetSecs, nil, nil)
+				t.Context(),
+				wallclock.Segment{Start: nearMidnight - 86_400, End: nearMidnight + 86_400, OffsetSeconds: tc.offsetSecs}, nil, nil)
 			require.NoError(t, err)
 			require.Len(t, got, 1, "exactly one date bucket regardless of offset")
 			assert.Equal(t, tc.wantDate, got[0].Date,

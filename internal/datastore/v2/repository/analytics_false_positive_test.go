@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/gorm"
 )
 
@@ -79,7 +80,7 @@ func TestGetDailyAnalytics_ExcludesFalsePositives(t *testing.T) {
 	// The second day has only a false positive.
 	seedFalsePositiveReview(t, db, seedDetection(t, db, parus, analyticsDay2+secondsPerHour, 0.9))
 
-	got, err := repo.GetDailyAnalytics(ctx, analyticsDay1, analyticsDay2+secondsPerDay, 0, nil, nil)
+	got, err := repo.GetDailyAnalytics(ctx, wallclock.Segment{Start: analyticsDay1, End: analyticsDay2 + secondsPerDay}, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, got, 1, "a day with only false positives must have no row")
 	assert.Equal(t, "2024-06-14", got[0].Date)
