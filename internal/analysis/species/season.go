@@ -282,19 +282,26 @@ func (t *SpeciesTracker) computeCurrentSeason(currentTime time.Time) string {
 	return currentSeason
 }
 
+// resetYearlyTrackingLocked empties the yearly set and makes trackingYear the
+// current tracking year. checkTime is only used for logging.
+// Assumes lock is held.
+func (t *SpeciesTracker) resetYearlyTrackingLocked(trackingYear int, checkTime time.Time) {
+	oldYear := t.currentYear
+	t.speciesThisYear = make(map[string]time.Time)
+	t.currentYear = trackingYear
+	// Clear status cache when year resets to ensure fresh calculations
+	t.statusCache = make(map[string]cachedSpeciesStatus)
+	getLog().Debug("Reset yearly tracking",
+		logger.Int("old_year", oldYear),
+		logger.Int("new_year", t.currentYear),
+		logger.String("check_time", checkTime.Format(time.DateTime)))
+}
+
 // checkAndResetPeriods checks if we need to reset yearly or seasonal tracking
 func (t *SpeciesTracker) checkAndResetPeriods(currentTime time.Time) {
 	// Check for yearly reset
 	if t.yearlyEnabled && t.shouldResetYear(currentTime) {
-		oldYear := t.currentYear
-		t.speciesThisYear = make(map[string]time.Time)
-		t.currentYear = t.getTrackingYear(currentTime) // Use tracking year, not calendar year
-		// Clear status cache when year resets to ensure fresh calculations
-		t.statusCache = make(map[string]cachedSpeciesStatus)
-		getLog().Debug("Reset yearly tracking",
-			logger.Int("old_year", oldYear),
-			logger.Int("new_year", t.currentYear),
-			logger.String("check_time", currentTime.Format(time.DateTime)))
+		t.resetYearlyTrackingLocked(t.getTrackingYear(currentTime), currentTime)
 	}
 
 	// Check for seasonal reset

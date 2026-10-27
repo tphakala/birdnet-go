@@ -828,7 +828,7 @@ func TestMultiPeriodTracking_CrossPeriodScenarios(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
-	err := tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2024, 4, 1, 12, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	speciesName := "Cyanistes caeruleus"
@@ -893,7 +893,7 @@ func TestMultiPeriodTracking_SeasonTransition(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
-	err := tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2024, 4, 15, 12, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	speciesName := "Hirundo rustica" // Barn Swallow
@@ -954,7 +954,7 @@ func TestMultiPeriodTracking_YearReset(t *testing.T) {
 	// Create tracker and set to 2023 to simulate starting in previous year
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023) // Use test helper method
-	err := tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2023, 6, 15, 12, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	speciesName := "Poecile palustris"

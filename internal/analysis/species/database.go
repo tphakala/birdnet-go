@@ -383,8 +383,19 @@ func sameTrackerDate(a, b time.Time) bool {
 	return ay == by && am == bm && ad == bd
 }
 
-// loadYearlyDataFromDatabase loads first detection data for the current year
+// loadYearlyDataFromDatabase loads first detection data for the tracking year of
+// now, which it makes the current tracking year. Assumes lock is held.
 func (t *SpeciesTracker) loadYearlyDataFromDatabase(ctx context.Context, now time.Time) error {
+	// The rows loaded below belong to now's tracking year, so label the set with
+	// that year first. Unlike the live path (checkAndResetPeriods, forward-only),
+	// the load pins the year in both directions: it covers a load past the reset
+	// before any tracker call, and a load whose now predates a call that already
+	// advanced the year. Doing it before the query also keeps the "preserve
+	// existing data" branch below within one tracking year.
+	if trackingYear := t.getTrackingYear(now); trackingYear != t.currentYear {
+		t.resetYearlyTrackingLocked(trackingYear, now)
+	}
+
 	startDate, endDate := t.getYearDateRange(now)
 
 	// Use GetSpeciesFirstDetectionInPeriod for yearly tracking

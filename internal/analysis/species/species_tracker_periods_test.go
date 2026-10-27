@@ -225,7 +225,7 @@ func TestYearlyTrackingAcrossYearBoundary(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2023)
-	err := tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2023, 12, 15, 10, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	// Simulate detection in 2023
@@ -580,7 +580,8 @@ func TestSeasonalWindowExpiration(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024) // Set to 2024 for test dates
-	_ = tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
 
 	species := "Motacilla alba"
 	detectionTime := time.Date(2024, 7, 1, 10, 0, 0, 0, time.UTC)
