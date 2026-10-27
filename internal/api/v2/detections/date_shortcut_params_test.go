@@ -112,6 +112,15 @@ func TestParseDetectionQueryParams_DateShortcuts(t *testing.T) {
 		}
 	})
 
+	t.Run("a species parameter infers a species query that rejects shortcuts", func(t *testing.T) {
+		t.Parallel()
+		req := httptest.NewRequest("GET", "/api/v2/detections?species=Robin&date=today", http.NoBody)
+		ctx := echo.New().NewContext(req, httptest.NewRecorder())
+		_, err := newShortcutHandler(t).parseDetectionQueryParams(ctx)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid date format, use YYYY-MM-DD")
+	})
+
 	t.Run("start_date and end_date reject shortcuts", func(t *testing.T) {
 		t.Parallel()
 		req := httptest.NewRequest("GET", "/api/v2/detections?start_date=today&end_date=today", http.NoBody)

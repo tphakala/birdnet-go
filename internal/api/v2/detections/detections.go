@@ -349,7 +349,10 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 	// Validate dates. The advanced search path resolves the search box shortcuts (today,
 	// week, ...) itself; the hourly and species query types parse date natively and take
 	// only YYYY-MM-DD, and start_date and end_date never take shortcuts.
-	acceptsShortcut := params.QueryType != queryTypeHourly && params.QueryType != queryTypeSpecies
+	// A species parameter without an explicit query type is inferred as a species query below,
+	// so it takes the strict format as well.
+	inferredSpecies := params.QueryType == "" && params.Species != ""
+	acceptsShortcut := params.QueryType != queryTypeHourly && params.QueryType != queryTypeSpecies && !inferredSpecies
 	if !acceptsShortcut || !apicore.IsDateShortcut(params.Date) {
 		if err := validateDateParam(params.Date, "date"); err != nil {
 			return nil, &dateValidationError{message: err.Error(), paramName: "date"}
