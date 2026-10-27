@@ -254,8 +254,8 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 }
 
 // newTrackerFromSettingsAt builds a tracker as if it were created at now.
-// It is the clock seam for NewTrackerFromSettings; it does not affect
-// InitFromDatabase, which reads its own clock.
+// It is the clock seam for NewTrackerFromSettings; the database load has its
+// own seam, InitFromDatabaseAt.
 func newTrackerFromSettingsAt(ds SpeciesDatastore, settings *conf.SpeciesTrackingSettings, now time.Time) *SpeciesTracker {
 	// Log initialization
 	getLog().Debug("Creating new species tracker",
@@ -402,7 +402,7 @@ func (t *SpeciesTracker) InitFromDatabaseAsync() {
 	t.asyncOpsWg.Go(func() {
 		defer t.warming.Store(false)
 		defer cancel()
-		if err := t.initFromDatabaseContext(ctx); err != nil {
+		if err := t.initFromDatabaseContext(ctx, time.Now()); err != nil {
 			getLog().Error("species tracker background initialization failed; continuing with live detections",
 				logger.Error(err),
 				logger.String("operation", "species_tracker_async_init"),
