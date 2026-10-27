@@ -3,6 +3,7 @@ package testutil
 import (
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -48,16 +49,21 @@ func SetupMySQLIntegrationTest(t *testing.T, cfg *datastoreV2.MySQLConfig) *Test
 	}
 
 	// Legacy side: plain connection with the legacy DSN parameters.
-	legacyDSN := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?%s",
-		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database, legacyMySQLDSNParams)
+	legacyDSN := fmt.Sprintf("%s:%s@tcp(%s)/%s?%s",
+		cfg.Username, cfg.Password, net.JoinHostPort(cfg.Host, cfg.Port), cfg.Database, legacyMySQLDSNParams)
 	legacyGorm, err := gorm.Open(gormmysql.Open(legacyDSN), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	require.NoError(t, err, "failed to open legacy MySQL connection")
 	legacySQL, err := legacyGorm.DB()
 	require.NoError(t, err, "failed to get sql.DB from GORM")
+	// Cleanups run last in, first out: each is registered as soon as what it
+	// releases exists, so a setup that fails part way still cleans up, and the
+	// worker stop registered last runs first.
+	t.Cleanup(func() { _ = legacySQL.Close() })
 
 	models := legacyModels()
+	t.Cleanup(func() { _ = legacyGorm.Migrator().DropTable(models...) })
 	require.NoError(t, legacyGorm.Migrator().DropTable(models...), "failed to drop legacy tables")
 	require.NoError(t, legacyGorm.AutoMigrate(models...), "failed to migrate legacy schema")
 
@@ -73,6 +79,8 @@ func SetupMySQLIntegrationTest(t *testing.T, cfg *datastoreV2.MySQLConfig) *Test
 	v2Cfg.Logger = log
 	mgr, err := datastoreV2.NewMySQLManager(&v2Cfg)
 	require.NoError(t, err, "failed to create v2 MySQL manager")
+	t.Cleanup(func() { _ = mgr.Close() })
+	t.Cleanup(func() { _ = mgr.Delete() })
 	require.NoError(t, mgr.Delete(), "failed to drop stale v2 tables")
 	require.NoError(t, mgr.Initialize(), "failed to initialize v2 schema")
 	ctx.V2Manager = mgr
@@ -83,15 +91,12 @@ func SetupMySQLIntegrationTest(t *testing.T, cfg *datastoreV2.MySQLConfig) *Test
 	ctx.createAuxiliaryMigrator(t)
 	ctx.createWorker(t)
 
-	// Stop the worker before its connections go away.
+	// Registered last, so it runs first: stop the worker before the tables are
+	// dropped and the connections close.
 	t.Cleanup(func() {
 		if ctx.Worker != nil {
 			ctx.Worker.Stop()
 		}
-		_ = mgr.Delete()
-		_ = legacyGorm.Migrator().DropTable(models...)
-		_ = mgr.Close()
-		_ = legacySQL.Close()
 	})
 
 	return ctx
