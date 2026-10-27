@@ -63,15 +63,23 @@ func WallClockArithmetic(m dsl.Matcher) {
 
 	m.Match(
 		`$t.Truncate($c * time.Hour)`,
-		`$t.Round($c * time.Hour)`,
 		`$t.Truncate(time.Hour * $c)`,
+	).
+		Where((m["t"].Type.Is("time.Time") || m["t"].Type.Is("*time.Time")) &&
+			m["c"].Value.Int() == 24 &&
+			!m.File().Name.Matches(`_test\.go$`) &&
+			!m.File().PkgPath.Matches(`(internal/wallclock|/testutil)$`)).
+		Report("Truncate to a day works on UTC time and is wrong for local days; use wallclock.DateOf or wallclock.DayBounds from internal/wallclock")
+
+	m.Match(
+		`$t.Round($c * time.Hour)`,
 		`$t.Round(time.Hour * $c)`,
 	).
 		Where((m["t"].Type.Is("time.Time") || m["t"].Type.Is("*time.Time")) &&
 			m["c"].Value.Int() == 24 &&
 			!m.File().Name.Matches(`_test\.go$`) &&
 			!m.File().PkgPath.Matches(`(internal/wallclock|/testutil)$`)).
-		Report("Truncate/Round to a day works on UTC time and is wrong for local days; use wallclock.DateOf or wallclock.DayBounds from internal/wallclock")
+		Report("Round to a day works on UTC time and is wrong for local days; wallclock.DateOf and wallclock.DayBounds take the date that contains the instant (they do not round to the nearest day), so keep the nearest-day behaviour explicit if it is intended (internal/wallclock)")
 
 	// Day counts from hours.
 	m.Match(
