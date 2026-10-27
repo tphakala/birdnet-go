@@ -1,6 +1,9 @@
 package v2only
 
 import (
+	"context"
+	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 	_ "time/tzdata" // zone data for the named locations, independent of the host
@@ -14,6 +17,37 @@ import (
 	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
 )
 
+// repeatedHourZone names a zone and the two UTC instants at which its clock reads
+// the same wall time (first the DST occurrence, then the standard time one).
+type repeatedHourZone struct {
+	name     string
+	zone     string
+	wallTime string
+	hour     string // the repeated wall hour, as the hour filters take it
+	first    time.Time
+	second   time.Time
+}
+
+// repeatedHourZones are the zones the repeated-hour tests run in.
+var repeatedHourZones = []repeatedHourZone{
+	{
+		name: "New York", zone: "America/New_York", wallTime: "2026-11-01 01:30", hour: "01",
+		first:  time.Date(2026, time.November, 1, 5, 30, 0, 0, time.UTC),
+		second: time.Date(2026, time.November, 1, 6, 30, 0, 0, time.UTC),
+	},
+	{
+		name: "Helsinki", zone: "Europe/Helsinki", wallTime: "2026-10-25 03:30", hour: "03",
+		first:  time.Date(2026, time.October, 25, 0, 30, 0, 0, time.UTC),
+		second: time.Date(2026, time.October, 25, 1, 30, 0, 0, time.UTC),
+	},
+	{
+		// A 30 minute shift: an hour-only shortcut would not pass.
+		name: "Lord Howe", zone: "Australia/Lord_Howe", wallTime: "2026-04-05 01:50", hour: "01",
+		first:  time.Date(2026, time.April, 4, 14, 50, 0, 0, time.UTC),
+		second: time.Date(2026, time.April, 4, 15, 20, 0, 0, time.UTC),
+	},
+}
+
 // TestDetectionRepository_SaveStoresTimestampInRepeatedHour verifies that the
 // stored detected_at is the detection's own instant for both occurrences of a
 // wall-clock hour that repeats at the end of DST. Formatting the instant as wall
@@ -21,34 +55,7 @@ import (
 func TestDetectionRepository_SaveStoresTimestampInRepeatedHour(t *testing.T) {
 	t.Parallel()
 
-	// Each zone lists the two UTC instants at which its clock reads the same
-	// wall time (first the DST occurrence, then the standard time one).
-	tests := []struct {
-		name     string
-		zone     string
-		wallTime string
-		first    time.Time
-		second   time.Time
-	}{
-		{
-			name: "New York", zone: "America/New_York", wallTime: "2026-11-01 01:30",
-			first:  time.Date(2026, time.November, 1, 5, 30, 0, 0, time.UTC),
-			second: time.Date(2026, time.November, 1, 6, 30, 0, 0, time.UTC),
-		},
-		{
-			name: "Helsinki", zone: "Europe/Helsinki", wallTime: "2026-10-25 03:30",
-			first:  time.Date(2026, time.October, 25, 0, 30, 0, 0, time.UTC),
-			second: time.Date(2026, time.October, 25, 1, 30, 0, 0, time.UTC),
-		},
-		{
-			// A 30 minute shift: an hour-only shortcut would not pass.
-			name: "Lord Howe", zone: "Australia/Lord_Howe", wallTime: "2026-04-05 01:50",
-			first:  time.Date(2026, time.April, 4, 14, 50, 0, 0, time.UTC),
-			second: time.Date(2026, time.April, 4, 15, 20, 0, 0, time.UTC),
-		},
-	}
-
-	for _, tt := range tests {
+	for _, tt := range repeatedHourZones {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -218,4 +225,333 @@ func TestDetectionRepository_SearchMinIDCursorVisitsAllRows(t *testing.T) {
 	}
 
 	assert.Equal(t, wantIDs, visited, "every row must be visited once by cursor pagination")
+}
+
+// readCall is one read method of the DetectionRepository with its arguments bound.
+type readCall struct {
+	name string
+	call func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, error)
+}
+
+// withoutTotal adapts a read that returns no total to a readCall.
+func withoutTotal(read func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, int64, error)) func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, error) {
+	return func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, error) {
+		results, _, err := read(ctx, repo)
+		return results, err
+	}
+}
+
+// listReadCalls returns the list read methods bound to a date and hour. Get is not a
+// list read and is exercised per ID by the callers.
+func listReadCalls(date, hour string) []readCall {
+	const listLimit = 10
+	return []readCall{
+		{"GetRecent", func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, error) {
+			return repo.GetRecent(ctx, listLimit)
+		}},
+		{"Search", withoutTotal(func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, int64, error) {
+			return repo.Search(ctx, datastore.NewDetectionFilters().WithLimit(listLimit))
+		})},
+		{"GetBySpecies", withoutTotal(func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, int64, error) {
+			return repo.GetBySpecies(ctx, "Parus major", nil)
+		})},
+		{"GetByDateRange", withoutTotal(func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, int64, error) {
+			return repo.GetByDateRange(ctx, date, date, listLimit, 0)
+		})},
+		{"GetHourly", withoutTotal(func(ctx context.Context, repo datastore.DetectionRepository) ([]*detection.Result, int64, error) {
+			return repo.GetHourly(ctx, date, hour, 1, listLimit, 0)
+		})},
+	}
+}
+
+// TestDetectionRepository_ReadsReturnStoredInstantInRepeatedHour verifies that every
+// read method returns each detection's stored instant, in the station zone, for both
+// occurrences of a wall-clock hour that repeats at the end of DST. Reading through the
+// formatted Date and Time text parses one occurrence of each pair back shifted.
+func TestDetectionRepository_ReadsReturnStoredInstantInRepeatedHour(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range repeatedHourZones {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			loc, err := time.LoadLocation(tt.zone)
+			require.NoError(t, err)
+			cfg, cleanup := buildTestConfig(t, nil)
+			defer cleanup()
+			cfg.Timezone = loc
+			ds, err := New(cfg)
+			require.NoError(t, err)
+			defer func() { assert.NoError(t, ds.Close()) }()
+
+			repo := NewDetectionRepository(ds)
+			ctx := t.Context()
+
+			want := make(map[uint]time.Time)
+			for _, utc := range []time.Time{tt.first, tt.second} {
+				at := utc.In(loc)
+				result := &detection.Result{
+					Timestamp: at,
+					Species:   detection.Species{ScientificName: "Parus major", CommonName: "Great Tit"},
+					Model:     detection.DefaultModelInfo(),
+				}
+				require.NoError(t, repo.Save(ctx, result, nil))
+				want[result.ID] = at
+			}
+			date := tt.wallTime[:len("2006-01-02")]
+
+			assertInstants := func(t *testing.T, got []*detection.Result) {
+				t.Helper()
+				require.Len(t, got, len(want))
+				for _, r := range got {
+					at, ok := want[r.ID]
+					require.True(t, ok, "unexpected detection %d", r.ID)
+					assert.True(t, at.Equal(r.Timestamp), "detection %d: want instant %s, got %s", r.ID, at, r.Timestamp)
+					assert.Equal(t, at.Format(time.RFC3339), r.Timestamp.Format(time.RFC3339), "detection %d offset", r.ID)
+					assert.Same(t, loc, r.Timestamp.Location(), "detection %d zone", r.ID)
+				}
+			}
+
+			t.Run("Get", func(t *testing.T) {
+				got := make([]*detection.Result, 0, len(want))
+				for id := range want {
+					r, err := repo.Get(ctx, strconv.FormatUint(uint64(id), 10))
+					require.NoError(t, err)
+					got = append(got, r)
+				}
+				assertInstants(t, got)
+			})
+			for _, rc := range listReadCalls(date, tt.hour) {
+				t.Run(rc.name, func(t *testing.T) {
+					got, err := rc.call(ctx, repo)
+					require.NoError(t, err)
+					assertInstants(t, got)
+				})
+			}
+		})
+	}
+}
+
+// TestDetectionRepository_ReadsMatchBridge verifies that the v2 repository returns the
+// same values as the datastore.Interface bridge over the same Datastore for every read
+// method: results, totals, errors, and nil versus empty slices.
+func TestDetectionRepository_ReadsMatchBridge(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ds.timezone = time.UTC
+	ctx := t.Context()
+
+	v2 := NewDetectionRepository(ds)
+	bridge := datastore.NewDetectionRepository(ds, ds.timezone)
+
+	at := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	full := &detection.Result{
+		Timestamp:      at,
+		AudioSource:    detection.AudioSource{SafeString: "rtsp_garage", DisplayName: "Garage"},
+		Species:        detection.Species{ScientificName: "Parus major", CommonName: "Great Tit"},
+		Confidence:     0.91,
+		Unlikely:       true,
+		Latitude:       60.17,
+		Longitude:      24.94,
+		ClipName:       "clips/parus.wav",
+		ClipSampleRate: 48000,
+		BeginTime:      at.Add(-3 * time.Second),
+		EndTime:        at.Add(3 * time.Second),
+		ProcessingTime: 150 * time.Millisecond,
+		Model:          perchModelInfo(),
+	}
+	require.NoError(t, v2.Save(ctx, full, nil))
+	id := strconv.FormatUint(uint64(full.ID), 10)
+	require.NoError(t, ds.SaveNoteReview(&datastore.NoteReview{NoteID: full.ID, Verified: "correct"}))
+	require.NoError(t, ds.LockNote(id))
+	require.NoError(t, ds.SaveNoteComment(&datastore.NoteComment{NoteID: full.ID, Entry: "a comment", CreatedAt: at}))
+	bare := seedDetection(t, ds, "Parus major", at.Add(time.Hour))
+	bareID := strconv.FormatUint(uint64(bare.ID), 10)
+
+	// readOutcome is everything one read returns. Errors compare by text.
+	type readOutcome struct {
+		Results []*detection.Result
+		Total   int64
+		Err     string
+	}
+	outcome := func(results []*detection.Result, total int64, err error) readOutcome {
+		o := readOutcome{Results: results, Total: total}
+		if err != nil {
+			o.Err = err.Error()
+		}
+		return o
+	}
+
+	const listLimit = 10
+	reads := []struct {
+		name string
+		read func(repo datastore.DetectionRepository) readOutcome
+	}{
+		{"Get full", func(r datastore.DetectionRepository) readOutcome {
+			res, err := r.Get(ctx, id)
+			return outcome([]*detection.Result{res}, 0, err)
+		}},
+		{"Get bare", func(r datastore.DetectionRepository) readOutcome {
+			res, err := r.Get(ctx, bareID)
+			return outcome([]*detection.Result{res}, 0, err)
+		}},
+		{"Get missing", func(r datastore.DetectionRepository) readOutcome {
+			res, err := r.Get(ctx, "9999")
+			return outcome([]*detection.Result{res}, 0, err)
+		}},
+		{"Get invalid ID", func(r datastore.DetectionRepository) readOutcome {
+			res, err := r.Get(ctx, "x")
+			return outcome([]*detection.Result{res}, 0, err)
+		}},
+		{"GetRecent", func(r datastore.DetectionRepository) readOutcome {
+			res, err := r.GetRecent(ctx, listLimit)
+			return outcome(res, 0, err)
+		}},
+		{"GetRecent limit 1", func(r datastore.DetectionRepository) readOutcome {
+			res, err := r.GetRecent(ctx, 1)
+			return outcome(res, 0, err)
+		}},
+		{"Search nil filters", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.Search(ctx, nil)
+			return outcome(res, total, err)
+		}},
+		{"Search species and dates", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.Search(ctx, datastore.NewDetectionFilters().
+				WithSpecies("Parus major").WithDateRange("2026-06-01", "2026-06-01").WithLimit(1))
+			return outcome(res, total, err)
+		}},
+		{"Search bad date", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.Search(ctx, datastore.NewDetectionFilters().WithDateRange("not-a-date", ""))
+			return outcome(res, total, err)
+		}},
+		{"Search no match", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.Search(ctx, datastore.NewDetectionFilters().WithSpecies("Turdus merula"))
+			return outcome(res, total, err)
+		}},
+		{"GetBySpecies known", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetBySpecies(ctx, "Parus major", datastore.NewDetectionFilters().WithLimit(1).WithOffset(1))
+			return outcome(res, total, err)
+		}},
+		{"GetBySpecies unknown", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetBySpecies(ctx, "Unknown species", nil)
+			return outcome(res, total, err)
+		}},
+		{"GetByDateRange dates", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetByDateRange(ctx, "2026-06-01", "2026-06-02", listLimit, 0)
+			return outcome(res, total, err)
+		}},
+		{"GetByDateRange empty dates", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetByDateRange(ctx, "", "", listLimit, 0)
+			return outcome(res, total, err)
+		}},
+		{"GetByDateRange bad date", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetByDateRange(ctx, "not-a-date", "", listLimit, 0)
+			return outcome(res, total, err)
+		}},
+		{"GetHourly", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetHourly(ctx, "2026-06-01", "12", 1, listLimit, 0)
+			return outcome(res, total, err)
+		}},
+		{"GetHourly empty hour", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetHourly(ctx, "2026-06-01", "03", 1, listLimit, 0)
+			return outcome(res, total, err)
+		}},
+		{"GetHourly bad hour", func(r datastore.DetectionRepository) readOutcome {
+			res, total, err := r.GetHourly(ctx, "2026-06-01", "x", 1, listLimit, 0)
+			return outcome(res, total, err)
+		}},
+	}
+
+	for _, rd := range reads {
+		t.Run(rd.name, func(t *testing.T) {
+			want := rd.read(bridge)
+			got := rd.read(v2)
+			// Whole values compare equal: both paths build times from Unix seconds or a
+			// wall time parsed in the same *time.Location, with no monotonic reading.
+			assert.Equal(t, want, got)
+		})
+	}
+}
+
+// TestDetectionRepository_ReadsHonourCancelledContext verifies that the v2 reads pass
+// the caller's context to their queries.
+func TestDetectionRepository_ReadsHonourCancelledContext(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	det := seedDetection(t, ds, "Parus major", time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC))
+	repo := NewDetectionRepository(ds)
+
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	_, err := repo.Get(ctx, strconv.FormatUint(uint64(det.ID), 10))
+	require.Error(t, err, "Get")
+	require.ErrorIs(t, err, context.Canceled, "Get")
+
+	for _, rc := range listReadCalls("2026-06-01", "12") {
+		_, err := rc.call(ctx, repo)
+		require.Error(t, err, rc.name)
+		assert.ErrorIs(t, err, context.Canceled, rc.name)
+	}
+}
+
+// cancelAfterChecks is a context that cancels itself once Err has been called more than
+// limit times, so a test can end the context at every point of a read.
+type cancelAfterChecks struct {
+	context.Context
+	cancel context.CancelFunc
+	limit  int64
+	checks atomic.Int64
+}
+
+func (c *cancelAfterChecks) Err() error {
+	if c.checks.Add(1) > c.limit {
+		c.cancel()
+	}
+	return c.Context.Err()
+}
+
+// TestDetectionRepository_ListReadsNeverReturnUnresolvedSpecies verifies that a list read
+// whose context ends part way returns an error, not rows whose species were not loaded.
+func TestDetectionRepository_ListReadsNeverReturnUnresolvedSpecies(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+	ds.timezone = time.UTC
+	const (
+		species  = "Parus major"
+		rowCount = 3
+		// maxCancelPoint is far above the number of context checks one read makes.
+		maxCancelPoint = 500
+	)
+	for i := range rowCount {
+		seedDetection(t, ds, species, time.Date(2026, 6, 1, 12+i, 0, 0, 0, time.UTC))
+	}
+	repo := NewDetectionRepository(ds)
+
+	for _, rc := range listReadCalls("2026-06-01", "12") {
+		t.Run(rc.name, func(t *testing.T) {
+			completed := false
+			for limit := range maxCancelPoint {
+				base, cancel := context.WithCancel(t.Context())
+				ctx := &cancelAfterChecks{Context: base, cancel: cancel, limit: int64(limit)}
+				results, err := rc.call(ctx, repo)
+				cancel()
+				if err != nil {
+					continue
+				}
+				require.NotEmpty(t, results, "context ended after %d checks", limit)
+				for _, r := range results {
+					require.Equal(t, species, r.Species.ScientificName, "context ended after %d checks", limit)
+				}
+				completed = true
+			}
+			assert.True(t, completed, "no cancel point let the read finish")
+		})
+	}
 }

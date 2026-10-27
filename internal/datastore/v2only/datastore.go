@@ -1143,7 +1143,7 @@ func clipSampleRateValue(rate *int) int {
 }
 
 // detectionFields holds the values derived from a v2 Detection for the read mappers.
-// decodeDetection computes it; detectionToNote is its only consumer so far.
+// decodeDetection computes it for detectionToNote and detectionToResult.
 type detectionFields struct {
 	// instant is the stored detection time (detected_at) in the station zone.
 	instant time.Time
@@ -1178,9 +1178,8 @@ type detectionFields struct {
 // decodeDetection derives the detectionFields of det. The instant comes from the stored
 // detected_at column and never from formatted text. det must not be nil.
 // Common name is looked up from the name maps which are built at startup. When the label is not
-// preloaded it is fetched from the label repository, which queries the database on a background
-// context because decodeDetection takes no ctx.
-func (ds *Datastore) decodeDetection(det *entities.Detection) detectionFields {
+// preloaded it is fetched from the label repository with ctx.
+func (ds *Datastore) decodeDetection(ctx context.Context, det *entities.Detection) detectionFields {
 	f := detectionFields{}
 
 	// Try to get scientific name from preloaded Label first.
@@ -1190,7 +1189,6 @@ func (ds *Datastore) decodeDetection(det *entities.Detection) detectionFields {
 		f.scientificName = detection.ExtractScientificName(det.Label.ScientificName)
 	} else if det.LabelID > 0 && ds.label != nil {
 		// Label not preloaded, fetch it from the repository
-		ctx := context.Background()
 		if label, err := ds.label.GetByID(ctx, det.LabelID); err == nil && label != nil {
 			f.scientificName = detection.ExtractScientificName(label.ScientificName)
 		}
@@ -1266,7 +1264,8 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		return datastore.Note{}
 	}
 
-	f := ds.decodeDetection(det)
+	// detectionToNote serves the Interface methods, which carry no ctx.
+	f := ds.decodeDetection(context.Background(), det)
 
 	// Convert Unix timestamp to date and time strings
 	dateStr := f.instant.Format(time.DateOnly)
