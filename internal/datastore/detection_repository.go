@@ -523,15 +523,6 @@ func (r *detectionRepository) convertFilters(filters *DetectionFilters) (Advance
 			Start: start,
 			End:   end,
 		}
-	} else if filters.Date != "" {
-		date, err := r.parseDateWithDefault(filters.Date, false)
-		if err != nil {
-			return AdvancedSearchFilters{}, err
-		}
-		legacy.DateRange = &DateRange{
-			Start: date,
-			End:   date.Add(24*time.Hour - time.Nanosecond), //nolint:gocritic // End of day (23:59:59.999999999) from a local midnight: a known DST bug in an unused branch (DetectionFilters.Date has no setter and no non-test caller), removed with the dead wall-clock APIs cleanup
-		}
 	}
 
 	// Convert hour range

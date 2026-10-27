@@ -41,11 +41,6 @@ func (m *mockWeatherRepo) GetHourlyWeather(ctx context.Context, date string) ([]
 	return args.Get(0).([]entities.HourlyWeather), args.Error(1)
 }
 
-func (m *mockWeatherRepo) GetHourlyWeatherInLocation(ctx context.Context, date string, loc *time.Location) ([]entities.HourlyWeather, error) {
-	args := m.Called(ctx, date, loc)
-	return args.Get(0).([]entities.HourlyWeather), args.Error(1)
-}
-
 func (m *mockWeatherRepo) LatestHourlyWeather(ctx context.Context) (*entities.HourlyWeather, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
