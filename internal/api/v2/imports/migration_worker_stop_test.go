@@ -287,3 +287,21 @@ func TestStopMigrationWorker_DrainsBeforeReturning(t *testing.T) {
 		})
 	})
 }
+
+func TestCancelMigration_CompletedKeepsTailSync(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		env := newStopTestEnv(t, nil)
+		env.toCompleted(t, 5)
+		env.startWorker(t)
+		synctest.Wait() // worker parked in tail sync
+
+		rec := env.call(env.h.CancelMigration, "/cancel")
+		synctest.Wait()
+
+		assert.Equal(t, http.StatusConflict, rec.Code, "a completed migration cannot be cancelled")
+		state, err := env.sm.GetState()
+		require.NoError(t, err)
+		assert.Equal(t, entities.MigrationStatusCompleted, state.State)
+		assert.True(t, env.worker.IsRunning(), "a rejected cancel must leave tail sync running")
+	})
+}

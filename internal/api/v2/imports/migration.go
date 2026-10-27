@@ -654,6 +654,13 @@ func (c *Handler) RetryValidation(ctx echo.Context) error {
 	})
 }
 
+// isMigrationCompleted reports whether the migration state is COMPLETED. A state
+// read error counts as not completed.
+func isMigrationCompleted(sm *datastoreV2.StateManager) bool {
+	state, err := sm.GetState()
+	return err == nil && state.State == entities.MigrationStatusCompleted
+}
+
 // CancelMigration handles POST /api/v2/system/database/migration/cancel
 func (c *Handler) CancelMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
@@ -665,7 +672,9 @@ func (c *Handler) CancelMigration(ctx echo.Context) error {
 
 	// Stop the worker first and wait for it, so its last batch cannot write
 	// after the state is reset. A stop that times out leaves the state untouched.
-	if worker != nil {
+	// A COMPLETED migration cannot be cancelled, so its tail sync worker is left
+	// running and sm.Cancel rejects the request below.
+	if worker != nil && !isMigrationCompleted(sm) {
 		stopCtx, stopCancel := context.WithTimeout(ctx.Request().Context(), migrationWorkerStopTimeout)
 		defer stopCancel()
 		if err := worker.Abandon(stopCtx); err != nil {
