@@ -11,6 +11,28 @@ import (
 	"gorm.io/gorm"
 )
 
+// Values of the detection rows these tests seed. The equal-values case in
+// TestMySQL_DetectionUpdate_OutcomeByRowState sends seededConfidence back, so
+// the row and that update cannot drift apart.
+const (
+	seededModelID      = 1
+	seededLabelID      = 1
+	seededDetectedAt   = 1000
+	seededConfidence   = 0.9
+	seededClipName     = "clip.wav"
+	insertDetectionSQL = "INSERT INTO v2_detections (id, model_id, label_id, detected_at, confidence, clip_name) VALUES (?, ?, ?, ?, ?, ?)"
+)
+
+// seedDetection inserts a v2 detection with an explicit id and foreign key
+// checks off, so no lookup rows are needed. A nil clipName stores NULL.
+func seedDetection(t *testing.T, id uint, clipName *string) {
+	t.Helper()
+	require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
+		return tx.Exec(insertDetectionSQL,
+			id, seededModelID, seededLabelID, seededDetectedAt, seededConfidence, clipName).Error
+	}))
+}
+
 // TestMySQL_DetectionUpdate_OutcomeByRowState runs detectionRepository.Update
 // through the production MySQL DSN against every server the suite is pointed
 // at. An UPDATE that leaves the stored values as they are must still count as
@@ -24,24 +46,19 @@ func TestMySQL_DetectionUpdate_OutcomeByRowState(t *testing.T) {
 
 	repo := repository.NewDetectionRepository(mgr.DB(), nil, true, true)
 
+	// Every case that changes its row owns one, so no case depends on another.
 	const (
-		openID    = uint(1)
-		lockedID  = uint(2)
+		equalID   = uint(1)
+		clearID   = uint(2)
+		nullID    = uint(3)
+		lockedID  = uint(4)
 		missingID = uint(99)
-		clipName  = "clip.wav"
 	)
-
-	// Explicit ids with foreign key checks off, so no lookup rows are needed.
-	require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
-		for _, id := range []uint{openID, lockedID} {
-			if err := tx.Exec(
-				"INSERT INTO v2_detections (id, model_id, label_id, detected_at, confidence, clip_name) VALUES (?, 1, 1, ?, 0.9, ?)",
-				id, 1000+id, clipName).Error; err != nil {
-				return err
-			}
-		}
-		return nil
-	}))
+	clip := seededClipName
+	seedDetection(t, equalID, &clip)
+	seedDetection(t, clearID, &clip)
+	seedDetection(t, nullID, nil)
+	seedDetection(t, lockedID, &clip)
 	require.NoError(t, repo.Lock(t.Context(), lockedID))
 
 	storedClip := func(id uint) *string {
@@ -60,18 +77,21 @@ func TestMySQL_DetectionUpdate_OutcomeByRowState(t *testing.T) {
 		wantClip  string
 	}{
 		{
-			name:    "values equal to the stored ones succeed",
-			id:      openID,
-			updates: map[string]any{"clip_name": clipName, "confidence": 0.9},
+			name:      "values equal to the stored ones succeed",
+			id:        equalID,
+			updates:   map[string]any{"clip_name": seededClipName, "confidence": seededConfidence},
+			checkClip: true,
+			wantClip:  seededClipName,
 		},
 		{
-			name:    "clearing a clip name succeeds",
-			id:      openID,
-			updates: map[string]any{"clip_name": nil},
+			name:      "clearing a clip name succeeds",
+			id:        clearID,
+			updates:   map[string]any{"clip_name": nil},
+			checkClip: true,
 		},
 		{
 			name:      "clearing an already cleared clip name succeeds",
-			id:        openID,
+			id:        nullID,
 			updates:   map[string]any{"clip_name": nil},
 			checkClip: true,
 		},
@@ -81,12 +101,12 @@ func TestMySQL_DetectionUpdate_OutcomeByRowState(t *testing.T) {
 			updates:   map[string]any{"clip_name": "other.wav"},
 			wantErr:   repository.ErrDetectionLocked,
 			checkClip: true,
-			wantClip:  clipName,
+			wantClip:  seededClipName,
 		},
 		{
 			name:    "an unchanged value on a locked detection is still refused",
 			id:      lockedID,
-			updates: map[string]any{"clip_name": clipName},
+			updates: map[string]any{"clip_name": seededClipName},
 			wantErr: repository.ErrDetectionLocked,
 		},
 		{
@@ -121,7 +141,7 @@ func TestMySQL_DetectionUpdate_OutcomeByRowState(t *testing.T) {
 
 // TestMySQL_ClipSampleRate_ReportsOnlyRealChanges pins that, with matched-row
 // counting, FillClipSampleRate still reports true only when it filled a NULL
-// rate, and that RecordClipSampleRate overwriting a stored value is not an error.
+// rate, and that RecordClipSampleRate overwrites a stored rate.
 func TestMySQL_ClipSampleRate_ReportsOnlyRealChanges(t *testing.T) {
 	dropAllTables(t, coexTestDB, coexTestDBName)
 
@@ -132,23 +152,24 @@ func TestMySQL_ClipSampleRate_ReportsOnlyRealChanges(t *testing.T) {
 	repo := repository.NewDetectionRepository(mgr.DB(), nil, true, true)
 
 	const (
-		detectionID = uint(1)
-		clipName    = "clip.wav"
-		sampleRate  = 48000
+		detectionID        = uint(1)
+		sampleRate         = 48000
+		recordedSampleRate = 44100
 	)
-	require.NoError(t, withForeignKeyChecksOff(coexTestDB, func(tx *gorm.DB) error {
-		return tx.Exec(
-			"INSERT INTO v2_detections (id, model_id, label_id, detected_at, confidence, clip_name) VALUES (?, 1, 1, 1000, 0.9, ?)",
-			detectionID, clipName).Error
-	}))
+	clip := seededClipName
+	seedDetection(t, detectionID, &clip)
 
-	filled, err := repo.FillClipSampleRate(t.Context(), detectionID, clipName, sampleRate)
+	filled, err := repo.FillClipSampleRate(t.Context(), detectionID, seededClipName, sampleRate)
 	require.NoError(t, err)
 	assert.True(t, filled, "a NULL rate is filled")
 
-	filled, err = repo.FillClipSampleRate(t.Context(), detectionID, clipName, sampleRate)
+	filled, err = repo.FillClipSampleRate(t.Context(), detectionID, seededClipName, sampleRate)
 	require.NoError(t, err)
 	assert.False(t, filled, "a stored rate is not filled again")
 
-	require.NoError(t, repo.RecordClipSampleRate(t.Context(), detectionID, clipName, sampleRate))
+	require.NoError(t, repo.RecordClipSampleRate(t.Context(), detectionID, seededClipName, recordedSampleRate))
+	det, err := repo.Get(t.Context(), detectionID)
+	require.NoError(t, err)
+	require.NotNil(t, det.ClipSampleRate)
+	assert.Equal(t, recordedSampleRate, *det.ClipSampleRate)
 }
