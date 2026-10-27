@@ -247,7 +247,7 @@ All public methods use read-write mutex for safe concurrent access:
 - Triggers when crossing the configured reset date
 - Clears `speciesThisYear` map
 - Invalidates status cache
-- Every database load (startup and periodic sync) also makes the load's tracking year current, emptying `speciesThisYear` first when that differs from the tracker's year, so rows are never held under another year's label
+- Every database load (startup and periodic sync) also makes the load's tracking year current, emptying `speciesThisYear` when that differs from the tracker's year (after the query succeeds; a failed load changes nothing), so rows are never held under another year's label
 
 **Seasonal Reset**:
 

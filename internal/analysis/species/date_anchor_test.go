@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/testutil"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
@@ -393,7 +394,7 @@ func TestGetSeasonDateRange_EndNormalisesLikeTimeDate(t *testing.T) {
 // resetStep is one operation in a tracking-year reset sequence and the state
 // expected after it.
 type resetStep struct {
-	op       string // "detect", "status", "batch", "seed" or "load"
+	op       string // "detect", "status", "batch", "seed", "load" or "load_error"
 	species  string
 	at       time.Time
 	wantYear int
@@ -405,9 +406,13 @@ type resetStep struct {
 type yearRowsDatastore struct {
 	mockSpeciesDatastore
 	rows []datastore.NewSpeciesData
+	err  error
 }
 
 func (d *yearRowsDatastore) GetSpeciesFirstDetectionInPeriod(_ context.Context, startDate, endDate string, _, _ int) ([]datastore.NewSpeciesData, error) {
+	if d.err != nil {
+		return nil, d.err
+	}
 	var inRange []datastore.NewSpeciesData
 	for _, row := range d.rows {
 		// ISO dates compare correctly as strings.
@@ -449,6 +454,8 @@ func runResetSteps(t *testing.T, tracker *SpeciesTracker, steps []resetStep) {
 			tracker.GetBatchSpeciesStatus([]string{step.species}, step.at)
 		case "load":
 			require.NoError(t, tracker.initFromDatabaseContext(t.Context(), step.at), "step %d: load", i)
+		case "load_error":
+			require.Error(t, tracker.initFromDatabaseContext(t.Context(), step.at), "step %d: load", i)
 		case "seed":
 			tracker.mu.Lock()
 			tracker.speciesThisYear[step.species] = step.at
@@ -480,6 +487,7 @@ func TestYearlyTracking_ResetFollowsTrackingYear(t *testing.T) {
 		startYear   int
 		constructAt time.Time // when non-zero, build through the clock seam and expect startYear
 		rows        []datastore.NewSpeciesData
+		queryErr    error // when set, the yearly query fails
 		steps       []resetStep
 	}{
 		{
@@ -584,6 +592,17 @@ func TestYearlyTracking_ResetFollowsTrackingYear(t *testing.T) {
 			},
 		},
 		{
+			// A failed query must leave the year and the set as they were.
+			name:        "failed_load_after_reset_keeps_state",
+			startYear:   2026,
+			constructAt: resetNoon(2027, time.June, 30),
+			queryErr:    errors.NewStd("query failed"),
+			steps: []resetStep{
+				{"detect", "A", resetNoon(2027, time.June, 30), 2026, []string{"A"}},
+				{"load_error", "", time.Date(2027, time.July, 1, 0, 0, 30, 0, time.UTC), 2026, []string{"A"}},
+			},
+		},
+		{
 			// A load whose now was read before a call that already crossed the reset
 			// holds the previous year's rows, so it labels them with that year.
 			name:        "stale_load_behind_current_year",
@@ -602,7 +621,7 @@ func TestYearlyTracking_ResetFollowsTrackingYear(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			ds := &yearRowsDatastore{rows: tt.rows}
+			ds := &yearRowsDatastore{rows: tt.rows, err: tt.queryErr}
 			var tracker *SpeciesTracker
 			if tt.constructAt.IsZero() {
 				tracker = NewTrackerFromSettings(ds, newResetTestSettings(resetMonth, resetDay))
