@@ -122,7 +122,7 @@ type SpeciesStatus struct {
 	DaysSinceLastSeen int // Days since the previous detection before a return episode; -1 if first-ever / unknown
 
 	// Multi-period tracking
-	FirstThisYear   *time.Time // First detection this calendar year
+	FirstThisYear   *time.Time // First detection this tracking year
 	FirstThisSeason *time.Time // First detection this season
 	CurrentSeason   string     // Current season name
 
