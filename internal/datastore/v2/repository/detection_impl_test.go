@@ -1,8 +1,10 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -951,4 +953,91 @@ func TestSearch_SortByIDWithMinID(t *testing.T) {
 	assert.Equal(t, ids[1:], got(&SearchFilters{SortBy: SortFieldID, MinID: ids[0]}), "MinID is exclusive")
 	assert.Equal(t, ids[1:], got(&SearchFilters{SortBy: SortFieldID, MinID: ids[0], Query: "Corvus"}),
 		"MinID must not be ambiguous when labels is joined")
+}
+
+// TestSearch_TiedSortKeysPageDeterministically verifies that every non-id sort breaks
+// ties by detection id in the sort direction, so Limit/Offset pages cover each row
+// exactly once instead of repeating or skipping rows with equal sort keys.
+func TestSearch_TiedSortKeysPageDeterministically(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	const (
+		rowCount = 9
+		pageSize = 2
+		// sharedDetectedAt is the one timestamp every seeded row carries.
+		sharedDetectedAt = int64(1_700_000_000)
+		verifiedRank     = 0
+		unreviewedRank   = 1
+		otherRank        = 2
+	)
+	labels := []*entities.Label{
+		createTestLabel(t, db, "Corvus corone", 1),
+		createTestLabel(t, db, "Parus major", 1),
+	}
+	type seeded struct {
+		id      uint
+		species int
+		status  int
+	}
+	rows := make([]seeded, 0, rowCount)
+	for i := range rowCount {
+		det := createDetectionForLabel(t, db, labels[i%len(labels)].ID, sharedDetectedAt)
+		status := unreviewedRank
+		switch i % 3 {
+		case 0:
+			status = verifiedRank
+			require.NoError(t, db.Table(tableDetectionReviews).Create(&entities.DetectionReview{
+				DetectionID: det.ID, Verified: entities.VerificationCorrect,
+			}).Error)
+		case 2:
+			status = otherRank
+			require.NoError(t, db.Table(tableDetectionReviews).Create(&entities.DetectionReview{
+				DetectionID: det.ID, Verified: entities.VerificationFalsePositive,
+			}).Error)
+		}
+		rows = append(rows, seeded{id: det.ID, species: i % len(labels), status: status})
+	}
+
+	sortKey := map[string]func(seeded) int{
+		SortFieldDetectedAt: func(seeded) int { return 0 },
+		SortFieldConfidence: func(seeded) int { return 0 },
+		SortFieldSpecies:    func(s seeded) int { return s.species },
+		SortFieldStatus:     func(s seeded) int { return s.status },
+	}
+
+	for sortBy, key := range sortKey {
+		for _, desc := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/desc=%t", sortBy, desc), func(t *testing.T) {
+				want := slices.Clone(rows)
+				slices.SortFunc(want, func(a, b seeded) int {
+					c := cmp.Compare(key(a), key(b))
+					if c == 0 {
+						c = cmp.Compare(a.id, b.id)
+					}
+					if desc {
+						return -c
+					}
+					return c
+				})
+				wantIDs := make([]uint, 0, len(want))
+				for _, s := range want {
+					wantIDs = append(wantIDs, s.id)
+				}
+
+				var got []uint
+				for offset := 0; offset < rowCount; offset += pageSize {
+					page, _, err := repo.Search(ctx, &SearchFilters{
+						SortBy: sortBy, SortDesc: desc, Limit: pageSize, Offset: offset,
+					})
+					require.NoError(t, err)
+					for _, d := range page {
+						got = append(got, d.ID)
+					}
+				}
+				assert.Equal(t, wantIDs, got, "pages must cover every row once, ties ordered by id in the sort direction")
+			})
+		}
+	}
 }

@@ -738,6 +738,12 @@ func (r *detectionRepository) applySearchOrdering(query *gorm.DB, filters *Searc
 		query = query.Order("detected_at" + dir)
 	}
 
+	// Tiebreak on the primary key so rows with equal sort keys keep one order across
+	// offset pages. Qualified because the joined labels and reviews tables have an id too.
+	if filters.SortBy != SortFieldID {
+		query = query.Order(r.tableName() + ".id" + dir)
+	}
+
 	// Pagination
 	if filters.Limit > 0 {
 		query = query.Limit(filters.Limit)
