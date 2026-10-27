@@ -187,7 +187,9 @@ const (
 	// untabled release older than the oldest supported one.
 	SupportEndOfLife SupportLevel = "end_of_life"
 	// SupportUntracked is an untabled release at or above the oldest supported
-	// one. It is not known to be end of life, so it only produces a note.
+	// one. The table does not say whether upstream still maintains it (a newer
+	// LTS or Innovation release, or a short-lived rolling series that may
+	// already have ended), so it only produces a note.
 	SupportUntracked SupportLevel = "untracked"
 	// SupportUnknown is a version string that could not be parsed.
 	SupportUnknown SupportLevel = "unknown"

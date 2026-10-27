@@ -143,6 +143,11 @@ func (c *DatabaseCharsetCheck) Run(ctx context.Context) health.Result {
 			fmt.Sprintf("Unable to read the database character sets: %v", err), nil)
 	}
 
+	if report.SchemaCharset == "" {
+		return databaseServerResult(c.Name(), c.Category(), start, health.StatusUnknown,
+			"The database default character set could not be determined", nil)
+	}
+
 	bad := report.NonUTF8MB4Tables()
 	named := bad
 	if len(named) > maxNamedCharsetTables {

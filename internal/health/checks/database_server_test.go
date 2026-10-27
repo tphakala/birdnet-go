@@ -80,6 +80,7 @@ func TestDatabaseCharsetCheck_Status(t *testing.T) {
 		{"latin1 schema with 12 tables", charsetProbe(dbserver.CharsetReport{
 			SchemaCharset: "latin1", Tables: manyTables,
 		}), health.StatusWarning, []string{"latin1", "12 table(s)", "t09", "and 2 more"}, "t10"},
+		{"no schema row", charsetProbe(dbserver.CharsetReport{}), health.StatusUnknown, []string{"could not be determined"}, ""},
 		{"probe error", func(context.Context) (dbserver.CharsetReport, bool, error) {
 			return dbserver.CharsetReport{}, true, errors.NewStd("denied")
 		}, health.StatusUnknown, []string{"denied"}, ""},
