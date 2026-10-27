@@ -26,6 +26,9 @@ const (
 	// oracleRecentInstant is one ordinary 2026 instant (2026-06-15 12:00:00 UTC) that every zone
 	// also gets, so rows after the epoch are covered next to the ones before it.
 	oracleRecentInstant = 1781524800
+	// oracleDaysBeforeEpoch puts one fixed instant a year (in days) before 1970, deeper than the
+	// shifted-epoch instants.
+	oracleDaysBeforeEpoch = 365
 )
 
 // oracleRow is one instant with the offset the SQL applies and the wall time Go derives from them.
@@ -50,7 +53,7 @@ func oracleRows(t *testing.T) []oracleRow {
 		wallClockSecondsPerHour - 1, wallClockSecondsPerHour,
 		wallClockSecondsPerDay - 1, wallClockSecondsPerDay,
 	}
-	fixed := []int64{-365*wallClockSecondsPerDay - 1, -1, 0, 1, oracleRecentInstant}
+	fixed := []int64{-oracleDaysBeforeEpoch*wallClockSecondsPerDay - 1, -1, 0, 1, oracleRecentInstant}
 
 	rows := make([]oracleRow, 0, len(names)*(len(shifted)+len(fixed)))
 	for _, name := range names {
