@@ -332,6 +332,16 @@ func (t *SpeciesTracker) seasonCarryoverLookbackStart(seasonStart wallclock.Date
 	return seasonStart.AddDays(-t.seasonalWindowDays)
 }
 
+// lastSeenCarriesOver reports whether a species last heard at lastSeen was
+// already present when the season starting at seasonStart began: its last
+// detection falls in the lookback window before the start. The live rebuild and
+// the read-only status view share it so they cannot disagree.
+func (t *SpeciesTracker) lastSeenCarriesOver(lastSeen time.Time, seasonStart wallclock.Date) bool {
+	lastSeenDate := wallclock.DateOf(lastSeen)
+	return lastSeenDate.Compare(t.seasonCarryoverLookbackStart(seasonStart)) >= 0 &&
+		lastSeenDate.Compare(seasonStart) < 0
+}
+
 // advanceSeasonCarryoverLocked rebuilds the carry-over set from last-seen times
 // when a live season rollover moves forward into a season it does not yet
 // describe. At that moment each species' last-seen time still predates the new
@@ -345,11 +355,9 @@ func (t *SpeciesTracker) advanceSeasonCarryoverLocked(currentTime time.Time) {
 		return
 	}
 
-	lookbackStart := t.seasonCarryoverLookbackStart(seasonStart)
 	carryover := make(map[string]struct{})
 	for scientificName, lastSeen := range t.speciesLastSeen {
-		lastSeenDate := wallclock.DateOf(lastSeen)
-		if lastSeenDate.Compare(lookbackStart) >= 0 && lastSeenDate.Compare(seasonStart) < 0 {
+		if t.lastSeenCarriesOver(lastSeen, seasonStart) {
 			carryover[scientificName] = struct{}{}
 		}
 	}

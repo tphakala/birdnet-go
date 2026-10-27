@@ -163,7 +163,7 @@ func TestBuildSpeciesStatusLocked(t *testing.T) {
 	tracker.speciesBySeason["summer"]["Test Species"] = now.Add(-3 * 24 * time.Hour)
 
 	// Build status
-	status := tracker.buildSpeciesStatusLocked("Test Species", now, "summer")
+	status := tracker.buildSpeciesStatusLocked("Test Species", now, tracker.statusReadViewLocked(now))
 	tracker.mu.Unlock()
 
 	assert.NotNil(t, status.FirstThisYear, "FirstThisYear should be set")
