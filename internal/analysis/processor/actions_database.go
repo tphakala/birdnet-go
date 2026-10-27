@@ -329,6 +329,8 @@ func (a *DatabaseAction) terminate(err error) {
 
 // recordSaveSuccess runs the steps that follow a stored detection, once. The
 // caller holds the save slot and marks the action done when this returns.
+// A save that lands after the last job attempt ended is logged as late, and the
+// steps that need the job (MQTT, SSE) do not run for it.
 func (a *DatabaseAction) recordSaveSuccess(ctx context.Context, attempt int) {
 	// Repo.Save() sets a.Result.ID to the stored row's ID.
 	// Defensive check: warn if ID is unexpectedly 0 after a successful save.
@@ -340,6 +342,12 @@ func (a *DatabaseAction) recordSaveSuccess(ctx context.Context, attempt int) {
 			logger.String("species", a.Result.Species.CommonName),
 			logger.String("scientific_name", a.Result.Species.ScientificName),
 			logger.String("operation", "database_save_id_check"))
+	}
+
+	// The last attempt whose own step ended while the save was running: no
+	// attempt follows, so MQTT and SSE will not run for this detection.
+	if maxAttempts := int(a.maxAttempts.Load()); maxAttempts > 0 && attempt >= maxAttempts && ctx.Err() != nil {
+		a.windowEnded.Store(true)
 	}
 
 	switch {

@@ -904,3 +904,30 @@ func TestDatabaseAction_PanicInsideSaveIsNotRetried(t *testing.T) {
 	require.Panics(t, func() { _ = action.ExecuteContext(t.Context(), nil) })
 	assert.False(t, retry.Retryable(nil), "a save with an unknown outcome must not be repeated")
 }
+
+// TestDatabaseAction_LastAttemptOutlivingItsStepIsLoggedAsLate verifies that a
+// save which lands after the last attempt's step ended is treated as a late save.
+func TestDatabaseAction_LastAttemptOutlivingItsStepIsLoggedAsLate(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		repo := &scriptedSaveRepository{
+			MockDetectionRepository: NewMockDetectionRepository(),
+			release:                 make(chan struct{}),
+		}
+		det := testDetection()
+		action := &DatabaseAction{
+			Settings: &conf.Settings{Debug: true}, Repo: repo, Result: det.Result, Results: det.Results,
+			EventTracker: NewEventTracker(time.Hour),
+		}
+		action.saveRetryConfig()
+		action.maxAttempts.Store(1)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+		go func() { done <- action.ExecuteContext(ctx, nil) }()
+		synctest.Wait()
+		cancel() // the job's step ends while the save is still running
+		close(repo.release)
+		require.NoError(t, <-done)
+		assert.True(t, action.windowEnded.Load(), "the late landing is recorded as the end of the window")
+	})
+}

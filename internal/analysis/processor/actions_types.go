@@ -150,7 +150,7 @@ type DatabaseAction struct {
 	saveState    atomic.Int32  // saveStatePending, saveStateDone or saveStateTerminal
 	attempts     atomic.Int32  // ExecuteContext calls, one per job attempt
 	maxAttempts  atomic.Int32  // job attempts allowed; 0 means retries are not configured
-	windowEnded  atomic.Bool   // the last job attempt gave up while a save was still in flight
+	windowEnded  atomic.Bool   // the last job attempt ended while a save was still in flight
 	// Fields below are read and written only while holding saveSlot.
 	gated              bool                  // the event-tracker and new-species decisions are taken
 	isNewSpecies       bool                  // memoized new-species verdict of the gate
