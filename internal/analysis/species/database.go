@@ -12,25 +12,40 @@ import (
 	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
-// InitFromDatabase populates the tracker from historical data.
+// InitFromDatabase populates the tracker from historical data, as of the
+// current time.
 // This should be called once during initialization. It uses a background
 // context (no cancellation); the startup path uses InitFromDatabaseAsync, which
 // supplies a cancellable context via initFromDatabaseContext.
 func (t *SpeciesTracker) InitFromDatabase() error {
-	return t.initFromDatabaseContext(context.Background())
+	return t.initFromDatabaseContext(context.Background(), time.Now())
 }
 
-// initFromDatabaseContext performs the historical load under the given context,
-// so a shutdown during a background warm-up can abort the in-flight DB scan.
-func (t *SpeciesTracker) initFromDatabaseContext(ctx context.Context) error {
+// InitFromDatabaseAt populates the tracker from historical data as if the load
+// ran at now. It is the load counterpart of newTrackerFromSettingsAt: tests use
+// it to load a fixed fixture year instead of whatever year the real clock is in.
+//
+// WARNING: this method is exported only so the speciestest subpackage can reach
+// it. It is not guarded by testing.Testing() because production code must not
+// import the testing package. Do not call it from production code; use
+// InitFromDatabase.
+//
+// It records now as the sync time, so a following SyncIfNeeded reloads at the
+// real clock on its next call. Do not mix the two in one test.
+func (t *SpeciesTracker) InitFromDatabaseAt(now time.Time) error {
+	return t.initFromDatabaseContext(context.Background(), now)
+}
+
+// initFromDatabaseContext performs the historical load as of now under the
+// given context, so a shutdown during a background warm-up can abort the
+// in-flight DB scan. Production callers pass time.Now().
+func (t *SpeciesTracker) initFromDatabaseContext(ctx context.Context, now time.Time) error {
 	if t.ds == nil {
 		return errors.Newf("datastore is nil").
 			Component("new-species-tracker").
 			Category(errors.CategoryConfiguration).
 			Build()
 	}
-
-	now := time.Now()
 
 	getLog().Debug("Initializing species tracker from database",
 		logger.String("current_time", now.Format(time.DateTime)),
