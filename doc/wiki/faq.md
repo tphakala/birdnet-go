@@ -215,7 +215,7 @@ The maintainer's recommended starting point: enable the false-positive filter at
 
 ### Startup fails after an upgrade with a database/schema error
 
-Use the [Database Doctor](https://github.com/tphakala/birdnet-go/wiki/Database-Doctor) to diagnose and `--fix` (it backs up first). Don't drop tables yourself, several hold real data.
+Use the [Database Doctor](https://github.com/tphakala/birdnet-go/wiki/Database-Doctor) to diagnose and `--fix` (it backs up first). Don't drop tables yourself, several hold real data, unless the startup error says tables in the enhanced database (v2) shape hold rows; then follow [Legacy startup and tables in the enhanced database shape](https://github.com/tphakala/birdnet-go/wiki/Database-Doctor#legacy-startup-and-tables-in-the-enhanced-database-shape).
 
 ### Which MySQL and MariaDB versions are supported?
 

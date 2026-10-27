@@ -37,6 +37,16 @@ var errV2DatabaseInLegacyMode = errors.NewStd("database holds the enhanced datab
 var errV2ShapedTablesHoldRows = errors.NewStd("tables in the enhanced database (v2) shape hold rows the legacy store cannot use; refusing to drop them")
 
 const (
+	// v2ShapedTablesGuideURL is the wiki section that explains the v2-shaped table
+	// refusal table by table. The anchor follows the section heading in
+	// doc/wiki/database-doctor.md.
+	v2ShapedTablesGuideURL = "https://github.com/tphakala/birdnet-go/wiki/Database-Doctor#legacy-startup-and-tables-in-the-enhanced-database-shape"
+
+	// v2ShapedTablesRecoveryHint is the user-facing instruction emitted when legacy
+	// startup refuses to drop v2-shaped tables that hold rows.
+	v2ShapedTablesRecoveryHint = "stop BirdNET-Go and back up the database, then follow " + v2ShapedTablesGuideURL +
+		", which says what each listed table holds and which ones can be dropped by hand"
+
 	// v2LabelIDColumn is the label foreign key every v2 table keys on. No legacy
 	// model has ever declared it.
 	v2LabelIDColumn = "label_id"
@@ -501,8 +511,9 @@ func inspectV2ShapedTables(db *gorm.DB, candidates []string, log logger.Logger) 
 // number of empty tables already dropped before the refusal.
 func refuseV2ShapedTables(log logger.Logger, dbType, summary string, droppedEmpty int) error {
 	log.Error("Tables in the enhanced database shape hold rows the legacy store cannot use; no rows were dropped. Check earlier fallback to legacy mode log lines",
-		logger.String("tables", summary), logger.Int("dropped_empty_tables", droppedEmpty))
-	return criticalError(fmt.Errorf("%w: %s", errV2ShapedTablesHoldRows, summary),
+		logger.String("tables", summary), logger.Int("dropped_empty_tables", droppedEmpty),
+		logger.String("recovery_hint", v2ShapedTablesRecoveryHint))
+	return criticalError(fmt.Errorf("%w: %s; see %s", errV2ShapedTablesHoldRows, summary, v2ShapedTablesGuideURL),
 		"legacy_schema_guard", "v2_shaped_tables_hold_rows",
 		"db_type", dbType, "tables", summary)
 }

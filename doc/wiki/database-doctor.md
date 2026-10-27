@@ -146,7 +146,7 @@ The doctor uses SQLite's table-recreation algorithm to remove the extra columns 
 
 **Affected tables:** `image_caches`, `notification_histories`
 
-The doctor does not repair `dynamic_thresholds` or `threshold_events`. If they still have the old `label_id` column, BirdNET-Go recreates them itself on its next start and discards their rows. Adding a `label_id` column to a current table would trigger that, so the doctor leaves both tables alone.
+The doctor does not repair `dynamic_thresholds` or `threshold_events`. If they still have the old `label_id` column, BirdNET-Go recreates them itself on its next start in enhanced database mode and discards their rows. Adding a `label_id` column to a current table would trigger that, so the doctor leaves both tables alone.
 
 ### Corrupted indexes
 
@@ -302,10 +302,38 @@ DROP TABLE IF EXISTS alert_actions, alert_conditions, alert_history, alert_histo
 SET FOREIGN_KEY_CHECKS = 1;
 ```
 
-The enhanced database rows listed in the error are lost with these tables. On the next start the legacy store also recreates any of `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches` that still have the enhanced database shape, and their rows are lost.
+The enhanced database rows listed in the error are lost with these tables. On the next start the legacy store recreates those of `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches` that still have the enhanced database shape and are empty. If one of them holds rows, startup stops and names it; see [Legacy startup and tables in the enhanced database shape](#legacy-startup-and-tables-in-the-enhanced-database-shape).
 
 **3c: Both sides hold data you need, or the error says tables could not be read, or the enhanced side holds detections but is not a completed install.** Keep the backup and drop nothing. Ask on [GitHub Discussions](https://github.com/tphakala/birdnet-go/discussions) and include the log lines. The table names and row counts in them are safe to share.
 
 ### Step 4: Start BirdNET-Go
 
 Start BirdNET-Go again. After step 3a BirdNET-Go starts in enhanced database mode. After step 3b BirdNET-Go starts in legacy mode.
+
+## Legacy startup and tables in the enhanced database shape
+
+Four tables share their names between the legacy database and the enhanced database (v2): `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches`. When one of them has the enhanced database shape (a required `label_id` column) and BirdNET-Go starts with the legacy store, the legacy store cannot write to it or read its rows. BirdNET-Go drops such a table by itself when it is empty, and the legacy store recreates it.
+
+When one of these tables holds rows, or its rows cannot be counted, startup stops, drops no table that holds rows and prints an error like this:
+
+```text
+tables in the enhanced database (v2) shape hold rows the legacy store cannot use; refusing to drop them: notification_histories=2, dynamic_thresholds=0; see https://github.com/tphakala/birdnet-go/wiki/Database-Doctor#legacy-startup-and-tables-in-the-enhanced-database-shape
+```
+
+A number after a table name is its row count. `unknown` means the count failed. The error repeats on every start until you act.
+
+| Table                    | What it holds                                    | What is lost when you drop it                                  |
+| ------------------------ | ------------------------------------------------ | -------------------------------------------------------------- |
+| `notification_histories` | When each new species notification was last sent | At most one repeated new species notification per species      |
+| `image_caches`           | Links to species images and their credits        | Nothing, BirdNET-Go fetches them again                         |
+| `dynamic_thresholds`     | The learned dynamic threshold levels             | The thresholds start from the base value and are learned again |
+| `threshold_events`       | The history of dynamic threshold changes         | That history in the web interface                              |
+
+To resolve it:
+
+1. Stop BirdNET-Go.
+2. Back up the database. For SQLite, while BirdNET-Go is stopped, run `sqlite3 /path/to/birdnet.db ".backup /path/to/birdnet-backup.db"`. For MySQL and MariaDB, use the `mysqldump` (`mariadb-dump` on MariaDB) command from [Step 2](#step-2-back-up-the-database) above.
+3. Check whether the database also has a `detections` table. On SQLite run `sqlite3 /path/to/birdnet.db ".tables"`; on MySQL and MariaDB run `SHOW TABLES LIKE 'detections';`. If it does, these tables belong to an enhanced database: drop nothing and ask on [GitHub Discussions](https://github.com/tphakala/birdnet-go/discussions) with the log lines. On MySQL and MariaDB see also the section above.
+4. If a count is `unknown`, check that the database user can read the table and that the database file or server is healthy, then start BirdNET-Go again.
+5. Otherwise drop each listed table that holds rows you can lose, one statement per table. On SQLite run `sqlite3 /path/to/birdnet.db "DROP TABLE notification_histories;"`. On MySQL and MariaDB run `DROP TABLE notification_histories;` in the `mysql` or `mariadb` client.
+6. Start BirdNET-Go. The legacy store recreates the dropped tables.
