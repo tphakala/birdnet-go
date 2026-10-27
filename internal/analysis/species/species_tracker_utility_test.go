@@ -450,6 +450,11 @@ func TestSetCurrentYearForTesting_CriticalReliability(t *testing.T) {
 	// Create tracker
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled: true,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			ResetMonth: 1,
+			ResetDay:   1,
+		},
 	}
 
 	tracker := NewTrackerFromSettings(nil, settings)
@@ -464,12 +469,11 @@ func TestSetCurrentYearForTesting_CriticalReliability(t *testing.T) {
 	tracker.SetCurrentYearForTesting(testYear)
 	assert.Equal(t, testYear, tracker.currentYear, "Year should be updated")
 
-	// Test that setting affects year calculations
-	testTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
-	isWithinYear := tracker.isWithinCurrentYear(testTime)
-	// This depends on the reset month/day configuration
-	// Just verify the function doesn't panic
-	_ = isWithinYear
+	// The override must drive the year membership check (calendar year reset)
+	assert.False(t, tracker.isWithinCurrentYear(time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)),
+		"Date in the previous year should be outside the overridden year")
+	assert.True(t, tracker.isWithinCurrentYear(time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)),
+		"Date in the overridden year should be inside it")
 
 	t.Logf("✓ Test year override works correctly")
 }
