@@ -81,6 +81,11 @@ var ErrMigrationCancelled = errors.NewStd("migration cancelled")
 // ErrTooManyErrors is returned when too many consecutive errors occur.
 var ErrTooManyErrors = errors.NewStd("too many consecutive errors")
 
+// ErrWorkerStopTimeout is returned by Stop and Abandon when the worker goroutine
+// has not exited before the caller's context ended. The worker keeps stopping in
+// the background.
+var ErrWorkerStopTimeout = errors.NewStd("migration worker did not stop in time")
+
 // rateSample records a batch's timing for rate calculation.
 type rateSample struct {
 	records  int64
@@ -117,6 +122,9 @@ type Worker struct {
 	mu                sync.RWMutex
 	running           bool
 	paused            bool
+	done              chan struct{} // closed when the current run goroutine has exited; nil before the first Start
+	stopping          bool          // stopCh is already closed for the current run
+	skipFinalDrain    bool          // Abandon was requested: tail sync must not drain on exit
 	lastError         error
 	consecutiveErrors int
 	maxConsecErrors   int
@@ -244,6 +252,8 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 
 // Start begins the background migration process.
 // It should be called after the state manager transitions to DUAL_WRITE.
+// It fails while a previous run goroutine is still alive, including one that is
+// still stopping; Stop or Abandon return only after the goroutine has exited.
 func (w *Worker) Start(ctx context.Context) error {
 	w.mu.Lock()
 	if w.running {
@@ -254,6 +264,10 @@ func (w *Worker) Start(ctx context.Context) error {
 	w.paused = false
 	w.lastError = nil
 	w.consecutiveErrors = 0
+	w.stopping = false
+	w.skipFinalDrain = false
+	done := make(chan struct{})
+	w.done = done
 
 	// Reinitialize control channels in case they were closed by a previous Stop()
 	w.stopCh = make(chan struct{})
@@ -268,7 +282,7 @@ func (w *Worker) Start(ctx context.Context) error {
 
 	w.mu.Unlock()
 
-	go w.run(ctx)
+	go w.run(ctx, done)
 	return nil
 }
 
@@ -277,7 +291,7 @@ func (w *Worker) Pause() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if !w.running || w.paused {
+	if !w.running || w.stopping || w.paused {
 		return
 	}
 
@@ -291,7 +305,7 @@ func (w *Worker) Resume() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if !w.running || !w.paused {
+	if !w.running || w.stopping || !w.paused {
 		return
 	}
 
@@ -300,20 +314,59 @@ func (w *Worker) Resume() {
 	w.resumeCh = make(chan struct{})
 }
 
-// Stop permanently stops the migration worker.
-func (w *Worker) Stop() {
+// Stop asks the worker to stop and waits until its goroutine has exited or ctx
+// ends. In tail sync mode the worker first drains legacy rows written since the
+// last sync. It is safe to call repeatedly and concurrently, and returns nil when
+// the worker is not running. On timeout it returns an error wrapping
+// ErrWorkerStopTimeout and the worker keeps stopping in the background.
+func (w *Worker) Stop(ctx context.Context) error {
+	return w.stop(ctx, false)
+}
+
+// Abandon stops the worker like Stop but skips the final tail sync drain. Use it
+// when the migration is being discarded (cancel, rollback), so nothing writes to
+// the v2 tables after the caller resets the state.
+func (w *Worker) Abandon(ctx context.Context) error {
+	return w.stop(ctx, true)
+}
+
+// stop signals the current run to exit and waits for it.
+func (w *Worker) stop(ctx context.Context, skipDrain bool) error {
 	w.mu.Lock()
 	if !w.running {
 		w.mu.Unlock()
-		return
+		return nil
 	}
-
-	w.running = false
-	close(w.stopCh)
+	if skipDrain {
+		w.skipFinalDrain = true
+	}
+	if !w.stopping {
+		w.stopping = true
+		close(w.stopCh)
+	}
+	done := w.done
 	w.mu.Unlock()
+
+	if done == nil {
+		return nil
+	}
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("%w: %w", ErrWorkerStopTimeout, ctx.Err())
+	}
 }
 
-// IsRunning returns whether the worker is currently running.
+// shouldSkipFinalDrain reports whether Abandon was requested for the current run.
+func (w *Worker) shouldSkipFinalDrain() bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	return w.skipFinalDrain
+}
+
+// IsRunning returns whether a run goroutine is alive, including while it is
+// stopping.
 func (w *Worker) IsRunning() bool {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
@@ -342,15 +395,16 @@ const (
 	runActionReturn
 )
 
-// run is the main migration loop.
-func (w *Worker) run(ctx context.Context) {
+// run is the main migration loop. It closes done as its last step, after
+// clearing running, so a caller that waited on done sees a worker that has made
+// its last write.
+func (w *Worker) run(ctx context.Context, done chan struct{}) {
 	var panicked bool
 
 	defer func() {
-		w.mu.Lock()
+		w.mu.RLock()
 		wasPaused := w.paused
-		w.running = false
-		w.mu.Unlock()
+		w.mu.RUnlock()
 		// Clear phase on exit
 		_ = w.stateManager.SetCurrentPhase(entities.MigrationPhaseNone)
 
@@ -364,6 +418,12 @@ func (w *Worker) run(ctx context.Context) {
 				w.telemetry.ReportCancelled(state.MigratedRecords, state.TotalRecords)
 			}
 		}
+
+		// Last step: only now may Start spawn a new run or a caller touch state.
+		w.mu.Lock()
+		w.running = false
+		w.mu.Unlock()
+		close(done)
 	}()
 
 	// Recover from panics in the migration goroutine to prevent silent death.
@@ -492,6 +552,8 @@ func (w *Worker) handlePausedState(ctx context.Context) runAction {
 }
 
 // handleValidatingState runs validation with auto-retry and catch-up logic.
+// It returns promptly when the context ends or the worker is asked to stop,
+// including during the delay before each validation attempt.
 // If validation fails due to small count differences (from records added during migration),
 // it attempts to catch up by migrating the new records and retrying validation.
 func (w *Worker) handleValidatingState(ctx context.Context) runAction {
@@ -504,6 +566,8 @@ func (w *Worker) handleValidatingState(ctx context.Context) runAction {
 		// Wait before counting records
 		select {
 		case <-ctx.Done():
+			return runActionReturn
+		case <-w.stopCh:
 			return runActionReturn
 		case <-time.After(validationPreDelay):
 		}
@@ -898,13 +962,24 @@ func (w *Worker) handleCutoverState(ctx context.Context) runAction {
 	return runActionContinue
 }
 
+// finalDrain runs the last tail sync drain on exit unless Abandon was requested.
+func (w *Worker) finalDrain(reason string) {
+	if w.shouldSkipFinalDrain() {
+		w.logger.Info("tail sync: migration abandoned, skipping final drain", logger.String("reason", reason))
+		return
+	}
+	w.logger.Info("tail sync: performing final drain", logger.String("reason", reason))
+	w.drainLegacyRecords(context.Background())
+}
+
 // runTailSync runs a single tail sync iteration after migration has completed.
 // It checks for legacy records added after the last migrated ID and syncs them
 // to v2. This prevents data loss between migration completion and system restart
 // (issue #2442).
 //
 // The method sleeps for tailSyncInterval between checks, responding to stop
-// signals during the wait. Returns runActionContinue to keep the worker loop
+// signals during the wait. On shutdown it drains legacy records one last time,
+// except after Abandon. Returns runActionContinue to keep the worker loop
 // alive, or runActionReturn on shutdown.
 func (w *Worker) runTailSync(ctx context.Context) runAction {
 	// If legacy repository is not available, nothing to sync
@@ -914,15 +989,14 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 	}
 
 	// Sleep with responsive cancellation. On shutdown, perform a final
-	// drain to minimize data loss before the system switches to v2-only mode.
+	// drain to minimize data loss before the system switches to v2-only mode,
+	// unless the migration is being abandoned (cancel, rollback).
 	select {
 	case <-ctx.Done():
-		w.logger.Info("tail sync: context cancelled, performing final drain")
-		w.drainLegacyRecords(context.Background())
+		w.finalDrain("context cancelled")
 		return runActionReturn
 	case <-w.stopCh:
-		w.logger.Info("tail sync: shutdown requested, performing final drain")
-		w.drainLegacyRecords(context.Background())
+		w.finalDrain("shutdown requested")
 		return runActionReturn
 	case <-time.After(tailSyncInterval):
 	}

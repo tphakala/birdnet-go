@@ -8,6 +8,7 @@
 package migration_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -315,16 +316,9 @@ func TestMigration_CrashRecovery(t *testing.T) {
 	require.Positive(t, checkpointID, "should have a checkpoint ID")
 
 	// Stop worker (simulating crash)
-	ctx.Worker.Stop()
-
-	// Poll for worker to stop
-	stopDeadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(stopDeadline) {
-		if !ctx.Worker.IsRunning() {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	stopCtx, stopCancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer stopCancel()
+	require.NoError(t, ctx.Worker.Stop(stopCtx))
 	require.False(t, ctx.Worker.IsRunning(), "worker should have stopped")
 
 	// Create new worker (recovery)

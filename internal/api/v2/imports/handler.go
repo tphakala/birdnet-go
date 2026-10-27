@@ -176,7 +176,7 @@ func (c *Handler) getNotificationService() *notification.Service {
 // Shutdown stops the background singletons this domain owns. It stops the backup
 // job manager's cleanup goroutine (a no-op when no backup routes were registered,
 // so the singleton is nil). The migration worker is stopped separately by
-// internal/analysis via StopMigrationWorker() as part of the datastore lifecycle,
+// internal/analysis via StopMigrationWorker(ctx) as part of the datastore lifecycle,
 // so it is deliberately not torn down here.
 func (c *Handler) Shutdown() {
 	if backupJobManager != nil {

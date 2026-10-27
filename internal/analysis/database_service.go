@@ -498,9 +498,10 @@ func bootParamsFromStartup(settings *conf.Settings, st datastoreV2.StartupState)
 }
 
 // Stop gracefully shuts down the database connections with WAL checkpoints.
-// It stops the migration state monitor and the migration worker, closes the v2 database,
-// then closes the primary datastore.
-func (d *DatabaseService) Stop(_ context.Context) error {
+// It stops the migration state monitor and the migration worker (waiting for it,
+// bounded, so its final drain finishes first), closes the v2 database, then closes
+// the primary datastore.
+func (d *DatabaseService) Stop(ctx context.Context) error {
 	log := GetLogger()
 
 	// Stop the state monitor first so nothing reads the database after it closes.
@@ -509,8 +510,11 @@ func (d *DatabaseService) Stop(_ context.Context) error {
 		d.legacyMonitor = nil
 	}
 
-	// Stop the migration worker before closing databases.
-	importsapi.StopMigrationWorker()
+	// Stop the migration worker and wait for it before closing databases. On a
+	// timeout the databases are closed anyway, as the shutdown budget is fixed.
+	if err := importsapi.StopMigrationWorker(ctx); err != nil {
+		log.Warn("migration worker did not stop before database close", logger.Error(err))
+	}
 
 	// Close v2 database (only in migration mode, not v2-only).
 	if !d.v2OnlyMode {

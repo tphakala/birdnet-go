@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -53,7 +54,7 @@ func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
 
 	// run() should recover from the panic without itself panicking
 	assert.NotPanics(t, func() {
-		w.run(t.Context())
+		w.run(t.Context(), make(chan struct{}))
 	})
 
 	// Verify the worker recorded the panic error
@@ -957,4 +958,40 @@ func TestWorker_TransitionToValidation_RecordsAuxiliaryOutcome(t *testing.T) {
 			assert.Equal(t, tt.wantOutcome, state.AuxiliaryDataOutcome())
 		})
 	}
+}
+
+func TestWorker_AbandonDuringValidationDelay(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		sm, cleanup := setupWorkerTest(t)
+		defer cleanup()
+
+		require.NoError(t, sm.StartMigration(10))
+		require.NoError(t, sm.TransitionToDualWrite())
+		require.NoError(t, sm.TransitionToMigrating())
+		require.NoError(t, sm.TransitionToValidating())
+
+		// No expectations: validation must not run once the worker is stopped.
+		w := &Worker{
+			stateManager:    sm,
+			legacy:          mocks.NewMockDetectionRepository(t),
+			logger:          testLogger(),
+			batchSize:       DefaultBatchSize,
+			pauseCh:         make(chan struct{}),
+			resumeCh:        make(chan struct{}),
+			stopCh:          make(chan struct{}),
+			maxConsecErrors: DefaultMaxConsecutiveErrors,
+			rateSamples:     make([]rateSample, DefaultRateWindowSize),
+		}
+
+		for range 2 { // the second round pins that a stopped worker can start again
+			require.NoError(t, w.Start(t.Context()))
+			synctest.Wait() // parked in the validation pre-delay
+			before := time.Now()
+
+			require.NoError(t, w.Abandon(t.Context()))
+
+			assert.Equal(t, before, time.Now(), "abandon must not wait out the validation delay")
+			assert.False(t, w.IsRunning())
+		}
+	})
 }
