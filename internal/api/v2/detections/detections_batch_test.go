@@ -323,10 +323,42 @@ func TestBatchResolveDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
+			name:           "refuses a malformed date on an all query before any lookup",
+			body:           BatchResolveRequest{QueryType: "all", Date: "not-a-date"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a malformed date on a search query before any lookup",
+			body:           BatchResolveRequest{QueryType: "search", Search: "robin", Date: "2025-3-7"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a shortcut on a species query before any lookup",
+			body:           BatchResolveRequest{QueryType: "species", Species: "Turdus merula", Date: "week"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
 			name:           "refuses a malformed date on an hourly query before any lookup",
 			body:           BatchResolveRequest{QueryType: "hourly", Date: "yesterday", Hour: "8"},
 			mockSetup:      func(*mocks.MockInterface) {},
 			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "an all query accepts a search box shortcut",
+			body: BatchResolveRequest{QueryType: "all", Date: "week"},
+			mockSetup: func(m *mocks.MockInterface) {
+				m.EXPECT().SearchNotesAdvanced(mock.Anything).Return(mockNotes, int64(2), nil).Once()
+			},
+			expectedStatus: http.StatusOK,
+			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result BatchResolveResult
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+				assert.Equal(t, 2, result.Count)
+			},
 		},
 		{
 			name: "resolves all query to IDs",
