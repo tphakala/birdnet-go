@@ -314,9 +314,9 @@ Start BirdNET-Go again. After step 3a BirdNET-Go starts in enhanced database mod
 
 Four tables share their names between the legacy database and the enhanced database (v2): `notification_histories`, `dynamic_thresholds`, `threshold_events` and `image_caches`. When one of them has the enhanced database shape (a required `label_id` column) and BirdNET-Go starts with the legacy store, the legacy store cannot write to it or read its rows. BirdNET-Go drops such a table by itself when it is empty, and the legacy store recreates it.
 
-`notification_histories` and `image_caches` hold only data BirdNET-Go rebuilds by itself, so BirdNET-Go drops them with their rows too, unless the database also has a `detections` table. It logs a warning for each dropped table with the table name and its row count.
+`notification_histories` and `image_caches` hold only data BirdNET-Go rebuilds by itself, so BirdNET-Go drops them with their rows too, unless the database also has a `detections` table. An `image_caches` table with a wrong index or a stray `label_id` column is recreated, rows included, by a separate check that does not look for a `detections` table. It logs a warning for each dropped table with the table name and its row count.
 
-When `dynamic_thresholds` or `threshold_events` holds rows, a row count fails, or a `detections` table exists beside a table that holds rows, startup stops, drops no table that holds rows and prints an error like this:
+When `dynamic_thresholds` or `threshold_events` holds rows, a row count fails, or a `detections` table exists beside a table that holds rows, startup stops, never drops rows of `dynamic_thresholds` or `threshold_events`, and prints an error like this:
 
 ```text
 tables in the enhanced database (v2) shape hold rows the legacy store cannot use; refusing to drop them: notification_histories=2, dynamic_thresholds=1, threshold_events=0, image_caches=0; see https://github.com/tphakala/birdnet-go/wiki/Database-Doctor#legacy-startup-and-tables-in-the-enhanced-database-shape

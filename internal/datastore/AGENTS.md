@@ -84,7 +84,7 @@ of these hold:
 - The table listing shows no bare `detections` table, at the first listing and
   in the listing right before the drop. Beside one, a table that holds rows
   belongs to an enhanced database and is kept.
-- Every other v2-shaped table it checks is empty, and every count succeeded.
+- No v2-shaped table outside these two holds rows, and every count succeeded.
   Otherwise it refuses and drops nothing that holds rows.
 - Immediately before each such drop it lists the tables again and counts the
   table again, and it refuses when the listing or the count fails, when the
@@ -99,9 +99,11 @@ history) are user data and keep the refusal. A table joins this list only with
 the maintainer's approval in the pull request that adds it. The list in the code
 (`disposableV2ShapedTables` in `manage.go`, mirrored as
 `legacyDisposableSharedTables` in `internal/datastore/v2/startup.go`) must match
-this paragraph. `validateAndFixSchema` may also recreate a legacy `image_caches`
-with a wrong index or a stray `label_id` column, rows included, and logs its row
-count.
+this paragraph.
+
+`validateAndFixSchema` is a separate path that these conditions do not bound: it
+recreates a legacy `image_caches` with a wrong index or a stray `label_id`
+column, rows included, and logs its row count at Warn.
 
 Refuse to start, with an error that names the cause, only when no safe automatic
 choice exists, for example when both candidate sides hold data. Never destroy
