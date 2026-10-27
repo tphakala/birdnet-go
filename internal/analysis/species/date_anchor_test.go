@@ -234,7 +234,7 @@ func TestYearlyTracking_ResetDateFollowsLocalDate(t *testing.T) {
 
 // newAnchorSeasonTracker returns a seasonal tracker whose spring starts on date.
 // It computes seasons for the given time instead of reusing the season cached
-// for the real clock at construction, and skips the test year override.
+// for the real clock at construction.
 func newAnchorSeasonTracker(ds SpeciesDatastore, date wallclock.Date) *SpeciesTracker {
 	tracker := NewTrackerFromSettings(ds, &conf.SpeciesTrackingSettings{
 		Enabled:              true,
