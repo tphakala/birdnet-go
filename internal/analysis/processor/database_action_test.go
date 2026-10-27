@@ -1076,3 +1076,38 @@ func TestDatabaseAction_SlowFollowUpStepKeepsTheJobRetrying(t *testing.T) {
 		assert.False(t, retry.Retryable(nil))
 	})
 }
+
+// TestDatabaseAction_LateLandingIsOnlyTheLastAttempt verifies that a save landing
+// with an ended context is called late only for the last configured attempt,
+// because an earlier attempt is followed by one that finds the detection done.
+func TestDatabaseAction_LateLandingIsOnlyTheLastAttempt(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		maxAttempts int32
+		attempts    int32 // attempts already counted before this call
+		wantLate    bool
+	}{
+		{"middle attempt", 3, 1, false},
+		{"last attempt", 3, 2, true},
+		{"retries not configured", 0, 0, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			det := testDetection()
+			action := &DatabaseAction{
+				Settings: &conf.Settings{Debug: true}, Repo: NewMockDetectionRepository(),
+				Result: det.Result, Results: det.Results, EventTracker: NewEventTracker(time.Hour),
+			}
+			action.maxAttempts.Store(tt.maxAttempts)
+			action.attempts.Store(tt.attempts)
+
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			require.NoError(t, action.ExecuteContext(ctx, nil))
+			assert.Equal(t, tt.wantLate, action.windowEnded.Load())
+		})
+	}
+}
