@@ -2447,8 +2447,9 @@ func buildTimeOfDayConditions(filters *SearchFilters, sc *suncalc.SunCalc, db *g
 	// and sunset shift enough within a week to flip a window across midnight).
 	for date := range wallclock.Dates(startDate, endDate) {
 		dateStr := date.String()
-		// Local midnight of the date, the instant the filter has always used: parsing in
-		// UTC would shift sunrise/sunset by about a second against the note timestamps.
+		// Local midnight of the date in loc. GetSunEventTimes keys its cache on this
+		// instant's date in the observer's zone, so a loc that differs from that zone
+		// can select a neighboring date's sun events.
 		// DayBounds resolves a skipped midnight onto its own date.
 		dayStart, _ := wallclock.DayBounds(date, loc)
 		sunTimes, err := sc.GetSunEventTimes(dayStart)
