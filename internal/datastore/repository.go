@@ -3,13 +3,15 @@ package datastore
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore/mapper"
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
-// defaultDetectionLimit is the default number of detections returned by queries.
-const defaultDetectionLimit = 100
+// DefaultDetectionLimit is the default number of detections returned by queries.
+const DefaultDetectionLimit = 100
 
 // DetectionRepository defines the interface for detection persistence operations.
 // This interface uses the domain model (detection.Result) and abstracts away
@@ -135,7 +137,7 @@ type ConfidenceRange struct {
 // NewDetectionFilters creates default detection filters.
 func NewDetectionFilters() *DetectionFilters {
 	return &DetectionFilters{
-		Limit:         defaultDetectionLimit,
+		Limit:         DefaultDetectionLimit,
 		Offset:        0,
 		SortAscending: false,
 	}
@@ -200,4 +202,103 @@ func Timezone() *time.Location {
 	// Default to local timezone
 	// In future this could be made configurable via settings
 	return time.Local
+}
+
+// ToAdvancedSearchFilters converts the filters to the AdvancedSearchFilters both stores
+// accept. StartDate and EndDate are parsed as dates in tz, so tz must not be nil. A nil
+// receiver returns the default limit and no other filter. When either date is set the
+// range is always bounded on both sides: an empty StartDate is the zero time and an
+// empty EndDate is the current time in tz.
+func (f *DetectionFilters) ToAdvancedSearchFilters(tz *time.Location) (AdvancedSearchFilters, error) {
+	if f == nil {
+		return AdvancedSearchFilters{
+			Limit:  DefaultDetectionLimit,
+			Offset: 0,
+		}, nil
+	}
+
+	legacy := AdvancedSearchFilters{
+		TextQuery:        f.Query,
+		Species:          f.Species,
+		TimeOfDay:        f.TimeOfDay,
+		Location:         f.Location,
+		Limit:            f.Limit,
+		Offset:           f.Offset,
+		SortAscending:    f.SortAscending,
+		Verified:         f.Verified,
+		Locked:           f.Locked,
+		MinID:            f.MinID,
+		CursorPagination: f.CursorPagination,
+	}
+
+	// Convert date range - parse strings to time.Time using the given timezone
+	if f.StartDate != "" || f.EndDate != "" {
+		dateRange, err := parseDateRange(f.StartDate, f.EndDate, tz)
+		if err != nil {
+			return AdvancedSearchFilters{}, err
+		}
+		legacy.DateRange = dateRange
+	}
+
+	// Convert hour range
+	if f.HourRange != nil {
+		legacy.Hour = &HourFilter{
+			Start: f.HourRange.Start,
+			End:   f.HourRange.End,
+		}
+	}
+
+	// Convert confidence
+	if f.Confidence != nil {
+		legacy.Confidence = &ConfidenceFilter{
+			Operator: f.Confidence.Operator,
+			Value:    f.Confidence.Value,
+		}
+	}
+
+	return legacy, nil
+}
+
+// DateRangeSearchFilters builds the AdvancedSearchFilters for a date range query.
+// startDate and endDate are dates in tz, which must not be nil. Both bounds are always
+// set: an empty startDate is the zero time and an empty endDate is the current time in tz.
+func DateRangeSearchFilters(startDate, endDate string, limit, offset int, tz *time.Location) (AdvancedSearchFilters, error) {
+	dateRange, err := parseDateRange(startDate, endDate, tz)
+	if err != nil {
+		return AdvancedSearchFilters{}, err
+	}
+	return AdvancedSearchFilters{
+		DateRange: dateRange,
+		Limit:     limit,
+		Offset:    offset,
+	}, nil
+}
+
+// parseDateRange parses both bounds of a date range in tz.
+func parseDateRange(startDate, endDate string, tz *time.Location) (*DateRange, error) {
+	start, err := parseDateWithDefault(startDate, false, tz)
+	if err != nil {
+		return nil, err
+	}
+	end, err := parseDateWithDefault(endDate, true, tz)
+	if err != nil {
+		return nil, err
+	}
+	return &DateRange{Start: start, End: end}, nil
+}
+
+// parseDateWithDefault parses a date string, returning a default if empty.
+// If defaultToNow is true and the string is empty, returns current time in tz.
+func parseDateWithDefault(dateStr string, defaultToNow bool, tz *time.Location) (time.Time, error) {
+	if dateStr == "" {
+		if defaultToNow {
+			return time.Now().In(tz), nil
+		}
+		return time.Time{}, nil
+	}
+	t, err := time.ParseInLocation(mapper.DateFormat, dateStr, tz)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date %q: %w", dateStr, err)
+	}
+	return t, nil
 }

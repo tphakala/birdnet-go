@@ -87,7 +87,7 @@ func (r *detectionRepository) GetRecent(ctx context.Context, limit int) ([]*dete
 // Search finds detections matching the given filters.
 func (r *detectionRepository) Search(ctx context.Context, filters *DetectionFilters) ([]*detection.Result, int64, error) {
 	// Convert to legacy AdvancedSearchFilters
-	legacyFilters, err := r.convertFilters(filters)
+	legacyFilters, err := filters.ToAdvancedSearchFilters(r.tz)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -107,7 +107,7 @@ func (r *detectionRepository) Search(ctx context.Context, filters *DetectionFilt
 
 // GetBySpecies retrieves detections for a specific species.
 func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, filters *DetectionFilters) ([]*detection.Result, int64, error) {
-	limit := defaultDetectionLimit
+	limit := DefaultDetectionLimit
 	offset := 0
 	if filters != nil {
 		if filters.Limit > 0 {
@@ -139,26 +139,12 @@ func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, 
 
 // GetByDateRange retrieves detections within a date range.
 func (r *detectionRepository) GetByDateRange(ctx context.Context, startDate, endDate string, limit, offset int) ([]*detection.Result, int64, error) {
-	start, err := r.parseDateWithDefault(startDate, false)
+	filters, err := DateRangeSearchFilters(startDate, endDate, limit, offset, r.tz)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	end, err := r.parseDateWithDefault(endDate, true)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	filters := &AdvancedSearchFilters{
-		DateRange: &DateRange{
-			Start: start,
-			End:   end,
-		},
-		Limit:  limit,
-		Offset: offset,
-	}
-
-	notes, total, err := r.store.SearchNotesAdvanced(filters)
+	notes, total, err := r.store.SearchNotesAdvanced(&filters)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get detections by date range: %w", err)
 	}
@@ -486,64 +472,6 @@ func (r *detectionRepository) notesToResults(notes []Note) ([]*detection.Result,
 	return results, nil
 }
 
-// convertFilters converts DetectionFilters to legacy AdvancedSearchFilters.
-func (r *detectionRepository) convertFilters(filters *DetectionFilters) (AdvancedSearchFilters, error) {
-	if filters == nil {
-		return AdvancedSearchFilters{
-			Limit:  defaultDetectionLimit,
-			Offset: 0,
-		}, nil
-	}
-
-	legacy := AdvancedSearchFilters{
-		TextQuery:        filters.Query,
-		Species:          filters.Species,
-		TimeOfDay:        filters.TimeOfDay,
-		Location:         filters.Location,
-		Limit:            filters.Limit,
-		Offset:           filters.Offset,
-		SortAscending:    filters.SortAscending,
-		Verified:         filters.Verified,
-		Locked:           filters.Locked,
-		MinID:            filters.MinID,
-		CursorPagination: filters.CursorPagination,
-	}
-
-	// Convert date range - parse strings to time.Time using repository timezone
-	if filters.StartDate != "" || filters.EndDate != "" {
-		start, err := r.parseDateWithDefault(filters.StartDate, false)
-		if err != nil {
-			return AdvancedSearchFilters{}, err
-		}
-		end, err := r.parseDateWithDefault(filters.EndDate, true)
-		if err != nil {
-			return AdvancedSearchFilters{}, err
-		}
-		legacy.DateRange = &DateRange{
-			Start: start,
-			End:   end,
-		}
-	}
-
-	// Convert hour range
-	if filters.HourRange != nil {
-		legacy.Hour = &HourFilter{
-			Start: filters.HourRange.Start,
-			End:   filters.HourRange.End,
-		}
-	}
-
-	// Convert confidence
-	if filters.Confidence != nil {
-		legacy.Confidence = &ConfidenceFilter{
-			Operator: filters.Confidence.Operator,
-			Value:    filters.Confidence.Value,
-		}
-	}
-
-	return legacy, nil
-}
-
 // parseID converts a string ID to uint.
 func (r *detectionRepository) parseID(id string) (uint, error) {
 	n, err := strconv.ParseUint(id, 10, 64)
@@ -551,22 +479,6 @@ func (r *detectionRepository) parseID(id string) (uint, error) {
 		return 0, fmt.Errorf("invalid detection ID %q: %w", id, err)
 	}
 	return uint(n), nil
-}
-
-// parseDateWithDefault parses a date string, returning a default if empty.
-// If defaultToNow is true and the string is empty, returns current time in the timezone.
-func (r *detectionRepository) parseDateWithDefault(dateStr string, defaultToNow bool) (time.Time, error) {
-	if dateStr == "" {
-		if defaultToNow {
-			return time.Now().In(r.tz), nil
-		}
-		return time.Time{}, nil
-	}
-	t, err := time.ParseInLocation(mapper.DateFormat, dateStr, r.tz)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid date %q: %w", dateStr, err)
-	}
-	return t, nil
 }
 
 // CountAll returns the total count of all detections.

@@ -1115,18 +1115,23 @@ func (ds *Datastore) Delete(id string) error {
 
 // Get retrieves a note by ID.
 func (ds *Datastore) Get(id string) (datastore.Note, error) {
-	ctx := context.Background()
-	noteID, err := parseID(id)
-	if err != nil {
-		return datastore.Note{}, err
-	}
-
-	det, err := ds.detection.GetWithRelations(ctx, noteID)
+	det, err := ds.getDetection(context.Background(), id)
 	if err != nil {
 		return datastore.Note{}, err
 	}
 
 	return ds.detectionToNote(det), nil
+}
+
+// getDetection loads the detection with the given ID together with its label, model,
+// source, review, lock and comments.
+func (ds *Datastore) getDetection(ctx context.Context, id string) (*entities.Detection, error) {
+	noteID, err := parseID(id)
+	if err != nil {
+		return nil, err
+	}
+
+	return ds.detection.GetWithRelations(ctx, noteID)
 }
 
 // clipSampleRateValue returns the stored clip sample rate, or 0 when it is NULL.
@@ -1137,90 +1142,143 @@ func clipSampleRateValue(rate *int) int {
 	return *rate
 }
 
+// detectionFields holds the values derived from a v2 Detection for the read mappers.
+// decodeDetection computes it; detectionToNote is its only consumer so far.
+type detectionFields struct {
+	// instant is the stored detection time (detected_at) in the station zone.
+	instant time.Time
+	// scientificName is the species scientific name, without any legacy common name suffix.
+	scientificName string
+	// commonName is the common name for scientificName, falling back to the scientific name.
+	commonName string
+	// speciesCode is the eBird species code for scientificName, or empty.
+	speciesCode string
+	// clipName and spectrogramClipName are empty when the column is NULL.
+	clipName            string
+	spectrogramClipName string
+	// latitude and longitude are zero when the column is NULL.
+	latitude  float64
+	longitude float64
+	// beginTime and endTime are in the station zone and zero when the column is NULL.
+	beginTime time.Time
+	endTime   time.Time
+	// processingTime is zero when the column is NULL.
+	processingTime time.Duration
+	// sourceURI and sourceDisplayName are empty when the detection has no source.
+	sourceURI         string
+	sourceDisplayName string
+	// verified is the review status, empty when there is no review.
+	verified string
+	// locked reports whether the detection has a lock.
+	locked bool
+	// model is the preloaded model, zero when the detection has none.
+	model detection.ModelInfo
+}
+
+// decodeDetection derives the detectionFields of det. The instant comes from the stored
+// detected_at column and never from formatted text. det must not be nil.
+// Common name is looked up from the name maps which are built at startup. When the label is not
+// preloaded it is fetched from the label repository, which queries the database on a background
+// context because decodeDetection takes no ctx.
+func (ds *Datastore) decodeDetection(det *entities.Detection) detectionFields {
+	f := detectionFields{}
+
+	// Try to get scientific name from preloaded Label first.
+	// Labels may contain legacy concatenated "ScientificName_CommonName" format,
+	// so extract only the scientific name portion.
+	if det.Label != nil && det.Label.ScientificName != "" {
+		f.scientificName = detection.ExtractScientificName(det.Label.ScientificName)
+	} else if det.LabelID > 0 && ds.label != nil {
+		// Label not preloaded, fetch it from the repository
+		ctx := context.Background()
+		if label, err := ds.label.GetByID(ctx, det.LabelID); err == nil && label != nil {
+			f.scientificName = detection.ExtractScientificName(label.ScientificName)
+		}
+	}
+
+	// Look up common name from pre-built map, fallback to scientific name
+	f.commonName = ds.resolveCommonName(f.scientificName)
+	f.speciesCode = ds.speciesCodeMap[f.scientificName]
+
+	if det.ClipName != nil {
+		f.clipName = *det.ClipName
+	}
+	if det.SpectrogramClipName != nil {
+		f.spectrogramClipName = *det.SpectrogramClipName
+	}
+	if det.Latitude != nil {
+		f.latitude = *det.Latitude
+	}
+	if det.Longitude != nil {
+		f.longitude = *det.Longitude
+	}
+
+	f.instant = time.Unix(det.DetectedAt, 0).In(ds.timezone)
+
+	// Populate virtual Verified field from Review
+	if det.Review != nil {
+		f.verified = string(det.Review.Verified)
+	}
+
+	// Populate virtual Locked field from Lock presence
+	f.locked = det.Lock != nil
+
+	// Convert BeginTime/EndTime from Unix millis to time.Time
+	if det.BeginTime != nil {
+		f.beginTime = time.UnixMilli(*det.BeginTime).In(ds.timezone)
+	}
+	if det.EndTime != nil {
+		f.endTime = time.UnixMilli(*det.EndTime).In(ds.timezone)
+	}
+
+	// Convert ProcessingTimeMs to time.Duration
+	if det.ProcessingTimeMs != nil {
+		f.processingTime = time.Duration(*det.ProcessingTimeMs) * time.Millisecond
+	}
+
+	if det.Source != nil {
+		f.sourceURI = det.Source.SourceURI
+		if det.Source.DisplayName != nil {
+			f.sourceDisplayName = *det.Source.DisplayName
+		}
+	}
+
+	// ModelType is carried here (from the batch-loaded ai_models relation) so API handlers
+	// can read it directly instead of issuing a per-detection lookup (avoids N+1 on lists).
+	if det.Model != nil {
+		f.model = detection.ModelInfo{
+			Name:           det.Model.Name,
+			Version:        det.Model.Version,
+			Variant:        det.Model.Variant,
+			ClassifierPath: det.Model.ClassifierPath,
+			ModelType:      string(det.Model.ModelType),
+		}
+	}
+
+	return f
+}
+
 // detectionToNote converts a v2 Detection to a legacy Note, including the runtime-only
 // SpectrogramClipName of a detection whose audio was removed but whose spectrogram was kept.
-// Common name is looked up from the name maps which are built at startup.
 func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 	// Guard against nil detection to prevent panics
 	if det == nil {
 		return datastore.Note{}
 	}
 
-	scientificName := ""
-	// Try to get scientific name from preloaded Label first.
-	// Labels may contain legacy concatenated "ScientificName_CommonName" format,
-	// so extract only the scientific name portion.
-	if det.Label != nil && det.Label.ScientificName != "" {
-		scientificName = detection.ExtractScientificName(det.Label.ScientificName)
-	} else if det.LabelID > 0 && ds.label != nil {
-		// Label not preloaded, fetch it from the repository
-		ctx := context.Background()
-		if label, err := ds.label.GetByID(ctx, det.LabelID); err == nil && label != nil {
-			scientificName = detection.ExtractScientificName(label.ScientificName)
-		}
-	}
-
-	// Look up common name from pre-built map, fallback to scientific name
-	commonName := ds.resolveCommonName(scientificName)
-
-	clipName := ""
-	if det.ClipName != nil {
-		clipName = *det.ClipName
-	}
-	spectrogramClipName := ""
-	if det.SpectrogramClipName != nil {
-		spectrogramClipName = *det.SpectrogramClipName
-	}
-
-	lat := 0.0
-	if det.Latitude != nil {
-		lat = *det.Latitude
-	}
-	lon := 0.0
-	if det.Longitude != nil {
-		lon = *det.Longitude
-	}
+	f := ds.decodeDetection(det)
 
 	// Convert Unix timestamp to date and time strings
-	t := time.Unix(det.DetectedAt, 0).In(ds.timezone)
-	dateStr := t.Format(time.DateOnly)
-	timeStr := t.Format(time.TimeOnly)
-
-	// Populate virtual Verified field from Review
-	verified := ""
-	if det.Review != nil {
-		verified = string(det.Review.Verified)
-	}
-
-	// Populate virtual Locked field from Lock presence
-	locked := det.Lock != nil
-
-	// Convert BeginTime/EndTime from Unix millis to time.Time
-	var beginTime, endTime time.Time
-	if det.BeginTime != nil {
-		beginTime = time.UnixMilli(*det.BeginTime).In(ds.timezone)
-	}
-	if det.EndTime != nil {
-		endTime = time.UnixMilli(*det.EndTime).In(ds.timezone)
-	}
-
-	// Convert ProcessingTimeMs to time.Duration
-	var processingTime time.Duration
-	if det.ProcessingTimeMs != nil {
-		processingTime = time.Duration(*det.ProcessingTimeMs) * time.Millisecond
-	}
+	dateStr := f.instant.Format(time.DateOnly)
+	timeStr := f.instant.Format(time.TimeOnly)
 
 	// Map Source entity to datastore.AudioSource
 	var source datastore.AudioSource
 	if det.Source != nil {
-		displayName := ""
-		if det.Source.DisplayName != nil {
-			displayName = *det.Source.DisplayName
-		}
 		source = datastore.AudioSource{
-			ID:          det.Source.SourceURI,
-			SafeString:  det.Source.SourceURI,
-			DisplayName: displayName,
+			ID:          f.sourceURI,
+			SafeString:  f.sourceURI,
+			DisplayName: f.sourceDisplayName,
 		}
 	}
 
@@ -1243,36 +1301,28 @@ func (ds *Datastore) detectionToNote(det *entities.Detection) datastore.Note {
 		ID:                  det.ID,
 		Date:                dateStr,
 		Time:                timeStr,
-		ScientificName:      scientificName,
-		CommonName:          commonName,
-		SpeciesCode:         ds.speciesCodeMap[scientificName],
+		ScientificName:      f.scientificName,
+		CommonName:          f.commonName,
+		SpeciesCode:         f.speciesCode,
 		Confidence:          det.Confidence,
-		Latitude:            lat,
-		Longitude:           lon,
-		ClipName:            clipName,
-		SpectrogramClipName: spectrogramClipName,
+		Latitude:            f.latitude,
+		Longitude:           f.longitude,
+		ClipName:            f.clipName,
+		SpectrogramClipName: f.spectrogramClipName,
 		ClipSampleRate:      clipSampleRateValue(det.ClipSampleRate),
-		BeginTime:           beginTime,
-		EndTime:             endTime,
-		ProcessingTime:      processingTime,
+		BeginTime:           f.beginTime,
+		EndTime:             f.endTime,
+		ProcessingTime:      f.processingTime,
 		Source:              source,
 		Comments:            comments,
 		Unlikely:            det.Unlikely,
-		Verified:            verified,
-		Locked:              locked,
+		Verified:            f.verified,
+		Locked:              f.locked,
 	}
 
-	// Populate model info from preloaded Model entity. ModelType is carried here
-	// (from the batch-loaded ai_models relation) so API handlers can read it
-	// directly instead of issuing a per-detection lookup (avoids N+1 on lists).
+	// Populate model info from preloaded Model entity.
 	if det.Model != nil {
-		note.Model = detection.ModelInfo{
-			Name:           det.Model.Name,
-			Version:        det.Model.Version,
-			Variant:        det.Model.Variant,
-			ClassifierPath: det.Model.ClassifierPath,
-			ModelType:      string(det.Model.ModelType),
-		}
+		note.Model = f.model
 	}
 
 	return note
@@ -1682,8 +1732,16 @@ func (ds *Datastore) GetBatchHourlyOccurrences(ctx context.Context, startDate, e
 // local wall-clock hours on date (see localHourWindow); a zero duration with an hour
 // means one hour, and an empty hour means the whole date.
 func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]datastore.Note, error) {
-	ctx := context.Background()
+	dets, err := ds.speciesDetections(context.Background(), species, date, hour, duration, sortAscending, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	return ds.detectionsToNotes(dets), nil
+}
 
+// speciesDetections is the entity-returning query behind SpeciesDetections. It returns an
+// empty, non-nil slice when the species is unknown.
+func (ds *Datastore) speciesDetections(ctx context.Context, species, date, hour string, duration int, sortAscending bool, limit, offset int) ([]*entities.Detection, error) {
 	var startTime, endTime *int64
 	if date != "" {
 		day, err := wallclock.ParseDate(date)
@@ -1720,7 +1778,7 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 		}
 		if len(ids) == 0 {
 			// Species not found - return empty results instead of all detections
-			return []datastore.Note{}, nil
+			return []*entities.Detection{}, nil
 		}
 		labelIDs = ids
 	}
@@ -1747,17 +1805,22 @@ func (ds *Datastore) SpeciesDetections(species, date, hour string, duration int,
 		}
 	}
 
-	return ds.detectionsToNotes(dets), nil
+	return dets, nil
 }
 
 // GetLastDetections retrieves the last N detections.
 func (ds *Datastore) GetLastDetections(numDetections int) ([]datastore.Note, error) {
-	ctx := context.Background()
-	dets, err := ds.detection.GetRecent(ctx, numDetections)
+	dets, err := ds.recentDetections(context.Background(), numDetections)
 	if err != nil {
 		return nil, err
 	}
 	return ds.detectionsToNotes(dets), nil
+}
+
+// recentDetections is the entity-returning query behind GetLastDetections. Only the
+// relations GetRecent loads are present on the result.
+func (ds *Datastore) recentDetections(ctx context.Context, n int) ([]*entities.Detection, error) {
+	return ds.detection.GetRecent(ctx, n)
 }
 
 // GetAllDetectedSpecies retrieves all detected species.
@@ -1844,8 +1907,15 @@ func (ds *Datastore) SearchNotes(query string, sortAscending bool, limit, offset
 // SearchNotesAdvanced performs advanced search with filters.
 // Converts all AdvancedSearchFilters fields to repository SearchFilters.
 func (ds *Datastore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
-	ctx := context.Background()
+	dets, total, err := ds.searchAdvanced(context.Background(), filters)
+	if err != nil {
+		return nil, 0, err
+	}
+	return ds.detectionsToNotes(dets), total, nil
+}
 
+// searchAdvanced is the entity-returning query behind SearchNotesAdvanced.
+func (ds *Datastore) searchAdvanced(ctx context.Context, filters *datastore.AdvancedSearchFilters) ([]*entities.Detection, int64, error) {
 	// Set up dependencies for entity lookups. The name maps enable common-name resolution for the
 	// free-text query (active locale), matching the dashboard search behavior. See issue #3378.
 	deps := ds.filterLookupDeps()
@@ -1869,7 +1939,7 @@ func (ds *Datastore) SearchNotesAdvanced(filters *datastore.AdvancedSearchFilter
 		}
 	}
 
-	return ds.detectionsToNotes(dets), total, nil
+	return dets, total, nil
 }
 
 // GetNoteClipPath retrieves the clip path for a note.
@@ -2307,7 +2377,15 @@ func (ds *Datastore) LatestHourlyWeather() (*datastore.HourlyWeather, error) {
 // GetHourlyDetections retrieves detections for a specific hour. The hour and duration
 // name local wall-clock hours on date (see localHourWindow).
 func (ds *Datastore) GetHourlyDetections(date, hour string, duration, limit, offset int) ([]datastore.Note, error) {
-	ctx := context.Background()
+	dets, err := ds.hourlyDetections(context.Background(), date, hour, duration, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	return ds.detectionsToNotes(dets), nil
+}
+
+// hourlyDetections is the entity-returning query behind GetHourlyDetections.
+func (ds *Datastore) hourlyDetections(ctx context.Context, date, hour string, duration, limit, offset int) ([]*entities.Detection, error) {
 	startTime, endTime, err := localHourWindow(date, hour, duration, ds.timezone)
 	if err != nil {
 		return nil, err
@@ -2333,7 +2411,7 @@ func (ds *Datastore) GetHourlyDetections(date, hour string, duration, limit, off
 		}
 	}
 
-	return ds.detectionsToNotes(dets), nil
+	return dets, nil
 }
 
 // CountSpeciesDetections counts detections for a species.
@@ -2341,7 +2419,11 @@ func (ds *Datastore) GetHourlyDetections(date, hour string, duration, limit, off
 // local wall-clock hours on date (see localHourWindow); a zero duration with an hour
 // means one hour, and an empty hour means the whole date.
 func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration int) (int64, error) {
-	ctx := context.Background()
+	return ds.countSpeciesDetections(context.Background(), species, date, hour, duration)
+}
+
+// countSpeciesDetections is the query behind CountSpeciesDetections.
+func (ds *Datastore) countSpeciesDetections(ctx context.Context, species, date, hour string, duration int) (int64, error) {
 	var startTime, endTime *int64
 	if date != "" {
 		day, err := wallclock.ParseDate(date)
@@ -2394,7 +2476,11 @@ func (ds *Datastore) CountSpeciesDetections(species, date, hour string, duration
 // CountHourlyDetections counts detections for a specific hour. The hour and duration
 // name local wall-clock hours on date (see localHourWindow).
 func (ds *Datastore) CountHourlyDetections(date, hour string, duration int) (int64, error) {
-	ctx := context.Background()
+	return ds.countHourlyDetections(context.Background(), date, hour, duration)
+}
+
+// countHourlyDetections is the query behind CountHourlyDetections.
+func (ds *Datastore) countHourlyDetections(ctx context.Context, date, hour string, duration int) (int64, error) {
 	startTime, endTime, err := localHourWindow(date, hour, duration, ds.timezone)
 	if err != nil {
 		return 0, err
