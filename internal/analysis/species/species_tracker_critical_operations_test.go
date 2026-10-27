@@ -320,7 +320,7 @@ func TestCheckAndResetPeriods_CriticalReliability(t *testing.T) {
 		{
 			"custom_year_reset_date",
 			time.Date(2024, 7, 1, 0, 0, 1, 0, time.UTC),
-			2024,
+			2023,
 			"summer",
 			true, true,
 			7, 1, // Reset on July 1

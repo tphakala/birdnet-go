@@ -369,41 +369,16 @@ func (t *SpeciesTracker) isSeasonCarryoverLocked(scientificName, seasonName stri
 	return ok && seasonStart == t.seasonCarryoverStart
 }
 
-// shouldResetYear determines if we should reset yearly tracking
+// shouldResetYear determines if we should reset yearly tracking. It compares
+// tracking years, so a time in an earlier tracking year never resets and a time
+// in a later one always does, whatever the gap since the last call.
 func (t *SpeciesTracker) shouldResetYear(currentTime time.Time) bool {
 	// If we've never reset before (currentYear is 0), we need to reset
 	if t.currentYear == 0 {
 		return true
 	}
 
-	currentCalendarYear := currentTime.Year()
-
-	// Handle standard January 1st resets
-	if t.resetMonth == 1 && t.resetDay == 1 {
-		// Standard calendar year - reset if we're in a later year
-		return currentCalendarYear > t.currentYear
-	}
-
-	// Handle custom reset dates
-	resetDate := t.resetDate(currentCalendarYear)
-
-	// If we're in a later calendar year, definitely reset
-	if currentCalendarYear > t.currentYear {
-		return true
-	}
-
-	// If we're in an earlier calendar year (shouldn't happen normally), don't reset
-	if currentCalendarYear < t.currentYear {
-		return false
-	}
-
-	// Same calendar year - reset only on the exact reset day
-	// This handles the case where we reach the reset day but not necessarily at midnight
-	if currentCalendarYear == t.currentYear && wallclock.DateOf(currentTime) == resetDate {
-		return true
-	}
-
-	return false
+	return t.getTrackingYear(currentTime) > t.currentYear
 }
 
 // getTrackingYear determines which tracking year a given time falls into
@@ -422,25 +397,7 @@ func (t *SpeciesTracker) getTrackingYear(now time.Time) int {
 
 // getYearDateRange calculates the start and end dates for yearly tracking
 func (t *SpeciesTracker) getYearDateRange(now time.Time) (startDate, endDate string) {
-	// Use t.currentYear if explicitly set for testing, otherwise use the provided time's year
-	currentYear := now.Year()
-	useOverride := t.currentYear != 0 && t.currentYear != time.Now().Year()
-
-	if useOverride {
-		// Only use t.currentYear if it was explicitly set for testing (different from real current year)
-		currentYear = t.currentYear
-	}
-
-	// Determine the tracking year based on reset date
-	var trackingYear int
-
-	if useOverride {
-		// When year is overridden for testing, use it directly as the tracking year
-		trackingYear = currentYear
-	} else {
-		// Normal operation: determine based on reset date
-		trackingYear = t.getTrackingYear(now)
-	}
+	trackingYear := t.getTrackingYear(now)
 
 	// Calculate the tracking period: from reset date of trackingYear to day before reset date of next year
 	yearStart := t.resetDate(trackingYear)
@@ -460,16 +417,10 @@ func (t *SpeciesTracker) getSeasonDateRange(seasonName string, now time.Time) (s
 		return "", ""
 	}
 
-	// Use test year override if set, otherwise use now's year
-	currentYear := now.Year()
-	if t.currentYear != 0 && t.currentYear != time.Now().Year() {
-		currentYear = t.currentYear
-	}
-
 	// Calculate season start date, adjusting to the previous year where needed
-	seasonYear := currentYear
+	seasonYear := now.Year()
 	if t.shouldAdjustYearForSeason(now, time.Month(season.month), true) {
-		seasonYear = currentYear - 1
+		seasonYear--
 	}
 	seasonStart := trackerDate(seasonYear, time.Month(season.month), season.day)
 

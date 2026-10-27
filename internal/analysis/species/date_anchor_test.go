@@ -2,6 +2,8 @@ package species
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"testing"
 	"time"
 
@@ -140,7 +142,7 @@ func TestYearlyTracking_ResetDateFollowsLocalDate(t *testing.T) {
 			assert.Contains(t, tracker.speciesThisYear, "current")
 			assert.NotContains(t, tracker.speciesThisYear, "previous")
 
-			tracker.currentYear = d.Year
+			tracker.currentYear = d.Year - 1 // tracking year in force the day before
 			assert.True(t, tracker.shouldResetYear(wallclock.Noon(first)), "reset fires on the reset date")
 			assert.False(t, tracker.shouldResetYear(wallclock.Noon(before)), "no reset the day before")
 		})
@@ -150,7 +152,7 @@ func TestYearlyTracking_ResetDateFollowsLocalDate(t *testing.T) {
 		t.Parallel()
 
 		tracker := newAnchorYearTracker(wallclock.Date{Year: 2027, Month: time.February, Day: anchorYearlyFeb29})
-		tracker.currentYear = 2027
+		tracker.currentYear = 2026
 
 		assert.True(t, tracker.shouldResetYear(time.Date(2027, time.March, 1, 12, 0, 0, 0, time.UTC)),
 			"a configured February 29 resets on March 1 in a common year")
@@ -249,7 +251,6 @@ func newAnchorSeasonTracker(ds SpeciesDatastore, date wallclock.Date) *SpeciesTr
 		},
 	})
 	tracker.seasonCacheTTL = 0
-	tracker.currentYear = 0
 	return tracker
 }
 
@@ -381,11 +382,158 @@ func TestGetSeasonDateRange_EndNormalisesLikeTimeDate(t *testing.T) {
 					Seasons:    seasons,
 				},
 			})
-			tracker.currentYear = 0
 
 			start, end := tracker.getSeasonDateRange(tt.season, tt.now)
 			assert.Equal(t, tt.wantStart, start)
 			assert.Equal(t, tt.wantEnd, end)
 		})
 	}
+}
+
+// resetStep is one operation in a tracking-year reset sequence and the state
+// expected after it.
+type resetStep struct {
+	op       string // "detect", "status" or "seed"
+	species  string
+	at       time.Time
+	wantYear int
+	wantSet  []string
+}
+
+func resetNoon(year int, month time.Month, day int) time.Time {
+	return time.Date(year, month, day, 12, 0, 0, 0, time.UTC)
+}
+
+// newResetTestSettings returns yearly tracking settings with the given reset date.
+func newResetTestSettings(resetMonth, resetDay int) *conf.SpeciesTrackingSettings {
+	return &conf.SpeciesTrackingSettings{
+		Enabled:              true,
+		NewSpeciesWindowDays: 30,
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			WindowDays: 30,
+			ResetMonth: resetMonth,
+			ResetDay:   resetDay,
+		},
+	}
+}
+
+func runResetSteps(t *testing.T, tracker *SpeciesTracker, steps []resetStep) {
+	t.Helper()
+
+	for i, step := range steps {
+		switch step.op {
+		case "detect":
+			tracker.UpdateSpecies(step.species, step.at)
+		case "status":
+			tracker.GetSpeciesStatus(step.species, step.at)
+		case "seed":
+			tracker.mu.Lock()
+			tracker.speciesThisYear[step.species] = step.at
+			tracker.mu.Unlock()
+			continue
+		default:
+			t.Fatalf("step %d: unknown op %q", i, step.op)
+		}
+
+		tracker.mu.RLock()
+		gotYear := tracker.currentYear
+		gotSet := slices.Collect(maps.Keys(tracker.speciesThisYear))
+		tracker.mu.RUnlock()
+
+		assert.Equal(t, step.wantYear, gotYear, "step %d (%s %s at %s): tracking year", i, step.op, step.species, step.at)
+		assert.ElementsMatch(t, step.wantSet, gotSet, "step %d (%s %s at %s): yearly set", i, step.op, step.species, step.at)
+	}
+}
+
+func TestYearlyTracking_ResetFollowsTrackingYear(t *testing.T) {
+	t.Parallel()
+
+	const (
+		resetMonth = int(time.July)
+		resetDay   = 1
+	)
+
+	tests := []struct {
+		name        string
+		startYear   int
+		constructAt time.Time // when non-zero, build through the clock seam and expect startYear
+		steps       []resetStep
+	}{
+		{
+			name:      "custom_reset_survives_new_year",
+			startYear: 2026,
+			steps: []resetStep{
+				{"detect", "A", resetNoon(2026, time.December, 20), 2026, []string{"A"}},
+				{"detect", "B", resetNoon(2027, time.January, 1), 2026, []string{"A", "B"}},
+				{"detect", "C", resetNoon(2027, time.January, 2), 2026, []string{"A", "B", "C"}},
+				{"detect", "D", resetNoon(2027, time.March, 15), 2026, []string{"A", "B", "C", "D"}},
+				{"detect", "E", resetNoon(2027, time.June, 30), 2026, []string{"A", "B", "C", "D", "E"}},
+			},
+		},
+		{
+			name:      "custom_reset_fires_once_on_reset_date",
+			startYear: 2026,
+			steps: []resetStep{
+				{"detect", "A", resetNoon(2027, time.June, 30), 2026, []string{"A"}},
+				{"detect", "B", resetNoon(2027, time.July, 1), 2027, []string{"B"}},
+				{"detect", "C", time.Date(2027, time.July, 1, 18, 0, 0, 0, time.UTC), 2027, []string{"B", "C"}},
+				{"detect", "D", resetNoon(2027, time.July, 2), 2027, []string{"B", "C", "D"}},
+			},
+		},
+		{
+			name:        "constructor_seeded_before_reset_date_then_gap",
+			startYear:   2026,
+			constructAt: resetNoon(2027, time.February, 10),
+			steps: []resetStep{
+				{"detect", "A", resetNoon(2027, time.February, 10), 2026, []string{"A"}},
+				{"seed", "Stale", resetNoon(2027, time.February, 1), 0, nil},
+				{"detect", "A2", resetNoon(2027, time.June, 28), 2026, []string{"A", "Stale", "A2"}},
+				// Nothing is detected on the reset day; the first later call resets.
+				{"detect", "B", resetNoon(2027, time.July, 3), 2027, []string{"B"}},
+			},
+		},
+		{
+			name:      "past_dated_status_read_does_not_reset",
+			startYear: 2027,
+			steps: []resetStep{
+				{"detect", "A", resetNoon(2027, time.July, 3), 2027, []string{"A"}},
+				{"status", "A", time.Date(2027, time.June, 20, 23, 59, 59, 0, time.UTC), 2027, []string{"A"}},
+			},
+		},
+		{
+			name:      "status_cache_does_not_hide_reset",
+			startYear: 2026,
+			steps: []resetStep{
+				{"detect", "A", resetNoon(2027, time.June, 30), 2026, []string{"A"}},
+				{"status", "A", time.Date(2027, time.June, 30, 23, 59, 45, 0, time.UTC), 2026, []string{"A"}},
+				// Within the status cache TTL of the read above, but in the next tracking year.
+				{"status", "A", time.Date(2027, time.July, 1, 0, 0, 5, 0, time.UTC), 2027, nil},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			var tracker *SpeciesTracker
+			if tt.constructAt.IsZero() {
+				tracker = NewTrackerFromSettings(nil, newResetTestSettings(resetMonth, resetDay))
+				tracker.currentYear = tt.startYear
+			} else {
+				tracker = newTrackerFromSettingsAt(nil, newResetTestSettings(resetMonth, resetDay), tt.constructAt)
+				require.Equal(t, tt.startYear, tracker.currentYear, "constructor seeds the tracking year")
+			}
+
+			runResetSteps(t, tracker, tt.steps)
+		})
+	}
+
+	t.Run("constructor_seeds_new_tracking_year_after_reset_date", func(t *testing.T) {
+		t.Parallel()
+
+		tracker := newTrackerFromSettingsAt(nil, newResetTestSettings(resetMonth, resetDay), resetNoon(2027, time.August, 1))
+		assert.Equal(t, 2027, tracker.currentYear)
+	})
 }

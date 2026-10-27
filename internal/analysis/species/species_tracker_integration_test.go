@@ -136,8 +136,10 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 	// Set current year for testing
 	tracker.SetCurrentYearForTesting(2024)
 
-	// Initialize from database
-	err := tracker.InitFromDatabase()
+	// Load the 2024 yearly data at a fixed instant (InitFromDatabase reads the real clock)
+	tracker.mu.Lock()
+	err := tracker.loadYearlyDataFromDatabase(t.Context(), time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC))
+	tracker.mu.Unlock()
 	require.NoError(t, err)
 
 	// Check species from current year
