@@ -1411,6 +1411,11 @@ func TestMixedSchemaTableLists_MatchEntities(t *testing.T) {
 		return s.Table
 	}
 
+	// The same literal is asserted for disposableV2ShapedTables in the datastore
+	// package (TestDisposableV2ShapedTables_AreTheRegenerablePair), so a change to
+	// one list alone fails a test.
+	assert.ElementsMatch(t, []string{"notification_histories", "image_caches"}, legacyDisposableSharedTables,
+		"the mirror must hold exactly the regenerable tables named in internal/datastore/AGENTS.md")
 	for _, table := range legacyDisposableSharedTables {
 		assert.Contains(t, legacyRepairedSharedTables, table,
 			"a disposable shared table must be one of the tables the legacy store repairs")

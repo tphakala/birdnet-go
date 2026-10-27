@@ -530,6 +530,20 @@ func TestPerformAutoMigration_V2ShapedTables_RegenerableRecheck(t *testing.T) {
 	}
 }
 
+// TestDisposableV2ShapedTables_AreTheRegenerablePair pins the tables legacy
+// startup may drop with their rows to the pair named in internal/datastore/AGENTS.md.
+// The classifier mirror in internal/datastore/v2 asserts the same literal.
+func TestDisposableV2ShapedTables_AreTheRegenerablePair(t *testing.T) {
+	t.Parallel()
+
+	got := make([]string, 0, len(disposableV2ShapedTables))
+	for table := range disposableV2ShapedTables {
+		got = append(got, table)
+		assert.Contains(t, v2ShapedLegacyTables, table, "a disposable table must be a candidate")
+	}
+	assert.ElementsMatch(t, []string{"notification_histories", "image_caches"}, got)
+}
+
 // TestV2ShapedTablesGuideURL_PointsAtWikiHeading keeps the link in the refusal
 // message and log in step with the wiki: rewording the section heading would
 // otherwise leave users on a page that does not scroll to the explanation.
