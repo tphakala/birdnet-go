@@ -462,7 +462,7 @@ func TestEnqueue_DisabledRetryMeansSingleAttempt(t *testing.T) {
 }
 
 // TestEnqueue_RetryablePredicateStopsRetries verifies that RetryConfig.Retryable
-// is consulted after every failed attempt: a false verdict fails the job at once,
+// is consulted after a failed attempt that has attempts left: a false verdict fails the job at once,
 // even though attempts remain.
 func TestEnqueue_RetryablePredicateStopsRetries(t *testing.T) {
 	t.Parallel()

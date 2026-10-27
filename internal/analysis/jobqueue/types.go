@@ -61,7 +61,7 @@ type RetryConfig struct {
 	MaxDelay     time.Duration // Maximum delay between retries
 	Multiplier   float64       // Backoff multiplier for each subsequent retry
 
-	// Retryable, when non-nil, is asked after every failed attempt whether
+	// Retryable, when non-nil, is asked after a failed attempt that has attempts left whether
 	// another attempt may run; a false answer fails the job at once even though
 	// attempts remain. Nil means every error may be retried. It is called with
 	// the queue lock held, so it must be fast, must not block and must not call
