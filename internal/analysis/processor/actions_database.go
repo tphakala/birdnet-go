@@ -354,7 +354,7 @@ func (a *DatabaseAction) recordSaveSuccess(ctx context.Context, attempt int) {
 
 	switch {
 	case a.windowEnded.Load():
-		GetLogger().Warn("Detection saved after its job ended, MQTT and SSE skipped",
+		GetLogger().Warn("Detection saved after its job ended, any MQTT and SSE steps skipped",
 			logger.String("component", "analysis.processor.actions"),
 			logger.String("detection_id", a.CorrelationID),
 			logger.String("species", a.Result.Species.CommonName),
