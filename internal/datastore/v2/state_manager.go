@@ -432,7 +432,9 @@ func (m *StateManager) Rollback() error {
 // UpdatePhaseProgress sets the progress numerator of the current migration
 // phase. It never touches last_migrated_id, because that column is the
 // detections cursor used by resume, tail sync and the startup reconciliation
-// scan, and only the detections pass and tail sync may move it.
+// scan. Only IncrementProgress, called by the detections pass and tail sync,
+// advances it, and StartMigration, Cancel and Rollback reset it. Code that
+// reports progress for any other phase uses this method.
 func (m *StateManager) UpdatePhaseProgress(migratedRecords int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -442,7 +444,9 @@ func (m *StateManager) UpdatePhaseProgress(migratedRecords int64) error {
 		Update("migrated_records", migratedRecords).Error
 }
 
-// IncrementProgress increments the migrated records count by delta.
+// IncrementProgress increments the migrated records count by delta and sets
+// last_migrated_id, the detections cursor. Only the detections pass and tail
+// sync call it; progress for other phases goes through UpdatePhaseProgress.
 func (m *StateManager) IncrementProgress(lastMigratedID uint, delta int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
