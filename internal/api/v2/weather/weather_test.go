@@ -705,6 +705,9 @@ func TestGetWeatherForDetection(t *testing.T) {
 		assert.InDelta(t, 4.0, response.Hourly.FeelsLike, 0.01)
 		assert.Equal(t, "Clouds", response.Hourly.WeatherMain)
 		assert.Equal(t, "scattered clouds", response.Hourly.WeatherDesc)
+
+		// Time of day is classified from the stored instant, 12:30 on a January day
+		assert.Equal(t, datastore.TimeOfDayDay, response.TimeOfDay)
 	}
 
 	// Verify mock expectations
