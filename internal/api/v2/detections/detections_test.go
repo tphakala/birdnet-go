@@ -24,6 +24,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -1980,6 +1983,53 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 			assert.Equal(t, tt.wantID, resp.Source.ID)
 			assert.Equal(t, tt.wantType, resp.Source.Type)
 			assert.Equal(t, tt.wantDisplay, resp.Source.DisplayName)
+		})
+	}
+}
+
+// TestGetDetectionTimeOfDay verifies that the time-of-day endpoint classifies the
+// stored instant of the detection read through the repository, and answers 404
+// when the repository has no such detection. The datastore mock has no
+// expectations, so any read through the legacy datastore fails the test.
+func TestGetDetectionTimeOfDay(t *testing.T) {
+	t.Parallel()
+
+	// Noon at the test location (Helsinki, EEST) in midsummer is daytime.
+	noon := time.Date(2026, time.June, 21, 12, 0, 0, 0, time.FixedZone("EEST", 3*60*60))
+
+	tests := []struct {
+		name       string
+		result     *detection.Result
+		repoErr    error
+		wantStatus int
+		wantTime   string
+	}{
+		{name: "found", result: &detection.Result{ID: 5, Timestamp: noon}, wantStatus: http.StatusOK, wantTime: datastore.TimeOfDayDay},
+		{name: "not found", repoErr: repository.ErrDetectionNotFound, wantStatus: http.StatusNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e, _, h := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
+			repo := mocks.NewMockDetectionRepository(t)
+			h.Repo = repo
+			repo.EXPECT().Get(mock.Anything, "5").Return(tt.result, tt.repoErr)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/5/time-of-day", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues("5")
+
+			require.NoError(t, h.GetDetectionTimeOfDay(c))
+			require.Equal(t, tt.wantStatus, rec.Code)
+			if tt.wantStatus == http.StatusOK {
+				var resp TimeOfDayResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, tt.wantTime, resp.TimeOfDay)
+			}
 		})
 	}
 }

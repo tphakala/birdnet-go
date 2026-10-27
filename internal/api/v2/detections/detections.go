@@ -1813,20 +1813,12 @@ func (c *Handler) AddLock(noteID uint, locked bool) error {
 func (c *Handler) GetDetectionTimeOfDay(ctx echo.Context) error {
 	id := ctx.Param("id")
 
-	// Get the detection from the database
-	note, err := c.DS.Get(id)
+	// Get the detection through the repository: its Timestamp is the stored instant
+	r, err := c.Repo.Get(ctx.Request().Context(), id)
 	if err != nil {
 		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
-
-	// Parse the detection date and time
-	dateTimeStr := fmt.Sprintf("%s %s", note.Date, note.Time)
-	layout := "2006-01-02 15:04:05" // Adjust based on your actual date/time format
-
-	detectionTime, err := time.ParseInLocation(layout, dateTimeStr, time.Local)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to parse detection time", http.StatusInternalServerError)
-	}
+	detectionTime := r.Timestamp
 
 	// Check if SunCalc is initialized
 	if c.SunCalc == nil {
