@@ -192,10 +192,14 @@ func (c *Handler) migrationStateRefusal(ctx context.Context, mgr datastoreV2.Man
 
 // sqliteStateRefusal is migrationStateRefusal for the SQLite delete. It also
 // refuses a not_required outcome: only a fresh install records it, so that
-// database has no legacy companion to delete.
+// database has no legacy companion to delete. Every refusal it returns reports
+// the legacy file as existing.
 func (c *Handler) sqliteStateRefusal(ctx context.Context, mgr datastoreV2.Manager) (*entities.MigrationState, *legacyCleanupRefusal) {
 	migrationState, refusal := c.migrationStateRefusal(ctx, mgr)
 	if refusal != nil {
+		// A SQLite caller asks about a legacy file it already found, so the
+		// refusal reports it as existing even when the state itself is unreadable.
+		refusal.exists = true
 		return nil, refusal
 	}
 	if migrationState.AuxiliaryDataOutcome() == entities.AuxiliaryDataStatusNotRequired {

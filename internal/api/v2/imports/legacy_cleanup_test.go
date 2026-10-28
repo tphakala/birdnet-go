@@ -946,6 +946,15 @@ func TestLegacyCleanup_SQLiteRequiresMigrationProof(t *testing.T) {
 			postKey: notification.MsgErrCleanupAccessFailed,
 		},
 		{
+			name: "migration state unreadable",
+			mutate: func(t *testing.T, fx *sqliteCleanupFixture) {
+				t.Helper()
+				require.NoError(t, fx.mgr.db.Exec("DROP TABLE migration_states").Error)
+			},
+			statusKey: notification.MsgErrCleanupAccessFailed,
+			postKey:   notification.MsgErrCleanupAccessFailed,
+		},
+		{
 			name: "legacy file missing",
 			mutate: func(t *testing.T, fx *sqliteCleanupFixture) {
 				t.Helper()
@@ -971,6 +980,7 @@ func TestLegacyCleanup_SQLiteRequiresMigrationProof(t *testing.T) {
 
 			assert.Equal(t, tt.statusKey == "", status.CanCleanup)
 			assert.Equal(t, tt.statusKey, status.ErrorKey)
+			assert.Equal(t, tt.name != "legacy file missing", status.Exists, "the status reports the legacy file whenever it is on disk")
 			assert.Equal(t, tt.postKey, post.ErrorKey)
 			if tt.postKey == "" {
 				assert.Equal(t, http.StatusOK, code)
