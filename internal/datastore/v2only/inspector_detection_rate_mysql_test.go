@@ -3,6 +3,7 @@
 package v2only
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,4 +23,13 @@ func TestV2OnlyDatastore_DetectionRateLabelsUTC_MySQL(t *testing.T) {
 	require.Equal(t, mysqlTestServerZone, sessionZone, "server time zone did not take effect")
 
 	assertDetectionRateLabelsUTC(t, ds)
+}
+
+// TestV2OnlyDatastore_DetectionRateDaily_MySQL_HugeDaysFails pins that a day
+// count whose window in seconds does not fit in 64 bits is an error, not a
+// wrapped cutoff that silently returns no rows.
+func TestV2OnlyDatastore_DetectionRateDaily_MySQL_HugeDaysFails(t *testing.T) {
+	ds := setupMySQLDatastore(t)
+	_, err := ds.GetDetectionRateDaily(math.MaxInt)
+	require.Error(t, err)
 }
