@@ -320,6 +320,11 @@ type MqttAction struct {
 	CorrelationID string            // Detection correlation ID for log tracking
 	mu            sync.Mutex        // Protect concurrent access to Result
 	rateLimit     rateLimitDecision // Event-tracker verdict of the first attempt, reused by queue retries
+	// gatedByDatabase is set when the action runs as a step of the database
+	// composite. The composite runs it only for a detection the database step
+	// stored, and that step's event-tracker verdict is the detection's only one, so
+	// the action does not ask its own.
+	gatedByDatabase bool
 	// SpeciesTimeSource provides the species' first-ever and most-recent previous
 	// detection times for the MQTT payload. Nil when the database is disabled or
 	// the backend does not support the query; the payload then carries null fields.
@@ -383,6 +388,11 @@ type SSEAction struct {
 	Description    string
 	CorrelationID  string     // Detection correlation ID for log tracking
 	mu             sync.Mutex // Protect concurrent access to Result
+	// gatedByDatabase is set when the action runs as a step of the database
+	// composite. The composite runs it only for a detection the database step
+	// stored, and that step's event-tracker verdict is the detection's only one, so
+	// the action does not ask its own.
+	gatedByDatabase bool
 	// SSEBroadcaster is a function that broadcasts detection data
 	// This allows the action to be independent of the specific API implementation
 	SSEBroadcaster func(note *datastore.Note, birdImage *imageprovider.BirdImage) error

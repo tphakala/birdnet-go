@@ -2419,6 +2419,9 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 	//    realtime.mqtt.retrysettings, which a step inside the composite cannot have.
 	//    The job starts after the save, so it still reads the database ID.
 	// 3. SSEAction broadcasts inline.
+	// The database step's event-tracker verdict is the detection's only one: a
+	// detection it skips ends the composite, and MQTT and SSE inside it do not ask
+	// their own limiters, so both announce exactly the rows that were stored.
 	// The composite is retried only while its database step reports a save that
 	// stored nothing (DatabaseAction.retryPending), so a retry cannot store a
 	// second row; MQTT and SSE run once, after the save that lands. A failure whose
@@ -2442,6 +2445,7 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 	if databaseAction != nil {
 		sequentialActions := []Action{databaseAction}
 		if mqttAction != nil {
+			mqttAction.gatedByDatabase = true
 			sequentialActions = append(sequentialActions, &enqueueAction{
 				action: mqttAction,
 				// No PCM data: a retrying MQTT job must not pin the audio.
@@ -2450,6 +2454,7 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 			})
 		}
 		if sseAction != nil {
+			sseAction.gatedByDatabase = true
 			sequentialActions = append(sequentialActions, sseAction)
 		}
 

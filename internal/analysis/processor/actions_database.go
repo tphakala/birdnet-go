@@ -129,10 +129,13 @@ const (
 	// stored (the next attempt then finds the state done). The job queue keeps
 	// retrying the job.
 	saveStatePending int32 = iota
-	// saveStateDone: the detection is stored, or the event tracker skipped it.
+	// saveStateDone: the detection is stored.
 	saveStateDone
 	// saveStateTerminal: the save failed in a way that must not be repeated.
 	saveStateTerminal
+	// saveStateSkipped: the event tracker skipped the detection. Nothing is stored
+	// and no later composite step runs.
+	saveStateSkipped
 )
 
 // errDetectionSaveInFlight is returned by an attempt that gave up waiting for an
@@ -149,7 +152,9 @@ var errDetectionSaveInFlight = errors.NewStd("detection save still running from 
 // the species as already known. Only one attempt runs a save at a time: an attempt
 // that cannot get the slot before ctx ends returns errDetectionSaveInFlight.
 // A save that panics is not repeated, and neither is one whose follow-up steps
-// panic after the row is stored.
+// panic after the row is stored. A detection the event tracker skips is not saved:
+// the call returns nil and the composite ends there (see skipsLaterSteps), so the
+// event-tracker verdict of this step is the only one the detection gets.
 func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	attempt := int(a.attempts.Add(1))
 	if !a.acquireSaveSlot(ctx) {
@@ -164,12 +169,14 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 		return nil
 	case saveStateTerminal:
 		return a.terminalErr
+	case saveStateSkipped:
+		return nil
 	}
 
 	if !a.gated {
 		// Check event frequency (supports scientific name lookup)
 		if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, DatabaseSave) {
-			a.saveState.Store(saveStateDone)
+			a.saveState.Store(saveStateSkipped)
 			return nil
 		}
 		// Check if this is a new species and update atomically to prevent race conditions
@@ -190,6 +197,12 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	defer a.saveState.Store(saveStateDone)
 	a.recordSaveSuccess(ctx, attempt)
 	return nil
+}
+
+// skipsLaterSteps reports whether the event tracker skipped the detection, so that
+// the composite stops instead of running steps that need a stored row.
+func (a *DatabaseAction) skipsLaterSteps() bool {
+	return a.saveState.Load() == saveStateSkipped
 }
 
 // acquireSaveSlot takes the save slot, or reports false when ctx ends first. A
