@@ -427,7 +427,11 @@ func initializeMySQLMigrationInfrastructure(settings *conf.Settings, ds datastor
 // It handles both:
 //   - Fresh installs: v2 schema at configured path (no _v2 suffix, no v2_ prefix)
 //   - Post-migration: v2 schema at migration path (_v2 suffix, v2_ prefix)
-func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
+//
+// On MySQL and MariaDB, mysqlFreshV2 is the answer of datastoreV2.CheckMySQLHasFreshV2Schema,
+// which the caller read together with the startup state and checked for an error: true
+// selects the bare schema, false the v2_ prefix. The SQLite branch ignores it.
+func initializeV2OnlyMode(settings *conf.Settings, mysqlFreshV2 bool) (*v2only.Datastore, error) {
 	log := logger.Global().Module("datastore")
 	log.Info("initializing enhanced database mode",
 		logger.String("operation", "initialize_enhanced_database_mode"))
@@ -466,13 +470,12 @@ func initializeV2OnlyMode(settings *conf.Settings) (*v2only.Datastore, error) {
 		}
 
 	case settings.Output.MySQL.Enabled:
-		// Check if fresh v2 tables exist (no prefix) or migration tables (v2_ prefix)
-		isFreshV2 := datastoreV2.CheckMySQLHasFreshV2Schema(settings)
-		useV2Prefix = !isFreshV2
+		// Fresh v2 tables exist (no prefix) or migration tables (v2_ prefix); the caller read it.
+		useV2Prefix = !mysqlFreshV2
 
 		log.Debug("MySQL v2 mode configuration",
 			logger.Bool("use_v2_prefix", useV2Prefix),
-			logger.Bool("is_fresh_v2", isFreshV2))
+			logger.Bool("is_fresh_v2", mysqlFreshV2))
 
 		v2Manager, err = datastoreV2.NewMySQLManager(&datastoreV2.MySQLConfig{
 			Host:        settings.Output.MySQL.Host,

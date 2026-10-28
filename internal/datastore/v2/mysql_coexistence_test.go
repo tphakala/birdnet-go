@@ -695,7 +695,9 @@ func TestMySQL_StartupDetection_MixedSchema_ReconcilesWithoutLosingRows(t *testi
 						assert.False(t, tableExists(t, coexTestDB, coexTestDBName, table), "%s must be dropped", table)
 					}
 					settings := buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, coexTestPassword)
-					assert.True(t, CheckMySQLHasFreshV2Schema(settings), "the enhanced database must be picked")
+					fresh, err := CheckMySQLHasFreshV2Schema(settings)
+					require.NoError(t, err)
+					assert.True(t, fresh, "the enhanced database must be picked")
 				}},
 				{DecisionV2Restart, effectV2, nil},
 			},
@@ -1037,8 +1039,9 @@ func TestMySQL_StartupDetection_MixedSchemaKeepV2Steps_RestartsV2(t *testing.T) 
 	state := checkMySQLMigrationState(settings)
 	require.NoError(t, state.Error)
 	assert.Equal(t, DecisionV2Restart, state.Decision)
-	assert.True(t, CheckMySQLHasFreshV2Schema(settings),
-		"the next start must use the bare schema, not the v2_ prefix")
+	fresh, err := CheckMySQLHasFreshV2Schema(settings)
+	require.NoError(t, err)
+	assert.True(t, fresh, "the next start must use the bare schema, not the v2_ prefix")
 	assert.Equal(t, int64(2), getRowCount(t, coexTestDB, "detections"), "detections must survive the recovery")
 }
 

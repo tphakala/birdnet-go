@@ -3,9 +3,12 @@ package analysis
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -261,6 +264,245 @@ func TestDatabaseService_Start_LegacyInstallWithoutStateManager(t *testing.T) {
 	assert.Equal(t, migrationTagUnavailable, event.Tags["migration_state"])
 }
 
+// unreachableServerError is the error of a dial to a port nobody listens on, the cause the
+// MySQL state checks wrap in ErrStartupStateUnknown.
+func unreachableServerError() error {
+	return &net.OpError{Op: "dial", Net: "tcp", Err: &os.SyscallError{Syscall: "connect", Err: syscall.ECONNREFUSED}}
+}
+
+// unknownStateOutcome is a startup state that could not be read, wrapping cause.
+func unknownStateOutcome(cause error) datastoreV2.StartupState {
+	return datastoreV2.StartupState{
+		Decision: datastoreV2.DecisionStateUnknown,
+		Error:    fmt.Errorf("%w: open MySQL database: %w", datastoreV2.ErrStartupStateUnknown, cause),
+	}
+}
+
+// pick returns the i-th outcome of a script, repeating the last one.
+func pick[T any](script []T, i int) T {
+	return script[min(i, len(script)-1)]
+}
+
+// TestDatabaseService_AwaitStartupState pins the retry of the boot decision read: the
+// whole unit (tail check, state check, prefix probe) is read again while the cause can
+// heal, the delays are bounded and capped, and an unhealable cause fails at once.
+func TestDatabaseService_AwaitStartupState(t *testing.T) {
+	t.Parallel()
+
+	type tailOutcome struct {
+		hasUnmigrated bool
+		err           error
+	}
+	type probeOutcome struct {
+		fresh bool
+		err   error
+	}
+	conn := unreachableServerError()
+	completed := datastoreV2.StartupState{
+		MigrationStatus: entities.MigrationStatusCompleted,
+		V2Available:     true,
+		Decision:        datastoreV2.DecisionV2Restart,
+	}
+	legacy := datastoreV2.StartupState{
+		MigrationStatus: entities.MigrationStatusIdle,
+		LegacyRequired:  true,
+		Decision:        datastoreV2.DecisionLegacyMode,
+	}
+	cleanTail := []tailOutcome{{}}
+	connTail := tailOutcome{err: fmt.Errorf("%w: open MySQL database: %w", datastoreV2.ErrLegacyTailUnverified, conn)}
+	flatProbeErr := fmt.Errorf("%w: check bare v2 schema: flattened server text", datastoreV2.ErrStartupStateUnknown)
+
+	tests := []struct {
+		name           string
+		tail           []tailOutcome
+		state          []datastoreV2.StartupState
+		probe          []probeOutcome
+		waitErr        error
+		wantAttempts   int
+		wantProbeCalls int
+		wantDelays     []time.Duration
+		wantErrIs      []error
+		wantFresh      bool
+		wantTailErr    bool
+		sqliteToo      bool
+	}{
+		{
+			name:         "retries an unknown state until it is known",
+			tail:         cleanTail,
+			state:        []datastoreV2.StartupState{unknownStateOutcome(conn), unknownStateOutcome(conn), legacy},
+			probe:        []probeOutcome{{}},
+			wantAttempts: 3,
+			wantDelays:   []time.Duration{time.Second, 2 * time.Second},
+		},
+		{
+			name:         "gives up after the attempt bound with a capped schedule",
+			tail:         cleanTail,
+			state:        []datastoreV2.StartupState{unknownStateOutcome(conn)},
+			probe:        []probeOutcome{{}},
+			wantAttempts: 8,
+			wantDelays: []time.Duration{
+				time.Second, 2 * time.Second, 4 * time.Second, 8 * time.Second,
+				15 * time.Second, 15 * time.Second, 15 * time.Second,
+			},
+			wantErrIs: []error{datastoreV2.ErrStartupStateUnknown},
+		},
+		{
+			name:           "re-reads the tail check with the state",
+			tail:           []tailOutcome{connTail, {}},
+			state:          []datastoreV2.StartupState{completed},
+			probe:          []probeOutcome{{fresh: true}},
+			wantAttempts:   2,
+			wantProbeCalls: 1,
+			wantDelays:     []time.Duration{time.Second},
+			wantFresh:      true,
+		},
+		{
+			name:         "does not need the tail for a legacy start",
+			tail:         []tailOutcome{connTail},
+			state:        []datastoreV2.StartupState{legacy},
+			probe:        []probeOutcome{{}},
+			wantAttempts: 1,
+			wantTailErr:  true,
+		},
+		{
+			name:           "retries the prefix probe with the unit",
+			tail:           cleanTail,
+			state:          []datastoreV2.StartupState{completed},
+			probe:          []probeOutcome{{err: unknownStateOutcome(conn).Error}, {fresh: false}},
+			wantAttempts:   2,
+			wantProbeCalls: 2,
+			wantDelays:     []time.Duration{time.Second},
+		},
+		{
+			name:           "fails at once on a probe cause that cannot heal",
+			tail:           cleanTail,
+			state:          []datastoreV2.StartupState{completed},
+			probe:          []probeOutcome{{err: flatProbeErr}},
+			wantAttempts:   1,
+			wantProbeCalls: 1,
+			wantErrIs:      []error{datastoreV2.ErrStartupStateUnknown},
+		},
+		{
+			name:         "keeps the refusal for a tail error that cannot heal",
+			tail:         []tailOutcome{{err: fmt.Errorf("%w: open MySQL database: flattened server text", datastoreV2.ErrLegacyTailUnverified)}},
+			state:        []datastoreV2.StartupState{completed},
+			probe:        []probeOutcome{{}},
+			wantAttempts: 1,
+			wantTailErr:  true,
+		},
+		{
+			name:         "does not probe while unmigrated records wait for the tail sync",
+			tail:         []tailOutcome{{hasUnmigrated: true}},
+			state:        []datastoreV2.StartupState{completed},
+			probe:        []probeOutcome{{}},
+			wantAttempts: 1,
+		},
+		{
+			name:         "does not probe when SQLite is enabled too",
+			tail:         cleanTail,
+			state:        []datastoreV2.StartupState{completed},
+			probe:        []probeOutcome{{}},
+			wantAttempts: 1,
+			sqliteToo:    true,
+		},
+		{
+			name:         "stops when the wait fails",
+			tail:         cleanTail,
+			state:        []datastoreV2.StartupState{unknownStateOutcome(conn)},
+			probe:        []probeOutcome{{}},
+			waitErr:      context.Canceled,
+			wantAttempts: 1,
+			wantDelays:   []time.Duration{time.Second},
+			wantErrIs:    []error{datastoreV2.ErrStartupStateUnknown, context.Canceled},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			settings := &conf.Settings{}
+			settings.Output.MySQL.Enabled = true
+			if tt.sqliteToo {
+				// The real SQLite consolidation runs before the state check; point it at an
+				// empty directory so it finds nothing to rename.
+				settings.Output.SQLite.Enabled = true
+				settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
+			}
+			svc := NewDatabaseService(settings, nil)
+
+			var tailCalls, stateCalls, probeCalls int
+			var delays []time.Duration
+			svc.checkLegacyTail = func(*conf.Settings, logger.Logger) (bool, error) {
+				o := pick(tt.tail, tailCalls)
+				tailCalls++
+				return o.hasUnmigrated, o.err
+			}
+			svc.checkStartupState = func(*conf.Settings) datastoreV2.StartupState {
+				st := pick(tt.state, stateCalls)
+				stateCalls++
+				return st
+			}
+			svc.checkFreshV2Schema = func(*conf.Settings) (bool, error) {
+				o := pick(tt.probe, probeCalls)
+				probeCalls++
+				return o.fresh, o.err
+			}
+			svc.waitStartupRetry = func(_ context.Context, d time.Duration) error {
+				delays = append(delays, d)
+				return tt.waitErr
+			}
+
+			log := logger.NewSlogLogger(io.Discard, logger.LogLevelError, time.UTC)
+			reading, err := svc.awaitStartupState(t.Context(), settings, log)
+
+			assert.Equal(t, tt.wantAttempts, stateCalls, "state check calls")
+			assert.Equal(t, tt.wantAttempts, tailCalls, "tail check calls")
+			assert.Equal(t, tt.wantProbeCalls, probeCalls, "prefix probe calls")
+			assert.Equal(t, tt.wantDelays, delays)
+			if len(tt.wantErrIs) > 0 {
+				require.Error(t, err)
+				for _, target := range tt.wantErrIs {
+					require.ErrorIs(t, err, target)
+				}
+				return
+			}
+			require.NoError(t, err)
+			assert.NoError(t, reading.unknown)
+			assert.Equal(t, tt.wantFresh, reading.mysqlFreshV2)
+			assert.Equal(t, tt.wantTailErr, reading.tailErr != nil)
+		})
+	}
+}
+
+// TestDatabaseService_Start_StartupStateUnknownRefuses pins the wiring of the unknown
+// state refusal: Start must return the error before any datastore is
+// constructed. Without it the legacy default branch would open the database and create
+// the SQLite file. Not parallel: it swaps the global logger.
+func TestDatabaseService_Start_StartupStateUnknownRefuses(t *testing.T) {
+	configuredPath := filepath.Join(t.TempDir(), "birdnet.db")
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = configuredPath
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelError)
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+
+	svc := NewDatabaseService(settings, metrics)
+	svc.checkStartupState = func(*conf.Settings) datastoreV2.StartupState {
+		return unknownStateOutcome(unreachableServerError())
+	}
+	svc.waitStartupRetry = func(context.Context, time.Duration) error { return nil }
+
+	err = svc.Start(t.Context())
+	require.ErrorIs(t, err, datastoreV2.ErrStartupStateUnknown)
+	assert.Nil(t, svc.DataStore(), "no datastore may be constructed when the state is unknown")
+	assert.False(t, svc.IsV2OnlyMode())
+	assert.NoFileExists(t, configuredPath, "the legacy fallback would have created the database file")
+	assert.Contains(t, buf.String(), startupStateUnknownRecoveryHint, "the log must tell the user what to do")
+}
+
 // TestDatabaseService_Start_MixedSchemaRefuses pins the wiring of the mixed schema
 // refusal: Start must return the error before any datastore is constructed. Without
 // it the legacy default branch would open the database and create the SQLite file.
@@ -271,7 +513,7 @@ func TestDatabaseService_Start_MixedSchemaRefuses(t *testing.T) {
 	settings.Output.SQLite.Enabled = true
 	settings.Output.SQLite.Path = configuredPath
 
-	buf := logtest.CaptureBufferAt(t, slog.LevelError)
+	buf := logtest.CaptureBufferAt(t, slog.LevelWarn)
 
 	metrics, err := observability.NewMetrics()
 	require.NoError(t, err)
@@ -291,6 +533,39 @@ func TestDatabaseService_Start_MixedSchemaRefuses(t *testing.T) {
 	assert.False(t, svc.IsV2OnlyMode())
 	assert.NoFileExists(t, configuredPath, "the legacy fallback would have created the database file")
 	assert.Contains(t, buf.String(), mixedSchemaGuideURL, "the log must point the user to the guide")
+	assert.NotContains(t, buf.String(), legacyFallbackWarnMessage,
+		"a refused start must not log that the legacy database is being started")
+}
+
+// legacyFallbackWarnMessage is the Warn emitted when a state check error falls back to the
+// legacy database.
+const legacyFallbackWarnMessage = "database state check failed, starting with the legacy database"
+
+// TestDatabaseService_Start_StateErrorWarnsOnLegacyFallback pins the Warn log of the legacy
+// fallback: a state check error that is not a refusal is the only record that the start
+// took the legacy path because of an error. Not parallel: it swaps the global logger.
+func TestDatabaseService_Start_StateErrorWarnsOnLegacyFallback(t *testing.T) {
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelWarn)
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+	svc := NewDatabaseService(settings, metrics)
+	svc.checkStartupState = func(*conf.Settings) datastoreV2.StartupState {
+		return datastoreV2.StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			LegacyRequired:  true,
+			Decision:        datastoreV2.DecisionV2Corrupted,
+			Error:           fmt.Errorf("%w: test", datastoreV2.ErrV2DatabaseCorrupted),
+		}
+	}
+
+	require.NoError(t, svc.Start(t.Context()))
+	t.Cleanup(func() { assert.NoError(t, svc.Stop(t.Context())) })
+	assert.Contains(t, buf.String(), legacyFallbackWarnMessage)
 }
 
 // legacyTailFixture builds a SQLite install whose migration is COMPLETED with watermark
