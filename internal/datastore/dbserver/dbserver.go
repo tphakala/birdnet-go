@@ -283,6 +283,7 @@ const (
 	tagUntracked   = "untracked"
 	tagOther       = "other"
 	tagMixed       = "mixed"
+	tagUTF8MB4Tbls = "utf8mb4_tables"
 	tagSeparator   = "-"
 	charsetASCII   = "ascii"
 	charsetLatin1  = "latin1"
@@ -342,17 +343,28 @@ func (r CharsetReport) AllUTF8MB4() bool {
 	return r.SchemaCharset == CharsetUTF8MB4 && len(r.NonUTF8MB4Tables()) == 0
 }
 
+// EveryTableUTF8MB4 reports that the schema has at least one table with text
+// columns and every such table is utf8mb4, whatever the schema default is. The
+// schema default then only affects tables created later without an explicit
+// character set.
+func (r CharsetReport) EveryTableUTF8MB4() bool {
+	return len(r.Tables) > 0 && len(r.NonUTF8MB4Tables()) == 0
+}
+
 // CharsetTag returns a bounded telemetry value for r: "utf8mb4" when
-// everything is utf8mb4, "mixed" when the schema default is utf8mb4 but a table
-// is not, otherwise the schema default when it is "utf8mb3" or "latin1",
-// "other" for any other schema default, and "unknown" when no schema default
-// was read.
+// everything is utf8mb4, "utf8mb4_tables" when every table is utf8mb4 but the
+// schema default is not, "mixed" when the schema default is utf8mb4 but a table
+// is not, otherwise the schema default when it is "utf8mb3" or "latin1" (some
+// table is not utf8mb4 or no table has text columns), "other" for any other
+// schema default, and "unknown" when no schema default was read.
 func CharsetTag(r CharsetReport) string {
 	switch {
 	case r.SchemaCharset == "":
 		return tagUnknown
 	case r.AllUTF8MB4():
 		return CharsetUTF8MB4
+	case r.EveryTableUTF8MB4():
+		return tagUTF8MB4Tbls
 	case r.SchemaCharset == CharsetUTF8MB4:
 		// The schema default is fine; some existing table is not.
 		return tagMixed
