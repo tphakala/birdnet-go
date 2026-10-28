@@ -4,10 +4,13 @@ package v2only
 
 import (
 	"context"
+	"database/sql"
+	"net"
 	"strconv"
 	"testing"
 	"time"
 
+	mysqldriver "github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -19,6 +22,14 @@ import (
 // v2only Datastore against it. It returns the datastore (timezone forced to UTC
 // for deterministic date bucketing) and registers container/datastore cleanup.
 func setupMySQLDatastore(t *testing.T) *Datastore {
+	t.Helper()
+	return setupMySQLDatastoreInServerZone(t, "")
+}
+
+// setupMySQLDatastoreInServerZone is setupMySQLDatastore with the server's
+// global time_zone set to serverZone (for example "+05:45") before the
+// connection pool opens. An empty serverZone keeps the server default.
+func setupMySQLDatastoreInServerZone(t *testing.T, serverZone string) *Datastore {
 	t.Helper()
 	containers.SkipIfContainerRuntimeUnavailable(t)
 
@@ -46,6 +57,10 @@ func setupMySQLDatastore(t *testing.T) *Datastore {
 	port, err := container.GetPort(ctx)
 	require.NoError(t, err)
 
+	if serverZone != "" {
+		setMySQLGlobalTimeZone(t, host, port, cfg.Password, serverZone)
+	}
+
 	testLogger := logger.NewConsoleLogger("v2only_mysql_test", logger.LogLevelDebug)
 	manager, err := v2.NewMySQLManager(&v2.MySQLConfig{
 		Host:     host,
@@ -68,6 +83,29 @@ func setupMySQLDatastore(t *testing.T) *Datastore {
 	// the test host's local zone.
 	ds.timezone = time.UTC
 	return ds
+}
+
+// setMySQLGlobalTimeZone sets the server's global time_zone as root. The
+// testcontainers MySQL module sets the root password to MYSQL_PASSWORD, so the
+// password is the test user's, not MySQLConfig.RootPassword. It must run before
+// the pool opens: sessions that already exist keep the zone they started with.
+// Each test has its own container, so the setting does not leak to other tests.
+func setMySQLGlobalTimeZone(t *testing.T, host string, port int, rootPassword, zone string) {
+	t.Helper()
+	dsn := (&mysqldriver.Config{
+		User:   "root",
+		Passwd: rootPassword,
+		Net:    "tcp",
+		Addr:   net.JoinHostPort(host, strconv.Itoa(port)),
+		// MariaDB's root account uses mysql_native_password, which the driver
+		// only offers when asked.
+		AllowNativePasswords: true,
+	}).FormatDSN()
+	db, err := sql.Open("mysql", dsn)
+	require.NoError(t, err)
+	defer func() { _ = db.Close() }()
+	_, err = db.ExecContext(t.Context(), "SET GLOBAL time_zone = ?", zone)
+	require.NoError(t, err, "failed to set the server time zone")
 }
 
 // TestV2OnlyDatastore_GetSpeciesLastDetectionDateBefore_MySQL reproduces the MySQL
