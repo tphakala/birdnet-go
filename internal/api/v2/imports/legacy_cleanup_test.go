@@ -45,6 +45,12 @@ func createLegacyTestHandler(tb testing.TB, e *echo.Echo, settings *conf.Setting
 	apitest.PublishTestSettings(tb, settings)
 	c := &Handler{Core: &apicore.Core{Echo: e}, cleanupStatus: NewCleanupStatus()}
 	c.Settings.Store(settings)
+	if settings.Output.SQLite.Enabled {
+		// The failed-consolidation layout: the process runs on the _v2 sidecar and
+		// the configured path is the legacy file, the only layout where the SQLite
+		// delete is legitimate.
+		c.V2Manager = &fakeV2Manager{path: datastoreV2.V2MigrationPathFromConfigured(settings.Output.SQLite.Path)}
+	}
 	return c
 }
 
@@ -457,14 +463,14 @@ func TestGetLegacyStatus_MySQL_Refuses(t *testing.T) {
 	t.Attr("type", "unit")
 
 	sqliteMgr := newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0)
+	mysqlMgr := &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}
 	tests := []struct {
 		name string
 		repo func() datastore.DetectionRepository
 		mgr  datastoreV2.Manager
 	}{
-		{"repository without a connection", func() datastore.DetectionRepository { return nil }, nil},
+		{"repository without a connection", func() datastore.DetectionRepository { return nil }, mysqlMgr},
 		{"no v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }, nil},
-		{"non-MySQL v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }, sqliteMgr},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -497,18 +503,23 @@ func TestStartLegacyCleanup_MySQL_Refuses(t *testing.T) {
 	t.Attr("type", "unit")
 
 	sqliteMgr := newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0)
+	mysqlMgr := &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}
 	tests := []struct {
 		name string
 		repo func() datastore.DetectionRepository
+		mgr  datastoreV2.Manager
 	}{
-		{"repository without a connection", func() datastore.DetectionRepository { return nil }},
-		{"no v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }},
+		{"repository without a connection", func() datastore.DetectionRepository { return nil }, mysqlMgr},
+		{"no v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }, nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
 			controller := createLegacyTestHandler(t, e, createMySQLTestSettings())
 			controller.Repo = tt.repo()
+			if tt.mgr != nil {
+				controller.V2Manager = tt.mgr
+			}
 			enableV2OnlyMode(t)
 
 			rec := httptest.NewRecorder()
@@ -595,4 +606,156 @@ func TestCleanupStatus_SetGetReset(t *testing.T) {
 	assert.Empty(t, errMsg)
 	assert.Nil(t, remaining)
 	assert.Equal(t, int64(0), reclaimed)
+}
+
+// legacyCleanupCall runs GET status and then POST cleanup against the handler and
+// waits for any scheduled work, returning both decoded responses and the POST code.
+func legacyCleanupCall(t *testing.T, c *Handler) (status LegacyStatusResponse, post CleanupActionResponse, postCode int) {
+	t.Helper()
+	e := c.Echo
+
+	rec := httptest.NewRecorder()
+	ctx := e.NewContext(httptest.NewRequest(http.MethodGet, "/api/v2/system/database/legacy/status", http.NoBody), rec)
+	require.NoError(t, c.GetLegacyStatus(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &status))
+
+	rec = httptest.NewRecorder()
+	ctx = e.NewContext(httptest.NewRequest(http.MethodPost, "/api/v2/system/database/legacy/cleanup", http.NoBody), rec)
+	require.NoError(t, c.StartLegacyCleanup(ctx))
+	c.Wait()
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &post))
+	return status, post, rec.Code
+}
+
+// TestLegacyCleanup_BackendFollowsOpenedDatabase pins that the cleanup picks the
+// SQLite delete or the MySQL drop from the database the process opened, not from
+// the live settings, which only take effect after a restart.
+func TestLegacyCleanup_BackendFollowsOpenedDatabase(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	t.Run("manager MySQL, settings switched to SQLite", func(t *testing.T) {
+		legacyPath := filepath.Join(t.TempDir(), "birdnet.db")
+		require.NoError(t, os.WriteFile(legacyPath, []byte("legacy"), 0o600))
+		c := createLegacyTestHandler(t, echo.New(), createTestSettings(legacyPath))
+		c.V2Manager = &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}
+		enableV2OnlyMode(t)
+
+		status, post, code := legacyCleanupCall(t, c)
+
+		assert.False(t, status.CanCleanup)
+		assert.Equal(t, notification.MsgErrCleanupAccessFailed, status.ErrorKey)
+		assert.Equal(t, http.StatusBadRequest, code)
+		assert.False(t, post.Success)
+		state, _, _, _ := c.cleanupStatus.Get()
+		assert.Equal(t, CleanupStateIdle, state)
+		assert.FileExists(t, legacyPath, "the settings switch must not make the SQLite delete reachable")
+	})
+
+	t.Run("manager SQLite, settings switched to MySQL", func(t *testing.T) {
+		legacyPath := filepath.Join(t.TempDir(), "birdnet.db")
+		require.NoError(t, os.WriteFile(legacyPath, []byte("legacy"), 0o600))
+		settings := createMySQLTestSettings()
+		settings.Output.SQLite.Path = legacyPath
+		c := createLegacyTestHandler(t, echo.New(), settings)
+		c.V2Manager = &fakeV2Manager{path: datastoreV2.V2MigrationPathFromConfigured(legacyPath)}
+		enableV2OnlyMode(t)
+
+		status, post, code := legacyCleanupCall(t, c)
+
+		assert.True(t, status.CanCleanup)
+		assert.Equal(t, legacyPath, status.Location)
+		assert.Equal(t, http.StatusOK, code)
+		assert.True(t, post.Success)
+		assert.NoFileExists(t, legacyPath)
+	})
+}
+
+// TestLegacyCleanup_SQLiteTargetRefusals pins every reason the SQLite delete
+// refuses before touching the file.
+func TestLegacyCleanup_SQLiteTargetRefusals(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	tests := []struct {
+		name         string
+		noManager    bool
+		managerPath  func(dir string) string
+		settingsPath func(dir string) string
+		statusExists bool
+		statusKey    string
+		postKey      string
+	}{
+		{
+			name:         "no manager",
+			noManager:    true,
+			settingsPath: func(dir string) string { return filepath.Join(dir, "birdnet.db") },
+			statusExists: false,
+			statusKey:    notification.MsgErrCleanupAccessFailed,
+			postKey:      notification.MsgErrCleanupAccessFailed,
+		},
+		{
+			name:         "path changed since start",
+			managerPath:  func(dir string) string { return filepath.Join(dir, "boot_v2.db") },
+			settingsPath: func(dir string) string { return filepath.Join(dir, "other.db") },
+			statusExists: true,
+			statusKey:    notification.MsgErrCleanupRestartRequired,
+			postKey:      notification.MsgErrCleanupRestartNeeded,
+		},
+		{
+			name:         "path is the active database",
+			managerPath:  func(dir string) string { return filepath.Join(dir, "birdnet.db") },
+			settingsPath: func(dir string) string { return filepath.Join(dir, "birdnet.db") },
+			statusExists: true,
+			statusKey:    notification.MsgErrCleanupSafetyCheck,
+			postKey:      notification.MsgErrCleanupSafetyCheck,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			target := tt.settingsPath(dir)
+			// Plain bytes, so a schema probe alone would not stop the delete.
+			require.NoError(t, os.WriteFile(target, []byte("plain bytes"), 0o600))
+			c := createLegacyTestHandler(t, echo.New(), createTestSettings(target))
+			if tt.noManager {
+				c.V2Manager = nil
+			} else {
+				c.V2Manager = &fakeV2Manager{path: tt.managerPath(dir)}
+			}
+			enableV2OnlyMode(t)
+
+			status, post, code := legacyCleanupCall(t, c)
+
+			assert.Equal(t, tt.statusExists, status.Exists)
+			assert.False(t, status.CanCleanup)
+			assert.Equal(t, tt.statusKey, status.ErrorKey)
+			assert.Equal(t, http.StatusBadRequest, code)
+			assert.False(t, post.Success)
+			assert.Equal(t, tt.postKey, post.ErrorKey)
+			state, _, _, _ := c.cleanupStatus.Get()
+			assert.Equal(t, CleanupStateIdle, state, "a refused POST must not enter in_progress")
+			assert.FileExists(t, target)
+		})
+	}
+}
+
+// TestCleanupSQLiteLegacy_RefusesUnownedPath pins the background recheck: a path
+// that is not the legacy companion of the opened database is never deleted, even
+// when the job is handed it directly.
+func TestCleanupSQLiteLegacy_RefusesUnownedPath(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	dir := t.TempDir()
+	otherPath := filepath.Join(dir, "other.db")
+	require.NoError(t, os.WriteFile(otherPath, []byte("plain bytes"), 0o600))
+	c := createLegacyTestHandler(t, echo.New(), createTestSettings(otherPath))
+	mgr := &fakeV2Manager{path: datastoreV2.V2MigrationPathFromConfigured(filepath.Join(dir, "boot.db"))}
+
+	err := c.cleanupSQLiteLegacy(t.Context(), mgr, otherPath)
+
+	require.Error(t, err)
+	assert.FileExists(t, otherPath)
 }

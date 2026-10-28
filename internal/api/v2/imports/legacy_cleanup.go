@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -110,6 +111,39 @@ type legacyCleanupRefusal struct {
 	exists   bool
 	reason   string
 	errorKey string
+}
+
+// Refusal reasons for the cleanup target checks.
+const (
+	reasonNoManager        = "Database manager is not available"
+	reasonActiveDatabase   = "Target file is the active database, cleanup not allowed for safety"
+	reasonPathChangedSince = "Database path changed since start, restart before cleanup"
+)
+
+// cleanupManager returns the v2 manager the process opened, or a refusal when
+// there is none. The cleanup takes its backend and target from it, not from the
+// live settings: the connection settings only take effect after a restart.
+func (c *Handler) cleanupManager() (datastoreV2.Manager, *legacyCleanupRefusal) {
+	if c.V2Manager == nil {
+		return nil, &legacyCleanupRefusal{reason: reasonNoManager, errorKey: notification.MsgErrCleanupAccessFailed}
+	}
+	return c.V2Manager, nil
+}
+
+// sqliteLegacyRefusal decides whether legacyPath, read from the settings, is the
+// legacy companion of the SQLite database mgr opened. It refuses the active
+// database itself and any path whose derived v2 path is not the opened file,
+// which is a path changed in settings since the process started. It is pure and
+// opens nothing.
+func sqliteLegacyRefusal(mgr datastoreV2.Manager, legacyPath string) *legacyCleanupRefusal {
+	activePath := filepath.Clean(mgr.Path())
+	if filepath.Clean(legacyPath) == activePath {
+		return &legacyCleanupRefusal{exists: true, reason: reasonActiveDatabase, errorKey: notification.MsgErrCleanupSafetyCheck}
+	}
+	if filepath.Clean(datastoreV2.V2MigrationPathFromConfigured(legacyPath)) != activePath {
+		return &legacyCleanupRefusal{exists: true, reason: reasonPathChangedSince, errorKey: notification.MsgErrCleanupRestartRequired}
+	}
+	return nil
 }
 
 // legacyTableListing is one row of the information_schema table listing.
@@ -322,16 +356,31 @@ func (c *Handler) GetLegacyStatus(ctx echo.Context) error {
 		Tables: []LegacyTableInfo{},
 	}
 
-	// Check if using MySQL
-	if c.isUsingMySQL() {
+	mgr, refusal := c.cleanupManager()
+	if refusal != nil {
+		response.Location = c.CurrentSettings().Output.SQLite.Path
+		return writeLegacyRefusal(ctx, &response, refusal)
+	}
+
+	// The opened database decides the backend, not the live settings.
+	if mgr.IsMySQL() {
 		return c.getLegacyStatusMySQL(ctx, &response)
 	}
 
-	return c.getLegacyStatusSQLite(ctx, &response)
+	return c.getLegacyStatusSQLite(ctx, &response, mgr)
+}
+
+// writeLegacyRefusal answers a status request with the refusal.
+func writeLegacyRefusal(ctx echo.Context, response *LegacyStatusResponse, refusal *legacyCleanupRefusal) error {
+	response.Exists = refusal.exists
+	response.CanCleanup = false
+	response.Reason = refusal.reason
+	response.ErrorKey = refusal.errorKey
+	return ctx.JSON(http.StatusOK, response)
 }
 
 // getLegacyStatusSQLite handles legacy status for SQLite deployments.
-func (c *Handler) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatusResponse) error {
+func (c *Handler) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatusResponse, mgr datastoreV2.Manager) error {
 	legacyPath := c.CurrentSettings().Output.SQLite.Path
 	response.Location = legacyPath
 
@@ -366,11 +415,17 @@ func (c *Handler) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatus
 	}
 
 	// Check if we're in v2-only mode (required for cleanup)
-	if !isV2OnlyMode {
+	if !getIsV2OnlyMode() {
 		response.CanCleanup = false
 		response.Reason = "Application must be restarted after migration before cleanup is available"
 		response.ErrorKey = notification.MsgErrCleanupRestartRequired
 		return ctx.JSON(http.StatusOK, response)
+	}
+
+	// The path must be the legacy companion of the database this process
+	// opened. Checked before the schema probe so an unowned file is never opened.
+	if refusal := sqliteLegacyRefusal(mgr, legacyPath); refusal != nil {
+		return writeLegacyRefusal(ctx, response, refusal)
 	}
 
 	// CRITICAL SAFETY CHECK: Ensure target is not a V2 database
@@ -404,7 +459,7 @@ func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusR
 	response.Location = c.CurrentSettings().Output.MySQL.Database
 
 	// Check if we're in v2-only mode (required for cleanup)
-	if !isV2OnlyMode {
+	if !getIsV2OnlyMode() {
 		response.Exists = true // Assume exists for MySQL
 		response.CanCleanup = false
 		response.Reason = "Application must be restarted after migration before cleanup is available"
@@ -443,13 +498,15 @@ func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusR
 // StartLegacyCleanup handles POST /api/v2/system/database/legacy/cleanup
 // Initiates asynchronous legacy database cleanup. For MySQL the tables are
 // resolved first and a refusal answers 400 without starting anything; the
-// background drop resolves again before it drops.
+// background drop resolves again before it drops. The backend and the SQLite
+// target are decided once here, from the v2 manager the process opened, and
+// handed to the background job, which reads no settings.
 func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Starting legacy database cleanup", logger.String("path", path), logger.String("ip", ip))
 
 	// Check if we're in v2-only mode (check before trying to start)
-	if !isV2OnlyMode {
+	if !getIsV2OnlyMode() {
 		return ctx.JSON(http.StatusBadRequest, CleanupActionResponse{
 			Success:  false,
 			Message:  "Cannot cleanup: Application must be restarted after migration",
@@ -457,11 +514,34 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 		})
 	}
 
-	// Resolve the MySQL tables before scheduling anything, so a refusal is a
+	mgr, refusal := c.cleanupManager()
+	if refusal != nil {
+		return ctx.JSON(http.StatusBadRequest, CleanupActionResponse{
+			Success:  false,
+			Message:  refusal.reason,
+			ErrorKey: refusal.errorKey,
+		})
+	}
+
+	// Resolve the target before scheduling anything, so a refusal is a
 	// synchronous answer and leaves the cleanup state idle.
-	usingMySQL := c.isUsingMySQL()
+	usingMySQL := mgr.IsMySQL()
+	var legacyPath string
 	var mysqlSize int64
-	if usingMySQL {
+	if !usingMySQL {
+		legacyPath = c.CurrentSettings().Output.SQLite.Path
+		if refusal := sqliteLegacyRefusal(mgr, legacyPath); refusal != nil {
+			errorKey := refusal.errorKey
+			if errorKey == notification.MsgErrCleanupRestartRequired {
+				errorKey = notification.MsgErrCleanupRestartNeeded
+			}
+			return ctx.JSON(http.StatusBadRequest, CleanupActionResponse{
+				Success:  false,
+				Message:  refusal.reason,
+				ErrorKey: errorKey,
+			})
+		}
+	} else {
 		reqCtx := ctx.Request().Context()
 		db, refusal := c.mysqlCleanupConn(reqCtx)
 		if refusal == nil {
@@ -490,7 +570,7 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 	// Get size before deletion for reporting
 	sizeBytes := mysqlSize
 	if !usingMySQL {
-		sizeBytes = c.getSQLiteLegacySize()
+		sizeBytes = c.getSQLiteLegacySize(legacyPath)
 	}
 
 	// Start async cleanup using WaitGroup for proper lifecycle management
@@ -504,10 +584,10 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 		var err error
 		var remaining []string
 
-		if c.isUsingMySQL() {
+		if usingMySQL {
 			remaining, err = c.cleanupMySQLLegacy(cleanupCtx)
 		} else {
-			err = c.cleanupSQLiteLegacy(cleanupCtx)
+			err = c.cleanupSQLiteLegacy(cleanupCtx, mgr, legacyPath)
 		}
 
 		if err != nil {
@@ -531,8 +611,10 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 	})
 }
 
-// cleanupSQLiteLegacy deletes the legacy SQLite database files.
-func (c *Handler) cleanupSQLiteLegacy(ctx context.Context) error {
+// cleanupSQLiteLegacy deletes the legacy SQLite database files at legacyPath,
+// the path the POST checked. It re-checks that the path is the legacy companion
+// of the database mgr opened and deletes nothing otherwise.
+func (c *Handler) cleanupSQLiteLegacy(ctx context.Context, mgr datastoreV2.Manager, legacyPath string) error {
 	// Check for cancellation before starting
 	select {
 	case <-ctx.Done():
@@ -540,10 +622,14 @@ func (c *Handler) cleanupSQLiteLegacy(ctx context.Context) error {
 	default:
 	}
 
-	legacyPath := c.CurrentSettings().Output.SQLite.Path
-
 	c.LogInfoIfEnabled("Starting SQLite legacy database cleanup",
 		logger.String("path", legacyPath))
+
+	if refusal := sqliteLegacyRefusal(mgr, legacyPath); refusal != nil {
+		c.LogErrorIfEnabled("Safety check failed: target is not the legacy database of the opened database",
+			logger.String("path", legacyPath))
+		return fmt.Errorf("legacy cleanup refused: %s", refusal.reason)
+	}
 
 	// CRITICAL SAFETY CHECK: Ensure we're not deleting a V2 database
 	if datastoreV2.CheckSQLiteHasV2Schema(legacyPath) {
@@ -635,8 +721,7 @@ func (c *Handler) dropMySQLLegacyTables(ctx context.Context, db *gorm.DB, tables
 }
 
 // getSQLiteLegacySize returns the total size of SQLite legacy files.
-func (c *Handler) getSQLiteLegacySize() int64 {
-	legacyPath := c.CurrentSettings().Output.SQLite.Path
+func (c *Handler) getSQLiteLegacySize(legacyPath string) int64 {
 	var totalSize int64
 
 	if info, err := os.Stat(legacyPath); err == nil {
