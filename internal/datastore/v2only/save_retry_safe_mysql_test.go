@@ -107,10 +107,69 @@ func (p *faultProxy) track(c net.Conn) {
 	p.mu.Unlock()
 }
 
-// isCommitPacket reports whether pkt is a COM_QUERY packet carrying COMMIT.
-func isCommitPacket(pkt []byte) bool {
-	return len(pkt) > mysqlPacketHeaderLen+1 && pkt[mysqlPacketHeaderLen] == mysqlComQuery &&
-		strings.EqualFold(strings.TrimSpace(string(pkt[mysqlPacketHeaderLen+1:])), "COMMIT")
+// isCommitPacket reports whether buf holds a COM_QUERY packet carrying COMMIT.
+// The driver can write the close of a prepared statement right before the
+// COMMIT, so one TCP read can hold both packets and the COMMIT may follow
+// another packet; every packet in buf is checked.
+func isCommitPacket(buf []byte) bool {
+	for len(buf) > mysqlPacketHeaderLen {
+		payloadLen := int(buf[0]) | int(buf[1])<<8 | int(buf[2])<<16
+		end := mysqlPacketHeaderLen + payloadLen
+		if end > len(buf) {
+			return false // partial packet at the end of the read
+		}
+		pkt := buf[:end]
+		if payloadLen > 0 && pkt[mysqlPacketHeaderLen] == mysqlComQuery &&
+			strings.EqualFold(strings.TrimSpace(string(pkt[mysqlPacketHeaderLen+1:])), "COMMIT") {
+			return true
+		}
+		buf = buf[end:]
+	}
+	return false
+}
+
+// mysqlTestPacket frames payload as a MySQL packet with sequence id 0.
+func mysqlTestPacket(payload ...byte) []byte {
+	n := len(payload)
+	return append([]byte{byte(n), byte(n >> 8), byte(n >> 16), 0}, payload...)
+}
+
+func TestIsCommitPacket(t *testing.T) {
+	t.Parallel()
+	query := func(sql string) []byte { return mysqlTestPacket(append([]byte{mysqlComQuery}, sql...)...) }
+	stmtClose := mysqlTestPacket(0x19, 1, 0, 0, 0) // COM_STMT_CLOSE
+	cat := func(parts ...[]byte) []byte {
+		var out []byte
+		for _, p := range parts {
+			out = append(out, p...)
+		}
+		return out
+	}
+	partialCommit := query("COMMIT")[:8]
+
+	tests := []struct {
+		name string
+		buf  []byte
+		want bool
+	}{
+		{"commit only", query("COMMIT"), true},
+		{"commit lower case", query("commit"), true},
+		{"commit after statement close", cat(stmtClose, query("COMMIT")), true},
+		{"commit after empty packet", cat(mysqlTestPacket(), query("COMMIT")), true},
+		{"non-commit query", query("SELECT 1"), false},
+		{"statement close only", stmtClose, false},
+		{"empty buffer", nil, false},
+		{"shorter than a header", []byte{1, 0}, false},
+		{"header only", mysqlTestPacket(), false},
+		{"partial commit packet", partialCommit, false},
+		{"close then partial commit", cat(stmtClose, partialCommit), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isCommitPacket(tt.buf))
+		})
+	}
 }
 
 func (p *faultProxy) handle(client net.Conn) {
