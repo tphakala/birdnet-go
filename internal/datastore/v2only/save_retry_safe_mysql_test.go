@@ -33,6 +33,10 @@ const (
 const (
 	// mysqlComQuery is the MySQL protocol command byte of a text statement.
 	mysqlComQuery = 0x03
+	// mysqlComStmtClose is the command byte that closes a prepared statement.
+	mysqlComStmtClose = 0x19
+	// mysqlStmtIDLen is the length of the statement id that follows COM_STMT_CLOSE.
+	mysqlStmtIDLen = 4
 	// mysqlPacketHeaderLen is the length prefix plus sequence id before the command byte.
 	mysqlPacketHeaderLen = 4
 	// proxyReadBufferSize holds one client packet; the statements here are small.
@@ -107,10 +111,77 @@ func (p *faultProxy) track(c net.Conn) {
 	p.mu.Unlock()
 }
 
-// isCommitPacket reports whether pkt is a COM_QUERY packet carrying COMMIT.
-func isCommitPacket(pkt []byte) bool {
-	return len(pkt) > mysqlPacketHeaderLen+1 && pkt[mysqlPacketHeaderLen] == mysqlComQuery &&
-		strings.EqualFold(strings.TrimSpace(string(pkt[mysqlPacketHeaderLen+1:])), "COMMIT")
+// isCommitPacket reports whether buf holds a COM_QUERY packet carrying COMMIT.
+// The driver can write the close of a prepared statement right before the
+// COMMIT, so one TCP read can hold both packets and the COMMIT may follow
+// another packet; every packet in buf is checked.
+func isCommitPacket(buf []byte) bool {
+	for len(buf) > mysqlPacketHeaderLen {
+		payloadLen := int(buf[0]) | int(buf[1])<<8 | int(buf[2])<<16
+		end := mysqlPacketHeaderLen + payloadLen
+		if end > len(buf) {
+			return false // partial packet at the end of the read
+		}
+		pkt := buf[:end]
+		if payloadLen > 0 && pkt[mysqlPacketHeaderLen] == mysqlComQuery &&
+			strings.EqualFold(strings.TrimSpace(string(pkt[mysqlPacketHeaderLen+1:])), "COMMIT") {
+			return true
+		}
+		buf = buf[end:]
+	}
+	return false
+}
+
+// mysqlTestPacket frames payload as a MySQL packet with sequence id 0.
+func mysqlTestPacket(payload ...byte) []byte {
+	n := len(payload)
+	return append([]byte{byte(n), byte(n >> 8), byte(n >> 16), 0}, payload...)
+}
+
+func TestIsCommitPacket(t *testing.T) {
+	t.Parallel()
+	query := func(sql string) []byte { return mysqlTestPacket(append([]byte{mysqlComQuery}, sql...)...) }
+	stmtClose := mysqlTestPacket(append([]byte{mysqlComStmtClose}, make([]byte, mysqlStmtIDLen)...)...)
+	// Payloads past 255 and 65535 bytes need the second and third length bytes.
+	const (
+		twoByteLenPayload   = 300
+		threeByteLenPayload = 70000
+	)
+	longInsert := func(n int) []byte { return query("INSERT " + strings.Repeat("x", n)) }
+	cat := func(parts ...[]byte) []byte {
+		var out []byte
+		for _, p := range parts {
+			out = append(out, p...)
+		}
+		return out
+	}
+	partialCommit := query("COMMIT")[:8]
+
+	tests := []struct {
+		name string
+		buf  []byte
+		want bool
+	}{
+		{"commit only", query("COMMIT"), true},
+		{"commit lower case", query("commit"), true},
+		{"commit after statement close", cat(stmtClose, query("COMMIT")), true},
+		{"commit after a payload needing two length bytes", cat(longInsert(twoByteLenPayload), query("COMMIT")), true},
+		{"commit after a payload needing three length bytes", cat(longInsert(threeByteLenPayload), query("COMMIT")), true},
+		{"commit after empty packet", cat(mysqlTestPacket(), query("COMMIT")), true},
+		{"non-commit query", query("SELECT 1"), false},
+		{"statement close only", stmtClose, false},
+		{"empty buffer", nil, false},
+		{"shorter than a header", []byte{1, 0}, false},
+		{"header only", mysqlTestPacket(), false},
+		{"partial commit packet", partialCommit, false},
+		{"close then partial commit", cat(stmtClose, partialCommit), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tt.want, isCommitPacket(tt.buf))
+		})
+	}
 }
 
 func (p *faultProxy) handle(client net.Conn) {
