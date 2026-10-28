@@ -290,8 +290,11 @@ func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName 
 }
 
 // cleanUpDynamicThresholds removes stale dynamic thresholds for species that haven't been detected for a long time.
-// It prunes the in-memory map only and runs on the flusher tick, so it must not touch the database.
-// Expired database rows are deleted by the cleanup goroutine (startThresholdCleanup).
+// It runs on the flusher tick: the in-memory prune is cheap, and the database delete runs only
+// when the prune removed an entry, so an idle tick never touches the database. That keeps the
+// expired rows that the stats and listing endpoints read from outliving their in-memory entry.
+// Rows without an in-memory entry (feature off, restart) are deleted by the cleanup goroutine
+// (startThresholdCleanup).
 func (p *Processor) cleanUpDynamicThresholds() {
 	settings := p.currentSettings()
 	log := GetLogger()
@@ -325,6 +328,9 @@ func (p *Processor) cleanUpDynamicThresholds() {
 	// Log memory cleanup if any were removed
 	if removedCount > 0 {
 		log.Debug("cleaned up stale dynamic thresholds from memory", logger.Int("count", removedCount))
+		if p.Ds != nil {
+			p.deleteExpiredThresholdsFromDB()
+		}
 	}
 }
 

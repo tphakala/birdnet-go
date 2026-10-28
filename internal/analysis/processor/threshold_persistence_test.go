@@ -968,20 +968,21 @@ func TestConvertThresholdsForPersistence_ZeroTimestampFallback(t *testing.T) {
 	assert.Equal(t, got.FirstCreated, got.LastTriggered, "zero LastTriggered falls back to FirstCreated")
 }
 
-// TestCleanUpDynamicThresholds_PrunesMemoryWithoutDatabase verifies the flusher-tick
-// cleanup prunes only the in-memory map and never issues a database delete (#2256).
-func TestCleanUpDynamicThresholds_PrunesMemoryWithoutDatabase(t *testing.T) {
+// TestCleanUpDynamicThresholds_DeletesFromDatabaseOnlyWhenPruning verifies the
+// flusher-tick cleanup stays off the database while nothing expires, and deletes the
+// expired rows once when it prunes an in-memory entry (#2256).
+func TestCleanUpDynamicThresholds_DeletesFromDatabaseOnlyWhenPruning(t *testing.T) {
 	p := createTestProcessor()
 	mockDs, ok := p.Ds.(*MockDatastore)
 	require.True(t, ok)
-	mockDs.thresholds["expired"] = &datastore.DynamicThreshold{
-		SpeciesName: "expired",
-		ExpiresAt:   time.Now().Add(-time.Hour),
+
+	p.DynamicThresholds["fresh"] = &DynamicThreshold{Timer: time.Now().Add(time.Hour)}
+	for range 5 {
+		p.cleanUpDynamicThresholds()
 	}
+	assert.Zero(t, mockDs.deleteExpiredCalls.Load(), "an idle tick must not touch the database")
 
 	p.DynamicThresholds["stale"] = &DynamicThreshold{Timer: time.Now().AddDate(-10, 0, 0)}
-	p.DynamicThresholds["fresh"] = &DynamicThreshold{Timer: time.Now().Add(time.Hour)}
-
 	for range 5 {
 		p.cleanUpDynamicThresholds()
 	}
@@ -993,7 +994,24 @@ func TestCleanUpDynamicThresholds_PrunesMemoryWithoutDatabase(t *testing.T) {
 
 	assert.False(t, staleKept, "stale in-memory entry should be pruned")
 	assert.True(t, freshKept, "fresh in-memory entry should be kept")
-	assert.Zero(t, mockDs.deleteExpiredCalls.Load(), "the tick must not touch the database")
+	assert.EqualValues(t, 1, mockDs.deleteExpiredCalls.Load(), "pruning an entry deletes the expired rows once")
+}
+
+// TestThresholdCleanup_SkipsStartCleanupWhenAlreadyCancelled verifies a lifecycle that was
+// stopped before the cleanup goroutine ran does not delete anything.
+func TestThresholdCleanup_SkipsStartCleanupWhenAlreadyCancelled(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := createTestProcessor()
+		mockDs, ok := p.Ds.(*MockDatastore)
+		require.True(t, ok)
+
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		p.startThresholdCleanup(ctx)
+		synctest.Wait()
+
+		assert.Zero(t, mockDs.deleteExpiredCalls.Load(), "a cancelled lifecycle must not clean up")
+	})
 }
 
 // TestThresholdCleanup_RunsAtStartThenDailyAndFollowsToggle verifies the database
