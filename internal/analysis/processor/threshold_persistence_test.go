@@ -4,7 +4,9 @@ package processor
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -32,8 +34,10 @@ type MockDatastore struct {
 	deleteAllEventsError         error            // error for DeleteAllThresholdEvents
 	deletedCount                 int64
 	batchSaveCalled              bool
-	deleteExpiredCalled          bool
-	getAllCalled                 bool
+	// deleteExpiredCalls counts DeleteExpiredDynamicThresholds calls; atomic because
+	// the cleanup goroutine calls it while the test goroutine reads it.
+	deleteExpiredCalls atomic.Int64
+	getAllCalled       bool
 	// Call counters to verify both delete paths are invoked even on error
 	deleteDynamicThresholdCalls int
 	deleteThresholdEventsCalls  int
@@ -264,7 +268,7 @@ func (m *MockDatastore) DeleteDynamicThreshold(speciesName string) error {
 }
 
 func (m *MockDatastore) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
-	m.deleteExpiredCalled = true
+	m.deleteExpiredCalls.Add(1)
 	if m.deleteExpiredError != nil {
 		return 0, m.deleteExpiredError
 	}
@@ -962,4 +966,68 @@ func TestConvertThresholdsForPersistence_ZeroTimestampFallback(t *testing.T) {
 	assert.False(t, got.FirstCreated.IsZero(), "zero FirstCreated must fall back to now")
 	assert.WithinDuration(t, time.Now(), got.FirstCreated, 5*time.Second)
 	assert.Equal(t, got.FirstCreated, got.LastTriggered, "zero LastTriggered falls back to FirstCreated")
+}
+
+// TestCleanUpDynamicThresholds_PrunesMemoryWithoutDatabase verifies the flusher-tick
+// cleanup prunes only the in-memory map and never issues a database delete (#2256).
+func TestCleanUpDynamicThresholds_PrunesMemoryWithoutDatabase(t *testing.T) {
+	p := createTestProcessor()
+	mockDs, ok := p.Ds.(*MockDatastore)
+	require.True(t, ok)
+	mockDs.thresholds["expired"] = &datastore.DynamicThreshold{
+		SpeciesName: "expired",
+		ExpiresAt:   time.Now().Add(-time.Hour),
+	}
+
+	p.DynamicThresholds["stale"] = &DynamicThreshold{Timer: time.Now().AddDate(-10, 0, 0)}
+	p.DynamicThresholds["fresh"] = &DynamicThreshold{Timer: time.Now().Add(time.Hour)}
+
+	for range 5 {
+		p.cleanUpDynamicThresholds()
+	}
+
+	p.thresholdsMutex.RLock()
+	_, staleKept := p.DynamicThresholds["stale"]
+	_, freshKept := p.DynamicThresholds["fresh"]
+	p.thresholdsMutex.RUnlock()
+
+	assert.False(t, staleKept, "stale in-memory entry should be pruned")
+	assert.True(t, freshKept, "fresh in-memory entry should be kept")
+	assert.Zero(t, mockDs.deleteExpiredCalls.Load(), "the tick must not touch the database")
+}
+
+// TestThresholdCleanup_RunsAtStartThenDailyAndFollowsToggle verifies the database
+// cleanup runs once when the goroutine starts, then once per DefaultCleanupInterval,
+// and starts and stops with the runtime enable/disable of dynamic thresholds.
+func TestThresholdCleanup_RunsAtStartThenDailyAndFollowsToggle(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := createTestProcessor()
+		mockDs, ok := p.Ds.(*MockDatastore)
+		require.True(t, ok)
+
+		p.StartDynamicThresholds()
+		synctest.Wait()
+		assert.EqualValues(t, 1, mockDs.deleteExpiredCalls.Load(), "cleanup should run once at start")
+
+		time.Sleep(DefaultCleanupInterval - time.Minute)
+		synctest.Wait()
+		assert.EqualValues(t, 1, mockDs.deleteExpiredCalls.Load(), "no cleanup before the interval elapses")
+
+		time.Sleep(2 * time.Minute)
+		synctest.Wait()
+		assert.EqualValues(t, 2, mockDs.deleteExpiredCalls.Load(), "cleanup should run after the interval")
+
+		p.StopDynamicThresholds()
+		synctest.Wait()
+		time.Sleep(DefaultCleanupInterval + time.Minute)
+		synctest.Wait()
+		assert.EqualValues(t, 2, mockDs.deleteExpiredCalls.Load(), "no cleanup while disabled")
+
+		p.StartDynamicThresholds()
+		synctest.Wait()
+		assert.EqualValues(t, 3, mockDs.deleteExpiredCalls.Load(), "re-enable should clean immediately")
+
+		p.StopDynamicThresholds()
+		synctest.Wait()
+	})
 }
