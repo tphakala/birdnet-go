@@ -970,7 +970,7 @@ func TestConvertThresholdsForPersistence_ZeroTimestampFallback(t *testing.T) {
 
 // TestCleanUpDynamicThresholds_DeletesFromDatabaseOnlyWhenPruning verifies the
 // flusher-tick cleanup stays off the database while nothing expires, and deletes the
-// expired rows once when it prunes an in-memory entry (#2256).
+// expired rows once when it prunes an in-memory entry.
 func TestCleanUpDynamicThresholds_DeletesFromDatabaseOnlyWhenPruning(t *testing.T) {
 	p := createTestProcessor()
 	mockDs, ok := p.Ds.(*MockDatastore)
@@ -999,7 +999,7 @@ func TestCleanUpDynamicThresholds_DeletesFromDatabaseOnlyWhenPruning(t *testing.
 
 // TestPersistDynamicThresholds_DeletesExpiredRowsOnlyWhenDroppingAnEntry verifies the
 // persistence tick deletes the expired rows once when it drops an expired entry from
-// memory, and stays off the delete path while nothing expires (#2256).
+// memory, and stays off the delete path while nothing expires.
 func TestPersistDynamicThresholds_DeletesExpiredRowsOnlyWhenDroppingAnEntry(t *testing.T) {
 	p := createTestProcessor()
 	mockDs, ok := p.Ds.(*MockDatastore)

@@ -192,7 +192,7 @@ func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (db
 
 // cleanupExpiredThresholds removes expired thresholds from memory and, when the
 // datastore is set, deletes the expired rows from the database so a row does not
-// outlive its in-memory entry until the next scheduled cleanup (#2256). The database
+// outlive its in-memory entry until the next scheduled cleanup. The database
 // call runs after thresholdsMutex is released, and only when an entry was removed.
 func (p *Processor) cleanupExpiredThresholds(expiredSpecies []string) {
 	if len(expiredSpecies) == 0 {
