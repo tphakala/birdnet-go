@@ -149,7 +149,8 @@ var errDetectionSaveInFlight = errors.NewStd("detection save still running from 
 // The queue may call it again for the same detection while saveStatePending holds
 // (see retryPending). The event-tracker and new-species decisions are taken on the
 // first call and reused, so a retry is neither rate limited into a no-op nor sees
-// the species as already known. Only one attempt runs a save at a time: an attempt
+// the species as already known. That holds when the first call panicked in the
+// new-species update. Only one attempt runs a save at a time: an attempt
 // that cannot get the slot before ctx ends returns errDetectionSaveInFlight.
 // A save that panics is not repeated, and neither is one whose follow-up steps
 // panic after the row is stored. A detection the event tracker skips is not saved:
@@ -174,6 +175,10 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 	}
 
 	if !a.gated {
+		// Set before the tracker calls: they update shared state, so a retry after a
+		// panic in them must not ask them again, or the event tracker would rate
+		// limit the retry into a skip and the detection would never be saved.
+		a.gated = true
 		// Check event frequency (supports scientific name lookup)
 		if !a.EventTracker.TrackEventWithNames(a.Result.Species.CommonName, a.Result.Species.ScientificName, DatabaseSave) {
 			a.saveState.Store(saveStateSkipped)
@@ -185,7 +190,6 @@ func (a *DatabaseAction) ExecuteContext(ctx context.Context, _ any) error {
 			// when multiple detections of the same species arrive concurrently
 			a.isNewSpecies, a.daysSinceFirstSeen, a.novelty = a.NewSpeciesTracker.CheckAndUpdateSpeciesWithNovelty(a.Result.Species.ScientificName, a.Result.BeginTime)
 		}
-		a.gated = true
 	}
 
 	if err := a.saveGuarded(ctx); err != nil {
