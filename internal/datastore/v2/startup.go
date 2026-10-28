@@ -121,6 +121,9 @@ const (
 	// DecisionMixedSchemaKeptLegacy: legacy tables hold data and the bare v2 detection tables
 	// are empty. Startup kept the legacy database and dropped the empty bare v2 detection tables.
 	DecisionMixedSchemaKeptLegacy = "mixed_schema_kept_legacy"
+	// DecisionStateUnknown: the startup check could not read the database state (the
+	// server could not be reached). No mode was chosen.
+	DecisionStateUnknown = "state_unknown"
 	// DecisionMigrationPrefix prefixes a migration-state decision, e.g. "migration_completed".
 	DecisionMigrationPrefix = "migration_"
 )
@@ -147,6 +150,11 @@ var (
 	// a database could not be opened or a probe failed. Callers must not consolidate or
 	// start in v2-only mode on it (errors.Is).
 	ErrLegacyTailUnverified = errors.NewStd("could not verify the legacy records beyond the migration watermark")
+	// ErrStartupStateUnknown indicates the startup check could not read the database state:
+	// the server could not be reached, or a probe the decision needs failed. Callers must
+	// not choose a mode or a table prefix on it (errors.Is). A cause that
+	// errors.IsConnectivityError recognises may heal, so callers may retry the read.
+	ErrStartupStateUnknown = errors.NewStd("database state at startup could not be read")
 )
 
 // StartupState represents the result of checking migration state at startup.
@@ -174,6 +182,8 @@ type StartupState struct {
 //   - StartupState with MigrationStatus=COMPLETED, LegacyRequired=false if migration is done
 //   - StartupState with LegacyRequired=true if legacy database is still needed
 //   - StartupState with Error set if v2 database check fails
+//   - StartupState with Decision=DecisionStateUnknown and Error wrapping ErrStartupStateUnknown
+//     if the MySQL/MariaDB server could not be reached; no mode may be chosen on it
 func CheckMigrationStateBeforeStartup(settings *conf.Settings) StartupState {
 	if settings.Output.MySQL.Enabled {
 		return checkMySQLMigrationState(settings)
@@ -453,6 +463,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, tailStepOpenMySQL, err))
+		}
 		reportStartupError("mysql", "openDatabase", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -481,6 +494,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'notes'",
 		settings.Output.MySQL.Database).Scan(&legacyCount).Error
 	if err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, tailStepLegacyTable, err))
+		}
 		reportStartupError("mysql", "checkLegacyTables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -500,6 +516,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?)",
 		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationCount).Error
 	if err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, stateStepV2MarkerTable, err))
+		}
 		reportStartupError("mysql", "checkV2Tables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -516,6 +535,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	err = db.Raw("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = ? AND table_name = 'detections'",
 		settings.Output.MySQL.Database).Scan(&freshV2Count).Error
 	if err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, stateStepBareDetections, err))
+		}
 		reportStartupError("mysql", "checkFreshV2Tables", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -574,6 +596,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	var v2MigrationTableName string
 	err = db.Raw("SELECT table_name FROM information_schema.tables WHERE table_schema = ? AND table_name IN (?, ?) LIMIT 1",
 		settings.Output.MySQL.Database, tableNameNew, tableNameOld).Scan(&v2MigrationTableName).Error
+	if errors.IsConnectivityError(err) {
+		return unknownStartupState(mysqlStateUnknown(settings, stateStepResolveMarker, err))
+	}
 	if err != nil || v2MigrationTableName == "" {
 		reportErr, stateErr := migrationTableResolveErrors(err)
 		reportStartupError("mysql", "resolveV2TableName", reportErr, mysqlHost, mysqlDB, mysqlUser)
@@ -587,6 +612,9 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	}
 	var state entities.MigrationState
 	if err := db.Table(v2MigrationTableName).First(&state).Error; err != nil {
+		if errors.IsConnectivityError(err) {
+			return unknownStartupState(mysqlStateUnknown(settings, tailStepReadState, err))
+		}
 		reportStartupError("mysql", "readMigrationState", err, mysqlHost, mysqlDB, mysqlUser)
 		return StartupState{
 			MigrationStatus: entities.MigrationStatusIdle,
@@ -658,6 +686,16 @@ const (
 	tailStepMySQLHandle    = "get MySQL database handle"
 )
 
+// Steps of the MySQL state check and the bare schema probe, named in ErrStartupStateUnknown
+// wraps. Fixed strings, so an error never carries a host, database or user name.
+const (
+	stateStepV2MarkerTable  = "look up v2_ migration state table"
+	stateStepBareDetections = "look up bare detections table"
+	stateStepResolveMarker  = "resolve migration state table"
+	stateStepListTables     = "list tables"
+	stateStepBareSchema     = "check bare v2 schema"
+)
+
 // tailUnverified wraps cause as an ErrLegacyTailUnverified for the named step.
 func tailUnverified(step string, cause error) error {
 	return fmt.Errorf("%w: %s: %w", ErrLegacyTailUnverified, step, cause)
@@ -667,12 +705,31 @@ func tailUnverified(step string, cause error) error {
 // its chain so the connectivity policy classifies it. Any other cause is flattened to a
 // scrubbed message: server errors can name the user and the database.
 func mysqlTailUnverified(settings *conf.Settings, step string, cause error) error {
+	return mysqlStartupError(settings, ErrLegacyTailUnverified, step, cause)
+}
+
+// mysqlStateUnknown wraps a MySQL cause as an ErrStartupStateUnknown for the named step,
+// with the same chain rules as mysqlTailUnverified.
+func mysqlStateUnknown(settings *conf.Settings, step string, cause error) error {
+	return mysqlStartupError(settings, ErrStartupStateUnknown, step, cause)
+}
+
+// mysqlStartupError wraps a MySQL cause under sentinel for the named step. A connectivity
+// failure keeps its chain so the connectivity policy classifies it. Any other cause is
+// flattened to a scrubbed message: server errors can name the user and the database.
+func mysqlStartupError(settings *conf.Settings, sentinel error, step string, cause error) error {
 	if errors.IsConnectivityError(cause) {
-		return tailUnverified(step, cause)
+		return fmt.Errorf("%w: %s: %w", sentinel, step, cause)
 	}
 	cfg := settings.Output.MySQL
 	scrubbed := scrubErrorWithPaths(cause.Error(), cfg.Host, cfg.Database, cfg.Username)
-	return fmt.Errorf("%w: %s: %s", ErrLegacyTailUnverified, step, scrubbed)
+	return fmt.Errorf("%w: %s: %s", sentinel, step, scrubbed)
+}
+
+// unknownStartupState is the StartupState for a read that could not tell. Every flag is
+// false, so a caller that ignores the error cannot land in v2-only or fresh-install mode.
+func unknownStartupState(err error) StartupState {
+	return StartupState{Decision: DecisionStateUnknown, Error: err}
 }
 
 // openReadOnlySQLite opens the SQLite database at path read-only and returns the handle
@@ -1161,23 +1218,41 @@ func CheckSQLiteHasV2Schema(dbPath string) bool {
 // marker left by a backend switch (e.g. SQLite -> MySQL) or a partial/aborted init
 // from wedging the app in enhanced mode against a missing `detections` table
 // (GitHub #3575).
-func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
+//
+// An error (always an ErrStartupStateUnknown) means the probe could not tell, for
+// example because the server could not be reached; the bool must not be read then, and
+// the caller must not choose a table prefix on it. A false answer is returned only
+// with a nil error.
+func CheckMySQLHasFreshV2Schema(settings *conf.Settings) (bool, error) {
 	dsn := buildMySQLStartupDSN(settings)
 
 	db, err := gorm.Open(gormmysql.Open(dsn), &gorm.Config{
 		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
-		return false
+		return false, mysqlStateUnknown(settings, tailStepOpenMySQL, err)
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		return false
+		return false, mysqlStateUnknown(settings, tailStepMySQLHandle, err)
 	}
 	defer func() { _ = sqlDB.Close() }()
 
-	return hasCompleteFreshV2Schema(db)
+	// List with listTableNames, not GORM's Migrator: HasTable swallows the query error and
+	// reads it as "no table", and GetTables discards the error of its CurrentDatabase
+	// query on MySQL, so a failed lookup could read as an empty database. Base tables
+	// only, the scope of GORM's MySQL HasTable.
+	existing, err := listTableNames(db, settings.Output.MySQL.Database, true)
+	if err != nil {
+		return false, mysqlStateUnknown(settings, stateStepListTables, err)
+	}
+
+	fresh, err := hasCompleteFreshV2Schema(db, existing)
+	if err != nil {
+		return false, mysqlStateUnknown(settings, stateStepBareSchema, err)
+	}
+	return fresh, nil
 }
 
 // hasCompleteFreshV2Schema is the dialect-agnostic core behind CheckMySQLHasFreshV2Schema.
@@ -1186,29 +1261,35 @@ func CheckMySQLHasFreshV2Schema(settings *conf.Settings) bool {
 // migration_state) row with state == COMPLETED AND a physical no-prefix `detections`
 // data table.
 //
-// It uses GORM's migrator for table existence so the same code path can be unit-tested
-// against SQLite (in CI, where MySQL is unavailable) while production calls it for MySQL.
-func hasCompleteFreshV2Schema(db *gorm.DB) bool {
+// existing is the set of lower-cased table names of the database, listed by the caller
+// with a probe that reports its errors. A false answer is definite only with a nil error;
+// any failed read returns an error, because "could not read" must not be taken for "not
+// a fresh schema" (that picks the v2_ prefix over a bare install).
+func hasCompleteFreshV2Schema(db *gorm.DB, existing map[string]struct{}) (bool, error) {
 	// Resolve the migration-state table name. Plural is current; the singular
 	// "migration_state" predates PR #2165 (which removed TableName() overrides).
 	migrationTable := ""
 	for _, name := range []string{"migration_states", "migration_state"} {
-		if db.Migrator().HasTable(name) {
+		if _, ok := existing[name]; ok {
 			migrationTable = name
 			break
 		}
 	}
 	if migrationTable == "" {
-		return false
+		return false, nil
 	}
 
-	// The migration must be marked COMPLETED.
+	// The migration must be marked COMPLETED. A table without its singleton row is a
+	// definite "not completed"; any other read error is unknown.
 	var state entities.MigrationState
 	if err := db.Table(migrationTable).First(&state).Error; err != nil {
-		return false
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read migration state: %w", err)
 	}
 	if state.State != entities.MigrationStatusCompleted {
-		return false
+		return false, nil
 	}
 
 	// A COMPLETED marker alone is NOT sufficient evidence of a usable fresh v2 schema:
@@ -1226,11 +1307,17 @@ func hasCompleteFreshV2Schema(db *gorm.DB) bool {
 	// legacy table is harmless residue that a fully migrated v2 database can still carry and
 	// must NOT disqualify the schema; keying on table existence alone (as PR #3926 first did)
 	// wrongly forced healthy v2 databases into legacy mode. Mirror the same row-based guard
-	// used by CheckSQLiteHasV2Schema, failing closed on a row-count probe error.
-	if hasLegacyData, err := legacyDataPresent(db); err != nil || hasLegacyData {
-		return false
+	// used by CheckSQLiteHasV2Schema. A row-count probe error is returned, not read as a
+	// verdict either way.
+	hasLegacyData, err := legacyRowsPresent(db, existing)
+	if err != nil {
+		return false, fmt.Errorf("check legacy data tables: %w", err)
 	}
-	return db.Migrator().HasTable("detections")
+	if hasLegacyData {
+		return false, nil
+	}
+	_, hasDetections := existing["detections"]
+	return hasDetections, nil
 }
 
 // legacyDataTables lists the v1 data tables. After a completed in-place migration these tables
@@ -1270,9 +1357,14 @@ func legacyDataPresent(db *gorm.DB) (bool, error) {
 	}
 	existing := make(map[string]struct{}, len(tables))
 	for _, t := range tables {
-		existing[t] = struct{}{}
+		existing[strings.ToLower(t)] = struct{}{}
 	}
+	return legacyRowsPresent(db, existing)
+}
 
+// legacyRowsPresent reports whether any legacy data table listed in existing (lower-cased
+// table names) holds at least one row. The bool is meaningful only when the error is nil.
+func legacyRowsPresent(db *gorm.DB, existing map[string]struct{}) (bool, error) {
 	for _, name := range legacyDataTables {
 		if _, ok := existing[name]; !ok {
 			continue

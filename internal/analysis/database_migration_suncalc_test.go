@@ -52,7 +52,7 @@ func TestInitializeV2OnlyMode_ComputesDawnChorusOnset(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, fresh.Close())
 
-	ds, err := initializeV2OnlyMode(settings)
+	ds, err := initializeV2OnlyMode(settings, false)
 	require.NoError(t, err)
 	defer func() { _ = ds.Close() }()
 
