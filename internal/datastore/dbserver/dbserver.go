@@ -345,8 +345,8 @@ func (r CharsetReport) AllUTF8MB4() bool {
 
 // EveryTableUTF8MB4 reports that the schema has at least one table with text
 // columns and every such table is utf8mb4, whatever the schema default is. The
-// schema default then only affects tables created later without an explicit
-// character set.
+// check covers existing character columns only; the schema default can still
+// be inherited by tables created later without an explicit character set.
 func (r CharsetReport) EveryTableUTF8MB4() bool {
 	return len(r.Tables) > 0 && len(r.NonUTF8MB4Tables()) == 0
 }

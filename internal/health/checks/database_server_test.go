@@ -81,7 +81,7 @@ func TestDatabaseCharsetCheck_Status(t *testing.T) {
 			SchemaCharset: "latin1", Tables: []dbserver.TableCharsets{
 				{Name: "a", Charsets: []string{"utf8mb4"}}, {Name: "b", Charsets: []string{"utf8mb4"}},
 			},
-		}), health.StatusHealthy, []string{"All tables use utf8mb4", "latin1"}, "rejected"},
+		}), health.StatusHealthy, []string{"All existing character columns use utf8mb4", "latin1"}, "rejected"},
 		{"latin1 schema with 12 tables", charsetProbe(dbserver.CharsetReport{
 			SchemaCharset: "latin1", Tables: manyTables,
 		}), health.StatusWarning, []string{"latin1", "12 table(s)", "t09", "and 2 more"}, "t10"},

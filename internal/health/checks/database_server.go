@@ -20,9 +20,9 @@ const (
 	databaseServerNotApplicable = "Not applicable: the database is not MySQL or MariaDB"
 	// maxNamedCharsetTables bounds how many tables the charset message names.
 	maxNamedCharsetTables = 10
-	// databaseCharsetTablesOKFormat is the message when every table is utf8mb4
-	// but the database default is not; the argument is the default.
-	databaseCharsetTablesOKFormat = "All tables use utf8mb4. The database default character set is %s; it applies only to tables created without an explicit character set."
+	// databaseCharsetTablesOKFormat is the message when every character column is
+	// utf8mb4 but the database default is not; the argument is the default.
+	databaseCharsetTablesOKFormat = "All existing character columns use utf8mb4. The database default character set is %s; new tables created without an explicit character set may inherit it."
 	// eolDateLayout formats the end-of-life date in messages.
 	eolDateLayout = time.DateOnly
 )
