@@ -23,13 +23,21 @@ import (
 // for deterministic date bucketing) and registers container/datastore cleanup.
 func setupMySQLDatastore(t *testing.T) *Datastore {
 	t.Helper()
-	return setupMySQLDatastoreInServerZone(t, "")
+	return setupMySQLDatastoreWith(t, mysqlDatastoreOptions{})
 }
 
-// setupMySQLDatastoreInServerZone is setupMySQLDatastore with the server's
-// global time_zone set to serverZone (for example "+05:45") before the
-// connection pool opens. An empty serverZone keeps the server default.
-func setupMySQLDatastoreInServerZone(t *testing.T, serverZone string) *Datastore {
+// mysqlDatastoreOptions tunes setupMySQLDatastoreWith.
+type mysqlDatastoreOptions struct {
+	// serverZone sets the server's global time_zone (for example "+05:45")
+	// before the connection pool opens. Empty keeps the server default.
+	serverZone string
+	// useV2Prefix creates the schema with the v2_ table prefix, as on a MySQL
+	// install migrated from the legacy schema.
+	useV2Prefix bool
+}
+
+// setupMySQLDatastoreWith is setupMySQLDatastore with the options applied.
+func setupMySQLDatastoreWith(t *testing.T, opts mysqlDatastoreOptions) *Datastore {
 	t.Helper()
 	containers.SkipIfContainerRuntimeUnavailable(t)
 
@@ -57,8 +65,8 @@ func setupMySQLDatastoreInServerZone(t *testing.T, serverZone string) *Datastore
 	port, err := container.GetPort(ctx)
 	require.NoError(t, err)
 
-	if serverZone != "" {
-		setMySQLGlobalTimeZone(t, host, port, cfg.Password, serverZone)
+	if opts.serverZone != "" {
+		setMySQLGlobalTimeZone(t, host, port, cfg.Password, opts.serverZone)
 	}
 
 	testLogger := logger.NewConsoleLogger("v2only_mysql_test", logger.LogLevelDebug)
@@ -69,6 +77,8 @@ func setupMySQLDatastoreInServerZone(t *testing.T, serverZone string) *Datastore
 		Password: cfg.Password,
 		Database: cfg.Database,
 		Logger:   testLogger,
+
+		UseV2Prefix: opts.useV2Prefix,
 	})
 	require.NoError(t, err, "failed to create MySQL manager")
 	require.NoError(t, manager.Initialize(), "failed to initialize MySQL schema")

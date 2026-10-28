@@ -59,11 +59,15 @@ func buildConfigForManager(t *testing.T, manager v2.Manager, testLogger logger.L
 
 	db := manager.DB()
 
+	// A prefixed manager (a MySQL install migrated from legacy) needs prefixed
+	// repositories, or they would address tables that do not exist.
+	useV2Prefix := manager.TablePrefix() != ""
+
 	// Create lookup table entries for tests
 	// The LabelType and TaxonomicClass tables should be created by Initialize()
-	labelTypeRepo := repository.NewLabelTypeRepository(db, nil, false)
-	taxClassRepo := repository.NewTaxonomicClassRepository(db, nil, false)
-	modelRepo := repository.NewModelRepository(db, nil, false, isMySQL)
+	labelTypeRepo := repository.NewLabelTypeRepository(db, nil, useV2Prefix)
+	taxClassRepo := repository.NewTaxonomicClassRepository(db, nil, useV2Prefix)
+	modelRepo := repository.NewModelRepository(db, nil, useV2Prefix, isMySQL)
 
 	ctx := t.Context()
 
@@ -81,15 +85,15 @@ func buildConfigForManager(t *testing.T, manager v2.Manager, testLogger logger.L
 
 	avesClassID := avesClass.ID
 
-	// Create repositories. useV2Prefix=false (fresh install / clean table names);
+	// Create repositories. useV2Prefix follows the manager's table prefix;
 	// isMySQL selects the dialect-specific SQL the repositories generate.
-	detectionRepo := repository.NewDetectionRepository(db, nil, false, isMySQL)
-	labelRepo := repository.NewLabelRepository(db, nil, false, isMySQL)
-	sourceRepo := repository.NewAudioSourceRepository(db, nil, false, isMySQL)
-	weatherRepo := repository.NewWeatherRepository(db, nil, false, isMySQL)
-	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, false, isMySQL)
-	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, false, isMySQL)
-	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, false, isMySQL)
+	detectionRepo := repository.NewDetectionRepository(db, nil, useV2Prefix, isMySQL)
+	labelRepo := repository.NewLabelRepository(db, nil, useV2Prefix, isMySQL)
+	sourceRepo := repository.NewAudioSourceRepository(db, nil, useV2Prefix, isMySQL)
+	weatherRepo := repository.NewWeatherRepository(db, nil, useV2Prefix, isMySQL)
+	imageCacheRepo := repository.NewImageCacheRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
+	thresholdRepo := repository.NewDynamicThresholdRepository(db, nil, useV2Prefix, isMySQL)
+	notificationRepo := repository.NewNotificationHistoryRepository(db, nil, labelRepo, useV2Prefix, isMySQL)
 
 	return &Config{
 		Manager:            manager,
