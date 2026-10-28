@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -157,6 +158,85 @@ func TestMySQLServerChecks_TargetUnavailable(t *testing.T) {
 			assert.Equal(t, CheckSeverityCritical, check.Severity)
 		})
 	}
+}
+
+func TestMySQLServerChecks_UnusableTarget(t *testing.T) {
+	tests := []struct {
+		name    string
+		manager *fakeV2Manager
+	}{
+		{name: "non-MySQL manager", manager: &fakeV2Manager{tablePrefix: "v2_"}},
+		{name: "MySQL manager without a connection", manager: &fakeV2Manager{tablePrefix: "v2_", isMySQL: true}},
+	}
+	for _, tt := range tests {
+		for id, run := range map[string]func(*Handler) PrerequisiteCheck{
+			"mysql_server_version": (*Handler).checkMySQLServerVersion,
+			"mysql_charset":        (*Handler).checkMySQLCharset,
+		} {
+			t.Run(tt.name+" "+id, func(t *testing.T) {
+				_, controller, _ := setupPrerequisitesTestEnvironment(t)
+				useMySQLSettings(t, controller)
+				controller.V2Manager = tt.manager
+				check := run(controller)
+				assert.Equal(t, CheckStatusError, check.Status, check.Message)
+				assert.Equal(t, errMsgMigrationTargetUnavailable, check.Message)
+			})
+		}
+	}
+
+	t.Run("empty table prefix cannot tell target from legacy tables", func(t *testing.T) {
+		_, controller, _ := setupPrerequisitesTestEnvironment(t)
+		useMySQLSettings(t, controller)
+		controller.V2Manager = &fakeV2Manager{isMySQL: true}
+		controller.charsetReportFn = func(context.Context) (dbserver.CharsetReport, error) {
+			return dbserver.CharsetReport{SchemaCharset: dbserver.CharsetUTF8MB4}, nil
+		}
+		check := controller.checkMySQLCharset()
+		assert.Equal(t, CheckStatusError, check.Status, check.Message)
+		assert.Equal(t, errMsgMigrationTargetAmbiguous, check.Message)
+	})
+}
+
+func TestCheckMySQLServerVersion_ReadFailureBlocks(t *testing.T) {
+	_, controller, _ := setupPrerequisitesTestEnvironment(t)
+	useMySQLSettings(t, controller)
+	controller.V2Manager = &fakeV2Manager{tablePrefix: "v2_", isMySQL: true}
+	controller.serverVersionFn = func(context.Context) (string, error) { return "", errors.NewStd("connection refused") }
+
+	check := controller.checkMySQLServerVersion()
+
+	assert.Equal(t, CheckStatusError, check.Status, check.Message)
+	assert.Contains(t, check.Message, "connection refused")
+}
+
+// TestRunCriticalPrerequisiteChecks_ServerChecks pins that the server checks
+// gate through the shared critical list, MySQL only, version check first.
+func TestRunCriticalPrerequisiteChecks_ServerChecks(t *testing.T) {
+	ids := func(checks []PrerequisiteCheck) []string {
+		out := make([]string, 0, len(checks))
+		for i := range checks {
+			out = append(out, checks[i].ID)
+		}
+		return out
+	}
+
+	t.Run("mysql runs the version check before the charset check", func(t *testing.T) {
+		_, controller, _ := setupPrerequisitesTestEnvironment(t)
+		useMySQLSettings(t, controller)
+		got := ids(controller.runCriticalPrerequisiteChecks())
+		version, charset := slices.Index(got, "mysql_server_version"), slices.Index(got, "mysql_charset")
+		health := slices.Index(got, "mysql_table_health")
+		require.GreaterOrEqual(t, version, 0, got)
+		assert.Less(t, version, charset, got)
+		assert.Less(t, charset, health, got)
+	})
+
+	t.Run("sqlite runs neither", func(t *testing.T) {
+		_, controller, _ := setupPrerequisitesTestEnvironment(t)
+		got := ids(controller.runCriticalPrerequisiteChecks())
+		assert.NotContains(t, got, "mysql_server_version")
+		assert.NotContains(t, got, "mysql_charset")
+	})
 }
 
 func TestStartMigration_BlocksEndOfLifeServer(t *testing.T) {
