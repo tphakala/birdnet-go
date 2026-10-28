@@ -997,6 +997,40 @@ func TestCleanUpDynamicThresholds_DeletesFromDatabaseOnlyWhenPruning(t *testing.
 	assert.EqualValues(t, 1, mockDs.deleteExpiredCalls.Load(), "pruning an entry deletes the expired rows once")
 }
 
+// TestPersistDynamicThresholds_DeletesExpiredRowsOnlyWhenDroppingAnEntry verifies the
+// persistence tick deletes the expired rows once when it drops an expired entry from
+// memory, and stays off the delete path while nothing expires (#2256).
+func TestPersistDynamicThresholds_DeletesExpiredRowsOnlyWhenDroppingAnEntry(t *testing.T) {
+	p := createTestProcessor()
+	mockDs, ok := p.Ds.(*MockDatastore)
+	require.True(t, ok)
+
+	p.DynamicThresholds["fresh"] = &DynamicThreshold{
+		Level: 1, BaseThreshold: 0.7, Timer: time.Now().Add(time.Hour), ValidHours: 24,
+	}
+	for range 5 {
+		require.NoError(t, p.persistDynamicThresholds(t.Context()))
+	}
+	assert.Zero(t, mockDs.deleteExpiredCalls.Load(), "an idle persistence tick must not delete")
+
+	// Expired by ExpiresAt but not yet stale for the flusher prune.
+	p.DynamicThresholds["expired"] = &DynamicThreshold{
+		Level: 1, BaseThreshold: 0.7, Timer: time.Now().Add(-time.Minute), ValidHours: 24,
+	}
+	for range 5 {
+		require.NoError(t, p.persistDynamicThresholds(t.Context()))
+	}
+
+	p.thresholdsMutex.RLock()
+	_, expiredKept := p.DynamicThresholds["expired"]
+	_, freshKept := p.DynamicThresholds["fresh"]
+	p.thresholdsMutex.RUnlock()
+
+	assert.False(t, expiredKept, "expired entry should be dropped from memory")
+	assert.True(t, freshKept, "fresh entry should be kept")
+	assert.EqualValues(t, 1, mockDs.deleteExpiredCalls.Load(), "dropping an entry deletes the expired rows once")
+}
+
 // TestThresholdCleanup_SkipsStartCleanupWhenAlreadyCancelled verifies a lifecycle that was
 // stopped before the cleanup goroutine ran does not delete anything.
 func TestThresholdCleanup_SkipsStartCleanupWhenAlreadyCancelled(t *testing.T) {

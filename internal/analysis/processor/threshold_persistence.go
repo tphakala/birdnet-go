@@ -190,7 +190,10 @@ func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (db
 	return dbThresholds, expiredSpecies
 }
 
-// cleanupExpiredThresholds removes expired thresholds from memory.
+// cleanupExpiredThresholds removes expired thresholds from memory and, when the
+// datastore is set, deletes the expired rows from the database so a row does not
+// outlive its in-memory entry until the next scheduled cleanup (#2256). The database
+// call runs after thresholdsMutex is released, and only when an entry was removed.
 func (p *Processor) cleanupExpiredThresholds(expiredSpecies []string) {
 	if len(expiredSpecies) == 0 {
 		return
@@ -205,6 +208,10 @@ func (p *Processor) cleanupExpiredThresholds(expiredSpecies []string) {
 	GetLogger().Info("Cleaned expired thresholds from memory",
 		logger.Int("count", len(expiredSpecies)),
 		logger.String("operation", "persist_dynamic_thresholds"))
+
+	if p.Ds != nil {
+		p.deleteExpiredThresholdsFromDB()
+	}
 }
 
 // saveThresholdsWithRetry attempts to save thresholds with exponential backoff.
@@ -258,6 +265,7 @@ func (p *Processor) saveThresholdsWithRetry(ctx context.Context, dbThresholds []
 }
 
 // persistDynamicThresholds saves all current dynamic thresholds to the database
+// and drops expired ones from memory and the database (see cleanupExpiredThresholds).
 // This is called periodically by the persistence goroutine. The ctx governs the
 // retry-backoff abort and is supplied by the caller (the persistence goroutine's
 // lifecycle context, or a snapshot taken under thresholdsMutex by Stop/Flush).
@@ -419,8 +427,9 @@ func (p *Processor) startThresholdPersistence(ctx context.Context) {
 }
 
 // deleteExpiredThresholdsFromDB deletes expired dynamic threshold rows from the database
-// and logs the outcome. It is called from the cleanup goroutine and, when the in-memory
-// prune removed an entry, from the flusher tick; it must not run on every tick.
+// and logs the outcome. It is called from the cleanup goroutine and, when an in-memory
+// prune removed an entry, from the flusher tick (cleanUpDynamicThresholds) and the
+// persistence tick (cleanupExpiredThresholds); it must not run on every tick.
 func (p *Processor) deleteExpiredThresholdsFromDB() {
 	deleted, err := p.Ds.DeleteExpiredDynamicThresholds(time.Now())
 	if err != nil {
