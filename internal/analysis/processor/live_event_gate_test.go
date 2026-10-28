@@ -151,3 +151,26 @@ func TestDefaultActions_LiveEventsCarryTheStoredDetection(t *testing.T) {
 		})
 	}
 }
+
+// TestDefaultActions_SSEAndMQTTWithoutDatabaseKeepTheirOwnLimiters verifies that
+// without a database, SSE and MQTT still rate limit per species: the database
+// composite is the only place that bypasses their limiters.
+func TestDefaultActions_SSEAndMQTTWithoutDatabaseKeepTheirOwnLimiters(t *testing.T) {
+	t.Parallel()
+
+	p, _, mqttClient, sseCalls, settings := newMQTTPipelineProcessor(t, false)
+	for range 2 {
+		det := testDetection()
+		for _, action := range p.getDefaultActions(&det, settings) {
+			switch action.(type) {
+			case *SSEAction, *MqttAction:
+				// The first MQTT publish fails by design of the helper; only the
+				// number of attempts matters here.
+				_ = action.Execute(t.Context(), nil)
+			}
+		}
+	}
+
+	assert.EqualValues(t, 1, sseCalls.Load(), "the second detection inside the interval is suppressed")
+	assert.Equal(t, 1, mqttClient.GetPublishCalls(), "the second detection inside the interval is suppressed")
+}

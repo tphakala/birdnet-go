@@ -149,8 +149,9 @@ var errDetectionSaveInFlight = errors.NewStd("detection save still running from 
 // The queue may call it again for the same detection while saveStatePending holds
 // (see retryPending). The event-tracker and new-species decisions are taken on the
 // first call and reused, so a retry is neither rate limited into a no-op nor sees
-// the species as already known. That holds when the first call panicked in the
-// new-species update. Only one attempt runs a save at a time: an attempt
+// the species as already known. A panic in the new-species update does not undo
+// the event-tracker decision: the retry saves the detection, but without the
+// new-species result. Only one attempt runs a save at a time: an attempt
 // that cannot get the slot before ctx ends returns errDetectionSaveInFlight.
 // A save that panics is not repeated, and neither is one whose follow-up steps
 // panic after the row is stored. A detection the event tracker skips is not saved:

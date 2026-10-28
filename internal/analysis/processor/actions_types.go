@@ -147,7 +147,7 @@ type DatabaseAction struct {
 	// Retry state. The zero value is ready to use; see ExecuteContext.
 	saveSlotOnce sync.Once
 	saveSlot     chan struct{} // one-slot semaphore: only one save attempt runs at a time
-	saveState    atomic.Int32  // saveStatePending, saveStateDone or saveStateTerminal
+	saveState    atomic.Int32  // saveStatePending, saveStateDone, saveStateTerminal or saveStateSkipped
 	attempts     atomic.Int32  // ExecuteContext calls, one per job attempt
 	maxAttempts  atomic.Int32  // job attempts allowed; 0 means retries are not configured
 	windowEnded  atomic.Bool   // the last job attempt ended while a save was still in flight
