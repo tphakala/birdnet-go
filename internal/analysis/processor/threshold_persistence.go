@@ -16,6 +16,7 @@ const (
 	DefaultPersistInterval = 30 * time.Second
 
 	// DefaultCleanupInterval is the default interval for cleaning up expired dynamic thresholds
+	// (a cleanup also runs once when the cleanup goroutine starts)
 	DefaultCleanupInterval = 24 * time.Hour
 
 	// DefaultFlushTimeout is the default timeout for flushing dynamic thresholds during shutdown
@@ -189,7 +190,10 @@ func (p *Processor) convertThresholdsForPersistence(settings *conf.Settings) (db
 	return dbThresholds, expiredSpecies
 }
 
-// cleanupExpiredThresholds removes expired thresholds from memory.
+// cleanupExpiredThresholds removes expired thresholds from memory and, when the
+// datastore is set, deletes the expired rows from the database so a row does not
+// outlive its in-memory entry until the next scheduled cleanup. The database
+// call runs after thresholdsMutex is released, and only when an entry was removed.
 func (p *Processor) cleanupExpiredThresholds(expiredSpecies []string) {
 	if len(expiredSpecies) == 0 {
 		return
@@ -204,6 +208,10 @@ func (p *Processor) cleanupExpiredThresholds(expiredSpecies []string) {
 	GetLogger().Info("Cleaned expired thresholds from memory",
 		logger.Int("count", len(expiredSpecies)),
 		logger.String("operation", "persist_dynamic_thresholds"))
+
+	if p.Ds != nil {
+		p.deleteExpiredThresholdsFromDB()
+	}
 }
 
 // saveThresholdsWithRetry attempts to save thresholds with exponential backoff.
@@ -257,6 +265,7 @@ func (p *Processor) saveThresholdsWithRetry(ctx context.Context, dbThresholds []
 }
 
 // persistDynamicThresholds saves all current dynamic thresholds to the database
+// and drops expired ones from memory and the database (see cleanupExpiredThresholds).
 // This is called periodically by the persistence goroutine. The ctx governs the
 // retry-backoff abort and is supplied by the caller (the persistence goroutine's
 // lifecycle context, or a snapshot taken under thresholdsMutex by Stop/Flush).
@@ -417,7 +426,25 @@ func (p *Processor) startThresholdPersistence(ctx context.Context) {
 	}()
 }
 
-// startThresholdCleanup starts a goroutine that periodically cleans up expired thresholds
+// deleteExpiredThresholdsFromDB deletes expired dynamic threshold rows from the database
+// and logs the outcome. It is called from the cleanup goroutine and, when the in-memory
+// prune removed an entry, from the persistence tick (cleanupExpiredThresholds); it must not
+// run on every tick and must not be called from the flusher tick, which never touches the database.
+func (p *Processor) deleteExpiredThresholdsFromDB() {
+	deleted, err := p.Ds.DeleteExpiredDynamicThresholds(time.Now())
+	if err != nil {
+		GetLogger().Error("Failed to clean expired thresholds",
+			logger.Error(err),
+			logger.String("operation", "cleanup_dynamic_thresholds"))
+	} else if deleted > 0 {
+		GetLogger().Info("Cleaned expired dynamic thresholds",
+			logger.Int64("count", deleted),
+			logger.String("operation", "cleanup_dynamic_thresholds"))
+	}
+}
+
+// startThresholdCleanup starts a goroutine that deletes expired thresholds once when it
+// starts and then every DefaultCleanupInterval.
 // This prevents the database from accumulating stale threshold data
 // The goroutine uses the same context as persistence for clean cancellation on shutdown
 func (p *Processor) startThresholdCleanup(ctx context.Context) {
@@ -431,19 +458,16 @@ func (p *Processor) startThresholdCleanup(ctx context.Context) {
 			logger.Int("cleanup_interval_hours", int(DefaultCleanupInterval.Hours())),
 			logger.String("operation", "threshold_cleanup_startup"))
 
+		// Clean once at start so instances restarted more often than the interval
+		// still delete expired rows, unless the lifecycle was stopped before this ran.
+		if ctx.Err() == nil {
+			p.deleteExpiredThresholdsFromDB()
+		}
+
 		for {
 			select {
 			case <-ticker.C:
-				deleted, err := p.Ds.DeleteExpiredDynamicThresholds(time.Now())
-				if err != nil {
-					GetLogger().Error("Failed to clean expired thresholds",
-						logger.Error(err),
-						logger.String("operation", "cleanup_dynamic_thresholds"))
-				} else if deleted > 0 {
-					GetLogger().Info("Cleaned expired dynamic thresholds",
-						logger.Int64("count", deleted),
-						logger.String("operation", "cleanup_dynamic_thresholds"))
-				}
+				p.deleteExpiredThresholdsFromDB()
 			case <-ctx.Done():
 				// Shutdown signal received via context cancellation
 				GetLogger().Info("Dynamic threshold cleanup stopped",
