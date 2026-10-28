@@ -168,7 +168,14 @@ func getBirdImageFromCache(detectionCtx *DetectionContext, cache *imageprovider.
 	return birdImage
 }
 
-// Execute runs all actions sequentially, stopping on first error
+// laterStepSkipper is implemented by a step that can decide, after returning nil,
+// that the detection needs no further steps.
+type laterStepSkipper interface {
+	skipsLaterSteps() bool
+}
+
+// Execute runs all actions sequentially, stopping on first error or when a step
+// reports that the later steps must not run.
 // This method is designed to prevent deadlocks and handle timeouts properly
 func (a *CompositeAction) Execute(ctx context.Context, data any) error {
 	// Handle nil or empty actions gracefully
@@ -206,6 +213,9 @@ func (a *CompositeAction) Execute(ctx context.Context, data any) error {
 		err := a.executeActionWithRecovery(ctx, action, data, currentStep, nonNilCount)
 		if err != nil {
 			return err
+		}
+		if s, ok := action.(laterStepSkipper); ok && s.skipsLaterSteps() {
+			return nil
 		}
 	}
 
@@ -301,7 +311,8 @@ func (a *CompositeAction) logStepFailure(msg, operation string, err error, actio
 // database step reports a save that stored nothing, and this step runs only after
 // the save has landed, so a retried composite never enqueues it twice.
 //
-// Like every composite step it runs only when all earlier steps returned nil.
+// Like every composite step it runs only when all earlier steps returned nil and
+// none ended the detection.
 type enqueueAction struct {
 	action Action
 	// detection is the task payload. It carries no PCM data, so a job that is

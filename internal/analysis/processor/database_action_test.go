@@ -1110,3 +1110,59 @@ func TestCompositeAction_WillRetryFollowsTheDatabaseStep(t *testing.T) {
 
 	assert.False(t, (&CompositeAction{}).willRetry(failure), "a composite without a retry policy is not retried")
 }
+
+// TestDatabaseAction_PanicInGateRetriesTheSave verifies that a panic in the
+// new-species update, which runs after the event tracker has stamped the
+// detection, does not turn the queue retry into a rate-limited no-op.
+func TestDatabaseAction_PanicInGateRetriesTheSave(t *testing.T) {
+	t.Parallel()
+
+	det := testDetection()
+	repo := NewMockDetectionRepository()
+	detCtx := &DetectionContext{}
+	action := &DatabaseAction{
+		Settings: &conf.Settings{}, Repo: repo, Result: det.Result, Results: det.Results,
+		EventTracker: NewEventTracker(time.Hour), DetectionCtx: detCtx,
+		// A zero-value tracker panics on its nil maps inside
+		// CheckAndUpdateSpeciesWithNovelty.
+		NewSpeciesTracker: &species.SpeciesTracker{},
+	}
+	later := &MockAction{}
+	composite := &CompositeAction{Actions: []Action{action, later}, RetryConfig: action.saveRetryConfig()}
+
+	// Precondition: the first attempt fails and is retried. If the species tracker
+	// ever stops panicking here, this fails instead of the test passing vacuously.
+	err := composite.Execute(t.Context(), nil)
+	require.Error(t, err)
+	require.True(t, composite.RetryConfig.Retryable(err), "a panic before the save is retried")
+
+	require.NoError(t, composite.Execute(t.Context(), nil))
+	assert.Equal(t, 1, repo.GetSavedCount(), "the retry stores the detection")
+	assert.NotZero(t, detCtx.NoteID.Load())
+	assert.Equal(t, 1, later.GetExecuteCount(), "later steps run once, after the save")
+}
+
+// TestDatabaseAction_SkippedDetectionEndsTheCompositeWithoutError verifies that a
+// detection the event tracker skips is neither saved nor retried, returns nil on
+// every attempt, and ends the composite so that later steps do not run.
+func TestDatabaseAction_SkippedDetectionEndsTheCompositeWithoutError(t *testing.T) {
+	t.Parallel()
+
+	det := testDetection()
+	repo := NewMockDetectionRepository()
+	tracker := NewEventTracker(time.Hour)
+	require.True(t, tracker.TrackEventWithNames(det.Result.Species.CommonName, det.Result.Species.ScientificName, DatabaseSave), "stamp the slot so the action is skipped")
+	action := &DatabaseAction{
+		Settings: &conf.Settings{}, Repo: repo, Result: det.Result, Results: det.Results,
+		EventTracker: tracker, DetectionCtx: &DetectionContext{},
+	}
+	later := &MockAction{}
+	composite := &CompositeAction{Actions: []Action{action, later}, RetryConfig: action.saveRetryConfig()}
+
+	for range 2 {
+		require.NoError(t, composite.Execute(t.Context(), nil))
+	}
+	assert.Zero(t, repo.GetSavedCount(), "a skipped detection is not saved")
+	assert.Zero(t, later.GetExecuteCount(), "a skipped detection runs no later step")
+	assert.False(t, composite.RetryConfig.Retryable(nil), "a skipped detection is not retried")
+}
