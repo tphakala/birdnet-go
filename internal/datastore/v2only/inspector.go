@@ -292,8 +292,13 @@ func (ds *Datastore) getMySQLTableStats() ([]datastore.TableStats, error) {
 	return stats, nil
 }
 
+// secondsPerDay is the length of an elapsed day in seconds. The detection rate
+// windows are elapsed time, so they are independent of any time zone.
+const secondsPerDay = 24 * 60 * 60
+
 // GetDetectionRate24h returns hourly detection counts for the last 24 hours.
-// Uses the v2 detections table with Unix timestamp detected_at column.
+// Uses the v2 detections table with Unix timestamp detected_at column. Buckets
+// are UTC hours on every engine, labelled "2006-01-02T15:00:00Z".
 func (ds *Datastore) GetDetectionRate24h() ([]datastore.HourlyCount, error) {
 	db := ds.manager.DB()
 
@@ -301,14 +306,18 @@ func (ds *Datastore) GetDetectionRate24h() ([]datastore.HourlyCount, error) {
 	var err error
 
 	if ds.manager.IsMySQL() {
+		// The label is computed from the integer with DATE_ADD on a literal
+		// date, which applies no time zone. FROM_UNIXTIME would convert to the
+		// session time zone and shift the buckets by the server's UTC offset.
 		err = db.Raw(`
-			SELECT DATE_FORMAT(FROM_UNIXTIME(detected_at), '%Y-%m-%dT%H:00:00Z') AS hour,
+			SELECT DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL (detected_at - detected_at % 3600) SECOND),
+			                   '%Y-%m-%dT%H:00:00Z') AS hour,
 			       COUNT(*) AS count
 			FROM detections
-			WHERE detected_at > UNIX_TIMESTAMP(NOW() - INTERVAL 24 HOUR)
+			WHERE detected_at > UNIX_TIMESTAMP() - ?
 			GROUP BY hour
 			ORDER BY hour
-		`).Scan(&results).Error
+		`, secondsPerDay).Scan(&results).Error
 	} else {
 		err = db.Raw(`
 			SELECT strftime('%Y-%m-%dT%H:00:00Z', detected_at, 'unixepoch') AS hour,
@@ -330,6 +339,7 @@ func (ds *Datastore) GetDetectionRate24h() ([]datastore.HourlyCount, error) {
 }
 
 // GetDetectionRateDaily returns daily detection counts for the specified number of days.
+// Buckets are UTC dates on every engine, labelled "2006-01-02".
 func (ds *Datastore) GetDetectionRateDaily(days int) ([]datastore.DailyCount, error) {
 	if days <= 0 {
 		return nil, fmt.Errorf("days must be positive, got %d", days)
@@ -341,14 +351,15 @@ func (ds *Datastore) GetDetectionRateDaily(days int) ([]datastore.DailyCount, er
 	var err error
 
 	if ds.manager.IsMySQL() {
+		// Zone-free label and window, as in GetDetectionRate24h.
 		err = db.Raw(`
-			SELECT DATE_FORMAT(FROM_UNIXTIME(detected_at), '%Y-%m-%d') AS date,
+			SELECT DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL detected_at SECOND), '%Y-%m-%d') AS date,
 			       COUNT(*) AS count
 			FROM detections
-			WHERE detected_at > UNIX_TIMESTAMP(NOW() - INTERVAL ? DAY)
+			WHERE detected_at > UNIX_TIMESTAMP() - ?
 			GROUP BY date
 			ORDER BY date
-		`, days).Scan(&results).Error
+		`, int64(days)*secondsPerDay).Scan(&results).Error
 	} else {
 		err = db.Raw(`
 			SELECT strftime('%Y-%m-%d', detected_at, 'unixepoch') AS date,
