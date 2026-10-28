@@ -312,8 +312,8 @@ const CharsetUTF8MB4 = "utf8mb4"
 
 // CharsetReport holds the character sets of the current schema.
 type CharsetReport struct {
-	// SchemaCharset and SchemaCollation are the schema defaults, which new
-	// tables inherit.
+	// SchemaCharset and SchemaCollation are the schema defaults, which tables
+	// created without an explicit character set inherit.
 	SchemaCharset   string
 	SchemaCollation string
 	// Tables lists base tables that have text columns, in name order.
@@ -420,21 +420,35 @@ func QueryVersion(ctx context.Context, db *gorm.DB) (string, error) {
 	return version, nil
 }
 
-// QueryCharset reads the default character set of the current schema and the
-// character sets of the text columns of its base tables. It only reads.
-func QueryCharset(ctx context.Context, db *gorm.DB) (CharsetReport, error) {
-	conn := db.WithContext(ctx)
-
+// QuerySchemaCharset reads the default character set and collation of the
+// current schema. Both are empty when the server returns no schema row.
+func QuerySchemaCharset(ctx context.Context, db *gorm.DB) (charset, collation string, err error) {
 	var schema []struct {
 		SchemaCharset   string `gorm:"column:schema_charset"`
 		SchemaCollation string `gorm:"column:schema_collation"`
 	}
-	if err := conn.Raw(querySchemaCharset).Scan(&schema).Error; err != nil {
-		return CharsetReport{}, errors.New(err).
+	if err := db.WithContext(ctx).Raw(querySchemaCharset).Scan(&schema).Error; err != nil {
+		return "", "", errors.New(err).
 			Component(componentName).
 			Category(errors.CategoryDatabase).
 			Context("operation", "query_schema_charset").
 			Build()
+	}
+	if len(schema) == 0 {
+		return "", "", nil
+	}
+	return schema[0].SchemaCharset, schema[0].SchemaCollation, nil
+}
+
+// QueryCharset reads the default character set of the current schema and the
+// character sets of the text columns of its base tables. It only reads, and it
+// returns the error of either read.
+func QueryCharset(ctx context.Context, db *gorm.DB) (CharsetReport, error) {
+	conn := db.WithContext(ctx)
+
+	schemaCharset, schemaCollation, err := QuerySchemaCharset(ctx, db)
+	if err != nil {
+		return CharsetReport{}, err
 	}
 
 	var cols []struct {
@@ -449,11 +463,7 @@ func QueryCharset(ctx context.Context, db *gorm.DB) (CharsetReport, error) {
 			Build()
 	}
 
-	var report CharsetReport
-	if len(schema) > 0 {
-		report.SchemaCharset = schema[0].SchemaCharset
-		report.SchemaCollation = schema[0].SchemaCollation
-	}
+	report := CharsetReport{SchemaCharset: schemaCharset, SchemaCollation: schemaCollation}
 	for _, c := range cols {
 		if n := len(report.Tables); n > 0 && report.Tables[n-1].Name == c.TableName {
 			report.Tables[n-1].Charsets = append(report.Tables[n-1].Charsets, c.CharsetName)
