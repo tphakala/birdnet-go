@@ -71,8 +71,8 @@ type ProgressReporter interface {
 
 // ImportOptions controls engine behaviour.
 type ImportOptions struct {
-	// SourceNode is the provenance tag set on every imported detection. Only the
-	// legacy store persists it (see mapToResult).
+	// SourceNode is the provenance tag set on every imported detection and its
+	// associated audio source.
 	// Defaults to DefaultSourceNode.
 	SourceNode string
 
@@ -441,16 +441,16 @@ func parseTimestamp(date, timeStr string, loc *time.Location) (time.Time, error)
 //     "audio not available" links.
 //   - Model is set to a synthetic marker so imported rows are distinguishable from
 //     live detections in queries or analytics.
-//   - Provenance: SourceNode is set, but only the legacy store persists it (the
-//     notes.source_node column). The v2 store keeps a node name only on an
-//     audio source, and AudioSource is left zero (it is runtime-only on the
-//     legacy save path), so on v2 imported rows carry no node name. Duplicate
-//     detection does not depend on it (see loadExistingKeys).
+//   - Provenance: SourceNode and AudioSource are set from sourceNode. The v2
+//     store uses AudioSource to resolve or create the audio_sources row that
+//     carries the source node. Duplicate detection does not depend on it (see
+//     loadExistingKeys).
 //   - Week and Overlap from BirdNET-Pi are dropped; birdnet-go does not use them.
 func mapToResult(row *SourceDetection, ts time.Time, sourceNode string) *detection.Result {
 	return &detection.Result{
-		Timestamp:  ts,
-		SourceNode: sourceNode,
+		Timestamp:   ts,
+		SourceNode:  sourceNode,
+		AudioSource: detection.NewAudioSource(sourceNode),
 		Species: detection.Species{
 			ScientificName: row.ScientificName,
 			CommonName:     row.CommonName,
