@@ -1031,6 +1031,55 @@ func TestPersistDynamicThresholds_DeletesExpiredRowsOnlyWhenDroppingAnEntry(t *t
 	assert.EqualValues(t, 1, mockDs.deleteExpiredCalls.Load(), "dropping an entry deletes the expired rows once")
 }
 
+// lockProbeDatastore records whether thresholdsMutex was held (for reading or writing)
+// while DeleteExpiredDynamicThresholds ran.
+type lockProbeDatastore struct {
+	*MockDatastore
+	p        *Processor
+	lockHeld atomic.Bool
+}
+
+func (d *lockProbeDatastore) DeleteExpiredDynamicThresholds(before time.Time) (int64, error) {
+	if d.p.thresholdsMutex.TryLock() {
+		d.p.thresholdsMutex.Unlock()
+	} else {
+		d.lockHeld.Store(true)
+	}
+	return d.MockDatastore.DeleteExpiredDynamicThresholds(before)
+}
+
+// TestPersistDynamicThresholds_ExpiredRowDeleteRunsWithoutLock verifies the database
+// delete after the persistence prune does not run under thresholdsMutex.
+func TestPersistDynamicThresholds_ExpiredRowDeleteRunsWithoutLock(t *testing.T) {
+	p := createTestProcessor()
+	probe := &lockProbeDatastore{MockDatastore: p.Ds.(*MockDatastore), p: p}
+	p.Ds = probe
+
+	p.DynamicThresholds["expired"] = &DynamicThreshold{
+		Level: 1, BaseThreshold: 0.7, Timer: time.Now().Add(-time.Minute), ValidHours: 24,
+	}
+	require.NoError(t, p.persistDynamicThresholds(t.Context()))
+
+	assert.EqualValues(t, 1, probe.deleteExpiredCalls.Load(), "the expired rows should be deleted")
+	assert.False(t, probe.lockHeld.Load(), "the database delete must not run under thresholdsMutex")
+}
+
+// TestPersistDynamicThresholds_DropsExpiredEntryWithoutDatastore verifies the persistence
+// prune still drops an expired entry, and does not panic, when no datastore is set.
+func TestPersistDynamicThresholds_DropsExpiredEntryWithoutDatastore(t *testing.T) {
+	p := createTestProcessor()
+	p.Ds = nil
+	p.DynamicThresholds["expired"] = &DynamicThreshold{
+		Level: 1, BaseThreshold: 0.7, Timer: time.Now().Add(-time.Minute), ValidHours: 24,
+	}
+
+	p.cleanupExpiredThresholds([]string{"expired"})
+
+	p.thresholdsMutex.RLock()
+	defer p.thresholdsMutex.RUnlock()
+	assert.Empty(t, p.DynamicThresholds, "expired entry should be dropped from memory")
+}
+
 // TestThresholdCleanup_SkipsStartCleanupWhenAlreadyCancelled verifies a lifecycle that was
 // stopped before the cleanup goroutine ran does not delete anything.
 func TestThresholdCleanup_SkipsStartCleanupWhenAlreadyCancelled(t *testing.T) {
