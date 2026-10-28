@@ -43,6 +43,13 @@ func mixedCharsetReport() databaseServerReport {
 	return r
 }
 
+// utf8mb4TablesReport has a latin1 schema default and only utf8mb4 tables.
+func utf8mb4TablesReport() databaseServerReport {
+	r := serverReportFor("8.4.13", "latin1")
+	r.charset.Tables = []dbserver.TableCharsets{{Name: "detections", Charsets: []string{"utf8mb4"}}}
+	return r
+}
+
 // tagCapture records the values passed to setTags.
 type tagCapture struct {
 	mu   sync.Mutex
@@ -76,6 +83,7 @@ func TestDatabaseServerNotice_RaisesOnlyForAttention(t *testing.T) {
 		{"end of life", serverReportFor("8.0.46", "utf8mb4"), true, [3]string{"mysql-8.0", "end_of_life", "utf8mb4"}},
 		{"untabled end of life", serverReportFor("10.5.29-MariaDB", "utf8mb4"), true, [3]string{"mariadb-end_of_life", "end_of_life", "utf8mb4"}},
 		{"latin1 charset", serverReportFor("8.4.13", "latin1"), true, [3]string{"mysql-8.4", "supported", "latin1"}},
+		{"latin1 schema with only utf8mb4 tables", utf8mb4TablesReport(), false, [3]string{"mysql-8.4", "supported", "utf8mb4_tables"}},
 		{"ending soon", endingSoonReport(), true, [3]string{"mariadb-10.11", "ending_soon", "utf8mb4"}},
 		{"utf8mb4 schema with a latin1 table", mixedCharsetReport(), true, [3]string{"mariadb-11.4", "supported", "mixed"}},
 		{"no schema row", serverReportFor("11.4.13-MariaDB", ""), false, [3]string{"mariadb-11.4", "supported", "unknown"}},

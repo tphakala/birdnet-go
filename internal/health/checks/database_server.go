@@ -20,6 +20,9 @@ const (
 	databaseServerNotApplicable = "Not applicable: the database is not MySQL or MariaDB"
 	// maxNamedCharsetTables bounds how many tables the charset message names.
 	maxNamedCharsetTables = 10
+	// databaseCharsetTablesOKFormat is the message when every character column is
+	// utf8mb4 but the database default is not; the argument is the default.
+	databaseCharsetTablesOKFormat = "All existing character columns use utf8mb4. The database default character set is %s; new tables created without an explicit character set may inherit it."
 	// eolDateLayout formats the end-of-life date in messages.
 	eolDateLayout = time.DateOnly
 )
@@ -162,6 +165,10 @@ func (c *DatabaseCharsetCheck) Run(ctx context.Context) health.Result {
 	if report.AllUTF8MB4() {
 		return databaseServerResult(c.Name(), c.Category(), start, health.StatusHealthy,
 			"The database and all its tables use utf8mb4", details)
+	}
+	if report.EveryTableUTF8MB4() {
+		return databaseServerResult(c.Name(), c.Category(), start, health.StatusHealthy,
+			fmt.Sprintf(databaseCharsetTablesOKFormat, report.SchemaCharset), details)
 	}
 
 	var msg strings.Builder

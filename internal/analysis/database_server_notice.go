@@ -65,7 +65,8 @@ func probeDatabaseServer(ctx context.Context, db *gorm.DB, now time.Time) databa
 
 // reasons returns the sorted reasons the bell notice is due, empty when none.
 // An untracked or unparseable version is a note, not a problem, and a failed
-// probe is not evidence of a problem.
+// probe is not evidence of a problem. A schema default other than utf8mb4 is
+// no reason while every table is utf8mb4.
 func (r *databaseServerReport) reasons() []string {
 	var reasons []string
 	if r.versionErr == nil {
@@ -77,7 +78,7 @@ func (r *databaseServerReport) reasons() []string {
 		case dbserver.SupportSupported, dbserver.SupportUntracked, dbserver.SupportUnknown:
 		}
 	}
-	if r.charsetErr == nil && r.charset.SchemaCharset != "" && !r.charset.AllUTF8MB4() {
+	if r.charsetErr == nil && r.charset.SchemaCharset != "" && !r.charset.AllUTF8MB4() && !r.charset.EveryTableUTF8MB4() {
 		reasons = append(reasons, databaseServerReasonCharset)
 	}
 	slices.Sort(reasons)

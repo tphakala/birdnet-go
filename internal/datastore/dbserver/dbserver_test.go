@@ -129,6 +129,7 @@ func TestCharsetReport(t *testing.T) {
 		report     CharsetReport
 		nonUTF8MB4 []string
 		all        bool
+		every      bool
 		tag        string
 	}{
 		{
@@ -140,7 +141,17 @@ func TestCharsetReport(t *testing.T) {
 			name:   "all utf8mb4",
 			report: CharsetReport{SchemaCharset: "utf8mb4", Tables: []TableCharsets{{"a", []string{"utf8mb4"}}}},
 			all:    true,
+			every:  true,
 			tag:    "utf8mb4",
+		},
+		{
+			name: "latin1 schema with only utf8mb4 tables",
+			report: CharsetReport{SchemaCharset: "latin1", Tables: []TableCharsets{
+				{"a", []string{"utf8mb4"}},
+				{"b", []string{"utf8mb4"}},
+			}},
+			every: true,
+			tag:   "utf8mb4_tables",
 		},
 		{
 			name: "latin1 schema with mixed tables",
@@ -173,6 +184,7 @@ func TestCharsetReport(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, tt.nonUTF8MB4, tt.report.NonUTF8MB4Tables())
 			assert.Equal(t, tt.all, tt.report.AllUTF8MB4())
+			assert.Equal(t, tt.every, tt.report.EveryTableUTF8MB4())
 			assert.Equal(t, tt.tag, CharsetTag(tt.report))
 		})
 	}
