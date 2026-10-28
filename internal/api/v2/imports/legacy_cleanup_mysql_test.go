@@ -131,11 +131,20 @@ func createLegacyTables(t *testing.T, db *gorm.DB, names []string) {
 	}
 }
 
-// markMigration sets the migration state of the manager's schema.
-func markMigration(t *testing.T, mgr *datastoreV2.MySQLManager, state entities.MigrationStatus, relatedErr string) {
+// markMigration sets the migration state of the manager's schema, including the
+// auxiliary data outcome. StartedAt and AuxiliaryDataStartedAt get one whole-second
+// literal in the same UPDATE, so the outcome belongs to the recorded attempt and
+// survives the MySQL round trip.
+func markMigration(t *testing.T, mgr *datastoreV2.MySQLManager, state entities.MigrationStatus, relatedErr string, aux entities.AuxiliaryDataStatus) {
 	t.Helper()
 	require.NoError(t, mgr.DB().Model(&entities.MigrationState{}).Where("id = ?", 1).
-		Updates(map[string]any{"state": state, "related_data_error": relatedErr}).Error)
+		Updates(map[string]any{
+			"state":                     state,
+			"related_data_error":        relatedErr,
+			"auxiliary_data_status":     aux,
+			"started_at":                fixtureAttemptStart,
+			"auxiliary_data_started_at": fixtureAttemptStart,
+		}).Error)
 }
 
 // newCleanupHandler builds a handler on the manager with v2-only mode on. The Repo is a
@@ -203,7 +212,7 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 		env.reset(t, mgr)
 		require.NoError(t, mgr.Initialize())
 		// Completed, so only the schema rule can refuse.
-		markMigration(t, mgr, entities.MigrationStatusCompleted, "")
+		markMigration(t, mgr, entities.MigrationStatusCompleted, "", entities.AuxiliaryDataStatusSucceeded)
 		require.NoError(t, mgr.DB().Create(&entities.DailyEvents{Date: legacyRowDate}).Error)
 		before := env.tables(t, mgr.DB())
 		c := newCleanupHandler(t, mgr)
@@ -229,7 +238,7 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 		mgr := env.newManager(t, true)
 		env.reset(t, mgr)
 		require.NoError(t, mgr.Initialize())
-		markMigration(t, mgr, entities.MigrationStatusCompleted, "")
+		markMigration(t, mgr, entities.MigrationStatusCompleted, "", entities.AuxiliaryDataStatusSucceeded)
 		require.NoError(t, mgr.DB().Create(&entities.DailyEvents{Date: legacyRowDate}).Error)
 		createLegacyTables(t, mgr.DB(), allLegacy)
 		v2Tables := slicesWithPrefix(env.tables(t, mgr.DB()), "v2_")
@@ -280,7 +289,7 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 			return tx.Exec("SET FOREIGN_KEY_CHECKS = 1").Error
 		}))
 		mgr := env.newManager(t, true)
-		markMigration(t, mgr, entities.MigrationStatusCompleted, "")
+		markMigration(t, mgr, entities.MigrationStatusCompleted, "", entities.AuxiliaryDataStatusSucceeded)
 		createLegacyTables(t, mgr.DB(), []string{"notes"})
 		c := newCleanupHandler(t, mgr)
 
@@ -303,7 +312,7 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 		mgr := env.newManager(t, true)
 		env.reset(t, mgr)
 		require.NoError(t, mgr.Initialize())
-		markMigration(t, mgr, entities.MigrationStatusCompleted, "reviews failed")
+		markMigration(t, mgr, entities.MigrationStatusCompleted, "reviews failed", entities.AuxiliaryDataStatusSucceeded)
 		createLegacyTables(t, mgr.DB(), allLegacy)
 		c := newCleanupHandler(t, mgr)
 
@@ -329,7 +338,7 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 		c := newCleanupHandler(t, mgr)
 
 		for _, state := range []entities.MigrationStatus{entities.MigrationStatusIdle, entities.MigrationStatusMigrating, entities.MigrationStatusFailed} {
-			markMigration(t, mgr, state, "")
+			markMigration(t, mgr, state, "", entities.AuxiliaryDataStatusSucceeded)
 			status := getStatus(t, c)
 			assert.False(t, status.CanCleanup, string(state))
 			assert.Equal(t, notification.MsgErrCleanupRestartRequired, status.ErrorKey, string(state))
@@ -359,7 +368,7 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 			mgr := env.newManager(t, true)
 			env.reset(t, mgr)
 			require.NoError(t, mgr.Initialize())
-			markMigration(t, mgr, entities.MigrationStatusCompleted, "")
+			markMigration(t, mgr, entities.MigrationStatusCompleted, "", entities.AuxiliaryDataStatusSucceeded)
 			createLegacyTables(t, mgr.DB(), allLegacy)
 			require.NoError(t, mgr.DB().Exec("CREATE TABLE `"+marker+"` (id INT PRIMARY KEY)").Error)
 			c := newCleanupHandler(t, mgr)
@@ -378,7 +387,7 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 		mgr := env.newManager(t, true)
 		env.reset(t, mgr)
 		require.NoError(t, mgr.Initialize())
-		markMigration(t, mgr, entities.MigrationStatusCompleted, "")
+		markMigration(t, mgr, entities.MigrationStatusCompleted, "", entities.AuxiliaryDataStatusSucceeded)
 		createLegacyTables(t, mgr.DB(), allLegacy)
 		c := newCleanupHandler(t, mgr)
 
