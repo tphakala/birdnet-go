@@ -1,10 +1,13 @@
 package v2
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -48,6 +51,58 @@ const v2TablePrefix = "v2_"
 // "row missing or locked", so an UPDATE that leaves a row's values as they
 // are must not report 0.
 const mysqlDSNParams = "charset=utf8mb4&parseTime=True&loc=Local&clientFoundRows=true"
+
+const (
+	// gormTableOptionsKey is the GORM setting that Migrator.CreateTable appends
+	// to a CREATE TABLE statement, after the closing parenthesis.
+	gormTableOptionsKey = "gorm:table_options"
+
+	// utf8mb4TableOptions makes a new table utf8mb4. The leading space is there
+	// because GORM appends the value directly after the closing parenthesis.
+	// It has no COLLATE, so each server picks its own utf8mb4 default collation.
+	utf8mb4TableOptions = " DEFAULT CHARSET=" + dbserver.CharsetUTF8MB4
+
+	// errComponentDatastore and errOpReadSchemaCharset label the errors of the
+	// schema character set read.
+	errComponentDatastore  = "datastore"
+	errOpReadSchemaCharset = "read_schema_charset"
+)
+
+// tableOptionsFor returns the CREATE TABLE options for a schema whose default
+// character set is schemaCharset. A utf8mb4 schema needs none: new tables keep
+// inheriting the schema collation, so they compare with the existing tables.
+func tableOptionsFor(schemaCharset string) (options string, ok bool) {
+	if schemaCharset == dbserver.CharsetUTF8MB4 {
+		return "", false
+	}
+	return utf8mb4TableOptions, true
+}
+
+// migrationDB returns the handle that AutoMigrate creates the v2 tables with.
+// When the schema default character set is not utf8mb4 the handle carries the
+// utf8mb4 table options. It fails when the schema default cannot be read, so
+// the schema never depends on a transient error.
+func (m *MySQLManager) migrationDB() (*gorm.DB, error) {
+	charset, _, err := dbserver.QuerySchemaCharset(context.Background(), m.db)
+	if err != nil {
+		return nil, errors.New(err).
+			Component(errComponentDatastore).
+			Category(errors.CategoryDatabase).
+			Context("operation", errOpReadSchemaCharset).
+			Build()
+	}
+	if charset == "" {
+		return nil, errors.Newf("no schema row found for the database %q", m.config.Database).
+			Component(errComponentDatastore).
+			Category(errors.CategoryDatabase).
+			Context("operation", errOpReadSchemaCharset).
+			Build()
+	}
+	if options, ok := tableOptionsFor(charset); ok {
+		return m.db.Set(gormTableOptionsKey, options), nil
+	}
+	return m.db, nil
+}
 
 // NewMySQLManager creates a new v2 MySQL database manager.
 // If UseV2Prefix is true, tables will be created with the "v2_" prefix (migration mode).
@@ -126,8 +181,15 @@ func (m *MySQLManager) Initialize() error {
 	}
 
 	// Run GORM auto-migrations for all entities using the shared canonical list.
-	// Tables will be created with v2_ prefix due to NamingStrategy.
-	err := m.db.AutoMigrate(v2Entities()...)
+	// Tables will be created with v2_ prefix due to NamingStrategy. On a schema
+	// whose default character set is not utf8mb4, new tables are created as
+	// utf8mb4; existing tables are never altered.
+	migrateDB, err := m.migrationDB()
+	if err != nil {
+		reportInitFailure("mysql", "readSchemaCharset", err, m.config.Host, m.config.Database, m.config.Username)
+		return fmt.Errorf("failed to read schema character set: %w", err)
+	}
+	err = migrateDB.AutoMigrate(v2Entities()...)
 	if err != nil {
 		reportInitFailure("mysql", "AutoMigrate", err, m.config.Host, m.config.Database, m.config.Username)
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
