@@ -13,8 +13,10 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/formatutil"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -118,6 +120,17 @@ const (
 	reasonNoManager        = "Database manager is not available"
 	reasonActiveDatabase   = "Target file is the active database, cleanup not allowed for safety"
 	reasonPathChangedSince = "Database path changed since start, restart before cleanup"
+
+	reasonStateUnreadable     = "Cannot read migration state"
+	reasonMigrationIncomplete = "Migration has not completed, cleanup is not available"
+	reasonRelatedDataError    = "Migration recorded an error in related data, cleanup is not allowed for safety"
+	reasonAuxiliaryFailed     = "Auxiliary data migration failed, cleanup is not allowed for safety"
+	reasonAuxiliaryUnknown    = "Auxiliary data migration outcome was not recorded, cleanup is not allowed for safety"
+	reasonFreshInstall        = "The active database was created by a fresh install and has no legacy database"
+	reasonNotLegacyDatabase   = "Target file is not a legacy database"
+	reasonLegacyUnmigrated    = "Legacy records are missing from the enhanced database, cleanup is not allowed for safety"
+	reasonCannotVerify        = "Cannot verify the legacy database"
+	reasonNoLegacyDatabase    = "No legacy database found"
 )
 
 // cleanupManager returns the v2 manager the process opened, or a refusal when
@@ -146,6 +159,75 @@ func sqliteLegacyRefusal(mgr datastoreV2.Manager, legacyPath string) *legacyClea
 	return nil
 }
 
+// migrationStateRefusal reads the migration state of the v2 database mgr opened
+// and refuses unless the migration completed without a related-data error and
+// the auxiliary data outcome is succeeded or not_required. Failed and unrecorded
+// outcomes refuse, so a migration from a build that recorded none is never
+// cleaned up. It returns the state for the callers that need the watermark.
+func (c *Handler) migrationStateRefusal(ctx context.Context, mgr datastoreV2.Manager) (*entities.MigrationState, *legacyCleanupRefusal) {
+	db := mgr.DB()
+	if db == nil {
+		return nil, &legacyCleanupRefusal{reason: reasonNoManager, errorKey: notification.MsgErrCleanupAccessFailed}
+	}
+	migrationState, err := datastoreV2.NewStateManager(db.WithContext(ctx)).GetState()
+	if err != nil {
+		c.LogWarnIfEnabled("Legacy cleanup: failed to read migration state", logger.Error(err))
+		return nil, &legacyCleanupRefusal{reason: reasonStateUnreadable, errorKey: notification.MsgErrCleanupAccessFailed}
+	}
+	if migrationState.State != entities.MigrationStatusCompleted {
+		return nil, &legacyCleanupRefusal{exists: true, reason: reasonMigrationIncomplete, errorKey: notification.MsgErrCleanupRestartRequired}
+	}
+	if migrationState.RelatedDataError != "" {
+		return nil, &legacyCleanupRefusal{exists: true, reason: reasonRelatedDataError, errorKey: notification.MsgErrCleanupSafetyCheck}
+	}
+	switch migrationState.AuxiliaryDataOutcome() {
+	case entities.AuxiliaryDataStatusSucceeded, entities.AuxiliaryDataStatusNotRequired:
+		return migrationState, nil
+	case entities.AuxiliaryDataStatusFailed:
+		return nil, &legacyCleanupRefusal{exists: true, reason: reasonAuxiliaryFailed, errorKey: notification.MsgErrCleanupSafetyCheck}
+	default:
+		return nil, &legacyCleanupRefusal{exists: true, reason: reasonAuxiliaryUnknown, errorKey: notification.MsgErrCleanupSafetyCheck}
+	}
+}
+
+// sqliteStateRefusal is migrationStateRefusal for the SQLite delete. It also
+// refuses a not_required outcome: only a fresh install records it, so that
+// database has no legacy companion to delete.
+func (c *Handler) sqliteStateRefusal(ctx context.Context, mgr datastoreV2.Manager) (*entities.MigrationState, *legacyCleanupRefusal) {
+	migrationState, refusal := c.migrationStateRefusal(ctx, mgr)
+	if refusal != nil {
+		return nil, refusal
+	}
+	if migrationState.AuxiliaryDataOutcome() == entities.AuxiliaryDataStatusNotRequired {
+		return nil, &legacyCleanupRefusal{exists: true, reason: reasonFreshInstall, errorKey: notification.MsgErrCleanupNoLegacyDB}
+	}
+	return migrationState, nil
+}
+
+// sqliteMigrationRefusal decides whether the SQLite file at legacyPath may be
+// deleted: the migration state must pass sqliteStateRefusal and the file must be
+// a legacy database whose tail is in v2. It reads the file, so the POST and the
+// background delete call it and the status call does not. Any failure to read or
+// prove refuses.
+func (c *Handler) sqliteMigrationRefusal(ctx context.Context, mgr datastoreV2.Manager, legacyPath string) *legacyCleanupRefusal {
+	migrationState, refusal := c.sqliteStateRefusal(ctx, mgr)
+	if refusal != nil {
+		return refusal
+	}
+	err := datastoreV2.VerifySQLiteLegacyMigrated(ctx, legacyPath, mgr.DB(), migrationState.LastMigratedID, apicore.GetLogger())
+	switch {
+	case err == nil:
+		return nil
+	case errors.Is(err, datastoreV2.ErrNotLegacyDatabase):
+		return &legacyCleanupRefusal{exists: true, reason: reasonNotLegacyDatabase, errorKey: notification.MsgErrCleanupSafetyCheck}
+	case errors.Is(err, datastoreV2.ErrLegacyRecordsUnmigrated):
+		return &legacyCleanupRefusal{exists: true, reason: reasonLegacyUnmigrated, errorKey: notification.MsgErrCleanupSafetyCheck}
+	default:
+		c.LogWarnIfEnabled("Legacy cleanup: cannot verify the legacy database", logger.Error(err))
+		return &legacyCleanupRefusal{exists: true, reason: reasonCannotVerify, errorKey: notification.MsgErrCleanupAccessFailed}
+	}
+}
+
 // legacyTableListing is one row of the information_schema table listing.
 type legacyTableListing struct {
 	Name string
@@ -170,7 +252,9 @@ func (c *Handler) mysqlCleanupConn(ctx context.Context) (*gorm.DB, *legacyCleanu
 // resolveMySQLLegacyTables decides which legacy tables the MySQL cleanup may
 // list and drop, from the v2 manager's actual schema. It is the single decision
 // shared by the status call, the POST pre-check and the background drop, and it
-// fails closed: anything it cannot read refuses. db carries the request or
+// fails closed: anything it cannot read refuses, and it applies the migration
+// state gate (completed, no related-data error, auxiliary outcome succeeded or
+// not_required) before it lists any table. db carries the request or
 // cleanup context and is the connection the caller will also run its DROPs on.
 // withCounts adds an exact row count per table, which only the status call
 // reports; the POST pre-check and the drop skip it because COUNT(*) can scan a
@@ -190,28 +274,12 @@ func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, db *gorm.DB, wit
 		return nil, &legacyCleanupRefusal{reason: "No legacy tables found", errorKey: notification.MsgErrCleanupNoLegacyTables}
 	}
 
-	migrationState, err := datastoreV2.NewStateManager(mgr.DB().WithContext(ctx)).GetState()
-	if err != nil {
-		c.LogWarnIfEnabled("Legacy cleanup: failed to read migration state", logger.Error(err))
-		return nil, accessFailed("Cannot read migration state")
-	}
-	if migrationState.State != entities.MigrationStatusCompleted {
-		return nil, &legacyCleanupRefusal{
-			exists:   true,
-			reason:   "Migration has not completed, cleanup is not available",
-			errorKey: notification.MsgErrCleanupRestartRequired,
-		}
-	}
-	if migrationState.RelatedDataError != "" {
-		return nil, &legacyCleanupRefusal{
-			exists:   true,
-			reason:   "Migration recorded an error in related data, cleanup is not allowed for safety",
-			errorKey: notification.MsgErrCleanupSafetyCheck,
-		}
+	if _, refusal := c.migrationStateRefusal(ctx, mgr); refusal != nil {
+		return nil, refusal
 	}
 
 	var listing []legacyTableListing
-	err = db.Raw(`
+	err := db.Raw(`
 		SELECT table_name AS name, COALESCE(data_length, 0) + COALESCE(index_length, 0) AS size
 		FROM information_schema.tables
 		WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'`).Scan(&listing).Error
@@ -389,7 +457,7 @@ func (c *Handler) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatus
 	if os.IsNotExist(err) {
 		response.Exists = false
 		response.CanCleanup = false
-		response.Reason = "No legacy database found"
+		response.Reason = reasonNoLegacyDatabase
 		response.ErrorKey = notification.MsgErrCleanupNoLegacyDB
 		return ctx.JSON(http.StatusOK, response)
 	}
@@ -434,6 +502,13 @@ func (c *Handler) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatus
 		response.Reason = "Target file appears to be a V2 database - cleanup not allowed for safety"
 		response.ErrorKey = notification.MsgErrCleanupSafetyCheck
 		return ctx.JSON(http.StatusOK, response)
+	}
+
+	// The migration state is one row read. The tail proof scans the legacy
+	// file, so only the POST runs it; the card may then be offered and the POST
+	// refuse with a message.
+	if _, refusal := c.sqliteStateRefusal(ctx.Request().Context(), mgr); refusal != nil {
+		return writeLegacyRefusal(ctx, response, refusal)
 	}
 
 	response.CanCleanup = true
@@ -498,9 +573,12 @@ func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusR
 // StartLegacyCleanup handles POST /api/v2/system/database/legacy/cleanup
 // Initiates asynchronous legacy database cleanup. For MySQL the tables are
 // resolved first and a refusal answers 400 without starting anything; the
-// background drop resolves again before it drops. The backend and the SQLite
-// target are decided once here, from the v2 manager the process opened, and
-// handed to the background job, which reads no settings.
+// background drop resolves again before it drops. For SQLite the target is
+// checked against the opened database, then the migration state and the legacy
+// file are proven (see sqliteMigrationRefusal), and the background delete
+// proves them again. The backend and the SQLite target are decided once here,
+// from the v2 manager the process opened, and handed to the background job,
+// which reads no settings.
 func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
 	c.LogInfoIfEnabled("Starting legacy database cleanup", logger.String("path", path), logger.String("ip", ip))
@@ -530,7 +608,17 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 	var mysqlSize int64
 	if !usingMySQL {
 		legacyPath = c.CurrentSettings().Output.SQLite.Path
-		if refusal := sqliteLegacyRefusal(mgr, legacyPath); refusal != nil {
+		refusal := sqliteLegacyRefusal(mgr, legacyPath)
+		if refusal == nil {
+			// A missing file is a plain "nothing to delete", not a failed proof.
+			if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
+				refusal = &legacyCleanupRefusal{reason: reasonNoLegacyDatabase, errorKey: notification.MsgErrCleanupNoLegacyDB}
+			}
+		}
+		if refusal == nil {
+			refusal = c.sqliteMigrationRefusal(ctx.Request().Context(), mgr, legacyPath)
+		}
+		if refusal != nil {
 			errorKey := refusal.errorKey
 			if errorKey == notification.MsgErrCleanupRestartRequired {
 				errorKey = notification.MsgErrCleanupRestartNeeded
@@ -613,7 +701,8 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 
 // cleanupSQLiteLegacy deletes the legacy SQLite database files at legacyPath,
 // the path the POST checked. It re-checks that the path is the legacy companion
-// of the database mgr opened and deletes nothing otherwise.
+// of the database mgr opened and that the migration is proven for it (state,
+// auxiliary outcome and legacy tail), and deletes nothing otherwise.
 func (c *Handler) cleanupSQLiteLegacy(ctx context.Context, mgr datastoreV2.Manager, legacyPath string) error {
 	// Check for cancellation before starting
 	select {
@@ -628,6 +717,13 @@ func (c *Handler) cleanupSQLiteLegacy(ctx context.Context, mgr datastoreV2.Manag
 	if refusal := sqliteLegacyRefusal(mgr, legacyPath); refusal != nil {
 		c.LogErrorIfEnabled("Safety check failed: target is not the legacy database of the opened database",
 			logger.String("path", legacyPath))
+		return fmt.Errorf("legacy cleanup refused: %s", refusal.reason)
+	}
+
+	// The migration state and the target may have changed since the POST.
+	if refusal := c.sqliteMigrationRefusal(ctx, mgr, legacyPath); refusal != nil {
+		c.LogErrorIfEnabled("Safety check failed: migration is not proven for the legacy database",
+			logger.String("reason", refusal.reason))
 		return fmt.Errorf("legacy cleanup refused: %s", refusal.reason)
 	}
 
