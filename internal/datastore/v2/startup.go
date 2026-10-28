@@ -11,6 +11,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/go-sql-driver/mysql"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -434,7 +435,7 @@ func buildMySQLStartupDSN(settings *conf.Settings) string {
 		User:                 settings.Output.MySQL.Username,
 		Passwd:               settings.Output.MySQL.Password,
 		Net:                  "tcp",
-		Addr:                 fmt.Sprintf("%s:%s", settings.Output.MySQL.Host, settings.Output.MySQL.Port),
+		Addr:                 datastore.MySQLAddr(settings.Output.MySQL.Host, settings.Output.MySQL.Port),
 		DBName:               settings.Output.MySQL.Database,
 		AllowNativePasswords: true,
 		CheckConnLiveness:    true,

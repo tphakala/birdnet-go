@@ -49,15 +49,15 @@ func (store *MySQLStore) Open() (retErr error) {
 		return err // validateMySQLConfig returns a properly formatted error
 	}
 
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		store.Settings.Output.MySQL.Username, store.Settings.Output.MySQL.Password,
-		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
+		MySQLAddr(store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port),
 		store.Settings.Output.MySQL.Database)
 
 	// Log database opening (with sanitized DSN)
-	sanitizedDSN := fmt.Sprintf("%s:***@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+	sanitizedDSN := fmt.Sprintf("%s:***@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		store.Settings.Output.MySQL.Username,
-		store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port,
+		MySQLAddr(store.Settings.Output.MySQL.Host, store.Settings.Output.MySQL.Port),
 		store.Settings.Output.MySQL.Database)
 	GetLogger().Info("Opening MySQL database connection",
 		logger.String("dsn", sanitizedDSN))
@@ -299,9 +299,8 @@ func (m *MySQLStore) GetDatabaseStats(ctx context.Context) (*DatabaseStats, erro
 	// Defensive guard for nil Settings (e.g., in custom test setups)
 	location := ""
 	if m.Settings != nil {
-		location = fmt.Sprintf("%s:%s/%s",
-			m.Settings.Output.MySQL.Host,
-			m.Settings.Output.MySQL.Port,
+		location = fmt.Sprintf("%s/%s",
+			MySQLAddr(m.Settings.Output.MySQL.Host, m.Settings.Output.MySQL.Port),
 			m.Settings.Output.MySQL.Database)
 	}
 
