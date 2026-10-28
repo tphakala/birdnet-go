@@ -10,7 +10,7 @@ import (
 
 // audioDirNames are sibling directory names that indicate a BirdNET-Pi audio
 // tree next to a birds.db.
-var audioDirNames = []string{"BirdSongs", "Extracted"}
+var audioDirNames = []string{"BirdSongs", "Extracted", "By_Date"}
 
 // Probe inspects a single birds.db path and returns its candidate metadata. It
 // is the manual-entry counterpart to a Scan hit: the wizard's "validate this

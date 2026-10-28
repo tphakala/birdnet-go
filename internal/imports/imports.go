@@ -89,7 +89,8 @@ type ImportOptions struct {
 	IncludeAudio bool
 
 	// AudioSourceDir is the directory containing the BirdNET-Pi source audio tree.
-	// It must contain an "Extracted/By_Date" subtree. Used only when IncludeAudio is true.
+	// It must contain either an "Extracted/By_Date" or "By_Date" subtree. Used
+	// only when IncludeAudio is true.
 	AudioSourceDir string
 
 	// ClipExportPath is the root directory where audio clips are written.

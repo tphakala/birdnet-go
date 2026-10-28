@@ -38,6 +38,15 @@ func makeAudioTree(t *testing.T, root, date, comName, fileName string, content [
 	return path
 }
 
+func makeBackupAudioTree(t *testing.T, root, date, comName, fileName string, content []byte) string {
+	t.Helper()
+	dir := filepath.Join(root, "By_Date", date, comName)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	path := filepath.Join(dir, fileName)
+	require.NoError(t, os.WriteFile(path, content, 0o644))
+	return path
+}
+
 // assertWithinDir fails the test if target is not contained within root.
 // This is the test-package mirror of the package-private isWithinDir helper;
 // it uses filepath.Rel because the unexported helper is not importable here.
@@ -130,6 +139,45 @@ func TestImport_WithAudio_CopiesClips(t *testing.T) {
 	require.NoError(t, searchErr)
 	require.Len(t, results, 1)
 	assert.Equal(t, relPath, results[0].ClipName, "ClipName must equal the relative clip path")
+}
+
+func TestImport_WithAudio_CopiesClips_BackupLayout(t *testing.T) {
+	audioSrc := t.TempDir()
+	exportDir := t.TempDir()
+	date := "2025-03-25"
+	comName := "Great Spotted Woodpecker"
+	fileName := "woodpecker.mp3"
+	clipContent := []byte("fake audio content")
+	makeBackupAudioTree(t, audioSrc, date, comName, fileName, clipContent)
+
+	rows := []birdnetPiRow{{
+		Date: date, Time: "14:27:32",
+		SciName: "Dendrocopos major", ComName: comName,
+		Confidence: 0.74, Lat: 60.75, Lon: 24.77,
+		Cutoff: 0.7, Sens: 1.25, FileName: fileName,
+	}}
+	dbPath := newFixtureDB(t, rows)
+	src, err := newBirdNetPiSource(t, dbPath)
+	require.NoError(t, err)
+
+	store := newTestStore(t)
+	repo := newDetectionRepo(t, store)
+	stats, err := imports.NewEngine(repo).Run(t.Context(), src, &imports.ImportOptions{
+		SourceNode:     imports.DefaultSourceNode,
+		Location:       time.UTC,
+		BatchSize:      100,
+		IncludeAudio:   true,
+		AudioSourceDir: audioSrc,
+		ClipExportPath: exportDir,
+	}, nil)
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.Inserted)
+
+	ts := time.Date(2025, 3, 25, 14, 27, 32, 0, time.UTC)
+	relPath := imports.TargetClipRelPathForTest("Dendrocopos major", 0.74, ts, "mp3")
+	data, readErr := os.ReadFile(filepath.Join(exportDir, filepath.FromSlash(relPath)))
+	require.NoError(t, readErr)
+	assert.Equal(t, clipContent, data)
 }
 
 func TestImport_WithAudio_InsufficientDiskSpace_Aborts(t *testing.T) {
