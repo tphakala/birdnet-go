@@ -545,6 +545,8 @@ const legacyFallbackWarnMessage = "database state check failed, starting with th
 // fallback: a state check error that is not a refusal is the only record that the start
 // took the legacy path because of an error. Not parallel: it swaps the global logger.
 func TestDatabaseService_Start_StateErrorWarnsOnLegacyFallback(t *testing.T) {
+	t.Cleanup(func() { importsapi.SetMigrationDependencies(nil, nil) })
+
 	settings := &conf.Settings{}
 	settings.Output.SQLite.Enabled = true
 	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
