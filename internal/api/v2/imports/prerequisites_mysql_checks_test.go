@@ -87,6 +87,7 @@ func TestCheckMySQLCharset_Status(t *testing.T) {
 		queryErr    error
 		want        string
 		wantMessage string
+		wantNot     string
 	}{
 		{name: "all utf8mb4 passes", schema: "utf8mb4",
 			tables: []dbserver.TableCharsets{tbl("notes", "utf8mb4"), tbl("v2_detections", "utf8mb4")}, want: CheckStatusPassed},
@@ -97,10 +98,16 @@ func TestCheckMySQLCharset_Status(t *testing.T) {
 			want:   CheckStatusFailed, wantMessage: "v2_detections"},
 		{name: "one latin1 target table among utf8mb4 ones fails", schema: "utf8mb4",
 			tables: []dbserver.TableCharsets{tbl("notes", "utf8mb4"), tbl("v2_a", "utf8mb4"), tbl("v2_b", "latin1")},
-			want:   CheckStatusFailed, wantMessage: "v2_b"},
-		{name: "shared legacy name is source and foreign table is ignored", schema: "utf8mb4",
-			tables: []dbserver.TableCharsets{tbl("image_caches", "latin1"), tbl("wp_posts", "latin1"), tbl("v2_detections", "utf8mb4")},
-			want:   CheckStatusPassed},
+			want:   CheckStatusFailed, wantMessage: "v2_b", wantNot: "v2_a"},
+		{name: "mixed targets warn without naming utf8mb4 as limited", schema: "utf8mb4",
+			tables: []dbserver.TableCharsets{tbl("notes", "latin1"), tbl("v2_a", "utf8mb4"), tbl("v2_b", "latin1")},
+			want:   CheckStatusWarning, wantMessage: "latin1", wantNot: "utf8mb4"},
+		{name: "shared legacy table with utf8mb4 text fails a latin1 target", schema: "latin1",
+			tables: []dbserver.TableCharsets{tbl("image_caches", "utf8mb4"), tbl("v2_detections", "latin1")},
+			want:   CheckStatusFailed, wantMessage: "v2_detections"},
+		{name: "foreign table is not a source", schema: "latin1",
+			tables: []dbserver.TableCharsets{tbl("wp_posts", "utf8mb4"), tbl("notes", "latin1"), tbl("v2_detections", "latin1")},
+			want:   CheckStatusWarning},
 		{name: "no target text tables falls back to schema default", schema: "latin1",
 			tables: []dbserver.TableCharsets{tbl("notes", "utf8mb4")}, want: CheckStatusFailed},
 		{name: "no target tables and no schema default errors", schema: "",
@@ -118,6 +125,9 @@ func TestCheckMySQLCharset_Status(t *testing.T) {
 			assert.Equal(t, tt.want, check.Status, check.Message)
 			if tt.wantMessage != "" {
 				assert.Contains(t, check.Message, tt.wantMessage)
+			}
+			if tt.wantNot != "" {
+				assert.NotContains(t, check.Message, tt.wantNot)
 			}
 		})
 	}

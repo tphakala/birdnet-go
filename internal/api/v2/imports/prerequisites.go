@@ -896,14 +896,15 @@ func (c *Handler) checkMySQLCharset() PrerequisiteCheck {
 
 // charsetTables is the classification of a schema's tables for the charset check.
 type charsetTables struct {
-	targetNames    []string
+	targetTables   []dbserver.TableCharsets
 	targetCharsets []string
 	sourceCharsets []string
 }
 
 // classifyCharsetTables splits report into target tables (name starts with
 // prefix) and legacy source tables (name in the legacy lists). A table's class
-// depends only on its own name; any other table is ignored. When no target
+// depends only on its own name; any other table is ignored. Target tables keep
+// their charsets so a message can name the ones that use a given charset. When no target
 // table has text columns, the schema default stands in for the target.
 func classifyCharsetTables(report *dbserver.CharsetReport, prefix string) charsetTables {
 	var out charsetTables
@@ -912,7 +913,7 @@ func classifyCharsetTables(report *dbserver.CharsetReport, prefix string) charse
 		name := strings.ToLower(t.Name)
 		switch {
 		case strings.HasPrefix(name, prefix):
-			out.targetNames = append(out.targetNames, t.Name)
+			out.targetTables = append(out.targetTables, t)
 			out.targetCharsets = append(out.targetCharsets, t.Charsets...)
 		case slices.Contains(legacyOnlyTables, name) || slices.Contains(legacySharedTables, name):
 			out.sourceCharsets = append(out.sourceCharsets, t.Charsets...)
@@ -929,7 +930,9 @@ func classifyCharsetTables(report *dbserver.CharsetReport, prefix string) charse
 }
 
 // describeCharset judges whether the target tables can hold the legacy text.
-// Every target charset must hold every source charset.
+// Every target charset must hold every source charset. A failure names the
+// target tables that use the offending charset; a warning names only the
+// charsets other than utf8mb4.
 func describeCharset(report *dbserver.CharsetReport, prefix string) (status, message string) {
 	tables := classifyCharsetTables(report, prefix)
 	if len(tables.targetCharsets) == 0 {
@@ -943,7 +946,7 @@ func describeCharset(report *dbserver.CharsetReport, prefix string) (status, mes
 			}
 			return CheckStatusFailed, fmt.Sprintf(
 				"Migration target tables %s use %s, which cannot store the %s text in the legacy tables. Convert the %s tables to %s (ALTER TABLE ... CONVERT TO CHARACTER SET %s) before migrating.",
-				describeTableNames(tables.targetNames, report.SchemaCharset), target, source,
+				describeTableNames(tablesUsing(tables.targetTables, target), report.SchemaCharset), target, source,
 				prefix, dbserver.CharsetUTF8MB4, dbserver.CharsetUTF8MB4)
 		}
 	}
@@ -951,10 +954,22 @@ func describeCharset(report *dbserver.CharsetReport, prefix string) (status, mes
 	if len(tables.targetCharsets) == 1 && tables.targetCharsets[0] == dbserver.CharsetUTF8MB4 {
 		return CheckStatusPassed, "The migration target tables use " + dbserver.CharsetUTF8MB4
 	}
-	used := strings.Join(tables.targetCharsets, ", ")
+	limited := slices.DeleteFunc(slices.Clone(tables.targetCharsets), func(cs string) bool { return cs == dbserver.CharsetUTF8MB4 })
+	used := strings.Join(limited, ", ")
 	return CheckStatusWarning, fmt.Sprintf(
-		"The migration target tables use %s. The legacy data fits, but after the migration text outside %s, such as emoji or some scripts, is rejected.",
+		"Some migration target tables use %s. After the migration, text outside %s, such as emoji or some scripts, is rejected there.",
 		used, used)
+}
+
+// tablesUsing returns the names of the tables with a text column in charset.
+func tablesUsing(tables []dbserver.TableCharsets, charset string) []string {
+	var names []string
+	for _, t := range tables {
+		if slices.Contains(t.Charsets, charset) {
+			names = append(names, t.Name)
+		}
+	}
+	return names
 }
 
 // describeTableNames lists up to maxNamedCharsetTables names. With no target
