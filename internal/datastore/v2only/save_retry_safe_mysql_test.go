@@ -33,6 +33,10 @@ const (
 const (
 	// mysqlComQuery is the MySQL protocol command byte of a text statement.
 	mysqlComQuery = 0x03
+	// mysqlComStmtClose is the command byte that closes a prepared statement.
+	mysqlComStmtClose = 0x19
+	// mysqlStmtIDLen is the length of the statement id that follows COM_STMT_CLOSE.
+	mysqlStmtIDLen = 4
 	// mysqlPacketHeaderLen is the length prefix plus sequence id before the command byte.
 	mysqlPacketHeaderLen = 4
 	// proxyReadBufferSize holds one client packet; the statements here are small.
@@ -137,7 +141,13 @@ func mysqlTestPacket(payload ...byte) []byte {
 func TestIsCommitPacket(t *testing.T) {
 	t.Parallel()
 	query := func(sql string) []byte { return mysqlTestPacket(append([]byte{mysqlComQuery}, sql...)...) }
-	stmtClose := mysqlTestPacket(0x19, 1, 0, 0, 0) // COM_STMT_CLOSE
+	stmtClose := mysqlTestPacket(append([]byte{mysqlComStmtClose}, make([]byte, mysqlStmtIDLen)...)...)
+	// Payloads past 255 and 65535 bytes need the second and third length bytes.
+	const (
+		twoByteLenPayload   = 300
+		threeByteLenPayload = 70000
+	)
+	longInsert := func(n int) []byte { return query("INSERT " + strings.Repeat("x", n)) }
 	cat := func(parts ...[]byte) []byte {
 		var out []byte
 		for _, p := range parts {
@@ -155,6 +165,8 @@ func TestIsCommitPacket(t *testing.T) {
 		{"commit only", query("COMMIT"), true},
 		{"commit lower case", query("commit"), true},
 		{"commit after statement close", cat(stmtClose, query("COMMIT")), true},
+		{"commit after a payload needing two length bytes", cat(longInsert(twoByteLenPayload), query("COMMIT")), true},
+		{"commit after a payload needing three length bytes", cat(longInsert(threeByteLenPayload), query("COMMIT")), true},
 		{"commit after empty packet", cat(mysqlTestPacket(), query("COMMIT")), true},
 		{"non-commit query", query("SELECT 1"), false},
 		{"statement close only", stmtClose, false},
