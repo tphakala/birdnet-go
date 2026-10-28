@@ -1733,6 +1733,12 @@
             "sqlite_integrity": {
               "name": "Tietokannan eheys"
             },
+            "mysql_server_version": {
+              "name": "Tietokantapalvelimen versio"
+            },
+            "mysql_charset": {
+              "name": "Tietokannan merkistö"
+            },
             "mysql_table_health": {
               "name": "Taulujen kunto"
             },

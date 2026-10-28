@@ -177,3 +177,26 @@ func TestCharsetReport(t *testing.T) {
 		})
 	}
 }
+
+func TestCharsetCanHold(t *testing.T) {
+	tests := []struct {
+		target, source string
+		want           bool
+	}{
+		{"utf8mb4", "utf8mb4", true},
+		{"utf8mb4", "cp1251", true},
+		{"latin1", "latin1", true},
+		{"utf8mb3", "latin1", true},
+		{"latin1", "ascii", true},
+		{"latin1", "utf8mb4", false},
+		{"utf8mb3", "utf8mb4", false},
+		{"latin1", "utf8mb3", false},
+		{"cp1251", "latin1", false},
+		{"cp1251", "cp1251", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.target+"_holds_"+tt.source, func(t *testing.T) {
+			assert.Equal(t, tt.want, CharsetCanHold(tt.target, tt.source))
+		})
+	}
+}

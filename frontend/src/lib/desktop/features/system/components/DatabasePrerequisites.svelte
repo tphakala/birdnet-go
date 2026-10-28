@@ -168,12 +168,11 @@
           <StatusIcon class="w-4 h-4 flex-shrink-0 {statusIconColor[check.status]}" />
 
           <div class="flex-1 min-w-0">
-            <span class="font-medium">{check.name}</span>
-            <span class="mx-1.5 text-muted">&mdash;</span>
+            <span class="font-medium">{check.name}:</span>
             <span class="text-muted">{check.message}</span>
           </div>
 
-          {#if check.severity === 'critical' && check.status !== 'passed'}
+          {#if check.severity === 'critical' && (check.status === 'failed' || check.status === 'error')}
             <span
               class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold badge-status-error"
             >

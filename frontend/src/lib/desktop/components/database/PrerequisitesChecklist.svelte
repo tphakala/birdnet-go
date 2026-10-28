@@ -45,6 +45,8 @@
     'disk_space',
     'legacy_accessible',
     'sqlite_integrity',
+    'mysql_server_version',
+    'mysql_charset',
     'mysql_table_health',
     'mysql_permissions',
     'write_permission',

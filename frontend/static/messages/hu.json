@@ -1733,6 +1733,12 @@
             "sqlite_integrity": {
               "name": "Adatbázis integritás"
             },
+            "mysql_server_version": {
+              "name": "Adatbázis-kiszolgáló verziója"
+            },
+            "mysql_charset": {
+              "name": "Adatbázis karakterkészlete"
+            },
             "mysql_table_health": {
               "name": "Tábla állapot"
             },
