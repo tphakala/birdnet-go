@@ -968,20 +968,15 @@ func TestConvertThresholdsForPersistence_ZeroTimestampFallback(t *testing.T) {
 	assert.Equal(t, got.FirstCreated, got.LastTriggered, "zero LastTriggered falls back to FirstCreated")
 }
 
-// TestCleanUpDynamicThresholds_DeletesFromDatabaseOnlyWhenPruning verifies the
-// flusher-tick cleanup stays off the database while nothing expires, and deletes the
-// expired rows once when it prunes an in-memory entry.
-func TestCleanUpDynamicThresholds_DeletesFromDatabaseOnlyWhenPruning(t *testing.T) {
+// TestCleanUpDynamicThresholds_PrunesMemoryWithoutTouchingDatabase verifies the
+// flusher-tick cleanup prunes stale in-memory entries and never calls the database, so a
+// slow database cannot delay the flusher.
+func TestCleanUpDynamicThresholds_PrunesMemoryWithoutTouchingDatabase(t *testing.T) {
 	p := createTestProcessor()
 	mockDs, ok := p.Ds.(*MockDatastore)
 	require.True(t, ok)
 
 	p.DynamicThresholds["fresh"] = &DynamicThreshold{Timer: time.Now().Add(time.Hour)}
-	for range 5 {
-		p.cleanUpDynamicThresholds()
-	}
-	assert.Zero(t, mockDs.deleteExpiredCalls.Load(), "an idle tick must not touch the database")
-
 	p.DynamicThresholds["stale"] = &DynamicThreshold{Timer: time.Now().AddDate(-10, 0, 0)}
 	for range 5 {
 		p.cleanUpDynamicThresholds()
@@ -994,7 +989,7 @@ func TestCleanUpDynamicThresholds_DeletesFromDatabaseOnlyWhenPruning(t *testing.
 
 	assert.False(t, staleKept, "stale in-memory entry should be pruned")
 	assert.True(t, freshKept, "fresh in-memory entry should be kept")
-	assert.EqualValues(t, 1, mockDs.deleteExpiredCalls.Load(), "pruning an entry deletes the expired rows once")
+	assert.Zero(t, mockDs.deleteExpiredCalls.Load(), "the flusher tick must not touch the database")
 }
 
 // TestPersistDynamicThresholds_DeletesExpiredRowsOnlyWhenDroppingAnEntry verifies the

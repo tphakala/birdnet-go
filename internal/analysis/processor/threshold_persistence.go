@@ -427,9 +427,9 @@ func (p *Processor) startThresholdPersistence(ctx context.Context) {
 }
 
 // deleteExpiredThresholdsFromDB deletes expired dynamic threshold rows from the database
-// and logs the outcome. It is called from the cleanup goroutine and, when an in-memory
-// prune removed an entry, from the flusher tick (cleanUpDynamicThresholds) and the
-// persistence tick (cleanupExpiredThresholds); it must not run on every tick.
+// and logs the outcome. It is called from the cleanup goroutine and, when the in-memory
+// prune removed an entry, from the persistence tick (cleanupExpiredThresholds); it must not
+// run on every tick and must not be called from the flusher tick, which never touches the database.
 func (p *Processor) deleteExpiredThresholdsFromDB() {
 	deleted, err := p.Ds.DeleteExpiredDynamicThresholds(time.Now())
 	if err != nil {
