@@ -1733,6 +1733,12 @@
             "sqlite_integrity": {
               "name": "Integralność bazy danych"
             },
+            "mysql_server_version": {
+              "name": "Wersja serwera bazy danych"
+            },
+            "mysql_charset": {
+              "name": "Zestaw znaków bazy danych"
+            },
             "mysql_table_health": {
               "name": "Stan tabel"
             },

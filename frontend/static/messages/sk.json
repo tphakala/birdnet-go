@@ -1733,6 +1733,12 @@
             "sqlite_integrity": {
               "name": "Integrita databázy"
             },
+            "mysql_server_version": {
+              "name": "Verzia databázového servera"
+            },
+            "mysql_charset": {
+              "name": "Znaková sada databázy"
+            },
             "mysql_table_health": {
               "name": "Stav tabuliek"
             },

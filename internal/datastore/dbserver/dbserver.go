@@ -284,6 +284,7 @@ const (
 	tagOther       = "other"
 	tagMixed       = "mixed"
 	tagSeparator   = "-"
+	charsetASCII   = "ascii"
 	charsetLatin1  = "latin1"
 	charsetUTF8MB3 = "utf8mb3"
 )
@@ -360,6 +361,29 @@ func CharsetTag(r CharsetReport) string {
 	default:
 		return tagOther
 	}
+}
+
+// charsetRank orders the character sets whose repertoires nest: every ascii
+// character is in latin1, and every latin1 character is in utf8mb3.
+var charsetRank = map[string]int{
+	charsetASCII:   1,
+	charsetLatin1:  2,
+	charsetUTF8MB3: 3,
+}
+
+// CharsetCanHold reports whether a column in character set target can store
+// every character of a column in character set source. It is true when the two
+// are equal, when target is utf8mb4, or when both are in the nested order
+// ascii < latin1 < utf8mb3 and source ranks at or below target. Any other pair
+// is false, including a pair with a character set outside that order.
+// Collations are not considered.
+func CharsetCanHold(target, source string) bool {
+	if target == source || target == CharsetUTF8MB4 {
+		return true
+	}
+	t, tok := charsetRank[target]
+	s, sok := charsetRank[source]
+	return tok && sok && s <= t
 }
 
 // TagUnknown is the telemetry value for a probe that failed.

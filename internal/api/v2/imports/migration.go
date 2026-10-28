@@ -778,9 +778,10 @@ func (c *Handler) runPreflightChecks() error {
 
 // runCriticalPrerequisiteChecks runs all critical checks that must pass before migration.
 // This is used by both GetPrerequisites and runPreflightChecks to ensure consistency.
-// It also records the outcome in the migration_prereq telemetry tag.
+// It also records the outcome in the migration_prereq telemetry tag. In the MySQL branch the
+// server version check runs first, so the tag names it when the server is unsupported.
 func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
-	checks := make([]PrerequisiteCheck, 0, 6)
+	checks := make([]PrerequisiteCheck, 0, 8)
 
 	// Common critical checks
 	checks = append(checks,
@@ -792,6 +793,8 @@ func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
 	// Database-specific critical checks
 	if c.isUsingMySQL() {
 		checks = append(checks,
+			c.checkMySQLServerVersion(),
+			c.checkMySQLCharset(),
 			c.checkMySQLTableHealth(),
 			c.checkMySQLPermissions(),
 		)

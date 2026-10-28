@@ -1733,6 +1733,12 @@
             "sqlite_integrity": {
               "name": "Databasintegritet"
             },
+            "mysql_server_version": {
+              "name": "Databasserverns version"
+            },
+            "mysql_charset": {
+              "name": "Databasens teckenuppsättning"
+            },
             "mysql_table_health": {
               "name": "Tabellhälsa"
             },

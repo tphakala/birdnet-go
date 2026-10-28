@@ -1733,6 +1733,12 @@
             "sqlite_integrity": {
               "name": "Datubāzes integritāte"
             },
+            "mysql_server_version": {
+              "name": "Datubāzes servera versija"
+            },
+            "mysql_charset": {
+              "name": "Datubāzes rakstzīmju kopa"
+            },
             "mysql_table_health": {
               "name": "Tabulu veselība"
             },
