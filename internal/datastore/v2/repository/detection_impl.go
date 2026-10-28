@@ -1274,12 +1274,14 @@ func (r *detectionRepository) SavePredictionsBatch(ctx context.Context, preds []
 	}, r.metrics)
 }
 
-// GetPredictions retrieves all predictions for a detection.
+// GetPredictions retrieves all predictions for a detection, best rank first.
+// rank is a reserved word on MySQL, so the ORDER BY column goes through the
+// dialect's identifier quoting.
 func (r *detectionRepository) GetPredictions(ctx context.Context, detectionID uint) ([]*entities.DetectionPrediction, error) {
 	var preds []*entities.DetectionPrediction
 	err := r.db.WithContext(ctx).Table(r.predictionsTable()).
 		Where("detection_id = ?", detectionID).
-		Order("rank ASC").
+		Order(clause.OrderByColumn{Column: clause.Column{Name: "rank"}}).
 		Find(&preds).Error
 	return preds, err
 }
