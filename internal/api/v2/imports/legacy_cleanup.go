@@ -258,13 +258,14 @@ func mysqlCleanupConn(ctx context.Context, mgr datastoreV2.Manager) (*gorm.DB, *
 type mysqlResolveMode int
 
 const (
-	// mysqlResolveStatus adds an exact row count per table and skips the tail
-	// proof; only the status call uses it.
-	mysqlResolveStatus mysqlResolveMode = iota
 	// mysqlResolveDrop runs the tail proof and skips row counts, because
 	// COUNT(*) can scan a whole large table; the POST pre-check and the
-	// background drop use it.
-	mysqlResolveDrop
+	// background drop use it. It is the zero value, so a caller that forgets the
+	// mode gets the proof.
+	mysqlResolveDrop mysqlResolveMode = iota
+	// mysqlResolveStatus adds an exact row count per table and skips the tail
+	// proof; only the status call uses it.
+	mysqlResolveStatus
 )
 
 // resolveMySQLLegacyTables decides which legacy tables the MySQL cleanup may
@@ -313,7 +314,7 @@ func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, mgr datastoreV2.
 		return nil, nil, &legacyCleanupRefusal{reason: reasonNoLegacyTables, errorKey: notification.MsgErrCleanupNoLegacyTables}
 	}
 
-	if mode == mysqlResolveDrop {
+	if mode != mysqlResolveStatus {
 		err := datastoreV2.VerifyMySQLLegacyMigrated(ctx, db, prefix, state.LastMigratedID, apicore.GetLogger())
 		if refusal := c.legacyProofRefusal(err); refusal != nil {
 			return nil, nil, refusal

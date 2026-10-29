@@ -3,6 +3,7 @@ package v2
 import (
 	"context"
 	"fmt"
+	"regexp"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -56,6 +57,13 @@ func VerifySQLiteLegacyMigrated(ctx context.Context, legacyPath string, v2DB *go
 	return nil
 }
 
+// safeTablePrefix is the shape of a table prefix that may be spliced into the
+// backtick-quoted identifiers of the proof queries.
+var safeTablePrefix = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
+
+// errUnsafeTablePrefix is the fixed cause when the table prefix is not a plain identifier fragment.
+var errUnsafeTablePrefix = errors.NewStd("table prefix is not a plain identifier")
+
 // errNoCurrentDatabase is the fixed cause when the server reports no selected database.
 var errNoCurrentDatabase = errors.NewStd("no database selected")
 
@@ -89,6 +97,9 @@ const legacyChildTablesQuery = "SELECT c.note_id FROM `%s` c LEFT JOIN `%s` d ON
 func VerifyMySQLLegacyMigrated(ctx context.Context, db *gorm.DB, tablePrefix string, lastMigratedID uint, log logger.Logger) error {
 	if tablePrefix == "" {
 		return ErrNotLegacyDatabase
+	}
+	if !safeTablePrefix.MatchString(tablePrefix) {
+		return tailUnverified(tailStepLegacyTable, errUnsafeTablePrefix)
 	}
 	db = db.WithContext(ctx)
 

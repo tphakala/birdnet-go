@@ -108,6 +108,15 @@ func TestVerifyMySQLLegacyMigrated(t *testing.T) {
 			wantErr: ErrLegacyRecordsUnmigrated,
 		},
 		{
+			name:   "notes dropped, pending dirty id",
+			prefix: proofPrefix,
+			setup: func(s proofSeed) {
+				s.child(1)
+				require.NoError(s.t, s.db.Exec(proofDirtyInsertSQL, 1).Error)
+			},
+			wantErr: ErrLegacyRecordsUnmigrated,
+		},
+		{
 			name:   "notes dropped, child rows at or below the watermark",
 			prefix: proofPrefix,
 			setup:  func(s proofSeed) { s.child(1, proofWatermark) },
@@ -139,6 +148,12 @@ func TestVerifyMySQLLegacyMigrated(t *testing.T) {
 			prefix:  proofPrefix,
 			setup:   func(s proofSeed) { s.notes(1) },
 			cancel:  true,
+			wantErr: ErrLegacyTailUnverified,
+		},
+		{
+			name:    "prefix that is not a plain identifier",
+			prefix:  "v2`_",
+			setup:   func(s proofSeed) { s.notes(1) },
 			wantErr: ErrLegacyTailUnverified,
 		},
 		{

@@ -436,6 +436,11 @@ func TestLegacyCleanup_MySQL(t *testing.T) {
 		insertLegacyTailNote(t, mgr.DB())
 		c := newCleanupHandler(t, mgr)
 
+		// Status lists and counts without the proof; only the drop proves the tail.
+		status := getStatus(t, c)
+		assert.True(t, status.CanCleanup)
+		assert.Equal(t, int64(len(legacyOnly)+1), status.TotalRecords, "one row per table plus the tail note")
+
 		code, resp := postCleanup(t, c)
 		assert.Equal(t, http.StatusBadRequest, code)
 		assert.Equal(t, notification.MsgErrCleanupSafetyCheck, resp.ErrorKey)

@@ -577,6 +577,33 @@ func TestGetLegacyStatus_MySQL_Refuses(t *testing.T) {
 	}
 }
 
+// TestMysqlCleanupConn_RefusesUnusableManagers verifies the connection seam
+// refuses a missing manager, a non-MySQL manager and a manager without a
+// connection, so a SQLite database is never handed to the MySQL queries.
+func TestMysqlCleanupConn_RefusesUnusableManagers(t *testing.T) {
+	t.Attr("component", "legacy_cleanup")
+	t.Attr("type", "unit")
+
+	tests := []struct {
+		name       string
+		mgr        datastoreV2.Manager
+		wantReason string
+	}{
+		{"no manager", nil, reasonMySQLManagerUnavailable},
+		{"non-MySQL manager", newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0), reasonMySQLManagerUnavailable},
+		{"MySQL manager without a connection", &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}, reasonNoConnection},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, refusal := mysqlCleanupConn(t.Context(), tt.mgr)
+			assert.Nil(t, db)
+			require.NotNil(t, refusal)
+			assert.Equal(t, tt.wantReason, refusal.reason)
+			assert.Equal(t, notification.MsgErrCleanupAccessFailed, refusal.errorKey)
+		})
+	}
+}
+
 // TestStartLegacyCleanup_MySQL_Refuses verifies a POST that cannot be resolved is
 // refused synchronously and never schedules work.
 func TestStartLegacyCleanup_MySQL_Refuses(t *testing.T) {
@@ -1004,13 +1031,14 @@ func TestLegacyCleanup_MySQL_RequiresAuxiliaryOutcome(t *testing.T) {
 	t.Attr("type", "unit")
 
 	tests := []struct {
-		name      string
-		aux       entities.AuxiliaryDataStatus
-		wantKey   string
-		wantAfter string // reason of the listing failure that follows a passed gate
+		name       string
+		aux        entities.AuxiliaryDataStatus
+		wantKey    string
+		wantExists bool
+		wantAfter  string // reason of the listing failure that follows a passed gate
 	}{
-		{name: "not recorded", aux: entities.AuxiliaryDataStatusUnknown, wantKey: notification.MsgErrCleanupSafetyCheck},
-		{name: "failed", aux: entities.AuxiliaryDataStatusFailed, wantKey: notification.MsgErrCleanupSafetyCheck},
+		{name: "not recorded", aux: entities.AuxiliaryDataStatusUnknown, wantKey: notification.MsgErrCleanupSafetyCheck, wantExists: true},
+		{name: "failed", aux: entities.AuxiliaryDataStatusFailed, wantKey: notification.MsgErrCleanupSafetyCheck, wantExists: true},
 		{name: "not required is a fresh install with no legacy database", aux: entities.AuxiliaryDataStatusNotRequired, wantKey: notification.MsgErrCleanupNoLegacyDB},
 		{name: "succeeded passes the gate", aux: entities.AuxiliaryDataStatusSucceeded, wantKey: notification.MsgErrCleanupAccessFailed, wantAfter: reasonListTablesFailed},
 	}
@@ -1026,6 +1054,7 @@ func TestLegacyCleanup_MySQL_RequiresAuxiliaryOutcome(t *testing.T) {
 			status, post, code := legacyCleanupCall(t, c)
 
 			assert.False(t, status.CanCleanup)
+			assert.Equal(t, tt.wantExists, status.Exists)
 			assert.Equal(t, tt.wantKey, status.ErrorKey)
 			assert.Equal(t, http.StatusBadRequest, code)
 			assert.Equal(t, tt.wantKey, post.ErrorKey)
