@@ -381,7 +381,7 @@ func (p *Processor) finishThresholdReset(b *thresholdResetBarrier, apply func())
 // hold up detections or shutdown. Events recorded for the species while the
 // deletes run are saved after them (thresholdResetBarrier), so the events delete
 // cannot wipe them. A retry is queued (pendingResets) only when a DB delete
-// failed, and a fully successful reset drops an older queued retry for the species.
+// failed or panicked, and a fully successful reset drops an older queued retry for the species.
 func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	log := GetLogger()
 	// Normalize to lowercase to match the casing used by addSpeciesToDynamicThresholds
@@ -411,7 +411,7 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	// Registered after the persistence-unlock defer, so it runs first: the retry
 	// state is in place before the next cycle can take the persistence lock.
 	defer p.finishThresholdReset(barrier, func() {
-		// Queue a retry only when a delete failed. On success, drop an older
+		// Queue a retry only when a delete failed or panicked. On success, drop an older
 		// retry so it cannot delete events re-learned after this reset.
 		if p.pendingResets == nil {
 			return
@@ -450,7 +450,7 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 // The persistence lock is held for the whole operation and thresholdsMutex only
 // to clear memory and to record the outcome (see ResetDynamicThreshold); events of
 // every species recorded during the deletes are saved after them.
-// pendingResetAll is set only when a DB delete failed and cleared when both succeed.
+// pendingResetAll is set only when a DB delete failed or panicked and cleared when both succeed.
 func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 	log := GetLogger()
 	// Persistence lock first, then thresholdsMutex (see lockThresholdPersistence).
@@ -480,7 +480,7 @@ func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 	// Stays true if a datastore call panics, so the deferred section queues a retry.
 	failed := true
 	defer p.finishThresholdReset(barrier, func() {
-		// Retry at the start of the next persistence cycle only if a delete failed;
+		// Retry at the start of the next persistence cycle only if a delete failed or panicked;
 		// a full success also drops an older queued retry.
 		p.pendingResetAll = failed
 	})
