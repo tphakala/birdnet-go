@@ -14,6 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbfailure"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
@@ -51,7 +52,7 @@ func abortOnV2SchemaCorruption(log logger.Logger, err error, operation, modeLabe
 		logger.String("mode", modeLabel),
 		logger.String("operation", operation),
 		logger.String("recovery_hint", schemaCorruptionRecoveryHint))
-	return fmt.Errorf("v2 schema corrupted in %s mode, refusing silent fallback to legacy mode: %w", modeLabel, err)
+	return fmt.Errorf("v2 schema corrupted in %s mode, refusing silent fallback to legacy mode: %w; %s", modeLabel, err, schemaCorruptionRecoveryHint)
 }
 
 // mixedSchemaGuideURL is the wiki section that explains how to resolve a MySQL or
@@ -91,6 +92,45 @@ const (
 // refuses to continue because the database state could not be read.
 const startupStateUnknownRecoveryHint = "make sure the MySQL or MariaDB server is running and reachable from BirdNET-Go, then restart BirdNET-Go"
 
+// Operations that start the text of a classified start error.
+const (
+	// opRefuseStart starts the text of a refusal after the database server rejected the connection.
+	opRefuseStart = "refusing to start"
+	// opRefuseUnknownState starts the text of the unknown-state refusal.
+	opRefuseUnknownState = "refusing to start before the database state is known"
+	// opOpenDatabase starts the text of a failure to open the database.
+	opOpenDatabase = "cannot open the database"
+)
+
+// failureLogFields returns the log fields that describe a classified failure. They carry
+// the kind, the server error number, the settings to check and the hint, and no value
+// from the configuration.
+func failureLogFields(f *dbfailure.Failure) []logger.Field {
+	fields := []logger.Field{
+		logger.String("failure_kind", string(f.Kind)),
+		logger.String("settings_to_check", strings.Join(f.Settings, ", ")),
+		logger.String("recovery_hint", f.Hint),
+	}
+	if f.MySQLErrorNumber != 0 {
+		fields = append(fields, logger.Int("mysql_error", int(f.MySQLErrorNumber)))
+	}
+	return fields
+}
+
+// refuseClassifiedStart logs a classified start failure at Error level and returns it for
+// the caller to propagate. The text and the MySQL log fields carry no configuration value;
+// the cause is logged only for SQLite, where it holds paths and disk numbers the service
+// already logs.
+func refuseClassifiedStart(log logger.Logger, startErr *dbfailure.StartError, message, operation string) error {
+	fields := append([]logger.Field{logger.Error(startErr), logger.String("operation", operation)},
+		failureLogFields(&startErr.Failure)...)
+	if startErr.Failure.Backend == dbfailure.BackendSQLite {
+		fields = append(fields, logger.String("cause", startErr.Unwrap().Error()))
+	}
+	log.Error(message, fields...)
+	return startErr
+}
+
 // abortOnMixedSchema inspects the error of the startup state check. If it chains to
 // datastoreV2.ErrMixedSchemaDatabase it logs at Error level with the per-table row
 // counts and the recovery hint and returns a wrapped error the caller must propagate.
@@ -104,23 +144,33 @@ func abortOnMixedSchema(log logger.Logger, err error) error {
 	log.Error("database holds both enhanced database (v2) tables and legacy tables, refusing to start, no table with rows was dropped",
 		logger.Error(err),
 		logger.String("recovery_hint", mixedSchemaRecoveryHint))
-	return fmt.Errorf("refusing to start on a database with both enhanced and legacy tables: %w", err)
+	return fmt.Errorf("refusing to start on a database with both enhanced and legacy tables: %w; %s", err, mixedSchemaRecoveryHint)
 }
 
 // abortOnStartupStateUnknown logs at Error level and returns a wrapped error the caller
 // must propagate when err chains to datastoreV2.ErrStartupStateUnknown. Startup stops
 // before any datastore is constructed. The reads before it may already have changed the
 // database: the state check can drop empty tables of a mixed schema, and with SQLite
-// enabled the SQLite consolidation may have run. Returns nil for other errors and for nil input.
+// enabled the SQLite consolidation may have run. When the cause is recognised
+// (dbfailure.Classify) the returned error is a *dbfailure.StartError that names the settings
+// to check and keeps the cause reachable; otherwise the generic hint is appended to the
+// text. Returns nil for other errors and for nil input.
 func abortOnStartupStateUnknown(log logger.Logger, err error) error {
 	if err == nil || !errors.Is(err, datastoreV2.ErrStartupStateUnknown) {
 		return nil
 	}
-	log.Error("could not read the database state at startup, refusing to start, no datastore was constructed",
+	const message = "could not read the database state at startup, refusing to start, no datastore was constructed"
+	if failure := dbfailure.Classify(err); failure.Kind != dbfailure.KindUnknown {
+		fields := append([]logger.Field{logger.Error(err), logger.String("operation", operationStartupReconciliation)},
+			failureLogFields(&failure)...)
+		log.Error(message, fields...)
+		return dbfailure.NewStartError(opRefuseUnknownState, &failure, err)
+	}
+	log.Error(message,
 		logger.Error(err),
 		logger.String("operation", operationStartupReconciliation),
 		logger.String("recovery_hint", startupStateUnknownRecoveryHint))
-	return fmt.Errorf("refusing to start before the database state is known: %w", err)
+	return fmt.Errorf("%s: %w; %s", opRefuseUnknownState, err, startupStateUnknownRecoveryHint)
 }
 
 // waitWithContext waits for d or until ctx is done, whichever comes first, and returns
@@ -347,8 +397,10 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 // check, state check, table prefix probe), Start reads it again with a bounded, capped
 // backoff (startupStateMaxAttempts) and then refuses to start before any datastore is
 // constructed (datastoreV2.ErrStartupStateUnknown), so no mode or table prefix is chosen
-// on a failed read. Any other state check error keeps the legacy fallback and is logged
-// at Warn level.
+// on a failed read. A MySQL or MariaDB server that rejects the connection (1044, 1045,
+// 1049, 3159) is refused the same way, before any datastore is constructed, and the
+// returned error names the settings to check. Any other state check error keeps the
+// legacy fallback and is logged at Warn level.
 // Migration infrastructure is initialized when not in v2-only mode; on a legacy
 // install with a migration state manager it also starts the monitor that keeps
 // the migration_state telemetry tag, the legacy schema bell notice and the
@@ -388,6 +440,15 @@ func (d *DatabaseService) Start(ctx context.Context) error {
 	d.v2OnlyMode = startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
 	freshInstall := startupState.FreshInstall
 
+	// A server that rejected the connection while the state was read would reject the
+	// datastore too: refuse below, after the boot journal, before any datastore exists.
+	var rejection *dbfailure.StartError
+	if settings.Output.MySQL.Enabled && startupState.Error != nil {
+		if failure := dbfailure.Classify(startupState.Error); failure.ServerRejected() {
+			rejection = dbfailure.NewStartError(opRefuseStart, &failure, startupState.Error)
+		}
+	}
+
 	// An unverified legacy tail only matters when it would let the install start in
 	// v2-only mode, which skips the tail-sync worker. Refuse before anything is opened.
 	if tailErr != nil {
@@ -397,11 +458,13 @@ func (d *DatabaseService) Start(ctx context.Context) error {
 				logger.Error(tailErr),
 				logger.String("operation", operationStartupReconciliation),
 				logger.String("recovery_hint", legacyTailRecoveryHint))
-			return fmt.Errorf("refusing to start before the legacy records are verified: %w", tailErr)
+			return fmt.Errorf("refusing to start before the legacy records are verified: %w; %s", tailErr, legacyTailRecoveryHint)
 		}
-		datastoreLog.Warn("could not verify legacy records beyond the migration watermark, not needed for this start",
-			logger.Error(tailErr),
-			logger.String("operation", operationStartupReconciliation))
+		if rejection == nil {
+			datastoreLog.Warn("could not verify legacy records beyond the migration watermark, not needed for this start",
+				logger.Error(tailErr),
+				logger.String("operation", operationStartupReconciliation))
+		}
 	}
 
 	// Override v2-only mode when unmigrated legacy records were found. This forces
@@ -424,6 +487,8 @@ func (d *DatabaseService) Start(ctx context.Context) error {
 		GetLogger().Info("fresh installation detected, initializing v2 schema",
 			logger.String("database_path", settings.Output.SQLite.Path),
 			logger.String("operation", "startup_mode_check"))
+	case rejection != nil:
+		// Refused below, after the boot journal.
 	case startupState.Error != nil && !errors.Is(startupState.Error, datastoreV2.ErrMixedSchemaDatabase):
 		GetLogger().Warn("database state check failed, starting with the legacy database",
 			logger.String("decision", startupState.Decision),
@@ -458,6 +523,14 @@ func (d *DatabaseService) Start(ctx context.Context) error {
 	// may pick a side for the user.
 	if err := abortOnMixedSchema(datastoreLog, startupState.Error); err != nil {
 		return err
+	}
+
+	// A MySQL or MariaDB server that rejected the connection is never opened: the legacy
+	// fallback would fail the same way and only hide the cause.
+	if rejection != nil {
+		return refuseClassifiedStart(datastoreLog, rejection,
+			"the database server rejected the connection, refusing to start, no datastore was constructed",
+			operationStartupReconciliation)
 	}
 
 	// Initialize database access based on startup state
@@ -550,6 +623,10 @@ func (d *DatabaseService) Start(ctx context.Context) error {
 		// This prevents startup failures due to insufficient disk space
 		// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
 		if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
+			if failure := dbfailure.Classify(err); failure.Kind != dbfailure.KindUnknown {
+				return refuseClassifiedStart(GetLogger(), dbfailure.NewStartError(opOpenDatabase, &failure, err),
+					"disk space validation failed", "validate_startup_disk_space")
+			}
 			GetLogger().Error("disk space validation failed",
 				logger.Error(err),
 				logger.String("operation", "validate_startup_disk_space"))
@@ -558,6 +635,10 @@ func (d *DatabaseService) Start(ctx context.Context) error {
 
 		// Open a connection to the database and handle possible errors.
 		if err := d.dataStore.Open(); err != nil {
+			if failure := dbfailure.Classify(err); failure.Kind != dbfailure.KindUnknown {
+				return refuseClassifiedStart(GetLogger(), dbfailure.NewStartError(opOpenDatabase, &failure, err),
+					"failed to open database", "open_database")
+			}
 			GetLogger().Error("failed to open database",
 				logger.Error(err),
 				logger.String("operation", "open_database"))

@@ -18,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/conf/conftest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbfailure"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/testutil/containers"
@@ -1411,4 +1412,21 @@ func insertV2NotificationHistories(tx *gorm.DB, n int) error {
 		}
 	}
 	return nil
+}
+
+// TestMySQL_StartupDetection_WrongPassword_KeepsServerError pins that a rejected login
+// reaches the startup state with the server error intact, so the service refuses the
+// start with a message that names the settings instead of falling back to the legacy
+// database. Routing the open failure through a flattening helper would lose the typed
+// error and silently restore the fallback.
+func TestMySQL_StartupDetection_WrongPassword_KeepsServerError(t *testing.T) {
+	settings := buildTestSettings(coexTestHost, coexTestPort, coexTestDBName, coexTestUser, "wrong")
+
+	state := checkMySQLMigrationState(settings)
+
+	require.Error(t, state.Error)
+	assert.Equal(t, DecisionV2Corrupted, state.Decision)
+	failure := dbfailure.Classify(state.Error)
+	assert.Equal(t, dbfailure.KindMySQLAccessDenied, failure.Kind)
+	assert.True(t, failure.ServerRejected())
 }
