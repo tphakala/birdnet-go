@@ -240,12 +240,12 @@ func (p *faultProxy) handle(client net.Conn) {
 	}
 }
 
-// TestSaveDetection_RetrySafeMarkerMatchesCommitOutcome_MySQL proves the marker
-// the processor relies on: a failed save carries datastore.ErrDetectionSaveRetrySafe
-// only when it stored nothing, and a COMMIT whose outcome is unknown does not,
-// whether the server applied it or not. MYSQL_TEST_IMAGE selects the server.
-func TestSaveDetection_RetrySafeMarkerMatchesCommitOutcome_MySQL(t *testing.T) {
-	containers.SkipIfContainerRuntimeUnavailable(t)
+// newFaultProxyStore starts a MySQL container, puts a faultProxy in front of it
+// and opens a Datastore through the proxy. The returned direct connection goes
+// straight to the server, so rows can be counted without the proxy's faults.
+// MYSQL_TEST_IMAGE selects the server.
+func newFaultProxyStore(t *testing.T) (ds *Datastore, proxy *faultProxy, direct *sql.DB) {
+	t.Helper()
 	ctx := t.Context()
 
 	cfg := &containers.MySQLConfig{
@@ -266,7 +266,7 @@ func TestSaveDetection_RetrySafeMarkerMatchesCommitOutcome_MySQL(t *testing.T) {
 	require.NoError(t, err)
 	port, err := container.GetPort(ctx)
 	require.NoError(t, err)
-	proxy := newFaultProxy(t, net.JoinHostPort(host, strconv.Itoa(port)))
+	proxy = newFaultProxy(t, net.JoinHostPort(host, strconv.Itoa(port)))
 	proxyHost, proxyPort, err := net.SplitHostPort(proxy.addr)
 	require.NoError(t, err)
 
@@ -278,7 +278,7 @@ func TestSaveDetection_RetrySafeMarkerMatchesCommitOutcome_MySQL(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NoError(t, manager.Initialize())
-	ds, err := New(buildConfigForManager(t, manager, testLogger, true, nil))
+	ds, err = New(buildConfigForManager(t, manager, testLogger, true, nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = ds.Close() })
 	ds.timezone = time.UTC
@@ -289,9 +289,21 @@ func TestSaveDetection_RetrySafeMarkerMatchesCommitOutcome_MySQL(t *testing.T) {
 	sqlDB.SetMaxIdleConns(0)
 
 	// Rows are counted over a direct connection, never through the proxy.
-	direct, err := sql.Open("mysql", container.GetDSN())
+	direct, err = sql.Open("mysql", container.GetDSN())
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = direct.Close() })
+	return ds, proxy, direct
+}
+
+// TestSaveDetection_RetrySafeMarkerMatchesCommitOutcome_MySQL proves the marker
+// the processor relies on: a failed save carries datastore.ErrDetectionSaveRetrySafe
+// only when it stored nothing, and a COMMIT whose outcome is unknown does not,
+// whether the server applied it or not. MYSQL_TEST_IMAGE selects the server.
+func TestSaveDetection_RetrySafeMarkerMatchesCommitOutcome_MySQL(t *testing.T) {
+	containers.SkipIfContainerRuntimeUnavailable(t)
+
+	ds, proxy, direct := newFaultProxyStore(t)
+	ctx := t.Context()
 	countRows := func(clip string) int {
 		var n int
 		require.NoError(t, direct.QueryRowContext(ctx, "SELECT COUNT(*) FROM detections WHERE clip_name = ?", clip).Scan(&n))
@@ -357,4 +369,93 @@ func TestSaveDetection_RetrySafeMarkerMatchesCommitOutcome_MySQL(t *testing.T) {
 				5*time.Second, 50*time.Millisecond, "rows stored for %s", tc.clip)
 		})
 	}
+}
+
+// TestBatchSaveDynamicThresholds_RepeatAfterLostCommit_MySQL proves what the
+// processor's threshold save retry relies on: a failed batch save is classified
+// as a connectivity error, and repeating it after a COMMIT whose outcome is
+// unknown leaves exactly one row per species with the snapshot's values.
+// MYSQL_TEST_IMAGE selects the server.
+func TestBatchSaveDynamicThresholds_RepeatAfterLostCommit_MySQL(t *testing.T) {
+	containers.SkipIfContainerRuntimeUnavailable(t)
+	ds, proxy, direct := newFaultProxyStore(t)
+	ctx := t.Context()
+
+	const (
+		thresholdLevel = 2
+		thresholdValue = 0.65
+		thresholdBase  = 0.8
+		thresholdHours = 48
+	)
+	snapshot := func(species ...string) []datastore.DynamicThreshold {
+		now := time.Now().UTC()
+		out := make([]datastore.DynamicThreshold, 0, len(species))
+		for _, name := range species {
+			out = append(out, datastore.DynamicThreshold{
+				SpeciesName:   name,
+				Level:         thresholdLevel,
+				CurrentValue:  thresholdValue,
+				BaseThreshold: thresholdBase,
+				ValidHours:    thresholdHours,
+				ExpiresAt:     now.Add(thresholdHours * time.Hour),
+				LastTriggered: now,
+				FirstCreated:  now,
+			})
+		}
+		return out
+	}
+	countRows := func(species ...string) int {
+		var n int
+		for _, name := range species {
+			var c int
+			require.NoError(t, direct.QueryRowContext(ctx, "SELECT COUNT(*) FROM dynamic_thresholds WHERE species_name = ?", name).Scan(&c))
+			n += c
+		}
+		return n
+	}
+
+	// Warm the connection setup so the faults below hit the transaction.
+	require.NoError(t, ds.BatchSaveDynamicThresholds(snapshot("warmup species")))
+
+	commitCases := []struct {
+		name     string
+		species  []string
+		fault    int32
+		wantRows int
+	}{
+		{"commit_dropped_before_server", []string{"dropped one", "dropped two"}, commitDropUnsent, 0},
+		{"commit_applied_reply_lost", []string{"applied one", "applied two"}, commitApplyLoseRply, 2},
+	}
+	for _, tc := range commitCases {
+		t.Run(tc.name, func(t *testing.T) {
+			proxy.commit.Store(tc.fault)
+			err := ds.BatchSaveDynamicThresholds(snapshot(tc.species...))
+			require.Error(t, err)
+			assert.True(t, errors.IsConnectivityError(err), "the processor retries on this classification")
+			require.Eventually(t, func() bool { return countRows(tc.species...) == tc.wantRows },
+				5*time.Second, 50*time.Millisecond, "rows stored for %v", tc.species)
+
+			require.NoError(t, ds.BatchSaveDynamicThresholds(snapshot(tc.species...)), "a repeat once the fault is gone")
+			assert.Equal(t, len(tc.species), countRows(tc.species...), "one row per species after the repeat")
+
+			var level int
+			var current float64
+			require.NoError(t, direct.QueryRowContext(ctx,
+				"SELECT level, current_value FROM dynamic_thresholds WHERE species_name = ?", tc.species[0]).Scan(&level, &current))
+			assert.Equal(t, thresholdLevel, level)
+			assert.InDelta(t, thresholdValue, current, 0.001)
+		})
+	}
+
+	t.Run("refused_before_write", func(t *testing.T) {
+		species := []string{"refused one", "refused two"}
+		proxy.stop()
+		err := ds.BatchSaveDynamicThresholds(snapshot(species...))
+		require.Error(t, err)
+		assert.True(t, errors.IsConnectivityError(err), "a refused dial is a connectivity error")
+		proxy.restart(t)
+
+		require.NoError(t, ds.BatchSaveDynamicThresholds(snapshot(species...)), "a repeat once the server is back")
+		assert.Equal(t, len(species), countRows(species...))
+	})
 }

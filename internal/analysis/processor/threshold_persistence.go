@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -24,6 +25,14 @@ const (
 	// while still being responsive. With max ~300 species, batch insert completes quickly on
 	// normal hardware, but this accounts for resource-constrained systems.
 	DefaultFlushTimeout = 15 * time.Second
+
+	// thresholdSaveMaxAttempts is the number of times one persistence call tries
+	// to save the threshold batch before it gives up.
+	thresholdSaveMaxAttempts = 3
+
+	// thresholdSaveBaseDelay is the wait before the first retry of a failed batch
+	// save; it doubles for every further retry.
+	thresholdSaveBaseDelay = 100 * time.Millisecond
 )
 
 // loadDynamicThresholdsFromDB loads persisted dynamic thresholds from the database
@@ -214,7 +223,24 @@ func (p *Processor) cleanupExpiredThresholds(expiredSpecies []string) {
 	}
 }
 
+// isRetryableThresholdSaveError reports whether a failed threshold batch save is
+// worth repeating: a lock or deadlock, or a connectivity failure such as a dropped
+// connection after a database server restart.
+//
+// Repeating is safe after a connectivity error even when the first attempt's COMMIT
+// was applied and only its reply was lost, because the save is an idempotent upsert
+// of the whole in-memory snapshot keyed by species_name: a repeat writes identical
+// values. Resets made in the meantime are re-applied by drainPendingResets after the
+// save returns. This is why the check is broader than the detection save's
+// isRepeatableSaveError, where a repeat would insert a second row. If the batch save
+// stops being an idempotent upsert, this check must be revisited.
+func isRetryableThresholdSaveError(err error) bool {
+	return datastore.IsTransientDBError(err) || errors.IsConnectivityError(err)
+}
+
 // saveThresholdsWithRetry attempts to save thresholds with exponential backoff.
+// It retries lock and deadlock errors and connectivity errors (see
+// isRetryableThresholdSaveError); any other error is returned at once.
 // The caller passes the threshold-lifecycle context so the retry loop aborts on
 // cancellation without reading the shared p.thresholdsCtx field (which would race
 // with StartDynamicThresholds/StopDynamicThresholds toggling the feature at runtime).
@@ -222,30 +248,29 @@ func (p *Processor) saveThresholdsWithRetry(ctx context.Context, dbThresholds []
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	const maxRetries = 3
-	baseDelay := 100 * time.Millisecond
 
 	var err error
-	for attempt := range maxRetries {
+	for attempt := range thresholdSaveMaxAttempts {
 		err = p.Ds.BatchSaveDynamicThresholds(dbThresholds)
 		if err == nil {
 			return nil
 		}
 
-		if !datastore.IsTransientDBError(err) || attempt == maxRetries-1 {
+		if !isRetryableThresholdSaveError(err) || attempt == thresholdSaveMaxAttempts-1 {
 			GetLogger().Error("Failed to persist dynamic thresholds",
 				logger.Error(err),
 				logger.Int("threshold_count", len(dbThresholds)),
 				logger.Int("attempt", attempt+1),
-				logger.Int("max_retries", maxRetries),
+				logger.Int("max_retries", thresholdSaveMaxAttempts),
 				logger.String("operation", "persist_dynamic_thresholds"))
 			return err
 		}
 
-		backoffDuration := baseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt is bounded by maxRetries (3), no overflow risk
-		GetLogger().Warn("Database locked, retrying after backoff",
+		backoffDuration := thresholdSaveBaseDelay * time.Duration(1<<uint(attempt)) //nolint:gosec // G115: attempt is bounded by thresholdSaveMaxAttempts (3), no overflow risk
+		GetLogger().Warn("Dynamic threshold save failed, retrying after backoff",
+			logger.Error(err),
 			logger.Int("attempt", attempt+1),
-			logger.Int("max_retries", maxRetries),
+			logger.Int("max_retries", thresholdSaveMaxAttempts),
 			logger.Int64("backoff_ms", backoffDuration.Milliseconds()),
 			logger.String("operation", "persist_dynamic_thresholds"))
 

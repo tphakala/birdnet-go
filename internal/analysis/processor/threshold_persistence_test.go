@@ -3,12 +3,15 @@ package processor
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
@@ -16,6 +19,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"gorm.io/gorm"
 )
 
@@ -34,6 +38,8 @@ type MockDatastore struct {
 	deleteAllEventsError         error            // error for DeleteAllThresholdEvents
 	deletedCount                 int64
 	batchSaveCalled              bool
+	batchSaveCalls               int                  // number of BatchSaveDynamicThresholds calls
+	batchSaveHook                func(call int) error // per-call error injection; call is 1-based
 	// deleteExpiredCalls counts DeleteExpiredDynamicThresholds calls; atomic because
 	// the cleanup goroutine calls it while the test goroutine reads it.
 	deleteExpiredCalls atomic.Int64
@@ -297,6 +303,12 @@ func (m *MockDatastore) UpdateDynamicThresholdExpiry(speciesName string, expires
 
 func (m *MockDatastore) BatchSaveDynamicThresholds(thresholds []datastore.DynamicThreshold) error {
 	m.batchSaveCalled = true
+	m.batchSaveCalls++
+	if m.batchSaveHook != nil {
+		if err := m.batchSaveHook(m.batchSaveCalls); err != nil {
+			return err
+		}
+	}
 	if m.batchSaveError != nil {
 		return m.batchSaveError
 	}
@@ -639,6 +651,129 @@ func TestPersistDynamicThresholds(t *testing.T) {
 		// Only valid threshold should be saved to database
 		assert.Len(t, mockDs.thresholds, 1)
 		assert.Contains(t, mockDs.thresholds, "american crow")
+	})
+}
+
+// gormJoinedInvalidConn builds the error GORM returns when a statement fails and
+// the rollback then fails with the driver's invalid connection error: both are
+// joined with "%v; %w", so the statement error is text only.
+func gormJoinedInvalidConn(stmtErr error) error {
+	return fmt.Errorf("%v; %w", stmtErr, mysql.ErrInvalidConn) //nolint:errorlint // mirrors GORM, which keeps only the rollback error wrapped
+}
+
+// TestSaveThresholdsWithRetry_RetriesLockAndConnectivityErrorsOnly verifies which
+// batch save errors the processor repeats.
+func TestSaveThresholdsWithRetry_RetriesLockAndConnectivityErrorsOnly(t *testing.T) {
+	// The v2 shape of a connection that dies mid-transaction: GORM joins the
+	// failed statement and the rollback error with %v and %w.
+	invalidConn := gormJoinedInvalidConn(mysql.ErrInvalidConn)
+	serverErrWithInvalidConn := gormJoinedInvalidConn(errors.NewStd("Error 1366 (HY000): Incorrect string value"))
+
+	tests := []struct {
+		name      string
+		hook      func(call int) error
+		wantCalls int
+		wantErr   bool
+		wantWarns int // retry records; a recovered save must not log an Error
+		wantErrs  int // final failure records
+	}{
+		{
+			name: "invalid connection then success",
+			hook: func(call int) error {
+				if call == 1 {
+					return invalidConn
+				}
+				return nil
+			},
+			wantCalls: 2,
+			wantWarns: 1,
+		},
+		{
+			name: "database locked then success",
+			hook: func(call int) error {
+				if call == 1 {
+					return errors.NewStd("database is locked")
+				}
+				return nil
+			},
+			wantCalls: 2,
+			wantWarns: 1,
+		},
+		{
+			name:      "server error joined with invalid connection is not retried",
+			hook:      func(int) error { return serverErrWithInvalidConn },
+			wantCalls: 1,
+			wantErr:   true,
+			wantErrs:  1,
+		},
+		{
+			name:      "connectivity error on every attempt is bounded",
+			hook:      func(int) error { return invalidConn },
+			wantCalls: thresholdSaveMaxAttempts,
+			wantErr:   true,
+			wantWarns: thresholdSaveMaxAttempts - 1,
+			wantErrs:  1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				logs := logtest.CaptureBuffer(t)
+				p := createTestProcessor()
+				mockDs := p.Ds.(*MockDatastore)
+				mockDs.batchSaveHook = tt.hook
+				p.DynamicThresholds["american crow"] = &DynamicThreshold{
+					Level:         1,
+					BaseThreshold: 0.75,
+					Timer:         time.Now().Add(24 * time.Hour),
+					ValidHours:    48,
+				}
+
+				err := p.persistDynamicThresholds(t.Context())
+
+				assert.Equal(t, tt.wantCalls, mockDs.batchSaveCalls)
+				assert.Equal(t, tt.wantWarns, strings.Count(logs.String(), "level=WARN"), "retry records")
+				assert.Equal(t, tt.wantErrs, strings.Count(logs.String(), "level=ERROR"), "final failure records")
+				if tt.wantErr {
+					require.Error(t, err)
+					return
+				}
+				require.NoError(t, err)
+				assert.Contains(t, mockDs.thresholds, "american crow")
+			})
+		})
+	}
+}
+
+// TestPersistDynamicThresholds_ResetDuringSaveRetryStaysDeleted verifies that a
+// reset made while the save is being retried is re-applied once the save succeeds.
+func TestPersistDynamicThresholds_ResetDuringSaveRetryStaysDeleted(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := createTestProcessor()
+		mockDs := p.Ds.(*MockDatastore)
+		now := time.Now()
+		for _, name := range []string{"american crow", "blue jay"} {
+			p.DynamicThresholds[name] = &DynamicThreshold{
+				Level:         1,
+				BaseThreshold: 0.75,
+				Timer:         now.Add(24 * time.Hour),
+				ValidHours:    48,
+			}
+		}
+		mockDs.batchSaveHook = func(call int) error {
+			if call == 1 {
+				require.NoError(t, p.ResetDynamicThreshold("blue jay"))
+				return gormJoinedInvalidConn(mysql.ErrInvalidConn)
+			}
+			return nil
+		}
+
+		require.NoError(t, p.persistDynamicThresholds(t.Context()))
+
+		assert.Equal(t, 2, mockDs.batchSaveCalls)
+		assert.Contains(t, mockDs.thresholds, "american crow")
+		assert.NotContains(t, mockDs.thresholds, "blue jay", "the stale snapshot re-inserted the reset species")
 	})
 }
 
