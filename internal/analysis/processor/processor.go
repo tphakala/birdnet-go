@@ -81,10 +81,16 @@ type Processor struct {
 	pendingResets          map[string]struct{} // Species whose reset delete failed; retried at the start of the next persistence cycle, protected by thresholdsMutex
 	pendingResetAll        bool                // True if the delete-all of a full reset failed; retried at the start of the next persistence cycle, protected by thresholdsMutex
 
+	// thresholdResetBarrier is the reset whose database deletes are running, nil
+	// otherwise, protected by thresholdsMutex. At most one exists at a time because
+	// resets hold the persistence lock for their whole run.
+	thresholdResetBarrier *thresholdResetBarrier
+
 	// thresholdPersistSlot is a one-slot lock that serializes dynamic threshold
-	// persistence cycles and resets. It is created on first use through
-	// thresholdPersistOnce so zero-value Processors in tests work. Lock order: take
-	// it before thresholdsMutex, never while holding thresholdsMutex.
+	// persistence cycles and resets. Resets also rely on it to keep a cycle from
+	// writing a re-learned row before their row delete. It is created on first use
+	// through thresholdPersistOnce so zero-value Processors in tests work. Lock
+	// order: take it before thresholdsMutex, never while holding thresholdsMutex.
 	thresholdPersistOnce sync.Once
 	thresholdPersistSlot chan struct{}
 
@@ -2854,6 +2860,37 @@ func (p *Processor) Shutdown() error {
 	return p.ShutdownWithContext(ctx)
 }
 
+// cancelThresholdLifecycle cancels the threshold persistence and cleanup
+// goroutines. It reads the cancel func under thresholdsMutex; when the mutex is
+// not free at once it waits for it in a goroutine at most until ctx ends, and
+// that goroutine still cancels once the mutex is free. cancel() is idempotent.
+func (p *Processor) cancelThresholdLifecycle(ctx context.Context) {
+	if p.thresholdsMutex.TryRLock() {
+		cancel := p.thresholdsCancel
+		p.thresholdsMutex.RUnlock()
+		if cancel != nil {
+			cancel()
+		}
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		p.thresholdsMutex.RLock()
+		cancel := p.thresholdsCancel
+		p.thresholdsMutex.RUnlock()
+		if cancel != nil {
+			cancel()
+		}
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		GetLogger().Warn("Context expired waiting to stop dynamic threshold goroutines during shutdown",
+			logger.String("operation", "shutdown_cancel_thresholds"))
+	}
+}
+
 // ShutdownWithContext gracefully stops all processor components, respecting
 // the provided context deadline for all internal waits.
 func (p *Processor) ShutdownWithContext(ctx context.Context) error {
@@ -2864,15 +2901,11 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 	}
 	p.discoveryDebounceMu.Unlock()
 
-	// Stop threshold persistence and cleanup goroutines first. Snapshot the cancel func
-	// under thresholdsMutex so this never races with StopDynamicThresholds rewriting the
-	// field when the feature is toggled off at runtime (see #1025). cancel() is idempotent.
-	p.thresholdsMutex.RLock()
-	thresholdsCancel := p.thresholdsCancel
-	p.thresholdsMutex.RUnlock()
-	if thresholdsCancel != nil {
-		thresholdsCancel()
-	}
+	// Stop threshold persistence and cleanup goroutines first. The cancel func is
+	// read under thresholdsMutex so this never races with StopDynamicThresholds
+	// rewriting the field when the feature is toggled off at runtime (see #1025);
+	// the wait for the mutex is bounded by ctx.
+	p.cancelThresholdLifecycle(ctx)
 
 	// Cancel flusher goroutine
 	if p.flusherCancel != nil {

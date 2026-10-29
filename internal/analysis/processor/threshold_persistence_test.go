@@ -16,6 +16,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
@@ -499,17 +500,28 @@ const (
 	persistTestDoneCtxAttempts = 64
 )
 
+// Delete operations passed to concurrentThresholdStore.deleteHook.
+const (
+	opDeleteThreshold     = "DeleteDynamicThreshold"
+	opDeleteEvents        = "DeleteThresholdEvents"
+	opDeleteAllThresholds = "DeleteAllDynamicThresholds"
+	opDeleteAllEvents     = "DeleteAllThresholdEvents"
+)
+
 // concurrentThresholdStore is a goroutine-safe datastore fake for tests where a
 // persistence cycle and a reset run in different goroutines. The mutex-protected
-// row map records what a database would hold. saveHook runs inside
+// row map and event list record what a database would hold. saveHook runs inside
 // BatchSaveDynamicThresholds with no lock held; it may block or start goroutines,
-// and a returned error fails that save attempt.
+// and a returned error fails that save attempt. deleteHook runs at the entry of
+// each of the four delete methods with no lock held and may block.
 type concurrentThresholdStore struct {
 	*MockDatastore
-	mu        sync.Mutex
-	rows      map[string]datastore.DynamicThreshold
-	saveCalls int
-	saveHook  func(call int) error
+	mu         sync.Mutex
+	rows       map[string]datastore.DynamicThreshold
+	events     []datastore.ThresholdEvent
+	saveCalls  int
+	saveHook   func(call int) error
+	deleteHook func(op string)
 }
 
 func (s *concurrentThresholdStore) BatchSaveDynamicThresholds(ts []datastore.DynamicThreshold) error {
@@ -530,14 +542,69 @@ func (s *concurrentThresholdStore) BatchSaveDynamicThresholds(ts []datastore.Dyn
 	return nil
 }
 
+func (s *concurrentThresholdStore) runDeleteHook(op string) {
+	if s.deleteHook != nil {
+		s.deleteHook(op)
+	}
+}
+
 func (s *concurrentThresholdStore) DeleteDynamicThreshold(name string) error {
+	s.runDeleteHook(opDeleteThreshold)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.rows, name)
 	return nil
 }
 
-func (s *concurrentThresholdStore) DeleteThresholdEvents(string) error { return nil }
+func (s *concurrentThresholdStore) DeleteThresholdEvents(name string) error {
+	s.runDeleteHook(opDeleteEvents)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.events = slices.DeleteFunc(s.events, func(e datastore.ThresholdEvent) bool {
+		return e.SpeciesName == name
+	})
+	return nil
+}
+
+func (s *concurrentThresholdStore) DeleteAllDynamicThresholds() (int64, error) {
+	s.runDeleteHook(opDeleteAllThresholds)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := int64(len(s.rows))
+	clear(s.rows)
+	return n, nil
+}
+
+func (s *concurrentThresholdStore) DeleteAllThresholdEvents() (int64, error) {
+	s.runDeleteHook(opDeleteAllEvents)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	n := int64(len(s.events))
+	s.events = nil
+	return n, nil
+}
+
+func (s *concurrentThresholdStore) SaveThresholdEvent(e *datastore.ThresholdEvent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.events = append(s.events, *e)
+	return nil
+}
+
+func (s *concurrentThresholdStore) eventsFor(species string) []datastore.ThresholdEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.DeleteFunc(slices.Clone(s.events), func(e datastore.ThresholdEvent) bool {
+		return e.SpeciesName != species
+	})
+}
+
+func (s *concurrentThresholdStore) hasRow(species string) (datastore.DynamicThreshold, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row, ok := s.rows[species]
+	return row, ok
+}
 
 func (s *concurrentThresholdStore) saveCallCount() int {
 	s.mu.Lock()
@@ -1550,4 +1617,191 @@ func TestThresholdCleanup_RunsAtStartThenDailyAndFollowsToggle(t *testing.T) {
 		p.StopDynamicThresholds()
 		synctest.Wait()
 	})
+}
+
+const (
+	// stallTestTimeout bounds each call that must not wait for a hung reset.
+	stallTestTimeout = 3 * time.Second
+	// stallTestShutdownDeadline is the shutdown context of the stall test.
+	stallTestShutdownDeadline = 100 * time.Millisecond
+	// resetTestTrigger is the dynamic threshold trigger of the reset tests; the
+	// test confidence is above it.
+	resetTestTrigger = 0.5
+	// resetTestConfidence is the confidence of the approved detection a reset test learns from.
+	resetTestConfidence = 0.95
+)
+
+// enableResetTestThresholds turns on dynamic thresholds with a trigger and an
+// expiry window on the processor's own settings.
+func enableResetTestThresholds(p *Processor) {
+	p.Settings.Realtime.DynamicThreshold.Enabled = true
+	p.Settings.Realtime.DynamicThreshold.Trigger = resetTestTrigger
+	p.Settings.Realtime.DynamicThreshold.ValidHours = persistTestValidHours
+}
+
+// requireReturnsWithin fails the test unless fn returns within stallTestTimeout.
+func requireReturnsWithin(t *testing.T, what string, fn func()) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		fn()
+	}()
+	select {
+	case <-done:
+	case <-time.After(stallTestTimeout):
+		require.Failf(t, "call stalled behind a reset", "%s did not return within %s", what, stallTestTimeout)
+	}
+}
+
+// TestResetDynamicThresholds_BlockedDeleteDoesNotStallDetectionOrShutdown pins
+// that no database delete of a reset runs under thresholdsMutex: while a delete
+// hangs, the detection filter, learning, the API read and shutdown all return.
+//
+// Real time, not synctest: on the old code the waiters block on a sync mutex,
+// which synctest does not treat as durably blocked. Not parallel: the settings
+// come from the processor, and currentSettings() prefers the global snapshot.
+func TestResetDynamicThresholds_BlockedDeleteDoesNotStallDetectionOrShutdown(t *testing.T) {
+	tests := []struct {
+		name  string
+		op    string
+		reset func(p *Processor) error
+	}{
+		{"single reset hung in threshold delete", opDeleteThreshold, func(p *Processor) error {
+			return p.ResetDynamicThreshold(persistTestSpeciesReset)
+		}},
+		{"single reset hung in events delete", opDeleteEvents, func(p *Processor) error {
+			return p.ResetDynamicThreshold(persistTestSpeciesReset)
+		}},
+		{"reset-all hung in threshold delete", opDeleteAllThresholds, func(p *Processor) error {
+			_, err := p.ResetAllDynamicThresholds()
+			return err
+		}},
+		{"reset-all hung in events delete", opDeleteAllEvents, func(p *Processor) error {
+			_, err := p.ResetAllDynamicThresholds()
+			return err
+		}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, store := newConcurrentThresholdProcessor()
+			p.JobQueue = jobqueue.NewJobQueue() // not started: stopping it returns at once
+			enableResetTestThresholds(p)
+
+			entered := make(chan struct{})
+			release := make(chan struct{})
+			releaseDelete := sync.OnceFunc(func() { close(release) })
+			store.deleteHook = func(op string) {
+				if op == tt.op {
+					close(entered)
+					<-release
+				}
+			}
+
+			resetDone := make(chan error, 1)
+			// Registered first so it runs last: release the delete, then wait for the reset.
+			defer func() { assert.NoError(t, <-resetDone) }()
+			defer releaseDelete()
+			go func() { resetDone <- tt.reset(p) }()
+
+			select {
+			case <-entered:
+			case <-time.After(stallTestTimeout):
+				require.Fail(t, "the reset never reached the blocked delete")
+			}
+
+			requireReturnsWithin(t, "getAdjustedConfidenceThreshold", func() {
+				p.getAdjustedConfidenceThreshold(persistTestSpeciesKept, persistTestBaseValue, false)
+			})
+			requireReturnsWithin(t, "LearnFromApprovedDetection", func() {
+				p.LearnFromApprovedDetection(persistTestSpeciesReset, "", resetTestConfidence, persistTestBaseValue)
+			})
+			requireReturnsWithin(t, "GetDynamicThresholdData", func() {
+				_ = p.GetDynamicThresholdData()
+			})
+
+			ctx, cancel := context.WithTimeout(t.Context(), stallTestShutdownDeadline)
+			defer cancel()
+			requireReturnsWithin(t, "ShutdownWithContext", func() {
+				_ = p.ShutdownWithContext(ctx)
+			})
+
+			releaseDelete()
+			select {
+			case err := <-resetDone:
+				resetDone <- err // the deferred wait receives it again
+				require.NoError(t, err)
+			case <-time.After(stallTestTimeout):
+				require.Fail(t, "the reset did not return after the delete was released")
+			}
+		})
+	}
+}
+
+// TestResetDynamicThresholds_RelearnDuringDeleteKeepsRowAndEvent pins that a
+// species re-learned while the reset's events delete is running keeps both its
+// event (saved only after the delete returns) and its row (written by the next
+// persistence cycle). Not parallel, for the settings reason above.
+func TestResetDynamicThresholds_RelearnDuringDeleteKeepsRowAndEvent(t *testing.T) {
+	tests := []struct {
+		name     string
+		blockOp  string
+		reset    func(p *Processor) error
+		keptGone bool
+	}{
+		{"single reset", opDeleteEvents, func(p *Processor) error {
+			return p.ResetDynamicThreshold(persistTestSpeciesReset)
+		}, false},
+		{"reset-all", opDeleteAllEvents, func(p *Processor) error {
+			_, err := p.ResetAllDynamicThresholds()
+			return err
+		}, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				p, store := newConcurrentThresholdProcessor()
+				enableResetTestThresholds(p)
+
+				release := make(chan struct{})
+				releaseDelete := sync.OnceFunc(func() { close(release) })
+				defer releaseDelete()
+				store.deleteHook = func(op string) {
+					if op == tt.blockOp {
+						<-release
+					}
+				}
+
+				resetDone := make(chan error, 1)
+				go func() { resetDone <- tt.reset(p) }()
+				synctest.Wait() // the reset is blocked in its events delete
+
+				p.LearnFromApprovedDetection(persistTestSpeciesReset, "", resetTestConfidence, persistTestBaseValue)
+				synctest.Wait()
+				assert.Empty(t, store.eventsFor(persistTestSpeciesReset),
+					"the event save must wait until the reset's deletes return")
+
+				releaseDelete()
+				require.NoError(t, <-resetDone)
+				synctest.Wait()
+
+				events := store.eventsFor(persistTestSpeciesReset)
+				require.Len(t, events, 1, "the event recorded after the reset must survive it")
+				assert.Equal(t, 1, events[0].NewLevel)
+
+				require.NoError(t, p.persistDynamicThresholds(t.Context()))
+				row, ok := store.hasRow(persistTestSpeciesReset)
+				require.True(t, ok, "the re-learned threshold must be persisted")
+				assert.Equal(t, 1, row.Level)
+				if tt.keptGone {
+					_, kept := store.hasRow(persistTestSpeciesKept)
+					assert.False(t, kept, "reset-all must remove the other species' row")
+				}
+				assert.Empty(t, p.pendingResets)
+				assert.False(t, p.pendingResetAll)
+			})
+		})
+	}
 }
