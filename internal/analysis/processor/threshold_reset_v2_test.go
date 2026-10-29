@@ -155,3 +155,78 @@ func TestResetDynamicThreshold_V2Store_DrainClearsResetAndRelearnPersists(t *tes
 		})
 	}
 }
+
+// TestResetDynamicThreshold_V2Store_RelearnBeforeNextCycleKeepsRowAndEvents checks
+// that a species reset and re-learned before the next persistence cycle keeps its
+// row and its new events on every following cycle, for a single reset and for
+// reset-all (two code paths).
+func TestResetDynamicThreshold_V2Store_RelearnBeforeNextCycleKeepsRowAndEvents(t *testing.T) {
+	cases := []struct {
+		name  string
+		reset func(t *testing.T, p *Processor)
+	}{
+		{
+			name: "single reset",
+			reset: func(t *testing.T, p *Processor) {
+				t.Helper()
+				require.NoError(t, p.ResetDynamicThreshold(resetTestSpecies))
+			},
+		},
+		{
+			name: "reset all",
+			reset: func(t *testing.T, p *Processor) {
+				t.Helper()
+				_, err := p.ResetAllDynamicThresholds()
+				require.NoError(t, err)
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ds := newV2ThresholdTestStore(t)
+			p := createTestProcessor()
+			p.Ds = ds
+
+			now := time.Now()
+			newEntry := func() *DynamicThreshold {
+				return &DynamicThreshold{
+					Level:         resetTestLearnedLevel,
+					BaseThreshold: resetTestBaseValue,
+					Timer:         now.Add(resetTestValidHours * time.Hour),
+					ValidHours:    resetTestValidHours,
+					FirstCreated:  now,
+					LastTriggered: now,
+				}
+			}
+
+			p.DynamicThresholds[resetTestSpecies] = newEntry()
+			require.NoError(t, p.persistDynamicThresholds(t.Context()))
+
+			tc.reset(t, p)
+
+			// Re-learn before the next cycle runs.
+			p.thresholdsMutex.Lock()
+			p.DynamicThresholds[resetTestSpecies] = newEntry()
+			p.thresholdsMutex.Unlock()
+			require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
+				SpeciesName:   resetTestSpecies,
+				PreviousLevel: resetTestPreviousLevel,
+				NewLevel:      resetTestLearnedLevel,
+				PreviousValue: resetTestBaseValue,
+				NewValue:      resetTestLearnedValue,
+				ChangeReason:  changeReasonHighConfidence,
+				CreatedAt:     now,
+			}))
+
+			for tick := 1; tick <= resetTestRelearnTicks; tick++ {
+				require.NoError(t, p.persistDynamicThresholds(t.Context()))
+				_, err := ds.GetDynamicThreshold(resetTestSpecies)
+				require.NoError(t, err, "tick %d: re-learned row must exist", tick)
+				events, err := ds.GetThresholdEvents(resetTestSpecies, resetTestEventLimit)
+				require.NoError(t, err)
+				assert.Len(t, events, resetTestExpectedEvents, "tick %d: re-learned events must survive", tick)
+			}
+		})
+	}
+}
