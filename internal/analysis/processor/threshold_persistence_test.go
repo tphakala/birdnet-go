@@ -1886,19 +1886,29 @@ func TestResetDynamicThresholds_PanicInDeleteQueuesRetry(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			p, store := newConcurrentThresholdProcessor()
 			enableResetTestThresholds(p)
+			var barrier *thresholdResetBarrier
 			store.deleteHook = func(op string) {
 				if op == tt.panicOp {
+					p.thresholdsMutex.RLock()
+					barrier = p.thresholdResetBarrier
+					p.thresholdsMutex.RUnlock()
 					panic("simulated datastore panic")
 				}
 			}
 
 			require.Panics(t, func() { tt.reset(p) })
+			require.NotNil(t, barrier, "the reset must have published its barrier before the delete")
+			select {
+			case <-barrier.done:
+			default:
+				assert.Fail(t, "the barrier channel must be closed so held-back event saves are released")
+			}
 
 			p.thresholdsMutex.RLock()
-			barrier := p.thresholdResetBarrier
+			remaining := p.thresholdResetBarrier
 			queued := tt.queued(p)
 			p.thresholdsMutex.RUnlock()
-			assert.Nil(t, barrier, "the reset barrier must be cleared")
+			assert.Nil(t, remaining, "the reset barrier must be cleared")
 			assert.True(t, queued, "a reset that did not finish its deletes must queue a retry")
 
 			// The persistence lock was released: a later cycle runs and drains the retry.
