@@ -241,9 +241,11 @@ func isRetryableThresholdSaveError(err error) bool {
 // saveThresholdsWithRetry attempts to save thresholds with exponential backoff.
 // It retries lock and deadlock errors and connectivity errors (see
 // isRetryableThresholdSaveError); any other error is returned at once.
-// The caller passes the threshold-lifecycle context so the retry loop aborts on
-// cancellation without reading the shared p.thresholdsCtx field (which would race
-// with StartDynamicThresholds/StopDynamicThresholds toggling the feature at runtime).
+// The caller passes the context that bounds the backoff (the threshold-lifecycle
+// context for the persistence goroutine and StopDynamicThresholds, the shutdown
+// context for the shutdown flush), so the retry loop never reads the shared
+// p.thresholdsCtx field (which would race with StartDynamicThresholds/
+// StopDynamicThresholds toggling the feature at runtime).
 func (p *Processor) saveThresholdsWithRetry(ctx context.Context, dbThresholds []datastore.DynamicThreshold) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -293,7 +295,8 @@ func (p *Processor) saveThresholdsWithRetry(ctx context.Context, dbThresholds []
 // and drops expired ones from memory and the database (see cleanupExpiredThresholds).
 // This is called periodically by the persistence goroutine. The ctx governs the
 // retry-backoff abort and is supplied by the caller (the persistence goroutine's
-// lifecycle context, or a snapshot taken under thresholdsMutex by Stop/Flush).
+// lifecycle context, a snapshot taken under thresholdsMutex by
+// StopDynamicThresholds, or the caller's context for FlushDynamicThresholds).
 func (p *Processor) persistDynamicThresholds(ctx context.Context) error {
 	settings := p.currentSettings()
 	dbThresholds, expiredSpecies := p.convertThresholdsForPersistence(settings)
@@ -605,18 +608,15 @@ func (p *Processor) StopDynamicThresholds() {
 		logger.String("operation", "stop_dynamic_thresholds"))
 }
 
-// FlushDynamicThresholds immediately persists all dynamic thresholds to the database
-// This is useful during graceful shutdown to ensure no data loss
-func (p *Processor) FlushDynamicThresholds() error {
+// FlushDynamicThresholds immediately persists all dynamic thresholds to the database.
+// This is useful during graceful shutdown to ensure no data loss. The ctx bounds the
+// retry backoff of the save; callers must pass a context that is still live.
+// ShutdownWithContext passes its shutdown context because it has already cancelled
+// the threshold lifecycle context by the time it flushes.
+func (p *Processor) FlushDynamicThresholds(ctx context.Context) error {
 	GetLogger().Info("Flushing dynamic thresholds to database",
 		logger.String("operation", "flush_dynamic_thresholds"))
 
-	// Use the lifecycle context if running; otherwise fall back to Background so a
-	// flush during shutdown (or before Start) still completes. Read under the lock.
-	ctx := p.snapshotThresholdsCtx()
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if err := p.persistDynamicThresholds(ctx); err != nil {
 		GetLogger().Error("Failed to flush dynamic thresholds",
 			logger.Error(err),

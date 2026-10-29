@@ -2876,11 +2876,13 @@ func (p *Processor) ShutdownWithContext(ctx context.Context) error {
 		p.pipelineStats.Stop()
 	}
 
-	// Flush dynamic thresholds using the provided context deadline
+	// Flush dynamic thresholds using the provided context deadline. The threshold
+	// lifecycle context was cancelled above, so the flush gets the shutdown context:
+	// the connectivity retry keeps working and stops at the shutdown deadline.
 	if p.currentSettings().Realtime.DynamicThreshold.Enabled {
 		done := make(chan error, 1)
 		go func() {
-			done <- p.FlushDynamicThresholds()
+			done <- p.FlushDynamicThresholds(ctx)
 		}()
 
 		select {
