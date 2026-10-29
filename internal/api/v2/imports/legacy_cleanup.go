@@ -58,8 +58,9 @@ const (
 	CleanupStateFailed     = "failed"
 )
 
-// legacyOnlyTables are legacy-schema tables that no v2 schema (bare or
-// prefixed) ever has, in dependency order (children first).
+// legacyOnlyTables are the only tables the MySQL cleanup drops: legacy-schema
+// tables that no v2 schema (bare or prefixed) ever has, in dependency order
+// (children first).
 var legacyOnlyTables = []string{
 	"note_reviews",
 	"note_comments",
@@ -70,8 +71,10 @@ var legacyOnlyTables = []string{
 
 // legacySharedTables are legacy-schema tables whose names are also the live
 // tables of an unprefixed (bare) v2 schema, because the v2 entities have no
-// TableName overrides. They are legacy only when the active v2 schema carries a
-// table prefix and no bare v2 schema exists beside it.
+// TableName overrides. The cleanup never drops them: rows written to them after
+// the one-time auxiliary copy are never migrated, so they may hold the only copy.
+// The migration charset check also uses this list to classify source tables
+// (prerequisites.go:910).
 var legacySharedTables = []string{
 	"hourly_weathers",
 	"daily_events",
@@ -81,31 +84,15 @@ var legacySharedTables = []string{
 	"notification_histories",
 }
 
-// bareV2MarkerTables are bare v2 tables the legacy schema never has. Any of them
-// in the database means an unprefixed v2 schema lives there. "detections" is the
-// startup probe's own signal; "labels" is the foreign key parent of the bare
-// "image_caches" and "notification_histories", so it survives a half-deleted
-// bare schema; both spellings of the migration state table are listed because
-// earlier releases used the singular name.
-var bareV2MarkerTables = []string{
-	"detections",
-	"labels",
-	"migration_states",
-	"migration_state",
-}
-
 // mysqlLegacyCandidates returns the legacy table names that may be dropped for a
 // v2 schema with the given table prefix, in drop order. A bare prefix means the
-// legacy-named tables are live v2 tables, so nothing is offered. Beside bare v2
-// tables the shared names are withheld. The result is a fresh slice.
-func mysqlLegacyCandidates(tablePrefix string, bareV2Present bool) []string {
+// legacy-named tables are live v2 tables, so nothing is offered. The shared
+// auxiliary tables are never candidates. The result is a fresh slice.
+func mysqlLegacyCandidates(tablePrefix string) []string {
 	if tablePrefix == "" {
 		return nil
 	}
-	if bareV2Present {
-		return slices.Clone(legacyOnlyTables)
-	}
-	return slices.Concat(legacyOnlyTables, legacySharedTables)
+	return slices.Clone(legacyOnlyTables)
 }
 
 // legacyCleanupRefusal describes why the MySQL legacy cleanup is not offered.
@@ -131,6 +118,12 @@ const (
 	reasonLegacyUnmigrated    = "Legacy records are missing from the enhanced database, cleanup is not allowed for safety"
 	reasonCannotVerify        = "Cannot verify the legacy database"
 	reasonNoLegacyDatabase    = "No legacy database found"
+
+	reasonNoConnection            = "Cannot access database connection"
+	reasonMySQLManagerUnavailable = "MySQL v2 database manager is not available"
+	reasonNoLegacyTables          = "No legacy tables found"
+	reasonListTablesFailed        = "Cannot list database tables"
+	reasonCleanupCancelled        = "Cleanup was cancelled"
 )
 
 // cleanupManager returns the v2 manager the process opened, or a refusal when
@@ -219,6 +212,14 @@ func (c *Handler) sqliteMigrationRefusal(ctx context.Context, mgr datastoreV2.Ma
 		return refusal
 	}
 	err := datastoreV2.VerifySQLiteLegacyMigrated(ctx, legacyPath, mgr.DB(), migrationState.LastMigratedID, apicore.GetLogger())
+	return c.legacyProofRefusal(err)
+}
+
+// legacyProofRefusal maps the result of a legacy tail proof to a refusal, or nil
+// when the proof held. Both backends share it. An unverifiable proof is logged
+// here because its error may carry server or path text that must not reach the
+// client.
+func (c *Handler) legacyProofRefusal(err error) *legacyCleanupRefusal {
 	switch {
 	case err == nil:
 		return nil
@@ -238,50 +239,109 @@ type legacyTableListing struct {
 	Size int64
 }
 
-// mysqlCleanupConn returns the connection the MySQL cleanup runs on. It is
-// the repository's GORM connection, bound to ctx, and a refusal when the
-// repository does not provide one.
-func (c *Handler) mysqlCleanupConn(ctx context.Context) (*gorm.DB, *legacyCleanupRefusal) {
-	provider, ok := c.Repo.(gormDBProvider)
-	if !ok {
-		return nil, &legacyCleanupRefusal{reason: "Cannot access database connection", errorKey: notification.MsgErrCleanupAccessFailed}
+// mysqlCleanupConn returns the connection the MySQL cleanup runs on: the GORM
+// handle of the v2 manager the process opened, bound to ctx. The manager's
+// database holds both the prefixed v2 schema and the legacy tables. It refuses
+// when mgr is not a MySQL manager or has no connection.
+func mysqlCleanupConn(ctx context.Context, mgr datastoreV2.Manager) (*gorm.DB, *legacyCleanupRefusal) {
+	if mgr == nil || !mgr.IsMySQL() {
+		return nil, &legacyCleanupRefusal{reason: reasonMySQLManagerUnavailable, errorKey: notification.MsgErrCleanupAccessFailed}
 	}
-	db := provider.GetDB()
+	db := mgr.DB()
 	if db == nil {
-		return nil, &legacyCleanupRefusal{reason: "Cannot access database connection", errorKey: notification.MsgErrCleanupAccessFailed}
+		return nil, &legacyCleanupRefusal{reason: reasonNoConnection, errorKey: notification.MsgErrCleanupAccessFailed}
 	}
 	return db.WithContext(ctx), nil
 }
 
+// mysqlResolveMode selects what the MySQL resolver does besides listing.
+type mysqlResolveMode int
+
+const (
+	// mysqlResolveDrop runs the tail proof and skips row counts, because
+	// COUNT(*) can scan a whole large table; the POST pre-check and the
+	// background drop use it. It is the zero value, so a caller that forgets the
+	// mode gets the proof.
+	mysqlResolveDrop mysqlResolveMode = iota
+	// mysqlResolveStatus adds an exact row count per table and skips the tail
+	// proof; only the status call uses it.
+	mysqlResolveStatus
+)
+
 // resolveMySQLLegacyTables decides which legacy tables the MySQL cleanup may
 // list and drop, from the v2 manager's actual schema. It is the single decision
 // shared by the status call, the POST pre-check and the background drop, and it
-// fails closed: anything it cannot read refuses, and it applies the migration
-// state gate (completed, no related-data error, auxiliary outcome succeeded or
-// not_required) before it lists any table. db carries the request or
-// cleanup context and is the connection the caller will also run its DROPs on.
-// withCounts adds an exact row count per table, which only the status call
-// reports; the POST pre-check and the drop skip it because COUNT(*) can scan a
-// whole large table.
-func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, db *gorm.DB, withCounts bool) ([]LegacyTableInfo, *legacyCleanupRefusal) {
-	accessFailed := func(reason string) *legacyCleanupRefusal {
-		return &legacyCleanupRefusal{reason: reason, errorKey: notification.MsgErrCleanupAccessFailed}
-	}
-
-	mgr := c.V2Manager
-	if mgr == nil || !mgr.IsMySQL() || mgr.DB() == nil {
-		return nil, accessFailed("MySQL v2 database manager is not available")
+// fails closed: anything it cannot read refuses. Order: the manager's
+// connection, the table prefix (a bare schema has no legacy companion), the
+// migration state gate (completed, no related-data error, auxiliary outcome
+// succeeded; not_required means a fresh install and refuses as "no legacy
+// database"), the table listing, and in drop mode the tail proof
+// (VerifyMySQLLegacyMigrated). Only the legacy-only tables are candidates. The
+// returned handle is the one the caller runs its DROPs on.
+func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, mgr datastoreV2.Manager, mode mysqlResolveMode) (*gorm.DB, []LegacyTableInfo, *legacyCleanupRefusal) {
+	db, refusal := mysqlCleanupConn(ctx, mgr)
+	if refusal != nil {
+		return nil, nil, refusal
 	}
 
 	prefix := mgr.TablePrefix()
 	if prefix == "" {
-		return nil, &legacyCleanupRefusal{reason: "No legacy tables found", errorKey: notification.MsgErrCleanupNoLegacyTables}
+		return nil, nil, &legacyCleanupRefusal{reason: reasonNoLegacyTables, errorKey: notification.MsgErrCleanupNoLegacyTables}
 	}
 
-	if _, refusal := c.migrationStateRefusal(ctx, mgr); refusal != nil {
-		return nil, refusal
+	state, refusal := c.migrationStateRefusal(ctx, mgr)
+	if refusal != nil {
+		return nil, nil, refusal
+	}
+	if state.AuxiliaryDataOutcome() == entities.AuxiliaryDataStatusNotRequired {
+		return nil, nil, &legacyCleanupRefusal{reason: reasonFreshInstall, errorKey: notification.MsgErrCleanupNoLegacyDB}
 	}
 
+	sizes, refusal := c.listMySQLTableSizes(db)
+	if refusal != nil {
+		return nil, nil, refusal
+	}
+
+	var tables []LegacyTableInfo
+	for _, name := range mysqlLegacyCandidates(prefix) {
+		size, ok := sizes[name]
+		if !ok {
+			continue
+		}
+		tables = append(tables, LegacyTableInfo{Name: name, SizeBytes: size})
+	}
+	if len(tables) == 0 {
+		return nil, nil, &legacyCleanupRefusal{reason: reasonNoLegacyTables, errorKey: notification.MsgErrCleanupNoLegacyTables}
+	}
+
+	if mode != mysqlResolveStatus {
+		err := datastoreV2.VerifyMySQLLegacyMigrated(ctx, db, prefix, state.LastMigratedID, apicore.GetLogger())
+		if refusal := c.legacyProofRefusal(err); refusal != nil {
+			return nil, nil, refusal
+		}
+		return db, tables, nil
+	}
+
+	for i := range tables {
+		name := tables[i].Name
+		if err := db.Raw("SELECT COUNT(*) FROM `" + name + "`").Scan(&tables[i].RowCount).Error; err != nil {
+			if ctx.Err() != nil {
+				return nil, nil, &legacyCleanupRefusal{reason: reasonCleanupCancelled, errorKey: notification.MsgErrCleanupAccessFailed}
+			}
+			// The count is informational and never decides what is dropped.
+			c.LogWarnIfEnabled("Legacy cleanup: failed to query row count",
+				logger.String("table", name),
+				logger.Error(err))
+			tables[i].RowCount = 0
+		}
+	}
+	return db, tables, nil
+}
+
+// listMySQLTableSizes returns the size in bytes of each base table in the
+// current database, keyed by lower-cased name (MySQL 8 and MariaDB differ in the
+// case of returned names).
+func (c *Handler) listMySQLTableSizes(db *gorm.DB) (map[string]int64, *legacyCleanupRefusal) {
 	var listing []legacyTableListing
 	err := db.Raw(`
 		SELECT table_name AS name, COALESCE(data_length, 0) + COALESCE(index_length, 0) AS size
@@ -289,44 +349,13 @@ func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, db *gorm.DB, wit
 		WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE'`).Scan(&listing).Error
 	if err != nil {
 		c.LogWarnIfEnabled("Legacy cleanup: failed to list tables", logger.Error(err))
-		return nil, accessFailed("Cannot list database tables")
+		return nil, &legacyCleanupRefusal{reason: reasonListTablesFailed, errorKey: notification.MsgErrCleanupAccessFailed}
 	}
-	// MySQL 8 and MariaDB differ in the case of returned names.
 	sizes := make(map[string]int64, len(listing))
 	for _, row := range listing {
 		sizes[strings.ToLower(row.Name)] = row.Size
 	}
-
-	bareV2Present := slices.ContainsFunc(bareV2MarkerTables, func(name string) bool {
-		_, ok := sizes[name]
-		return ok
-	})
-
-	var tables []LegacyTableInfo
-	for _, name := range mysqlLegacyCandidates(prefix, bareV2Present) {
-		size, ok := sizes[name]
-		if !ok {
-			continue
-		}
-		info := LegacyTableInfo{Name: name, SizeBytes: size}
-		if withCounts {
-			if err := db.Raw("SELECT COUNT(*) FROM `" + name + "`").Scan(&info.RowCount).Error; err != nil {
-				if ctx.Err() != nil {
-					return nil, accessFailed("Cleanup was cancelled")
-				}
-				// The count is informational and never decides what is dropped.
-				c.LogWarnIfEnabled("Legacy cleanup: failed to query row count",
-					logger.String("table", name),
-					logger.Error(err))
-				info.RowCount = 0
-			}
-		}
-		tables = append(tables, info)
-	}
-	if len(tables) == 0 {
-		return nil, &legacyCleanupRefusal{reason: "No legacy tables found", errorKey: notification.MsgErrCleanupNoLegacyTables}
-	}
-	return tables, nil
+	return sizes, nil
 }
 
 // sumLegacyTableSizes returns the total size of the resolved tables.
@@ -436,7 +465,7 @@ func (c *Handler) GetLegacyStatus(ctx echo.Context) error {
 
 	// The opened database decides the backend, not the live settings.
 	if mgr.IsMySQL() {
-		return c.getLegacyStatusMySQL(ctx, &response)
+		return c.getLegacyStatusMySQL(ctx, &response, mgr)
 	}
 
 	return c.getLegacyStatusSQLite(ctx, &response, mgr)
@@ -534,7 +563,7 @@ func (c *Handler) getLegacyStatusSQLite(ctx echo.Context, response *LegacyStatus
 }
 
 // getLegacyStatusMySQL handles legacy status for MySQL deployments.
-func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusResponse) error {
+func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusResponse, mgr datastoreV2.Manager) error {
 	response.Location = c.CurrentSettings().Output.MySQL.Database
 
 	// Check if we're in v2-only mode (required for cleanup)
@@ -549,22 +578,18 @@ func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusR
 	// Bind the request context so the schema queries below abort if the
 	// client disconnects, rather than running unbounded on the request thread.
 	reqCtx := ctx.Request().Context()
-	db, refusal := c.mysqlCleanupConn(reqCtx)
+	_, tables, refusal := c.resolveMySQLLegacyTables(reqCtx, mgr, mysqlResolveStatus)
 	if refusal == nil {
-		var tables []LegacyTableInfo
-		tables, refusal = c.resolveMySQLLegacyTables(reqCtx, db, true)
-		if refusal == nil {
-			var totalRows int64
-			for _, t := range tables {
-				totalRows += t.RowCount
-			}
-			response.Exists = true
-			response.CanCleanup = true
-			response.SizeBytes = sumLegacyTableSizes(tables)
-			response.TotalRecords = totalRows
-			response.Tables = tables
-			return ctx.JSON(http.StatusOK, response)
+		var totalRows int64
+		for _, t := range tables {
+			totalRows += t.RowCount
 		}
+		response.Exists = true
+		response.CanCleanup = true
+		response.SizeBytes = sumLegacyTableSizes(tables)
+		response.TotalRecords = totalRows
+		response.Tables = tables
+		return ctx.JSON(http.StatusOK, response)
 	}
 
 	response.Exists = refusal.exists
@@ -576,8 +601,9 @@ func (c *Handler) getLegacyStatusMySQL(ctx echo.Context, response *LegacyStatusR
 
 // StartLegacyCleanup handles POST /api/v2/system/database/legacy/cleanup
 // Initiates asynchronous legacy database cleanup. For MySQL the tables are
-// resolved first and a refusal answers 400 without starting anything; the
-// background drop resolves again before it drops. For SQLite the target is
+// resolved first, including the proof that the legacy tail is in v2, and a
+// refusal answers 400 without starting anything; the background drop resolves
+// and proves again immediately before it drops. For SQLite the target is
 // checked against the opened database, then the migration state and the legacy
 // file are proven (see sqliteMigrationRefusal), and the background delete
 // proves them again. The backend and the SQLite target are decided once here,
@@ -634,13 +660,9 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 			})
 		}
 	} else {
-		reqCtx := ctx.Request().Context()
-		db, refusal := c.mysqlCleanupConn(reqCtx)
-		if refusal == nil {
-			var tables []LegacyTableInfo
-			tables, refusal = c.resolveMySQLLegacyTables(reqCtx, db, false)
-			mysqlSize = sumLegacyTableSizes(tables)
-		}
+		var tables []LegacyTableInfo
+		_, tables, refusal = c.resolveMySQLLegacyTables(ctx.Request().Context(), mgr, mysqlResolveDrop)
+		mysqlSize = sumLegacyTableSizes(tables)
 		if refusal != nil {
 			return ctx.JSON(http.StatusBadRequest, CleanupActionResponse{
 				Success:  false,
@@ -677,7 +699,7 @@ func (c *Handler) StartLegacyCleanup(ctx echo.Context) error {
 		var remaining []string
 
 		if usingMySQL {
-			remaining, err = c.cleanupMySQLLegacy(cleanupCtx)
+			remaining, err = c.cleanupMySQLLegacy(cleanupCtx, mgr)
 		} else {
 			err = c.cleanupSQLiteLegacy(cleanupCtx, mgr, legacyPath)
 		}
@@ -760,24 +782,23 @@ func (c *Handler) cleanupSQLiteLegacy(ctx context.Context, mgr datastoreV2.Manag
 	return nil
 }
 
-// cleanupMySQLLegacy drops the legacy tables the resolver allows. It resolves
-// again, because the database may have changed since the POST was accepted, and
-// drops nothing when the resolver refuses. On a failure or cancellation it
-// returns the names not dropped.
-func (c *Handler) cleanupMySQLLegacy(ctx context.Context) ([]string, error) {
-	// Bind the cleanup context to the GORM session so the listing and the DROP
-	// TABLE Exec below observe cancellation. Without this, an in-flight DROP
-	// cannot abort on shutdown, stalling graceful shutdown and leaking the
-	// cleanup goroutine.
-	db, refusal := c.mysqlCleanupConn(ctx)
-	if refusal == nil {
-		var tables []LegacyTableInfo
-		tables, refusal = c.resolveMySQLLegacyTables(ctx, db, false)
-		if refusal == nil {
-			return c.dropMySQLLegacyTables(ctx, db, tables)
-		}
+// cleanupMySQLLegacy drops the legacy tables the resolver allows, on the
+// connection of mgr. It resolves and proves the legacy tail again immediately
+// before the first DROP, because the database may have changed since the POST was
+// accepted, and drops nothing when the resolver refuses. The bound context lets
+// an in-flight DROP abort on shutdown. On a failure or cancellation it returns
+// the names not dropped.
+func (c *Handler) cleanupMySQLLegacy(ctx context.Context, mgr datastoreV2.Manager) ([]string, error) {
+	db, tables, refusal := c.resolveMySQLLegacyTables(ctx, mgr, mysqlResolveDrop)
+	if refusal != nil {
+		return nil, fmt.Errorf("legacy cleanup refused: %s", refusal.reason)
 	}
-	return nil, fmt.Errorf("legacy cleanup refused: %s", refusal.reason)
+	remaining, err := c.dropMySQLLegacyTables(ctx, db, tables)
+	if err == nil {
+		c.LogInfoIfEnabled("MySQL legacy cleanup kept the shared auxiliary tables, which may hold rows the migration never copied",
+			logger.String("kept_tables", strings.Join(legacySharedTables, ",")))
+	}
+	return remaining, err
 }
 
 // dropMySQLLegacyTables drops the resolved tables in order and stops at the first
