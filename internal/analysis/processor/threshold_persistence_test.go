@@ -1859,9 +1859,8 @@ func TestResetDynamicThresholds_NilDatastoreClearsMemoryOnly(t *testing.T) {
 }
 
 // TestResetDynamicThresholds_PanicInDeleteQueuesRetry pins that a datastore call
-// that panics inside a reset still queues the retry (and does not drop an older
-// one), clears the reset barrier and lets later persistence cycles run. Not
-// parallel: the settings come from the processor.
+// that panics inside a reset still queues the retry, clears the reset barrier and
+// lets later persistence cycles run. Not parallel: the settings come from the processor.
 func TestResetDynamicThresholds_PanicInDeleteQueuesRetry(t *testing.T) {
 	tests := []struct {
 		name    string
