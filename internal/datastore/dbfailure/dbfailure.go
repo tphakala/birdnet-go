@@ -15,7 +15,6 @@ import (
 	"io/fs"
 	"net"
 	"slices"
-	"strings"
 	"syscall"
 
 	"github.com/go-sql-driver/mysql"
@@ -223,7 +222,7 @@ func newServerFailure(kind Kind, number uint16) Failure {
 // It inspects the typed values itself and does not depend on errors.IsConnectivityError.
 func Classify(err error) Failure {
 	if err == nil {
-		return Failure{Kind: KindUnknown}
+		return unknownFailure
 	}
 	if serverErr, ok := errors.AsType[*mysql.MySQLError](err); ok {
 		return classifyServerError(serverErr.Number)
@@ -234,7 +233,7 @@ func Classify(err error) Failure {
 	}
 	if opErr, ok := errors.AsType[*net.OpError](err); ok {
 		if opErr.Op != dialOp {
-			return Failure{Kind: KindUnknown}
+			return unknownFailure
 		}
 		if opErr.Timeout() {
 			return newFailure(KindMySQLTimeout)
@@ -260,7 +259,7 @@ func classifyServerError(number uint16) Failure {
 	case mysqlErrSecureTransportRequired:
 		return newServerFailure(KindMySQLSecureTransportRequired, number)
 	default:
-		return Failure{Kind: KindUnknown}
+		return unknownFailure
 	}
 }
 
@@ -277,9 +276,12 @@ func classifyFile(err error) Failure {
 		errors.Is(err, syscall.ENOTDIR), errors.Is(err, syscall.EROFS):
 		return newFailure(KindSQLitePathUnusable)
 	default:
-		return Failure{Kind: KindUnknown}
+		return unknownFailure
 	}
 }
+
+// unknownFailure is the result for an error that is not a recognised start failure.
+var unknownFailure = Failure{Kind: KindUnknown}
 
 // StartError is a database start failure with a classification. Its text is built
 // from constants only; Unwrap returns the original error so typed causes stay
@@ -300,15 +302,7 @@ func NewStartError(op string, f *Failure, cause error) *StartError {
 // Error returns "<Op>: <Summary>; <Hint>, then restart BirdNET-Go". It never
 // includes the text of the cause.
 func (e *StartError) Error() string {
-	var b strings.Builder
-	b.WriteString(e.Op)
-	b.WriteString(": ")
-	b.WriteString(e.Failure.Summary)
-	b.WriteString("; ")
-	b.WriteString(e.Failure.Hint)
-	b.WriteString(", ")
-	b.WriteString(restartSuffix)
-	return b.String()
+	return e.Op + ": " + e.Failure.Summary + "; " + e.Failure.Hint + ", " + restartSuffix
 }
 
 // Unwrap returns the original error.

@@ -42,6 +42,11 @@ func refusedDial() error {
 	}
 }
 
+var (
+	sqliteSettings   = []string{SettingSQLitePath}
+	hostPortSettings = []string{SettingMySQLHost, SettingMySQLPort}
+)
+
 func TestClassify(t *testing.T) {
 	t.Parallel()
 
@@ -63,25 +68,25 @@ func TestClassify(t *testing.T) {
 		{"dns failure arrives as a dial error and wins over it",
 			&net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Err: "no such host", Name: "x.invalid", IsNotFound: true}},
 			KindMySQLHostNotFound, 0, []string{SettingMySQLHost}, BackendMySQL},
-		{"refused dial", refusedDial(), KindMySQLUnreachable, 0, []string{SettingMySQLHost, SettingMySQLPort}, BackendMySQL},
+		{"refused dial", refusedDial(), KindMySQLUnreachable, 0, hostPortSettings, BackendMySQL},
 		{"dial timeout", &net.OpError{Op: "dial", Net: "tcp", Err: os.ErrDeadlineExceeded},
-			KindMySQLTimeout, 0, []string{SettingMySQLHost, SettingMySQLPort}, BackendMySQL},
+			KindMySQLTimeout, 0, hostPortSettings, BackendMySQL},
 		{"read error is not a dial failure", &net.OpError{Op: "read", Net: "tcp", Err: syscall.ECONNRESET}, KindUnknown, 0, nil, ""},
-		{"driver invalid connection", mysql.ErrInvalidConn, KindMySQLUnreachable, 0, []string{SettingMySQLHost, SettingMySQLPort}, BackendMySQL},
-		{"sql bad connection", driver.ErrBadConn, KindMySQLUnreachable, 0, []string{SettingMySQLHost, SettingMySQLPort}, BackendMySQL},
-		{"sqlite cannot open", sqlite3.Error{Code: sqlite3.ErrCantOpen}, KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
-		{"sqlite full", sqlite3.Error{Code: sqlite3.ErrFull}, KindSQLiteDiskSpace, 0, []string{SettingSQLitePath}, BackendSQLite},
-		{"startup disk check", fmt.Errorf("%w: 512MB available", ErrInsufficientDiskSpace), KindSQLiteDiskSpace, 0, []string{SettingSQLitePath}, BackendSQLite},
+		{"driver invalid connection", mysql.ErrInvalidConn, KindMySQLUnreachable, 0, hostPortSettings, BackendMySQL},
+		{"sql bad connection", driver.ErrBadConn, KindMySQLUnreachable, 0, hostPortSettings, BackendMySQL},
+		{"sqlite cannot open", sqlite3.Error{Code: sqlite3.ErrCantOpen}, KindSQLitePathUnusable, 0, sqliteSettings, BackendSQLite},
+		{"sqlite full", sqlite3.Error{Code: sqlite3.ErrFull}, KindSQLiteDiskSpace, 0, sqliteSettings, BackendSQLite},
+		{"startup disk check", fmt.Errorf("%w: 512MB available", ErrInsufficientDiskSpace), KindSQLiteDiskSpace, 0, sqliteSettings, BackendSQLite},
 		{"permission denied creating the directory", &fs.PathError{Op: "mkdir", Path: "/x", Err: syscall.EACCES},
-			KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
-		{"parent is not a directory", syscall.ENOTDIR, KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
-		{"sqlite permission", sqlite3.Error{Code: sqlite3.ErrPerm}, KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
-		{"sqlite read only", sqlite3.Error{Code: sqlite3.ErrReadonly}, KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
+			KindSQLitePathUnusable, 0, sqliteSettings, BackendSQLite},
+		{"parent is not a directory", syscall.ENOTDIR, KindSQLitePathUnusable, 0, sqliteSettings, BackendSQLite},
+		{"sqlite permission", sqlite3.Error{Code: sqlite3.ErrPerm}, KindSQLitePathUnusable, 0, sqliteSettings, BackendSQLite},
+		{"sqlite read only", sqlite3.Error{Code: sqlite3.ErrReadonly}, KindSQLitePathUnusable, 0, sqliteSettings, BackendSQLite},
 		{"directory does not exist", &fs.PathError{Op: "open", Path: "/x", Err: syscall.ENOENT},
-			KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
-		{"read only file system", syscall.EROFS, KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
+			KindSQLitePathUnusable, 0, sqliteSettings, BackendSQLite},
+		{"read only file system", syscall.EROFS, KindSQLitePathUnusable, 0, sqliteSettings, BackendSQLite},
 		{"no space left on device", &fs.PathError{Op: "write", Path: "/x", Err: syscall.ENOSPC},
-			KindSQLiteDiskSpace, 0, []string{SettingSQLitePath}, BackendSQLite},
+			KindSQLiteDiskSpace, 0, sqliteSettings, BackendSQLite},
 		{"nil", nil, KindUnknown, 0, nil, ""},
 		{"other", errors.NewStd("other"), KindUnknown, 0, nil, ""},
 	}
@@ -127,14 +132,10 @@ func TestStartError_MessageCarriesHintWithoutDriverText(t *testing.T) {
 		name             string
 		cause            error
 		wantConnectivity bool
-		wantTarget       func(error) bool
 	}{
-		{"access denied", fmt.Errorf("%w: %w", errTestSentinel, mysqlServerError(1045)), false,
-			func(err error) bool { _, ok := errors.AsType[*mysql.MySQLError](err); return ok }},
-		{"refused dial", refusedDial(), true,
-			func(err error) bool { _, ok := errors.AsType[*net.OpError](err); return ok }},
-		{"sqlite cannot open", sqlite3.Error{Code: sqlite3.ErrCantOpen}, false,
-			func(err error) bool { _, ok := errors.AsType[sqlite3.Error](err); return ok }},
+		{"access denied", fmt.Errorf("%w: %w", errTestSentinel, mysqlServerError(1045)), false},
+		{"refused dial", refusedDial(), true},
+		{"sqlite cannot open", sqlite3.Error{Code: sqlite3.ErrCantOpen}, false},
 	}
 
 	for _, tt := range tests {
@@ -152,7 +153,7 @@ func TestStartError_MessageCarriesHintWithoutDriverText(t *testing.T) {
 			for _, leak := range []string{testUserName, testAddress, "Access denied", "connection refused", "unable to open"} {
 				assert.NotContains(t, msg, leak)
 			}
-			assert.True(t, tt.wantTarget(err), "the typed cause must stay reachable")
+			require.ErrorIs(t, err, tt.cause, "the typed cause must stay reachable")
 			assert.Equal(t, tt.wantConnectivity, errors.IsConnectivityError(err))
 		})
 	}
