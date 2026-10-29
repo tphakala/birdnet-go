@@ -91,7 +91,8 @@ type MigrationState struct {
 	// row handled.
 	RelatedPredictionsResultID *uint `gorm:"column:related_predictions_result_id"`
 	// RelatedReconciledAt is the start time of the last completed review and
-	// lock reconcile. Legacy review and lock edits older than this are in v2.
+	// lock reconcile. Rows whose detection was not in v2 yet were skipped by that
+	// pass, so the time alone does not show that every edit older than it is in v2.
 	RelatedReconciledAt *time.Time `gorm:"column:related_reconciled_at"`
 	UpdatedAt           time.Time  `gorm:"autoUpdateTime"`
 }

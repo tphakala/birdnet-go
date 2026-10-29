@@ -340,9 +340,9 @@ func (w *Worker) Resume() {
 // Stop asks the worker to stop and waits until its goroutine has exited or ctx
 // ends. A stop once the migration is completed (tail sync mode) drains legacy
 // rows written since the last sync, detections first, then related data;
-// Abandon skips the drain. A stop while migrating, validating or paused exits
-// without it. It is safe to call repeatedly and concurrently, and returns nil when
-// the worker is not running. On timeout it returns an error wrapping
+// Abandon skips the drain. A stop while migrating or validating exits without
+// it; a paused worker whose migration is completed drains too. It is safe to
+// call repeatedly and concurrently, and returns nil when the worker is not running. On timeout it returns an error wrapping
 // ErrWorkerStopTimeout and the worker keeps stopping in the background.
 func (w *Worker) Stop(ctx context.Context) error {
 	return w.stop(ctx, false)
