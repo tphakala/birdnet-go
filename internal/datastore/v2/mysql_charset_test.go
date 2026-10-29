@@ -7,11 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
 
 const (
@@ -23,6 +26,13 @@ const (
 	charsetTestLatin1DDL   = "CHARACTER SET latin1 COLLATE latin1_swedish_ci"
 	charsetTestCustomDDL   = "CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
 	charsetTestCustomColl  = "utf8mb4_unicode_ci"
+
+	// charsetTestLockWaitTimeoutNumber is the MySQL error number of a lock wait
+	// timeout, for a table lock and for a metadata lock.
+	charsetTestLockWaitTimeoutNumber = 1205
+	// charsetTestOtherSessionWaitSeconds bounds how long the test's own second
+	// session waits for a table that the manager holds locked.
+	charsetTestOtherSessionWaitSeconds = 1
 )
 
 // tableCollations maps each base table of the test schema to its collation.
@@ -71,7 +81,7 @@ func roundTripUnicode(t *testing.T, db *gorm.DB) {
 	assert.Equal(t, charsetTestUnicodeText, gotCache.AuthorName)
 }
 
-func TestMySQL_V2Initialize_SchemaCharset_NewTablesHoldUnicodeAndExistingTablesUnchanged(t *testing.T) {
+func TestMySQL_V2Initialize_SchemaCharset_NewTablesHoldUnicodeAndPopulatedTablesUnchanged(t *testing.T) {
 	// Not parallel: the subtests share one database and change its default.
 	tests := []struct {
 		name        string
@@ -142,8 +152,258 @@ func TestMySQL_V2MigrationDB_UnreadableSchemaCharsetFails(t *testing.T) {
 	mgr := newTestMySQLManager(t, false)
 	require.NoError(t, mgr.Close())
 
-	db, err := mgr.migrationDB()
+	db, _, err := mgr.migrationDB()
 
 	require.Error(t, err, "an unreadable schema charset must not fall back to a handle without table options")
 	assert.Nil(t, db)
+}
+
+// createOldReleaseSchema leaves the test database the way a release from before
+// the utf8mb4 table options left it: every v2 table created without options on
+// the schema default, the seeded reference tables and the migration state row
+// populated, app_metadata holding a latin1 value, and two foreign tables (the
+// legacy notes table and the other mode's image_caches) that are empty. The
+// caller sets the schema default first.
+func createOldReleaseSchema(t *testing.T, usePrefix bool) {
+	t.Helper()
+	dropAllTables(t, coexTestDB, coexTestDBName)
+
+	old := newTestMySQLManager(t, usePrefix)
+	t.Cleanup(func() { _ = old.Close() })
+	require.NoError(t, old.DB().AutoMigrate(v2Entities()...))
+	require.NoError(t, seedLookupTablesDB(old.DB()))
+	require.NoError(t, seedDefaultModelDB(old.DB()))
+	require.NoError(t, old.DB().FirstOrCreate(&entities.MigrationState{ID: 1}, entities.MigrationState{ID: 1}).Error)
+	require.NoError(t, old.DB().Create(&entities.AppMetadata{Key: "k", Value: charsetTestOldText}).Error)
+
+	foreignShared := "v2_image_caches"
+	if usePrefix {
+		foreignShared = "image_caches"
+	}
+	for _, name := range []string{"notes", foreignShared} {
+		require.NoError(t, coexTestDB.Exec(fmt.Sprintf("CREATE TABLE `%s` (id INT PRIMARY KEY, body TEXT)", name)).Error)
+	}
+}
+
+// useSchemaDefault sets the default character set of the test database and
+// restores the original one when the test ends.
+func useSchemaDefault(t *testing.T, schemaDDL string) {
+	t.Helper()
+	origCharset, origCollation, err := dbserver.QuerySchemaCharset(t.Context(), coexTestDB)
+	require.NoError(t, err)
+	require.NoError(t, coexTestDB.Exec(fmt.Sprintf("ALTER DATABASE `%s` %s", coexTestDBName, schemaDDL)).Error)
+	t.Cleanup(func() {
+		restore := fmt.Sprintf("ALTER DATABASE `%s` CHARACTER SET %s COLLATE %s", coexTestDBName, origCharset, origCollation)
+		assert.NoError(t, coexTestDB.Exec(restore).Error)
+	})
+}
+
+// textColumnSnapshot lists (table, column, type, character set) of every text
+// column of the test schema, in a stable order.
+func textColumnSnapshot(t *testing.T) []string {
+	t.Helper()
+	var rows []struct {
+		Table   string `gorm:"column:table_name"`
+		Column  string `gorm:"column:column_name"`
+		Type    string `gorm:"column:column_type"`
+		Charset string `gorm:"column:character_set_name"`
+	}
+	require.NoError(t, coexTestDB.Raw(
+		"SELECT TABLE_NAME AS table_name, COLUMN_NAME AS column_name, COLUMN_TYPE AS column_type, "+
+			"CHARACTER_SET_NAME AS character_set_name FROM information_schema.COLUMNS "+
+			"WHERE TABLE_SCHEMA = ? AND CHARACTER_SET_NAME IS NOT NULL ORDER BY TABLE_NAME, COLUMN_NAME",
+		coexTestDBName).Scan(&rows).Error)
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = fmt.Sprintf("%s.%s %s %s", r.Table, r.Column, r.Type, r.Charset)
+	}
+	return out
+}
+
+func columnType(t *testing.T, table, column string) string {
+	t.Helper()
+	var got string
+	require.NoError(t, coexTestDB.Raw(
+		"SELECT COLUMN_TYPE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?",
+		coexTestDBName, table, column).Scan(&got).Error)
+	return got
+}
+
+func TestMySQL_V2Initialize_ConvertsVerifiedEmptyTablesToUTF8MB4(t *testing.T) {
+	// Not parallel: the subtests share one database and change its default.
+	tests := []struct {
+		name        string
+		schemaDDL   string
+		usePrefix   bool
+		wantConvert bool
+	}{
+		{"latin1 schema bare", charsetTestLatin1DDL, false, true},
+		{"latin1 schema v2 prefix", charsetTestLatin1DDL, true, true},
+		{"utf8mb4 schema left alone", charsetTestCustomDDL, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			useSchemaDefault(t, tt.schemaDDL)
+			createOldReleaseSchema(t, tt.usePrefix)
+			prefix := ""
+			if tt.usePrefix {
+				prefix = v2TablePrefix
+			}
+			// The collation reference: a table created new by the boot.
+			require.NoError(t, coexTestDB.Exec("DROP TABLE `"+prefix+"app_events`").Error)
+			if !tt.wantConvert {
+				// An empty latin1 v2 table on a utf8mb4 schema.
+				require.NoError(t, coexTestDB.Exec(
+					"ALTER TABLE `"+prefix+"image_caches` CONVERT TO CHARACTER SET latin1").Error)
+			}
+
+			before, err := dbserver.QueryCharset(t.Context(), coexTestDB)
+			require.NoError(t, err)
+			candidates, err := convertibleTables(schema.NamingStrategy{TablePrefix: prefix}, before)
+			require.NoError(t, err)
+			emptyBefore := map[string]bool{}
+			rowsBefore := map[string]int64{}
+			for _, name := range candidates {
+				has, err := tableHasAnyRow(coexTestDB, name)
+				require.NoError(t, err)
+				emptyBefore[name] = !has
+				rowsBefore[name] = getRowCount(t, coexTestDB, name)
+			}
+			require.NotEmpty(t, candidates)
+
+			mgr := newTestMySQLManager(t, tt.usePrefix)
+			require.NoError(t, mgr.Initialize())
+			t.Cleanup(func() { _ = mgr.Close() })
+
+			after, err := dbserver.QueryCharset(t.Context(), coexTestDB)
+			require.NoError(t, err)
+			nonUTF8 := after.NonUTF8MB4Tables()
+			collations := tableCollations(t)
+
+			if !tt.wantConvert {
+				assert.Equal(t, []string{prefix + "image_caches"}, nonUTF8,
+					"a utf8mb4 schema must not be touched")
+				return
+			}
+
+			// Foreign tables keep the schema default.
+			assert.Contains(t, nonUTF8, "notes")
+			foreignShared := "v2_image_caches"
+			if tt.usePrefix {
+				foreignShared = "image_caches"
+			}
+			assert.Contains(t, nonUTF8, foreignShared)
+
+			reference := collations[prefix+"app_events"]
+			require.NotEmpty(t, reference)
+			require.NotEmpty(t, emptyBefore)
+			for name, wasEmpty := range emptyBefore {
+				if wasEmpty {
+					assert.NotContains(t, nonUTF8, name, "empty table %s must be converted", name)
+					assert.Equal(t, reference, collations[name], "table %s must match tables created new", name)
+					continue
+				}
+				assert.Contains(t, nonUTF8, name, "populated table %s must not be altered", name)
+				assert.Equal(t, rowsBefore[name], getRowCount(t, coexTestDB, name))
+			}
+			var row entities.AppMetadata
+			require.NoError(t, coexTestDB.Table(prefix+"app_metadata").First(&row, "`key` = ?", "k").Error)
+			assert.Equal(t, charsetTestOldText, row.Value)
+
+			// CONVERT widens TEXT to MEDIUMTEXT; running before AutoMigrate lets the
+			// same boot restore the declared type.
+			assert.Equal(t, "text", columnType(t, prefix+"detection_comments", "entry"))
+			roundTripUnicode(t, mgr.DB())
+
+			// A second boot changes nothing.
+			snapshot := textColumnSnapshot(t)
+			mgr2 := newTestMySQLManager(t, tt.usePrefix)
+			require.NoError(t, mgr2.Initialize())
+			t.Cleanup(func() { _ = mgr2.Close() })
+			assert.Equal(t, collations, tableCollations(t))
+			assert.Equal(t, snapshot, textColumnSnapshot(t))
+		})
+	}
+}
+
+func TestMySQL_V2Initialize_ConvertEmptyTables_WriterBlockedUntilConverted(t *testing.T) {
+	useSchemaDefault(t, charsetTestLatin1DDL)
+	createOldReleaseSchema(t, false)
+
+	mgr := newTestMySQLManager(t, false)
+	t.Cleanup(func() { _ = mgr.Close() })
+	seamRan := false
+	mgr.beforeConvertAlter = func(table string) {
+		if table != "app_events" {
+			return
+		}
+		seamRan = true
+		// A second session writing between the emptiness check and the ALTER must wait
+		// for the table lock and give up.
+		err := coexTestDB.Connection(func(tx *gorm.DB) error {
+			require.NoError(t, tx.Exec(fmt.Sprintf(
+				"SET SESSION lock_wait_timeout = %d", charsetTestOtherSessionWaitSeconds)).Error)
+			return tx.Create(&entities.AppEvent{
+				Timestamp: time.Now(), Category: "test", EventType: "writer",
+			}).Error
+		})
+		if mysqlErr, ok := errors.AsType[*mysql.MySQLError](err); assert.True(t, ok, "the writer must fail with a MySQL error, got %v", err) {
+			assert.EqualValues(t, charsetTestLockWaitTimeoutNumber, mysqlErr.Number)
+		}
+	}
+
+	require.NoError(t, mgr.Initialize())
+	require.True(t, seamRan, "the conversion must have reached app_events")
+
+	report, err := dbserver.QueryCharset(t.Context(), coexTestDB)
+	require.NoError(t, err)
+	assert.NotContains(t, report.NonUTF8MB4Tables(), "app_events")
+	assert.Zero(t, getRowCount(t, coexTestDB, "app_events"))
+	require.NoError(t, mgr.DB().Create(&entities.AppEvent{
+		Timestamp: time.Now(), Category: "test", EventType: "after", Message: charsetTestUnicodeText,
+	}).Error)
+	var got entities.AppEvent
+	require.NoError(t, mgr.DB().First(&got).Error)
+	assert.Equal(t, charsetTestUnicodeText, got.Message)
+}
+
+func TestMySQL_V2Initialize_ConvertEmptyTables_LockTimeoutSkipsTableAndBootContinues(t *testing.T) {
+	useSchemaDefault(t, charsetTestLatin1DDL)
+	createOldReleaseSchema(t, false)
+
+	// READ, not WRITE: AutoMigrate must still be able to read the table.
+	sqlDB, err := coexTestDB.DB()
+	require.NoError(t, err)
+	holder, err := sqlDB.Conn(t.Context())
+	require.NoError(t, err)
+	_, err = holder.ExecContext(t.Context(), "LOCK TABLES `app_events` READ")
+	require.NoError(t, err)
+	released := false
+	release := func() {
+		if released {
+			return
+		}
+		released = true
+		_, unlockErr := holder.ExecContext(t.Context(), "UNLOCK TABLES")
+		assert.NoError(t, unlockErr)
+		assert.NoError(t, holder.Close())
+	}
+	t.Cleanup(release)
+
+	mgr := newTestMySQLManager(t, false)
+	t.Cleanup(func() { _ = mgr.Close() })
+	require.NoError(t, mgr.Initialize(), "a lock timeout must not fail the boot")
+
+	report, err := dbserver.QueryCharset(t.Context(), coexTestDB)
+	require.NoError(t, err)
+	assert.Contains(t, report.NonUTF8MB4Tables(), "app_events", "the locked table keeps its character set")
+	assert.NotContains(t, report.NonUTF8MB4Tables(), "dynamic_thresholds", "the next table is still handled")
+
+	release()
+	mgr2 := newTestMySQLManager(t, false)
+	t.Cleanup(func() { _ = mgr2.Close() })
+	require.NoError(t, mgr2.Initialize())
+	report, err = dbserver.QueryCharset(t.Context(), coexTestDB)
+	require.NoError(t, err)
+	assert.NotContains(t, report.NonUTF8MB4Tables(), "app_events", "the next boot converts it")
 }
