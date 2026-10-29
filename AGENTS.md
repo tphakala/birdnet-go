@@ -77,11 +77,12 @@ yourself before touching code in that area.
   its conditions are in `internal/datastore/AGENTS.md`). A data migration (SQLite to MySQL, legacy to v2, copying or
   consolidating databases) never starts by itself; only an explicit user action
   starts it. Details: `internal/datastore/AGENTS.md`.
-- **HARD RULE: support only MySQL and MariaDB releases that upstream still
-  supports.** A release past its upstream end of life (MySQL 5.7 and 8.0,
-  MariaDB 10.6 and older) is not supported: no workarounds, version branches or
-  tests for it, and no fixes for bugs that only show on it. The current list is
-  in `internal/datastore/AGENTS.md`.
+- **HARD RULE: support only the MySQL and MariaDB LTS releases we test.** A
+  tested release is supported; a release we do not test is not, and a release
+  already end of life upstream is not tested (MySQL 5.7 and 8.0, MariaDB 10.6
+  and older). No workarounds, version branches or tests for unsupported
+  releases, no fixes for bugs that only show on them, and no end of life dates
+  in code. The current list is in `internal/datastore/AGENTS.md`.
 - **The frontend is for desktop and tablet only; mobile is out of scope.** Do
   not optimize, fix, test or file issues for phone viewports or phone layouts
   (about 640 px wide and below), and do not add phone-specific workarounds.

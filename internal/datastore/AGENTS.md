@@ -130,29 +130,37 @@ Tests for startup and repair code run against a real database (SQLite in a temp
 directory, MySQL and MariaDB through the testcontainer suites), assert that no
 row is ever dropped, and boot twice to assert the same result both times.
 
-## HARD RULE: support only MySQL and MariaDB releases under upstream support
+## HARD RULE: support only the MySQL and MariaDB LTS releases we test
 
-BirdNET-Go targets the MySQL and MariaDB releases that their upstream projects
-still maintain, and nothing older. This is a standing maintainer decision.
+BirdNET-Go is tested against the long-term support (LTS) releases of MySQL and
+MariaDB. A release we test is supported. A release we do not test is not
+supported, and a release that is already end of life upstream is not tested, so
+it is not supported either. This is a standing maintainer decision.
 
-- **Supported** (checked October 2026): the MySQL LTS series 8.4 and 9.7, and
-  the MariaDB community LTS series 10.11, 11.4, 11.8 and 12.3. A MariaDB rolling
-  release or a MySQL Innovation release counts only while upstream still
-  maintains it. Re-check the
-  upstream lifecycle pages (the MySQL release policy, the mariadb.org maintenance
-  policy) when this list is more than a few months old: a new LTS joins, and a
-  release past its end of life leaves.
-- **Not supported:** MySQL 5.7, MySQL 8.0 (community support ended 2026-04-30),
-  MariaDB 10.6 (end of life 2026-07-06) and every older release. Do not add
-  workarounds, version checks that keep them working, SQL rewrites or tests for
-  them, and do not fix bugs that only show on them. A bug that also reproduces on
-  a supported release is a real bug, whatever release it was first reported on.
-- **One table in code.** The release table (series and end-of-life dates) lives
-  in `internal/datastore/dbserver`; change it together with the list above. The
+- **Supported** (the LTS releases we test against, checked October 2026):
+  MySQL 8.4 and 9.7, and MariaDB 10.11, 11.4, 11.8 and 12.3. MySQL Innovation
+  releases and MariaDB rolling releases are not LTS, are not tested, and are not
+  supported.
+- **Not supported:** every release that is not in that list, including the
+  releases already end of life upstream (MySQL 5.7, MySQL 8.0, MariaDB 10.6 and
+  every older release). Do not add workarounds, version checks that keep them
+  working, SQL rewrites or tests for them, and do not fix bugs that only show on
+  them. A bug that also reproduces on a supported release is a real bug,
+  whatever release it was first reported on.
+- **No end of life dates in code.** Support follows the tested list, not an
+  upstream calendar: a listed release stays supported until a maintainer takes
+  it off the list. Do not add end of life dates, "ending soon" states or
+  date-driven checks.
+- **One table in code.** The list of supported series lives in
+  `internal/datastore/dbserver`; change it together with the list above. The
   health checks, the startup log and notice, the telemetry tags and the support
   dump all read that one table.
-- **When a release reaches end of life, drop it:** take it out of the CI test
-  matrix and the testcontainer defaults, and remove code that exists only for it.
+- **Changing the list.** A new LTS release joins the list once we test against
+  it. When a listed release reaches end of life upstream, drop it: take it out of
+  the table, the CI test matrix and the testcontainer defaults, and remove code
+  that exists only for it. Re-check the upstream lifecycle pages (the MySQL
+  release policy, the mariadb.org maintenance policy) when this list is more
+  than a few months old.
 - Test MySQL and MariaDB changes against supported releases only, and keep the
   testcontainer images (`MYSQL_TEST_IMAGE` and its defaults) on supported
   releases.
