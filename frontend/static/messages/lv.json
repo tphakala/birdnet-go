@@ -462,7 +462,7 @@
       },
       "database": {
         "serverAttentionTitle": "Datubāzes serverim nepieciešama uzmanība",
-        "serverAttentionMessage": "MySQL vai MariaDB serveris ir sasniedzis atbalsta beigas vai tuvojas tām, vai arī datubāze neizmanto rakstzīmju kopu utf8mb4. Sīkāku informāciju skatiet sadaļā Sistēma > Sistēmas veselība."
+        "serverAttentionMessage": "MySQL vai MariaDB servera versija netiek atbalstīta, vai arī datubāze neizmanto rakstzīmju kopu utf8mb4. Sīkāku informāciju skatiet sadaļā Sistēma > Sistēmas veselība."
       },
       "cleanup": {
         "completeTitle": "Mantotās datubāzes tīrīšana pabeigta",

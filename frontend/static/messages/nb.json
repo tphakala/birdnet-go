@@ -462,7 +462,7 @@
       },
       "database": {
         "serverAttentionTitle": "Databaseserveren trenger oppmerksomhet",
-        "serverAttentionMessage": "MySQL- eller MariaDB-serveren har nådd eller nærmer seg slutten av levetiden, eller databasen bruker ikke tegnsettet utf8mb4. Åpne System > Helse for detaljer."
+        "serverAttentionMessage": "MySQL- eller MariaDB-serveren er ikke en støttet versjon, eller databasen bruker ikke tegnsettet utf8mb4. Åpne System > Helse for detaljer."
       },
       "cleanup": {
         "completeTitle": "Opprydding av eldre database fullført",

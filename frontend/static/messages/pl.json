@@ -462,7 +462,7 @@
       },
       "database": {
         "serverAttentionTitle": "Serwer bazy danych wymaga uwagi",
-        "serverAttentionMessage": "Serwer MySQL lub MariaDB osiągnął koniec wsparcia lub się do niego zbliża albo baza danych nie używa zestawu znaków utf8mb4. Szczegóły znajdziesz w System > Zdrowie."
+        "serverAttentionMessage": "Serwer MySQL lub MariaDB nie jest obsługiwaną wersją albo baza danych nie używa zestawu znaków utf8mb4. Szczegóły znajdziesz w System > Zdrowie."
       },
       "cleanup": {
         "completeTitle": "Czyszczenie starej bazy danych zakończone",

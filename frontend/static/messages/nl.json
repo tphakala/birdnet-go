@@ -462,7 +462,7 @@
       },
       "database": {
         "serverAttentionTitle": "De databaseserver heeft aandacht nodig",
-        "serverAttentionMessage": "De MySQL- of MariaDB-server heeft het einde van zijn levensduur bereikt of nadert dat, of de database gebruikt niet de tekenset utf8mb4. Open Systeem > Gezondheid voor details."
+        "serverAttentionMessage": "De MySQL- of MariaDB-server is geen ondersteunde versie, of de database gebruikt niet de tekenset utf8mb4. Open Systeem > Gezondheid voor details."
       },
       "cleanup": {
         "completeTitle": "Opruiming oude database voltooid",

@@ -462,7 +462,7 @@
       },
       "database": {
         "serverAttentionTitle": "Der Datenbankserver benötigt Aufmerksamkeit",
-        "serverAttentionMessage": "Der MySQL- oder MariaDB-Server hat das Ende seiner Lebensdauer erreicht oder steht kurz davor, oder die Datenbank verwendet nicht den Zeichensatz utf8mb4. Details finden Sie unter System > Status."
+        "serverAttentionMessage": "Der MySQL- oder MariaDB-Server ist keine unterstützte Version, oder die Datenbank verwendet nicht den Zeichensatz utf8mb4. Details finden Sie unter System > Status."
       },
       "cleanup": {
         "completeTitle": "Bereinigung der alten Datenbank abgeschlossen",

@@ -462,7 +462,7 @@
       },
       "database": {
         "serverAttentionTitle": "Databázový server vyžaduje pozornost",
-        "serverAttentionMessage": "Server MySQL nebo MariaDB je za koncem životnosti nebo se k němu blíží, nebo databáze nepoužívá znakovou sadu utf8mb4. Podrobnosti najdete v části Systém > Zdraví."
+        "serverAttentionMessage": "Server MySQL nebo MariaDB není podporovaná verze, nebo databáze nepoužívá znakovou sadu utf8mb4. Podrobnosti najdete v části Systém > Zdraví."
       },
       "cleanup": {
         "completeTitle": "Vyčištění staré databáze dokončeno",
