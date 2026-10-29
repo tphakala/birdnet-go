@@ -135,9 +135,10 @@ row is ever dropped, and boot twice to assert the same result both times.
 BirdNET-Go targets the MySQL and MariaDB releases that their upstream projects
 still maintain, and nothing older. This is a standing maintainer decision.
 
-- **Supported** (checked October 2026): MySQL 8.4 LTS, and the MariaDB community
-  LTS series 10.11, 11.4, 11.8 and 12.3. A MariaDB rolling release or a MySQL
-  Innovation release counts only while upstream still maintains it. Re-check the
+- **Supported** (checked October 2026): the MySQL LTS series 8.4 and 9.7, and
+  the MariaDB community LTS series 10.11, 11.4, 11.8 and 12.3. A MariaDB rolling
+  release or a MySQL Innovation release counts only while upstream still
+  maintains it. Re-check the
   upstream lifecycle pages (the MySQL release policy, the mariadb.org maintenance
   policy) when this list is more than a few months old: a new LTS joins, and a
   release past its end of life leaves.
