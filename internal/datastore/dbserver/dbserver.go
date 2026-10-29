@@ -1,6 +1,6 @@
 // Package dbserver identifies the MySQL or MariaDB server behind a connection,
 // classifies its release against the upstream lifecycle, and reads the
-// character sets of the schema the application uses.
+// character sets and the size of the schema the application uses.
 //
 // The release table in this package and the supported list in
 // internal/datastore/AGENTS.md ("HARD RULE: support only MySQL and MariaDB
@@ -15,6 +15,7 @@ package dbserver
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"regexp"
 	"slices"
@@ -408,6 +409,9 @@ const TagUnknown = tagUnknown
 const (
 	queryVersion = `SELECT VERSION()`
 
+	querySchemaSize = `SELECT SUM(DATA_LENGTH + INDEX_LENGTH) AS schema_size ` +
+		`FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE()`
+
 	querySchemaCharset = `SELECT DEFAULT_CHARACTER_SET_NAME AS schema_charset, ` +
 		`DEFAULT_COLLATION_NAME AS schema_collation ` +
 		`FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE()`
@@ -430,6 +434,24 @@ func QueryVersion(ctx context.Context, db *gorm.DB) (string, error) {
 			Build()
 	}
 	return version, nil
+}
+
+// QuerySchemaSize returns the size in bytes of the current schema: the data
+// plus the indexes of every table in it. A schema with no tables returns 0.
+// The figures come from InnoDB table statistics, which both MySQL and MariaDB
+// refresh lazily (MySQL also caches them per information_schema_stats_expiry,
+// 24 hours by default), so the value can lag recent writes until the next
+// ANALYZE TABLE.
+func QuerySchemaSize(ctx context.Context, db *gorm.DB) (int64, error) {
+	var size sql.NullInt64
+	if err := db.WithContext(ctx).Raw(querySchemaSize).Row().Scan(&size); err != nil {
+		return 0, errors.New(err).
+			Component(componentName).
+			Category(errors.CategoryDatabase).
+			Context("operation", "query_schema_size").
+			Build()
+	}
+	return size.Int64, nil
 }
 
 // QuerySchemaCharset reads the default character set and collation of the
