@@ -48,8 +48,10 @@ const (
 // by a snapshot read before it. Rows of species with a queued reset retry (and all
 // rows while a delete-all retry is queued) are not loaded: the retry is about to
 // delete them. If the lock is not free within thresholdLoadLockTimeout the load
-// is skipped with a warning; the database rows stay and the running cycles write
-// the in-memory state, so nothing is lost.
+// is skipped and the lock error is returned. The skip is not retried: the stored
+// rows stay, but this session starts with an empty map, and the first save of a
+// species learned again overwrites its stored row. The callers log the error and
+// start the persistence goroutines anyway.
 func (p *Processor) loadDynamicThresholdsFromDB() error {
 	lockCtx, cancel := context.WithTimeout(context.Background(), thresholdLoadLockTimeout)
 	defer cancel()
@@ -57,7 +59,7 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 		GetLogger().Warn("Skipping dynamic threshold load: persistence lock busy",
 			logger.Error(err),
 			logger.String("operation", "load_dynamic_thresholds"))
-		return nil
+		return err
 	}
 	defer p.unlockThresholdPersistence()
 

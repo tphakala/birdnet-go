@@ -2037,7 +2037,7 @@ func TestLoadDynamicThresholdsFromDB_ResetBetweenReadAndMergeIsNotResurrected(t 
 }
 
 // TestLoadDynamicThresholdsFromDB_GivesUpWhenLockHeldPastTimeout verifies a load
-// stuck behind a running cycle returns after its timeout without touching the
+// stuck behind a running cycle returns the timeout error without touching the
 // database, so startup is not held up by a hung cycle.
 func TestLoadDynamicThresholdsFromDB_GivesUpWhenLockHeldPastTimeout(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -2054,7 +2054,25 @@ func TestLoadDynamicThresholdsFromDB_GivesUpWhenLockHeldPastTimeout(t *testing.T
 
 		time.Sleep(thresholdLoadLockTimeout)
 		synctest.Wait()
-		require.NoError(t, <-loadDone)
+		require.ErrorIs(t, <-loadDone, context.DeadlineExceeded, "a skipped load must report why")
 		assert.False(t, ds.getAllCalled, "a skipped load must not read the database")
 	})
+}
+
+// TestLoadDynamicThresholdsFromDB_SkipsQueuedResetWhenStoredNameHasOtherCase
+// verifies the queued-reset check matches a stored row whose species name is not
+// lowercase, as the merge keys it.
+func TestLoadDynamicThresholdsFromDB_SkipsQueuedResetWhenStoredNameHasOtherCase(t *testing.T) {
+	p := createTestProcessor()
+	ds, ok := p.Ds.(*MockDatastore)
+	require.True(t, ok)
+	row := loadTestRow("Blue Jay")
+	ds.thresholds[row.SpeciesName] = &row
+	p.pendingResets[persistTestSpeciesReset] = struct{}{}
+
+	require.NoError(t, p.loadDynamicThresholdsFromDB())
+
+	p.thresholdsMutex.RLock()
+	defer p.thresholdsMutex.RUnlock()
+	assert.Empty(t, p.DynamicThresholds)
 }
