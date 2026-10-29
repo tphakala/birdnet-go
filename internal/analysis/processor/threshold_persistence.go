@@ -296,8 +296,7 @@ func (p *Processor) saveThresholdsWithRetry(ctx context.Context, dbThresholds []
 // threshold persistence cycles and resets. It is held across database calls and
 // across the save retry backoff, so a holder can block others for a whole cycle.
 // A free lock is taken even when ctx is already done; otherwise it waits until
-// the lock is free or ctx ends, and returns ctx.Err() in the latter case. A nil
-// ctx is treated as context.Background().
+// the lock is free or ctx ends, and returns ctx.Err() in the latter case.
 //
 // Lock order: take it before thresholdsMutex, never while holding
 // thresholdsMutex, and never re-enter it from the same goroutine.
@@ -307,9 +306,6 @@ func (p *Processor) lockThresholdPersistence(ctx context.Context) error {
 	case p.thresholdPersistSlot <- struct{}{}:
 		return nil
 	default:
-	}
-	if ctx == nil {
-		ctx = context.Background()
 	}
 	select {
 	case p.thresholdPersistSlot <- struct{}{}:
@@ -386,8 +382,8 @@ func (p *Processor) drainPendingResets() {
 	p.thresholdsMutex.Lock()
 	resets := p.pendingResets
 	resetAll := p.pendingResetAll
-	// Clear the pending state under lock so new resets can accumulate while
-	// we perform DB operations. Use nil-safe initialization since tests may
+	// Swap the pending state out under the lock so thresholdsMutex is not held
+	// across the DB operations. Use nil-safe initialization since tests may
 	// create Processor structs without initializing pendingResets.
 	if p.pendingResets != nil {
 		p.pendingResets = make(map[string]struct{})
