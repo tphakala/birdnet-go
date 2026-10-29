@@ -13,12 +13,14 @@ import (
 	"time"
 
 	"github.com/getsentry/sentry-go"
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	importsapi "github.com/tphakala/birdnet-go/internal/api/v2/imports"
 	"github.com/tphakala/birdnet-go/internal/app"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbfailure"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
@@ -100,6 +102,17 @@ func TestErrV2SchemaCorrupted_PropagatesThroughInitializeWrapChain(t *testing.T)
 
 	assert.True(t, errors.Is(wrapped, datastoreV2.ErrV2SchemaCorrupted),
 		"errors.Is must unwrap through fmt.Errorf and EnhancedError to find the sentinel")
+}
+
+// TestAbortOnV2SchemaCorruption_ReturnedErrorCarriesHint pins that the terminal text of a
+// schema corruption refusal carries the recovery hint, not only the log.
+func TestAbortOnV2SchemaCorruption_ReturnedErrorCarriesHint(t *testing.T) {
+	t.Parallel()
+
+	cause := fmt.Errorf("%w: detections missing columns", datastoreV2.ErrV2SchemaCorrupted)
+	err := abortOnV2SchemaCorruption(logger.Global().Module("datastore"), cause, "test_operation", "test-mode")
+	require.ErrorIs(t, err, datastoreV2.ErrV2SchemaCorrupted)
+	assert.Contains(t, err.Error(), schemaCorruptionRecoveryHint)
 }
 
 func TestDatabaseService_Start_FreshInstall(t *testing.T) {
@@ -477,30 +490,179 @@ func TestDatabaseService_AwaitStartupState(t *testing.T) {
 // TestDatabaseService_Start_StartupStateUnknownRefuses pins the wiring of the unknown
 // state refusal: Start must return the error before any datastore is
 // constructed. Without it the legacy default branch would open the database and create
-// the SQLite file. Not parallel: it swaps the global logger.
+// the SQLite file. The returned text must carry the hint, classified or not. Not
+// parallel: it swaps the global logger.
 func TestDatabaseService_Start_StartupStateUnknownRefuses(t *testing.T) {
+	tests := []struct {
+		name         string
+		cause        error
+		wantInError  []string
+		wantInLog    string
+		wantClassify bool
+	}{
+		{
+			name:         "classified cause names the settings",
+			cause:        unreachableServerError(),
+			wantInError:  []string{dbfailure.SettingMySQLHost, dbfailure.SettingMySQLPort, "then restart BirdNET-Go"},
+			wantInLog:    dbfailure.SettingMySQLHost,
+			wantClassify: true,
+		},
+		{
+			name:        "unclassified cause keeps the generic hint",
+			cause:       errors.NewStd("look up bare detections table: Error 1142 (42000): denied"),
+			wantInError: []string{startupStateUnknownRecoveryHint},
+			wantInLog:   startupStateUnknownRecoveryHint,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			configuredPath := filepath.Join(t.TempDir(), "birdnet.db")
+			settings := &conf.Settings{}
+			settings.Output.SQLite.Enabled = true
+			settings.Output.SQLite.Path = configuredPath
+
+			buf := logtest.CaptureBufferAt(t, slog.LevelError)
+
+			metrics, err := observability.NewMetrics()
+			require.NoError(t, err)
+
+			svc := NewDatabaseService(settings, metrics)
+			svc.checkStartupState = func(*conf.Settings) datastoreV2.StartupState {
+				return unknownStateOutcome(tt.cause)
+			}
+			svc.waitStartupRetry = func(context.Context, time.Duration) error { return nil }
+
+			err = svc.Start(t.Context())
+			require.ErrorIs(t, err, datastoreV2.ErrStartupStateUnknown)
+			_, classified := errors.AsType[*dbfailure.StartError](err)
+			assert.Equal(t, tt.wantClassify, classified)
+			for _, want := range tt.wantInError {
+				assert.Contains(t, err.Error(), want)
+			}
+			assert.Nil(t, svc.DataStore(), "no datastore may be constructed when the state is unknown")
+			assert.False(t, svc.IsV2OnlyMode())
+			assert.NoFileExists(t, configuredPath, "the legacy fallback would have created the database file")
+			assert.Contains(t, buf.String(), tt.wantInLog, "the log must tell the user what to do")
+		})
+	}
+}
+
+// TestDatabaseService_Start_ServerRejectionRefuses pins the early refusal of a MySQL or
+// MariaDB server that rejected the connection while the state was read: Start must
+// return a classified error before any datastore is constructed, instead of logging the
+// legacy fallback Warn and opening a store that fails the same way. The error and the log
+// must carry no configuration value. Not parallel: it swaps the global logger.
+func TestDatabaseService_Start_ServerRejectionRefuses(t *testing.T) {
+	const (
+		secretHost     = "db.example.internal"
+		secretUser     = "secret_user"
+		secretPassword = "secret_pw"
+		secretDatabase = "secret_db"
+		clientAddress  = "192.0.2.7"
+	)
 	configuredPath := filepath.Join(t.TempDir(), "birdnet.db")
 	settings := &conf.Settings{}
-	settings.Output.SQLite.Enabled = true
+	settings.Output.MySQL.Enabled = true
+	settings.Output.MySQL.Host = secretHost
+	settings.Output.MySQL.Port = "3306"
+	settings.Output.MySQL.Username = secretUser
+	settings.Output.MySQL.Password = secretPassword
+	settings.Output.MySQL.Database = secretDatabase
 	settings.Output.SQLite.Path = configuredPath
 
-	buf := logtest.CaptureBufferAt(t, slog.LevelError)
+	buf := logtest.CaptureBufferAt(t, slog.LevelWarn)
 
 	metrics, err := observability.NewMetrics()
 	require.NoError(t, err)
 
 	svc := NewDatabaseService(settings, metrics)
+	svc.checkLegacyTail = func(*conf.Settings, logger.Logger) (bool, error) { return false, nil }
 	svc.checkStartupState = func(*conf.Settings) datastoreV2.StartupState {
-		return unknownStateOutcome(unreachableServerError())
+		// The shape checkMySQLMigrationState returns for a rejected login.
+		return datastoreV2.StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			LegacyRequired:  true,
+			Decision:        datastoreV2.DecisionV2Corrupted,
+			Error: fmt.Errorf("%w: %w", datastoreV2.ErrV2DatabaseCorrupted, &mysql.MySQLError{
+				Number:   1045,
+				SQLState: [5]byte{'2', '8', '0', '0', '0'},
+				Message: fmt.Sprintf("Access denied for user '%s'@'%s' (using password: YES)",
+					secretUser, clientAddress),
+			}),
+		}
 	}
-	svc.waitStartupRetry = func(context.Context, time.Duration) error { return nil }
 
 	err = svc.Start(t.Context())
-	require.ErrorIs(t, err, datastoreV2.ErrStartupStateUnknown)
-	assert.Nil(t, svc.DataStore(), "no datastore may be constructed when the state is unknown")
-	assert.False(t, svc.IsV2OnlyMode())
+	startErr, ok := errors.AsType[*dbfailure.StartError](err)
+	require.True(t, ok, "want a classified start error, got %v", err)
+	assert.Equal(t, dbfailure.KindMySQLAccessDenied, startErr.Failure.Kind)
+	require.ErrorIs(t, err, datastoreV2.ErrV2DatabaseCorrupted)
+	assert.Nil(t, svc.DataStore(), "no datastore may be constructed for a rejected login")
 	assert.NoFileExists(t, configuredPath, "the legacy fallback would have created the database file")
-	assert.Contains(t, buf.String(), startupStateUnknownRecoveryHint, "the log must tell the user what to do")
+	assert.Contains(t, err.Error(), dbfailure.SettingMySQLUsername)
+	assert.Contains(t, err.Error(), dbfailure.SettingMySQLPassword)
+	for _, value := range []string{secretHost, secretUser, secretPassword, secretDatabase, clientAddress} {
+		assert.NotContains(t, err.Error(), value)
+		assert.NotContains(t, buf.String(), value)
+	}
+	assert.NotContains(t, buf.String(), legacyFallbackWarnMessage,
+		"a refused start must not log that the legacy database is being started")
+}
+
+// TestDatabaseService_Start_RejectionShapedErrorKeepsFallbackWithoutMySQL pins the MySQL
+// guard of the early refusal: with MySQL disabled the same state error keeps the legacy
+// fallback and its Warn. Not parallel: it swaps the global logger and Start sets process globals.
+func TestDatabaseService_Start_RejectionShapedErrorKeepsFallbackWithoutMySQL(t *testing.T) {
+	t.Cleanup(func() { importsapi.SetMigrationDependencies(nil, nil) })
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelWarn)
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+	svc := NewDatabaseService(settings, metrics)
+	svc.checkStartupState = func(*conf.Settings) datastoreV2.StartupState {
+		return datastoreV2.StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			LegacyRequired:  true,
+			Decision:        datastoreV2.DecisionV2Corrupted,
+			Error:           fmt.Errorf("%w: %w", datastoreV2.ErrV2DatabaseCorrupted, &mysql.MySQLError{Number: 1045, Message: "Access denied"}),
+		}
+	}
+
+	require.NoError(t, svc.Start(t.Context()))
+	t.Cleanup(func() { assert.NoError(t, svc.Stop(t.Context())) })
+	assert.Contains(t, buf.String(), legacyFallbackWarnMessage)
+}
+
+// TestDatabaseService_Start_SQLitePathUnusableNamesSetting pins that a SQLite file that
+// cannot be created fails the start with a classified error naming the path setting.
+// The parent of the database file is a regular file, so this fails for root and on every
+// OS. Not parallel: Start sets process globals and swaps the global logger.
+func TestDatabaseService_Start_SQLitePathUnusableNamesSetting(t *testing.T) {
+	t.Cleanup(func() { importsapi.SetMigrationDependencies(nil, nil) })
+	logtest.CaptureBufferAt(t, slog.LevelError)
+
+	parent := filepath.Join(t.TempDir(), "not-a-directory")
+	require.NoError(t, os.WriteFile(parent, []byte("x"), 0o600))
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(parent, "birdnet.db")
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+	svc := NewDatabaseService(settings, metrics)
+
+	err = svc.Start(t.Context())
+	startErr, ok := errors.AsType[*dbfailure.StartError](err)
+	require.True(t, ok, "want a classified start error, got %v", err)
+	assert.Equal(t, dbfailure.KindSQLitePathUnusable, startErr.Failure.Kind)
+	assert.Contains(t, err.Error(), dbfailure.SettingSQLitePath)
+	assert.Nil(t, svc.DataStore(), "the failed start must clean up the datastore")
 }
 
 // TestDatabaseService_Start_MixedSchemaRefuses pins the wiring of the mixed schema
@@ -529,6 +691,7 @@ func TestDatabaseService_Start_MixedSchemaRefuses(t *testing.T) {
 
 	err = svc.Start(t.Context())
 	require.ErrorIs(t, err, datastoreV2.ErrMixedSchemaDatabase)
+	assert.Contains(t, err.Error(), mixedSchemaRecoveryHint, "the terminal text must carry the hint")
 	assert.Nil(t, svc.DataStore(), "no datastore may be constructed for a refused database")
 	assert.False(t, svc.IsV2OnlyMode())
 	assert.NoFileExists(t, configuredPath, "the legacy fallback would have created the database file")
@@ -665,6 +828,7 @@ func TestDatabaseService_Start_UnverifiedLegacyTail(t *testing.T) {
 			err = svc.Start(t.Context())
 			if tt.wantRefused {
 				require.ErrorIs(t, err, datastoreV2.ErrLegacyTailUnverified)
+				assert.Contains(t, err.Error(), legacyTailRecoveryHint, "the terminal text must carry the hint")
 				assert.Nil(t, svc.DataStore(), "no datastore may be constructed for a refused start")
 				assert.False(t, svc.IsV2OnlyMode())
 				assert.ElementsMatch(t, before, dirEntryNames(t, dir),
