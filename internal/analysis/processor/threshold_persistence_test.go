@@ -494,6 +494,9 @@ const (
 	persistTestRelearnLevel = 2
 	// persistTestShortDeadline is a flush deadline far shorter than any real cycle.
 	persistTestShortDeadline = 5 * time.Second
+	// persistTestDoneCtxAttempts repeats the done-context lock attempt so a lock
+	// that picks randomly between a free slot and a done context fails reliably.
+	persistTestDoneCtxAttempts = 64
 )
 
 // concurrentThresholdStore is a goroutine-safe datastore fake for tests where a
@@ -683,6 +686,30 @@ func TestPersistDynamicThresholds_FailedResetRetriedBeforeSave(t *testing.T) {
 			},
 		},
 		{
+			name: "single reset, events delete fails",
+			setErr: func(m *MockDatastore, err error) {
+				m.deleteEventsPerSpeciesErrors = map[string]error{persistTestSpeciesReset: err}
+			},
+			reset: func(t *testing.T, p *Processor) {
+				t.Helper()
+				require.NoError(t, p.ResetDynamicThreshold(persistTestSpeciesReset))
+			},
+			pending: func(p *Processor) bool {
+				_, queued := p.pendingResets[persistTestSpeciesReset]
+				return queued
+			},
+		},
+		{
+			name:   "reset all, events delete fails",
+			setErr: func(m *MockDatastore, err error) { m.deleteAllEventsError = err },
+			reset: func(t *testing.T, p *Processor) {
+				t.Helper()
+				_, err := p.ResetAllDynamicThresholds()
+				require.NoError(t, err)
+			},
+			pending: func(p *Processor) bool { return p.pendingResetAll },
+		},
+		{
 			name:   "reset all",
 			setErr: func(m *MockDatastore, err error) { m.deleteAllThresholdsError = err },
 			reset: func(t *testing.T, p *Processor) {
@@ -722,6 +749,21 @@ func TestPersistDynamicThresholds_FailedResetRetriedBeforeSave(t *testing.T) {
 			tc.reset(t, p)
 			assert.False(t, tc.pending(p), "a successful reset must drop the older queued retry")
 		})
+	}
+}
+
+// TestLockThresholdPersistence_FreeLockTakenWithDoneContext verifies a free lock is
+// taken even when ctx is already done (shutdown relies on one last flush attempt),
+// and that a held lock with a done ctx gives up with the ctx error.
+func TestLockThresholdPersistence_FreeLockTakenWithDoneContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	for range persistTestDoneCtxAttempts {
+		p := &Processor{}
+		require.NoError(t, p.lockThresholdPersistence(ctx), "a free lock must be taken with a done ctx")
+		require.ErrorIs(t, p.lockThresholdPersistence(ctx), context.Canceled, "a held lock must give up with a done ctx")
+		p.unlockThresholdPersistence()
 	}
 }
 

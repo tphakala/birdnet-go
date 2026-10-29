@@ -78,11 +78,11 @@ func captureGlobalLog(t *testing.T) *bytes.Buffer {
 	return &buf
 }
 
-// TestResetDynamicThreshold_V2Store_DrainClearsResetAndRelearnPersists checks
-// that on the v2 store the first drain empties pendingResets after a reset, logs
-// no warning, and that a species re-learned afterwards keeps its row and events.
-// Not parallel: it replaces the global logger.
-func TestResetDynamicThreshold_V2Store_DrainClearsResetAndRelearnPersists(t *testing.T) {
+// TestResetDynamicThreshold_V2Store_SuccessfulResetQueuesNothingAndRelearnPersists
+// checks that on the v2 store a successful reset leaves pendingResets empty, the
+// following cycle logs no warning, and that a species re-learned afterwards keeps
+// its row and events. Not parallel: it replaces the global logger.
+func TestResetDynamicThreshold_V2Store_SuccessfulResetQueuesNothingAndRelearnPersists(t *testing.T) {
 	cases := []struct {
 		name            string
 		persistedBefore bool
@@ -123,7 +123,7 @@ func TestResetDynamicThreshold_V2Store_DrainClearsResetAndRelearnPersists(t *tes
 			p.thresholdsMutex.RLock()
 			pending := len(p.pendingResets)
 			p.thresholdsMutex.RUnlock()
-			assert.Zero(t, pending, "drain must clear the reset instead of requeueing it")
+			assert.Zero(t, pending, "a successful reset must not queue a retry")
 
 			_, err := ds.GetDynamicThreshold(resetTestSpecies)
 			require.ErrorIs(t, err, repository.ErrDynamicThresholdNotFound, "reset must have removed the row")
