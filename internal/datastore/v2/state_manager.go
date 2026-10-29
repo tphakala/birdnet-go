@@ -10,6 +10,7 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/telemetry"
@@ -28,6 +29,11 @@ const (
 	MigrationPhaseNumberPredictions = 2 // Phase 2: Migrating predictions and related data
 	MigrationTotalPhases            = 2 // Total number of migration phases
 )
+
+// ErrRelatedSyncNotRecorded is returned when the related data sync cursors are
+// not recorded for the current migration attempt: the related data was copied
+// by an older version, or the attempt changed while a sync pass was running.
+var ErrRelatedSyncNotRecorded = errors.NewStd("related data sync cursors are not recorded for this migration attempt")
 
 // StateManager manages the migration state machine and tracks progress.
 // It provides thread-safe access to the migration state.
@@ -57,9 +63,9 @@ func (m *StateManager) GetState() (*entities.MigrationState, error) {
 }
 
 // StartMigration transitions from IDLE to INITIALIZING.
-// It clears the error fields and the recorded auxiliary data outcome, and the
-// dirty-ID set left by an earlier run, in the same transaction. A refused
-// transition leaves the dirty-ID set untouched.
+// It clears the error fields, the recorded auxiliary data outcome and the related
+// data sync cursors, and the dirty-ID set left by an earlier run, in the same
+// transaction. A refused transition leaves the dirty-ID set untouched.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) StartMigration(totalRecords int64) error {
 	m.mu.Lock()
@@ -67,21 +73,26 @@ func (m *StateManager) StartMigration(totalRecords int64) error {
 
 	now := time.Now()
 	updates := map[string]any{
-		"state":                     entities.MigrationStatusInitializing,
-		"current_phase":             entities.MigrationPhaseDetections,
-		"phase_number":              MigrationPhaseNumberDetections,
-		"total_phases":              MigrationTotalPhases,
-		"started_at":                &now,
-		"phase_started_at":          &now, // Track phase start for rate calculation
-		"total_records":             totalRecords,
-		"migrated_records":          0,
-		"last_migrated_id":          0,
-		"error_message":             "",
-		"related_data_error":        "",
-		"completed_at":              nil,
-		"auxiliary_data_status":     entities.AuxiliaryDataStatusUnknown,
-		"auxiliary_data_error":      "",
-		"auxiliary_data_started_at": nil,
+		"state":                         entities.MigrationStatusInitializing,
+		"current_phase":                 entities.MigrationPhaseDetections,
+		"phase_number":                  MigrationPhaseNumberDetections,
+		"total_phases":                  MigrationTotalPhases,
+		"started_at":                    &now,
+		"phase_started_at":              &now, // Track phase start for rate calculation
+		"total_records":                 totalRecords,
+		"migrated_records":              0,
+		"last_migrated_id":              0,
+		"error_message":                 "",
+		"related_data_error":            "",
+		"completed_at":                  nil,
+		"auxiliary_data_status":         entities.AuxiliaryDataStatusUnknown,
+		"auxiliary_data_error":          "",
+		"auxiliary_data_started_at":     nil,
+		"related_sync_started_at":       nil,
+		"related_comments_cursor":       nil,
+		"related_predictions_note_id":   nil,
+		"related_predictions_result_id": nil,
+		"related_reconciled_at":         nil,
 	}
 
 	matched, err := m.updateGuardedClearingDirtyIDs(entities.MigrationStatusIdle, updates)
@@ -330,7 +341,7 @@ func (m *StateManager) Complete() error {
 }
 
 // Cancel transitions any active state back to IDLE.
-// It clears the recorded auxiliary data outcome.
+// It clears the recorded auxiliary data outcome and the related data sync cursors.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) Cancel() error {
 	m.mu.Lock()
@@ -347,20 +358,25 @@ func (m *StateManager) Cancel() error {
 	}
 
 	updates := map[string]any{
-		"state":                     entities.MigrationStatusIdle,
-		"current_phase":             entities.MigrationPhaseNone,
-		"phase_number":              MigrationPhaseNumberNone,
-		"total_phases":              MigrationPhaseNumberNone,
-		"started_at":                nil,
-		"completed_at":              nil,
-		"total_records":             0,
-		"migrated_records":          0,
-		"last_migrated_id":          0,
-		"error_message":             "",
-		"related_data_error":        "",
-		"auxiliary_data_status":     entities.AuxiliaryDataStatusUnknown,
-		"auxiliary_data_error":      "",
-		"auxiliary_data_started_at": nil,
+		"state":                         entities.MigrationStatusIdle,
+		"current_phase":                 entities.MigrationPhaseNone,
+		"phase_number":                  MigrationPhaseNumberNone,
+		"total_phases":                  MigrationPhaseNumberNone,
+		"started_at":                    nil,
+		"completed_at":                  nil,
+		"total_records":                 0,
+		"migrated_records":              0,
+		"last_migrated_id":              0,
+		"error_message":                 "",
+		"related_data_error":            "",
+		"auxiliary_data_status":         entities.AuxiliaryDataStatusUnknown,
+		"auxiliary_data_error":          "",
+		"auxiliary_data_started_at":     nil,
+		"related_sync_started_at":       nil,
+		"related_comments_cursor":       nil,
+		"related_predictions_note_id":   nil,
+		"related_predictions_result_id": nil,
+		"related_reconciled_at":         nil,
 	}
 
 	result := m.db.Model(&entities.MigrationState{}).
@@ -386,26 +402,31 @@ func (m *StateManager) Cancel() error {
 }
 
 // Rollback transitions from COMPLETED back to IDLE for rollback scenarios.
-// It clears the recorded auxiliary data outcome, and the dirty-ID set (the tail
-// sync markers of the abandoned v2 data), in the same transaction. A refused
-// transition leaves the dirty-ID set untouched.
+// It clears the recorded auxiliary data outcome, the related data sync cursors,
+// and the dirty-ID set (the tail sync markers of the abandoned v2 data), in the
+// same transaction. A refused transition leaves the dirty-ID set untouched.
 // Uses atomic update to ensure multi-process safety.
 func (m *StateManager) Rollback() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	updates := map[string]any{
-		"state":                     entities.MigrationStatusIdle,
-		"started_at":                nil,
-		"completed_at":              nil,
-		"total_records":             0,
-		"migrated_records":          0,
-		"last_migrated_id":          0,
-		"error_message":             "",
-		"related_data_error":        "",
-		"auxiliary_data_status":     entities.AuxiliaryDataStatusUnknown,
-		"auxiliary_data_error":      "",
-		"auxiliary_data_started_at": nil,
+		"state":                         entities.MigrationStatusIdle,
+		"started_at":                    nil,
+		"completed_at":                  nil,
+		"total_records":                 0,
+		"migrated_records":              0,
+		"last_migrated_id":              0,
+		"error_message":                 "",
+		"related_data_error":            "",
+		"auxiliary_data_status":         entities.AuxiliaryDataStatusUnknown,
+		"auxiliary_data_error":          "",
+		"auxiliary_data_started_at":     nil,
+		"related_sync_started_at":       nil,
+		"related_comments_cursor":       nil,
+		"related_predictions_note_id":   nil,
+		"related_predictions_result_id": nil,
+		"related_reconciled_at":         nil,
 	}
 
 	matched, err := m.updateGuardedClearingDirtyIDs(entities.MigrationStatusCompleted, updates)
@@ -425,6 +446,82 @@ func (m *StateManager) Rollback() error {
 	}
 
 	return nil
+}
+
+// BeginRelatedSync binds the related data sync cursors to the current migration
+// attempt and returns them. The first call for an attempt copies started_at to
+// related_sync_started_at in SQL and zeroes the cursors; later calls for the
+// same attempt change nothing and return the stored cursors, so a rerun resumes.
+// It returns ErrRelatedSyncNotRecorded when no attempt is recorded.
+func (m *StateManager) BeginRelatedSync() (entities.RelatedSyncCursors, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := m.db.Model(&entities.MigrationState{}).
+		Where("id = ? AND started_at IS NOT NULL AND (related_sync_started_at IS NULL OR related_sync_started_at <> started_at)", migrationStateID).
+		Updates(map[string]any{
+			"related_sync_started_at":       gorm.Expr("started_at"),
+			"related_comments_cursor":       0,
+			"related_predictions_note_id":   0,
+			"related_predictions_result_id": 0,
+			"related_reconciled_at":         nil,
+		})
+	if result.Error != nil {
+		return entities.RelatedSyncCursors{}, fmt.Errorf("failed to begin related data sync: %w", result.Error)
+	}
+
+	var state entities.MigrationState
+	if err := m.db.First(&state).Error; err != nil {
+		return entities.RelatedSyncCursors{}, fmt.Errorf("failed to read related data sync cursors: %w", err)
+	}
+	cursors, ok := state.RelatedSyncCursors()
+	if !ok {
+		return entities.RelatedSyncCursors{}, ErrRelatedSyncNotRecorded
+	}
+	return cursors, nil
+}
+
+// updateRelatedSync applies updates to the state row only while the related
+// data sync cursors belong to the current attempt. It returns
+// ErrRelatedSyncNotRecorded when no row matches.
+func (m *StateManager) updateRelatedSync(updates map[string]any) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	result := m.db.Model(&entities.MigrationState{}).
+		Where("id = ? AND related_sync_started_at = started_at", migrationStateID).
+		Updates(updates)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update related data sync state: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return ErrRelatedSyncNotRecorded
+	}
+	return nil
+}
+
+// SetRelatedCommentsCursor records the last legacy comment id handled by the
+// related data sync. It returns ErrRelatedSyncNotRecorded when the cursors do
+// not belong to the current attempt.
+func (m *StateManager) SetRelatedCommentsCursor(id uint) error {
+	return m.updateRelatedSync(map[string]any{"related_comments_cursor": id})
+}
+
+// SetRelatedPredictionsCursor records the last legacy results row (note id,
+// result id) handled by the related data sync. It returns
+// ErrRelatedSyncNotRecorded when the cursors do not belong to the current attempt.
+func (m *StateManager) SetRelatedPredictionsCursor(noteID, resultID uint) error {
+	return m.updateRelatedSync(map[string]any{
+		"related_predictions_note_id":   noteID,
+		"related_predictions_result_id": resultID,
+	})
+}
+
+// SetRelatedReconciledAt records the start time of a completed review and lock
+// reconcile. It returns ErrRelatedSyncNotRecorded when the cursors do not belong
+// to the current attempt.
+func (m *StateManager) SetRelatedReconciledAt(at time.Time) error {
+	return m.updateRelatedSync(map[string]any{"related_reconciled_at": at})
 }
 
 // UpdatePhaseProgress sets the progress numerator of the current migration
@@ -686,6 +783,23 @@ func (m *StateManager) GetDirtyIDs(limit, offset int) ([]uint, error) {
 // Returns IDs ordered by detection_id for consistent iteration.
 func (m *StateManager) GetDirtyIDsBatch(batchSize int) ([]uint, error) {
 	return m.GetDirtyIDs(batchSize, 0)
+}
+
+// FilterDirtyIDs returns the subset of ids that are in the dirty list.
+// Empty input returns nil without a query.
+func (m *StateManager) FilterDirtyIDs(ids []uint) ([]uint, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var found []uint
+	err := m.db.Model(&entities.MigrationDirtyID{}).
+		Where("detection_id IN ?", ids).
+		Order("detection_id ASC").
+		Pluck("detection_id", &found).Error
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter dirty IDs: %w", err)
+	}
+	return found, nil
 }
 
 // GetDirtyIDCount returns the count of dirty IDs awaiting re-sync.

@@ -1483,6 +1483,8 @@ func (r *detectionRepository) DeleteComment(ctx context.Context, commentID uint)
 }
 
 // SaveCommentsBatch saves multiple comments efficiently.
+// Comments repeating a stored LegacyID are skipped (unique index plus
+// onConflictSkip), which keeps repeated migration copies idempotent.
 func (r *detectionRepository) SaveCommentsBatch(ctx context.Context, comments []*entities.DetectionComment) error {
 	if len(comments) == 0 {
 		return nil
@@ -1594,6 +1596,21 @@ func (r *detectionRepository) SaveLocksBatch(ctx context.Context, locks []*entit
 			Clauses(onConflictSkip(r.isMySQL, detectionIDColumn)).
 			CreateInBatches(locks, defaultDBBatchSize).Error
 	}, r.metrics)
+}
+
+// GetLockedDetectionIDsAfter returns the detection IDs of locked detections
+// greater than afterID in ascending order, at most limit of them.
+func (r *detectionRepository) GetLockedDetectionIDsAfter(ctx context.Context, afterID uint, limit int) ([]uint, error) {
+	var ids []uint
+	err := r.db.WithContext(ctx).Table(r.locksTable()).
+		Where("detection_id > ?", afterID).
+		Order("detection_id ASC").
+		Limit(limit).
+		Pluck("detection_id", &ids).Error
+	if err != nil {
+		return nil, fmt.Errorf("list locked detection ids: %w", err)
+	}
+	return ids, nil
 }
 
 // GetLocksByDetectionIDs retrieves lock status for multiple detections.

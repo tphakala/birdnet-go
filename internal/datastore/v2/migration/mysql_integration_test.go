@@ -208,6 +208,11 @@ func TestMySQL_TailSync_DrainsDirtyIDsOfRowsAlreadyInV2(t *testing.T) {
 	for id := uint(1); id <= total; id++ {
 		require.NoError(t, ctx.StateManager.AddDirtyID(id))
 	}
+	// The lock exists in both stores, as in legacy mode; the tail sync's lock
+	// reconcile would remove a v2 lock that the legacy store does not have.
+	require.NoError(t, ctx.Seeder.SeedLocks([]datastore.NoteLock{
+		testutil.NewLockBuilder().WithID(1).WithNoteID(lockedID).Build(),
+	}))
 	require.NoError(t, ctx.DetectionRepo.Lock(t.Context(), lockedID))
 
 	require.Eventually(t, func() bool {
@@ -231,4 +236,15 @@ func TestMySQL_RerunAfterRollbackPassesValidation(t *testing.T) {
 
 	ctx := testutil.SetupMySQLIntegrationTest(t, getMySQLConfig())
 	assertRerunAfterRollbackPassesValidation(t, ctx, mysqlMigrationTimeout)
+}
+
+// TestMySQL_RelatedDataWrittenAfterCopyReachesV2Once runs the post-copy related
+// data flow on MySQL/MariaDB with the v2_ prefix: the unique comment legacy id
+// with the skip-on-conflict insert, the review upsert, the lock merge and the
+// cursor attempt marker.
+func TestMySQL_RelatedDataWrittenAfterCopyReachesV2Once(t *testing.T) {
+	skipIfNoMySQL(t)
+
+	ctx := testutil.SetupMySQLIntegrationTest(t, getMySQLConfig())
+	assertRelatedDataAfterCopyReachesV2Once(t, ctx, mysqlMigrationTimeout)
 }

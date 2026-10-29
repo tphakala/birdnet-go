@@ -210,6 +210,8 @@ type DetectionRepository interface {
 	DeleteComment(ctx context.Context, commentID uint) error
 
 	// SaveCommentsBatch saves multiple comments efficiently.
+	// Comments repeating a stored LegacyID are skipped, so copying the same
+	// legacy comments again adds nothing.
 	SaveCommentsBatch(ctx context.Context, comments []*entities.DetectionComment) error
 
 	// GetCommentsByDetectionIDs retrieves comments for multiple detections.
@@ -233,6 +235,11 @@ type DetectionRepository interface {
 
 	// SaveLocksBatch saves multiple locks efficiently.
 	SaveLocksBatch(ctx context.Context, locks []*entities.DetectionLock) error
+
+	// GetLockedDetectionIDsAfter returns the detection IDs of locked detections
+	// greater than afterID in ascending order, at most limit of them. The
+	// migration pages through it to find v2 locks the legacy store no longer has.
+	GetLockedDetectionIDsAfter(ctx context.Context, afterID uint, limit int) ([]uint, error)
 
 	// GetLocksByDetectionIDs retrieves lock status for multiple detections in a single query.
 	// Returns a map of detection ID to bool (true if locked).
