@@ -77,7 +77,7 @@ const (
 	MsgMigrationLegacyRestartRequiredTitle   = "notifications.content.migration.legacyRestartRequiredTitle"
 	MsgMigrationLegacyRestartRequiredMessage = "notifications.content.migration.legacyRestartRequiredMessage"
 
-	// Database server notice (end-of-life release or non-utf8mb4 character set)
+	// Database server notice (unsupported release or non-utf8mb4 character set)
 	MsgDatabaseServerAttentionTitle   = "notifications.content.database.serverAttentionTitle"
 	MsgDatabaseServerAttentionMessage = "notifications.content.database.serverAttentionMessage"
 

@@ -137,7 +137,7 @@ MariaDB. A release we test is supported. A release we do not test is not
 supported, and a release that is already end of life upstream is not tested, so
 it is not supported either. This is a standing maintainer decision.
 
-- **Supported** (the LTS releases we test against, checked October 2026):
+- **Supported** (the LTS releases we test against):
   MySQL 8.4 and 9.7, and MariaDB 10.11, 11.4, 11.8 and 12.3. MySQL Innovation
   releases and MariaDB rolling releases are not LTS, are not tested, and are not
   supported.
@@ -154,13 +154,13 @@ it is not supported either. This is a standing maintainer decision.
 - **One table in code.** The list of supported series lives in
   `internal/datastore/dbserver`; change it together with the list above. The
   health checks, the startup log and notice, the telemetry tags and the support
-  dump all read that one table.
+  dump all read that one table. Known MySQL Innovation series above the oldest
+  supported release (9.0 to 9.6) are listed there as not supported; older
+  series need no entry.
 - **Changing the list.** A new LTS release joins the list once we test against
-  it. When a listed release reaches end of life upstream, drop it: take it out of
-  the table, the CI test matrix and the testcontainer defaults, and remove code
-  that exists only for it. Re-check the upstream lifecycle pages (the MySQL
-  release policy, the mariadb.org maintenance policy) when this list is more
-  than a few months old.
+  it. A listed release leaves it only when a maintainer takes it off; then take
+  it out of the table, the CI test matrix and the testcontainer defaults, and
+  remove code that exists only for it.
 - Test MySQL and MariaDB changes against supported releases only, and keep the
   testcontainer images (`MYSQL_TEST_IMAGE` and its defaults) on supported
   releases.

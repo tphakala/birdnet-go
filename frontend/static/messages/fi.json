@@ -462,7 +462,7 @@
       },
       "database": {
         "serverAttentionTitle": "Tietokantapalvelin vaatii huomiota",
-        "serverAttentionMessage": "MySQL- tai MariaDB-palvelimen tuki on päättynyt tai päättymässä, tai tietokanta ei käytä utf8mb4-merkistöä. Katso lisätiedot kohdasta Järjestelmä > Tila."
+        "serverAttentionMessage": "MySQL- tai MariaDB-palvelimen versio ei ole tuettu, tai tietokanta ei käytä utf8mb4-merkistöä. Katso lisätiedot kohdasta Järjestelmä > Tila."
       },
       "cleanup": {
         "completeTitle": "Vanhan tietokannan siivous valmis",

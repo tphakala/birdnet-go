@@ -782,13 +782,13 @@ func (c *Handler) probeContext() (context.Context, context.CancelFunc) {
 }
 
 // checkMySQLServerVersion blocks the migration on a database server release
-// that upstream no longer supports. It follows dbserver's lifecycle table, so
-// a table edit changes the verdict without code changes.
+// that BirdNET-Go does not support. It follows dbserver's release table, so a
+// table edit changes the verdict without code changes.
 func (c *Handler) checkMySQLServerVersion() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDMySQLServerVersion,
 		Name:        "Database Server Version",
-		Description: "The database server must be a release under upstream support",
+		Description: "The database server must be a supported release",
 		Severity:    CheckSeverityCritical,
 	}
 	if getIsV2OnlyMode() {
@@ -818,7 +818,7 @@ func (c *Handler) checkMySQLServerVersion() PrerequisiteCheck {
 		return check
 	}
 
-	a := dbserver.AssessRaw(raw, time.Now())
+	a := dbserver.AssessRaw(raw)
 	check.Status, check.Message = describeServerVersion(&a)
 	return check
 }
@@ -829,17 +829,9 @@ func describeServerVersion(a *dbserver.Assessment) (status, message string) {
 	supported := dbserver.SupportedReleases()
 	switch a.Level {
 	case dbserver.SupportSupported:
-		return CheckStatusPassed, fmt.Sprintf("%s is supported until %s", name, a.Release.EOL.Format(time.DateOnly))
-	case dbserver.SupportEndingSoon:
-		return CheckStatusWarning, fmt.Sprintf("%s reaches its upstream end of life on %s. Plan an upgrade to a supported release (%s).",
-			name, a.Release.EOL.Format(time.DateOnly), supported)
-	case dbserver.SupportEndOfLife:
-		if a.Release != nil {
-			return CheckStatusFailed, fmt.Sprintf("%s is past its upstream end of life (%s) and is not supported. Upgrade the database server to a supported release (%s) before migrating.",
-				name, a.Release.EOL.Format(time.DateOnly), supported)
-		}
-		return CheckStatusFailed, fmt.Sprintf("%s is older than the oldest supported release and is not supported. Upgrade the database server to a supported release (%s) before migrating.",
-			name, supported)
+		return CheckStatusPassed, fmt.Sprintf("%s is a supported release", name)
+	case dbserver.SupportUnsupported:
+		return CheckStatusFailed, fmt.Sprintf("%s is not a supported release. Upgrade the database server to a supported release (%s) before migrating.", name, supported)
 	case dbserver.SupportUntracked:
 		return CheckStatusWarning, fmt.Sprintf("%s is not on the list of releases BirdNET-Go is tested with (%s).", name, supported)
 	case dbserver.SupportUnknown:

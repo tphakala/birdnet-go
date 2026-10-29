@@ -18,22 +18,12 @@ import (
 	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
-// databaseServerTestNow is the fixed clock of the notice tests.
-var databaseServerTestNow = time.Date(2026, time.October, 27, 12, 0, 0, 0, time.UTC)
-
 // serverReportFor builds a probe report for a raw version and a schema charset.
 func serverReportFor(raw, schemaCharset string) databaseServerReport {
 	return databaseServerReport{
-		assessment: dbserver.AssessRaw(raw, databaseServerTestNow),
+		assessment: dbserver.AssessRaw(raw),
 		charset:    dbserver.CharsetReport{SchemaCharset: schemaCharset},
 	}
-}
-
-// endingSoonReport is MariaDB 10.11 assessed 30 days before its end of life.
-func endingSoonReport() databaseServerReport {
-	r := serverReportFor("10.11.19-MariaDB", "utf8mb4")
-	r.assessment = dbserver.AssessRaw("10.11.19-MariaDB", time.Date(2028, time.January, 17, 0, 0, 0, 0, time.UTC))
-	return r
 }
 
 // mixedCharsetReport has a utf8mb4 schema default and one latin1 table.
@@ -80,15 +70,26 @@ func TestDatabaseServerNotice_RaisesOnlyForAttention(t *testing.T) {
 		wantNotice bool
 		wantTags   [3]string
 	}{
-		{"end of life", serverReportFor("8.0.46", "utf8mb4"), true, [3]string{"mysql-8.0", "end_of_life", "utf8mb4"}},
-		{"untabled end of life", serverReportFor("10.5.29-MariaDB", "utf8mb4"), true, [3]string{"mariadb-end_of_life", "end_of_life", "utf8mb4"}},
+		{"innovation release 9.0", serverReportFor("9.0.1", "utf8mb4"), true, [3]string{"mysql-9.0", "unsupported", "utf8mb4"}},
+		{"innovation release 9.1", serverReportFor("9.1.1", "utf8mb4"), true, [3]string{"mysql-9.1", "unsupported", "utf8mb4"}},
+		{"innovation release 9.2", serverReportFor("9.2.1", "utf8mb4"), true, [3]string{"mysql-9.2", "unsupported", "utf8mb4"}},
+		{"innovation release 9.3", serverReportFor("9.3.1", "utf8mb4"), true, [3]string{"mysql-9.3", "unsupported", "utf8mb4"}},
+		{"innovation release 9.4", serverReportFor("9.4.1", "utf8mb4"), true, [3]string{"mysql-9.4", "unsupported", "utf8mb4"}},
+		{"innovation release 9.5", serverReportFor("9.5.1", "utf8mb4"), true, [3]string{"mysql-9.5", "unsupported", "utf8mb4"}},
+		{"innovation release 9.6", serverReportFor("9.6.1", "utf8mb4"), true, [3]string{"mysql-9.6", "unsupported", "utf8mb4"}},
+		{"below the floor mysql 8.0", serverReportFor("8.0.46", "utf8mb4"), true, [3]string{"mysql-unsupported", "unsupported", "utf8mb4"}},
+		{"below the floor mysql 5.7", serverReportFor("5.7.44-log", "utf8mb4"), true, [3]string{"mysql-unsupported", "unsupported", "utf8mb4"}},
+		{"below the floor mariadb 10.6", serverReportFor("10.6.28-MariaDB", "utf8mb4"), true, [3]string{"mariadb-unsupported", "unsupported", "utf8mb4"}},
+		{"below the floor mariadb 10.5", serverReportFor("10.5.29-MariaDB", "utf8mb4"), true, [3]string{"mariadb-unsupported", "unsupported", "utf8mb4"}},
 		{"latin1 charset", serverReportFor("8.4.13", "latin1"), true, [3]string{"mysql-8.4", "supported", "latin1"}},
 		{"latin1 schema with only utf8mb4 tables", utf8mb4TablesReport(), false, [3]string{"mysql-8.4", "supported", "utf8mb4_tables"}},
-		{"ending soon", endingSoonReport(), true, [3]string{"mariadb-10.11", "ending_soon", "utf8mb4"}},
 		{"utf8mb4 schema with a latin1 table", mixedCharsetReport(), true, [3]string{"mariadb-11.4", "supported", "mixed"}},
 		{"no schema row", serverReportFor("11.4.13-MariaDB", ""), false, [3]string{"mariadb-11.4", "supported", "unknown"}},
 		{"supported", serverReportFor("11.4.13-MariaDB", "utf8mb4"), false, [3]string{"mariadb-11.4", "supported", "utf8mb4"}},
-		{"untracked", serverReportFor("9.7.4", "utf8mb4"), false, [3]string{"mysql-untracked", "untracked", "utf8mb4"}},
+		{"supported mysql 9.7", serverReportFor("9.7.4", "utf8mb4"), false, [3]string{"mysql-9.7", "supported", "utf8mb4"}},
+		{"supported mysql 8.4", serverReportFor("8.4.13", "utf8mb4"), false, [3]string{"mysql-8.4", "supported", "utf8mb4"}},
+		{"untracked mysql 9.8", serverReportFor("9.8.0", "utf8mb4"), false, [3]string{"mysql-untracked", "untracked", "utf8mb4"}},
+		{"untracked mysql 26.10", serverReportFor("26.10.0", "utf8mb4"), false, [3]string{"mysql-untracked", "untracked", "utf8mb4"}},
 		{"unknown", serverReportFor("garbage", "utf8mb4"), false, [3]string{"unknown", "unknown", "utf8mb4"}},
 		{"probe error", probeErr, false, [3]string{"unknown", "unknown", "unknown"}},
 	}
@@ -118,6 +119,16 @@ func TestDatabaseServerNotice_RaisesOnlyForAttention(t *testing.T) {
 				assert.Equal(t, notification.MsgDatabaseServerAttentionMessage, got.MessageKey)
 			})
 		})
+	}
+}
+
+func TestAttentionText_Unsupported(t *testing.T) {
+	for _, raw := range []string{"9.6.1", "8.0.46", "10.6.28-MariaDB"} {
+		r := serverReportFor(raw, "utf8mb4")
+		got := attentionText(&r, databaseServerReasonUnsupported)
+		assert.Contains(t, got, "is not a supported release; upgrade to a supported release (MySQL 8.4, 9.7; MariaDB 10.11, 11.4, 11.8, 12.3)", raw)
+		assert.NotContains(t, got, "end of life")
+		assert.NotRegexp(t, `\d{4}-\d{2}-\d{2}`, got)
 	}
 }
 
@@ -205,7 +216,7 @@ func TestDatabaseService_ProbeDatabaseServer_OnlyOnMySQL(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			svc := &DatabaseService{v2Manager: tt.manager}
 			probes := 0
-			svc.probeServer = func(ctx context.Context, _ *gorm.DB, _ time.Time) databaseServerReport {
+			svc.probeServer = func(ctx context.Context, _ *gorm.DB) databaseServerReport {
 				probes++
 				_, bounded := ctx.Deadline()
 				assert.True(t, bounded, "the probe must run under a deadline")

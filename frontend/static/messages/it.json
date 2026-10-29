@@ -462,7 +462,7 @@
       },
       "database": {
         "serverAttentionTitle": "Il server del database richiede attenzione",
-        "serverAttentionMessage": "Il server MySQL o MariaDB ha raggiunto o sta per raggiungere la fine del supporto, oppure il database non usa il set di caratteri utf8mb4. Apri Sistema > Salute per i dettagli."
+        "serverAttentionMessage": "Il server MySQL o MariaDB non è una versione supportata, oppure il database non usa il set di caratteri utf8mb4. Apri Sistema > Salute per i dettagli."
       },
       "cleanup": {
         "completeTitle": "Pulizia del vecchio database completata",

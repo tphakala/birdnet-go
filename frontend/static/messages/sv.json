@@ -462,7 +462,7 @@
       },
       "database": {
         "serverAttentionTitle": "Databasservern behöver uppmärksamhet",
-        "serverAttentionMessage": "MySQL- eller MariaDB-servern har nått eller närmar sig slutet av sin livslängd, eller så använder databasen inte teckenuppsättningen utf8mb4. Öppna System > Hälsa för detaljer."
+        "serverAttentionMessage": "MySQL- eller MariaDB-servern är inte en version som stöds, eller så använder databasen inte teckenuppsättningen utf8mb4. Öppna System > Hälsa för detaljer."
       },
       "cleanup": {
         "completeTitle": "Rensning av gammal databas slutförd",

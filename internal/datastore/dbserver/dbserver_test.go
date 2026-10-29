@@ -2,14 +2,10 @@ package dbserver
 
 import (
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// testNow is a fixed clock for the assessment tests.
-var testNow = time.Date(2026, time.October, 27, 12, 0, 0, 0, time.UTC)
 
 func TestAssessRaw(t *testing.T) {
 	tests := []struct {
@@ -27,17 +23,26 @@ func TestAssessRaw(t *testing.T) {
 		{"5.5.5-10.11.19-MariaDB-ubu2204", VendorMariaDB, "10.11", SupportSupported},
 		{"10.11.6-MariaDB-1:10.11.6+maria~deb12", VendorMariaDB, "10.11", SupportSupported},
 		{"12.3.3-MariaDB", VendorMariaDB, "12.3", SupportSupported},
-		// Tabled end of life and untabled series below the vendor floor.
-		{"8.0.46", VendorMySQL, "8.0", SupportEndOfLife},
-		{"8.0.46-log", VendorMySQL, "8.0", SupportEndOfLife},
-		{"5.7.44-log", VendorMySQL, "5.7", SupportEndOfLife},
-		{"10.6.28-MariaDB", VendorMariaDB, "10.6", SupportEndOfLife},
-		{"10.5.29-MariaDB", VendorMariaDB, "10.5", SupportEndOfLife},
-		{"10.7.8-MariaDB", VendorMariaDB, "10.7", SupportEndOfLife},
-		{"8.0.36-28", VendorMySQL, "8.0", SupportEndOfLife},
+		// Tabled MySQL releases: the 9.7 LTS is supported, the 9.0 to 9.6
+		// Innovation run is listed as not supported (both ends of the run).
+		{"9.7.4", VendorMySQL, "9.7", SupportSupported},
+		{"9.0.1", VendorMySQL, "9.0", SupportUnsupported},
+		{"9.1.0", VendorMySQL, "9.1", SupportUnsupported},
+		{"9.2.0", VendorMySQL, "9.2", SupportUnsupported},
+		{"9.3.0", VendorMySQL, "9.3", SupportUnsupported},
+		{"9.4.0", VendorMySQL, "9.4", SupportUnsupported},
+		{"9.5.0", VendorMySQL, "9.5", SupportUnsupported},
+		{"9.6.1", VendorMySQL, "9.6", SupportUnsupported},
+		// Untabled series below the vendor floor.
+		{"8.0.46", VendorMySQL, "8.0", SupportUnsupported},
+		{"8.0.46-log", VendorMySQL, "8.0", SupportUnsupported},
+		{"5.7.44-log", VendorMySQL, "5.7", SupportUnsupported},
+		{"10.6.28-MariaDB", VendorMariaDB, "10.6", SupportUnsupported},
+		{"10.5.29-MariaDB", VendorMariaDB, "10.5", SupportUnsupported},
+		{"10.7.8-MariaDB", VendorMariaDB, "10.7", SupportUnsupported},
+		{"8.0.36-28", VendorMySQL, "8.0", SupportUnsupported},
 		// Untabled series at or above the floor, including a two-digit major.
-		{"9.7.4", VendorMySQL, "9.7", SupportUntracked},
-		{"9.6.1", VendorMySQL, "9.6", SupportUntracked},
+		{"9.8.0", VendorMySQL, "9.8", SupportUntracked},
 		{"26.10.0", VendorMySQL, "26.10", SupportUntracked},
 		{"13.0.2-MariaDB", VendorMariaDB, "13.0", SupportUntracked},
 		{"11.5.2-MariaDB", VendorMariaDB, "11.5", SupportUntracked},
@@ -48,8 +53,9 @@ func TestAssessRaw(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.raw, func(t *testing.T) {
-			a := AssessRaw(tt.raw, testNow)
+			a := AssessRaw(tt.raw)
 			assert.Equal(t, tt.level, a.Level)
+			assert.Equal(t, tt.level == SupportSupported, a.Supported())
 			assert.Equal(t, tt.vendor, a.Version.Vendor)
 			if tt.level != SupportUnknown {
 				assert.Equal(t, tt.series, a.Version.Series())
@@ -72,37 +78,58 @@ func TestParseVersion_Name(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestAssess_EndOfLifeBoundaries(t *testing.T) {
-	v, err := ParseVersion("10.11.19-MariaDB")
-	require.NoError(t, err)
-	eol := Assess(v, testNow).Release.EOL
-
-	day := 24 * time.Hour
+func TestServerTag_Values(t *testing.T) {
 	tests := []struct {
-		name  string
-		now   time.Time
-		level SupportLevel
+		raw string
+		tag string
 	}{
-		{"91 days before", eol.Add(-91 * day), SupportSupported},
-		{"90 days before", eol.Add(-90 * day), SupportEndingSoon},
-		{"1 day before", eol.Add(-day), SupportEndingSoon},
-		{"on the date", eol, SupportEndOfLife},
-		{"after", eol.Add(day), SupportEndOfLife},
+		{"8.4.13", "mysql-8.4"},
+		{"9.0.1", "mysql-9.0"},
+		{"9.1.0", "mysql-9.1"},
+		{"9.2.0", "mysql-9.2"},
+		{"9.3.0", "mysql-9.3"},
+		{"9.4.0", "mysql-9.4"},
+		{"9.5.0", "mysql-9.5"},
+		{"9.6.1", "mysql-9.6"},
+		{"9.7.4", "mysql-9.7"},
+		{"5.7.44-log", "mysql-unsupported"},
+		{"8.0.46", "mysql-unsupported"},
+		{"10.6.28-MariaDB", "mariadb-unsupported"},
+		{"9.8.0", "mysql-untracked"},
+		{"26.10.0", "mysql-untracked"},
+		{"10.11.19-MariaDB", "mariadb-10.11"},
+		{"11.4.13-MariaDB", "mariadb-11.4"},
+		{"11.8.9-MariaDB", "mariadb-11.8"},
+		{"12.3.3-MariaDB", "mariadb-12.3"},
 	}
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			a := Assess(v, tt.now)
-			assert.Equal(t, tt.level, a.Level)
-			assert.Equal(t, tt.level == SupportSupported || tt.level == SupportEndingSoon, a.Supported())
+		t.Run(tt.raw, func(t *testing.T) {
+			a := AssessRaw(tt.raw)
+			assert.Equal(t, tt.tag, ServerTag(&a))
 		})
+	}
+}
+
+func TestAssess_InnovationRowsAreTabledUnsupported(t *testing.T) {
+	for minor := 0; minor <= 6; minor++ {
+		a := Assess(Version{Vendor: VendorMySQL, Major: 9, Minor: minor})
+		require.NotNil(t, a.Release, "9.%d must have a table row", minor)
+		assert.False(t, a.Release.Supported)
+		assert.Equal(t, SupportUnsupported, a.Level)
+	}
+	for _, raw := range []string{"5.7.44-log", "8.0.46", "10.6.28-MariaDB"} {
+		a := AssessRaw(raw)
+		assert.Nil(t, a.Release, "%s is unsupported through the floor rule, not a table row", raw)
+		assert.Equal(t, SupportUnsupported, a.Level)
 	}
 }
 
 func TestServerTag_ClosedSet(t *testing.T) {
 	allowed := map[string]bool{
-		"mysql-8.4": true, "mysql-8.0": true, "mysql-5.7": true,
-		"mariadb-10.11": true, "mariadb-11.4": true, "mariadb-11.8": true, "mariadb-12.3": true, "mariadb-10.6": true,
-		"mysql-end_of_life": true, "mariadb-end_of_life": true,
+		"mysql-8.4": true, "mysql-9.0": true, "mysql-9.1": true, "mysql-9.2": true, "mysql-9.3": true,
+		"mysql-9.4": true, "mysql-9.5": true, "mysql-9.6": true, "mysql-9.7": true,
+		"mariadb-10.11": true, "mariadb-11.4": true, "mariadb-11.8": true, "mariadb-12.3": true,
+		"mysql-unsupported": true, "mariadb-unsupported": true,
 		"mysql-untracked": true, "mariadb-untracked": true,
 		"unknown": true,
 	}
@@ -110,17 +137,17 @@ func TestServerTag_ClosedSet(t *testing.T) {
 		"8.4.13", "10.11.19-MariaDB-ubu2204", "11.4.13-MariaDB-ubu2404", "11.8.9-MariaDB-ubu2404",
 		"5.5.5-10.11.19-MariaDB-ubu2204", "10.11.6-MariaDB-1:10.11.6+maria~deb12", "12.3.3-MariaDB",
 		"8.0.46-log", "5.7.44-log", "10.6.28-MariaDB", "10.5.29-MariaDB", "10.7.8-MariaDB", "8.0.36-28",
-		"9.7.4", "26.10.0", "13.0.2-MariaDB", "11.5.2-MariaDB", "", "MariaDB", "8", "5.1.0-secret-host.example",
+		"9.0.1", "9.6.1", "9.7.4", "9.8.0", "26.10.0", "13.0.2-MariaDB", "11.5.2-MariaDB", "", "MariaDB", "8", "5.1.0-secret-host.example",
 	}
 	for _, raw := range raws {
-		a := AssessRaw(raw, testNow)
+		a := AssessRaw(raw)
 		tag := ServerTag(&a)
 		assert.True(t, allowed[tag], "tag %q for %q is outside the closed set", tag, raw)
 	}
 }
 
 func TestSupportedReleases(t *testing.T) {
-	assert.Equal(t, "MySQL 8.4; MariaDB 10.11, 11.4, 11.8, 12.3", SupportedReleases())
+	assert.Equal(t, "MySQL 8.4, 9.7; MariaDB 10.11, 11.4, 11.8, 12.3", SupportedReleases())
 }
 
 func TestCharsetReport(t *testing.T) {

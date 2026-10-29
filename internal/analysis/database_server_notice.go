@@ -28,15 +28,14 @@ const (
 	databaseServerCheckOperation = "database_server_check"
 
 	// Reasons that make up the signature of the bell notice.
-	databaseServerReasonCharset    = "charset"
-	databaseServerReasonEndingSoon = "ending_soon"
-	databaseServerReasonEndOfLife  = "eol"
-	databaseServerReasonSeparator  = "|"
+	databaseServerReasonCharset     = "charset"
+	databaseServerReasonUnsupported = "unsupported"
+	databaseServerReasonSeparator   = "|"
 
 	// databaseServerNoticeTitle and databaseServerNoticeMessage are the English
 	// fallback text of the bell notice; the UI translates it by key.
 	databaseServerNoticeTitle   = "Database server needs attention"
-	databaseServerNoticeMessage = "The MySQL or MariaDB server is past or near its end of life, or the database does not use the utf8mb4 character set. Open System > Health for details."
+	databaseServerNoticeMessage = "The MySQL or MariaDB server is not a supported release, or the database does not use the utf8mb4 character set. Open System > Health for details."
 )
 
 // databaseServerReport is what one probe of the database server found.
@@ -48,16 +47,16 @@ type databaseServerReport struct {
 }
 
 // databaseServerProbe reads the server version and character sets through db.
-type databaseServerProbe func(ctx context.Context, db *gorm.DB, now time.Time) databaseServerReport
+type databaseServerProbe func(ctx context.Context, db *gorm.DB) databaseServerReport
 
 // probeDatabaseServer is the real databaseServerProbe. It only reads.
-func probeDatabaseServer(ctx context.Context, db *gorm.DB, now time.Time) databaseServerReport {
+func probeDatabaseServer(ctx context.Context, db *gorm.DB) databaseServerReport {
 	var r databaseServerReport
 	raw, err := dbserver.QueryVersion(ctx, db)
 	if err != nil {
 		r.versionErr = err
 	} else {
-		r.assessment = dbserver.AssessRaw(raw, now)
+		r.assessment = dbserver.AssessRaw(raw)
 	}
 	r.charset, r.charsetErr = dbserver.QueryCharset(ctx, db)
 	return r
@@ -71,10 +70,8 @@ func (r *databaseServerReport) reasons() []string {
 	var reasons []string
 	if r.versionErr == nil {
 		switch r.assessment.Level {
-		case dbserver.SupportEndOfLife:
-			reasons = append(reasons, databaseServerReasonEndOfLife)
-		case dbserver.SupportEndingSoon:
-			reasons = append(reasons, databaseServerReasonEndingSoon)
+		case dbserver.SupportUnsupported:
+			reasons = append(reasons, databaseServerReasonUnsupported)
 		case dbserver.SupportSupported, dbserver.SupportUntracked, dbserver.SupportUnknown:
 		}
 	}
@@ -184,16 +181,9 @@ func (n *databaseServerNotice) logReport(r *databaseServerReport) {
 func attentionText(r *databaseServerReport, reason string) string {
 	name := r.assessment.Version.Name()
 	switch reason {
-	case databaseServerReasonEndOfLife:
-		if rel := r.assessment.Release; rel != nil {
-			return fmt.Sprintf("%s is past its upstream end of life (%s) and is not supported; upgrade to a supported release (%s)",
-				name, rel.EOL.Format(time.DateOnly), dbserver.SupportedReleases())
-		}
-		return fmt.Sprintf("%s is older than the oldest supported release; upgrade to a supported release (%s)",
+	case databaseServerReasonUnsupported:
+		return fmt.Sprintf("%s is not a supported release; upgrade to a supported release (%s)",
 			name, dbserver.SupportedReleases())
-	case databaseServerReasonEndingSoon:
-		return fmt.Sprintf("%s reaches its upstream end of life on %s; plan an upgrade to a supported release (%s)",
-			name, r.assessment.Release.EOL.Format(time.DateOnly), dbserver.SupportedReleases())
 	default:
 		return fmt.Sprintf("the database default character set is %s and %d table(s) are not utf8mb4; text outside that character set is rejected or stored incorrectly",
 			r.charset.SchemaCharset, len(r.charset.NonUTF8MB4Tables()))

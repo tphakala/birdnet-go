@@ -117,7 +117,7 @@ func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 
 	svc := NewDatabaseService(settings, metrics)
 	probed := 0
-	svc.probeServer = func(context.Context, *gorm.DB, time.Time) databaseServerReport {
+	svc.probeServer = func(context.Context, *gorm.DB) databaseServerReport {
 		probed++
 		return databaseServerReport{}
 	}
