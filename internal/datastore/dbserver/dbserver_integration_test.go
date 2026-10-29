@@ -83,11 +83,17 @@ func latin1SchemaDB(ctx context.Context, t *testing.T) *gorm.DB {
 	return openGorm(t, c.GetDSN())
 }
 
-func TestQueryVersionAndCharset_RealServer(t *testing.T) {
+func TestServerProbes_RealServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), integrationTimeout)
 	defer cancel()
 
 	db := latin1SchemaDB(ctx, t)
+
+	// An empty schema sums to NULL on every server; it must read as zero.
+	emptySize, err := QuerySchemaSize(ctx, db)
+	require.NoError(t, err)
+	assert.Zero(t, emptySize)
+
 	for _, stmt := range []string{
 		"CREATE TABLE t_inherit (id INT PRIMARY KEY, name VARCHAR(20))",
 		"CREATE TABLE t_utf8mb4 (id INT PRIMARY KEY, name VARCHAR(20)) DEFAULT CHARSET=utf8mb4",
@@ -95,6 +101,12 @@ func TestQueryVersionAndCharset_RealServer(t *testing.T) {
 	} {
 		require.NoError(t, db.WithContext(ctx).Exec(stmt).Error, stmt)
 	}
+
+	// MySQL serves table sizes from cached statistics, so only assert that the
+	// new tables are counted, not how much they grew.
+	size, err := QuerySchemaSize(ctx, db)
+	require.NoError(t, err)
+	assert.Positive(t, size)
 
 	raw, err := QueryVersion(ctx, db)
 	require.NoError(t, err)

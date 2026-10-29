@@ -97,6 +97,10 @@ func (c *Handler) HealthEventBuffer() *observability.HealthEventBuffer {
 	return c.healthEvents
 }
 
+// errDatabaseSizeNoMySQLHandle is reported by the database size check when
+// settings select MySQL or MariaDB but there is no v2 manager to query.
+var errDatabaseSizeNoMySQLHandle = errors.NewStd("no MySQL connection is available")
+
 // mysqlServerDB returns the v2 manager's handle when the database is MySQL or
 // MariaDB, and nil otherwise (SQLite, or no v2 manager). It is read on every
 // check run, so nothing is captured at startup. The v2 manager is used because
@@ -208,6 +212,18 @@ func (c *Handler) registerHealthChecks() {
 		// Database checks
 		checks.NewDatabaseSizeCheck(func() string {
 			return c.CurrentSettings().Output.SQLite.Path
+		}, func(ctx context.Context) (int64, bool, error) {
+			db := c.mysqlServerDB()
+			if db == nil {
+				// Without a v2 manager the dialect is unknown; settings say MySQL,
+				// so do not fall back to a SQLite file that may be a leftover.
+				if c.V2Manager == nil && c.CurrentSettings().Output.MySQL.Enabled {
+					return 0, true, errDatabaseSizeNoMySQLHandle
+				}
+				return 0, false, nil
+			}
+			size, err := dbserver.QuerySchemaSize(ctx, db)
+			return size, true, err
 		}),
 		checks.NewMigrationStatusCheck(func() (bool, string, error) {
 			if c.DS == nil {

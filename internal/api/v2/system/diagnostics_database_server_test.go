@@ -1,13 +1,18 @@
 package system
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/health"
 )
@@ -57,4 +62,66 @@ func TestRegisterHealthChecks_DatabaseServerChecksSkippedWithoutMySQL(t *testing
 	require.Contains(t, statuses, "database_charset")
 	assert.Equal(t, health.StatusSkipped, statuses["database_server_version"])
 	assert.Equal(t, health.StatusSkipped, statuses["database_charset"])
+}
+
+// TestRegisterHealthChecks_DatabaseSizeFollowsDialect pins that the open v2
+// manager, not the presence of a SQLite file, decides what the size check
+// measures.
+func TestRegisterHealthChecks_DatabaseSizeFollowsDialect(t *testing.T) {
+	content := []byte("leftover sqlite file")
+	staleFile := filepath.Join(t.TempDir(), "birdnet.db")
+	require.NoError(t, os.WriteFile(staleFile, content, 0o600))
+
+	// A SQLite handle has no information_schema, so the server query fails and
+	// proves the MySQL branch ran without needing a MySQL server.
+	sqliteHandle, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: logger.Discard})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		sqlDB, dbErr := sqliteHandle.DB()
+		if dbErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+
+	tests := []struct {
+		name         string
+		manager      datastoreV2.Manager
+		mysqlEnabled bool
+		wantStatus   health.Status
+		wantMessage  string
+		wantPath     bool
+	}{
+		{"mysql manager ignores a leftover sqlite file", dialectManagerStub{mysql: true, db: sqliteHandle}, true, health.StatusUnknown, "Unable to read the database size", false},
+		{"sqlite manager stats the configured file", dialectManagerStub{mysql: false}, false, health.StatusHealthy, "Database size OK", true},
+		{"no manager with mysql configured", nil, true, health.StatusUnknown, "no MySQL connection is available", false},
+		{"no manager with sqlite configured", nil, false, health.StatusHealthy, "Database size OK", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &Handler{Core: apitest.NewCore(t, apitest.WithSettingsFunc(func(s *conf.Settings) {
+				s.Output.SQLite.Path = staleFile
+				s.Output.MySQL.Enabled = tt.mysqlEnabled
+			}))}
+			h.DS = nil
+			h.V2Manager = tt.manager
+			h.healthRegistry = health.NewRegistry()
+			h.registerHealthChecks()
+
+			var got *health.Result
+			for _, r := range h.healthRegistry.RunCategory(t.Context(), health.CategoryDatabase) {
+				if r.Name == "database_size" {
+					got = &r
+				}
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantStatus, got.Status)
+			assert.Contains(t, got.Message, tt.wantMessage)
+			if tt.wantPath {
+				assert.Equal(t, staleFile, got.Details["path"])
+				assert.Equal(t, int64(len(content)), got.Details["size_bytes"])
+			} else {
+				assert.NotContains(t, got.Details, "path")
+			}
+		})
+	}
 }
