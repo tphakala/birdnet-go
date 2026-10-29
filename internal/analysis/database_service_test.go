@@ -610,6 +610,35 @@ func TestDatabaseService_Start_ServerRejectionRefuses(t *testing.T) {
 		"a refused start must not log that the legacy database is being started")
 }
 
+// TestDatabaseService_Start_RejectionShapedErrorKeepsFallbackWithoutMySQL pins the MySQL
+// guard of the early refusal: with MySQL disabled the same state error keeps the legacy
+// fallback and its Warn. Not parallel: it swaps the global logger and Start sets process globals.
+func TestDatabaseService_Start_RejectionShapedErrorKeepsFallbackWithoutMySQL(t *testing.T) {
+	t.Cleanup(func() { importsapi.SetMigrationDependencies(nil, nil) })
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "birdnet.db")
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelWarn)
+
+	metrics, err := observability.NewMetrics()
+	require.NoError(t, err)
+	svc := NewDatabaseService(settings, metrics)
+	svc.checkStartupState = func(*conf.Settings) datastoreV2.StartupState {
+		return datastoreV2.StartupState{
+			MigrationStatus: entities.MigrationStatusIdle,
+			LegacyRequired:  true,
+			Decision:        datastoreV2.DecisionV2Corrupted,
+			Error:           fmt.Errorf("%w: %w", datastoreV2.ErrV2DatabaseCorrupted, &mysql.MySQLError{Number: 1045, Message: "Access denied"}),
+		}
+	}
+
+	require.NoError(t, svc.Start(t.Context()))
+	t.Cleanup(func() { assert.NoError(t, svc.Stop(t.Context())) })
+	assert.Contains(t, buf.String(), legacyFallbackWarnMessage)
+}
+
 // TestDatabaseService_Start_SQLitePathUnusableNamesSetting pins that a SQLite file that
 // cannot be created fails the start with a classified error naming the path setting.
 // The parent of the database file is a regular file, so this fails for root and on every
