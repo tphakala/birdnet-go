@@ -387,7 +387,7 @@ func TestMySQL_V2Initialize_ConvertEmptyTables_LockTimeoutSkipsTableAndBootConti
 		}
 		released = true
 		// A live context, because t.Context() is already cancelled when Cleanup runs.
-		if _, unlockErr := holder.ExecContext(context.Background(), "UNLOCK TABLES"); unlockErr != nil {
+		if _, unlockErr := holder.ExecContext(context.WithoutCancel(t.Context()), "UNLOCK TABLES"); unlockErr != nil {
 			assert.NoError(t, unlockErr)
 			// End the session so the server releases the lock instead of the pool keeping it.
 			_ = holder.Raw(func(any) error { return driver.ErrBadConn })
