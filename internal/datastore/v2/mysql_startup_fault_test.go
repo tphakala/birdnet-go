@@ -9,7 +9,9 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
+	"github.com/getsentry/sentry-go"
 	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,6 +55,10 @@ const (
 	// connection open. The server never sees the statement.
 	faultReplyServerError
 )
+
+// mixedSchemaLostConnectionWarn is the start of the Warn that a connection lost during a
+// reconcile step logs.
+const mixedSchemaLostConnectionWarn = "lost the database connection while reconciling"
 
 // startupFaultProxy forwards to a MySQL server and applies one one-shot rule to the
 // first client statement (COM_QUERY or COM_STMT_PREPARE) whose text contains the
@@ -263,11 +269,16 @@ func TestMySQL_StartupDetection_MixedSchema_ConnectionLossRetriesWithoutLosingRo
 	}
 
 	tests := []struct {
-		name         string
-		seed         func(t *testing.T)
-		match        string
-		action       faultAction
-		afterFirst   func(t *testing.T, before, after map[string]int64, log string)
+		name       string
+		seed       func(t *testing.T)
+		match      string
+		action     faultAction
+		afterFirst func(t *testing.T, before, after map[string]int64, log string)
+		// noWarn is set when the connection was lost before any reconcile step ran, so
+		// no reconcile Warn is logged.
+		noWarn bool
+		// wantWarn are the rendered step and dropped_empty_tables fields of the Warn.
+		wantWarn     []string
 		wantDecision string
 	}{
 		{
@@ -277,6 +288,7 @@ func TestMySQL_StartupDetection_MixedSchema_ConnectionLossRetriesWithoutLosingRo
 				t.Helper()
 				assert.Equal(t, before, after, "a failed probe changes nothing")
 			},
+			noWarn:       true,
 			wantDecision: DecisionMixedSchemaKeptLegacy,
 		},
 		{
@@ -286,6 +298,7 @@ func TestMySQL_StartupDetection_MixedSchema_ConnectionLossRetriesWithoutLosingRo
 				t.Helper()
 				assert.Equal(t, before, after, "a failed lock changes nothing")
 			},
+			wantWarn:     []string{`step="removing the empty legacy tables"`, "dropped_empty_tables=none"},
 			wantDecision: DecisionMixedSchemaKeptV2,
 		},
 		{
@@ -296,8 +309,8 @@ func TestMySQL_StartupDetection_MixedSchema_ConnectionLossRetriesWithoutLosingRo
 				assertNoRowsLost(t, before, after, "partial drop")
 				assert.False(t, tableExists(t, coexTestDB, coexTestDBName, "detection_locks"), "a table dropped before the loss stays dropped")
 				assert.True(t, tableExists(t, coexTestDB, coexTestDBName, "detections"), "the keyed table is dropped last")
-				assert.Contains(t, log, "detection_locks", "the Warn names the tables already dropped")
 			},
+			wantWarn:     []string{`step="removing the empty enhanced detection tables"`, `dropped_empty_tables="detection_locks, detection_comments"`},
 			wantDecision: DecisionMixedSchemaKeptLegacy,
 		},
 		{
@@ -307,6 +320,7 @@ func TestMySQL_StartupDetection_MixedSchema_ConnectionLossRetriesWithoutLosingRo
 				t.Helper()
 				assertNoRowsLost(t, before, after, "keyed table dropped")
 			},
+			wantWarn:     []string{`step="removing the empty enhanced detection tables"`, `dropped_empty_tables="detection_locks, detection_comments, detection_reviews, detection_predictions"`},
 			wantDecision: DecisionLegacyMode,
 		},
 		{
@@ -319,6 +333,7 @@ func TestMySQL_StartupDetection_MixedSchema_ConnectionLossRetriesWithoutLosingRo
 				require.NoError(t, coexTestDB.Raw("SELECT state FROM migration_states WHERE id = 1").Scan(&state).Error)
 				assert.Equal(t, string(entities.MigrationStatusIdle), state)
 			},
+			wantWarn:     []string{`step="marking the empty enhanced database as completed"`, "dropped_empty_tables=none"},
 			wantDecision: DecisionMixedSchemaFreshV2,
 		},
 	}
@@ -331,12 +346,23 @@ func TestMySQL_StartupDetection_MixedSchema_ConnectionLossRetriesWithoutLosingRo
 			settings := settingsViaProxy(t, proxy)
 			before := tableRowCounts(t)
 
+			transport := bindCaptureTransport(t)
 			proxy.arm(tt.match, tt.action, 0)
 			var state StartupState
 			log := logtest.Capture(t, func() { state = checkMySQLMigrationState(settings) })
 			proxy.disarm()
+			sentry.Flush(time.Second)
 
 			require.Equal(t, 1, proxy.fired(), "the rule must hit exactly once")
+			assert.Empty(t, transport.captured(), "a lost connection is retried, not reported as a refusal")
+			if tt.noWarn {
+				assert.NotContains(t, log, mixedSchemaLostConnectionWarn)
+			} else {
+				assert.Contains(t, log, mixedSchemaLostConnectionWarn)
+				for _, field := range tt.wantWarn {
+					assert.Contains(t, log, field, "the Warn names the step and the empty tables already dropped")
+				}
+			}
 			assert.Equal(t, DecisionStateUnknown, state.Decision)
 			require.ErrorIs(t, state.Error, ErrStartupStateUnknown)
 			require.NotErrorIs(t, state.Error, ErrMixedSchemaDatabase)

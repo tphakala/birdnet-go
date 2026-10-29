@@ -1390,9 +1390,11 @@ func TestProbeMixedSchema_ExistsFailure_FailsClosed(t *testing.T) {
 
 // TestResolveMixedSchema_ProbeFailure_RetriesOnlyConnectivity injects a read failure at
 // each probe site of a mixed schema database. A lost connection must give the unknown
-// state, which the caller retries; any other failure must still refuse the boot.
+// state, which the caller retries, without a Sentry event; any other failure must still
+// refuse the boot and report it.
+// Not parallel: it binds a client on the process-wide Sentry hub.
 func TestResolveMixedSchema_ProbeFailure_RetriesOnlyConnectivity(t *testing.T) {
-	t.Parallel()
+	transport := bindCaptureTransport(t)
 
 	const database = "birdnet"
 	tests := []struct {
@@ -1409,8 +1411,6 @@ func TestResolveMixedSchema_ProbeFailure_RetriesOnlyConnectivity(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
 			require.NoError(t, err)
 			sqlDB, err := db.DB()
@@ -1434,14 +1434,19 @@ func TestResolveMixedSchema_ProbeFailure_RetriesOnlyConnectivity(t *testing.T) {
 
 			settings := &conf.Settings{}
 			settings.Output.MySQL.Database = database
+			eventsBefore := len(transport.captured())
 			state := resolveMixedSchema(db, settings)
+			sentry.Flush(time.Second)
+			newEvents := len(transport.captured()) - eventsBefore
 
 			if !tt.wantRetry {
+				assert.Positive(t, newEvents, "a refusal is reported")
 				assert.Equal(t, DecisionMixedSchemaRefused, state.Decision)
 				require.ErrorIs(t, state.Error, ErrMixedSchemaDatabase)
 				require.NotErrorIs(t, state.Error, ErrStartupStateUnknown)
 				return
 			}
+			assert.Zero(t, newEvents, "a lost connection is retried, not reported as a refusal")
 			assert.Equal(t, DecisionStateUnknown, state.Decision)
 			require.ErrorIs(t, state.Error, ErrStartupStateUnknown)
 			require.ErrorIs(t, state.Error, mysql.ErrInvalidConn)
