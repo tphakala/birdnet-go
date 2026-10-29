@@ -685,6 +685,9 @@ const (
 	tailStepVerifyTail     = "verify legacy tail against v2"
 	tailStepOpenMySQL      = "open MySQL database"
 	tailStepMySQLHandle    = "get MySQL database handle"
+
+	tailStepCurrentDatabase = "read current database"
+	tailStepVerifyChildren  = "verify legacy child rows against v2"
 )
 
 // Steps of the MySQL state check and the bare schema probe, named in ErrStartupStateUnknown
@@ -927,17 +930,12 @@ func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, note
 	// v2 and has not reconciled them yet. Tail sync can advance LastMigratedID past a
 	// record it failed to migrate, so the membership check below would not see those;
 	// the dirty-ID set catches them.
-	if dirtyTable != "" {
-		var dirty int64
-		if err := v2DB.Table(dirtyTable).Count(&dirty).Error; err != nil {
-			return false, fmt.Errorf("count dirty IDs: %w", err)
-		}
-		if dirty > 0 {
-			log.Warn("legacy tail not reconciled: dirty IDs pending sync to v2",
-				logger.Int64("dirty_ids", dirty),
-				logger.Uint64("last_migrated_id", uint64(lastMigratedID)))
-			return false, nil
-		}
+	pending, err := pendingDirtyIDs(v2DB, dirtyTable, lastMigratedID, log)
+	if err != nil {
+		return false, err
+	}
+	if pending {
+		return false, nil
 	}
 
 	missing, err := legacyTailMissingFromV2(legacyDB, v2DB, lastMigratedID, notesTable, detectionsTable)
@@ -950,6 +948,27 @@ func legacyTailReconciledInV2(legacyDB, v2DB *gorm.DB, lastMigratedID uint, note
 		return false, nil
 	}
 	return true, nil
+}
+
+// pendingDirtyIDs reports whether dirtyTable holds any row, which means the migration
+// worker has dirty IDs it has not reconciled. An empty dirtyTable (the table does not
+// exist) reports false. A read error is returned with a false result, never read as
+// "none pending".
+func pendingDirtyIDs(v2DB *gorm.DB, dirtyTable string, lastMigratedID uint, log logger.Logger) (bool, error) {
+	if dirtyTable == "" {
+		return false, nil
+	}
+	var dirty int64
+	if err := v2DB.Table(dirtyTable).Count(&dirty).Error; err != nil {
+		return false, fmt.Errorf("count dirty IDs: %w", err)
+	}
+	if dirty > 0 {
+		log.Warn("legacy tail not reconciled: dirty IDs pending sync to v2",
+			logger.Int64("dirty_ids", dirty),
+			logger.Uint64("last_migrated_id", uint64(lastMigratedID)))
+		return true, nil
+	}
+	return false, nil
 }
 
 // legacyTailMissingFromV2 reports whether any legacy notesTable.id greater than

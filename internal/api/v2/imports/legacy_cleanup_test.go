@@ -22,7 +22,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -481,17 +480,6 @@ func createMySQLTestSettings() *conf.Settings {
 	return settings
 }
 
-// legacyDBRepo is a test-only repository that exposes a GORM connection through
-// GetDB, the seam the MySQL cleanup reads its connection from. Production
-// repositories do not implement it.
-type legacyDBRepo struct {
-	datastore.DetectionRepository
-	db *gorm.DB
-}
-
-// GetDB returns the wrapped connection.
-func (r *legacyDBRepo) GetDB() *gorm.DB { return r.db }
-
 // enableV2OnlyMode switches the package-wide v2-only flag on for one test.
 func enableV2OnlyMode(t *testing.T) {
 	t.Helper()
@@ -500,33 +488,28 @@ func enableV2OnlyMode(t *testing.T) {
 	t.Cleanup(func() { isV2OnlyMode = prev })
 }
 
-// wantLegacyOnly and wantLegacyShared spell out the legacy table names so a name
-// dropped from the production lists fails the test.
-var (
-	wantLegacyOnly   = []string{"note_reviews", "note_comments", "note_locks", "results", "notes"}
-	wantLegacyShared = []string{"hourly_weathers", "daily_events", "image_caches", "dynamic_thresholds", "threshold_events", "notification_histories"}
-)
+// wantLegacyOnly spells out the legacy-only table names so a name dropped from
+// the production list fails the test.
+var wantLegacyOnly = []string{"note_reviews", "note_comments", "note_locks", "results", "notes"}
 
 // TestMySQLLegacyCandidates pins the candidate rule: a bare table prefix means
-// the legacy-named tables are live v2 tables, and bare v2 tables beside a prefixed
-// schema keep the shared names out of the list.
+// the legacy-named tables are live v2 tables, and a prefixed schema offers only
+// the legacy-only tables, never the shared auxiliary ones.
 func TestMySQLLegacyCandidates(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
 	tests := []struct {
-		name          string
-		prefix        string
-		bareV2Present bool
-		want          []string
+		name   string
+		prefix string
+		want   []string
 	}{
-		{"bare schema offers nothing", "", false, nil},
-		{"prefixed schema without bare v2 offers every legacy table", "v2_", false, append(slices.Clone(wantLegacyOnly), wantLegacyShared...)},
-		{"prefixed schema beside bare v2 tables offers legacy-only tables", "v2_", true, wantLegacyOnly},
+		{"bare schema offers nothing", "", nil},
+		{"prefixed schema offers only the legacy-only tables", "v2_", wantLegacyOnly},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, mysqlLegacyCandidates(tt.prefix, tt.bareV2Present))
+			assert.Equal(t, tt.want, mysqlLegacyCandidates(tt.prefix))
 		})
 	}
 }
@@ -537,7 +520,7 @@ func TestMySQLLegacyCandidates_DropOrder(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
-	got := mysqlLegacyCandidates("v2_", false)
+	got := mysqlLegacyCandidates("v2_")
 	for _, child := range []string{"note_reviews", "note_comments", "note_locks", "results"} {
 		assert.Less(t, slices.Index(got, child), slices.Index(got, "notes"), "%s must be dropped before notes", child)
 	}
@@ -564,21 +547,17 @@ func TestGetLegacyStatus_MySQL_Refuses(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
-	sqliteMgr := newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0)
-	mysqlMgr := &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}
 	tests := []struct {
 		name string
-		repo func() datastore.DetectionRepository
 		mgr  datastoreV2.Manager
 	}{
-		{"repository without a connection", func() datastore.DetectionRepository { return nil }, mysqlMgr},
-		{"no v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }, nil},
+		{"manager without a connection", &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}},
+		{"no v2 manager", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
 			controller := createLegacyTestHandler(t, e, createMySQLTestSettings())
-			controller.Repo = tt.repo()
 			if tt.mgr != nil {
 				controller.V2Manager = tt.mgr
 			}
@@ -604,21 +583,17 @@ func TestStartLegacyCleanup_MySQL_Refuses(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
-	sqliteMgr := newFakeV2ManagerWithTable(t, "v2_detections", "v2_", 0)
-	mysqlMgr := &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}
 	tests := []struct {
 		name string
-		repo func() datastore.DetectionRepository
 		mgr  datastoreV2.Manager
 	}{
-		{"repository without a connection", func() datastore.DetectionRepository { return nil }, mysqlMgr},
-		{"no v2 manager", func() datastore.DetectionRepository { return &legacyDBRepo{db: sqliteMgr.DB()} }, nil},
+		{"manager without a connection", &fakeV2Manager{isMySQL: true, tablePrefix: "v2_"}},
+		{"no v2 manager", nil},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			e := echo.New()
 			controller := createLegacyTestHandler(t, e, createMySQLTestSettings())
-			controller.Repo = tt.repo()
 			if tt.mgr != nil {
 				controller.V2Manager = tt.mgr
 			}
@@ -1036,7 +1011,8 @@ func TestLegacyCleanup_MySQL_RequiresAuxiliaryOutcome(t *testing.T) {
 	}{
 		{name: "not recorded", aux: entities.AuxiliaryDataStatusUnknown, wantKey: notification.MsgErrCleanupSafetyCheck},
 		{name: "failed", aux: entities.AuxiliaryDataStatusFailed, wantKey: notification.MsgErrCleanupSafetyCheck},
-		{name: "not required passes the gate", aux: entities.AuxiliaryDataStatusNotRequired, wantKey: notification.MsgErrCleanupAccessFailed, wantAfter: "Cannot list database tables"},
+		{name: "not required is a fresh install with no legacy database", aux: entities.AuxiliaryDataStatusNotRequired, wantKey: notification.MsgErrCleanupNoLegacyDB},
+		{name: "succeeded passes the gate", aux: entities.AuxiliaryDataStatusSucceeded, wantKey: notification.MsgErrCleanupAccessFailed, wantAfter: reasonListTablesFailed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1045,7 +1021,6 @@ func TestLegacyCleanup_MySQL_RequiresAuxiliaryOutcome(t *testing.T) {
 			db := newV2StateDB(t, cfg)
 			c := createLegacyTestHandler(t, echo.New(), createMySQLTestSettings())
 			c.V2Manager = &fakeV2Manager{isMySQL: true, tablePrefix: "v2_", db: db}
-			c.Repo = &legacyDBRepo{db: db}
 			enableV2OnlyMode(t)
 
 			status, post, code := legacyCleanupCall(t, c)
