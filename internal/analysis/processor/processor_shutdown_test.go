@@ -287,3 +287,52 @@ func TestShutdownWithContext_DynamicThresholdFlush(t *testing.T) {
 		})
 	})
 }
+
+const (
+	// shutdownMutexTestDeadline is the shutdown context of the mutex wait test.
+	shutdownMutexTestDeadline = 100 * time.Millisecond
+	// shutdownMutexTestBound bounds each wait of the mutex wait test.
+	shutdownMutexTestBound = 10 * time.Second
+)
+
+// TestShutdownWithContext_ThresholdsMutexWaitBoundedByContext pins that a
+// thresholdsMutex that stays held does not stall shutdown past its context, and
+// that the threshold lifecycle is still cancelled once the mutex is free.
+//
+// Real time: the waiter blocks on a sync mutex, which synctest does not treat as
+// durably blocked. Not parallel: currentSettings() reads the global snapshot.
+func TestShutdownWithContext_ThresholdsMutexWaitBoundedByContext(t *testing.T) {
+	p := createTestProcessor()
+	p.Settings = &conf.Settings{}
+	p.JobQueue = jobqueue.NewJobQueue() // not started: stopping it returns at once
+
+	lifeCtx, lifeCancel := context.WithCancel(t.Context())
+	defer lifeCancel()
+	p.thresholdsCtx = lifeCtx
+	p.thresholdsCancel = lifeCancel
+
+	p.thresholdsMutex.Lock()
+	unlock := sync.OnceFunc(p.thresholdsMutex.Unlock)
+	defer unlock()
+
+	ctx, cancel := context.WithTimeout(t.Context(), shutdownMutexTestDeadline)
+	defer cancel()
+	shutdownDone := make(chan struct{})
+	go func() {
+		defer close(shutdownDone)
+		_ = p.ShutdownWithContext(ctx)
+	}()
+
+	select {
+	case <-shutdownDone:
+	case <-time.After(shutdownMutexTestBound):
+		require.Fail(t, "ShutdownWithContext stalled behind thresholdsMutex past its context")
+	}
+
+	unlock()
+	select {
+	case <-lifeCtx.Done():
+	case <-time.After(shutdownMutexTestBound):
+		require.Fail(t, "the threshold lifecycle was not cancelled once thresholdsMutex was free")
+	}
+}
