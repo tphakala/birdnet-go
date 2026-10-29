@@ -113,11 +113,13 @@ that the conversion widens to `MEDIUMTEXT`. A table with rows, a legacy table,
 and every table of a utf8mb4 schema are never altered by the app; converting a
 populated table is a manual step. A lock timeout or a failed ALTER leaves the
 table as it was, is logged as a warning, and the next start tries again. Each
-conversion logs one line with the table name.
+conversion logs one Info line with the table name; a warning after it means
+only that the connection could not be reset.
 
-`validateAndFixSchema` is a separate path that these conditions do not bound: it
-recreates a legacy `image_caches` with a wrong index or a stray `label_id`
-column, rows included, and logs its row count at Warn.
+`validateAndFixSchema` is a separate path that the conditions of the
+regenerable-tables exception do not bound: it recreates a legacy `image_caches`
+with a wrong index or a stray `label_id` column, rows included, and logs its row
+count at Warn.
 
 Refuse to start, with an error that names the cause, only when no safe automatic
 choice exists, for example when both candidate sides hold data. Never destroy
