@@ -230,10 +230,11 @@ func (p *Processor) cleanupExpiredThresholds(expiredSpecies []string) {
 // Repeating is safe after a connectivity error even when the first attempt's COMMIT
 // was applied and only its reply was lost, because the save is an idempotent upsert
 // of the whole in-memory snapshot keyed by species_name: a repeat writes identical
-// values. Resets made in the meantime are re-applied by drainPendingResets after the
-// save returns. This is why the check is broader than the detection save's
-// isRepeatableSaveError, where a repeat would insert a second row. If the batch save
-// stops being an idempotent upsert, this check must be revisited.
+// values. Resets cannot run during the save because they wait for the persistence
+// lock, which the whole cycle holds (see lockThresholdPersistence). This is why the
+// check is broader than the detection save's isRepeatableSaveError, where a repeat
+// would insert a second row. If the batch save stops being an idempotent upsert,
+// this check must be revisited.
 func isRetryableThresholdSaveError(err error) bool {
 	return datastore.IsTransientDBError(err) || errors.IsConnectivityError(err)
 }
@@ -291,34 +292,68 @@ func (p *Processor) saveThresholdsWithRetry(ctx context.Context, dbThresholds []
 	return err
 }
 
+// lockThresholdPersistence takes the one-slot lock that serializes dynamic
+// threshold persistence cycles and resets. It is held across database calls and
+// across the save retry backoff, so a holder can block others for a whole cycle.
+// A free lock is taken even when ctx is already done; otherwise it waits until
+// the lock is free or ctx ends, and returns ctx.Err() in the latter case.
+//
+// Lock order: take it before thresholdsMutex, never while holding
+// thresholdsMutex, and never re-enter it from the same goroutine.
+func (p *Processor) lockThresholdPersistence(ctx context.Context) error {
+	p.thresholdPersistOnce.Do(func() { p.thresholdPersistSlot = make(chan struct{}, 1) })
+	select {
+	case p.thresholdPersistSlot <- struct{}{}:
+		return nil
+	default:
+	}
+	select {
+	case p.thresholdPersistSlot <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// unlockThresholdPersistence releases the lock taken by lockThresholdPersistence.
+func (p *Processor) unlockThresholdPersistence() {
+	<-p.thresholdPersistSlot
+}
+
 // persistDynamicThresholds saves all current dynamic thresholds to the database
 // and drops expired ones from memory and the database (see cleanupExpiredThresholds).
 // This is called periodically by the persistence goroutine. The ctx governs the
-// retry-backoff abort and is supplied by the caller (the persistence goroutine's
-// lifecycle context, a snapshot taken under thresholdsMutex by
-// StopDynamicThresholds, or the caller's context for FlushDynamicThresholds).
+// retry-backoff abort and the wait for the persistence lock, and is supplied by
+// the caller (the persistence goroutine's lifecycle context, a snapshot taken
+// under thresholdsMutex by StopDynamicThresholds, or the caller's context for
+// FlushDynamicThresholds).
+//
+// The whole cycle runs under the persistence lock, so resets wait for it and no
+// cycle can write a snapshot taken before a reset after that reset deleted. Reset
+// deletes that failed earlier are retried first, before the snapshot.
 func (p *Processor) persistDynamicThresholds(ctx context.Context) error {
+	if err := p.lockThresholdPersistence(ctx); err != nil {
+		return err
+	}
+	defer p.unlockThresholdPersistence()
+
+	// Retry failed reset deletes before the snapshot: a species re-learned since
+	// the reset is then written fresh by this cycle's save instead of being deleted
+	// again after it.
+	p.drainPendingResets()
+
 	settings := p.currentSettings()
 	dbThresholds, expiredSpecies := p.convertThresholdsForPersistence(settings)
 
 	p.cleanupExpiredThresholds(expiredSpecies)
 
 	if len(dbThresholds) == 0 {
-		// Even when there are no thresholds to persist, drain pending resets
-		// to clean up species that were deleted between persistence cycles.
-		p.drainPendingResets()
 		return nil
 	}
 
 	if err := p.saveThresholdsWithRetry(ctx, dbThresholds); err != nil {
 		return err
 	}
-
-	// After the batch save, drain pending resets. If a species was deleted
-	// between the snapshot (convertThresholdsForPersistence) and the write
-	// (saveThresholdsWithRetry), the batch upsert may have re-inserted it.
-	// Draining pending resets re-deletes those species from the database.
-	p.drainPendingResets()
 
 	if settings.Realtime.DynamicThreshold.Debug {
 		GetLogger().Debug("Persisted dynamic thresholds to database",
@@ -329,10 +364,17 @@ func (p *Processor) persistDynamicThresholds(ctx context.Context) error {
 	return nil
 }
 
-// drainPendingResets processes any species that were reset (deleted) while a
-// persistence cycle was in progress. Because the periodic batch upsert could
-// re-insert a stale snapshot of a deleted species, this method re-deletes them
-// from the database after the batch write completes.
+// drainPendingResets retries the reset deletes that failed when the reset ran
+// (a reset queues a species or the reset-all flag only when its own delete
+// failed). It runs at the start of a persistence cycle, under the persistence
+// lock and before the snapshot, so a species re-learned since the reset is
+// written fresh by the same cycle's save.
+//
+// The retry deletes the species' event history without a time bound, so when the
+// species was re-learned after the failed reset and before this retry, its new
+// events are deleted too. This is accepted: it only affects a reset whose
+// database delete failed, and datastore.Interface has no time-bounded events
+// delete. The threshold row is not lost, because the save that follows rewrites it.
 //
 // If any DB delete fails, the failed items are requeued into pendingResets so
 // they will be retried on the next persistence cycle rather than silently lost.
@@ -340,8 +382,8 @@ func (p *Processor) drainPendingResets() {
 	p.thresholdsMutex.Lock()
 	resets := p.pendingResets
 	resetAll := p.pendingResetAll
-	// Clear the pending state under lock so new resets can accumulate while
-	// we perform DB operations. Use nil-safe initialization since tests may
+	// Swap the pending state out under the lock so thresholdsMutex is not held
+	// across the DB operations. Use nil-safe initialization since tests may
 	// create Processor structs without initializing pendingResets.
 	if p.pendingResets != nil {
 		p.pendingResets = make(map[string]struct{})
@@ -360,13 +402,13 @@ func (p *Processor) drainPendingResets() {
 
 		if _, err := p.Ds.DeleteAllDynamicThresholds(); err != nil {
 			requeue = true
-			log.Warn("failed to re-delete all dynamic thresholds after persistence, requeuing",
+			log.Warn("retry delete of all dynamic thresholds failed, requeuing",
 				logger.Error(err),
 				logger.String("operation", "drain_pending_resets"))
 		}
 		if _, err := p.Ds.DeleteAllThresholdEvents(); err != nil {
 			requeue = true
-			log.Warn("failed to re-delete all threshold events after persistence, requeuing",
+			log.Warn("retry delete of all threshold events failed, requeuing",
 				logger.Error(err),
 				logger.String("operation", "drain_pending_resets"))
 		}
@@ -386,14 +428,14 @@ func (p *Processor) drainPendingResets() {
 	for speciesName := range resets {
 		thresholdErr := p.Ds.DeleteDynamicThreshold(speciesName)
 		if thresholdErr != nil {
-			log.Warn("failed to re-delete dynamic threshold after persistence, requeuing",
+			log.Warn("retry delete of dynamic threshold failed, requeuing",
 				logger.String("species", speciesName),
 				logger.Error(thresholdErr),
 				logger.String("operation", "drain_pending_resets"))
 		}
 		eventsErr := p.Ds.DeleteThresholdEvents(speciesName)
 		if eventsErr != nil {
-			log.Warn("failed to re-delete threshold events after persistence, requeuing",
+			log.Warn("retry delete of threshold events failed, requeuing",
 				logger.String("species", speciesName),
 				logger.Error(eventsErr),
 				logger.String("operation", "drain_pending_resets"))
@@ -439,7 +481,10 @@ func (p *Processor) startThresholdPersistence(ctx context.Context) {
 		for {
 			select {
 			case <-ticker.C:
-				if err := p.persistDynamicThresholds(ctx); err != nil {
+				// At shutdown the lifecycle ctx is cancelled while a flush holds the
+				// persistence lock, so a tick that races the cancel gets
+				// context.Canceled from the lock; that is not a failure to report.
+				if err := p.persistDynamicThresholds(ctx); err != nil && ctx.Err() == nil {
 					GetLogger().Error("Failed to persist dynamic thresholds",
 						logger.Error(err),
 						logger.String("operation", "persist_dynamic_thresholds"))
@@ -590,7 +635,7 @@ func (p *Processor) StopDynamicThresholds() {
 	// Protected by thresholdsMutex to prevent races with StartDynamicThresholds.
 	p.thresholdsMutex.Lock()
 	// Only tear down if the session is still the one we snapshotted. The flush above
-	// runs without the lock and can block on DB-retry backoff; if the feature was
+	// runs without thresholdsMutex (it holds only the persistence lock) and can block on DB-retry backoff; if the feature was
 	// toggled back on in the meantime, StartDynamicThresholds installed a fresh ctx
 	// and goroutines, and we must not cancel/clear those (see #1025).
 	if p.thresholdsCtx == ctx {
@@ -610,8 +655,10 @@ func (p *Processor) StopDynamicThresholds() {
 
 // FlushDynamicThresholds immediately persists all dynamic thresholds to the database.
 // This is useful during graceful shutdown to ensure no data loss. The ctx bounds the
-// retry backoff of the save; callers must pass a context that is still live.
-// ShutdownWithContext passes its shutdown context because it has already cancelled
+// retry backoff of the save and the wait for the persistence lock; callers must pass
+// a context that is still live. It waits for an in-flight persistence cycle or reset
+// and gives up with the context's error when ctx ends first (a free lock is taken
+// even with a done ctx). ShutdownWithContext passes its shutdown context because it has already cancelled
 // the threshold lifecycle context by the time it flushes.
 func (p *Processor) FlushDynamicThresholds(ctx context.Context) error {
 	GetLogger().Info("Flushing dynamic thresholds to database",

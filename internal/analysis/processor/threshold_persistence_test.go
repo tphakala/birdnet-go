@@ -4,6 +4,8 @@ package processor
 import (
 	"context"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -483,6 +485,300 @@ func createTestProcessor() *Processor {
 	return p
 }
 
+const (
+	persistTestSpeciesKept  = "american crow"
+	persistTestSpeciesReset = "blue jay"
+	persistTestBaseValue    = 0.75
+	persistTestValidHours   = 48
+	persistTestLevel        = 1
+	persistTestRelearnLevel = 2
+	// persistTestShortDeadline is a flush deadline far shorter than any real cycle.
+	persistTestShortDeadline = 5 * time.Second
+	// persistTestDoneCtxAttempts repeats the done-context lock attempt so a lock
+	// that picks randomly between a free slot and a done context fails reliably.
+	persistTestDoneCtxAttempts = 64
+)
+
+// concurrentThresholdStore is a goroutine-safe datastore fake for tests where a
+// persistence cycle and a reset run in different goroutines. The mutex-protected
+// row map records what a database would hold. saveHook runs inside
+// BatchSaveDynamicThresholds with no lock held; it may block or start goroutines,
+// and a returned error fails that save attempt.
+type concurrentThresholdStore struct {
+	*MockDatastore
+	mu        sync.Mutex
+	rows      map[string]datastore.DynamicThreshold
+	saveCalls int
+	saveHook  func(call int) error
+}
+
+func (s *concurrentThresholdStore) BatchSaveDynamicThresholds(ts []datastore.DynamicThreshold) error {
+	s.mu.Lock()
+	s.saveCalls++
+	call := s.saveCalls
+	s.mu.Unlock()
+	if s.saveHook != nil {
+		if err := s.saveHook(call); err != nil {
+			return err
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i := range ts {
+		s.rows[ts[i].SpeciesName] = ts[i]
+	}
+	return nil
+}
+
+func (s *concurrentThresholdStore) DeleteDynamicThreshold(name string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.rows, name)
+	return nil
+}
+
+func (s *concurrentThresholdStore) DeleteThresholdEvents(string) error { return nil }
+
+func (s *concurrentThresholdStore) saveCallCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.saveCalls
+}
+
+func (s *concurrentThresholdStore) rowNames() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return slices.Collect(maps.Keys(s.rows))
+}
+
+// newConcurrentThresholdProcessor returns a processor holding two learned
+// thresholds (persistTestSpeciesKept and persistTestSpeciesReset), both already
+// present as database rows, backed by a concurrentThresholdStore.
+func newConcurrentThresholdProcessor() (*Processor, *concurrentThresholdStore) {
+	p := createTestProcessor()
+	store := &concurrentThresholdStore{
+		MockDatastore: &MockDatastore{},
+		rows:          make(map[string]datastore.DynamicThreshold),
+	}
+	p.Ds = store
+	now := time.Now()
+	for _, name := range []string{persistTestSpeciesKept, persistTestSpeciesReset} {
+		p.DynamicThresholds[name] = &DynamicThreshold{
+			Level:         persistTestLevel,
+			BaseThreshold: persistTestBaseValue,
+			Timer:         now.Add(persistTestValidHours * time.Hour),
+			ValidHours:    persistTestValidHours,
+		}
+		store.rows[name] = datastore.DynamicThreshold{SpeciesName: name}
+	}
+	return p, store
+}
+
+// TestPersistDynamicThresholds_ResetDuringInFlightCycleIsNotResurrected pins the
+// interleaving where cycle A is inside its save, a reset is requested, a second
+// cycle B (a flush) runs, and A then finishes: the reset species must stay
+// deleted, because the reset waits for A and B waits for the reset.
+func TestPersistDynamicThresholds_ResetDuringInFlightCycleIsNotResurrected(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p, store := newConcurrentThresholdProcessor()
+		release := make(chan struct{})
+		releaseCycle := sync.OnceFunc(func() { close(release) })
+		defer releaseCycle()
+		store.saveHook = func(call int) error {
+			if call == 1 {
+				<-release
+			}
+			return nil
+		}
+
+		cycleDone := make(chan error, 1)
+		go func() { cycleDone <- p.persistDynamicThresholds(t.Context()) }()
+		synctest.Wait() // cycle A is blocked inside its first save
+
+		resetDone := make(chan error, 1)
+		go func() { resetDone <- p.ResetDynamicThreshold(persistTestSpeciesReset) }()
+		synctest.Wait()
+
+		flushDone := make(chan error, 1)
+		go func() { flushDone <- p.FlushDynamicThresholds(t.Context()) }()
+		synctest.Wait()
+
+		releaseCycle()
+		require.NoError(t, <-cycleDone)
+		require.NoError(t, <-resetDone)
+		require.NoError(t, <-flushDone)
+
+		assert.ElementsMatch(t, []string{persistTestSpeciesKept}, store.rowNames(),
+			"a stale snapshot re-inserted the reset species")
+		assert.Empty(t, p.pendingResets, "successful deletes must not queue a retry")
+	})
+}
+
+// TestFlushDynamicThresholds_GivesUpWhenLockHeldPastDeadline verifies a flush
+// stuck behind a running cycle returns at its deadline instead of waiting for the
+// cycle, so shutdown is not held up by a hung database call.
+func TestFlushDynamicThresholds_GivesUpWhenLockHeldPastDeadline(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p, store := newConcurrentThresholdProcessor()
+		release := make(chan struct{})
+		releaseCycle := sync.OnceFunc(func() { close(release) })
+		defer releaseCycle()
+		store.saveHook = func(call int) error {
+			if call == 1 {
+				<-release
+			}
+			return nil
+		}
+
+		cycleDone := make(chan error, 1)
+		go func() { cycleDone <- p.persistDynamicThresholds(t.Context()) }()
+		synctest.Wait()
+
+		ctx, cancel := context.WithTimeout(t.Context(), persistTestShortDeadline)
+		defer cancel()
+		start := time.Now()
+		err := p.FlushDynamicThresholds(ctx)
+
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		assert.Equal(t, persistTestShortDeadline, time.Since(start))
+		assert.Equal(t, 1, store.saveCallCount(), "the flush must not reach the database")
+
+		releaseCycle()
+		require.NoError(t, <-cycleDone)
+	})
+}
+
+// TestPersistDynamicThresholds_FailedResetRetriedBeforeSave verifies that a reset
+// queues a retry only when its own delete failed, that the retry runs before the
+// snapshot so a species re-learned meanwhile is rewritten by the same cycle, and
+// that a later successful reset drops an older queued retry.
+func TestPersistDynamicThresholds_FailedResetRetriedBeforeSave(t *testing.T) {
+	dbErr := errors.Newf("database locked").Build()
+	relearn := func(p *Processor) {
+		p.thresholdsMutex.Lock()
+		defer p.thresholdsMutex.Unlock()
+		p.DynamicThresholds[persistTestSpeciesReset] = &DynamicThreshold{
+			Level:         persistTestRelearnLevel,
+			BaseThreshold: persistTestBaseValue,
+			Timer:         time.Now().Add(persistTestValidHours * time.Hour),
+			ValidHours:    persistTestValidHours,
+		}
+	}
+
+	cases := []struct {
+		name    string
+		setErr  func(m *MockDatastore, err error)
+		reset   func(t *testing.T, p *Processor)
+		pending func(p *Processor) bool
+	}{
+		{
+			name: "single reset",
+			setErr: func(m *MockDatastore, err error) {
+				m.deletePerSpeciesErrors = map[string]error{persistTestSpeciesReset: err}
+			},
+			reset: func(t *testing.T, p *Processor) {
+				t.Helper()
+				require.NoError(t, p.ResetDynamicThreshold(persistTestSpeciesReset))
+			},
+			pending: func(p *Processor) bool {
+				_, queued := p.pendingResets[persistTestSpeciesReset]
+				return queued
+			},
+		},
+		{
+			name: "single reset, events delete fails",
+			setErr: func(m *MockDatastore, err error) {
+				m.deleteEventsPerSpeciesErrors = map[string]error{persistTestSpeciesReset: err}
+			},
+			reset: func(t *testing.T, p *Processor) {
+				t.Helper()
+				require.NoError(t, p.ResetDynamicThreshold(persistTestSpeciesReset))
+			},
+			pending: func(p *Processor) bool {
+				_, queued := p.pendingResets[persistTestSpeciesReset]
+				return queued
+			},
+		},
+		{
+			name:   "reset all, events delete fails",
+			setErr: func(m *MockDatastore, err error) { m.deleteAllEventsError = err },
+			reset: func(t *testing.T, p *Processor) {
+				t.Helper()
+				_, err := p.ResetAllDynamicThresholds()
+				require.NoError(t, err)
+			},
+			pending: func(p *Processor) bool { return p.pendingResetAll },
+		},
+		{
+			name:   "reset all",
+			setErr: func(m *MockDatastore, err error) { m.deleteAllThresholdsError = err },
+			reset: func(t *testing.T, p *Processor) {
+				t.Helper()
+				_, err := p.ResetAllDynamicThresholds()
+				require.NoError(t, err)
+			},
+			pending: func(p *Processor) bool { return p.pendingResetAll },
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := createTestProcessor()
+			mockDs := p.Ds.(*MockDatastore)
+
+			// A reset whose delete fails queues a retry.
+			tc.setErr(mockDs, dbErr)
+			tc.reset(t, p)
+			require.True(t, tc.pending(p), "a failed reset must queue a retry")
+
+			// The database recovers and the species is re-learned before the next cycle.
+			tc.setErr(mockDs, nil)
+			relearn(p)
+			require.NoError(t, p.persistDynamicThresholds(t.Context()))
+
+			saved := mockDs.thresholds[persistTestSpeciesReset]
+			require.NotNil(t, saved, "the retry deleted the row the same cycle's save wrote")
+			assert.Equal(t, persistTestRelearnLevel, saved.Level)
+			assert.False(t, tc.pending(p), "the retry succeeded, nothing may stay queued")
+
+			// A failed reset followed by a successful one leaves nothing queued.
+			tc.setErr(mockDs, dbErr)
+			tc.reset(t, p)
+			require.True(t, tc.pending(p))
+			tc.setErr(mockDs, nil)
+			tc.reset(t, p)
+			assert.False(t, tc.pending(p), "a successful reset must drop the older queued retry")
+		})
+	}
+}
+
+// TestLockThresholdPersistence_FreeLockTakenWithDoneContext verifies a free lock is
+// taken even when ctx is already done (shutdown relies on one last flush attempt),
+// and that a held lock with a done ctx gives up with the ctx error.
+func TestLockThresholdPersistence_FreeLockTakenWithDoneContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	for range persistTestDoneCtxAttempts {
+		p := &Processor{}
+		require.NoError(t, p.lockThresholdPersistence(ctx), "a free lock must be taken with a done ctx")
+		require.ErrorIs(t, p.lockThresholdPersistence(ctx), context.Canceled, "a held lock must give up with a done ctx")
+		p.unlockThresholdPersistence()
+	}
+}
+
+// TestResetDynamicThreshold_SuccessQueuesNothing verifies a reset whose deletes
+// succeed leaves no retry behind.
+func TestResetDynamicThreshold_SuccessQueuesNothing(t *testing.T) {
+	p := createTestProcessor()
+	require.NoError(t, p.ResetDynamicThreshold(persistTestSpeciesReset))
+	_, err := p.ResetAllDynamicThresholds()
+	require.NoError(t, err)
+
+	assert.Empty(t, p.pendingResets)
+	assert.False(t, p.pendingResetAll)
+}
+
 // TestLoadDynamicThresholdsFromDB tests loading thresholds from database
 func TestLoadDynamicThresholdsFromDB(t *testing.T) {
 	t.Run("FirstRun_NoThresholds", func(t *testing.T) {
@@ -746,34 +1042,27 @@ func TestSaveThresholdsWithRetry_RetriesLockAndConnectivityErrorsOnly(t *testing
 	}
 }
 
-// TestPersistDynamicThresholds_ResetDuringSaveRetryStaysDeleted verifies that a
-// reset made while the save is being retried is re-applied once the save succeeds.
-func TestPersistDynamicThresholds_ResetDuringSaveRetryStaysDeleted(t *testing.T) {
+// TestPersistDynamicThresholds_ResetDuringSaveRetryWaitsForCycle verifies that a
+// reset requested while the save is being retried waits for the whole cycle, so
+// the retried attempt cannot write a pre-reset snapshot after the reset deleted.
+func TestPersistDynamicThresholds_ResetDuringSaveRetryWaitsForCycle(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		p := createTestProcessor()
-		mockDs := p.Ds.(*MockDatastore)
-		now := time.Now()
-		for _, name := range []string{"american crow", "blue jay"} {
-			p.DynamicThresholds[name] = &DynamicThreshold{
-				Level:         1,
-				BaseThreshold: 0.75,
-				Timer:         now.Add(24 * time.Hour),
-				ValidHours:    48,
-			}
-		}
-		mockDs.batchSaveHook = func(call int) error {
+		p, store := newConcurrentThresholdProcessor()
+		resetDone := make(chan error, 1)
+		store.saveHook = func(call int) error {
 			if call == 1 {
-				require.NoError(t, p.ResetDynamicThreshold("blue jay"))
+				go func() { resetDone <- p.ResetDynamicThreshold(persistTestSpeciesReset) }()
 				return gormJoinedInvalidConn(mysql.ErrInvalidConn)
 			}
 			return nil
 		}
 
 		require.NoError(t, p.persistDynamicThresholds(t.Context()))
+		require.NoError(t, <-resetDone)
 
-		assert.Equal(t, 2, mockDs.batchSaveCalls)
-		assert.Contains(t, mockDs.thresholds, "american crow")
-		assert.NotContains(t, mockDs.thresholds, "blue jay", "the stale snapshot re-inserted the reset species")
+		assert.Equal(t, 2, store.saveCallCount())
+		assert.Contains(t, store.rowNames(), persistTestSpeciesKept)
+		assert.NotContains(t, store.rowNames(), persistTestSpeciesReset, "the retried attempt re-inserted the reset species")
 	})
 }
 

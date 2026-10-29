@@ -78,13 +78,21 @@ type Processor struct {
 	Metrics                *observability.Metrics
 	DynamicThresholds      map[string]*DynamicThreshold
 	thresholdsMutex        sync.RWMutex        // Mutex to protect access to DynamicThresholds
-	pendingResets          map[string]struct{} // Species names pending reset, protected by thresholdsMutex
-	pendingResetAll        bool                // True if a full reset is pending, protected by thresholdsMutex
-	pendingDetections      map[string]PendingDetection
-	pendingMutex           sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
-	dogDetectionMutex      sync.Mutex
-	detectionMutex         sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
-	vadGate                *vadGate     // Lazily-loaded Silero VAD speech gate for the privacy filter
+	pendingResets          map[string]struct{} // Species whose reset delete failed; retried at the start of the next persistence cycle, protected by thresholdsMutex
+	pendingResetAll        bool                // True if the delete-all of a full reset failed; retried at the start of the next persistence cycle, protected by thresholdsMutex
+
+	// thresholdPersistSlot is a one-slot lock that serializes dynamic threshold
+	// persistence cycles and resets. It is created on first use through
+	// thresholdPersistOnce so zero-value Processors in tests work. Lock order: take
+	// it before thresholdsMutex, never while holding thresholdsMutex.
+	thresholdPersistOnce sync.Once
+	thresholdPersistSlot chan struct{}
+
+	pendingDetections map[string]PendingDetection
+	pendingMutex      sync.RWMutex // RWMutex to protect access to pendingDetections (RLock for snapshots)
+	dogDetectionMutex sync.Mutex
+	detectionMutex    sync.RWMutex // Mutex to protect LastDogDetection and LastHumanDetection maps
+	vadGate           *vadGate     // Lazily-loaded Silero VAD speech gate for the privacy filter
 	// privacyCoverage lists the audio spans each (source, model, detector) has
 	// scored for speech, guarded by detectionMutex. The privacy coverage gate
 	// defers a pending detection until its saved clip span is inside one of them.
