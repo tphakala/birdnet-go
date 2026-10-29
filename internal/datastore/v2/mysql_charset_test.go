@@ -103,13 +103,7 @@ func TestMySQL_V2Initialize_SchemaCharset_NewTablesHoldUnicodeAndPopulatedTables
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dropAllTables(t, coexTestDB, coexTestDBName)
-			origCharset, origCollation, err := dbserver.QuerySchemaCharset(t.Context(), coexTestDB)
-			require.NoError(t, err)
-			require.NoError(t, coexTestDB.Exec(fmt.Sprintf("ALTER DATABASE `%s` %s", coexTestDBName, tt.schemaDDL)).Error)
-			t.Cleanup(func() {
-				restore := fmt.Sprintf("ALTER DATABASE `%s` CHARACTER SET %s COLLATE %s", coexTestDBName, origCharset, origCollation)
-				assert.NoError(t, coexTestDB.Exec(restore).Error)
-			})
+			useSchemaDefault(t, tt.schemaDDL)
 
 			prefix := ""
 			if tt.usePrefix {

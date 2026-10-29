@@ -17,9 +17,10 @@ import (
 
 const (
 	// utf8mb4ConvertLockWaitSeconds bounds the wait for the table lock and for the
-	// metadata lock of the ALTER. A session that holds the table makes the
-	// conversion of that table skip until the next start.
-	utf8mb4ConvertLockWaitSeconds = 3
+	// metadata lock of the ALTER, the same bound as the mixed schema drop. A
+	// session that holds the table makes the conversion of that table skip until
+	// the next start.
+	utf8mb4ConvertLockWaitSeconds = mixedSchemaLockWaitSeconds
 
 	// opConvertEmptyTable is the operation field of the conversion log lines.
 	opConvertEmptyTable = "convert_empty_table_utf8mb4"
@@ -38,9 +39,10 @@ const (
 
 // convertibleTables returns the tables of this manager's v2 schema that have a
 // text column outside utf8mb4, in name order. Tables are matched by the names
-// the entities get from namer, so legacy tables and the tables of the other
-// naming mode never match. Tables without text columns are not in the report
-// and are never candidates.
+// the entities get from namer, so tables outside this naming mode never match.
+// In the unprefixed mode a v2 table that shares its name with a legacy table is
+// matched, as AutoMigrate matches it. Tables without text columns are not in the
+// report and are never candidates.
 func convertibleTables(namer schema.Namer, report dbserver.CharsetReport) ([]string, error) {
 	v2Tables := make(map[string]struct{})
 	for _, model := range v2Entities() {
@@ -74,13 +76,10 @@ func discardPinnedConn(tx *gorm.DB) {
 // pinned connection it takes a WRITE lock on the table, checks for a row under
 // the lock and runs ALTER TABLE ... CONVERT TO CHARACTER SET utf8mb4, so no other
 // session can insert between the check and the ALTER. It reports whether it
-// converted. A lock timeout or any other error before the ALTER changes nothing;
-// the ALTER itself is atomic. When the ALTER succeeded and resetting the session
-// afterwards fails, it returns converted true together with that error. beforeAlter, when not nil, is
-// called under the lock after the check and before the ALTER, and afterAlter with the
-// pinned handle right after the ALTER succeeded (test seams). The
-// table name comes from the entity list through the naming strategy, never from
-// input, so the interpolation is safe.
+// converted. An error before the ALTER changes nothing. When the ALTER succeeded
+// and resetting the session afterwards fails, it returns converted true together
+// with that error. beforeAlter and afterAlter are test seams. The table name
+// comes from the entity list through the naming strategy, never from input.
 func convertTableIfEmpty(ctx context.Context, db *gorm.DB, table string, beforeAlter func(string), afterAlter func(*gorm.DB)) (converted bool, err error) {
 	err = db.WithContext(ctx).Connection(func(tx *gorm.DB) (retErr error) {
 		var previousWait int

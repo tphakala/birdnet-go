@@ -109,8 +109,9 @@ holds no rows. It takes a WRITE lock on that one table (with a 3 second lock
 wait), checks for a row under the lock, and converts without a collation, so the
 table gets the server's utf8mb4 default collation, the same as tables created
 new. It runs before `AutoMigrate`, which restores the declared `TEXT` columns
-that the conversion widens to `MEDIUMTEXT`. A table with rows, a legacy table,
-and every table of a utf8mb4 schema are never altered by the app; converting a
+that the conversion widens to `MEDIUMTEXT`. A table with rows, a table outside
+the v2 schema of the manager's naming mode, and every table of a utf8mb4 schema
+are never altered by the app; converting a
 populated table is a manual step. A lock timeout or a failed ALTER leaves the
 table as it was, is logged as a warning, and the next start tries again. Each
 conversion logs one Info line with the table name; a warning after it means
