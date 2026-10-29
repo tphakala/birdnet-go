@@ -40,6 +40,16 @@ type MySQLManager struct {
 	location    string // host:port/database for display
 	tablePrefix string // "" for fresh installs, "v2_" for migration
 	log         logger.Logger
+
+	// beforeConvertAlter is a test seam. It is called under the table lock, after
+	// the emptiness check and before the ALTER of the utf8mb4 conversion. It is
+	// nil in production.
+	beforeConvertAlter func(table string)
+
+	// afterConvertAlter is a test seam. It is called with the pinned handle right
+	// after the ALTER of the utf8mb4 conversion succeeded, before the table is
+	// unlocked. It is nil in production.
+	afterConvertAlter func(tx *gorm.DB)
 }
 
 // v2TablePrefix is the prefix used for all v2 tables in MySQL.
@@ -80,28 +90,29 @@ func tableOptionsFor(schemaCharset string) (options string, ok bool) {
 
 // migrationDB returns the handle that AutoMigrate creates the v2 tables with.
 // When the schema default character set is not utf8mb4 the handle carries the
-// utf8mb4 table options. It fails when the schema default cannot be read, so
-// the schema never depends on a transient error.
-func (m *MySQLManager) migrationDB() (*gorm.DB, error) {
+// utf8mb4 table options. It also returns the schema default character set. It
+// fails when the schema default cannot be read, so the schema never depends on
+// a transient error.
+func (m *MySQLManager) migrationDB() (db *gorm.DB, schemaCharset string, err error) {
 	charset, _, err := dbserver.QuerySchemaCharset(context.Background(), m.db)
 	if err != nil {
-		return nil, errors.New(err).
+		return nil, "", errors.New(err).
 			Component(errComponentDatastore).
 			Category(errors.CategoryDatabase).
 			Context("operation", errOpReadSchemaCharset).
 			Build()
 	}
 	if charset == "" {
-		return nil, errors.Newf("no schema row found for the database %q", m.config.Database).
+		return nil, "", errors.Newf("no schema row found for the database %q", m.config.Database).
 			Component(errComponentDatastore).
 			Category(errors.CategoryDatabase).
 			Context("operation", errOpReadSchemaCharset).
 			Build()
 	}
 	if options, ok := tableOptionsFor(charset); ok {
-		return m.db.Set(gormTableOptionsKey, options), nil
+		return m.db.Set(gormTableOptionsKey, options), charset, nil
 	}
-	return m.db, nil
+	return m.db, charset, nil
 }
 
 // NewMySQLManager creates a new v2 MySQL database manager.
@@ -182,12 +193,18 @@ func (m *MySQLManager) Initialize() error {
 
 	// Run GORM auto-migrations for all entities using the shared canonical list.
 	// Tables will be created with v2_ prefix due to NamingStrategy. On a schema
-	// whose default character set is not utf8mb4, new tables are created as
-	// utf8mb4; existing tables are never altered.
-	migrateDB, err := m.migrationDB()
+	// whose default character set is not utf8mb4, existing v2 tables that hold no
+	// rows are converted to utf8mb4 first (under a table lock) and new tables are
+	// created as utf8mb4; tables with rows are never altered. The conversion runs
+	// before AutoMigrate because CONVERT widens TEXT columns to MEDIUMTEXT and
+	// AutoMigrate restores the declared types while the table is still empty.
+	migrateDB, schemaCharset, err := m.migrationDB()
 	if err != nil {
 		reportInitFailure("mysql", "readSchemaCharset", err, m.config.Host, m.config.Database, m.config.Username)
 		return fmt.Errorf("failed to read schema character set: %w", err)
+	}
+	if _, convert := tableOptionsFor(schemaCharset); convert {
+		m.convertEmptyTablesToUTF8MB4(context.Background())
 	}
 	err = migrateDB.AutoMigrate(v2Entities()...)
 	if err != nil {

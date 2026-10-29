@@ -101,9 +101,26 @@ the maintainer's approval in the pull request that adds it. The list in the code
 `legacyDisposableSharedTables` in `internal/datastore/v2/startup.go`) must match
 this paragraph.
 
-`validateAndFixSchema` is a separate path that these conditions do not bound: it
-recreates a legacy `image_caches` with a wrong index or a stray `label_id`
-column, rows included, and logs its row count at Warn.
+**Character set repair of empty tables (MySQL and MariaDB).** When the schema
+default character set is not utf8mb4, `MySQLManager.Initialize` converts each
+table of its v2 schema whose text columns are not all utf8mb4 with
+`ALTER TABLE ... CONVERT TO CHARACTER SET utf8mb4`, and only when the table
+holds no rows. It takes a WRITE lock on that one table (with a 3 second lock
+wait), checks for a row under the lock, and converts without a collation, so the
+table gets the server's utf8mb4 default collation, the same as tables created
+new. It runs before `AutoMigrate`, which restores the declared `TEXT` columns
+that the conversion widens to `MEDIUMTEXT`. A table with rows, a table outside
+the v2 schema of the manager's naming mode, and every table of a utf8mb4 schema
+are never altered by the app; converting a
+populated table is a manual step. A lock timeout or a failed ALTER leaves the
+table as it was, is logged as a warning, and the next start tries again. Each
+conversion logs one Info line with the table name; a warning after it means
+only that the connection could not be reset.
+
+`validateAndFixSchema` is a separate path that the conditions of the
+regenerable-tables exception do not bound: it recreates a legacy `image_caches`
+with a wrong index or a stray `label_id` column, rows included, and logs its row
+count at Warn.
 
 Refuse to start, with an error that names the cause, only when no safe automatic
 choice exists, for example when both candidate sides hold data. Never destroy
