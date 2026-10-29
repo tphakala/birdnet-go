@@ -23,7 +23,7 @@ type DatabaseSizeCheck struct {
 }
 
 // NewDatabaseSizeCheck creates a DatabaseSizeCheck using the given path provider
-// and server size probe. A nil probe means SQLite only.
+// and server size probe. A nil probe means SQLite only. A nil path provider makes the check report skipped, whatever the probe says.
 func NewDatabaseSizeCheck(getDBPath func() string, serverSize DatabaseSizeProbe) *DatabaseSizeCheck {
 	return &DatabaseSizeCheck{getDBPath: getDBPath, serverSize: serverSize}
 }

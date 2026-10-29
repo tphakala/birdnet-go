@@ -440,7 +440,7 @@ func QueryVersion(ctx context.Context, db *gorm.DB) (string, error) {
 // plus the indexes of every table in it. A schema with no tables returns 0.
 // MySQL serves these figures from cached table statistics, refreshed per
 // information_schema_stats_expiry (24 hours by default), so the value can lag
-// recent writes; MariaDB reads them live.
+// recent writes.
 func QuerySchemaSize(ctx context.Context, db *gorm.DB) (int64, error) {
 	var size sql.NullInt64
 	if err := db.WithContext(ctx).Raw(querySchemaSize).Row().Scan(&size); err != nil {
