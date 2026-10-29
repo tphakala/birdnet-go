@@ -23,6 +23,11 @@ const (
 	resetTestLearnedValue = 0.7
 	resetTestEventLimit   = 10
 	resetTestWarnMarker   = "level=WARN"
+	// resetTestRelearnTicks is the number of persistence ticks run after the drain.
+	resetTestRelearnTicks   = 2
+	resetTestPreviousLevel  = 0
+	resetTestLearnedLevel   = 1
+	resetTestExpectedEvents = 1
 )
 
 // newV2ThresholdTestStore opens a v2-only SQLite datastore with a dynamic
@@ -74,7 +79,7 @@ func captureGlobalLog(t *testing.T) *bytes.Buffer {
 }
 
 // TestResetDynamicThreshold_V2Store_DrainClearsResetAndRelearnPersists checks
-// that on the v2 store a reset leaves pendingResets after the first drain, logs
+// that on the v2 store the first drain empties pendingResets after a reset, logs
 // no warning, and that a species re-learned afterwards keeps its row and events.
 // Not parallel: it replaces the global logger.
 func TestResetDynamicThreshold_V2Store_DrainClearsResetAndRelearnPersists(t *testing.T) {
@@ -95,7 +100,7 @@ func TestResetDynamicThreshold_V2Store_DrainClearsResetAndRelearnPersists(t *tes
 			now := time.Now()
 			newEntry := func() *DynamicThreshold {
 				return &DynamicThreshold{
-					Level:         1,
+					Level:         resetTestLearnedLevel,
 					BaseThreshold: resetTestBaseValue,
 					Timer:         now.Add(resetTestValidHours * time.Hour),
 					ValidHours:    resetTestValidHours,
@@ -130,21 +135,21 @@ func TestResetDynamicThreshold_V2Store_DrainClearsResetAndRelearnPersists(t *tes
 			p.thresholdsMutex.Unlock()
 			require.NoError(t, ds.SaveThresholdEvent(&datastore.ThresholdEvent{
 				SpeciesName:   resetTestSpecies,
-				PreviousLevel: 0,
-				NewLevel:      1,
+				PreviousLevel: resetTestPreviousLevel,
+				NewLevel:      resetTestLearnedLevel,
 				PreviousValue: resetTestBaseValue,
 				NewValue:      resetTestLearnedValue,
-				ChangeReason:  "high_confidence",
+				ChangeReason:  changeReasonHighConfidence,
 				CreatedAt:     now,
 			}))
 
-			for tick := 1; tick <= 2; tick++ {
+			for tick := 1; tick <= resetTestRelearnTicks; tick++ {
 				require.NoError(t, p.persistDynamicThresholds(t.Context()))
 				_, err := ds.GetDynamicThreshold(resetTestSpecies)
 				require.NoError(t, err, "tick %d: re-learned row must exist", tick)
 				events, err := ds.GetThresholdEvents(resetTestSpecies, resetTestEventLimit)
 				require.NoError(t, err)
-				assert.Len(t, events, 1, "tick %d: re-learned events must survive", tick)
+				assert.Len(t, events, resetTestExpectedEvents, "tick %d: re-learned events must survive", tick)
 			}
 			assert.NotContains(t, logBuf.String(), resetTestWarnMarker, "re-learn ticks must not warn")
 		})
