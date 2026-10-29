@@ -522,6 +522,7 @@ type concurrentThresholdStore struct {
 	saveCalls  int
 	saveHook   func(call int) error
 	deleteHook func(op string)
+	getAllHook func()
 }
 
 func (s *concurrentThresholdStore) BatchSaveDynamicThresholds(ts []datastore.DynamicThreshold) error {
@@ -540,6 +541,18 @@ func (s *concurrentThresholdStore) BatchSaveDynamicThresholds(ts []datastore.Dyn
 		s.rows[ts[i].SpeciesName] = ts[i]
 	}
 	return nil
+}
+
+// GetAllDynamicThresholds returns a snapshot of rows. getAllHook runs after the
+// snapshot is taken and before it is returned, with no lock held; it may block.
+func (s *concurrentThresholdStore) GetAllDynamicThresholds(_ ...int) ([]datastore.DynamicThreshold, error) {
+	s.mu.Lock()
+	out := slices.Collect(maps.Values(s.rows))
+	s.mu.Unlock()
+	if s.getAllHook != nil {
+		s.getAllHook()
+	}
+	return out, nil
 }
 
 func (s *concurrentThresholdStore) runDeleteHook(op string) {
@@ -1920,4 +1933,128 @@ func TestResetDynamicThresholds_PanicInDeleteQueuesRetry(t *testing.T) {
 			assert.False(t, p.pendingResetAll)
 		})
 	}
+}
+
+// loadTestRow returns a live database row for the species.
+func loadTestRow(name string) datastore.DynamicThreshold {
+	return datastore.DynamicThreshold{
+		SpeciesName:   name,
+		Level:         persistTestLevel,
+		BaseThreshold: persistTestBaseValue,
+		ValidHours:    persistTestValidHours,
+		ExpiresAt:     time.Now().Add(persistTestValidHours * time.Hour),
+	}
+}
+
+// TestLoadDynamicThresholdsFromDB_SkipsQueuedResets verifies a species whose
+// reset delete failed earlier is not loaded back from its stale row, and that
+// the retry then removes the row for good.
+func TestLoadDynamicThresholdsFromDB_SkipsQueuedResets(t *testing.T) {
+	p := createTestProcessor()
+	ds, ok := p.Ds.(*MockDatastore)
+	require.True(t, ok)
+	for _, name := range []string{persistTestSpeciesKept, persistTestSpeciesReset} {
+		row := loadTestRow(name)
+		ds.thresholds[name] = &row
+	}
+	// The reset's DB delete fails, so the stale row stays and a retry is queued.
+	ds.deletePerSpeciesErrors = map[string]error{persistTestSpeciesReset: errors.NewStd("db unavailable")}
+	require.NoError(t, p.ResetDynamicThreshold(persistTestSpeciesReset))
+	require.Contains(t, p.pendingResets, persistTestSpeciesReset)
+	require.Contains(t, ds.thresholds, persistTestSpeciesReset)
+
+	require.NoError(t, p.loadDynamicThresholdsFromDB())
+
+	p.thresholdsMutex.RLock()
+	assert.Contains(t, p.DynamicThresholds, persistTestSpeciesKept)
+	assert.NotContains(t, p.DynamicThresholds, persistTestSpeciesReset,
+		"a row awaiting its reset retry must not be loaded")
+	p.thresholdsMutex.RUnlock()
+
+	// The database recovers; the retry deletes the row and later cycles keep it gone.
+	ds.deletePerSpeciesErrors = nil
+	for range 2 {
+		require.NoError(t, p.persistDynamicThresholds(t.Context()))
+		assert.NotContains(t, ds.thresholds, persistTestSpeciesReset)
+		p.thresholdsMutex.RLock()
+		assert.NotContains(t, p.DynamicThresholds, persistTestSpeciesReset)
+		p.thresholdsMutex.RUnlock()
+	}
+	assert.Contains(t, ds.thresholds, persistTestSpeciesKept)
+}
+
+// TestLoadDynamicThresholdsFromDB_SkipsEverythingWhenResetAllQueued verifies a
+// queued delete-all means no stale row is loaded.
+func TestLoadDynamicThresholdsFromDB_SkipsEverythingWhenResetAllQueued(t *testing.T) {
+	p := createTestProcessor()
+	ds, ok := p.Ds.(*MockDatastore)
+	require.True(t, ok)
+	for _, name := range []string{persistTestSpeciesKept, persistTestSpeciesReset} {
+		row := loadTestRow(name)
+		ds.thresholds[name] = &row
+	}
+	p.pendingResetAll = true
+
+	require.NoError(t, p.loadDynamicThresholdsFromDB())
+
+	p.thresholdsMutex.RLock()
+	defer p.thresholdsMutex.RUnlock()
+	assert.Empty(t, p.DynamicThresholds)
+}
+
+// TestLoadDynamicThresholdsFromDB_ResetBetweenReadAndMergeIsNotResurrected pins
+// the interleaving where a reset finishes after the load read the rows and before
+// it merged them: the reset species must not be in memory afterwards.
+func TestLoadDynamicThresholdsFromDB_ResetBetweenReadAndMergeIsNotResurrected(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p, store := newConcurrentThresholdProcessor()
+		clear(p.DynamicThresholds)
+		store.rows[persistTestSpeciesReset] = loadTestRow(persistTestSpeciesReset)
+		store.rows[persistTestSpeciesKept] = loadTestRow(persistTestSpeciesKept)
+		release := make(chan struct{})
+		releaseRead := sync.OnceFunc(func() { close(release) })
+		defer releaseRead()
+		store.getAllHook = func() { <-release }
+
+		loadDone := make(chan error, 1)
+		go func() { loadDone <- p.loadDynamicThresholdsFromDB() }()
+		synctest.Wait() // the load holds its snapshot and is blocked before the merge
+
+		resetDone := make(chan error, 1)
+		go func() { resetDone <- p.ResetDynamicThreshold(persistTestSpeciesReset) }()
+		synctest.Wait()
+
+		releaseRead()
+		require.NoError(t, <-loadDone)
+		require.NoError(t, <-resetDone)
+
+		p.thresholdsMutex.RLock()
+		defer p.thresholdsMutex.RUnlock()
+		assert.NotContains(t, p.DynamicThresholds, persistTestSpeciesReset,
+			"the stale snapshot re-inserted the reset species")
+		assert.NotContains(t, store.rowNames(), persistTestSpeciesReset)
+	})
+}
+
+// TestLoadDynamicThresholdsFromDB_GivesUpWhenLockHeldPastTimeout verifies a load
+// stuck behind a running cycle returns after its timeout without touching the
+// database, so startup is not held up by a hung cycle.
+func TestLoadDynamicThresholdsFromDB_GivesUpWhenLockHeldPastTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		p := createTestProcessor()
+		ds, ok := p.Ds.(*MockDatastore)
+		require.True(t, ok)
+		require.NoError(t, p.lockThresholdPersistence(t.Context()))
+		defer p.unlockThresholdPersistence()
+
+		loadDone := make(chan error, 1)
+		go func() { loadDone <- p.loadDynamicThresholdsFromDB() }()
+		synctest.Wait()
+		require.Empty(t, loadDone, "the load must wait for the lock")
+
+		time.Sleep(thresholdLoadLockTimeout)
+		synctest.Wait()
+		require.NoError(t, <-loadDone)
+		assert.False(t, ds.getAllCalled, "a skipped load must not read the database")
+	})
 }
