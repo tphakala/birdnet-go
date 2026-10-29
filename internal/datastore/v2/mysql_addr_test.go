@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -50,11 +51,8 @@ func TestMySQLConnections_DialIPv6LiteralHost(t *testing.T) {
 				})
 				require.Error(t, err)
 
-				select {
-				case <-accepted:
-				case <-time.After(ipv6DialWait):
-					t.Fatalf("no connection reached the IPv6 loopback listener for host %q", host)
-				}
+				testutil.WaitForChannel(t, accepted, ipv6DialWait,
+					fmt.Sprintf("no connection reached the IPv6 loopback listener for host %q", host))
 			})
 		}
 	}

@@ -1,6 +1,7 @@
 package datastore
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -91,11 +92,8 @@ func TestMySQLStoreOpen_DialsIPv6LiteralHost(t *testing.T) {
 			store := &MySQLStore{Settings: settings}
 			require.Error(t, store.Open())
 
-			select {
-			case <-accepted:
-			case <-time.After(ipv6DialWait):
-				t.Fatalf("no connection reached the IPv6 loopback listener for host %q", host)
-			}
+			testutil.WaitForChannel(t, accepted, ipv6DialWait,
+				fmt.Sprintf("no connection reached the IPv6 loopback listener for host %q", host))
 		})
 	}
 }
