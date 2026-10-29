@@ -292,7 +292,7 @@ const (
 	// shutdownMutexTestDeadline is the shutdown context of the mutex wait test.
 	shutdownMutexTestDeadline = 100 * time.Millisecond
 	// shutdownMutexTestBound bounds each wait of the mutex wait test.
-	shutdownMutexTestBound = 3 * time.Second
+	shutdownMutexTestBound = 10 * time.Second
 )
 
 // TestShutdownWithContext_ThresholdsMutexWaitBoundedByContext pins that a

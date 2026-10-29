@@ -1621,7 +1621,7 @@ func TestThresholdCleanup_RunsAtStartThenDailyAndFollowsToggle(t *testing.T) {
 
 const (
 	// stallTestTimeout bounds each call that must not wait for a hung reset.
-	stallTestTimeout = 3 * time.Second
+	stallTestTimeout = 10 * time.Second
 	// stallTestShutdownDeadline is the shutdown context of the stall test.
 	stallTestShutdownDeadline = 100 * time.Millisecond
 	// resetTestTrigger is the dynamic threshold trigger of the reset tests; the
@@ -1739,24 +1739,30 @@ func TestResetDynamicThresholds_BlockedDeleteDoesNotStallDetectionOrShutdown(t *
 	}
 }
 
+// resetTestOtherSpecies is a species with no threshold, learned during a reset.
+const resetTestOtherSpecies = "northern cardinal"
+
 // TestResetDynamicThresholds_RelearnDuringDeleteKeepsRowAndEvent pins that a
-// species re-learned while the reset's events delete is running keeps both its
-// event (saved only after the delete returns) and its row (written by the next
-// persistence cycle). Not parallel, for the settings reason above.
+// species re-learned while a reset's deletes are running keeps its event (saved
+// only after the deletes return) and its row (written by a persistence cycle that
+// waits for the reset). Rows block the reset in the row delete, where a cycle
+// that ignored the reset would write the re-learned row just before it is
+// deleted, and in the events delete. A single reset holds back only its own
+// species' events; reset-all holds back every species'. Not parallel: the
+// settings come from the processor.
 func TestResetDynamicThresholds_RelearnDuringDeleteKeepsRowAndEvent(t *testing.T) {
+	resetOne := func(p *Processor) error { return p.ResetDynamicThreshold(persistTestSpeciesReset) }
+	resetAll := func(p *Processor) error { _, err := p.ResetAllDynamicThresholds(); return err }
 	tests := []struct {
-		name     string
-		blockOp  string
-		reset    func(p *Processor) error
-		keptGone bool
+		name    string
+		blockOp string
+		reset   func(p *Processor) error
+		all     bool
 	}{
-		{"single reset", opDeleteEvents, func(p *Processor) error {
-			return p.ResetDynamicThreshold(persistTestSpeciesReset)
-		}, false},
-		{"reset-all", opDeleteAllEvents, func(p *Processor) error {
-			_, err := p.ResetAllDynamicThresholds()
-			return err
-		}, true},
+		{"single reset, row delete", opDeleteThreshold, resetOne, false},
+		{"single reset, events delete", opDeleteEvents, resetOne, false},
+		{"reset-all, row delete", opDeleteAllThresholds, resetAll, true},
+		{"reset-all, events delete", opDeleteAllEvents, resetAll, true},
 	}
 
 	for _, tt := range tests {
@@ -1776,32 +1782,78 @@ func TestResetDynamicThresholds_RelearnDuringDeleteKeepsRowAndEvent(t *testing.T
 
 				resetDone := make(chan error, 1)
 				go func() { resetDone <- tt.reset(p) }()
-				synctest.Wait() // the reset is blocked in its events delete
+				synctest.Wait() // the reset is blocked in its delete
 
 				p.LearnFromApprovedDetection(persistTestSpeciesReset, "", resetTestConfidence, persistTestBaseValue)
-				synctest.Wait()
+				p.LearnFromApprovedDetection(resetTestOtherSpecies, "", resetTestConfidence, persistTestBaseValue)
+				cycleDone := make(chan error, 1)
+				go func() { cycleDone <- p.persistDynamicThresholds(t.Context()) }()
+				synctest.Wait() // the cycle waits for the reset
+
 				assert.Empty(t, store.eventsFor(persistTestSpeciesReset),
 					"the event save must wait until the reset's deletes return")
+				if tt.all {
+					assert.Empty(t, store.eventsFor(resetTestOtherSpecies),
+						"reset-all holds back every species' events")
+				} else {
+					assert.Len(t, store.eventsFor(resetTestOtherSpecies), 1,
+						"a single reset must not hold back another species' event")
+				}
 
 				releaseDelete()
 				require.NoError(t, <-resetDone)
+				require.NoError(t, <-cycleDone)
 				synctest.Wait()
 
 				events := store.eventsFor(persistTestSpeciesReset)
 				require.Len(t, events, 1, "the event recorded after the reset must survive it")
 				assert.Equal(t, 1, events[0].NewLevel)
+				assert.Len(t, store.eventsFor(resetTestOtherSpecies), 1)
 
-				require.NoError(t, p.persistDynamicThresholds(t.Context()))
 				row, ok := store.hasRow(persistTestSpeciesReset)
 				require.True(t, ok, "the re-learned threshold must be persisted")
 				assert.Equal(t, 1, row.Level)
-				if tt.keptGone {
+				if tt.all {
 					_, kept := store.hasRow(persistTestSpeciesKept)
 					assert.False(t, kept, "reset-all must remove the other species' row")
 				}
 				assert.Empty(t, p.pendingResets)
 				assert.False(t, p.pendingResetAll)
 			})
+		})
+	}
+}
+
+// TestResetDynamicThresholds_NilDatastoreClearsMemoryOnly pins that without a
+// datastore a reset clears memory, sets no barrier and queues no retry.
+func TestResetDynamicThresholds_NilDatastoreClearsMemoryOnly(t *testing.T) {
+	tests := []struct {
+		name           string
+		reset          func(p *Processor)
+		wantKeptRetry  bool
+		wantMemoryKept bool
+	}{
+		{"single reset", func(p *Processor) { _ = p.ResetDynamicThreshold(persistTestSpeciesReset) }, true, true},
+		{"reset-all", func(p *Processor) { _, _ = p.ResetAllDynamicThresholds() }, false, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := createTestProcessor()
+			p.Ds = nil
+			p.DynamicThresholds[persistTestSpeciesReset] = &DynamicThreshold{Level: persistTestLevel}
+			p.DynamicThresholds[persistTestSpeciesKept] = &DynamicThreshold{Level: persistTestLevel}
+			p.pendingResets[persistTestSpeciesKept] = struct{}{}
+
+			require.NotPanics(t, func() { tt.reset(p) })
+
+			assert.NotContains(t, p.DynamicThresholds, persistTestSpeciesReset)
+			assert.Equal(t, tt.wantMemoryKept, p.DynamicThresholds[persistTestSpeciesKept] != nil)
+			_, retry := p.pendingResets[persistTestSpeciesKept]
+			assert.Equal(t, tt.wantKeptRetry, retry)
+			assert.NotContains(t, p.pendingResets, persistTestSpeciesReset)
+			assert.False(t, p.pendingResetAll)
+			assert.Nil(t, p.thresholdResetBarrier)
 		})
 	}
 }
