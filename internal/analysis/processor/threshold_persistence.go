@@ -33,11 +33,36 @@ const (
 	// thresholdSaveBaseDelay is the wait before the first retry of a failed batch
 	// save; it doubles for every further retry.
 	thresholdSaveBaseDelay = 100 * time.Millisecond
+
+	// thresholdLoadLockTimeout bounds how long a load waits for the persistence
+	// lock behind a running cycle or reset. The load callers have no context of
+	// their own, and a hung database call must not hold up startup forever.
+	thresholdLoadLockTimeout = DefaultFlushTimeout
 )
 
 // loadDynamicThresholdsFromDB loads persisted dynamic thresholds from the database
-// This is called during processor initialization to restore learned thresholds across restarts
+// This is called during processor initialization to restore learned thresholds across restarts.
+//
+// The persistence lock is held from before the database read until the merge is
+// done, so a reset or a flush cannot run between the two and have its work undone
+// by a snapshot read before it. Rows of species with a queued reset retry (and all
+// rows while a delete-all retry is queued) are not loaded: the retry is about to
+// delete them. If the lock is not free within thresholdLoadLockTimeout the load
+// is skipped and the lock error is returned. The skip is not retried: the stored
+// rows stay, but this session starts with an empty map, and the first save of a
+// species learned again overwrites its stored row. The callers log the error and
+// start the persistence goroutines anyway.
 func (p *Processor) loadDynamicThresholdsFromDB() error {
+	lockCtx, cancel := context.WithTimeout(context.Background(), thresholdLoadLockTimeout)
+	defer cancel()
+	if err := p.lockThresholdPersistence(lockCtx); err != nil {
+		GetLogger().Warn("Skipping dynamic threshold load: persistence lock busy",
+			logger.Error(err),
+			logger.String("operation", "load_dynamic_thresholds"))
+		return err
+	}
+	defer p.unlockThresholdPersistence()
+
 	settings := p.currentSettings()
 	GetLogger().Info("Loading dynamic thresholds from database",
 		logger.String("operation", "load_dynamic_thresholds"))
@@ -69,9 +94,15 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 	now := time.Now()
 	loadedCount := 0
 	expiredCount := 0
+	pendingResetCount := 0
 
 	for i := range thresholds {
 		dbThreshold := &thresholds[i]
+		// A queued reset retry will delete this row; loading it would resurrect it.
+		if _, queued := p.pendingResets[strings.ToLower(dbThreshold.SpeciesName)]; queued || p.pendingResetAll {
+			pendingResetCount++
+			continue
+		}
 		// Skip expired thresholds
 		if now.After(dbThreshold.ExpiresAt) {
 			expiredCount++
@@ -123,6 +154,7 @@ func (p *Processor) loadDynamicThresholdsFromDB() error {
 	GetLogger().Info("Dynamic thresholds loaded from database",
 		logger.Int("loaded_count", loadedCount),
 		logger.Int("expired_count", expiredCount),
+		logger.Int("pending_reset_count", pendingResetCount),
 		logger.Int("total_retrieved", len(thresholds)),
 		logger.String("operation", "load_dynamic_thresholds"))
 
