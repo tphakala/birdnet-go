@@ -380,8 +380,10 @@ func (m *RelatedDataMigrator) convertResultsToPredictions(
 			continue
 		}
 
-		// Skip low-confidence predictions (< 10%)
-		if r.Confidence < 0.1 {
+		// Skip rows below the threshold that filterBatchByConfidence applied
+		// before label resolution, so a row is kept or dropped the same way
+		// whether or not its species happens to be cached already.
+		if r.Confidence < minPredictionConfidence {
 			skipped++
 			continue
 		}

@@ -54,3 +54,25 @@ func TestFilterBatchByConfidence(t *testing.T) {
 		})
 	}
 }
+
+// TestConvertResultsToPredictions_SameThresholdAsLabelFilter pins that a row
+// below the label-resolution threshold is dropped even when its species is
+// already cached, so the one-time copy and the tail pass keep the same rows.
+func TestConvertResultsToPredictions_SameThresholdAsLabelFilter(t *testing.T) {
+	m := &RelatedDataMigrator{}
+	batch := []datastore.Results{
+		{ID: 1, NoteID: 7, Species: "Parus major", Confidence: 0.80},
+		{ID: 2, NoteID: 7, Species: "Cyanistes caeruleus", Confidence: 0.15},
+		{ID: 3, NoteID: 7, Species: "Cyanistes caeruleus", Confidence: 0.20},
+	}
+	existing := map[uint]struct{}{7: {}}
+	labels := map[string]uint{"Parus major": 1, "Cyanistes caeruleus": 2}
+
+	predictions, skipped := m.convertResultsToPredictions(batch, existing, labels, &predictionRankTracker{})
+
+	assert.Len(t, predictions, 2)
+	assert.Equal(t, 1, skipped)
+	for _, p := range predictions {
+		assert.GreaterOrEqual(t, p.Confidence, float64(minPredictionConfidence))
+	}
+}
