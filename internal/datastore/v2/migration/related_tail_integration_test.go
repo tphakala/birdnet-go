@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration/testutil"
 	"gorm.io/gorm"
@@ -310,14 +311,13 @@ func TestRelatedSyncTail_BlocksOnPendingDetectionsAndSkipsOrphans(t *testing.T) 
 }
 
 // TestRelatedSyncTail_ReconcilesLocksAcrossBatches pins the range merge of the
-// lock reconcile across legacy batch boundaries: only the locks the legacy store
-// no longer has are removed, and locks at the batch edges survive.
+// lock reconcile across legacy batch boundaries (1000 locks per batch): a v2
+// lock beyond a legacy table that is an exact multiple of the batch size, v2
+// locks missing exactly at the batch edges, and unlocks around the first edge.
 func TestRelatedSyncTail_ReconcilesLocksAcrossBatches(t *testing.T) {
 	t.Parallel()
 
-	const (
-		notes = 2300 // more than two reconcile batches of 1000
-	)
+	const notes = 2001 // two full reconcile batches plus one lock
 	ctx := testutil.SetupIntegrationTest(t)
 	require.NoError(t, ctx.Seeder.SeedDetections(testutil.GenerateDetections(notes)))
 	locks := make([]datastore.NoteLock, 0, notes)
@@ -332,29 +332,102 @@ func TestRelatedSyncTail_ReconcilesLocksAcrossBatches(t *testing.T) {
 	defer cancel()
 	require.NoError(t, ctx.Worker.Abandon(stopCtx))
 
-	var locked int64
-	require.NoError(t, ctx.V2Manager.DB().Model(&entities.DetectionLock{}).Count(&locked).Error)
-	require.Equal(t, int64(notes), locked)
-
+	lockedCount := func() int64 {
+		var n int64
+		require.NoError(t, ctx.V2Manager.DB().Model(&entities.DetectionLock{}).Count(&n).Error)
+		return n
+	}
+	require.Equal(t, int64(notes), lockedCount())
 	legacy := &datastore.DataStore{DB: ctx.LegacyGorm}
-	unlocked := []uint{1, 999, 1000, 1001, 2000, 2001, notes}
+
+	// Phase 1: 2000 legacy locks remain, an exact multiple of the batch size,
+	// so the last legacy batch is empty and the v2 lock beyond it must go.
+	require.NoError(t, legacy.UnlockNote(uintString(notes)))
+	result, err := ctx.RelatedMigrator.SyncTail(t.Context(), true)
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.LocksRemoved, "the v2 lock past the last legacy lock must be removed")
+	assert.Zero(t, result.LocksInserted)
+	assert.Equal(t, int64(notes-1), lockedCount())
+
+	// Phase 2: v2 locks missing at the last row of batch one, the first row of
+	// batch two and the last row of batch two must be inserted again.
+	missing := []uint{1000, 1001, 2000}
+	for _, id := range missing {
+		require.NoError(t, ctx.DetectionRepo.Unlock(t.Context(), id))
+	}
+	result, err = ctx.RelatedMigrator.SyncTail(t.Context(), true)
+	require.NoError(t, err)
+	assert.Equal(t, len(missing), result.LocksInserted)
+	assert.Zero(t, result.LocksRemoved)
+	assert.Equal(t, int64(notes-1), lockedCount())
+
+	// Phase 3: unlocks in legacy shift the batch edges; every one is removed.
+	unlocked := []uint{1, 1000, 1001}
 	for _, id := range unlocked {
 		require.NoError(t, legacy.UnlockNote(uintString(id)))
 	}
-
-	result, err := ctx.RelatedMigrator.SyncTail(t.Context(), true)
+	result, err = ctx.RelatedMigrator.SyncTail(t.Context(), true)
 	require.NoError(t, err)
 	assert.Equal(t, len(unlocked), result.LocksRemoved)
 	assert.Zero(t, result.LocksInserted)
 	assert.True(t, result.FullScanCompleted)
-
-	require.NoError(t, ctx.V2Manager.DB().Model(&entities.DetectionLock{}).Count(&locked).Error)
-	assert.Equal(t, int64(notes-len(unlocked)), locked)
+	assert.Equal(t, int64(notes-1-len(unlocked)), lockedCount())
 	for _, id := range unlocked {
 		isLocked, lockErr := ctx.DetectionRepo.IsLocked(t.Context(), id)
 		require.NoError(t, lockErr)
 		assert.False(t, isLocked, "detection %d must be unlocked", id)
 	}
+}
+
+// TestRelatedSyncTail_WithoutAttemptMarkerCopiesNothing pins that a migration
+// whose related copy is not bound to the attempt (an older version copied it)
+// gets no tail sync: SyncTail reports the sentinel and writes nothing.
+func TestRelatedSyncTail_WithoutAttemptMarkerCopiesNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx := abandonedCompletedMigration(t)
+	require.NoError(t, ctx.V2Manager.DB().Model(&entities.MigrationState{}).
+		Where("id = ?", 1).Updates(map[string]any{"related_sync_started_at": nil}).Error)
+	require.NoError(t, ctx.Seeder.SeedComments([]datastore.NoteComment{
+		testutil.NewCommentBuilder().WithID(2).WithNoteID(2).WithEntry("not copied").Build(),
+	}))
+	before := snapshotRelated(t, ctx.V2Manager.DB())
+
+	_, err := ctx.RelatedMigrator.SyncTail(t.Context(), true)
+	require.ErrorIs(t, err, datastoreV2.ErrRelatedSyncNotRecorded)
+	assert.Equal(t, before, snapshotRelated(t, ctx.V2Manager.DB()), "nothing may be written without the attempt marker")
+}
+
+// TestMigration_RelatedDataReachesV2ThroughTailCycle pins that the periodic
+// tail sync cycle copies related data on its own, with the worker still
+// running: the rows are asserted before any Stop, so the final drain cannot
+// supply them. The tail sync only advances migrated_records for the detection.
+func TestMigration_RelatedDataReachesV2ThroughTailCycle(t *testing.T) {
+	t.Parallel()
+
+	ctx := testutil.SetupIntegrationTest(t)
+	seedRelatedLegacy(t, ctx)
+	ctx.StartMigration(t, relatedSeedNotes)
+	ctx.WaitForCompletion(t, 30*time.Second)
+	writeRelatedLegacyAfterCopy(t, ctx)
+
+	// The first tail cycle runs after tailSyncInterval (10 s) and reconciles reviews and locks.
+	// A SyncTail pass copies comments and predictions, then locks, then reviews, so
+	// the review added after the copy shows that the whole pass is done.
+	require.Eventually(t, func() bool {
+		var newReviews int64
+		require.NoError(t, ctx.V2Manager.DB().Model(&entities.DetectionReview{}).
+			Where("detection_id = ?", relatedNewReview).Count(&newReviews).Error)
+		return newReviews == 1 && countCommentsOf(t, ctx, relatedLateNote) == 1 &&
+			countPredictionsOf(t, ctx, relatedLateNote) == 2
+	}, 45*time.Second, 500*time.Millisecond, "the tail cycle should copy the late detection's rows and reconcile reviews and locks")
+
+	snap := snapshotRelated(t, ctx.V2Manager.DB())
+	requireRelatedDataInV2(t, &snap)
+
+	state, err := ctx.StateManager.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), state.MigratedRecords, "the tail sync counts the late detection only, not its related rows")
 }
 
 // uintString formats a note id the way the legacy API takes it.
