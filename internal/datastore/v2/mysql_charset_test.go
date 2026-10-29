@@ -3,7 +3,9 @@
 package v2
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
 )
@@ -33,6 +36,10 @@ const (
 	// charsetTestOtherSessionWaitSeconds bounds how long the test's own second
 	// session waits for a table that the manager holds locked.
 	charsetTestOtherSessionWaitSeconds = 1
+	// charsetTestKillWait and charsetTestKillPoll bound the wait for a killed
+	// session to leave the process list.
+	charsetTestKillWait = 10 * time.Second
+	charsetTestKillPoll = 50 * time.Millisecond
 )
 
 // tableCollations maps each base table of the test schema to its collation.
@@ -406,4 +413,92 @@ func TestMySQL_V2Initialize_ConvertEmptyTables_LockTimeoutSkipsTableAndBootConti
 	report, err = dbserver.QueryCharset(t.Context(), coexTestDB)
 	require.NoError(t, err)
 	assert.NotContains(t, report.NonUTF8MB4Tables(), "app_events", "the next boot converts it")
+}
+
+// logEntry is one line captured by recordingLogger.
+type logEntry struct {
+	level  logger.LogLevel
+	msg    string
+	fields map[string]any
+}
+
+// recordingLogger is a logger.Logger that keeps every line, for tests that pin
+// the level and fields of the conversion log lines.
+type recordingLogger struct {
+	mu      sync.Mutex
+	entries []logEntry
+}
+
+var _ logger.Logger = (*recordingLogger)(nil)
+
+func (l *recordingLogger) record(level logger.LogLevel, msg string, fields []logger.Field) {
+	values := make(map[string]any, len(fields))
+	for _, f := range fields {
+		values[f.Key] = f.Value
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.entries = append(l.entries, logEntry{level: level, msg: msg, fields: values})
+}
+
+// lines returns the captured lines of one level for one table.
+func (l *recordingLogger) lines(level logger.LogLevel, table string) []logEntry {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []logEntry
+	for _, e := range l.entries {
+		if e.level == level && e.fields["table"] == table {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+func (l *recordingLogger) Module(string) logger.Logger { return l }
+func (l *recordingLogger) Trace(msg string, f ...logger.Field) {
+	l.record(logger.LogLevelTrace, msg, f)
+}
+func (l *recordingLogger) Debug(msg string, f ...logger.Field) {
+	l.record(logger.LogLevelDebug, msg, f)
+}
+func (l *recordingLogger) Info(msg string, f ...logger.Field) { l.record(logger.LogLevelInfo, msg, f) }
+func (l *recordingLogger) Warn(msg string, f ...logger.Field) { l.record(logger.LogLevelWarn, msg, f) }
+func (l *recordingLogger) Error(msg string, f ...logger.Field) {
+	l.record(logger.LogLevelError, msg, f)
+}
+func (l *recordingLogger) With(...logger.Field) logger.Logger        { return l }
+func (l *recordingLogger) WithContext(context.Context) logger.Logger { return l }
+func (l *recordingLogger) Flush() error                              { return nil }
+func (l *recordingLogger) Log(level logger.LogLevel, msg string, f ...logger.Field) {
+	l.record(level, msg, f)
+}
+
+func TestMySQL_V2Initialize_ConvertEmptyTables_CleanupFailureAfterAlterStillLogsConversion(t *testing.T) {
+	useSchemaDefault(t, charsetTestLatin1DDL)
+	createOldReleaseSchema(t, false)
+
+	rec := &recordingLogger{}
+	mgr := newTestMySQLManager(t, false)
+	mgr.log = rec
+	t.Cleanup(func() { _ = mgr.Close() })
+	// End the pinned session right after each ALTER, so the UNLOCK TABLES that
+	// follows fails.
+	mgr.afterConvertAlter = func(tx *gorm.DB) {
+		var id uint64
+		require.NoError(t, tx.Raw("SELECT CONNECTION_ID()").Scan(&id).Error)
+		require.NoError(t, coexTestDB.Exec(fmt.Sprintf("KILL %d", id)).Error)
+		require.Eventually(t, func() bool {
+			var n int64
+			require.NoError(t, coexTestDB.Raw(
+				"SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID = ?", id).Scan(&n).Error)
+			return n == 0
+		}, charsetTestKillWait, charsetTestKillPoll)
+	}
+
+	require.NoError(t, mgr.Initialize())
+
+	report, err := dbserver.QueryCharset(t.Context(), coexTestDB)
+	require.NoError(t, err)
+	assert.NotContains(t, report.NonUTF8MB4Tables(), "app_events", "the ALTER committed before the session ended")
+	assert.NotEmpty(t, rec.lines(logger.LogLevelInfo, "app_events"), "a converted table is logged as converted")
 }

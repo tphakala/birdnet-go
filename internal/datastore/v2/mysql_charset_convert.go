@@ -74,8 +74,9 @@ func discardPinnedConn(tx *gorm.DB) {
 // pinned connection it takes a WRITE lock on the table, checks for a row under
 // the lock and runs ALTER TABLE ... CONVERT TO CHARACTER SET utf8mb4, so no other
 // session can insert between the check and the ALTER. It reports whether it
-// converted. A lock timeout or any other error returns before the ALTER and
-// changes nothing; the ALTER itself is atomic. beforeAlter, when not nil, is
+// converted. A lock timeout or any other error before the ALTER changes nothing;
+// the ALTER itself is atomic. When the ALTER succeeded and resetting the session
+// afterwards fails, it returns converted true together with that error. beforeAlter, when not nil, is
 // called under the lock after the check and before the ALTER, and afterAlter with the
 // pinned handle right after the ALTER succeeded (test seams). The
 // table name comes from the entity list through the naming strategy, never from
@@ -136,7 +137,8 @@ func convertTableIfEmpty(ctx context.Context, db *gorm.DB, table string, beforeA
 // convertEmptyTablesToUTF8MB4 converts the v2 tables that hold no row and have a
 // text column outside utf8mb4. It never fails Initialize: a table that cannot be
 // converted keeps its character set, is logged, and is tried again on the next
-// start. Tables with rows are never altered.
+// start. Tables with rows are never altered. Each table's outcome is logged by
+// logConvertOutcome.
 func (m *MySQLManager) convertEmptyTablesToUTF8MB4(ctx context.Context) {
 	report, err := dbserver.QueryCharset(ctx, m.db)
 	if err != nil {
@@ -150,30 +152,40 @@ func (m *MySQLManager) convertEmptyTablesToUTF8MB4(ctx context.Context) {
 	}
 	for _, table := range tables {
 		converted, err := convertTableIfEmpty(ctx, m.db, table, m.beforeConvertAlter, m.afterConvertAlter)
-		switch {
-		case err != nil:
-			if m.log != nil {
-				m.log.Warn("could not convert empty table to utf8mb4; it keeps its character set and the next start tries again",
-					logger.String("table", table),
-					logger.Error(err),
-					logger.String("operation", opConvertEmptyTable))
-			}
-		case converted:
-			if m.log != nil {
-				m.log.Info("converted empty table to utf8mb4",
-					logger.String("table", table),
-					logger.String("from_charsets", strings.Join(tableCharsets(report, table), charsetListSeparator)),
-					logger.String("to_charset", dbserver.CharsetUTF8MB4),
-					logger.Int64("row_count", 0),
-					logger.String("operation", opConvertEmptyTable))
-			}
-		default:
-			if m.log != nil {
-				m.log.Debug("table holds rows; left as is",
-					logger.String("table", table),
-					logger.String("operation", opConvertEmptyTable))
-			}
+		m.logConvertOutcome(report, table, converted, err)
+	}
+}
+
+// logConvertOutcome logs what happened to one table. A table is logged as
+// converted whenever its ALTER succeeded; an error that arrives after that
+// comes from resetting the session, so it is a separate warning.
+func (m *MySQLManager) logConvertOutcome(report dbserver.CharsetReport, table string, converted bool, err error) {
+	if m.log == nil {
+		return
+	}
+	switch {
+	case converted:
+		m.log.Info("converted empty table to utf8mb4",
+			logger.String("table", table),
+			logger.String("from_charsets", strings.Join(tableCharsets(report, table), charsetListSeparator)),
+			logger.String("to_charset", dbserver.CharsetUTF8MB4),
+			logger.Int64("row_count", 0),
+			logger.String("operation", opConvertEmptyTable))
+		if err != nil {
+			m.log.Warn("table was converted, but its connection could not be reset and was closed",
+				logger.String("table", table),
+				logger.Error(err),
+				logger.String("operation", opConvertEmptyTable))
 		}
+	case err != nil:
+		m.log.Warn("could not convert empty table to utf8mb4; it keeps its character set and the next start tries again",
+			logger.String("table", table),
+			logger.Error(err),
+			logger.String("operation", opConvertEmptyTable))
+	default:
+		m.log.Debug("table holds rows; left as is",
+			logger.String("table", table),
+			logger.String("operation", opConvertEmptyTable))
 	}
 }
 
