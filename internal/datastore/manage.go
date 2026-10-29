@@ -41,6 +41,17 @@ var errV2ShapedTablesHoldRows = errors.NewStd("tables in the enhanced database (
 // present and fails closed.
 var errV2TableListingFailed = errors.NewStd("could not list database tables to check for the enhanced database (v2) schema; refusing legacy schema migration")
 
+// tableListingError carries a failed table listing. Its message omits the
+// driver text, which can name the database address or user; both errV2TableListingFailed
+// and the listing error stay reachable through errors.Is and errors.As.
+type tableListingError struct {
+	cause error
+}
+
+func (e *tableListingError) Error() string { return errV2TableListingFailed.Error() }
+
+func (e *tableListingError) Unwrap() []error { return []error{errV2TableListingFailed, e.cause} }
+
 const (
 	// v2ShapedTablesGuideURL is the wiki section that explains the v2-shaped table
 	// refusal table by table. The anchor follows the section heading in
@@ -709,7 +720,7 @@ func repairV2ShapedLegacyTables(db *gorm.DB, dbType string, log logger.Logger) e
 	if err != nil {
 		log.Error("Could not list tables to check for the enhanced database schema; startup stops. Check the database connection and privileges",
 			logger.Error(err))
-		return criticalError(fmt.Errorf("%w: %w", errV2TableListingFailed, err),
+		return criticalError(&tableListingError{cause: err},
 			"legacy_schema_guard", "table_listing_failed",
 			"db_type", dbType)
 	}

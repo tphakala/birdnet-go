@@ -401,6 +401,7 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 
 		require.ErrorIs(t, err, errV2TableListingFailed)
 		require.ErrorIs(t, err, errListFailed)
+		assert.NotContains(t, err.Error(), "list failed", "driver text must not reach the returned message")
 		assert.True(t, columnExists(t, db, "notification_histories", "label_id"), "no table may be dropped")
 		assert.EqualValues(t, 2, countRows(t, db, "notification_histories"))
 		assert.False(t, db.Migrator().HasTable("notes"), "refusal must not create notes")
