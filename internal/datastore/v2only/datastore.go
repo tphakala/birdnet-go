@@ -4147,13 +4147,20 @@ func (ds *Datastore) GetAllDynamicThresholds(limit ...int) ([]datastore.DynamicT
 	return result, nil
 }
 
-// DeleteDynamicThreshold deletes a dynamic threshold.
+// DeleteDynamicThreshold deletes the stored threshold for a species. A species
+// with no stored threshold is not an error: delete is idempotent, matching the
+// legacy store and the reset drain in the processor, which requeues a species
+// on any error.
 func (ds *Datastore) DeleteDynamicThreshold(speciesName string) error {
 	if ds.threshold == nil {
 		return fmt.Errorf("threshold repository not configured")
 	}
 	ctx := context.Background()
-	return ds.threshold.DeleteDynamicThreshold(ctx, strings.ToLower(speciesName))
+	err := ds.threshold.DeleteDynamicThreshold(ctx, strings.ToLower(speciesName))
+	if errors.Is(err, repository.ErrDynamicThresholdNotFound) {
+		return nil
+	}
+	return err
 }
 
 // DeleteExpiredDynamicThresholds deletes expired thresholds.
