@@ -423,19 +423,20 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 		}
 	})
 
-	failed = false
 	// Delete the threshold record
-	if err := p.Ds.DeleteDynamicThreshold(speciesName); err != nil {
-		log.Warn("failed to delete dynamic threshold from database", logger.String("species", speciesName), logger.Error(err))
+	thresholdErr := p.Ds.DeleteDynamicThreshold(speciesName)
+	if thresholdErr != nil {
+		log.Warn("failed to delete dynamic threshold from database", logger.String("species", speciesName), logger.Error(thresholdErr))
 		// Don't return error - the in-memory reset was successful
-		failed = true
 	}
 
 	// Delete event history for this species (no need to record reset event since history is cleared)
-	if err := p.Ds.DeleteThresholdEvents(speciesName); err != nil {
-		log.Warn("failed to delete threshold events from database", logger.String("species", speciesName), logger.Error(err))
-		failed = true
+	eventsErr := p.Ds.DeleteThresholdEvents(speciesName)
+	if eventsErr != nil {
+		log.Warn("failed to delete threshold events from database", logger.String("species", speciesName), logger.Error(eventsErr))
 	}
+	// Assigned only after both calls return, so a panic leaves failed true.
+	failed = thresholdErr != nil || eventsErr != nil
 
 	log.Info("reset dynamic threshold", logger.String("species", speciesName))
 	return nil
@@ -484,22 +485,22 @@ func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 		p.pendingResetAll = failed
 	})
 
-	failed = false
-	dbCount, err := p.Ds.DeleteAllDynamicThresholds()
-	if err != nil {
-		log.Warn("failed to delete all dynamic thresholds from database", logger.Error(err))
+	dbCount, thresholdErr := p.Ds.DeleteAllDynamicThresholds()
+	if thresholdErr != nil {
+		log.Warn("failed to delete all dynamic thresholds from database", logger.Error(thresholdErr))
 		// Don't return error - the in-memory reset was successful
-		failed = true
 	}
 
 	// Use the higher count (in case database had more records)
 	count = max(count, dbCount)
 
 	// Delete all event history
-	if _, err := p.Ds.DeleteAllThresholdEvents(); err != nil {
-		log.Warn("failed to delete all threshold events from database", logger.Error(err))
-		failed = true
+	_, eventsErr := p.Ds.DeleteAllThresholdEvents()
+	if eventsErr != nil {
+		log.Warn("failed to delete all threshold events from database", logger.Error(eventsErr))
 	}
+	// Assigned only after both calls return, so a panic leaves failed true.
+	failed = thresholdErr != nil || eventsErr != nil
 
 	log.Info("reset all dynamic thresholds", logger.Int64("count", count))
 	return count, nil

@@ -1805,3 +1805,58 @@ func TestResetDynamicThresholds_RelearnDuringDeleteKeepsRowAndEvent(t *testing.T
 		})
 	}
 }
+
+// TestResetDynamicThresholds_PanicInDeleteQueuesRetry pins that a datastore call
+// that panics inside a reset still queues the retry (and does not drop an older
+// one), clears the reset barrier and lets later persistence cycles run. Not
+// parallel: the settings come from the processor.
+func TestResetDynamicThresholds_PanicInDeleteQueuesRetry(t *testing.T) {
+	tests := []struct {
+		name    string
+		panicOp string
+		reset   func(p *Processor)
+		queued  func(p *Processor) bool
+	}{
+		{"single reset, threshold delete panics", opDeleteThreshold,
+			func(p *Processor) { _ = p.ResetDynamicThreshold(persistTestSpeciesReset) },
+			func(p *Processor) bool { _, ok := p.pendingResets[persistTestSpeciesReset]; return ok }},
+		{"single reset, events delete panics", opDeleteEvents,
+			func(p *Processor) { _ = p.ResetDynamicThreshold(persistTestSpeciesReset) },
+			func(p *Processor) bool { _, ok := p.pendingResets[persistTestSpeciesReset]; return ok }},
+		{"reset-all, threshold delete panics", opDeleteAllThresholds,
+			func(p *Processor) { _, _ = p.ResetAllDynamicThresholds() },
+			func(p *Processor) bool { return p.pendingResetAll }},
+		{"reset-all, events delete panics", opDeleteAllEvents,
+			func(p *Processor) { _, _ = p.ResetAllDynamicThresholds() },
+			func(p *Processor) bool { return p.pendingResetAll }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p, store := newConcurrentThresholdProcessor()
+			enableResetTestThresholds(p)
+			store.deleteHook = func(op string) {
+				if op == tt.panicOp {
+					panic("simulated datastore panic")
+				}
+			}
+
+			require.Panics(t, func() { tt.reset(p) })
+
+			p.thresholdsMutex.RLock()
+			barrier := p.thresholdResetBarrier
+			queued := tt.queued(p)
+			p.thresholdsMutex.RUnlock()
+			assert.Nil(t, barrier, "the reset barrier must be cleared")
+			assert.True(t, queued, "a reset that did not finish its deletes must queue a retry")
+
+			// The persistence lock was released: a later cycle runs and drains the retry.
+			store.deleteHook = nil
+			require.NoError(t, p.persistDynamicThresholds(t.Context()))
+			p.thresholdsMutex.RLock()
+			defer p.thresholdsMutex.RUnlock()
+			assert.Empty(t, p.pendingResets)
+			assert.False(t, p.pendingResetAll)
+		})
+	}
+}
