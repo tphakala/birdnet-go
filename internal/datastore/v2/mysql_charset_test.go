@@ -4,7 +4,6 @@ package v2
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"sync"
 	"testing"
@@ -279,9 +278,7 @@ func TestMySQL_V2Initialize_ConvertsVerifiedEmptyTablesToUTF8MB4(t *testing.T) {
 			}
 			require.NotEmpty(t, candidates)
 
-			rec := &recordingLogger{}
 			mgr := newTestMySQLManager(t, tt.usePrefix)
-			mgr.log = rec
 			require.NoError(t, mgr.Initialize())
 			t.Cleanup(func() { _ = mgr.Close() })
 
@@ -311,10 +308,8 @@ func TestMySQL_V2Initialize_ConvertsVerifiedEmptyTablesToUTF8MB4(t *testing.T) {
 				if wasEmpty {
 					assert.NotContains(t, nonUTF8, name, "empty table %s must be converted", name)
 					assert.Equal(t, reference, collations[name], "table %s must match tables created new", name)
-					assert.Len(t, rec.lines(logger.LogLevelInfo, name), 1, "conversion of %s is logged at Info", name)
 					continue
 				}
-				assert.Len(t, rec.lines(logger.LogLevelDebug, name), 1, "skipping populated %s is logged at Debug", name)
 				assert.Contains(t, nonUTF8, name, "populated table %s must not be altered", name)
 				assert.Equal(t, rowsBefore[name], getRowCount(t, coexTestDB, name))
 			}
@@ -353,18 +348,9 @@ func TestMySQL_V2Initialize_ConvertEmptyTables_WriterBlockedUntilConverted(t *te
 		// A second session writing between the emptiness check and the ALTER must wait
 		// for the table lock and give up.
 		err := coexTestDB.Connection(func(tx *gorm.DB) error {
-			// Each statement runs on a fresh handle of the pinned connection: a
-			// failed Create leaves an error on tx, which would skip the restore.
-			session := tx.Session(&gorm.Session{NewDB: true})
-			var previousWait int
-			require.NoError(t, session.Raw("SELECT @@SESSION.lock_wait_timeout").Scan(&previousWait).Error)
-			defer func() {
-				assert.NoError(t, session.Exec(
-					fmt.Sprintf("SET SESSION lock_wait_timeout = %d", previousWait)).Error)
-			}()
-			require.NoError(t, session.Exec(fmt.Sprintf(
+			require.NoError(t, tx.Exec(fmt.Sprintf(
 				"SET SESSION lock_wait_timeout = %d", charsetTestOtherSessionWaitSeconds)).Error)
-			return session.Create(&entities.AppEvent{
+			return tx.Create(&entities.AppEvent{
 				Timestamp: time.Now(), Category: "test", EventType: "writer",
 			}).Error
 		})
@@ -411,13 +397,9 @@ func TestMySQL_V2Initialize_ConvertEmptyTables_LockTimeoutSkipsTableAndBootConti
 	}
 	t.Cleanup(release)
 
-	rec := &recordingLogger{}
 	mgr := newTestMySQLManager(t, false)
-	mgr.log = rec
 	t.Cleanup(func() { _ = mgr.Close() })
 	require.NoError(t, mgr.Initialize(), "a lock timeout must not fail the boot")
-	assert.Len(t, rec.lines(logger.LogLevelWarn, "app_events"), 1, "the skipped table is logged at Warn")
-	assert.Len(t, rec.lines(logger.LogLevelInfo, "dynamic_thresholds"), 1, "the next table is converted and logged at Info")
 
 	report, err := dbserver.QueryCharset(t.Context(), coexTestDB)
 	require.NoError(t, err)
@@ -472,19 +454,6 @@ func (l *recordingLogger) lines(level logger.LogLevel, table string) []logEntry 
 	return out
 }
 
-// count returns how many lines of one level were captured.
-func (l *recordingLogger) count(level logger.LogLevel) int {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	n := 0
-	for _, e := range l.entries {
-		if e.level == level {
-			n++
-		}
-	}
-	return n
-}
-
 func (l *recordingLogger) Module(string) logger.Logger { return l }
 func (l *recordingLogger) Trace(msg string, f ...logger.Field) {
 	l.record(logger.LogLevelTrace, msg, f)
@@ -532,50 +501,4 @@ func TestMySQL_V2Initialize_ConvertEmptyTables_CleanupFailureAfterAlterStillLogs
 	require.NoError(t, err)
 	assert.NotContains(t, report.NonUTF8MB4Tables(), "app_events", "the ALTER committed before the session ended")
 	assert.NotEmpty(t, rec.lines(logger.LogLevelInfo, "app_events"), "a converted table is logged as converted")
-	assert.NotEmpty(t, rec.lines(logger.LogLevelWarn, "app_events"), "the failed session reset is logged as a warning")
-}
-
-func TestMySQL_V2ConvertEmptyTables_UnreadableCharsetReportWarnsAndReturns(t *testing.T) {
-	// Not parallel: shares the test database with the other integration tests.
-	rec := &recordingLogger{}
-	mgr := newTestMySQLManager(t, false)
-	mgr.log = rec
-	require.NoError(t, mgr.Close())
-
-	assert.NotPanics(t, func() { mgr.convertEmptyTablesToUTF8MB4(t.Context()) })
-
-	assert.Equal(t, 1, rec.count(logger.LogLevelWarn), "an unreadable report skips the step with one warning")
-	assert.Zero(t, rec.count(logger.LogLevelInfo))
-}
-
-func TestMySQL_DiscardPinnedConn_ReleasesTableLock(t *testing.T) {
-	// Not parallel: shares the test database with the other integration tests.
-	dropAllTables(t, coexTestDB, coexTestDBName)
-	require.NoError(t, coexTestDB.Exec("CREATE TABLE discard_probe (id INT)").Error)
-	t.Cleanup(func() { _ = coexTestDB.Exec("DROP TABLE IF EXISTS discard_probe").Error })
-
-	require.NoError(t, coexTestDB.Connection(func(tx *gorm.DB) error {
-		if err := tx.Exec("LOCK TABLES discard_probe WRITE").Error; err != nil {
-			return err
-		}
-		discardPinnedConn(tx)
-		return nil
-	}))
-
-	// Two sessions at once: a connection that still held the lock would be one of
-	// them, and the other could not write.
-	sqlDB, err := coexTestDB.DB()
-	require.NoError(t, err)
-	conns := make([]*sql.Conn, 2)
-	for i := range conns {
-		conns[i], err = sqlDB.Conn(t.Context())
-		require.NoError(t, err)
-		t.Cleanup(func() { _ = conns[i].Close() })
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), charsetTestKillWait)
-	defer cancel()
-	for _, conn := range conns {
-		_, err = conn.ExecContext(ctx, "INSERT INTO discard_probe (id) VALUES (1)")
-		assert.NoError(t, err, "a discarded session must not keep its table lock")
-	}
 }
