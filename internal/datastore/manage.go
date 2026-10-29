@@ -36,6 +36,11 @@ var errV2DatabaseInLegacyMode = errors.NewStd("database holds the enhanced datab
 // could lose data.
 var errV2ShapedTablesHoldRows = errors.NewStd("tables in the enhanced database (v2) shape hold rows the legacy store cannot use; refusing to drop them")
 
+// errV2TableListingFailed is returned by the legacy schema guard when the
+// database tables cannot be listed, so the guard cannot tell whether v2 data is
+// present and fails closed.
+var errV2TableListingFailed = errors.NewStd("could not list database tables to check for the enhanced database (v2) schema; refusing legacy schema migration")
+
 const (
 	// v2ShapedTablesGuideURL is the wiki section that explains the v2-shaped table
 	// refusal table by table. The anchor follows the section heading in
@@ -697,12 +702,16 @@ func dropV2ShapedTable(db *gorm.DB, name string, rows int64, log logger.Logger) 
 // with their rows. Every table is checked once more right before its DROP; a
 // table that gains rows, or cannot be read, after the first count refuses, and
 // only disposable tables can already have been dropped by then. A table listing
-// error skips the guard.
+// error refuses before any DROP, because the guard cannot tell whether the
+// database is a v2 database.
 func repairV2ShapedLegacyTables(db *gorm.DB, dbType string, log logger.Logger) error {
 	tables, err := db.Migrator().GetTables()
 	if err != nil {
-		log.Warn("Could not list tables, skipping v2 shape check", logger.Error(err))
-		return nil
+		log.Error("Could not list tables to check for the enhanced database schema; startup stops. Check the database connection and privileges",
+			logger.Error(err))
+		return criticalError(fmt.Errorf("%w: %w", errV2TableListingFailed, err),
+			"legacy_schema_guard", "table_listing_failed",
+			"db_type", dbType)
 	}
 
 	if isV2Database(db, tables, log) {

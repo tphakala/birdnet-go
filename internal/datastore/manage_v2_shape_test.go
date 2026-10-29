@@ -386,6 +386,26 @@ func TestPerformAutoMigration_V2ShapedTables(t *testing.T) {
 		assert.False(t, db.Migrator().HasTable("notes"), "refusal must not create notes")
 	})
 
+	t.Run("refuses_when_the_table_listing_fails", func(t *testing.T) {
+		db := openSQLiteTestDB(t)
+		seedV2ShapedAuxTables(t, db)
+		require.NoError(t, db.Exec(testV2DetectionsDDL).Error)
+		errListFailed := errors.NewStd("list failed")
+		require.NoError(t, db.Callback().Row().Before("gorm:row").Register("test:fail_first_listing", func(tx *gorm.DB) {
+			if strings.Contains(tx.Statement.SQL.String(), "FROM sqlite_master where type=") {
+				_ = tx.AddError(errListFailed)
+			}
+		}))
+
+		err := performAutoMigration(db, false, "SQLite", "")
+
+		require.ErrorIs(t, err, errV2TableListingFailed)
+		require.ErrorIs(t, err, errListFailed)
+		assert.True(t, columnExists(t, db, "notification_histories", "label_id"), "no table may be dropped")
+		assert.EqualValues(t, 2, countRows(t, db, "notification_histories"))
+		assert.False(t, db.Migrator().HasTable("notes"), "refusal must not create notes")
+	})
+
 	t.Run("refuses_split_brain_with_populated_v2_shaped_tables", func(t *testing.T) {
 		db := openSQLiteTestDB(t)
 		// Only the regenerable table holds rows, so the refusal can only come from
