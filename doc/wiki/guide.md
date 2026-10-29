@@ -420,7 +420,7 @@ output:
 ```
 
 MySQL and MariaDB are supported only in releases that their upstream projects
-still maintain: MySQL 8.4 LTS, and MariaDB 10.11, 11.4, 11.8 or 12.3 (checked
+still maintain: MySQL 8.4 and 9.7 LTS, and MariaDB 10.11, 11.4, 11.8 or 12.3 (checked
 October 2026). MySQL 5.7, MySQL 8.0 and MariaDB 10.6 or older have reached end
 of life and are not supported. Create the database with the `utf8mb4` character
 set (the default on supported releases), for example
