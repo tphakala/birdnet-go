@@ -75,6 +75,13 @@ func TestClassify(t *testing.T) {
 		{"permission denied creating the directory", &fs.PathError{Op: "mkdir", Path: "/x", Err: syscall.EACCES},
 			KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
 		{"parent is not a directory", syscall.ENOTDIR, KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
+		{"sqlite permission", sqlite3.Error{Code: sqlite3.ErrPerm}, KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
+		{"sqlite read only", sqlite3.Error{Code: sqlite3.ErrReadonly}, KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
+		{"directory does not exist", &fs.PathError{Op: "open", Path: "/x", Err: syscall.ENOENT},
+			KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
+		{"read only file system", syscall.EROFS, KindSQLitePathUnusable, 0, []string{SettingSQLitePath}, BackendSQLite},
+		{"no space left on device", &fs.PathError{Op: "write", Path: "/x", Err: syscall.ENOSPC},
+			KindSQLiteDiskSpace, 0, []string{SettingSQLitePath}, BackendSQLite},
 		{"nil", nil, KindUnknown, 0, nil, ""},
 		{"other", errors.NewStd("other"), KindUnknown, 0, nil, ""},
 	}
