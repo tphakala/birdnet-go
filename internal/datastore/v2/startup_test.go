@@ -1388,6 +1388,70 @@ func TestProbeMixedSchema_ExistsFailure_FailsClosed(t *testing.T) {
 	assert.Equal(t, verdictRefuseUnknown, classifyMixedSchema(p))
 }
 
+// TestResolveMixedSchema_ProbeFailure_RetriesOnlyConnectivity injects a read failure at
+// each probe site of a mixed schema database. A lost connection must give the unknown
+// state, which the caller retries; any other failure must still refuse the boot.
+func TestResolveMixedSchema_ProbeFailure_RetriesOnlyConnectivity(t *testing.T) {
+	t.Parallel()
+
+	const database = "birdnet"
+	tests := []struct {
+		name      string
+		match     string
+		err       error
+		wantRetry bool
+	}{
+		{"connection lost while listing tables", "information_schema.tables WHERE table_schema", mysql.ErrInvalidConn, true},
+		{"connection lost on a row probe", "EXISTS(SELECT 1 FROM `notes`)", mysql.ErrInvalidConn, true},
+		{"connection lost on the label_id columns", "information_schema.columns", mysql.ErrInvalidConn, true},
+		{"connection lost on the marker read", "FROM `migration_states` LIMIT 1", mysql.ErrInvalidConn, true},
+		{"other row probe failure", "EXISTS(SELECT 1 FROM `notes`)", errors.NewStd("read failed"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{Logger: gormlogger.Discard})
+			require.NoError(t, err)
+			sqlDB, err := db.DB()
+			require.NoError(t, err)
+			// The attached schema lives on one connection.
+			sqlDB.SetMaxOpenConns(1)
+			t.Cleanup(func() { _ = sqlDB.Close() })
+			require.NoError(t, db.Exec("ATTACH DATABASE ':memory:' AS information_schema").Error)
+			require.NoError(t, db.Exec("CREATE TABLE information_schema.tables (table_name TEXT, table_schema TEXT)").Error)
+			require.NoError(t, db.Exec("CREATE TABLE information_schema.columns (table_name TEXT, table_schema TEXT, column_name TEXT, is_nullable TEXT)").Error)
+			for _, name := range []string{"detections", "notes", "migration_states"} {
+				require.NoError(t, db.Exec("INSERT INTO information_schema.tables VALUES (?, ?)", name, database).Error)
+				require.NoError(t, db.Exec("CREATE TABLE `"+name+"` (id INTEGER, state TEXT)").Error)
+			}
+			require.NoError(t, db.Exec("INSERT INTO `migration_states` VALUES (1, ?)", string(entities.MigrationStatusIdle)).Error)
+			require.NoError(t, db.Callback().Row().Before("gorm:row").Register("test:fail_probe", func(tx *gorm.DB) {
+				if strings.Contains(tx.Statement.SQL.String(), tt.match) {
+					_ = tx.AddError(tt.err)
+				}
+			}))
+
+			settings := &conf.Settings{}
+			settings.Output.MySQL.Database = database
+			state := resolveMixedSchema(db, settings)
+
+			if !tt.wantRetry {
+				assert.Equal(t, DecisionMixedSchemaRefused, state.Decision)
+				require.ErrorIs(t, state.Error, ErrMixedSchemaDatabase)
+				require.NotErrorIs(t, state.Error, ErrStartupStateUnknown)
+				return
+			}
+			assert.Equal(t, DecisionStateUnknown, state.Decision)
+			require.ErrorIs(t, state.Error, ErrStartupStateUnknown)
+			require.ErrorIs(t, state.Error, mysql.ErrInvalidConn)
+			require.NotErrorIs(t, state.Error, ErrMixedSchemaDatabase)
+			assert.True(t, errors.IsConnectivityError(state.Error))
+			assert.False(t, state.V2Available || state.LegacyRequired || state.FreshInstall, "no side or mode is chosen")
+		})
+	}
+}
+
 // TestDescribeStepFailure pins the cause named in a drop-failure refusal: the driver
 // error number when there is one, "gained rows" for a table that was no longer empty
 // under the lock, and only the step otherwise. The raw error text never appears, because

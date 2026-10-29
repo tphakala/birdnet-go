@@ -392,7 +392,9 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 // tables, the startup state check keeps the side that holds data and drops only the
 // other side's empty tables. Start refuses, dropping no table with rows, only when no side can be
 // kept without losing rows, a table cannot be read or an empty table cannot be removed
-// (datastoreV2.ErrMixedSchemaDatabase).
+// (datastoreV2.ErrMixedSchemaDatabase). A lost connection while that schema is probed or
+// reconciled is not such a refusal: it is an unknown state like the one below, so a
+// refusal on ErrMixedSchemaDatabase means a cause other than a lost connection.
 // When a MySQL or MariaDB server cannot be reached while the boot decision is read (tail
 // check, state check, table prefix probe), Start reads it again with a bounded, capped
 // backoff (startupStateMaxAttempts) and then refuses to start before any datastore is
