@@ -78,7 +78,22 @@ type MigrationState struct {
 	// AuxiliaryDataStartedAt is a copy of StartedAt taken in the same UPDATE that
 	// recorded the outcome. It ties the outcome to one migration attempt.
 	AuxiliaryDataStartedAt *time.Time `gorm:"column:auxiliary_data_started_at"`
-	UpdatedAt              time.Time  `gorm:"autoUpdateTime"`
+	// RelatedSyncStartedAt is a copy of StartedAt taken in the same UPDATE that
+	// initialised the related data sync cursors. It ties the cursors to one
+	// migration attempt. Read the cursors only through RelatedSyncCursors.
+	RelatedSyncStartedAt *time.Time `gorm:"column:related_sync_started_at"`
+	// RelatedCommentsCursor is the last legacy note_comments.id handled.
+	RelatedCommentsCursor *uint `gorm:"column:related_comments_cursor"`
+	// RelatedPredictionsNoteID is the legacy results.note_id of the last
+	// prediction row handled; the cursor always sits on a note boundary.
+	RelatedPredictionsNoteID *uint `gorm:"column:related_predictions_note_id"`
+	// RelatedPredictionsResultID is the legacy results.id of the last prediction
+	// row handled.
+	RelatedPredictionsResultID *uint `gorm:"column:related_predictions_result_id"`
+	// RelatedReconciledAt is the start time of the last completed review and
+	// lock reconcile. Legacy review and lock edits older than this are in v2.
+	RelatedReconciledAt *time.Time `gorm:"column:related_reconciled_at"`
+	UpdatedAt           time.Time  `gorm:"autoUpdateTime"`
 }
 
 // AuxiliaryDataOutcome returns the auxiliary data outcome recorded for the
@@ -100,6 +115,37 @@ func (m *MigrationState) AuxiliaryDataOutcome() AuxiliaryDataStatus {
 		return AuxiliaryDataStatusUnknown
 	}
 	return m.AuxiliaryDataStatus
+}
+
+// RelatedSyncCursors holds the persisted positions of the related data sync.
+type RelatedSyncCursors struct {
+	// CommentID is the last legacy note_comments.id handled.
+	CommentID uint
+	// PredictionNoteID and PredictionResultID are the last legacy results row
+	// handled, as the (note_id, id) keyset position.
+	PredictionNoteID   uint
+	PredictionResultID uint
+}
+
+// RelatedSyncCursors returns the related data sync cursors recorded for the
+// current migration attempt. ok is false when they cannot be shown to belong to
+// it: no cursors stored (a related copy by an older version), or
+// RelatedSyncStartedAt differing from StartedAt. Both timestamps come from
+// database columns, so compare them only after a round trip through the
+// database.
+func (m *MigrationState) RelatedSyncCursors() (cursors RelatedSyncCursors, ok bool) {
+	if m.RelatedSyncStartedAt == nil || m.StartedAt == nil ||
+		m.RelatedCommentsCursor == nil || m.RelatedPredictionsNoteID == nil || m.RelatedPredictionsResultID == nil {
+		return RelatedSyncCursors{}, false
+	}
+	if !m.RelatedSyncStartedAt.Equal(*m.StartedAt) {
+		return RelatedSyncCursors{}, false
+	}
+	return RelatedSyncCursors{
+		CommentID:          *m.RelatedCommentsCursor,
+		PredictionNoteID:   *m.RelatedPredictionsNoteID,
+		PredictionResultID: *m.RelatedPredictionsResultID,
+	}, true
 }
 
 // Progress returns the migration progress as a percentage (0-100).

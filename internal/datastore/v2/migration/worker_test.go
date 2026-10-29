@@ -1066,6 +1066,39 @@ func TestWorker_StopLifecycle(t *testing.T) {
 	})
 }
 
+// TestWorker_StopDuringTailSyncBatchDrains pins that a stop arriving while a
+// periodic tail sync batch is in flight still drains once the batch is done.
+func TestWorker_StopDuringTailSyncBatchDrains(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, legacy := newTailSyncWorker(t)
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		var searches atomic.Int32
+		legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				if searches.Add(1) == 1 {
+					entered <- struct{}{} // the periodic batch
+					<-release
+				}
+				return nil, 0, nil
+			}).Twice()
+
+		require.NoError(t, w.Start(t.Context()))
+		<-entered // the periodic batch is inside the legacy search
+
+		stopped := make(chan error, 1)
+		go func() { stopped <- w.Stop(t.Context()) }()
+		synctest.Wait()
+		assert.True(t, w.IsRunning(), "stop waits for the batch in flight")
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, <-stopped)
+		assert.False(t, w.IsRunning())
+		legacy.AssertNumberOfCalls(t, "Search", 2) // the periodic batch and the final drain
+	})
+}
+
 func TestWorker_AbandonDuringTailSyncBatch(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		w, legacy := newTailSyncWorker(t)

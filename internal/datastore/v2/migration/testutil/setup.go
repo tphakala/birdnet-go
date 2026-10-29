@@ -58,11 +58,16 @@ type TestContext struct {
 
 	// Migration components
 	Worker            *migration.Worker
+	RelatedMigrator   *migration.RelatedDataMigrator // The worker's related data migrator, for direct SyncTail and MigrateAll calls
 	AuxiliaryMigrator *migration.AuxiliaryMigrator
 
 	// Adapters for migration interfaces
 	legacyDetectionRepo datastore.DetectionRepository
 	legacyInterface     datastore.Interface
+
+	// PredictionsBatchSize, when set before RecreateWorker, is the number of
+	// legacy results the related data migrator reads per batch (0 = default).
+	PredictionsBatchSize int
 
 	// useBatchMode is passed to the worker as UseBatchMode (set for MySQL, as in production).
 	useBatchMode bool
@@ -277,15 +282,16 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 	// Create related data migrator for reviews, comments, locks, predictions
 	// Use small batch size for faster testing
 	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
-		LegacyStore:        ctx.legacyInterface,
-		DetectionRepo:      ctx.DetectionRepo,
-		LabelRepo:          ctx.LabelRepo,
-		StateManager:       ctx.StateManager,
-		Logger:             ctx.Logger,
-		BatchSize:          testMigrationBatchSize,
-		DefaultModelID:     ctx.DefaultModelID,
-		SpeciesLabelTypeID: ctx.SpeciesLabelTypeID,
-		AvesClassID:        ctx.AvesClassID,
+		LegacyStore:          ctx.legacyInterface,
+		DetectionRepo:        ctx.DetectionRepo,
+		LabelRepo:            ctx.LabelRepo,
+		StateManager:         ctx.StateManager,
+		Logger:               ctx.Logger,
+		BatchSize:            testMigrationBatchSize,
+		PredictionsBatchSize: ctx.PredictionsBatchSize,
+		DefaultModelID:       ctx.DefaultModelID,
+		SpeciesLabelTypeID:   ctx.SpeciesLabelTypeID,
+		AvesClassID:          ctx.AvesClassID,
 	})
 
 	// Create worker with test configuration
@@ -309,6 +315,7 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 	require.NoError(t, err, "failed to create migration worker")
 
 	ctx.Worker = worker
+	ctx.RelatedMigrator = relatedMigrator
 }
 
 // createAuxiliaryMigrator creates the auxiliary migrator with all dependencies.

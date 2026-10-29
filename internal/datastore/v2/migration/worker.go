@@ -72,6 +72,19 @@ const catchUpMaxBatches = 10000
 // database between migration completion and system restart.
 const tailSyncInterval = 10 * time.Second
 
+// relatedFullScanInterval is how often the tail sync reconciles reviews and
+// locks. Both are edited in place in the legacy store, so seeing an edit needs a
+// read of the whole legacy tables; comments and predictions use cursors and are
+// synced on every tail sync cycle. The first cycle after the worker starts and
+// the final drain always reconcile.
+const relatedFullScanInterval = time.Minute
+
+// Operation names for log fields of the related data sync in tail sync mode.
+const (
+	operationTailSyncRelated   = "tail_sync_related_data"
+	operationFinalDrainRelated = "final_drain_related_data"
+)
+
 // ErrMigrationPaused is returned when migration is paused by user.
 var ErrMigrationPaused = errors.NewStd("migration paused")
 
@@ -128,6 +141,11 @@ type Worker struct {
 	lastError         error
 	consecutiveErrors int
 	maxConsecErrors   int
+
+	// Tail sync state. Only the run goroutine touches these; Start resets them
+	// before it spawns the goroutine.
+	lastRelatedFullScan          time.Time // when the last complete review and lock reconcile started
+	relatedSyncUnavailableLogged bool      // the "older version" notice was logged for this run
 
 	// Rate tracking for time estimates (sliding window for display)
 	rateSamples []rateSample
@@ -254,6 +272,9 @@ func NewWorker(cfg *WorkerConfig) (*Worker, error) {
 // It should be called after the state manager transitions to DUAL_WRITE.
 // It fails while a previous run goroutine is still alive, including one that is
 // still stopping; Stop or Abandon return only after the goroutine has exited.
+// A start clears the abandon request and the tail sync bookkeeping of the
+// previous run (the last review and lock reconcile time and the "older version"
+// notice), so the first tail sync cycle of the new run reconciles reviews and locks.
 func (w *Worker) Start(ctx context.Context) error {
 	w.mu.Lock()
 	if w.running {
@@ -266,6 +287,8 @@ func (w *Worker) Start(ctx context.Context) error {
 	w.consecutiveErrors = 0
 	w.stopping = false
 	w.skipFinalDrain = false
+	w.lastRelatedFullScan = time.Time{}
+	w.relatedSyncUnavailableLogged = false
 	done := make(chan struct{})
 	w.done = done
 
@@ -315,10 +338,10 @@ func (w *Worker) Resume() {
 }
 
 // Stop asks the worker to stop and waits until its goroutine has exited or ctx
-// ends. In tail sync mode, a stop that arrives while the worker waits for the
-// next sync first drains legacy rows written since the last sync; a stop at any
-// other point (during a sync batch, while paused, or between iterations) exits
-// without that drain. It is safe to call repeatedly and concurrently, and returns nil when
+// ends. A stop once the migration is completed (tail sync mode) drains legacy
+// rows written since the last sync, detections first, then related data;
+// Abandon skips the drain. A stop while migrating, validating or paused exits
+// without it. It is safe to call repeatedly and concurrently, and returns nil when
 // the worker is not running. On timeout it returns an error wrapping
 // ErrWorkerStopTimeout and the worker keeps stopping in the background.
 func (w *Worker) Stop(ctx context.Context) error {
@@ -399,7 +422,9 @@ const (
 
 // run is the main migration loop. It closes done as its last step, after
 // clearing running, so a caller that waited on done sees a worker that has made
-// its last write.
+// its last write. When the loop ends while the migration is completed, run
+// performs the final drain (detections, then related data) before that, unless
+// Abandon was requested.
 func (w *Worker) run(ctx context.Context, done chan struct{}) {
 	var panicked bool
 
@@ -459,9 +484,28 @@ func (w *Worker) run(ctx context.Context, done chan struct{}) {
 	for {
 		action := w.runIteration(ctx)
 		if action == runActionReturn {
-			return
+			break
 		}
 	}
+
+	// Once the migration is completed, every exit that is not an abandon
+	// drains, whether the stop arrived while waiting, between batches, inside a
+	// related data pass or before the first tail sync cycle. A panic in the
+	// drain is recovered by the deferred handler above.
+	if w.inTailSyncMode() {
+		w.finalDrain("worker exiting")
+	}
+}
+
+// inTailSyncMode reports whether the migration is completed and a legacy
+// repository is available, which is when the worker keeps legacy rows
+// synced and an exit has a final drain to run.
+func (w *Worker) inTailSyncMode() bool {
+	if w.legacy == nil {
+		return false
+	}
+	state, err := w.stateManager.GetState()
+	return err == nil && state.State == entities.MigrationStatusCompleted
 }
 
 // runIteration processes one iteration of the migration loop.
@@ -972,6 +1016,82 @@ func (w *Worker) finalDrain(reason string) {
 	}
 	w.logger.Info("tail sync: performing final drain", logger.String("reason", reason))
 	w.drainLegacyRecords(context.Background())
+	w.drainRelatedData(context.Background())
+}
+
+// drainRelatedData runs the last related data sync of the final drain: comments
+// and predictions from their cursors, then a full review and lock reconcile. It
+// runs after the detections drain so the detections the rows belong to are in v2.
+func (w *Worker) drainRelatedData(ctx context.Context) {
+	if w.relatedMigrator == nil {
+		return
+	}
+	result, err := w.relatedMigrator.SyncTail(ctx, true)
+	w.logRelatedTailSync(&result, err, operationFinalDrainRelated)
+}
+
+// logRelatedTailSync logs the outcome of a related data tail sync.
+// datastoreV2.ErrRelatedSyncNotRecorded (related data copied by an older
+// version) is logged once per run, other errors on every call.
+func (w *Worker) logRelatedTailSync(result *TailSyncResult, err error, operation string) {
+	switch {
+	case err == nil:
+		if result.Blocked {
+			w.logger.Debug("related data sync waiting for detections not yet in v2",
+				logger.String("operation", operation))
+		}
+	case errors.Is(err, context.Canceled):
+		w.logger.Debug("related data tail sync interrupted by shutdown",
+			logger.String("operation", operation))
+	case errors.Is(err, datastoreV2.ErrRelatedSyncNotRecorded):
+		if !w.relatedSyncUnavailableLogged {
+			w.relatedSyncUnavailableLogged = true
+			w.logger.Info("related data tail sync unavailable: related data was copied by an older version",
+				logger.String("operation", operation))
+		}
+	default:
+		w.logger.Warn("related data tail sync failed",
+			logger.String("operation", operation),
+			logger.Error(err))
+	}
+}
+
+// syncRelatedTail runs one related data sync of a tail sync cycle. Comments and
+// predictions are synced every cycle; reviews and locks on the first cycle after
+// the worker starts and then every relatedFullScanInterval. The pass stops
+// promptly when the worker is asked to stop; the final drain then continues it.
+func (w *Worker) syncRelatedTail(ctx context.Context) {
+	if w.relatedMigrator == nil {
+		return
+	}
+	syncCtx, cancel := w.stopAwareContext(ctx)
+	defer cancel()
+
+	fullScan := w.lastRelatedFullScan.IsZero() || time.Since(w.lastRelatedFullScan) >= relatedFullScanInterval
+	scanStart := time.Now()
+	result, err := w.relatedMigrator.SyncTail(syncCtx, fullScan)
+	if result.FullScanCompleted {
+		w.lastRelatedFullScan = scanStart
+	}
+	w.logRelatedTailSync(&result, err, operationTailSyncRelated)
+}
+
+// stopAwareContext returns a context that ends when ctx ends or the worker is
+// asked to stop. The caller must call the returned cancel function.
+func (w *Worker) stopAwareContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	w.mu.RLock()
+	stopCh := w.stopCh
+	w.mu.RUnlock()
+
+	stopCtx, cancel := context.WithCancel(ctx)
+	go func() {
+		select {
+		case <-stopCh:
+			cancel()
+		case <-stopCtx.Done():
+		}
+	}()
+	return stopCtx, cancel
 }
 
 // runTailSync runs a single tail sync iteration after migration has completed.
@@ -980,9 +1100,11 @@ func (w *Worker) finalDrain(reason string) {
 // (issue #2442).
 //
 // The method sleeps for tailSyncInterval between checks, responding to stop
-// signals during the wait. A stop that arrives during the wait drains legacy
-// records one last time, except after Abandon. Returns runActionContinue to keep the worker loop
-// alive, or runActionReturn on shutdown.
+// signals during the wait. After the detections it syncs the related data
+// (comments, predictions, and periodically reviews and locks). It returns
+// runActionReturn on shutdown without draining: run drains once it sees the
+// worker was in tail sync mode, except after Abandon. Returns runActionContinue
+// to keep the worker loop alive.
 func (w *Worker) runTailSync(ctx context.Context) runAction {
 	// If legacy repository is not available, nothing to sync
 	if w.legacy == nil {
@@ -990,15 +1112,12 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 		return runActionReturn
 	}
 
-	// Sleep with responsive cancellation. On shutdown, perform a final
-	// drain to minimize data loss before the system switches to v2-only mode,
-	// unless the migration is being abandoned (cancel, rollback).
+	// Sleep with responsive cancellation. An exit drains (see run), unless the
+	// migration is being abandoned (cancel, rollback).
 	select {
 	case <-ctx.Done():
-		w.finalDrain("context cancelled")
 		return runActionReturn
 	case <-w.stopCh:
-		w.finalDrain("shutdown requested")
 		return runActionReturn
 	case <-time.After(tailSyncInterval):
 	}
@@ -1043,6 +1162,9 @@ func (w *Worker) runTailSync(ctx context.Context) runAction {
 			logger.String("operation", "tail_sync_dirty_id_retry"),
 			logger.Int64("count", caught))
 	}
+
+	// Related data goes last: it needs the detections above in v2.
+	w.syncRelatedTail(ctx)
 
 	return runActionContinue
 }
