@@ -104,6 +104,17 @@ func TestErrV2SchemaCorrupted_PropagatesThroughInitializeWrapChain(t *testing.T)
 		"errors.Is must unwrap through fmt.Errorf and EnhancedError to find the sentinel")
 }
 
+// TestAbortOnV2SchemaCorruption_ReturnedErrorCarriesHint pins that the terminal text of a
+// schema corruption refusal carries the recovery hint, not only the log.
+func TestAbortOnV2SchemaCorruption_ReturnedErrorCarriesHint(t *testing.T) {
+	t.Parallel()
+
+	cause := fmt.Errorf("%w: detections missing columns", datastoreV2.ErrV2SchemaCorrupted)
+	err := abortOnV2SchemaCorruption(logger.Global().Module("datastore"), cause, "test_operation", "test-mode")
+	require.ErrorIs(t, err, datastoreV2.ErrV2SchemaCorrupted)
+	assert.Contains(t, err.Error(), schemaCorruptionRecoveryHint)
+}
+
 func TestDatabaseService_Start_FreshInstall(t *testing.T) {
 	t.Parallel()
 
@@ -651,6 +662,7 @@ func TestDatabaseService_Start_MixedSchemaRefuses(t *testing.T) {
 
 	err = svc.Start(t.Context())
 	require.ErrorIs(t, err, datastoreV2.ErrMixedSchemaDatabase)
+	assert.Contains(t, err.Error(), mixedSchemaRecoveryHint, "the terminal text must carry the hint")
 	assert.Nil(t, svc.DataStore(), "no datastore may be constructed for a refused database")
 	assert.False(t, svc.IsV2OnlyMode())
 	assert.NoFileExists(t, configuredPath, "the legacy fallback would have created the database file")
@@ -787,6 +799,7 @@ func TestDatabaseService_Start_UnverifiedLegacyTail(t *testing.T) {
 			err = svc.Start(t.Context())
 			if tt.wantRefused {
 				require.ErrorIs(t, err, datastoreV2.ErrLegacyTailUnverified)
+				assert.Contains(t, err.Error(), legacyTailRecoveryHint, "the terminal text must carry the hint")
 				assert.Nil(t, svc.DataStore(), "no datastore may be constructed for a refused start")
 				assert.False(t, svc.IsV2OnlyMode())
 				assert.ElementsMatch(t, before, dirEntryNames(t, dir),
