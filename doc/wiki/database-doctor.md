@@ -243,7 +243,7 @@ The doctor output includes platform info, database fingerprint, migration state,
 
 ## MySQL and MariaDB: enhanced and legacy tables in one database
 
-This applies to the MySQL and MariaDB releases that upstream still maintains: MySQL 8.4 and 9.7 LTS, and MariaDB 10.11, 11.4, 11.8 or 12.3 (checked October 2026). Older releases are not supported.
+This applies to the MySQL and MariaDB releases BirdNET-Go supports: the tested LTS releases MySQL 8.4 and 9.7, and MariaDB 10.11, 11.4, 11.8 or 12.3. Other releases are not supported.
 
 A MySQL or MariaDB database can hold the enhanced database (v2) tables and the legacy tables at the same time, for example after a failed setup or a downgrade. BirdNET-Go resolves this by itself when one side holds no data:
 

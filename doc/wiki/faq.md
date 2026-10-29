@@ -219,7 +219,7 @@ Use the [Database Doctor](https://github.com/tphakala/birdnet-go/wiki/Database-D
 
 ### Which MySQL and MariaDB versions are supported?
 
-Only releases that their upstream projects still maintain: MySQL 8.4 and 9.7 LTS, and MariaDB 10.11, 11.4, 11.8 or 12.3 (checked October 2026). MySQL 5.7, MySQL 8.0 and MariaDB 10.6 or older have reached end of life. They are not tested, and problems that show up only on them will not be fixed, so upgrade the database server first. SQLite is the default and needs no server. Run `SELECT VERSION();` in the `mysql` or `mariadb` client to see which release you have, and create the database with the `utf8mb4` character set.
+Only the LTS releases BirdNET-Go is tested with: MySQL 8.4 and 9.7, and MariaDB 10.11, 11.4, 11.8 or 12.3. MySQL Innovation releases (such as 9.0 to 9.6), MariaDB rolling releases and older releases such as MySQL 5.7, MySQL 8.0 and MariaDB 10.6 are not supported. They are not tested, and problems that show up only on them will not be fixed, so upgrade the database server first. SQLite is the default and needs no server. Run `SELECT VERSION();` in the `mysql` or `mariadb` client to see which release you have, and create the database with the `utf8mb4` character set.
 
 ## Remote access, TLS, and authentication
 
