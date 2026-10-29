@@ -3,8 +3,8 @@ package checks
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -14,8 +14,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 )
 
-var databaseServerTestNow = time.Date(2026, time.October, 27, 12, 0, 0, 0, time.UTC)
-
 func TestDatabaseServerVersionCheck_Status(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -24,10 +22,24 @@ func TestDatabaseServerVersionCheck_Status(t *testing.T) {
 		contains   string
 		wantDetail string
 	}{
-		{"supported", versionProbe("10.11.19-MariaDB-ubu2204"), health.StatusHealthy, "supported until 2028-02-16", "supported"},
-		{"tabled end of life", versionProbe("10.6.28-MariaDB"), health.StatusWarning, "past its upstream end of life", "end_of_life"},
-		{"untabled end of life", versionProbe("10.5.29-MariaDB"), health.StatusWarning, "older than the oldest supported", "end_of_life"},
-		{"untracked", versionProbe("9.7.4"), health.StatusWarning, "not on the list", "untracked"},
+		{"supported mysql 8.4", versionProbe("8.4.13"), health.StatusHealthy, "is a supported release", "supported"},
+		{"supported mysql 9.7", versionProbe("9.7.4"), health.StatusHealthy, "is a supported release", "supported"},
+		{"supported mariadb 10.11", versionProbe("10.11.19-MariaDB-ubu2204"), health.StatusHealthy, "is a supported release", "supported"},
+		{"supported mariadb 11.4", versionProbe("11.4.13-MariaDB"), health.StatusHealthy, "is a supported release", "supported"},
+		{"supported mariadb 11.8", versionProbe("11.8.9-MariaDB"), health.StatusHealthy, "is a supported release", "supported"},
+		{"supported mariadb 12.3", versionProbe("12.3.3-MariaDB"), health.StatusHealthy, "is a supported release", "supported"},
+		{"innovation 9.0", versionProbe("9.0.1"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"innovation 9.1", versionProbe("9.1.0"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"innovation 9.2", versionProbe("9.2.0"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"innovation 9.3", versionProbe("9.3.0"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"innovation 9.4", versionProbe("9.4.0"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"innovation 9.5", versionProbe("9.5.0"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"innovation 9.6", versionProbe("9.6.1"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"below the floor mysql 5.7", versionProbe("5.7.44-log"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"below the floor mysql 8.0", versionProbe("8.0.46"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"below the floor mariadb 10.6", versionProbe("10.6.28-MariaDB"), health.StatusWarning, "is not a supported release", "unsupported"},
+		{"untracked mysql 9.8", versionProbe("9.8.0"), health.StatusWarning, "not on the list", "untracked"},
+		{"untracked mysql 26.10", versionProbe("26.10.0"), health.StatusWarning, "not on the list", "untracked"},
 		{"unparseable", versionProbe("garbage"), health.StatusWarning, "not recognized", "unknown"},
 		{"probe error", func(context.Context) (string, bool, error) {
 			return "", true, errors.NewStd("connection refused")
@@ -37,28 +49,21 @@ func TestDatabaseServerVersionCheck_Status(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			check := NewDatabaseServerVersionCheck(tt.probe, func() time.Time { return databaseServerTestNow })
+			check := NewDatabaseServerVersionCheck(tt.probe)
 			assert.Equal(t, "database_server_version", check.Name())
 			assert.Equal(t, health.CategoryDatabase, check.Category())
 			res := check.Run(t.Context())
 			assert.Equal(t, tt.status, res.Status)
 			assert.Contains(t, res.Message, tt.contains)
+			assert.NotRegexp(t, `\d{4}-\d{2}-\d{2}`, res.Message)
+			assert.NotContains(t, strings.ToLower(res.Message), "end of life")
+			assert.NotContains(t, res.Details, "eol_date")
 			if tt.wantDetail != "" {
 				assert.Equal(t, tt.wantDetail, res.Details["support"])
+				assert.Equal(t, tt.wantDetail == "supported", res.Details["supported"])
 			}
 		})
 	}
-}
-
-func TestDatabaseServerVersionCheck_EndingSoon(t *testing.T) {
-	// MariaDB 10.11 ends 2028-02-16; 30 days before is inside the 90 day window.
-	now := time.Date(2028, time.January, 17, 0, 0, 0, 0, time.UTC)
-	check := NewDatabaseServerVersionCheck(versionProbe("10.11.19-MariaDB"), func() time.Time { return now })
-	res := check.Run(t.Context())
-	assert.Equal(t, health.StatusWarning, res.Status)
-	assert.Contains(t, res.Message, "reaches its upstream end of life on 2028-02-16")
-	assert.Equal(t, "2028-02-16", res.Details["eol_date"])
-	assert.Equal(t, true, res.Details["supported"])
 }
 
 func TestDatabaseCharsetCheck_Status(t *testing.T) {

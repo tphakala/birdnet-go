@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
@@ -35,42 +34,50 @@ func useMySQLSettings(t *testing.T, c *Handler) {
 func TestDescribeServerVersion(t *testing.T) {
 	t.Parallel()
 
-	now := time.Date(2026, time.October, 28, 12, 0, 0, 0, time.UTC)
-	nearEOL := time.Date(2032, time.March, 1, 12, 0, 0, 0, time.UTC)
-
 	tests := []struct {
 		name         string
 		raw          string
-		now          time.Time
 		wantStatus   string
 		wantContains []string
 	}{
-		{name: "mysql supported", raw: "8.4.13", now: now, wantStatus: CheckStatusPassed},
-		{name: "mariadb supported", raw: "10.11.19-MariaDB-ubu2204", now: now, wantStatus: CheckStatusPassed},
-		{name: "ending soon warns", raw: "8.4.13", now: nearEOL, wantStatus: CheckStatusWarning, wantContains: []string{"2032-04-30"}},
-		{name: "tabled end of life fails", raw: "8.0.46", now: now, wantStatus: CheckStatusFailed, wantContains: []string{"8.0.46", "2026-04-30"}},
-		{name: "untabled below floor fails", raw: "10.5.29-MariaDB", now: now, wantStatus: CheckStatusFailed},
-		{name: "untracked warns", raw: "99.1.0", now: now, wantStatus: CheckStatusWarning},
-		{name: "unparseable warns with raw", raw: "garbage", now: now, wantStatus: CheckStatusWarning, wantContains: []string{`"garbage"`}},
+		{name: "supported 8.4.13", raw: "8.4.13", wantStatus: CheckStatusPassed, wantContains: []string{"is a supported release"}},
+		{name: "supported 9.7.4", raw: "9.7.4", wantStatus: CheckStatusPassed, wantContains: []string{"is a supported release"}},
+		{name: "supported 10.11.19-MariaDB-ubu2204", raw: "10.11.19-MariaDB-ubu2204", wantStatus: CheckStatusPassed, wantContains: []string{"is a supported release"}},
+		{name: "supported 11.4.13-MariaDB", raw: "11.4.13-MariaDB", wantStatus: CheckStatusPassed, wantContains: []string{"is a supported release"}},
+		{name: "supported 11.8.9-MariaDB", raw: "11.8.9-MariaDB", wantStatus: CheckStatusPassed, wantContains: []string{"is a supported release"}},
+		{name: "supported 12.3.3-MariaDB", raw: "12.3.3-MariaDB", wantStatus: CheckStatusPassed, wantContains: []string{"is a supported release"}},
+		{name: "innovation release 9.0 fails", raw: "9.0.1", wantStatus: CheckStatusFailed, wantContains: []string{"9.0.1", "is not a supported release", "before migrating"}},
+		{name: "innovation release 9.1 fails", raw: "9.1.1", wantStatus: CheckStatusFailed, wantContains: []string{"9.1.1", "is not a supported release", "before migrating"}},
+		{name: "innovation release 9.2 fails", raw: "9.2.1", wantStatus: CheckStatusFailed, wantContains: []string{"9.2.1", "is not a supported release", "before migrating"}},
+		{name: "innovation release 9.3 fails", raw: "9.3.1", wantStatus: CheckStatusFailed, wantContains: []string{"9.3.1", "is not a supported release", "before migrating"}},
+		{name: "innovation release 9.4 fails", raw: "9.4.1", wantStatus: CheckStatusFailed, wantContains: []string{"9.4.1", "is not a supported release", "before migrating"}},
+		{name: "innovation release 9.5 fails", raw: "9.5.1", wantStatus: CheckStatusFailed, wantContains: []string{"9.5.1", "is not a supported release", "before migrating"}},
+		{name: "innovation release 9.6 fails", raw: "9.6.1", wantStatus: CheckStatusFailed, wantContains: []string{"9.6.1", "is not a supported release", "before migrating"}},
+		{name: "below the floor 5.7.44-log fails", raw: "5.7.44-log", wantStatus: CheckStatusFailed, wantContains: []string{"is not a supported release", "before migrating"}},
+		{name: "below the floor 8.0.46 fails", raw: "8.0.46", wantStatus: CheckStatusFailed, wantContains: []string{"is not a supported release", "before migrating"}},
+		{name: "below the floor 10.6.28-MariaDB fails", raw: "10.6.28-MariaDB", wantStatus: CheckStatusFailed, wantContains: []string{"is not a supported release", "before migrating"}},
+		{name: "below the floor 10.5.29-MariaDB fails", raw: "10.5.29-MariaDB", wantStatus: CheckStatusFailed, wantContains: []string{"is not a supported release", "before migrating"}},
+		{name: "untracked 9.8.0 warns", raw: "9.8.0", wantStatus: CheckStatusWarning, wantContains: []string{"not on the list"}},
+		{name: "untracked 26.10.0 warns", raw: "26.10.0", wantStatus: CheckStatusWarning, wantContains: []string{"not on the list"}},
+		{name: "untracked 99.1.0 warns", raw: "99.1.0", wantStatus: CheckStatusWarning, wantContains: []string{"not on the list"}},
+		{name: "unparseable warns with raw", raw: "garbage", wantStatus: CheckStatusWarning, wantContains: []string{`"garbage"`}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			a := dbserver.AssessRaw(tt.raw, tt.now)
+			a := dbserver.AssessRaw(tt.raw)
 			status, msg := describeServerVersion(&a)
 			assert.Equal(t, tt.wantStatus, status, msg)
 			for _, want := range tt.wantContains {
 				assert.Contains(t, msg, want)
 			}
+			assert.NotContains(t, strings.ToLower(msg), "end of life")
+			assert.NotRegexp(t, `\d{4}-\d{2}-\d{2}`, msg)
 			if tt.wantStatus != CheckStatusPassed {
 				assert.Contains(t, msg, dbserver.SupportedReleases())
 			}
 		})
 	}
-	// The untabled branch has no date to name.
-	a := dbserver.AssessRaw("10.5.29-MariaDB", now)
-	_, msg := describeServerVersion(&a)
-	assert.NotContains(t, msg, "end of life (")
 }
 
 func TestCheckMySQLCharset_Status(t *testing.T) {
@@ -239,13 +246,13 @@ func TestRunCriticalPrerequisiteChecks_ServerChecks(t *testing.T) {
 	})
 }
 
-func TestStartMigration_BlocksEndOfLifeServer(t *testing.T) {
+func TestStartMigration_BlocksUnsupportedServer(t *testing.T) {
 	tests := []struct {
 		name      string
 		version   string
 		wantNamed bool
 	}{
-		{name: "end of life server is named in the refusal", version: "8.0.46", wantNamed: true},
+		{name: "unsupported server is named in the refusal", version: "8.0.46", wantNamed: true},
 		{name: "supported server is not the blocker", version: "8.4.13", wantNamed: false},
 	}
 	for _, tt := range tests {

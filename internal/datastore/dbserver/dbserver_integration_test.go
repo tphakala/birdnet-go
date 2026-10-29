@@ -111,7 +111,7 @@ func TestServerProbes_RealServer(t *testing.T) {
 	raw, err := QueryVersion(ctx, db)
 	require.NoError(t, err)
 	t.Logf("server version %q", raw)
-	a := AssessRaw(raw, time.Now())
+	a := AssessRaw(raw)
 	assert.NotEqual(t, SupportUnknown, a.Level, "version %q must parse", raw)
 	if image := os.Getenv("MYSQL_TEST_IMAGE"); image != "" {
 		repo, _, _ := strings.Cut(image, ":")

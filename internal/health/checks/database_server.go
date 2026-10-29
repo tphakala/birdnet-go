@@ -23,8 +23,6 @@ const (
 	// databaseCharsetTablesOKFormat is the message when every character column is
 	// utf8mb4 but the database default is not; the argument is the default.
 	databaseCharsetTablesOKFormat = "All existing character columns use utf8mb4. The database default character set is %s; new tables created without an explicit character set may inherit it."
-	// eolDateLayout formats the end-of-life date in messages.
-	eolDateLayout = time.DateOnly
 )
 
 // DatabaseServerProbe returns the raw SELECT VERSION() string. applicable is
@@ -37,19 +35,15 @@ type DatabaseServerProbe func(ctx context.Context) (raw string, applicable bool,
 type DatabaseCharsetProbe func(ctx context.Context) (report dbserver.CharsetReport, applicable bool, err error)
 
 // DatabaseServerVersionCheck reports whether the MySQL or MariaDB server is a
-// release under upstream support. It never reports critical: an old server
-// that works is a warning, not an outage.
+// supported release. It never reports critical: an old server that works is a
+// warning, not an outage.
 type DatabaseServerVersionCheck struct {
 	probe DatabaseServerProbe
-	now   func() time.Time
 }
 
 // NewDatabaseServerVersionCheck creates the check. A nil probe skips it.
-func NewDatabaseServerVersionCheck(probe DatabaseServerProbe, now func() time.Time) *DatabaseServerVersionCheck {
-	if now == nil {
-		now = time.Now
-	}
-	return &DatabaseServerVersionCheck{probe: probe, now: now}
+func NewDatabaseServerVersionCheck(probe DatabaseServerProbe) *DatabaseServerVersionCheck {
+	return &DatabaseServerVersionCheck{probe: probe}
 }
 
 // Name returns the check identifier.
@@ -73,7 +67,7 @@ func (c *DatabaseServerVersionCheck) Run(ctx context.Context) health.Result {
 			fmt.Sprintf("Unable to read the database server version: %v", err), nil)
 	}
 
-	a := dbserver.AssessRaw(raw, c.now())
+	a := dbserver.AssessRaw(raw)
 	status, msg := describeServerAssessment(&a)
 	details := map[string]any{
 		"version":   a.Version.Raw,
@@ -84,9 +78,6 @@ func (c *DatabaseServerVersionCheck) Run(ctx context.Context) health.Result {
 		details["vendor"] = string(a.Version.Vendor)
 		details["series"] = a.Version.Series()
 	}
-	if a.Release != nil {
-		details["eol_date"] = a.Release.EOL.Format(eolDateLayout)
-	}
 	return databaseServerResult(c.Name(), c.Category(), start, status, msg, details)
 }
 
@@ -96,17 +87,9 @@ func describeServerAssessment(a *dbserver.Assessment) (status health.Status, mes
 	supported := dbserver.SupportedReleases()
 	switch a.Level {
 	case dbserver.SupportSupported:
-		return health.StatusHealthy, fmt.Sprintf("%s is supported until %s", name, a.Release.EOL.Format(eolDateLayout))
-	case dbserver.SupportEndingSoon:
-		return health.StatusWarning, fmt.Sprintf("%s reaches its upstream end of life on %s. Plan an upgrade to a supported release (%s).",
-			name, a.Release.EOL.Format(eolDateLayout), supported)
-	case dbserver.SupportEndOfLife:
-		if a.Release != nil {
-			return health.StatusWarning, fmt.Sprintf("%s is past its upstream end of life (%s) and is not supported. Upgrade to a supported release (%s).",
-				name, a.Release.EOL.Format(eolDateLayout), supported)
-		}
-		return health.StatusWarning, fmt.Sprintf("%s is older than the oldest supported release and is not supported. Upgrade to a supported release (%s).",
-			name, supported)
+		return health.StatusHealthy, fmt.Sprintf("%s is a supported release", name)
+	case dbserver.SupportUnsupported:
+		return health.StatusWarning, fmt.Sprintf("%s is not a supported release. Upgrade to a supported release (%s).", name, supported)
 	case dbserver.SupportUntracked:
 		return health.StatusWarning, fmt.Sprintf("%s is not on the list of releases BirdNET-Go is tested with (%s).", name, supported)
 	case dbserver.SupportUnknown:

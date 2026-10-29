@@ -633,7 +633,7 @@ func (d *DatabaseService) probeDatabaseServer(log logger.Logger) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), databaseServerProbeTimeout)
 	defer cancel()
-	report := d.probeServer(ctx, d.v2Manager.DB(), time.Now())
+	report := d.probeServer(ctx, d.v2Manager.DB())
 	d.serverNotice = newDatabaseServerNotice(log)
 	d.serverNotice.report(&report)
 }

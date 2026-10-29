@@ -798,7 +798,7 @@ const (
 	migrationPrereqTagKey = "migration_prereq"
 	// databaseServerTagKey is the Sentry tag holding the database server release series.
 	databaseServerTagKey = "db_server"
-	// databaseServerSupportTagKey is the Sentry tag holding the upstream support level of the database server.
+	// databaseServerSupportTagKey is the Sentry tag holding the support level of the database server.
 	databaseServerSupportTagKey = "db_server_support"
 	// databaseCharsetTagKey is the Sentry tag holding the database character set class.
 	databaseCharsetTagKey = "db_charset"
@@ -834,7 +834,7 @@ func SetMigrationPrereqTag(value string) bool {
 }
 
 // SetDatabaseServerTags sets the global Sentry tags describing the MySQL or
-// MariaDB server: its release series, its upstream support level and the
+// MariaDB server: its release series, its support level and the
 // character set class of the schema. The caller must pass values from closed
 // sets (see dbserver.ServerTag, the dbserver support levels and
 // dbserver.CharsetTag), never the raw version string, error text or a path.

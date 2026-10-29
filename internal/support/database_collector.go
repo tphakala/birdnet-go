@@ -378,7 +378,7 @@ func (c *GormDatabaseInfoCollector) collectMySQLInfo(ctx context.Context, info *
 		*errs = append(*errs, fmt.Sprintf("mysql version: %v", err))
 	} else {
 		info.EngineVersion = version
-		info.ServerSupport = string(dbserver.AssessRaw(version, time.Now()).Level)
+		info.ServerSupport = string(dbserver.AssessRaw(version).Level)
 	}
 
 	// Default character set of the schema

@@ -263,7 +263,7 @@ func (c *Handler) registerHealthChecks() {
 			}
 			raw, err := dbserver.QueryVersion(ctx, db)
 			return raw, true, err
-		}, time.Now),
+		}),
 		checks.NewDatabaseCharsetCheck(func(ctx context.Context) (dbserver.CharsetReport, bool, error) {
 			db := c.mysqlServerDB()
 			if db == nil {
