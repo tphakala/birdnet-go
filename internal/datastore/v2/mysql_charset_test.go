@@ -4,6 +4,7 @@ package v2
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"sync"
 	"testing"
@@ -385,9 +386,13 @@ func TestMySQL_V2Initialize_ConvertEmptyTables_LockTimeoutSkipsTableAndBootConti
 			return
 		}
 		released = true
-		_, unlockErr := holder.ExecContext(t.Context(), "UNLOCK TABLES")
-		assert.NoError(t, unlockErr)
-		assert.NoError(t, holder.Close())
+		// A live context, because t.Context() is already cancelled when Cleanup runs.
+		if _, unlockErr := holder.ExecContext(context.Background(), "UNLOCK TABLES"); unlockErr != nil {
+			assert.NoError(t, unlockErr)
+			// End the session so the server releases the lock instead of the pool keeping it.
+			_ = holder.Raw(func(any) error { return driver.ErrBadConn })
+		}
+		_ = holder.Close()
 	}
 	t.Cleanup(release)
 
@@ -483,8 +488,10 @@ func TestMySQL_V2Initialize_ConvertEmptyTables_CleanupFailureAfterAlterStillLogs
 		require.NoError(t, coexTestDB.Exec(fmt.Sprintf("KILL %d", id)).Error)
 		require.Eventually(t, func() bool {
 			var n int64
-			require.NoError(t, coexTestDB.Raw(
-				"SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID = ?", id).Scan(&n).Error)
+			if queryErr := coexTestDB.Raw(
+				"SELECT COUNT(*) FROM information_schema.PROCESSLIST WHERE ID = ?", id).Scan(&n).Error; queryErr != nil {
+				return false
+			}
 			return n == 0
 		}, charsetTestKillWait, charsetTestKillPoll)
 	}
