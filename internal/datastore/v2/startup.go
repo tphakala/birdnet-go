@@ -110,7 +110,8 @@ const (
 	// DecisionMixedSchemaRefused: MySQL/MariaDB holds bare v2 tables beside a legacy
 	// notes table and no side can be kept without losing rows (both sides hold data, the
 	// chosen side's startup would drop rows, the enhanced side is not a completed install,
-	// a table could not be read, or an empty table could not be removed). Startup drops
+	// a table could not be read, or an empty table could not be removed; a lost connection
+	// in either is not a refusal and gives DecisionStateUnknown). Startup drops
 	// no table with rows and refuses.
 	DecisionMixedSchemaRefused = "mixed_schema_refused"
 	// DecisionMixedSchemaKeptV2: bare v2 tables beside empty legacy tables on a completed
