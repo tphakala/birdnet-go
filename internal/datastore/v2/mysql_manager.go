@@ -108,8 +108,8 @@ func (m *MySQLManager) migrationDB() (*gorm.DB, error) {
 // If UseV2Prefix is true, tables will be created with the "v2_" prefix (migration mode).
 // If UseV2Prefix is false, tables use clean names (fresh install mode).
 func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?%s",
-		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database, mysqlDSNParams)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?%s",
+		cfg.Username, cfg.Password, datastore.MySQLAddr(cfg.Host, cfg.Port), cfg.Database, mysqlDSNParams)
 
 	// Create GORM logger using the adapter if a logger is provided
 	var gormLog gorm_logger.Interface
@@ -154,7 +154,7 @@ func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 	return &MySQLManager{
 		db:          db,
 		config:      *cfg,
-		location:    fmt.Sprintf("%s:%s/%s", cfg.Host, cfg.Port, cfg.Database),
+		location:    fmt.Sprintf("%s/%s", datastore.MySQLAddr(cfg.Host, cfg.Port), cfg.Database),
 		tablePrefix: tablePrefix,
 		log:         cfg.Logger,
 	}, nil
