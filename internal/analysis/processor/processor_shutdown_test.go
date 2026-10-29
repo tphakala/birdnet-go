@@ -91,7 +91,7 @@ func TestProcessor_ShutdownWithContext_RespectsDeadline(t *testing.T) {
 			pendingResets:     make(map[string]struct{}),
 		}
 
-		// Use a very short deadline — flush should be cut short
+		// Use a very short deadline; flush should be cut short
 		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 		defer cancel()
 
