@@ -8,7 +8,7 @@ import (
 )
 
 func TestFilterBatchByConfidence(t *testing.T) {
-	// Note: minPredictionConfidence is 0.2 (20%)
+	// Note: minPredictionConfidence is 0.3 (30%)
 	tests := []struct {
 		name     string
 		batch    []datastore.Results
@@ -18,11 +18,11 @@ func TestFilterBatchByConfidence(t *testing.T) {
 			name: "filters out low confidence",
 			batch: []datastore.Results{
 				{ID: 1, Species: "Parus major", Confidence: 0.10}, // below threshold
-				{ID: 2, Species: "Parus major", Confidence: 0.20}, // at threshold
+				{ID: 2, Species: "Parus major", Confidence: 0.30}, // at threshold
 				{ID: 3, Species: "Parus major", Confidence: 0.50}, // above threshold
-				{ID: 4, Species: "Parus major", Confidence: 0.19}, // below threshold
+				{ID: 4, Species: "Parus major", Confidence: 0.29}, // below threshold
 			},
-			expected: 2, // only 0.20 and 0.50 pass
+			expected: 2, // only 0.30 and 0.50 pass
 		},
 		{
 			name:     "empty batch returns empty",
@@ -32,7 +32,7 @@ func TestFilterBatchByConfidence(t *testing.T) {
 		{
 			name: "all above threshold",
 			batch: []datastore.Results{
-				{ID: 1, Species: "Parus major", Confidence: 0.25},
+				{ID: 1, Species: "Parus major", Confidence: 0.35},
 				{ID: 2, Species: "Parus major", Confidence: 0.95},
 			},
 			expected: 2,
@@ -41,7 +41,7 @@ func TestFilterBatchByConfidence(t *testing.T) {
 			name: "all below threshold",
 			batch: []datastore.Results{
 				{ID: 1, Species: "Parus major", Confidence: 0.05},
-				{ID: 2, Species: "Parus major", Confidence: 0.15},
+				{ID: 2, Species: "Parus major", Confidence: 0.25},
 			},
 			expected: 0,
 		},
@@ -62,8 +62,8 @@ func TestConvertResultsToPredictions_SameThresholdAsLabelFilter(t *testing.T) {
 	m := &RelatedDataMigrator{}
 	batch := []datastore.Results{
 		{ID: 1, NoteID: 7, Species: "Parus major", Confidence: 0.80},
-		{ID: 2, NoteID: 7, Species: "Cyanistes caeruleus", Confidence: 0.15},
-		{ID: 3, NoteID: 7, Species: "Cyanistes caeruleus", Confidence: 0.20},
+		{ID: 2, NoteID: 7, Species: "Cyanistes caeruleus", Confidence: 0.25},
+		{ID: 3, NoteID: 7, Species: "Cyanistes caeruleus", Confidence: 0.30},
 	}
 	existing := map[uint]struct{}{7: {}}
 	labels := map[string]uint{"Parus major": 1, "Cyanistes caeruleus": 2}

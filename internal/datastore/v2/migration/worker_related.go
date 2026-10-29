@@ -256,10 +256,10 @@ func collectDetectionIDs(batch []datastore.Results) []uint {
 }
 
 // minPredictionConfidence is the minimum confidence threshold for migrating predictions.
-// Set to 0.2 (20%) to reduce table size by excluding predictions that are almost
-// certainly incorrect. Predictions below this threshold provide no analytical value
-// and would only increase storage requirements.
-const minPredictionConfidence = 0.2
+// Set to 0.3 (30%) to reduce table size by excluding secondary predictions that are
+// unlikely to be correct. They provide little analytical value and would only
+// increase storage requirements.
+const minPredictionConfidence = 0.3
 
 // filterBatchByConfidence returns only results that meet the minimum confidence threshold.
 // This should be called BEFORE resolveSpeciesLabels to avoid creating orphaned labels.
