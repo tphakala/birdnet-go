@@ -717,6 +717,29 @@ func TestV2OnlyDatastore_DynamicThreshold_DeleteByCommonName(t *testing.T) {
 	assert.Empty(t, all, "threshold should be deleted when using common name")
 }
 
+// TestV2OnlyDatastore_DeleteDynamicThreshold_NotFoundSemantics verifies the
+// Interface contract: deleting a species with no stored threshold succeeds,
+// while genuine database failures are still returned.
+func TestV2OnlyDatastore_DeleteDynamicThreshold_NotFoundSemantics(t *testing.T) {
+	t.Run("MissingRowReturnsNil", func(t *testing.T) {
+		ds, cleanup := setupTestDatastore(t)
+		defer cleanup()
+
+		require.NoError(t, ds.DeleteDynamicThreshold("never saved"))
+	})
+
+	t.Run("GenuineDBErrorStillReturned", func(t *testing.T) {
+		ds, cleanup := setupTestDatastore(t)
+		defer cleanup()
+
+		require.NoError(t, ds.Close())
+
+		err := ds.DeleteDynamicThreshold("never saved")
+		require.Error(t, err)
+		assert.NotErrorIs(t, err, repository.ErrDynamicThresholdNotFound)
+	})
+}
+
 // TestV2OnlyDatastore_DynamicThreshold_GetByCommonName verifies case-insensitive
 // retrieval of dynamic thresholds.
 func TestV2OnlyDatastore_DynamicThreshold_GetByCommonName(t *testing.T) {
