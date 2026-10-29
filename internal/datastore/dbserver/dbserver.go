@@ -438,9 +438,10 @@ func QueryVersion(ctx context.Context, db *gorm.DB) (string, error) {
 
 // QuerySchemaSize returns the size in bytes of the current schema: the data
 // plus the indexes of every table in it. A schema with no tables returns 0.
-// MySQL serves these figures from cached table statistics, refreshed per
-// information_schema_stats_expiry (24 hours by default), so the value can lag
-// recent writes.
+// The figures come from InnoDB table statistics, which both MySQL and MariaDB
+// refresh lazily (MySQL also caches them per information_schema_stats_expiry,
+// 24 hours by default), so the value can lag recent writes until the next
+// ANALYZE TABLE.
 func QuerySchemaSize(ctx context.Context, db *gorm.DB) (int64, error) {
 	var size sql.NullInt64
 	if err := db.WithContext(ctx).Raw(querySchemaSize).Row().Scan(&size); err != nil {
