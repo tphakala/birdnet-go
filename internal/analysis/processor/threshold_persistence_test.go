@@ -790,7 +790,7 @@ func TestFlushDynamicThresholds(t *testing.T) {
 			Timer:         now.Add(24 * time.Hour),
 		}
 
-		err := p.FlushDynamicThresholds()
+		err := p.FlushDynamicThresholds(t.Context())
 
 		require.NoError(t, err)
 		assert.True(t, mockDs.batchSaveCalled)

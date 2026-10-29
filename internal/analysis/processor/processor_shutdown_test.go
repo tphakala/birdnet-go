@@ -2,9 +2,13 @@ package processor
 
 import (
 	"context"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	"github.com/go-sql-driver/mysql"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/analysis/jobqueue"
@@ -87,7 +91,7 @@ func TestProcessor_ShutdownWithContext_RespectsDeadline(t *testing.T) {
 			pendingResets:     make(map[string]struct{}),
 		}
 
-		// Use a very short deadline — flush should be cut short
+		// Use a very short deadline; flush should be cut short
 		ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 		defer cancel()
 
@@ -190,4 +194,96 @@ func TestProcessor_Shutdown_DelegatesToShutdownWithContext(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Less(t, elapsed, 5*time.Second, "Shutdown() on idle processor should complete quickly")
+}
+
+// newShutdownFlushProcessor builds a processor in the state ShutdownWithContext
+// sees at shutdown: one learned threshold and a threshold lifecycle context that
+// is still set (as after StartDynamicThresholds). ShutdownWithContext cancels it
+// before flushing, which is the state that used to abort the flush retry.
+func newShutdownFlushProcessor(t *testing.T) (*Processor, *MockDatastore) {
+	t.Helper()
+
+	p := createTestProcessor()
+	p.JobQueue = jobqueue.NewJobQueue() // not started: stopping it returns at once
+	p.DynamicThresholds["american crow"] = &DynamicThreshold{
+		Level:         1,
+		BaseThreshold: 0.75,
+		Timer:         time.Now().Add(24 * time.Hour),
+		ValidHours:    48,
+	}
+
+	lifeCtx, lifeCancel := context.WithCancel(t.Context())
+	t.Cleanup(lifeCancel)
+	p.thresholdsCtx = lifeCtx
+	p.thresholdsCancel = lifeCancel
+
+	return p, p.Ds.(*MockDatastore)
+}
+
+// TestShutdownWithContext_DynamicThresholdFlush verifies the shutdown flush keeps
+// the connectivity retry working after the threshold lifecycle context is
+// cancelled, and that the retry stops at the shutdown deadline.
+//
+// Not parallel: currentSettings() reads the global settings snapshot that other
+// non-parallel tests publish.
+func TestShutdownWithContext_DynamicThresholdFlush(t *testing.T) {
+	t.Run("retries a connectivity error and persists", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			p, mockDs := newShutdownFlushProcessor(t)
+
+			var attempts atomic.Int32
+			mockDs.batchSaveHook = func(call int) error {
+				attempts.Add(1)
+				if call == 1 {
+					return gormJoinedInvalidConn(mysql.ErrInvalidConn)
+				}
+				return nil
+			}
+
+			ctx, cancel := context.WithTimeout(t.Context(), DefaultFlushTimeout)
+			defer cancel()
+
+			require.NoError(t, p.ShutdownWithContext(ctx))
+
+			assert.Equal(t, int32(2), attempts.Load(), "the connectivity error must be retried once")
+			assert.Contains(t, mockDs.thresholds, "american crow")
+		})
+	})
+
+	t.Run("stops retrying at the shutdown deadline", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			p, mockDs := newShutdownFlushProcessor(t)
+
+			var (
+				mu           sync.Mutex
+				attemptTimes []time.Time
+			)
+			mockDs.batchSaveHook = func(int) error {
+				mu.Lock()
+				attemptTimes = append(attemptTimes, time.Now())
+				mu.Unlock()
+				return gormJoinedInvalidConn(mysql.ErrInvalidConn)
+			}
+
+			// Between the second attempt (1 x base delay) and the third (3 x base delay).
+			shutdownDeadline := thresholdSaveBaseDelay + thresholdSaveBaseDelay/2
+			ctx, cancel := context.WithTimeout(t.Context(), shutdownDeadline)
+			defer cancel()
+
+			start := time.Now()
+			require.NoError(t, p.ShutdownWithContext(ctx))
+			assert.LessOrEqual(t, time.Since(start), shutdownDeadline)
+
+			// Fake clock: run past where a third attempt would have fired.
+			time.Sleep(4 * thresholdSaveBaseDelay)
+			synctest.Wait()
+
+			mu.Lock()
+			defer mu.Unlock()
+			assert.Len(t, attemptTimes, 2, "no save attempt may start after the shutdown deadline")
+			for _, at := range attemptTimes {
+				assert.True(t, at.Before(start.Add(shutdownDeadline)), "attempt at %v is past the deadline", at.Sub(start))
+			}
+		})
+	})
 }
