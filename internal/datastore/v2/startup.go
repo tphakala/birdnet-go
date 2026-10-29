@@ -110,7 +110,8 @@ const (
 	// DecisionMixedSchemaRefused: MySQL/MariaDB holds bare v2 tables beside a legacy
 	// notes table and no side can be kept without losing rows (both sides hold data, the
 	// chosen side's startup would drop rows, the enhanced side is not a completed install,
-	// a table could not be read, or an empty table could not be removed). Startup drops
+	// a table could not be read, or an empty table could not be removed; a lost connection
+	// in either is not a refusal and gives DecisionStateUnknown). Startup drops
 	// no table with rows and refuses.
 	DecisionMixedSchemaRefused = "mixed_schema_refused"
 	// DecisionMixedSchemaKeptV2: bare v2 tables beside empty legacy tables on a completed
@@ -131,8 +132,6 @@ const (
 
 // Startup state checking errors.
 var (
-	// ErrV2DatabaseNotFound indicates the v2 database does not exist.
-	ErrV2DatabaseNotFound = errors.NewStd("v2 database not found")
 	// ErrV2DatabaseCorrupted indicates the v2 database is corrupted or unreadable.
 	ErrV2DatabaseCorrupted = errors.NewStd("v2 database corrupted or unreadable")
 	// ErrV2SchemaCorrupted indicates the v2 database has contaminated or invalid schema.
@@ -141,7 +140,8 @@ var (
 	// ErrMixedSchemaDatabase indicates the MySQL/MariaDB database holds bare v2 tables
 	// beside a legacy notes table and no side can be kept without losing rows (both sides
 	// hold data, the kept side's startup would drop rows, a table could not be read, or an
-	// empty table could not be removed). Callers must refuse to start (errors.Is), so that
+	// empty table could not be removed, for a reason other than a lost connection, which
+	// gives ErrStartupStateUnknown instead). Callers must refuse to start (errors.Is), so that
 	// no table with rows is dropped;
 	// StartupState.Error carries the tables with rows, or the failed step when an empty
 	// table could not be removed.
@@ -526,7 +526,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 			V2Available:     false,
 			LegacyRequired:  true,
 			Decision:        DecisionV2Corrupted,
-			Error:           ErrV2DatabaseNotFound,
+			Error:           fmt.Errorf("failed to check v2 migration tables: %w", err),
 		}
 	}
 	v2MigrationExists := v2MigrationCount > 0
@@ -578,7 +578,7 @@ func checkMySQLMigrationState(settings *conf.Settings) StartupState {
 	// only the empty tables of the other, each verified empty under a lock; refuse when
 	// no side can be kept without losing rows. See resolveMixedSchema.
 	if freshV2Exists && !v2MigrationExists && legacyExists {
-		return resolveMixedSchema(db, settings.Output.MySQL.Database, mysqlHost, mysqlDB, mysqlUser)
+		return resolveMixedSchema(db, settings)
 	}
 
 	// No v2 tables at all but legacy exists = legacy mode
@@ -695,6 +695,11 @@ const (
 	stateStepResolveMarker  = "resolve migration state table"
 	stateStepListTables     = "list tables"
 	stateStepBareSchema     = "check bare v2 schema"
+
+	stateStepMixedListTables    = "list tables for the mixed schema check"
+	stateStepMixedTableRows     = "check mixed schema table rows"
+	stateStepMixedSharedColumns = "read the label_id columns of shared tables"
+	stateStepMixedMarker        = "read the bare migration marker"
 )
 
 // tailUnverified wraps cause as an ErrLegacyTailUnverified for the named step.
@@ -1558,13 +1563,27 @@ type mixedSchemaProbe struct {
 	v2Completed bool
 	// unknown is true when any input could not be read.
 	unknown bool
+	// retryStep and retryErr are the first read that failed with a connectivity error. When
+	// retryErr is set the read may heal, so the caller must not decide from this probe.
+	retryStep string
+	retryErr  error
+}
+
+// noteReadFailure marks the probe unknown and records the first connectivity failure.
+func (p *mixedSchemaProbe) noteReadFailure(step string, err error) {
+	p.unknown = true
+	if p.retryErr == nil && errors.IsConnectivityError(err) {
+		p.retryStep = step
+		p.retryErr = err
+	}
 }
 
 // mixedSchemaVerdict is the outcome of classifyMixedSchema. The zero value refuses.
 type mixedSchemaVerdict int
 
 const (
-	// verdictRefuseUnknown: an input could not be read.
+	// verdictRefuseUnknown: an input could not be read for a reason other than a lost
+	// connection.
 	verdictRefuseUnknown mixedSchemaVerdict = iota
 	// verdictKeepV2: legacy tables empty, enhanced install completed.
 	verdictKeepV2
@@ -1722,23 +1741,23 @@ func classifyMixedSchema(p *mixedSchemaProbe) mixedSchemaVerdict {
 }
 
 // probeTableRows reads whether a table holds rows and, only when it does, how many. The
-// bool is false when the EXISTS probe failed; the entry then reports rows as unknown
+// error is the EXISTS probe failure; the entry then reports rows as unknown
 // so the table counts as non-empty. A COUNT failure never changes the verdict: an exact
 // COUNT of a large table can pass the startup read timeout, and the count is only
 // printed. The name comes from a fixed list (see tableHasAnyRow).
-func probeTableRows(db *gorm.DB, name string) (tableRowCount, bool) {
+func probeTableRows(db *gorm.DB, name string) (tableRowCount, error) {
 	hasRow, err := tableHasAnyRow(db, name)
 	if err != nil {
-		return tableRowCount{table: name, rows: mixedSchemaRowCountUnknown, hasRows: true}, false
+		return tableRowCount{table: name, rows: mixedSchemaRowCountUnknown, hasRows: true}, err
 	}
 	if !hasRow {
-		return tableRowCount{table: name}, true
+		return tableRowCount{table: name}, nil
 	}
 	var rows int64
 	if err := db.Raw("SELECT COUNT(*) FROM `" + name + "`").Scan(&rows).Error; err != nil {
 		rows = mixedSchemaRowCountUnknown
 	}
-	return tableRowCount{table: name, rows: rows, hasRows: true}, true
+	return tableRowCount{table: name, rows: rows, hasRows: true}, nil
 }
 
 // probeTables reads the existing tables of a fixed list, in list order, and marks the
@@ -1749,9 +1768,9 @@ func (p *mixedSchemaProbe) probeTables(db *gorm.DB, existing map[string]struct{}
 		if _, ok := existing[name]; !ok {
 			continue
 		}
-		entry, ok := probeTableRows(db, name)
-		if !ok {
-			p.unknown = true
+		entry, err := probeTableRows(db, name)
+		if err != nil {
+			p.noteReadFailure(stateStepMixedTableRows, err)
 		}
 		probed = append(probed, entry)
 	}
@@ -1781,7 +1800,8 @@ func listTableNames(db *gorm.DB, database string, baseTablesOnly bool) (map[stri
 // lists the tables straight from information_schema (GORM's Migrator().GetTables()
 // swallows the errors of its CurrentDatabase query on MySQL) and fails closed: when the
 // listing fails or lacks detections or notes (which existed moments ago), or any
-// existence probe fails, the result is marked unknown. It never returns an error.
+// existence probe fails, the result is marked unknown. It never returns an error; it
+// records the first connectivity failure in retryErr instead.
 func probeMixedSchema(db *gorm.DB, database string) *mixedSchemaProbe {
 	p := &mixedSchemaProbe{}
 
@@ -1790,6 +1810,9 @@ func probeMixedSchema(db *gorm.DB, database string) *mixedSchemaProbe {
 	_, hasNotes := existing[mixedSchemaNotesTable]
 	if listErr != nil || !hasDetections || !hasNotes {
 		p.unknown = true
+		if listErr != nil {
+			p.noteReadFailure(stateStepMixedListTables, listErr)
+		}
 		p.v2Tables = []tableRowCount{{table: mixedSchemaDetectionsTable, rows: mixedSchemaRowCountUnknown, hasRows: true}}
 		p.legacyTables = []tableRowCount{{table: mixedSchemaNotesTable, rows: mixedSchemaRowCountUnknown, hasRows: true}}
 		return p
@@ -1813,14 +1836,14 @@ func (p *mixedSchemaProbe) probeSharedTables(db *gorm.DB, database string) {
 		"WHERE table_schema = ? AND column_name = ? AND table_name IN ?",
 		database, mixedSchemaLabelIDColumn, legacyRepairedSharedTables).Scan(&columns).Error
 	if err != nil {
-		p.unknown = true
+		p.noteReadFailure(stateStepMixedSharedColumns, err)
 		return
 	}
 	for _, col := range columns {
 		name := strings.ToLower(col.Name)
-		entry, ok := probeTableRows(db, name)
-		if !ok {
-			p.unknown = true
+		entry, rowsErr := probeTableRows(db, name)
+		if rowsErr != nil {
+			p.noteReadFailure(stateStepMixedTableRows, rowsErr)
 		}
 		p.sharedTables = append(p.sharedTables, sharedTableProbe{
 			tableRowCount: entry,
@@ -1840,7 +1863,7 @@ func (p *mixedSchemaProbe) probeMarker(db *gorm.DB, existing map[string]struct{}
 		p.markerTable = name
 		var states []string
 		if err := db.Raw("SELECT state FROM `" + name + "` LIMIT 1").Scan(&states).Error; err != nil {
-			p.unknown = true
+			p.noteReadFailure(stateStepMixedMarker, err)
 			return
 		}
 		if len(states) == 0 {
@@ -2029,15 +2052,34 @@ func describeStepFailure(step string, err error) string {
 // rows. A failed drop or marker write refuses the boot too. A marker already written
 // for the fresh shape stays; with no legacy rows the next start classifies the database
 // as keep-v2 and retries the drop. The table the branch keys on is always dropped last.
-func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupState {
+// A lost connection in a read or a step is not a refusal: it returns the unknown state,
+// which the caller retries, after zero or more drops of tables verified empty.
+func resolveMixedSchema(db *gorm.DB, settings *conf.Settings) StartupState {
+	database := settings.Output.MySQL.Database
+	redact := []string{settings.Output.MySQL.Host, database, settings.Output.MySQL.Username}
 	p := probeMixedSchema(db, database)
+	if p.retryErr != nil {
+		return unknownStartupState(mysqlStateUnknown(settings, p.retryStep, p.retryErr))
+	}
 	verdict := classifyMixedSchema(p)
 
 	refuse := func(v mixedSchemaVerdict) StartupState {
 		reportMixedSchemaRefused()
 		return mixedSchemaRefusedState(newMixedSchemaError(p, v))
 	}
-	failed := func(operation, step string, err error) StartupState {
+	failed := func(operation, step string, dropped []string, err error) StartupState {
+		if errors.IsConnectivityError(err) {
+			droppedText := mixedSchemaNone
+			if len(dropped) > 0 {
+				droppedText = strings.Join(dropped, ", ")
+			}
+			logger.Global().Module("datastore").Warn("lost the database connection while reconciling a mixed schema database, the startup check reads the database again",
+				logger.String("operation", operation),
+				logger.String("step", step),
+				logger.String("dropped_empty_tables", droppedText),
+				logger.Error(err))
+			return unknownStartupState(mysqlStateUnknown(settings, step, err))
+		}
 		reportStartupError("mysql", operation, err, redact...)
 		reportMixedSchemaRefused()
 		refusal := newMixedSchemaError(p, verdictRefuseDropFailed)
@@ -2049,7 +2091,7 @@ func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupS
 	case verdictKeepV2:
 		dropped, err := dropVerifiedEmptyTables(db, database, legacyDetectionTables)
 		if err != nil {
-			return failed("mixedSchemaDropLegacy", stepDropLegacy, err)
+			return failed("mixedSchemaDropLegacy", stepDropLegacy, dropped, err)
 		}
 		logMixedSchemaReconciled("database held enhanced database (v2) tables beside empty legacy tables; kept the enhanced database and removed the empty legacy tables",
 			DecisionMixedSchemaKeptV2, p, dropped)
@@ -2058,7 +2100,7 @@ func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupS
 	case verdictFreshV2:
 		marked, err := markEmptyBareSchemaCompleted(db, p.markerTable)
 		if err != nil {
-			return failed("mixedSchemaMarkCompleted", stepMarkCompleted, err)
+			return failed("mixedSchemaMarkCompleted", stepMarkCompleted, nil, err)
 		}
 		if !marked {
 			// No marker row to update: the fresh install path writes it. Dropping the
@@ -2071,7 +2113,7 @@ func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupS
 		if err != nil {
 			// The completed marker stays. With no legacy rows the next start classifies this
 			// database as keep-v2 and retries the drop, so there is nothing to undo.
-			return failed("mixedSchemaDropLegacy", stepDropLegacy, err)
+			return failed("mixedSchemaDropLegacy", stepDropLegacy, dropped, err)
 		}
 		logMixedSchemaReconciled("database held empty enhanced database (v2) tables beside empty legacy tables; kept the enhanced database, marked it completed and removed the empty legacy tables",
 			DecisionMixedSchemaFreshV2, p, dropped, logger.Bool("marked_completed", true))
@@ -2080,7 +2122,7 @@ func resolveMixedSchema(db *gorm.DB, database string, redact ...string) StartupS
 	case verdictKeepLegacy:
 		dropped, err := dropVerifiedEmptyTables(db, database, bareDetectionTables)
 		if err != nil {
-			return failed("mixedSchemaDropDetections", stepDropDetections, err)
+			return failed("mixedSchemaDropDetections", stepDropDetections, dropped, err)
 		}
 		logMixedSchemaReconciled("database held legacy tables beside empty enhanced database (v2) detection tables; kept the legacy database and removed the empty detection tables, every other enhanced table was left in place",
 			DecisionMixedSchemaKeptLegacy, p, dropped)
