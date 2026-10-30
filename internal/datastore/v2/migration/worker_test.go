@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -1125,4 +1126,54 @@ func TestWorker_AbandonDuringTailSyncBatch(t *testing.T) {
 		assert.False(t, w.IsRunning())
 		legacy.AssertNumberOfCalls(t, "Search", 1) // no final drain after the batch
 	})
+}
+
+// TestWorker_ValidateWithCounts_FailsWhenNotesWithIntegerZeroBeginTimeAreMissing verifies
+// the count gate sees legacy notes whose begin_time is stored as integer 0: when they are
+// missing from v2, validation must fail instead of passing on a filtered legacy count.
+func TestWorker_ValidateWithCounts_FailsWhenNotesWithIntegerZeroBeginTimeAreMissing(t *testing.T) {
+	t.Parallel()
+
+	settings := &conf.Settings{}
+	settings.Output.SQLite.Enabled = true
+	settings.Output.SQLite.Path = filepath.Join(t.TempDir(), "legacy.db")
+	store := datastore.New(settings)
+	require.NoError(t, store.Open())
+	t.Cleanup(func() { assert.NoError(t, store.Close()) })
+	sqliteStore, ok := store.(*datastore.SQLiteStore)
+	require.True(t, ok, "expected a SQLite store")
+
+	day := time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC)
+	notes := make([]datastore.Note, 5)
+	for i := range notes {
+		notes[i] = datastore.Note{ScientificName: "Parus major", Date: "2024-06-15", Time: "10:00:00", BeginTime: day.Add(time.Duration(i) * time.Hour)}
+	}
+	require.NoError(t, sqliteStore.DB.Create(&notes).Error)
+	require.NoError(t, sqliteStore.DB.Exec("UPDATE notes SET begin_time = 0 WHERE id IN ?",
+		[]uint{notes[3].ID, notes[4].ID}).Error)
+	var integerRows int64
+	require.NoError(t, sqliteStore.DB.Raw("SELECT count(*) FROM notes WHERE typeof(begin_time) = 'integer'").
+		Scan(&integerRows).Error)
+	require.Equal(t, int64(2), integerRows)
+
+	// The planted v2 rows stand for the migrated text-begin_time notes; the two
+	// integer-0 notes are the rows missing from v2.
+	v2Repo, _ := newOnDiskDetectionRepo(t)
+	for _, n := range notes[:3] {
+		plantGhostDetection(t, v2Repo, n.ID)
+	}
+
+	sm, cleanup := setupWorkerTest(t)
+	t.Cleanup(cleanup)
+	w := &Worker{
+		legacy:       datastore.NewDetectionRepository(store, time.UTC),
+		v2Detection:  v2Repo,
+		stateManager: sm,
+		logger:       testLogger(),
+	}
+
+	legacyCount, v2Count, err := w.validateWithCounts(t.Context())
+	require.Error(t, err)
+	assert.Equal(t, int64(5), legacyCount)
+	assert.Equal(t, int64(3), v2Count)
 }

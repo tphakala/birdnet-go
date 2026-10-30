@@ -282,6 +282,7 @@ type Interface interface {
 	// PingWithLatency executes a trivial query (SELECT 1) and returns the round-trip time.
 	PingWithLatency(ctx context.Context) (time.Duration, error)
 	// CountDetectionsSince returns the number of detections recorded since the given time.
+	// A zero since counts every detection, whatever its stored begin_time.
 	CountDetectionsSince(ctx context.Context, since time.Time) (int, error)
 	// SchemaVersion returns the datastore schema version ("legacy" or "v2").
 	SchemaVersion() string
@@ -340,12 +341,18 @@ func (ds *DataStore) PingWithLatency(ctx context.Context) (time.Duration, error)
 }
 
 // CountDetectionsSince returns the number of detections recorded since the given time.
+// A zero since counts every detection, whatever its stored begin_time: SQLite orders the
+// INTEGER 0 left in old rows below any TEXT time, so a begin_time comparison would skip them.
 func (ds *DataStore) CountDetectionsSince(ctx context.Context, since time.Time) (int, error) {
 	if ds.DB == nil {
 		return 0, ErrDBNotConnected
 	}
 	var count int64
-	if err := ds.DB.WithContext(ctx).Model(&Note{}).Where("begin_time >= ?", since).Count(&count).Error; err != nil {
+	query := ds.DB.WithContext(ctx).Model(&Note{})
+	if !since.IsZero() {
+		query = query.Where("begin_time >= ?", since)
+	}
+	if err := query.Count(&count).Error; err != nil {
 		return 0, fmt.Errorf("count detections failed: %w", err)
 	}
 	return int(count), nil
