@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Inställningar för utökad inspelning ändrade. Omstart krävs.",
         "equalizerUpdateFailed": "Kunde inte uppdatera ljudequalizerinställningar",
         "equalizerUpdated": "Ljudequalizerinställningar uppdaterade",
+        "equalizerFiltersSkipped": "Ljudequalizerinställningar sparade, men vissa filter hoppas över för {count, plural, one {källan} other {källorna}} {sources}: ett filter måste vara giltigt vid källans samplingsfrekvens, och dess frekvens måste ligga under hälften av den.",
         "savedSuccessfully": "Inställningarna sparades",
         "saveFailed": "Kunde inte spara inställningar"
       },
@@ -449,7 +450,19 @@
         "completedTitle": "Databasmigrering slutförd",
         "completedMessage": "Migreringen slutförd. Starta om BirdNET-Go för att byta till den nya databasen.",
         "errorTitle": "Databasmigreringsfel",
-        "errorMessage": "Migreringen pausad på grund av fel. Kontrollera loggar och försök återuppta."
+        "errorMessage": "Migreringen pausad på grund av fel. Kontrollera loggar och försök återuppta.",
+        "legacyNotStartedTitle": "Databasuppgradering krävs",
+        "legacyNotStartedMessage": "Den här installationen använder fortfarande det gamla databasformatet, som slutar fungera i en framtida version. Öppna System > Databas för att köra migreringen.",
+        "legacyInProgressTitle": "Databasmigrering pågår",
+        "legacyInProgressMessage": "Migreringen till det nya databasformatet körs. Låt BirdNET-Go vara igång tills den är klar; det gamla formatet slutar fungera i en framtida version.",
+        "legacyNeedsAttentionTitle": "Databasmigreringen behöver uppmärksamhet",
+        "legacyNeedsAttentionMessage": "Migreringen till det nya databasformatet är pausad eller har misslyckats. Öppna System > Databas för att återuppta eller försöka igen; det gamla formatet slutar fungera i en framtida version.",
+        "legacyRestartRequiredTitle": "Starta om för att slutföra databasmigreringen",
+        "legacyRestartRequiredMessage": "Migreringen är slutförd. Starta om BirdNET-Go för att byta till den nya databasen. Om det här meddelandet finns kvar efter en omstart, kontrollera loggen efter databasfel."
+      },
+      "database": {
+        "serverAttentionTitle": "Databasservern behöver uppmärksamhet",
+        "serverAttentionMessage": "MySQL- eller MariaDB-servern är inte en version som stöds, eller så använder databasen inte teckenuppsättningen utf8mb4. Öppna System > Hälsa för detaljer."
       },
       "cleanup": {
         "completeTitle": "Rensning av gammal databas slutförd",
@@ -793,6 +806,9 @@
       "loadFailedAction": "Visa status för AI-modeller",
       "failingTitle": "{count, plural, one {En modell misslyckas vid varje analys} other {# modeller misslyckas vid varje analys}}",
       "failingMessage": "{count, plural, one {{models} är inläst, men varje analys misslyckas, så den upptäcker ingenting.} other {{models} är inlästa, men varje analys misslyckas, så de upptäcker ingenting.}} Sidan AI-modeller visar backend och felet."
+    },
+    "legacyDatabase": {
+      "action": "Öppna databasinställningar"
     },
     "banner": {
       "title": "Titel",
@@ -1581,7 +1597,7 @@
           "restartTitle": "Omstart krävs",
           "restartBody": "Starta om applikationen för att byta till V2-databasen. Rensning av äldre databas blir tillgänglig efter omstart.",
           "fallbackError": "Antal poster stämmer inte mellan äldre och V2-databaser. Vissa poster kan ha migrerats felaktigt.",
-          "migrateInfo": "Migreringen kommer att överföra {count} poster från den äldre databasen till det nya V2-schemat. Dubbelskrivningsläge säkerställer noll dataförlust under migreringen.",
+          "migrateInfo": "Migreringen kommer att överföra {count} poster från den äldre databasen till det nya V2-schemat. Nya detektioner som sparas under migreringen kopieras också till den nya databasen.",
           "sourceLegacy": "Källa (Äldre)",
           "targetV2": "Mål (V2)",
           "recordsLabel": "Poster",
@@ -1633,7 +1649,7 @@
         },
         "notes": {
           "in_progress": "Du kan fortsätta använda systemet normalt medan migreringen körs i bakgrunden.",
-          "dual_write": "Migrering pågår. Din data är säker - alla nya detektioner sparas i båda databaserna.",
+          "dual_write": "Migrering pågår. Din data är säker - nya detektioner sparas i den nuvarande databasen och kopieras till den nya databasen under migreringen.",
           "migrating": "Kopierar dina befintliga detektioner till den nya databasen.",
           "validating": "Verifierar att alla poster kopierades korrekt. Nästan klart!",
           "cutover": "Byter till den nya databasen. Det tar bara ett ögonblick.",
@@ -1716,6 +1732,12 @@
             },
             "sqlite_integrity": {
               "name": "Databasintegritet"
+            },
+            "mysql_server_version": {
+              "name": "Databasserverns version"
+            },
+            "mysql_charset": {
+              "name": "Databasens teckenuppsättning"
             },
             "mysql_table_health": {
               "name": "Tabellhälsa"
@@ -2323,6 +2345,7 @@
     "errors": {
       "loadFailed": "Kunde inte ladda inställningar",
       "saveFailed": "Kunde inte spara inställningar",
+      "changedElsewhere": "Inställningarna ändrades på annat håll. Granska dem och spara igen.",
       "databaseStatsFailed": "Kunde inte ladda databasstatistik",
       "csvDownloadFailed": "Kunde inte ladda ner CSV"
     },
@@ -2670,7 +2693,7 @@
                 "descriptions": {
                   "highContrast": "Bäst för svaga signaler. Fågelläten framträder tydligt mot bakgrundsbruset. Rekommenderas för vetenskapliga/gråskalestilar.",
                   "standard": "Standardbalanserad inställning. Bra för de flesta användningsfall.",
-                  "extended": "Mer detaljer synliga men lägre kontrast. SoX standardvärde."
+                  "extended": "Mer detaljer synliga men lägre kontrast."
                 }
               },
               "enabled": {
@@ -2772,7 +2795,7 @@
           "title": "Vad som ingår i rapporten:",
           "applicationLogs": "**Applikationsloggar** - Senaste fel och felsökningsinformation",
           "configuration": "**Konfiguration** - Dina inställningar med känslig data borttagen",
-          "systemInfo": "**Systeminformation** - OS-version, minne och körtidsdetaljer",
+          "systemInfo": "**Systeminformation** - OS-version, minne, hårdvara, anslutna USB-enheter och ljudkort samt körtidsdetaljer",
           "notIncluded": "**INGÅR INTE** - Ljudfiler, fågeldetektioner eller personuppgifter"
         },
         "userMessage": {
@@ -2925,6 +2948,11 @@
             "unit": "min",
             "helpText": "Förhindra upprepade aviseringar för samma art inom detta tidsfönster. Ange 0 för att inaktivera."
           }
+        },
+        "rulesNotice": {
+          "message": "Push-notifieringar om detekteringar kommer från larmregler på fliken Regler. De inbyggda detekteringsreglerna aviserar bara i appen. För att få push-notifieringar lägger du till åtgärden {pushAction} i regeln {ruleName}, eller skapar en regel för händelsen {eventName} med ett konfidensvillkor och en väntetid.",
+          "previousFilters": "Dina inställningar Minsta konfidens ({confidence}%) och Artavkylning ({minutes} min) här används inte av larmregler.",
+          "openRules": "Öppna Regler"
         },
         "noProviders": "Inga leverantörer konfigurerade",
         "noProvidersDescription": "Lägg till en leverantör för att börja ta emot push-aviseringar",
@@ -3229,10 +3257,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Ladda upp detektioner till BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg inte detekterat",
-          "message": "Installera FFmpeg för att aktivera stöd för FLAC-kodning, BirdWeather fasar ut WAV-uppladdningar till förmån för komprimerade FLAC-ljudfiler."
-        },
         "enable": "Aktivera BirdWeather-uppladdningar",
         "token": {
           "label": "BirdWeather-token",
@@ -4249,7 +4273,6 @@
     },
     "species": {
       "pageLabel": "Artinställningar",
-      "saveError": "Kunde inte spara konfiguration för \"{species}\". Försök igen.",
       "configUpdated": "Konfiguration uppdaterad för \"{species}\"",
       "configAdded": "Konfiguration tillagd för \"{species}\"",
       "duplicateConfigError": "Arten \"{species}\" har redan en konfiguration. Välj ett annat namn.",
@@ -5080,6 +5103,7 @@
       "loop": "Växla upprepning",
       "player": "Ljudspelare",
       "autoplayBlocked": "Klicka för att spela (autouppspelning blockerad)",
+      "hlsLoadFailed": "Det gick inte att läsa in ljudspelaren, ladda om sidan och försök igen",
       "hlsNotSupported": "HLS-uppspelning stöds inte i den här webbläsaren",
       "streamStarting": "Startar ljudström...",
       "levelFor": "Ljudnivå för {source}",
@@ -5314,6 +5338,9 @@
       "invalidJSON": "Ogiltig JSON",
       "invalidEscalation": "Eskaleringsstegen är ogiltiga",
       "engineUnavailable": "Varningsmotorn är otillgänglig"
+    },
+    "insights": {
+      "v2Required": "Insikter kräver den utökade (v2) databasen"
     },
     "detection": {
       "invalidDate": "Ogiltigt {paramName}-format, använd ÅÅÅÅ-MM-DD"

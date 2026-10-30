@@ -376,8 +376,70 @@ relying on the retry.
   and it is written under `-outputdir`, which defaults to the package directory
   inside the repository. Pass `-outputdir` with an existing directory outside
   the repository so the output cannot be committed.
-- Test containers (MySQL, Mosquitto, MediaMTX, ntfy, Pebble) live in
-  `internal/testutil/containers`.
+- Test containers (MySQL or MariaDB, Mosquitto, MediaMTX, ntfy, Pebble) live in
+  `internal/testutil/containers`. `MYSQL_TEST_IMAGE` (`mysql:<tag>` or
+  `mariadb:<tag>`, default `mysql:8.4`) selects the server for the MySQL-backed
+  container suites and overrides any tag a test sets; it does not affect the
+  external-server tests gated by `MYSQL_TEST_HOST` and `MYSQL_TEST_PASSWORD`.
+  When `CI` is set the variable is required, and the suites fail at startup
+  without it. The migration package's external-server suite (`-tags=integration,mysql`,
+  `MYSQL_TEST_*` variables) is not run by CI and drops and recreates tables, so
+  point `MYSQL_TEST_DATABASE` at a dedicated database whose name ends in `_test`.
+  Pass `-count=1` when switching servers: the suites read it in `TestMain`, and
+  `go test` can replay a result cached for another server.
+  In CI the `database-tests` job runs these suites on MySQL 8.4, MariaDB 10.11
+  and MariaDB 11.8.
+
+### Which CI jobs a pull request runs
+
+Some CI jobs are expensive and depend on a narrow part of the tree, so a pull
+request runs them only when it changes files they depend on. The `changes` job
+in `golangci-test.yml` (and in `cross-platform-build.yml`) holds the exact path
+lists:
+
+- `database-tests`: the datastore, the import code, the container helper,
+  `go.mod`, `go.sum` and the test workflow.
+- `integration-tests` (SQLite migrations): the datastore and the packages it
+  maps from.
+- `testcontainer-tests`: `mqtt`, `spectrogram`, the container helper and the
+  top-level `internal/api` files.
+- `openvino-build`: the classifier and inference packages, the toolchain and
+  dependencies.
+- The container smoke tests, the reverse proxy tests and the browser
+  integration tests use `paths` filters on pull requests.
+
+Pushes to `main` and manual runs always run everything. The unit tests and lint
+run on every pull request. To force the gated jobs on a pull request, add the
+`run-full-ci` label (or `run-db-tests` for the database job only) and push.
+
+### Go test cache in CI
+
+Each unit-tests shard restores the Go build and test cache saved by the last push
+to `main` (one entry per shard). On a pull request, a package whose inputs match
+main's run is shown as `(cached)` and is not run again. Main and manual runs run
+`go clean -testcache` first, so they run every test. The `run-full-ci` label also
+forces every unit test to run (on the next push).
+
+- Before the tests, every tracked file gets an mtime derived from its content,
+  because Go identifies the files a test opens by size and mtime.
+- The cache key carries the TFLite and ONNX Runtime libraries and headers, the Go
+  version, the runner image family and the files that define the job (the
+  workflow, `.github/scripts/go-test-cache.sh` and the two setup actions). A
+  change to any of them runs everything.
+- The cache cannot see anything outside the repository (other runner software,
+  binaries on `PATH`, the Mosquitto service), files a test reads only through a
+  subprocess or C code, and anything read in `init`, a package-level variable or
+  `TestMain` before `m.Run`. A pull request replays main's result for such state.
+  Write tests that open or stat their inputs inside the test function. Main runs
+  every test, so a change that only such state breaks still shows up on main.
+  The import-guard tests are one known case: they run `go list` with default
+  build tags in a subprocess, so a file the unit job's tags exclude is not part
+  of their cache key.
+- A gotestsum rerun (`-run=^Name$`) can be replayed when main passed the same
+  rerun on the same inputs; the report then counts the test as flaky, which it is.
+- Cached packages report an elapsed time of about zero in the JSON events and
+  JUnit files. The job summary of each shard counts the cached packages.
+- To turn the cache off, set `GO_TEST_CACHE` to `'false'` in `golangci-test.yml`.
 
 ## Mocking with testify/mock
 

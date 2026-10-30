@@ -9,9 +9,9 @@ import (
 // Sentinel errors. Problems with the source or the request wrap one of these (use
 // errors.Is), together with the underlying decoder error when there is one;
 // callers map them to HTTP statuses. Any other error (file access, an encoder or
-// denoiser failure) carries none and is a server fault. The one exception is a
-// failed read of M4A frame data, which go-m4a reports as corrupt data, so it
-// wraps ErrUndecodableSource.
+// denoiser failure) carries none and is a server fault. ErrShorterThanDeclared
+// is not a source fault and is not for status mapping: it tells the analysis
+// caller to decode buffered.
 var (
 	// ErrUnsupportedSource marks a source this package does not decode: a file
 	// whose extension is not a clip format, a non-regular file, or a sample rate
@@ -29,6 +29,14 @@ var (
 	// sentinel keep their answer. MP3, M4A and Opus carry no exact length and are
 	// never reported this way.
 	ErrTruncatedSource = errors.NewStd("source audio is shorter than its header declares")
+
+	// ErrShorterThanDeclared is returned by MonoSource.Stream when a file-backed
+	// source of a format without an exact length (MP3, M4A, Opus) delivers fewer
+	// frames than its header declared. The span a caller took from the header is
+	// then too long for the audio, so the caller should decode the file with
+	// DecodeMono and use what it holds. It is a signal to redo the decode, not a
+	// source fault: it is never wrapped together with ErrUndecodableSource.
+	ErrShorterThanDeclared = errors.NewStd("source audio is shorter than its header declared")
 
 	// ErrAudioTooLong marks a source file or a decoded range that exceeds the
 	// size bounds.

@@ -41,9 +41,6 @@ var CandidateSampleRates = conf.ValidSampleRates()
 // MinCaptureSampleRate is the lowest rate considered useful for capture.
 const MinCaptureSampleRate = 48000
 
-// MaxCaptureSampleRate is the highest rate probed during capability discovery.
-const MaxCaptureSampleRate = 384000
-
 // ErrDeviceNotFound is returned when ProbeDeviceCapabilities cannot find a
 // device matching the requested ID.
 var ErrDeviceNotFound = errors.Newf("device not found").

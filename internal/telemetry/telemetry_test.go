@@ -585,3 +585,21 @@ func TestCaptureMessage_InfoLevelFiltered(t *testing.T) {
 	FastCaptureMessage("Verbose trace", sentry.LevelDebug, "system")
 	// If we get here without panic, the early return works.
 }
+
+func TestInitSentry_OldBuildSkipsInit(t *testing.T) {
+	// Not parallel: mutates package-level state and the global hub.
+	t.Setenv(sentryDSNEnvVar, "https://dummy@example.ingest.sentry.io/1")
+	bindTestClient(t, nil)
+	t.Cleanup(func() {
+		deferredMutex.Lock()
+		deferredMessages = nil
+		sentryInitialized = false
+		deferredMutex.Unlock()
+	})
+
+	settings := &conf.Settings{BuildDate: expiredBuildDate()}
+	settings.Sentry.Enabled = true
+
+	require.NoError(t, InitSentry(settings))
+	assert.False(t, sentryClientBound(), "an expired build must not bind a Sentry client")
+}

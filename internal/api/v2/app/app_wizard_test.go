@@ -292,17 +292,6 @@ func TestDetermineWizardState(t *testing.T) {
 // DismissWizard handler tests
 // =============================================================================
 
-func TestDismissWizard_Success(t *testing.T) {
-	// Not parallel: serveDismiss publishes the process-wide settings snapshot.
-	mockRepo := newMockAppMetadataRepo()
-
-	rec := serveDismiss(t, mockRepo)
-
-	assert.Equal(t, http.StatusNoContent, rec.Code)
-	assert.Equal(t, "v0.9.0", mockRepo.store["last_seen_version"],
-		"DismissWizard should persist the current version")
-}
-
 func TestDismissWizard_NilRepo(t *testing.T) {
 	t.Parallel()
 

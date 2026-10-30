@@ -14,6 +14,8 @@ import (
 	v2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/suncalc"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestInitializeFreshInstall_SQLite(t *testing.T) {
@@ -43,6 +45,18 @@ func TestInitializeFreshInstall_SQLite(t *testing.T) {
 
 	// Verify enhanced database mode was set
 	assert.True(t, v2.IsEnhancedDatabase(), "enhanced database flag should be set")
+
+	// A fresh install has nothing to migrate and records that.
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if sqlDB, dbErr := db.DB(); dbErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	state, err := v2.NewStateManager(db).GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.AuxiliaryDataStatusNotRequired, state.AuxiliaryDataOutcome())
 }
 
 func TestInitializeFreshInstall_SQLite_CustomPath(t *testing.T) {

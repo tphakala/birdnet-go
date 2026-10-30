@@ -164,11 +164,7 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 	// Ensure a CSRF token is available for the SPA. The CSRF middleware forces
 	// Echo's token path (GHSA-9fhj-f35q-w532), so a real token is normally already
 	// in context; EnsureCSRFToken is the backstop that always returns one here.
-	csrfToken, err := middleware.EnsureCSRFToken(ctx)
-	if err != nil {
-		c.LogWarnIfEnabled("Failed to generate CSRF token", logger.Error(err))
-		return c.HandleError(ctx, err, "Failed to generate CSRF token", http.StatusInternalServerError)
-	}
+	csrfToken := middleware.EnsureCSRFToken(ctx)
 
 	// Snapshot the live settings once so the response reflects the latest
 	// published configuration and every read below is race-free against a
@@ -248,17 +244,15 @@ func (c *Handler) GetAppConfig(ctx echo.Context) error {
 		response.Layout = &settings.Realtime.Dashboard.Layout
 	}
 
-	// Include Sentry frontend config when telemetry is enabled AND a DSN is
-	// actually configured for this build. Builds without a DSN (plain `go build`
-	// or forks) must not hand the frontend an empty DSN, which would make the
-	// browser SDK fail to initialize.
-	if settings.Sentry.Enabled {
-		if dsn := telemetry.GetFrontendDSN(); dsn != "" {
-			response.Sentry = &SentryFrontendConfig{
-				Enabled:  true,
-				DSN:      dsn,
-				SystemID: settings.SystemID,
-			}
+	// Include Sentry frontend config only when reporting is allowed AND a DSN
+	// is actually configured for this build. Builds without a DSN (plain `go
+	// build` or forks) must not hand the frontend an empty DSN, which would make
+	// the browser SDK fail to initialize.
+	if dsn := telemetry.FrontendDSN(settings); dsn != "" {
+		response.Sentry = &SentryFrontendConfig{
+			Enabled:  true,
+			DSN:      dsn,
+			SystemID: settings.SystemID,
 		}
 	}
 

@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"testing"
+	"time"
 
 	"github.com/getsentry/sentry-go"
 	"github.com/stretchr/testify/assert"
@@ -80,4 +81,30 @@ func TestInitMinimalSentryForSupportUnboundHub(t *testing.T) {
 	bindTestClient(t, newTestClient(t))
 	assert.NoError(t, InitMinimalSentryForSupport("test-system-id", "test-version"),
 		"an initialized client is reused")
+}
+
+// TestShouldSkipTelemetryForOldBuild pins that the build-age check runs on every
+// call from the current settings and that a bound client does not override it.
+// Not parallel: it changes the global hub, test mode and settings.
+func TestShouldSkipTelemetryForOldBuild(t *testing.T) {
+	prevMode := testMode.Load()
+	t.Cleanup(func() { testMode.Store(prevMode) })
+	testMode.Store(testModeDisabled)
+
+	prevSettings := conf.GetSettings()
+	t.Cleanup(func() { conf.StoreSettings(prevSettings) })
+
+	bindTestClient(t, newTestClient(t))
+
+	conf.StoreSettings(&conf.Settings{
+		Sentry:    conf.SentrySettings{Enabled: true},
+		BuildDate: time.Now().Add(-time.Hour).Format(time.RFC3339),
+	})
+	assert.False(t, shouldSkipTelemetry(), "a fresh build with a bound client must not skip")
+
+	conf.StoreSettings(&conf.Settings{
+		Sentry:    conf.SentrySettings{Enabled: true},
+		BuildDate: expiredBuildDate(),
+	})
+	assert.True(t, shouldSkipTelemetry(), "an expired build must skip even with a bound client")
 }

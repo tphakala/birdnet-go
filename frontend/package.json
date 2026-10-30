@@ -86,7 +86,7 @@
     ]
   },
   "devDependencies": {
-    "@ast-grep/cli": "^0.45.2",
+    "@ast-grep/cli": "^0.51.0",
     "@axe-core/playwright": "^4.11.3",
     "@eslint/js": "^10.0.1",
     "@formatjs/icu-messageformat-parser": "^3.5.19",
@@ -105,7 +105,7 @@
     "@vitest/eslint-plugin": "^1.6.20",
     "@vitest/ui": "^5.0.1",
     "axe-core": "^4.12.1",
-    "eslint": "^10.11.0",
+    "eslint": "^10.13.0",
     "eslint-plugin-playwright": "^2.12.0",
     "eslint-plugin-security": "^4.0.1",
     "eslint-plugin-svelte": "^3.19.0",
@@ -121,7 +121,7 @@
     "stylelint": "^17.13.0",
     "stylelint-config-standard": "^40.0.0",
     "svelte": "^5.57.1",
-    "svelte-check": "^4.6.0",
+    "svelte-check": "^4.7.7",
     "svelte-eslint-parser": "^1.8.0",
     "tailwindcss": "^4.2",
     "typescript": "^6.0.3",
@@ -132,7 +132,7 @@
   },
   "dependencies": {
     "@bybas/weather-icons": "^2.0.0",
-    "@lucide/svelte": "1.57.0",
+    "@lucide/svelte": "1.58.0",
     "@sentry/browser": "^10.75.0",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",

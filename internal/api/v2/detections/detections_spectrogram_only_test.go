@@ -12,28 +12,30 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	detectionPkg "github.com/tphakala/birdnet-go/internal/detection"
 )
 
 const keptClipName = "2026/01/a.wav"
 
-func TestNoteToDetectionResponse_SpectrogramOnly(t *testing.T) {
-	_, _, h := setupTestEnvironment(t)
+func TestResultToDetectionResponse_SpectrogramOnly(t *testing.T) {
+	_, _, h := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
 
 	tests := []struct {
-		name string
-		note datastore.Note
-		want bool
+		name   string
+		result detectionPkg.Result
+		want   bool
 	}{
-		{"audio present", datastore.Note{ClipName: keptClipName}, false},
-		{"spectrogram only", datastore.Note{SpectrogramClipName: "2026/01/kept.wav"}, true},
-		{"audio present with stale spectrogram name", datastore.Note{ClipName: keptClipName, SpectrogramClipName: "2026/01/kept.wav"}, false},
-		{"neither", datastore.Note{}, false},
+		{"audio present", detectionPkg.Result{ClipName: keptClipName}, false},
+		{"spectrogram only", detectionPkg.Result{SpectrogramClipName: "2026/01/kept.wav"}, true},
+		{"audio present with stale spectrogram name", detectionPkg.Result{ClipName: keptClipName, SpectrogramClipName: "2026/01/kept.wav"}, false},
+		{"neither", detectionPkg.Result{}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			resp := h.noteToDetectionResponse(&tt.note, false, nil)
+			resp := h.resultToDetectionResponse(&tt.result, false, nil)
 			assert.Equal(t, tt.want, resp.SpectrogramOnly)
 
 			body, err := json.Marshal(resp)

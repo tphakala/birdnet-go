@@ -37,18 +37,48 @@ jobs:
 
       - name: Check for drift
         run: |
-          if git diff --exit-code -- internal/speciesdict/data; then
-            echo "### Species Dict In Sync" >> $GITHUB_STEP_SUMMARY
+          # Compare the decompressed JSON, not the gzip bytes. The compressed
+          # bytes depend on the Go toolchain's compress/flate implementation, so
+          # a Go upgrade would otherwise fail this check with no change in content.
+          # A file that is missing on either side or does not decompress counts as drift.
+          set -o pipefail
+          data_dir=internal/speciesdict/data
+          tmp=$(mktemp -d)
+          checked=0
+          drifted=()
+          while IFS= read -r f; do
+            checked=$((checked + 1))
+            if git show "HEAD:$f" 2>/dev/null | gzip -dc > "$tmp/old" 2>/dev/null &&
+              gzip -dc "$f" > "$tmp/new" 2>/dev/null &&
+              cmp -s "$tmp/old" "$tmp/new"; then
+              continue
+            fi
+            drifted+=("$f")
+          done < <(git ls-files --cached --others --exclude-standard -- "$data_dir")
+
+          if [ "$checked" -eq 0 ]; then
+            echo "### Species Dict Check Found No Files" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "No files were listed under \`$data_dir\`, so nothing was compared." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          if [ "${#drifted[@]}" -eq 0 ]; then
+            echo "### Species Dict In Sync" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "### Species Dict Out Of Sync" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "The committed \`internal/speciesdict/data/*.json.gz\` files do not match" >> $GITHUB_STEP_SUMMARY
-            echo "the output of \`go generate ./internal/speciesdict\`." >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Run the following and commit the result:" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "go generate ./internal/speciesdict" >> $GITHUB_STEP_SUMMARY
-            echo "git add internal/speciesdict/data" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "### Species Dict Out Of Sync" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "The decompressed content of these \`internal/speciesdict/data/*.json.gz\` files" >> "$GITHUB_STEP_SUMMARY"
+            echo "does not match the output of \`go generate ./internal/speciesdict\`:" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            for f in "${drifted[@]}"; do
+              echo "- \`$f\`" >> "$GITHUB_STEP_SUMMARY"
+            done
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Run the following and commit the result:" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "go generate ./internal/speciesdict" >> "$GITHUB_STEP_SUMMARY"
+            echo "git add internal/speciesdict/data" >> "$GITHUB_STEP_SUMMARY"
+            echo "\`\`\`" >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi

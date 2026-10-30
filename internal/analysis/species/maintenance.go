@@ -8,6 +8,7 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // SyncIfNeeded checks if a database sync is needed and performs it
@@ -110,20 +111,17 @@ func (t *SpeciesTracker) pruneYearlyEntriesLocked(now time.Time) int {
 		return 0
 	}
 
-	currentYearStart := time.Date(now.Year(), time.Month(t.resetMonth), t.resetDay, 0, 0, 0, 0, now.Location())
-	if now.Before(currentYearStart) {
-		currentYearStart = currentYearStart.AddDate(-1, 0, 0)
-	}
+	currentYearStart := t.resetDate(t.getTrackingYear(now))
 
 	pruned := 0
 	for scientificName, firstSeen := range t.speciesThisYear {
-		if dateOnlyBefore(firstSeen, currentYearStart) {
+		if wallclock.DateOf(firstSeen).Compare(currentYearStart) < 0 {
 			delete(t.speciesThisYear, scientificName)
 			pruned++
 			getLog().Debug("Pruned old yearly entry",
 				logger.String("species", scientificName),
 				logger.String("first_seen", firstSeen.Format(time.DateOnly)),
-				logger.String("year_start", currentYearStart.Format(time.DateOnly)))
+				logger.String("year_start", currentYearStart.String()))
 		}
 	}
 	return pruned

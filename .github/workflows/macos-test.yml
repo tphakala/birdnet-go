@@ -37,9 +37,12 @@ on:
 permissions:
   contents: read
 
+# Only superseded pull request runs are cancelled. A run on main or a manual run
+# gets its own group per commit, so a burst of merges cannot cancel the run that
+# is the authoritative check of main.
 concurrency:
-  group: macos-test-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: macos-test-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unit-tests-macos:
@@ -76,9 +79,6 @@ jobs:
             echo "TFLITE_VERSION=${tflite}"
             echo "ONNXRUNTIME_VERSION=${onnx}"
           } >> "$GITHUB_ENV"
-
-      - name: Install FFmpeg and SoX
-        run: brew install ffmpeg sox
 
       - name: Install Task
         uses: arduino/setup-task@c0bc642852239c2689f73f4ea6459c29405f3c52 # v3.0.0

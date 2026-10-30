@@ -69,8 +69,11 @@ config := notification.DefaultTelemetryConfig()
 ### 1. Service Setup
 
 ```go
-// Create telemetry reporter (implemented by telemetry package)
-reporter := telemetry.NewNotificationReporter(settings.Sentry.Enabled)
+// Create telemetry reporter (implemented by telemetry package). It is
+// installed at startup whatever the setting; IsEnabled follows the live Error
+// Tracking opt-in, the build age and a bound client, so toggling the setting
+// takes effect without a restart.
+reporter := telemetry.NewNotificationReporter(true)
 
 // Create telemetry integration
 config := notification.DefaultTelemetryConfig()

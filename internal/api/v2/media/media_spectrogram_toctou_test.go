@@ -55,7 +55,7 @@ func TestGenerateSpectrogramFromRelIgnoresLiveExportPath(t *testing.T) {
 	relAudioPath := "2024/06/04/Turdus_merula_80p.wav"
 	_, _, _, relSpectrogramPath := buildSpectrogramPaths(relAudioPath, width, raw, "", "", "")
 
-	// Pre-create the spectrogram on disk so the fast path returns without ffmpeg.
+	// Pre-create the spectrogram on disk so the fast path returns without rendering.
 	full := filepath.Join(tmp, relSpectrogramPath)
 	require.NoError(t, os.MkdirAll(filepath.Dir(full), 0o750))
 	require.NoError(t, os.WriteFile(full, []byte("PNG"), 0o600))

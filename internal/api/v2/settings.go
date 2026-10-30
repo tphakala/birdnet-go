@@ -2,7 +2,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
@@ -22,7 +21,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier/cadence"
 	"github.com/tphakala/birdnet-go/internal/classifier/region"
 	"github.com/tphakala/birdnet-go/internal/conf"
-	"github.com/tphakala/birdnet-go/internal/events"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -84,7 +82,7 @@ func (c *Controller) initSettingsRoutes() {
 	// NOTE: /settings/dashboard is intentionally registered publicly above and
 	// will match before this parameterized route.
 	settingsGroup.GET("/:section", c.GetSectionSettings)
-	// PUT /api/v2/settings - Updates multiple settings sections with complete replacement
+	// PUT /api/v2/settings - Updates multiple settings sections; keys absent from the body keep their values
 	settingsGroup.PUT("", c.UpdateSettings)
 	// PATCH /api/v2/settings/:section - Updates a specific settings section with partial replacement
 	// (includes /settings/dashboard; writes remain auth-protected).
@@ -100,18 +98,15 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Read the controller's lock-free settings snapshot.
-	settings := c.ControllerSettings()
+	// Read the live settings snapshot so out-of-band updates (such as gallery
+	// model installations) are immediately visible.
+	settings := c.getSettingsOrFallback()
 	if settings == nil {
-		// Fallback to global settings if controller settings not set
-		settings = conf.Setting()
-		if settings == nil {
-			c.LogErrorIfEnabled("Settings not initialized when trying to get all settings",
-				logger.String("path", ctx.Request().URL.Path),
-				logger.String("ip", ctx.RealIP()),
-			)
-			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
-		}
+		c.LogErrorIfEnabled("Settings not initialized when trying to get all settings",
+			logger.String("path", ctx.Request().URL.Path),
+			logger.String("ip", ctx.RealIP()),
+		)
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	c.LogInfoIfEnabled("Retrieved all settings successfully",
@@ -121,6 +116,9 @@ func (c *Controller) GetAllSettings(ctx echo.Context) error {
 
 	// Return a sanitized copy with secrets redacted
 	sanitized := sanitizeSettingsForAPI(settings)
+	// The ETag comes from the same snapshot as the body, so a client that sends it
+	// back as If-Match is asking about exactly the state it was shown.
+	ctx.Response().Header().Set(apicore.HeaderETag, settingsETag(settings))
 	return ctx.JSON(http.StatusOK, sanitized)
 }
 
@@ -139,17 +137,12 @@ const dashboardSectionName = "dashboard"
 func (c *Controller) GetDashboardSettings(ctx echo.Context) error {
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting public dashboard settings")
 
-	// Read the controller's lock-free settings snapshot.
-	settings := c.ControllerSettings()
+	settings := c.getSettingsOrFallback()
 	if settings == nil {
-		// Fallback to global settings if controller settings not set.
-		settings = conf.Setting()
-		if settings == nil {
-			c.LogAPIRequest(ctx, logger.LogLevelError,
-				"Settings not initialized when trying to get dashboard settings")
-			return c.HandleError(ctx, fmt.Errorf("settings not initialized"),
-				"Failed to get settings", http.StatusInternalServerError)
-		}
+		c.LogAPIRequest(ctx, logger.LogLevelError,
+			"Settings not initialized when trying to get dashboard settings")
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"),
+			"Failed to get settings", http.StatusInternalServerError)
 	}
 
 	// Sanitize first, then extract the dashboard section from the sanitized
@@ -178,15 +171,10 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
-	// Read the controller's lock-free settings snapshot.
-	settings := c.ControllerSettings()
+	settings := c.getSettingsOrFallback()
 	if settings == nil {
-		// Fallback to global settings if controller settings not set
-		settings = conf.Setting()
-		if settings == nil {
-			c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get section settings", logger.String("section", section))
-			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
-		}
+		c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get section settings", logger.String("section", section))
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	// Sanitize first, then extract the section from the sanitized copy
@@ -204,40 +192,31 @@ func (c *Controller) GetSectionSettings(ctx echo.Context) error {
 
 // UpdateSettings handles PUT /api/v2/settings.
 //
-// The flow is copy-on-write: we clone the current *conf.Settings snapshot,
-// apply the inbound update to the clone, validate, and atomically publish the
-// clone via conf.StoreSettings. Readers on the hot path (e.g. the basepath
-// strip middleware in internal/api/server.go) see either the old snapshot or
-// the new one, never a torn view. Rollback after a validation or disk-write
-// failure is a republish of the previous snapshot.
+// The flow is copy-on-write: commitSettings hands the merge the snapshot that is
+// current when the write happens plus a clone, the inbound update is applied to
+// the clone and validated, and the clone is published atomically under the
+// process-wide settings writer lock (conf.UpdateSettings). Because the baseline
+// is read under that lock, a model install or range filter rebuild that
+// published since the request arrived is kept, not overwritten. Readers on the
+// hot path (e.g. the basepath strip middleware in internal/api/server.go) see
+// either the old snapshot or the new one, never a torn view. Rollback after a
+// side-effect or disk-write failure is a compare-and-swap back to the previous
+// snapshot (rollbackSettings).
+//
+// A request that sends If-Match is applied only if it matches the current
+// settings ETag (settingsETag); otherwise it answers 412 with the current ETag
+// and changes nothing. A request without If-Match is applied as before. The
+// success response carries the ETag of the published snapshot.
 func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Attempting to update settings")
-	// Serialise concurrent PUT /api/v2/settings calls; each must see the
-	// latest published snapshot as its baseline.
+	// Serialise concurrent settings handlers on this controller. This does not
+	// order them against writers outside the API (model install, range filter);
+	// conf.UpdateSettings does that inside commitSettings.
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	// Read the controller's own snapshot when set (tests inject this
-	// directly); fall back to the global publisher. In production these are
-	// the same pointer at boot and stay in sync because every successful
-	// publish below updates both the atomic Settings pointer and conf.settingsInstance.
-	current := c.getSettingsOrFallback()
-	if current == nil {
-		c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized during update attempt")
-		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
-	}
-
-	// Build a mutable clone; never mutate current in place. Readers holding
-	// current through conf.GetSettings continue to see a consistent snapshot
-	// until StoreSettings publishes the new one.
-	updated := conf.CloneSettings(current)
-
-	// Publish to the global atomic pointer only when this controller owns
-	// it (production). Determined once at construction, so out-of-band
-	// StoreSettings calls (range filter, etc.) cannot desynchronize it.
-	publishGlobal := c.isGlobalOwner
-
-	// Parse the request body as raw JSON. Binding into a typed conf.Settings (the
+	// Parse the request body as raw JSON, before any settings lock is taken so a
+	// slow client cannot hold the writer lock. Binding into a typed conf.Settings (the
 	// previous behavior) filled every field the body omitted with its Go zero
 	// value, which the reflective apply then wrote over the live value, silently
 	// blanking unmentioned settings (issue #3993: lat/long reset to 0,0,
@@ -249,130 +228,115 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	// Deep-merge the incoming JSON into the clone, preserving keys absent from the
-	// request. This is the same omission-preserving merge PATCH uses per section,
-	// applied to the whole settings object; Go map-typed fields (species config,
-	// taxonomy synonyms) are replaced wholesale when present so the UI can still
-	// delete or rename a species-config entry by omitting its key.
-	if err := mergeFullSettings(updated, requestBody); err != nil {
-		c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to merge settings update", logger.Error(err))
-		return c.HandleError(ctx, err, "Failed to apply settings update", http.StatusBadRequest)
+	ifMatch, ifMatchPresent := requestIfMatch(ctx.Request())
+	var skippedFields []string
+	current, updated, err := c.commitSettings(func(current, updated *conf.Settings) error {
+		// Refuse a write built on settings that have changed since the client loaded
+		// them. Checked against current inside the writer lock, so nothing can
+		// publish between the check and this write.
+		if err := checkSettingsPrecondition(ifMatch, ifMatchPresent, current); err != nil {
+			return err
+		}
+
+		// Deep-merge the incoming JSON into the clone, preserving keys absent from the
+		// request. This is the same omission-preserving merge PATCH uses per section,
+		// applied to the whole settings object; Go map-typed fields (species config,
+		// taxonomy synonyms) are replaced wholesale when present so the UI can still
+		// delete or rename a species-config entry by omitting its key.
+		if err := mergeFullSettings(updated, requestBody); err != nil {
+			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to merge settings update", logger.Error(err))
+			return newRejection(err, "Failed to apply settings update", http.StatusBadRequest)
+		}
+
+		// Restore redacted secret placeholders to their live values so the merge does
+		// not persist the placeholder over a real secret. current is the source of
+		// truth for pre-update secrets (same argument order and ordering as PATCH).
+		if err := restoreRedactedSecrets(current, updated); err != nil {
+			c.LogAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
+			return newRejection(err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
+		}
+
+		// Enforce the blocked-field map: revert every blocked leaf to its pre-update
+		// value. The merge above wrote whatever the request carried, so this is what
+		// stops a client changing a never-updatable-via-API field, and it is what
+		// restores Security.BasicAuth.ClientID/ClientSecret, which sanitizeSettingsForAPI
+		// BLANKS (not redacts) so a full-object round trip carries empty strings for
+		// them. Same mechanism PATCH uses (restoreBlockedFields), replacing the
+		// field-by-field skip the old typed walk performed.
+		skippedFields = restoreBlockedFields(current, updated)
+		if len(skippedFields) > 0 {
+			// Debug, not Warn as on the PATCH path, and deliberately so: the frontend
+			// sends the full settings object on every save, and the blanked BasicAuth
+			// client credentials are reverted (and thus reported) on every save that
+			// has BasicAuth configured. Logging that at Warn would fire on every save.
+			// PATCH warns because it only touches the security section when the client
+			// actually PATCHes it.
+			c.LogAPIRequest(ctx, logger.LogLevelDebug, "Reverted blocked settings fields during full settings update", logger.Any("skipped_fields", skippedFields))
+		}
+
+		// Normalize species config keys to lowercase for case-insensitive matching.
+		if updated.Realtime.Species.Config != nil {
+			updated.Realtime.Species.Config = conf.NormalizeSpeciesConfigKeys(updated.Realtime.Species.Config)
+		}
+
+		// Canonicalize the species exclude list to scientific names so a localized or
+		// common name typed into the Settings exclude editor is stored in the same form
+		// the per-detection filter and the detection-card toggle match. Idempotent for
+		// an already-canonical list, so this does not spuriously trigger a rebuild.
+		updated.Realtime.Species.Exclude = c.canonicalizeExcludeList(updated.Realtime.Species.Exclude)
+
+		// Ensure LocationConfigured is set when birdnet coordinates are present.
+		// Backward compatibility with older frontends that don't send the flag.
+		if updated.BirdNET.Latitude != 0 || updated.BirdNET.Longitude != 0 {
+			updated.BirdNET.LocationConfigured = true
+		}
+
+		// Migrate legacy single audio source if a cached frontend sent it.
+		updated.MigrateAudioSourceConfig()
+
+		// Validate the clone before publishing. No rollback needed on validation
+		// failure: commitSettings publishes nothing when this returns an error.
+		if err := conf.ValidateSettings(updated); err != nil {
+			return newRejection(err, "Invalid settings", http.StatusBadRequest)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return c.respondCommitError(ctx, err)
 	}
-
-	// Restore redacted secret placeholders to their live values so the merge does
-	// not persist the placeholder over a real secret. current is the source of
-	// truth for pre-update secrets (same argument order and ordering as PATCH).
-	if err := restoreRedactedSecrets(current, updated); err != nil {
-		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
-		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
-	}
-
-	// Enforce the blocked-field map: revert every blocked leaf to its pre-update
-	// value. The merge above wrote whatever the request carried, so this is what
-	// stops a client changing a never-updatable-via-API field, and it is what
-	// restores Security.BasicAuth.ClientID/ClientSecret, which sanitizeSettingsForAPI
-	// BLANKS (not redacts) so a full-object round trip carries empty strings for
-	// them. Same mechanism PATCH uses (restoreBlockedFields), replacing the
-	// field-by-field skip the old typed walk performed.
-	skippedFields := restoreBlockedFields(current, updated)
-	if len(skippedFields) > 0 {
-		// Debug, not Warn as on the PATCH path, and deliberately so: the frontend
-		// sends the full settings object on every save, and the blanked BasicAuth
-		// client credentials are reverted (and thus reported) on every save that
-		// has BasicAuth configured. Logging that at Warn would fire on every save.
-		// PATCH warns because it only touches the security section when the client
-		// actually PATCHes it.
-		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Reverted blocked settings fields during full settings update", logger.Any("skipped_fields", skippedFields))
-	}
-
-	// Normalize species config keys to lowercase for case-insensitive matching.
-	if updated.Realtime.Species.Config != nil {
-		updated.Realtime.Species.Config = conf.NormalizeSpeciesConfigKeys(updated.Realtime.Species.Config)
-	}
-
-	// Canonicalize the species exclude list to scientific names so a localized or
-	// common name typed into the Settings exclude editor is stored in the same form
-	// the per-detection filter and the detection-card toggle match. Idempotent for
-	// an already-canonical list, so this does not spuriously trigger a rebuild.
-	updated.Realtime.Species.Exclude = c.canonicalizeExcludeList(updated.Realtime.Species.Exclude)
-
-	// Ensure LocationConfigured is set when birdnet coordinates are present.
-	// Backward compatibility with older frontends that don't send the flag.
-	if updated.BirdNET.Latitude != 0 || updated.BirdNET.Longitude != 0 {
-		updated.BirdNET.LocationConfigured = true
-	}
-
-	// Migrate legacy single audio source if a cached frontend sent it.
-	updated.MigrateAudioSourceConfig()
-
-	// Validate the clone before publishing. No rollback needed on validation
-	// failure: we simply never publish.
-	if err := conf.ValidateSettings(updated); err != nil {
-		return c.HandleError(ctx, err, "Invalid settings", http.StatusBadRequest)
-	}
-
-	// Publish the new snapshot. conf.StoreSettings publishes atomically to
-	// the global (readers via conf.GetSettings immediately see this version;
-	// existing pointer holders stay on the old). c.Settings.Store republishes
-	// the controller's own atomic snapshot so per-controller readers
-	// (controllerSettings) return the freshly published value. Both stores are
-	// lock-free; settingsMutex here only serialises this read-modify-write
-	// against other update handlers, not against readers.
-	ensureProfilingTokenForSave(updated)
-	if publishGlobal {
-		conf.StoreSettings(updated)
-	}
-	c.Settings.Store(updated)
+	// The clone is now published globally (readers via conf.GetSettings see this
+	// version at once; existing pointer holders stay on the old one) and
+	// c.Settings was refreshed, so per-controller readers (ControllerSettings)
+	// return the freshly published value. Both stores are lock-free for readers.
 
 	// Run cross-field side-effects (interval tracking, telemetry toggles, etc.)
-	// against the published pair. handleSettingsChanges is read-only on both.
-	if err := c.handleSettingsChanges(current, updated); err != nil {
-		// Rollback: republish the previous snapshot so in-memory state matches
-		// what is on disk (which was never overwritten).
-		if publishGlobal {
-			conf.StoreSettings(current)
-		}
-		c.Settings.Store(current)
-		c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to apply settings changes, rolling back", logger.Error(err))
-		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
-	}
-
-	// Persist to disk only when this controller owns the global snapshot
-	// (production path) AND DisableSaveSettings is not set. conf.SaveSettings
-	// reads conf.GetSettings internally; persisting from a test that stored a
-	// standalone snapshot via c.Settings.Store would save an unrelated snapshot.
-	if publishGlobal && !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			// Rollback in-memory; disk write never happened successfully.
-			conf.StoreSettings(current)
-			c.Settings.Store(current)
-			restoreProfilingRates(current)
-			c.LogAPIRequest(ctx, logger.LogLevelError, "Failed to save settings to disk, rolling back", logger.Error(err))
-			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
-		}
+	// against the published pair. handleSettingsChanges is read-only on both, and
+	// it runs outside the settings writer lock because it reaches into the
+	// classifier, whose model manager lock is held by callers of that lock.
+	if msg, err := c.finishSettingsWrite(current, updated, func() error { return c.handleSettingsChanges(current, updated) }); err != nil {
+		return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
 	}
 
 	// Emit settings_saved event with key-level diff (fire-and-forget).
-	if changes := diffSettings(current, updated); len(changes) > 0 {
-		events.Emit(context.Background(), "settings", "settings_saved", "Settings saved via UI", map[string]any{
-			"source":       "ui",
-			"change_count": len(changes),
-			"changes":      changes,
-		})
-	}
+	c.emitSettingsSaved(current, updated)
 
 	telemetry.UpdateTelemetryEnabled()
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
-	if publishGlobal && !c.DisableSaveSettings {
+	if c.persistsSettings() {
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Settings updated and saved successfully",
 			logger.Int("skipped_fields_count", len(skippedFields)))
 	} else {
 		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Settings updated (save to disk skipped)",
-			logger.Bool("publishGlobal", publishGlobal),
+			logger.Bool("publishGlobal", c.isGlobalOwner),
 			logger.Bool("disableSaveSettings", c.DisableSaveSettings))
 	}
 
+	// The ETag of the snapshot this write published, so the client can send it as
+	// the next If-Match without a GET. A writer that published since makes it stale,
+	// which is the point.
+	ctx.Response().Header().Set(apicore.HeaderETag, settingsETag(updated))
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":          "Settings updated successfully",
 		"skippedFields":    skippedFields,
@@ -381,68 +345,36 @@ func (c *Controller) UpdateSettings(ctx echo.Context) error {
 	})
 }
 
-// publishAndSaveSettings publishes updated settings and persists to disk.
-// Must be called while c.settingsMutex is held. On save failure, the atomic
-// Settings snapshot is rolled back to current.
 // ensureProfilingTokenForSave mints the profiling token into a settings
 // snapshot that is about to be published and persisted, so enabling pprof at
 // runtime on an instance with no authentication provider yields a usable
 // credential rather than an endpoint that refuses every request until restart.
 //
-// It is called at each of the three publish points rather than from one shared
-// save helper because the settings-write paths each inline their own
-// publish-then-persist sequence. Hooking only one of them is exactly how the
-// first attempt at this shipped a dead feature: publishAndSaveSettings is used
-// by the TLS, integrations and detections writers, none of which can carry a
-// diagnostics change, so the two handlers that CAN (PUT /settings and
-// PATCH /settings/:section) never minted anything.
+// commitSettings calls it once, after the mutate function succeeds, so every
+// settings writer mints: PUT /settings, PATCH /settings/:section and the
+// updateAndSaveSettings hand-off alike. Hooking only some writers is how the
+// first attempt at this shipped a dead feature: the TLS, integrations and
+// detections writers cannot carry a diagnostics change, so the two handlers
+// that can never minted anything.
 //
-// Non-fatal by design. The pprof routes fail closed without a token, and a
-// diagnostics credential must not cost the user the rest of their settings
-// change. EnsureProfilingToken is a no-op unless profiling is enabled, the
-// token is empty, and no auth provider is configured, so the normal save path
-// pays a boolean check and nothing else.
+// EnsureProfilingToken is a no-op unless profiling is enabled, the token is
+// empty, and no auth provider is configured, so the normal save path pays a
+// boolean check and nothing else.
 func ensureProfilingTokenForSave(updated *conf.Settings) {
-	if _, err := conf.EnsureProfilingToken(updated); err != nil {
-		apicore.GetLogger().Warn(
-			"Failed to generate profiling token; the profiling endpoints will refuse requests",
-			logger.Error(err))
-	}
+	// Whether a token was minted does not matter here: the caller persists the
+	// whole snapshot either way.
+	conf.EnsureProfilingToken(updated)
 }
 
-func (c *Controller) publishAndSaveSettings(current, updated *conf.Settings) error {
-	ensureProfilingTokenForSave(updated)
-	if c.isGlobalOwner {
-		conf.StoreSettings(updated)
-	}
-	c.Settings.Store(updated)
-
-	if c.isGlobalOwner && !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			conf.StoreSettings(current)
-			c.Settings.Store(current)
-			return fmt.Errorf("failed to save settings: %w", err)
-		}
-	}
-
-	// Emit settings_saved event with key-level diff (fire-and-forget).
-	if changes := diffSettings(current, updated); len(changes) > 0 {
-		events.Emit(context.Background(), "settings", "settings_saved", "Settings saved via UI", map[string]any{
-			"source":       "ui",
-			"change_count": len(changes),
-			"changes":      changes,
-		})
-	}
-
-	return nil
-}
-
-// getSettingsOrFallback returns the current settings snapshot for write handlers.
+// getSettingsOrFallback returns the current settings snapshot for any handler
+// that returns settings to a client or merges into them.
 // When this controller owns the global singleton (production), it reads from
-// conf.GetSettings() so that out-of-band publishers (range filter rebuild,
-// ShouldUpdateRangeFilterToday, etc.) are not silently overwritten by a stale
+// conf.GetSettings() so that out-of-band publishers (model manager, range filter rebuild,
+// ShouldUpdateRangeFilterToday, etc.) are not silently overwritten or missed by a stale
 // per-controller pointer. For test controllers that inject a standalone *Settings,
-// the controller's own atomic snapshot is returned as-is.
+// the controller's own atomic snapshot is returned as-is, which keeps tests
+// isolated from the global even when one is set. conf.Setting() is the last
+// resort when neither is available.
 func (c *Controller) getSettingsOrFallback() *conf.Settings {
 	if c.isGlobalOwner {
 		if s := conf.GetSettings(); s != nil {
@@ -470,11 +402,15 @@ func parseAndValidateJSON(ctx echo.Context) (json.RawMessage, error) {
 
 // UpdateSectionSettings handles PATCH /api/v2/settings/:section.
 //
-// Uses the same copy-on-write flow as UpdateSettings: clone the current
-// *conf.Settings snapshot, apply the section merge to the clone, validate,
-// and publish via conf.StoreSettings. Rollback on failure republishes the
+// Uses the same copy-on-write flow as UpdateSettings: commitSettings hands the
+// section merge the snapshot that is current under the settings writer lock plus
+// a clone, the merge is validated, and the clone is published
+// (conf.UpdateSettings). Rollback on failure is a compare-and-swap back to the
 // previous snapshot. Keeps PATCH race-free against basepath middleware reads
 // and any other reader that goes through conf.GetSettings().
+//
+// If-Match and the ETag response header work as on UpdateSettings: the ETag is
+// the one for the whole settings, not for the section.
 func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
@@ -484,142 +420,112 @@ func (c *Controller) UpdateSectionSettings(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("section not specified"), "Section parameter is required", http.StatusBadRequest)
 	}
 
-	current := c.getSettingsOrFallback()
-	if current == nil {
-		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
-	}
-
-	// Build a mutable clone; never mutate current in place. Readers holding
-	// current through conf.GetSettings keep seeing a consistent snapshot
-	// until StoreSettings publishes the new one.
-	updated := conf.CloneSettings(current)
-
-	// Publish globally when the controller owns the global singleton.
-	// Determined once at construction, immune to pointer desync from
-	// out-of-band StoreSettings calls (range filter rebuild, etc.).
-	publishGlobal := c.isGlobalOwner
-
+	// Read the body before any settings lock is taken so a slow client cannot
+	// hold the settings writer lock.
 	requestBody, err := parseAndValidateJSON(ctx)
 	if err != nil {
 		return c.HandleError(ctx, err, "Failed to parse request body", http.StatusBadRequest)
 	}
 
-	if err := updateSettingsSection(updated, section, requestBody); err != nil {
-		return c.HandleError(ctx, err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
-	}
-
-	// Restore redacted secret fields to their current values so the merge
-	// does not overwrite real secrets with the placeholder. current is the
-	// source of truth for the pre-update values.
-	if err := restoreRedactedSecrets(current, updated); err != nil {
-		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
-		return c.HandleError(ctx, err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
-	}
-
-	// Enforce the blocked-field map. The section merge above writes whatever the
-	// request contained, so this is the only thing standing between a client and
-	// a field the map marks never-updatable-via-API (Security.SessionSecret,
-	// Diagnostics.Profiling.Token, the audio tool paths, ...). It runs after
-	// restoreRedactedSecrets so that a normal GET-modify-PATCH round trip, which
-	// sends the redacted placeholder back for SessionSecret, is not reported as
-	// an attempt to change it; TestPatchReportsBlockedFieldsItRejected pins that
-	// ordering. The exception is Security.BasicAuth.ClientID/ClientSecret, which
-	// sanitizeSettingsForAPI BLANKS rather than redacts, so restoreRedactedSecrets
-	// does not cover them and such a round trip does report them. That is honest
-	// (the request really did carry a different value) and it is also what stops
-	// the round trip from wiping both credentials, as it did before this check
-	// existed.
-	skippedFields := restoreBlockedFields(current, updated)
-	if len(skippedFields) > 0 {
-		// Same field key as the PUT path and as the response JSON, so one query
-		// finds a rejection on either verb. The two differ only in log level: this
-		// one is Warn, PUT's is Debug, because a full-object PUT reverts the blanked
-		// BasicAuth client credentials on every save (see the PUT call site).
-		c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected update to blocked settings fields",
-			logger.String("section", section),
-			logger.Any("skipped_fields", skippedFields))
-	}
-
-	// Ensure LocationConfigured is set when birdnet coordinates are present.
-	// Backward compatibility with older frontends that don't send the flag.
-	if strings.EqualFold(section, SettingsSectionBirdnet) {
-		if updated.BirdNET.Latitude != 0 || updated.BirdNET.Longitude != 0 {
-			updated.BirdNET.LocationConfigured = true
+	ifMatch, ifMatchPresent := requestIfMatch(ctx.Request())
+	var skippedFields []string
+	current, updated, err := c.commitSettings(func(current, updated *conf.Settings) error {
+		// See UpdateSettings: the precondition is checked inside the writer lock.
+		if err := checkSettingsPrecondition(ifMatch, ifMatchPresent, current); err != nil {
+			return err
 		}
-	}
 
-	// Migrate legacy single audio source if a cached frontend sent it.
-	updated.MigrateAudioSourceConfig()
-
-	// Canonicalize the species exclude list to scientific names (see UpdateSettings).
-	// Only the realtime/species sections carry it, so skip other sections: an
-	// unrelated section save must not rewrite the list or trigger a spurious
-	// range-filter rebuild via rangeFilterSettingsChanged.
-	if strings.EqualFold(section, SettingsSectionRealtime) || strings.EqualFold(section, SettingsSectionSpecies) {
-		updated.Realtime.Species.Exclude = c.canonicalizeExcludeList(updated.Realtime.Species.Exclude)
-	}
-
-	// Validate the clone before publishing. No rollback needed on validation
-	// failure: we simply never publish.
-	if err := conf.ValidateSettings(updated); err != nil {
-		return c.HandleError(ctx, err,
-			fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
-	}
-
-	// Publish the new snapshot atomically when we own the global, then
-	// republish the controller's own atomic snapshot. See the matching comment
-	// in UpdateSettings for why Debug reads via conf.GetSettings() (the global)
-	// rather than the per-controller snapshot.
-	ensureProfilingTokenForSave(updated)
-	if publishGlobal {
-		conf.StoreSettings(updated)
-	}
-	c.Settings.Store(updated)
-
-	if err := c.handleSettingsChanges(current, updated); err != nil {
-		if publishGlobal {
-			conf.StoreSettings(current)
+		if err := updateSettingsSection(updated, section, requestBody); err != nil {
+			return newRejection(err, fmt.Sprintf("Failed to update %s settings", section), http.StatusBadRequest)
 		}
-		c.Settings.Store(current)
-		return c.HandleError(ctx, err, "Failed to apply settings changes, rolled back to previous settings", http.StatusInternalServerError)
+
+		// Restore redacted secret fields to their current values so the merge
+		// does not overwrite real secrets with the placeholder. current is the
+		// source of truth for the pre-update values.
+		if err := restoreRedactedSecrets(current, updated); err != nil {
+			c.LogAPIRequest(ctx, logger.LogLevelWarn, "Redacted sentinel validation failed", logger.Error(err))
+			return newRejection(err, "Cannot save: some secret fields contain the redacted placeholder because their identifying key was changed while the secret was hidden. Re-enter the secret values.", http.StatusBadRequest)
+		}
+
+		// Enforce the blocked-field map. The section merge above writes whatever the
+		// request contained, so this is the only thing standing between a client and
+		// a field the map marks never-updatable-via-API (Security.SessionSecret,
+		// Diagnostics.Profiling.Token, the audio tool paths, ...). It runs after
+		// restoreRedactedSecrets so that a normal GET-modify-PATCH round trip, which
+		// sends the redacted placeholder back for SessionSecret, is not reported as
+		// an attempt to change it; TestPatchReportsBlockedFieldsItRejected pins that
+		// ordering. The exception is Security.BasicAuth.ClientID/ClientSecret, which
+		// sanitizeSettingsForAPI BLANKS rather than redacts, so restoreRedactedSecrets
+		// does not cover them and such a round trip does report them. That is honest
+		// (the request really did carry a different value) and it is also what stops
+		// the round trip from wiping both credentials, as it did before this check
+		// existed.
+		skippedFields = restoreBlockedFields(current, updated)
+		if len(skippedFields) > 0 {
+			// Same field key as the PUT path and as the response JSON, so one query
+			// finds a rejection on either verb. The two differ only in log level: this
+			// one is Warn, PUT's is Debug, because a full-object PUT reverts the blanked
+			// BasicAuth client credentials on every save (see the PUT call site).
+			c.LogAPIRequest(ctx, logger.LogLevelWarn, "Rejected update to blocked settings fields",
+				logger.String("section", section),
+				logger.Any("skipped_fields", skippedFields))
+		}
+
+		// Ensure LocationConfigured is set when birdnet coordinates are present.
+		// Backward compatibility with older frontends that don't send the flag.
+		if strings.EqualFold(section, SettingsSectionBirdnet) {
+			if updated.BirdNET.Latitude != 0 || updated.BirdNET.Longitude != 0 {
+				updated.BirdNET.LocationConfigured = true
+			}
+		}
+
+		// Migrate legacy single audio source if a cached frontend sent it.
+		updated.MigrateAudioSourceConfig()
+
+		// Canonicalize the species exclude list to scientific names (see UpdateSettings).
+		// Only the realtime/species sections carry it, so skip other sections: an
+		// unrelated section save must not rewrite the list or trigger a spurious
+		// range-filter rebuild via rangeFilterSettingsChanged.
+		if strings.EqualFold(section, SettingsSectionRealtime) || strings.EqualFold(section, SettingsSectionSpecies) {
+			updated.Realtime.Species.Exclude = c.canonicalizeExcludeList(updated.Realtime.Species.Exclude)
+		}
+
+		// Validate the clone before publishing. No rollback needed on validation
+		// failure: commitSettings publishes nothing when this returns an error.
+		if err := conf.ValidateSettings(updated); err != nil {
+			return newRejection(err, fmt.Sprintf("Invalid %s settings", section), http.StatusBadRequest)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return c.respondCommitError(ctx, err)
 	}
 
-	// Persist to disk only when this controller owns the global snapshot
-	// AND the test did not disable save. conf.SaveSettings persists the
-	// conf.GetSettings value, which would be wrong under a standalone
-	// snapshot injected by a test that bypassed the global publish.
-	if publishGlobal && !c.DisableSaveSettings {
-		if err := conf.SaveSettings(); err != nil {
-			conf.StoreSettings(current)
-			c.Settings.Store(current)
-			restoreProfilingRates(current)
-			return c.HandleError(ctx, err, "Failed to save settings, rolled back to previous settings", http.StatusInternalServerError)
-		}
+	if msg, err := c.finishSettingsWrite(current, updated, func() error { return c.handleSettingsChanges(current, updated) }); err != nil {
+		return c.HandleError(ctx, err, msg, http.StatusInternalServerError)
+	}
+	if c.persistsSettings() {
 		c.LogAPIRequest(ctx, logger.LogLevelInfo, "Section settings saved successfully",
 			logger.String("section", section))
 	}
 
-	if !publishGlobal || c.DisableSaveSettings {
+	if !c.persistsSettings() {
 		c.LogAPIRequest(ctx, logger.LogLevelDebug, "Section settings updated (save to disk skipped)",
 			logger.String("section", section),
-			logger.Bool("publishGlobal", publishGlobal),
+			logger.Bool("publishGlobal", c.isGlobalOwner),
 			logger.Bool("disableSaveSettings", c.DisableSaveSettings))
 	}
 
 	// Emit settings_saved event with key-level diff (fire-and-forget).
-	if changes := diffSettings(current, updated); len(changes) > 0 {
-		events.Emit(context.Background(), "settings", "settings_saved", "Settings saved via UI", map[string]any{
-			"source":       "ui",
-			"change_count": len(changes),
-			"changes":      changes,
-		})
-	}
+	c.emitSettingsSaved(current, updated)
 
 	telemetry.UpdateTelemetryEnabled()
 
 	// Rebuild taxonomy synonym lookup cache if overrides changed
 	imageprovider.SetCustomSynonyms(updated.TaxonomySynonyms, updated.BirdNET.Labels)
 
+	ctx.Response().Header().Set(apicore.HeaderETag, settingsETag(updated))
 	return ctx.JSON(http.StatusOK, map[string]any{
 		"message":          fmt.Sprintf("%s settings updated successfully", section),
 		"skippedFields":    skippedFields,
@@ -695,7 +601,7 @@ func mergeJSONIntoStruct(data json.RawMessage, target any) error {
 	//
 	// Only slices are affected: scalar, map, and struct fields are correctly
 	// overwritten by json.Unmarshal. We must NOT zero the entire struct because
-	// fields tagged json:"-" (runtime values like Labels, SoxAudioTypes) would
+	// fields tagged json:"-" (runtime values like Labels) would
 	// be destroyed and are absent from mergedJSON.
 	zeroJSONSliceFields(reflect.ValueOf(target))
 
@@ -1721,6 +1627,11 @@ func getSettingsSection(settings *conf.Settings, section string) (any, error) {
 	//nolint:gocritic // Need index i for settingsValue.Field(i) call
 	for i := range settingsType.NumField() {
 		field := settingsType.Field(i)
+		// Unexported fields (the snapshot revision) are not sections, and calling
+		// Interface on one panics.
+		if !field.IsExported() {
+			continue
+		}
 		if strings.EqualFold(field.Name, section) {
 			return settingsValue.Field(i).Interface(), nil
 		}
@@ -2249,8 +2160,8 @@ func restoreBlockedFieldsRecursively(
 		currentField := currentValue.FieldByName(fieldName)
 		updatedField := updatedValue.FieldByName(fieldName)
 		// A map entry naming a field that no longer exists (renamed or removed)
-		// must not panic a live request. TestBlockedFieldMapNamesRealFields is
-		// what turns such an entry into a test failure instead.
+		// must not panic a live request. TestRestoreBlockedFieldsCoversEveryLeaf
+		// is what turns such an entry into a test failure instead.
 		if !currentField.IsValid() || !updatedField.IsValid() || !currentField.CanInterface() {
 			continue
 		}
@@ -2280,7 +2191,7 @@ func restoreBlockedFieldsRecursively(
 // every gap in blockedValuesEqual was a bypass, and it had one: time.Time.Equal
 // ignores Location, so a client could resend BirdNET.RangeFilter.LastUpdated as
 // the same instant in a different offset, have it compare "unchanged", and shift
-// the calendar day conf.LocalNoon derives from it. Writing current's value back
+// the calendar day wallclock.Noon derives from it. Writing current's value back
 // every time makes a comparison bug cost an inaccurate skippedFields list rather
 // than a leaked write.
 func restoreBlockedLeaf(currentField, updatedField reflect.Value, fieldPath string, restored *[]string) {
@@ -2500,6 +2411,7 @@ var settingsChangeChecks = []settingsChangeCheck{
 	{"eBird", "reconfigure_ebird", ebirdSettingsChanged, "Reconfiguring eBird integration...", notification.MsgSettingsReconfiguringEbird, ToastTypeInfo, toastDurationMedium},
 	{"Streams", "reconfigure_rtsp_sources", streamsSettingsChanged, "Reconfiguring audio streams...", notification.MsgSettingsReconfiguringStreams, ToastTypeInfo, toastDurationMedium},
 	{"Telemetry", "reconfigure_telemetry", telemetrySettingsChanged, "Reconfiguring telemetry settings...", notification.MsgSettingsReconfiguringTelemetry, ToastTypeInfo, toastDurationShort},
+	{"Sentry", telemetry.SignalReconfigureSentry, sentryEnabledChanged, "", "", ToastTypeInfo, toastDurationShort},
 	{"Species tracking", "reconfigure_species_tracking", speciesTrackingSettingsChanged, "Reconfiguring species tracking...", notification.MsgSettingsReconfiguringSpeciesTracking, ToastTypeInfo, toastDurationShort},
 	{"Push notifications", "reconfigure_push_notifications", pushNotificationSettingsChanged, "Reconfiguring push notification providers...", notification.MsgSettingsReconfiguringPushNotifications, ToastTypeInfo, toastDurationMedium},
 	{"Quiet hours", schedule.SignalReconfigureQuietHours, quietHoursSettingsChanged, "Updating quiet hours schedule...", "", ToastTypeInfo, toastDurationShort},
@@ -2582,7 +2494,7 @@ func (c *Controller) handleSettingsChanges(oldSettings, currentSettings *conf.Se
 	// have left the process sampling.
 	//
 	// Both handlers that can carry a diagnostics change route through
-	// handleSettingsChanges, and neither routes through publishAndSaveSettings,
+	// handleSettingsChanges, and neither routes through updateAndSaveSettings,
 	// whose callers are the TLS, MQTT-TLS and detections writers. That is what
 	// makes this the one seam covering this section rather than something to be
 	// remembered at each write path; getting it backwards is how the token mint
@@ -3077,6 +2989,13 @@ func telemetrySettingsChanged(oldSettings, currentSettings *conf.Settings) bool 
 	return false
 }
 
+// sentryEnabledChanged reports whether the Error Tracking opt-in changed. Debug
+// is not compared: the BeforeSend hook reads it live, and the action only starts
+// or stops the client. SDK debug logging is decided when the client starts.
+func sentryEnabledChanged(oldSettings, currentSettings *conf.Settings) bool {
+	return oldSettings.Sentry.Enabled != currentSettings.Sentry.Enabled
+}
+
 // yearlyTrackingChanged checks if yearly tracking settings have changed.
 func yearlyTrackingChanged(old, current conf.YearlyTrackingSettings) bool {
 	return old.Enabled != current.Enabled ||
@@ -3334,15 +3253,10 @@ func (c *Controller) GetImageProviders(ctx echo.Context) error {
 func (c *Controller) GetSystemID(ctx echo.Context) error {
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Getting system ID")
 
-	// Read the controller's lock-free settings snapshot.
-	settings := c.ControllerSettings()
+	settings := c.getSettingsOrFallback()
 	if settings == nil {
-		// Fallback to global settings if controller settings not set
-		settings = conf.Setting()
-		if settings == nil {
-			c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get system ID", logger.String("endpoint", "GetSystemID"))
-			return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
-		}
+		c.LogAPIRequest(ctx, logger.LogLevelError, "Settings not initialized when trying to get system ID", logger.String("endpoint", "GetSystemID"))
+		return c.HandleError(ctx, fmt.Errorf("settings not initialized"), "Failed to get settings", http.StatusInternalServerError)
 	}
 
 	c.LogAPIRequest(ctx, logger.LogLevelInfo, "Retrieved system ID successfully", logger.String("system_id", settings.SystemID))

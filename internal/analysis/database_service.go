@@ -14,8 +14,10 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbfailure"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2only"
 	"github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
@@ -50,7 +52,138 @@ func abortOnV2SchemaCorruption(log logger.Logger, err error, operation, modeLabe
 		logger.String("mode", modeLabel),
 		logger.String("operation", operation),
 		logger.String("recovery_hint", schemaCorruptionRecoveryHint))
-	return fmt.Errorf("v2 schema corrupted in %s mode, refusing silent fallback to legacy mode: %w", modeLabel, err)
+	return fmt.Errorf("v2 schema corrupted in %s mode, refusing silent fallback to legacy mode: %w; %s", modeLabel, err, schemaCorruptionRecoveryHint)
+}
+
+// mixedSchemaGuideURL is the wiki section that explains how to resolve a MySQL or
+// MariaDB database holding both enhanced database (v2) and legacy tables. The anchor
+// follows the section heading in doc/wiki/database-doctor.md.
+const mixedSchemaGuideURL = "https://github.com/tphakala/birdnet-go/wiki/Database-Doctor#mysql-and-mariadb-enhanced-and-legacy-tables-in-one-database"
+
+// mixedSchemaRecoveryHint is the user-facing instruction emitted when startup refuses a
+// database that holds both schemas. db-doctor is named only to say it does not cover MySQL.
+// An error that names a failed step needs no manual change: fix its cause and restart.
+const mixedSchemaRecoveryHint = "if the error names a failed step, fix its cause and restart; otherwise stop BirdNET-Go, back up the database with mysqldump (mariadb-dump on MariaDB), then follow " +
+	mixedSchemaGuideURL + "; the db-doctor script supports SQLite only"
+
+// operationStartupReconciliation is the operation field of the startup reconciliation logs.
+const operationStartupReconciliation = "startup_reconciliation"
+
+// legacyTailRecoveryHint is the user-facing instruction emitted when startup refuses to
+// continue because the legacy records beyond the migration watermark could not be verified.
+const legacyTailRecoveryHint = "make sure the database files are readable by the BirdNET-Go user and not damaged, or that the database server is reachable, then restart BirdNET-Go"
+
+// Bounds of the retry of the startup state read while the database server cannot be
+// reached. The delay doubles after each wait up to the cap: with 8 attempts the waits are
+// 1, 2, 4, 8, 15, 15 and 15 seconds, a minute in total, long enough for a database that
+// starts a little after BirdNET-Go and short enough that a real outage ends in a visible
+// failed start.
+const (
+	// startupStateMaxAttempts is the number of times the startup state is read before
+	// the start is refused.
+	startupStateMaxAttempts = 8
+	// startupStateRetryInitialDelay is the wait before the second read.
+	startupStateRetryInitialDelay = time.Second
+	// startupStateRetryMaxDelay caps the doubling wait between two reads.
+	startupStateRetryMaxDelay = 15 * time.Second
+)
+
+// startupStateUnknownRecoveryHint is the user-facing instruction emitted when startup
+// refuses to continue because the database state could not be read.
+const startupStateUnknownRecoveryHint = "make sure the MySQL or MariaDB server is running and reachable from BirdNET-Go, then restart BirdNET-Go"
+
+// Operations that start the text of a classified start error.
+const (
+	// opRefuseStart starts the text of a refusal after the database server rejected the connection.
+	opRefuseStart = "refusing to start"
+	// opRefuseUnknownState starts the text of the unknown-state refusal.
+	opRefuseUnknownState = "refusing to start before the database state is known"
+	// opOpenDatabase starts the text of a failure to open the database.
+	opOpenDatabase = "cannot open the database"
+)
+
+// failureLogFields returns the log fields that describe a classified failure. They carry
+// the kind, the server error number, the settings to check and the hint, and no value
+// from the configuration.
+func failureLogFields(f *dbfailure.Failure) []logger.Field {
+	fields := []logger.Field{
+		logger.String("failure_kind", string(f.Kind)),
+		logger.String("settings_to_check", strings.Join(f.Settings, ", ")),
+		logger.String("recovery_hint", f.Hint),
+	}
+	if f.MySQLErrorNumber != 0 {
+		fields = append(fields, logger.Int("mysql_error", int(f.MySQLErrorNumber)))
+	}
+	return fields
+}
+
+// refuseClassifiedStart logs a classified start failure at Error level and returns it for
+// the caller to propagate. The text and the MySQL log fields carry no configuration value;
+// the cause is logged only for SQLite, where it holds paths and disk numbers the service
+// already logs.
+func refuseClassifiedStart(log logger.Logger, startErr *dbfailure.StartError, message, operation string) error {
+	fields := append([]logger.Field{logger.Error(startErr), logger.String("operation", operation)},
+		failureLogFields(&startErr.Failure)...)
+	if startErr.Failure.Backend == dbfailure.BackendSQLite {
+		fields = append(fields, logger.String("cause", startErr.Unwrap().Error()))
+	}
+	log.Error(message, fields...)
+	return startErr
+}
+
+// abortOnMixedSchema inspects the error of the startup state check. If it chains to
+// datastoreV2.ErrMixedSchemaDatabase it logs at Error level with the per-table row
+// counts and the recovery hint and returns a wrapped error the caller must propagate.
+// Startup stops before any datastore is constructed and drops no table with rows, so
+// the decision repeats on every boot until the user acts or the cause of a failed step goes away. Returns nil for
+// other errors and for nil input.
+func abortOnMixedSchema(log logger.Logger, err error) error {
+	if err == nil || !errors.Is(err, datastoreV2.ErrMixedSchemaDatabase) {
+		return nil
+	}
+	log.Error("database holds both enhanced database (v2) tables and legacy tables, refusing to start, no table with rows was dropped",
+		logger.Error(err),
+		logger.String("recovery_hint", mixedSchemaRecoveryHint))
+	return fmt.Errorf("refusing to start on a database with both enhanced and legacy tables: %w; %s", err, mixedSchemaRecoveryHint)
+}
+
+// abortOnStartupStateUnknown logs at Error level and returns a wrapped error the caller
+// must propagate when err chains to datastoreV2.ErrStartupStateUnknown. Startup stops
+// before any datastore is constructed. The reads before it may already have changed the
+// database: the state check can drop empty tables of a mixed schema, and with SQLite
+// enabled the SQLite consolidation may have run. When the cause is recognised
+// (dbfailure.Classify) the returned error is a *dbfailure.StartError that names the settings
+// to check and keeps the cause reachable; otherwise the generic hint is appended to the
+// text. Returns nil for other errors and for nil input.
+func abortOnStartupStateUnknown(log logger.Logger, err error) error {
+	if err == nil || !errors.Is(err, datastoreV2.ErrStartupStateUnknown) {
+		return nil
+	}
+	const message = "could not read the database state at startup, refusing to start, no datastore was constructed"
+	if failure := dbfailure.Classify(err); failure.Kind != dbfailure.KindUnknown {
+		fields := append([]logger.Field{logger.Error(err), logger.String("operation", operationStartupReconciliation)},
+			failureLogFields(&failure)...)
+		log.Error(message, fields...)
+		return dbfailure.NewStartError(opRefuseUnknownState, &failure, err)
+	}
+	log.Error(message,
+		logger.Error(err),
+		logger.String("operation", operationStartupReconciliation),
+		logger.String("recovery_hint", startupStateUnknownRecoveryHint))
+	return fmt.Errorf("%s: %w; %s", opRefuseUnknownState, err, startupStateUnknownRecoveryHint)
+}
+
+// waitWithContext waits for d or until ctx is done, whichever comes first, and returns
+// the context error in the second case.
+func waitWithContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // DatabaseService manages the database lifecycle as an app.Service with TierCore shutdown.
@@ -61,14 +194,160 @@ type DatabaseService struct {
 	dataStore  datastore.Interface
 	v2Manager  datastoreV2.Manager
 	v2OnlyMode bool
+
+	// detectionRepo is the detection repository matching dataStore; set in Start.
+	detectionRepo datastore.DetectionRepository
+
+	// checkStartupState reads the database state at startup. It is a field so tests
+	// can inject a state; NewDatabaseService sets the real check.
+	checkStartupState func(*conf.Settings) datastoreV2.StartupState
+
+	// checkLegacyTail reports whether legacy records beyond the migration watermark are
+	// missing from v2. It is a field so tests can inject an outcome; NewDatabaseService
+	// sets the real check.
+	checkLegacyTail func(*conf.Settings, logger.Logger) (bool, error)
+
+	// checkFreshV2Schema reports whether a MySQL database holds the bare (no v2_ prefix)
+	// enhanced schema. It is a field so tests can inject an outcome; NewDatabaseService
+	// sets the real probe.
+	checkFreshV2Schema func(*conf.Settings) (bool, error)
+
+	// waitStartupRetry waits between two reads of the startup state. It is a field so
+	// tests can record the delays without sleeping; NewDatabaseService sets a wait that
+	// ends early when the context is done.
+	waitStartupRetry func(ctx context.Context, d time.Duration) error
+
+	// legacyMonitor keeps the migration_state telemetry tag, the legacy schema
+	// bell notice and the weekly push reminder current. It exists only while
+	// the process runs the legacy schema with a state manager.
+	legacyMonitor *legacySchemaMonitor
+
+	// probeServer reads the MySQL or MariaDB server version and character sets
+	// at startup. It is a field so tests can inject a result; NewDatabaseService
+	// sets the real probe.
+	probeServer databaseServerProbe
+
+	// serverNotice logs the server probe, sets its telemetry tags and raises
+	// the bell notice. It exists only after a MySQL or MariaDB probe.
+	serverNotice *databaseServerNotice
 }
 
 // NewDatabaseService creates a new DatabaseService with the given settings and metrics.
 // The service is not started; call Start() to initialize the databases.
 func NewDatabaseService(settings *conf.Settings, metrics *observability.Metrics) *DatabaseService {
 	return &DatabaseService{
-		settings: settings,
-		metrics:  metrics,
+		settings:           settings,
+		metrics:            metrics,
+		checkStartupState:  datastoreV2.CheckMigrationStateBeforeStartup,
+		checkLegacyTail:    datastoreV2.HasUnmigratedLegacyRecords,
+		checkFreshV2Schema: datastoreV2.CheckMySQLHasFreshV2Schema,
+		waitStartupRetry:   waitWithContext,
+		probeServer:        probeDatabaseServer,
+	}
+}
+
+// startupReading is one read of the boot decision: the legacy tail check, the startup
+// state and, when the install would start in MySQL v2-only mode, the table prefix probe.
+type startupReading struct {
+	// hasUnmigrated and tailErr are the result of the legacy tail check.
+	hasUnmigrated bool
+	tailErr       error
+	// state is the startup state check.
+	state datastoreV2.StartupState
+	// mysqlFreshV2 is the answer of the prefix probe; meaningful only when the install
+	// would start in MySQL v2-only mode and unknown is nil.
+	mysqlFreshV2 bool
+	// unknown is non-nil when the boot decision could not be read; it chains to
+	// datastoreV2.ErrStartupStateUnknown and no mode or prefix may be chosen on it.
+	unknown error
+}
+
+// readStartupState reads the boot decision once, in the order the decision needs it: tail
+// check, SQLite consolidation, state check, prefix probe. The tail check must run before
+// consolidation, which renames the legacy database while it may still hold records the
+// worker needs to sync.
+func (d *DatabaseService) readStartupState(settings *conf.Settings, log logger.Logger) startupReading {
+	var r startupReading
+	// Check for unmigrated legacy records from a potential hard crash during tail sync.
+	r.hasUnmigrated, r.tailErr = d.checkLegacyTail(settings, log)
+
+	// Check for and perform database consolidation if needed (SQLite only)
+	// Skip consolidation when unmigrated records found, or when the tail could not be
+	// verified: consolidation renames the legacy database and is never re-examined.
+	if settings.Output.SQLite.Enabled && !r.hasUnmigrated && r.tailErr == nil {
+		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, log)
+		if err != nil {
+			log.Error("database consolidation failed", logger.Error(err))
+			_ = errors.New(err).
+				Component("analysis.database").
+				Category(errors.CategoryDatabase).
+				Context("operation", "database_consolidation").
+				Build()
+			// Continue with normal startup - consolidation can be retried
+		} else if consolidated {
+			log.Info("database consolidation completed, continuing startup")
+		}
+	} else if r.hasUnmigrated {
+		log.Info("deferring database consolidation until unmigrated records are synced")
+	}
+
+	// Check migration state before initializing database
+	// This allows us to skip the legacy database when migration is complete
+	r.state = d.checkStartupState(settings)
+	if errors.Is(r.state.Error, datastoreV2.ErrStartupStateUnknown) {
+		r.unknown = r.state.Error
+		return r
+	}
+
+	wouldBeV2Only := r.state.MigrationStatus == entities.MigrationStatusCompleted && r.state.V2Available
+	if !wouldBeV2Only {
+		return r
+	}
+	// The tail check matters only for an install that would start in v2-only mode. An
+	// unreachable server is not a verdict on the tail, so read the unit again.
+	if r.tailErr != nil {
+		if errors.IsConnectivityError(r.tailErr) {
+			r.unknown = fmt.Errorf("%w: %w", datastoreV2.ErrStartupStateUnknown, r.tailErr)
+		}
+		return r
+	}
+	// Mirror the branch order of initializeV2OnlyMode: the table prefix is chosen only
+	// for MySQL without SQLite, and only from a probe that could answer.
+	if !r.hasUnmigrated && settings.Output.MySQL.Enabled && !settings.Output.SQLite.Enabled {
+		fresh, err := d.checkFreshV2Schema(settings)
+		if err != nil {
+			r.unknown = err
+			return r
+		}
+		r.mysqlFreshV2 = fresh
+	}
+	return r
+}
+
+// awaitStartupState reads the boot decision, reading it again while it is unknown and the
+// cause is a connectivity failure, at most startupStateMaxAttempts times with a doubling,
+// capped wait. A cause that cannot heal is returned at once. The returned error chains to
+// datastoreV2.ErrStartupStateUnknown; when it is nil the reading is known.
+func (d *DatabaseService) awaitStartupState(ctx context.Context, settings *conf.Settings, log logger.Logger) (startupReading, error) {
+	delay := startupStateRetryInitialDelay
+	for attempt := 1; ; attempt++ {
+		reading := d.readStartupState(settings, log)
+		if reading.unknown == nil {
+			return reading, nil
+		}
+		if attempt >= startupStateMaxAttempts || !errors.IsConnectivityError(reading.unknown) {
+			return reading, reading.unknown
+		}
+		log.Warn("database server not reachable while reading the startup state, retrying",
+			logger.Int("attempt", attempt),
+			logger.Int("max_attempts", startupStateMaxAttempts),
+			logger.Duration("retry_in", delay),
+			logger.Error(reading.unknown),
+			logger.String("operation", operationStartupReconciliation))
+		if err := d.waitStartupRetry(ctx, delay); err != nil {
+			return reading, fmt.Errorf("%w: waiting to read the startup state again: %w", reading.unknown, err)
+		}
+		delay = min(2*delay, startupStateRetryMaxDelay)
 	}
 }
 
@@ -88,6 +367,13 @@ func (d *DatabaseService) DataStore() datastore.Interface {
 	return d.dataStore
 }
 
+// DetectionRepository returns the detection repository for the active database, or
+// nil if not yet started. A v2 database gets its own repository, which stores and
+// reads back each detection's own instant; the legacy modes get the bridge over the legacy datastore.
+func (d *DatabaseService) DetectionRepository() datastore.DetectionRepository {
+	return d.detectionRepo
+}
+
 // V2Manager returns the v2 database manager, or nil if not yet started.
 func (d *DatabaseService) V2Manager() datastoreV2.Manager {
 	return d.v2Manager
@@ -100,10 +386,35 @@ func (d *DatabaseService) IsV2OnlyMode() bool {
 
 // Start initializes and opens the database connections.
 // It handles three startup paths: v2-only (post-migration), fresh install, and legacy mode.
-// Migration infrastructure is initialized when not in v2-only mode.
+// It also sets the detection repository that matches the datastore it opened: the v2 repository
+// on a v2 database, the datastore bridge otherwise.
+// When a MySQL or MariaDB database holds both enhanced database (v2) tables and legacy
+// tables, the startup state check keeps the side that holds data and drops only the
+// other side's empty tables. Start refuses, dropping no table with rows, only when no side can be
+// kept without losing rows, a table cannot be read or an empty table cannot be removed
+// (datastoreV2.ErrMixedSchemaDatabase). A lost connection while that schema is probed or
+// reconciled is not such a refusal: it is an unknown state like the one below, so a
+// refusal on ErrMixedSchemaDatabase means a cause other than a lost connection.
+// When a MySQL or MariaDB server cannot be reached while the boot decision is read (tail
+// check, state check, table prefix probe), Start reads it again with a bounded, capped
+// backoff (startupStateMaxAttempts) and then refuses to start before any datastore is
+// constructed (datastoreV2.ErrStartupStateUnknown), so no mode or table prefix is chosen
+// on a failed read. A MySQL or MariaDB server that rejects the connection (1044, 1045,
+// 1049, 3159) is refused the same way, before any datastore is constructed, and the
+// returned error names the settings to check. Any other state check error keeps the
+// legacy fallback and is logged at Warn level.
+// Migration infrastructure is initialized when not in v2-only mode; on a legacy
+// install with a migration state manager it also starts the monitor that keeps
+// the migration_state telemetry tag, the legacy schema bell notice and the
+// weekly push reminder current, and logs the legacy schema startup WARN once
+// (the monitor logs it, or this method when no state manager exists).
+// When the legacy records beyond the migration watermark cannot be verified it skips
+// SQLite consolidation, and refuses to start before any datastore is constructed if the
+// migration is complete. The startup state check runs first and may already have
+// reconciled empty tables.
 //
 //nolint:gocognit,gocyclo // Database initialization requires handling multiple startup paths with detailed logging
-func (d *DatabaseService) Start(_ context.Context) error {
+func (d *DatabaseService) Start(ctx context.Context) error {
 	settings := d.settings
 
 	// If Start fails after opening the database, clean up to prevent resource leaks.
@@ -118,43 +429,52 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		}
 	}()
 
-	// Check for unmigrated legacy records from a potential hard crash during tail sync.
-	// Must run BEFORE consolidation to prevent renaming the legacy DB while it still
-	// has unmigrated records that the worker needs to sync.
+	// Read the boot decision (legacy tail check, consolidation, state check and the MySQL
+	// table prefix probe) as one unit. When the database server cannot be reached the
+	// read is repeated; if it stays unknown the start is refused before any datastore is
+	// constructed, so no mode or table prefix is ever chosen on a failed read.
 	datastoreLog := logger.Global().Module("datastore")
-	hasUnmigrated := datastoreV2.HasUnmigratedLegacyRecords(settings, datastoreLog)
-
-	// Check for and perform database consolidation if needed (SQLite only)
-	// Skip consolidation when unmigrated records found; let the worker tail-sync them first
-	if settings.Output.SQLite.Enabled && !hasUnmigrated {
-		consolidated, err := datastoreV2.CheckAndConsolidateAtStartup(settings.Output.SQLite.Path, datastoreLog)
-		if err != nil {
-			datastoreLog.Error("database consolidation failed", logger.Error(err))
-			_ = errors.New(err).
-				Component("analysis.database").
-				Category(errors.CategoryDatabase).
-				Context("operation", "database_consolidation").
-				Build()
-			// Continue with normal startup - consolidation can be retried
-		} else if consolidated {
-			datastoreLog.Info("database consolidation completed, continuing startup")
-		}
-	} else if hasUnmigrated {
-		datastoreLog.Info("deferring database consolidation until unmigrated records are synced")
+	reading, err := d.awaitStartupState(ctx, settings, datastoreLog)
+	if abortErr := abortOnStartupStateUnknown(datastoreLog, err); abortErr != nil {
+		return abortErr
 	}
-
-	// Check migration state before initializing database
-	// This allows us to skip the legacy database when migration is complete
-	startupState := datastoreV2.CheckMigrationStateBeforeStartup(settings)
+	hasUnmigrated, tailErr, startupState := reading.hasUnmigrated, reading.tailErr, reading.state
 	d.v2OnlyMode = startupState.MigrationStatus == entities.MigrationStatusCompleted && startupState.V2Available
 	freshInstall := startupState.FreshInstall
+
+	// A server that rejected the connection while the state was read would reject the
+	// datastore too: refuse below, after the boot journal, before any datastore exists.
+	var rejection *dbfailure.StartError
+	if settings.Output.MySQL.Enabled && startupState.Error != nil {
+		if failure := dbfailure.Classify(startupState.Error); failure.ServerRejected() {
+			rejection = dbfailure.NewStartError(opRefuseStart, &failure, startupState.Error)
+		}
+	}
+
+	// An unverified legacy tail only matters when it would let the install start in
+	// v2-only mode, which skips the tail-sync worker. Refuse before anything is opened.
+	if tailErr != nil {
+		if d.v2OnlyMode {
+			d.v2OnlyMode = false
+			datastoreLog.Error("could not verify legacy records beyond the migration watermark, refusing to start in enhanced database mode, no SQLite consolidation was run and no datastore was constructed",
+				logger.Error(tailErr),
+				logger.String("operation", operationStartupReconciliation),
+				logger.String("recovery_hint", legacyTailRecoveryHint))
+			return fmt.Errorf("refusing to start before the legacy records are verified: %w; %s", tailErr, legacyTailRecoveryHint)
+		}
+		if rejection == nil {
+			datastoreLog.Warn("could not verify legacy records beyond the migration watermark, not needed for this start",
+				logger.Error(tailErr),
+				logger.String("operation", operationStartupReconciliation))
+		}
+	}
 
 	// Override v2-only mode when unmigrated legacy records were found. This forces
 	// the system to start with the legacy DB so the worker can tail-sync the stragglers.
 	// Consolidation will complete on the next clean restart.
 	if hasUnmigrated && d.v2OnlyMode {
 		datastoreLog.Warn("deferring v2-only mode: unmigrated legacy records found, will sync via tail sync",
-			logger.String("operation", "startup_reconciliation"))
+			logger.String("operation", operationStartupReconciliation))
 		d.v2OnlyMode = false
 		startupState.LegacyRequired = true
 	}
@@ -168,6 +488,14 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	case freshInstall:
 		GetLogger().Info("fresh installation detected, initializing v2 schema",
 			logger.String("database_path", settings.Output.SQLite.Path),
+			logger.String("operation", "startup_mode_check"))
+	case rejection != nil:
+		// Refused below, after the boot journal.
+	case startupState.Error != nil && !errors.Is(startupState.Error, datastoreV2.ErrMixedSchemaDatabase):
+		GetLogger().Warn("database state check failed, starting with the legacy database",
+			logger.String("decision", startupState.Decision),
+			logger.String("migration_status", string(startupState.MigrationStatus)),
+			logger.Error(startupState.Error),
 			logger.String("operation", "startup_mode_check"))
 	default:
 		GetLogger().Debug("migration state check completed",
@@ -192,6 +520,21 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		)
 	}
 
+	// A database holding both schemas that cannot be reconciled without losing rows is never
+	// opened: neither the legacy fallback below nor the unmigrated-records override above
+	// may pick a side for the user.
+	if err := abortOnMixedSchema(datastoreLog, startupState.Error); err != nil {
+		return err
+	}
+
+	// A MySQL or MariaDB server that rejected the connection is never opened: the legacy
+	// fallback would fail the same way and only hide the cause.
+	if rejection != nil {
+		return refuseClassifiedStart(datastoreLog, rejection,
+			"the database server rejected the connection, refusing to start, no datastore was constructed",
+			operationStartupReconciliation)
+	}
+
 	// Initialize database access based on startup state
 	var v2OnlyDatastore *v2only.Datastore
 
@@ -199,7 +542,7 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	case d.v2OnlyMode:
 		// Post-migration: use birdnet_v2.db with V2OnlyDatastore
 		var err error
-		v2OnlyDatastore, err = initializeV2OnlyMode(settings)
+		v2OnlyDatastore, err = initializeV2OnlyMode(settings, reading.mysqlFreshV2)
 		if err != nil {
 			if corrErr := abortOnV2SchemaCorruption(datastoreLog, err,
 				"initialize_enhanced_database_mode", "v2-only"); corrErr != nil {
@@ -264,6 +607,14 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		d.dataStore = datastore.New(settings)
 	}
 
+	// Pick the detection repository for the active database. A v2 database stores and
+	// reads back each detection's own instant; the legacy modes keep the bridge over the legacy datastore.
+	if d.v2OnlyMode && v2OnlyDatastore != nil {
+		d.detectionRepo = v2only.NewDetectionRepository(v2OnlyDatastore)
+	} else {
+		d.detectionRepo = datastore.NewDetectionRepository(d.dataStore, nil)
+	}
+
 	// Connect metrics to datastore before opening
 	d.dataStore.SetMetrics(d.metrics.Datastore)
 	d.dataStore.SetSunCalcMetrics(d.metrics.SunCalc)
@@ -274,6 +625,10 @@ func (d *DatabaseService) Start(_ context.Context) error {
 		// This prevents startup failures due to insufficient disk space
 		// ValidateStartupDiskSpace already returns a fully structured error, so we return it directly
 		if err := datastore.ValidateStartupDiskSpace(settings.Output.SQLite.Path); err != nil {
+			if failure := dbfailure.Classify(err); failure.Kind != dbfailure.KindUnknown {
+				return refuseClassifiedStart(GetLogger(), dbfailure.NewStartError(opOpenDatabase, &failure, err),
+					"disk space validation failed", "validate_startup_disk_space")
+			}
 			GetLogger().Error("disk space validation failed",
 				logger.Error(err),
 				logger.String("operation", "validate_startup_disk_space"))
@@ -282,6 +637,10 @@ func (d *DatabaseService) Start(_ context.Context) error {
 
 		// Open a connection to the database and handle possible errors.
 		if err := d.dataStore.Open(); err != nil {
+			if failure := dbfailure.Classify(err); failure.Kind != dbfailure.KindUnknown {
+				return refuseClassifiedStart(GetLogger(), dbfailure.NewStartError(opOpenDatabase, &failure, err),
+					"failed to open database", "open_database")
+			}
 			GetLogger().Error("failed to open database",
 				logger.Error(err),
 				logger.String("operation", "open_database"))
@@ -290,14 +649,15 @@ func (d *DatabaseService) Start(_ context.Context) error {
 	}
 
 	// Set datastore schema version as a Sentry tag for telemetry
-	telemetry.SetDatastoreSchemaTag(d.dataStore.SchemaVersion())
+	schemaVersion := d.dataStore.SchemaVersion()
+	telemetry.SetDatastoreSchemaTag(schemaVersion)
 
 	// Initialize v2 migration infrastructure only if not in enhanced database mode
 	// In enhanced database mode, migration is already complete - no need for migration infrastructure
 	if !d.v2OnlyMode {
 		// This sets up the StateManager and Worker for the database migration API.
 		// Store the returned manager so Stop() can close the v2 database connection.
-		migrationManager, err := initializeMigrationInfrastructure(settings, d.dataStore)
+		infra, err := initializeMigrationInfrastructure(settings, d.dataStore)
 		if err != nil {
 			// Schema corruption during migration setup is the same silent-fallback class
 			// of failure the v2-only and fresh-install arms now refuse. A migration v2
@@ -313,16 +673,52 @@ func (d *DatabaseService) Start(_ context.Context) error {
 			GetLogger().Warn("migration infrastructure initialization failed",
 				logger.Error(err),
 				logger.String("operation", "initialize_migration_infrastructure"))
-		} else {
-			d.v2Manager = migrationManager
+		}
+		if infra != nil {
+			d.v2Manager = infra.manager
+			if infra.states != nil {
+				d.legacyMonitor = newLegacySchemaMonitor(infra.states, legacySchemaPollInterval, datastoreLog,
+					schemaVersion == datastore.SchemaVersionLegacy)
+				if infra.metadata != nil {
+					d.legacyMonitor.setReminder(newLegacyReminder(infra.metadata,
+						func() *conf.Settings { return conf.CurrentOrFallback(d.settings) },
+						d.settings.BuildDate, legacySchemaPollInterval, datastoreLog))
+				}
+			}
+		}
+		if d.legacyMonitor == nil && schemaVersion == datastore.SchemaVersionLegacy {
+			// Legacy schema without a readable migration state.
+			_ = telemetry.SetMigrationStateTag(migrationTagUnavailable)
+			logLegacySchemaWarning(datastoreLog, migration.LegacyNoticeNone, migrationTagUnavailable)
 		}
 	} else {
 		datastoreLog.Debug("skipping migration infrastructure in enhanced database mode",
 			logger.String("operation", "initialize_migration_infrastructure"))
 	}
 
+	// Start the monitor last so the failure defer above never has to stop it.
+	if d.legacyMonitor != nil {
+		d.legacyMonitor.start()
+	}
+
+	d.probeDatabaseServer(datastoreLog)
+
 	startSucceeded = true
 	return nil
+}
+
+// probeDatabaseServer runs the one-shot MySQL or MariaDB server check. It
+// does nothing for SQLite or without a v2 manager, runs under its own bounded
+// context, and only logs: a failed probe never fails startup.
+func (d *DatabaseService) probeDatabaseServer(log logger.Logger) {
+	if d.probeServer == nil || d.v2Manager == nil || !d.v2Manager.IsMySQL() {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), databaseServerProbeTimeout)
+	defer cancel()
+	report := d.probeServer(ctx, d.v2Manager.DB())
+	d.serverNotice = newDatabaseServerNotice(log)
+	d.serverNotice.report(&report)
 }
 
 // bootParamsFromStartup maps settings and the datastore startup state into
@@ -369,12 +765,28 @@ func bootParamsFromStartup(settings *conf.Settings, st datastoreV2.StartupState)
 }
 
 // Stop gracefully shuts down the database connections with WAL checkpoints.
-// It stops the migration worker, closes the v2 database, then closes the primary datastore.
-func (d *DatabaseService) Stop(_ context.Context) error {
+// It stops the migration state monitor and the migration worker (waiting for it,
+// bounded, so a final drain that finishes in time completes first), closes the v2 database, then closes
+// the primary datastore.
+func (d *DatabaseService) Stop(ctx context.Context) error {
 	log := GetLogger()
 
-	// Stop the migration worker before closing databases.
-	importsapi.StopMigrationWorker()
+	if d.serverNotice != nil {
+		d.serverNotice.stop()
+		d.serverNotice = nil
+	}
+
+	// Stop the state monitor first so nothing reads the database after it closes.
+	if d.legacyMonitor != nil {
+		d.legacyMonitor.stop()
+		d.legacyMonitor = nil
+	}
+
+	// Stop the migration worker and wait for it before closing databases. On a
+	// timeout the databases are closed anyway, as the shutdown budget is fixed.
+	if err := importsapi.StopMigrationWorker(ctx); err != nil {
+		log.Warn("migration worker did not stop before database close", logger.Error(err))
+	}
 
 	// Close v2 database (only in migration mode, not v2-only).
 	if !d.v2OnlyMode {
@@ -388,10 +800,11 @@ func (d *DatabaseService) Stop(_ context.Context) error {
 }
 
 // closeDataStore performs a WAL checkpoint and closes the primary datastore.
-// Safe to call multiple times: nils out the reference after close.
+// Safe to call multiple times: nils out the datastore and detection repository references.
 func (d *DatabaseService) closeDataStore(log logger.Logger) {
 	store := d.dataStore
 	d.dataStore = nil
+	d.detectionRepo = nil
 	if store == nil {
 		return
 	}

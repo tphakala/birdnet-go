@@ -128,8 +128,15 @@ const (
 
 // Equalizer filter validation limits
 const (
-	MaxEQFrequency = 24000.0 // Maximum EQ frequency in Hz (Nyquist for 48 kHz)
-	MaxEQQ         = 100.0   // Maximum Q factor for EQ filters
+	// MaxEQFrequency is a sanity ceiling for equalizer filter frequencies in Hz:
+	// the Nyquist frequency of the highest supported capture rate. It does not
+	// depend on any source's rate, since the global and stream equalizers have no
+	// single rate. A filter at or above the Nyquist frequency of the rate its
+	// route runs at passes validation and is skipped with a warning when the
+	// chain is built (internal/audiocore/equalizer), and the settings save
+	// reports it in its toast.
+	MaxEQFrequency = MaxValidSampleRate / 2.0
+	MaxEQQ         = 100.0 // Maximum Q factor for EQ filters
 )
 
 // Stream validation constants
@@ -183,8 +190,22 @@ var ValidStreamTypes = map[string]bool{
 	StreamTypeUDP:  true,
 }
 
+// MaxValidSampleRate is the highest supported capture sample rate in Hz, the
+// last entry of validSampleRates.
+const MaxValidSampleRate = 384000
+
 // validSampleRates is the canonical list of supported capture sample rates (sorted ascending).
-var validSampleRates = []int{48000, 96000, 192000, 256000, 384000}
+var validSampleRates = []int{48000, 96000, 192000, 256000, MaxValidSampleRate}
+
+// EffectiveSampleRate returns the rate in Hz at which a source delivers frames
+// to the router: rate when positive, else the default capture rate SampleRate
+// (a configured or registered rate of 0 means the default).
+func EffectiveSampleRate(rate int) int {
+	if rate > 0 {
+		return rate
+	}
+	return SampleRate
+}
 
 // ValidSampleRates returns a copy of the canonical sample rate list.
 // Returning a clone prevents callers from mutating the shared source of truth.
@@ -509,9 +530,9 @@ func (s *AudioSettings) clearFfmpegMetadata() {
 // concurrently exec'ing such a non-executable stub crashes the Windows race
 // detector with STATUS_STACK_BUFFER_OVERRUN. Production always uses the real
 // detector; only tests override it (see validate_audio_export_test.go).
-var ffmpegVersionDetector = GetFfmpegVersionFrom
+var ffmpegVersionDetector = boundedFfmpegVersion
 
-// validateAudioSettings validates the audio settings and sets ffmpeg and sox paths
+// validateAudioSettings validates the audio settings and sets the ffmpeg path
 func validateAudioSettings(settings *AudioSettings) error {
 	// Validate and determine the effective FFmpeg path
 	validatedFfmpegPath, ffmpegErr := ValidateToolPath(settings.FfmpegPath, GetFfmpegBinaryName())
@@ -548,21 +569,9 @@ func validateAudioSettings(settings *AudioSettings) error {
 				settings.FfprobePath = ""
 				GetLogger().Warn("FFprobe not found alongside FFmpeg or in PATH",
 					logger.String("expected_path", ffprobePath),
-					logger.String("impact", "Audio validation via FFprobe will be disabled"))
+					logger.String("impact", "Network stream probing (sample rate and channel detection) via FFprobe will be disabled"))
 			}
 		}
-	}
-
-	// Validate and determine the effective SoX path, using the same
-	// ValidateToolPath pattern as FFmpeg (configured path first, then PATH).
-	validatedSoxPath, soxErr := ValidateToolPath(settings.SoxPath, GetSoxBinaryName())
-	if soxErr != nil {
-		settings.SoxPath = ""
-		settings.SoxAudioTypes = nil
-		GetLogger().Warn("SoX not available", logger.Error(soxErr), logger.String("impact", "Spectrogram generation via SoX will be disabled"))
-	} else {
-		settings.SoxPath = validatedSoxPath
-		settings.SoxAudioTypes = GetSoxFormats(validatedSoxPath)
 	}
 
 	// Validate audio sources

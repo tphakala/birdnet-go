@@ -45,12 +45,17 @@ import type {
 } from '$lib/desktop/features/settings/pages/audioExportFormat';
 import { t } from '$lib/i18n';
 import { getLogger } from '$lib/utils/logger';
+import { pruneRemovedModelAliases } from '$lib/utils/modelAliases';
 import { isPlainObject, safeGet, safeSpread } from '$lib/utils/security';
 import { settingsAPI } from '$lib/utils/settingsApi.js';
 import type { SettingsSectionName, SettingsSectionPayloads } from '$lib/utils/settingsApi.js';
 import { withoutServerOwnedKeys } from '$lib/utils/settingsSections';
 import { coerceSettings } from '$lib/utils/settingsCoercion';
-import { mergeSettingsPatch, mergeSettingsPatchKeepingEdits } from '$lib/utils/settingsMerge';
+import {
+  mergeSettingsPatch,
+  mergeSettingsPatchKeepingEdits,
+  rebaseSettingsKeepingEdits,
+} from '$lib/utils/settingsMerge';
 import { DEFAULT_REGION_MODE } from '$lib/utils/variantSelection';
 import { weatherDefaults } from '$lib/utils/weatherDefaults';
 import { derived, get, writable } from 'svelte/store';
@@ -197,7 +202,6 @@ export interface AudioSettings {
   sources: AudioSourceConfig[];
   source: string; // legacy single source, kept for backward compat
   ffmpegPath?: string;
-  soxPath?: string;
   streamTransport?: string;
   export: ExportSettings;
   soundLevel: SoundLevelSettings;
@@ -752,7 +756,7 @@ export type SpectrogramMode = 'auto' | 'prerender' | 'user-requested';
 // Spectrogram style preset options
 export type SpectrogramStyle = 'default' | 'scientific_dark' | 'high_contrast_dark' | 'scientific';
 
-// Spectrogram dynamic range preset options (dB values for Sox -z parameter)
+// Spectrogram dynamic range preset options (dynamic range in dB)
 // Lower values = higher contrast (weak signals visible), higher values = more detail
 export type SpectrogramDynamicRange = '80' | '100' | '120';
 
@@ -930,6 +934,12 @@ export interface GlobalSettingsState {
   isSaving: boolean;
   activeSection: string;
   error: string | null;
+  /**
+   * True when the failure in `error` was also shown as a toast, so the Settings page
+   * banner does not announce it a second time. Written with every non-null `error`;
+   * absent means no toast.
+   */
+  errorToasted?: boolean;
   dataLoaded: boolean;
 }
 
@@ -1013,7 +1023,6 @@ function createEmptySettings(): SettingsFormData & { security: SecuritySettings 
         sources: [],
         source: '',
         ffmpegPath: '',
-        soxPath: '',
         streamTransport: 'auto',
         export: {
           type: 'wav',
@@ -1421,61 +1430,252 @@ const inFlightSectionSaves = new Set<Promise<void>>();
  */
 let pendingFullSave: { done: Promise<void>; notify: boolean } | null = null;
 
+let serverSyncTail: Promise<void> = Promise.resolve();
+const ignoreOutcome = () => undefined;
+
 /**
- * Snapshots formData and sends it to the backend, then marks it saved. Resets isSaving
- * and rethrows on every failure path, including the refusal before a load.
+ * Runs task after every earlier queued task has settled, so a refresh or a load
+ * applies wholly before or wholly after a full save and a GET issued before a
+ * PUT can never land after it. Orders loads, rebases and full saves only;
+ * section saves are not queued.
+ */
+function runSerialized<T>(task: () => Promise<T>): Promise<T> {
+  const result = serverSyncTail.then(task);
+  serverSyncTail = result.then(ignoreOutcome, ignoreOutcome);
+  return result;
+}
+
+/** Applies the per-section coercion to every object section. Keys without a coercion rule pass through. */
+function coerceAllSections(data: SettingsFormData): SettingsFormData {
+  const coerced = { ...data };
+  for (const [section, sectionData] of Object.entries(data)) {
+    if (sectionData && typeof sectionData === 'object') {
+      // eslint-disable-next-line security/detect-object-injection -- Safe: section from Object.entries of known object
+      (coerced as unknown as Record<string, unknown>)[section] = coerceSettings(
+        section,
+        sectionData as Record<string, unknown>
+      );
+    }
+  }
+  return coerced;
+}
+
+/**
+ * Spreads a settings response over the defaults and coerces each object section.
+ * Keys the interfaces do not declare (for example models) are kept as received.
+ */
+function normalizeLoadedSettings(data: SettingsFormData): SettingsFormData {
+  return coerceAllSections({ ...createEmptySettings(), ...data });
+}
+
+/** HTTP status the backend answers a stale If-Match with. */
+const HTTP_PRECONDITION_FAILED = 412;
+
+/** Tries a full save makes with If-Match: one send plus one resend after a 412 and a rebase. */
+const MAX_SETTINGS_SAVE_ATTEMPTS = 2;
+
+/** Prefix of a weak entity tag; the backend compares If-Match strongly, so a weak tag never matches. */
+const WEAK_ETAG_PREFIX = 'W/';
+
+/**
+ * Set once a save sees two 412s in a row name the same current ETag. That means the
+ * validator is rewritten between the browser and the server (a compressing reverse
+ * proxy such as Caddy or Apache mod_deflate appends "-gzip"), so no If-Match from a
+ * GET can ever match. From then on saves in this page load send no If-Match, which
+ * is how saves worked before conditional saves. Reset by a page reload.
+ */
+let ifMatchUnusable = false;
+
+/** Test-only: forget a detected ETag rewrite so each test starts as a fresh page. */
+export function resetIfMatchFallbackForTest(): void {
+  ifMatchUnusable = false;
+}
+
+/**
+ * Thrown when the save is still refused with a 412 after its attempts: the settings keep
+ * changing under the form. A save makes up to three sends, the third without If-Match
+ * once the validator is judged rewritten in transit. Callers identify the conflict with
+ * `instanceof`.
+ */
+export class SettingsChangedElsewhereError extends Error {
+  /** The status of the conflict it reports, so telemetry filters it like the 412 itself. */
+  readonly status = HTTP_PRECONDITION_FAILED;
+
+  constructor() {
+    super(t('settings.errors.changedElsewhere'));
+    this.name = 'SettingsChangedElsewhereError';
+  }
+}
+
+/**
+ * True for a 412 from the backend. Duck-typed on status: the store does not
+ * import the api module's ApiError, and tests mock settingsApi only.
+ */
+function isPreconditionFailed(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    error.status === HTTP_PRECONDITION_FAILED
+  );
+}
+
+/**
+ * The If-Match value to send for an ETag from the pre-save GET: only a strong
+ * ETag. Absent (an older backend) or weak (a proxy weakened it) means no
+ * protection, which is how saves worked before If-Match, rather than a save
+ * that can never match. Also absent once a rewritten ETag was detected.
+ */
+function usableIfMatch(etag: string | null): string | undefined {
+  if (ifMatchUnusable) return undefined;
+  return etag && !etag.startsWith(WEAK_ETAG_PREFIX) ? etag : undefined;
+}
+
+/**
+ * Fetches the current server settings, normalized like a load, with the ETag
+ * the response carried (null when absent). Throws on a malformed response.
+ */
+async function fetchServerSnapshot(): Promise<{
+  snapshot: SettingsFormData;
+  etag: string | null;
+}> {
+  let etag: string | null = null;
+  const data = await settingsAPI.load({
+    onETag: value => {
+      etag = value;
+    },
+  });
+  if (!isPlainObject(data)) {
+    throw new Error(t('settings.errors.loadFailed'));
+  }
+  return { snapshot: normalizeLoadedSettings(data), etag };
+}
+
+/**
+ * Rebases the state on a fresh server snapshot: pending edits are kept, every
+ * other path takes the server value, and originalData becomes the snapshot. An
+ * edit wins over a server change to the same path (last writer wins, see
+ * rebaseSettingsKeepingEdits).
+ */
+function rebaseState(state: GlobalSettingsState, fresh: SettingsFormData): GlobalSettingsState {
+  const merged = rebaseSettingsKeepingEdits(
+    { ...state.formData },
+    { ...state.originalData },
+    { ...fresh }
+  );
+  const formData = pruneRemovedModelAliases({ ...fresh, ...merged }, state.originalData, fresh);
+  return { ...state, formData, originalData: JSON.parse(JSON.stringify(fresh)) };
+}
+
+/**
+ * Sends the whole form with PUT, with If-Match when ifMatch is set. Resolves
+ * { conflict: false } when the server accepted it and, on a 412, { conflict: true }
+ * with the current ETag the rejection named (null when it named none, or when no
+ * If-Match was sent). Rethrows every other failure.
+ */
+async function sendSettings(
+  data: SettingsFormData,
+  ifMatch: string | undefined
+): Promise<{ conflict: false } | { conflict: true; currentETag: string | null }> {
+  let currentETag: string | null = null;
+  try {
+    // Only pass options when there is an If-Match, so a bare save() call stays as before.
+    await (ifMatch
+      ? settingsAPI.save(data, {
+          ifMatch,
+          onETag: value => {
+            currentETag = value;
+          },
+        })
+      : settingsAPI.save(data));
+    return { conflict: false };
+  } catch (error) {
+    if (!isPreconditionFailed(error)) throw error;
+    return { conflict: true, currentETag };
+  }
+}
+
+/**
+ * Rebases the store on the current server state, then sends the whole form to
+ * the backend and marks exactly what was sent as saved. The PUT carries the
+ * snapshot's strong ETag as If-Match; on a 412 (the settings changed between the
+ * GET and the PUT) the rebase and send run once more on a fresh snapshot, and a
+ * second 412 fails the save with SettingsChangedElsewhereError, edits kept.
+ * Unless both 412s named the same non-empty current ETag: then nothing changed on the
+ * server and the ETag is rewritten on the way, so one more send without If-Match
+ * follows and later saves in this page load send none.
+ * Resets isSaving and rethrows on every failure path, including the refusal
+ * before a load. A failed fetch of the server state fails the save before any
+ * request is sent.
  */
 async function persistFormData(notify: boolean): Promise<void> {
   try {
-    const currentState = get(settingsStore);
-    if (!currentState.dataLoaded) {
+    if (!get(settingsStore).dataLoaded) {
       logger.warn('Refusing to save settings before they have been loaded');
       throw new Error(t('settings.errors.loadFailed'));
     }
     settingsStore.update(state => ({ ...state, isSaving: true, error: null }));
 
-    // Apply coercion to all sections before saving
-    const coercedFormData = { ...currentState.formData };
-    for (const [section, data] of Object.entries(coercedFormData)) {
-      if (data && typeof data === 'object') {
-        const key = section as keyof SettingsFormData;
-        // Use a type assertion to handle the assignment
-        // eslint-disable-next-line security/detect-object-injection -- key is from controlled source
-        (coercedFormData as Record<string, unknown>)[key] = coerceSettings(
-          section,
-          data as Record<string, unknown>
+    await runSerialized(async () => {
+      // The current ETag the previous attempt's 412 named, to spot a rewritten validator.
+      let previousConflictETag: string | null = null;
+      for (let attempt = 1; ; attempt++) {
+        // Rebase first so a change made on the server since the load (a model
+        // gallery action) is not overwritten by load-time values.
+        const { snapshot, etag } = await fetchServerSnapshot();
+        settingsStore.update(state => rebaseState(state, snapshot));
+        const rebased = get(settingsStore);
+        const sent: SettingsFormData = JSON.parse(JSON.stringify(rebased.formData));
+        const loadedLocale = rebased.originalData.realtime?.dashboard?.locale;
+
+        const coercedFormData = coerceAllSections(sent);
+
+        // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
+        // This ensures the config file is properly cleaned when users clear these fields
+        // Trim whitespace to handle cases like "   " which should also be treated as empty
+        if (coercedFormData.birdnet.modelPath?.trim() === '') {
+          coercedFormData.birdnet.modelPath = null;
+        }
+        if (coercedFormData.birdnet.labelPath?.trim() === '') {
+          coercedFormData.birdnet.labelPath = null;
+        }
+
+        const ifMatch = usableIfMatch(etag);
+        const outcome = await sendSettings(coercedFormData, ifMatch);
+        if (outcome.conflict) {
+          if (attempt < MAX_SETTINGS_SAVE_ATTEMPTS) {
+            previousConflictETag = outcome.currentETag;
+            continue;
+          }
+          // Both GET-issued ETags were refused while the server named the same current
+          // ETag twice: nothing changed between the two PUTs, so the validator is
+          // rewritten on the way. Save once more without If-Match and stop sending it.
+          if (outcome.currentETag && outcome.currentETag === previousConflictETag) {
+            ifMatchUnusable = true;
+            logger.warn(
+              'Settings If-Match is rewritten between the browser and the server; saving without it for this page load'
+            );
+            continue;
+          }
+          throw new SettingsChangedElsewhereError();
+        }
+
+        // Read newLocale from coercedFormData (the value we actually persisted)
+        // and compare to originalData (the snapshot rebased on the backend).
+        await afterSettingsPersisted(
+          coercedFormData.realtime?.dashboard?.locale,
+          loadedLocale,
+          coercedFormData.sentry?.enabled
         );
+
+        // Mark what was sent as saved, not formData as it is now, so an edit typed
+        // while the request was in flight stays unsaved. Restart-required state is
+        // owned by the backend (refreshed in afterSettingsPersisted) and surfaced
+        // by the global RestartBanner, so it is not tracked client-side.
+        settingsStore.update(state => ({ ...state, originalData: sent, isSaving: false }));
+        return;
       }
-    }
-
-    // Convert empty strings to null for modelPath and labelPath to signal "revert to default"
-    // This ensures the config file is properly cleaned when users clear these fields
-    // Trim whitespace to handle cases like "   " which should also be treated as empty
-    if (coercedFormData.birdnet.modelPath?.trim() === '') {
-      coercedFormData.birdnet.modelPath = null;
-    }
-    if (coercedFormData.birdnet.labelPath?.trim() === '') {
-      coercedFormData.birdnet.labelPath = null;
-    }
-
-    await settingsAPI.save(coercedFormData);
-
-    // Read newLocale from coercedFormData (the value we actually persisted)
-    // and compare to originalData (the snapshot loaded from the backend).
-    await afterSettingsPersisted(
-      coercedFormData.realtime?.dashboard?.locale,
-      currentState.originalData.realtime?.dashboard?.locale
-    );
-
-    // Update originalData to match the saved formData (no reload needed).
-    // Restart-required state is owned by the backend (refreshed in
-    // afterSettingsPersisted) and surfaced by the global RestartBanner, so
-    // it is no longer tracked client-side here.
-    settingsStore.update(state => ({
-      ...state,
-      originalData: JSON.parse(JSON.stringify(state.formData)),
-      isSaving: false,
-    }));
+    });
 
     if (notify) {
       toastActions.success(t('notifications.content.settings.savedSuccessfully'));
@@ -1486,10 +1686,15 @@ async function persistFormData(notify: boolean): Promise<void> {
       ...state,
       isSaving: false,
       error: errorMessage,
+      errorToasted: notify,
     }));
 
     if (notify) {
-      toastActions.error(t('notifications.content.settings.saveFailed'));
+      toastActions.error(
+        error instanceof SettingsChangedElsewhereError
+          ? error.message
+          : t('notifications.content.settings.saveFailed')
+      );
     }
 
     throw error;
@@ -1542,16 +1747,34 @@ function applySectionPatch(
  * from the one previously saved, so a locale chosen via the sidebar
  * LanguageSelector (which updates localStorage but not the backend) is not
  * clobbered by whatever stale value the backend still holds.
+ *
+ * When the save carried an Error Tracking value, the browser Sentry SDK is
+ * reconciled with it. Only the import of the already loaded appState module is
+ * awaited, so an opt-out has stopped sending before the save resolves; the
+ * reconcile itself (which may fetch the app config) is never awaited and its
+ * failure is logged, not thrown.
  */
 async function afterSettingsPersisted(
   newLocale: string | undefined,
-  origLocale: string | undefined
+  origLocale: string | undefined,
+  savedSentryEnabled: boolean | undefined
 ): Promise<void> {
   void import('$lib/stores/restart.svelte')
     .then(({ fetchRestartStatus }) => fetchRestartStatus())
     .catch(e => {
       logger.error('Failed to refresh restart status after settings save:', e);
     });
+
+  if (typeof savedSentryEnabled === 'boolean') {
+    const logApplyFailure = (e: unknown) =>
+      logger.error('Failed to apply the Error Tracking setting in the browser after save:', e);
+    try {
+      const { applySavedSentrySetting } = await import('$lib/stores/appState.svelte');
+      void applySavedSentrySetting(savedSentryEnabled).catch(logApplyFailure);
+    } catch (e) {
+      logApplyFailure(e);
+    }
+  }
 
   if (newLocale && newLocale !== origLocale) {
     try {
@@ -1572,35 +1795,46 @@ export const settingsActions = {
   async loadSettings() {
     settingsStore.update(state => ({ ...state, isLoading: true, error: null }));
     try {
-      const data = await settingsAPI.load();
-      const mergedData = { ...createEmptySettings(), ...data };
+      // Queued with full saves and refreshes, so a load never lands between a
+      // save's rebase and the originalData write that ends it.
+      await runSerialized(async () => {
+        const data = await settingsAPI.load();
+        const coercedData = normalizeLoadedSettings(data);
 
-      // Apply coercion to each section
-      const coercedData = { ...mergedData };
-      for (const [section, sectionData] of Object.entries(mergedData)) {
-        if (sectionData && typeof sectionData === 'object') {
-          const coercedSection = coerceSettings(section, sectionData as Record<string, unknown>);
-          // eslint-disable-next-line security/detect-object-injection -- Safe: section from Object.entries of known object
-          (coercedData as unknown as Record<string, unknown>)[section] = coercedSection;
-        }
-      }
-
-      settingsStore.update(state => ({
-        ...state,
-        formData: coercedData,
-        originalData: JSON.parse(JSON.stringify(coercedData)),
-        isLoading: false,
-        dataLoaded: true,
-      }));
+        settingsStore.update(state => ({
+          ...state,
+          formData: coercedData,
+          originalData: JSON.parse(JSON.stringify(coercedData)),
+          isLoading: false,
+          dataLoaded: true,
+        }));
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : t('settings.errors.loadFailed');
       settingsStore.update(state => ({
         ...state,
         isLoading: false,
         error: errorMessage,
+        errorToasted: false,
       }));
       throw error;
     }
+  },
+
+  /**
+   * Rebases the store on the current server settings without losing unsaved
+   * edits. For actions the server persists outside the form (the model
+   * gallery): unedited paths take the server value, edited paths keep the form
+   * value. Returns at once before a load has succeeded. Does not touch
+   * isLoading, isSaving or error, and rejects on failure so the caller decides
+   * how to report it. Runs in order with full saves.
+   */
+  async refreshKeepingEdits(): Promise<void> {
+    if (!get(settingsStore).dataLoaded) return;
+    await runSerialized(async () => {
+      const { snapshot } = await fetchServerSnapshot();
+      settingsStore.update(state => rebaseState(state, snapshot));
+    });
   },
 
   updateSection<K extends keyof SettingsFormData>(section: K, data: Partial<SettingsFormData[K]>) {
@@ -1658,9 +1892,12 @@ export const settingsActions = {
       settingsStore.update(state => ({ ...state, ...applySectionPatch(state, section, patch) }));
 
       const newLocale = section === 'dashboard' ? patch.locale : undefined;
+      const savedSentryEnabled =
+        section === 'sentry' && typeof patch.enabled === 'boolean' ? patch.enabled : undefined;
       await afterSettingsPersisted(
         typeof newLocale === 'string' ? newLocale : undefined,
-        origLocale
+        origLocale,
+        savedSentryEnabled
       );
     })();
 
@@ -1713,7 +1950,10 @@ export const settingsActions = {
    * Saves the whole formData to the backend. Refuses (throws before any network
    * call) while no settings load has succeeded, because formData would then hold
    * empty defaults that the backend deep-merges over the real configuration.
-   * Pass `{ notify: false }` to suppress the success and failure toasts.
+   * It first fetches the server settings and merges the unsaved edits onto them,
+   * so changes made on the server since the load (a model gallery install) are
+   * not reverted; a failed fetch fails the save with no PUT, and every full save
+   * costs one extra GET. Pass `{ notify: false }` to suppress the success and failure toasts.
    *
    * A call made while an earlier call still waits for section saves joins it:
    * one request, one result, and the success or failure toast if any joined call

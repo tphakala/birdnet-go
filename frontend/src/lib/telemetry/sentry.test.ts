@@ -5,6 +5,7 @@ vi.mock('@sentry/browser', () => ({
   init: vi.fn(),
   captureException: vi.fn(),
   setTag: vi.fn(),
+  getIsolationScope: vi.fn(() => ({ clearBreadcrumbs: vi.fn() })),
   withScope: vi.fn((callback: (scope: unknown) => void) => {
     const mockScope = {
       setLevel: vi.fn(),
@@ -347,6 +348,17 @@ describe('captureApiError', () => {
   it('skips 409 conflict errors', () => {
     const error = new Error('Conflict') as Error & { status: number; isNetworkError: boolean };
     error.status = 409;
+    error.isNetworkError = false;
+    captureApiError(error);
+    expect(Sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  it('skips 412 precondition failed errors', () => {
+    const error = new Error('Precondition Failed') as Error & {
+      status: number;
+      isNetworkError: boolean;
+    };
+    error.status = 412;
     error.isNetworkError = false;
     captureApiError(error);
     expect(Sentry.captureException).not.toHaveBeenCalled();

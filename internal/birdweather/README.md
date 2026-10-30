@@ -24,7 +24,7 @@ The package provides a client interface for interacting with the BirdWeather API
 
 ```go
 type Interface interface {
-    Publish(note *datastore.Note, pcmData []byte) error
+    Publish(note *datastore.Note, detectedAt time.Time, pcmData []byte) error
     UploadSoundscape(timestamp string, pcmData []byte) (soundscapeID string, err error)
     PostDetection(soundscapeID, timestamp, commonName, scientificName string, confidence float64) error
     TestConnection(ctx context.Context, resultChan chan<- TestResult)
@@ -123,19 +123,21 @@ func initBirdWeather(settings *conf.Settings) (*birdweather.BwClient, error) {
 
 ```go
 import (
+    "time"
+
     "github.com/tphakala/birdnet-go/internal/datastore"
 )
 
-func publishDetection(client *birdweather.BwClient, pcmData []byte) error {
+// detectedAt is the detection's own instant (for example detection.Result.Timestamp).
+// Publish uploads it with its UTC offset; the note's Date and Time are not used for it.
+func publishDetection(client *birdweather.BwClient, detectedAt time.Time, pcmData []byte) error {
     note := &datastore.Note{
-        Date:          "2023-04-10",
-        Time:          "14:30:25",
         CommonName:    "Eurasian Blackbird",
         ScientificName: "Turdus merula",
         Confidence:    0.95,
     }
 
-    return client.Publish(note, pcmData)
+    return client.Publish(note, detectedAt, pcmData)
 }
 ```
 

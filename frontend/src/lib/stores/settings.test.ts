@@ -1,8 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { get } from 'svelte/store';
-import { settingsStore, settingsActions, hasUnsavedChanges, SECTION_STORE_PATHS } from './settings';
+import {
+  settingsStore,
+  settingsActions,
+  hasUnsavedChanges,
+  resetIfMatchFallbackForTest,
+  SECTION_STORE_PATHS,
+} from './settings';
 import type {
   AudioSettings,
+  AudioSourceConfig,
   BirdNetSettings,
   EqualizerSettings,
   RealtimeSettings,
@@ -12,6 +19,7 @@ import { settingsAPI } from '$lib/utils/settingsApi.js';
 import { hasSettingsChanged } from '$lib/utils/settingsChanges';
 import { deferred } from '../../test/async-helpers';
 import { lookup, serverSettings } from '../../test/settings-helpers';
+import { serveConfirmedSettings } from '../../test/settings-store-helpers';
 
 // Mock the settings API
 vi.mock('$lib/utils/settingsApi.js', () => ({
@@ -37,6 +45,10 @@ vi.mock('$lib/i18n/index.js', () => ({
   isValidLocale: vi.fn().mockReturnValue(true),
   t: vi.fn((key: string) => key),
 }));
+
+beforeEach(() => {
+  serveConfirmedSettings();
+});
 
 describe('Settings Store - Dynamic Threshold and Range Filter', () => {
   beforeEach(() => {
@@ -918,6 +930,7 @@ describe('Settings Store - saveSettings refuses before settings load', () => {
 
   beforeEach(async () => {
     vi.mocked(settingsAPI.save).mockClear();
+    vi.mocked(settingsAPI.load).mockClear();
     const { toastActions } = await import('./toast.js');
     vi.mocked(toastActions.success).mockClear();
     vi.mocked(toastActions.error).mockClear();
@@ -929,6 +942,7 @@ describe('Settings Store - saveSettings refuses before settings load', () => {
     await expect(settingsActions.saveSettings()).rejects.toThrow('settings.errors.loadFailed');
 
     expect(settingsAPI.save).not.toHaveBeenCalled();
+    expect(settingsAPI.load).not.toHaveBeenCalled();
     const state = get(settingsStore);
     expect(state.error).toBe('settings.errors.loadFailed');
     expect(state.isSaving).toBe(false);
@@ -991,6 +1005,7 @@ describe('Settings Store - saveSection', () => {
     });
     vi.mocked(settingsAPI.load).mockResolvedValue(serverSettings());
     await settingsActions.loadSettings();
+    serveConfirmedSettings();
   };
 
   beforeEach(async () => {
@@ -1503,6 +1518,140 @@ describe('Settings Store - restart status refresh after a save', () => {
   );
 });
 
+describe('Settings Store - browser error tracking follows the saved setting', () => {
+  const withSentry = (enabled: boolean) => ({ ...serverSettings(), sentry: { enabled } });
+
+  // The shared mock implementations, saved before any override and put back after each test.
+  // The file-level beforeEach has already installed serveConfirmedSettings on load.
+  let originalLoad: (typeof settingsAPI)['load'] | undefined;
+  let originalSave: (typeof settingsAPI)['save'] | undefined;
+  let originalPatchSection: (typeof settingsAPI)['patchSection'] | undefined;
+
+  beforeEach(() => {
+    originalLoad = vi.mocked(settingsAPI.load).getMockImplementation();
+    originalSave = vi.mocked(settingsAPI.save).getMockImplementation();
+    originalPatchSection = vi.mocked(settingsAPI.patchSection).getMockImplementation();
+  });
+
+  afterEach(() => {
+    vi.mocked(settingsAPI.load).mockReset();
+    if (originalLoad) vi.mocked(settingsAPI.load).mockImplementation(originalLoad);
+    vi.mocked(settingsAPI.save).mockReset();
+    if (originalSave) vi.mocked(settingsAPI.save).mockImplementation(originalSave);
+    vi.mocked(settingsAPI.patchSection).mockReset();
+    if (originalPatchSection) {
+      vi.mocked(settingsAPI.patchSection).mockImplementation(originalPatchSection);
+    }
+  });
+
+  const load = async (loaded: boolean, rebased?: boolean) => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    vi.mocked(settingsAPI.patchSection).mockReset().mockResolvedValue({});
+    vi.mocked(settingsAPI.load)
+      .mockReset()
+      .mockResolvedValueOnce(withSentry(loaded))
+      .mockResolvedValue(withSentry(rebased ?? loaded));
+    await settingsActions.loadSettings();
+  };
+
+  const spyApply = async () => {
+    const appState = await import('$lib/stores/appState.svelte');
+    return vi.spyOn(appState, 'applySavedSentrySetting').mockResolvedValue(undefined);
+  };
+
+  it.each([
+    {
+      name: 'saveSettings passes an edit that survives the rebase',
+      loaded: false,
+      rebased: false,
+      run: async () => {
+        settingsActions.updateSection('sentry', { enabled: true });
+        await settingsActions.saveSettings({ notify: false });
+      },
+      expected: [true],
+    },
+    {
+      name: 'saveSettings passes the rebased value that was sent, not the pre-rebase one',
+      loaded: true,
+      rebased: false,
+      run: () => settingsActions.saveSettings({ notify: false }),
+      expected: [false],
+    },
+    {
+      name: 'saveSection sentry passes the patched value',
+      loaded: true,
+      rebased: true,
+      run: () => settingsActions.saveSection('sentry', { enabled: false }),
+      expected: [false],
+    },
+    {
+      name: 'saveSection sentry without enabled passes nothing',
+      loaded: true,
+      rebased: true,
+      run: () => settingsActions.saveSection('sentry', { environment: 'staging' }),
+      expected: [],
+    },
+    {
+      name: 'saveSection of another section carrying enabled passes nothing',
+      loaded: true,
+      rebased: true,
+      run: () => settingsActions.saveSection('privacyfilter', { enabled: false }),
+      expected: [],
+    },
+  ])('$name', async ({ loaded, rebased, run, expected }) => {
+    await load(loaded, rebased);
+    const apply = await spyApply();
+    try {
+      await run();
+      expect(apply.mock.calls).toEqual(expected.map(value => [value]));
+    } finally {
+      apply.mockRestore();
+    }
+  });
+
+  it('a failure applying Error Tracking in the browser does not fail the save', async () => {
+    await load(false);
+    const appState = await import('$lib/stores/appState.svelte');
+    const apply = vi
+      .spyOn(appState, 'applySavedSentrySetting')
+      .mockRejectedValue(new Error('boom'));
+    try {
+      settingsActions.updateSection('sentry', { enabled: true });
+      await expect(settingsActions.saveSettings({ notify: false })).resolves.toBeUndefined();
+      const state = get(settingsStore);
+      expect(state.isSaving).toBe(false);
+      expect(state.error).toBeNull();
+    } finally {
+      apply.mockRestore();
+    }
+  });
+
+  it('a save does not wait for the browser to apply Error Tracking', async () => {
+    await load(false);
+    const appState = await import('$lib/stores/appState.svelte');
+    // Never settles: the save must not await the apply
+    const apply = vi
+      .spyOn(appState, 'applySavedSentrySetting')
+      .mockReturnValue(new Promise(() => {}));
+    try {
+      settingsActions.updateSection('sentry', { enabled: true });
+      const saved = settingsActions.saveSettings({ notify: false }).then((): string => 'saved');
+      // Resolves only after the imports and a macrotask, by which time a save that does
+      // not wait for the apply has finished
+      const sentinel = (async (): Promise<string> => {
+        await vi.dynamicImportSettled();
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+        return 'still waiting';
+      })();
+
+      expect(await Promise.race([saved, sentinel])).toBe('saved');
+      expect(apply).toHaveBeenCalledWith(true);
+    } finally {
+      apply.mockRestore();
+    }
+  });
+});
+
 describe('Settings Store - equalizer values the backend accepts', () => {
   // Values the editor never offers but the backend stores: a disabled equalizer is not
   // validated at all, and an enabled one only bounds frequency and Q
@@ -1617,5 +1766,423 @@ describe('Settings Store - equalizer values the backend accepts', () => {
     await settingsActions.saveSection('audio', patch);
 
     expect(get(hasUnsavedChanges)).toBe(false);
+  });
+});
+
+describe('Settings Store - saveSettings rebases on the server state', () => {
+  // The fake server and the PUT body are JSON documents the tests read and edit by
+  // path, so they are typed as plain records and cast at the store boundary.
+  type Body = Record<string, unknown>;
+  let server: Record<string, unknown>;
+
+  const withModels = () => {
+    const data = serverSettings() as unknown as Record<string, unknown>;
+    data.models = { enabled: ['birdnet', 'perch'] };
+    const audio = lookup(data, ['realtime', 'audio']) as { sources: Record<string, unknown>[] };
+    audio.sources = [{ name: 'Card', device: 'hw:0', models: ['birdnet', 'perch'] }];
+    const rtsp = lookup(data, ['realtime', 'rtsp']) as { streams: Record<string, unknown>[] };
+    rtsp.streams = [{ name: 'Old', url: 'rtsp://old', models: ['birdnet', 'perch'] }];
+    return data;
+  };
+
+  const lastBody = (): Body =>
+    vi.mocked(settingsAPI.save).mock.calls.at(-1)?.[0] as unknown as Body;
+
+  beforeEach(async () => {
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    server = withModels();
+    vi.mocked(settingsAPI.load).mockImplementation(
+      async () => JSON.parse(JSON.stringify(server)) as SettingsFormData
+    );
+    settingsStore.set({
+      formData: { main: { name: '' } } as unknown as SettingsFormData,
+      originalData: { main: { name: '' } } as unknown as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    await settingsActions.loadSettings();
+  });
+
+  it('sends the server models and source lists with the unrelated edit and ends clean', async () => {
+    (server.models as { enabled: string[] }).enabled = ['birdnet', 'perch', 'extra'];
+    (lookup(server, ['realtime', 'audio', 'sources']) as { models: string[] }[])[0].models = [
+      'birdnet',
+    ];
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await settingsActions.saveSettings({ notify: false });
+
+    const body = lastBody();
+    expect(lookup(body, ['models', 'enabled'])).toEqual(['birdnet', 'perch', 'extra']);
+    expect(lookup(body, ['realtime', 'audio', 'sources', '0', 'models'])).toEqual(['birdnet']);
+    expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('fails without a PUT and keeps edits when the server state cannot be fetched', async () => {
+    vi.mocked(settingsAPI.load).mockRejectedValueOnce(new Error('offline'));
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await expect(settingsActions.saveSettings({ notify: false })).rejects.toThrow('offline');
+
+    expect(settingsAPI.save).not.toHaveBeenCalled();
+    const state = get(settingsStore);
+    expect(state.formData.birdnet.threshold).toBe(0.55);
+    expect(state.isSaving).toBe(false);
+    expect(state.error).toBe('offline');
+  });
+
+  it('keeps an edit typed while the PUT is in flight unsaved and sends it next time', async () => {
+    const hold = deferred();
+    vi.mocked(settingsAPI.save).mockReturnValueOnce(hold.promise);
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    const saving = settingsActions.saveSettings({ notify: false });
+    await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+    settingsActions.updateSection('main', { name: 'Typed meanwhile' });
+    hold.resolve();
+    await saving;
+
+    expect(get(hasUnsavedChanges)).toBe(true);
+    await settingsActions.saveSettings({ notify: false });
+    expect(lookup(lastBody(), ['main', 'name'])).toBe('Typed meanwhile');
+  });
+
+  it('refreshKeepingEdits keeps unsaved edits and takes server values elsewhere', async () => {
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    (server.models as { enabled: string[] }).enabled = ['birdnet'];
+    (server.main as { name: string }).name = 'Renamed on server';
+
+    await settingsActions.refreshKeepingEdits();
+
+    const state = get(settingsStore);
+    expect(state.formData.birdnet.threshold).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(true);
+    expect(state.formData.main.name).toBe('Renamed on server');
+    expect(lookup(state.formData, ['models', 'enabled'])).toEqual(['birdnet']);
+    expect(lookup(state.originalData, ['models', 'enabled'])).toEqual(['birdnet']);
+    expect(state.isSaving).toBe(false);
+    expect(state.error).toBeNull();
+  });
+
+  it('applies a refresh requested during a save only after the save completes', async () => {
+    const hold = deferred();
+    vi.mocked(settingsAPI.save).mockReturnValueOnce(hold.promise);
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.load).mockClear();
+
+    const saving = settingsActions.saveSettings({ notify: false });
+    await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+    const refreshing = settingsActions.refreshKeepingEdits();
+    await Promise.resolve();
+    expect(settingsAPI.load).toHaveBeenCalledTimes(1);
+
+    server.birdnet = { ...(server.birdnet as Body), threshold: 0.55 };
+    hold.resolve();
+    await Promise.all([saving, refreshing]);
+
+    expect(settingsAPI.load).toHaveBeenCalledTimes(2);
+    const state = get(settingsStore);
+    expect(state.formData.birdnet.threshold).toBe(0.55);
+    expect(state.originalData.birdnet.threshold).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(false);
+  });
+
+  it('applies a load requested during a save only after the save completes', async () => {
+    const hold = deferred();
+    vi.mocked(settingsAPI.save).mockReturnValueOnce(hold.promise);
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.load).mockClear();
+
+    const saving = settingsActions.saveSettings({ notify: false });
+    await vi.waitFor(() => expect(settingsAPI.save).toHaveBeenCalledTimes(1));
+    // The server now holds the saved value, as it does once the PUT lands.
+    server.birdnet = { ...(server.birdnet as Body), threshold: 0.55 };
+    const loading = settingsActions.loadSettings();
+    await Promise.resolve();
+    expect(settingsAPI.load).toHaveBeenCalledTimes(1);
+
+    hold.resolve();
+    await Promise.all([saving, loading]);
+
+    expect(settingsAPI.load).toHaveBeenCalledTimes(2);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(get(settingsStore).formData.birdnet.threshold).toBe(0.55);
+  });
+
+  it('drops a model the server removed from edited source and stream lists, ignoring case', async () => {
+    const sources = lookup(server, ['realtime', 'audio', 'sources']) as Body[];
+    const streams = lookup(server, ['realtime', 'rtsp', 'streams']) as Body[];
+    const audio = get(settingsStore).formData.realtime?.audio as AudioSettings;
+    const rtsp = get(settingsStore).formData.realtime?.rtsp as NonNullable<
+      RealtimeSettings['rtsp']
+    >;
+    settingsActions.updateSection('realtime', {
+      audio: {
+        ...audio,
+        sources: [{ ...audio.sources[0], name: 'Renamed card', models: ['birdnet', 'Perch'] }],
+      },
+      rtsp: { ...rtsp, streams: [{ ...rtsp.streams[0], name: 'Renamed stream' }] },
+    });
+    (server.models as { enabled: string[] }).enabled = ['birdnet'];
+    sources[0].models = ['birdnet'];
+    streams[0].models = ['birdnet'];
+
+    await settingsActions.saveSettings({ notify: false });
+
+    const body = lastBody();
+    expect(lookup(body, ['realtime', 'audio', 'sources', '0', 'name'])).toBe('Renamed card');
+    expect(lookup(body, ['realtime', 'audio', 'sources', '0', 'models'])).toEqual(['birdnet']);
+    expect(lookup(body, ['realtime', 'rtsp', 'streams', '0', 'name'])).toBe('Renamed stream');
+    expect(lookup(body, ['realtime', 'rtsp', 'streams', '0', 'models'])).toEqual(['birdnet']);
+  });
+});
+
+describe('Settings Store - tab change markers agree with the toolbar after a save', () => {
+  // SoundCardManager and StreamCard store a source without an equalizer as
+  // `equalizer: undefined`, a present key whose value JSON drops. The toolbar
+  // (hasUnsavedChanges) compares JSON; the Audio tab dots use hasSettingsChanged.
+  it('reports a saved audio source with an undefined equalizer as unchanged', async () => {
+    const snapshot = serverSettings();
+    settingsStore.set({
+      formData: serverSettings(),
+      originalData: serverSettings(),
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: true,
+    });
+
+    const audio = snapshot.realtime?.audio;
+    if (!audio) throw new Error('fixture has no audio settings');
+    const source: AudioSourceConfig = {
+      name: 'Mic',
+      device: 'hw:1',
+      gain: 0,
+      models: ['birdnet'],
+      equalizer: undefined,
+    };
+    settingsActions.updateSection('realtime', { audio: { ...audio, sources: [source] } });
+    await settingsActions.saveSettings({ notify: false });
+
+    const state = get(settingsStore);
+    // The key must survive the store round trip, or the comparison below proves nothing.
+    expect(state.formData.realtime?.audio?.sources[0]).toHaveProperty('equalizer', undefined);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(
+      hasSettingsChanged(
+        state.originalData.realtime?.audio?.sources,
+        state.formData.realtime?.audio?.sources
+      )
+    ).toBe(false);
+  });
+});
+
+describe('Settings Store - save conflicts (If-Match)', () => {
+  // The fake server and the PUT body are JSON documents the tests read and edit by
+  // path, so they are typed as plain records and cast at the store boundary.
+  type Body = Record<string, unknown>;
+  type LoadOptions = { onETag?: (etag: string | null) => void };
+  const CHANGED_ELSEWHERE_KEY = 'settings.errors.changedElsewhere';
+
+  let server: Record<string, unknown>;
+  let etag: string | null;
+
+  /** The ifMatch each save() call was given, in call order. */
+  const sentIfMatch = () => vi.mocked(settingsAPI.save).mock.calls.map(call => call[1]?.ifMatch);
+
+  const conflict = () => Object.assign(new Error('Precondition Failed'), { status: 412 });
+
+  /**
+   * Makes save() answer 412 to every request that carries an If-Match, naming the
+   * ETag next() returns as the current one, as the server does. A request without
+   * If-Match is accepted.
+   */
+  const rejectIfMatchSaves = (next: () => string | null) => {
+    vi.mocked(settingsAPI.save)
+      .mockReset()
+      .mockImplementation(async (_data, options) => {
+        if (!options?.ifMatch) return undefined;
+        options.onETag?.(next());
+        throw conflict();
+      });
+  };
+
+  beforeEach(async () => {
+    resetIfMatchFallbackForTest();
+    server = serverSettings() as unknown as Record<string, unknown>;
+    etag = '"e-1"';
+    vi.mocked(settingsAPI.load).mockReset();
+    vi.mocked(settingsAPI.load).mockImplementation((async (options?: LoadOptions) => {
+      options?.onETag?.(etag);
+      return JSON.parse(JSON.stringify(server));
+    }) as typeof settingsAPI.load);
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    const { toastActions } = await import('./toast.js');
+    vi.mocked(toastActions.error).mockClear();
+    settingsStore.set({
+      formData: { main: { name: '' } } as unknown as SettingsFormData,
+      originalData: { main: { name: '' } } as unknown as SettingsFormData,
+      isLoading: false,
+      isSaving: false,
+      activeSection: 'main',
+      error: null,
+      dataLoaded: false,
+    });
+    await settingsActions.loadSettings();
+  });
+
+  it('refetches, rebases and resends once after a 412, keeping the edit and taking the server change', async () => {
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.load).mockClear();
+    vi.mocked(settingsAPI.save).mockRejectedValueOnce(conflict());
+    // The out-of-band change lands after the first snapshot is read and before the
+    // second, so only a rebase on the second snapshot can carry it into the resend.
+    vi.mocked(settingsAPI.load).mockImplementationOnce((async (options?: LoadOptions) => {
+      options?.onETag?.('"e-1"');
+      const first = JSON.parse(JSON.stringify(server));
+      server.main = { name: 'Renamed elsewhere' };
+      etag = '"e-2"';
+      return first;
+    }) as typeof settingsAPI.load);
+
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(settingsAPI.load).toHaveBeenCalledTimes(2);
+    expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+    expect(sentIfMatch()).toEqual(['"e-1"', '"e-2"']);
+    const body = vi.mocked(settingsAPI.save).mock.calls[1][0] as unknown as Body;
+    expect(lookup(body, ['birdnet', 'threshold'])).toBe(0.55);
+    expect(lookup(body, ['main', 'name'])).toBe('Renamed elsewhere');
+    expect(lookup(vi.mocked(settingsAPI.save).mock.calls[0][0], ['main', 'name'])).toBe('TestNode');
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(get(settingsStore).error).toBeNull();
+  });
+
+  it('shows the changed-elsewhere message after a second 412, sends no third PUT and keeps the edit', async () => {
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.save).mockReset().mockRejectedValue(conflict());
+    const { toastActions } = await import('./toast.js');
+
+    await expect(settingsActions.saveSettings()).rejects.toMatchObject({
+      message: CHANGED_ELSEWHERE_KEY,
+      // Carries the 412 so telemetry treats it as the expected conflict it is.
+      status: 412,
+    });
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+    const state = get(settingsStore);
+    expect(state.error).toBe(CHANGED_ELSEWHERE_KEY);
+    expect(toastActions.error).toHaveBeenCalledExactlyOnceWith(CHANGED_ELSEWHERE_KEY);
+    expect(state.formData.birdnet.threshold).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(true);
+    expect(state.isSaving).toBe(false);
+  });
+
+  it('does not retry a failure that is not a 412', async () => {
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+    vi.mocked(settingsAPI.save).mockRejectedValueOnce(
+      Object.assign(new Error('boom'), { status: 500 })
+    );
+
+    const { toastActions } = await import('./toast.js');
+
+    await expect(settingsActions.saveSettings()).rejects.toThrow('boom');
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+    expect(toastActions.error).toHaveBeenCalledExactlyOnceWith(
+      'notifications.content.settings.saveFailed'
+    );
+  });
+
+  it('saves without If-Match once two 412s name the same current ETag, and keeps it off for later saves', async () => {
+    // What the page sees through a compressing proxy: the proxy appended -gzip to the
+    // GET's ETag, while the 412 names the origin's real current ETag.
+    etag = '"e-1-gzip"';
+    rejectIfMatchSaves(() => '"e-1"');
+    const { toastActions } = await import('./toast.js');
+    vi.mocked(toastActions.error).mockClear();
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(3);
+    expect(sentIfMatch()).toEqual(['"e-1-gzip"', '"e-1-gzip"', undefined]);
+    expect(get(hasUnsavedChanges)).toBe(false);
+    expect(get(settingsStore).error).toBeNull();
+    expect(toastActions.error).not.toHaveBeenCalled();
+
+    vi.mocked(settingsAPI.load).mockClear();
+    vi.mocked(settingsAPI.save).mockClear();
+    settingsActions.updateSection('birdnet', { threshold: 0.6 });
+
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(settingsAPI.load).toHaveBeenCalledTimes(1);
+    expect(settingsAPI.save).toHaveBeenCalledTimes(1);
+    expect(sentIfMatch()).toEqual([undefined]);
+  });
+
+  it('still fails with changed elsewhere when the current ETag moves between the two 412s', async () => {
+    const named = ['"e-2"', '"e-3"'];
+    rejectIfMatchSaves(() => named.shift() ?? '"e-9"');
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await expect(settingsActions.saveSettings({ notify: false })).rejects.toMatchObject({
+      message: CHANGED_ELSEWHERE_KEY,
+      status: 412,
+    });
+
+    expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+    expect(get(settingsStore).formData.birdnet.threshold).toBe(0.55);
+    expect(get(hasUnsavedChanges)).toBe(true);
+
+    // A real conflict must not switch the precondition off for later saves.
+    vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(sentIfMatch()).toEqual(['"e-1"']);
+  });
+
+  it.each([
+    { name: 'no ETag', named: null },
+    { name: 'an empty ETag', named: '' },
+  ])(
+    'still fails with changed elsewhere when both 412s carry $name, and keeps If-Match on',
+    async ({ named }) => {
+      rejectIfMatchSaves(() => named);
+      settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+      await expect(settingsActions.saveSettings({ notify: false })).rejects.toMatchObject({
+        message: CHANGED_ELSEWHERE_KEY,
+        status: 412,
+      });
+
+      expect(settingsAPI.save).toHaveBeenCalledTimes(2);
+      expect(sentIfMatch()).toEqual(['"e-1"', '"e-1"']);
+
+      // Nothing identified a rewritten validator, so later saves still send If-Match.
+      vi.mocked(settingsAPI.save).mockReset().mockResolvedValue(undefined);
+      await settingsActions.saveSettings({ notify: false });
+
+      expect(sentIfMatch()).toEqual(['"e-1"']);
+    }
+  );
+
+  it.each([
+    { name: 'no ETag (older backend or a stripping proxy)', header: null, expected: undefined },
+    { name: 'a weak ETag', header: 'W/"e-1"', expected: undefined },
+    { name: 'a strong ETag', header: '"e-1"', expected: '"e-1"' },
+  ])('sends the right If-Match for $name', async ({ header, expected }) => {
+    etag = header;
+    settingsActions.updateSection('birdnet', { threshold: 0.55 });
+
+    await settingsActions.saveSettings({ notify: false });
+
+    expect(sentIfMatch()).toEqual([expected]);
   });
 });

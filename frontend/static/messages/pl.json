@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Zmieniono ustawienia rozszerzonego nagrywania. Wymagany restart.",
         "equalizerUpdateFailed": "Nie udało się zaktualizować ustawień korektora dźwięku",
         "equalizerUpdated": "Ustawienia korektora dźwięku zaktualizowane",
+        "equalizerFiltersSkipped": "Ustawienia korektora dźwięku zapisane, ale niektóre filtry są pomijane w {count, plural, one {źródle} few {źródłach} many {źródłach} other {źródłach}} {sources}: filtr musi być poprawny przy częstotliwości próbkowania źródła, a jego częstotliwość musi być poniżej jej połowy.",
         "savedSuccessfully": "Ustawienia zapisane pomyślnie",
         "saveFailed": "Nie udało się zapisać ustawień"
       },
@@ -449,7 +450,19 @@
         "completedTitle": "Migracja bazy danych zakończona",
         "completedMessage": "Migracja zakończona. Uruchom ponownie BirdNET-Go, aby przełączyć się na nową bazę danych.",
         "errorTitle": "Błąd migracji bazy danych",
-        "errorMessage": "Migracja wstrzymana z powodu błędów. Sprawdź logi i spróbuj wznowić."
+        "errorMessage": "Migracja wstrzymana z powodu błędów. Sprawdź logi i spróbuj wznowić.",
+        "legacyNotStartedTitle": "Wymagana aktualizacja bazy danych",
+        "legacyNotStartedMessage": "Ta instalacja nadal używa starego formatu bazy danych, który przestanie działać w przyszłym wydaniu. Otwórz System > Baza danych, aby uruchomić migrację.",
+        "legacyInProgressTitle": "Trwa migracja bazy danych",
+        "legacyInProgressMessage": "Trwa migracja do nowego formatu bazy danych. Pozostaw BirdNET-Go uruchomiony do jej zakończenia; stary format przestanie działać w przyszłym wydaniu.",
+        "legacyNeedsAttentionTitle": "Migracja bazy danych wymaga uwagi",
+        "legacyNeedsAttentionMessage": "Migracja do nowego formatu bazy danych została wstrzymana lub zakończyła się błędem. Otwórz System > Baza danych, aby ją wznowić lub spróbować ponownie; stary format przestanie działać w przyszłym wydaniu.",
+        "legacyRestartRequiredTitle": "Uruchom ponownie, aby zakończyć migrację bazy danych",
+        "legacyRestartRequiredMessage": "Migracja została zakończona. Uruchom ponownie BirdNET-Go, aby przełączyć się na nową bazę danych. Jeśli ten komunikat nie znika po ponownym uruchomieniu, sprawdź w dzienniku błędy bazy danych."
+      },
+      "database": {
+        "serverAttentionTitle": "Serwer bazy danych wymaga uwagi",
+        "serverAttentionMessage": "Serwer MySQL lub MariaDB nie jest obsługiwaną wersją albo baza danych nie używa zestawu znaków utf8mb4. Szczegóły znajdziesz w System > Zdrowie."
       },
       "cleanup": {
         "completeTitle": "Czyszczenie starej bazy danych zakończone",
@@ -793,6 +806,9 @@
       "loadFailedAction": "Wyświetl status modeli AI",
       "failingTitle": "{count, plural, one {Model zawodzi przy każdej analizie} few {# modele zawodzą przy każdej analizie} many {# modeli zawodzi przy każdej analizie} other {# modeli zawodzi przy każdej analizie}}",
       "failingMessage": "{count, plural, one {{models} jest załadowany, ale każda analiza kończy się błędem, więc niczego nie wykrywa.} few {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.} many {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.} other {{models} są załadowane, ale każda analiza kończy się błędem, więc niczego nie wykrywają.}} Strona Modele AI pokazuje backend i błąd."
+    },
+    "legacyDatabase": {
+      "action": "Otwórz ustawienia bazy danych"
     },
     "banner": {
       "title": "Tytuł",
@@ -1581,7 +1597,7 @@
           "restartTitle": "Wymagane ponowne uruchomienie",
           "restartBody": "Uruchom ponownie aplikację, aby przełączyć się na bazę danych V2. Czyszczenie starszej bazy danych będzie dostępne po ponownym uruchomieniu.",
           "fallbackError": "Niezgodność liczby rekordów między starszą bazą danych a V2. Niektóre rekordy mogły nie zostać poprawnie zmigrowane.",
-          "migrateInfo": "Migracja przeniesie {count} rekordów ze starszej bazy danych do nowego schematu V2. Tryb podwójnego zapisu zapewnia brak utraty danych podczas migracji.",
+          "migrateInfo": "Migracja przeniesie {count} rekordów ze starszej bazy danych do nowego schematu V2. Nowe wykrycia zapisane podczas migracji są również kopiowane do nowej bazy danych.",
           "sourceLegacy": "Źródło (starsza)",
           "targetV2": "Cel (V2)",
           "recordsLabel": "Rekordy",
@@ -1633,7 +1649,7 @@
         },
         "notes": {
           "in_progress": "Możesz normalnie korzystać z systemu, podczas gdy migracja działa w tle.",
-          "dual_write": "Migracja w toku. Twoje dane są bezpieczne - wszystkie nowe wykrycia są zapisywane w obu bazach danych. Możesz nadal normalnie korzystać z BirdNET-Go.",
+          "dual_write": "Migracja w toku. Twoje dane są bezpieczne - nowe wykrycia są zapisywane w bieżącej bazie danych i kopiowane do nowej bazy podczas migracji. Możesz nadal normalnie korzystać z BirdNET-Go.",
           "migrating": "Kopiowanie istniejących wykryć do nowej bazy danych. Może to potrwać, w zależności od liczby wykryć. Możesz wstrzymać i wznowić w dowolnym momencie.",
           "validating": "Sprawdzanie, czy wszystkie rekordy zostały poprawnie skopiowane. Prawie gotowe!",
           "cutover": "Przełączanie na nową bazę danych. To zajmie tylko chwilę.",
@@ -1716,6 +1732,12 @@
             },
             "sqlite_integrity": {
               "name": "Integralność bazy danych"
+            },
+            "mysql_server_version": {
+              "name": "Wersja serwera bazy danych"
+            },
+            "mysql_charset": {
+              "name": "Zestaw znaków bazy danych"
             },
             "mysql_table_health": {
               "name": "Stan tabel"
@@ -2323,6 +2345,7 @@
     "errors": {
       "loadFailed": "Nie udało się załadować ustawień",
       "saveFailed": "Nie udało się zapisać ustawień",
+      "changedElsewhere": "Ustawienia zostały zmienione gdzie indziej. Sprawdź je i zapisz ponownie.",
       "databaseStatsFailed": "Nie udało się załadować statystyk bazy danych",
       "csvDownloadFailed": "Nie udało się pobrać pliku CSV"
     },
@@ -2670,7 +2693,7 @@
                 "descriptions": {
                   "highContrast": "Najlepszy dla słabych sygnałów. Śpiew ptaków wyraźnie wyróżnia się z szumu tła. Zalecany dla stylów naukowych/skali szarości.",
                   "standard": "Domyślne zrównoważone ustawienie. Dobre dla większości zastosowań.",
-                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast. Domyślna wartość SoX."
+                  "extended": "Więcej szczegółów widocznych, ale niższy kontrast."
                 }
               },
               "enabled": {
@@ -2772,7 +2795,7 @@
           "title": "Co jest zawarte w raporcie:",
           "applicationLogs": "**Logi aplikacji** - Ostatnie błędy i informacje debugowania",
           "configuration": "**Konfiguracja** - Twoje ustawienia z usuniętymi wrażliwymi danymi",
-          "systemInfo": "**Informacje systemowe** - Wersja systemu operacyjnego, pamięć i szczegóły środowiska uruchomieniowego",
+          "systemInfo": "**Informacje systemowe** - Wersja systemu operacyjnego, pamięć, sprzęt, podłączone urządzenia USB i karty dźwiękowe oraz szczegóły środowiska uruchomieniowego",
           "notIncluded": "**NIE zawiera** - Pliki audio, detekcje ptaków ani dane osobowe"
         },
         "userMessage": {
@@ -2925,6 +2948,11 @@
             "unit": "min",
             "helpText": "Zapobiegaj powtórnym powiadomieniom dla tego samego gatunku w tym oknie czasowym. Ustaw na 0, aby wyłączyć."
           }
+        },
+        "rulesNotice": {
+          "message": "Powiadomienia push o wykryciach pochodzą z reguł alertów na karcie Reguły. Wbudowane reguły wykryć powiadamiają tylko w aplikacji. Aby otrzymywać powiadomienia push, dodaj akcję {pushAction} do reguły {ruleName} lub utwórz regułę dla zdarzenia {eventName} z warunkiem pewności i czasem odnowienia.",
+          "previousFilters": "Ustawienia Minimalna pewność ({confidence} %) i Czas oczekiwania gatunku ({minutes} min) wprowadzone tutaj nie są używane przez reguły alertów.",
+          "openRules": "Otwórz Reguły"
         },
         "noProviders": "Brak skonfigurowanych dostawców",
         "noProvidersDescription": "Dodaj dostawcę, aby zacząć otrzymywać powiadomienia push",
@@ -3229,10 +3257,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Przesyłaj detekcje do BirdWeather",
-        "ffmpegWarning": {
-          "title": "Nie wykryto FFmpeg",
-          "message": "Proszę zainstalować FFmpeg, aby włączyć obsługę kodowania FLAC, BirdWeather wycofuje przesyłanie WAV na rzecz skompresowanych plików audio FLAC."
-        },
         "enable": "Włącz Przesyłanie do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
@@ -4249,7 +4273,6 @@
     },
     "species": {
       "pageLabel": "Ustawienia gatunków",
-      "saveError": "Nie udało się zapisać konfiguracji dla \"{species}\". Spróbuj ponownie.",
       "configUpdated": "Zaktualizowano konfigurację dla \"{species}\"",
       "configAdded": "Dodano konfigurację dla \"{species}\"",
       "duplicateConfigError": "Gatunek \"{species}\" ma już konfigurację. Wybierz inną nazwę.",
@@ -5080,6 +5103,7 @@
       "loop": "Przełącz pętlę",
       "player": "Odtwarzacz audio",
       "autoplayBlocked": "Kliknij, aby odtworzyć (autoodtwarzanie zablokowane)",
+      "hlsLoadFailed": "Nie udało się załadować odtwarzacza audio, odśwież stronę i spróbuj ponownie",
       "hlsNotSupported": "Odtwarzanie HLS nie jest obsługiwane w tej przeglądarce",
       "streamStarting": "Uruchamianie strumienia audio...",
       "levelFor": "Poziom dźwięku dla {source}",
@@ -5314,6 +5338,9 @@
       "invalidJSON": "Nieprawidłowy JSON",
       "invalidEscalation": "Kroki eskalacji są nieprawidłowe",
       "engineUnavailable": "Silnik alertów jest niedostępny"
+    },
+    "insights": {
+      "v2Required": "Analizy wymagają rozszerzonej bazy danych (v2)"
     },
     "detection": {
       "invalidDate": "Nieprawidłowy format {paramName}, użyj RRRR-MM-DD"

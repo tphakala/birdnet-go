@@ -185,7 +185,7 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 | POST   | `/spectrogram/:id/process`           | `ProcessedSpectrogramByID` | ✅   | Spectrogram of denoised/normalized clip |
 
 **On-demand clip processing.** `clip`, `process`, `audible-bats` and the processed
-spectrogram decode the stored clip and process it in Go without FFmpeg; the processed spectrogram is then rendered by the spectrogram generator (SoX, with an FFmpeg fallback).
+spectrogram decode the stored clip and process it in Go without FFmpeg; the processed spectrogram is then rendered natively in Go by the spectrogram generator.
 `clip` accepts the formats `wav`, `flac`, `mp3`, `aac` (served as `.m4a`) and `opus`
 (served as `.ogg`); any other value answers **400**. Filters apply
 in the order denoise (`light`, `medium`, `heavy`), loudness normalization, gain
@@ -204,10 +204,30 @@ rendered: an unsupported format or a sample rate below 8 kHz, a damaged file, a 
 the size limits, or a clip too short for one spectrogram column. The first two also answer
 **503** with `Retry-After` while the clip is still being written, and also when the header probe
 cannot read the clip, since a half-written file looks the same; only damage found while decoding
-answers 422. With the native renderer, a clip that changes (size, modification time or file) between the
+answers 422. A clip that changes (size, modification time or file) between the
 readiness check and the render also answers 503 and nothing is cached (one removed before the
 render starts answers 404), and a WAV or FLAC that holds fewer samples than
 its header declares answers 422 (a rerun after the file is completed renders it).
+
+**Spectrogram reasons.** The status answer (`GET /spectrogram/:id/status`, in `data`) and the
+`404` of `GET /spectrogram/:id` for a missing source clip (in `data`) carry a machine
+readable `reason` when it is known. The field is additive: status values are unchanged, and
+queued and generating answers carry no reason. A client that can read the body (a `fetch`,
+not an `<img>`) should act on it:
+
+| `reason`         | Where                                                                                                                  | What a client should do                  |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
+| `not_generated`  | status `not_started`, source clip on disk                                                                              | request generation                       |
+| `source_pending` | status `not_started` or `failed`, and the image `404` after the wait; the clip may still appear                        | retry later, a bounded number of times   |
+| `source_missing` | status `not_started` or `failed`, and the fast image `404`; the clip is gone for good                                  | stop retrying, show that no audio exists |
+| `source_invalid` | status `failed`; the clip exists but cannot be rendered                                                                | stop retrying                            |
+| `busy`           | status `failed`; no generation slot in time, a deadline or a cancellation                                              | retry with backoff                       |
+| `render_failed`  | status `failed`; any other generation failure, and the image `404` when the rendered image is missing after generation | retry a bounded number of times          |
+
+A kept render of the clip can still be served by `GET /spectrogram/:id` when the audio is
+gone, so `source_missing` describes the audio, not every image request. The `Invalid audio
+path` `not_started` answer and the `404` of user-requested mode (which carries `data.mode`)
+carry no reason.
 
 **Pending species image (`503 + Retry-After`).** The image endpoints never contact an
 image provider on the request goroutine: a cold species can take minutes to resolve
@@ -226,11 +246,26 @@ broadcast are emitted before its audio clip is written, and with Extended Captur
 clip write is deferred until the capture tail is recorded (up to the capture-buffer
 size). While a clip is still legitimately pending, the by-ID audio and spectrogram
 endpoints (`GET /audio/:id`, `GET /spectrogram/:id`) return `503 Service Unavailable`
-with a `Retry-After` header sized to the remaining time, instead of `404`. Clients
-should honor `Retry-After` and retry; the clip appears once the capture completes. A
-`404` from these endpoints means the clip is genuinely absent (never produced, or purged
-by retention). These pending 503s are intentionally not logged as errors and are not
+with a `Retry-After` header, instead of `404`; for the Extended Capture window it is
+sized to the remaining time. Clients
+should honor `Retry-After` and retry; the clip appears once the capture completes. The
+same `503` answers `GET /audio/:id` for a detection that completed within the last 10
+minutes when its clip is still missing after a short grace wait, because the export may
+still be queued (its `Retry-After` is the short minimum). A `404` from `GET /audio/:id`
+means the clip is absent: never produced, or purged by retention, and for a detection
+older than 10 minutes. A request with no known completion time (a filename serve) also
+answers `404` after the grace wait. A `404` from `GET /spectrogram/:id` carries
+`data.reason`, described below: `source_pending` means the clip may still appear. These pending 503s are intentionally not logged as errors and are not
 reported to telemetry, since they are expected, self-resolving backpressure.
+
+A by-ID spectrogram request (`GET /spectrogram/:id`) for a clip that can no longer appear
+answers `404` at once, with `data.reason` set to `source_missing`, instead of first waiting
+up to 5 seconds for the file. A clip can no longer appear when its detection completed more
+than 10 minutes ago, it is past the pending window, no export temp file is present and no
+copy of it exists under another audio extension: the same condition under which
+`GET /audio/:id` answers `404` without waiting. While the clip may still be written, the
+request keeps the wait and answers `404` with `reason` `source_pending` afterwards. A
+missing source is logged at Debug (or Warn after the wait), not as an API error.
 
 **Spectrogram after retention (`GET /spectrogram/:id`).** When the retention policy
 deletes a detection's audio and the "keep spectrograms" setting is on, the detection
@@ -244,6 +279,13 @@ unchanged and keep answering `404` for detections without audio. Detection and s
 responses carry `spectrogramOnly: true` for these detections (the field is omitted
 otherwise); `clipName` / `hasAudio` stay empty / false, so clients show the image but no
 player or download.
+
+**Detection timestamps.** Detection list, detail and recent responses carry `timestamp`, the stored
+instant of the detection as RFC3339 with the UTC offset in effect at that instant. `date` and `time` are the
+station-local wall clock text of the same instant, so on a v2 database the two detections in the repeated hour
+at the end of daylight saving time show the same `date` and `time` and differ in `timestamp`. The weather
+match and moon phase of a response use the same instant. A legacy database stores only offset-free date and
+time text, so there both detections get the first occurrence's offset.
 
 **Spectrogram frequency range.** Bird spectrograms span 0 to 12 kHz. Bat
 spectrograms render at the clip's own sample rate and span 0 to half of it (a 384 kHz clip shows 0 to
@@ -265,6 +307,21 @@ fresh render removes the older `-bat-v2` and `-bat` files next to it.
 - `POST /spectrogram/:id/generate` and `GET /spectrogram/:id/status` answer `503` with `Retry-After` when
   the detection's model type cannot be looked up (a database error), and so does `GET /spectrogram/:id`
   with `sr`. Nothing is queued or written, and the request can be retried.
+
+**Model contributions.** On the enhanced (v2) database, `GET /detections`, `GET /detections/recent` and
+`GET /detections/:id` carry a read-only `modelContributions` array: one element per model that detected
+the species for this detection, largest hit count first (then highest maximum confidence). Each element
+has `modelName`, `modelVersion`, `modelVariant`, `modelType`, `hitCount` and `maxConfidence`, plus
+`minConfidence`, `meanConfidence`, `firstHitAt` and `lastHitAt`. The last four appear together and are
+omitted when they were not recorded (detections recorded before these statistics existed) or the stored
+values are unusable (zero hit count, minimum above maximum, first hit after last hit). Times are RFC3339 in the server's time
+zone, like `beginTime`.
+
+- The whole field is omitted on the legacy database, during migration, for detections with no recorded
+  contributions (including migrated ones), and when the read fails or takes longer than 1 second.
+- `POST /search` does not carry it.
+- The SSE `pending` event has its own `modelContributions` with a different element shape (`modelID`,
+  `hitCount`, `maxConfidence`, present only when more than one model contributed).
 
 ### Notifications (`notifications/notifications.go`)
 
@@ -324,11 +381,13 @@ The `GET /settings/connection` endpoint tells the requester how their own connec
 
 The `GET /settings/dashboard` endpoint is intentionally public so that unauthenticated guests can render the SPA dashboard (species summary limit, layout, locale, thumbnails). The Dashboard section contains no secrets, tokens, or PII, and the layout is already exposed via `/app/config`. All mutations (PATCH) on the dashboard section remain auth-protected.
 
+**Optimistic concurrency:** `GET /settings` and a successful `PUT /settings` or `PATCH /settings/:section` send an `ETag` response header. The value is opaque and strong (`"<process id>-<revision>"`); it changes on every settings write, including a rollback of a failed write and writes the server makes itself (a model install, a species exclusion), and it changes after a restart. It does not change when the server rebuilds the range filter species list or stamps its update time: those fields (`birdnet.rangeFilter.species` and `lastUpdated`) are served by `GET /settings` but cannot be written through the API, so a client that missed them loses nothing, and the body of `GET /settings` can differ between two responses that carry the same `ETag`. `PUT /settings` and `PATCH /settings/:section` honour `If-Match` only when it is sent: if it does not match the current `ETag` the request answers `412 Precondition Failed` with the current `ETag`, and nothing is changed. A request without `If-Match` is applied as before (there is no `428`), but a request that sends the header with an empty value lists no tag and answers `412`. The `ETag` identifies the whole settings, not one section, so `GET /settings/:section` sends none and a `PATCH` is checked against the ETag of the whole settings. Validators are compared strongly: `*` and a list of tags are accepted, and a weak `W/"..."` tag never matches. A client behind a proxy that weakens the `ETag` should leave `If-Match` out. A proxy that rewrites the value when it compresses (Apache `mod_deflate` and Caddy append `-gzip`) makes every `If-Match` fail the same way; the 412 still names the current `ETag`, and the web UI stops sending `If-Match` for the page session once two 412s in a row name the same one.
+
 **Restart-required signal:** `PUT /settings` and `PATCH /settings/:section` responses include `restart_required` (bool) and `restart_reasons` (string[]), reflecting the global restart state also served by `GET /system/restart-status`. Settings bound once at startup that cannot hot-reload set this flag: web server / TLS settings, database (`output`), logging, and TLS certificate operations. `restart_reasons` carries i18n message keys (e.g. `restart.reasons.database`), not English text; the SPA resolves them via the translation catalog. The flag is sticky (it clears when the process actually restarts) and is not cleared by reverting the change.
 
 **Blocked fields:** a set of fields can never be written through the settings API, on either write path. Both `PUT /settings` and `PATCH /settings/:section` merge the request into the current settings and then restore the blocked fields from the pre-update snapshot. Sending such a field is not an error: the rest of the request is applied normally and only the blocked values are reverted.
 
-The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg/sox tool paths and the sox format list (`Realtime.Audio.FfmpegPath`/`SoxPath`/`SoxAudioTypes`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
+The set covers generated credentials (`Security.SessionSecret`, `Security.BasicAuth.ClientID`/`ClientSecret`, `Diagnostics.Profiling.Token`), the session and OAuth2 lifetimes (`Security.SessionDuration`, `Security.BasicAuth.AuthCodeExp`/`AccessTokenExp`), the server-validated ffmpeg tool path (`Realtime.Audio.FfmpegPath`), the range-filter model selection (`BirdNET.RangeFilter.Model`), and runtime state the process populates for itself (`Version`, `BuildDate`, `SystemID`, `ValidationWarnings`, `Input`, `BirdNET.Labels`, `BirdNET.RangeFilter.Species`/`LastUpdated`). Note that several of these are ordinary `config.yaml` keys: they are settable by editing the config file, just not through the API.
 
 Both verbs report identically under the `skippedFields` response key: it lists only the blocked paths whose value the request actually changed, sorted (every blocked field is reverted regardless; the list is the subset that differed), and it is an empty array (`[]`) when nothing was reverted. Do not treat a non-empty list as a request failure. Because the frontend sends the whole settings object on every save, a `PUT` that carries the blanked `Security.BasicAuth.ClientID`/`ClientSecret` reports those two whenever BasicAuth is configured; that is expected and the rest of the save still applies.
 
@@ -473,13 +532,12 @@ HLS playlist and segment routes use token-based authentication instead of standa
 
 **Features:**
 
-- FFmpeg-based HLS streaming with AAC audio encoding
+- In-process HLS streaming (go-hls) with native AAC encoding, no FFmpeg process
 - Token-based auth for HLS content (no auth middleware on playlist/segment routes)
 - Automatic stream cleanup after 5 minutes of inactivity
 - Stream reuse: existing healthy streams are reused for new clients
 - Client tracking with heartbeat-based keep-alive
 - Secure file serving with path validation
-- Cross-platform support (FIFO on Unix, stdin pipe on Windows)
 - Configurable bitrate (16-320 kbps), sample rate, and segment length
 
 **Configuration (via settings):**
@@ -542,7 +600,7 @@ HLS playlist and segment routes use token-based authentication instead of standa
 | GET    | `/system/audio/devices`            | `GetAudioDevices`          | ✅   | Available audio devices                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | GET    | `/system/audio/active`             | `GetActiveAudioDevice`     | ✅   | Active audio device                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | GET    | `/system/audio/equalizer/config`   | `GetEqualizerConfig`       | ✅   | Audio equalizer filter configuration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| POST   | `/system/audio/equalizer/response` | `ComputeEqualizerResponse` | ✅   | Equalizer magnitude curve for an unsaved config, from the chain the audio routes build. Body: `equalizer` (required, `enabled` and `filters`, at most 64), optional `sourceId` (a registered source: curve is computed at that source's pipeline rate), `sampleRate` (8000-384000, used when `sourceId` is absent or unknown, else the configured rate), `points` (2-2048, default 512), `minHz` (default 20), `maxHz` (default min(20000, Nyquist), at most Nyquist). Returns `sampleRate` used, `enabled`, `points` (`hz`, `gainDb`, a log-spaced sweep of `points` entries plus each applied filter's center, so between `points` and `points` plus the applied filter count; gain is finite, an exact null reads -200 dB per filter section) and `skipped` (filters audio would skip, with `index`, `type`, `reason`, `message`). Disabled, empty, all-skipped or all-bypassed (every filter at `passes` 0) configs give a flat 0 dB curve, and a disabled config always reports an empty `skipped`. A filter the library rejects at the rate (corner at or above Nyquist, non-positive Q or width for the types that use them, negative or too many passes) is skipped, as in audio. A filter of a known type with `passes` 0 is off: it is left out of the curve and is not reported in `skipped`.                                                                                                                                                                                                                                         |
+| POST   | `/system/audio/equalizer/response` | `ComputeEqualizerResponse` | ✅   | Equalizer magnitude curve for an unsaved config, from the chain the audio routes build. Body: `equalizer` (required, `enabled` and `filters`, at most 64), optional `sourceId` (a registered source: curve is computed at that source's pipeline rate), `sampleRate` (8000-384000, used when `sourceId` is absent or unknown, else the configured rate), `points` (2-2048, default 512), `minHz` (default 20), `maxHz` (default min(20000, Nyquist) up to 48000 Hz, Nyquist above that; at most Nyquist). Returns `sampleRate` used, `enabled`, `minHz` and `maxHz` (the swept range), `points` (`hz`, `gainDb`, a log-spaced sweep of `points` entries plus each applied filter's center, so between `points` and `points` plus the applied filter count; gain is finite, an exact null reads -200 dB per filter section) and `skipped` (filters audio would skip, with `index`, `type`, `reason`, `message`). Disabled, empty, all-skipped or all-bypassed (every filter at `passes` 0) configs give a flat 0 dB curve, and a disabled config always reports an empty `skipped`. A filter the library rejects at the rate (corner at or above Nyquist, non-positive Q or width for the types that use them, negative or too many passes) is skipped, as in audio. A filter of a known type with `passes` 0 is off: it is left out of the curve and is not reported in `skipped`.                                                                                                                                                               |
 | GET    | `/system/audio/sources`            | `ListAudioSources`         | ✅   | Active audio sources (all types)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | GET    | `/system/network-interfaces`       | `GetNetworkInterfaces`     | ✅   | IPv4 network interfaces for binding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | GET    | `/system/models`                   | `GetActiveModels`          | ✅   | Active model metadata                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
@@ -572,6 +630,11 @@ Registered under the system route group. All endpoints require authentication.
 | GET    | `/weather/detection/:id`      | `GetWeatherForDetection`  | ❌   | Weather for detection time          |
 | GET    | `/weather/latest`             | `GetLatestWeather`        | ❌   | Latest weather data                 |
 | GET    | `/weather/sun/:date`          | `GetSunTimes`             | ❌   | Sun times (sunrise/sunset) for date |
+| GET    | `/weather/moon/:date`         | `GetMoonPhase`            | ❌   | Moon phase for date                 |
+
+`:date` on `/weather/daily/:date`, `/weather/hourly/:date` and `/weather/hourly/:date/:hour` must be a real calendar date in `YYYY-MM-DD` form. A non-empty value that is not a real date answers **400** before the database is queried, with `error_key` `errors.detection.invalidDate` and `error_params` `{paramName: "date"}`; an empty value answers **400** without an `error_key`. `/weather/sun/:date` and `/weather/moon/:date` also answer 400 for an invalid date (without an `error_key`).
+
+`/weather/hourly/:date` answers 200 with an empty `data` array and a `message` when no rows exist for the date. The message says the date is in the future when it is after the server's local date.
 
 ### Alert Rules (`alerts/alerts.go`)
 
@@ -580,6 +643,7 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | Method | Route                          | Handler                  | Auth | Description              |
 | ------ | ------------------------------ | ------------------------ | ---- | ------------------------ |
 | GET    | `/alerts/schema`               | `GetAlertSchema`         | ❌   | Alert schema for UI      |
+| GET    | `/alerts/status`               | `GetAlertStatus`         | ❌   | Alert engine state       |
 | GET    | `/alerts/rules`                | `ListAlertRules`         | ❌   | List rules (filterable)  |
 | GET    | `/alerts/rules/:id`            | `GetAlertRule`           | ❌   | Get single rule          |
 | GET    | `/alerts/rules/export`         | `ExportAlertRules`       | ✅   | Export rules as JSON     |
@@ -589,9 +653,13 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 | PATCH  | `/alerts/rules/:id/toggle`     | `ToggleAlertRule`        | ✅   | Enable/disable rule      |
 | DELETE | `/alerts/rules/:id`            | `DeleteAlertRule`        | ✅   | Delete rule              |
 | POST   | `/alerts/rules/:id/test`       | `TestAlertRule`          | ✅   | Test-fire rule           |
-| POST   | `/alerts/rules/reset-defaults` | `ResetDefaultAlertRules` | ✅   | Re-seed built-in rules   |
+| POST   | `/alerts/rules/reset-defaults` | `ResetDefaultAlertRules` | ✅   | Restore built-in rules   |
 | POST   | `/alerts/rules/import`         | `ImportAlertRules`       | ✅   | Import rules from JSON   |
 | DELETE | `/alerts/history`              | `ClearAlertHistory`      | ✅   | Delete all history       |
+
+`PUT /alerts/rules/:id` replaces the rule, with three exceptions. `built_in` in the body is ignored and the stored flag is kept. A rule that has a `name_key` or `description_key` keeps its stored `name` or `description` while the request sends the same key, because the editor sends the translated text. Renaming a built-in rule (changing its `name_key`, or its `name` when it has no key) makes it a custom rule. An omitted, null or unchanged `escalation_steps` keeps the stored steps while the rule's object type, trigger type, metric, event and each condition's property, operator and value are unchanged, and removes them otherwise, since a rule with steps fires only at or above its lowest step. A condition's `duration_sec` does not affect this. Steps that differ from the stored ones replace them.
+
+`POST /alerts/rules/reset-defaults` deletes the built-in rules and creates each shipped default again, except a default whose `name` or `name_key` a remaining rule already has. It returns `status` (`"defaults reset"`), `created` (number of defaults created) and `skipped` (names of the defaults it did not create). `POST /alerts/rules/import` does not create a rule whose `name`, or non-empty `name_key`, matches a stored rule or a rule imported earlier in the same request, and imports the others. It returns `imported`, `total` and `skipped` (names of the rules it did not create for that reason). Startup seeding recognises a default the same way.
 
 **Query Parameters:**
 
@@ -600,21 +668,45 @@ Requires enhanced (v2) database. Returns 409 Conflict if not available.
 
 ### Insights (`analytics/insights.go`)
 
-Requires enhanced (v2) database. Returns 409 Conflict if not available.
+Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.insights.v2Required` if not available.
 
-| Method | Route                               | Handler                    | Auth | Description                              |
-| ------ | ----------------------------------- | -------------------------- | ---- | ---------------------------------------- |
-| GET    | `/insights/expected-today`          | `getExpectedToday`         | ❌   | Species expected today based on history  |
-| GET    | `/insights/expected-today/regional` | `getExpectedTodayRegional` | ❌   | Regional eBird observations near station |
-| GET    | `/insights/phantom-species`         | `getPhantomSpecies`        | ❌   | Frequent but low-confidence detections   |
-| GET    | `/insights/dawn-chorus`             | `getDawnChorus`            | ❌   | Dawn chorus timing analysis              |
-| GET    | `/insights/migration`               | `getMigration`             | ❌   | New arrivals and gone-quiet species      |
-| GET    | `/dashboard/kpis`                   | `getDashboardKPIs`         | ❌   | Dashboard headline metrics and streak    |
+| Method | Route                               | Handler                     | Auth | Description                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ------ | ----------------------------------- | --------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/insights/expected-today`          | `getExpectedToday`          | ❌   | Species expected today based on history                                                                                                                                                                                                                                                                                                                                                                              |
+| GET    | `/insights/expected-today/regional` | `getExpectedTodayRegional`  | ❌   | Regional eBird observations near station                                                                                                                                                                                                                                                                                                                                                                             |
+| GET    | `/insights/phantom-species`         | `getPhantomSpecies`         | ❌   | Frequent but low-confidence detections                                                                                                                                                                                                                                                                                                                                                                               |
+| GET    | `/insights/dawn-chorus`             | `getDawnChorus`             | ❌   | Dawn chorus timing analysis                                                                                                                                                                                                                                                                                                                                                                                          |
+| GET    | `/insights/migration`               | `getMigration`              | ❌   | New arrivals and gone-quiet species                                                                                                                                                                                                                                                                                                                                                                                  |
+| GET    | `/insights/model-contributions`     | `getModelContributionStats` | ❌   | Per-model statistics from detection model contributions: detections contributed to, hits and hit share, sole-contributor count, confidence min/mean/max (min and mean are null when no row in range has recorded stats), review outcome counts (correct, false_positive, unreviewed) and pairwise agreement. `start_date` required; `end_date` optional (defaults to `start_date` + 30 days); range at most 366 days |
+| GET    | `/dashboard/kpis`                   | `getDashboardKPIs`          | ❌   | Dashboard headline metrics and streak                                                                                                                                                                                                                                                                                                                                                                                |
 
 **Query Parameters:**
 
-- All insights endpoints accept optional `model_id` query parameter to filter by BirdNET model
+- All insights endpoints except `/insights/model-contributions` accept optional `model_id` query parameter to filter by BirdNET model
+- `/insights/model-contributions` requires `start_date` and accepts optional `end_date` (both `YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 366 days). It takes no `model_id`. Counts are lower bounds: contribution rows are written best-effort and are absent for detections migrated from the legacy database
 - `/insights/dawn-chorus` also accepts `period_days` (default 30, 1 to 365) and `min_days` (default 3, clamped to `period_days`); the response echoes both as `period_days` and `min_days`
+
+### Privacy Filter Activity (`privacy/privacy.go`)
+
+Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.privacyFilter.v2Required` if not available. Every route requires authentication (not admin only) and is never public. The routes use the protected auth middleware, which follows the instance's own authentication settings (`IsAuthRequired` and `OAuth2Server.IsAuthenticationEnabled`): on an instance with no authentication provider configured, or for a client in an allowed bypass subnet, they pass like every other protected route.
+
+| Method | Route                      | Handler        | Auth | Description                                                                                          |
+| ------ | -------------------------- | -------------- | ---- | ---------------------------------------------------------------------------------------------------- |
+| GET    | `/privacy-filter/activity` | `GetActivity`  | ✅   | Hourly rollup of privacy filter activity per source, detector model, trigger and threshold           |
+| GET    | `/privacy-filter/discards` | `ListDiscards` | ✅   | Detections the privacy filter discarded, with the per-detector hits behind each, newest first, paged |
+
+**Query Parameters:**
+
+- Both routes require `start_date` and accept optional `end_date` (`YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 31 days, matching the 30-day retention of both tables; years 1970 to 9998 only, counting the defaulted `end_date`, otherwise 400)
+- `/privacy-filter/discards` also accepts `limit` (default 100, 1 to 1000) and `offset` (default 0, at most 1000000). Rows are ordered by discard time descending, then id descending. The response is the same paginated envelope as the detections list (`data`, `total`, `limit`, `offset`, `current_page`, `total_pages`)
+
+**Semantics:**
+
+- Hourly rows are keyed on UTC hours and returned with a UTC `hour_start`. A row is included when its hour overlaps the requested range, so in zones with a half-hour or 45-minute offset the boundary hours belong to both of two adjacent ranges. The response echoes `range_start` and `range_end` (UTC instants, end exclusive) so a client can trim.
+- A discard's time is the wall clock of the flush that dropped the detection, while the rollup counts a discard in the hour of the hit that caused it, so per-hour counts of the two endpoints do not match exactly.
+- All counts are lower bounds. The `margin_*` fields bucket hits by how far the score is above the threshold in effect (`margin_lt_50` below 0.05, `margin_lt_100` 0.05 to 0.10, `margin_lt_200` 0.10 to 0.20, `margin_ge_200` 0.20 or more), not by absolute score. Per row, the sum of the buckets is `hits - confirmed + held`.
+- A row with an empty `model_id` and `threshold` 0 counts unscanned saves. Rows with `trigger_type` `vad` carry the voice activity threshold.
+- Sources appear as `{id, name}`: the display name with any stream URL credentials removed, or `source-<id>` when there is none. The stored source URI is never returned. A discard whose source could not be resolved has `source: null`. No transcript, audio or clip path is returned.
 
 ### Models (`models/models.go`)
 

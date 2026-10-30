@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/notification"
 )
 
 func TestSystemInitManager_ShutdownWithContext(t *testing.T) {
@@ -108,4 +109,39 @@ func TestSystemInitManager_ShutdownTimeoutCalculation(t *testing.T) {
 		assert.False(t, ok)
 		assert.Zero(t, deadline)
 	})
+}
+
+// TestSetupNotificationTelemetryFollowsLiveOptIn pins that the notification
+// reporter is installed at startup whatever the Error Tracking setting, and
+// that its gate follows the live opt-in so a runtime enable needs no reinstall.
+func TestSetupNotificationTelemetryFollowsLiveOptIn(t *testing.T) {
+	// Not parallel: it changes the global settings, hub and notification service.
+	prevSettings := conf.GetSettings()
+	prevMode := testMode.Load()
+	testMode.Store(testModeDisabled)
+	t.Cleanup(func() {
+		testMode.Store(prevMode)
+		conf.StoreSettings(prevSettings)
+	})
+	bindTestClient(t, nil)
+
+	notification.ResetForTest()
+	notification.Initialize(notification.DefaultServiceConfig())
+	service := notification.GetService()
+	require.NotNil(t, service)
+	t.Cleanup(func() {
+		service.Stop()
+		notification.ResetForTest()
+	})
+
+	conf.StoreSettings(&conf.Settings{Version: "test", Sentry: conf.SentrySettings{Enabled: false}})
+	(&SystemInitManager{sysLog: GetLogger()}).setupNotificationTelemetry()
+
+	installed := service.GetTelemetry()
+	require.NotNil(t, installed, "the reporter must be installed while opted out")
+	assert.False(t, installed.IsEnabled())
+
+	conf.StoreSettings(&conf.Settings{Version: "test", Sentry: conf.SentrySettings{Enabled: true}})
+	bindTestClient(t, newTestClient(t))
+	assert.True(t, installed.IsEnabled(), "enabling at runtime must open the installed reporter's gate")
 }

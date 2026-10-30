@@ -98,6 +98,7 @@ vi.mock('$lib/utils/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   })),
+  setSentryCaptureError: vi.fn(),
 }));
 
 // Mock transition utilities - transitions don't run in jsdom, use instant duration
@@ -458,8 +459,6 @@ vi.mock('$lib/utils/settingsApi.js', () => {
       },
       system: {
         audioDevices: vi.fn().mockResolvedValue([]),
-        ffmpegVersion: vi.fn().mockResolvedValue({ version: '5.0.0', available: true }),
-        soxVersion: vi.fn().mockResolvedValue({ version: '14.4.2', available: true }),
       },
     },
   };

@@ -149,6 +149,6 @@ installation steps above.
 
 ## More Information
 
-- Documentation: https://birdnet-go.dev
+- Documentation: https://github.com/tphakala/birdnet-go/wiki
 - GitHub: https://github.com/tphakala/birdnet-go
 - Discussions: https://github.com/tphakala/birdnet-go/discussions

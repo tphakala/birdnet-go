@@ -81,6 +81,10 @@ const (
 	// not downmix, so naming it gives the muxer configuration something to be
 	// checked against rather than a second bare literal.
 	hlsConsumerChannels = 1
+
+	// hlsStreamTokenBytes is the number of random bytes in a stream URL token;
+	// hex encoding makes the token twice as many characters.
+	hlsStreamTokenBytes = 16
 )
 
 // HLSStreamInfo contains information about an active HLS streaming session.
@@ -252,39 +256,34 @@ func (c *Handler) publicLiveAudioAuth(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 // generateStreamToken creates a crypto-random 32-character hex token for stream URL access.
-func generateStreamToken() (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("failed to generate stream token: %w", err)
-	}
-	return hex.EncodeToString(b), nil
+func generateStreamToken() string {
+	b := make([]byte, hlsStreamTokenBytes)
+	rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // getOrCreateStreamToken returns the existing token for a sourceID, or creates a new one.
 // Uses double-checked locking to avoid generating redundant tokens under contention.
-func getOrCreateStreamToken(sourceID string) (string, error) {
+func getOrCreateStreamToken(sourceID string) string {
 	hlsMgr.tokensMu.RLock()
 	if token, exists := hlsMgr.sourceTokens[sourceID]; exists {
 		hlsMgr.tokensMu.RUnlock()
-		return token, nil
+		return token
 	}
 	hlsMgr.tokensMu.RUnlock()
 
-	token, err := generateStreamToken()
-	if err != nil {
-		return "", err
-	}
+	token := generateStreamToken()
 
 	hlsMgr.tokensMu.Lock()
 	if existing, exists := hlsMgr.sourceTokens[sourceID]; exists {
 		hlsMgr.tokensMu.Unlock()
-		return existing, nil
+		return existing
 	}
 	hlsMgr.tokens[token] = sourceID
 	hlsMgr.sourceTokens[sourceID] = token
 	hlsMgr.tokensMu.Unlock()
 
-	return token, nil
+	return token
 }
 
 // resolveStreamToken looks up the sourceID for a given stream token.
@@ -438,10 +437,7 @@ func (c *Handler) buildHLSStreamResponse(ctx echo.Context, sourceID string, stre
 	clientCount := getStreamClientCount(sourceID)
 
 	// Generate or retrieve stream token for secure URL access
-	token, err := getOrCreateStreamToken(sourceID)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to generate stream token", http.StatusInternalServerError)
-	}
+	token := getOrCreateStreamToken(sourceID)
 
 	// Build the API URL using the stream token (not the sourceID)
 	playlistURL := hlsPlaylistURL(token)
@@ -1127,10 +1123,10 @@ func (c *Handler) setupAudioCallback(sourceID string, sampleRate int, maxQueuedB
 
 	// Determine the actual sample rate of the capture source
 	sourceSampleRate := sampleRate // Fallback to target rate
-	if src != nil && src.SampleRate > 0 {
-		sourceSampleRate = src.SampleRate
+	if src != nil {
+		sourceSampleRate = src.EffectiveSampleRate()
 	} else {
-		apicore.GetLogger().Warn("Audio source sample rate unavailable, falling back to HLS target rate", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.Int("fallback_rate", sampleRate))
+		apicore.GetLogger().Warn("Audio source not in registry, falling back to HLS target rate", logger.String("source_id", privacy.SanitizeRTSPUrl(sourceID)), logger.Int("fallback_rate", sampleRate))
 	}
 
 	// Add route on the AudioRouter

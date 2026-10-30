@@ -4,7 +4,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
@@ -25,7 +24,7 @@ type ConversionDeps struct {
 }
 
 // ConvertToV2Detection converts a domain Result to a v2 Detection entity.
-// This is shared between DualWriteRepository and migration Worker.
+// The migration Worker uses it to copy legacy records into v2.
 // deps.SpeciesLabelTypeID, deps.AvesClassID, and deps.ChiropteraClassID must be initialized.
 func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *ConversionDeps) (*entities.Detection, error) {
 	// Get or create model first (needed for label creation)
@@ -132,110 +131,4 @@ func ConvertToV2Detection(ctx context.Context, result *detection.Result, deps *C
 	}
 
 	return det, nil
-}
-
-// ConvertToPredictions converts additional results to v2 prediction entities.
-// This is shared between DualWriteRepository and migration Worker.
-// modelID and speciesLabelTypeID must be provided for label creation.
-func ConvertToPredictions(ctx context.Context, detectionID, modelID, speciesLabelTypeID uint, taxonomicClassID *uint, additional []detection.AdditionalResult, labelRepo LabelRepository) ([]*entities.DetectionPrediction, error) {
-	preds := make([]*entities.DetectionPrediction, 0, len(additional))
-
-	for i, ar := range additional {
-		label, err := labelRepo.GetOrCreate(ctx, ar.Species.ScientificName, modelID, speciesLabelTypeID, taxonomicClassID)
-		if err != nil {
-			return nil, fmt.Errorf("prediction label resolution failed: %w", err)
-		}
-
-		preds = append(preds, &entities.DetectionPrediction{
-			DetectionID: detectionID,
-			LabelID:     label.ID,
-			Confidence:  ar.Confidence,
-			Rank:        i + 2, // Primary is rank 1, additional start at 2
-		})
-	}
-
-	return preds, nil
-}
-
-// ConvertFromV2Detection converts a v2 Detection entity to a domain Result.
-func ConvertFromV2Detection(det *entities.Detection) *detection.Result {
-	result := &detection.Result{
-		ID:        det.ID,
-		Timestamp: time.Unix(det.DetectedAt, 0),
-		Unlikely:  det.Unlikely,
-	}
-
-	// Convert label to species
-	if det.Label != nil {
-		result.Species = detection.Species{
-			ScientificName: det.Label.ScientificName,
-		}
-	}
-
-	// Convert model
-	if det.Model != nil {
-		result.Model = detection.ModelInfo{
-			Name:           det.Model.Name,
-			Version:        det.Model.Version,
-			Variant:        det.Model.Variant,
-			ClassifierPath: det.Model.ClassifierPath,
-		}
-	}
-
-	// Convert source
-	if det.Source != nil {
-		displayName := ""
-		if det.Source.DisplayName != nil {
-			displayName = *det.Source.DisplayName
-		}
-		result.AudioSource = detection.AudioSource{
-			SafeString:  det.Source.SourceURI,
-			Type:        string(det.Source.SourceType),
-			DisplayName: displayName,
-		}
-		result.SourceNode = det.Source.NodeName
-	}
-
-	// Convert times
-	if det.BeginTime != nil {
-		result.BeginTime = time.UnixMilli(*det.BeginTime)
-	}
-	if det.EndTime != nil {
-		result.EndTime = time.UnixMilli(*det.EndTime)
-	}
-
-	// Convert confidence
-	result.Confidence = det.Confidence
-
-	// Convert location
-	if det.Latitude != nil {
-		result.Latitude = *det.Latitude
-	}
-	if det.Longitude != nil {
-		result.Longitude = *det.Longitude
-	}
-
-	// Convert clip name
-	if det.ClipName != nil {
-		result.ClipName = *det.ClipName
-	}
-	if det.ClipSampleRate != nil {
-		result.ClipSampleRate = *det.ClipSampleRate
-	}
-
-	// Convert processing time
-	if det.ProcessingTimeMs != nil {
-		result.ProcessingTime = time.Duration(*det.ProcessingTimeMs) * time.Millisecond
-	}
-
-	return result
-}
-
-// ConvertFromV2Detections converts multiple v2 Detection entities to domain Results.
-func ConvertFromV2Detections(dets []*entities.Detection) []*detection.Result {
-	results := make([]*detection.Result, 0, len(dets))
-	for _, det := range dets {
-		results = append(results, ConvertFromV2Detection(det))
-	}
-	return results
 }

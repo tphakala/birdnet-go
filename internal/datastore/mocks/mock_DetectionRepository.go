@@ -468,9 +468,9 @@ func (_c *MockDetectionRepository_GetByDateRange_Call) RunAndReturn(run func(con
 	return _c
 }
 
-// GetBySpecies provides a mock function with given fields: ctx, species, filters
-func (_m *MockDetectionRepository) GetBySpecies(ctx context.Context, species string, filters *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
-	ret := _m.Called(ctx, species, filters)
+// GetBySpecies provides a mock function with given fields: ctx, species, date, hour, duration, limit, offset
+func (_m *MockDetectionRepository) GetBySpecies(ctx context.Context, species string, date string, hour string, duration int, limit int, offset int) ([]*detection.Result, int64, error) {
+	ret := _m.Called(ctx, species, date, hour, duration, limit, offset)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetBySpecies")
@@ -479,25 +479,25 @@ func (_m *MockDetectionRepository) GetBySpecies(ctx context.Context, species str
 	var r0 []*detection.Result
 	var r1 int64
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, *datastore.DetectionFilters) ([]*detection.Result, int64, error)); ok {
-		return rf(ctx, species, filters)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, int, int, int) ([]*detection.Result, int64, error)); ok {
+		return rf(ctx, species, date, hour, duration, limit, offset)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, *datastore.DetectionFilters) []*detection.Result); ok {
-		r0 = rf(ctx, species, filters)
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, string, int, int, int) []*detection.Result); ok {
+		r0 = rf(ctx, species, date, hour, duration, limit, offset)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*detection.Result)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, *datastore.DetectionFilters) int64); ok {
-		r1 = rf(ctx, species, filters)
+	if rf, ok := ret.Get(1).(func(context.Context, string, string, string, int, int, int) int64); ok {
+		r1 = rf(ctx, species, date, hour, duration, limit, offset)
 	} else {
 		r1 = ret.Get(1).(int64)
 	}
 
-	if rf, ok := ret.Get(2).(func(context.Context, string, *datastore.DetectionFilters) error); ok {
-		r2 = rf(ctx, species, filters)
+	if rf, ok := ret.Get(2).(func(context.Context, string, string, string, int, int, int) error); ok {
+		r2 = rf(ctx, species, date, hour, duration, limit, offset)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -513,14 +513,18 @@ type MockDetectionRepository_GetBySpecies_Call struct {
 // GetBySpecies is a helper method to define mock.On call
 //   - ctx context.Context
 //   - species string
-//   - filters *datastore.DetectionFilters
-func (_e *MockDetectionRepository_Expecter) GetBySpecies(ctx interface{}, species interface{}, filters interface{}) *MockDetectionRepository_GetBySpecies_Call {
-	return &MockDetectionRepository_GetBySpecies_Call{Call: _e.mock.On("GetBySpecies", ctx, species, filters)}
+//   - date string
+//   - hour string
+//   - duration int
+//   - limit int
+//   - offset int
+func (_e *MockDetectionRepository_Expecter) GetBySpecies(ctx interface{}, species interface{}, date interface{}, hour interface{}, duration interface{}, limit interface{}, offset interface{}) *MockDetectionRepository_GetBySpecies_Call {
+	return &MockDetectionRepository_GetBySpecies_Call{Call: _e.mock.On("GetBySpecies", ctx, species, date, hour, duration, limit, offset)}
 }
 
-func (_c *MockDetectionRepository_GetBySpecies_Call) Run(run func(ctx context.Context, species string, filters *datastore.DetectionFilters)) *MockDetectionRepository_GetBySpecies_Call {
+func (_c *MockDetectionRepository_GetBySpecies_Call) Run(run func(ctx context.Context, species string, date string, hour string, duration int, limit int, offset int)) *MockDetectionRepository_GetBySpecies_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(*datastore.DetectionFilters))
+		run(args[0].(context.Context), args[1].(string), args[2].(string), args[3].(string), args[4].(int), args[5].(int), args[6].(int))
 	})
 	return _c
 }
@@ -530,7 +534,7 @@ func (_c *MockDetectionRepository_GetBySpecies_Call) Return(_a0 []*detection.Res
 	return _c
 }
 
-func (_c *MockDetectionRepository_GetBySpecies_Call) RunAndReturn(run func(context.Context, string, *datastore.DetectionFilters) ([]*detection.Result, int64, error)) *MockDetectionRepository_GetBySpecies_Call {
+func (_c *MockDetectionRepository_GetBySpecies_Call) RunAndReturn(run func(context.Context, string, string, string, int, int, int) ([]*detection.Result, int64, error)) *MockDetectionRepository_GetBySpecies_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -1100,6 +1104,72 @@ func (_c *MockDetectionRepository_Search_Call) Return(_a0 []*detection.Result, _
 }
 
 func (_c *MockDetectionRepository_Search_Call) RunAndReturn(run func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error)) *MockDetectionRepository_Search_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SearchAdvanced provides a mock function with given fields: ctx, filters
+func (_m *MockDetectionRepository) SearchAdvanced(ctx context.Context, filters *datastore.AdvancedSearchFilters) ([]*detection.Result, int64, error) {
+	ret := _m.Called(ctx, filters)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SearchAdvanced")
+	}
+
+	var r0 []*detection.Result
+	var r1 int64
+	var r2 error
+	if rf, ok := ret.Get(0).(func(context.Context, *datastore.AdvancedSearchFilters) ([]*detection.Result, int64, error)); ok {
+		return rf(ctx, filters)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, *datastore.AdvancedSearchFilters) []*detection.Result); ok {
+		r0 = rf(ctx, filters)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*detection.Result)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, *datastore.AdvancedSearchFilters) int64); ok {
+		r1 = rf(ctx, filters)
+	} else {
+		r1 = ret.Get(1).(int64)
+	}
+
+	if rf, ok := ret.Get(2).(func(context.Context, *datastore.AdvancedSearchFilters) error); ok {
+		r2 = rf(ctx, filters)
+	} else {
+		r2 = ret.Error(2)
+	}
+
+	return r0, r1, r2
+}
+
+// MockDetectionRepository_SearchAdvanced_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SearchAdvanced'
+type MockDetectionRepository_SearchAdvanced_Call struct {
+	*mock.Call
+}
+
+// SearchAdvanced is a helper method to define mock.On call
+//   - ctx context.Context
+//   - filters *datastore.AdvancedSearchFilters
+func (_e *MockDetectionRepository_Expecter) SearchAdvanced(ctx interface{}, filters interface{}) *MockDetectionRepository_SearchAdvanced_Call {
+	return &MockDetectionRepository_SearchAdvanced_Call{Call: _e.mock.On("SearchAdvanced", ctx, filters)}
+}
+
+func (_c *MockDetectionRepository_SearchAdvanced_Call) Run(run func(ctx context.Context, filters *datastore.AdvancedSearchFilters)) *MockDetectionRepository_SearchAdvanced_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*datastore.AdvancedSearchFilters))
+	})
+	return _c
+}
+
+func (_c *MockDetectionRepository_SearchAdvanced_Call) Return(_a0 []*detection.Result, _a1 int64, _a2 error) *MockDetectionRepository_SearchAdvanced_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *MockDetectionRepository_SearchAdvanced_Call) RunAndReturn(run func(context.Context, *datastore.AdvancedSearchFilters) ([]*detection.Result, int64, error)) *MockDetectionRepository_SearchAdvanced_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/labstack/echo/v4"
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
@@ -228,11 +229,26 @@ func (c *Handler) BatchLockDetections(ctx echo.Context) error {
 }
 
 // BatchResolveDetections resolves a query to a list of detection IDs without modifying any data.
-// Returns an error if the matching set exceeds maxBatchSize.
+// Returns an error if the matching set exceeds maxBatchSize, or if the date is not YYYY-MM-DD
+// (or, for all and search queries, one of the search box date shortcuts).
 func (c *Handler) BatchResolveDetections(ctx echo.Context) error {
 	var req BatchResolveRequest
 	if err := ctx.Bind(&req); err != nil {
 		return c.HandleError(ctx, err, "Invalid request format", http.StatusBadRequest)
+	}
+
+	// A date that does not parse drops the date filter (all and search queries) or, on a v2
+	// database, selects every date (species and hourly queries). The resolved IDs feed bulk
+	// delete, review and lock operations, so a malformed date must be refused here, as it is
+	// for the list endpoint. The all and search queries also take the search box shortcuts;
+	// the species and hourly queries take only YYYY-MM-DD.
+	nativeDateQuery := req.QueryType == queryTypeSpecies || req.QueryType == queryTypeHourly
+	if nativeDateQuery || (req.Date != "" && !apicore.IsDateShortcut(req.Date)) {
+		if err := validateDateParam(req.Date, "date"); err != nil {
+			return c.HandleError(ctx,
+				&dateValidationError{message: err.Error(), paramName: "date"},
+				"Invalid date", http.StatusBadRequest)
+		}
 	}
 
 	duration := req.Duration

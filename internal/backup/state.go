@@ -3,6 +3,7 @@ package backup
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -50,11 +51,15 @@ type MissedBackup struct {
 	Weekday       string    `json:"weekday,omitempty"`
 }
 
-// StateManager handles persistence of backup states
+// StateManager handles persistence of backup states.
+//
+// mu guards state. saveMu serializes writes of the state file and is always
+// taken before mu, never while mu is held.
 type StateManager struct {
 	state     *BackupState
 	statePath string
 	mu        sync.RWMutex
+	saveMu    sync.Mutex
 	logger    logger.Logger
 }
 
@@ -79,6 +84,11 @@ func NewStateManager(_ logger.Logger) (*StateManager, error) {
 	// Create state file path
 	statePath := filepath.Join(configPaths[0], "backup-state.json")
 
+	return newStateManagerAt(statePath), nil
+}
+
+// newStateManagerAt builds a manager for the given state file and loads it if present.
+func newStateManagerAt(statePath string) *StateManager {
 	sm := &StateManager{
 		statePath: statePath,
 		state: &BackupState{
@@ -102,7 +112,7 @@ func NewStateManager(_ logger.Logger) (*StateManager, error) {
 		sm.logger.Info("Successfully loaded existing backup state", logger.String("path", statePath))
 	}
 
-	return sm, nil
+	return sm
 }
 
 // loadState loads the backup state from disk
@@ -118,17 +128,38 @@ func (sm *StateManager) loadState() error {
 	return json.Unmarshal(data, sm.state)
 }
 
-// saveState saves the current backup state to disk
+// marshalState renders the current state as indented JSON.
+// The marshal runs under the read lock because the shallow copy of the state
+// shares its maps and slice with the live state, which mutators write.
+func (sm *StateManager) marshalState() ([]byte, error) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	snapshot := *sm.state
+	snapshot.LastUpdate = time.Now()
+	return json.MarshalIndent(&snapshot, "", "  ")
+}
+
+// saveState saves the current backup state to disk.
+// It must be called without sm.mu held: it takes saveMu first and then mu.
+// Holding saveMu for the whole save keeps concurrent saves from sharing the
+// temporary file, and makes the last save snapshot every earlier mutation.
 func (sm *StateManager) saveState() error {
+	sm.saveMu.Lock()
+	defer sm.saveMu.Unlock()
+
 	start := time.Now()
 
-	// Copy state under lock
-	sm.mu.Lock()
-	stateSnapshot := *sm.state
-	sm.mu.Unlock()
-
-	// Update last update time (on the snapshot)
-	stateSnapshot.LastUpdate = time.Now()
+	// Marshal state to JSON with pretty printing
+	data, err := sm.marshalState()
+	if err != nil {
+		sm.logger.Error("Failed to marshal backup state to JSON", logger.Error(err))
+		return errors.New(err).
+			Component("backup").
+			Category(errors.CategoryFileIO).
+			Context("operation", "marshal_state").
+			Build()
+	}
 
 	// Create state directory if it doesn't exist (internal config path)
 	dirPath := filepath.Dir(sm.statePath)
@@ -138,17 +169,6 @@ func (sm *StateManager) saveState() error {
 			Component("backup").
 			Category(errors.CategoryFileIO).
 			Context("operation", "create_state_directory").
-			Build()
-	}
-
-	// Marshal state to JSON with pretty printing
-	data, err := json.MarshalIndent(stateSnapshot, "", "  ")
-	if err != nil {
-		sm.logger.Error("Failed to marshal backup state to JSON", logger.Error(err))
-		return errors.New(err).
-			Component("backup").
-			Category(errors.CategoryFileIO).
-			Context("operation", "marshal_state").
 			Build()
 	}
 
@@ -180,11 +200,21 @@ func (sm *StateManager) saveState() error {
 	return nil
 }
 
-// UpdateScheduleState updates the state for a specific schedule
-func (sm *StateManager) UpdateScheduleState(schedule *BackupSchedule, successful bool) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
+// update applies mutate under the write lock, then persists with the lock released.
+// The unlock is deferred inside the closure so a panic in mutate cannot leave mu held.
+func (sm *StateManager) update(mutate func(state *BackupState)) error {
+	func() {
+		sm.mu.Lock()
+		defer sm.mu.Unlock()
+		mutate(sm.state)
+	}()
+	return sm.saveState()
+}
 
+// UpdateScheduleState updates the state for a specific schedule. NextScheduled is
+// set from schedule.NextRun, which the caller sets to the schedule's next upcoming
+// run. schedule must not be shared with a goroutine that writes it.
+func (sm *StateManager) UpdateScheduleState(schedule *BackupSchedule, successful bool) error {
 	// Generate schedule key
 	key := "daily"
 	if schedule.IsWeekly {
@@ -192,33 +222,33 @@ func (sm *StateManager) UpdateScheduleState(schedule *BackupSchedule, successful
 	}
 	sm.logger.Debug("Updating schedule state", logger.String("schedule_key", key), logger.Bool("successful", successful))
 
-	state := sm.state.Schedules[key]
-	state.LastAttempted = time.Now()
-	if successful {
-		state.LastSuccessful = time.Now()
-		state.FailureCount = 0
-	} else {
-		state.FailureCount++
-	}
-	state.NextScheduled = schedule.NextRun
+	nextRun := schedule.NextRun
+	err := sm.update(func(st *BackupState) {
+		state := st.Schedules[key]
+		state.LastAttempted = time.Now()
+		if successful {
+			state.LastSuccessful = time.Now()
+			state.FailureCount = 0
+		} else {
+			state.FailureCount++
+		}
+		state.NextScheduled = nextRun
 
-	sm.state.Schedules[key] = state
-
-	// Save state changes
-	if err := sm.saveState(); err != nil {
+		st.Schedules[key] = state
+	})
+	if err != nil {
 		sm.logger.Error("Failed to save state after updating schedule", logger.String("schedule_key", key), logger.Error(err))
 		return err
 	}
 	return nil
 }
 
-// AddMissedBackup records a missed backup
-func (sm *StateManager) AddMissedBackup(schedule *BackupSchedule, reason string) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
+// AddMissedBackup records the run due at scheduledTime as missed. schedule supplies
+// only the identity (IsWeekly, Weekday) and must not be shared with a goroutine
+// that writes it.
+func (sm *StateManager) AddMissedBackup(schedule *BackupSchedule, scheduledTime time.Time, reason string) error {
 	missed := MissedBackup{
-		ScheduledTime: schedule.NextRun,
+		ScheduledTime: scheduledTime,
 		Reason:        reason,
 		IsWeekly:      schedule.IsWeekly,
 	}
@@ -231,9 +261,11 @@ func (sm *StateManager) AddMissedBackup(schedule *BackupSchedule, reason string)
 		logger.String("reason", reason),
 		logger.Bool("is_weekly", missed.IsWeekly),
 		logger.String("weekday", missed.Weekday))
-	sm.state.MissedRuns = append(sm.state.MissedRuns, missed)
 
-	if err := sm.saveState(); err != nil {
+	err := sm.update(func(st *BackupState) {
+		st.MissedRuns = append(st.MissedRuns, missed)
+	})
+	if err != nil {
 		sm.logger.Error("Failed to save state after adding missed backup", logger.Error(err))
 		return err
 	}
@@ -242,41 +274,41 @@ func (sm *StateManager) AddMissedBackup(schedule *BackupSchedule, reason string)
 
 // UpdateTargetState updates the state for a specific backup target
 func (sm *StateManager) UpdateTargetState(targetName string, metadata *Metadata, status string) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
 	sm.logger.Debug("Updating target state",
 		logger.String("target_name", targetName),
 		logger.String("backup_id", metadata.ID),
 		logger.String("status", status))
 
-	state := sm.state.Targets[targetName]
-	state.LastBackupID = metadata.ID
-	state.LastBackupTime = metadata.Timestamp
-	state.LastBackupStatus = status
-	state.LastBackupSize = metadata.Size
-	if status == "success" {
-		state.TotalBackups++
-		state.TotalSize += metadata.Size
-	}
+	err := sm.update(func(st *BackupState) {
+		state := st.Targets[targetName]
+		state.LastBackupID = metadata.ID
+		state.LastBackupTime = metadata.Timestamp
+		state.LastBackupStatus = status
+		state.LastBackupSize = metadata.Size
+		if status == "success" {
+			state.TotalBackups++
+			state.TotalSize += metadata.Size
+		}
 
-	sm.state.Targets[targetName] = state
-
-	if err := sm.saveState(); err != nil {
+		st.Targets[targetName] = state
+	})
+	if err != nil {
 		sm.logger.Error("Failed to save state after updating target state", logger.String("target_name", targetName), logger.Error(err))
 		return err
 	}
 	return nil
 }
 
-// UpdateStats updates the backup statistics
+// UpdateStats updates the backup statistics.
+// The map is cloned so the state never aliases a map the caller keeps using.
 func (sm *StateManager) UpdateStats(stats map[string]BackupStats) error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
 	sm.logger.Debug("Updating overall backup stats")
 
-	sm.state.Stats = stats
-
-	if err := sm.saveState(); err != nil {
+	statsCopy := maps.Clone(stats)
+	err := sm.update(func(st *BackupState) {
+		st.Stats = statsCopy
+	})
+	if err != nil {
 		sm.logger.Error("Failed to save state after updating stats", logger.Error(err))
 		return err
 	}
@@ -317,13 +349,13 @@ func (sm *StateManager) GetMissedBackups() []MissedBackup {
 
 // ClearMissedBackups clears the list of missed backups
 func (sm *StateManager) ClearMissedBackups() error {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-	sm.logger.Info("Clearing missed backups list", logger.Int("previous_count", len(sm.state.MissedRuns)))
-
-	sm.state.MissedRuns = make([]MissedBackup, 0)
-
-	if err := sm.saveState(); err != nil {
+	var previousCount int
+	err := sm.update(func(st *BackupState) {
+		previousCount = len(st.MissedRuns)
+		st.MissedRuns = make([]MissedBackup, 0)
+	})
+	sm.logger.Info("Cleared missed backups list", logger.Int("previous_count", previousCount))
+	if err != nil {
 		sm.logger.Error("Failed to save state after clearing missed backups", logger.Error(err))
 		return err
 	}

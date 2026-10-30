@@ -98,7 +98,7 @@ func TestGetThumbnailURL_EmitsAURLWithNoCacheConfigured(t *testing.T) {
 
 // TestPopulateEventMetadata_DoesNotBlockOnTheProvider pins the de-blocking half of the
 // change on the detection-save path: no provider fetch inside the CompositeAction,
-// whose 30s timeout this file's siblings document as the reason slow work was moved out
+// whose per-step timeout this file's siblings document as the reason slow work was moved out
 // of it.
 //
 // The URL itself deliberately stays the provider's upstream address: this metadata

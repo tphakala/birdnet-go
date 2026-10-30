@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore/dbfailure"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
@@ -323,8 +324,8 @@ func ValidateStartupDiskSpace(dbPath string) error {
 		}
 		// totalMB will be 0 if GetDetailedDiskUsage fails, which is acceptable for error context
 
-		return errors.Newf("insufficient disk space to start application: %dMB available (minimum: %dMB required)",
-			availableMB, MinDiskSpaceStartup).
+		return errors.Newf("%w: %dMB available (minimum: %dMB required)",
+			dbfailure.ErrInsufficientDiskSpace, availableMB, MinDiskSpaceStartup).
 			Component("datastore").
 			Category(errors.CategorySystem).
 			Context("operation", "startup_validation").

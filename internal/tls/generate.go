@@ -47,14 +47,8 @@ func GenerateSelfSigned(opts SelfSignedOptions) (certPEM, keyPEM string, err err
 	}
 
 	// Generate random 128-bit serial number
-	serialNumber, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), serialNumberBitLen))
-	if err != nil {
-		return "", "", errors.New(err).
-			Component("tls-generate").
-			Category(errors.CategorySystem).
-			Context("operation", "serial-generation").
-			Build()
-	}
+	// rand.Int fails only when its reader does, and the default rand.Reader never returns an error.
+	serialNumber, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), serialNumberBitLen))
 
 	// Separate DNS names and IP addresses from SANs
 	var dnsNames []string

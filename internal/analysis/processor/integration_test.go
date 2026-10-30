@@ -140,15 +140,8 @@ func TestIntegration_DatabaseToTracker(t *testing.T) {
 
 	tracker := species.NewTrackerFromSettings(adapter, settings)
 	speciestest.SetCurrentYearForTesting(t, tracker, 2024) // Set to 2024 for test data
-	err := tracker.InitFromDatabase()
-	require.NoError(t, err)
+	require.NoError(t, speciestest.InitFromDatabaseAt(t, tracker, time.Date(2024, 7, 30, 10, 0, 0, 0, time.UTC)))
 
-	// Since InitFromDatabase uses time.Now() which is 2025, manually update the tracker
-	// with the 2024 detections to simulate proper loading
-	tracker.UpdateSpecies("Parus major", time.Date(2024, 1, 15, 10, 0, 0, 0, time.UTC))
-	tracker.UpdateSpecies("Hirundo rustica", time.Date(2024, 4, 15, 6, 0, 0, 0, time.UTC))
-	tracker.UpdateSpecies("Sylvia atricapilla", time.Date(2024, 7, 28, 18, 47, 0, 0, time.UTC))
-	tracker.UpdateSpecies("Turdus merula", time.Date(2024, 3, 25, 7, 30, 0, 0, time.UTC))
 	// Add a recent summer detection for Turdus merula so it's not new in summer
 	tracker.UpdateSpecies("Turdus merula", time.Date(2024, 7, 10, 8, 0, 0, 0, time.UTC))
 
@@ -263,12 +256,16 @@ func TestIntegration_YearTransition(t *testing.T) {
 
 	tracker := species.NewTrackerFromSettings(adapter, settings)
 	speciestest.SetCurrentYearForTesting(t, tracker, 2023)
-	err := tracker.InitFromDatabase()
-	require.NoError(t, err)
+
+	// Load as of Dec 31, 2023 so the 2023 rows are the ones loaded
+	dec31 := time.Date(2023, 12, 31, 23, 30, 0, 0, time.UTC)
+	require.NoError(t, speciestest.InitFromDatabaseAt(t, tracker, dec31))
 
 	// Check status on Dec 31, 2023
-	dec31 := time.Date(2023, 12, 31, 23, 30, 0, 0, time.UTC)
 	status := tracker.GetSpeciesStatus("Parus major", dec31)
+	require.NotNil(t, status.FirstThisYear, "the 2023 rows must be loaded")
+	assert.Equal(t, time.Date(2023, 12, 20, 0, 0, 0, 0, time.UTC), *status.FirstThisYear)
+	assert.Equal(t, 11, status.DaysThisYear)
 	assert.True(t, status.IsNewThisYear, "Should be new this year (11 days < 30-day window)")
 
 	// Check status on Jan 1, 2024 - should trigger year reset
@@ -342,9 +339,18 @@ func TestIntegration_SeasonalTransitions(t *testing.T) {
 	}
 
 	tracker := species.NewTrackerFromSettings(adapter, settings)
-	speciestest.SetCurrentYearForTesting(t, tracker, 2024) // Set to 2024 for test dates
-	err := tracker.InitFromDatabase()
-	require.NoError(t, err)
+
+	// Load as of mid-summer 2024 so the 2024 rows are the ones loaded
+	loadAt := time.Date(2024, 7, 20, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, speciestest.InitFromDatabaseAt(t, tracker, loadAt))
+
+	t.Run("loads seasonal history", func(t *testing.T) {
+		status := tracker.GetSpeciesStatus("Apus apus", loadAt)
+		require.NotNil(t, status.FirstThisSeason, "the summer 2024 rows must be loaded")
+		assert.Equal(t, time.Date(2024, 6, 21, 0, 0, 0, 0, time.UTC), *status.FirstThisSeason)
+		assert.Equal(t, 29, status.DaysThisSeason)
+		assert.False(t, status.IsNewThisSeason)
+	})
 
 	t.Run("species crossing season boundary", func(t *testing.T) {
 		// Check Turdus pilaris on last day of winter

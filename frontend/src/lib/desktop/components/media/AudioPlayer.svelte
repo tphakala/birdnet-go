@@ -50,7 +50,9 @@
     MAX_AUDIO_LOAD_RETRIES,
     AUDIO_RETRY_DELAY_MS,
     isPlayInterruptedError,
+    pendingRetryDelayMs,
     playButtonLabelKey,
+    probeAudioSource,
   } from '$lib/utils/audio';
   import {
     getAudioContext,
@@ -70,7 +72,12 @@
   import { getCsrfToken } from '$lib/utils/api';
   import { isKnownSampleRate, lookupClipSampleRate } from '$lib/utils/clipSampleRateLookup';
   import {
+    SPECTROGRAM_REASON,
     fetchSpectrogramStatus,
+    isTerminalSpectrogramReason,
+    isRetryableSpectrogramReason,
+    isSpectrogramSourceKnownMissing,
+    markSpectrogramSourceMissing,
     parseSpectrogramStatus,
     type SpectrogramGenerationStatus,
   } from '$lib/utils/spectrogramStatus';
@@ -202,9 +209,11 @@
   let spectrogramCacheKey = $state(0);
 
   // Audio load retry state: handles race condition where detection DB record
-  // exists but audio file is still being encoded by FFmpeg (backend returns 503)
+  // exists but audio file is still being exported (backend returns 503)
   let audioRetryCount = 0;
   let audioRetryTimer: ReturnType<typeof setTimeout> | undefined;
+  // Aborts the one byte probe of the audio URL that runs beside the first retry timer.
+  let audioProbeController: AbortController | undefined;
   // True when the user pressed play while a load retry was pending; consumed once
   // by 'loadedmetadata' or 'canplay' so the play intent is not lost when the
   // transient error is suppressed.
@@ -215,6 +224,9 @@
   let statusPollTimer: ReturnType<typeof setTimeout> | undefined;
   let statusPollStartTime: number | undefined;
   let statusPollAbortController: AbortController | undefined;
+  // True once the status poll answered failed for the current attempt; ends the image
+  // retries, including one already in flight. Cleared whenever a new attempt starts.
+  let spectrogramStatusFailed = false;
 
   // ==========================================================================
   // User-requested spectrogram generation (INCOMPLETE FEATURE)
@@ -328,6 +340,9 @@
   // 404 from that path still arrives in time.
   const SPECTROGRAM_PROBE_TIMEOUT_MS = 8000;
   const HTTP_STATUS_NOT_FOUND = 404;
+  const HTTP_STATUS_REQUEST_TIMEOUT = 408;
+  const HTTP_STATUS_TOO_MANY_REQUESTS = 429;
+  const HTTP_STATUS_SERVER_ERROR_MIN = 500;
   // Generation statuses that mean the exact-rate render is coming or already
   // there, so a 404 for it is not a missing render.
   const RENDER_PENDING_OR_READY_STATUSES = new Set([
@@ -1076,7 +1091,10 @@
   const currentSource = () =>
     audibleBats.active && audibleBats.url ? audibleBats.url : (processedAudioUrl ?? audioUrl);
 
+  // Also ends the probe: it only matters while the retry it may cancel is pending.
   function clearAudioRetryTimer() {
+    audioProbeController?.abort();
+    audioProbeController = undefined;
     if (audioRetryTimer !== undefined) {
       clearTimeout(audioRetryTimer);
       audioRetryTimer = undefined;
@@ -1126,6 +1144,53 @@
     playRequestedAfterRetry = false;
     clearAudioRetryTimer();
     audioRetryCount = 0;
+  }
+
+  // Reload the active source after delayMs. A media element cannot read the HTTP status.
+  function scheduleLoadRetry(delayMs: number) {
+    if (audioRetryTimer !== undefined) clearTimeout(audioRetryTimer);
+    audioRetryTimer = setTimeout(() => {
+      clearAudioRetryTimer();
+      if (audioElement) {
+        // Retry against whichever source is currently active; reverting
+        // to the original audioUrl here would silently drop out of an
+        // active audible-bats or processed-audio derived clip while
+        // leaving its state flagged as still active.
+        replaceSource(currentSource());
+        audioElement.load();
+      }
+    }, delayMs);
+  }
+
+  // Gives up without retrying: the clip is gone, so the error shows now.
+  function failLoadPermanently() {
+    clearAudioRetryTimer();
+    error = t('media.audio.error');
+    isLoading = false;
+    playRequestedAfterRetry = false;
+    markPlaybackStopped();
+  }
+
+  // On the first failure of a load, ask the server what the failure was. The retry is
+  // already scheduled, so a 404 only has to cancel it and a 503 to move it later;
+  // any other answer leaves the scheduled blind retry in place. Only the original clip is
+  // probed: a processed or audible-bats source is a local blob URL.
+  function probeFailedLoad() {
+    if (currentSource() !== audioUrl) return;
+    const controller = new AbortController();
+    audioProbeController = controller;
+    const probedUrl = audioUrl;
+    void probeAudioSource(probedUrl, controller.signal).then(outcome => {
+      // An answer for a clip that is no longer the current source says nothing about it
+      if (controller.signal.aborted || probedUrl !== audioUrl) return;
+      audioProbeController = undefined;
+      if (outcome.kind === 'missing') {
+        debugLog('Audio probe: clip is gone, not retrying');
+        failLoadPermanently();
+      } else if (outcome.kind === 'pending') {
+        scheduleLoadRetry(pendingRetryDelayMs(outcome, AUDIO_RETRY_DELAY_MS));
+      }
+    });
   }
 
   // Point the element at a new source. The assignment pauses the element without
@@ -1385,6 +1450,43 @@
       `/api/v2/spectrogram/${encodeURIComponent(detectionId)}/status?size=${spectrogramSize}${spectrogramRaw ? '&raw=true' : ''}`
     );
 
+  // Schedules the next poll without touching statusPollStartTime, so
+  // MAX_POLL_DURATION bounds the whole polling run and not one request.
+  const scheduleNextStatusPoll = () => {
+    if (statusPollTimer) clearTimeout(statusPollTimer);
+    statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
+  };
+
+  // Ends the attempt: no more retries, polls or probes, and the unavailable state shows.
+  const endAttemptUnavailable = () => {
+    clearStatusPollTimer();
+    clearSpectrogramRetryTimer();
+    clearSpectrogramProbe();
+    spectrogramStatusFailed = true;
+    spectrogramLoader.setError();
+  };
+
+  // The server reported a reason retrying cannot change (the source clip is gone or
+  // cannot be rendered). source_missing describes the audio, not the image: a request
+  // that carried the clip rate is first tried without it, which the server answers
+  // from any render it kept. Otherwise every retry, poll and probe ends and the
+  // unavailable state shows.
+  const endOnTerminalReason = (reason: string | undefined) => {
+    debugLog('pollSpectrogramStatus: terminal reason', { reason });
+    if (reason === SPECTROGRAM_REASON.sourceMissing) {
+      markSpectrogramSourceMissing(detectionId);
+    }
+    if (
+      reason === SPECTROGRAM_REASON.sourceMissing &&
+      overlayRate !== undefined &&
+      !processedSpectrogramUrl
+    ) {
+      fallBackToImageWithoutRate();
+      return;
+    }
+    endAttemptUnavailable();
+  };
+
   const pollSpectrogramStatus = async () => {
     if (!showSpectrogram || !detectionId) {
       debugLog('pollSpectrogramStatus: skipped', {
@@ -1408,14 +1510,16 @@
       return;
     }
 
-    // Create new AbortController for this poll request
-    statusPollAbortController = new AbortController();
+    // Create new AbortController for this poll request, ending any request still in flight
+    statusPollAbortController?.abort();
+    const controller = new AbortController();
+    statusPollAbortController = controller;
 
     const statusUrl = spectrogramStatusUrl();
     debugLog('pollSpectrogramStatus: fetching', { url: statusUrl });
 
     try {
-      const response = await fetch(statusUrl, { signal: statusPollAbortController.signal });
+      const response = await fetch(statusUrl, { signal: controller.signal });
 
       debugLog('pollSpectrogramStatus: response', {
         ok: response.ok,
@@ -1424,6 +1528,8 @@
 
       if (response.ok) {
         const status = parseSpectrogramStatus(await response.json());
+        // The poll was cancelled (unmount, new detection, image loaded) while the body was read
+        if (controller.signal.aborted) return;
         spectrogramStatus = status ?? null;
         if (!status) return;
 
@@ -1445,17 +1551,44 @@
           spectrogramStatus = null;
           // Force reload by incrementing cache key (triggers Svelte reactivity)
           spectrogramCacheKey++;
+          spectrogramStatusFailed = false;
           debugLog('pollSpectrogramStatus: cache key updated', { cacheKey: spectrogramCacheKey });
         } else if (status.status === 'queued' || status.status === 'generating') {
           // Still processing, continue polling
           debugLog('pollSpectrogramStatus: still processing, scheduling next poll');
-          clearStatusPollTimer();
-          statusPollTimer = setTimeout(pollSpectrogramStatus, SPECTROGRAM_POLL_INTERVAL);
-        } else if (status.status === 'failed') {
-          // Generation failed
+          scheduleNextStatusPoll();
+        } else if (
+          (status.status === 'failed' || status.status === 'not_started') &&
+          isTerminalSpectrogramReason(status.reason)
+        ) {
+          endOnTerminalReason(status.reason);
+        } else if (status.status === 'failed' && !isRetryableSpectrogramReason(status.reason)) {
+          // Generation failed and the server does not say a later request can succeed:
+          // stop polling and the image retries
           debugLog('pollSpectrogramStatus: generation failed');
+          endAttemptUnavailable();
+        } else {
+          // not_started, an unknown status, or a failure the server marks retryable (the
+          // clip may still be written, the server was busy, a render failed): end polling
+          // and leave the image retries to decide the outcome.
+          debugLog('pollSpectrogramStatus: nothing in progress, ending poll', {
+            status: status.status,
+          });
           clearStatusPollTimer();
-          spectrogramLoader.setError();
+        }
+      } else if (!controller.signal.aborted) {
+        // The status request itself failed. A server error, timeout or rate limit is
+        // transient: try again at the poll interval, bounded by the MAX_POLL_DURATION
+        // check on entry. Any other client error (unknown detection) is permanent.
+        const transient =
+          response.status >= HTTP_STATUS_SERVER_ERROR_MIN ||
+          response.status === HTTP_STATUS_REQUEST_TIMEOUT ||
+          response.status === HTTP_STATUS_TOO_MANY_REQUESTS;
+        debugLog('pollSpectrogramStatus: non-OK response', { status: response.status, transient });
+        if (transient) {
+          scheduleNextStatusPoll();
+        } else {
+          clearStatusPollTimer();
         }
       }
     } catch (err) {
@@ -1465,8 +1598,12 @@
         debugLog('pollSpectrogramStatus: aborted');
         return;
       }
+      // A cancelled poll must not reschedule itself: clearStatusPollTimer already reset the
+      // start time, so the rescheduled chain would have no MAX_POLL_DURATION bound.
+      if (controller.signal.aborted) return;
       logger.error('Failed to poll spectrogram status', { detectionId, error: err });
       debugLog('pollSpectrogramStatus: error', err);
+      scheduleNextStatusPoll();
     }
   };
 
@@ -1543,8 +1680,11 @@
   // Spectrogram loading handlers
   const handleSpectrogramLoad = () => {
     debugLog('handleSpectrogramLoad: success');
-    spectrogramLoader.setLoading(false);
+    // reset() also clears a sticky error left by a failure that a late load outran
+    spectrogramLoader.reset();
+    spectrogramStatus = null;
     spectrogramRetryCount = 0; // Reset retry count on successful load
+    spectrogramStatusFailed = false;
     clearSpectrogramRetryTimer();
     clearStatusPollTimer(); // Also clear status polling
     clearSpectrogramProbe();
@@ -1574,7 +1714,7 @@
     }
 
     // Start polling for generation status on first error
-    if (spectrogramRetryCount === 0) {
+    if (spectrogramRetryCount === 0 && !spectrogramStatusFailed) {
       debugLog('handleSpectrogramError: first error, starting status polling');
       statusPollStartTime = Date.now();
       pollSpectrogramStatus();
@@ -1584,8 +1724,9 @@
       }
     }
 
-    // Retry on any error (likely 503 or temporary failure) up to max retries
-    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES) {
+    // Retry on any error (likely 503 or temporary failure) up to max retries, unless the
+    // status poll already ended the attempt (a request in flight when it said failed)
+    if (spectrogramRetryCount < MAX_SPECTROGRAM_RETRIES && !spectrogramStatusFailed) {
       // Use exponential backoff for retry
       // Use Math.min to safely select delay without direct array indexing
       const delayIndex = Math.min(spectrogramRetryCount, SPECTROGRAM_RETRY_DELAYS.length - 1);
@@ -1644,11 +1785,12 @@
       return;
     }
 
-    // Really failed - stop everything
+    // Really failed - stop the image retries. A status poll that is still scheduled (the
+    // status endpoint kept failing) is left to run: it ends on its own at a terminal
+    // status or MAX_POLL_DURATION, and an exists answer reloads the image.
     debugLog('handleSpectrogramError: giving up after max retries');
     spectrogramLoader.setError();
     clearSpectrogramRetryTimer();
-    clearStatusPollTimer();
 
     logger.warn('Spectrogram loading failed after max retries', {
       detectionId,
@@ -1707,6 +1849,7 @@
         // Reset state and start polling
         spectrogramNeedsGeneration = false;
         spectrogramRetryCount = 0;
+        spectrogramStatusFailed = false;
         spectrogramLoader.setLoading(true);
         statusPollStartTime = Date.now();
 
@@ -1725,6 +1868,7 @@
         // Reset state and reload the spectrogram via reactive cache key
         spectrogramNeedsGeneration = false;
         spectrogramRetryCount = 0;
+        spectrogramStatusFailed = false;
         spectrogramLoader.setLoading(true);
 
         // Reload by incrementing cache key (triggers Svelte reactivity)
@@ -1791,11 +1935,7 @@
   // Handle spectrogram base URL changes (different detection) with proper loading state
   $effect(() => {
     // Only reset loading state if base URL actually changed (new detection)
-    if (
-      spectrogramBaseUrl &&
-      spectrogramBaseUrl !== previousSpectrogramBaseUrl &&
-      !spectrogramLoader.error
-    ) {
+    if (spectrogramBaseUrl && spectrogramBaseUrl !== previousSpectrogramBaseUrl) {
       debugLog('spectrogramBaseUrl changed', {
         from: previousSpectrogramBaseUrl,
         to: spectrogramBaseUrl,
@@ -1808,7 +1948,9 @@
 
       // Reset retry/cache state for new spectrogram
       spectrogramRetryCount = 0;
+      spectrogramStatusFailed = false;
       spectrogramCacheKey = 0;
+      spectrogramStatus = null;
       clearSpectrogramRetryTimer();
       // Abort any in-flight status polling and status check when URL changes
       clearStatusPollTimer();
@@ -1859,10 +2001,7 @@
         duration = 0;
         error = null;
         audioRetryCount = 0;
-        if (audioRetryTimer) {
-          clearTimeout(audioRetryTimer);
-          audioRetryTimer = undefined;
-        }
+        clearAudioRetryTimer();
         // Reset clip selection for new audio
         clearSelection();
       }
@@ -1978,23 +2117,22 @@
           canplayTimeoutId = undefined;
         }
 
+        // The original clip, already reported gone for good, is not retried or probed. A
+        // processed or audible-bats source is a local blob and keeps its retries.
+        if (currentSource() === audioUrl && isSpectrogramSourceKnownMissing(detectionId)) {
+          failLoadPermanently();
+          return;
+        }
+
         // Retry loading if under the retry limit; the audio file may still
         // be encoding (backend returns 503 which the browser treats as a load error)
         if (audioRetryCount < MAX_AUDIO_LOAD_RETRIES) {
+          const isFirstFailure = audioRetryCount === 0;
           clearAudioRetryTimer();
           audioRetryCount++;
           debugLog(`Audio load failed, retrying (${audioRetryCount}/${MAX_AUDIO_LOAD_RETRIES})`);
-          audioRetryTimer = setTimeout(() => {
-            audioRetryTimer = undefined;
-            if (audioElement) {
-              // Retry against whichever source is currently active; reverting
-              // to the original audioUrl here would silently drop out of an
-              // active audible-bats or processed-audio derived clip while
-              // leaving its state flagged as still active.
-              replaceSource(currentSource());
-              audioElement.load();
-            }
-          }, AUDIO_RETRY_DELAY_MS);
+          scheduleLoadRetry(AUDIO_RETRY_DELAY_MS);
+          if (isFirstFailure) probeFailedLoad();
           return;
         }
 
@@ -2071,10 +2209,7 @@
       clearStatusPollTimer();
       clearSpectrogramProbe();
       spectrogramLoader.cleanup();
-      if (audioRetryTimer) {
-        clearTimeout(audioRetryTimer);
-        audioRetryTimer = undefined;
-      }
+      clearAudioRetryTimer();
 
       // Clear canplay safety timeout
       if (canplayTimeoutId) {

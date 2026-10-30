@@ -8,9 +8,10 @@ import (
 
 // CustomClassifier runs secondary classification on embedding vectors from a primary model.
 // Used for custom classification heads (e.g., bat species detection from BirdNET embeddings).
-// It is safe for concurrent use from multiple goroutines.
+// It is safe for concurrent use from multiple goroutines, and Close may run
+// concurrently with predictions.
 type CustomClassifier struct {
-	session    *ort.DynamicAdvancedSession
+	session    guardedSession
 	labels     []string
 	inputDim   int
 	numClasses int
@@ -125,7 +126,7 @@ func (b *CustomClassifierBuilder) Build() (*CustomClassifier, error) {
 	}
 
 	return &CustomClassifier{
-		session:    session,
+		session:    guardedSession{s: session},
 		labels:     labels,
 		inputDim:   inputDim,
 		numClasses: numClasses,
@@ -146,7 +147,7 @@ func (c *CustomClassifier) Predict(embeddings []float32) ([]Prediction, error) {
 // PredictRaw runs inference on a single embedding vector and returns all
 // sigmoid-applied scores as a flat array (no topK filtering).
 func (c *CustomClassifier) PredictRaw(embeddings []float32) ([]float32, error) {
-	if c.session == nil {
+	if c.session.isClosed() {
 		return nil, ErrSessionClosed
 	}
 	if len(embeddings) != c.inputDim {
@@ -165,7 +166,7 @@ func (c *CustomClassifier) PredictRaw(embeddings []float32) ([]float32, error) {
 	}
 	defer func() { _ = outputTensor.Destroy() }()
 
-	err = c.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor})
+	err = c.session.run([]ort.Value{inputTensor}, []ort.Value{outputTensor})
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: custom classifier inference failed: %w", err)
 	}
@@ -175,7 +176,7 @@ func (c *CustomClassifier) PredictRaw(embeddings []float32) ([]float32, error) {
 
 // PredictBatch runs inference on multiple embedding vectors in a single batch.
 func (c *CustomClassifier) PredictBatch(embeddings [][]float32) ([][]Prediction, error) {
-	if c.session == nil {
+	if c.session.isClosed() {
 		return nil, ErrSessionClosed
 	}
 	if len(embeddings) == 0 {
@@ -205,7 +206,7 @@ func (c *CustomClassifier) PredictBatch(embeddings [][]float32) ([][]Prediction,
 	}
 	defer func() { _ = outputTensor.Destroy() }()
 
-	err = c.session.Run([]ort.Value{inputTensor}, []ort.Value{outputTensor})
+	err = c.session.run([]ort.Value{inputTensor}, []ort.Value{outputTensor})
 	if err != nil {
 		return nil, fmt.Errorf("birdnet: custom classifier batch inference failed: %w", err)
 	}
@@ -241,12 +242,9 @@ func (c *CustomClassifier) Labels() []string {
 	return cp
 }
 
-// Close releases the ONNX session and associated resources.
+// Close releases the ONNX session. It waits for in-flight inference runs to
+// finish, is safe to call more than once and concurrently with Predict, and
+// every later Predict call returns ErrSessionClosed.
 func (c *CustomClassifier) Close() error {
-	if c.session != nil {
-		err := c.session.Destroy()
-		c.session = nil
-		return err
-	}
-	return nil
+	return c.session.close()
 }

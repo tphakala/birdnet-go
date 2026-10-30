@@ -1,6 +1,7 @@
 package processor
 
 import (
+	"context"
 	"strings"
 	"time"
 
@@ -155,9 +156,27 @@ func (p *Processor) getAdjustedConfidenceThreshold(speciesLowercase string, base
 	return float32(effectiveDynamicThreshold(float64(baseThreshold), dt.Level, minThreshold))
 }
 
+// thresholdResetBarrier holds back the database save of threshold events for the
+// species a reset is deleting until the reset's database deletes have returned,
+// so an event recorded after the reset cleared memory is not erased by the
+// reset's own events delete.
+type thresholdResetBarrier struct {
+	species string        // species being reset; unused when all is set
+	all     bool          // a reset of every species
+	done    chan struct{} // closed when the reset's database deletes have returned
+}
+
+// covers reports whether an event for species must wait for this reset.
+func (b *thresholdResetBarrier) covers(species string) bool {
+	return b.all || b.species == species
+}
+
 // recordThresholdEvent saves a threshold change event to the database (BG-59).
 // Events are keyed by species (lowercase common name); scientificName is stored as
 // display metadata only, not used to resolve any model/label (#4195).
+// Callers hold thresholdsMutex. When a reset covering the species is running, the
+// save waits in its own goroutine until the reset's deletes return; the caller
+// never waits.
 func (p *Processor) recordThresholdEvent(speciesName, scientificName string, previousLevel, newLevel int, previousValue, newValue float64, changeReason string, confidence float64) {
 	if p.Ds == nil {
 		return
@@ -175,8 +194,16 @@ func (p *Processor) recordThresholdEvent(speciesName, scientificName string, pre
 		CreatedAt:      time.Now(),
 	}
 
+	var wait chan struct{}
+	if b := p.thresholdResetBarrier; b != nil && b.covers(speciesName) {
+		wait = b.done
+	}
+
 	// Save asynchronously to avoid blocking the detection pipeline
 	go func() {
+		if wait != nil {
+			<-wait
+		}
 		if err := p.Ds.SaveThresholdEvent(event); err != nil {
 			log := GetLogger()
 			log.Error("Failed to save threshold event", logger.String("species", speciesName), logger.Error(err))
@@ -290,7 +317,11 @@ func (p *Processor) LearnFromApprovedDetection(speciesLowercase, scientificName 
 }
 
 // cleanUpDynamicThresholds removes stale dynamic thresholds for species that haven't been detected for a long time.
-// This cleans up both the in-memory map and the database.
+// It prunes the in-memory map only and runs on the flusher tick, so it must not touch the database:
+// a slow database must not delay the detection flusher. The persistence tick deletes the expired
+// rows when it drops an entry (cleanupExpiredThresholds); rows whose entry only this prune
+// removed (persistence stopped, or a long suspension) and rows without an in-memory entry
+// (feature off, restart) are deleted by the cleanup goroutine (startThresholdCleanup).
 func (p *Processor) cleanUpDynamicThresholds() {
 	settings := p.currentSettings()
 	log := GetLogger()
@@ -325,16 +356,17 @@ func (p *Processor) cleanUpDynamicThresholds() {
 	if removedCount > 0 {
 		log.Debug("cleaned up stale dynamic thresholds from memory", logger.Int("count", removedCount))
 	}
+}
 
-	// Also clean up expired thresholds from the database
-	if p.Ds != nil {
-		dbCount, err := p.Ds.DeleteExpiredDynamicThresholds(now)
-		if err != nil {
-			log.Warn("failed to clean up expired dynamic thresholds from database", logger.Error(err))
-		} else if dbCount > 0 {
-			log.Info("cleaned up expired dynamic thresholds from database", logger.Int64("count", dbCount))
-		}
-	}
+// finishThresholdReset ends the reset b: under thresholdsMutex it clears the
+// barrier and runs apply to record the reset's outcome, then it releases the
+// events held back by the barrier. The caller holds the persistence lock.
+func (p *Processor) finishThresholdReset(b *thresholdResetBarrier, apply func()) {
+	p.thresholdsMutex.Lock()
+	p.thresholdResetBarrier = nil
+	apply()
+	p.thresholdsMutex.Unlock()
+	close(b.done)
 }
 
 // ResetDynamicThreshold resets a single species threshold across all models and clears its history (BG-59)
@@ -342,41 +374,69 @@ func (p *Processor) cleanUpDynamicThresholds() {
 // The error return is always nil as database errors are logged internally
 // and the operation is best-effort for database cleanup.
 //
-// The mutex is held for the entire operation (memory clear + DB delete) to
-// prevent a race where a new detection inserts data between the memory clear
-// and the DB delete, causing the DB delete to wipe the newly-inserted record.
+// The persistence lock is held for the whole operation, so the reset waits for an
+// in-flight persistence cycle and no cycle can write a row between the memory
+// clear and the DB delete. thresholdsMutex is held only to clear memory and to
+// record the outcome, never across a database call, so a slow database does not
+// hold up detections or shutdown. Events recorded for the species while the
+// deletes run are saved after them (thresholdResetBarrier), so the events delete
+// cannot wipe them. A retry is queued (pendingResets) only when a DB delete
+// failed or panicked, and a fully successful reset drops an older queued retry for the species.
 func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 	log := GetLogger()
 	// Normalize to lowercase to match the casing used by addSpeciesToDynamicThresholds
 	speciesName = strings.ToLower(speciesName)
 
-	// Lock the mutex for the entire operation to prevent races between
-	// memory clear and DB delete. See drainPendingResets for the pattern.
-	p.thresholdsMutex.Lock()
+	// Persistence lock first, then thresholdsMutex (see lockThresholdPersistence).
+	// A background context never ends, so the lock call cannot fail.
+	_ = p.lockThresholdPersistence(context.Background())
+	defer p.unlockThresholdPersistence()
 
+	p.thresholdsMutex.Lock()
 	// Remove the species entry from the in-memory map. Entries are keyed per
 	// species, so a single delete clears it; DeleteDynamicThreshold likewise
 	// operates on the species name.
 	delete(p.DynamicThresholds, speciesName)
-	if p.pendingResets != nil {
-		p.pendingResets[speciesName] = struct{}{}
+	if p.Ds == nil {
+		p.thresholdsMutex.Unlock()
+		log.Info("reset dynamic threshold", logger.String("species", speciesName))
+		return nil
 	}
-
-	// Delete from database while still holding the lock to prevent a concurrent
-	// detection from inserting new data that this delete would then wipe.
-	if p.Ds != nil {
-		// Delete the threshold record
-		if err := p.Ds.DeleteDynamicThreshold(speciesName); err != nil {
-			log.Warn("failed to delete dynamic threshold from database", logger.String("species", speciesName), logger.Error(err))
-			// Don't return error - the in-memory reset was successful
-		}
-
-		// Delete event history for this species (no need to record reset event since history is cleared)
-		if err := p.Ds.DeleteThresholdEvents(speciesName); err != nil {
-			log.Warn("failed to delete threshold events from database", logger.String("species", speciesName), logger.Error(err))
-		}
-	}
+	barrier := &thresholdResetBarrier{species: speciesName, done: make(chan struct{})}
+	p.thresholdResetBarrier = barrier
 	p.thresholdsMutex.Unlock()
+
+	// Stays true if a datastore call panics, so the deferred section queues a retry.
+	failed := true
+	// Registered after the persistence-unlock defer, so it runs first: the retry
+	// state is in place before the next cycle can take the persistence lock.
+	defer p.finishThresholdReset(barrier, func() {
+		// Queue a retry only when a delete failed or panicked. On success, drop an older
+		// retry so it cannot delete events re-learned after this reset.
+		if p.pendingResets == nil {
+			return
+		}
+		if failed {
+			p.pendingResets[speciesName] = struct{}{}
+		} else {
+			delete(p.pendingResets, speciesName)
+		}
+	})
+
+	// Delete the threshold record
+	thresholdErr := p.Ds.DeleteDynamicThreshold(speciesName)
+	if thresholdErr != nil {
+		log.Warn("failed to delete dynamic threshold from database", logger.String("species", speciesName), logger.Error(thresholdErr))
+		// Don't return error - the in-memory reset was successful
+	}
+
+	// Delete event history for this species (no need to record reset event since history is cleared)
+	eventsErr := p.Ds.DeleteThresholdEvents(speciesName)
+	if eventsErr != nil {
+		log.Warn("failed to delete threshold events from database", logger.String("species", speciesName), logger.Error(eventsErr))
+	}
+	// Assigned only after both calls return, so a panic leaves failed true.
+	failed = thresholdErr != nil || eventsErr != nil
 
 	log.Info("reset dynamic threshold", logger.String("species", speciesName))
 	return nil
@@ -387,47 +447,60 @@ func (p *Processor) ResetDynamicThreshold(speciesName string) error {
 // errors are logged internally and the operation is best-effort for database cleanup;
 // in-memory reset is always successful.
 //
-// The mutex is held for the entire operation (memory clear + DB delete) to
-// prevent a race where a new detection inserts data between the memory clear
-// and the DB delete, causing the DB delete to wipe the newly-inserted record.
+// The persistence lock is held for the whole operation and thresholdsMutex only
+// to clear memory and to record the outcome (see ResetDynamicThreshold); events of
+// every species recorded during the deletes are saved after them.
+// pendingResetAll is set only when a DB delete failed or panicked and cleared when both succeed.
 func (p *Processor) ResetAllDynamicThresholds() (int64, error) {
 	log := GetLogger()
-	// Lock the mutex for the entire operation to prevent races between
-	// memory clear and DB delete. See drainPendingResets for the pattern.
-	p.thresholdsMutex.Lock()
+	// Persistence lock first, then thresholdsMutex (see lockThresholdPersistence).
+	// A background context never ends, so the lock call cannot fail.
+	_ = p.lockThresholdPersistence(context.Background())
+	defer p.unlockThresholdPersistence()
 
+	p.thresholdsMutex.Lock()
 	// Count in-memory thresholds
 	count := int64(len(p.DynamicThresholds))
 
-	// Clear all in-memory thresholds and set pendingResetAll so the periodic
-	// persistence goroutine won't re-insert a stale snapshot into the database.
-	// Also clear individual pending resets since pendingResetAll supersedes them.
+	// Clear all in-memory thresholds. Individual pending resets are cleared too:
+	// the delete-all below covers them, and if it fails pendingResetAll supersedes them.
 	p.DynamicThresholds = make(map[string]*DynamicThreshold)
-	p.pendingResetAll = true
 	if p.pendingResets != nil {
 		p.pendingResets = make(map[string]struct{})
 	}
-
-	// Delete all from database while still holding the lock to prevent a
-	// concurrent detection from inserting new data that this delete would wipe.
-	if p.Ds != nil {
-		dbCount, err := p.Ds.DeleteAllDynamicThresholds()
-		if err != nil {
-			log.Warn("failed to delete all dynamic thresholds from database", logger.Error(err))
-			// Don't return error - the in-memory reset was successful
-		}
-
-		// Use the higher count (in case database had more records)
-		if dbCount > count {
-			count = dbCount
-		}
-
-		// Delete all event history
-		if _, err := p.Ds.DeleteAllThresholdEvents(); err != nil {
-			log.Warn("failed to delete all threshold events from database", logger.Error(err))
-		}
+	if p.Ds == nil {
+		p.thresholdsMutex.Unlock()
+		log.Info("reset all dynamic thresholds", logger.Int64("count", count))
+		return count, nil
 	}
+	barrier := &thresholdResetBarrier{all: true, done: make(chan struct{})}
+	p.thresholdResetBarrier = barrier
 	p.thresholdsMutex.Unlock()
+
+	// Stays true if a datastore call panics, so the deferred section queues a retry.
+	failed := true
+	defer p.finishThresholdReset(barrier, func() {
+		// Retry at the start of the next persistence cycle only if a delete failed or panicked;
+		// a full success also drops an older queued retry.
+		p.pendingResetAll = failed
+	})
+
+	dbCount, thresholdErr := p.Ds.DeleteAllDynamicThresholds()
+	if thresholdErr != nil {
+		log.Warn("failed to delete all dynamic thresholds from database", logger.Error(thresholdErr))
+		// Don't return error - the in-memory reset was successful
+	}
+
+	// Use the higher count (in case database had more records)
+	count = max(count, dbCount)
+
+	// Delete all event history
+	_, eventsErr := p.Ds.DeleteAllThresholdEvents()
+	if eventsErr != nil {
+		log.Warn("failed to delete all threshold events from database", logger.Error(eventsErr))
+	}
+	// Assigned only after both calls return, so a panic leaves failed true.
+	failed = thresholdErr != nil || eventsErr != nil
 
 	log.Info("reset all dynamic thresholds", logger.Int64("count", count))
 	return count, nil

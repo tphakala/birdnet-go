@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 )
 
@@ -171,4 +172,26 @@ func TestMySQLManager_Path(t *testing.T) {
 	path := mgr.Path()
 	assert.Contains(t, path, cfg.Host)
 	assert.Contains(t, path, cfg.Database)
+}
+
+func TestTableOptionsFor(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		schemaCharset string
+		wantOptions   string
+		wantApply     bool
+	}{
+		{"utf8mb4 schema keeps its own default", dbserver.CharsetUTF8MB4, "", false},
+		{"latin1 schema gets explicit utf8mb4", "latin1", utf8mb4TableOptions, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			options, apply := tableOptionsFor(tt.schemaCharset)
+			assert.Equal(t, tt.wantApply, apply)
+			assert.Equal(t, tt.wantOptions, options)
+		})
+	}
 }

@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Laajennetun tallennuksen asetukset muuttuneet. Uudelleenkäynnistys vaaditaan.",
         "equalizerUpdateFailed": "Äänen taajuuskorjaimen asetusten päivitys epäonnistui",
         "equalizerUpdated": "Äänen taajuuskorjaimen asetukset päivitetty",
+        "equalizerFiltersSkipped": "Äänen taajuuskorjaimen asetukset tallennettu, mutta joitakin suodattimia ohitetaan {count, plural, one {lähteellä} other {lähteillä}} {sources}: suodattimen on oltava kelvollinen lähteen näytteenottotaajuudella, ja sen taajuuden on oltava alle puolet siitä.",
         "savedSuccessfully": "Asetukset tallennettu onnistuneesti",
         "saveFailed": "Asetusten tallennus epäonnistui"
       },
@@ -449,7 +450,19 @@
         "completedTitle": "Tietokannan siirto valmis",
         "completedMessage": "Siirto valmis. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan.",
         "errorTitle": "Tietokannan siirtovirhe",
-        "errorMessage": "Siirto keskeytetty virheiden vuoksi. Tarkista lokit ja yritä jatkaa."
+        "errorMessage": "Siirto keskeytetty virheiden vuoksi. Tarkista lokit ja yritä jatkaa.",
+        "legacyNotStartedTitle": "Tietokannan päivitys vaaditaan",
+        "legacyNotStartedMessage": "Tämä asennus käyttää edelleen vanhaa tietokantamuotoa, joka lakkaa toimimasta tulevassa versiossa. Suorita siirto avaamalla Järjestelmä > Tietokanta.",
+        "legacyInProgressTitle": "Tietokannan siirto käynnissä",
+        "legacyInProgressMessage": "Siirto uuteen tietokantamuotoon on käynnissä. Pidä BirdNET-Go käynnissä, kunnes se on valmis; vanha muoto lakkaa toimimasta tulevassa versiossa.",
+        "legacyNeedsAttentionTitle": "Tietokannan siirto vaatii huomiota",
+        "legacyNeedsAttentionMessage": "Siirto uuteen tietokantamuotoon on keskeytetty tai epäonnistunut. Jatka tai yritä uudelleen avaamalla Järjestelmä > Tietokanta; vanha muoto lakkaa toimimasta tulevassa versiossa.",
+        "legacyRestartRequiredTitle": "Käynnistä uudelleen tietokannan siirron viimeistelemiseksi",
+        "legacyRestartRequiredMessage": "Siirto on valmis. Käynnistä BirdNET-Go uudelleen siirtyäksesi uuteen tietokantaan. Jos tämä viesti pysyy uudelleenkäynnistyksen jälkeen, tarkista lokista tietokantavirheet."
+      },
+      "database": {
+        "serverAttentionTitle": "Tietokantapalvelin vaatii huomiota",
+        "serverAttentionMessage": "MySQL- tai MariaDB-palvelimen versio ei ole tuettu, tai tietokanta ei käytä utf8mb4-merkistöä. Katso lisätiedot kohdasta Järjestelmä > Tila."
       },
       "cleanup": {
         "completeTitle": "Vanhan tietokannan siivous valmis",
@@ -793,6 +806,9 @@
       "loadFailedAction": "Näytä Tekoälymallit-tila",
       "failingTitle": "{count, plural, one {Malli epäonnistuu jokaisessa analyysissä} other {# mallia epäonnistuu jokaisessa analyysissä}}",
       "failingMessage": "{count, plural, one {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten se ei tunnista mitään.} other {{models} on ladattu, mutta jokainen analyysi epäonnistuu, joten ne eivät tunnista mitään.}} Tekoälymallit-sivulla näkyy taustajärjestelmä ja virhe."
+    },
+    "legacyDatabase": {
+      "action": "Avaa tietokanta-asetukset"
     },
     "banner": {
       "title": "Otsikko",
@@ -1581,7 +1597,7 @@
           "restartTitle": "Uudelleenkäynnistys vaaditaan",
           "restartBody": "Käynnistä sovellus uudelleen vaihtaaksesi V2-tietokantaan. Vanhan tietokannan siivous on käytettävissä uudelleenkäynnistyksen jälkeen.",
           "fallbackError": "Tietuemäärä ei täsmää vanhan ja V2-tietokannan välillä. Joitain tietueita ei ehkä ole siirretty oikein.",
-          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Kaksoistallennustila varmistaa, ettei tietoja menetetä siirron aikana.",
+          "migrateInfo": "Siirto siirtää {count} tietuetta vanhasta tietokannasta uuteen V2-skeemaan. Siirron aikana tallennetut uudet havainnot kopioidaan myös uuteen tietokantaan.",
           "sourceLegacy": "Lähde (vanha)",
           "targetV2": "Kohde (V2)",
           "recordsLabel": "Tietueet",
@@ -1633,7 +1649,7 @@
         },
         "notes": {
           "in_progress": "Voit jatkaa järjestelmän normaalia käyttöä migraation suorittaessa taustalla.",
-          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - kaikki uudet havainnot tallennetaan molempiin tietokantoihin. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
+          "dual_write": "Migraatio käynnissä. Tietosi ovat turvassa - uudet havainnot tallennetaan nykyiseen tietokantaan ja kopioidaan uuteen tietokantaan siirron aikana. Voit jatkaa BirdNET-Go:n käyttöä normaalisti.",
           "migrating": "Kopioidaan olemassa olevia havaintojasi uuteen tietokantaan. Tämä voi kestää jonkin aikaa havaintojen määrästä riippuen. Voit keskeyttää ja jatkaa milloin tahansa.",
           "validating": "Tarkistetaan, että kaikki tietueet kopioitiin oikein. Melkein valmis!",
           "cutover": "Vaihdetaan uuteen tietokantaan. Tämä kestää vain hetken.",
@@ -1716,6 +1732,12 @@
             },
             "sqlite_integrity": {
               "name": "Tietokannan eheys"
+            },
+            "mysql_server_version": {
+              "name": "Tietokantapalvelimen versio"
+            },
+            "mysql_charset": {
+              "name": "Tietokannan merkistö"
             },
             "mysql_table_health": {
               "name": "Taulujen kunto"
@@ -2323,6 +2345,7 @@
     "errors": {
       "loadFailed": "Asetusten lataaminen epäonnistui",
       "saveFailed": "Asetusten tallentaminen epäonnistui",
+      "changedElsewhere": "Asetuksia muutettiin muualla. Tarkista ne ja tallenna uudelleen.",
       "databaseStatsFailed": "Tietokantatilastojen lataaminen epäonnistui",
       "csvDownloadFailed": "CSV-tiedoston lataaminen epäonnistui"
     },
@@ -2670,7 +2693,7 @@
                 "descriptions": {
                   "highContrast": "Paras heikoille signaaleille. Lintujen äänet erottuvat selvästi taustakohinasta. Suositellaan tieteellisille/harmaasävytyyleille.",
                   "standard": "Oletusarvoinen tasapainotettu asetus. Sopii useimpiin käyttötarkoituksiin.",
-                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti. SoX-oletusarvo."
+                  "extended": "Enemmän yksityiskohtia näkyvissä mutta matalampi kontrasti."
                 }
               },
               "enabled": {
@@ -2772,7 +2795,7 @@
           "title": "Mitä raportti sisältää:",
           "applicationLogs": "**Sovelluslokit** - Viimeisimmät virheet ja virheenkorjaustiedot",
           "configuration": "**Kokoonpano** - Asetuksesi arkaluonteiset tiedot poistettuina",
-          "systemInfo": "**Järjestelmätiedot** - Käyttöjärjestelmän versio, muisti ja suoritusympäristön tiedot",
+          "systemInfo": "**Järjestelmätiedot** - Käyttöjärjestelmän versio, muisti, laitteisto, yhdistetyt USB-laitteet ja äänikortit sekä suoritusympäristön tiedot",
           "notIncluded": "**EI sisälly** - Äänitiedostoja, lintuhavaintoja tai henkilökohtaisia tietoja"
         },
         "userMessage": {
@@ -2925,6 +2948,11 @@
             "unit": "min",
             "helpText": "Estää toistuvat ilmoitukset samasta lajista tämän aikavälin sisällä. Aseta 0 poistaaksesi käytöstä."
           }
+        },
+        "rulesNotice": {
+          "message": "Havaintojen push-ilmoitukset tulevat Säännöt-välilehden hälytyssäännöistä. Sisäänrakennetut havaintosäännöt ilmoittavat vain sovelluksessa. Saat push-ilmoitukset lisäämällä toiminnon {pushAction} sääntöön {ruleName} tai luomalla tapahtumalle {eventName} säännön, jossa on luottamusehto ja odotusaika.",
+          "previousFilters": "Hälytyssäännöt eivät käytä tässä asettamiasi arvoja Vähimmäisluottamus ({confidence} %) ja Lajikohtainen odotusaika ({minutes} min).",
+          "openRules": "Avaa Säännöt"
         },
         "noProviders": "Ei määritettyjä palveluntarjoajia",
         "noProvidersDescription": "Lisää palveluntarjoaja aloittaaksesi push-ilmoitusten vastaanottamisen",
@@ -3229,10 +3257,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Lähetä havainnot BirdWeatheriin",
-        "ffmpegWarning": {
-          "title": "FFmpeg ei havaittu",
-          "message": "Asenna FFmpeg ottaaksesi käyttöön FLAC-koodauksen tuen, BirdWeather on lopettamassa WAV-tiedostojen tuen pakattujen FLAC-äänitiedostojen hyväksi."
-        },
         "enable": "Ota käyttöön BirdWeather-lähetykset",
         "token": {
           "label": "BirdWeather-tunnus",
@@ -4249,7 +4273,6 @@
     },
     "species": {
       "pageLabel": "Lajiasetukset",
-      "saveError": "Lajin \"{species}\" asetusten tallennus epäonnistui. Yritä uudelleen.",
       "configUpdated": "Lajin \"{species}\" asetukset päivitetty",
       "configAdded": "Lajin \"{species}\" asetukset lisätty",
       "duplicateConfigError": "Lajilla \"{species}\" on jo asetukset. Valitse toinen nimi.",
@@ -5080,6 +5103,7 @@
       "loop": "Vaihda silmukka",
       "player": "Äänisoitin",
       "autoplayBlocked": "Klikkaa toistaaksesi (automaattinen toisto estetty)",
+      "hlsLoadFailed": "Äänisoittimen lataaminen epäonnistui, lataa sivu uudelleen ja yritä uudestaan",
       "hlsNotSupported": "HLS-toisto ei ole tuettu tässä selaimessa",
       "streamStarting": "Käynnistetään äänistriimi...",
       "levelFor": "Äänitaso lähteelle {source}",
@@ -5314,6 +5338,9 @@
       "invalidJSON": "Virheellinen JSON",
       "invalidEscalation": "Eskalaatioaskeleet ovat virheellisiä",
       "engineUnavailable": "Hälytysjärjestelmä ei ole käytettävissä"
+    },
+    "insights": {
+      "v2Required": "Analyysit vaativat laajennetun (v2) tietokannan"
     },
     "detection": {
       "invalidDate": "Virheellinen {paramName}-muoto, käytä VVVV-KK-PP"

@@ -407,13 +407,7 @@ func handleEmptySessionSecret(settings *conf.Settings) {
 		logger.Bool("debug_mode", settings.WebServer.Debug),
 		logger.String("recommendation", "BirdNET-Go will auto-generate a SessionSecret on next restart"))
 
-	tempSecret, err := conf.GenerateRandomSecret()
-	if err != nil {
-		GetLogger().Error("FATAL: Cannot generate temporary SessionSecret, crypto/rand is unavailable. Shutting down to prevent insecure operation.",
-			logger.Error(err))
-		os.Exit(1)
-	}
-	settings.Security.SessionSecret = tempSecret
+	settings.Security.SessionSecret = conf.GenerateRandomSecret()
 	GetLogger().Info("Generated temporary SessionSecret for this session")
 
 	_ = errors.New(
@@ -945,16 +939,12 @@ func isValidUserId(configuredIds, providedId string) bool {
 }
 
 // GenerateAuthCode generates a new authorization code
-func (s *OAuth2Server) GenerateAuthCode() (string, error) {
+func (s *OAuth2Server) GenerateAuthCode() string {
 	secLog := GetLogger()
 	secLog.Debug("Generating new authorization code")
 
 	code := make([]byte, AuthCodeByteLength)
-	_, err := rand.Read(code)
-	if err != nil {
-		secLog.Error("Failed to read random bytes for auth code", logger.Error(err))
-		return "", err
-	}
+	rand.Read(code)
 	authCode := base64.URLEncoding.EncodeToString(code)
 
 	s.mutex.Lock()
@@ -968,7 +958,7 @@ func (s *OAuth2Server) GenerateAuthCode() (string, error) {
 	// Do not log the authCode itself
 	secLog.Info("Generated and stored new authorization code", logger.Time("expires_at", expiresAt))
 	go s.persistTokensIfEnabled() // Persist changes
-	return authCode, nil
+	return authCode
 }
 
 // ExchangeAuthCode exchanges an authorization code for an access token
@@ -1008,11 +998,7 @@ func (s *OAuth2Server) ExchangeAuthCode(ctx context.Context, code string) (strin
 
 	// Generate access token
 	tokenBytes := make([]byte, AccessTokenByteLength)
-	_, err := rand.Read(tokenBytes)
-	if err != nil {
-		secLog.Error("Failed to read random bytes for access token", logger.Error(err))
-		return "", err
-	}
+	rand.Read(tokenBytes)
 	accessToken := base64.URLEncoding.EncodeToString(tokenBytes)
 	expiresAt := time.Now().Add(s.currentSettings().Security.BasicAuth.AccessTokenExp)
 

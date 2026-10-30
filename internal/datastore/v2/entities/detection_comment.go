@@ -11,6 +11,11 @@ type DetectionComment struct {
 	CreatedAt   time.Time `gorm:"autoCreateTime;index"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
 
+	// LegacyID is the legacy note_comments.id this row was copied from, NULL for
+	// comments created in v2. It is unique so a repeated copy of the same legacy
+	// comment is skipped instead of duplicated.
+	LegacyID *uint `gorm:"uniqueIndex"`
+
 	// Relationship
 	Detection *Detection `gorm:"foreignKey:DetectionID;constraint:OnDelete:CASCADE,OnUpdate:CASCADE"`
 }

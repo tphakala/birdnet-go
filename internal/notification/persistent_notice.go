@@ -20,6 +20,11 @@ const ComponentAnalysis = "analysis"
 // application keeps its data (paths lost when a container is recreated).
 const ComponentStorage = "storage"
 
+// ComponentDatabase is the notification component for notices about the
+// database and its migration. It equals the literal "database" the migration
+// notices already use, so users' push component filters keep matching.
+const ComponentDatabase = "database"
+
 // Persistent-notice retry bounds. A create can fail transiently, most often on
 // the shared notification rate limit (DefaultRateLimitMaxEvents per minute) at a
 // busy startup, so a failed raise is retried a bounded number of times with a

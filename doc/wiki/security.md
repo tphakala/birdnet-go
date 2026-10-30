@@ -47,37 +47,18 @@ security:
 
 ## Authentication Bypass
 
-If you are running BirdNET-Go on a trusted network, you can bypass authentication either by configuring a Cloudflare Tunnel with Cloudflare Access enabled, or by specifying a trusted subnet. Both options will allow access to the application without any authentication.
+On a trusted network you can let clients from a given subnet skip authentication entirely.
 
-Both options can be configured through the web interface or in the `config.yaml` file:
+Set it in the web interface, or in `config.yaml`:
 
 ```yaml
 security:
-  allowcftunnelbypass: true
   allowsubnetbypass:
     enabled: true
     subnet: "192.168.1.0/24,10.0.0.0/8"
 ```
 
-### Cloudflare Access Authentication Bypass
-
-Cloudflare Access provides an authentication layer that uses your existing identity providers, such as Google or GitHub accounts, to control access to your applications. When using Cloudflare Access for authentication, you can configure BirdNET-Go to trust traffic coming through the Cloudflare tunnel. The system authenticates requests by validating the `Cf-Access-Jwt-Assertion` header containing a JWT token from Cloudflare.
-
-To add even more security, you can also require that the Cloudflare Team Domain Name and Policy audience are valid in the JWT token. Enable these by defining them in the `config.yaml` file:
-
-```yaml
-security:
-  allowcloudflarebypass:
-    enabled: true
-    teamdomain: "your-subdomain-of-cloudflareaccess.com"
-    audience: "your-policy-auddience"
-```
-
-See the following links for more information on Cloudflare Access:
-
-- [Cloudflare tunnels](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/)
-- [Create a remotely-managed tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/)
-- [Self-hosted applications](https://developers.cloudflare.com/cloudflare-one/applications/configure-apps/self-hosted-apps/)
+> **Note**: BirdNET-Go used to check Cloudflare Access tokens itself, through the `allowcftunnelbypass` and `allowcloudflarebypass` settings. That support is gone, and those keys are now ignored. When BirdNET-Go sits behind a Cloudflare Tunnel, protect it with Cloudflare Access on the Cloudflare side, with BirdNET-Go's own login, or with both. The [Cloudflare Tunnel guide](cloudflare_tunnel_guide.md) describes the tunnel setup.
 
 ### Subnet-based Authentication Bypass
 

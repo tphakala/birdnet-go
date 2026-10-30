@@ -32,6 +32,8 @@ Once enabled, you should see:
 - 📊 **Automatic error reporting** begins immediately
 - 🔒 **Privacy protection** automatically applied to all reports
 
+Builds older than about six months (183 days after their build date) do not send error reports, even with telemetry enabled. Update to a current release to resume reporting. Support dump uploads you request yourself still work.
+
 That's it! No additional configuration is required.
 
 ## Understanding the Interface

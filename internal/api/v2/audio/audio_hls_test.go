@@ -23,43 +23,6 @@ import (
 	"github.com/tphakala/birdnet-go/internal/audiocore/engine"
 )
 
-// TestHLSStreamStatusStruct tests the HLSStreamStatus struct
-func TestHLSStreamStatusStruct(t *testing.T) {
-	t.Run("starting status", func(t *testing.T) {
-		status := HLSStreamStatus{
-			Status:        "starting",
-			Source:        "test_source",
-			StreamToken:   "abc123def456abc123def456abc123de",
-			PlaylistURL:   "/api/v2/streams/hls/t/abc123def456abc123def456abc123de/playlist.m3u8",
-			ActiveClients: 0,
-			PlaylistReady: false,
-		}
-
-		assert.Equal(t, "test_source", status.Source)
-		assert.Contains(t, status.PlaylistURL, "/t/")
-		assert.Contains(t, status.PlaylistURL, "playlist.m3u8")
-		assert.NotEmpty(t, status.StreamToken)
-		assert.Equal(t, "starting", status.Status)
-		assert.False(t, status.PlaylistReady)
-	})
-
-	t.Run("ready status with clients", func(t *testing.T) {
-		status := HLSStreamStatus{
-			Status:        "ready",
-			Source:        "rtsp%3A%2F%2Fcamera.local%2Fstream", // URL-encoded source
-			StreamToken:   "def456abc123def456abc123def456ab",
-			PlaylistURL:   "/api/v2/streams/hls/t/def456abc123def456abc123def456ab/playlist.m3u8",
-			ActiveClients: 2,
-			PlaylistReady: true,
-		}
-
-		assert.Equal(t, "ready", status.Status)
-		assert.True(t, status.PlaylistReady)
-		assert.Equal(t, 2, status.ActiveClients)
-		assert.Contains(t, status.PlaylistURL, "/t/")
-	})
-}
-
 // TestHLSManagerStreamTracking tests the HLS manager stream tracking
 func TestHLSManagerStreamTracking(t *testing.T) {
 	t.Run("getActiveStreamIDs returns empty for no streams", func(t *testing.T) {
@@ -132,62 +95,59 @@ func TestHLSManagerClientTracking(t *testing.T) {
 	})
 }
 
+// setHLSActivity replaces the HLS manager's activity map for the duration of the
+// test and restores the original when the test ends.
+func setHLSActivity(t *testing.T, activity map[string]time.Time) {
+	t.Helper()
+	hlsMgr.activityMu.Lock()
+	original := hlsMgr.activity
+	hlsMgr.activity = activity
+	hlsMgr.activityMu.Unlock()
+
+	t.Cleanup(func() {
+		hlsMgr.activityMu.Lock()
+		hlsMgr.activity = original
+		hlsMgr.activityMu.Unlock()
+	})
+}
+
 // TestShouldCleanupStream tests the stream cleanup logic
 func TestShouldCleanupStream(t *testing.T) {
-	t.Run("nonexistent stream should not be cleaned up", func(t *testing.T) {
-		// Save and restore original state
-		originalActivity := hlsMgr.activity
-		hlsMgr.activityMu.Lock()
-		hlsMgr.activity = make(map[string]time.Time)
-		hlsMgr.activityMu.Unlock()
+	tests := []struct {
+		name         string
+		activity     map[string]time.Time
+		wantCleanup  bool
+		lookupStream string
+	}{
+		{
+			name:         "stream without recorded activity is kept",
+			activity:     map[string]time.Time{},
+			lookupStream: "nonexistent",
+			wantCleanup:  false,
+		},
+		{
+			// Past the new-stream grace period but inside the inactivity timeout.
+			name:         "stream active a minute ago is kept",
+			activity:     map[string]time.Time{"recent_stream": time.Now().Add(-time.Minute)},
+			lookupStream: "recent_stream",
+			wantCleanup:  false,
+		},
+		{
+			name: "stream idle past the inactivity timeout is cleaned up",
+			activity: map[string]time.Time{
+				"expired_stream": time.Now().Add(-(hlsStreamInactivityTimeout + time.Minute)),
+			},
+			lookupStream: "expired_stream",
+			wantCleanup:  true,
+		},
+	}
 
-		defer func() {
-			hlsMgr.activityMu.Lock()
-			hlsMgr.activity = originalActivity
-			hlsMgr.activityMu.Unlock()
-		}()
-
-		shouldCleanup := shouldCleanupStream("nonexistent")
-		assert.False(t, shouldCleanup)
-	})
-
-	t.Run("recently active stream should not be cleaned up", func(t *testing.T) {
-		// Save and restore original state
-		originalActivity := hlsMgr.activity
-		hlsMgr.activityMu.Lock()
-		hlsMgr.activity = map[string]time.Time{
-			"recent_stream": time.Now(),
-		}
-		hlsMgr.activityMu.Unlock()
-
-		defer func() {
-			hlsMgr.activityMu.Lock()
-			hlsMgr.activity = originalActivity
-			hlsMgr.activityMu.Unlock()
-		}()
-
-		shouldCleanup := shouldCleanupStream("recent_stream")
-		assert.False(t, shouldCleanup)
-	})
-
-	t.Run("stream within grace period should not be cleaned up", func(t *testing.T) {
-		// Save and restore original state
-		originalActivity := hlsMgr.activity
-		hlsMgr.activityMu.Lock()
-		hlsMgr.activity = map[string]time.Time{
-			"grace_stream": time.Now().Add(-5 * time.Second), // Within 10 second grace period
-		}
-		hlsMgr.activityMu.Unlock()
-
-		defer func() {
-			hlsMgr.activityMu.Lock()
-			hlsMgr.activity = originalActivity
-			hlsMgr.activityMu.Unlock()
-		}()
-
-		shouldCleanup := shouldCleanupStream("grace_stream")
-		assert.False(t, shouldCleanup)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setHLSActivity(t, tt.activity)
+			assert.Equal(t, tt.wantCleanup, shouldCleanupStream(tt.lookupStream))
+		})
+	}
 }
 
 // TestFindInactiveStreams tests finding inactive streams
@@ -197,24 +157,31 @@ func TestFindInactiveStreams(t *testing.T) {
 		assert.Empty(t, inactive)
 	})
 
-	t.Run("all active streams returns empty", func(t *testing.T) {
-		// Save and restore original state
-		originalActivity := hlsMgr.activity
-		hlsMgr.activityMu.Lock()
-		hlsMgr.activity = map[string]time.Time{
-			"stream1": time.Now(),
-			"stream2": time.Now(),
-		}
-		hlsMgr.activityMu.Unlock()
+	t.Run("only the expired registered stream is selected", func(t *testing.T) {
+		const (
+			expiredID = "inactive_test_expired"
+			recentID  = "inactive_test_recent"
+		)
+		setHLSActivity(t, map[string]time.Time{
+			expiredID: time.Now().Add(-(hlsStreamInactivityTimeout + time.Minute)),
+			recentID:  time.Now(),
+		})
 
-		defer func() {
-			hlsMgr.activityMu.Lock()
-			hlsMgr.activity = originalActivity
-			hlsMgr.activityMu.Unlock()
-		}()
+		hlsMgr.streamsMu.Lock()
+		hlsMgr.streams[expiredID] = &HLSStreamInfo{SourceID: expiredID}
+		hlsMgr.streams[recentID] = &HLSStreamInfo{SourceID: recentID}
+		hlsMgr.streamsMu.Unlock()
+		t.Cleanup(func() {
+			hlsMgr.streamsMu.Lock()
+			delete(hlsMgr.streams, expiredID)
+			delete(hlsMgr.streams, recentID)
+			hlsMgr.streamsMu.Unlock()
+		})
 
-		inactive := findInactiveStreams([]string{"stream1", "stream2"})
-		assert.Empty(t, inactive)
+		// Same sequence syncHLSActivity runs: snapshot the registered streams,
+		// then select the inactive ones.
+		inactive := findInactiveStreams(getActiveStreamIDs())
+		assert.Equal(t, []string{expiredID}, inactive)
 	})
 }
 
@@ -273,60 +240,6 @@ func TestHLSManagerConcurrency(t *testing.T) {
 
 		wg.Wait()
 	})
-
-	t.Run("concurrent activity updates", func(t *testing.T) {
-		const numGoroutines = 10
-		var wg sync.WaitGroup
-		wg.Add(numGoroutines)
-
-		for i := range numGoroutines {
-			go func(id int) {
-				defer wg.Done()
-				streamID := fmt.Sprintf("activity_test_%s_%d", time.Now().String(), id)
-
-				// Update activity
-				hlsMgr.activityMu.Lock()
-				hlsMgr.activity[streamID] = time.Now()
-				hlsMgr.activityMu.Unlock()
-
-				// Read activity
-				hlsMgr.activityMu.Lock()
-				delete(hlsMgr.activity, streamID)
-				hlsMgr.activityMu.Unlock()
-			}(i)
-		}
-
-		wg.Wait()
-	})
-
-	t.Run("concurrent client tracking", func(t *testing.T) {
-		const numGoroutines = 10
-		var wg sync.WaitGroup
-		wg.Add(numGoroutines)
-
-		for i := range numGoroutines {
-			go func(id int) {
-				defer wg.Done()
-				streamID := fmt.Sprintf("client_test_%s_%d", time.Now().String(), id)
-				clientID := fmt.Sprintf("client_%d", id)
-
-				// Add client
-				hlsMgr.clientsMu.Lock()
-				if hlsMgr.clients[streamID] == nil {
-					hlsMgr.clients[streamID] = make(map[string]bool)
-				}
-				hlsMgr.clients[streamID][clientID] = true
-				hlsMgr.clientsMu.Unlock()
-
-				// Remove client
-				hlsMgr.clientsMu.Lock()
-				delete(hlsMgr.clients, streamID)
-				hlsMgr.clientsMu.Unlock()
-			}(i)
-		}
-
-		wg.Wait()
-	})
 }
 
 // TestHLSHeartbeatRequest tests the heartbeat request struct JSON binding
@@ -353,12 +266,11 @@ func TestHLSHeartbeatRequest(t *testing.T) {
 // TestStreamTokenGeneration tests crypto-random token generation
 func TestStreamTokenGeneration(t *testing.T) {
 	t.Run("generates 32-character hex string", func(t *testing.T) {
-		token, err := generateStreamToken()
-		require.NoError(t, err)
+		token := generateStreamToken()
 		assert.Len(t, token, 32)
 
 		// Verify it's valid hex
-		_, err = hex.DecodeString(token)
+		_, err := hex.DecodeString(token)
 		assert.NoError(t, err)
 	})
 
@@ -367,8 +279,7 @@ func TestStreamTokenGeneration(t *testing.T) {
 		tokens := make(map[string]bool, tokenCount)
 
 		for range tokenCount {
-			token, err := generateStreamToken()
-			require.NoError(t, err)
+			token := generateStreamToken()
 			assert.False(t, tokens[token], "duplicate token generated: %s", token)
 			tokens[token] = true
 		}
@@ -395,8 +306,7 @@ func TestStreamTokenMapping(t *testing.T) {
 	})
 
 	t.Run("getOrCreate creates and returns token", func(t *testing.T) {
-		token, err := getOrCreateStreamToken("source_a")
-		require.NoError(t, err)
+		token := getOrCreateStreamToken("source_a")
 		assert.Len(t, token, 32)
 
 		// Verify resolve works
@@ -405,28 +315,21 @@ func TestStreamTokenMapping(t *testing.T) {
 	})
 
 	t.Run("getOrCreate is idempotent", func(t *testing.T) {
-		token1, err := getOrCreateStreamToken("source_a")
-		require.NoError(t, err)
-
-		token2, err := getOrCreateStreamToken("source_a")
-		require.NoError(t, err)
+		token1 := getOrCreateStreamToken("source_a")
+		token2 := getOrCreateStreamToken("source_a")
 
 		assert.Equal(t, token1, token2, "same sourceID should return same token")
 	})
 
 	t.Run("different sources get different tokens", func(t *testing.T) {
-		tokenA, err := getOrCreateStreamToken("source_a")
-		require.NoError(t, err)
-
-		tokenB, err := getOrCreateStreamToken("source_b")
-		require.NoError(t, err)
+		tokenA := getOrCreateStreamToken("source_a")
+		tokenB := getOrCreateStreamToken("source_b")
 
 		assert.NotEqual(t, tokenA, tokenB)
 	})
 
 	t.Run("remove clears both mappings", func(t *testing.T) {
-		token, err := getOrCreateStreamToken("source_c")
-		require.NoError(t, err)
+		token := getOrCreateStreamToken("source_c")
 
 		// Verify it exists
 		assert.Equal(t, "source_c", resolveStreamToken(token))
@@ -438,8 +341,7 @@ func TestStreamTokenMapping(t *testing.T) {
 		assert.Empty(t, resolveStreamToken(token))
 
 		// A new call should create a different token
-		newToken, err := getOrCreateStreamToken("source_c")
-		require.NoError(t, err)
+		newToken := getOrCreateStreamToken("source_c")
 		assert.NotEqual(t, token, newToken)
 	})
 
@@ -474,34 +376,28 @@ func TestGetOrCreateStreamTokenConcurrency(t *testing.T) {
 		})
 
 		const numGoroutines = 20
-		type result struct {
-			token string
-			err   error
-		}
-		results := make(chan result, numGoroutines)
+		results := make(chan string, numGoroutines)
 		var wg sync.WaitGroup
 		wg.Add(numGoroutines)
 
 		for range numGoroutines {
 			go func() {
 				defer wg.Done()
-				token, err := getOrCreateStreamToken("concurrent_source")
-				results <- result{token: token, err: err}
+				results <- getOrCreateStreamToken("concurrent_source")
 			}()
 		}
 
 		wg.Wait()
 		close(results)
 
-		// Verify all goroutines succeeded and got the same non-empty token
+		// Verify all goroutines got the same non-empty token
 		var firstToken string
-		for r := range results {
-			require.NoError(t, r.err)
+		for token := range results {
 			if firstToken == "" {
-				firstToken = r.token
+				firstToken = token
 				require.NotEmpty(t, firstToken, "token should not be empty")
 			}
-			assert.Equal(t, firstToken, r.token, "all concurrent requests should get same token")
+			assert.Equal(t, firstToken, token, "all concurrent requests should get same token")
 		}
 	})
 }

@@ -3,13 +3,27 @@ package datastore
 
 import (
 	"context"
+	"fmt"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/datastore/mapper"
 	"github.com/tphakala/birdnet-go/internal/detection"
+	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// defaultDetectionLimit is the default number of detections returned by queries.
-const defaultDetectionLimit = 100
+// ErrNilAdvancedSearchFilters is returned by DetectionRepository.SearchAdvanced when it
+// is called without filters.
+var ErrNilAdvancedSearchFilters = errors.NewStd("advanced search filters must not be nil")
+
+// ErrDetectionSaveRetrySafe is wrapped by a DetectionRepository.Save error when
+// the failure happened before the write could have been committed, so repeating
+// the same save cannot store a second row. An error without it says nothing about
+// whether a row was stored (for example a connection lost while committing).
+// Only the v2 repository sets it; callers test for it with errors.Is.
+var ErrDetectionSaveRetrySafe = errors.NewStd("detection save failed before it could be committed")
+
+// DefaultDetectionLimit is the default number of detections returned by queries.
+const DefaultDetectionLimit = 100
 
 // DetectionRepository defines the interface for detection persistence operations.
 // This interface uses the domain model (detection.Result) and abstracts away
@@ -34,8 +48,27 @@ type DetectionRepository interface {
 	// Returns results, total count, and any error.
 	Search(ctx context.Context, filters *DetectionFilters) ([]*detection.Result, int64, error)
 
-	// GetBySpecies retrieves detections for a specific species.
-	GetBySpecies(ctx context.Context, species string, filters *DetectionFilters) ([]*detection.Result, int64, error)
+	// SearchAdvanced finds detections matching the filters as given, including the sort
+	// order, scientific-name list and source list that DetectionFilters cannot express; this
+	// is the query the detection list API builds from request parameters. SortBy
+	// SortBySearchDefault orders as the plain text search does: newest first by detection
+	// time on the v2 store and by id on the legacy store. Unlike the plain text search on the
+	// legacy store, an empty query does not drop rows whose names are both NULL. A nil
+	// filters returns ErrNilAdvancedSearchFilters. A Limit of zero or less is not capped:
+	// every match is returned. Returns results, total count before pagination, and any
+	// error.
+	SearchAdvanced(ctx context.Context, filters *AdvancedSearchFilters) ([]*detection.Result, int64, error)
+
+	// GetBySpecies retrieves detections for a specific species, newest first, with the
+	// total count of matches before pagination. An empty date means all dates; a date with
+	// an empty hour means that whole day; a date with an hour restricts to duration hours
+	// from that hour. A limit of zero or less means DefaultDetectionLimit. The legacy store
+	// matches only rows whose date equals the given date, so on it an empty date finds
+	// nothing. The v2 store ignores a date that is not YYYY-MM-DD, as it ignores an hour
+	// without a date, and returns every date, so callers must validate the date first. A
+	// duration of zero means one hour on the v2 store and an empty window on the legacy
+	// store; callers should pass a positive duration.
+	GetBySpecies(ctx context.Context, species, date, hour string, duration, limit, offset int) ([]*detection.Result, int64, error)
 
 	// GetByDateRange retrieves detections within a date range.
 	GetByDateRange(ctx context.Context, startDate, endDate string, limit, offset int) ([]*detection.Result, int64, error)
@@ -88,12 +121,10 @@ type DetectionFilters struct {
 	Species []string
 
 	// Date filters
-	Date      string
 	StartDate string
 	EndDate   string
 
 	// Time filters
-	Hour      string
 	HourRange *HourRange
 	TimeOfDay []string // "day", "night", "sunrise", "sunset"
 
@@ -137,7 +168,7 @@ type ConfidenceRange struct {
 // NewDetectionFilters creates default detection filters.
 func NewDetectionFilters() *DetectionFilters {
 	return &DetectionFilters{
-		Limit:         defaultDetectionLimit,
+		Limit:         DefaultDetectionLimit,
 		Offset:        0,
 		SortAscending: false,
 	}
@@ -202,4 +233,103 @@ func Timezone() *time.Location {
 	// Default to local timezone
 	// In future this could be made configurable via settings
 	return time.Local
+}
+
+// ToAdvancedSearchFilters converts the filters to the AdvancedSearchFilters both stores
+// accept. StartDate and EndDate are parsed as dates in tz, so tz must not be nil. A nil
+// receiver returns the default limit and no other filter. When either date is set the
+// range is always bounded on both sides: an empty StartDate is the zero time and an
+// empty EndDate is the current time in tz.
+func (f *DetectionFilters) ToAdvancedSearchFilters(tz *time.Location) (AdvancedSearchFilters, error) {
+	if f == nil {
+		return AdvancedSearchFilters{
+			Limit:  DefaultDetectionLimit,
+			Offset: 0,
+		}, nil
+	}
+
+	legacy := AdvancedSearchFilters{
+		TextQuery:        f.Query,
+		Species:          f.Species,
+		TimeOfDay:        f.TimeOfDay,
+		Location:         f.Location,
+		Limit:            f.Limit,
+		Offset:           f.Offset,
+		SortAscending:    f.SortAscending,
+		Verified:         f.Verified,
+		Locked:           f.Locked,
+		MinID:            f.MinID,
+		CursorPagination: f.CursorPagination,
+	}
+
+	// Convert date range - parse strings to time.Time using the given timezone
+	if f.StartDate != "" || f.EndDate != "" {
+		dateRange, err := parseDateRange(f.StartDate, f.EndDate, tz)
+		if err != nil {
+			return AdvancedSearchFilters{}, err
+		}
+		legacy.DateRange = dateRange
+	}
+
+	// Convert hour range
+	if f.HourRange != nil {
+		legacy.Hour = &HourFilter{
+			Start: f.HourRange.Start,
+			End:   f.HourRange.End,
+		}
+	}
+
+	// Convert confidence
+	if f.Confidence != nil {
+		legacy.Confidence = &ConfidenceFilter{
+			Operator: f.Confidence.Operator,
+			Value:    f.Confidence.Value,
+		}
+	}
+
+	return legacy, nil
+}
+
+// DateRangeSearchFilters builds the AdvancedSearchFilters for a date range query.
+// startDate and endDate are dates in tz, which must not be nil. Both bounds are always
+// set: an empty startDate is the zero time and an empty endDate is the current time in tz.
+func DateRangeSearchFilters(startDate, endDate string, limit, offset int, tz *time.Location) (AdvancedSearchFilters, error) {
+	dateRange, err := parseDateRange(startDate, endDate, tz)
+	if err != nil {
+		return AdvancedSearchFilters{}, err
+	}
+	return AdvancedSearchFilters{
+		DateRange: dateRange,
+		Limit:     limit,
+		Offset:    offset,
+	}, nil
+}
+
+// parseDateRange parses both bounds of a date range in tz.
+func parseDateRange(startDate, endDate string, tz *time.Location) (*DateRange, error) {
+	start, err := parseDateWithDefault(startDate, false, tz)
+	if err != nil {
+		return nil, err
+	}
+	end, err := parseDateWithDefault(endDate, true, tz)
+	if err != nil {
+		return nil, err
+	}
+	return &DateRange{Start: start, End: end}, nil
+}
+
+// parseDateWithDefault parses a date string, returning a default if empty.
+// If defaultToNow is true and the string is empty, returns current time in tz.
+func parseDateWithDefault(dateStr string, defaultToNow bool, tz *time.Location) (time.Time, error) {
+	if dateStr == "" {
+		if defaultToNow {
+			return time.Now().In(tz), nil
+		}
+		return time.Time{}, nil
+	}
+	t, err := time.ParseInLocation(mapper.DateFormat, dateStr, tz)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid date %q: %w", dateStr, err)
+	}
+	return t, nil
 }

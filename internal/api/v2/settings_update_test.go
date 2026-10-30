@@ -97,301 +97,134 @@ func TestDashboardLayoutWidthPersistence(t *testing.T) {
 	assert.Equal(t, "half", elements2[2].Width, "detections-grid should have 'half'")
 }
 
-// TestMergePreservesJSONDashFields verifies that mergeJSONIntoStruct preserves
-// fields tagged json:"-" (runtime values invisible to JSON) when zeroing slices.
-func TestMergePreservesJSONDashFields(t *testing.T) {
-	initialSettings := getTestSettings(t)
-	// Set runtime-only field (json:"-") that must survive a merge
-	initialSettings.BirdNET.Labels = []string{"species1", "species2"}
+// TestPatchSectionPreservesOmittedFields verifies that a section PATCH changes
+// only the scalar it names, leaving the section's other scalars alone, and that
+// an empty body changes nothing. Each preserved field holds a non-zero value,
+// from the row's seed or from getTestSettings, so a field reset to its zero
+// value shows as a difference.
+//
+// The table pins scalar preservation only. A nested object that is replaced
+// instead of merged keeps its scalars (json.Unmarshal leaves absent ones alone)
+// and loses its slices, so TestPatchNestedObjectKeepsSiblingSlices is the pin
+// for the nested merge.
+func TestPatchSectionPreservesOmittedFields(t *testing.T) {
+	// marshaled returns v as JSON, for a row that compares a whole section.
+	marshaled := func(t *testing.T, v any) string {
+		t.Helper()
+		out, err := json.Marshal(v)
+		require.NoError(t, err)
+		return string(out)
+	}
 
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// PATCH birdnet section: Labels (json:"-") must survive
-	update := map[string]any{"sensitivity": 1.0}
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/birdnet", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("birdnet")
-
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Runtime field must be preserved: Labels is json:"-" and would be
-	// destroyed if zeroJSONSliceFields zeroed json:"-" tagged slices.
-	assert.Equal(t, []string{"species1", "species2"}, controller.Settings.Load().BirdNET.Labels,
-		"BirdNET.Labels (json:\"-\") must survive merge")
-}
-
-// TestDashboardPartialUpdate verifies dashboard settings preserve unmodified fields
-func TestDashboardPartialUpdate(t *testing.T) {
-	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings(t)
-	initialSettings.Realtime.Dashboard.Thumbnails.ImageProvider = "testprovider"
-	initialSettings.Realtime.Dashboard.SummaryLimit = 200
-
-	// Capture initial values
-	initialProvider := initialSettings.Realtime.Dashboard.Thumbnails.ImageProvider
-	initialLimit := initialSettings.Realtime.Dashboard.SummaryLimit
-	initialRecent := initialSettings.Realtime.Dashboard.Thumbnails.Recent
-
-	// Create controller with settings
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only summary field
-	update := map[string]any{
-		"thumbnails": map[string]any{
-			"summary": false,
+	tests := []struct {
+		name    string
+		section string
+		seed    func(s *conf.Settings)
+		body    map[string]any
+		// changed asserts the field the body names. Nil for the empty body.
+		changed func(t *testing.T, s *conf.Settings)
+		// preserved returns the values that must be identical before and after.
+		preserved func(t *testing.T, s *conf.Settings) any
+	}{
+		{
+			name:    "dashboard thumbnails summary",
+			section: "dashboard",
+			seed: func(s *conf.Settings) {
+				s.Realtime.Dashboard.Thumbnails.ImageProvider = "testprovider"
+				s.Realtime.Dashboard.SummaryLimit = 200
+			},
+			body: map[string]any{"thumbnails": map[string]any{"summary": false}},
+			changed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.False(t, s.Realtime.Dashboard.Thumbnails.Summary)
+			},
+			preserved: func(t *testing.T, s *conf.Settings) any {
+				t.Helper()
+				d := s.Realtime.Dashboard
+				return []any{d.Thumbnails.Recent, d.Thumbnails.ImageProvider, d.SummaryLimit}
+			},
+		},
+		{
+			name:    "weather provider",
+			section: "weather",
+			seed:    func(s *conf.Settings) { s.Realtime.Weather.Debug = true },
+			body:    map[string]any{"provider": "openweather"},
+			changed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, "openweather", s.Realtime.Weather.Provider)
+			},
+			preserved: func(t *testing.T, s *conf.Settings) any {
+				t.Helper()
+				w := s.Realtime.Weather
+				return []any{w.PollInterval, w.Debug}
+			},
+		},
+		{
+			name:    "mqtt broker",
+			section: "mqtt",
+			seed: func(s *conf.Settings) {
+				s.Realtime.MQTT.Enabled = true
+				s.Realtime.MQTT.Retain = true
+				s.Realtime.MQTT.Username = "testuser"
+			},
+			body: map[string]any{"broker": "tcp://newbroker:1883"},
+			changed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, "tcp://newbroker:1883", s.Realtime.MQTT.Broker)
+			},
+			preserved: func(t *testing.T, s *conf.Settings) any {
+				t.Helper()
+				m := s.Realtime.MQTT
+				return []any{m.Enabled, m.Topic, m.Retain, m.Username}
+			},
+		},
+		{
+			name:    "audio export type",
+			section: "audio",
+			body:    map[string]any{"export": map[string]any{"type": "mp3"}},
+			changed: func(t *testing.T, s *conf.Settings) {
+				t.Helper()
+				assert.Equal(t, "mp3", s.Realtime.Audio.Export.Type)
+			},
+			preserved: func(t *testing.T, s *conf.Settings) any {
+				t.Helper()
+				x := s.Realtime.Audio.Export
+				return []any{x.Enabled, x.Path, x.Bitrate}
+			},
+		},
+		{
+			name:    "empty body changes nothing",
+			section: "dashboard",
+			seed:    func(s *conf.Settings) { s.Realtime.Dashboard.Thumbnails.ImageProvider = "wikimedia" },
+			body:    map[string]any{},
+			preserved: func(t *testing.T, s *conf.Settings) any {
+				t.Helper()
+				return marshaled(t, s.Realtime.Dashboard)
+			},
 		},
 	}
 
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := echo.New()
+			controller := newMergeController(t, e, tt.seed)
+			want := tt.preserved(t, controller.Settings.Load())
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/dashboard", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("dashboard")
+			rec := patchSection(t, e, controller, tt.section, tt.body)
 
-	// Execute update
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
+			var response struct {
+				Message string `json:"message"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+			assert.Equal(t, tt.section+" settings updated successfully", response.Message)
 
-	// Verify the response
-	var response map[string]any
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-	assert.Contains(t, response["message"], "dashboard settings updated successfully")
-
-	// Verify only the summary field changed, others preserved
-	settings := controller.Settings.Load()
-	assert.False(t, settings.Realtime.Dashboard.Thumbnails.Summary)                        // Changed
-	assert.Equal(t, initialRecent, settings.Realtime.Dashboard.Thumbnails.Recent)          // Preserved
-	assert.Equal(t, initialProvider, settings.Realtime.Dashboard.Thumbnails.ImageProvider) // Preserved
-	assert.Equal(t, initialLimit, settings.Realtime.Dashboard.SummaryLimit)                // Preserved
-}
-
-// TestWeatherPartialUpdate verifies weather settings preserve unmodified fields
-func TestWeatherPartialUpdate(t *testing.T) {
-	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings(t)
-	initialSettings.Realtime.Weather.Debug = true
-
-	// Capture initial values
-	initialPollInterval := initialSettings.Realtime.Weather.PollInterval
-	initialDebug := initialSettings.Realtime.Weather.Debug
-
-	// Create controller with settings
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only provider
-	update := map[string]any{
-		"provider": "openweather",
+			saved := controller.Settings.Load()
+			if tt.changed != nil {
+				tt.changed(t, saved)
+			}
+			assert.Equal(t, want, tt.preserved(t, saved), "fields the body omits must keep their values")
+		})
 	}
-
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/weather", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("weather")
-
-	// Execute update
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify settings were preserved
-	settings := controller.Settings.Load()
-	assert.Equal(t, "openweather", settings.Realtime.Weather.Provider)           // Changed
-	assert.Equal(t, initialPollInterval, settings.Realtime.Weather.PollInterval) // Preserved
-	assert.Equal(t, initialDebug, settings.Realtime.Weather.Debug)               // Preserved
-}
-
-// TestMQTTPartialUpdate verifies MQTT settings preserve unmodified fields
-func TestMQTTPartialUpdate(t *testing.T) {
-	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings(t)
-	initialSettings.Realtime.MQTT.Enabled = true
-	initialSettings.Realtime.MQTT.Retain = true
-	initialSettings.Realtime.MQTT.Username = "testuser"
-
-	// Capture initial values
-	initialEnabled := initialSettings.Realtime.MQTT.Enabled
-	initialTopic := initialSettings.Realtime.MQTT.Topic
-	initialRetain := initialSettings.Realtime.MQTT.Retain
-	initialUsername := initialSettings.Realtime.MQTT.Username
-
-	// Create controller with settings
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only broker
-	update := map[string]any{
-		"broker": "tcp://newbroker:1883",
-	}
-
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/mqtt", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("mqtt")
-
-	// Execute update
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify settings were preserved
-	settings := controller.Settings.Load()
-	assert.Equal(t, "tcp://newbroker:1883", settings.Realtime.MQTT.Broker) // Changed
-	assert.Equal(t, initialEnabled, settings.Realtime.MQTT.Enabled)        // Preserved
-	assert.Equal(t, initialTopic, settings.Realtime.MQTT.Topic)            // Preserved
-	assert.Equal(t, initialRetain, settings.Realtime.MQTT.Retain)          // Preserved
-	assert.Equal(t, initialUsername, settings.Realtime.MQTT.Username)      // Preserved
-}
-
-// TestBirdNETCoordinatesUpdate verifies BirdNET settings preserve range filter
-func TestBirdNETCoordinatesUpdate(t *testing.T) {
-	// Get initial settings (already has the values we need from getTestSettings)
-	initialSettings := getTestSettings(t)
-
-	// Create controller with settings
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only coordinates
-	update := map[string]any{
-		"latitude":  51.5074,
-		"longitude": -0.1278,
-	}
-
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/birdnet", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("birdnet")
-
-	// Execute update
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify settings were preserved
-	settings := controller.Settings.Load()
-	assert.InDelta(t, 51.5074, settings.BirdNET.Latitude, 0.0001)                    // Changed
-	assert.InDelta(t, -0.1278, settings.BirdNET.Longitude, 0.0001)                   // Changed
-	assert.InDelta(t, 1.0, settings.BirdNET.Sensitivity, 0.0001)                     // Preserved
-	assert.InDelta(t, 0.8, settings.BirdNET.Threshold, 0.0001)                       // Preserved
-	assert.Equal(t, "latest", settings.BirdNET.RangeFilter.Model)                    // Preserved
-	assert.InDelta(t, float32(0.03), settings.BirdNET.RangeFilter.Threshold, 0.0001) // Preserved
-}
-
-// TestNestedRangeFilterUpdate verifies nested updates preserve parent fields
-func TestNestedRangeFilterUpdate(t *testing.T) {
-	// Get initial settings (already has the values we need from getTestSettings)
-	initialSettings := getTestSettings(t)
-
-	// Create controller with settings
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only range filter threshold
-	update := map[string]any{
-		"rangeFilter": map[string]any{
-			"threshold": 0.05,
-		},
-	}
-
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/birdnet", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("birdnet")
-
-	// Execute update
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify settings were preserved
-	settings := controller.Settings.Load()
-	assert.InDelta(t, float32(0.05), settings.BirdNET.RangeFilter.Threshold, 0.0001) // Changed
-	assert.InDelta(t, 40.7128, settings.BirdNET.Latitude, 0.0001)                    // Preserved
-	assert.InDelta(t, -74.0060, settings.BirdNET.Longitude, 0.0001)                  // Preserved
-	assert.Equal(t, "latest", settings.BirdNET.RangeFilter.Model)                    // Preserved
-}
-
-// TestAudioExportPartialUpdate verifies audio export settings preserve unmodified fields
-func TestAudioExportPartialUpdate(t *testing.T) {
-	// Get initial settings (already has the values we need from getTestSettings)
-	initialSettings := getTestSettings(t)
-
-	// Create controller with settings
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only export type
-	update := map[string]any{
-		"export": map[string]any{
-			"type": "mp3",
-		},
-	}
-
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/audio", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("audio")
-
-	// Execute update
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify settings were preserved
-	settings := controller.Settings.Load()
-	assert.Equal(t, "mp3", settings.Realtime.Audio.Export.Type)     // Changed
-	assert.True(t, settings.Realtime.Audio.Export.Enabled)          // Preserved
-	assert.Equal(t, "clips", settings.Realtime.Audio.Export.Path)   // Preserved
-	assert.Equal(t, "192k", settings.Realtime.Audio.Export.Bitrate) // Preserved
 }
 
 // TestAudioSourcesSectionPatch pins the server side of the onboarding wizard's
@@ -459,105 +292,10 @@ func TestAudioSourcesSectionPatch(t *testing.T) {
 	}
 }
 
-// TestSpeciesConfigUpdate verifies complex nested species config updates
-func TestSpeciesConfigUpdate(t *testing.T) {
-	// Get initial settings and setup species config
-	// Use lowercase key since that's what a real config would have after load normalization
-	initialSettings := getTestSettings(t)
-	initialSettings.Realtime.Species.Config["american robin"] = conf.SpeciesConfig{
-		Threshold: 0.8,
-		Interval:  30,
-		Actions: []conf.SpeciesAction{{
-			Type:            "ExecuteCommand",
-			Command:         "/usr/bin/notify",
-			Parameters:      []string{"--species", "American Robin"},
-			ExecuteDefaults: true,
-		}},
-	}
-
-	// Create controller with settings
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only threshold
-	update := map[string]any{
-		"config": map[string]any{
-			"American Robin": map[string]any{
-				"threshold": 0.9,
-			},
-		},
-	}
-
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
-
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/species", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("species")
-
-	// Execute update
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify settings were preserved (keys normalized to lowercase after API update)
-	settings := controller.Settings.Load()
-	robinConfig := settings.Realtime.Species.Config["american robin"]
-	assert.InDelta(t, 0.9, robinConfig.Threshold, 0.0001) // Changed
-	assert.Equal(t, 30, robinConfig.Interval)             // Preserved
-	assert.Len(t, robinConfig.Actions, 1)                 // Preserved
-	if len(robinConfig.Actions) > 0 {
-		assert.Equal(t, "ExecuteCommand", robinConfig.Actions[0].Type)                              // Preserved
-		assert.Equal(t, "/usr/bin/notify", robinConfig.Actions[0].Command)                          // Preserved
-		assert.Equal(t, []string{"--species", "American Robin"}, robinConfig.Actions[0].Parameters) // Preserved
-		assert.True(t, robinConfig.Actions[0].ExecuteDefaults)                                      // Preserved
-	}
-}
-
-// TestEmptyUpdatePreservesEverything verifies empty updates don't change anything
-func TestEmptyUpdatePreservesEverything(t *testing.T) {
-	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings(t)
-	initialSettings.Realtime.Dashboard.Thumbnails.ImageProvider = "wikimedia"
-
-	// Get initial state
-	initialJSON, err := json.Marshal(initialSettings.Realtime.Dashboard)
-	require.NoError(t, err)
-
-	// Create controller with settings
-	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Send empty update
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/dashboard", bytes.NewReader([]byte("{}")))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("dashboard")
-
-	// Execute update
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify nothing changed
-	updatedSettings := controller.Settings.Load()
-	updatedJSON, err := json.Marshal(updatedSettings.Realtime.Dashboard)
-	require.NoError(t, err)
-
-	assert.JSONEq(t, string(initialJSON), string(updatedJSON))
-}
-
 // TestValidationErrors verifies validation rules are enforced
+//
+// Not parallel: see the note in settings_blocked_fields_test.go.
 func TestValidationErrors(t *testing.T) {
-	t.Parallel()
-
 	tests := []struct {
 		name          string
 		section       string
@@ -590,10 +328,8 @@ func TestValidationErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := echo.New()
-			controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10)}
+			controller := getTestController(t, e)
 
 			var body []byte
 			var err error
@@ -619,51 +355,36 @@ func TestValidationErrors(t *testing.T) {
 	}
 }
 
-// TestDeepNestedUpdates verifies deeply nested object updates preserve all levels
-func TestDeepNestedUpdates(t *testing.T) {
-	t.Parallel()
-
-	// Get initial settings and override some values for testing
-	initialSettings := getTestSettings(t)
-	initialSettings.Realtime.MQTT.TLS.Enabled = true
-	initialSettings.Realtime.MQTT.TLS.InsecureSkipVerify = false
-
-	// Capture initial values
-	initialMaxRetries := initialSettings.Realtime.MQTT.RetrySettings.MaxRetries
-	initialBackoff := initialSettings.Realtime.MQTT.RetrySettings.BackoffMultiplier
-	initialTLSEnabled := initialSettings.Realtime.MQTT.TLS.Enabled
-
+// TestPatchNestedObjectKeepsSiblingSlices pins the nested-object merge of the
+// PATCH path. The body names one scalar inside the equalizer object, and the
+// filter slice next to it must come through untouched. A slice is the case a
+// struct-only assertion cannot see: the merge resets every JSON-visible slice
+// before decoding, so a nested object that is replaced instead of merged loses
+// its slices, while json.Unmarshal would keep an absent scalar either way.
+func TestPatchNestedObjectKeepsSiblingSlices(t *testing.T) {
 	e := echo.New()
-	controller := &Controller{Core: &apicore.Core{Echo: e}, controlChan: make(chan string, 10), DisableSaveSettings: true}
-	controller.Settings.Store(initialSettings)
-
-	// Update only one deeply nested field
-	update := map[string]any{
-		"retrySettings": map[string]any{
-			"initialDelay": 30,
+	controller := getTestController(t, e)
+	controller.Settings.Load().Realtime.Audio.Equalizer = conf.EqualizerSettings{
+		Enabled: true,
+		Filters: []conf.EqualizerFilter{
+			{Type: "HighPass", Frequency: 200, Q: 0.707, Passes: 1},
+			{Type: "LowPass", Frequency: 14000, Q: 0.707, Passes: 2},
 		},
 	}
 
-	body, err := json.Marshal(update)
-	require.NoError(t, err)
+	patchSection(t, e, controller, "audio", map[string]any{
+		"equalizer": map[string]any{"enabled": false},
+	})
 
-	req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/mqtt", bytes.NewReader(body))
-	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetParamNames("section")
-	ctx.SetParamValues("mqtt")
-
-	err = controller.UpdateSectionSettings(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	// Verify only the targeted field changed
-	settings := controller.Settings.Load()
-	assert.Equal(t, 30, settings.Realtime.MQTT.RetrySettings.InitialDelay)                           // Changed
-	assert.Equal(t, initialMaxRetries, settings.Realtime.MQTT.RetrySettings.MaxRetries)              // Preserved
-	assert.InDelta(t, initialBackoff, settings.Realtime.MQTT.RetrySettings.BackoffMultiplier, 0.001) // Preserved
-	assert.Equal(t, initialTLSEnabled, settings.Realtime.MQTT.TLS.Enabled)                           // Preserved
+	eq := controller.Settings.Load().Realtime.Audio.Equalizer
+	assert.False(t, eq.Enabled, "the field in the body must change")
+	require.Len(t, eq.Filters, 2, "the sibling filter slice must survive")
+	assert.Equal(t, "HighPass", eq.Filters[0].Type)
+	assert.InDelta(t, 200.0, eq.Filters[0].Frequency, 0.001)
+	assert.Equal(t, 1, eq.Filters[0].Passes)
+	assert.Equal(t, "LowPass", eq.Filters[1].Type)
+	assert.InDelta(t, 14000.0, eq.Filters[1].Frequency, 0.001)
+	assert.Equal(t, 2, eq.Filters[1].Passes)
 }
 
 // TestStreamsSettingsChanged_DetectsModelEdits verifies that per-stream model

@@ -105,16 +105,23 @@ func getTestSettings(t *testing.T) *conf.Settings {
 type fakeV2Manager struct {
 	db          *gorm.DB
 	tablePrefix string
+	isMySQL     bool
+	path        string
 }
 
-func (f *fakeV2Manager) Initialize() error    { return nil }
-func (f *fakeV2Manager) DB() *gorm.DB         { return f.db }
-func (f *fakeV2Manager) Path() string         { return ":memory:" }
+func (f *fakeV2Manager) Initialize() error { return nil }
+func (f *fakeV2Manager) DB() *gorm.DB      { return f.db }
+func (f *fakeV2Manager) Path() string {
+	if f.path != "" {
+		return f.path
+	}
+	return ":memory:"
+}
 func (f *fakeV2Manager) Close() error         { return nil }
 func (f *fakeV2Manager) CheckpointWAL() error { return nil }
 func (f *fakeV2Manager) Delete() error        { return nil }
 func (f *fakeV2Manager) Exists() bool         { return true }
-func (f *fakeV2Manager) IsMySQL() bool        { return false }
+func (f *fakeV2Manager) IsMySQL() bool        { return f.isMySQL }
 func (f *fakeV2Manager) TablePrefix() string  { return f.tablePrefix }
 
 // newFakeV2ManagerWithTable creates a fakeV2Manager backed by an in-memory SQLite

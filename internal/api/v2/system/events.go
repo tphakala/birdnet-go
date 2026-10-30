@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/logger/reader"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // detectionOperations lists the log operations consumed by the detection events endpoint.
@@ -196,7 +197,7 @@ func (c *Handler) GetDetectionEvents(ctx echo.Context) error {
 		return err
 	}
 
-	targetDate, _ := time.ParseInLocation(time.DateOnly, date, time.Local)
+	targetDate, _ := wallclock.ParseDate(date)
 
 	// Get actions.log path from logger config
 	actionsLogPath := logger.Global().GetOutputPath("analysis.processor")
@@ -229,7 +230,7 @@ func (c *Handler) GetDetectionEvents(ctx echo.Context) error {
 	}
 
 	// Aggregate into response
-	result := c.aggregateDetectionEvents(entries, targetDate)
+	result := c.aggregateDetectionEvents(entries)
 	return ctx.JSON(http.StatusOK, result)
 }
 
@@ -254,7 +255,7 @@ func (c *Handler) GetOperationalEvents(ctx echo.Context) error {
 		return c.HandleError(ctx, nil, "Invalid level. Use DEBUG, INFO, WARN, or ERROR", http.StatusBadRequest)
 	}
 
-	targetDate, _ := time.ParseInLocation(time.DateOnly, date, time.Local)
+	targetDate, _ := wallclock.ParseDate(date)
 
 	// Collect entries from both application.log and audio.log
 	var allEntries []reader.LogEntry
@@ -302,7 +303,7 @@ func (c *Handler) GetOperationalEvents(ctx echo.Context) error {
 }
 
 // readLogSource finds and reads log entries from a base log path, filtering by date and level.
-func readLogSource(basePath string, date time.Time, level string, loc *time.Location) ([]reader.LogEntry, error) {
+func readLogSource(basePath string, date wallclock.Date, level string, loc *time.Location) ([]reader.LogEntry, error) {
 	logFiles, err := reader.FindLogFiles(basePath)
 	if err != nil {
 		return nil, fmt.Errorf("finding log files for %s: %w", basePath, err)

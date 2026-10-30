@@ -16,9 +16,9 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
-// requireFFmpegTools resolves the ffmpeg binary these tests encode and decode
-// with, skipping when it is absent. Both are needed: encoding proves the export
-// path runs, decoding is how the loudness is read back.
+// requireFFmpegTools resolves the ffmpeg binary these tests decode the exported
+// clips with, skipping when it is absent. The clips are encoded natively; ffmpeg
+// only reads them back so the loudness can be measured.
 func requireFFmpegTools(t *testing.T) string {
 	t.Helper()
 	bin, err := exec.LookPath(conf.GetFfmpegBinaryName())

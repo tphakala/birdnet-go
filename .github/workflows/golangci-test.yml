@@ -11,6 +11,9 @@ on:
       - '.golangci.yaml'
       - '.github/workflows/golangci-test.yml'
       - '.github/scripts/ci-test-report.sh'
+      - '.github/scripts/go-test-cache.sh'
+      - '.github/actions/setup-tensorflow/**'
+      - '.github/actions/setup-onnxruntime/**'
   pull_request:
     paths:
       - '**/*.go'
@@ -19,15 +22,21 @@ on:
       - '.golangci.yaml'
       - '.github/workflows/golangci-test.yml'
       - '.github/scripts/ci-test-report.sh'
+      - '.github/scripts/go-test-cache.sh'
+      - '.github/actions/setup-tensorflow/**'
+      - '.github/actions/setup-onnxruntime/**'
 
 permissions:
   contents: read
 
 # Cancel superseded runs for the same ref so rapid pushes do not pile up full
 # test matrices behind each other.
+# Only superseded pull request runs are cancelled. A run on main or a manual run
+# gets its own group per commit, so a burst of merges cannot cancel the run that
+# is the authoritative check of main.
 concurrency:
-  group: golangci-test-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: golangci-test-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # gotestsum gives us JSON + JUnit output and, crucially, --rerun-fails so an
@@ -37,10 +46,61 @@ env:
   # Number of parallel shards the portable unit suite is split across. Keep in
   # sync with the matrix below and the `NR % <N>` modulo in the shard step.
   UNIT_SHARDS: 4
+  # Per-shard Go test cache for the unit-tests job (see "Go test cache in CI" in
+  # TESTING.md). Set to 'false' to turn it off: every unit test then runs again
+  # and nothing is restored or saved.
+  GO_TEST_CACHE: 'true'
 
 jobs:
   golangci:
     uses: ./.github/workflows/golangci-lint.yml
+
+  # Decides which of the expensive suites a pull request needs. Each gate lists
+  # the paths that can change what that suite sees; a PR that touches none of
+  # them skips the suite. Pushes to main and manual runs always run everything,
+  # as the backstop for anything a filter misses, and the `run-full-ci` label
+  # forces every gate on a PR (it takes effect on the next push). A diff that
+  # cannot be read runs the suite too.
+  changes:
+    name: changes
+    runs-on: ubuntu-24.04
+    outputs:
+      database: ${{ steps.database.outputs.matched }}
+      migration: ${{ steps.migration.outputs.matched }}
+      containers: ${{ steps.containers.outputs.matched }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The PR merge commit and its first parent (the base tip).
+          fetch-depth: 2
+
+      # MySQL and MariaDB suites, about 20 runner minutes per run: the
+      # datastore, the import code the legacy cleanup test drives, the container
+      # helper, the driver and gorm versions (go.mod, go.sum) and this workflow.
+      - id: database
+        uses: ./.github/actions/changed-paths
+        with:
+          name: database-tests
+          labels: run-db-tests run-full-ci
+          pattern: '^(internal/datastore/|internal/api/v2/imports/|internal/imports/|internal/testutil/containers/)|^(go\.mod|go\.sum|\.github/workflows/golangci-test\.yml)$'
+
+      # SQLite migration integration tests (./internal/datastore/v2/migration/...).
+      - id: migration
+        uses: ./.github/actions/changed-paths
+        with:
+          name: integration-tests
+          labels: run-full-ci
+          pattern: '^(internal/(datastore|detection|speciesindex|privacy|openfauna|labels)/)|^(go\.mod|go\.sum|\.github/workflows/golangci-test\.yml)$'
+
+      # Mosquitto, MediaMTX and spectrogram containers plus the AutoTLS Pebble
+      # test, which drives the server startup in internal/api (top-level files
+      # only; the v2 handlers are not on that path).
+      - id: containers
+        uses: ./.github/actions/changed-paths
+        with:
+          name: testcontainer-tests
+          labels: run-full-ci
+          pattern: '^(internal/(mqtt|spectrogram|testutil)/|internal/api/[^/]+\.go$)|^(go\.mod|go\.sum|\.github/workflows/golangci-test\.yml)$'
 
   unit-tests:
     name: unit-tests (shard ${{ matrix.shard }})
@@ -50,6 +110,14 @@ jobs:
       fail-fast: false
       matrix:
         shard: [0, 1, 2, 3]
+    env:
+      # Only a push to main saves the Go test cache; pull requests and manual
+      # runs only restore it.
+      GO_TEST_CACHE_SAVE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      # PATH is part of the cache input of every test that looks up a binary. The
+      # runner's own PATH carries the Task version setup-task resolved, which
+      # changes without notice, so the tests get a fixed one.
+      UNIT_TEST_SYSTEM_PATH: /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     services:
       mosquitto:
         image: eclipse-mosquitto:1.6
@@ -69,6 +137,30 @@ jobs:
       - name: Setup ONNX Runtime
         uses: ./.github/actions/setup-onnxruntime
 
+      # The key carries what Go's test cache cannot see: the native libraries and
+      # headers, the Go version, the image family and the files that define this
+      # job. setup-go restores a GOCACHE shared by every Linux job and saved by
+      # whichever job missed first, possibly on a pull request ref; dropping it
+      # means test results reach this job only through its own key.
+      - name: Compute Go test cache key
+        id: go-test-cache
+        if: env.GO_TEST_CACHE == 'true'
+        env:
+          SHARD: ${{ matrix.shard }}
+          CI_FILES_HASH: ${{ hashFiles('.github/workflows/golangci-test.yml', '.github/scripts/go-test-cache.sh', '.github/actions/setup-tensorflow/action.yml', '.github/actions/setup-onnxruntime/action.yml') }}
+        run: |
+          .github/scripts/go-test-cache.sh key "$SHARD" >> "$GITHUB_OUTPUT"
+          rm -rf "$(go env GOCACHE)"
+
+      - name: Restore Go test cache
+        id: go-test-cache-restore
+        if: env.GO_TEST_CACHE == 'true'
+        uses: actions/cache/restore@v6
+        with:
+          path: ${{ steps.go-test-cache.outputs.path }}
+          key: ${{ steps.go-test-cache.outputs.key }}
+          restore-keys: ${{ steps.go-test-cache.outputs.restore-prefix }}
+
       # notflite is retained as a minimal, strictly-ONNX build option, but after
       # arm64 containers went back to linking libtensorflowlite_c no shipped
       # artifact builds the notflite tag by default. Compile the whole tree with it
@@ -77,12 +169,6 @@ jobs:
       - name: Compile check (notflite stub path)
         if: matrix.shard == 0
         run: go build -tags "noembed,skipfrontend,notflite" ./...
-
-      - name: Install FFmpeg, SoX, and test dependencies
-        uses: ./.github/actions/setup-apt-packages
-        with:
-          packages: ffmpeg sox procps
-        timeout-minutes: 3
 
       - name: Cache Go tools
         uses: actions/cache@v6
@@ -124,11 +210,49 @@ jobs:
           echo "Shard ${{ matrix.shard }} owns $(wc -l < shard_pkgs.txt) packages:"
           cat shard_pkgs.txt
 
+      # Main and manual runs execute every test; a pull request replays only the
+      # results main produced on identical inputs. The run-full-ci label forces a
+      # real run too.
+      - name: Prepare Go test cache
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FULL_CI: ${{ contains(github.event.pull_request.labels.*.name, 'run-full-ci') }}
+        run: |
+          if [ "$GO_TEST_CACHE" != 'true' ]; then
+            echo "Go test cache is off: clearing cached test results"
+            go clean -testcache
+          elif [ "$EVENT_NAME" != 'pull_request' ]; then
+            echo "Not a pull request: clearing cached test results so every test runs"
+            go clean -testcache
+          elif [ "$FULL_CI" == 'true' ]; then
+            echo "run-full-ci label: clearing cached test results so every test runs"
+            go clean -testcache
+          fi
+          if [ "$GO_TEST_CACHE" == 'true' ]; then
+            .github/scripts/go-test-cache.sh self-test
+            # Go identifies the files a test opens by size and mtime, and a fresh
+            # checkout gives every file a new mtime. Tracked files get one derived
+            # from their content instead. This is the last step before the tests;
+            # only gotestsum's own output files land in the repo root after it, and
+            # no unit test lists the root.
+            .github/scripts/go-test-cache.sh normalize
+          fi
+
       - name: Run unit tests
         env:
           CI: true
           MQTT_TEST_BROKER: tcp://localhost:1883
+          # Go hashes file times with the local zone name; keep it equal on every run.
+          TZ: UTC
         run: |
+          # Fixed PATH, see UNIT_TEST_SYSTEM_PATH. gotestsum lives in GOPATH/bin and
+          # the import-guard and gen-schema tests run `go`.
+          GOROOT_DIR=$(go env GOROOT)
+          GOPATH_DIR=$(go env GOPATH)
+          export PATH="${GOROOT_DIR}/bin:${GOPATH_DIR}/bin:${UNIT_TEST_SYSTEM_PATH}"
+
+          # Packages replayed from the Go test cache are reported as `(cached)`;
+          # never add -count=1 here, it disables the cache.
           # gotestsum runs `go test -json` for us. --rerun-fails retries a failed
           # test once; if it then passes it is reported as flaky (not a gate
           # failure). --rerun-fails-abort-on-data-race keeps real data races fatal
@@ -148,6 +272,11 @@ jobs:
             -- -tags noembed,skipfrontend -race -short -timeout 300s
         timeout-minutes: 12
 
+      # Shows per run how many packages were replayed and which ones ran.
+      - name: Summarise Go test cache use
+        if: ${{ !cancelled() && env.GO_TEST_CACHE == 'true' }}
+        run: .github/scripts/go-test-cache.sh report "events-unit-${{ matrix.shard }}.json" "${{ matrix.shard }}"
+
       - name: Cleanup any remaining processes
         if: always()
         run: |
@@ -166,7 +295,34 @@ jobs:
             rerun-unit-${{ matrix.shard }}.txt
           if-no-files-found: warn
 
+      # Same key the restore used, or the entry's version will not match.
+      - name: Save Go test cache
+        if: success() && env.GO_TEST_CACHE == 'true' && env.GO_TEST_CACHE_SAVE == 'true' && steps.go-test-cache-restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ${{ steps.go-test-cache.outputs.path }}
+          key: ${{ steps.go-test-cache.outputs.key }}
+
+  # Deletes the cache entries this run's shards superseded, so the repository
+  # keeps one generation per shard. Runs on main only and executes no tests, so
+  # the token that may delete caches never meets pull request code.
+  unit-tests-cache-prune:
+    needs: unit-tests
+    if: ${{ !cancelled() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Prune superseded Go test cache entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: .github/scripts/go-test-cache.sh prune
+
   testcontainer-tests:
+    needs: changes
+    if: needs.changes.outputs.containers == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -178,44 +334,16 @@ jobs:
       - name: Setup TensorFlow Lite
         uses: ./.github/actions/setup-tensorflow
 
-      - name: Install FFmpeg and Sox for integration tests
-        uses: ./.github/actions/setup-apt-packages
-        with:
-          packages: ffmpeg sox
-        timeout-minutes: 3
-
       - name: Set up gotestsum
         run: |
           if ! command -v gotestsum &> /dev/null; then
             go install "gotest.tools/gotestsum@${GOTESTSUM_VERSION}"
           fi
 
-      - name: Run MySQL-backed integration tests (serialized)
-        run: |
-          # Serialize package-level parallelism (-p 1) for the MySQL-backed
-          # packages. Running them in parallel spins up several MySQL 8 containers
-          # at once; under the runner's memory ceiling one gets OOM-reaped
-          # mid-test, surfacing as `connection refused` / `No such container` and
-          # looking like a logic bug. One container set at a time removes that
-          # race. gotestsum --rerun-fails still absorbs any residual flake.
-          gotestsum \
-            --format pkgname \
-            --jsonfile events-tc-mysql.json \
-            --junitfile junit-tc-mysql.xml \
-            --rerun-fails=1 \
-            --rerun-fails-abort-on-data-race \
-            --rerun-fails-max-failures=10 \
-            --rerun-fails-report=rerun-tc-mysql.txt \
-            --packages "./internal/datastore/v2 ./internal/datastore/v2/repository/... ./internal/datastore/v2only" \
-            -- -tags=integration -race -timeout 300s -p 1
-        timeout-minutes: 10
-
       - name: Run other container integration tests
-        if: ${{ !cancelled() }}
         run: |
           # Mosquitto / MediaMTX / spectrogram container tests are light enough to
-          # run with default package parallelism. Runs even if the MySQL step
-          # failed (!cancelled) so one flaky suite does not hide the others.
+          # run with default package parallelism.
           gotestsum \
             --format pkgname \
             --jsonfile events-tc-other.json \
@@ -284,6 +412,8 @@ jobs:
           if-no-files-found: warn
 
   integration-tests:
+    needs: changes
+    if: needs.changes.outputs.migration == 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
@@ -339,6 +469,113 @@ jobs:
             rerun-integration*.txt
           if-no-files-found: warn
 
+  # MySQL-backed integration suites, run once per supported database server.
+  # Debian 12 (bookworm) ships MariaDB 10.11 and Debian 13 (trixie) 11.8, the
+  # servers Raspberry Pi OS and DietPi users get from their package manager.
+  # Skipped on pull requests that touch no database-related files (see `changes`).
+  database-tests:
+    name: database-tests (${{ matrix.server }})
+    needs: changes
+    if: needs.changes.outputs.database == 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      # Report every server's failures; one server failing must not cancel the rest.
+      fail-fast: false
+      matrix:
+        include:
+          - server: mysql-8.4
+            image: mysql:8.4
+          - server: mariadb-10.11
+            image: mariadb:10.11
+          - server: mariadb-11.8
+            image: mariadb:11.8
+    env:
+      # Read by internal/testutil/containers; it is required on CI so a typo here
+      # fails every leg instead of silently testing the default server.
+      MYSQL_TEST_IMAGE: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Setup TensorFlow Lite
+        uses: ./.github/actions/setup-tensorflow
+
+      - name: Set up gotestsum
+        run: |
+          if ! command -v gotestsum &> /dev/null; then
+            go install "gotest.tools/gotestsum@${GOTESTSUM_VERSION}"
+          fi
+
+      - name: Pull database image
+        run: |
+          # Pull up front, with retries, so a registry blip fails here, clearly
+          # named, instead of in a TestMain that gotestsum cannot rerun.
+          for attempt in 1 2 3; do
+            docker pull "${MYSQL_TEST_IMAGE}" && exit 0
+            echo "docker pull attempt ${attempt} failed, retrying..."
+            sleep 10
+          done
+          exit 1
+        timeout-minutes: 5
+
+      - name: Run database integration tests (serialized)
+        run: |
+          # Serialize package-level parallelism (-p 1). Running the packages in
+          # parallel spins up several database containers at once; under the
+          # runner's memory ceiling one gets OOM-reaped mid-test, surfacing as
+          # `connection refused` / `No such container` and looking like a logic
+          # bug. One container set at a time removes that race. gotestsum
+          # --rerun-fails still absorbs any residual flake.
+          # -count=1: the suites read MYSQL_TEST_IMAGE in TestMain, which go test
+          # does not record in its cache key, so a result cached for another
+          # server could otherwise be replayed.
+          gotestsum \
+            --format pkgname \
+            --jsonfile "events-db-${{ matrix.server }}.json" \
+            --junitfile "junit-db-${{ matrix.server }}.xml" \
+            --rerun-fails=1 \
+            --rerun-fails-abort-on-data-race \
+            --rerun-fails-max-failures=10 \
+            --rerun-fails-report="rerun-db-${{ matrix.server }}.txt" \
+            --packages "./internal/datastore ./internal/datastore/dbserver ./internal/datastore/v2 ./internal/datastore/v2/repository/... ./internal/datastore/v2only ./internal/api/v2/imports" \
+            -- -tags=integration -race -count=1 -timeout 300s -p 1
+        timeout-minutes: 15
+
+      - name: Container diagnostics on failure
+        if: failure()
+        run: |
+          # Capture the evidence needed to tell an infra flake (OOM-reaped
+          # container) from a real failure.
+          {
+            echo "## Database test diagnostics (${{ matrix.server }})"
+            echo '```'
+            echo "--- docker ps -a ---"
+            docker ps -a 2>&1 || true
+            echo "--- docker system df ---"
+            docker system df 2>&1 || true
+            echo "--- free -m ---"
+            free -m 2>&1 || true
+            echo "--- df -h ---"
+            df -h 2>&1 || true
+            echo "--- kernel OOM kills ---"
+            sudo dmesg 2>/dev/null | grep -iE "killed process|out of memory|oom-kill" | tail -20 || echo "none found / dmesg unavailable"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test events
+        uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: gotest-db-${{ matrix.server }}
+          path: |
+            events-db-*.json
+            junit-db-*.xml
+            rerun-db-*.txt
+          if-no-files-found: warn
+
   # Consolidated, machine-readable result. Runs regardless of upstream outcome so
   # there is ONE place (a single job summary + a single ci-failures.json
   # artifact) for a human or an LLM agent to read: it classifies every failure as
@@ -347,7 +584,7 @@ jobs:
   test-report:
     name: test-report
     if: always()
-    needs: [unit-tests, testcontainer-tests, integration-tests]
+    needs: [changes, unit-tests, testcontainer-tests, database-tests, integration-tests]
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -412,11 +649,22 @@ jobs:
           #    otherwise see zero failures and falsely pass. The individual job is
           #    already red, but this keeps the consolidated gate honest too.
           # 2. A real regression survived reruns. Flaky-on-rerun failures stay green.
-          UNIT='${{ needs.unit-tests.result }}'
-          TC='${{ needs.testcontainer-tests.result }}'
-          INTEG='${{ needs.integration-tests.result }}'
-          if [ "$UNIT" != "success" ] || [ "$TC" != "success" ] || [ "$INTEG" != "success" ]; then
-            echo "::error::An upstream test job did not succeed (unit-tests=$UNIT, testcontainer-tests=$TC, integration-tests=$INTEG)"
+          CHANGES='${{ needs.changes.result }}'
+          # A gated job may be skipped only when the changes job ran and said it
+          # was not needed. A skip caused by a failed or cancelled changes job,
+          # or any other non-success result, must not pass.
+          gated_ok() { # result, wanted
+            [ "$1" = "success" ] && return 0
+            [ "$1" = "skipped" ] && [ "$CHANGES" = "success" ] && [ "$2" = "false" ] && return 0
+            return 1
+          }
+          SUMMARY="changes=$CHANGES, unit-tests=${{ needs.unit-tests.result }}, testcontainer-tests=${{ needs.testcontainer-tests.result }}, database-tests=${{ needs.database-tests.result }}, integration-tests=${{ needs.integration-tests.result }}"
+          if [ "$CHANGES" != "success" ] \
+            || [ '${{ needs.unit-tests.result }}' != "success" ] \
+            || ! gated_ok '${{ needs.testcontainer-tests.result }}' '${{ needs.changes.outputs.containers }}' \
+            || ! gated_ok '${{ needs.database-tests.result }}' '${{ needs.changes.outputs.database }}' \
+            || ! gated_ok '${{ needs.integration-tests.result }}' '${{ needs.changes.outputs.migration }}'; then
+            echo "::error::An upstream test job did not succeed ($SUMMARY)"
             exit 1
           fi
           REG=$(jq 'length' ci-failures.json 2>/dev/null || echo 0)

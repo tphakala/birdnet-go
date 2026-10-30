@@ -15,6 +15,11 @@ const (
 
 // AudioSource represents a normalized audio input source.
 // This normalizes the source_node string from the legacy schema.
+// DefaultSourceNodeName is the node name of an audio source saved without one.
+// Every writer that resolves an audio_sources row must use it, or the same
+// source ends up in two rows.
+const DefaultSourceNodeName = "default"
+
 type AudioSource struct {
 	ID uint `gorm:"primaryKey"`
 	// SourceURI is the source identifier (e.g., "rtsp://...", "hw:0,0", "/path/to/file").

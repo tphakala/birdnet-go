@@ -1,8 +1,10 @@
 package repository
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -310,7 +313,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 		&entities.Detection{LabelID: 30, ModelID: 1, Confidence: 0.2, DetectedAt: base}).Error)
 
 	t.Run("per-label counts with confidence filter", func(t *testing.T) {
-		got, err := repo.GetBatchHourlyOccurrences(t.Context(), []uint{10, 20, 30, 99}, base-1, base+10_000, 0, 0.5)
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), []uint{10, 20, 30, 99}, wallclock.Segment{Start: base - 1, End: base + 10_000}, 0.5)
 		require.NoError(t, err)
 
 		require.Contains(t, got, uint(10))
@@ -322,7 +325,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 	})
 
 	t.Run("empty input returns empty map", func(t *testing.T) {
-		got, err := repo.GetBatchHourlyOccurrences(t.Context(), nil, base-1, base+10_000, 0, 0.0)
+		got, err := repo.GetBatchHourlyOccurrences(t.Context(), nil, wallclock.Segment{Start: base - 1, End: base + 10_000}, 0.0)
 		require.NoError(t, err)
 		assert.Empty(t, got)
 	})
@@ -330,7 +333,7 @@ func TestGetBatchHourlyOccurrences(t *testing.T) {
 	t.Run("cancelled context surfaces an error", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
-		_, err := repo.GetBatchHourlyOccurrences(ctx, []uint{10}, base-1, base+10_000, 0, 0.0)
+		_, err := repo.GetBatchHourlyOccurrences(ctx, []uint{10}, wallclock.Segment{Start: base - 1, End: base + 10_000}, 0.0)
 		require.ErrorIs(t, err, context.Canceled, "a cancelled context must abort the query with context.Canceled, not return zeros")
 	})
 }
@@ -371,7 +374,8 @@ func TestGetBatchHourlyOccurrences_TimezoneOffset(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := repo.GetBatchHourlyOccurrences(
-				t.Context(), []uint{10}, utcMidnight-86_400, utcMidnight+86_400, tc.offsetSecs, 0.0)
+				t.Context(), []uint{10},
+				wallclock.Segment{Start: utcMidnight - 86_400, End: utcMidnight + 86_400, OffsetSeconds: tc.offsetSecs}, 0.0)
 			require.NoError(t, err)
 			require.Equal(t, 1, totalBatchHourly(got, 10), "exactly one detection regardless of offset")
 			counts := got[10]
@@ -406,7 +410,8 @@ func TestGetDailyAnalytics_TimezoneOffset(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := repo.GetDailyAnalytics(
-				t.Context(), nearMidnight-86_400, nearMidnight+86_400, tc.offsetSecs, nil, nil)
+				t.Context(),
+				wallclock.Segment{Start: nearMidnight - 86_400, End: nearMidnight + 86_400, OffsetSeconds: tc.offsetSecs}, nil, nil)
 			require.NoError(t, err)
 			require.Len(t, got, 1, "exactly one date bucket regardless of offset")
 			assert.Equal(t, tc.wantDate, got[0].Date,
@@ -597,28 +602,28 @@ func TestSearch_IncludedHoursOnSQLite(t *testing.T) {
 	tests := []struct {
 		name           string
 		includedHours  []int
-		timezoneOffset int
+		timeZone       *time.Location
 		wantTotal      int64
 		wantDetectedAt []int64
 	}{
 		{
 			name:           "single hour UTC",
 			includedHours:  []int{14},
-			timezoneOffset: 0,
+			timeZone:       time.UTC,
 			wantTotal:      1,
 			wantDetectedAt: []int64{t14},
 		},
 		{
 			name:           "multiple hours UTC",
 			includedHours:  []int{8, 22},
-			timezoneOffset: 0,
+			timeZone:       time.UTC,
 			wantTotal:      2,
 			wantDetectedAt: []int64{t08, t22},
 		},
 		{
 			name:           "negative timezone offset UTC-5",
 			includedHours:  []int{9},
-			timezoneOffset: -5 * 3600,
+			timeZone:       time.FixedZone("UTC-5", -5*3600),
 			wantTotal:      1,
 			wantDetectedAt: []int64{t14},
 		},
@@ -627,8 +632,8 @@ func TestSearch_IncludedHoursOnSQLite(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			results, total, err := repo.Search(ctx, &SearchFilters{
-				IncludedHours:  tc.includedHours,
-				TimezoneOffset: tc.timezoneOffset,
+				IncludedHours: tc.includedHours,
+				TimeZone:      tc.timeZone,
 			})
 			require.NoError(t, err)
 			assert.Equal(t, tc.wantTotal, total)
@@ -677,81 +682,6 @@ func TestSaveReview_ConcurrentUpsertNoDuplicates(t *testing.T) {
 	var count int64
 	require.NoError(t, db.Table(tableDetectionReviews).Where("detection_id = ?", det.ID).Count(&count).Error)
 	assert.Equal(t, int64(1), count)
-}
-
-// ============================================================================
-// GetByHour / CountByHour boundary tests
-// ============================================================================
-
-// TestGetByHour_HalfOpenBoundary verifies that GetByHour and CountByHour use
-// a half-open interval [hourStart, hourStart+3600) so a detection whose
-// detected_at equals the next hour's start is not double-counted.
-//
-// Three detections are seeded:
-//   - t+10    (inside the hour, clearly included)
-//   - t+3599  (last second of the hour, included)
-//   - t+3600  (next hour's first second, must be EXCLUDED from the current hour)
-//
-// The current hour must return exactly 2. The next hour must return exactly 1.
-func TestGetByHour_HalfOpenBoundary(t *testing.T) {
-	db := setupDetectionTestDB(t)
-	ctx := t.Context()
-	repo := &detectionRepository{db: db}
-
-	const hourStart = int64(1_700_000_000)
-
-	createTestDetection(t, db, hourStart+10)
-	createTestDetection(t, db, hourStart+3599)
-	createTestDetection(t, db, hourStart+3600) // boundary: next hour's first second
-
-	t.Run("GetByHour current hour excludes boundary second", func(t *testing.T) {
-		dets, total, err := repo.GetByHour(ctx, hourStart, 100, 0)
-		require.NoError(t, err)
-		assert.Equal(t, int64(2), total,
-			"GetByHour must use half-open [hourStart, hourStart+3600): expected 2, got %d", total)
-		assert.Len(t, dets, 2)
-	})
-
-	t.Run("CountByHour current hour excludes boundary second", func(t *testing.T) {
-		n, err := repo.CountByHour(ctx, hourStart)
-		require.NoError(t, err)
-		assert.Equal(t, int64(2), n,
-			"CountByHour must use half-open [hourStart, hourStart+3600): expected 2, got %d", n)
-	})
-
-	t.Run("GetByHour next hour includes boundary second exactly once", func(t *testing.T) {
-		dets, total, err := repo.GetByHour(ctx, hourStart+3600, 100, 0)
-		require.NoError(t, err)
-		assert.Equal(t, int64(1), total,
-			"boundary second must belong to the next hour exactly once: expected 1, got %d", total)
-		assert.Len(t, dets, 1)
-	})
-
-	t.Run("CountByHour next hour includes boundary second exactly once", func(t *testing.T) {
-		n, err := repo.CountByHour(ctx, hourStart+3600)
-		require.NoError(t, err)
-		assert.Equal(t, int64(1), n,
-			"boundary second must belong to the next hour exactly once: expected 1, got %d", n)
-	})
-}
-
-// TestGetByHour_PaginationHonored verifies that LIMIT is applied by GetByHour even
-// though the query is used for a Count first. If the GORM query object's state leaked
-// across the Count/Find boundary, LIMIT would be ignored and all rows returned.
-func TestGetByHour_PaginationHonored(t *testing.T) {
-	db := setupDetectionTestDB(t)
-	ctx := t.Context()
-	repo := &detectionRepository{db: db}
-
-	const hourStart = int64(1_700_000_000)
-	for i := range int64(5) {
-		createTestDetection(t, db, hourStart+i*60)
-	}
-
-	dets, total, err := repo.GetByHour(ctx, hourStart, 2, 0)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5), total, "total must count all rows in the hour")
-	assert.Len(t, dets, 2, "LIMIT must be honored; query reuse after Count would return all 5")
 }
 
 func TestGetTopSpecies_DeterministicOrder(t *testing.T) {
@@ -897,4 +827,217 @@ func TestGetTopSpecies_NoLimitWhenNonPositive(t *testing.T) {
 	require.Len(t, all, 3)
 	assert.Equal(t, labelA.ID, all[0].LabelID)
 	assert.Equal(t, labelC.ID, all[2].LabelID)
+}
+
+// TestCountSearch_MatchesSearchTotal pins CountSearch to the total Search reports and
+// to the number of rows an unpaginated Search returns, across the label, time range,
+// hours, confidence, text query, review and lock filters, and checks that sorting and
+// pagination fields do not change the count.
+func TestCountSearch_MatchesSearchTotal(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	parus := createTestLabel(t, db, "Parus major", 1)
+	turdus := createTestLabel(t, db, "Turdus merula", 1)
+
+	// Hour-aligned timestamps so the IncludedHours filter (UTC, offset 0) splits them.
+	const hour = int64(3600)
+	base := int64(1_700_000_000) / (24 * hour) * (24 * hour) // a UTC midnight
+	const (
+		parusCount  = 6
+		turdusCount = 4
+		// lowConfidence is below the confidence threshold used by the cases below,
+		// while createDetectionForLabel's default confidence is above it.
+		lowConfidence = 0.3
+	)
+	parusIDs := make([]uint, 0, parusCount)
+	for i := range int64(parusCount) {
+		parusIDs = append(parusIDs, createDetectionForLabel(t, db, parus.ID, base+i*hour).ID)
+	}
+	for i := range int64(turdusCount) {
+		createDetectionForLabel(t, db, turdus.ID, base+i*hour+1)
+	}
+	lowConfidenceIDs := []uint{parusIDs[3], parusIDs[4]}
+	require.NoError(t, db.Table(tableDetections).Where("id IN ?", lowConfidenceIDs).
+		Update("confidence", lowConfidence).Error)
+	require.NoError(t, db.Table(tableDetectionReviews).Create(&entities.DetectionReview{
+		DetectionID: parusIDs[0], Verified: entities.VerificationFalsePositive,
+	}).Error)
+	require.NoError(t, db.Table(tableDetectionReviews).Create(&entities.DetectionReview{
+		DetectionID: parusIDs[1], Verified: entities.VerificationCorrect,
+	}).Error)
+	require.NoError(t, db.Table(tableDetectionLocks).Create(&entities.DetectionLock{
+		DetectionID: parusIDs[2],
+	}).Error)
+
+	start, end := base+hour, base+4*hour
+	confidenceThreshold := 0.5
+	falsePositive := VerificationFilter(entities.VerificationFalsePositive)
+	yes, no := true, false
+
+	tests := []struct {
+		name    string
+		filters *SearchFilters
+		want    int64
+	}{
+		{name: "nil filters", filters: nil, want: 10},
+		{name: "no filters", filters: &SearchFilters{}, want: 10},
+		{name: "label", filters: &SearchFilters{LabelIDs: []uint{parus.ID}}, want: 6},
+		{name: "half-open time range", filters: &SearchFilters{StartTime: &start, EndTime: &end}, want: 6},
+		{name: "label and time range", filters: &SearchFilters{LabelIDs: []uint{turdus.ID}, StartTime: &start, EndTime: &end}, want: 3},
+		{name: "included hours", filters: &SearchFilters{IncludedHours: []int{0, 5}}, want: 3},
+		{name: "min confidence", filters: &SearchFilters{MinConfidence: &confidenceThreshold}, want: 8},
+		{name: "max confidence", filters: &SearchFilters{MaxConfidence: &confidenceThreshold}, want: 2},
+		{name: "text query joins labels", filters: &SearchFilters{Query: "Turdus"}, want: 4},
+		{name: "verified joins reviews", filters: &SearchFilters{Verified: &falsePositive}, want: 1},
+		{name: "reviewed", filters: &SearchFilters{IsReviewed: &yes}, want: 2},
+		{name: "locked joins locks", filters: &SearchFilters{IsLocked: &yes}, want: 1},
+		{name: "unlocked", filters: &SearchFilters{IsLocked: &no}, want: 9},
+		{
+			name: "sorting and pagination are ignored",
+			filters: &SearchFilters{
+				LabelIDs: []uint{parus.ID}, SortBy: SortFieldSpecies, SortDesc: true, Limit: 2, Offset: 1,
+			},
+			want: 6,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := repo.CountSearch(ctx, tt.filters)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+
+			var unpaged *SearchFilters
+			if tt.filters != nil {
+				f := *tt.filters
+				f.Limit, f.Offset = 0, 0
+				unpaged = &f
+			}
+			rows, total, err := repo.Search(ctx, unpaged)
+			require.NoError(t, err)
+			assert.Equal(t, total, got, "CountSearch must equal the Search total")
+			assert.Len(t, rows, int(got), "CountSearch must equal the unpaginated row count")
+		})
+	}
+}
+
+// TestSearch_SortByIDWithMinID verifies that SortFieldID orders by the primary key
+// regardless of detection time and that MinID is an exclusive lower bound, also when
+// a text query joins the labels table (which has its own id column).
+func TestSearch_SortByIDWithMinID(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	label := createTestLabel(t, db, "Corvus corone", 1)
+	// IDs rise while detection times fall.
+	times := []int64{3000, 2000, 1000}
+	ids := make([]uint, 0, len(times))
+	for _, at := range times {
+		ids = append(ids, createDetectionForLabel(t, db, label.ID, at).ID)
+	}
+
+	got := func(filters *SearchFilters) []uint {
+		t.Helper()
+		results, _, err := repo.Search(ctx, filters)
+		require.NoError(t, err)
+		out := make([]uint, 0, len(results))
+		for _, d := range results {
+			out = append(out, d.ID)
+		}
+		return out
+	}
+
+	assert.Equal(t, ids, got(&SearchFilters{SortBy: SortFieldID}), "ascending by id, not by time")
+	assert.Equal(t, ids[1:], got(&SearchFilters{SortBy: SortFieldID, MinID: ids[0]}), "MinID is exclusive")
+	assert.Equal(t, ids[1:], got(&SearchFilters{SortBy: SortFieldID, MinID: ids[0], Query: "Corvus"}),
+		"MinID must not be ambiguous when labels is joined")
+}
+
+// TestSearch_TiedSortKeysPageDeterministically verifies that every non-id sort breaks
+// ties by detection id in the sort direction, so Limit/Offset pages cover each row
+// exactly once instead of repeating or skipping rows with equal sort keys.
+func TestSearch_TiedSortKeysPageDeterministically(t *testing.T) {
+	db := setupDetectionTestDBWithLabels(t)
+	ctx := t.Context()
+	repo := &detectionRepository{db: db}
+
+	const (
+		rowCount = 9
+		pageSize = 2
+		// sharedDetectedAt is the one timestamp every seeded row carries.
+		sharedDetectedAt = int64(1_700_000_000)
+		verifiedRank     = 0
+		unreviewedRank   = 1
+		otherRank        = 2
+	)
+	labels := []*entities.Label{
+		createTestLabel(t, db, "Corvus corone", 1),
+		createTestLabel(t, db, "Parus major", 1),
+	}
+	type seeded struct {
+		id      uint
+		species int
+		status  int
+	}
+	rows := make([]seeded, 0, rowCount)
+	for i := range rowCount {
+		det := createDetectionForLabel(t, db, labels[i%len(labels)].ID, sharedDetectedAt)
+		status := unreviewedRank
+		switch i % 3 {
+		case 0:
+			status = verifiedRank
+			require.NoError(t, db.Table(tableDetectionReviews).Create(&entities.DetectionReview{
+				DetectionID: det.ID, Verified: entities.VerificationCorrect,
+			}).Error)
+		case 2:
+			status = otherRank
+			require.NoError(t, db.Table(tableDetectionReviews).Create(&entities.DetectionReview{
+				DetectionID: det.ID, Verified: entities.VerificationFalsePositive,
+			}).Error)
+		}
+		rows = append(rows, seeded{id: det.ID, species: i % len(labels), status: status})
+	}
+
+	sortKey := map[string]func(seeded) int{
+		SortFieldDetectedAt: func(seeded) int { return 0 },
+		SortFieldConfidence: func(seeded) int { return 0 },
+		SortFieldSpecies:    func(s seeded) int { return s.species },
+		SortFieldStatus:     func(s seeded) int { return s.status },
+	}
+
+	for sortBy, key := range sortKey {
+		for _, desc := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/desc=%t", sortBy, desc), func(t *testing.T) {
+				want := slices.Clone(rows)
+				slices.SortFunc(want, func(a, b seeded) int {
+					c := cmp.Compare(key(a), key(b))
+					if c == 0 {
+						c = cmp.Compare(a.id, b.id)
+					}
+					if desc {
+						return -c
+					}
+					return c
+				})
+				wantIDs := make([]uint, 0, len(want))
+				for _, s := range want {
+					wantIDs = append(wantIDs, s.id)
+				}
+
+				var got []uint
+				for offset := 0; offset < rowCount; offset += pageSize {
+					page, _, err := repo.Search(ctx, &SearchFilters{
+						SortBy: sortBy, SortDesc: desc, Limit: pageSize, Offset: offset,
+					})
+					require.NoError(t, err)
+					for _, d := range page {
+						got = append(got, d.ID)
+					}
+				}
+				assert.Equal(t, wantIDs, got, "pages must cover every row once, ties ordered by id in the sort direction")
+			})
+		}
+	}
 }

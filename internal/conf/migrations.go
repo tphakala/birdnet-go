@@ -73,19 +73,12 @@ func migrateStreamEnabledDefaults() bool {
 // configs that predate the field so session signing remains stable across
 // restarts. Unlike the security package's temporary runtime fallback, this
 // updates the loaded settings and best-effort saves the generated secret.
-func ensureSessionSecret(settings *Settings) error {
+func ensureSessionSecret(settings *Settings) {
 	if settings.Security.SessionSecret != "" {
-		return nil
+		return
 	}
 
-	sessionSecret, err := GenerateRandomSecret()
-	if err != nil {
-		return errors.New(err).
-			Component("conf").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "generate_session_secret").
-			Build()
-	}
+	sessionSecret := GenerateRandomSecret()
 
 	settings.Security.SessionSecret = sessionSecret
 
@@ -99,21 +92,19 @@ func ensureSessionSecret(settings *Settings) error {
 	// This ensures the secret remains the same across restarts
 	configFile := viper.ConfigFileUsed()
 	if configFile == "" {
-		return nil
+		return
 	}
 
 	if err := SaveYAMLConfig(configFile, settings); err != nil {
 		// Log the error but don't fail - the generated secret will work for this session
 		GetLogger().Warn("Failed to save generated SessionSecret to config file", logger.Error(err))
-		return nil
+		return
 	}
 
 	// Set secure file permissions after saving
 	if err := os.Chmod(configFile, 0o600); err != nil {
 		GetLogger().Warn("Failed to set secure permissions on config file", logger.Error(err))
 	}
-
-	return nil
 }
 
 // EnsureProfilingToken mints diagnostics.profiling.token when the pprof
@@ -137,31 +128,22 @@ func ensureSessionSecret(settings *Settings) error {
 //
 // The caller owns persistence, and is told whether anything changed so it can
 // decide whether a write is needed.
-func EnsureProfilingToken(settings *Settings) (bool, error) {
+func EnsureProfilingToken(settings *Settings) bool {
 	if settings == nil {
-		return false, nil
+		return false
 	}
 
 	profiling := &settings.Diagnostics.Profiling
 	if !profiling.Enabled || profiling.Token != "" || settings.IsAuthProviderConfigured() {
-		return false, nil
+		return false
 	}
 
-	token, err := GenerateRandomSecret()
-	if err != nil {
-		return false, errors.New(err).
-			Component("conf").
-			Category(errors.CategoryConfiguration).
-			Context("operation", "generate_profiling_token").
-			Build()
-	}
-
-	profiling.Token = token
+	profiling.Token = GenerateRandomSecret()
 
 	// The value itself is never logged.
 	GetLogger().Info("Generated profiling token; no authentication provider is configured, so /debug/pprof/ requires the token from diagnostics.profiling.token")
 
-	return true, nil
+	return true
 }
 
 // migrateLegacyProvider converts a legacy SocialProvider to the new OAuthProviderConfig format.
@@ -685,8 +667,11 @@ func (s *Settings) ValidateModelConfig(knownIDs map[string]bool, checkSourceRefs
 
 	// During early config loading, models.enabled is not yet synchronized
 	// with gallery-installed models (ScanInstalled runs later), so these
-	// checks produce false positives. The orchestrator re-validates with
-	// the authoritative model list after startup sync is complete.
+	// checks produce false positives. The only production caller passes
+	// false, and nothing re-runs this check with source references turned
+	// on, so a source or stream that lists a model missing from
+	// models.enabled is not rejected here; the analysis pipeline skips such
+	// aliases at runtime.
 	if checkSourceRefs {
 		enabledSet := make(map[string]bool, len(s.Models.Enabled))
 		for _, id := range s.Models.Enabled {
@@ -717,14 +702,14 @@ func (s *Settings) ValidateModelConfig(knownIDs map[string]bool, checkSourceRefs
 // errors are collected and returned together so the user can fix them in
 // one pass.
 func (s *Settings) applyModelValidation() error {
-	// Fallback known-ID set used during config loading before the classifier
-	// package is available; the orchestrator re-validates with the authoritative
-	// classifier.KnownConfigIDs() later. Reuse ValidAudioModels (the same
-	// canonical + catalog-alias set, kept in lockstep with the registry by
-	// TestKnownConfigIDs_MatchesConfValidAudioModels) rather than hand-maintaining
-	// a third copy that could drift. The extra "" default key is harmless here
-	// because models.enabled never contains an empty entry. ValidateModelConfig
-	// only reads the map.
+	// Known-ID set used during config loading, before the classifier package
+	// is available; classifier.KnownConfigIDs() is not consulted here. Reuse
+	// ValidAudioModels (the same canonical + catalog-alias set, kept in
+	// lockstep with the registry by
+	// TestKnownConfigIDs_MatchesConfValidAudioModels) rather than
+	// hand-maintaining a third copy that could drift. The extra "" default key
+	// is harmless here because models.enabled never contains an empty entry.
+	// ValidateModelConfig only reads the map.
 	modelIssues := s.ValidateModelConfig(ValidAudioModels, false)
 	var fatalErrors []string
 	for _, issue := range modelIssues {

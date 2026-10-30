@@ -11,19 +11,34 @@ on:
       - "go.sum"
       - "Taskfile.yml"
       - ".github/workflows/container-test.yml"
+  # A pull request runs these image smoke tests only when something they check
+  # can change: the image recipe, the entrypoint and startup code, the config and
+  # path handling, the model loading, or the toolchain. Pushes to main keep the
+  # broad filter above, so any Go change is still checked on main.
   pull_request:
     paths:
       - "Dockerfile"
       - "Docker/**"
-      - "**/*.go"
       - "go.mod"
       - "go.sum"
       - "Taskfile.yml"
+      - "main.go"
+      - "cmd/**"
+      - "internal/conf/**"
+      - "internal/classifier/**"
+      - "internal/inference/**"
+      - "internal/securefs/**"
+      - "internal/diskmanager/**"
+      - "internal/datastore/sqlite*.go"
+      - "!**/*_test.go"
       - ".github/workflows/container-test.yml"
 
+# Only superseded pull request runs are cancelled. A run on main or a manual run
+# gets its own group per commit, so a burst of merges cannot cancel the run that
+# is the authoritative check of main.
 concurrency:
-  group: container-test-${{ github.ref }}
-  cancel-in-progress: true
+  group: container-test-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -49,7 +64,8 @@ jobs:
           tags: birdnet-go:test
           platforms: linux/amd64
           # Reads the registry caches the publish workflows populate (anonymous,
-          # public); writes/reads the PR-scoped GHA cache. Never pushes. The
+          # public) and the GHA cache; only pushes to main write the GHA cache, so PR
+          # builds do not churn the repository's cache budget. Never pushes images. The
           # -base:buildcache is required because publish app builds stack on the
           # pre-published base and never rebuild the runtime-base stage, so the
           # app :buildcache no longer holds the heavy base layers; this PR build
@@ -59,7 +75,7 @@ jobs:
             type=gha
             type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
             type=registry,ref=ghcr.io/${{ github.repository }}-base:buildcache
-          cache-to: type=gha,mode=max
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max' || '' }}
           provenance: false
 
       - name: Arbitrary-UID startup smoke test
@@ -120,7 +136,7 @@ jobs:
             type=gha,scope=arm64
             type=registry,ref=ghcr.io/${{ github.repository }}:buildcache
             type=registry,ref=ghcr.io/${{ github.repository }}-base:buildcache
-          cache-to: type=gha,mode=max,scope=arm64
+          cache-to: ${{ github.event_name == 'push' && 'type=gha,mode=max,scope=arm64' || '' }}
           provenance: false
 
       - name: Arbitrary-UID startup smoke test (arm64)

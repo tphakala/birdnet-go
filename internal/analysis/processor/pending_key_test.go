@@ -112,3 +112,74 @@ func TestPendingDetectionKey_RTSPUrlWithColons(t *testing.T) {
 	key2 := pendingDetectionKey("rtsp://cam2:554/alt", species)
 	assert.NotEqual(t, key, key2)
 }
+
+// TestModelContribution_RecordHit pins the per-model hit statistics: min, max and
+// sum of confidences, and first and last hit times folded with min/max so that
+// hits arriving out of audio order cannot leave first after last.
+func TestModelContribution_RecordHit(t *testing.T) {
+	t.Parallel()
+	const epsilon = 1e-9
+	base := time.Date(2026, 10, 24, 12, 0, 0, 0, time.UTC)
+	type hit struct {
+		confidence float64
+		at         time.Time
+	}
+	tests := []struct {
+		name      string
+		start     ModelContribution
+		hits      []hit
+		wantCount int
+		wantMin   float64
+		wantMax   float64
+		wantSum   float64
+		wantFirst time.Time
+		wantLast  time.Time
+	}{
+		{
+			name:      "single hit",
+			hits:      []hit{{0.8, base}},
+			wantCount: 1, wantMin: 0.8, wantMax: 0.8, wantSum: 0.8,
+			wantFirst: base, wantLast: base,
+		},
+		{
+			name:      "three hits",
+			hits:      []hit{{0.6, base}, {0.9, base.Add(time.Second)}, {0.7, base.Add(2 * time.Second)}},
+			wantCount: 3, wantMin: 0.6, wantMax: 0.9, wantSum: 2.2,
+			wantFirst: base, wantLast: base.Add(2 * time.Second),
+		},
+		{
+			name:      "hits arriving out of order",
+			hits:      []hit{{0.7, base.Add(2 * time.Second)}, {0.7, base}, {0.7, base.Add(time.Second)}},
+			wantCount: 3, wantMin: 0.7, wantMax: 0.7, wantSum: 2.1,
+			wantFirst: base, wantLast: base.Add(2 * time.Second),
+		},
+		{
+			name:      "old style literal without stats",
+			start:     ModelContribution{HitCount: 1, MaxConfidence: 0.85},
+			hits:      []hit{{0.5, base}},
+			wantCount: 2, wantMin: 0.5, wantMax: 0.85, wantSum: 0.5,
+			wantFirst: base, wantLast: base,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := tt.start
+			for _, h := range tt.hits {
+				c.recordHit(h.confidence, h.at)
+				if tt.start.HitCount == 0 {
+					mean := c.ConfidenceSum / float64(c.HitCount)
+					assert.LessOrEqual(t, c.MinConfidence, mean+epsilon, "min must not exceed the mean")
+					assert.LessOrEqual(t, mean, c.MaxConfidence+epsilon, "mean must not exceed max")
+				}
+				assert.False(t, c.FirstHitAt.After(c.LastHitAt), "first hit must not be after last hit")
+			}
+			assert.Equal(t, tt.wantCount, c.HitCount)
+			assert.InDelta(t, tt.wantMin, c.MinConfidence, epsilon)
+			assert.InDelta(t, tt.wantMax, c.MaxConfidence, epsilon)
+			assert.InDelta(t, tt.wantSum, c.ConfidenceSum, epsilon)
+			assert.True(t, tt.wantFirst.Equal(c.FirstHitAt), "first hit time")
+			assert.True(t, tt.wantLast.Equal(c.LastHitAt), "last hit time")
+		})
+	}
+}

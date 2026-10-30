@@ -4,7 +4,6 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -13,7 +12,6 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/alerts"
 	"github.com/tphakala/birdnet-go/internal/api/v2/analytics"
@@ -30,6 +28,7 @@ import (
 	mediaapi "github.com/tphakala/birdnet-go/internal/api/v2/media"
 	"github.com/tphakala/birdnet-go/internal/api/v2/models"
 	"github.com/tphakala/birdnet-go/internal/api/v2/notifications"
+	privacyapi "github.com/tphakala/birdnet-go/internal/api/v2/privacy"
 	rangeapi "github.com/tphakala/birdnet-go/internal/api/v2/range"
 	"github.com/tphakala/birdnet-go/internal/api/v2/species"
 	"github.com/tphakala/birdnet-go/internal/api/v2/sse"
@@ -151,6 +150,12 @@ type Controller struct {
 	// calls c.alerts.Shutdown() during teardown to stop the engine and its
 	// global event bus.
 	alerts *alerts.Handler
+
+	// privacyFilter serves the /api/v2/privacy-filter/* endpoints (hourly rollup
+	// and discarded detections, read-only). It needs only the shared
+	// *apicore.Core and builds its repositories in RegisterRoutes when a v2
+	// manager is set.
+	privacyFilter *privacyapi.Handler
 
 	// control serves the /api/v2/control/* endpoints (restart analysis, reload
 	// model, rebuild range filter, restart server/container, restart a single
@@ -366,6 +371,18 @@ func WithV2Manager(mgr datastoreV2.Manager) Option {
 	}
 }
 
+// WithDetectionRepository replaces the controller's default detection repository
+// (the datastore.Interface bridge built by apicore.NewCore) with repo. A nil repo
+// keeps the default. Domain handlers share the controller's core and read its Repo
+// per request, so the replacement reaches every handler.
+func WithDetectionRepository(repo datastore.DetectionRepository) Option {
+	return func(c *Controller) {
+		if repo != nil {
+			c.Repo = repo
+		}
+	}
+}
+
 // WithAudioEngine sets the AudioEngine for audio subsystem access.
 func WithAudioEngine(e *engine.AudioEngine) Option {
 	return func(c *Controller) {
@@ -417,7 +434,7 @@ func WithHealthErrorBuffer(buf *health.ErrorRingBuffer) Option {
 
 // New creates a new API controller, returning an error if initialization fails.
 // The controller owns the global settings singleton: it reads from the current
-// atomic snapshot on each request and publishes updates back via StoreSettings.
+// atomic snapshot on each request and publishes updates back through conf.UpdateSettings.
 func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
 	controlChan chan string,
@@ -433,7 +450,7 @@ func New(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
 		return nil, err
 	}
 	// Force true: the pointer identity check in NewWithOptions can fail when
-	// an out-of-band StoreSettings call (range filter rebuild at startup)
+	// an out-of-band UpdateSettings call (range filter rebuild at startup)
 	// replaces the global pointer before this constructor runs.
 	c.isGlobalOwner = true
 	return c, nil
@@ -487,7 +504,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// constructed here, so the &c.settingsMutex address and the method values are
 	// stable for the controller's lifetime.
 	c.tlsHandler = tlsapi.New(c.Core, &c.settingsMutex,
-		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
+		c.getSettingsOrFallback, c.updateAndSaveSettings, c.handleSettingsChanges)
 	// The integrations handler needs the same facade settings-save machinery as the
 	// TLS handler: the MQTT TLS certificate writes mutate persisted settings, so it
 	// receives the shared &c.settingsMutex (so those writes serialize against the
@@ -496,7 +513,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// lifetime, so this can be wired before the functional options loop (it needs no
 	// option-set dependency).
 	c.integrations = integrations.New(c.Core, &c.settingsMutex,
-		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges)
+		c.updateAndSaveSettings, c.handleSettingsChanges)
 	// The detections handler needs the same facade settings-save machinery as the
 	// integrations/TLS handlers (the review/ignore exclude-list mutation persists
 	// settings) plus four more facade-owned function dependencies whose subsystems
@@ -506,7 +523,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// read their backing fields at call time (so the post-option authService is
 	// observed), so this is wired before the functional options loop.
 	c.detections = detections.New(c.Core, &c.settingsMutex,
-		c.getSettingsOrFallback, c.publishAndSaveSettings, c.handleSettingsChanges,
+		c.getSettingsOrFallback, c.updateAndSaveSettings, c.handleSettingsChanges,
 		c.isClientAuthenticated, c.loadCommonNameMap, c.loadFoldedCommonNameMap,
 		c.loadCommonToScientificMap)
 	// The analytics handler is injected the same facade-owned dependencies as
@@ -542,6 +559,7 @@ func NewWithOptions(e *echo.Echo, ds datastore.Interface, settings *conf.Setting
 	// the shared core here (V2Manager, auth middleware, and the error/log helpers
 	// all promote from it).
 	c.alerts = alerts.New(c.Core)
+	c.privacyFilter = privacyapi.New(c.Core)
 	// The control handler owns its sourceRestarter and receives the shared
 	// control-signal channel as a send-only injection. c.controlChan is already
 	// set in the Controller literal above; passing it here narrows it to a
@@ -740,6 +758,7 @@ func (c *Controller) initRoutes() {
 		{"insights routes", c.initInsightsRoutes},
 		{"tls routes", func() { c.tlsHandler.RegisterRoutes(c.Group) }},
 		{"import routes", func() { c.imports.RegisterImportRoutes(c.Group) }},
+		{"privacy filter routes", func() { c.privacyFilter.RegisterRoutes(c.Group) }},
 	}
 
 	for _, initializer := range routeInitializers {
@@ -944,30 +963,4 @@ func (c *Controller) HandleErrorForTest(ctx echo.Context, err error, message str
 		fullMessage = fmt.Sprintf("%s: %v", message, err)
 	}
 	return echo.NewHTTPError(code, fullMessage)
-}
-
-// InitializeAPI creates a new API controller and registers all routes.
-// Auth middleware and service should be passed via functional options.
-func InitializeAPI(e *echo.Echo, ds datastore.Interface, settings *conf.Settings,
-	birdImageCache *imageprovider.BirdImageCache, sunCalc *suncalc.SunCalc,
-	controlChan chan string, proc *processor.Processor,
-	metrics *observability.Metrics, opts ...Option) *Controller {
-
-	// Create API controller with metrics and functional options
-	apiController, err := New(e, ds, settings, birdImageCache, sunCalc, controlChan, metrics, opts...)
-	if err != nil {
-		GetLogger().Error("Failed to initialize API", logger.Error(err))
-		os.Exit(1)
-	}
-
-	// Assign processor after initialization
-	apiController.Processor = proc
-
-	// Log initialization
-	apiController.LogInfoIfEnabled("API v2 initialized",
-		logger.String("version", settings.Version),
-		logger.String("build_date", settings.BuildDate),
-	)
-
-	return apiController
 }

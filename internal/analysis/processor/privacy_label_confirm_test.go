@@ -42,7 +42,7 @@ func labelHit(p *Processor, settings *conf.Settings, source, model string, end t
 }
 
 // held reports whether source has a label hit waiting for a second hit.
-func held(p *Processor, source string) (heldLabelHit, bool) {
+func held(p *Processor, source string) (humanHit, bool) {
 	h, ok := p.heldLabelHits[source]
 	return h, ok
 }
@@ -101,11 +101,11 @@ func TestRecordLabelHit_RecordsBothHitsWithOwnStamps(t *testing.T) {
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
 
-	first := p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.4})
+	first := p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, "", 0.4, 0))
 	assert.True(t, first.held)
 	assert.Empty(t, p.LastHumanDetection)
 
-	second := p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0.Add(5 * time.Second), confidence: 0.3})
+	second := p.recordLabelHit(settings, confirmSource, labelHumanHit(t0.Add(5*time.Second), "", 0.3, 0))
 	assert.False(t, second.held)
 	require.NotNil(t, second.confirmed)
 	assert.True(t, t0.Equal(second.confirmed.at), "the held hit keeps its own stamp")
@@ -114,7 +114,7 @@ func TestRecordLabelHit_RecordsBothHitsWithOwnStamps(t *testing.T) {
 	assert.False(t, stillHeld)
 
 	// Once confirmed, a further hit inside the window counts at once.
-	third := p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0.Add(10 * time.Second), confidence: 0.3})
+	third := p.recordLabelHit(settings, confirmSource, labelHumanHit(t0.Add(10*time.Second), "", 0.3, 0))
 	assert.False(t, third.held)
 	assert.Nil(t, third.confirmed)
 	assert.True(t, t0.Add(10*time.Second).Equal(p.LastHumanDetection[confirmSource].Time))
@@ -126,8 +126,8 @@ func TestRecordLabelHit_ExpiredHeldHitIsDroppedAndNeverCounts(t *testing.T) {
 	t0 := time.Unix(1000, 0)
 	lateAt := t0.Add(labelConfirmWindow + time.Second)
 
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.4})
-	late := p.recordLabelHit(settings, confirmSource, heldLabelHit{at: lateAt, confidence: 0.3})
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, "", 0.4, 0))
+	late := p.recordLabelHit(settings, confirmSource, labelHumanHit(lateAt, "", 0.3, 0))
 	assert.True(t, late.held, "the late hit is held itself")
 	require.NotNil(t, late.dropped)
 	assert.True(t, t0.Equal(late.dropped.at))
@@ -161,9 +161,9 @@ func TestRecordVADHit(t *testing.T) {
 			t.Parallel()
 			p, settings := confirmProcessor(tt.overlap)
 			if tt.holdLabel {
-				require.True(t, p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.4}).held)
+				require.True(t, p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, "", 0.4, 0)).held)
 			}
-			d := p.recordVADHit(settings, confirmSource, t0.Add(tt.vadAfter), 0)
+			d := p.recordVADHit(settings, confirmSource, vadHumanHit(t0.Add(tt.vadAfter), 0, 0))
 			assert.Equal(t, tt.wantConfirm, d.confirmed != nil)
 			assert.Equal(t, tt.wantDropped, d.dropped != nil)
 			got, ok := lastHit(p)
@@ -183,24 +183,24 @@ func TestRecordLabelHit_ReadsOverlapPerCall(t *testing.T) {
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
 
-	p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.4})
+	p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, "", 0.4, 0))
 	require.Empty(t, p.LastHumanDetection)
 
 	// Hot reload down to the boundary: a single hit counts again at once.
 	settings.BirdNET.Overlap = 1.5
-	d := p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0.Add(time.Hour), confidence: 0.4})
+	d := p.recordLabelHit(settings, confirmSource, labelHumanHit(t0.Add(time.Hour), "", 0.4, 0))
 	assert.False(t, d.held)
 	assert.True(t, t0.Add(time.Hour).Equal(p.LastHumanDetection[confirmSource].Time))
 
 	// And back up: a lone hit far from the counted one is held again.
 	settings.BirdNET.Overlap = 2.4
-	d = p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0.Add(2 * time.Hour), confidence: 0.4})
+	d = p.recordLabelHit(settings, confirmSource, labelHumanHit(t0.Add(2*time.Hour), "", 0.4, 0))
 	assert.True(t, d.held)
 	assert.True(t, t0.Add(time.Hour).Equal(p.LastHumanDetection[confirmSource].Time))
 
 	// A hit counted while confirmation was off still confirms a close hit after
 	// the reload up, since both are speech evidence inside the window.
-	d = p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0.Add(time.Hour + 5*time.Second), confidence: 0.4})
+	d = p.recordLabelHit(settings, confirmSource, labelHumanHit(t0.Add(time.Hour+5*time.Second), "", 0.4, 0))
 	assert.False(t, d.held)
 	assert.True(t, t0.Add(time.Hour+5*time.Second).Equal(p.LastHumanDetection[confirmSource].Time))
 }
@@ -238,7 +238,7 @@ func TestRunVADGate_ConfirmsHeldLabelHit(t *testing.T) {
 var countedLogLine = regexp.MustCompile(`operation=privacy_filter(\s|$)`)
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_OperationAndLevel(t *testing.T) {
+func TestReportHitDecision_OperationAndLevel(t *testing.T) {
 	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
 	p, settings := confirmProcessor(2.4)
 	t0 := time.Unix(1000, 0)
@@ -257,7 +257,32 @@ func TestLogLabelHitDecision_OperationAndLevel(t *testing.T) {
 }
 
 // Not parallel: logtest.CaptureBufferAt replaces the global logger.
-func TestLogLabelHitDecision_HeldHitLogsAtDebugWithoutCountedOperation(t *testing.T) {
+func TestReportHitDecision_DropWithConfirmationOffLogsItsReason(t *testing.T) {
+	infoLog := logtest.CaptureBufferAt(t, slog.LevelInfo)
+	p, settings := confirmProcessor(2.4)
+	t0 := time.Unix(1000, 0)
+
+	labelHit(p, settings, confirmSource, testVADModel, t0)
+	settings.BirdNET.Overlap = 0
+	labelHit(p, settings, confirmSource, testVADModel, t0.Add(time.Second))
+
+	// The same drop through a VAD hit, which logs nothing else of its own.
+	vadProc, vadSettings := confirmProcessor(2.4)
+	labelHit(vadProc, vadSettings, confirmSource, testVADModel, t0)
+	vadSettings.BirdNET.Overlap = 0
+	vadHit := vadHumanHit(t0.Add(time.Second), 0, 0)
+	d := vadProc.recordVADHit(vadSettings, confirmSource, vadHit)
+	vadProc.reportHitDecision(vadSettings, confirmSource, &vadHit, &d)
+
+	out := infoLog.String()
+	assert.Equal(t, 2, strings.Count(out, "operation=privacy_filter_label_confirm"), "each dropped hit logs once under the confirm operation")
+	assert.Equal(t, 2, strings.Count(out, "label confirmation no longer applies"), "a label hit and a VAD hit each log the reason")
+	assert.NotContains(t, out, "no second hit", "no window is involved when confirmation is off")
+	assert.NotContains(t, out, "window=", "the window field belongs to the expiry message only")
+}
+
+// Not parallel: logtest.CaptureBufferAt replaces the global logger.
+func TestReportHitDecision_HeldHitLogsAtDebugWithoutCountedOperation(t *testing.T) {
 	debugLog := logtest.CaptureBufferAt(t, slog.LevelDebug)
 	p, settings := confirmProcessor(2.4)
 
@@ -316,7 +341,7 @@ func TestRecordLabelHit_FollowsEffectiveOverlap(t *testing.T) {
 			p, settings := confirmProcessor(tt.configured)
 			attachCadencePlan(t, p, tt.configured, tt.effective)
 
-			d := p.recordLabelHit(settings, confirmSource, heldLabelHit{at: time.Unix(1000, 0), confidence: 0.4})
+			d := p.recordLabelHit(settings, confirmSource, labelHumanHit(time.Unix(1000, 0), "", 0.4, 0))
 
 			assert.Equal(t, tt.wantHeld, d.held)
 			_, counted := lastHit(p)
@@ -331,18 +356,20 @@ func TestRecordVADHit_FollowsEffectiveOverlap(t *testing.T) {
 	attachCadencePlan(t, p, 2.4, 2.4+0.5)
 	t0 := time.Unix(1000, 0)
 
-	require.True(t, p.recordLabelHit(settings, confirmSource, heldLabelHit{at: t0, confidence: 0.4}).held)
+	require.True(t, p.recordLabelHit(settings, confirmSource, labelHumanHit(t0, "", 0.4, 0)).held)
 
 	// The plan is republished with the overlap capped below the boundary while the
-	// configured value stays above it: the VAD hit counts alone and does not
-	// resolve the held label hit.
+	// configured value stays above it: the VAD hit counts alone and drops the held
+	// label hit, even inside the confirmation window, because confirmation is off.
 	attachCadencePlan(t, p, 2.4, 1.0)
-	d := p.recordVADHit(settings, confirmSource, t0.Add(time.Second), 0)
+	d := p.recordVADHit(settings, confirmSource, vadHumanHit(t0.Add(time.Second), 0, 0))
 
 	assert.Nil(t, d.confirmed)
-	assert.Nil(t, d.dropped)
+	require.NotNil(t, d.dropped)
+	assert.True(t, t0.Equal(d.dropped.at))
+	assert.True(t, d.confirmationOff)
 	_, stillHeld := held(p, confirmSource)
-	assert.True(t, stillHeld)
+	assert.False(t, stillHeld)
 	got, ok := lastHit(p)
 	require.True(t, ok)
 	assert.Equal(t, metrics.TriggerVAD, got.Trigger)

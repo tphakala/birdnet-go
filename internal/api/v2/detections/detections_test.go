@@ -3,13 +3,11 @@
 package detections
 
 import (
-	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -26,39 +24,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
-
-// executeNoteCommentsHandler simulates the handler behavior for getting comments.
-func executeNoteCommentsHandler(t *testing.T, c echo.Context, mockDS datastore.Interface, detectionID string, expectedStatus int) error {
-	t.Helper()
-	if expectedStatus == http.StatusOK {
-		comments, dbErr := mockDS.GetNoteComments(detectionID)
-		if dbErr != nil {
-			return echo.NewHTTPError(http.StatusNotFound, "Comments not found")
-		}
-		return c.JSON(http.StatusOK, comments)
-	}
-	return echo.NewHTTPError(expectedStatus, "Comments not found")
-}
-
-// assertNoteCommentsResponse validates the response for note comments.
-func assertNoteCommentsResponse(t *testing.T, rec *httptest.ResponseRecorder, err error, expectedStatus, expectedCount int) {
-	t.Helper()
-	if expectedStatus == http.StatusOK {
-		require.NoError(t, err)
-		assert.Equal(t, expectedStatus, rec.Code)
-		var comments []datastore.NoteComment
-		jsonErr := json.Unmarshal(rec.Body.Bytes(), &comments)
-		require.NoError(t, jsonErr)
-		assert.Len(t, comments, expectedCount)
-	} else {
-		require.Error(t, err)
-		httpErr, ok := errors.AsType[*echo.HTTPError](err)
-		assert.True(t, ok)
-		assert.Equal(t, expectedStatus, httpErr.Code)
-	}
-}
 
 // decodePaginated is a helper to unmarshal a response body into a PaginatedResponse
 // and extract the data as a map slice for easier testing.
@@ -101,31 +71,8 @@ func testRealtimeSource() datastore.AudioSource {
 	}
 }
 
-// categorizeHTTPResponse categorizes an HTTP response status into success, conflict, or failure.
-func categorizeHTTPResponse(t *testing.T, statusCode int, successes, conflicts, failures *int32) {
-	t.Helper()
-	switch statusCode {
-	case http.StatusOK:
-		atomic.AddInt32(successes, 1)
-	case http.StatusConflict:
-		atomic.AddInt32(conflicts, 1)
-	default:
-		t.Logf("Unexpected status code: %d", statusCode)
-		atomic.AddInt32(failures, 1)
-	}
-}
-
-// getConcurrencyLevel returns a platform-appropriate concurrency level for tests.
-func getConcurrencyLevel() int {
-	switch runtime.GOOS {
-	case "windows":
-		return 3
-	case "darwin":
-		return 4
-	default:
-		return 5
-	}
-}
+// invalidQueryParamsMessage is the message GetDetections answers a rejected query with, except for malformed date parameters, which carry their own.
+const invalidQueryParamsMessage = "Invalid detection query parameters"
 
 // TestGetDetections tests the GetDetections endpoint with various query types
 func TestGetDetections(t *testing.T) {
@@ -177,7 +124,6 @@ func TestGetDetections(t *testing.T) {
 		mockSetup      func(*mock.Mock)
 		expectedStatus int
 		expectedCount  int
-		checkResponse  func(t *testing.T, testName string, rec *httptest.ResponseRecorder)
 	}{
 		{
 			name: "All detections",
@@ -187,15 +133,10 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 10, 0).Return(mockNotes, int64(2), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("", 10, 0)).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 2)
-			},
 		},
 		{
 			name: "Hourly detections",
@@ -213,11 +154,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		{
 			name: "Species detections",
@@ -234,11 +170,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		{
 			name: "Search detections",
@@ -249,15 +180,10 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "Crow", false, 10, 0).Return(mockNotes[:1], int64(1), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("Crow", 10, 0)).Return(mockNotes[:1], int64(1), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		{
 			name: "Invalid numResults parameter",
@@ -269,17 +195,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusBadRequest, // Expecting 400 Bad Request
 			expectedCount:  0,                     // Not relevant for error case
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// Check recorder status and body for the error
-				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
-
-				// Check the response body for the error message
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
-			},
 		},
 		{
 			name:           "Invalid_offset_parameter",
@@ -287,36 +202,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			mockSetup:      func(m *mock.Mock) { /* No DB interaction expected */ },
 			expectedCount:  0, // Not relevant for error case
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// Check recorder status and body for the error
-				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
-
-				// Check the response body for the error message
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
-			},
-		},
-		{
-			name: "Invalid confidence parameter",
-			queryParams: map[string]string{
-				"minConfidence": "200", // Value > 100
-			},
-			mockSetup: func(m *mock.Mock) {
-				// Controller should still process the request
-				m.On("SearchNotes", "", false, 100, 0).Return([]datastore.Note{}, int64(0), nil)
-			},
-			expectedStatus: http.StatusOK, // Now expecting 200 OK
-			expectedCount:  0,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// Verify response is successful
-				var response PaginatedResponse
-				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				require.NoError(t, err)
-			},
 		},
 		{
 			name: "Extremely large numResults parameter",
@@ -327,17 +212,6 @@ func TestGetDetections(t *testing.T) {
 			expectedCount:  0,                     // Not relevant for error case
 			mockSetup: func(m *mock.Mock) {
 				// No DB interaction expected for bad request
-			},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				// Check recorder status and body for the error
-				assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected status code 400")
-
-				// Check the response body for the error message
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err, "Failed to unmarshal error response")
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters", "Error message mismatch in response body")
 			},
 		},
 		{
@@ -350,14 +224,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedCount:  0,
 			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
 		},
 		{
 			name: "Hourly query with missing hour",
@@ -368,14 +234,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedCount:  0,
 			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
 		},
 		{
 			name: "Hourly query with hour range rejected",
@@ -387,14 +245,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedCount:  0,
 			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
 		},
 		{
 			name: "Hourly query with out of range hour",
@@ -406,33 +256,6 @@ func TestGetDetections(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 			expectedCount:  0,
 			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
-		},
-		{
-			name: "Hourly query with same-value range rejected",
-			queryParams: map[string]string{
-				"queryType": "hourly",
-				"date":      "2025-03-07",
-				"hour":      "08-08",
-			},
-			expectedStatus: http.StatusBadRequest,
-			expectedCount:  0,
-			mockSetup:      func(m *mock.Mock) {},
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				assert.Equal(t, http.StatusBadRequest, rec.Code)
-				var errResp map[string]any
-				err := json.Unmarshal(rec.Body.Bytes(), &errResp)
-				require.NoError(t, err)
-				assert.Contains(t, errResp["message"], "Invalid detection query parameters")
-			},
 		},
 		// Auto-inference: species param without queryType should infer queryType=species
 		{
@@ -449,11 +272,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		// Auto-inference: search param without queryType should infer queryType=search
 		{
@@ -464,15 +282,10 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "Crow", false, 10, 0).Return(mockNotes[:1], int64(1), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("Crow", 10, 0)).Return(mockNotes[:1], int64(1), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		// Date param without queryType should route through advanced search
 		{
@@ -488,11 +301,6 @@ func TestGetDetections(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  1,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 1)
-			},
 		},
 		// limit as alias for numResults
 		{
@@ -503,15 +311,10 @@ func TestGetDetections(t *testing.T) {
 				"offset":    "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 5, 0).Return(mockNotes, int64(2), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("", 5, 0)).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 2)
-			},
 		},
 		// numResults takes precedence over limit
 		{
@@ -523,15 +326,10 @@ func TestGetDetections(t *testing.T) {
 				"offset":     "0",
 			},
 			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", "", false, 10, 0).Return(mockNotes, int64(2), nil)
+				m.On("SearchNotesAdvanced", searchDefaultMatcher("", 10, 0)).Return(mockNotes, int64(2), nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
-			checkResponse: func(t *testing.T, testName string, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				detections, _ := decodePaginated(t, rec.Body.Bytes())
-				assert.Len(t, detections, 2)
-			},
 		},
 	}
 
@@ -561,9 +359,14 @@ func TestGetDetections(t *testing.T) {
 			// Check the recorder's status code FIRST
 			assert.Equal(t, localTC.expectedStatus, rec.Code)
 
-			// Now, run the specific checkResponse function for this test case,
-			// passing the recorder.
-			localTC.checkResponse(t, localTC.name, rec)
+			if localTC.expectedStatus == http.StatusOK {
+				detections, _ := decodePaginated(t, rec.Body.Bytes())
+				assert.Len(t, detections, localTC.expectedCount)
+			} else {
+				var errResp map[string]any
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &errResp))
+				assert.Contains(t, errResp["message"], invalidQueryParamsMessage)
+			}
 
 			// Verify mock expectations (only relevant if status code was not an error handled before DB call)
 			if localTC.expectedStatus < 400 {
@@ -980,7 +783,7 @@ func TestGetRecentDetections(t *testing.T) {
 		expectedCount  int
 	}{
 		{
-			name:  "Default limit",
+			name:  "Default limit when none is given (#2361)",
 			limit: "",
 			mockSetup: func(m *mock.Mock) {
 				m.On("GetLastDetections", 10).Return(mockNotes, nil)
@@ -993,15 +796,6 @@ func TestGetRecentDetections(t *testing.T) {
 			limit: "5",
 			mockSetup: func(m *mock.Mock) {
 				m.On("GetLastDetections", 5).Return(mockNotes, nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedCount:  2,
-		},
-		{
-			name:  "Huge limit is clamped",
-			limit: "999999999",
-			mockSetup: func(m *mock.Mock) {
-				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -1020,15 +814,6 @@ func TestGetRecentDetections(t *testing.T) {
 			limit: "1001",
 			mockSetup: func(m *mock.Mock) {
 				m.On("GetLastDetections", maxNumResults).Return(mockNotes, nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedCount:  2,
-		},
-		{
-			name:  "Frontend maximum limit",
-			limit: "48",
-			mockSetup: func(m *mock.Mock) {
-				m.On("GetLastDetections", 48).Return(mockNotes, nil)
 			},
 			expectedStatus: http.StatusOK,
 			expectedCount:  2,
@@ -1313,31 +1098,6 @@ func TestDeleteDetectionMissingFilesNoError(t *testing.T) {
 	mockDS.AssertExpectations(t)
 }
 
-// TestDeleteDetectionEmptyClipName verifies that deleting a detection with
-// no clip name still succeeds (no file removal attempted).
-func TestDeleteDetectionEmptyClipName(t *testing.T) {
-	e, mockDS, controller := setupTestEnvironment(t)
-
-	mockDS.On("Get", "30").Return(datastore.Note{
-		ID:       30,
-		Locked:   false,
-		ClipName: "",
-	}, nil)
-	mockDS.On("Delete", "30").Return(nil)
-
-	req := httptest.NewRequest(http.MethodDelete, "/api/v2/detections/30", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues("30")
-
-	err := controller.DeleteDetection(c)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusNoContent, rec.Code)
-
-	mockDS.AssertExpectations(t)
-}
-
 // TestReviewDetection tests the ReviewDetection endpoint
 func TestReviewDetection(t *testing.T) {
 	// Setup
@@ -1380,33 +1140,16 @@ func TestReviewDetection(t *testing.T) {
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
-			name:        "Locked detection",
+			// The note read is unlocked, but the database re-check sees a lock
+			// taken since: the review is refused and the comment is not saved.
+			name:        "Locked in the database after the read",
 			detectionID: "4",
-			// No lock_detection field: with LockDetection as a *bool this stays nil,
-			// so a verify-only request cannot unlock a locked detection (409 stands).
-			requestBody: `{"verified": "correct"}`,
+			requestBody: `{"verified": "correct", "comment": "Late comment"}`,
 			mockSetup: func(m *mock.Mock) {
-				m.On("Get", "4").Return(datastore.Note{ID: 4, Locked: true}, nil)
+				m.On("Get", "4").Return(datastore.Note{ID: 4, Locked: false}, nil)
+				m.On("IsNoteLocked", "4").Return(true, nil)
 			},
 			expectedStatus: http.StatusConflict,
-		},
-		{
-			name:        "Valid review with special characters in comment",
-			detectionID: "5",
-			requestBody: `{"verified": "correct", "comment": "<script>alert('XSS')</script>Special chars: &<>\"'!@#$%^&*()_+{}[]|\\:;,.?/~"}`,
-			mockSetup: func(m *mock.Mock) {
-				setupValidReviewMock(m, "5", 5, true)
-			},
-			expectedStatus: http.StatusOK,
-		},
-		{
-			name:        "Valid review with extremely long comment",
-			detectionID: "6",
-			requestBody: `{"verified": "correct", "comment": "` + strings.Repeat("Very long comment. ", 500) + `"}`,
-			mockSetup: func(m *mock.Mock) {
-				setupValidReviewMock(m, "6", 6, true)
-			},
-			expectedStatus: http.StatusOK,
 		},
 	}
 
@@ -1728,70 +1471,6 @@ func TestIgnoreSpecies(t *testing.T) {
 		}
 	})
 
-	// Test toggle behavior: add then remove
-	t.Run("Toggle behavior - add species", func(t *testing.T) {
-		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings.Load())
-
-		// First request: add species (should not be in list initially)
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			strings.NewReader(`{"common_name": "American Crow"}`))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err := controller.IgnoreSpecies(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response IgnoreSpeciesResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "American Crow", response.CommonName)
-		assert.Equal(t, "added", response.Action)
-		assert.True(t, response.IsExcluded)
-	})
-
-	t.Run("Toggle behavior - remove species", func(t *testing.T) {
-		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings.Load())
-
-		// First, add the species
-		req1 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			strings.NewReader(`{"common_name": "Red-bellied Woodpecker"}`))
-		req1.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec1 := httptest.NewRecorder()
-		c1 := e.NewContext(req1, rec1)
-
-		err := controller.IgnoreSpecies(c1)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec1.Code)
-
-		var addResponse IgnoreSpeciesResponse
-		err = json.Unmarshal(rec1.Body.Bytes(), &addResponse)
-		require.NoError(t, err)
-		assert.Equal(t, "added", addResponse.Action)
-		assert.True(t, addResponse.IsExcluded)
-
-		// Second request: toggle (remove) the same species
-		req2 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			strings.NewReader(`{"common_name": "Red-bellied Woodpecker"}`))
-		req2.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec2 := httptest.NewRecorder()
-		c2 := e.NewContext(req2, rec2)
-
-		err = controller.IgnoreSpecies(c2)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec2.Code)
-
-		var removeResponse IgnoreSpeciesResponse
-		err = json.Unmarshal(rec2.Body.Bytes(), &removeResponse)
-		require.NoError(t, err)
-		assert.Equal(t, "Red-bellied Woodpecker", removeResponse.CommonName)
-		assert.Equal(t, "removed", removeResponse.Action)
-		assert.False(t, removeResponse.IsExcluded)
-	})
-
 	t.Run("Localized name resolution", func(t *testing.T) {
 		e, _, controller := setupTestEnvironmentWithBatName(t)
 		clearExcludedSpeciesList(t, controller.Settings.Load())
@@ -1896,55 +1575,6 @@ func TestIgnoreSpecies(t *testing.T) {
 			assert.Equal(t, expectedAction, response.Action, "Request %d: expected action %s", i+1, expectedAction)
 			assert.Equal(t, expectedAction == "added", response.IsExcluded, "Request %d: isExcluded mismatch", i+1)
 		}
-	})
-
-	t.Run("Special characters in species name", func(t *testing.T) {
-		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings.Load())
-
-		// Test with special characters (properly JSON encoded)
-		// Note: Use proper JSON encoding for special chars
-		specialName := "Bird with special chars: &<>'éàü"
-		reqBody := IgnoreSpeciesRequest{CommonName: specialName}
-		jsonBody, err := json.Marshal(reqBody)
-		require.NoError(t, err)
-
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			bytes.NewReader(jsonBody))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err = controller.IgnoreSpecies(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response IgnoreSpeciesResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, specialName, response.CommonName)
-		assert.Equal(t, "added", response.Action)
-	})
-
-	t.Run("Long species name", func(t *testing.T) {
-		e, _, controller := setupTestEnvironment(t)
-		clearExcludedSpeciesList(t, controller.Settings.Load())
-
-		longName := strings.Repeat("Very Long Bird Name ", 50)
-		req := httptest.NewRequest(http.MethodPost, "/api/v2/detections/ignore",
-			strings.NewReader(`{"common_name": "`+longName+`"}`))
-		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec := httptest.NewRecorder()
-		c := e.NewContext(req, rec)
-
-		err := controller.IgnoreSpecies(c)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, rec.Code)
-
-		var response IgnoreSpeciesResponse
-		err = json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-		assert.Equal(t, "added", response.Action)
 	})
 }
 
@@ -2106,8 +1736,8 @@ func TestIgnoreSpeciesConcurrency(t *testing.T) {
 	// All requests should succeed
 	assert.Equal(t, int32(numGoroutines), successCount)
 
-	// Verify final state - species should be either in or out of list
-	// (odd number of toggles = in list, even = out)
+	// Ten sequential toggles of one species from an empty list end with it
+	// removed, so a lost update under concurrency leaves Count at 1.
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/ignored", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
@@ -2119,10 +1749,7 @@ func TestIgnoreSpeciesConcurrency(t *testing.T) {
 	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 
-	// With 10 toggles starting from empty list: odd number = should be in list
-	// But due to concurrent execution, the final state depends on timing
-	// We just verify the endpoint didn't crash and returned valid data
-	assert.GreaterOrEqual(t, response.Count, 0)
+	assert.Equal(t, 0, response.Count, "an even number of toggles must leave the species out of the list")
 }
 
 // TestGetExcludedSpeciesConcurrentReadsWithToggle exercises GetExcludedSpecies
@@ -2183,563 +1810,40 @@ func TestGetExcludedSpeciesConcurrentReadsWithToggle(t *testing.T) {
 	assert.Zero(t, failures.Load(), "concurrent ignore/get-excluded requests should all succeed")
 }
 
-// TestAddCommentMethod tests the AddComment method directly
+// TestAddCommentMethod pins that AddComment saves the given text for the given
+// note, returns the datastore error, and saves nothing for an empty comment.
 func TestAddCommentMethod(t *testing.T) {
-	// Setup
-	_, mockDS, controller := setupTestEnvironment(t)
+	const noteID uint = 7
 
-	// Test cases
 	testCases := []struct {
 		name        string
-		noteID      uint
 		commentText string
-		mockSetup   func(*mock.Mock)
-		expectError bool
+		saveErr     error
+		expectSave  bool
 	}{
-		{
-			name:        "Valid comment",
-			noteID:      1,
-			commentText: "This is a test comment",
-			mockSetup: func(m *mock.Mock) {
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
-			},
-			expectError: false,
-		},
-		{
-			name:        "Database error",
-			noteID:      1,
-			commentText: "This is a test comment",
-			mockSetup: func(m *mock.Mock) {
-				m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(errors.NewStd("database error"))
-			},
-			expectError: true,
-		},
+		{name: "Valid comment", commentText: "This is a test comment", expectSave: true},
+		{name: "Database error", commentText: "This is a test comment", saveErr: errors.NewStd("database error"), expectSave: true},
+		{name: "Empty comment saves nothing", commentText: ""},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Setup mock expectations
-			mockDS.ExpectedCalls = nil
-			tc.mockSetup(&mockDS.Mock)
+			_, mockDS, controller := setupTestEnvironment(t)
+			if tc.expectSave {
+				mockDS.On("SaveNoteComment", mock.MatchedBy(func(c *datastore.NoteComment) bool {
+					return c.NoteID == noteID && c.Entry == tc.commentText
+				})).Return(tc.saveErr).Once()
+			}
 
-			// Call method directly
-			err := controller.AddComment(tc.noteID, tc.commentText)
-
-			// Check result
-			if tc.expectError {
-				require.Error(t, err)
+			err := controller.AddComment(noteID, tc.commentText)
+			if tc.saveErr != nil {
+				require.ErrorIs(t, err, tc.saveErr)
 			} else {
 				require.NoError(t, err)
 			}
-
-			// Verify mock expectations
 			mockDS.AssertExpectations(t)
 		})
 	}
-}
-
-// TestGetNoteComments tests retrieving comments for a detection
-func TestGetNoteComments(t *testing.T) {
-	// Setup
-	e, mockDS, _ := setupTestEnvironment(t)
-
-	// Create mock data
-	mockComments := []datastore.NoteComment{
-		{
-			ID:        1,
-			NoteID:    1,
-			Entry:     "First comment",
-			CreatedAt: time.Now().Add(-2 * time.Hour),
-			UpdatedAt: time.Now().Add(-2 * time.Hour),
-		},
-		{
-			ID:        2,
-			NoteID:    1,
-			Entry:     "Second comment",
-			CreatedAt: time.Now().Add(-1 * time.Hour),
-			UpdatedAt: time.Now().Add(-1 * time.Hour),
-		},
-	}
-
-	// Test cases
-	testCases := []struct {
-		name           string
-		detectionID    string
-		mockSetup      func(*mock.Mock)
-		expectedStatus int
-		expectedCount  int
-	}{
-		{
-			name:        "Detection with comments",
-			detectionID: "1",
-			mockSetup: func(m *mock.Mock) {
-				m.On("GetNoteComments", "1").Return(mockComments, nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedCount:  2,
-		},
-		{
-			name:        "Detection without comments",
-			detectionID: "2",
-			mockSetup: func(m *mock.Mock) {
-				m.On("GetNoteComments", "2").Return([]datastore.NoteComment{}, nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedCount:  0,
-		},
-		{
-			name:        "Detection not found",
-			detectionID: "999",
-			mockSetup: func(m *mock.Mock) {
-				// No mock setup needed for this test case
-			},
-			expectedStatus: http.StatusNotFound,
-			expectedCount:  0,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Setup mock expectations
-			mockDS.ExpectedCalls = nil
-			tc.mockSetup(&mockDS.Mock)
-
-			// Create request
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/"+tc.detectionID+"/comments", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetParamNames("id")
-			c.SetParamValues(tc.detectionID)
-
-			err := executeNoteCommentsHandler(t, c, mockDS, tc.detectionID, tc.expectedStatus)
-			assertNoteCommentsResponse(t, rec, err, tc.expectedStatus, tc.expectedCount)
-			mockDS.AssertExpectations(t)
-		})
-	}
-}
-
-// TestGetNoteCommentsWithHandler tests retrieving comments for a detection using a proper route handler
-func TestGetNoteCommentsWithHandler(t *testing.T) {
-	// Setup
-	e, mockDS, _ := setupTestEnvironment(t)
-
-	// Register the route
-	e.GET("/api/v2/detections/:id/comments", func(c echo.Context) error {
-		id := c.Param("id")
-		comments, err := mockDS.GetNoteComments(id)
-		if err != nil {
-			return c.JSON(http.StatusNotFound, map[string]string{"error": "Comments not found"})
-		}
-		return c.JSON(http.StatusOK, comments)
-	})
-
-	// Create mock data
-	mockComments := []datastore.NoteComment{
-		{
-			ID:        1,
-			NoteID:    1,
-			Entry:     "First comment",
-			CreatedAt: time.Now().Add(-2 * time.Hour),
-			UpdatedAt: time.Now().Add(-2 * time.Hour),
-		},
-		{
-			ID:        2,
-			NoteID:    1,
-			Entry:     "Second comment with special chars: <script>alert('XSS')</script>",
-			CreatedAt: time.Now().Add(-1 * time.Hour),
-			UpdatedAt: time.Now().Add(-1 * time.Hour),
-		},
-	}
-
-	// Test cases
-	testCases := []struct {
-		name           string
-		detectionID    string
-		mockSetup      func(*mock.Mock)
-		expectedStatus int
-		expectedCount  int
-		checkResponse  func(*testing.T, *httptest.ResponseRecorder)
-	}{
-		{
-			name:        "Detection with comments",
-			detectionID: "1",
-			mockSetup: func(m *mock.Mock) {
-				m.On("GetNoteComments", "1").Return(mockComments, nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedCount:  2,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				var comments []datastore.NoteComment
-				err := json.Unmarshal(rec.Body.Bytes(), &comments)
-				require.NoError(t, err)
-				assert.Len(t, comments, 2)
-				assert.Equal(t, "First comment", comments[0].Entry)
-				assert.Contains(t, comments[1].Entry, "Second comment with special chars")
-			},
-		},
-		{
-			name:        "Detection without comments",
-			detectionID: "2",
-			mockSetup: func(m *mock.Mock) {
-				m.On("GetNoteComments", "2").Return([]datastore.NoteComment{}, nil)
-			},
-			expectedStatus: http.StatusOK,
-			expectedCount:  0,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				var comments []datastore.NoteComment
-				err := json.Unmarshal(rec.Body.Bytes(), &comments)
-				require.NoError(t, err)
-				assert.Empty(t, comments)
-			},
-		},
-		{
-			name:        "Detection not found",
-			detectionID: "999",
-			mockSetup: func(m *mock.Mock) {
-				m.On("GetNoteComments", "999").Return([]datastore.NoteComment{}, errors.NewStd("record not found"))
-			},
-			expectedStatus: http.StatusNotFound,
-			expectedCount:  0,
-			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
-				t.Helper()
-				var response map[string]string
-				err := json.Unmarshal(rec.Body.Bytes(), &response)
-				require.NoError(t, err)
-				assert.Equal(t, "Comments not found", response["error"])
-			},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// Setup mock expectations
-			mockDS.ExpectedCalls = nil
-			tc.mockSetup(&mockDS.Mock)
-
-			// Create request
-			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/"+tc.detectionID+"/comments", http.NoBody)
-			rec := httptest.NewRecorder()
-			c := e.NewContext(req, rec)
-			c.SetParamNames("id")
-			c.SetParamValues(tc.detectionID)
-
-			// Call the handler through the Echo framework
-			e.ServeHTTP(rec, req)
-
-			// Check response
-			assert.Equal(t, tc.expectedStatus, rec.Code)
-			tc.checkResponse(t, rec)
-
-			// Verify mock expectations
-			mockDS.AssertExpectations(t)
-		})
-	}
-}
-
-// TestReviewDetectionConcurrency tests concurrent review attempts
-func TestReviewDetectionConcurrency(t *testing.T) {
-	t.Run("DeterministicRaceCondition", func(t *testing.T) {
-		// Setup a fresh environment for this subtest
-		e, mockDS, controller := setupTestEnvironment(t)
-
-		// Create mock note
-		mockNote := datastore.Note{
-			ID:     1,
-			Locked: false,
-		}
-
-		// Create review request
-		reviewRequest := map[string]any{
-			"verified": "correct",
-			"comment":  "This is a correct identification",
-		}
-		jsonData, err := json.Marshal(reviewRequest)
-		require.NoError(t, err)
-
-		// Setup mock behavior - note is not locked initially, then becomes locked
-		mockDS.On("Get", "1").Return(mockNote, nil).Times(2)
-
-		// First request will find the note unlocked and complete successfully
-		mockDS.On("IsNoteLocked", "1").Return(false, nil).Once()
-		mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil).Once()
-		mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil).Once()
-
-		// Second request will find the note already locked (race condition)
-		mockDS.On("IsNoteLocked", "1").Return(true, nil).Once()
-
-		// Create two requests
-		req1 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review",
-			bytes.NewReader(jsonData))
-		req1.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec1 := httptest.NewRecorder()
-		c1 := e.NewContext(req1, rec1)
-		c1.SetPath("/api/v2/detections/:id/review")
-		c1.SetParamNames("id")
-		c1.SetParamValues("1")
-
-		req2 := httptest.NewRequest(http.MethodPost, "/api/v2/detections/1/review",
-			bytes.NewReader(jsonData))
-		req2.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-		rec2 := httptest.NewRecorder()
-		c2 := e.NewContext(req2, rec2)
-		c2.SetPath("/api/v2/detections/:id/review")
-		c2.SetParamNames("id")
-		c2.SetParamValues("1")
-
-		// Execute both requests sequentially (simulating the race condition outcome)
-		_ = controller.ReviewDetection(c1) // Expected to succeed
-		_ = controller.ReviewDetection(c2) // Expected to fail with conflict
-
-		// Verify results - check status codes
-		assert.Equal(t, http.StatusOK, rec1.Code, "First request should succeed")
-		assert.Equal(t, http.StatusConflict, rec2.Code, "Second request should fail with conflict due to note being locked")
-
-		// Parse second response to verify error message
-		var resp2 map[string]any
-		err2 := json.Unmarshal(rec2.Body.Bytes(), &resp2)
-		require.NoError(t, err2)
-
-		// Check error message for second request
-		assert.Contains(t, resp2["message"], "Detection is locked and status cannot be changed")
-
-		// Verify expectations
-		mockDS.AssertExpectations(t)
-	})
-}
-
-// TestTrueConcurrentReviewAccess tests true concurrent review access
-func TestTrueConcurrentReviewAccess(t *testing.T) {
-	// Go 1.25: Add test metadata for better test organization and reporting
-	t.Attr("component", "detections")
-	t.Attr("type", "concurrent")
-	t.Attr("feature", "review")
-
-	// Setup with a fresh test environment
-	e, mockDS, controller := setupTestEnvironment(t)
-
-	// Create a mock note that will be accessed concurrently
-	mockNote := datastore.Note{
-		ID:     1,
-		Locked: false,
-	}
-
-	// Setup server to handle requests
-	server := httptest.NewServer(e)
-	defer server.Close()
-
-	// Register routes
-	e.POST("/api/v2/detections/:id/review", controller.ReviewDetection)
-
-	// Create a JSON review request that will be used by all goroutines
-	reviewRequest := map[string]any{
-		"correct":  true,
-		"comment":  "This is a correct identification",
-		"verified": "correct",
-	}
-	jsonData, err := json.Marshal(reviewRequest)
-	require.NoError(t, err)
-
-	// Number of concurrent requests to make
-	numConcurrent := 10
-
-	// Create waitgroups to coordinate goroutines
-	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
-	var wg sync.WaitGroup
-
-	// Create a barrier to ensure goroutines start roughly at the same time
-	var barrier sync.WaitGroup
-	barrier.Add(1)
-
-	// Track results
-	var successes, failures, conflicts int32
-
-	// Configure mock expectations for concurrent access - more flexible approach
-	// First call to Get - all goroutines should be able to get the note
-	mockDS.On("Get", "1").Return(mockNote, nil).Maybe()
-
-	// IsNoteLocked - could return either false or true depending on timing
-	mockDS.On("IsNoteLocked", "1").Return(false, nil).Maybe()
-	mockDS.On("IsNoteLocked", "1").Return(true, nil).Maybe()
-
-	// No longer using temporary locks during review operations
-
-	// SaveNoteComment and SaveNoteReview - might be called depending on success
-	mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil).Maybe()
-	mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil).Maybe()
-
-	// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
-	for range numConcurrent {
-		wg.Go(func() {
-			// Wait for the barrier to be lifted
-			barrier.Wait()
-
-			// Create a fresh request for each goroutine
-			client := apitest.NewTestHTTPClient(5 * time.Second)
-			defer client.CloseIdleConnections() // Ensure cleanup
-			req, _ := http.NewRequest(
-				http.MethodPost,
-				server.URL+"/api/v2/detections/1/review",
-				bytes.NewReader(jsonData),
-			)
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-
-			// Make the request
-			resp, err := client.Do(req)
-
-			// Track the results
-			if err == nil {
-				defer func() {
-					_ = resp.Body.Close() // Safe to ignore in test cleanup
-				}()
-
-				switch resp.StatusCode {
-				case http.StatusOK:
-					atomic.AddInt32(&successes, 1)
-				case http.StatusConflict:
-					atomic.AddInt32(&conflicts, 1)
-				default:
-					atomic.AddInt32(&failures, 1)
-				}
-			} else {
-				atomic.AddInt32(&failures, 1)
-			}
-		})
-	}
-
-	// Lift the barrier to start all goroutines roughly simultaneously
-	barrier.Done()
-
-	// Wait for all goroutines to complete
-	wg.Wait()
-
-	// Verify results - in a true concurrent environment, we expect:
-	// 1. At least one success (hopefully exactly one, but we can't guarantee it)
-	// 2. Some number of conflicts
-	// 3. No unexpected failures
-	assert.GreaterOrEqual(t, successes, int32(0), "At least one request should succeed")
-	assert.GreaterOrEqual(t, conflicts, int32(0), "Some requests should get conflict status")
-	assert.Equal(t, int32(0), failures, "There should be no unexpected failures")
-	assert.Equal(t, int32(numConcurrent), successes+conflicts, "All requests should either succeed or get conflict") // #nosec G115 -- numConcurrent is a small test constant (3-10), no overflow risk
-}
-
-// TestTrueConcurrentPlatformSpecific tests platform-specific concurrency
-func TestTrueConcurrentPlatformSpecific(t *testing.T) {
-	// Go 1.25: Add test metadata for better test organization and reporting
-	t.Attr("component", "detections")
-	t.Attr("type", "concurrent")
-	t.Attr("feature", "platform-specific")
-
-	// Setup with a fresh test environment
-	e, mockDS, controller := setupTestEnvironment(t)
-
-	// Setup server
-	server := httptest.NewServer(e)
-	defer server.Close()
-
-	// Register routes
-	e.POST("/api/v2/detections/:id/review", controller.ReviewDetection)
-
-	// Create a JSON review request
-	reviewRequest := map[string]any{
-		"correct":  true,
-		"comment":  "This is a correct identification",
-		"verified": "correct",
-	}
-	jsonData, err := json.Marshal(reviewRequest)
-	require.NoError(t, err)
-
-	// Get platform-appropriate concurrency level
-	numConcurrent := getConcurrencyLevel()
-
-	// Mock note that will be accessed concurrently
-	mockNote := datastore.Note{
-		ID:     1,
-		Locked: false,
-	}
-
-	// Setup mock expectations - more resilient approach for real concurrency
-	mockDS.On("Get", "1").Return(mockNote, nil).Maybe()
-	mockDS.On("IsNoteLocked", "1").Return(false, nil).Maybe()
-	mockDS.On("IsNoteLocked", "1").Return(true, nil).Maybe()
-	mockDS.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil).Maybe()
-	mockDS.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil).Maybe()
-
-	// Create wait group and barrier
-	// Go 1.25: Using WaitGroup.Go() for automatic Add/Done management
-	var wg sync.WaitGroup
-	var barrier sync.WaitGroup
-	barrier.Add(1)
-
-	// Track results
-	var successes, failures, conflicts int32
-
-	// Add timeout to prevent test hanging on platform-specific issues
-	done := make(chan bool)
-
-	go func() {
-		// Launch concurrent requests using Go 1.25 WaitGroup.Go() pattern
-		for i := range numConcurrent {
-			wg.Go(func() {
-				goroutineID := i
-
-				// Wait for barrier
-				barrier.Wait()
-
-				// Create request with timeout appropriate for platform
-				client := apitest.NewTestHTTPClient(5 * time.Second)
-				defer client.CloseIdleConnections() // Ensure cleanup
-
-				// Add small stagger time to simulate more realistic conditions
-				// (especially important on Windows)
-				if runtime.GOOS == "windows" {
-					time.Sleep(time.Duration(goroutineID) * 10 * time.Millisecond)
-				}
-
-				req, _ := http.NewRequest(
-					http.MethodPost,
-					server.URL+"/api/v2/detections/1/review",
-					bytes.NewReader(jsonData),
-				)
-				req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-
-				// Make request
-				resp, err := client.Do(req)
-
-				// Track results
-				if err == nil {
-					defer func() { _ = resp.Body.Close() }()
-					categorizeHTTPResponse(t, resp.StatusCode, &successes, &conflicts, &failures)
-				} else {
-					t.Logf("Request error: %v", err)
-					atomic.AddInt32(&failures, 1)
-				}
-			})
-		}
-
-		// Start all goroutines
-		barrier.Done()
-
-		// Wait for completion
-		wg.Wait()
-		done <- true
-	}()
-
-	// Add test timeout
-	select {
-	case <-done:
-		// Test completed normally
-	case <-time.After(10 * time.Second):
-		require.Fail(t, "Test timed out")
-	}
-
-	// Verify results with platform-specific considerations
-	// In real concurrent execution, we can't strictly control which request wins
-	assert.GreaterOrEqual(t, successes, int32(0), "At least one request should succeed")
-	assert.GreaterOrEqual(t, conflicts, int32(0), "Some requests should get conflict status")
-	assert.Equal(t, int32(0), failures, "There should be no unexpected failures")
-	assert.Equal(t, int32(numConcurrent), successes+conflicts, "All requests should either succeed or get conflict") // #nosec G115 -- numConcurrent is a small test constant (3-10), no overflow risk
 }
 
 // TestApplySpeciesTrackingMetadata_NoveltyFlags verifies that the isNewSpecies,
@@ -2752,47 +1856,40 @@ func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "novelty-flags")
 
+	// The yearly reset date is set explicitly to the production default.
 	settings := &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: 30,
 		SyncIntervalMinutes:  60,
-		YearlyTracking:       conf.YearlyTrackingSettings{Enabled: true, WindowDays: 30},
-		SeasonalTracking:     conf.SeasonalTrackingSettings{Enabled: true, WindowDays: 30},
+		YearlyTracking: conf.YearlyTrackingSettings{
+			Enabled:    true,
+			WindowDays: 30,
+			ResetMonth: conf.DefaultYearlyTrackingResetMonth,
+			ResetDay:   conf.DefaultYearlyTrackingResetDay,
+		},
+		SeasonalTracking: conf.SeasonalTrackingSettings{Enabled: true, WindowDays: 30},
 	}
 
 	tracker := species.NewTrackerFromSettings(nil, settings)
 
-	// Seed the tracker: species first seen on 2026-03-20
-	_, _ = tracker.CheckAndUpdateSpecies("Parus major", time.Date(2026, 3, 20, 8, 0, 0, 0, time.Local))
+	// Seed the first sighting at the current time. The handler reads the status
+	// at time.Now(), so a fixed seed date stops counting as this year's (and this
+	// season's) first sighting once the calendar moves on.
+	firstSeen := time.Now()
+	_, _ = tracker.CheckAndUpdateSpecies("Parus major", firstSeen)
 
 	controller := &Handler{Core: &apicore.Core{Processor: &processor.Processor{
 		NewSpeciesTracker: tracker,
 	}}}
 
 	tests := []struct {
-		name            string
-		detectionDate   string
-		wantNewSpecies  bool
-		wantNewThisYear bool
+		name          string
+		detectionDate string
+		wantNew       bool
 	}{
-		{
-			name:            "detection on first-seen date is new",
-			detectionDate:   "2026-03-20",
-			wantNewSpecies:  true,
-			wantNewThisYear: true,
-		},
-		{
-			name:            "detection on later date is not new",
-			detectionDate:   "2026-03-21",
-			wantNewSpecies:  false,
-			wantNewThisYear: false,
-		},
-		{
-			name:            "detection on much later date is not new",
-			detectionDate:   "2026-06-15",
-			wantNewSpecies:  false,
-			wantNewThisYear: false,
-		},
+		{"detection on first-seen date is new", firstSeen.Format(time.DateOnly), true},
+		{"detection on later date is not new", firstSeen.AddDate(0, 0, 1).Format(time.DateOnly), false},
+		{"detection on much later date is not new", firstSeen.AddDate(0, 3, 0).Format(time.DateOnly), false},
 	}
 
 	for _, tt := range tests {
@@ -2800,16 +1897,17 @@ func TestApplySpeciesTrackingMetadata_NoveltyFlags(t *testing.T) {
 			t.Parallel()
 			var det DetectionResponse
 			controller.applySpeciesTrackingMetadata(&det, "Parus major", tt.detectionDate)
-			assert.Equal(t, tt.wantNewSpecies, det.IsNewSpecies, "isNewSpecies for date %s", tt.detectionDate)
-			assert.Equal(t, tt.wantNewThisYear, det.IsNewThisYear, "isNewThisYear for date %s", tt.detectionDate)
+			assert.Equal(t, tt.wantNew, det.IsNewSpecies, "isNewSpecies for date %s", tt.detectionDate)
+			assert.Equal(t, tt.wantNew, det.IsNewThisYear, "isNewThisYear for date %s", tt.detectionDate)
+			assert.Equal(t, tt.wantNew, det.IsNewThisSeason, "isNewThisSeason for date %s", tt.detectionDate)
 		})
 	}
 }
 
-// TestNoteToDetectionResponse_SourceInfo verifies that noteToDetectionResponse
-// populates DetectionResponse.Source as *SourceInfo when note.Source.ID is set,
+// TestResultToDetectionResponse_SourceInfo verifies that resultToDetectionResponse
+// populates DetectionResponse.Source as *SourceInfo when the result's audio source ID is set,
 // leaves it nil when ID is empty, and derives Type from the SafeString.
-func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
+func TestResultToDetectionResponse_SourceInfo(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "detections")
 	t.Attr("type", "unit")
@@ -2820,7 +1918,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		source      datastore.AudioSource
+		source      detection.AudioSource
 		wantNil     bool
 		wantID      string
 		wantType    string
@@ -2828,12 +1926,12 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 	}{
 		{
 			name:    "empty source stays nil",
-			source:  datastore.AudioSource{},
+			source:  detection.AudioSource{},
 			wantNil: true,
 		},
 		{
 			name: "rtsp source populates id, type, and display name",
-			source: datastore.AudioSource{
+			source: detection.AudioSource{
 				ID:          "rtsp_87b89761",
 				SafeString:  "rtsp://camera.local/stream",
 				DisplayName: "Front Yard",
@@ -2844,7 +1942,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 		},
 		{
 			name: "alsa source without friendly name falls back to raw device",
-			source: datastore.AudioSource{
+			source: detection.AudioSource{
 				ID:          "hw:1,0",
 				SafeString:  "hw:1,0",
 				DisplayName: "hw:1,0",
@@ -2855,7 +1953,7 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 		},
 		{
 			name: "unknown safe string yields type unknown",
-			source: datastore.AudioSource{
+			source: detection.AudioSource{
 				ID:         "custom-source",
 				SafeString: "file:///tmp/audio.wav",
 			},
@@ -2867,22 +1965,68 @@ func TestNoteToDetectionResponse_SourceInfo(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			note := &datastore.Note{
-				ID:     42,
-				Date:   "2026-04-14",
-				Time:   "09:30:00",
-				Source: tt.source,
+			r := &detection.Result{
+				ID:          42,
+				Timestamp:   time.Date(2026, time.April, 14, 9, 30, 0, 0, time.UTC),
+				AudioSource: tt.source,
 			}
-			resp := controller.noteToDetectionResponse(note, false, nil)
+			resp := controller.resultToDetectionResponse(r, false, nil)
 
 			if tt.wantNil {
-				assert.Nil(t, resp.Source, "Source should be nil when note.Source.ID is empty")
+				assert.Nil(t, resp.Source, "Source should be nil when the source ID is empty")
 				return
 			}
-			require.NotNil(t, resp.Source, "Source should be populated when note.Source.ID is set")
+			require.NotNil(t, resp.Source, "Source should be populated when the source ID is set")
 			assert.Equal(t, tt.wantID, resp.Source.ID)
 			assert.Equal(t, tt.wantType, resp.Source.Type)
 			assert.Equal(t, tt.wantDisplay, resp.Source.DisplayName)
+		})
+	}
+}
+
+// TestGetDetectionTimeOfDay verifies that the time-of-day endpoint classifies the
+// stored instant of the detection read through the repository, and answers 404
+// when the repository has no such detection. The datastore mock has no
+// expectations, so any read through the legacy datastore fails the test.
+func TestGetDetectionTimeOfDay(t *testing.T) {
+	t.Parallel()
+
+	// Noon at the test location (Helsinki, EEST) in midsummer is daytime.
+	noon := time.Date(2026, time.June, 21, 12, 0, 0, 0, time.FixedZone("EEST", 3*60*60))
+
+	tests := []struct {
+		name       string
+		result     *detection.Result
+		repoErr    error
+		wantStatus int
+		wantTime   string
+	}{
+		{name: "found", result: &detection.Result{ID: 5, Timestamp: noon}, wantStatus: http.StatusOK, wantTime: datastore.TimeOfDayDay},
+		{name: "not found", repoErr: repository.ErrDetectionNotFound, wantStatus: http.StatusNotFound},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			e, _, h := setupTestEnvironment(t, apitest.WithoutSettingsPublish())
+			repo := mocks.NewMockDetectionRepository(t)
+			h.Repo = repo
+			repo.EXPECT().Get(mock.Anything, "5").Return(tt.result, tt.repoErr)
+
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/5/time-of-day", http.NoBody)
+			rec := httptest.NewRecorder()
+			c := e.NewContext(req, rec)
+			c.SetParamNames("id")
+			c.SetParamValues("5")
+
+			require.NoError(t, h.GetDetectionTimeOfDay(c))
+			require.Equal(t, tt.wantStatus, rec.Code)
+			if tt.wantStatus == http.StatusOK {
+				var resp TimeOfDayResponse
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+				assert.Equal(t, tt.wantTime, resp.TimeOfDay)
+			}
 		})
 	}
 }

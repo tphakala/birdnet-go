@@ -63,8 +63,7 @@ type window struct {
 //
 // The decoder is chosen by the file extension. Source and request problems wrap
 // one of the package sentinels; context errors pass through, and file access
-// errors carry no sentinel (except a failed read of M4A frame data, which
-// go-m4a reports as corrupt data).
+// errors carry no sentinel.
 func decode(ctx context.Context, path string, win *window, maxBytes int) (*pcmBuffer, error) {
 	return decodeAtLeast(ctx, path, win, maxBytes, 0)
 }
@@ -279,6 +278,49 @@ func chunkBytes(frameBytes int) int {
 	return chunkFrames * frameBytes
 }
 
+// frameReader reads decoded PCM from a decoder in whole frames. It carries the
+// context, zero-read and error-classification guards of the read loops that fill
+// a buffer (readLimited and MonoSource.Stream).
+type frameReader struct {
+	r          io.Reader
+	frameBytes int
+	// op is the telemetry operation of an error from the decoder.
+	op string
+	// zeroReads counts the (0, nil) reads in a row; it persists across fill calls.
+	zeroReads int
+}
+
+// fill reads into buf until it is full or the source ends, checking ctx before
+// every Read. It returns the bytes read and whether the source ended. Before the
+// end n equals len(buf); at the end a trailing partial frame is dropped, so buf
+// should hold a whole number of frames. A context error is returned unchanged;
+// maxZeroReads (0, nil) reads in a row wrap ErrUndecodableSource with
+// io.ErrNoProgress; any other error goes through decodeError.
+func (fr *frameReader) fill(ctx context.Context, buf []byte) (n int, eof bool, err error) {
+	for n < len(buf) {
+		if err := ctx.Err(); err != nil {
+			return n, false, err
+		}
+		m, err := fr.r.Read(buf[n:])
+		n += m
+		if m == 0 && err == nil {
+			fr.zeroReads++
+			if fr.zeroReads >= maxZeroReads {
+				return n, false, wrapSentinel(ErrUndecodableSource, io.ErrNoProgress, fr.op, "decoder made no progress", errors.CategoryAudio)
+			}
+		} else {
+			fr.zeroReads = 0
+		}
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				return n, false, decodeError(fr.op, err)
+			}
+			return n - n%fr.frameBytes, true, nil
+		}
+	}
+	return n, false, nil
+}
+
 // readLimited reads r until EOF or until limit bytes are held, whichever comes
 // first. The buffer starts at initialCap and doubles, never beyond limit, so its
 // capacity is bounded by what the caller allowed. A trailing partial frame is
@@ -286,30 +328,19 @@ func chunkBytes(frameBytes int) int {
 func readLimited(ctx context.Context, r io.Reader, limit, initialCap, frameBytes int) ([]byte, error) {
 	out := make([]byte, 0, min(max(initialCap, 0), limit))
 	chunk := chunkBytes(frameBytes)
-	zeroReads := 0
+	fr := &frameReader{r: r, frameBytes: frameBytes, op: "decode_read"}
 	for len(out) < limit {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
 		n := min(chunk, limit-len(out))
 		if cap(out)-len(out) < n {
 			out = growTo(out, min(max(2*cap(out), len(out)+n), limit))
 		}
-		m, err := r.Read(out[len(out) : len(out)+n])
-		out = out[:len(out)+m]
-		if m == 0 && err == nil {
-			zeroReads++
-			if zeroReads >= maxZeroReads {
-				return nil, wrapSentinel(ErrUndecodableSource, io.ErrNoProgress, "decode_read", "decoder made no progress", errors.CategoryAudio)
-			}
-		} else {
-			zeroReads = 0
-		}
+		m, eof, err := fr.fill(ctx, out[len(out):len(out)+n])
 		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return nil, decodeError("decode_read", err)
+			return nil, err
+		}
+		out = out[:len(out)+m]
+		if eof {
+			break
 		}
 	}
 	return out[:len(out)-len(out)%frameBytes], nil

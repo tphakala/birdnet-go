@@ -8,14 +8,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
+
+// weekShortcutSpanDays is the number of days between the first and last date of the "week"
+// search shortcut, the last 7 local dates including today.
+const weekShortcutSpanDays = 6
 
 // TestBatchDeleteDetections tests the BatchDeleteDetections endpoint.
 func TestBatchDeleteDetections(t *testing.T) {
@@ -287,43 +293,24 @@ func TestBatchLockDetections(t *testing.T) {
 
 // TestBatchResolveDetections tests the BatchResolveDetections endpoint.
 func TestBatchResolveDetections(t *testing.T) {
-	e, mockDS, controller := setupTestEnvironment(t)
-
 	mockNotes := []datastore.Note{
-		{ID: 1, ScientificName: "Turdus merula"},
-		{ID: 2, ScientificName: "Turdus merula"},
+		{ID: 1, Date: "2025-03-07", Time: "08:15:00", ScientificName: "Turdus merula"},
+		{ID: 2, Date: "2025-03-07", Time: "08:16:00", ScientificName: "Turdus merula"},
 	}
 
 	testCases := []struct {
 		name           string
 		body           any
-		mockSetup      func(*mock.Mock)
+		mockSetup      func(m *mocks.MockInterface)
 		expectedStatus int
 		checkResult    func(t *testing.T, rec *httptest.ResponseRecorder)
 	}{
 		{
 			name: "resolves species query to IDs",
 			body: BatchResolveRequest{QueryType: "species", Species: "Turdus merula"},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SpeciesDetections",
-					mock.AnythingOfType("string"),
-					mock.AnythingOfType("string"),
-					mock.AnythingOfType("string"),
-					mock.AnythingOfType("int"),
-					mock.AnythingOfType("bool"),
-					mock.AnythingOfType("int"),
-					mock.AnythingOfType("int"),
-				).Return(mockNotes, nil).Maybe()
-				m.On("CountSpeciesDetections",
-					mock.AnythingOfType("string"),
-					mock.AnythingOfType("string"),
-					mock.AnythingOfType("string"),
-					mock.AnythingOfType("int"),
-				).Return(int64(2), nil).Maybe()
-				m.On("SearchNotes", mock.AnythingOfType("string"), mock.AnythingOfType("bool"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-					Return(mockNotes, int64(2), nil).Maybe()
-				m.On("SearchNotesAdvanced", mock.AnythingOfType("*datastore.AdvancedSearchFilters")).
-					Return(mockNotes, int64(2), nil).Maybe()
+			mockSetup: func(m *mocks.MockInterface) {
+				m.EXPECT().SpeciesDetections("Turdus merula", "", "", 0, false, maxBatchSize+1, 0).Return(mockNotes, nil).Once()
+				m.EXPECT().CountSpeciesDetections("Turdus merula", "", "", 0).Return(int64(2), nil).Once()
 			},
 			expectedStatus: http.StatusOK,
 			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -335,13 +322,59 @@ func TestBatchResolveDetections(t *testing.T) {
 			},
 		},
 		{
+			name:           "refuses a malformed date on a species query before any lookup",
+			body:           BatchResolveRequest{QueryType: "species", Species: "Turdus merula", Date: "2025-3-7"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a malformed date on an all query before any lookup",
+			body:           BatchResolveRequest{QueryType: "all", Date: "not-a-date"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a malformed date on a search query before any lookup",
+			body:           BatchResolveRequest{QueryType: "search", Search: "robin", Date: "2025-3-7"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a shortcut on a species query before any lookup",
+			body:           BatchResolveRequest{QueryType: "species", Species: "Turdus merula", Date: "week"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name:           "refuses a malformed date on an hourly query before any lookup",
+			body:           BatchResolveRequest{QueryType: "hourly", Date: "yesterday", Hour: "8"},
+			mockSetup:      func(*mocks.MockInterface) {},
+			expectedStatus: http.StatusBadRequest,
+		},
+		{
+			name: "an all query accepts a search box shortcut",
+			body: BatchResolveRequest{QueryType: "all", Date: "week"},
+			mockSetup: func(m *mocks.MockInterface) {
+				// "week" is the last 7 local dates including today, so the forwarded range spans
+				// 6 days between its first and last date.
+				m.EXPECT().SearchNotesAdvanced(mock.MatchedBy(func(f *datastore.AdvancedSearchFilters) bool {
+					return f.DateRange != nil &&
+						f.DateRange.End.Sub(f.DateRange.Start) == weekShortcutSpanDays*24*time.Hour
+				})).Return(mockNotes, int64(2), nil).Once()
+			},
+			expectedStatus: http.StatusOK,
+			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				t.Helper()
+				var result BatchResolveResult
+				require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &result))
+				assert.Equal(t, 2, result.Count)
+			},
+		},
+		{
 			name: "resolves all query to IDs",
 			body: BatchResolveRequest{QueryType: "all"},
-			mockSetup: func(m *mock.Mock) {
-				m.On("SearchNotes", mock.AnythingOfType("string"), mock.AnythingOfType("bool"), mock.AnythingOfType("int"), mock.AnythingOfType("int")).
-					Return(mockNotes, int64(2), nil).Maybe()
-				m.On("SearchNotesAdvanced", mock.AnythingOfType("*datastore.AdvancedSearchFilters")).
-					Return(mockNotes, int64(2), nil).Maybe()
+			mockSetup: func(m *mocks.MockInterface) {
+				m.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("", maxBatchSize+1, 0)).Return(mockNotes, int64(2), nil).Once()
 			},
 			expectedStatus: http.StatusOK,
 			checkResult: func(t *testing.T, rec *httptest.ResponseRecorder) {
@@ -355,9 +388,8 @@ func TestBatchResolveDetections(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			mockDS.ExpectedCalls = nil
-			mockDS.Calls = nil
-			tc.mockSetup(&mockDS.Mock)
+			e, mockDS, controller := setupTestEnvironment(t)
+			tc.mockSetup(mockDS)
 
 			bodyBytes, err := json.Marshal(tc.body)
 			require.NoError(t, err)

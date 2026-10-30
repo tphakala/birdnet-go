@@ -128,7 +128,7 @@ func buildTimeoutError(action Action, timeout time.Duration, step, total int) er
 // next detection.
 //
 // This deliberately does NOT fetch on the caller's goroutine. Both callers run inside
-// the CompositeAction that chains Database -> SSE -> MQTT under a 30s timeout, and a
+// the CompositeAction that chains Database -> enqueue MQTT -> SSE (10s per step), and a
 // cold species can take minutes to resolve through the provider chain. Audio export
 // was moved out of this CompositeAction for exactly this reason (see the note in
 // actions_database.go; Sentry BIRDNET-GO-WD); the image lookup was the same hazard
@@ -136,7 +136,7 @@ func buildTimeoutError(action Action, timeout time.Duration, step, total int) er
 // publish is the media-proxy URL, which does not depend on this lookup succeeding.
 // It also resolves at most once per detection: the result is published to the
 // shared DetectionContext so the Database, SSE and MQTT actions of one
-// CompositeAction share a single lookup instead of each making their own.
+// detection share a single lookup instead of each making their own.
 func getBirdImageFromCache(detectionCtx *DetectionContext, cache *imageprovider.BirdImageCache, scientificName, commonName, correlationID string) imageprovider.BirdImage {
 	if img, resolved := detectionCtx.LoadBirdImage(); resolved {
 		return img
@@ -168,7 +168,14 @@ func getBirdImageFromCache(detectionCtx *DetectionContext, cache *imageprovider.
 	return birdImage
 }
 
-// Execute runs all actions sequentially, stopping on first error
+// laterStepSkipper is implemented by a step that can decide, after returning nil,
+// that the detection needs no further steps.
+type laterStepSkipper interface {
+	skipsLaterSteps() bool
+}
+
+// Execute runs all actions sequentially, stopping on first error or when a step
+// reports that the later steps must not run.
 // This method is designed to prevent deadlocks and handle timeouts properly
 func (a *CompositeAction) Execute(ctx context.Context, data any) error {
 	// Handle nil or empty actions gracefully
@@ -206,6 +213,9 @@ func (a *CompositeAction) Execute(ctx context.Context, data any) error {
 		err := a.executeActionWithRecovery(ctx, action, data, currentStep, nonNilCount)
 		if err != nil {
 			return err
+		}
+		if s, ok := action.(laterStepSkipper); ok && s.skipsLaterSteps() {
+			return nil
 		}
 	}
 
@@ -254,26 +264,75 @@ func (a *CompositeAction) handleExecutionError(err error, action Action, timeout
 		return a.logAndReturnTimeoutError(action, timeout, step, total)
 	}
 
-	GetLogger().Error("Composite action failed",
+	a.logStepFailure("Composite action failed", "composite_action_execute", err, action, step, total)
+	return err
+}
+
+// logAndReturnTimeoutError logs a timeout error and returns a structured timeout error.
+func (a *CompositeAction) logAndReturnTimeoutError(action Action, timeout time.Duration, step, total int) error {
+	err := buildTimeoutError(action, timeout, step, total)
+	a.logStepFailure("Composite action timed out", "composite_action_timeout", err, action, step, total,
+		logger.Float64("timeout_seconds", timeout.Seconds()))
+	return err
+}
+
+// willRetry reports whether the job queue will run the composite again after err:
+// the composite has a retry policy whose check still allows it. The queue's own
+// log line announces such a retry, so the step failure is not an Error yet.
+func (a *CompositeAction) willRetry(err error) bool {
+	return a.RetryConfig.Enabled && a.RetryConfig.Retryable != nil && a.RetryConfig.Retryable(err)
+}
+
+// logStepFailure logs a failed or timed out step at Error, or at Debug when the
+// queue is about to retry the composite, so an outage does not produce an Error
+// line for every retry attempt.
+func (a *CompositeAction) logStepFailure(msg, operation string, err error, action Action, step, total int, extra ...logger.Field) {
+	fields := append([]logger.Field{
 		logger.String("component", "analysis.processor.actions"),
 		logger.String("detection_id", a.CorrelationID),
 		logger.Int("step", step),
 		logger.Int("total_steps", total),
 		logger.String("action_description", action.GetDescription()),
 		logger.Error(err),
-		logger.String("operation", "composite_action_execute"))
-	return err
+		logger.String("operation", operation),
+	}, extra...)
+	if a.willRetry(err) {
+		GetLogger().Debug(msg+", will be retried", fields...)
+		return
+	}
+	GetLogger().Error(msg, fields...)
 }
 
-// logAndReturnTimeoutError logs a timeout error and returns a structured timeout error.
-func (a *CompositeAction) logAndReturnTimeoutError(action Action, timeout time.Duration, step, total int) error {
-	GetLogger().Error("Composite action timed out",
-		logger.String("component", "analysis.processor.actions"),
-		logger.String("detection_id", a.CorrelationID),
-		logger.Int("step", step),
-		logger.Int("total_steps", total),
-		logger.String("action_description", action.GetDescription()),
-		logger.Float64("timeout_seconds", timeout.Seconds()),
-		logger.String("operation", "composite_action_timeout"))
-	return buildTimeoutError(action, timeout, step, total)
+// enqueueAction is a CompositeAction step that hands another action to the job
+// queue as its own job instead of running it inline. It lets an action that
+// depends on an earlier composite step (for example MQTT, which needs the
+// database ID) still get its own retry policy from the queue, which a step
+// inside the composite cannot have: the composite is retried only while its
+// database step reports a save that stored nothing, and this step runs only after
+// the save has landed, so a retried composite never enqueues it twice.
+//
+// Like every composite step it runs only when all earlier steps returned nil and
+// none ended the detection.
+type enqueueAction struct {
+	action Action
+	// detection is the task payload. It carries no PCM data, so a job that is
+	// retrying does not hold on to the audio.
+	detection Detections
+	enqueue   func(ctx context.Context, task *Task) error
+}
+
+// Execute enqueues the wrapped action. An enqueue failure is not returned:
+// EnqueueTaskCtx logs a full or stopped queue with the species; a context that
+// is already done returns without a log, and then the composite is being
+// abandoned. Returning the error would stop the composite and skip the later
+// steps for a detection that is already saved.
+func (a *enqueueAction) Execute(ctx context.Context, _ any) error {
+	task := &Task{Type: TaskTypeAction, Detection: a.detection, Action: a.action}
+	_ = a.enqueue(ctx, task)
+	return nil
+}
+
+// GetDescription returns a human-readable description of the step.
+func (a *enqueueAction) GetDescription() string {
+	return "Enqueue " + a.action.GetDescription()
 }

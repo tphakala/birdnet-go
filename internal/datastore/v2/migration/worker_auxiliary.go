@@ -15,37 +15,68 @@ import (
 	"github.com/tphakala/birdnet-go/internal/logger"
 )
 
-// AuxiliaryMigrationResult tracks what was migrated and what was skipped.
+// Auxiliary section names, shared by the result sections and the outcome summary.
+const (
+	auxSectionImageCache      = "image cache"
+	auxSectionThreshold       = "threshold"
+	auxSectionThresholdEvents = "threshold events"
+	auxSectionNotifications   = "notifications"
+	auxSectionWeather         = "weather"
+)
+
+// Sentinel errors recorded in a section's Error when rows that should have been
+// copied were not.
+var (
+	// ErrAuxLabelNotResolved means a species label was missing after batch creation.
+	ErrAuxLabelNotResolved = errors.NewStd("species label not resolved after batch creation")
+	// ErrAuxDailyEventNotInV2 means a legacy daily event date is missing in v2.
+	ErrAuxDailyEventNotInV2 = errors.NewStd("legacy daily event date not found in v2")
+	// ErrAuxDependencyNotConfigured means the auxiliary migrator lacks a dependency.
+	ErrAuxDependencyNotConfigured = errors.NewStd("auxiliary migrator dependency not configured")
+)
+
+// AuxiliaryMigrationResult tracks what was migrated, skipped and failed.
+//
+// Skipped counts legacy rows that cannot exist in v2. Failed counts rows that
+// should have been copied and were not. Error is the first error of any kind for
+// the section: it is set whenever a failed count rises or a fetch, label or read
+// fails, so a nil Error means the section is complete.
 type AuxiliaryMigrationResult struct {
 	ImageCaches struct {
 		Total    int
 		Migrated int
 		Skipped  int
-		Error    error // Non-nil if fetch from legacy failed
+		Failed   int
+		Error    error
 	}
 	Thresholds struct {
 		Total    int
 		Migrated int
 		Skipped  int
+		Failed   int
 		Error    error
 	}
 	ThresholdEvents struct {
 		Total    int
 		Migrated int
 		Skipped  int
-		Error    error // Non-nil if fetch from legacy failed
+		Failed   int
+		Error    error // A failed fetch leaves the event count unknown, so Failed stays 0
 	}
 	Notifications struct {
 		Total    int
 		Migrated int
 		Skipped  int
+		Failed   int
 		Error    error
 	}
 	Weather struct {
 		DailyEventsTotal      int
 		DailyEventsMigrated   int
+		DailyEventsFailed     int
 		HourlyWeatherTotal    int
 		HourlyWeatherMigrated int
+		HourlyWeatherFailed   int
 		Skipped               int
 		Error                 error
 	}
@@ -56,17 +87,27 @@ type auxSection struct {
 	name     string
 	total    int
 	migrated int
+	skipped  int
+	failed   int
 	err      error
 }
 
 // sections returns the standard (non-weather) auxiliary migration sections.
 func (r *AuxiliaryMigrationResult) sections() []auxSection {
 	return []auxSection{
-		{"image cache", r.ImageCaches.Total, r.ImageCaches.Migrated, r.ImageCaches.Error},
-		{"threshold", r.Thresholds.Total, r.Thresholds.Migrated, r.Thresholds.Error},
-		{"threshold events", r.ThresholdEvents.Total, r.ThresholdEvents.Migrated, r.ThresholdEvents.Error},
-		{"notifications", r.Notifications.Total, r.Notifications.Migrated, r.Notifications.Error},
+		{auxSectionImageCache, r.ImageCaches.Total, r.ImageCaches.Migrated, r.ImageCaches.Skipped, r.ImageCaches.Failed, r.ImageCaches.Error},
+		{auxSectionThreshold, r.Thresholds.Total, r.Thresholds.Migrated, r.Thresholds.Skipped, r.Thresholds.Failed, r.Thresholds.Error},
+		{auxSectionThresholdEvents, r.ThresholdEvents.Total, r.ThresholdEvents.Migrated, r.ThresholdEvents.Skipped, r.ThresholdEvents.Failed, r.ThresholdEvents.Error},
+		{auxSectionNotifications, r.Notifications.Total, r.Notifications.Migrated, r.Notifications.Skipped, r.Notifications.Failed, r.Notifications.Error},
 	}
+}
+
+// firstAuxError keeps the first error recorded for a section.
+func firstAuxError(current, err error) error {
+	if current != nil {
+		return current
+	}
+	return err
 }
 
 // LogErrors logs a warning for each auxiliary section that encountered errors.
@@ -93,7 +134,9 @@ func (r *AuxiliaryMigrationResult) LogErrors(log logger.Logger) {
 	}
 }
 
-// HasErrors returns true if any migration step encountered errors fetching legacy data.
+// HasErrors returns true if any section failed to copy rows that should have been
+// copied, or failed to fetch, resolve or read the data it needs. Every such failure
+// sets the section's Error.
 func (r *AuxiliaryMigrationResult) HasErrors() bool {
 	return r.ImageCaches.Error != nil ||
 		r.Thresholds.Error != nil ||
@@ -102,39 +145,83 @@ func (r *AuxiliaryMigrationResult) HasErrors() bool {
 		r.Weather.Error != nil
 }
 
+// Outcome returns the status to persist for this result and, when it failed, a
+// summary with one part per failed section joined by "; ". Each part holds counts
+// only, never error text.
+func (r *AuxiliaryMigrationResult) Outcome() (status entities.AuxiliaryDataStatus, summary string) {
+	if !r.HasErrors() {
+		return entities.AuxiliaryDataStatusSucceeded, ""
+	}
+	var parts []string
+	for _, sec := range r.sections() {
+		if sec.err == nil {
+			continue
+		}
+		parts = append(parts, auxSectionSummary(sec.name,
+			fmt.Sprintf("%d of %d migrated", sec.migrated, sec.total), sec.failed))
+	}
+	if r.Weather.Error != nil {
+		w := &r.Weather
+		counts := fmt.Sprintf("daily events %d of %d migrated%s, hourly weather %d of %d migrated%s",
+			w.DailyEventsMigrated, w.DailyEventsTotal, auxFailedSuffix(w.DailyEventsFailed),
+			w.HourlyWeatherMigrated, w.HourlyWeatherTotal, auxFailedSuffix(w.HourlyWeatherFailed))
+		parts = append(parts, fmt.Sprintf("%s: %s", auxSectionWeather, counts))
+	}
+	return entities.AuxiliaryDataStatusFailed, strings.Join(parts, "; ")
+}
+
+// auxFailedSuffix formats a failed count for the summary, omitting a zero count.
+func auxFailedSuffix(failed int) string {
+	if failed == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (%d failed)", failed)
+}
+
+// auxSectionSummary formats one failed section of the outcome summary. It carries
+// counts only: the summary is shown by the status API and the support dump, and a
+// section error can name paths, hosts or users. The errors themselves are logged by
+// LogErrors.
+func auxSectionSummary(name, counts string, failed int) string {
+	if failed == 0 {
+		return fmt.Sprintf("%s: %s", name, counts)
+	}
+	return fmt.Sprintf("%s: %s, %d failed", name, counts, failed)
+}
+
 // Summary returns a human-readable summary of the migration.
 func (r *AuxiliaryMigrationResult) Summary() string {
 	var b strings.Builder
 	b.WriteString("Auxiliary Migration Summary:\n")
 
-	fmt.Fprintf(&b, "  Image Caches: %d/%d migrated", r.ImageCaches.Migrated, r.ImageCaches.Total)
+	fmt.Fprintf(&b, "  Image Caches: %d/%d migrated, %d skipped, %d failed", r.ImageCaches.Migrated, r.ImageCaches.Total, r.ImageCaches.Skipped, r.ImageCaches.Failed)
 	if r.ImageCaches.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.ImageCaches.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.ImageCaches.Error)
 	}
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "  Thresholds: %d/%d migrated", r.Thresholds.Migrated, r.Thresholds.Total)
+	fmt.Fprintf(&b, "  Thresholds: %d/%d migrated, %d skipped, %d failed", r.Thresholds.Migrated, r.Thresholds.Total, r.Thresholds.Skipped, r.Thresholds.Failed)
 	if r.Thresholds.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.Thresholds.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.Thresholds.Error)
 	}
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "  Threshold Events: %d/%d migrated", r.ThresholdEvents.Migrated, r.ThresholdEvents.Total)
+	fmt.Fprintf(&b, "  Threshold Events: %d/%d migrated, %d skipped, %d failed", r.ThresholdEvents.Migrated, r.ThresholdEvents.Total, r.ThresholdEvents.Skipped, r.ThresholdEvents.Failed)
 	if r.ThresholdEvents.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.ThresholdEvents.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.ThresholdEvents.Error)
 	}
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "  Notifications: %d/%d migrated", r.Notifications.Migrated, r.Notifications.Total)
+	fmt.Fprintf(&b, "  Notifications: %d/%d migrated, %d skipped, %d failed", r.Notifications.Migrated, r.Notifications.Total, r.Notifications.Skipped, r.Notifications.Failed)
 	if r.Notifications.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.Notifications.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.Notifications.Error)
 	}
 	b.WriteString("\n")
 
-	fmt.Fprintf(&b, "  Daily Events: %d/%d migrated", r.Weather.DailyEventsMigrated, r.Weather.DailyEventsTotal)
-	fmt.Fprintf(&b, ", Hourly Weather: %d/%d migrated", r.Weather.HourlyWeatherMigrated, r.Weather.HourlyWeatherTotal)
+	fmt.Fprintf(&b, "  Daily Events: %d/%d migrated, %d failed", r.Weather.DailyEventsMigrated, r.Weather.DailyEventsTotal, r.Weather.DailyEventsFailed)
+	fmt.Fprintf(&b, ", Hourly Weather: %d/%d migrated, %d skipped, %d failed", r.Weather.HourlyWeatherMigrated, r.Weather.HourlyWeatherTotal, r.Weather.Skipped, r.Weather.HourlyWeatherFailed)
 	if r.Weather.Error != nil {
-		fmt.Fprintf(&b, " (fetch error: %v)", r.Weather.Error)
+		fmt.Fprintf(&b, " (error: %v)", r.Weather.Error)
 	}
 	b.WriteString("\n")
 
@@ -192,18 +279,28 @@ func NewAuxiliaryMigrator(cfg *AuxiliaryMigratorConfig) *AuxiliaryMigrator {
 
 // MigrateAll migrates all auxiliary tables from legacy to v2.
 // This should be called once during the migration process.
-// Returns a result struct with detailed migration statistics.
+// Returns a result struct with detailed migration statistics; its Outcome is what
+// callers record. A missing dependency returns an error wrapping
+// ErrAuxDependencyNotConfigured instead of silently skipping rows.
 func (m *AuxiliaryMigrator) MigrateAll(ctx context.Context) (*AuxiliaryMigrationResult, error) {
 	result := &AuxiliaryMigrationResult{}
 
-	if m.legacyStore == nil {
-		m.logger.Debug("no legacy store provided, skipping auxiliary migration")
-		return result, nil
-	}
-
-	// Fail fast if label repo is not configured - it's required for migration
-	if m.labelRepo == nil {
-		return result, errors.NewStd("label repository not configured")
+	// Fail fast on a missing dependency: skipping would leave rows uncopied while
+	// the caller records a clean outcome.
+	for _, dep := range []struct {
+		name       string
+		configured bool
+	}{
+		{"legacy store", m.legacyStore != nil},
+		{"label repository", m.labelRepo != nil},
+		{"image cache repository", m.imageCacheRepo != nil},
+		{"threshold repository", m.thresholdRepo != nil},
+		{"notification repository", m.notificationRepo != nil},
+		{"weather repository", m.weatherRepo != nil},
+	} {
+		if !dep.configured {
+			return result, fmt.Errorf("%w: %s", ErrAuxDependencyNotConfigured, dep.name)
+		}
 	}
 
 	m.logger.Info("starting auxiliary table migration")
@@ -229,12 +326,14 @@ func (m *AuxiliaryMigrator) MigrateAll(ctx context.Context) (*AuxiliaryMigration
 		logger.Int("hourly_weather_total", result.Weather.HourlyWeatherTotal),
 		logger.Int("hourly_weather_migrated", result.Weather.HourlyWeatherMigrated))
 
-	// Caller can inspect result.HasErrors() to decide if this is acceptable
+	// Caller records result.Outcome()
 	return result, nil
 }
 
 // migrateImageCaches migrates all image cache entries.
-// Resolves scientific names to label IDs for the normalized schema.
+// Resolves scientific names (trimmed, as the label repository keys them) to label
+// IDs for the normalized schema. Rows without a name are skipped; label and save
+// failures are counted as failed.
 func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *AuxiliaryMigrationResult) {
 	if m.imageCacheRepo == nil {
 		m.logger.Debug("image cache repo not configured, skipping")
@@ -256,28 +355,47 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *Auxi
 	}
 
 	// Batch resolve all labels to avoid N+1 queries
+	// Labels are keyed by the trimmed name and an empty name has no label.
 	speciesSet := make(map[string]struct{})
+	emptyNameRows := 0
 	for i := range legacyCaches {
-		speciesSet[legacyCaches[i].ScientificName] = struct{}{}
+		if name := strings.TrimSpace(legacyCaches[i].ScientificName); name != "" {
+			speciesSet[name] = struct{}{}
+		} else {
+			emptyNameRows++
+		}
 	}
 	speciesNames := slices.Collect(maps.Keys(speciesSet))
 
 	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 	if err != nil {
 		m.logger.Warn("failed to batch resolve labels for image caches", logger.Error(err))
-		result.ImageCaches.Error = err
+		// The per-row loop below skips rows without a name; count them the same
+		// way here, so only the other rows are failures.
+		result.ImageCaches.Skipped += emptyNameRows
+		result.ImageCaches.Failed += len(legacyCaches) - emptyNameRows
+		result.ImageCaches.Error = firstAuxError(result.ImageCaches.Error, err)
 		return
 	}
 
 	for i := range legacyCaches {
 		cache := &legacyCaches[i]
 
+		// A legacy row without a name cannot exist in v2: labels need a name.
+		scientificName := strings.TrimSpace(cache.ScientificName)
+		if scientificName == "" {
+			m.logger.Warn("skipping legacy image cache with empty scientific name")
+			result.ImageCaches.Skipped++
+			continue
+		}
+
 		// Look up label from pre-resolved map
-		label, ok := labelMap[cache.ScientificName]
+		label, ok := labelMap[scientificName]
 		if !ok {
 			m.logger.Warn("label not found after batch creation",
-				logger.String("species", cache.ScientificName))
-			result.ImageCaches.Skipped++
+				logger.String("species", scientificName))
+			result.ImageCaches.Failed++
+			result.ImageCaches.Error = firstAuxError(result.ImageCaches.Error, ErrAuxLabelNotResolved)
 			continue
 		}
 
@@ -294,9 +412,10 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *Auxi
 		}
 		if err := m.imageCacheRepo.SaveImageCache(ctx, v2Cache); err != nil {
 			m.logger.Warn("failed to migrate image cache",
-				logger.String("species", cache.ScientificName),
+				logger.String("species", scientificName),
 				logger.Error(err))
-			result.ImageCaches.Skipped++
+			result.ImageCaches.Failed++
+			result.ImageCaches.Error = firstAuxError(result.ImageCaches.Error, err)
 			continue
 		}
 		result.ImageCaches.Migrated++
@@ -305,7 +424,8 @@ func (m *AuxiliaryMigrator) migrateImageCaches(ctx context.Context, result *Auxi
 	m.logger.Info("image cache migration completed",
 		logger.Int("total", result.ImageCaches.Total),
 		logger.Int("migrated", result.ImageCaches.Migrated),
-		logger.Int("skipped", result.ImageCaches.Skipped))
+		logger.Int("skipped", result.ImageCaches.Skipped),
+		logger.Int("failed", result.ImageCaches.Failed))
 }
 
 // migrateDynamicThresholds migrates all dynamic thresholds and their events.
@@ -357,7 +477,8 @@ func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context, result
 			m.logger.Warn("failed to migrate threshold",
 				logger.String("species", speciesName),
 				logger.Error(err))
-			result.Thresholds.Skipped++
+			result.Thresholds.Failed++
+			result.Thresholds.Error = firstAuxError(result.Thresholds.Error, err)
 			continue
 		}
 		result.Thresholds.Migrated++
@@ -369,7 +490,8 @@ func (m *AuxiliaryMigrator) migrateDynamicThresholds(ctx context.Context, result
 	m.logger.Info("dynamic threshold migration completed",
 		logger.Int("total", result.Thresholds.Total),
 		logger.Int("migrated", result.Thresholds.Migrated),
-		logger.Int("skipped", result.Thresholds.Skipped))
+		logger.Int("skipped", result.Thresholds.Skipped),
+		logger.Int("failed", result.Thresholds.Failed))
 }
 
 // migrateThresholdEvents migrates threshold events for a species (1:1 copy, #4195).
@@ -410,7 +532,8 @@ func (m *AuxiliaryMigrator) migrateThresholdEvents(ctx context.Context, speciesN
 			m.logger.Warn("failed to migrate threshold event",
 				logger.String("species", speciesName),
 				logger.Error(err))
-			result.ThresholdEvents.Skipped++
+			result.ThresholdEvents.Failed++
+			result.ThresholdEvents.Error = firstAuxError(result.ThresholdEvents.Error, err)
 			continue
 		}
 		result.ThresholdEvents.Migrated++
@@ -418,7 +541,9 @@ func (m *AuxiliaryMigrator) migrateThresholdEvents(ctx context.Context, speciesN
 }
 
 // migrateNotificationHistory migrates notification history.
-// Resolves scientific names to label IDs for the normalized schema.
+// Resolves scientific names (trimmed, as the label repository keys them) to label
+// IDs for the normalized schema. Rows without a name are skipped; label and save
+// failures are counted as failed.
 func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, result *AuxiliaryMigrationResult) {
 	if m.notificationRepo == nil {
 		m.logger.Debug("notification repo not configured, skipping")
@@ -440,28 +565,47 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 	}
 
 	// Batch resolve all labels to avoid N+1 queries
+	// Labels are keyed by the trimmed name and an empty name has no label.
 	speciesSet := make(map[string]struct{})
+	emptyNameRows := 0
 	for i := range legacyHistory {
-		speciesSet[legacyHistory[i].ScientificName] = struct{}{}
+		if name := strings.TrimSpace(legacyHistory[i].ScientificName); name != "" {
+			speciesSet[name] = struct{}{}
+		} else {
+			emptyNameRows++
+		}
 	}
 	speciesNames := slices.Collect(maps.Keys(speciesSet))
 
 	labelMap, err := m.labelRepo.BatchGetOrCreate(ctx, speciesNames, m.defaultModelID, m.speciesLabelTypeID, m.avesClassID)
 	if err != nil {
 		m.logger.Warn("failed to batch resolve labels for notification history", logger.Error(err))
-		result.Notifications.Error = err
+		// The per-row loop below skips rows without a name; count them the same
+		// way here, so only the other rows are failures.
+		result.Notifications.Skipped += emptyNameRows
+		result.Notifications.Failed += len(legacyHistory) - emptyNameRows
+		result.Notifications.Error = firstAuxError(result.Notifications.Error, err)
 		return
 	}
 
 	for i := range legacyHistory {
 		history := &legacyHistory[i]
 
+		// A legacy row without a name cannot exist in v2: labels need a name.
+		scientificName := strings.TrimSpace(history.ScientificName)
+		if scientificName == "" {
+			m.logger.Warn("skipping legacy notification history with empty scientific name")
+			result.Notifications.Skipped++
+			continue
+		}
+
 		// Look up label from pre-resolved map
-		label, ok := labelMap[history.ScientificName]
+		label, ok := labelMap[scientificName]
 		if !ok {
 			m.logger.Warn("label not found after batch creation",
-				logger.String("species", history.ScientificName))
-			result.Notifications.Skipped++
+				logger.String("species", scientificName))
+			result.Notifications.Failed++
+			result.Notifications.Error = firstAuxError(result.Notifications.Error, ErrAuxLabelNotResolved)
 			continue
 		}
 
@@ -473,9 +617,10 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 		}
 		if err := m.notificationRepo.SaveNotificationHistory(ctx, v2History); err != nil {
 			m.logger.Warn("failed to migrate notification history",
-				logger.String("species", history.ScientificName),
+				logger.String("species", scientificName),
 				logger.Error(err))
-			result.Notifications.Skipped++
+			result.Notifications.Failed++
+			result.Notifications.Error = firstAuxError(result.Notifications.Error, err)
 			continue
 		}
 		result.Notifications.Migrated++
@@ -484,11 +629,14 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 	m.logger.Info("notification history migration completed",
 		logger.Int("total", result.Notifications.Total),
 		logger.Int("migrated", result.Notifications.Migrated),
-		logger.Int("skipped", result.Notifications.Skipped))
+		logger.Int("skipped", result.Notifications.Skipped),
+		logger.Int("failed", result.Notifications.Failed))
 }
 
 // migrateWeatherData migrates DailyEvents and HourlyWeather from legacy to v2.
 // Handles ID remapping since V2 may have different IDs for the same dates.
+// Hourly rows whose legacy parent does not exist are skipped as orphans; a legacy
+// date missing in v2 or a failed save or read is counted as failed.
 func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *AuxiliaryMigrationResult) {
 	if m.weatherRepo == nil {
 		m.logger.Debug("weather repo not configured, skipping")
@@ -514,6 +662,8 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 	result.Weather.HourlyWeatherTotal = len(legacyWeather)
 
 	if len(legacyEvents) == 0 {
+		// Without daily events every hourly row is an orphan and cannot exist in v2.
+		result.Weather.Skipped = len(legacyWeather)
 		m.logger.Debug("no weather data to migrate")
 		return
 	}
@@ -539,10 +689,8 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 	migrated, err := m.weatherRepo.SaveAllDailyEvents(ctx, v2Events)
 	if err != nil {
 		m.logger.Warn("failed to migrate some daily events", logger.Error(err))
-		// Record first save error for HasErrors() to report
-		if result.Weather.Error == nil {
-			result.Weather.Error = err
-		}
+		result.Weather.DailyEventsFailed += max(result.Weather.DailyEventsTotal-migrated, 0)
+		result.Weather.Error = firstAuxError(result.Weather.Error, err)
 	}
 	result.Weather.DailyEventsMigrated = migrated
 	m.logger.Info("daily events migration completed",
@@ -553,6 +701,18 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 	v2EventsAll, err := m.weatherRepo.GetAllDailyEvents(ctx)
 	if err != nil {
 		m.logger.Warn("failed to get v2 daily events for ID mapping", logger.Error(err))
+		// Without the mapping no hourly row can be copied. The per-row loop below
+		// skips orphan rows, whose parent is absent from legacy; count them the same
+		// way here, so only rows with a known parent are failures.
+		for i := range legacyWeather {
+			if _, known := legacyIDToDate[legacyWeather[i].DailyEventsID]; known {
+				result.Weather.HourlyWeatherFailed++
+			} else {
+				result.Weather.Skipped++
+			}
+		}
+		result.Weather.Error = firstAuxError(result.Weather.Error,
+			fmt.Errorf("read v2 daily events for ID mapping: %w", err))
 		return
 	}
 
@@ -574,12 +734,15 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 		date, ok := legacyIDToDate[w.DailyEventsID]
 		if !ok {
 			result.Weather.Skipped++
-			continue // Orphan record, skip
+			continue // Orphan record: no such parent in legacy, cannot exist in v2
 		}
 		v2ID, ok := dateToV2ID[date]
 		if !ok {
-			result.Weather.Skipped++
-			continue // Date not in V2, skip
+			// The daily event was saved with ON CONFLICT DO NOTHING, so a legacy
+			// date missing in v2 means its save or read failed.
+			result.Weather.HourlyWeatherFailed++
+			result.Weather.Error = firstAuxError(result.Weather.Error, ErrAuxDailyEventNotInV2)
+			continue
 		}
 
 		v2Weather = append(v2Weather, entities.HourlyWeather{
@@ -605,17 +768,16 @@ func (m *AuxiliaryMigrator) migrateWeatherData(ctx context.Context, result *Auxi
 	migratedWeather, err := m.weatherRepo.SaveAllHourlyWeather(ctx, v2Weather)
 	if err != nil {
 		m.logger.Warn("failed to migrate some hourly weather", logger.Error(err))
-		// Record first save error for HasErrors() to report
-		if result.Weather.Error == nil {
-			result.Weather.Error = err
-		}
+		result.Weather.HourlyWeatherFailed += max(len(v2Weather)-migratedWeather, 0)
+		result.Weather.Error = firstAuxError(result.Weather.Error, err)
 	}
 	result.Weather.HourlyWeatherMigrated = migratedWeather
 
 	m.logger.Info("hourly weather migration completed",
 		logger.Int("total", result.Weather.HourlyWeatherTotal),
 		logger.Int("migrated", result.Weather.HourlyWeatherMigrated),
-		logger.Int("skipped", result.Weather.Skipped))
+		logger.Int("skipped", result.Weather.Skipped),
+		logger.Int("failed", result.Weather.HourlyWeatherFailed))
 }
 
 // ValidateAuxiliaryTables validates that auxiliary tables have been migrated.

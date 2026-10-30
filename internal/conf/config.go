@@ -108,8 +108,6 @@ type AudioSettings struct {
 	FfmpegVersion   string              `yaml:"-" json:"ffmpegVersion,omitempty"`                               // ffmpeg version string, runtime value
 	FfmpegMajor     int                 `yaml:"-" json:"ffmpegMajor,omitempty"`                                 // ffmpeg major version number, runtime value
 	FfmpegMinor     int                 `yaml:"-" json:"ffmpegMinor,omitempty"`                                 // ffmpeg minor version number, runtime value
-	SoxPath         string              `yaml:"soxpath" mapstructure:"soxpath" json:"soxPath"`                  // path to sox, runtime value
-	SoxAudioTypes   []string            `yaml:"-" json:"-"`                                                     // supported audio types of sox, runtime value
 	FfprobePath     string              `yaml:"-" json:"-"`                                                     // path to ffprobe, derived from ffmpeg path at runtime
 	StreamTransport string              `yaml:"streamtransport" json:"streamTransport"`                         // preferred transport for audio streaming: "auto", "sse", or "ws"
 	Export          ExportSettings      `yaml:"export" json:"export"`                                           // export settings
@@ -141,15 +139,6 @@ func (a *AudioSettings) FindSourceByID(sourceID string) *AudioSourceConfig {
 		}
 	}
 	return nil
-}
-
-// NeedsFfprobeWorkaround returns true if the current FFmpeg version requires
-// using ffprobe to get audio file length for spectrograms (FFmpeg 5.x bug).
-// FFmpeg 7.x and later have this issue fixed.
-func (a *AudioSettings) NeedsFfprobeWorkaround() bool {
-	// FFmpeg 5.x has a bug that requires using ffprobe for audio duration
-	// FFmpeg 7.x and later have this fixed
-	return a.FfmpegMajor == 5
 }
 
 // HasFfmpegVersion returns true if FFmpeg version information has been detected and populated.
@@ -256,13 +245,13 @@ const (
 	SpectrogramStyleScientific       = "scientific"
 )
 
-// Spectrogram dynamic range preset constants (dB values for Sox -z parameter).
+// Spectrogram dynamic range preset constants (dynamic range in dB).
 // Lower values increase contrast, making weak signals stand out better.
 // Higher values show more detail but with lower contrast.
 const (
 	SpectrogramDynamicRangeHighContrast = "80"  // High contrast - weak signals visible
 	SpectrogramDynamicRangeStandard     = "100" // Standard - balanced (default)
-	SpectrogramDynamicRangeExtended     = "120" // Extended - more detail, Sox default
+	SpectrogramDynamicRangeExtended     = "120" // Extended - more detail
 )
 
 // SpectrogramPreRender contains settings for spectrogram generation modes.
@@ -2038,7 +2027,26 @@ type Settings struct {
 	Notification NotificationConfig `yaml:"notification" json:"notification"` // Configuration for push notifications
 
 	Alerting AlertSettings `yaml:"alerting" json:"alerting"` // Alerting rules engine settings
+
+	// revision labels the client-writable state of this snapshot within one
+	// process. Unexported, so JSON, YAML, mapstructure and the schema generator
+	// ignore it, and CloneSettings copies it with the rest of the struct. It is
+	// stamped by UpdateSettings and CompareAndStoreSettings and is zero for a
+	// snapshot published by Load or StoreSettings. Read it through Revision.
+	revision uint64
 }
+
+// Revision identifies the client-writable state of this snapshot within one
+// process. It changes on every publish except the runtime-only range filter
+// writers (UpdateIncludedSpecies, ShouldUpdateRangeFilterToday and
+// ResetRangeFilterUpdateFlag), and a value handed out by a writer is never reused
+// by a later publish, so two snapshots published by a settings writer with the
+// same revision hold the same client-writable content. The range filter species
+// list and its update stamp are served to clients but cannot be written by them,
+// so they can differ between two snapshots that share a revision. Load and
+// StoreSettings do not stamp: a snapshot they publish keeps whatever revision it
+// carries (0 for a new one), so the guarantee above does not cover them.
+func (s *Settings) Revision() uint64 { return s.revision }
 
 // RangeFilterConfig returns a pointer to the range filter settings block. The block
 // is stored under birdnet.rangefilter for historical reasons; callers use this
@@ -2141,16 +2149,19 @@ func (s *Settings) IsAuthProviderConfigured() bool {
 	return s.Security.BasicAuth.Enabled || len(s.GetEnabledOAuthProviders()) > 0
 }
 
+// randomSecretBytes is the number of random bytes in a GenerateRandomSecret
+// secret: 256 bits, which encode to 43 base64url characters.
+const randomSecretBytes = 32
+
 // GenerateRandomSecret generates a URL-safe base64 encoded random string
 // suitable for use as a client secret. The output is 43 characters long,
-// providing 256 bits of entropy. Returns an error if the system's
-// cryptographic random number generator fails.
-func GenerateRandomSecret() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", fmt.Errorf("failed to generate random secret: %w", err)
-	}
-	return base64.RawURLEncoding.EncodeToString(bytes), nil
+// providing 256 bits of entropy. It cannot fail: crypto/rand.Read never
+// returns an error and crashes the program if the system's random source is
+// unavailable.
+func GenerateRandomSecret() string {
+	bytes := make([]byte, randomSecretBytes)
+	rand.Read(bytes)
+	return base64.RawURLEncoding.EncodeToString(bytes)
 }
 
 // GetWeatherProvider returns the configured provider and its settings as any.

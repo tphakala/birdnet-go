@@ -45,7 +45,7 @@ func TestTelemetryWorker_ProcessEvent(t *testing.T) {
 			t.Parallel()
 
 			// Create worker
-			worker, err := NewTelemetryWorker(tt.enabled, nil)
+			worker, err := NewTelemetryWorker(func() bool { return tt.enabled }, nil)
 			require.NoError(t, err, "Failed to create worker")
 
 			// Process event
@@ -79,7 +79,7 @@ func TestTelemetryWorker_RateLimiting(t *testing.T) {
 		SamplingRate:       1.0,
 	}
 
-	worker, err := NewTelemetryWorker(true, config)
+	worker, err := NewTelemetryWorker(alwaysAllowed, config)
 	require.NoError(t, err, "Failed to create worker")
 
 	// Replace the Sentry reporter with a mock to prevent goroutine spawning
@@ -178,7 +178,7 @@ func TestTelemetryWorker_Sampling(t *testing.T) {
 		SamplingRate:       0.5, // 50% sampling
 	}
 
-	worker, err := NewTelemetryWorker(true, config)
+	worker, err := NewTelemetryWorker(alwaysAllowed, config)
 	require.NoError(t, err, "Failed to create worker")
 
 	// Process many events with different components
@@ -221,7 +221,7 @@ func TestTelemetryWorker_BatchProcessing(t *testing.T) {
 		BatchTimeout:       100 * time.Millisecond,
 	}
 
-	worker, err := NewTelemetryWorker(true, config)
+	worker, err := NewTelemetryWorker(alwaysAllowed, config)
 	require.NoError(t, err, "Failed to create worker")
 
 	// Verify batching is supported
@@ -245,7 +245,7 @@ func TestTelemetryWorker_ReportToSentry_WithContext(t *testing.T) {
 	t.Parallel()
 
 	// Create worker
-	worker, err := NewTelemetryWorker(true, nil)
+	worker, err := NewTelemetryWorker(alwaysAllowed, nil)
 	require.NoError(t, err, "Failed to create worker")
 
 	// Replace with mock reporter to avoid actual Sentry calls
@@ -267,7 +267,7 @@ func TestTelemetryWorker_ReportToSentry_NilContextSafe(t *testing.T) {
 	t.Parallel()
 
 	// Create worker
-	worker, err := NewTelemetryWorker(true, nil)
+	worker, err := NewTelemetryWorker(alwaysAllowed, nil)
 	require.NoError(t, err, "Failed to create worker")
 
 	// Replace with mock reporter

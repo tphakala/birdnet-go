@@ -53,6 +53,7 @@ const (
 	MsgSettingsExtendedCaptureRestart    = "notifications.content.settings.extendedCaptureRestartRequired"
 	MsgSettingsEqualizerFailed           = "notifications.content.settings.equalizerUpdateFailed"
 	MsgSettingsEqualizerUpdated          = "notifications.content.settings.equalizerUpdated"
+	MsgSettingsEqualizerFiltersSkipped   = "notifications.content.settings.equalizerFiltersSkipped"
 
 	// Database migration notifications
 	MsgMigrationStartedTitle     = "notifications.content.migration.startedTitle"
@@ -65,6 +66,20 @@ const (
 	MsgMigrationCompletedMessage = "notifications.content.migration.completedMessage"
 	MsgMigrationErrorTitle       = "notifications.content.migration.errorTitle"
 	MsgMigrationErrorMessage     = "notifications.content.migration.errorMessage"
+
+	// Legacy database schema notices
+	MsgMigrationLegacyNotStartedTitle        = "notifications.content.migration.legacyNotStartedTitle"
+	MsgMigrationLegacyNotStartedMessage      = "notifications.content.migration.legacyNotStartedMessage"
+	MsgMigrationLegacyInProgressTitle        = "notifications.content.migration.legacyInProgressTitle"
+	MsgMigrationLegacyInProgressMessage      = "notifications.content.migration.legacyInProgressMessage"
+	MsgMigrationLegacyNeedsAttentionTitle    = "notifications.content.migration.legacyNeedsAttentionTitle"
+	MsgMigrationLegacyNeedsAttentionMessage  = "notifications.content.migration.legacyNeedsAttentionMessage"
+	MsgMigrationLegacyRestartRequiredTitle   = "notifications.content.migration.legacyRestartRequiredTitle"
+	MsgMigrationLegacyRestartRequiredMessage = "notifications.content.migration.legacyRestartRequiredMessage"
+
+	// Database server notice (unsupported release or non-utf8mb4 character set)
+	MsgDatabaseServerAttentionTitle   = "notifications.content.database.serverAttentionTitle"
+	MsgDatabaseServerAttentionMessage = "notifications.content.database.serverAttentionMessage"
 
 	// Legacy database cleanup notifications
 	MsgCleanupCompleteTitle   = "notifications.content.cleanup.completeTitle"
@@ -96,6 +111,13 @@ const (
 	MsgErrAlertInvalidJSON       = "errors.alert.invalidJSON"
 	MsgErrAlertInvalidEscalation = "errors.alert.invalidEscalation"
 	MsgErrAlertEngineUnavailable = "errors.alert.engineUnavailable"
+
+	// Insights errors
+	MsgErrInsightsV2Required = "errors.insights.v2Required"
+
+	// Privacy filter errors. No locale entry exists yet because no UI calls the
+	// privacy filter endpoints.
+	MsgErrPrivacyFilterV2Required = "errors.privacyFilter.v2Required"
 
 	// Detection errors
 	MsgErrDetectionInvalidDate = "errors.detection.invalidDate"

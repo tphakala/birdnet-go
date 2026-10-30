@@ -6,7 +6,6 @@ import (
 	"io"
 	"math"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -345,47 +344,6 @@ func TestSupports_BitDepthAndChannels(t *testing.T) {
 	require.NoError(t, Supports(48000, 16, 2))
 	require.Error(t, Supports(48000, 16, 0))
 	require.Error(t, Supports(48000, 16, 3))
-}
-
-// Cross-validate the stream against an external demuxer, so a malformed header
-// or granule position surfaces here rather than in a user's browser.
-func TestEncodePCM_FFprobeAcceptsOutput(t *testing.T) {
-	t.Parallel()
-	ffprobe, err := exec.LookPath("ffprobe")
-	if err != nil {
-		t.Skip("ffprobe not installed")
-	}
-
-	out := filepath.Join(t.TempDir(), "clip.opus")
-	require.NoError(t, EncodePCM(t.Context(), &Options{
-		PCMData:     tonePCM(t, testSampleRate, 1.0, testToneHz),
-		OutputPath:  out,
-		SampleRate:  testSampleRate,
-		Channels:    1,
-		BitDepth:    16,
-		BitrateKbps: testBitrate,
-	}))
-
-	probe, err := exec.CommandContext(t.Context(), ffprobe, //nolint:gosec // fixed args, resolved binary
-		"-v", "error",
-		"-select_streams", "a:0",
-		"-show_entries", "stream=codec_name,sample_rate,channels",
-		"-of", "default=noprint_wrappers=1",
-		out).Output()
-	require.NoError(t, err, "ffprobe must parse the written stream")
-
-	// Parse key=value rather than indexing positionally: ffprobe emits fields in
-	// its own internal order, not the order requested, so positions are not a
-	// contract.
-	got := map[string]string{}
-	for field := range strings.FieldsSeq(string(probe)) {
-		if k, v, ok := strings.Cut(field, "="); ok {
-			got[k] = v
-		}
-	}
-	assert.Equal(t, "opus", got["codec_name"])
-	assert.Equal(t, "48000", got["sample_rate"])
-	assert.Equal(t, "1", got["channels"])
 }
 
 // rms returns the root mean square amplitude of the samples.

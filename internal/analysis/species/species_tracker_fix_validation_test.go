@@ -218,8 +218,11 @@ func TestPrecisionEdgeCases(t *testing.T) {
 	require.NotNil(t, tracker)
 	require.NoError(t, tracker.InitFromDatabase())
 
-	// Test edge cases that might cause precision issues
-	baseTime := time.Now()
+	// Test edge cases that might cause precision issues. The base time is in
+	// UTC because the tracker counts calendar days in the time's own location:
+	// in a local zone, an offset just under 24 hours that crosses a 23-hour DST
+	// day lands two calendar days later.
+	baseTime := time.Now().UTC()
 	species := "Precision_Edge_Case_Species"
 
 	edgeCases := []struct {

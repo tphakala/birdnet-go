@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Nastavenia rozšíreného nahrávania zmenené. Vyžaduje sa reštart.",
         "equalizerUpdateFailed": "Aktualizácia nastavení audio ekvalizéra zlyhala",
         "equalizerUpdated": "Nastavenia audio ekvalizéra aktualizované",
+        "equalizerFiltersSkipped": "Nastavenia audio ekvalizéra sú uložené, ale niektoré filtre sa na {count, plural, one {zdroji} few {zdrojoch} many {zdrojoch} other {zdrojoch}} {sources} preskakujú: filter musí byť platný pri vzorkovacej frekvencii zdroja a jeho frekvencia musí byť pod jej polovicou.",
         "savedSuccessfully": "Nastavenia úspešne uložené",
         "saveFailed": "Uloženie nastavení zlyhalo"
       },
@@ -449,7 +450,19 @@
         "completedTitle": "Migrácia databázy dokončená",
         "completedMessage": "Migrácia dokončená. Reštartujte BirdNET-Go pre prepnutie na novú databázu.",
         "errorTitle": "Chyba migrácie databázy",
-        "errorMessage": "Migrácia pozastavená kvôli chybám. Skontrolujte záznamy a skúste pokračovať."
+        "errorMessage": "Migrácia pozastavená kvôli chybám. Skontrolujte záznamy a skúste pokračovať.",
+        "legacyNotStartedTitle": "Je potrebná aktualizácia databázy",
+        "legacyNotStartedMessage": "Táto inštalácia stále používa starý formát databázy, ktorý v budúcom vydaní prestane fungovať. Migráciu spustíte v časti Systém > Databáza.",
+        "legacyInProgressTitle": "Prebieha migrácia databázy",
+        "legacyInProgressMessage": "Prebieha migrácia do nového formátu databázy. Nechajte BirdNET-Go bežať, kým sa nedokončí; starý formát v budúcom vydaní prestane fungovať.",
+        "legacyNeedsAttentionTitle": "Migrácia databázy vyžaduje pozornosť",
+        "legacyNeedsAttentionMessage": "Migrácia do nového formátu databázy je pozastavená alebo zlyhala. Obnovte ju alebo zopakujte v časti Systém > Databáza; starý formát v budúcom vydaní prestane fungovať.",
+        "legacyRestartRequiredTitle": "Dokončite migráciu databázy reštartom",
+        "legacyRestartRequiredMessage": "Migrácia bola dokončená. Reštartujte BirdNET-Go, aby sa prepol na novú databázu. Ak sa táto správa zobrazuje aj po reštarte, skontrolujte v zázname chyby databázy."
+      },
+      "database": {
+        "serverAttentionTitle": "Databázový server vyžaduje pozornosť",
+        "serverAttentionMessage": "Server MySQL alebo MariaDB nie je podporovaná verzia, alebo databáza nepoužíva znakovú sadu utf8mb4. Podrobnosti nájdete v časti Systém > Zdravie."
       },
       "cleanup": {
         "completeTitle": "Vyčistenie starej databázy dokončené",
@@ -793,6 +806,9 @@
       "loadFailedAction": "Zobraziť stav Modely AI",
       "failingTitle": "{count, plural, one {Model zlyháva pri každej analýze} few {# modely zlyhávajú pri každej analýze} many {# modelov zlyháva pri každej analýze} other {# modelov zlyháva pri každej analýze}}",
       "failingMessage": "{count, plural, one {{models} je načítaný, ale každá analýza zlyháva, takže nič nedeteguje.} few {{models} sú načítané, ale každá analýza zlyháva, takže nič nedetegujú.} many {{models} sú načítané, ale každá analýza zlyháva, takže nič nedetegujú.} other {{models} sú načítané, ale každá analýza zlyháva, takže nič nedetegujú.}} Stránka Modely AI zobrazuje backend a chybu."
+    },
+    "legacyDatabase": {
+      "action": "Otvoriť nastavenia databázy"
     },
     "banner": {
       "title": "Názov",
@@ -1581,7 +1597,7 @@
           "restartTitle": "Vyžaduje sa reštart",
           "restartBody": "Reštartujte aplikáciu pre prepnutie na databázu V2. Vyčistenie starej databázy bude dostupné po reštarte.",
           "fallbackError": "Nesúlad počtu záznamov medzi starou a V2 databázou. Niektoré záznamy sa možno nemigrovali správne.",
-          "migrateInfo": "Migrácia prenesie {count} záznamov zo starej databázy do nového schémy V2. Režim dvojitého zápisu zabezpečuje nulovú stratu dát počas migrácie.",
+          "migrateInfo": "Migrácia prenesie {count} záznamov zo starej databázy do nového schémy V2. Nové detekcie uložené počas migrácie sa tiež skopírujú do novej databázy.",
           "sourceLegacy": "Zdroj (Legacy)",
           "targetV2": "Cieľ (V2)",
           "recordsLabel": "Záznamy",
@@ -1633,7 +1649,7 @@
         },
         "notes": {
           "in_progress": "Systém môžete naďalej normálne používať, kým migrácia prebieha na pozadí.",
-          "dual_write": "Migrácia prebieha. Vaše dáta sú v bezpečí - všetky nové detekcie sa ukladajú do oboch databáz.",
+          "dual_write": "Migrácia prebieha. Vaše dáta sú v bezpečí - nové detekcie sa ukladajú do aktuálnej databázy a počas migrácie sa kopírujú do novej databázy.",
           "migrating": "Kopírujú sa vaše existujúce detekcie do novej databázy.",
           "validating": "Overuje sa, či boli všetky záznamy skopírované správne. Skoro hotovo!",
           "cutover": "Prepína sa na novú databázu. To trvá len chvíľu.",
@@ -1716,6 +1732,12 @@
             },
             "sqlite_integrity": {
               "name": "Integrita databázy"
+            },
+            "mysql_server_version": {
+              "name": "Verzia databázového servera"
+            },
+            "mysql_charset": {
+              "name": "Znaková sada databázy"
             },
             "mysql_table_health": {
               "name": "Stav tabuliek"
@@ -2323,6 +2345,7 @@
     "errors": {
       "loadFailed": "Nepodarilo sa načítať nastavenia",
       "saveFailed": "Nepodarilo sa uložiť nastavenia",
+      "changedElsewhere": "Nastavenia boli zmenené inde. Skontrolujte ich a uložte znova.",
       "databaseStatsFailed": "Nepodarilo sa načítať štatistiky databázy",
       "csvDownloadFailed": "Nepodarilo sa stiahnuť CSV"
     },
@@ -2670,7 +2693,7 @@
                 "descriptions": {
                   "highContrast": "Najlepšie pre slabé signály. Vtáčí spev jasne vyniká z hluku pozadia. Odporúča sa pre vedecké štýly/štýly v stupňoch sivej.",
                   "standard": "Predvolené vyvážené nastavenie. Dobré pre väčšinu prípadov použitia.",
-                  "extended": "Viditeľných viac detailov, ale nižší kontrast. Predvolená hodnota SoX."
+                  "extended": "Viditeľných viac detailov, ale nižší kontrast."
                 }
               },
               "enabled": {
@@ -2772,7 +2795,7 @@
           "title": "Čo je zahrnuté v správe:",
           "applicationLogs": "**Logy aplikácie** - Nedávne chyby a ladiace informácie",
           "configuration": "**Konfigurácia** - Vaše nastavenia s odstránenými citlivými údajmi",
-          "systemInfo": "**Informácie o systéme** - Verzia OS, pamäť a podrobnosti o runtime",
+          "systemInfo": "**Informácie o systéme** - Verzia OS, pamäť, hardvér, pripojené zariadenia USB a zvukové karty a podrobnosti o runtime",
           "notIncluded": "**NIE JE zahrnuté** - Audio súbory, detekcie vtákov alebo osobné údaje"
         },
         "userMessage": {
@@ -2925,6 +2948,11 @@
             "unit": "min",
             "helpText": "Zabrániť opakovaným upozorneniam na rovnaký druh v rámci tohto časového okna. Nastavte na 0 pre deaktiváciu."
           }
+        },
+        "rulesNotice": {
+          "message": "Push upozornenia na detekcie vytvárajú pravidlá upozornení na karte Pravidlá. Vstavané pravidlá detekcie upozorňujú iba v aplikácii. Ak chcete dostávať push upozornenia, pridajte akciu {pushAction} do pravidla {ruleName} alebo vytvorte pravidlo pre udalosť {eventName} s podmienkou istoty a dobou čakania.",
+          "previousFilters": "Vaše nastavenia Minimálna istota ({confidence} %) a Cooldown druhu ({minutes} min) tu pravidlá upozornení nepoužívajú.",
+          "openRules": "Otvoriť Pravidlá"
         },
         "noProviders": "Žiadni nakonfigurovaní poskytovatelia",
         "noProvidersDescription": "Pridajte poskytovateľa, aby ste začali dostávať push upozornenia",
@@ -3229,10 +3257,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Nahrať detekcie do BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg nebol nájdený",
-          "message": "Nainštalujte FFmpeg, aby ste povolili podporu kódovania FLAC. BirdWeather nahrádza nahrávanie WAV v prospech komprimovaných zvukových súborov FLAC."
-        },
         "enable": "Povoliť nahrávanie do BirdWeather",
         "token": {
           "label": "Token BirdWeather",
@@ -4249,7 +4273,6 @@
     },
     "species": {
       "pageLabel": "Nastavenia druhov",
-      "saveError": "Uloženie konfigurácie pre \"{species}\" zlyhalo. Skúste to znova.",
       "configUpdated": "Konfigurácia pre \"{species}\" aktualizovaná",
       "configAdded": "Konfigurácia pre \"{species}\" pridaná",
       "duplicateConfigError": "Druh \"{species}\" už má konfiguráciu. Vyberte iný názov.",
@@ -5080,6 +5103,7 @@
       "loop": "Prepnúť opakovanie",
       "player": "Prehrávač zvuku",
       "autoplayBlocked": "Kliknutím spustíte prehrávanie (automatické prehrávanie blokované)",
+      "hlsLoadFailed": "Prehrávač zvuku sa nepodarilo načítať, obnovte stránku a skúste to znova",
       "hlsNotSupported": "Prehrávanie HLS nie je v tomto prehliadači podporované",
       "streamStarting": "Spúšťa sa audio stream...",
       "levelFor": "Úroveň zvuku pre {source}",
@@ -5314,6 +5338,9 @@
       "invalidJSON": "Neplatný JSON",
       "invalidEscalation": "Eskalačné kroky sú neplatné",
       "engineUnavailable": "Správca výstrah nie je dostupný"
+    },
+    "insights": {
+      "v2Required": "Prehľady vyžadujú rozšírenú databázu (v2)"
     },
     "detection": {
       "invalidDate": "Neplatný formát {paramName}, použite RRRR-MM-DD"

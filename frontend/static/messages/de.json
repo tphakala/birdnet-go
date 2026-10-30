@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Erweiterte Aufnahmeeinstellungen geändert. Neustart erforderlich.",
         "equalizerUpdateFailed": "Aktualisierung der Audio-Equalizer-Einstellungen fehlgeschlagen",
         "equalizerUpdated": "Audio-Equalizer-Einstellungen aktualisiert",
+        "equalizerFiltersSkipped": "Audio-Equalizer-Einstellungen gespeichert, aber einige Filter werden bei {count, plural, one {der Quelle} other {den Quellen}} {sources} übersprungen: Ein Filter muss bei der Abtastrate der Quelle gültig sein, und seine Frequenz muss unter deren Hälfte liegen.",
         "savedSuccessfully": "Einstellungen erfolgreich gespeichert",
         "saveFailed": "Einstellungen konnten nicht gespeichert werden"
       },
@@ -449,7 +450,19 @@
         "completedTitle": "Datenbankmigration abgeschlossen",
         "completedMessage": "Migration abgeschlossen. Bitte starten Sie BirdNET-Go neu, um zur neuen Datenbank zu wechseln.",
         "errorTitle": "Datenbankmigrationsfehler",
-        "errorMessage": "Migration wegen Fehlern pausiert. Überprüfen Sie die Protokolle und versuchen Sie es erneut."
+        "errorMessage": "Migration wegen Fehlern pausiert. Überprüfen Sie die Protokolle und versuchen Sie es erneut.",
+        "legacyNotStartedTitle": "Datenbank-Upgrade erforderlich",
+        "legacyNotStartedMessage": "Diese Installation verwendet noch das alte Datenbankformat, das in einer zukünftigen Version nicht mehr funktionieren wird. Öffnen Sie System > Datenbank, um die Migration auszuführen.",
+        "legacyInProgressTitle": "Datenbankmigration läuft",
+        "legacyInProgressMessage": "Die Migration auf das neue Datenbankformat läuft. Lassen Sie BirdNET-Go laufen, bis sie abgeschlossen ist; das alte Format wird in einer zukünftigen Version nicht mehr funktionieren.",
+        "legacyNeedsAttentionTitle": "Datenbankmigration erfordert Aufmerksamkeit",
+        "legacyNeedsAttentionMessage": "Die Migration auf das neue Datenbankformat ist pausiert oder fehlgeschlagen. Öffnen Sie System > Datenbank, um sie fortzusetzen oder zu wiederholen; das alte Format wird in einer zukünftigen Version nicht mehr funktionieren.",
+        "legacyRestartRequiredTitle": "Neustart zum Abschluss der Datenbankmigration",
+        "legacyRestartRequiredMessage": "Die Migration ist abgeschlossen. Starten Sie BirdNET-Go neu, um zur neuen Datenbank zu wechseln. Wenn diese Meldung nach einem Neustart bestehen bleibt, prüfen Sie das Protokoll auf Datenbankfehler."
+      },
+      "database": {
+        "serverAttentionTitle": "Der Datenbankserver benötigt Aufmerksamkeit",
+        "serverAttentionMessage": "Der MySQL- oder MariaDB-Server ist keine unterstützte Version, oder die Datenbank verwendet nicht den Zeichensatz utf8mb4. Details finden Sie unter System > Status."
       },
       "cleanup": {
         "completeTitle": "Bereinigung der alten Datenbank abgeschlossen",
@@ -793,6 +806,9 @@
       "loadFailedAction": "Status der KI-Modelle anzeigen",
       "failingTitle": "{count, plural, one {Ein Modell scheitert bei jeder Analyse} other {# Modelle scheitern bei jeder Analyse}}",
       "failingMessage": "{count, plural, one {{models} ist geladen, aber jede Analyse schlägt fehl, daher erkennt es nichts.} other {{models} sind geladen, aber jede Analyse schlägt fehl, daher erkennen sie nichts.}} Die Seite KI-Modelle zeigt das Backend und den Fehler."
+    },
+    "legacyDatabase": {
+      "action": "Datenbankeinstellungen öffnen"
     },
     "banner": {
       "title": "Titel",
@@ -1581,7 +1597,7 @@
           "restartTitle": "Neustart erforderlich",
           "restartBody": "Starten Sie die Anwendung neu, um zur V2-Datenbank zu wechseln. Die Bereinigung der Legacy-Datenbank ist nach dem Neustart verfügbar.",
           "fallbackError": "Abweichung der Datensatzanzahl zwischen Legacy- und V2-Datenbank. Einige Datensätze wurden möglicherweise nicht korrekt migriert.",
-          "migrateInfo": "Die Migration überträgt {count} Datensätze von der Legacy-Datenbank in das neue V2-Schema. Der Dual-Write-Modus stellt sicher, dass während der Migration keine Daten verloren gehen.",
+          "migrateInfo": "Die Migration überträgt {count} Datensätze von der Legacy-Datenbank in das neue V2-Schema. Während der Migration gespeicherte neue Erkennungen werden ebenfalls in die neue Datenbank kopiert.",
           "sourceLegacy": "Quelle (Legacy)",
           "targetV2": "Ziel (V2)",
           "recordsLabel": "Datensätze",
@@ -1633,7 +1649,7 @@
         },
         "notes": {
           "in_progress": "Sie können das System normal weiter verwenden, während die Migration im Hintergrund läuft.",
-          "dual_write": "Migration läuft. Ihre Daten sind sicher - alle neuen Erkennungen werden in beide Datenbanken gespeichert. Sie können BirdNET-Go normal weiter nutzen.",
+          "dual_write": "Migration läuft. Ihre Daten sind sicher - neue Erkennungen werden in der aktuellen Datenbank gespeichert und während der Migration in die neue Datenbank kopiert. Sie können BirdNET-Go normal weiter nutzen.",
           "migrating": "Kopiere Ihre bestehenden Erkennungen in die neue Datenbank. Dies kann je nach Anzahl der Erkennungen eine Weile dauern. Sie können jederzeit pausieren und fortsetzen.",
           "validating": "Überprüfe, ob alle Datensätze korrekt kopiert wurden. Fast fertig!",
           "cutover": "Wechsle zur neuen Datenbank. Das dauert nur einen Moment.",
@@ -1716,6 +1732,12 @@
             },
             "sqlite_integrity": {
               "name": "Datenbankintegrität"
+            },
+            "mysql_server_version": {
+              "name": "Datenbankserver-Version"
+            },
+            "mysql_charset": {
+              "name": "Zeichensatz der Datenbank"
             },
             "mysql_table_health": {
               "name": "Tabellengesundheit"
@@ -2323,6 +2345,7 @@
     "errors": {
       "loadFailed": "Einstellungen konnten nicht geladen werden",
       "saveFailed": "Einstellungen konnten nicht gespeichert werden",
+      "changedElsewhere": "Die Einstellungen wurden an anderer Stelle geändert. Bitte prüfen Sie sie und speichern Sie erneut.",
       "databaseStatsFailed": "Datenbankstatistiken konnten nicht geladen werden",
       "csvDownloadFailed": "CSV-Download fehlgeschlagen"
     },
@@ -2670,7 +2693,7 @@
                 "descriptions": {
                   "highContrast": "Ideal für schwache Signale. Vogelrufe heben sich deutlich vom Hintergrundrauschen ab. Empfohlen für wissenschaftliche/Graustufen-Stile.",
                   "standard": "Ausgewogene Standardeinstellung. Gut für die meisten Anwendungsfälle.",
-                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast. SoX-Standardwert."
+                  "extended": "Mehr Details sichtbar, aber geringerer Kontrast."
                 }
               },
               "enabled": {
@@ -2772,7 +2795,7 @@
           "title": "Was im Bericht enthalten ist:",
           "applicationLogs": "**Anwendungsprotokolle** - Aktuelle Fehler und Debug-Informationen",
           "configuration": "**Konfiguration** - Ihre Einstellungen mit entfernten sensiblen Daten",
-          "systemInfo": "**Systeminformationen** - Betriebssystemversion, Speicher und Laufzeitdetails",
+          "systemInfo": "**Systeminformationen** - Betriebssystemversion, Speicher, Hardware, angeschlossene USB-Geräte und Soundkarten sowie Laufzeitdetails",
           "notIncluded": "**NICHT enthalten** - Audiodateien, Vogelerkennungen oder persönliche Daten"
         },
         "userMessage": {
@@ -2925,6 +2948,11 @@
             "unit": "Min",
             "helpText": "Verhindert wiederholte Benachrichtigungen für dieselbe Art innerhalb dieses Zeitfensters. Auf 0 setzen zum Deaktivieren."
           }
+        },
+        "rulesNotice": {
+          "message": "Push-Benachrichtigungen für Erkennungen kommen von den Alarmregeln auf der Registerkarte Regeln. Die integrierten Erkennungsregeln benachrichtigen nur in der App. Um Push-Benachrichtigungen zu erhalten, fügen Sie der Regel {ruleName} die Aktion {pushAction} hinzu oder erstellen Sie eine Regel für das Ereignis {eventName} mit einer Konfidenzbedingung und einer Abklingzeit.",
+          "previousFilters": "Ihre Einstellungen Mindestkonfidenz ({confidence} %) und Arten-Abklingzeit ({minutes} Min) hier werden von Alarmregeln nicht verwendet.",
+          "openRules": "Regeln öffnen"
         },
         "noProviders": "Keine Anbieter konfiguriert",
         "noProvidersDescription": "Fügen Sie einen Anbieter hinzu, um Push-Benachrichtigungen zu erhalten",
@@ -3229,10 +3257,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Erkennungen zu BirdWeather hochladen",
-        "ffmpegWarning": {
-          "title": "FFmpeg nicht erkannt",
-          "message": "Bitte installieren Sie FFmpeg, um die FLAC-Kodierungsunterstützung zu aktivieren. BirdWeather veraltet WAV-Uploads zugunsten komprimierter FLAC-Audiodateien."
-        },
         "enable": "BirdWeather-Uploads aktivieren",
         "token": {
           "label": "BirdWeather-Token",
@@ -4249,7 +4273,6 @@
     },
     "species": {
       "pageLabel": "Arteneinstellungen",
-      "saveError": "Konfiguration für \"{species}\" konnte nicht gespeichert werden. Bitte versuchen Sie es erneut.",
       "configUpdated": "Konfiguration für \"{species}\" aktualisiert",
       "configAdded": "Konfiguration für \"{species}\" hinzugefügt",
       "duplicateConfigError": "Art \"{species}\" hat bereits eine Konfiguration. Bitte wählen Sie einen anderen Namen.",
@@ -5080,6 +5103,7 @@
       "loop": "Wiederholung umschalten",
       "player": "Audioplayer",
       "autoplayBlocked": "Klicken zum Abspielen (Autoplay blockiert)",
+      "hlsLoadFailed": "Der Audioplayer konnte nicht geladen werden, bitte die Seite neu laden und erneut versuchen",
       "hlsNotSupported": "HLS-Wiedergabe wird in diesem Browser nicht unterstützt",
       "streamStarting": "Audiostream wird gestartet...",
       "levelFor": "Audiopegel für {source}",
@@ -5314,6 +5338,9 @@
       "invalidJSON": "Ungültiges JSON",
       "invalidEscalation": "Eskalationsstufen sind ungültig",
       "engineUnavailable": "Die Alerting-Engine ist nicht verfügbar"
+    },
+    "insights": {
+      "v2Required": "Einblicke erfordern die erweiterte (v2) Datenbank"
     },
     "detection": {
       "invalidDate": "Ungültiges {paramName}-Format, verwenden Sie JJJJ-MM-TT"

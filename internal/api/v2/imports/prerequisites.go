@@ -7,11 +7,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/shirou/gopsutil/v3/disk"
 	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/gorm"
@@ -39,6 +43,22 @@ type PrerequisitesResponse struct {
 	CriticalFailures  int                 `json:"critical_failures"`
 	Warnings          int                 `json:"warnings"`
 	CheckedAt         time.Time           `json:"checked_at"`
+}
+
+// prerequisiteTagPassed is the migration_prereq telemetry value when no critical check blocks.
+const prerequisiteTagPassed = "passed"
+
+// prerequisiteTagValue reduces check results to the bounded migration_prereq
+// telemetry value: "passed" when no critical check failed or errored,
+// otherwise the fixed ID of the first one that did.
+func prerequisiteTagValue(checks []PrerequisiteCheck) string {
+	for i := range checks {
+		c := &checks[i]
+		if c.Severity == CheckSeverityCritical && (c.Status == CheckStatusFailed || c.Status == CheckStatusError) {
+			return c.ID
+		}
+	}
+	return prerequisiteTagPassed
 }
 
 // gormDBProvider is implemented by datastores that can provide a GORM DB instance.
@@ -229,17 +249,17 @@ func (c *Handler) checkDiskSpace() PrerequisiteCheck {
 		}
 	}
 
-	usage, err := disk.Usage(diskPath)
+	free, err := c.diskFree(diskPath)
 	if err != nil {
 		check.Status = CheckStatusError
 		check.Message = fmt.Sprintf("Failed to check disk space on %s: %v", diskPath, err)
 		return check
 	}
 
-	freeGB := float64(usage.Free) / (1024 * 1024 * 1024)
+	freeGB := float64(free) / (1024 * 1024 * 1024)
 	requiredGB := float64(requiredSpace) / (1024 * 1024 * 1024)
 
-	if usage.Free >= requiredSpace {
+	if free >= requiredSpace {
 		check.Status = CheckStatusPassed
 		check.Message = fmt.Sprintf("%.1fGB available (need %.1fGB)%s", freeGB, requiredGB, dbSizeInfo)
 	} else {
@@ -669,15 +689,15 @@ func (c *Handler) checkMemoryAvailable() PrerequisiteCheck {
 		Severity:    CheckSeverityWarning,
 	}
 
-	v, err := mem.VirtualMemory()
+	available, err := c.availableMemory()
 	if err != nil {
 		check.Status = CheckStatusSkipped
 		check.Message = "Could not check memory"
 		return check
 	}
 
-	availableMB := v.Available / (1024 * 1024)
-	if v.Available >= MinMemoryBytes {
+	availableMB := available / (1024 * 1024)
+	if available >= MinMemoryBytes {
 		check.Status = CheckStatusPassed
 		check.Message = fmt.Sprintf("%dMB available", availableMB)
 	} else {
@@ -700,4 +720,258 @@ func (c *Handler) getLegacyGormDB() *gorm.DB {
 	}
 
 	return nil
+}
+
+// diskFree returns the free bytes on the filesystem holding path through the
+// diskFreeFn seam, falling back to gopsutil disk.Usage.
+func (c *Handler) diskFree(path string) (uint64, error) {
+	if c.diskFreeFn != nil {
+		return c.diskFreeFn(path)
+	}
+	usage, err := disk.Usage(path)
+	if err != nil {
+		return 0, err
+	}
+	return usage.Free, nil
+}
+
+// availableMemory returns the available memory in bytes through the
+// availableMemoryFn seam, falling back to gopsutil mem.VirtualMemory.
+func (c *Handler) availableMemory() (uint64, error) {
+	if c.availableMemoryFn != nil {
+		return c.availableMemoryFn()
+	}
+	v, err := mem.VirtualMemory()
+	if err != nil {
+		return 0, err
+	}
+	return v.Available, nil
+}
+
+// Check IDs and limits for the database server prerequisites.
+const (
+	checkIDMySQLServerVersion = "mysql_server_version"
+	checkIDMySQLCharset       = "mysql_charset"
+
+	// mysqlServerProbeTimeout bounds the information_schema and VERSION() reads.
+	mysqlServerProbeTimeout = 10 * time.Second
+	// maxNamedCharsetTables bounds how many tables the charset message names.
+	maxNamedCharsetTables = 10
+
+	errMsgMigrationTargetUnavailable = "Migration target database not available"
+	errMsgMigrationTargetAmbiguous   = "Migration target tables cannot be told apart from the legacy tables"
+	errMsgCharsetUndetermined        = "Could not determine the character set of the migration target tables"
+)
+
+// mysqlMigrationTarget returns the migration target manager when it is a MySQL
+// or MariaDB one. The query seams never replace this gating.
+func (c *Handler) mysqlMigrationTarget() (datastoreV2.Manager, bool) {
+	if c.V2Manager == nil || !c.V2Manager.IsMySQL() {
+		return nil, false
+	}
+	return c.V2Manager, true
+}
+
+// probeContext returns a bounded context for the server probes.
+func (c *Handler) probeContext() (context.Context, context.CancelFunc) {
+	ctx := c.Context()
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(ctx, mysqlServerProbeTimeout)
+}
+
+// checkMySQLServerVersion blocks the migration on a database server release
+// that BirdNET-Go does not support. It follows dbserver's release table, so a
+// table edit changes the verdict without code changes.
+func (c *Handler) checkMySQLServerVersion() PrerequisiteCheck {
+	check := PrerequisiteCheck{
+		ID:          checkIDMySQLServerVersion,
+		Name:        "Database Server Version",
+		Description: "The database server must be a supported release",
+		Severity:    CheckSeverityCritical,
+	}
+	if getIsV2OnlyMode() {
+		check.Status = CheckStatusSkipped
+		check.Message = v2OnlySkipMessage
+		return check
+	}
+	mgr, ok := c.mysqlMigrationTarget()
+	if !ok || (c.serverVersionFn == nil && mgr.DB() == nil) {
+		check.Status = CheckStatusError
+		check.Message = errMsgMigrationTargetUnavailable
+		return check
+	}
+
+	ctx, cancel := c.probeContext()
+	defer cancel()
+	var raw string
+	var err error
+	if c.serverVersionFn != nil {
+		raw, err = c.serverVersionFn(ctx)
+	} else {
+		raw, err = dbserver.QueryVersion(ctx, mgr.DB())
+	}
+	if err != nil {
+		check.Status = CheckStatusError
+		check.Message = fmt.Sprintf("Could not read the database server version: %v", err)
+		return check
+	}
+
+	a := dbserver.AssessRaw(raw)
+	check.Status, check.Message = describeServerVersion(&a)
+	return check
+}
+
+// describeServerVersion maps an assessment to a check status and message.
+func describeServerVersion(a *dbserver.Assessment) (status, message string) {
+	name := a.Version.Name()
+	supported := dbserver.SupportedReleases()
+	switch a.Level {
+	case dbserver.SupportSupported:
+		return CheckStatusPassed, fmt.Sprintf("%s is a supported release", name)
+	case dbserver.SupportUnsupported:
+		return CheckStatusFailed, fmt.Sprintf("%s is not a supported release. Upgrade the database server to a supported release (%s) before migrating.", name, supported)
+	case dbserver.SupportUntracked:
+		return CheckStatusWarning, fmt.Sprintf("%s is not on the list of releases BirdNET-Go is tested with (%s).", name, supported)
+	case dbserver.SupportUnknown:
+		return CheckStatusWarning, fmt.Sprintf("The database server version %q was not recognized. Supported releases: %s.", a.Version.Raw, supported)
+	}
+	return CheckStatusWarning, fmt.Sprintf("The support level of %s is unknown.", name)
+}
+
+// checkMySQLCharset blocks the migration when the v2 target tables cannot
+// store the text of the legacy tables. It only reads information_schema.
+func (c *Handler) checkMySQLCharset() PrerequisiteCheck {
+	check := PrerequisiteCheck{
+		ID:          checkIDMySQLCharset,
+		Name:        "Database Character Set",
+		Description: "Migration target tables must be able to store the legacy text",
+		Severity:    CheckSeverityCritical,
+	}
+	if getIsV2OnlyMode() {
+		check.Status = CheckStatusSkipped
+		check.Message = v2OnlySkipMessage
+		return check
+	}
+	mgr, ok := c.mysqlMigrationTarget()
+	if !ok || (c.charsetReportFn == nil && mgr.DB() == nil) {
+		check.Status = CheckStatusError
+		check.Message = errMsgMigrationTargetUnavailable
+		return check
+	}
+	prefix := mgr.TablePrefix()
+	if prefix == "" {
+		check.Status = CheckStatusError
+		check.Message = errMsgMigrationTargetAmbiguous
+		return check
+	}
+
+	ctx, cancel := c.probeContext()
+	defer cancel()
+	var report dbserver.CharsetReport
+	var err error
+	if c.charsetReportFn != nil {
+		report, err = c.charsetReportFn(ctx)
+	} else {
+		report, err = dbserver.QueryCharset(ctx, mgr.DB())
+	}
+	if err != nil {
+		check.Status = CheckStatusError
+		check.Message = fmt.Sprintf("Could not read the database character sets: %v", err)
+		return check
+	}
+
+	check.Status, check.Message = describeCharset(&report, prefix)
+	return check
+}
+
+// charsetTables is the classification of a schema's tables for the charset check.
+type charsetTables struct {
+	targetTables   []dbserver.TableCharsets
+	targetCharsets []string
+	sourceCharsets []string
+}
+
+// classifyCharsetTables splits report into target tables (name starts with
+// prefix) and legacy source tables (name in the legacy lists). A table's class
+// depends only on its own name; any other table is ignored. Target tables keep
+// their charsets so a message can name the ones that use a given charset. When no target
+// table has text columns, the schema default stands in for the target.
+func classifyCharsetTables(report *dbserver.CharsetReport, prefix string) charsetTables {
+	var out charsetTables
+	prefix = strings.ToLower(prefix)
+	for _, t := range report.Tables {
+		name := strings.ToLower(t.Name)
+		switch {
+		case strings.HasPrefix(name, prefix):
+			out.targetTables = append(out.targetTables, t)
+			out.targetCharsets = append(out.targetCharsets, t.Charsets...)
+		case slices.Contains(legacyOnlyTables, name) || slices.Contains(legacySharedTables, name):
+			out.sourceCharsets = append(out.sourceCharsets, t.Charsets...)
+		}
+	}
+	if len(out.targetCharsets) == 0 && report.SchemaCharset != "" {
+		out.targetCharsets = []string{report.SchemaCharset}
+	}
+	slices.Sort(out.targetCharsets)
+	out.targetCharsets = slices.Compact(out.targetCharsets)
+	slices.Sort(out.sourceCharsets)
+	out.sourceCharsets = slices.Compact(out.sourceCharsets)
+	return out
+}
+
+// describeCharset judges whether the target tables can hold the legacy text.
+// Every target charset must hold every source charset. A failure names the
+// target tables that use the offending charset; a warning names only the
+// charsets other than utf8mb4.
+func describeCharset(report *dbserver.CharsetReport, prefix string) (status, message string) {
+	tables := classifyCharsetTables(report, prefix)
+	if len(tables.targetCharsets) == 0 {
+		return CheckStatusError, errMsgCharsetUndetermined
+	}
+
+	for _, target := range tables.targetCharsets {
+		for _, source := range tables.sourceCharsets {
+			if dbserver.CharsetCanHold(target, source) {
+				continue
+			}
+			return CheckStatusFailed, fmt.Sprintf(
+				"Migration target tables %s use %s, which cannot store the %s text in the legacy tables. Convert the %s tables to %s (ALTER TABLE ... CONVERT TO CHARACTER SET %s) before migrating.",
+				describeTableNames(tablesUsing(tables.targetTables, target), report.SchemaCharset), target, source,
+				prefix, dbserver.CharsetUTF8MB4, dbserver.CharsetUTF8MB4)
+		}
+	}
+
+	if len(tables.targetCharsets) == 1 && tables.targetCharsets[0] == dbserver.CharsetUTF8MB4 {
+		return CheckStatusPassed, "The migration target tables use " + dbserver.CharsetUTF8MB4
+	}
+	limited := slices.DeleteFunc(slices.Clone(tables.targetCharsets), func(cs string) bool { return cs == dbserver.CharsetUTF8MB4 })
+	used := strings.Join(limited, ", ")
+	return CheckStatusWarning, fmt.Sprintf(
+		"Some migration target tables use %s. After the migration, text outside %s, such as emoji or some scripts, is rejected there.",
+		used, used)
+}
+
+// tablesUsing returns the names of the tables with a text column in charset.
+func tablesUsing(tables []dbserver.TableCharsets, charset string) []string {
+	var names []string
+	for _, t := range tables {
+		if slices.Contains(t.Charsets, charset) {
+			names = append(names, t.Name)
+		}
+	}
+	return names
+}
+
+// describeTableNames lists up to maxNamedCharsetTables names. With no target
+// table it names the schema default the tables will inherit.
+func describeTableNames(names []string, schemaCharset string) string {
+	if len(names) == 0 {
+		return "(not created yet, schema default " + schemaCharset + ")"
+	}
+	if len(names) <= maxNamedCharsetTables {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s and %d more", strings.Join(names[:maxNamedCharsetTables], ", "), len(names)-maxNamedCharsetTables)
 }

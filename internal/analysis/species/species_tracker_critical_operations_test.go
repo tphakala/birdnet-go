@@ -320,7 +320,7 @@ func TestCheckAndResetPeriods_CriticalReliability(t *testing.T) {
 		{
 			"custom_year_reset_date",
 			time.Date(2024, 7, 1, 0, 0, 1, 0, time.UTC),
-			2024,
+			2023,
 			"summer",
 			true, true,
 			7, 1, // Reset on July 1
@@ -486,10 +486,10 @@ func TestGetBatchSpeciesStatus_CriticalReliability(t *testing.T) {
 	currentTime := time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC)
 
 	// Add various species with different statuses
-	tracker.UpdateSpecies("Recent_Species", currentTime.Add(-5*24*time.Hour))    // 5 days ago (new)
-	tracker.UpdateSpecies("Older_Species", currentTime.Add(-20*24*time.Hour))    // 20 days ago (not new)
-	tracker.UpdateSpecies("Very_Old_Species", currentTime.Add(-60*24*time.Hour)) // 60 days ago
-	tracker.UpdateSpecies("Today_Species", currentTime)                          // Today
+	tracker.UpdateSpecies("Recent_Species", currentTime.AddDate(0, 0, -5))    // 5 days ago (new)
+	tracker.UpdateSpecies("Older_Species", currentTime.AddDate(0, 0, -20))    // 20 days ago (not new)
+	tracker.UpdateSpecies("Very_Old_Species", currentTime.AddDate(0, 0, -60)) // 60 days ago
+	tracker.UpdateSpecies("Today_Species", currentTime)                       // Today
 
 	tests := []struct {
 		name          string

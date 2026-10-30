@@ -96,14 +96,16 @@ func TestSpeciesStatusTracking(t *testing.T) {
 	assert.True(t, status.IsNew) // Still within the window
 	assert.Equal(t, 0, status.DaysSinceFirst)
 
+	// The tracker counts local calendar days and a DST day is 23 or 25 hours long,
+	// so day offsets are built with AddDate instead of 24-hour durations.
 	// Check after testDaysWithinWindow days - still within window
-	future := now.Add(testDaysWithinWindow * 24 * time.Hour)
+	future := now.AddDate(0, 0, testDaysWithinWindow)
 	status = tracker.GetSpeciesStatus(testSpeciesScientificName, future)
 	assert.True(t, status.IsNew)
 	assert.Equal(t, testDaysWithinWindow, status.DaysSinceFirst)
 
 	// Check after testDaysOutsideWindow days - outside window
-	future = now.Add(testDaysOutsideWindow * 24 * time.Hour)
+	future = now.AddDate(0, 0, testDaysOutsideWindow)
 	status = tracker.GetSpeciesStatus(testSpeciesScientificName, future)
 	assert.False(t, status.IsNew)
 	assert.Equal(t, testDaysOutsideWindow, status.DaysSinceFirst)

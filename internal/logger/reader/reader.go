@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // Level constants define the log level hierarchy for filtering.
@@ -46,8 +48,8 @@ type LogEntry struct {
 
 // ReadOptions controls filtering during log file scanning.
 type ReadOptions struct {
-	Date       time.Time      // Optional: only return entries for this date. If zero, no date filtering is applied.
-	Location   *time.Location // Optional: timezone for date comparison. If nil, defaults to UTC.
+	Date       wallclock.Date // Optional: only return entries on this calendar date in Location; out-of-range fields are normalised like time.Date. If zero, no date filtering is applied.
+	Location   *time.Location // Optional: timezone in which an entry's date is read. If nil, defaults to UTC.
 	Operations []string       // Optional: filter to these operation values.
 	Level      string         // Optional: minimum level (DEBUG, INFO, WARN, ERROR).
 	Module     string         // Optional: filter to this module prefix.
@@ -230,15 +232,13 @@ func parseLine(line []byte) (LogEntry, bool) {
 
 // preparedOptions holds precomputed filter values to avoid repeated work per entry.
 type preparedOptions struct {
-	targetYear  int
-	targetMonth time.Month
-	targetDay   int
-	location    *time.Location
-	hasDate     bool
-	minRank     int
-	hasLevel    bool
-	operations  []string
-	module      string
+	targetDate wallclock.Date
+	location   *time.Location
+	hasDate    bool
+	minRank    int
+	hasLevel   bool
+	operations []string
+	module     string
 }
 
 // prepareOptions precomputes filter values from ReadOptions.
@@ -247,14 +247,14 @@ func prepareOptions(opts *ReadOptions) preparedOptions {
 		operations: opts.Operations,
 		module:     opts.Module,
 	}
-	if !opts.Date.IsZero() {
+	if opts.Date != (wallclock.Date{}) {
 		p.hasDate = true
 		loc := opts.Location
 		if loc == nil {
 			loc = time.UTC
 		}
 		p.location = loc
-		p.targetYear, p.targetMonth, p.targetDay = opts.Date.In(loc).Date()
+		p.targetDate = opts.Date.AddDays(0) // normalise, so the comparison with DateOf is by calendar day
 	}
 	if opts.Level != "" {
 		if rank, ok := levelRank[strings.ToUpper(opts.Level)]; ok {
@@ -269,8 +269,7 @@ func prepareOptions(opts *ReadOptions) preparedOptions {
 func matchesOptions(entry *LogEntry, prep *preparedOptions) bool {
 	// Date filter: compare dates in the configured timezone.
 	if prep.hasDate {
-		y, m, d := entry.Time.In(prep.location).Date()
-		if y != prep.targetYear || m != prep.targetMonth || d != prep.targetDay {
+		if wallclock.DateOf(entry.Time.In(prep.location)) != prep.targetDate {
 			return false
 		}
 	}

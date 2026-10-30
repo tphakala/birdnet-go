@@ -72,10 +72,18 @@ key and arrays replace, as on the server, so `partial` carries only the keys it
 changes, with each nested value typed as a complete object and each array sent
 whole; a failed request leaves the store untouched. It shows no toast and does
 not touch `isSaving`, so the caller owns busy and error UI. Like `saveSettings`
-it refreshes the restart status and applies a changed dashboard locale to the
-UI. `section` is the lowercase backend section name from
+it refreshes the restart status, applies a changed dashboard locale to the UI
+and applies a saved Error Tracking value to the browser Sentry SDK without a
+reload. `section` is the lowercase backend section name from
 `SettingsSectionPayloads` (for example `privacyfilter`, `rtsp`), not a store
 key such as `realtime` or `privacyFilter`.
+
+`settingsActions.saveSettings()` fetches the server settings first and merges
+the unsaved edits onto them before it sends the whole form, so a change the
+server made since the page loaded is not reverted. A flow that changes settings
+on the server outside the form (the model gallery installs, reinstalls,
+swaps and removes models) calls `settingsActions.refreshKeepingEdits()`
+afterwards, so the form shows the server values without losing unsaved edits.
 
 ## Form Controls
 

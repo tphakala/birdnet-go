@@ -3,6 +3,7 @@ package detections
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -204,20 +205,6 @@ func TestNeedsAdvancedRouting(t *testing.T) {
 	}
 }
 
-// TestAdvancedPageKey_NoDelimiterCollision pins that free-text filter values that
-// concatenate to the same text cannot make two different requests share a cache entry.
-func TestAdvancedPageKey_NoDelimiterCollision(t *testing.T) {
-	t.Parallel()
-	a := detectionQueryParams{QueryType: queryTypeSearch, Location: "node", Source: "rtsp://camera", Locked: "true"}
-	b := detectionQueryParams{QueryType: queryTypeSearch, Location: "node:rtsp", Source: "//camera", Locked: "true"}
-	assert.NotEqual(t, a.advancedPageKey(), b.advancedPageKey())
-
-	same := a
-	assert.Equal(t, a.advancedPageKey(), same.advancedPageKey())
-	same.Source = "rtsp://camera2"
-	assert.NotEqual(t, a.advancedPageKey(), same.advancedPageKey(), "source must be part of the key")
-}
-
 // TestAdvancedPageKey_EveryFilterFieldChangesKey fails when a field is added to
 // detectionQueryParams without being keyed. QueryType and IncludeWeather are the
 // only fields buildAdvancedSearchFilters never reads, so they must not change
@@ -225,7 +212,7 @@ func TestAdvancedPageKey_NoDelimiterCollision(t *testing.T) {
 func TestAdvancedPageKey_EveryFilterFieldChangesKey(t *testing.T) {
 	t.Parallel()
 	base := detectionQueryParams{}
-	baseKey := base.advancedPageKey()
+	baseKey := base.advancedPageKey(time.Now(), time.UTC)
 
 	for field := range reflect.TypeFor[detectionQueryParams]().Fields() {
 		p := base
@@ -244,11 +231,64 @@ func TestAdvancedPageKey_EveryFilterFieldChangesKey(t *testing.T) {
 		}
 
 		if field.Name == "QueryType" || field.Name == "IncludeWeather" {
-			assert.Equal(t, baseKey, p.advancedPageKey(), "%s must not change the key", field.Name)
+			assert.Equal(t, baseKey, p.advancedPageKey(time.Now(), time.UTC), "%s must not change the key", field.Name)
 			continue
 		}
-		assert.NotEqual(t, baseKey, p.advancedPageKey(), "%s must be part of the key", field.Name)
+		assert.NotEqual(t, baseKey, p.advancedPageKey(time.Now(), time.UTC), "%s must be part of the key", field.Name)
 	}
+}
+
+// TestAdvancedPageKey_ResolvesDateRange pins that the key identifies the resolved date range, not
+// the relative token, so a cached page is never served once the token means another range.
+func TestAdvancedPageKey_ResolvesDateRange(t *testing.T) {
+	t.Parallel()
+	santiago, err := time.LoadLocation("America/Santiago")
+	require.NoError(t, err)
+
+	// 23:58 on 2026-10-27 and 00:03 on 2026-10-28 in UTC.
+	before := time.Date(2026, 10, 27, 23, 58, 0, 0, time.UTC)
+	after := time.Date(2026, 10, 28, 0, 3, 0, 0, time.UTC)
+	keyAt := func(date string, now time.Time, loc *time.Location) *apicore.DetectionPageKey {
+		p := detectionQueryParams{Date: date}
+		return p.advancedPageKey(now, loc)
+	}
+
+	for _, token := range []string{"today", "yesterday", "week", "month"} {
+		t.Run(token+" changes key across local midnight", func(t *testing.T) {
+			t.Parallel()
+			assert.NotEqual(t, keyAt(token, before, time.UTC), keyAt(token, after, time.UTC))
+			assert.Equal(t, keyAt(token, before, time.UTC), keyAt(token, before.Add(time.Minute), time.UTC))
+		})
+	}
+
+	t.Run("the station zone sets the calendar day", func(t *testing.T) {
+		t.Parallel()
+		// 2026-10-28 02:00 UTC is still 2026-10-27 23:00 in Santiago (UTC-3).
+		now := time.Date(2026, 10, 28, 2, 0, 0, 0, time.UTC)
+		assert.NotEqual(t, keyAt("today", now, time.UTC), keyAt("today", now, santiago))
+		assert.Equal(t, keyAt("2026-10-27", now, santiago), keyAt("today", now, santiago))
+	})
+
+	t.Run("case and an explicit equal date share one entry", func(t *testing.T) {
+		t.Parallel()
+		assert.Equal(t, keyAt("today", before, time.UTC), keyAt("Today", before, time.UTC))
+		assert.Equal(t, keyAt("today", before, time.UTC), keyAt("2026-10-27", before, time.UTC))
+	})
+
+	t.Run("start and end dates resolve to the same entry as the equivalent date", func(t *testing.T) {
+		t.Parallel()
+		p := detectionQueryParams{StartDate: "2026-10-27", EndDate: "2026-10-27"}
+		assert.Equal(t, keyAt("2026-10-27", before, time.UTC), p.advancedPageKey(before, time.UTC))
+	})
+
+	t.Run("an unresolvable range keeps the raw fields", func(t *testing.T) {
+		t.Parallel()
+		p := detectionQueryParams{Date: "fortnight", StartDate: "2026-10-30", EndDate: "2026-10-01"}
+		key := p.advancedPageKey(before, time.UTC)
+		assert.Equal(t, "fortnight", key.Date)
+		assert.Equal(t, "2026-10-30", key.StartDate)
+		assert.Equal(t, "2026-10-01", key.EndDate)
+	})
 }
 
 // TestPageKeys_MatchDatastoreArguments pins that each simple page key carries

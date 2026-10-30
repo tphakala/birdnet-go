@@ -1,284 +1,102 @@
 package api
 
 import (
-	"bytes"
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
-// TestMaliciousInputData verifies the system handles potentially malicious input
-func TestMaliciousInputData(t *testing.T) {
-	t.Parallel()
-
+// TestPatchAudioRejectsUnsafeExportPath verifies that an export path that
+// escapes the clips directory, or carries a NUL byte, is rejected with a 400
+// and that nothing is published: the controller's snapshot must be the very
+// same pointer afterwards.
+func TestPatchAudioRejectsUnsafeExportPath(t *testing.T) {
 	tests := []struct {
-		name          string
-		section       string
-		maliciousData any
-		description   string
+		name string
+		path string
 	}{
-		{
-			name:    "SQL injection attempt in string field",
-			section: "mqtt",
-			maliciousData: map[string]any{
-				"broker": "tcp://localhost:1883'; DROP TABLE users; --",
-				"topic":  "birdnet' OR '1'='1",
-			},
-			description: "Should accept but sanitize SQL injection attempts",
-		},
-		{
-			name:    "XSS attempt in display fields",
-			section: "dashboard",
-			maliciousData: map[string]any{
-				"locale": "<script>alert('XSS')</script>",
-			},
-			description: "Should accept but fields should be escaped when displayed",
-		},
-		{
-			name:    "Path traversal attempt",
-			section: "audio",
-			maliciousData: map[string]any{
-				"export": map[string]any{
-					"path": "../../../etc/passwd",
-				},
-			},
-			description: "Should reject path traversal at validation time",
-		},
-		{
-			name:    "Command injection attempt",
-			section: "species",
-			maliciousData: map[string]any{
-				"config": map[string]any{
-					"Test Bird": map[string]any{
-						"actions": []map[string]any{
-							{
-								"type":       "ExecuteCommand",
-								"command":    "/bin/sh",
-								"parameters": []string{"-c", "rm -rf /"},
-							},
-						},
-					},
-				},
-			},
-			description: "Should accept but execution should be sandboxed",
-		},
-		{
-			name:    "Buffer overflow attempt with long string",
-			section: "mqtt",
-			maliciousData: map[string]any{
-				"topic": strings.Repeat("A", 10000),
-			},
-			description: "Should handle very long strings gracefully",
-		},
-		{
-			name:    "Unicode injection",
-			section: "dashboard",
-			maliciousData: map[string]any{
-				"locale": "en\u202E\u0000\u200E",
-			},
-			description: "Should handle Unicode control characters",
-		},
-		{
-			name:    "Null byte injection",
-			section: "audio",
-			maliciousData: map[string]any{
-				"export": map[string]any{
-					"path": "clips\x00/etc/passwd",
-				},
-			},
-			description: "Should handle null bytes in paths",
-		},
-		{
-			name:    "LDAP injection attempt",
-			section: "mqtt",
-			maliciousData: map[string]any{
-				"username": "admin)(uid=*))(|(uid=*",
-			},
-			description: "Should handle LDAP injection attempts",
-		},
-		{
-			name:    "XML injection attempt",
-			section: "dashboard",
-			maliciousData: map[string]any{
-				"locale": "<?xml version=\"1.0\"?><!DOCTYPE foo [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><foo>&xxe;</foo>",
-			},
-			description: "Should handle XML injection attempts",
-		},
-		{
-			name:    "JSON injection in nested field",
-			section: "mqtt",
-			maliciousData: map[string]any{
-				"topic": `","enabled":true,"broker":"evil.com:1883","topic":"`,
-			},
-			description: "Should handle JSON injection attempts",
-		},
+		{name: "parent directory traversal", path: "../../../etc/passwd"},
+		{name: "NUL byte", path: "clips\x00/etc/passwd"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := echo.New()
 			controller := getTestController(t, e)
+			before := controller.Settings.Load()
 
-			body, err := json.Marshal(tt.maliciousData)
-			require.NoError(t, err)
+			rec := sendSectionPatch(t, e, controller, "audio", map[string]any{
+				"export": map[string]any{"path": tt.path},
+			})
 
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
-				bytes.NewReader(body))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			rec := httptest.NewRecorder()
-			ctx := e.NewContext(req, rec)
-			ctx.SetParamNames("section")
-			ctx.SetParamValues(tt.section)
-
-			// The update should either succeed or reject malicious input
-			err = controller.UpdateSectionSettings(ctx)
-			if err != nil {
-				// Some malicious inputs might be rejected via error return, which is fine
-				if httpErr, ok := errors.AsType[*echo.HTTPError](err); ok && httpErr.Code == http.StatusBadRequest {
-					t.Logf("Input rejected via error: %v", err)
-					return
-				}
-			}
-
-			// Validation may also reject via response code (HandleError writes 400
-			// to recorder without returning an error). Both 200 and 400 are acceptable
-			// outcomes for malicious input: 200 means the data was safely accepted,
-			// 400 means it was correctly rejected at validation time.
-			if rec.Code == http.StatusBadRequest {
-				t.Logf("Input rejected at validation: status %d", rec.Code)
-				return
-			}
-			assert.Equal(t, http.StatusOK, rec.Code)
-			t.Logf("%s: %s", tt.name, tt.description)
+			assert.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+			assert.Same(t, before, controller.Settings.Load(), "a rejected patch must not publish settings")
 		})
 	}
 }
 
-// TestTypeConfusionAttacks verifies the system handles wrong types gracefully
-func TestTypeConfusionAttacks(t *testing.T) {
-	t.Parallel()
-
+// TestPatchRejectsMistypedValues verifies that a value of the wrong JSON type,
+// or an enum value outside the allowed set, is rejected with a 400 and that
+// nothing is published. Some rows are rejected while the body is merged into the
+// section and others by validation after the merge; the contract pinned here is
+// that either way the live settings stay untouched.
+func TestPatchRejectsMistypedValues(t *testing.T) {
 	tests := []struct {
-		name          string
-		section       string
-		confusedData  any
-		expectedError string
+		name    string
+		section string
+		body    any
 	}{
 		{
-			name:    "String instead of boolean",
+			name:    "string instead of boolean",
 			section: "mqtt",
-			confusedData: map[string]any{
-				"enabled": "yes",
-			},
-			expectedError: "json: cannot unmarshal",
+			body:    map[string]any{"enabled": "yes"},
 		},
 		{
-			name:    "Number instead of string",
+			name:    "number instead of string",
 			section: "mqtt",
-			confusedData: map[string]any{
-				"broker": 12345,
-			},
-			expectedError: "json: cannot unmarshal",
+			body:    map[string]any{"broker": 12345},
 		},
 		{
-			name:    "Object instead of array",
+			name:    "object instead of array",
 			section: "rtsp",
-			confusedData: map[string]any{
-				"urls": map[string]string{"url1": "rtsp://localhost"},
-			},
-			expectedError: "json: cannot unmarshal",
+			body:    map[string]any{"urls": map[string]string{"url1": "rtsp://localhost"}},
 		},
 		{
-			name:    "Array instead of object",
+			name:    "array instead of object",
 			section: "dashboard",
-			confusedData: map[string]any{
-				"thumbnails": []string{"summary", "recent"},
-			},
-			expectedError: "json: cannot unmarshal",
+			body:    map[string]any{"thumbnails": []string{"summary", "recent"}},
 		},
 		{
-			name:    "Null for required field",
+			name:    "boolean instead of number",
 			section: "birdnet",
-			confusedData: map[string]any{
-				"latitude": nil,
-			},
-			expectedError: "json: cannot unmarshal",
+			body:    map[string]any{"threshold": true},
 		},
 		{
-			name:    "Boolean instead of number",
-			section: "birdnet",
-			confusedData: map[string]any{
-				"threshold": true,
-			},
-			expectedError: "json: cannot unmarshal",
-		},
-		{
-			name:    "String instead of number array",
+			name:    "string instead of number",
 			section: "audio",
-			confusedData: map[string]any{
-				"export": map[string]any{
-					"retention": map[string]any{
-						"minClips": "ten",
-					},
-				},
+			body: map[string]any{
+				"export": map[string]any{"retention": map[string]any{"minClips": "ten"}},
 			},
-			expectedError: "json: cannot unmarshal",
 		},
 		{
-			name:    "Invalid enum value",
+			name:    "invalid enum value",
 			section: "audio",
-			confusedData: map[string]any{
-				"export": map[string]any{
-					"type": "invalid_format",
-				},
-			},
-			expectedError: "", // May be accepted, validation happens elsewhere
+			body:    map[string]any{"export": map[string]any{"type": "invalid_format"}},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
 			e := echo.New()
 			controller := getTestController(t, e)
+			before := controller.Settings.Load()
 
-			body, err := json.Marshal(tt.confusedData)
-			require.NoError(t, err)
+			rec := sendSectionPatch(t, e, controller, tt.section, tt.body)
 
-			req := httptest.NewRequest(http.MethodPatch, "/api/v2/settings/"+tt.section,
-				bytes.NewReader(body))
-			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
-			rec := httptest.NewRecorder()
-			ctx := e.NewContext(req, rec)
-			ctx.SetParamNames("section")
-			ctx.SetParamValues(tt.section)
-
-			err = controller.UpdateSectionSettings(ctx)
-			// Type confusion might be caught at JSON unmarshal or later validation
-			if err == nil {
-				// If no error, the system handled the type conversion OR sent an HTTP error response
-				if rec.Code == http.StatusOK {
-					// Type conversion was successful
-					t.Logf("Type confusion handled successfully with conversion")
-				} else {
-					// HTTP error response was sent (expected for type mismatches)
-					assert.Equal(t, http.StatusBadRequest, rec.Code, "Expected BadRequest for type confusion")
-					t.Logf("Type confusion properly rejected with HTTP error response")
-				}
-			} else {
-				// Error is expected for type mismatches
-				t.Logf("Type confusion properly rejected: %v", err)
-			}
+			assert.Equal(t, http.StatusBadRequest, rec.Code, "body: %s", rec.Body.String())
+			assert.Same(t, before, controller.Settings.Load(), "a rejected patch must not publish settings")
 		})
 	}
 }

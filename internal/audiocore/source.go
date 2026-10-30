@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/errors"
 )
 
@@ -186,6 +187,17 @@ func (s *AudioSource) SetConnectionString(cs string) {
 // ensuring that credentials are never inadvertently written to logs.
 func (s *AudioSource) String() string {
 	return s.SafeString
+}
+
+// EffectiveSampleRate returns the rate in Hz at which the source delivers
+// frames to the router: its registered SampleRate when positive, else the
+// default capture rate. It is safe to call on a nil source, so a failed
+// registry lookup falls back to the default rate.
+func (s *AudioSource) EffectiveSampleRate() int {
+	if s == nil {
+		return conf.SampleRate
+	}
+	return conf.EffectiveSampleRate(s.SampleRate)
 }
 
 // StreamTypeToSourceType converts a stream type string (e.g., "rtsp", "http")

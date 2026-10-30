@@ -189,7 +189,6 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 	settings.Security.TLSMode = conf.TLSModeAutoTLS
 	settings.Security.Host = testHost
 	settings.Security.TLSPort = tlsPort
-	conftest.SetTestSettings(settings)
 
 	cfg := ConfigFromSettings(settings)
 	require.Equal(t, tlsPort, cfg.TLSPort)
@@ -422,7 +421,6 @@ func TestAutoTLS_DualListeners_RedirectStatus(t *testing.T) {
 	settings.Security.TLSMode = conf.TLSModeAutoTLS
 	settings.Security.Host = testHost
 	settings.Security.TLSPort = tlsPort
-	conftest.SetTestSettings(settings)
 
 	cfg := ConfigFromSettings(settings)
 
@@ -633,7 +631,6 @@ func TestAutoTLS_RedirectDisabled_ServesApp(t *testing.T) {
 	settings.Security.Host = testHost
 	settings.Security.TLSPort = tlsPort
 	settings.Security.RedirectToHTTPS = false
-	conftest.SetTestSettings(settings)
 
 	cfg := ConfigFromSettings(settings)
 	cfg.RedirectToHTTPS = false // override the default-true logic

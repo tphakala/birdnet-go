@@ -9,9 +9,10 @@
   import { buildAppUrl } from '$lib/utils/urlHelpers';
   import { generateSessionId } from '$lib/utils/session';
   import { hasLiveAudioAccess } from '$lib/stores/appState.svelte';
-  import Hls from 'hls.js';
+  import type Hls from 'hls.js';
   import type { ErrorData } from 'hls.js';
   import { HLS_AUDIO_CONFIG, BUFFERING_STRATEGY, EXPECTED_STALL_ERRORS } from './hls-config';
+  import { canPlayHls, tryLoadHls } from './hls-loader';
 
   const logger = loggers.audio;
 
@@ -28,8 +29,6 @@
   interface Props {
     className?: string;
   }
-
-  const hlsSupported = typeof window !== 'undefined' && Hls.isSupported();
 
   let { className = '' }: Props = $props();
 
@@ -50,6 +49,7 @@
   const SMOOTHING_FACTOR = 0.4;
   const ZERO_LEVEL_TIMEOUT = 5000;
   const HEARTBEAT_INTERVAL = 20000;
+  const ERROR_STATUS_HIDE_DELAY_MS = 3000;
 
   const sessionId = generateSessionId();
 
@@ -59,6 +59,7 @@
   let zeroLevelTime: { [key: string]: number } = {};
   let heartbeatTimer: ReturnType<typeof globalThis.setInterval> | null = null;
   let startRequestId = 0;
+  let statusHideTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
   let dropdownRef = $state<HTMLDivElement>();
   let buttonRef = $state<HTMLButtonElement>();
 
@@ -101,9 +102,9 @@
 
       audioElementRef.addEventListener('error', _e => {
         if (!playingSource) return; // Ignore errors from cleanup
-        showStatusMessage(t('media.audio.playError'));
-        isPlaying = false;
+        // stopPlayback hides the status message, so show the error after it.
         stopPlayback();
+        showTransientError(t('media.audio.playError'));
       });
 
       document.body.appendChild(audioElementRef);
@@ -229,11 +230,26 @@
     }
   }
 
+  function clearStatusHideTimer() {
+    if (statusHideTimer) {
+      globalThis.clearTimeout(statusHideTimer);
+      statusHideTimer = null;
+    }
+  }
+
+  // Show an error and hide it after a delay. A newer message replaces the pending hide
+  // so it cannot be hidden early by an older error's timer.
+  function showTransientError(message: string) {
+    showStatusMessage(message);
+    statusHideTimer = globalThis.setTimeout(() => hideStatusMessage(), ERROR_STATUS_HIDE_DELAY_MS);
+  }
+
   // Show status message.
   // Use queueMicrotask to defer state mutations so they never occur
   // synchronously inside a $derived or $effect evaluation, which would
   // trigger Svelte 5's state_unsafe_mutation error.
   function showStatusMessage(message: string) {
+    clearStatusHideTimer();
     queueMicrotask(() => {
       statusMessage = message;
       showStatus = true;
@@ -242,6 +258,7 @@
 
   // Hide status message (deferred for the same reason as showStatusMessage).
   function hideStatusMessage() {
+    clearStatusHideTimer();
     queueMicrotask(() => {
       showStatus = false;
     });
@@ -277,9 +294,10 @@
     }
   }
 
-  // Start heartbeat
+  // Start heartbeat. Clears any previous timer without sending a disconnect, which
+  // would target the stream this start just registered.
   function startHeartbeat() {
-    stopHeartbeat();
+    clearHeartbeatTimer();
 
     const sendHeartbeat = async () => {
       if (!isPlaying || !activeStreamToken) return;
@@ -298,12 +316,16 @@
     heartbeatTimer = globalThis.setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
   }
 
-  // Stop heartbeat
-  function stopHeartbeat() {
+  function clearHeartbeatTimer() {
     if (heartbeatTimer) {
       globalThis.clearInterval(heartbeatTimer);
       heartbeatTimer = null;
     }
+  }
+
+  // Stop heartbeat and tell the server this client has left the stream.
+  function stopHeartbeat() {
+    clearHeartbeatTimer();
 
     // Send disconnect notification (keepalive ensures delivery during page unload)
     if (activeStreamToken) {
@@ -317,13 +339,21 @@
     }
   }
 
-  // Setup HLS streaming
-  async function setupHLSStream(hlsUrl: string) {
+  // isStaleStart reports whether the startPlayback request requestId was
+  // superseded: a newer start bumps startRequestId, and stopPlayback clears
+  // playingSource.
+  function isStaleStart(requestId: number): boolean {
+    return requestId !== startRequestId || playingSource === null;
+  }
+
+  // Setup HLS streaming. HlsClass is null when HLS.js could not be loaded,
+  // which leaves native HLS as the only option.
+  async function setupHLSStream(hlsUrl: string, HlsClass: typeof Hls | null) {
     const audio = getAudioElement();
     if (!audio) return;
 
     // Check if HLS.js is supported
-    if (hlsSupported) {
+    if (HlsClass?.isSupported()) {
       // Clean up existing instance
       if (hlsInstance) {
         hlsInstance.destroy();
@@ -331,14 +361,14 @@
       }
 
       // Create new HLS instance with audio-optimized configuration
-      hlsInstance = new Hls(HLS_AUDIO_CONFIG);
+      hlsInstance = new HlsClass(HLS_AUDIO_CONFIG);
 
       // Track if we've attempted to play
       let playbackAttempted = false;
       let fragmentsBuffered = 0;
 
       // Setup error handling with proper types
-      hlsInstance.on(Hls.Events.ERROR, (_event: string, data: ErrorData) => {
+      hlsInstance.on(HlsClass.Events.ERROR, (_event: string, data: ErrorData) => {
         logger.error('HLS error:', {
           type: data.type,
           details: data.details,
@@ -348,9 +378,10 @@
 
         if (data.fatal) {
           // Handle fatal HLS error
-          showStatusMessage(t('media.audio.playbackError', { details: data.details }));
+          // stopPlayback hides the status message, so show the error after it.
           stopPlayback();
-        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          showTransientError(t('media.audio.playbackError', { details: data.details }));
+        } else if (data.type === HlsClass.ErrorTypes.MEDIA_ERROR) {
           // Handle non-fatal media errors with improved categorization
           if (EXPECTED_STALL_ERRORS.has(data.details)) {
             // Buffer stalls are expected in low-latency audio streaming
@@ -370,17 +401,17 @@
       });
 
       // Wait for media to be attached
-      hlsInstance.on(Hls.Events.MEDIA_ATTACHED, () => {
+      hlsInstance.on(HlsClass.Events.MEDIA_ATTACHED, () => {
         logger.debug('HLS.js media attached');
       });
 
       // Wait for manifest to be parsed
-      hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+      hlsInstance.on(HlsClass.Events.MANIFEST_PARSED, () => {
         logger.debug('HLS.js manifest parsed');
       });
 
       // Wait for first fragment to be buffered before playing
-      hlsInstance.on(Hls.Events.FRAG_BUFFERED, () => {
+      hlsInstance.on(HlsClass.Events.FRAG_BUFFERED, () => {
         logger.debug('HLS fragment buffered');
         fragmentsBuffered++;
 
@@ -396,6 +427,11 @@
             minRequired: BUFFERING_STRATEGY.MIN_FRAGMENTS_BEFORE_PLAY,
           });
           audio.play().catch((err: Error) => {
+            // pause() or teardown interrupted play(); the stop already reported its own outcome.
+            if (err.name === 'AbortError') {
+              logger.debug('Playback start interrupted:', err);
+              return;
+            }
             logger.error('Playback start error:', err);
             if (err.name === 'NotAllowedError') {
               showStatusMessage(t('media.audio.autoplayBlocked'));
@@ -409,8 +445,9 @@
       // Attach to media element and load source
       hlsInstance.attachMedia(audio);
       hlsInstance.loadSource(hlsUrl);
-    } else if (audio?.canPlayType('application/vnd.apple.mpegurl')) {
-      // Native HLS support (Safari, iOS)
+    } else {
+      // Native HLS support (Safari, iOS). startPlayback checked canPlayHls
+      // before the server stream was started, so a native player exists here.
       audio.src = hlsUrl;
       audio.play().catch((err: Error) => {
         // Handle playback start error
@@ -418,9 +455,6 @@
           showStatusMessage(t('media.audio.autoplayBlocked'));
         }
       });
-    } else {
-      showStatusMessage(t('media.audio.hlsNotSupported'));
-      // HLS playback not supported
     }
   }
 
@@ -436,6 +470,20 @@
     const encodedSourceId = encodeURIComponent(sourceId);
 
     try {
+      // Load HLS.js before starting the server stream, so a failed load
+      // cannot leave a started stream without a player.
+      const HlsClass = await tryLoadHls();
+      if (isStaleStart(requestId)) return;
+      if (!canPlayHls(HlsClass)) {
+        playingSource = null;
+        // A null HlsClass means HLS.js failed to load (offline, stale chunk), which
+        // a page reload usually fixes; otherwise this browser has no HLS player at all.
+        showTransientError(
+          HlsClass === null ? t('media.audio.hlsLoadFailed') : t('media.audio.hlsNotSupported')
+        );
+        return;
+      }
+
       // Use fetchWithCSRF for authenticated HLS endpoint
       const data = await fetchWithCSRF<{
         status: string;
@@ -447,28 +495,42 @@
         body: { session_id: sessionId },
       });
 
-      // Discard stale response if user switched sources during fetch
-      if (requestId !== startRequestId) return;
+      // Discard stale response if user switched sources or stopped during fetch.
+      // The stop may have reached the server before this start registered its
+      // client, so stop the stream this start created unless a newer start is
+      // playing the same source.
+      if (isStaleStart(requestId)) {
+        if (playingSource !== sourceId) {
+          fetchWithCSRF(`/api/v2/streams/hls/${encodedSourceId}/stop`, {
+            method: 'POST',
+            keepalive: true,
+            body: { session_id: sessionId },
+          }).catch(() => {});
+        }
+        return;
+      }
 
       activeStreamToken = data.stream_token;
       const hlsUrl = buildAppUrl(data.playlist_url);
-      await setupHLSStream(hlsUrl);
+      await setupHLSStream(hlsUrl, HlsClass);
 
       // Re-check after second await
-      if (requestId !== startRequestId) return;
+      if (isStaleStart(requestId)) return;
 
       startHeartbeat();
     } catch (error) {
-      // Only show error if this is still the active request
-      if (requestId !== startRequestId) return;
+      // Only show error if this start was not superseded or stopped
+      if (isStaleStart(requestId)) return;
 
       // Handle audio stream access error
       const message =
         error instanceof Error && error.message.includes('permission')
           ? t('media.audio.loginRequired')
           : t('media.audio.streamError');
-      showStatusMessage(message);
-      globalThis.setTimeout(() => hideStatusMessage(), 3000);
+      // Reset to idle (clears playingSource, stops any server stream) so the next
+      // click starts again instead of stopping a stream that never played.
+      stopPlayback();
+      showTransientError(message);
     }
   }
 
@@ -513,12 +575,11 @@
 
   // Toggle playback for a source
   function toggleSourcePlayback(source: string) {
-    if (isPlaying && playingSource === source) {
+    // playingSource is set as soon as a start begins, before isPlaying, so
+    // this also stops a stream that is still starting (the stop icon shows then).
+    if (playingSource === source) {
       stopPlayback();
     } else {
-      if (isPlaying) {
-        stopPlayback();
-      }
       startPlayback(source);
     }
   }
@@ -574,6 +635,11 @@
 
         cleanupEventSource();
         stopHeartbeat();
+        clearStatusHideTimer();
+        // Make a start still in flight stale so it neither sets up a player nor
+        // leaves its server stream running.
+        startRequestId++;
+        playingSource = null;
 
         if (audioElementRef) {
           audioElementRef.pause();

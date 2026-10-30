@@ -85,7 +85,7 @@ func TestServeSpectrogramCacheControlHonorsPrivateMode(t *testing.T) {
 
 			// Simulate an already-generated spectrogram so the serve path runs
 			// without invoking external tools. Default raw=true => audio_800px.png.
-			require.NoError(t, createTestAudioFile(t, filepath.Join(root, "audio.wav")))
+			createTestAudioFile(t, filepath.Join(root, "audio.wav"))
 			require.NoError(t, os.WriteFile(filepath.Join(root, "audio_800px.png"),
 				[]byte("simulated spectrogram content"), 0o600))
 
@@ -128,7 +128,7 @@ func TestServeAudioClipCacheControlPrivateInPrivateMode(t *testing.T) {
 			h, e, root := newCacheControlTestHandler(t, tc.privateMode)
 
 			audioFilename := "clip.wav"
-			require.NoError(t, createTestAudioFile(t, filepath.Join(root, audioFilename)))
+			createTestAudioFile(t, filepath.Join(root, audioFilename))
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/media/audio/"+audioFilename, http.NoBody)
 			rec := httptest.NewRecorder()
@@ -167,7 +167,7 @@ func TestServeAudioByIDCacheControlHonorsPrivateMode(t *testing.T) {
 
 			const noteID = "42"
 			clipFilename := "clip_by_id.wav"
-			require.NoError(t, createTestAudioFile(t, filepath.Join(root, clipFilename)))
+			createTestAudioFile(t, filepath.Join(root, clipFilename))
 
 			mockDS := mocks.NewMockInterface(t)
 			mockDS.EXPECT().GetNoteClipPath(noteID).Return(clipFilename, nil)
@@ -210,7 +210,7 @@ func TestServeSpectrogramByIDCacheControlHonorsPrivateMode(t *testing.T) {
 
 			const noteID = "42"
 			audioBase := "clip_by_id"
-			require.NoError(t, createTestAudioFile(t, filepath.Join(root, audioBase+".wav")))
+			createTestAudioFile(t, filepath.Join(root, audioBase+".wav"))
 			// Default raw=true with size=lg (1026px). Provide both raw and legend
 			// variants so the serve path finds the fixture regardless of raw parsing.
 			require.NoError(t, os.WriteFile(filepath.Join(root, audioBase+"_1026px.png"),

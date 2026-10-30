@@ -20,6 +20,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/classifier/inferencestats"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/health"
 	"github.com/tphakala/birdnet-go/internal/health/checks"
@@ -29,6 +30,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/weather"
+	"gorm.io/gorm"
 )
 
 // diagnosticsStatusResponse is the quick health summary returned by GET /status.
@@ -93,6 +95,23 @@ func (c *Handler) HealthMetricsStore() *observability.HealthMetricsStore {
 // so recorded counters can also surface as recent events on the System Health page.
 func (c *Handler) HealthEventBuffer() *observability.HealthEventBuffer {
 	return c.healthEvents
+}
+
+// errDatabaseSizeNoMySQLHandle is reported by the database size check when
+// settings select MySQL or MariaDB but there is no v2 manager to query.
+var errDatabaseSizeNoMySQLHandle = errors.NewStd("no MySQL connection is available")
+
+// mysqlServerDB returns the v2 manager's handle when the database is MySQL or
+// MariaDB, and nil otherwise (SQLite, or no v2 manager). It is read on every
+// check run, so nothing is captured at startup. The v2 manager is used because
+// it exists in legacy and v2-only mode alike and points at the same server and
+// schema as the legacy store.
+func (c *Handler) mysqlServerDB() *gorm.DB {
+	mgr := c.V2Manager
+	if mgr == nil || !mgr.IsMySQL() {
+		return nil
+	}
+	return mgr.DB()
 }
 
 // registerHealthChecks registers all health checks with dependency injection closures.
@@ -193,6 +212,18 @@ func (c *Handler) registerHealthChecks() {
 		// Database checks
 		checks.NewDatabaseSizeCheck(func() string {
 			return c.CurrentSettings().Output.SQLite.Path
+		}, func(ctx context.Context) (int64, bool, error) {
+			db := c.mysqlServerDB()
+			if db == nil {
+				// Without a v2 manager the dialect is unknown; settings say MySQL,
+				// so do not fall back to a SQLite file that may be a leftover.
+				if c.V2Manager == nil && c.CurrentSettings().Output.MySQL.Enabled {
+					return 0, true, errDatabaseSizeNoMySQLHandle
+				}
+				return 0, false, nil
+			}
+			size, err := dbserver.QuerySchemaSize(ctx, db)
+			return size, true, err
 		}),
 		checks.NewMigrationStatusCheck(func() (bool, string, error) {
 			if c.DS == nil {
@@ -224,6 +255,22 @@ func (c *Handler) registerHealthChecks() {
 				return ir.IntegrityResult()
 			}
 			return "", false
+		}),
+		checks.NewDatabaseServerVersionCheck(func(ctx context.Context) (string, bool, error) {
+			db := c.mysqlServerDB()
+			if db == nil {
+				return "", false, nil
+			}
+			raw, err := dbserver.QueryVersion(ctx, db)
+			return raw, true, err
+		}),
+		checks.NewDatabaseCharsetCheck(func(ctx context.Context) (dbserver.CharsetReport, bool, error) {
+			db := c.mysqlServerDB()
+			if db == nil {
+				return dbserver.CharsetReport{}, false, nil
+			}
+			report, err := dbserver.QueryCharset(ctx, db)
+			return report, true, err
 		}),
 
 		// Network checks
@@ -289,7 +336,7 @@ func (c *Handler) registerHealthChecks() {
 
 		// Config checks
 		checks.NewToolAvailabilityCheck(func() []checks.ToolInfo {
-			return requiredTools(c.CurrentSettings(), conf.NativeSpectrogramEnabled())
+			return requiredTools(c.CurrentSettings())
 		}),
 		checks.NewPathAccessCheck(map[string]string{
 			"data": filepath.Dir(c.CurrentSettings().Output.SQLite.Path),
@@ -830,21 +877,14 @@ func (c *Handler) GetRecentErrors(ctx echo.Context) error {
 	return ctx.JSON(http.StatusOK, entries)
 }
 
-// requiredTools lists the external binaries the health check expects. Only the
-// sox renderer uses Sox; with the native spectrogram renderer it is not needed.
-func requiredTools(s *conf.Settings, nativeSpectrogram bool) []checks.ToolInfo {
-	tools := []checks.ToolInfo{
+// requiredTools lists the external binaries the health check expects: FFmpeg,
+// used for network stream capture.
+func requiredTools(s *conf.Settings) []checks.ToolInfo {
+	return []checks.ToolInfo{
 		{
 			Name:    "FFmpeg",
 			Path:    s.Realtime.Audio.FfmpegPath,
 			Version: s.Realtime.Audio.FfmpegVersion,
 		},
 	}
-	if !nativeSpectrogram {
-		tools = append(tools, checks.ToolInfo{
-			Name: "Sox",
-			Path: s.Realtime.Audio.SoxPath,
-		})
-	}
-	return tools
 }

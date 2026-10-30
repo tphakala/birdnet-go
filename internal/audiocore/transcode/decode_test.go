@@ -11,10 +11,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/iotest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	m4a "github.com/tphakala/go-m4a"
+	aacm4a "github.com/tphakala/go-m4a/aacm4a"
 	wavpcm "github.com/tphakala/go-wav/pcm"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
@@ -204,6 +206,48 @@ func TestOpenSource_ClosedFileIsAFileIOError(t *testing.T) {
 			assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
 		})
 	}
+}
+
+// failingReads is an io.ReadSeeker that seeks the file and whose Read fails
+// with an *fs.PathError once failing is set.
+type failingReads struct {
+	*os.File
+	failing bool
+}
+
+func (r *failingReads) Read(p []byte) (int, error) {
+	if r.failing {
+		return 0, &fs.PathError{Op: "read", Path: r.Name(), Err: io.ErrClosedPipe}
+	}
+	return r.File.Read(p)
+}
+
+// A file read that fails while decoding M4A frames, after the open succeeded,
+// reports the failure of the file, not a damaged clip: go-m4a keeps the
+// *fs.PathError of a failed frame read in the chain. The decoder is built as
+// openM4A builds it, over a reader whose Read starts failing after the open.
+func TestDecodeError_M4AFrameReadFailureIsAFileIOError(t *testing.T) {
+	t.Parallel()
+
+	path, _ := writeFixture(t, fixtureNamed(t, "m4a"), testRate, 0.5)
+	f, err := os.Open(path) //nolint:gosec // G304: a test fixture path
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, f.Close()) })
+	r := &failingReads{File: f}
+	dec, info, err := aacm4a.NewSeekableDecoder(r, m4a.WithMaxBoxBuffer(maxM4ABoxBytes))
+	require.NoError(t, err)
+	r.failing = true
+
+	_, readErr := dec.Read(make([]byte, chunkBytes(info.Channels*bytesPerSample)))
+	require.Error(t, readErr)
+	_, isPathErr := errors.AsType[*fs.PathError](readErr)
+	require.True(t, isPathErr, "the frame read failure keeps its *fs.PathError: %v", readErr)
+
+	got := decodeError("test", readErr)
+	assert.False(t, errors.Is(got, ErrUndecodableSource), "a disk fault is not a damaged clip")
+	enhanced, ok := errors.AsType[*errors.EnhancedError](got)
+	require.True(t, ok)
+	assert.Equal(t, errors.CategoryFileIO, enhanced.Category)
 }
 
 func TestDecode_CorruptAndTruncatedInputs(t *testing.T) {
@@ -538,5 +582,51 @@ func TestDecode_AcceptsTheSourceRateBounds(t *testing.T) {
 		pcm, err := decode(t.Context(), path, nil, 0)
 		require.NoError(t, err, "rate %d", rate)
 		assert.Equal(t, rate, pcm.SampleRate)
+	}
+}
+
+// Real decoders return short reads (go-m4a returns one access unit per Read), so
+// fill must keep reading until the buffer holds whole frames, and drop a partial
+// frame only at the end of the source.
+func TestFrameReader_FillsWholeFramesAcrossShortReads(t *testing.T) {
+	t.Parallel()
+
+	const (
+		frameBytes  = 4
+		wholeFrames = 50
+		tailBytes   = 3
+		bufFrames   = 8
+	)
+	input := make([]byte, wholeFrames*frameBytes+tailBytes)
+	for i := range input {
+		input[i] = byte(i)
+	}
+	want := input[:wholeFrames*frameBytes]
+	tests := []struct {
+		name string
+		wrap func(io.Reader) io.Reader
+	}{
+		{name: "one byte per read", wrap: iotest.OneByteReader},
+		{name: "half the request per read", wrap: iotest.HalfReader},
+		{name: "data returned together with EOF", wrap: iotest.DataErrReader},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			fr := &frameReader{r: tt.wrap(bytes.NewReader(input)), frameBytes: frameBytes, op: "test_fill"}
+			buf := make([]byte, bufFrames*frameBytes)
+			var got []byte
+			for calls := 0; ; calls++ {
+				require.Less(t, calls, wholeFrames, "fill must reach the end of the source")
+				n, eof, err := fr.fill(t.Context(), buf)
+				require.NoError(t, err)
+				got = append(got, buf[:n]...)
+				if eof {
+					break
+				}
+				require.Equal(t, len(buf), n, "before the end every call fills the buffer")
+			}
+			assert.Equal(t, want, got, "the partial tail frame is dropped, nothing else")
+		})
 	}
 }

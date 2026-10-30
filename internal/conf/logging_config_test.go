@@ -1,6 +1,7 @@
 package conf
 
 import (
+	"maps"
 	"os"
 	"strings"
 	"testing"
@@ -179,6 +180,11 @@ func TestLoggingModuleLevelAppliedToLogger(t *testing.T) {
 		},
 	}
 
+	// Only testmod writes a file; keep the built-in outputs from opening
+	// relative logs/ files in the package directory.
+	cfg.FileOutput = &logger.FileOutput{Enabled: false}
+	maps.Copy(cfg.ModuleOutputs, logger.DisabledModuleOutputs())
+
 	cl, err := logger.NewCentralLogger(cfg)
 	require.NoError(t, err)
 	defer func() { require.NoError(t, cl.Close()) }()
@@ -222,6 +228,11 @@ func TestLoggingModuleLevelInfoFiltersDebug(t *testing.T) {
 			},
 		},
 	}
+
+	// Only testmod writes a file; keep the built-in outputs from opening
+	// relative logs/ files in the package directory.
+	cfg.FileOutput = &logger.FileOutput{Enabled: false}
+	maps.Copy(cfg.ModuleOutputs, logger.DisabledModuleOutputs())
 
 	cl, err := logger.NewCentralLogger(cfg)
 	require.NoError(t, err)

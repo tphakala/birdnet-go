@@ -10,7 +10,7 @@
 //
 // Eight members are injected from the facade because they live on facade-owned
 // subsystems that have not been extracted into their own domains yet:
-//   - settingsMutex / getSettingsOrFallback / publishAndSaveSettings /
+//   - settingsMutex / getSettingsOrFallback / updateAndSaveSettings /
 //     handleSettingsChanges: the facade settings-save machinery, used by the
 //     review/ignore exclude-list mutation (toggleSpeciesInIgnoredList,
 //     addSpeciesToIgnoredList). settingsMutex MUST be the same *sync.RWMutex the
@@ -34,6 +34,8 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
 )
 
 // queryValueTrue is the canonical "true" query-parameter value parsed by the
@@ -66,7 +68,7 @@ type Handler struct {
 
 	settingsMutex             *sync.RWMutex
 	getSettingsOrFallback     func() *conf.Settings
-	publishAndSaveSettings    func(current, updated *conf.Settings) error
+	updateAndSaveSettings     apicore.SettingsUpdater
 	handleSettingsChanges     func(oldSettings, currentSettings *conf.Settings) error
 	isClientAuthenticated     func(ctx echo.Context) bool
 	loadCommonNameMap         func() map[string]string
@@ -82,6 +84,10 @@ type Handler struct {
 	// clipRateGroup de-duplicates the lazy fill per row while it is in flight. It
 	// holds no result afterwards, so the fill is stateless.
 	clipRateGroup singleflight.Group
+
+	// contributions reads stored model contributions for the detection responses.
+	// It is nil unless the enhanced v2 database is active; see RegisterDetectionRoutes.
+	contributions modelContributionReader
 }
 
 // New constructs the detections domain handler around the shared core and the
@@ -95,7 +101,7 @@ func New(
 	core *apicore.Core,
 	settingsMutex *sync.RWMutex,
 	getSettingsOrFallback func() *conf.Settings,
-	publishAndSaveSettings func(current, updated *conf.Settings) error,
+	updateAndSaveSettings apicore.SettingsUpdater,
 	handleSettingsChanges func(oldSettings, currentSettings *conf.Settings) error,
 	isClientAuthenticated func(ctx echo.Context) bool,
 	loadCommonNameMap func() map[string]string,
@@ -106,7 +112,7 @@ func New(
 		Core:                      core,
 		settingsMutex:             settingsMutex,
 		getSettingsOrFallback:     getSettingsOrFallback,
-		publishAndSaveSettings:    publishAndSaveSettings,
+		updateAndSaveSettings:     updateAndSaveSettings,
 		handleSettingsChanges:     handleSettingsChanges,
 		isClientAuthenticated:     isClientAuthenticated,
 		loadCommonNameMap:         loadCommonNameMap,
@@ -142,12 +148,20 @@ func (c *Handler) RegisterSearchRoutes(g *echo.Group) {
 // supplied group. It preserves the facade's previous initDetectionRoutes entry,
 // including the datastore-disabled guard.
 func (c *Handler) RegisterDetectionRoutes(g *echo.Group) {
-	// Detection handlers dereference c.DS. Honor the constructor's "datastore disabled"
-	// mode (NewWithOptions permits a nil datastore) by not registering this route group
-	// when there is no datastore, instead of registering handlers that would panic.
-	if c.DS == nil {
+	// Detection handlers dereference c.DS and c.Repo. Honor the constructor's "datastore
+	// disabled" mode (NewWithOptions permits a nil datastore) by not registering this route
+	// group when either is missing, instead of registering handlers that would panic.
+	if c.DS == nil || c.Repo == nil {
 		c.LogWarnIfEnabled("Skipping detection routes: datastore is not available")
 		return
+	}
+
+	// Model contributions are keyed by v2 detection IDs. In migration mode a
+	// manager exists but the notes carry legacy IDs, so the reader is built only
+	// when the enhanced database is active (c.DS and this manager then share one
+	// database).
+	if c.V2Manager != nil && datastoreV2.IsEnhancedDatabase() {
+		c.contributions = repository.NewDetectionRepository(c.V2Manager.DB(), nil, c.V2Manager.TablePrefix() != "", c.V2Manager.IsMySQL())
 	}
 
 	// DetectionCache is initialized by the constructor (NewWithOptions); do not

@@ -191,7 +191,6 @@ All datastore mocks have been successfully migrated to generated mocks:
 These mocks are for non-datastore interfaces and remain unchanged:
 
 - `internal/imageprovider/*` - Image provider mocks
-- `internal/api/v2/range/range_test.go` - MockBirdNET, MockProcessor
 - `internal/analysis/processor/mqtt_action_test.go` - MockMQTTClient
 
 ## 🛠️ Configuration

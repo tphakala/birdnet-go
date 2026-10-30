@@ -376,6 +376,7 @@ export type TranslationKey =
   | 'notifications.content.settings.extendedCaptureRestartRequired'
   | 'notifications.content.settings.equalizerUpdateFailed'
   | 'notifications.content.settings.equalizerUpdated'
+  | 'notifications.content.settings.equalizerFiltersSkipped' // params: count, sources
   | 'notifications.content.settings.savedSuccessfully'
   | 'notifications.content.settings.saveFailed'
   | 'notifications.content.migration.startedTitle'
@@ -388,6 +389,16 @@ export type TranslationKey =
   | 'notifications.content.migration.completedMessage'
   | 'notifications.content.migration.errorTitle'
   | 'notifications.content.migration.errorMessage'
+  | 'notifications.content.migration.legacyNotStartedTitle'
+  | 'notifications.content.migration.legacyNotStartedMessage'
+  | 'notifications.content.migration.legacyInProgressTitle'
+  | 'notifications.content.migration.legacyInProgressMessage'
+  | 'notifications.content.migration.legacyNeedsAttentionTitle'
+  | 'notifications.content.migration.legacyNeedsAttentionMessage'
+  | 'notifications.content.migration.legacyRestartRequiredTitle'
+  | 'notifications.content.migration.legacyRestartRequiredMessage'
+  | 'notifications.content.database.serverAttentionTitle'
+  | 'notifications.content.database.serverAttentionMessage'
   | 'notifications.content.cleanup.completeTitle'
   | 'notifications.content.cleanup.completeMessage' // params: space
   | 'notifications.content.cleanup.failedTitle'
@@ -630,6 +641,7 @@ export type TranslationKey =
   | 'dashboard.acousticModels.loadFailedAction'
   | 'dashboard.acousticModels.failingTitle' // params: count
   | 'dashboard.acousticModels.failingMessage' // params: count, models
+  | 'dashboard.legacyDatabase.action'
   | 'dashboard.banner.title'
   | 'dashboard.banner.titlePlaceholder'
   | 'dashboard.banner.description'
@@ -1325,6 +1337,8 @@ export type TranslationKey =
   | 'system.database.migration.prerequisites.checks.disk_space.name'
   | 'system.database.migration.prerequisites.checks.legacy_accessible.name'
   | 'system.database.migration.prerequisites.checks.sqlite_integrity.name'
+  | 'system.database.migration.prerequisites.checks.mysql_server_version.name'
+  | 'system.database.migration.prerequisites.checks.mysql_charset.name'
   | 'system.database.migration.prerequisites.checks.mysql_table_health.name'
   | 'system.database.migration.prerequisites.checks.write_permission.name'
   | 'system.database.migration.prerequisites.checks.mysql_permissions.name'
@@ -1806,6 +1820,7 @@ export type TranslationKey =
   | 'settings.actions.noChangesToSave'
   | 'settings.errors.loadFailed'
   | 'settings.errors.saveFailed'
+  | 'settings.errors.changedElsewhere'
   | 'settings.errors.databaseStatsFailed'
   | 'settings.errors.csvDownloadFailed'
   | 'settings.card.changed'
@@ -2180,6 +2195,9 @@ export type TranslationKey =
   | 'settings.notifications.push.filters.speciesCooldown.label'
   | 'settings.notifications.push.filters.speciesCooldown.unit'
   | 'settings.notifications.push.filters.speciesCooldown.helpText'
+  | 'settings.notifications.push.rulesNotice.message' // params: pushAction, ruleName, eventName
+  | 'settings.notifications.push.rulesNotice.previousFilters' // params: confidence, minutes
+  | 'settings.notifications.push.rulesNotice.openRules'
   | 'settings.notifications.push.noProviders'
   | 'settings.notifications.push.noProvidersDescription'
   | 'settings.notifications.push.providers.title'
@@ -2375,8 +2393,6 @@ export type TranslationKey =
   | 'settings.filters.errors.speciesLoadFailed'
   | 'settings.integration.birdweather.title'
   | 'settings.integration.birdweather.description'
-  | 'settings.integration.birdweather.ffmpegWarning.title'
-  | 'settings.integration.birdweather.ffmpegWarning.message'
   | 'settings.integration.birdweather.enable'
   | 'settings.integration.birdweather.token.label'
   | 'settings.integration.birdweather.token.helpText'
@@ -3140,7 +3156,6 @@ export type TranslationKey =
   | 'settings.security.validation.invalidEntry' // params: tab, field
   | 'settings.security.validation.pendingEntry' // params: tab, field
   | 'settings.species.pageLabel'
-  | 'settings.species.saveError' // params: species
   | 'settings.species.configUpdated' // params: species
   | 'settings.species.configAdded' // params: species
   | 'settings.species.duplicateConfigError' // params: species
@@ -3729,6 +3744,7 @@ export type TranslationKey =
   | 'media.audio.loop'
   | 'media.audio.player'
   | 'media.audio.autoplayBlocked'
+  | 'media.audio.hlsLoadFailed'
   | 'media.audio.hlsNotSupported'
   | 'media.audio.streamStarting'
   | 'media.audio.levelFor' // params: source
@@ -3897,6 +3913,7 @@ export type TranslationKey =
   | 'errors.alert.invalidJSON'
   | 'errors.alert.invalidEscalation'
   | 'errors.alert.engineUnavailable'
+  | 'errors.insights.v2Required'
   | 'errors.detection.invalidDate' // params: paramName
   | 'errors.backup.invalidType'
   | 'errors.backup.alreadyRunning'
@@ -4439,6 +4456,10 @@ export type TranslationParams = {
     window_minutes: string | number;
     sample_error: string | number;
   };
+  'notifications.content.settings.equalizerFiltersSkipped': {
+    count: string | number;
+    sources: string | number;
+  };
   'notifications.content.cleanup.completeMessage': { space: string | number };
   'notifications.content.buffer.overloadMessage': {
     dropRate: string | number;
@@ -4760,6 +4781,15 @@ export type TranslationParams = {
   'settings.notifications.templates.saveError': { message: string | number };
   'settings.notifications.testNotification.statusMessages.error': { message: string | number };
   'settings.notifications.statusMessages.error': { message: string | number };
+  'settings.notifications.push.rulesNotice.message': {
+    pushAction: string | number;
+    ruleName: string | number;
+    eventName: string | number;
+  };
+  'settings.notifications.push.rulesNotice.previousFilters': {
+    confidence: string | number;
+    minutes: string | number;
+  };
   'settings.notifications.push.providers.urlsPreview': { count: string | number };
   'settings.notifications.push.providers.deleteConfirm': { name: string | number };
   'settings.notifications.push.test.error': { message: string | number };
@@ -4834,7 +4864,6 @@ export type TranslationParams = {
   };
   'settings.security.validation.invalidEntry': { tab: string | number; field: string | number };
   'settings.security.validation.pendingEntry': { tab: string | number; field: string | number };
-  'settings.species.saveError': { species: string | number };
   'settings.species.configUpdated': { species: string | number };
   'settings.species.configAdded': { species: string | number };
   'settings.species.duplicateConfigError': { species: string | number };

@@ -52,7 +52,7 @@ func TestUpdateSpeciesComprehensive(t *testing.T) {
 
 	tracker := NewTrackerFromSettings(ds, settings)
 	tracker.SetCurrentYearForTesting(2024)
-	err := tracker.InitFromDatabase()
+	err := tracker.initFromDatabaseContext(t.Context(), time.Date(2024, 7, 15, 10, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 
 	t.Run("first detection of species", func(t *testing.T) {
@@ -167,7 +167,7 @@ func TestBuildSpeciesStatusLocked(t *testing.T) {
 	tracker.speciesBySeason["summer"]["Test Species"] = now.Add(-3 * 24 * time.Hour)
 
 	// Build status
-	status := tracker.buildSpeciesStatusLocked("Test Species", now, "summer")
+	status := tracker.buildSpeciesStatusLocked("Test Species", now, tracker.statusReadViewLocked(now))
 	tracker.mu.Unlock()
 
 	assert.NotNil(t, status.FirstThisYear, "FirstThisYear should be set")
@@ -217,9 +217,9 @@ func TestShouldResetYear(t *testing.T) {
 			expected:    false,
 		},
 		{
-			name:        "new year before reset date",
+			name:        "next calendar year before reset date stays in tracking year",
 			currentTime: time.Date(2024, 2, 1, 0, 0, 0, 0, time.UTC),
-			expected:    true,
+			expected:    false,
 		},
 		{
 			name:        "new year after reset date",

@@ -483,7 +483,7 @@ The API provides HTTP Live Streaming (HLS) for real-time audio from configured s
 
 **Features:**
 
-- FFmpeg-based transcoding for broad compatibility
+- Encoded in-process with a native AAC encoder (go-hls), no FFmpeg process
 - Automatic stream cleanup on client disconnect
 - Configurable segment duration and playlist length
 
@@ -668,6 +668,7 @@ The API includes comprehensive endpoints for managing application settings:
    | BirdWeather       | `reconfigure_birdweather`      | ✅           |
    | RTSP sources      | `reconfigure_rtsp_sources`     | ✅           |
    | Telemetry         | `reconfigure_telemetry`        | ✅           |
+   | Error tracking    | `reconfigure_sentry`           | -            |
    | Species tracking  | `reconfigure_species_tracking` | ✅           |
    | Audio/Equalizer   | Various                        | ✅           |
 

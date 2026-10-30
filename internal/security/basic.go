@@ -130,11 +130,7 @@ func (s *OAuth2Server) HandleBasicAuthorize(c echo.Context) error {
 
 	// Generate an auth code
 	secLog.Debug("Generating authorization code")
-	authCode, err := s.GenerateAuthCode()
-	if err != nil {
-		secLog.Error("Failed to generate authorization code", logger.Error(err))
-		return c.String(http.StatusInternalServerError, "Error generating auth code")
-	}
+	authCode := s.GenerateAuthCode()
 
 	// DO NOT log the authCode itself
 	secLog.Info("Authorization code generated successfully, redirecting user")

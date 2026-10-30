@@ -23,7 +23,6 @@ const (
 type hotReloadEntry struct {
 	categories []hotReloadCategory
 	action     string
-	todoAction string
 }
 
 // hotReloadRegistry maps dot-separated field paths to their reload behavior.
@@ -150,8 +149,6 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.Audio.FfmpegVersion":        {categories: []hotReloadCategory{hotReloadRuntime}},
 	"Realtime.Audio.FfmpegMajor":          {categories: []hotReloadCategory{hotReloadRuntime}},
 	"Realtime.Audio.FfmpegMinor":          {categories: []hotReloadCategory{hotReloadRuntime}},
-	"Realtime.Audio.SoxPath":              {categories: []hotReloadCategory{hotReloadRuntime}},
-	"Realtime.Audio.SoxAudioTypes":        {categories: []hotReloadCategory{hotReloadRuntime}},
 	"Realtime.Audio.FfprobePath":          {categories: []hotReloadCategory{hotReloadRuntime}},
 	"Realtime.Audio.StreamTransport":      {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.Audio.Export":               {categories: []hotReloadCategory{hotReloadFresh}},
@@ -282,7 +279,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Security": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Sentry ---
-	"Sentry": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_telemetry"},
+	// Enabled: the capture paths and BeforeSend check consent live; the action
+	// starts or stops the client. Debug is read live by BeforeSend, no action.
+	"Sentry.Enabled": {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_sentry"},
+	"Sentry.Debug":   {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// --- Diagnostics ---
 	// Two different mechanisms, both actionless, which is why this stays one
@@ -317,9 +317,6 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	// --- Import (in-app elevation toggle; per-request policy read live, no action) ---
 	"Import": {categories: []hotReloadCategory{hotReloadFresh}},
 }
-
-// Ceiling decreases as TODO actions are implemented; target is zero.
-const maxTodoActions = 0
 
 // TestSettingsHotReloadCoverage ensures every leaf field in conf.Settings has
 // a declared hot-reload behavior in the registry. Fails CI when a new field
@@ -373,9 +370,6 @@ func TestDetectorTableActionsReferenced(t *testing.T) {
 		if entry.action != "" {
 			registryActions[entry.action] = true
 		}
-		if entry.todoAction != "" {
-			registryActions[entry.todoAction] = true
-		}
 	}
 
 	for _, a := range SettingsChangeActions() {
@@ -386,22 +380,6 @@ func TestDetectorTableActionsReferenced(t *testing.T) {
 		assert.True(t, registryActions[a],
 			"audio detector action %q is not referenced by any registry entry", a)
 	}
-}
-
-// TestTodoActionCeiling asserts the number of TODO gaps trends toward zero.
-func TestTodoActionCeiling(t *testing.T) {
-	t.Parallel()
-
-	var todoCount int
-	for _, entry := range hotReloadRegistry {
-		if entry.todoAction != "" {
-			todoCount++
-		}
-	}
-	t.Logf("current TODO:action count: %d (ceiling: %d)", todoCount, maxTodoActions)
-	assert.LessOrEqual(t, todoCount, maxTodoActions,
-		"TODO:action count %d exceeds ceiling %d; implement detectors or raise ceiling intentionally",
-		todoCount, maxTodoActions)
 }
 
 func walkSettingsType(t reflect.Type, prefix string, visited map[reflect.Type]bool, uncovered *[]string) {

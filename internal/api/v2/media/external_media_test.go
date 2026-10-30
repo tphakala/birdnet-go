@@ -118,94 +118,57 @@ func TestGetExternalMedia_ContainerMountUnreadable(t *testing.T) {
 }
 
 // TestGetExternalMedia_ContainerMountAbsent tests state 3: container without
-// the bind-mount (guidance must be populated).
+// the bind-mount. Guidance must be populated for every container runtime: the
+// common host setup commands plus the runtime's own volume instructions.
 func TestGetExternalMedia_ContainerMountAbsent(t *testing.T) {
 	t.Parallel()
 	t.Attr("component", "system")
 	t.Attr("type", "unit")
 	t.Attr("feature", "external-media")
 
-	_, ctrl := newExternalMediaController(
-		t,
-		func() (string, string) { return sysinfo.EnvDocker, "" },
-		func(_ string) sysinfo.MountProbeResult {
-			return sysinfo.MountProbeResult{Exists: false, IsMountpoint: false, Readable: false}
-		},
-	)
+	tests := []struct {
+		env string
+		// markers are runtime-specific lines that must appear in the guidance.
+		markers []string
+	}{
+		{sysinfo.EnvDocker, []string{"-v /mnt/birdnet-go/external:/external:rslave", "propagation: rslave"}},
+		{sysinfo.EnvPodman, []string{"-v /mnt/birdnet-go/external:/external:rslave", "podman run"}},
+		// LXC takes the generic branch shared with systemd-nspawn.
+		{sysinfo.EnvLXC, []string{"volume mechanism"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.env, func(t *testing.T) {
+			t.Parallel()
+			_, ctrl := newExternalMediaController(
+				t,
+				func() (string, string) { return tt.env, "" },
+				func(_ string) sysinfo.MountProbeResult {
+					return sysinfo.MountProbeResult{Exists: false, IsMountpoint: false, Readable: false}
+				},
+			)
 
-	resp, code := callExternalMediaEndpoint(t, ctrl)
+			resp, code := callExternalMediaEndpoint(t, ctrl)
 
-	assert.Equal(t, http.StatusOK, code)
-	assert.Equal(t, sysinfo.EnvDocker, resp.Environment)
-	assert.True(t, resp.Containerized)
-	assert.False(t, resp.MountPresent)
-	require.NotNil(t, resp.Guidance, "guidance must be populated when mount is absent in a container")
-	assert.NotEmpty(t, resp.Guidance.Environment, "guidance.environment should identify the runtime")
-	assert.NotEmpty(t, resp.Guidance.Steps, "guidance.steps should contain setup instructions")
-	// Verify the guidance steps contain required setup commands.
-	steps := strings.Join(resp.Guidance.Steps, "\n")
-	assert.Contains(t, steps, "mkdir -p /mnt/birdnet-go/external", "guidance must include mkdir step")
-	assert.Contains(t, steps, "mount --bind", "guidance must include bind mount step")
-	assert.Contains(t, steps, "make-rshared", "guidance must include make-rshared step")
-	assert.Contains(t, steps, `chown -h "${BIRDNET_UID:-1000}:${BIRDNET_GID:-1000}"`, "guidance must include chown step with env vars")
-	assert.Contains(t, steps, "-v /mnt/birdnet-go/external:/external:rslave", "guidance must include volume flag")
-}
-
-// TestGetExternalMedia_PodmanMountAbsent tests the Podman-specific guidance path.
-func TestGetExternalMedia_PodmanMountAbsent(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "system")
-	t.Attr("type", "unit")
-	t.Attr("feature", "external-media")
-
-	_, ctrl := newExternalMediaController(
-		t,
-		func() (string, string) { return "Podman", "" },
-		func(_ string) sysinfo.MountProbeResult {
-			return sysinfo.MountProbeResult{Exists: false, IsMountpoint: false, Readable: false}
-		},
-	)
-
-	resp, code := callExternalMediaEndpoint(t, ctrl)
-
-	assert.Equal(t, http.StatusOK, code)
-	assert.True(t, resp.Containerized)
-	assert.False(t, resp.MountPresent)
-	require.NotNil(t, resp.Guidance)
-	assert.Equal(t, "Podman", resp.Guidance.Environment)
-	assert.NotEmpty(t, resp.Guidance.Steps)
-}
-
-// TestGetExternalMedia_GenericContainerMountAbsent tests the default (generic)
-// guidance branch for container runtimes other than Docker/Podman (e.g. LXC,
-// systemd-nspawn).
-func TestGetExternalMedia_GenericContainerMountAbsent(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "system")
-	t.Attr("type", "unit")
-	t.Attr("feature", "external-media")
-
-	_, ctrl := newExternalMediaController(
-		t,
-		func() (string, string) { return "LXC", "" },
-		func(_ string) sysinfo.MountProbeResult {
-			return sysinfo.MountProbeResult{Exists: false, IsMountpoint: false, Readable: false}
-		},
-	)
-
-	resp, code := callExternalMediaEndpoint(t, ctrl)
-
-	assert.Equal(t, http.StatusOK, code)
-	assert.True(t, resp.Containerized)
-	assert.False(t, resp.MountPresent)
-	require.NotNil(t, resp.Guidance, "generic container must still receive guidance")
-	assert.Equal(t, "LXC", resp.Guidance.Environment)
-	// The generic branch still includes the common host setup commands.
-	steps := strings.Join(resp.Guidance.Steps, "\n")
-	assert.Contains(t, steps, "mkdir -p /mnt/birdnet-go/external")
-	assert.Contains(t, steps, "mount --bind")
-	assert.Contains(t, steps, "make-rshared")
-	assert.Contains(t, steps, `chown -h "${BIRDNET_UID:-1000}:${BIRDNET_GID:-1000}"`)
+			assert.Equal(t, http.StatusOK, code)
+			assert.Equal(t, tt.env, resp.Environment)
+			assert.True(t, resp.Containerized)
+			assert.False(t, resp.MountPresent)
+			require.NotNil(t, resp.Guidance, "guidance must be populated when mount is absent in a container")
+			assert.Equal(t, tt.env, resp.Guidance.Environment, "guidance.environment should identify the runtime")
+			steps := strings.Join(resp.Guidance.Steps, "\n")
+			for _, want := range []string{
+				"mkdir -p /mnt/birdnet-go/external",
+				"mount --bind",
+				"make-rshared",
+				`chown -h "${BIRDNET_UID:-1000}:${BIRDNET_GID:-1000}"`,
+			} {
+				assert.Contains(t, steps, want, "guidance must include the common host setup command")
+			}
+			for _, want := range tt.markers {
+				assert.Contains(t, steps, want, "guidance must include the %s instructions", tt.env)
+			}
+		})
+	}
 }
 
 // TestGetExternalMedia_ResponseShape verifies the JSON field names.

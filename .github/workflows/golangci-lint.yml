@@ -1,8 +1,11 @@
 name: golangci-lint
 
+# Only superseded pull request runs are cancelled. A run on main or a manual run
+# gets its own group per commit, so a burst of merges cannot cancel the run that
+# is the authoritative check of main.
 concurrency:
-  group: golangci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: golangci-${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 on:
   # Reusable workflow only - called by golangci-test.yml
@@ -47,7 +50,7 @@ jobs:
           # When `install-mode` is `binary` (default) the value can be v1.2 or v1.2.3 or `latest` to use the latest version.
           # When `install-mode` is `goinstall` the value can be v1.2.3, `latest`, or the hash of a commit.
           # Keep in sync with GOLANGCI_LINT_VERSION in Taskfile.yml, which lists every copy.
-          version: v2.14.0
+          version: v2.15.0
           # Show only new issues by default
           only-new-issues: false
           # Additional args for better output (v2.5.0+ syntax). noembed,skipfrontend skip

@@ -178,8 +178,8 @@ CleanupOldNotificationRecords(currentTime time.Time) int
 **BG-17 Fix**: Notification suppression state is now persisted to the database via the `notification_histories` table. This prevents duplicate "new species" notifications after application restarts. The state is automatically loaded during `InitFromDatabase()` and saved asynchronously when notifications are sent.
 
 New-species notification eligibility uses an exclusive elapsed-time window of
-`NewSpeciesWindowDays × 24 hours`, starting at local midnight on the first detection
-day. Historical loads also check the stored audio start, so a recording that
+`NewSpeciesWindowDays × 24 hours`, starting at the first local instant of the first
+detection day (midnight, or the end of the gap where the zone skips midnight). Historical loads also check the stored audio start, so a recording that
 crosses midnight retains its original day after a reload. Unlike the inclusive
 calendar-day badge window, it cannot outlast an equally long notification
 suppression interval (#4013). Shorter suppression
@@ -247,11 +247,14 @@ All public methods use read-write mutex for safe concurrent access:
 - Triggers when crossing the configured reset date
 - Clears `speciesThisYear` map
 - Invalidates status cache
+- Every database load (startup and periodic sync) also makes the load's tracking year current, emptying `speciesThisYear` when that differs from the tracker's year (after the query succeeds; a failed load changes nothing), so rows are never held under another year's label
 
 **Seasonal Reset**:
 
 - Automatic when season changes
 - Initializes new season map if needed
+
+**What moves the periods**: only live detections (`UpdateSpecies`, `CheckAndUpdateSpecies*`) and the single-species `GetSpeciesStatus`. `GetBatchSpeciesStatus`, which backs the dashboard daily summary, never moves them: it computes the periods for the requested date once per batch and returns the statuses a reset for that date would give, so viewing any past or future date does not change tracking.
 
 ### Database Synchronization
 
@@ -264,7 +267,7 @@ All public methods use read-write mutex for safe concurrent access:
 **Periodic Sync**:
 
 - Interval: Configurable (default: every N minutes)
-- Preserves existing data if database returns empty results
+- Preserves existing data if database returns empty results, within one tracking year (a load that changes the tracking year starts from an empty set)
 - Defensive against data loss
 
 ### Memory Management

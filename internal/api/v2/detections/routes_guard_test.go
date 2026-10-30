@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
+	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 )
 
 // TestRegisterDetectionRoutesSkippedWhenDatastoreDisabled pins the datastore-disabled
@@ -25,6 +26,23 @@ func TestRegisterDetectionRoutesSkippedWhenDatastoreDisabled(t *testing.T) {
 	for _, r := range e.Routes() {
 		assert.NotContains(t, r.Path, "/detections",
 			"detection routes must not register when the datastore is disabled: %s %s", r.Method, r.Path)
+	}
+}
+
+// TestRegisterDetectionRoutesSkippedWithoutRepository pins the repository half of the
+// guard: the list, detail and recent handlers dereference the detection repository, so
+// with a datastore but no repository no /detections route is registered.
+func TestRegisterDetectionRoutesSkippedWithoutRepository(t *testing.T) {
+	t.Parallel()
+
+	e := echo.New()
+	h := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), DS: mocks.NewMockInterface(t), Repo: nil}}
+
+	h.RegisterDetectionRoutes(h.Group)
+
+	for _, r := range e.Routes() {
+		assert.NotContains(t, r.Path, "/detections",
+			"detection routes must not register without a repository: %s %s", r.Method, r.Path)
 	}
 }
 

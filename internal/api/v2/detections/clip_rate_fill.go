@@ -8,8 +8,8 @@ import (
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/audiocore/transcode"
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	detectionPkg "github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/securefs"
@@ -61,11 +61,11 @@ func probeClipFileRate(ctx context.Context, f *os.File, name string) (int, error
 	return info.SampleRate, nil
 }
 
-// wantsClipRateFill reports whether note is a bat detection with a clip file and
+// wantsClipRateFill reports whether r is a bat detection with a clip file and
 // no stored clip sample rate. Spectrogram-only rows have no clip name and are
 // never probed.
-func wantsClipRateFill(note *datastore.Note) bool {
-	return note.Model.ModelType == string(entities.ModelTypeBat) && note.ClipName != "" && note.ClipSampleRate == 0
+func wantsClipRateFill(r *detectionPkg.Result) bool {
+	return r.Model.ModelType == string(entities.ModelTypeBat) && r.ClipName != "" && r.ClipSampleRate == 0
 }
 
 // fillClipSampleRate learns the clip sample rate of an old bat detection that has
@@ -76,21 +76,21 @@ func wantsClipRateFill(note *datastore.Note) bool {
 // file, so no path is re-resolved after the open. It reads one clip header (never
 // the audio), shares the probe and the guarded write between concurrent requests
 // for the same row, and waits at most clipRateResponseBudget. On a miss
-// note.ClipSampleRate stays 0 and the work finishes in the background. A failed
+// r.ClipSampleRate stays 0 and the work finishes in the background. A failed
 // probe writes nothing, so the next request tries again, and so does a panic in
 // the shared work, which is contained and treated as a failed probe. The write
 // changes a NULL value only (DetectionRepository.FillClipSampleRate) and runs
 // under the work context. It does nothing without a repository.
-func (c *Handler) fillClipSampleRate(note *datastore.Note) {
-	if c.Repo == nil || !wantsClipRateFill(note) {
+func (c *Handler) fillClipSampleRate(r *detectionPkg.Result) {
+	if c.Repo == nil || !wantsClipRateFill(r) {
 		return
 	}
-	rel, ok := c.resolveClipRel(note.ClipName)
+	rel, ok := c.resolveClipRel(r.ClipName)
 	if !ok {
 		return
 	}
 
-	noteID, clipName := note.ID, note.ClipName
+	noteID, clipName := r.ID, r.ClipName
 	key := clipRateFlightKeyPrefix + strconv.FormatUint(uint64(noteID), 10)
 	resultCh := c.clipRateGroup.DoChan(key, func() (res any, err error) {
 		// DoChan runs this on its own goroutine, which the HTTP recover middleware
@@ -115,7 +115,7 @@ func (c *Handler) fillClipSampleRate(note *datastore.Note) {
 	select {
 	case res := <-resultCh:
 		if res.Err == nil {
-			note.ClipSampleRate, _ = res.Val.(int)
+			r.ClipSampleRate, _ = res.Val.(int)
 		}
 	case <-timer.C:
 		c.LogDebugIfEnabled("Clip sample rate fill exceeded the response budget",

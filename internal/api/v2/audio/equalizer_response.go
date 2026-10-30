@@ -23,12 +23,11 @@ const (
 	maxEQResponsePoints     = 2048
 	defaultEQResponseMinHz  = 20.0
 	defaultEQResponseMaxHz  = 20000.0
-	// minEQResponseSampleRate and maxEQResponseSampleRate bound an explicit
+	// minEQResponseSampleRate and conf.MaxValidSampleRate bound an explicit
 	// sampleRate. The top is the highest entry of conf.ValidSampleRates. A range
 	// rather than the list, because a bat stream can run at a probed native rate
 	// that is not in the list.
 	minEQResponseSampleRate = 8000
-	maxEQResponseSampleRate = 384000
 	// maxEQResponseFilters caps the filters in one request. conf has no filter
 	// count limit, so this only bounds the cost of a preview.
 	maxEQResponseFilters = 64
@@ -69,10 +68,15 @@ type equalizerSkippedFilter struct {
 // equalizerResponseBody is the 200 response.
 type equalizerResponseBody struct {
 	// SampleRate is the rate the curve was computed at.
-	SampleRate int                      `json:"sampleRate"`
-	Enabled    bool                     `json:"enabled"`
-	Points     []equalizerResponsePoint `json:"points"`
-	Skipped    []equalizerSkippedFilter `json:"skipped"`
+	SampleRate int  `json:"sampleRate"`
+	Enabled    bool `json:"enabled"`
+	// MinHz and MaxHz are the swept frequency range in Hz: the request's
+	// values, or the defaults for the rate. Clients size their frequency axis
+	// from them.
+	MinHz   float64                  `json:"minHz"`
+	MaxHz   float64                  `json:"maxHz"`
+	Points  []equalizerResponsePoint `json:"points"`
+	Skipped []equalizerSkippedFilter `json:"skipped"`
 }
 
 // ComputeEqualizerResponse handles POST /api/v2/system/audio/equalizer/response.
@@ -93,8 +97,8 @@ func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 		return c.HandleError(ctx, fmt.Errorf("%d filters, at most %d", len(req.Equalizer.Filters), maxEQResponseFilters),
 			"Too many equalizer filters", http.StatusBadRequest)
 	}
-	if req.SampleRate != nil && (*req.SampleRate < minEQResponseSampleRate || *req.SampleRate > maxEQResponseSampleRate) {
-		return c.HandleError(ctx, fmt.Errorf("sampleRate %d outside [%d, %d]", *req.SampleRate, minEQResponseSampleRate, maxEQResponseSampleRate),
+	if req.SampleRate != nil && (*req.SampleRate < minEQResponseSampleRate || *req.SampleRate > conf.MaxValidSampleRate) {
+		return c.HandleError(ctx, fmt.Errorf("sampleRate %d outside [%d, %d]", *req.SampleRate, minEQResponseSampleRate, conf.MaxValidSampleRate),
 			"Invalid sampleRate", http.StatusBadRequest)
 	}
 
@@ -122,6 +126,8 @@ func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 	body := equalizerResponseBody{
 		SampleRate: rate,
 		Enabled:    req.Equalizer.Enabled,
+		MinHz:      minHz,
+		MaxHz:      maxHz,
 		Points:     make([]equalizerResponsePoint, len(freqs)),
 		Skipped:    make([]equalizerSkippedFilter, 0, len(skipped)),
 	}
@@ -145,9 +151,8 @@ func (c *Handler) ComputeEqualizerResponse(ctx echo.Context) error {
 
 // resolveEQResponseRate picks the sample rate to evaluate at. A source that is
 // in the registry wins, with the same rule the analysis pipeline applies when it
-// builds that source's EQ chain: the source's rate when positive, else the
-// configured rate (the sourceSampleRate rule in the analysis pipeline's route
-// setup in internal/analysis/audio_pipeline_service.go). The
+// builds that source's EQ chain, audiocore.AudioSource.EffectiveSampleRate: the
+// source's rate when positive, else the configured rate. The
 // probed SourceSampleRate is an ingest detail and is not used. For an absent or
 // unknown source the explicit sampleRate applies, else the configured rate.
 func (c *Handler) resolveEQResponseRate(req *equalizerResponseRequest) int {
@@ -155,10 +160,7 @@ func (c *Handler) resolveEQResponseRate(req *equalizerResponseRequest) int {
 		if eng := c.Engine.Load(); eng != nil {
 			if registry := eng.Registry(); registry != nil {
 				if src, ok := registry.Get(req.SourceID); ok {
-					if src.SampleRate > 0 {
-						return src.SampleRate
-					}
-					return conf.SampleRate
+					return src.EffectiveSampleRate()
 				}
 			}
 		}
@@ -171,11 +173,23 @@ func (c *Handler) resolveEQResponseRate(req *equalizerResponseRequest) int {
 	return conf.SampleRate
 }
 
+// defaultEQResponseMaxHzFor returns the default top of the sweep for rate.
+// Rates above the default capture rate (conf.SampleRate) carry content past the
+// audible band, so their default sweep is the full band up to Nyquist; the
+// others stop at the audible limit, or at Nyquist when that is lower.
+func defaultEQResponseMaxHzFor(rate int) float64 {
+	nyquist := float64(rate) / 2
+	if rate > conf.SampleRate {
+		return nyquist
+	}
+	return math.Min(defaultEQResponseMaxHz, nyquist)
+}
+
 // validateEQResponseRange applies the defaults and checks points and the
 // frequency range against the Nyquist frequency of rate.
 func validateEQResponseRange(req *equalizerResponseRequest, rate int) (points int, minHz, maxHz float64, err error) {
 	nyquist := float64(rate) / 2
-	points, minHz, maxHz = defaultEQResponsePoints, defaultEQResponseMinHz, math.Min(defaultEQResponseMaxHz, nyquist)
+	points, minHz, maxHz = defaultEQResponsePoints, defaultEQResponseMinHz, defaultEQResponseMaxHzFor(rate)
 	if req.Points != nil {
 		points = *req.Points
 	}

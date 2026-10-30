@@ -7,7 +7,9 @@
   Features:
   - Curve points come from POST /api/v2/system/audio/equalizer/response
     (debounced; a newer edit always wins over an older response)
-  - Modified logarithmic frequency scale optimized for high frequencies (20Hz - 20kHz)
+  - Frequency axis follows the range the backend swept: a modified logarithmic
+    scale optimized for high frequencies from 20Hz to 20kHz, and a plain
+    logarithmic scale up to Nyquist for sources above the default sample rate
   - Interactive tooltip showing the nearest computed point
   - Flat 0dB curve and label when the equalizer is disabled, empty, or every
     filter is skipped or set to 0 passes
@@ -78,6 +80,75 @@
     for (let db = MIN_DB; db <= maxDb; db += DB_GRID_STEP) lines.push(db);
     return lines;
   }
+
+  // Frequency axis. The left edge is always MIN_FREQ_HZ. The right edge is the
+  // top of the range the backend swept, but never below AUDIBLE_MAX_HZ, so
+  // sources at the default rate keep the scale tuned for the audible band.
+  /** Frequency at the left edge of the plot, in Hz. */
+  export const MIN_FREQ_HZ = 20;
+  /** Frequency at the right edge of the plot for sweeps that end at or below it, in Hz. */
+  export const AUDIBLE_MAX_HZ = 20000;
+  /** Frequency where the audible scale changes from a plain to a gentler logarithmic curve, in Hz. */
+  const AUDIBLE_KNEE_HZ = 1000;
+  /** Share of the audible axis width taken by 20 Hz to the knee. */
+  const AUDIBLE_LOW_PORTION = 0.3;
+  /** Steepness of the audible scale above the knee: log10(1 + this * x) spans 0 to 1 over x in 0 to 1. */
+  const AUDIBLE_HIGH_CURVE = 9;
+  /** Frequency grid lines of the audible axis, with more detail in the bird band, in Hz. */
+  export const AUDIBLE_GRID_HZ = [
+    20, 50, 100, 200, 500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000, 15000, 20000,
+  ];
+  /** Frequency grid lines of a full-band axis, one 1-2-5 step per decade, in Hz. */
+  export const FULL_BAND_GRID_HZ = [
+    20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000, 100000,
+  ];
+  /** A full-band axis gets a grid line at its end when it ends this many times above the last grid line. */
+  export const AXIS_END_LABEL_MIN_FACTOR = 2;
+
+  /** The right edge of the plot for a response swept up to responseMaxHz, in Hz. */
+  export function axisMaxHz(responseMaxHz: number | undefined): number {
+    return responseMaxHz !== undefined && responseMaxHz > AUDIBLE_MAX_HZ
+      ? responseMaxHz
+      : AUDIBLE_MAX_HZ;
+  }
+
+  /** Position of hz on an axis ending at maxHz: 0 at the left edge, 1 at the right edge. */
+  export function frequencyToFraction(hz: number, maxHz: number): number {
+    if (maxHz > AUDIBLE_MAX_HZ) {
+      return Math.log10(hz / MIN_FREQ_HZ) / Math.log10(maxHz / MIN_FREQ_HZ);
+    }
+    if (hz <= AUDIBLE_KNEE_HZ) {
+      return (
+        (Math.log10(hz / MIN_FREQ_HZ) / Math.log10(AUDIBLE_KNEE_HZ / MIN_FREQ_HZ)) *
+        AUDIBLE_LOW_PORTION
+      );
+    }
+    const x = (hz - AUDIBLE_KNEE_HZ) / (maxHz - AUDIBLE_KNEE_HZ);
+    return AUDIBLE_LOW_PORTION + (1 - AUDIBLE_LOW_PORTION) * Math.log10(1 + x * AUDIBLE_HIGH_CURVE);
+  }
+
+  /** Frequency at a position on an axis ending at maxHz; the inverse of frequencyToFraction. */
+  export function fractionToFrequency(fraction: number, maxHz: number): number {
+    if (maxHz > AUDIBLE_MAX_HZ) {
+      return MIN_FREQ_HZ * Math.pow(maxHz / MIN_FREQ_HZ, fraction);
+    }
+    if (fraction <= AUDIBLE_LOW_PORTION) {
+      return MIN_FREQ_HZ * Math.pow(AUDIBLE_KNEE_HZ / MIN_FREQ_HZ, fraction / AUDIBLE_LOW_PORTION);
+    }
+    const x =
+      (Math.pow(10, (fraction - AUDIBLE_LOW_PORTION) / (1 - AUDIBLE_LOW_PORTION)) - 1) /
+      AUDIBLE_HIGH_CURVE;
+    return AUDIBLE_KNEE_HZ + x * (maxHz - AUDIBLE_KNEE_HZ);
+  }
+
+  /** Frequencies of the vertical grid lines (and labels) of an axis ending at maxHz. */
+  export function frequencyGridLines(maxHz: number): number[] {
+    if (maxHz <= AUDIBLE_MAX_HZ) return AUDIBLE_GRID_HZ;
+    const lines = FULL_BAND_GRID_HZ.filter(hz => hz <= maxHz);
+    const last = lines.at(-1) ?? MIN_FREQ_HZ;
+    if (maxHz >= last * AXIS_END_LABEL_MIN_FACTOR) lines.push(maxHz);
+    return lines;
+  }
 </script>
 
 <script lang="ts">
@@ -139,12 +210,12 @@
         : undefined
   );
 
-  // Frequency range - standard audio range up to 20kHz (human hearing limit)
-  const MIN_FREQ = 20;
-  const MAX_FREQ = 20000;
+  /** The right edge of the frequency axis; like the y axis it follows the response being drawn. */
+  const xMaxHz = $derived(axisMaxHz(drawable?.response.maxHz));
+  const freqGridLines = $derived(frequencyGridLines(xMaxHz));
 
   /** The y axis for the response being drawn; it follows the drawn peak. */
-  const axis = $derived(gainAxis(drawable?.response.points ?? [], MIN_FREQ, MAX_FREQ));
+  const axis = $derived(gainAxis(drawable?.response.points ?? [], MIN_FREQ_HZ, xMaxHz));
   const gridLines = $derived(gainGridLines(axis.maxDb));
   const clippedText = $derived(
     drawable && axis.clipped && axis.peakDb !== undefined
@@ -249,11 +320,6 @@
   let plotWidth = $derived(canvasWidth - margins.left - margins.right);
   let plotHeight = $derived(canvasHeight - margins.top - margins.bottom);
 
-  // Grid lines optimized for audio engineering work - more detail in bird frequency range
-  const freqGridLines = [
-    20, 50, 100, 200, 500, 1000, 2000, 3000, 4000, 5000, 6000, 8000, 10000, 12000, 15000, 20000,
-  ];
-
   // Color scheme - reactive state for proper Svelte 5 updates
   let colors = $state({
     background: 'hsl(222, 30%, 15%)', //
@@ -269,62 +335,14 @@
     // This function kept for compatibility with existing effect calls
   }
 
-  // Convert frequency to x position using modified log scale optimized for audio work
+  // Convert frequency to x position on the axis of the response being drawn
   function freqToX(freq: number): number {
-    // Modified logarithmic scale that gives more visual space to high frequencies
-    // This is similar to what professional audio software uses
-
-    if (freq <= 1000) {
-      // Standard log scale for low frequencies (20Hz - 1kHz)
-      const logMin = Math.log10(MIN_FREQ);
-      const log1k = Math.log10(1000);
-      const logFreq = Math.log10(freq);
-      const lowEndPortion = 0.3; // 30% of the width for 20Hz-1kHz
-      return margins.left + ((logFreq - logMin) / (log1k - logMin)) * plotWidth * lowEndPortion;
-    } else {
-      // Modified scale for high frequencies (1kHz - 20kHz) with more visual space
-      const highFreqStart = 1000;
-      const highFreqRange = MAX_FREQ - highFreqStart;
-      const freqInHighRange = freq - highFreqStart;
-
-      // Use a gentler logarithmic curve for high frequencies
-      const normalizedHighFreq =
-        Math.log10(1 + (freqInHighRange / highFreqRange) * 9) / Math.log10(10);
-
-      const lowEndPortion = 0.3;
-      const highEndStart = margins.left + plotWidth * lowEndPortion;
-      const highEndWidth = plotWidth * (1 - lowEndPortion);
-
-      return highEndStart + normalizedHighFreq * highEndWidth;
-    }
+    return margins.left + frequencyToFraction(freq, xMaxHz) * plotWidth;
   }
 
   // Convert x position to frequency (inverse of freqToX)
   function xToFreq(x: number): number {
-    const plotX = x - margins.left;
-    const lowEndPortion = 0.3;
-    const lowEndWidth = plotWidth * lowEndPortion;
-
-    if (plotX <= lowEndWidth) {
-      // Low frequency range (20Hz - 1kHz)
-      const logMin = Math.log10(MIN_FREQ);
-      const log1k = Math.log10(1000);
-      const ratio = plotX / lowEndWidth;
-      const logFreq = logMin + ratio * (log1k - logMin);
-      return Math.pow(10, logFreq);
-    } else {
-      // High frequency range (1kHz - 20kHz)
-      const highEndWidth = plotWidth * (1 - lowEndPortion);
-      const highRatio = (plotX - lowEndWidth) / highEndWidth;
-
-      // Inverse of the modified high-frequency scale
-      const normalizedVal = highRatio;
-      const logVal = normalizedVal * Math.log10(10);
-      const scaledVal = Math.pow(10, logVal) - 1;
-      const freqInHighRange = (scaledVal / 9) * (MAX_FREQ - 1000);
-
-      return 1000 + freqInHighRange;
-    }
+    return fractionToFrequency((x - margins.left) / plotWidth, xMaxHz);
   }
 
   // Convert dB to y position within plot area
@@ -448,7 +466,7 @@
       ctx.beginPath();
       let started = false;
       for (const point of toDraw.response.points) {
-        if (point.hz < MIN_FREQ || point.hz > MAX_FREQ) continue;
+        if (point.hz < MIN_FREQ_HZ || point.hz > xMaxHz) continue;
         const x = freqToX(point.hz);
         const y = clampY(dbToY(point.gainDb));
         if (started) {

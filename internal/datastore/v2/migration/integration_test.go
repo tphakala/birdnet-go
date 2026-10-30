@@ -8,7 +8,9 @@
 package migration_test
 
 import (
+	"context"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -22,6 +24,9 @@ import (
 // ============================================================================
 // Test: Empty Legacy Database
 // ============================================================================
+
+// workerStopTimeout bounds the wait for a stopped worker to exit.
+const workerStopTimeout = 5 * time.Second
 
 func TestMigration_EmptyLegacyDatabase(t *testing.T) {
 	t.Parallel()
@@ -315,16 +320,9 @@ func TestMigration_CrashRecovery(t *testing.T) {
 	require.Positive(t, checkpointID, "should have a checkpoint ID")
 
 	// Stop worker (simulating crash)
-	ctx.Worker.Stop()
-
-	// Poll for worker to stop
-	stopDeadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(stopDeadline) {
-		if !ctx.Worker.IsRunning() {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	stopCtx, stopCancel := context.WithTimeout(t.Context(), workerStopTimeout)
+	defer stopCancel()
+	require.NoError(t, ctx.Worker.Stop(stopCtx))
 	require.False(t, ctx.Worker.IsRunning(), "worker should have stopped")
 
 	// Create new worker (recovery)
@@ -841,6 +839,27 @@ func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
 	err = ctx.Seeder.SeedDailyEvents([]datastore.DailyEvents{dailyEvent})
 	require.NoError(t, err, "failed to seed daily event")
 
+	// A threshold event, a notification, one valid hourly row and one orphan
+	// hourly row (its daily event does not exist) so that every section runs
+	// against its real repository and the orphan must not count as a failure.
+	err = ctx.Seeder.SeedThresholdEvents([]datastore.ThresholdEvent{
+		testutil.NewThresholdEventBuilder().WithID(1).WithSpeciesName("Parus major").Build(),
+	})
+	require.NoError(t, err, "failed to seed threshold event")
+	err = ctx.Seeder.SeedNotificationHistory([]datastore.NotificationHistory{
+		testutil.NewNotificationHistoryBuilder().
+			WithID(1).
+			WithScientificName("Parus major").
+			WithExpiresAt(time.Now().Add(time.Hour)).
+			Build(),
+	})
+	require.NoError(t, err, "failed to seed notification history")
+	err = ctx.Seeder.SeedHourlyWeather([]datastore.HourlyWeather{
+		testutil.NewHourlyWeatherBuilder().WithID(1).WithDailyEventsID(dailyEvent.ID).Build(),
+		testutil.NewHourlyWeatherBuilder().WithID(2).WithDailyEventsID(dailyEvent.ID + 100).Build(),
+	})
+	require.NoError(t, err, "failed to seed hourly weather")
+
 	// Run migration WITHOUT calling AuxiliaryMigrator directly
 	// This tests that auxiliary migration happens through the worker
 	c := t.Context()
@@ -873,6 +892,22 @@ func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
 	err = ctx.V2Manager.DB().Model(&entities.DailyEvents{}).Count(&dailyEventCount).Error
 	require.NoError(t, err, "failed to count daily events")
 	assert.Equal(t, int64(1), dailyEventCount, "daily event should be migrated through worker")
+
+	for model, name := range map[any]string{
+		&entities.ThresholdEvent{}:      "threshold event",
+		&entities.NotificationHistory{}: "notification history",
+		&entities.HourlyWeather{}:       "valid hourly weather row (the orphan is not copied)",
+	} {
+		var count int64
+		require.NoError(t, ctx.V2Manager.DB().Model(model).Count(&count).Error)
+		assert.Equal(t, int64(1), count, "%s should be migrated through worker", name)
+	}
+
+	// Orphan hourly rows are legacy rows that cannot exist in v2, not failures.
+	state, err := ctx.StateManager.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.AuxiliaryDataStatusSucceeded, state.AuxiliaryDataOutcome())
+	assert.Empty(t, state.AuxiliaryDataError)
 }
 
 // ============================================================================
@@ -914,19 +949,32 @@ func TestMigration_OutOfOrderIDs_AllRecordsMigrated(t *testing.T) {
 // Test: Post-Completion Tail Sync (Issue #2442)
 // ============================================================================
 
-// TestMigration_TailSyncCatchesPostCompletionRecords verifies that detections
-// written to the legacy database AFTER migration completes are synced to v2
-// by the tail sync loop. This is the fix for issue #2442 where hours of
-// detections were lost between migration completion and system restart.
-func TestMigration_TailSyncCatchesPostCompletionRecords(t *testing.T) {
+// TestMigration_TailSyncResumesFromCompletionWatermark verifies that
+// detections written to the legacy database AFTER migration completes are
+// synced to v2 by the tail sync loop (issue #2442), and that tail sync resumes
+// from the watermark the detections pass reached: the predictions phase must
+// not reset it, otherwise tail sync re-walks the whole legacy table.
+func TestMigration_TailSyncResumesFromCompletionWatermark(t *testing.T) {
 	t.Parallel()
 
 	ctx := testutil.SetupIntegrationTest(t)
 
-	// Seed 10 initial detections
+	// Seed 10 initial detections, each with one result so the predictions
+	// phase writes its progress.
 	notes := testutil.GenerateDetections(10)
 	err := ctx.Seeder.SeedDetections(notes)
 	require.NoError(t, err)
+
+	results := make([]datastore.Results, 0, len(notes))
+	for i := range notes {
+		id := uint(i + 1) //nolint:gosec // G115: test data uses small values
+		results = append(results, testutil.NewResultsBuilder().
+			WithID(id).
+			WithNoteID(id).
+			WithConfidence(0.6).
+			Build())
+	}
+	require.NoError(t, ctx.Seeder.SeedResults(results))
 
 	// Run migration to completion
 	ctx.StartMigration(t, len(notes))
@@ -935,6 +983,12 @@ func TestMigration_TailSyncCatchesPostCompletionRecords(t *testing.T) {
 	// Verify initial migration
 	v2Count := ctx.GetV2DetectionCount(t)
 	assert.Equal(t, int64(10), v2Count, "should have 10 detections after migration")
+
+	// The watermark must survive the predictions phase. This is checked right
+	// after completion, before the first tail sync cycle (10s interval) runs.
+	state, err := ctx.StateManager.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, uint(10), state.LastMigratedID, "predictions phase must not reset the watermark")
 
 	// Simulate post-completion detections: seed 5 more into legacy DB.
 	// In production, the processor writes these while waiting for restart.
@@ -949,8 +1003,71 @@ func TestMigration_TailSyncCatchesPostCompletionRecords(t *testing.T) {
 	// Wait for tail sync to pick up the new records.
 	// Tail sync interval is 10s, give it up to 30s for safety.
 	require.Eventually(t, func() bool {
-		v2Count = ctx.GetV2DetectionCount(t)
-		return v2Count >= 15
+		st, stErr := ctx.StateManager.GetState()
+		return stErr == nil && st.LastMigratedID == 15
 	}, 30*time.Second, time.Second,
-		"tail sync should have migrated the 5 post-completion detections to v2")
+		"tail sync should have advanced the watermark over the 5 post-completion detections")
+
+	assert.Equal(t, int64(15), ctx.GetV2DetectionCount(t))
+
+	// Tail sync migrated only the post-completion rows; a re-walk from 0
+	// would count all 15 here.
+	state, err = ctx.StateManager.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, int64(5), state.MigratedRecords)
+
+	dirty, err := ctx.StateManager.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), dirty)
+}
+
+// assertRerunAfterRollbackPassesValidation completes a migration, leaves a
+// tail sync marker, abandons the worker, rolls back, leaves a marker in idle
+// like an older version did, and then runs the migration again. Both resets
+// must clear the markers, or validation of the second run fails on them.
+func assertRerunAfterRollbackPassesValidation(t *testing.T, ctx *testutil.TestContext, timeout time.Duration) {
+	t.Helper()
+
+	const total = 10
+	require.NoError(t, ctx.Seeder.SeedDetections(testutil.GenerateDetections(total)))
+
+	ctx.StartMigration(t, total)
+	ctx.WaitForCompletion(t, timeout)
+
+	// A marker like the ones tail sync leaves on a row already in v2.
+	const tailSyncMarkerID = uint(4)
+	require.NoError(t, ctx.StateManager.AddDirtyID(tailSyncMarkerID))
+
+	require.NoError(t, ctx.Worker.Abandon(t.Context()))
+	require.NoError(t, ctx.StateManager.Rollback())
+
+	state, err := ctx.StateManager.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State)
+	dirty, err := ctx.StateManager.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), dirty, "rollback must clear the dirty IDs")
+
+	// A marker an older version left behind in idle.
+	const idleMarkerID = uint(6)
+	require.NoError(t, ctx.StateManager.AddDirtyID(idleMarkerID))
+
+	ctx.StartMigration(t, total)
+	ctx.WaitForCompletion(t, timeout)
+
+	dirty, err = ctx.StateManager.GetDirtyIDCount()
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), dirty, "the second run must not fail validation on stale dirty IDs")
+	assert.Equal(t, int64(total), ctx.GetV2DetectionCount(t))
+}
+
+// TestMigration_RerunAfterRollbackPassesValidation pins that a migration run
+// after a rollback is not failed by dirty IDs from the earlier run.
+func TestMigration_RerunAfterRollbackPassesValidation(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		ctx := testutil.SetupIntegrationTest(t)
+		assertRerunAfterRollbackPassesValidation(t, ctx, 30*time.Second)
+	})
 }

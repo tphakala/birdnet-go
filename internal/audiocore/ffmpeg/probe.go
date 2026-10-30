@@ -6,8 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/audiocore/audioformat"
@@ -24,9 +26,52 @@ const MinBatSampleRate = audioformat.MinBatSampleRate
 var ErrNoAudioStreamsFound = errors.NewStd("no audio streams found in probe output")
 
 // probeTimeout is the maximum time to wait for ffprobe stream probing.
-// This is separate from FFprobeTimeout (3s) used for local file validation;
-// live streams may need longer to connect and negotiate.
+// Live streams may need longer to connect and negotiate.
 const probeTimeout = 10 * time.Second
+
+// ErrFFprobeNotAvailable reports that no ffprobe binary could be resolved.
+var ErrFFprobeNotAvailable = errors.NewStd("ffprobe is not available")
+
+var (
+	ffprobePathMu         sync.RWMutex
+	configuredFFprobePath string
+)
+
+// SetFFprobePath sets the validated ffprobe path, derived from the configured
+// ffmpeg location during startup. Safe for concurrent use.
+func SetFFprobePath(path string) {
+	ffprobePathMu.Lock()
+	configuredFFprobePath = path
+	ffprobePathMu.Unlock()
+}
+
+// GetFFprobePath returns the currently configured ffprobe binary path.
+func GetFFprobePath() string {
+	ffprobePathMu.RLock()
+	defer ffprobePathMu.RUnlock()
+	return configuredFFprobePath
+}
+
+// getFfprobeBinaryName returns the platform-appropriate ffprobe binary name.
+func getFfprobeBinaryName() string {
+	if runtime.GOOS == osWindows {
+		return "ffprobe.exe"
+	}
+	return "ffprobe"
+}
+
+// resolveFFprobeBinary returns the ffprobe binary path, falling back to
+// PATH lookup if the configured path is empty.
+func resolveFFprobeBinary() (string, error) {
+	if path := GetFFprobePath(); path != "" {
+		return path, nil
+	}
+	found, err := exec.LookPath(getFfprobeBinaryName())
+	if err != nil {
+		return "", ErrFFprobeNotAvailable
+	}
+	return found, nil
+}
 
 // lossyCodecs lists codecs that destroy ultrasonic content, making them
 // unsuitable for bat detection which relies on high-frequency audio.

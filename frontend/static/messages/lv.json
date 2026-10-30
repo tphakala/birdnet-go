@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Paplašinātās ierakstīšanas iestatījumi mainīti. Nepieciešama restartēšana.",
         "equalizerUpdateFailed": "Neizdevās atjaunināt audio ekvalaizera iestatījumus",
         "equalizerUpdated": "Audio ekvalaizera iestatījumi atjaunināti",
+        "equalizerFiltersSkipped": "Audio ekvalaizera iestatījumi saglabāti, bet daži filtri tiek izlaisti {count, plural, zero {avotos} one {avotā} other {avotos}} {sources}: filtram jābūt derīgam pie avota diskretizācijas frekvences, un tā frekvencei jābūt zemākai par tās pusi.",
         "savedSuccessfully": "Iestatījumi veiksmīgi saglabāti",
         "saveFailed": "Neizdevās saglabāt iestatījumus"
       },
@@ -449,7 +450,19 @@
         "completedTitle": "Datubāzes migrācija pabeigta",
         "completedMessage": "Migrācija pabeigta. Lūdzu, restartējiet BirdNET-Go, lai pārslēgtos uz jauno datubāzi.",
         "errorTitle": "Datubāzes migrācijas kļūda",
-        "errorMessage": "Migrācija apturēta kļūdu dēļ. Pārbaudiet žurnālus un mēģiniet atsākt."
+        "errorMessage": "Migrācija apturēta kļūdu dēļ. Pārbaudiet žurnālus un mēģiniet atsākt.",
+        "legacyNotStartedTitle": "Nepieciešams datubāzes jauninājums",
+        "legacyNotStartedMessage": "Šī instalācija joprojām izmanto veco datubāzes formātu, kas kādā nākamajā laidienā pārstās darboties. Atveriet Sistēma > Datubāze, lai palaistu migrāciju.",
+        "legacyInProgressTitle": "Notiek datubāzes migrācija",
+        "legacyInProgressMessage": "Notiek migrācija uz jauno datubāzes formātu. Atstājiet BirdNET-Go darbojamies, līdz tā beidzas; vecais formāts kādā nākamajā laidienā pārstās darboties.",
+        "legacyNeedsAttentionTitle": "Datubāzes migrācijai nepieciešama uzmanība",
+        "legacyNeedsAttentionMessage": "Migrācija uz jauno datubāzes formātu ir apturēta vai neizdevās. Atveriet Sistēma > Datubāze, lai to atsāktu vai mēģinātu vēlreiz; vecais formāts kādā nākamajā laidienā pārstās darboties.",
+        "legacyRestartRequiredTitle": "Restartējiet, lai pabeigtu datubāzes migrāciju",
+        "legacyRestartRequiredMessage": "Migrācija ir pabeigta. Restartējiet BirdNET-Go, lai pārslēgtos uz jauno datubāzi. Ja šis ziņojums paliek arī pēc restartēšanas, pārbaudiet žurnālā datubāzes kļūdas."
+      },
+      "database": {
+        "serverAttentionTitle": "Datubāzes serverim nepieciešama uzmanība",
+        "serverAttentionMessage": "MySQL vai MariaDB servera versija netiek atbalstīta, vai arī datubāze neizmanto rakstzīmju kopu utf8mb4. Sīkāku informāciju skatiet sadaļā Sistēma > Sistēmas veselība."
       },
       "cleanup": {
         "completeTitle": "Mantotās datubāzes tīrīšana pabeigta",
@@ -793,6 +806,9 @@
       "loadFailedAction": "Skatīt MI Modeļi statusu",
       "failingTitle": "{count, plural, zero {# modeļiem neizdodas neviena analīze} one {Modelim neizdodas neviena analīze} other {# modeļiem neizdodas neviena analīze}}",
       "failingMessage": "{count, plural, zero {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.} one {{models} ir ielādēts, bet katra analīze neizdodas, tāpēc tas neko nenosaka.} other {{models} ir ielādēti, bet katra analīze neizdodas, tāpēc tie neko nenosaka.}} Lapa MI Modeļi parāda aizmugursistēmu un kļūdu."
+    },
+    "legacyDatabase": {
+      "action": "Atvērt datubāzes iestatījumus"
     },
     "banner": {
       "title": "Virsraksts",
@@ -1581,7 +1597,7 @@
           "restartTitle": "Nepieciešama restartēšana",
           "restartBody": "Restartējiet lietojumprogrammu, lai pārslēgtos uz V2 datubāzi. Mantotās datubāzes tīrīšana būs pieejama pēc restartēšanas.",
           "fallbackError": "Ierakstu skaita neatbilstība starp mantoto un V2 datubāzēm. Daži ieraksti, iespējams, nav pareizi migrēti.",
-          "migrateInfo": "Migrācija pārsūtīs {count} ierakstus no mantotās datubāzes uz jauno V2 shēmu. Dubultrakstīšanas režīms nodrošina nulles datu zudumu migrācijas laikā.",
+          "migrateInfo": "Migrācija pārsūtīs {count} ierakstus no mantotās datubāzes uz jauno V2 shēmu. Migrācijas laikā saglabātās jaunās atpazīšanas tiek kopētas arī uz jauno datubāzi.",
           "sourceLegacy": "Avots (mantotā)",
           "targetV2": "Mērķis (V2)",
           "recordsLabel": "Ieraksti",
@@ -1633,7 +1649,7 @@
         },
         "notes": {
           "in_progress": "Varat turpināt normāli izmantot sistēmu, kamēr migrācija darbojas fonā.",
-          "dual_write": "Migrācija noris. Jūsu dati ir drošībā - visas jaunās atpazīšanas tiek saglabātas abās datubāzēs.",
+          "dual_write": "Migrācija noris. Jūsu dati ir drošībā - jaunās atpazīšanas tiek saglabātas pašreizējā datubāzē un migrācijas laikā tiek kopētas uz jauno datubāzi.",
           "migrating": "Kopē jūsu esošās atpazīšanas uz jauno datubāzi.",
           "validating": "Pārbauda, vai visi ieraksti tika pareizi nokopēti. Gandrīz gatavs!",
           "cutover": "Pārslēdzas uz jauno datubāzi. Tas aizņem tikai brīdi.",
@@ -1716,6 +1732,12 @@
             },
             "sqlite_integrity": {
               "name": "Datubāzes integritāte"
+            },
+            "mysql_server_version": {
+              "name": "Datubāzes servera versija"
+            },
+            "mysql_charset": {
+              "name": "Datubāzes rakstzīmju kopa"
             },
             "mysql_table_health": {
               "name": "Tabulu veselība"
@@ -2323,6 +2345,7 @@
     "errors": {
       "loadFailed": "Neizdevās ielādēt iestatījumus",
       "saveFailed": "Neizdevās saglabāt iestatījumus",
+      "changedElsewhere": "Iestatījumi tika mainīti citur. Pārskatiet tos un saglabājiet vēlreiz.",
       "databaseStatsFailed": "Neizdevās ielādēt datubāzes statistiku",
       "csvDownloadFailed": "Neizdevās lejupielādēt CSV"
     },
@@ -2670,7 +2693,7 @@
                 "descriptions": {
                   "highContrast": "Vislabākais vājiem signāliem. Putnu balsis skaidri izceļas no fona trokšņa. Ieteicams zinātniskajiem/pelēktoņu stiliem.",
                   "standard": "Noklusējuma sabalansēts iestatījums. Labs lielākajai daļai lietojumu.",
-                  "extended": "Redzamas vairāk detaļas, bet zemāks kontrasts. SoX noklusējuma vērtība."
+                  "extended": "Redzamas vairāk detaļas, bet zemāks kontrasts."
                 }
               },
               "enabled": {
@@ -2772,7 +2795,7 @@
           "title": "Kas ir iekļauts ziņojumā:",
           "applicationLogs": "**Lietojumprogrammas žurnāli** - nesenie kļūdu un atkļūdošanas ieraksti",
           "configuration": "**Konfigurācija** - jūsu iestatījumi ar noņemtiem sensitīviem datiem",
-          "systemInfo": "**Sistēmas informācija** - OS versija, atmiņa un izpildlaika detaļas",
+          "systemInfo": "**Sistēmas informācija** - OS versija, atmiņa, aparatūra, pievienotās USB ierīces un skaņas kartes, kā arī izpildlaika detaļas",
           "notIncluded": "**NAV iekļauts** - audio faili, putnu noteikšanas vai personiskie dati"
         },
         "userMessage": {
@@ -2925,6 +2948,11 @@
             "unit": "min",
             "helpText": "Novērst atkārtotus paziņojumus par to pašu sugu šajā laika periodā. Iestatiet 0, lai atspējotu."
           }
+        },
+        "rulesNotice": {
+          "message": "Push paziņojumus par noteikšanām sūta brīdinājumu noteikumi cilnē Noteikumi. Iebūvētie noteikšanas noteikumi paziņo tikai lietotnē. Lai saņemtu push paziņojumus, pievienojiet darbību {pushAction} noteikumam {ruleName} vai izveidojiet noteikumu notikumam {eventName} ar ticamības nosacījumu un atdzišanas periodu.",
+          "previousFilters": "Brīdinājumu noteikumi neizmanto šeit iestatītās vērtības Minimālā ticamība ({confidence}%) un Sugas pauze ({minutes} min).",
+          "openRules": "Atvērt Noteikumus"
         },
         "noProviders": "Nav konfigurētu nodrošinātāju",
         "noProvidersDescription": "Pievienojiet nodrošinātāju, lai sāktu saņemt push paziņojumus",
@@ -3229,10 +3257,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Augšupielādēt noteikšanas uz BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg nav atrasts",
-          "message": "Lūdzu, instalējiet FFmpeg, lai iespējotu FLAC kodēšanas atbalstu. BirdWeather pārtrauc WAV augšupielādes par labu saspiestiem FLAC audio failiem."
-        },
         "enable": "Iespējot BirdWeather augšupielādes",
         "token": {
           "label": "BirdWeather tokens",
@@ -4249,7 +4273,6 @@
     },
     "species": {
       "pageLabel": "Sugu iestatījumi",
-      "saveError": "Neizdevās saglabāt konfigurāciju sugai \"{species}\". Lūdzu, mēģiniet vēlreiz.",
       "configUpdated": "Atjaunināta konfigurācija sugai \"{species}\"",
       "configAdded": "Pievienota konfigurācija sugai \"{species}\"",
       "duplicateConfigError": "Sugai \"{species}\" jau ir konfigurācija. Lūdzu, izvēlieties citu nosaukumu.",
@@ -5080,6 +5103,7 @@
       "loop": "Pārslēgt cilpu",
       "player": "Audio atskaņotājs",
       "autoplayBlocked": "Noklikšķiniet, lai atskaņotu (automātiskā atskaņošana bloķēta)",
+      "hlsLoadFailed": "Neizdevās ielādēt audio atskaņotāju, lūdzu, pārlādējiet lapu un mēģiniet vēlreiz",
       "hlsNotSupported": "HLS atskaņošana šajā pārlūkā netiek atbalstīta",
       "streamStarting": "Tiek startēta audio straume...",
       "levelFor": "Audio līmenis avotam {source}",
@@ -5314,6 +5338,9 @@
       "invalidJSON": "Nederīgs JSON",
       "invalidEscalation": "Eskalācijas soļi nav derīgi",
       "engineUnavailable": "Brīdinājumu dzinis nav pieejams"
+    },
+    "insights": {
+      "v2Required": "Analīzei nepieciešama uzlabotā (v2) datubāze"
     },
     "detection": {
       "invalidDate": "Nederīgs {paramName} formāts, izmantojiet YYYY-MM-DD"

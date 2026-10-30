@@ -13,6 +13,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 )
 
+// commentSourceDirs lists the directories, relative to the repository root,
+// whose Go sources the generator parses for struct field comments. The schema
+// test walks the same directories so that Go's test cache sees them as inputs.
+var commentSourceDirs = []string{"internal/conf", "internal/logger"}
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "gen-schema: %v\n", err)
@@ -42,7 +47,7 @@ func run() error {
 
 	// AddGoComments parses Go source to extract struct field comments and
 	// injects them as schema descriptions. Must be called before Reflect.
-	for _, dir := range []string{"internal/conf", "internal/logger"} {
+	for _, dir := range commentSourceDirs {
 		if err := r.AddGoComments("github.com/tphakala/birdnet-go", filepath.Join(".", dir)); err != nil {
 			return fmt.Errorf("adding comments from %s: %w", dir, err)
 		}

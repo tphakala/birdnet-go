@@ -160,15 +160,17 @@ type DetectionResponse struct {
 	SpectrogramOnly bool   `json:"spectrogramOnly,omitempty"`
 	ModelType       string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	// ClipSampleRate is the sample rate in Hz of the detection's original audio clip, omitted when unknown. Bat spectrograms span 0 to half of it. A spectrogram-only detection reports the original clip's rate.
-	ClipSampleRate     int               `json:"clipSampleRate,omitempty"`
-	Verified           string            `json:"verified"`
-	Locked             bool              `json:"locked"`
-	Unlikely           bool              `json:"unlikely,omitempty"`
-	Comments           []CommentResponse `json:"comments,omitempty"`
-	Weather            *WeatherInfo      `json:"weather,omitempty"`
-	TimeOfDay          string            `json:"timeOfDay,omitempty"`
-	IsNewSpecies       bool              `json:"isNewSpecies,omitempty"`       // First seen within tracking window
-	DaysSinceFirstSeen int               `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
+	ClipSampleRate int `json:"clipSampleRate,omitempty"`
+	// ModelContributions is the per-model breakdown from the enhanced database, read only. It is omitted on the legacy database, during migration, and when nothing was recorded.
+	ModelContributions []ModelContributionResponse `json:"modelContributions,omitempty"`
+	Verified           string                      `json:"verified"`
+	Locked             bool                        `json:"locked"`
+	Unlikely           bool                        `json:"unlikely,omitempty"`
+	Comments           []CommentResponse           `json:"comments,omitempty"`
+	Weather            *WeatherInfo                `json:"weather,omitempty"`
+	TimeOfDay          string                      `json:"timeOfDay,omitempty"`
+	IsNewSpecies       bool                        `json:"isNewSpecies,omitempty"`       // First seen within tracking window
+	DaysSinceFirstSeen int                         `json:"daysSinceFirstSeen,omitempty"` // Days since species was first detected
 
 	// Multi-period tracking metadata
 	IsNewThisYear   bool   `json:"isNewThisYear,omitempty"`   // First time this year
@@ -254,7 +256,7 @@ type detectionQueryParams struct {
 	IncludeWeather bool
 }
 
-// hourlyPageKey builds the cache key for a GetHourlyDetections page.
+// hourlyPageKey builds the cache key for a GetHourly page.
 func hourlyPageKey(date, hour string, duration, numResults, offset int) *apicore.DetectionPageKey {
 	return &apicore.DetectionPageKey{
 		Kind: apicore.DetectionPageHourly, Date: date, Hour: hour,
@@ -262,7 +264,7 @@ func hourlyPageKey(date, hour string, duration, numResults, offset int) *apicore
 	}
 }
 
-// speciesPageKey builds the cache key for a SpeciesDetections page.
+// speciesPageKey builds the cache key for a GetBySpecies page.
 func speciesPageKey(species, date, hour string, duration, numResults, offset int) *apicore.DetectionPageKey {
 	return &apicore.DetectionPageKey{
 		Kind: apicore.DetectionPageSpecies, Species: species, Date: date, Hour: hour,
@@ -270,9 +272,9 @@ func speciesPageKey(species, date, hour string, duration, numResults, offset int
 	}
 }
 
-// searchPageKey builds the cache key for a SearchNotes page. The text query and
-// the scientific-name alternatives are the only inputs the datastore call reads
-// besides the page window.
+// searchPageKey builds the cache key for a plain text search page. The text query
+// and the scientific-name alternatives are the only inputs the SearchAdvanced call
+// reads besides the page window.
 func searchPageKey(search string, scientific []string, numResults, offset int) *apicore.DetectionPageKey {
 	return &apicore.DetectionPageKey{
 		Kind: apicore.DetectionPageSearch, Search: search,
@@ -281,12 +283,23 @@ func searchPageKey(search string, scientific []string, numResults, offset int) *
 	}
 }
 
-// advancedPageKey builds the cache key for a SearchNotesAdvanced page. It
+// advancedPageKey builds the cache key for a SearchAdvanced page. It
 // carries every request field buildAdvancedSearchFilters reads, so two requests
 // that differ in any filter never share a page. QueryType and IncludeWeather
 // are deliberately absent: the filters do not read them, so requests that
-// differ only in those run the identical datastore call and share one entry.
-func (p *detectionQueryParams) advancedPageKey() *apicore.DetectionPageKey {
+// differ only in those run the identical repository call and share one entry.
+//
+// The date filter is keyed by the range it resolves to at now in loc, not by the
+// raw date token: "today" means a different range after local midnight, and a
+// page cached under the token would be served for the wrong day. When a range
+// resolves, Date is cleared and StartDate and EndDate carry the resolved dates,
+// so "today", "Today" and the same explicit date share one entry. With no valid
+// range the raw fields stay in the key, as the filters ignore them alike.
+func (p *detectionQueryParams) advancedPageKey(now time.Time, loc *time.Location) *apicore.DetectionPageKey {
+	date, startDate, endDate := p.Date, p.StartDate, p.EndDate
+	if r := apicore.ParseDateRangeFilter(p.Date, p.StartDate, p.EndDate, now, loc); r != nil {
+		date, startDate, endDate = "", r.Start.Format(time.DateOnly), r.End.Format(time.DateOnly)
+	}
 	return &apicore.DetectionPageKey{
 		Kind:             apicore.DetectionPageAdvanced,
 		Search:           p.Search,
@@ -301,9 +314,9 @@ func (p *detectionQueryParams) advancedPageKey() *apicore.DetectionPageKey {
 		Source:           p.Source,
 		Locked:           p.Locked,
 		Species:          p.Species,
-		Date:             p.Date,
-		StartDate:        p.StartDate,
-		EndDate:          p.EndDate,
+		Date:             date,
+		StartDate:        startDate,
+		EndDate:          endDate,
 		SortBy:           p.SortBy,
 		Hour:             p.Hour,
 		Duration:         p.Duration,
@@ -344,9 +357,17 @@ func (c *Handler) parseDetectionQueryParams(ctx echo.Context) (*detectionQueryPa
 	}
 	params.Duration = duration
 
-	// Validate dates
-	if err := validateDateParam(params.Date, "date"); err != nil {
-		return nil, &dateValidationError{message: err.Error(), paramName: "date"}
+	// Validate dates. The advanced search path resolves the search box shortcuts (today,
+	// week, ...) itself; the hourly and species query types parse date natively and take
+	// only YYYY-MM-DD, and start_date and end_date never take shortcuts.
+	// A species parameter without an explicit query type is inferred as a species query below,
+	// so it takes the strict format as well.
+	inferredSpecies := params.QueryType == "" && params.Species != ""
+	acceptsShortcut := params.QueryType != queryTypeHourly && params.QueryType != queryTypeSpecies && !inferredSpecies
+	if !acceptsShortcut || !apicore.IsDateShortcut(params.Date) {
+		if err := validateDateParam(params.Date, "date"); err != nil {
+			return nil, &dateValidationError{message: err.Error(), paramName: "date"}
+		}
 	}
 	if err := c.validateDateParameters(params.StartDate, params.EndDate, ctx); err != nil {
 		return nil, err
@@ -601,9 +622,9 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 		logger.String("ip", ctx.RealIP()),
 	)
 
-	// Get notes based on query type
+	// Get results based on query type
 	reqCtx := ctx.Request().Context()
-	notes, totalResults, err := c.getDetectionsByQueryType(reqCtx, params)
+	results, totalResults, err := c.getDetectionsByQueryType(reqCtx, params)
 	if err != nil {
 		if ended, respErr := c.respondIfRequestEnded(ctx, err, "Detections request ended before completion"); ended {
 			return respErr
@@ -617,8 +638,8 @@ func (c *Handler) GetDetections(ctx echo.Context) error {
 		return c.HandleError(ctx, err, "Failed to retrieve detections", http.StatusInternalServerError)
 	}
 
-	// Convert notes to response format
-	detections := c.convertNotesToDetectionResponses(notes, params.IncludeWeather)
+	// Convert results to response format
+	detections := c.convertResultsToDetectionResponses(reqCtx, results, params.IncludeWeather)
 	c.stripSourceForUnauthenticated(ctx, detections)
 
 	// Create paginated response
@@ -709,10 +730,11 @@ func (c *Handler) respondIfRequestEnded(ctx echo.Context, err error, logMsg stri
 	return true, ctx.JSON(code, resp)
 }
 
-// getDetectionsByQueryType retrieves detections based on the query type. The
-// context bounds how long the caller waits for a shared load; it does not
-// cancel the load itself.
-func (c *Handler) getDetectionsByQueryType(ctx context.Context, params *detectionQueryParams) ([]datastore.Note, int64, error) {
+// getDetectionsByQueryType retrieves detections based on the query type. On the
+// cached path the context bounds how long the caller waits for a shared load; it
+// does not cancel that load. A page that is not cached loads on this context, so
+// cancelling it ends the query.
+func (c *Handler) getDetectionsByQueryType(ctx context.Context, params *detectionQueryParams) ([]*detectionPkg.Result, int64, error) {
 	// Species filtering is exact, so an unambiguous common name can be replaced
 	// with its scientific name directly.
 	if resolved, hit := c.resolveSpeciesToScientific(params.Species); hit {
@@ -759,78 +781,81 @@ func (c *Handler) stripSourceForUnauthenticated(ctx echo.Context, detections []D
 	}
 }
 
-// convertNotesToDetectionResponses converts datastore notes to API detection responses
-func (c *Handler) convertNotesToDetectionResponses(notes []datastore.Note, includeWeather bool) []DetectionResponse {
-	detections := make([]DetectionResponse, 0, len(notes))
+// convertResultsToDetectionResponses converts repository results to API detection responses.
+// The results may be shared with the page cache and are never modified.
+func (c *Handler) convertResultsToDetectionResponses(ctx context.Context, results []*detectionPkg.Result, includeWeather bool) []DetectionResponse {
+	detections := make([]DetectionResponse, 0, len(results))
 
 	// Create a map to cache weather data if needed
 	weatherCache := make(map[string][]datastore.HourlyWeather)
 
-	for i := range notes {
-		note := &notes[i]
-		detection := c.noteToDetectionResponse(note, includeWeather, weatherCache)
-		detections = append(detections, detection)
+	for _, r := range results {
+		detections = append(detections, c.resultToDetectionResponse(r, includeWeather, weatherCache))
 	}
+	c.attachModelContributions(ctx, detections)
 	return detections
 }
 
-// noteToDetectionResponse converts a single note to a detection response
-func (c *Handler) noteToDetectionResponse(note *datastore.Note, includeWeather bool, weatherCache map[string][]datastore.HourlyWeather) DetectionResponse {
+// resultToDetectionResponse converts a single repository result to a detection response.
+// The timestamp, date, time, weather match and moon phase come from the instant
+// r.Timestamp, and the begin and end times from r.BeginTime and r.EndTime. On the v2 store
+// r.Timestamp is the stored instant, so the two detections of a repeated DST hour keep their
+// own UTC offsets even though their date and time text is identical. The legacy bridge can
+// only rebuild the instant from offset-free text, so it gives both the first occurrence's
+// offset. It never writes through r, which the page cache may share.
+//
+// A legacy-store row whose date and time text does not parse never reaches here: the
+// legacy bridge fails the read (list: 500, detail: 404). That is accepted legacy
+// degradation, the legacy store being deprecated.
+func (c *Handler) resultToDetectionResponse(r *detectionPkg.Result, includeWeather bool, weatherCache map[string][]datastore.HourlyWeather) DetectionResponse {
 	detection := DetectionResponse{
-		ID:             note.ID,
-		Date:           note.Date,
-		Time:           note.Time,
-		BeginTime:      note.BeginTime.Format(time.RFC3339),
-		EndTime:        note.EndTime.Format(time.RFC3339),
-		SpeciesCode:    note.SpeciesCode,
-		ScientificName: note.ScientificName,
-		CommonName:     note.CommonName,
-		Confidence:     note.Confidence,
+		ID:             r.ID,
+		Date:           r.Date(),
+		Time:           r.Time(),
+		Timestamp:      r.Timestamp.Format(time.RFC3339),
+		BeginTime:      r.BeginTime.Format(time.RFC3339),
+		EndTime:        r.EndTime.Format(time.RFC3339),
+		SpeciesCode:    r.Species.Code,
+		ScientificName: r.Species.ScientificName,
+		CommonName:     r.Species.CommonName,
+		Confidence:     r.Confidence,
 		// ClipName is the per-detection signal the frontend gates audio playback
 		// on. It is basename-stripped to match the SSE privacy contract
 		// (apicore.SafeBaseName): only the filename is exposed, never the on-disk
 		// directory layout, and an empty clip name stays empty (no clip exists).
-		ClipName: apicore.SafeBaseName(note.ClipName),
+		ClipName: apicore.SafeBaseName(r.ClipName),
 		// SpectrogramOnly never exposes the kept clip name, only that an image exists.
-		SpectrogramOnly: note.IsSpectrogramOnly(),
-		ClipSampleRate:  note.ClipSampleRate,
-		Locked:          note.Locked,
-		Unlikely:        note.Unlikely,
+		SpectrogramOnly: r.IsSpectrogramOnly(),
+		ClipSampleRate:  r.ClipSampleRate,
+		Locked:          r.Locked,
+		Unlikely:        r.Unlikely,
 	}
 
 	// populate source info if available
-	if note.Source.ID != "" {
+	if r.AudioSource.ID != "" {
 		detection.Source = &SourceInfo{
-			ID:          note.Source.ID,
-			Type:        detectionPkg.DetermineSourceType(note.Source.SafeString),
-			DisplayName: note.Source.DisplayName,
+			ID:          r.AudioSource.ID,
+			Type:        detectionPkg.DetermineSourceType(r.AudioSource.SafeString),
+			DisplayName: r.AudioSource.DisplayName,
 		}
 	}
 
-	// Build RFC3339 timestamp from Date+Time in the server's local timezone
-	// so the frontend can compute correct relative times across timezones.
-	if t, err := time.ParseInLocation("2006-01-02 15:04:05", note.Date+" "+note.Time, time.Local); err == nil {
-		detection.Timestamp = t.Format(time.RFC3339)
-	} else {
-		c.Debug("Failed to parse detection timestamp from date=%q time=%q: %v", note.Date, note.Time, err)
-	}
-
-	c.applySpeciesTrackingMetadata(&detection, note.ScientificName, note.Date)
-	detection.Verified = c.mapVerificationStatus(note.Verified)
-	detection.Comments = extractNoteComments(note.Comments)
+	c.applySpeciesTrackingMetadata(&detection, r.Species.ScientificName, r.Date())
+	detection.Verified = c.mapVerificationStatus(r.Verified)
+	detection.Comments = extractResultComments(r.Comments)
 
 	// Model type drives the UI spectrogram frequency range (bat detections span a
-	// much wider band than birds). It is carried on note.Model from the datastore's
+	// much wider band than birds). It is carried on r.Model from the datastore's
 	// batch-loaded ai_models relation, so reading it here adds no extra query.
 	// Fall back to the default bird range when the model type is unknown (e.g. the
 	// legacy datastore does not track it).
-	detection.ModelType = note.Model.ModelType
+	detection.ModelType = r.Model.ModelType
 	if detection.ModelType == "" {
 		detection.ModelType = defaultModelType
 	}
 
 	if includeWeather {
-		c.populateWeatherData(&detection, note, weatherCache)
+		c.populateWeatherData(&detection, r, weatherCache)
 	}
 
 	return detection
@@ -876,13 +901,13 @@ func (c *Handler) applySpeciesTrackingMetadata(detection *DetectionResponse, sci
 	detection.CurrentSeason = status.CurrentSeason
 }
 
-// extractNoteComments converts datastore comments to API response format
-func extractNoteComments(noteComments []datastore.NoteComment) []CommentResponse {
-	if len(noteComments) == 0 {
+// extractResultComments converts result comments to API response format
+func extractResultComments(resultComments []detectionPkg.Comment) []CommentResponse {
+	if len(resultComments) == 0 {
 		return nil
 	}
-	comments := make([]CommentResponse, 0, len(noteComments))
-	for _, comment := range noteComments {
+	comments := make([]CommentResponse, 0, len(resultComments))
+	for _, comment := range resultComments {
 		comments = append(comments, CommentResponse{
 			ID:        comment.ID,
 			Entry:     comment.Entry,
@@ -894,19 +919,11 @@ func extractNoteComments(noteComments []datastore.NoteComment) []CommentResponse
 }
 
 // populateWeatherData adds weather and time of day info to detection response
-func (c *Handler) populateWeatherData(detection *DetectionResponse, note *datastore.Note, weatherCache map[string][]datastore.HourlyWeather) {
-	// Parse detection time (database stores local time strings)
-	detectionTimeStr := note.Date + " " + note.Time
-	detectionTime, err := time.ParseInLocation("2006-01-02 15:04:05", detectionTimeStr, time.Local)
-	if err != nil {
-		c.LogWarnIfEnabled("Failed to parse detection time for weather data",
-			logger.String("time_str", detectionTimeStr),
-			logger.Error(err))
-		return
-	}
-
-	detection.TimeOfDay = c.calculateDetectionTimeOfDay(detectionTime)
-	detection.Weather = c.getWeatherForDetectionTime(detectionTime, note.Date, weatherCache)
+func (c *Handler) populateWeatherData(detection *DetectionResponse, r *detectionPkg.Result, weatherCache map[string][]datastore.HourlyWeather) {
+	// The stored instant picks the right hourly row and moon phase for either
+	// occurrence of a repeated DST hour.
+	detection.TimeOfDay = c.calculateDetectionTimeOfDay(r.Timestamp)
+	detection.Weather = c.getWeatherForDetectionTime(r.Timestamp, r.Date(), weatherCache)
 }
 
 // calculateDetectionTimeOfDay calculates time of day based on sun position
@@ -1002,13 +1019,16 @@ func (c *Handler) createPaginatedResponse(detections []DetectionResponse, totalR
 // cachedPage returns the page cached under key, or runs load once for all
 // concurrent callers that miss on it. Errors are returned as-is and never cached;
 // a panicking loader comes back as a *ttlcache.PanicError and its stack is logged.
-func (c *Handler) cachedPage(ctx context.Context, key *apicore.DetectionPageKey, load func() ([]datastore.Note, int64, error)) ([]datastore.Note, int64, error) {
-	page, err := c.DetectionCache.GetOrLoad(ctx, key, func(context.Context) (apicore.DetectionPage, error) {
-		notes, total, err := load()
+func (c *Handler) cachedPage(ctx context.Context, key *apicore.DetectionPageKey, load func(context.Context) ([]*detectionPkg.Result, int64, error)) ([]*detectionPkg.Result, int64, error) {
+	// The loader runs on the context GetOrLoad hands it: on the cached path that
+	// context is detached from the request, so one caller disconnecting cannot fail
+	// the load every waiting caller shares.
+	page, err := c.DetectionCache.GetOrLoad(ctx, key, func(loadCtx context.Context) (apicore.DetectionPage, error) {
+		results, total, err := load(loadCtx)
 		if err != nil {
 			return apicore.DetectionPage{}, err
 		}
-		return apicore.DetectionPage{Notes: notes, Total: total}, nil
+		return apicore.DetectionPage{Results: results, Total: total}, nil
 	})
 	if err != nil {
 		// A panicking loader is recovered by the cache so it cannot crash the
@@ -1021,14 +1041,19 @@ func (c *Handler) cachedPage(ctx context.Context, key *apicore.DetectionPageKey,
 		}
 		return nil, 0, err
 	}
-	return page.Notes, page.Total, nil
+	return page.Results, page.Total, nil
 }
 
 // getHourlyDetections handles hourly query type logic
-func (c *Handler) getHourlyDetections(ctx context.Context, date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
-	return c.cachedPage(ctx, hourlyPageKey(date, hour, duration, numResults, offset), func() ([]datastore.Note, int64, error) {
-		notes, err := c.DS.GetHourlyDetections(date, hour, duration, numResults, offset)
+func (c *Handler) getHourlyDetections(ctx context.Context, date, hour string, duration, numResults, offset int) ([]*detectionPkg.Result, int64, error) {
+	return c.cachedPage(ctx, hourlyPageKey(date, hour, duration, numResults, offset), func(loadCtx context.Context) ([]*detectionPkg.Result, int64, error) {
+		results, totalCount, err := c.Repo.GetHourly(loadCtx, date, hour, duration, numResults, offset)
 		if err != nil {
+			// A direct load runs on the request context; when that ended, GetDetections
+			// answers it at debug level, so it is not an error here.
+			if loadCtx.Err() != nil {
+				return nil, 0, err
+			}
 			c.LogErrorIfEnabled("Failed to get hourly detections",
 				logger.String("date", date),
 				logger.String("hour", hour),
@@ -1040,34 +1065,31 @@ func (c *Handler) getHourlyDetections(ctx context.Context, date, hour string, du
 			return nil, 0, err
 		}
 
-		totalCount, err := c.DS.CountHourlyDetections(date, hour, duration)
-		if err != nil {
-			c.LogErrorIfEnabled("Failed to count hourly detections",
-				logger.String("date", date),
-				logger.String("hour", hour),
-				logger.Int("duration", duration),
-				logger.Error(err),
-			)
-			return nil, 0, err
-		}
-
 		c.LogInfoIfEnabled("Retrieved hourly detections",
 			logger.String("date", date),
 			logger.String("hour", hour),
 			logger.Int("duration", duration),
-			logger.Int("count", len(notes)),
+			logger.Int("count", len(results)),
 			logger.Int64("total", totalCount),
 		)
 
-		return notes, totalCount, nil
+		return results, totalCount, nil
 	})
 }
 
-// getSpeciesDetections handles species query type logic
-func (c *Handler) getSpeciesDetections(ctx context.Context, species, date, hour string, duration, numResults, offset int) ([]datastore.Note, int64, error) {
-	return c.cachedPage(ctx, speciesPageKey(species, date, hour, duration, numResults, offset), func() ([]datastore.Note, int64, error) {
-		notes, err := c.DS.SpeciesDetections(species, date, hour, duration, false, numResults, offset)
+// getSpeciesDetections handles species query type logic. GetDetections validates the
+// date as YYYY-MM-DD or empty and sets the duration to at least one hour in
+// parseDetectionQueryParams, so the repository does not see a date it would ignore
+// there. BatchResolveDetections builds its parameters without that validation.
+func (c *Handler) getSpeciesDetections(ctx context.Context, species, date, hour string, duration, numResults, offset int) ([]*detectionPkg.Result, int64, error) {
+	return c.cachedPage(ctx, speciesPageKey(species, date, hour, duration, numResults, offset), func(loadCtx context.Context) ([]*detectionPkg.Result, int64, error) {
+		results, totalCount, err := c.Repo.GetBySpecies(loadCtx, species, date, hour, duration, numResults, offset)
 		if err != nil {
+			// A direct load runs on the request context; when that ended, GetDetections
+			// answers it at debug level, so it is not an error here.
+			if loadCtx.Err() != nil {
+				return nil, 0, err
+			}
 			c.LogErrorIfEnabled("Failed to get species detections",
 				logger.String("species", species),
 				logger.String("date", date),
@@ -1080,38 +1102,34 @@ func (c *Handler) getSpeciesDetections(ctx context.Context, species, date, hour 
 			return nil, 0, err
 		}
 
-		totalCount, err := c.DS.CountSpeciesDetections(species, date, hour, duration)
-		if err != nil {
-			c.LogErrorIfEnabled("Failed to count species detections",
-				logger.String("species", species),
-				logger.String("date", date),
-				logger.String("hour", hour),
-				logger.Int("duration", duration),
-				logger.Error(err),
-			)
-			return nil, 0, err
-		}
-
 		c.LogInfoIfEnabled("Retrieved species detections",
 			logger.String("species", species),
 			logger.String("date", date),
 			logger.String("hour", hour),
 			logger.Int("duration", duration),
-			logger.Int("count", len(notes)),
+			logger.Int("count", len(results)),
 			logger.Int64("total", totalCount),
 		)
 
-		return notes, totalCount, nil
+		return results, totalCount, nil
 	})
 }
 
 // getSearchDetectionsAdvanced handles advanced search with filters
-func (c *Handler) getSearchDetectionsAdvanced(ctx context.Context, params *detectionQueryParams) ([]datastore.Note, int64, error) {
-	return c.cachedPage(ctx, params.advancedPageKey(), func() ([]datastore.Note, int64, error) {
-		filters := c.buildAdvancedSearchFilters(params)
+func (c *Handler) getSearchDetectionsAdvanced(ctx context.Context, params *detectionQueryParams) ([]*detectionPkg.Result, int64, error) {
+	// One clock reading feeds both the cache key and the loader, so a request
+	// that straddles midnight cannot be keyed for one day and loaded for another.
+	now := time.Now()
+	return c.cachedPage(ctx, params.advancedPageKey(now, datastore.Timezone()), func(loadCtx context.Context) ([]*detectionPkg.Result, int64, error) {
+		filters := c.buildAdvancedSearchFilters(params, now)
 
-		notes, totalCount, err := c.DS.SearchNotesAdvanced(&filters)
+		results, totalCount, err := c.Repo.SearchAdvanced(loadCtx, &filters)
 		if err != nil {
+			// A direct load runs on the request context; when that ended, GetDetections
+			// answers it at debug level, so it is not an error here.
+			if loadCtx.Err() != nil {
+				return nil, 0, err
+			}
 			// Filters carry request text, and a source value may be a URI with credentials.
 			c.LogErrorIfEnabled("Failed to perform advanced search",
 				logger.String("filters", privacy.ScrubMessage(fmt.Sprintf("%+v", filters))),
@@ -1120,12 +1138,13 @@ func (c *Handler) getSearchDetectionsAdvanced(ctx context.Context, params *detec
 			return nil, 0, err
 		}
 
-		return notes, totalCount, nil
+		return results, totalCount, nil
 	})
 }
 
-// buildAdvancedSearchFilters constructs search filters from query parameters
-func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datastore.AdvancedSearchFilters {
+// buildAdvancedSearchFilters constructs search filters from query parameters,
+// resolving date shortcuts at now.
+func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams, now time.Time) datastore.AdvancedSearchFilters {
 	filters := datastore.AdvancedSearchFilters{
 		TextQuery:         params.Search,
 		SpeciesScientific: params.SearchScientific,
@@ -1163,8 +1182,8 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 		}
 	}
 
-	// Apply date range filter using shared helper
-	if dateRange := apicore.ParseDateRangeFilter(params.Date, params.StartDate, params.EndDate); dateRange != nil {
+	// Apply date range filter using shared helper; datastore.Timezone() is the station zone the datastore resolves dates in
+	if dateRange := apicore.ParseDateRangeFilter(params.Date, params.StartDate, params.EndDate, now, datastore.Timezone()); dateRange != nil {
 		filters.DateRange = &datastore.DateRange{
 			Start: dateRange.Start,
 			End:   dateRange.End,
@@ -1198,28 +1217,21 @@ func (c *Handler) buildAdvancedSearchFilters(params *detectionQueryParams) datas
 	return filters
 }
 
-// getSearchDetections returns cached or datastore results for raw text, unioning
-// any resolved scientific-name alternatives through advanced search. An empty
-// text lists every detection, which is how the default (all) query type is served.
-func (c *Handler) getSearchDetections(ctx context.Context, search string, scientific []string, numResults, offset int) ([]datastore.Note, int64, error) {
-	return c.cachedPage(ctx, searchPageKey(search, scientific, numResults, offset), func() ([]datastore.Note, int64, error) {
-		// If the active common-name map found scientific alternatives, use the
-		// advanced datastore path that can OR them with the raw text. Otherwise retain
-		// the lightweight legacy call for ordinary scientific/unknown text queries.
-		var notes []datastore.Note
-		var totalCount int64
-		var err error
-		if len(scientific) > 0 {
-			notes, totalCount, err = c.DS.SearchNotesAdvanced(&datastore.AdvancedSearchFilters{
-				TextQuery:         search,
-				SpeciesScientific: scientific,
-				Limit:             numResults,
-				Offset:            offset,
-				SortBy:            datastore.SortBySearchDefault,
-			})
-		} else {
-			notes, totalCount, err = c.DS.SearchNotes(search, false, numResults, offset)
-		}
+// getSearchDetections returns cached or repository results for raw text, unioning
+// any resolved scientific-name alternatives. An empty text lists every detection,
+// which is how the default (all) query type is served. Both go through SearchAdvanced
+// with the default sort, which orders as the plain text search does. Unlike that
+// search on the legacy store, an empty text also lists rows whose species names are
+// both NULL.
+func (c *Handler) getSearchDetections(ctx context.Context, search string, scientific []string, numResults, offset int) ([]*detectionPkg.Result, int64, error) {
+	return c.cachedPage(ctx, searchPageKey(search, scientific, numResults, offset), func(loadCtx context.Context) ([]*detectionPkg.Result, int64, error) {
+		results, totalCount, err := c.Repo.SearchAdvanced(loadCtx, &datastore.AdvancedSearchFilters{
+			TextQuery:         search,
+			SpeciesScientific: scientific,
+			Limit:             numResults,
+			Offset:            offset,
+			SortBy:            datastore.SortBySearchDefault,
+		})
 		// The default (all) query type is an empty search; keep its own log
 		// messages so they stay distinguishable from text searches.
 		errMsg, okMsg := "Failed to search notes", "Retrieved search results"
@@ -1230,6 +1242,11 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 			queryFields = []logger.Field{logger.String("query", search)}
 		}
 		if err != nil {
+			// A direct load runs on the request context; when that ended, GetDetections
+			// answers it at debug level, so it is not an error here.
+			if loadCtx.Err() != nil {
+				return nil, 0, err
+			}
 			c.LogErrorIfEnabled(errMsg, append(queryFields,
 				logger.Int("limit", numResults),
 				logger.Int("offset", offset),
@@ -1239,11 +1256,11 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 		}
 
 		c.LogInfoIfEnabled(okMsg, append(queryFields,
-			logger.Int("count", len(notes)),
+			logger.Int("count", len(results)),
 			logger.Int64("total", totalCount),
 		)...)
 
-		return notes, totalCount, nil
+		return results, totalCount, nil
 	})
 }
 
@@ -1253,22 +1270,31 @@ func (c *Handler) getSearchDetections(ctx context.Context, search string, scient
 // the wait is exceeded or the clip cannot be read the field is omitted.
 func (c *Handler) GetDetection(ctx echo.Context) error {
 	id := ctx.Param("id")
-	note, err := c.DS.Get(id)
+	reqCtx := ctx.Request().Context()
+	// Both stores report a missing id: the legacy bridge as gorm.ErrRecordNotFound and
+	// the v2 repository as repository.ErrDetectionNotFound. Every error other than a
+	// request that has ended is answered as not found, as before.
+	r, err := c.Repo.Get(reqCtx, id)
 	if err != nil {
+		if ended, respErr := c.respondIfRequestEnded(ctx, err, "Detection request ended before completion"); ended {
+			return respErr
+		}
 		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
 
 	// An old bat row may have no clip sample rate yet; learn it from the clip
-	// header (bounded wait). No list or search path does this.
-	c.fillClipSampleRate(&note)
+	// header (bounded wait). No list or search path does this. r is this request's
+	// own uncached copy, so filling it does not touch any shared page.
+	c.fillClipSampleRate(r)
 
 	// For single detection, include weather data by default
 	weatherCache := make(map[string][]datastore.HourlyWeather)
-	detection := c.noteToDetectionResponse(&note, true, weatherCache)
+	resp := []DetectionResponse{c.resultToDetectionResponse(r, true, weatherCache)}
+	c.attachModelContributions(reqCtx, resp)
 	if !c.isClientAuthenticated(ctx) {
-		detection.Source = nil
+		resp[0].Source = nil
 	}
-	return ctx.JSON(http.StatusOK, detection)
+	return ctx.JSON(http.StatusOK, resp[0])
 }
 
 // GetRecentDetections returns the most recent detections
@@ -1287,12 +1313,16 @@ func (c *Handler) GetRecentDetections(ctx echo.Context) error {
 	// Check if weather data should be included
 	includeWeather := ctx.QueryParam("includeWeather") == queryValueTrue
 
-	notes, err := c.DS.GetLastDetections(limit)
+	// On the v2 store these rows carry no verification, lock or comment data, as before.
+	results, err := c.Repo.GetRecent(ctx.Request().Context(), limit)
 	if err != nil {
+		if ended, respErr := c.respondIfRequestEnded(ctx, err, "Recent detections request ended before completion"); ended {
+			return respErr
+		}
 		return c.HandleError(ctx, err, "Failed to get recent detections", http.StatusInternalServerError)
 	}
 
-	detections := c.convertNotesToDetectionResponses(notes, includeWeather)
+	detections := c.convertResultsToDetectionResponses(ctx.Request().Context(), results, includeWeather)
 	c.stripSourceForUnauthenticated(ctx, detections)
 	return ctx.JSON(http.StatusOK, detections)
 }
@@ -1683,35 +1713,35 @@ func (c *Handler) toggleSpeciesInIgnoredList(species string) (action string, isE
 		return "", false, nil
 	}
 
-	// Serialise this read-modify-write against concurrent settings saves so an
-	// out-of-band StoreSettings (range filter rebuild, etc.) cannot interleave
-	// between reading current and publishing the update.
+	// Serialise against concurrent settings handlers on this controller. The
+	// read-modify-write itself runs inside updateAndSaveSettings, which reads the
+	// baseline under the process-wide settings writer lock, so an out-of-band
+	// writer (range filter rebuild, model install) cannot publish between reading
+	// the exclude list and publishing the update.
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	// Read the latest snapshot; getSettingsOrFallback prefers the global when
-	// this controller owns it, so out-of-band StoreSettings calls are seen.
-	current := c.getSettingsOrFallback()
-
-	wasExcluded := slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
-		return c.excludeEntryMatches(s, species)
-	})
-
-	updated := conf.CloneSettings(current)
-	if wasExcluded {
-		updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
+	var wasExcluded bool
+	current, updated, err := c.updateAndSaveSettings(func(current, updated *conf.Settings) error {
+		wasExcluded = slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
 			return c.excludeEntryMatches(s, species)
 		})
-		action = "removed"
-		isExcluded = false
-	} else {
-		updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
-		action = "added"
-		isExcluded = true
-	}
 
-	if err := c.publishAndSaveSettings(current, updated); err != nil {
+		if wasExcluded {
+			updated.Realtime.Species.Exclude = slices.DeleteFunc(updated.Realtime.Species.Exclude, func(s string) bool {
+				return c.excludeEntryMatches(s, species)
+			})
+		} else {
+			updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
+		}
+		return nil
+	})
+	if err != nil {
 		return "", wasExcluded, err
+	}
+	action, isExcluded = "removed", false
+	if !wasExcluded {
+		action, isExcluded = "added", true
 	}
 
 	// Trigger side-effects (range filter rebuild, etc.) so the include list
@@ -1736,17 +1766,19 @@ func (c *Handler) addSpeciesToIgnoredList(species string) error {
 	c.settingsMutex.Lock()
 	defer c.settingsMutex.Unlock()
 
-	current := c.getSettingsOrFallback()
-	if slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
-		return c.excludeEntryMatches(s, species)
-	}) {
+	current, updated, err := c.updateAndSaveSettings(func(current, updated *conf.Settings) error {
+		if slices.ContainsFunc(current.Realtime.Species.Exclude, func(s string) bool {
+			return c.excludeEntryMatches(s, species)
+		}) {
+			return conf.ErrSettingsUnchanged
+		}
+		updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
+		return nil
+	})
+	if errors.Is(err, conf.ErrSettingsUnchanged) {
 		return nil
 	}
-
-	updated := conf.CloneSettings(current)
-	updated.Realtime.Species.Exclude = append(updated.Realtime.Species.Exclude, species)
-
-	if err := c.publishAndSaveSettings(current, updated); err != nil {
+	if err != nil {
 		return err
 	}
 
@@ -1807,20 +1839,12 @@ func (c *Handler) AddLock(noteID uint, locked bool) error {
 func (c *Handler) GetDetectionTimeOfDay(ctx echo.Context) error {
 	id := ctx.Param("id")
 
-	// Get the detection from the database
-	note, err := c.DS.Get(id)
+	// Get the detection through the repository: its Timestamp is the stored instant
+	r, err := c.Repo.Get(ctx.Request().Context(), id)
 	if err != nil {
 		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
 	}
-
-	// Parse the detection date and time
-	dateTimeStr := fmt.Sprintf("%s %s", note.Date, note.Time)
-	layout := "2006-01-02 15:04:05" // Adjust based on your actual date/time format
-
-	detectionTime, err := time.ParseInLocation(layout, dateTimeStr, time.Local)
-	if err != nil {
-		return c.HandleError(ctx, err, "Failed to parse detection time", http.StatusInternalServerError)
-	}
+	detectionTime := r.Timestamp
 
 	// Check if SunCalc is initialized
 	if c.SunCalc == nil {

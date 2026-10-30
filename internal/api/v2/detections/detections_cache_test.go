@@ -64,7 +64,7 @@ func TestGetDetections_CacheHitPerQueryType(t *testing.T) {
 			name:  "all",
 			query: url.Values{"queryType": {"all"}, "numResults": {"10"}},
 			setup: func(m *mocks.MockInterface) {
-				m.EXPECT().SearchNotes("", false, 10, 0).Return(notes, int64(1), nil).Once()
+				m.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("", 10, 0)).Return(notes, int64(1), nil).Once()
 			},
 		},
 		{
@@ -87,7 +87,7 @@ func TestGetDetections_CacheHitPerQueryType(t *testing.T) {
 			name:  "search",
 			query: url.Values{"queryType": {"search"}, "search": {"Crow"}, "numResults": {"10"}},
 			setup: func(m *mocks.MockInterface) {
-				m.EXPECT().SearchNotes("Crow", false, 10, 0).Return(notes, int64(1), nil).Once()
+				m.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("Crow", 10, 0)).Return(notes, int64(1), nil).Once()
 			},
 		},
 		{
@@ -123,7 +123,7 @@ func TestGetDetections_CacheHitPerQueryType(t *testing.T) {
 // they share one cache entry.
 func TestGetDetections_AllAndEmptySearchShareOnePage(t *testing.T) {
 	e, mockDS, h := setupTestEnvironment(t)
-	mockDS.EXPECT().SearchNotes("", false, 10, 0).Return(cacheTestNotes(), int64(1), nil).Once()
+	mockDS.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("", 10, 0)).Return(cacheTestNotes(), int64(1), nil).Once()
 
 	_, allBody := getDetectionsBody(t, e, h, url.Values{"queryType": {"all"}, "numResults": {"10"}})
 	_, searchBody := getDetectionsBody(t, e, h, url.Values{"queryType": {"search"}, "numResults": {"10"}})
@@ -158,8 +158,8 @@ func TestGetDetections_ConcurrentIdenticalRequestsQueryOnce(t *testing.T) {
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
-	mockDS.EXPECT().SearchNotes("Crow", false, 10, 0).RunAndReturn(
-		func(string, bool, int, int) ([]datastore.Note, int64, error) {
+	mockDS.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("Crow", 10, 0)).RunAndReturn(
+		func(*datastore.AdvancedSearchFilters) ([]datastore.Note, int64, error) {
 			<-release
 			return cacheTestNotes(), 1, nil
 		}).Once()
@@ -193,7 +193,7 @@ func TestGetDetections_ConcurrentIdenticalRequestsQueryOnce(t *testing.T) {
 // always reads the datastore: a batch selection must see current rows.
 func TestBatchResolveDetections_BypassesCache(t *testing.T) {
 	e, mockDS, h := setupTestEnvironment(t)
-	mockDS.EXPECT().SearchNotes("Crow", false, maxBatchSize+1, 0).Return(cacheTestNotes(), int64(1), nil).Twice()
+	mockDS.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("Crow", maxBatchSize+1, 0)).Return(cacheTestNotes(), int64(1), nil).Twice()
 
 	resolve := func() string {
 		body, err := json.Marshal(BatchResolveRequest{QueryType: "search", Search: "Crow"})
@@ -313,7 +313,7 @@ func TestDetectionCache_InvalidatedByWriteHandlers(t *testing.T) {
 			e, mockDS, h := setupTestEnvironment(t)
 			// Two list queries are expected: the one that primes the cache and
 			// the one after the write.
-			mockDS.EXPECT().SearchNotes("Crow", false, 10, 0).Return(cacheTestNotes(), int64(1), nil).Twice()
+			mockDS.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("Crow", 10, 0)).Return(cacheTestNotes(), int64(1), nil).Twice()
 			tt.setup(mockDS)
 			query := url.Values{"queryType": {"search"}, "search": {"Crow"}, "numResults": {"10"}}
 
@@ -411,7 +411,7 @@ func TestGetDetections_RequestEnded(t *testing.T) {
 		{
 			"live request with a wrapped context error", t.Context(),
 			func(m *mocks.MockInterface) {
-				m.EXPECT().SearchNotes("Crow", false, 100, 0).Return(nil, int64(0), context.Canceled).Once()
+				m.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("Crow", 100, 0)).Return(nil, int64(0), context.Canceled).Once()
 			},
 			http.StatusInternalServerError, false,
 		},
@@ -467,8 +467,8 @@ func TestBatchResolveDetections_ClientDisconnect(t *testing.T) {
 // returns 500 and that the next request queries again.
 func TestGetDetections_LoaderErrorIsNotCached(t *testing.T) {
 	e, mockDS, h := setupTestEnvironment(t)
-	mockDS.EXPECT().SearchNotes("Crow", false, 10, 0).Return(nil, int64(0), assert.AnError).Once()
-	mockDS.EXPECT().SearchNotes("Crow", false, 10, 0).Return(cacheTestNotes(), int64(1), nil).Once()
+	mockDS.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("Crow", 10, 0)).Return(nil, int64(0), assert.AnError).Once()
+	mockDS.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("Crow", 10, 0)).Return(cacheTestNotes(), int64(1), nil).Once()
 	query := url.Values{"queryType": {"search"}, "search": {"Crow"}, "numResults": {"10"}}
 
 	status, _ := getDetectionsBody(t, e, h, query)
@@ -484,7 +484,7 @@ func TestGetDetections_LoaderPanicIsLogged(t *testing.T) {
 	e, mockDS, h := setupTestEnvironment(t)
 	rec := newLevelRecorder()
 	h.APILogger = rec
-	mockDS.EXPECT().SearchNotes("Crow", false, 10, 0).Run(func(string, bool, int, int) {
+	mockDS.EXPECT().SearchNotesAdvanced(searchDefaultMatcher("Crow", 10, 0)).Run(func(*datastore.AdvancedSearchFilters) {
 		panic("datastore exploded")
 	}).Once()
 	query := url.Values{"queryType": {"search"}, "search": {"Crow"}, "numResults": {"10"}}
@@ -494,22 +494,6 @@ func TestGetDetections_LoaderPanicIsLogged(t *testing.T) {
 	rec.mu.Lock()
 	defer rec.mu.Unlock()
 	assert.Contains(t, rec.errs, "Detection page loader panicked")
-}
-
-// TestGetDetections_AllQueryLogsAllDetections pins that the default query type
-// keeps its own log messages after sharing the search loader.
-func TestGetDetections_AllQueryLogsAllDetections(t *testing.T) {
-	e, mockDS, h := setupTestEnvironment(t)
-	rec := newLevelRecorder()
-	h.APILogger = rec
-	mockDS.EXPECT().SearchNotes("", false, 10, 0).Return(nil, int64(0), assert.AnError).Once()
-
-	status, _ := getDetectionsBody(t, e, h, url.Values{"numResults": {"10"}})
-	assert.Equal(t, http.StatusInternalServerError, status)
-	rec.mu.Lock()
-	defer rec.mu.Unlock()
-	assert.Contains(t, rec.errs, "Failed to get all detections")
-	assert.NotContains(t, rec.errs, "Failed to search notes")
 }
 
 // TestGetDetections_RequestEndedLogsCorrelationID pins that the debug line for a

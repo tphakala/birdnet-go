@@ -24,19 +24,22 @@ import (
 )
 
 // buildTestHandler builds a detections Handler around an apitest core with
-// in-memory test doubles for the facade-injected dependencies. The settings-save
-// doubles mirror the production behavior: getSettingsOrFallback reads the core's
-// atomic snapshot, publishAndSaveSettings stores the updated snapshot back (no disk
-// write, matching the original DisableSaveSettings=true), and handleSettingsChanges
-// is a no-op. isClientAuthenticated defaults to unauthenticated (the facade test
-// controller never injected an auth service). The name-map accessors return the
-// supplied maps so a test can seed name resolution.
+// in-memory test doubles for the facade-injected dependencies. The settings
+// getter returns only the core's own atomic snapshot, like getSettingsOrFallback
+// for a controller that does not own the global singleton; it never reads the
+// process-global settings, so it does not exercise the global-owner path.
+// updateAndSaveSettings clones the core snapshot, applies the mutation and stores
+// it back (no disk write, matching the original DisableSaveSettings=true), and
+// handleSettingsChanges is a no-op. isClientAuthenticated defaults to
+// unauthenticated (the facade test controller never injected an auth service).
+// The name-map accessors return the supplied maps so a test can seed name
+// resolution.
 func buildTestHandler(t *testing.T, core *apicore.Core, commonToSci, sciToCommon map[string]string) *Handler {
 	t.Helper()
 	var mu sync.RWMutex
 	return New(core, &mu,
 		func() *conf.Settings { return core.Settings.Load() },
-		func(_, updated *conf.Settings) error { core.Settings.Store(updated); return nil },
+		apitest.CoreSettingsUpdater(core),
 		func(_, _ *conf.Settings) error { return nil },
 		func(echo.Context) bool { return false },
 		func() map[string]string { return sciToCommon },
@@ -55,11 +58,13 @@ func buildTestHandler(t *testing.T, core *apicore.Core, commonToSci, sciToCommon
 // wired through an apitest core, with empty name maps. It mirrors the package-api
 // helper of the same name (which returned a *Controller); the handler's settings
 // route group is wired (core.Group) so route-registration tests can register routes.
-func setupTestEnvironment(t *testing.T) (*echo.Echo, *mocks.MockInterface, *Handler) {
+// opts are passed to apitest.NewCore after the echo and datastore options; a
+// parallel test passes apitest.WithoutSettingsPublish().
+func setupTestEnvironment(t *testing.T, opts ...apitest.CoreOption) (*echo.Echo, *mocks.MockInterface, *Handler) {
 	t.Helper()
 	e := echo.New()
 	mockDS := mocks.NewMockInterface(t)
-	core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithDatastore(mockDS))
+	core := apitest.NewCore(t, append([]apitest.CoreOption{apitest.WithEcho(e), apitest.WithDatastore(mockDS)}, opts...)...)
 	h := buildTestHandler(t, core, map[string]string{}, map[string]string{})
 	return e, mockDS, h
 }
@@ -91,4 +96,14 @@ func setupValidReviewMock(m *mock.Mock, id string, noteID uint, withComment bool
 		m.On("SaveNoteComment", mock.AnythingOfType("*datastore.NoteComment")).Return(nil)
 	}
 	m.On("SaveNoteReview", mock.AnythingOfType("*datastore.NoteReview")).Return(nil)
+}
+
+// searchDefaultMatcher matches the advanced-search call that serves the plain text
+// search and the default (all) list: the given text, no scientific-name
+// alternatives, the page window, and the default sort.
+func searchDefaultMatcher(text string, limit, offset int) any {
+	return mock.MatchedBy(func(f *datastore.AdvancedSearchFilters) bool {
+		return f.TextQuery == text && len(f.SpeciesScientific) == 0 &&
+			f.Limit == limit && f.Offset == offset && f.SortBy == datastore.SortBySearchDefault
+	})
 }

@@ -13,7 +13,8 @@ type ProbeInfo struct {
 	Channels   int
 	// DecodedBytes is the most bytes DecodeMono can hold for this file, from the
 	// header alone: the declared length at 16 bits per sample, or one frame past
-	// the decoded-size cap when the length is unknown or above it.
+	// the decoded-size cap when the length is unknown or above it. A source that
+	// OpenMono streams holds far less.
 	DecodedBytes int64
 }
 
@@ -34,8 +35,8 @@ func decodedBytesBound(totalFrames int64, frameBytes int) int64 {
 
 // ProbeFile reports whether DecodeMono can open path and read audio from it. It
 // stats path, runs the file checks ProbeOpenFile runs (regular file, size
-// bound) before the open, then opens the same decoder as DecodeMono with the
-// same sample-rate and channel bounds, returning the same errors except those
+// bound) before the open, then opens the same decoder as DecodeMono and OpenMono
+// with the same sample-rate and channel bounds, returning the same errors except those
 // only a full decode can find (the decoded-size bound). It
 // decodes one frame, so a clip whose headers parse but holds no audio wraps
 // ErrUndecodableSource. A nil error does not mean the clip is complete: a

@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Impostazioni di cattura estesa modificate. Riavvio necessario.",
         "equalizerUpdateFailed": "Aggiornamento delle impostazioni dell'equalizzatore audio non riuscito",
         "equalizerUpdated": "Impostazioni dell'equalizzatore audio aggiornate",
+        "equalizerFiltersSkipped": "Impostazioni dell'equalizzatore audio salvate, ma alcuni filtri vengono ignorati per {count, plural, one {la sorgente} other {le sorgenti}} {sources}: un filtro deve essere valido alla frequenza di campionamento della sorgente, con la sua frequenza inferiore alla metà di essa.",
         "savedSuccessfully": "Impostazioni salvate con successo",
         "saveFailed": "Salvataggio delle impostazioni non riuscito"
       },
@@ -449,7 +450,19 @@
         "completedTitle": "Migrazione del database completata",
         "completedMessage": "Migrazione completata. Riavvia BirdNET-Go per passare al nuovo database.",
         "errorTitle": "Errore di migrazione del database",
-        "errorMessage": "Migrazione sospesa a causa di errori. Controlla i log e riprova."
+        "errorMessage": "Migrazione sospesa a causa di errori. Controlla i log e riprova.",
+        "legacyNotStartedTitle": "Aggiornamento del database necessario",
+        "legacyNotStartedMessage": "Questa installazione usa ancora il vecchio formato del database, che smetterà di funzionare in una versione futura. Apri Sistema > Database per eseguire la migrazione.",
+        "legacyInProgressTitle": "Migrazione del database in corso",
+        "legacyInProgressMessage": "La migrazione al nuovo formato del database è in esecuzione. Lascia BirdNET-Go in esecuzione fino al termine; il vecchio formato smetterà di funzionare in una versione futura.",
+        "legacyNeedsAttentionTitle": "La migrazione del database richiede attenzione",
+        "legacyNeedsAttentionMessage": "La migrazione al nuovo formato del database è in pausa o non è riuscita. Apri Sistema > Database per riprenderla o riprovare; il vecchio formato smetterà di funzionare in una versione futura.",
+        "legacyRestartRequiredTitle": "Riavvia per completare la migrazione del database",
+        "legacyRestartRequiredMessage": "La migrazione è terminata. Riavvia BirdNET-Go per passare al nuovo database. Se questo messaggio resta dopo il riavvio, controlla il log per errori del database."
+      },
+      "database": {
+        "serverAttentionTitle": "Il server del database richiede attenzione",
+        "serverAttentionMessage": "Il server MySQL o MariaDB non è una versione supportata, oppure il database non usa il set di caratteri utf8mb4. Apri Sistema > Salute per i dettagli."
       },
       "cleanup": {
         "completeTitle": "Pulizia del vecchio database completata",
@@ -793,6 +806,9 @@
       "loadFailedAction": "Visualizza stato Modelli IA",
       "failingTitle": "{count, plural, one {Un modello fallisce ogni analisi} other {# modelli falliscono ogni analisi}}",
       "failingMessage": "{count, plural, one {{models} è caricato, ma ogni analisi fallisce, quindi non rileva nulla.} other {{models} sono caricati, ma ogni analisi fallisce, quindi non rilevano nulla.}} La pagina Modelli IA mostra il backend e l'errore."
+    },
+    "legacyDatabase": {
+      "action": "Apri impostazioni database"
     },
     "banner": {
       "title": "Titolo",
@@ -1581,7 +1597,7 @@
           "restartTitle": "Riavvio necessario",
           "restartBody": "Riavvia l'applicazione per passare al database V2. La pulizia del database legacy sarà disponibile dopo il riavvio.",
           "fallbackError": "Discrepanza nel conteggio dei record tra i database legacy e V2. Alcuni record potrebbero non essere stati migrati correttamente.",
-          "migrateInfo": "La migrazione trasferirà {count} record dal database legacy al nuovo schema V2. La modalità di scrittura doppia garantisce zero perdita di dati durante la migrazione.",
+          "migrateInfo": "La migrazione trasferirà {count} record dal database legacy al nuovo schema V2. Anche i nuovi rilevamenti salvati durante la migrazione vengono copiati nel nuovo database.",
           "sourceLegacy": "Sorgente (Legacy)",
           "targetV2": "Destinazione (V2)",
           "recordsLabel": "Record",
@@ -1633,7 +1649,7 @@
         },
         "notes": {
           "in_progress": "Puoi continuare a usare il sistema normalmente mentre la migrazione viene eseguita in background.",
-          "dual_write": "Migrazione in corso. I tuoi dati sono al sicuro - tutti i nuovi rilevamenti vengono salvati in entrambi i database.",
+          "dual_write": "Migrazione in corso. I tuoi dati sono al sicuro - i nuovi rilevamenti vengono salvati nel database attuale e copiati nel nuovo database durante la migrazione.",
           "migrating": "Copia dei rilevamenti esistenti nel nuovo database.",
           "validating": "Verifica che tutti i record siano stati copiati correttamente. Quasi fatto!",
           "cutover": "Passaggio al nuovo database. Richiede solo un momento.",
@@ -1716,6 +1732,12 @@
             },
             "sqlite_integrity": {
               "name": "Integrità Database"
+            },
+            "mysql_server_version": {
+              "name": "Versione del server di database"
+            },
+            "mysql_charset": {
+              "name": "Set di caratteri del database"
             },
             "mysql_table_health": {
               "name": "Salute Tabelle"
@@ -2323,6 +2345,7 @@
     "errors": {
       "loadFailed": "Caricamento delle impostazioni non riuscito",
       "saveFailed": "Salvataggio delle impostazioni non riuscito",
+      "changedElsewhere": "Le impostazioni sono state modificate altrove. Controllale e salva di nuovo.",
       "databaseStatsFailed": "Caricamento delle statistiche del database non riuscito",
       "csvDownloadFailed": "Download del CSV non riuscito"
     },
@@ -2670,7 +2693,7 @@
                 "descriptions": {
                   "highContrast": "Migliore per segnali deboli. I richiami degli uccelli risaltano chiaramente dal rumore di fondo. Raccomandato per stili scientifici/scala di grigi.",
                   "standard": "Impostazione bilanciata predefinita. Buona per la maggior parte dei casi d'uso.",
-                  "extended": "Più dettagli visibili ma contrasto inferiore. Valore predefinito SoX."
+                  "extended": "Più dettagli visibili ma contrasto inferiore."
                 }
               },
               "enabled": {
@@ -2772,7 +2795,7 @@
           "title": "Cosa è incluso nel rapporto:",
           "applicationLogs": "**Log applicazione** - Errori recenti e informazioni debug",
           "configuration": "**Configurazione** - Le tue impostazioni con dati sensibili rimossi",
-          "systemInfo": "**Informazioni sistema** - Versione OS, memoria e dettagli runtime",
+          "systemInfo": "**Informazioni sistema** - Versione OS, memoria, hardware, dispositivi USB collegati e schede audio, e dettagli runtime",
           "notIncluded": "**NON incluso** - File audio, rilevamenti uccelli o dati personali"
         },
         "userMessage": {
@@ -2925,6 +2948,11 @@
             "unit": "min",
             "helpText": "Previene notifiche ripetute per la stessa specie entro questa finestra temporale. Imposta a 0 per disabilitare."
           }
+        },
+        "rulesNotice": {
+          "message": "Le notifiche push dei rilevamenti provengono dalle regole di allerta nella scheda Regole. Le regole di rilevamento predefinite notificano solo nell'app. Per ricevere notifiche push, aggiungi l'azione {pushAction} alla regola {ruleName}, oppure crea una regola per l'evento {eventName} con una condizione di confidenza e un tempo di attesa.",
+          "previousFilters": "Le regole di allerta non usano le impostazioni Confidenza Minima ({confidence} %) e Raffreddamento Specie ({minutes} min) definite qui.",
+          "openRules": "Apri Regole"
         },
         "noProviders": "Nessun fornitore configurato",
         "noProvidersDescription": "Aggiungi un fornitore per iniziare a ricevere notifiche push",
@@ -3229,10 +3257,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Carica rilevamenti su BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg non rilevato",
-          "message": "Installa FFmpeg per abilitare supporto codifica FLAC, BirdWeather sta deprecando i caricamenti WAV in favore di file audio FLAC compressi."
-        },
         "enable": "Abilita Caricamenti BirdWeather",
         "token": {
           "label": "Token BirdWeather",
@@ -4249,7 +4273,6 @@
     },
     "species": {
       "pageLabel": "Impostazioni specie",
-      "saveError": "Salvataggio della configurazione per \"{species}\" non riuscito. Riprova.",
       "configUpdated": "Configurazione di \"{species}\" aggiornata",
       "configAdded": "Configurazione di \"{species}\" aggiunta",
       "duplicateConfigError": "La specie \"{species}\" ha già una configurazione. Scegli un altro nome.",
@@ -5080,6 +5103,7 @@
       "loop": "Attiva/disattiva ripetizione",
       "player": "Lettore audio",
       "autoplayBlocked": "Clicca per riprodurre (riproduzione automatica bloccata)",
+      "hlsLoadFailed": "Impossibile caricare il lettore audio, ricarica la pagina e riprova",
       "hlsNotSupported": "La riproduzione HLS non è supportata in questo browser",
       "streamStarting": "Avvio dello stream audio...",
       "levelFor": "Livello audio per {source}",
@@ -5314,6 +5338,9 @@
       "invalidJSON": "JSON non valido",
       "invalidEscalation": "I passaggi di escalation non sono validi",
       "engineUnavailable": "Il motore di avviso non è disponibile"
+    },
+    "insights": {
+      "v2Required": "Le analisi richiedono il database avanzato (v2)"
     },
     "detection": {
       "invalidDate": "Formato {paramName} non valido, usare AAAA-MM-GG"

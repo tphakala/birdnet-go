@@ -338,15 +338,9 @@ func (p *AudioPipelineService) Start(_ context.Context) error {
 			return p.quietHoursScheduler.IsStreamSuppressed(sourceID)
 		},
 		// RecoveryState lets the watchdog defer a restart to the native stream
-		// supervisor while it reconnects in place. Sound-card sources and the FFmpeg
-		// producer have no recovery intent, so the lookup miss / RecoveryUnknown both
-		// return the legacy restart path.
+		// supervisor while it reconnects in place; see streamRecoveryState.
 		RecoveryState: func(sourceID string) (audiocore.RecoveryState, time.Time) {
-			h, err := p.engine.StreamManager().StreamHealth(sourceID)
-			if err != nil || h == nil {
-				return audiocore.RecoveryUnknown, time.Time{}
-			}
-			return h.Recovery, h.RecoveryEntered
+			return streamRecoveryState(p.engine.StreamManager(), sourceID)
 		},
 	}
 	p.watchdog = audiocore.NewLivenessWatchdog(
@@ -814,10 +808,7 @@ func (p *AudioPipelineService) registerSoundLevelConsumers(sourceIDs []string, o
 		}
 
 		// Use per-source sample rate when available; fall back to global constant.
-		sourceSampleRate := conf.SampleRate
-		if src != nil && src.SampleRate > 0 {
-			sourceSampleRate = src.SampleRate
-		}
+		sourceSampleRate := src.EffectiveSampleRate()
 
 		eqChain := equalizer.ResolveAndBuildFilterChain(settings, sourceName, sourceSampleRate)
 
@@ -1199,7 +1190,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 
 		// Resolve per-source/per-stream EQ config for building per-route filter
 		// chains. Each route needs its own FilterChain because biquad filters
-		// have mutable state (in1/in2/out1/out2); sharing would cause a data race.
+		// have mutable per-filter state; sharing would cause a data race.
 		src, _ := p.engine.Registry().Get(sid)
 		sourceName := sid
 		if src != nil {
@@ -1266,10 +1257,7 @@ func (p *AudioPipelineService) registerConsumersForSources(sourceIDs []string, s
 			logger.String("operation", operation))
 
 		// Use per-source sample rate when available; fall back to global constant.
-		sourceSampleRate := conf.SampleRate
-		if src != nil && src.SampleRate > 0 {
-			sourceSampleRate = src.SampleRate
-		}
+		sourceSampleRate := src.EffectiveSampleRate()
 
 		consumerOK, bufferRouteOK := p.wireSourceBufferRoute(
 			sid, sourceName, sourceSampleRate, gainDB, targets, currentSettings, operation)
@@ -2072,10 +2060,7 @@ func (p *AudioPipelineService) buildSourceConfigs(fallbackSources map[string]str
 		if device == "" {
 			continue
 		}
-		sampleRate := conf.SampleRate
-		if src.SampleRate > 0 {
-			sampleRate = src.SampleRate
-		}
+		sampleRate := conf.EffectiveSampleRate(src.SampleRate)
 
 		// Default to an ALSA audio card; promote to a stream type only when the
 		// device is actually a network stream URL. This keeps a misplaced
@@ -2863,4 +2848,23 @@ func logHLSCleanup(err error) {
 		log.Info("cleaned up leftover HLS streaming files",
 			logger.String("operation", "cleanup_hls_files"))
 	}
+}
+
+// streamHealthLookup is the part of audiocore.StreamManager that
+// streamRecoveryState needs.
+type streamHealthLookup interface {
+	StreamHealth(sourceID string) (*audiocore.StreamHealth, error)
+}
+
+// streamRecoveryState reports the stream producer's recovery intent for
+// sourceID, for the liveness watchdog's RecoveryState callback. Sound-card
+// sources are not tracked by the stream manager and the FFmpeg producer reports
+// no intent, so a lookup miss returns RecoveryUnknown with a zero time, which
+// takes the watchdog's legacy restart path.
+func streamRecoveryState(mgr streamHealthLookup, sourceID string) (audiocore.RecoveryState, time.Time) {
+	h, err := mgr.StreamHealth(sourceID)
+	if err != nil || h == nil {
+		return audiocore.RecoveryUnknown, time.Time{}
+	}
+	return h.Recovery, h.RecoveryEntered
 }

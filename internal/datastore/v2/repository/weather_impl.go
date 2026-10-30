@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -102,34 +101,6 @@ func (r *weatherRepository) GetHourlyWeather(ctx context.Context, date string) (
 	return weather, err
 }
 
-// GetHourlyWeatherInLocation retrieves hourly weather for a date in a specific timezone.
-func (r *weatherRepository) GetHourlyWeatherInLocation(ctx context.Context, date string, loc *time.Location) ([]entities.HourlyWeather, error) {
-	// Parse the date in the given location
-	startOfDay, err := time.ParseInLocation("2006-01-02", date, loc)
-	if err != nil {
-		return nil, err
-	}
-	// Use AddDate instead of Add(24*time.Hour) to correctly handle DST transitions
-	// where days can be 23 hours (spring forward) or 25 hours (fall back)
-	endOfDay := startOfDay.AddDate(0, 0, 1)
-
-	var weather []entities.HourlyWeather
-	// Convert timestamps to Unix epoch seconds for comparison.
-	// This handles legacy records stored with local timezone offsets alongside new UTC records.
-	var whereClause string
-	if r.isMySQL {
-		whereClause = "UNIX_TIMESTAMP(time) >= UNIX_TIMESTAMP(?) AND UNIX_TIMESTAMP(time) < UNIX_TIMESTAMP(?)"
-	} else {
-		whereClause = "strftime('%s', time) >= strftime('%s', ?) AND strftime('%s', time) < strftime('%s', ?)"
-	}
-
-	err = r.db.WithContext(ctx).Table(r.hourlyWeatherTable()).
-		Where(whereClause, startOfDay, endOfDay).
-		Order("time ASC").
-		Find(&weather).Error
-	return weather, err
-}
-
 // LatestHourlyWeather retrieves the most recent hourly weather entry.
 func (r *weatherRepository) LatestHourlyWeather(ctx context.Context) (*entities.HourlyWeather, error) {
 	var weather entities.HourlyWeather
@@ -172,10 +143,7 @@ func (r *weatherRepository) SaveAllDailyEvents(ctx context.Context, events []ent
 
 		err := datastore.RetryOnLock(ctx, "v2_save_all_daily_events", func() error {
 			return r.db.WithContext(ctx).Table(r.dailyEventsTable()).
-				Clauses(clause.OnConflict{
-					Columns:   []clause.Column{{Name: "date"}},
-					DoNothing: true,
-				}).
+				Clauses(onConflictSkip(r.isMySQL, dailyEventsDateColumn, clause.Column{Name: dailyEventsDateColumn})).
 				Create(&batch).Error
 		}, r.metrics)
 		if err != nil {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/privacy"
@@ -377,6 +378,14 @@ func (c *GormDatabaseInfoCollector) collectMySQLInfo(ctx context.Context, info *
 		*errs = append(*errs, fmt.Sprintf("mysql version: %v", err))
 	} else {
 		info.EngineVersion = version
+		info.ServerSupport = string(dbserver.AssessRaw(version).Level)
+	}
+
+	// Default character set of the schema
+	if report, err := dbserver.QueryCharset(ctx, c.db); err != nil {
+		*errs = append(*errs, fmt.Sprintf("mysql charset: %v", err))
+	} else {
+		info.SchemaCharset = report.SchemaCharset
 	}
 
 	// Integrity check not available for MySQL
@@ -526,6 +535,12 @@ func (c *GormDatabaseInfoCollector) collectMigrationState(ctx context.Context, i
 		MigratedRecords:  state.MigratedRecords,
 		ErrorMessage:     state.ErrorMessage,
 		RelatedDataError: state.RelatedDataError,
+	}
+	if outcome := state.AuxiliaryDataOutcome(); outcome != entities.AuxiliaryDataStatusUnknown {
+		msi.AuxiliaryDataStatus = string(outcome)
+		if outcome == entities.AuxiliaryDataStatusFailed {
+			msi.AuxiliaryDataError = state.AuxiliaryDataError
+		}
 	}
 	if state.StartedAt != nil {
 		s := state.StartedAt.UTC().Format(time.RFC3339)

@@ -50,6 +50,10 @@ export interface EqualizerResponse {
   /** Sample rate the curve was computed at, in Hz. */
   sampleRate: number;
   enabled: boolean;
+  /** Lowest frequency the backend swept, in Hz. */
+  minHz: number;
+  /** Highest frequency the backend swept, in Hz; the graph sizes its axis from it. */
+  maxHz: number;
   /** Curve points, ascending and unique in `hz`. */
   points: EqualizerResponsePoint[];
   skipped: EqualizerSkippedFilter[];
@@ -165,12 +169,15 @@ export function parseEqualizerResponse(data: unknown, filterCount: number): Equa
   if (!isPlainObject(data)) {
     throw new Error('equalizer response is not an object');
   }
-  const { sampleRate, enabled, points, skipped } = data;
+  const { sampleRate, enabled, minHz, maxHz, points, skipped } = data;
   if (!isFiniteNumber(sampleRate) || sampleRate <= 0) {
     throw new Error('equalizer response has no valid sampleRate');
   }
   if (typeof enabled !== 'boolean') {
     throw new Error('equalizer response has no enabled flag');
+  }
+  if (!isFiniteNumber(minHz) || minHz <= 0 || !isFiniteNumber(maxHz) || maxHz <= minHz) {
+    throw new Error('equalizer response has no valid frequency range');
   }
   if (!Array.isArray(points) || points.length === 0) {
     throw new Error('equalizer response has no points');
@@ -220,7 +227,7 @@ export function parseEqualizerResponse(data: unknown, filterCount: number): Equa
     });
   }
 
-  return { sampleRate, enabled, points: parsedPoints, skipped: parsedSkipped };
+  return { sampleRate, enabled, minHz, maxHz, points: parsedPoints, skipped: parsedSkipped };
 }
 
 /** Request the response curve for `request` and validate the result. */

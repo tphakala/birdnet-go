@@ -9,6 +9,8 @@
 package integrations
 
 import (
+	"context"
+	"net"
 	"sync"
 	"testing"
 	"time"
@@ -22,17 +24,18 @@ import (
 )
 
 // newTestHandler builds an integrations Handler around a *apicore.Core with
-// in-memory test doubles for the facade's settings-save machinery. The doubles
-// mirror the production behavior: getSettingsOrFallback reads the core's atomic
-// snapshot, publishAndSaveSettings stores the updated snapshot back (no disk
-// write, matching the original DisableSaveSettings=true), and handleSettingsChanges
-// is a no-op. They share the supplied mutex so the handler serialises just as the
-// facade does.
+// in-memory test doubles for the facade's settings-save machinery.
+// updateAndSaveSettings works on the core's own atomic snapshot, like a
+// controller that does not own the global singleton; it never reads the
+// process-global settings, so it does not exercise the global-owner path. It
+// clones the core snapshot, applies the mutation and stores it back (no disk
+// write, matching the original DisableSaveSettings=true), and
+// handleSettingsChanges is a no-op. They share the supplied mutex so the
+// handler serialises just as the facade does.
 func newTestHandler(t *testing.T, core *apicore.Core, mu *sync.RWMutex) *Handler {
 	t.Helper()
 	return New(core, mu,
-		func() *conf.Settings { return core.Settings.Load() },
-		func(_, updated *conf.Settings) error { core.Settings.Store(updated); return nil },
+		apitest.CoreSettingsUpdater(core),
 		func(_, _ *conf.Settings) error { return nil },
 	)
 }
@@ -47,6 +50,39 @@ func newIntegrationsTestHandler(t *testing.T) (*echo.Echo, *Handler) {
 	core := apitest.NewCore(t, apitest.WithEcho(e))
 	var mu sync.RWMutex
 	return e, newTestHandler(t, core, &mu)
+}
+
+// newRefusingMQTTBroker starts a local TCP listener that accepts each connection
+// and closes it at once, and returns its tcp:// URL for use as an MQTT broker.
+// A connection attempt fails fast with a connection error and nothing leaves
+// the machine. The listener is closed when the test ends.
+func newRefusingMQTTBroker(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			_ = conn.Close()
+		}
+	}()
+	t.Cleanup(func() { _ = ln.Close() })
+	return "tcp://" + ln.Addr().String()
+}
+
+// cancelledContext returns a context that is already cancelled. A request built
+// on it makes the handlers' outbound HTTP calls fail before any DNS lookup or
+// dial (net/http transport.go roundTrip checks ctx.Done() first, Go 1.27.3
+// lines 694-698), and the MQTT and BirdWeather test clients return before
+// their stages (mqtt/testing.go:378, birdweather/connection_probe.go:957).
+func cancelledContext(t *testing.T) context.Context {
+	t.Helper()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	return ctx
 }
 
 // generateTestCertKeyPair creates a valid self-signed cert+key pair for testing.

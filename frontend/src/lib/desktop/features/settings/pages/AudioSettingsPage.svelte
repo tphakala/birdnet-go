@@ -434,9 +434,6 @@
     })()
   );
 
-  // Check if ffmpeg is available
-  let ffmpegAvailable = $state(true); // Assume true for now
-
   // Bitrate slider configuration based on format
   let bitrateConfig = $derived(getBitrateConfig(settings.audio.export.type));
 
@@ -1337,10 +1334,7 @@
                 step={bitrateConfig.step}
                 size="sm"
                 unit="k"
-                disabled={!settings.audio.export.enabled ||
-                  store.isLoading ||
-                  store.isSaving ||
-                  !ffmpegAvailable}
+                disabled={!settings.audio.export.enabled || store.isLoading || store.isSaving}
                 formatValue={(v: number) => `${v}k`}
                 helpText={t('settings.audio.fileSettings.bitrateHelp', {
                   min: bitrateConfig.min,

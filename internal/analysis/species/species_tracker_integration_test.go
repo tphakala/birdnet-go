@@ -4,6 +4,8 @@ package species
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -62,7 +64,7 @@ func TestFullWorkflow_BasicTracking(t *testing.T) {
 	assert.Equal(t, 0, status.DaysSinceFirst)
 
 	// Test detection after window expires
-	laterTime := newDetectionTime.Add(15 * 24 * time.Hour)
+	laterTime := newDetectionTime.AddDate(0, 0, 15)
 	isNew, days = tracker.CheckAndUpdateSpecies("New_Species", laterTime)
 	assert.False(t, isNew, "Species should no longer be new after window")
 	assert.Equal(t, 15, days)
@@ -136,8 +138,10 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 	// Set current year for testing
 	tracker.SetCurrentYearForTesting(2024)
 
-	// Initialize from database
-	err := tracker.InitFromDatabase()
+	// Load the 2024 yearly data at a fixed instant (InitFromDatabase reads the real clock)
+	tracker.mu.Lock()
+	err := tracker.loadYearlyDataFromDatabase(t.Context(), time.Date(2024, 6, 15, 0, 0, 0, 0, time.UTC))
+	tracker.mu.Unlock()
 	require.NoError(t, err)
 
 	// Check species from current year
@@ -155,13 +159,23 @@ func TestFullWorkflow_YearlyTracking(t *testing.T) {
 	isNew, _ := tracker.CheckAndUpdateSpecies("New_2024", time.Date(2024, 8, 1, 0, 0, 0, 0, time.UTC))
 	assert.True(t, isNew, "New species in 2024 should be new")
 
-	// Simulate year transition to 2025
-	tracker.SetCurrentYearForTesting(2025)
-	tracker.checkAndResetPeriods(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
+	// Simulate year transition to 2025 through the live path: the first detection
+	// dated in 2025 must reset the yearly set.
+	const newYearSpecies = "New_2025"
+	tracker.UpdateSpecies(newYearSpecies, time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
 
-	// Previous year's species should now be new
+	// Assert the reset before any further tracker call: GetSpeciesStatus would reset on its own.
+	tracker.mu.RLock()
+	gotYear := tracker.currentYear
+	gotSet := slices.Collect(maps.Keys(tracker.speciesThisYear))
+	tracker.mu.RUnlock()
+	assert.Equal(t, 2025, gotYear, "Detection dated in 2025 should advance the tracking year")
+	assert.ElementsMatch(t, []string{newYearSpecies}, gotSet, "Previous year's species should be cleared by the reset")
+
+	// Previous year's species should now be new this year
 	status = tracker.GetSpeciesStatus("Species_2024", time.Date(2025, 2, 1, 0, 0, 0, 0, time.UTC))
-	assert.True(t, status.IsNew, "Previous year's species should be new after reset")
+	assert.True(t, status.IsNewThisYear, "Previous year's species should be new this year after the reset")
+	assert.Nil(t, status.FirstThisYear, "Previous year's species should have no first-this-year date after the reset")
 
 	t.Log("✓ Yearly tracking workflow completed successfully")
 }

@@ -91,11 +91,11 @@ All frames are dispatched through the `AudioRouter`, which fans out each frame t
 
 ### Sample Rates by Model
 
-| Model | Inference Rate | Source Capture Rate | Resampling |
-|-------|---------------|-------------------|------------|
-| BirdNET v2.4 | 48 kHz | 48 kHz | None (or resample from source) |
-| Perch v2 | 32 kHz | 48 kHz | Downsampled by router |
-| BattyBirdNET | 48 kHz (pretend) | 96-256 kHz | None (the slow-down trick) |
+| Model        | Inference Rate   | Source Capture Rate | Resampling                     |
+| ------------ | ---------------- | ------------------- | ------------------------------ |
+| BirdNET v2.4 | 48 kHz           | 48 kHz              | None (or resample from source) |
+| Perch v2     | 32 kHz           | 48 kHz              | Downsampled by router          |
+| BattyBirdNET | 48 kHz (pretend) | 96-256 kHz          | None (the slow-down trick)     |
 
 ## Stage 2: Buffering
 
@@ -152,6 +152,7 @@ flowchart LR
 **Perch v2**: Runs ONNX, produces 14795 multi-taxa species probabilities (birds, insects, amphibians, mammals). Larger model, needs more CPU and RAM.
 
 **BattyBirdNET** (two-stage):
+
 1. The BirdNET v2.4 ONNX model (patched to expose embeddings) extracts a 1024-dimensional embedding vector from the `GLOBAL_AVG_POOL` layer
 2. A lightweight regional bat classifier (e.g., Europe, Americas) takes the embedding as input and outputs bat species probabilities
 3. Results are filtered by the bat confidence threshold
@@ -200,10 +201,11 @@ A single goroutine reads from `ResultsQueue` and processes each batch of results
 
 ### Cross-Model Detection Consensus
 
-Detections from different models for the **same species on the same source** are merged into a single `PendingDetection`. The key is `sourceID:commonName` (no model ID in the key).
+Detections from different models for the **same species on the same source** are merged into a single `PendingDetection`. The key is `sourceID:scientificName`, with the scientific name lower-cased (no model ID in the key).
 
 Each pending detection tracks:
-- `ModelContributions`: a map from model ID to `{HitCount, MaxConfidence, LastHitAt}`
+
+- `ModelContributions`: a map from model ID to `{HitCount, MaxConfidence, MinConfidence, ConfidenceSum, FirstHitAt, LastHitAt}`
 - `BestModelID`: which model produced the single highest confidence score
 - `FlushDeadline`: when to evaluate the detection for approval
 
@@ -235,11 +237,18 @@ sequenceDiagram
 
 Each `PendingDetection` stores a `ModelContributions` map tracking per-model statistics:
 
-| Field | Purpose |
-|-------|---------|
-| `HitCount` | Number of analysis windows where this model detected the species |
-| `MaxConfidence` | Highest single-detection confidence from this model |
-| `LastHitAt` | Timestamp of the most recent hit from this model |
+| Field           | Purpose                                                          |
+| --------------- | ---------------------------------------------------------------- |
+| `HitCount`      | Number of analysis windows where this model detected the species |
+| `MaxConfidence` | Highest single-detection confidence from this model              |
+| `MinConfidence` | Lowest single-detection confidence from this model               |
+| `ConfidenceSum` | Sum of the confidences of this model's hits (mean = sum / hits)  |
+| `FirstHitAt`    | Audio capture time of the end of this model's first hit window   |
+| `LastHitAt`     | Audio capture time of the end of this model's latest hit window  |
+
+When the audio source supplies no capture time, the hit times use the time of processing instead.
+
+When a detection is approved, these per-model statistics are saved with it in the `DetectionModelContribution` table. `MinConfidence`, `ConfidenceSum`, `FirstHitAt` and `LastHitAt` are stored together or not at all: a contribution that lacks them (for example when two entries of one model are merged and only one of them has them) is stored with NULL in all four.
 
 At flush time, the total hit count is the **sum across all models**. This means:
 
@@ -253,12 +262,12 @@ The `BestModelID` field tracks which model produced the highest individual confi
 
 The range filter limits detections to species that are geographically plausible at the configured location and time of year.
 
-| Model | Range Filtered? | Reason |
-|-------|----------------|--------|
-| BirdNET v2.4 | Always | BirdNET species are in the geomodel |
-| Perch v2 | Only with BirdNET Geomodel v3.0 | v3 covers Perch's expanded label set |
-| BattyBirdNET | Never | Bat species have independent range data |
-| BSG | Never | Independent species set |
+| Model        | Range Filtered?                 | Reason                                  |
+| ------------ | ------------------------------- | --------------------------------------- |
+| BirdNET v2.4 | Always                          | BirdNET species are in the geomodel     |
+| Perch v2     | Only with BirdNET Geomodel v3.0 | v3 covers Perch's expanded label set    |
+| BattyBirdNET | Never                           | Bat species have independent range data |
+| BSG          | Never                           | Independent species set                 |
 
 At startup, `BuildRangeFilter()` runs `PredictSpeciesScores(lat, lon, week, threshold)` on the geomodel to build a list of included species. Per-detection, `shouldFilterDetection()` checks `settings.IsSpeciesIncluded(species)` for applicable models.
 
@@ -275,7 +284,7 @@ flowchart LR
 
     COMP --> DBA[DatabaseAction\nSave to SQLite/MySQL]
     COMP --> SSEA[SSE Broadcast\nLive web feed]
-    COMP --> MQTTA[MQTT Publish\nHome Assistant discovery]
+    COMP -->|enqueues after save| MQTTA[MQTT Publish job\nretried by the queue]
 
     DBA -->|DetectionEvent| EB[Event Bus]
     EB --> ALRT[Alert Engine\nPush notifications\nWebhooks]
@@ -285,7 +294,7 @@ flowchart LR
     GA --> CMDA[Custom Command]
 ```
 
-**CompositeAction** wraps Database, SSE, and MQTT as sequential steps. `SaveAudioAction` runs separately to avoid slow FFmpeg encoding blocking the real-time broadcast.
+**CompositeAction** runs the database save, a step that enqueues the MQTT publish as its own job, and the SSE broadcast, in that order. MQTT is a separate job so that `realtime.mqtt.retrysettings` applies to it, and it still starts after the save so the payload carries the database id; the composite is retried only while the database save has stored nothing. If the database is unreachable (connection refused, host unreachable, a connection that dropped before the commit was sent), the save is retried for about five minutes before the detection is dropped, and MQTT and SSE then run once after the save that lands. Database lock and deadlock errors that happen before the commit are retried the same way. The composite also stays pending while an earlier attempt is still saving or still running the steps after the save, and the next attempt then continues from the stored row instead of saving again. A save that finishes only after the last attempt has ended keeps its row, but MQTT and SSE do not run for it; the log says so. A failure whose commit outcome is unknown, such as a connection lost while the commit was in flight, is logged and not retried, because the row may already be stored. Without a database, SSE and MQTT are queued as independent actions. `SaveAudioAction` is queued as a separate job that runs alongside it, so slow clip encoding never blocks the real-time broadcast. A client can therefore request a clip before its file exists; the media API waits briefly for it and answers 503 with `Retry-After` while the export is still pending.
 
 ### Audio Export
 
@@ -295,7 +304,7 @@ flowchart LR
 
 ### JobQueue
 
-The `JobQueue` is a bounded queue with retry/backoff support. BirdWeather and MQTT actions have configurable retry policies. `SaveAudioAction` for Extended Capture uses exponential backoff (1s to 30s, up to ~20 minutes for long captures).
+The `JobQueue` is a bounded queue with retry/backoff support. BirdWeather and MQTT actions have configurable retry policies, and the database save composite retries for about five minutes while the database is unreachable. `SaveAudioAction` for Extended Capture uses exponential backoff (1s to 30s, up to ~20 minutes for long captures).
 
 ## Complete Data Flow Summary
 

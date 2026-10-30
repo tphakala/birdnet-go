@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/tphakala/birdnet-go/internal/conf"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 )
 
 // testPublicPeerAddr is a public (untrusted-by-default) RemoteAddr reused across
@@ -283,28 +284,57 @@ func TestTrustedProxyIPExtractor_NilSettings(t *testing.T) {
 	}
 }
 
-// TestLogIgnoredForwardedHeader exercises the DEBUG breadcrumb helper for both
-// the header-present and header-absent (early-return) branches. It asserts the
-// path is panic-safe; the log line itself is a side effect on the global logger
-// and is not captured here.
-func TestLogIgnoredForwardedHeader(t *testing.T) {
-	t.Parallel()
+// TestTrustedProxyIPExtractor_LogsIgnoredForwardedHeaders checks the DEBUG
+// breadcrumb an operator uses to spot a missing trusted proxy: it names the
+// untrusted peer and the forwarded headers that were ignored, and it is not
+// written for a trusted peer or a request without forwarded headers.
+func TestTrustedProxyIPExtractor_LogsIgnoredForwardedHeaders(t *testing.T) {
+	// Not parallel: logtest swaps the process-global logger.
+	tests := []struct {
+		name        string
+		remoteAddr  string
+		headers     map[string]string
+		wantLogged  bool
+		wantHeaders string
+	}{
+		{
+			name:        "untrusted peer with forwarded headers",
+			remoteAddr:  testPublicPeerAddr,
+			headers:     map[string]string{"CF-Connecting-IP": "1.2.3.4", "X-Forwarded-For": "1.2.3.4", "X-Real-IP": "1.2.3.4"},
+			wantLogged:  true,
+			wantHeaders: "headers=CF-Connecting-IP,X-Forwarded-For,X-Real-Ip",
+		},
+		{
+			name:       "untrusted peer without forwarded headers",
+			remoteAddr: testPublicPeerAddr,
+		},
+		{
+			name:       "trusted peer with forwarded headers",
+			remoteAddr: "127.0.0.1:40000",
+			headers:    map[string]string{"X-Forwarded-For": "1.2.3.4"},
+		},
+	}
 
-	t.Run("with forwarded headers", func(t *testing.T) {
-		t.Parallel()
-		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		req.RemoteAddr = testPublicPeerAddr
-		req.Header.Set("CF-Connecting-IP", "1.2.3.4")
-		req.Header.Set("X-Forwarded-For", "1.2.3.4")
-		assert.NotPanics(t, func() { logIgnoredForwardedHeader(req, "203.0.113.50") })
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			buf := logtest.CaptureBuffer(t)
+			extractor := newTrustedProxyIPExtractor(func() *conf.Settings { return &conf.Settings{} })
 
-	t.Run("without forwarded headers", func(t *testing.T) {
-		t.Parallel()
-		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		req.RemoteAddr = testPublicPeerAddr
-		assert.NotPanics(t, func() { logIgnoredForwardedHeader(req, "203.0.113.50") })
-	})
+			req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+			req.RemoteAddr = tt.remoteAddr
+			for k, v := range tt.headers {
+				req.Header.Set(k, v)
+			}
+			extractor(req)
+
+			if !tt.wantLogged {
+				assert.NotContains(t, buf.String(), "peer=")
+				return
+			}
+			assert.Contains(t, buf.String(), "peer=203.0.113.50")
+			assert.Contains(t, buf.String(), tt.wantHeaders)
+		})
+	}
 }
 
 // TestHeaderNonEmpty_CanonicalKey verifies the direct-map header check uses the

@@ -20,11 +20,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/shirou/gopsutil/v3/disk"
+	"github.com/shirou/gopsutil/v3/host"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/tphakala/birdnet-go/internal/conf"
 	diagpkg "github.com/tphakala/birdnet-go/internal/diagnostics"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/mempolicy"
 	"github.com/tphakala/birdnet-go/internal/privacy"
 	"github.com/tphakala/birdnet-go/internal/sysinfo"
 	"gopkg.in/yaml.v3"
@@ -71,6 +74,7 @@ const (
 	metadataFileName       = "metadata.json"
 	configYAMLFileName     = "config.yaml"
 	systemInfoFileName     = "system_info.json"
+	runtimeInfoFileName    = "runtime_info.json"
 	databaseInfoFileName   = "database_info.json"
 	deploymentInfoFileName = "deployment_info.json"
 	appEventsFileName      = "app_events.json"
@@ -217,6 +221,8 @@ type Collector struct {
 	sensitiveKeys     []string
 	dbInfoProvider    DatabaseInfoProvider
 	appEventsProvider AppEventsProvider
+	// runtimeInfoProvider supplies runtime_info.json; nil in the CLI.
+	runtimeInfoProvider RuntimeInfoProvider
 }
 
 // DefaultSensitiveKeys returns the default list of sensitive configuration keys to redact.
@@ -473,7 +479,8 @@ func (c *Collector) Collect(ctx context.Context, opts CollectorOptions) (*Suppor
 	if opts.IncludeSystemInfo {
 		getLogger().Debug("support: collecting system information")
 		dump.Diagnostics.SystemCollection.Attempted = true
-		dump.SystemInfo = c.collectSystemInfo()
+		dump.SystemInfo = c.collectSystemInfo(ctx)
+		dump.RuntimeInfo = c.collectRuntimeInfo(ctx)
 		dump.Diagnostics.SystemCollection.Successful = true
 		getLogger().Debug("support: system information collected",
 			logger.String("os", dump.SystemInfo.OS),
@@ -664,6 +671,28 @@ func (c *Collector) CreateArchive(ctx context.Context, dump *SupportDump, opts C
 		getLogger().Debug("support: system info added successfully")
 	}
 
+	// Add runtime info: the file exists whenever system info was requested, with
+	// available=false when no running instance was inspected.
+	if dump.RuntimeInfo != nil {
+		runtimeFile, err := w.Create(runtimeInfoFileName)
+		if err != nil {
+			getLogger().Error("support: failed to create runtime info file in archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "create_runtime_info_file").
+				Build()
+		}
+		if err := json.NewEncoder(runtimeFile).Encode(dump.RuntimeInfo); err != nil {
+			getLogger().Error("support: failed to write runtime info to archive", logger.Error(err))
+			return nil, errors.New(err).
+				Component("support").
+				Category(errors.CategoryFileIO).
+				Context("operation", "write_runtime_info").
+				Build()
+		}
+	}
+
 	// Add database info if collected
 	if dump.DatabaseInfo != nil {
 		getLogger().Debug("support: adding database info to archive")
@@ -834,7 +863,7 @@ func (c *Collector) collectRuntimeEnv(allowlist []string) map[string]string {
 }
 
 // collectSystemInfo gathers system information
-func (c *Collector) collectSystemInfo() SystemInfo {
+func (c *Collector) collectSystemInfo(ctx context.Context) SystemInfo {
 	info := SystemInfo{
 		OS:           runtime.GOOS,
 		Architecture: runtime.GOARCH,
@@ -854,6 +883,9 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 		runtime.ReadMemStats(&memStats)
 		info.MemoryMB = memStats.Sys / bytesPerMB
 	}
+
+	collectHostFacts(&info)
+	info.USB, info.SoundCards = collectHardwareInventory(ctx, runtime.GOOS, hardwareInventoryRoot)
 
 	// Collect disk information
 	partitions, err := disk.Partitions(false)
@@ -898,6 +930,30 @@ func (c *Collector) collectSystemInfo() SystemInfo {
 	}
 
 	return info
+}
+
+// collectHostFacts fills the CPU, board, SIMD, kernel and cgroup memory fields
+// of info. Every probe is best effort: a failure leaves its field empty.
+func collectHostFacts(info *SystemInfo) {
+	info.CPUModel = sysinfo.GetCPUModel()
+	info.CPUFlags = sysinfo.GetCPUFlags()
+
+	hw := hwprofile.Hardware()
+	info.Board = hw.Board.Model
+	info.SIMD = hw.SIMD
+
+	if kernel, err := host.KernelVersion(); err == nil {
+		info.KernelVersion = kernel
+	}
+
+	if cg := mempolicy.DetectCgroupMemory(); cg.Version != "" {
+		info.CgroupMemory = &CgroupMemoryInfo{
+			Version:    cg.Version,
+			LimitBytes: cg.LimitBytes,
+			LimitExact: cg.LimitExact,
+			UsageBytes: cg.UsageBytes,
+		}
+	}
 }
 
 // collectConfig loads and scrubs the configuration
@@ -949,8 +1005,9 @@ func (c *Collector) scrubConfig(config map[string]any) map[string]any {
 //   - IP address lists (trustedproxies, plainhttpsessionclients) keep their
 //     length, each entry replaced by its address class; the cloudflare preset is kept
 //
-// For non-sensitive keys, it recursively processes nested structures
-// and sanitizes RTSP URLs in string values.
+// For non-sensitive keys, it recursively processes nested structures,
+// sanitizes RTSP URLs in string values and masks the USB serial in "usb-id:"
+// device tokens (privacy.RedactUSBDeviceID).
 func (c *Collector) scrubValue(key string, value any, sensitiveKeys []string) any {
 	// Check if key is sensitive using word boundary matching
 	lowerKey := strings.ToLower(key)
@@ -1057,8 +1114,10 @@ func (c *Collector) processNonSensitiveValue(key string, value any, sensitiveKey
 		}
 		return scrubbed
 	case string:
-		// Sanitize RTSP URLs in all string values (existing behavior)
-		return privacy.SanitizeRTSPUrls(v)
+		// Sanitize RTSP URLs and mask USB serials in all string values. A device
+		// value (audio source, sources[].device) is exactly one identifier, so the
+		// whole-value helper applies and also masks a serial that contains spaces.
+		return privacy.RedactUSBDeviceID(privacy.SanitizeRTSPUrls(v))
 	default:
 		return value
 	}

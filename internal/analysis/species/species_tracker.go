@@ -13,6 +13,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // Constants for better maintainability and avoiding magic numbers
@@ -138,7 +139,7 @@ type SpeciesStatus struct {
 	DaysSinceLastSeen int // Days since the previous detection before a return episode; -1 if first-ever / unknown
 
 	// Multi-period tracking
-	FirstThisYear   *time.Time // First detection this calendar year
+	FirstThisYear   *time.Time // First detection this tracking year
 	FirstThisSeason *time.Time // First detection this season
 	CurrentSeason   string     // Current season name
 
@@ -184,7 +185,7 @@ type SpeciesTracker struct {
 	// Multi-period tracking
 	speciesThisYear map[string]time.Time            // scientificName -> first detection this year
 	speciesBySeason map[string]map[string]time.Time // season -> scientificName -> first detection time
-	currentYear     int
+	currentYear     int                             // tracking year: the year whose reset date starts the current yearly period; 0 means unset
 	currentSeason   string
 	seasons         map[string]seasonDates // season name -> start dates
 
@@ -193,7 +194,7 @@ type SpeciesTracker struct {
 	// they are not "new this season". seasonCarryoverStart is the (date-only)
 	// start of the season the set describes; zero until first computed.
 	seasonCarryover      map[string]struct{}
-	seasonCarryoverStart time.Time
+	seasonCarryoverStart wallclock.Date
 
 	// Configuration
 	ds                 SpeciesDatastore
@@ -276,8 +277,13 @@ type seasonDates struct {
 // NewTrackerFromSettings creates a tracker from configuration settings
 // Note: All time calculations use the system's local timezone via time.Now()
 func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingSettings) *SpeciesTracker {
-	now := time.Now() // Uses system local timezone
+	return newTrackerFromSettingsAt(ds, settings, time.Now()) // Uses system local timezone
+}
 
+// newTrackerFromSettingsAt builds a tracker as if it were created at now.
+// It is the clock seam for NewTrackerFromSettings; the database load has its
+// own seam, InitFromDatabaseAt.
+func newTrackerFromSettingsAt(ds SpeciesDatastore, settings *conf.SpeciesTrackingSettings, now time.Time) *SpeciesTracker {
 	// Log initialization
 	getLog().Debug("Creating new species tracker",
 		logger.Bool("enabled", settings.Enabled),
@@ -298,7 +304,6 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 		// Multi-period tracking
 		speciesThisYear: make(map[string]time.Time, initialSpeciesCapacity),
 		speciesBySeason: make(map[string]map[string]time.Time),
-		currentYear:     now.Year(),
 		seasons:         make(map[string]seasonDates),
 
 		// Configuration
@@ -355,6 +360,7 @@ func NewTrackerFromSettings(ds SpeciesDatastore, settings *conf.SpeciesTrackingS
 	}
 
 	tracker.currentSeason = tracker.getCurrentSeason(now)
+	tracker.currentYear = tracker.getTrackingYear(now)
 
 	getLog().Debug("Species tracker initialized",
 		logger.String("current_season", tracker.currentSeason),
@@ -424,7 +430,7 @@ func (t *SpeciesTracker) InitFromDatabaseAsync() {
 	t.asyncOpsWg.Go(func() {
 		defer t.warming.Store(false)
 		defer cancel()
-		if err := t.initFromDatabaseContext(ctx); err != nil {
+		if err := t.initFromDatabaseContext(ctx, time.Now()); err != nil {
 			getLog().Error("species tracker background initialization failed; continuing with live detections",
 				logger.Error(err),
 				logger.String("operation", "species_tracker_async_init"),

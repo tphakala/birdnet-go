@@ -1,0 +1,69 @@
+name: Changed paths
+description: >
+  Reports whether a job should run, based on the files a pull request changes.
+  Always true outside pull requests, so pushes to main and manual runs stay the
+  full check. Also true when a forcing label is set or the diff cannot be read.
+  The caller must check out the repository with fetch-depth 2 first.
+
+inputs:
+  name:
+    description: Job being gated, used in log and summary lines.
+    required: true
+  pattern:
+    description: Extended regex matched against each changed file path.
+    required: true
+  labels:
+    description: Space-separated pull request labels that force the job to run.
+    required: false
+    default: ''
+
+outputs:
+  matched:
+    description: "'true' when the gated job should run, 'false' when it can be skipped."
+    value: ${{ steps.filter.outputs.matched }}
+
+runs:
+  using: composite
+  steps:
+    - id: filter
+      shell: bash
+      env:
+        GATED_JOB: ${{ inputs.name }}
+        PATTERN: ${{ inputs.pattern }}
+        FORCE_LABELS: ${{ inputs.labels }}
+        EVENT_NAME: ${{ github.event_name }}
+        PR_LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+      run: |
+        run_it() {
+          echo "matched=true" >> "$GITHUB_OUTPUT"
+          echo "${GATED_JOB} will run: $1"
+          exit 0
+        }
+
+        [ "$EVENT_NAME" = "pull_request" ] || run_it "event is ${EVENT_NAME}, not a pull request"
+
+        for label in $FORCE_LABELS; do
+          if jq -e --arg l "$label" 'index($l) != null' <<<"$PR_LABELS" > /dev/null; then
+            run_it "the ${label} label is set"
+          fi
+        done
+
+        # HEAD is the PR merge commit, so HEAD^1 is the base tip and the diff is
+        # the whole PR, not just the latest push.
+        CHANGED=$(git diff --name-only HEAD^1 HEAD) || run_it "could not diff against the base"
+
+        MATCHED=$(printf '%s\n' "$CHANGED" | grep -E "$PATTERN" || true)
+        if [ -n "$MATCHED" ]; then
+          echo "Files that trigger ${GATED_JOB}:"
+          echo "$MATCHED"
+          run_it "matching files changed"
+        fi
+
+        echo "matched=false" >> "$GITHUB_OUTPUT"
+        {
+          echo "### ${GATED_JOB} skipped"
+          echo "No file it depends on changed."
+          if [ -n "$FORCE_LABELS" ]; then
+            echo "Add one of these labels and push to force it: ${FORCE_LABELS}."
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"

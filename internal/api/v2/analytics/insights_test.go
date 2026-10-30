@@ -13,7 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
+	"github.com/tphakala/birdnet-go/internal/testutil"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // mockInsightsRepo is a simple mock for handler tests. When err is non-nil every
@@ -27,13 +30,22 @@ type mockInsightsRepo struct {
 	dashboardKPIs   *repository.DashboardKPIs
 	err             error
 
-	// lastTzOffsetSeconds records the most recent timezone offset forwarded by a handler, so
-	// tests can assert the handler actually threads analyticsTZOffset into the repository rather
-	// than passing 0 or a stale reference time.
-	lastTzOffsetSeconds int
+	// modelContributionStats is returned by GetModelContributionStats; lastStart and lastEnd
+	// record the range the handler forwarded.
+	modelContributionStats *repository.ModelContributionStats
+	lastStart, lastEnd     int64
+
+	// lastLoc and lastTodaySince record the zone and day start the dashboard handler forwarded,
+	// so tests can assert it hands the repository the zone it computed the day in.
+	lastLoc        *time.Location
+	lastTodaySince int64
+
+	// lastExpectedLoc is the zone the expected-today handler forwarded.
+	lastExpectedLoc *time.Location
 }
 
-func (m *mockInsightsRepo) GetExpectedSpeciesToday(_ context.Context, _ []repository.TimeRange, _ int, _ *uint) ([]repository.ExpectedSpecies, error) {
+func (m *mockInsightsRepo) GetExpectedSpeciesToday(_ context.Context, _ []repository.TimeRange, loc *time.Location, _ *uint) ([]repository.ExpectedSpecies, error) {
+	m.lastExpectedLoc = loc
 	return m.expectedSpecies, m.err
 }
 
@@ -41,7 +53,7 @@ func (m *mockInsightsRepo) GetPhantomSpecies(_ context.Context, _ int64, _ int, 
 	return m.phantomSpecies, m.err
 }
 
-func (m *mockInsightsRepo) GetDawnChorusRaw(_ context.Context, _ int64, _, _, _ int, _ *uint) ([]repository.DawnChorusRawEntry, error) {
+func (m *mockInsightsRepo) GetDawnChorusRaw(_ context.Context, _, _ int64, _, _ int, _ *time.Location, _ *uint) ([]repository.DawnChorusRawEntry, error) {
 	return m.dawnChorusRaw, m.err
 }
 
@@ -53,8 +65,13 @@ func (m *mockInsightsRepo) GetGoneQuiet(_ context.Context, _ int64, _ int, _ *ui
 	return m.goneQuiet, m.err
 }
 
-func (m *mockInsightsRepo) GetDashboardKPIs(_ context.Context, _ int64, tzOffsetSeconds int, _ *uint) (*repository.DashboardKPIs, error) {
-	m.lastTzOffsetSeconds = tzOffsetSeconds
+func (m *mockInsightsRepo) GetModelContributionStats(_ context.Context, start, end int64) (*repository.ModelContributionStats, error) {
+	m.lastStart, m.lastEnd = start, end
+	return m.modelContributionStats, m.err
+}
+
+func (m *mockInsightsRepo) GetDashboardKPIs(_ context.Context, todaySince int64, loc *time.Location, _ *uint) (*repository.DashboardKPIs, error) {
+	m.lastLoc, m.lastTodaySince = loc, todaySince
 	return m.dashboardKPIs, m.err
 }
 
@@ -134,13 +151,11 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	rec := httptest.NewRecorder()
 	ctx := e.NewContext(req, rec)
 
-	// Bracket the handler's internal time.Now() so the offset assertion holds even if a DST
-	// transition lands mid-test: the handler's offset must equal the local offset at some instant
-	// during the call (before or after are the only possible values, even across a boundary).
-	beforeOffset := repository.GetTimezoneOffsetAt(time.Local, time.Now())
+	// Bracket the handler's own clock read so the day-start assertion holds across local midnight.
+	before, _ := localDayStart(time.Now())
 	err := controller.getDashboardKPIsImpl(ctx)
 	require.NoError(t, err)
-	afterOffset := repository.GetTimezoneOffsetAt(time.Local, time.Now())
+	after, _ := localDayStart(time.Now())
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var resp DashboardKPIsResponse
@@ -149,10 +164,108 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	assert.Equal(t, int64(42), resp.TodayDetections)
 	assert.Equal(t, 2, resp.DetectionStreak.Days)
 
-	// The handler must forward the configured-timezone offset (not 0) so the repository buckets
-	// "today" in the same zone the handler computed the day boundary in.
-	assert.Contains(t, []int{beforeOffset, afterOffset}, mockRepo.lastTzOffsetSeconds,
-		"handler must thread analyticsTZOffset into GetDashboardKPIs")
+	// The handler must forward the zone it computed the day boundary in, so the repository
+	// buckets "today" with that zone's offsets rather than a single offset.
+	assert.Same(t, time.Local, mockRepo.lastLoc, "handler must pass the local zone to GetDashboardKPIs")
+	assert.Contains(t, []int64{before, after}, mockRepo.lastTodaySince, "handler must pass the start of the local day")
+}
+
+// TestGetExpectedToday_HandlerPassesLocalZone pins that the expected-today handler hands the
+// repository the local zone it built the year ranges in.
+func TestGetExpectedToday_HandlerPassesLocalZone(t *testing.T) {
+	t.Parallel()
+	mockRepo := &mockInsightsRepo{}
+	e, controller := setupInsightsTestController(t, mockRepo)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/insights/expected-today", http.NoBody)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.getExpectedTodayImpl(e.NewContext(req, rec)))
+	assert.Equal(t, http.StatusOK, rec.Code)
+	assert.Same(t, time.Local, mockRepo.lastExpectedLoc)
+}
+
+// TestLocalDayStart pins the dashboard's "today": the first instant of the local day and its
+// date label, on days where the zone's midnight is skipped (the clock jumps from 23:59 to
+// 01:00), where time.Date(y, m, d, 0, 0, 0, 0, loc) lands on the previous day.
+func TestLocalDayStart(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		zone      string
+		now       time.Time
+		wantDate  string
+		wantStart time.Time
+	}{
+		{
+			name:      "Havana spring forward skips midnight",
+			zone:      "America/Havana",
+			now:       time.Date(2026, 3, 8, 10, 0, 0, 0, time.UTC),
+			wantDate:  "2026-03-08",
+			wantStart: time.Date(2026, 3, 8, 5, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "Santiago spring forward skips midnight",
+			zone:      "America/Santiago",
+			now:       time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC),
+			wantDate:  "2026-09-06",
+			wantStart: time.Date(2026, 9, 6, 4, 0, 0, 0, time.UTC),
+		},
+		{
+			name:      "ordinary day starts at local midnight",
+			zone:      "Europe/Helsinki",
+			now:       time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC),
+			wantDate:  "2026-06-10",
+			wantStart: time.Date(2026, 6, 9, 21, 0, 0, 0, time.UTC),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			loc := testutil.ToolchainZones(t)[tt.zone]
+			require.NotNil(t, loc, "zone %s", tt.zone)
+			start, date := localDayStart(tt.now.In(loc))
+			assert.Equal(t, tt.wantDate, date)
+			assert.Equal(t, tt.wantStart.Unix(), start, "day start %s, want %s", time.Unix(start, 0).UTC(), tt.wantStart)
+		})
+	}
+}
+
+func TestGoneQuietDates(t *testing.T) {
+	t.Parallel()
+
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		now          time.Time
+		lastDetected time.Time
+		wantDate     string
+		wantDays     int
+	}{
+		{
+			name:         "span crosses spring-forward",
+			now:          time.Date(2026, 3, 30, 9, 0, 0, 0, helsinki),
+			lastDetected: time.Date(2026, 3, 15, 12, 0, 0, 0, helsinki),
+			wantDate:     "2026-03-15",
+			wantDays:     15,
+		},
+		{
+			name:         "date is read in the zone of now, not UTC",
+			now:          time.Date(2026, 7, 1, 10, 0, 0, 0, helsinki),
+			lastDetected: time.Date(2026, 6, 10, 0, 30, 0, 0, helsinki),
+			wantDate:     "2026-06-10",
+			wantDays:     21,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			date, days := goneQuietDates(tt.now, tt.lastDetected.Unix())
+			assert.Equal(t, tt.wantDate, date)
+			assert.Equal(t, tt.wantDays, days)
+		})
+	}
 }
 
 func TestGetMigration_Handler(t *testing.T) {
@@ -230,6 +343,11 @@ func TestInsightsEndpointContextErrors(t *testing.T) {
 			name:   "migration",
 			path:   "/api/v2/insights/migration",
 			invoke: func(c *Handler, ctx echo.Context) error { return c.getMigrationImpl(ctx) },
+		},
+		{
+			name:   "model contributions",
+			path:   "/api/v2/insights/model-contributions?start_date=2026-03-01",
+			invoke: func(c *Handler, ctx echo.Context) error { return c.getModelContributionStatsImpl(ctx) },
 		},
 		{
 			name:   "dashboard kpis",
@@ -363,6 +481,18 @@ func TestBuildYearRanges(t *testing.T) {
 			},
 		},
 		{
+			name:   "window wider than a year covers each whole year",
+			now:    time.Date(2026, 7, 1, 12, 0, 0, 0, time.Local),
+			window: 200,
+			checkFunc: func(t *testing.T, ranges []repository.TimeRange) {
+				t.Helper()
+				require.Len(t, ranges, expectedTodayMaxYears)
+				first, _ := wallclock.DayBounds(wallclock.Date{Year: 2016, Month: time.January, Day: 1}, time.Local)
+				_, afterLast := wallclock.DayBounds(wallclock.Date{Year: 2016, Month: time.December, Day: 31}, time.Local)
+				assert.Equal(t, repository.TimeRange{Start: first.Unix(), End: afterLast.Unix()}, ranges[0])
+			},
+		},
+		{
 			name:   "leap year Feb 29 handled correctly",
 			now:    time.Date(2024, 2, 29, 12, 0, 0, 0, time.Local),
 			window: 3,
@@ -381,6 +511,111 @@ func TestBuildYearRanges(t *testing.T) {
 			t.Parallel()
 			ranges := buildYearRanges(tt.now, tt.window)
 			tt.checkFunc(t, ranges)
+		})
+	}
+}
+
+// TestBuildYearRangesDayBounds pins that each range is the half-open span of whole local days,
+// [start of the first date, start of the day after the last date), on dates where DST moves
+// midnight: a skipped midnight must start the range at the transition (not an hour into the
+// previous day), and a repeated hour at the end of a day must stay inside the range.
+func TestBuildYearRangesDayBounds(t *testing.T) {
+	t.Parallel()
+	date := func(y int, m time.Month, d int) wallclock.Date { return wallclock.Date{Year: y, Month: m, Day: d} }
+	tests := []struct {
+		name      string
+		zone      string
+		now       time.Time
+		year      int
+		wantFirst wallclock.Date
+		wantLast  wallclock.Date
+	}{
+		{
+			name:      "Havana window starts on a skipped midnight",
+			zone:      "America/Havana",
+			now:       time.Date(2026, 3, 12, 12, 0, 0, 0, time.UTC),
+			year:      2025,
+			wantFirst: date(2025, time.March, 9),
+			wantLast:  date(2025, time.March, 15),
+		},
+		{
+			name:      "Santiago window ends on a day whose last hour repeats",
+			zone:      "America/Santiago",
+			now:       time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
+			year:      2025,
+			wantFirst: date(2025, time.March, 30),
+			wantLast:  date(2025, time.April, 5),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			loc := testutil.ToolchainZones(t)[tt.zone]
+			require.NotNil(t, loc, "zone %s", tt.zone)
+			now := tt.now.In(loc)
+			require.Equal(t, 7, wallclock.DaysBetween(tt.wantFirst, tt.wantLast)+1, "test window is +/-3 days around today")
+
+			first, _ := wallclock.DayBounds(tt.wantFirst, loc)
+			_, afterLast := wallclock.DayBounds(tt.wantLast, loc)
+			want := repository.TimeRange{Start: first.Unix(), End: afterLast.Unix()}
+
+			var inYear []repository.TimeRange
+			for _, r := range buildYearRanges(now, 3) {
+				if time.Unix(r.Start, 0).In(loc).Year() == tt.year {
+					inYear = append(inYear, r)
+				}
+			}
+			assert.Equal(t, []repository.TimeRange{want}, inYear)
+		})
+	}
+}
+
+// TestBuildYearRangesWrapAndLeapDay pins the exact ranges of the branches that wrap over a year
+// end and of a window centred on a leap day, in UTC so the expected instants are literal.
+func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
+	t.Parallel()
+	at := func(y int, m time.Month, d int) int64 { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() }
+	tests := []struct {
+		name   string
+		now    time.Time
+		window int
+		// tail is the end of the result, compared in full.
+		tail []repository.TimeRange
+	}{
+		{
+			name:   "early January splits a year into its tail and its head",
+			now:    time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC),
+			window: 3,
+			tail: []repository.TimeRange{
+				{Start: at(2025, time.December, 30), End: at(2026, time.January, 1)},
+				{Start: at(2025, time.January, 1), End: at(2025, time.January, 6)},
+			},
+		},
+		{
+			name:   "late December continues into the next year, not past the current one",
+			now:    time.Date(2026, 12, 30, 12, 0, 0, 0, time.UTC),
+			window: 3,
+			tail: []repository.TimeRange{
+				{Start: at(2024, time.December, 26), End: at(2025, time.January, 1)},
+				{Start: at(2025, time.January, 1), End: at(2025, time.January, 2)},
+				{Start: at(2025, time.December, 27), End: at(2026, time.January, 1)},
+			},
+		},
+		{
+			name:   "window centred on a leap day, in the non-leap year before",
+			now:    time.Date(2024, 2, 29, 12, 0, 0, 0, time.UTC),
+			window: 3,
+			tail: []repository.TimeRange{
+				{Start: at(2023, time.February, 26), End: at(2023, time.March, 5)},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ranges := buildYearRanges(tt.now, tt.window)
+			require.GreaterOrEqual(t, len(ranges), len(tt.tail))
+			assert.Equal(t, tt.tail, ranges[len(ranges)-len(tt.tail):])
 		})
 	}
 }
@@ -457,6 +692,50 @@ func TestGetDawnChorus_RejectsMalformedDays(t *testing.T) {
 			ctx := e.NewContext(req, rec)
 			_ = controller.getDawnChorusImpl(ctx)
 			assert.Equal(t, http.StatusBadRequest, rec.Code)
+		})
+	}
+}
+
+// TestInsightsHandlersReturn409WithoutEnhancedDatabase pins the guard on every
+// gated insights wrapper: status 409 with the insights message and error key.
+func TestInsightsHandlersReturn409WithoutEnhancedDatabase(t *testing.T) {
+	// Not parallel: this test reads the process-global database mode flag and
+	// forces it to the legacy state, restoring it when done.
+	datastoreV2.ResetDatabaseMode()
+	t.Cleanup(datastoreV2.ResetDatabaseMode)
+
+	tests := []struct {
+		name   string
+		path   string
+		invoke func(*Handler, echo.Context) error
+	}{
+		{"expected today", "/api/v2/insights/expected-today", (*Handler).GetExpectedToday},
+		{"expected today regional", "/api/v2/insights/expected-today/regional", (*Handler).GetExpectedTodayRegional},
+		{"phantom species", "/api/v2/insights/phantom-species", (*Handler).GetPhantomSpecies},
+		{"dawn chorus", "/api/v2/insights/dawn-chorus", (*Handler).GetDawnChorus},
+		{"migration", "/api/v2/insights/migration", (*Handler).GetMigration},
+		{"model contributions", "/api/v2/insights/model-contributions?start_date=2026-03-01", (*Handler).GetModelContributionStats},
+		{"dashboard kpis", "/api/v2/dashboard/kpis", (*Handler).GetDashboardKPIs},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// With a failing repo, a wrapper that lost its guard falls through to
+			// its Impl and answers something other than 409 instead of panicking.
+			e, h := setupInsightsTestController(t, &mockInsightsRepo{err: context.DeadlineExceeded})
+			req := httptest.NewRequest(http.MethodGet, tc.path, http.NoBody)
+			rec := httptest.NewRecorder()
+			ctx := e.NewContext(req, rec)
+
+			require.NoError(t, tc.invoke(h, ctx))
+			assert.Equal(t, http.StatusConflict, rec.Code)
+
+			var resp apicore.ErrorResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			// Literals, not the production constants, so a changed constant
+			// value fails here. They match errors.insights.v2Required in en.json.
+			assert.Equal(t, "errors.insights.v2Required", resp.ErrorKey)
+			assert.Equal(t, "Insights require the enhanced (v2) database", resp.Message)
 		})
 	}
 }

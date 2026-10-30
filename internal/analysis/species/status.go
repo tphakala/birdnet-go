@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 )
 
 // warmingSpeciesStatus is the suppressed status returned while the background
@@ -49,17 +50,17 @@ func (t *SpeciesTracker) GetSpeciesStatus(scientificName string, currentTime tim
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Check cache first - if valid entry exists within TTL and same year, return it
+	// Check cache first - if valid entry exists within TTL and same tracking year, return it
 	if cached, exists := t.statusCache[scientificName]; exists {
-		// Check if cache is still valid (within TTL and same year)
+		// Check if cache is still valid (within TTL and same tracking year)
 		cacheValid := currentTime.Sub(cached.timestamp) < t.cacheTTL
-		sameYear := currentTime.Year() == cached.timestamp.Year()
+		sameTrackingYear := t.getTrackingYear(currentTime) == t.getTrackingYear(cached.timestamp)
 
-		if cacheValid && sameYear {
+		if cacheValid && sameTrackingYear {
 			// Cache hit - return cached result directly
 			return cached.status
 		}
-		// Cache expired or year changed - will recompute and update cache below
+		// Cache expired or tracking year changed - will recompute and update cache below
 	}
 
 	// Perform periodic cache cleanup to prevent unbounded growth
@@ -121,14 +122,9 @@ func (t *SpeciesTracker) getFirstSeasonalDetection(scientificName, currentSeason
 }
 
 // calculateDaysSince calculates calendar days between two times, returning at minimum 0.
-// Uses date-only arithmetic in UTC to avoid DST off-by-one errors.
+// It counts dates, each read in its own location, so a DST change does not shift the result.
 func calculateDaysSince(currentTime, referenceTime time.Time) int {
-	y1, m1, d1 := referenceTime.Date()
-	y2, m2, d2 := currentTime.Date()
-	start := time.Date(y1, m1, d1, 0, 0, 0, 0, time.UTC)
-	end := time.Date(y2, m2, d2, 0, 0, 0, 0, time.UTC)
-	days := int(end.Sub(start) / (hoursPerDay * time.Hour))
-	return max(0, days)
+	return max(0, wallclock.CalendarDaysBetween(referenceTime, currentTime))
 }
 
 // applyLifetimeStatus sets lifetime tracking fields on status.
@@ -285,7 +281,9 @@ func (t *SpeciesTracker) cleanupExpiredCacheWithForce(currentTime time.Time, for
 // GetBatchSpeciesStatus returns the tracking status for multiple species in a single operation
 // This method significantly reduces mutex contention and redundant computations compared to
 // calling GetSpeciesStatus individually for each species. It performs expensive operations
-// like checkAndResetPeriods() and getCurrentSeason() only once for the entire batch.
+// like getCurrentSeason() only once for the entire batch. It never moves the yearly or
+// seasonal periods: a read for any date, past or future, leaves the tracking state where
+// live detections put it, and the statuses are what a period reset for that date would give.
 func (t *SpeciesTracker) GetBatchSpeciesStatus(scientificNames []string, currentTime time.Time) map[string]SpeciesStatus {
 	if len(scientificNames) == 0 {
 		return make(map[string]SpeciesStatus)
@@ -303,9 +301,8 @@ func (t *SpeciesTracker) GetBatchSpeciesStatus(scientificNames []string, current
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	// Perform expensive operations only once for the entire batch
-	t.checkAndResetPeriods(currentTime)
-	currentSeason := t.getCurrentSeason(currentTime)
+	// Work out the periods once for the entire batch, without changing the tracker
+	view := t.statusReadViewLocked(currentTime)
 
 	// Pre-allocate result map with exact capacity
 	results := make(map[string]SpeciesStatus, len(scientificNames))
@@ -314,27 +311,75 @@ func (t *SpeciesTracker) GetBatchSpeciesStatus(scientificNames []string, current
 	// keyed by the caller's input name; only the internal lookup is canonicalized so
 	// an alias and its canonical name resolve to the same tracked history.
 	for _, scientificName := range scientificNames {
-		status := t.buildSpeciesStatusLocked(canonicalSpeciesName(scientificName), currentTime, currentSeason)
+		status := t.buildSpeciesStatusLocked(canonicalSpeciesName(scientificName), currentTime, view)
 		results[scientificName] = status
 	}
 
 	return results
 }
 
-// buildSpeciesStatusLocked builds a species status without acquiring locks or performing
-// expensive period checks. This is used internally by GetBatchSpeciesStatus.
+// statusReadView is the period state one batch status read sees. It is built
+// without changing the tracker, so a read for any date leaves the yearly and
+// seasonal periods where live detections put them.
+type statusReadView struct {
+	season string
+	// yearlySetStale is true when the read falls in a later tracking year than
+	// currentYear, so the stored yearly set does not apply to it.
+	yearlySetStale bool
+	// carryoverFromLastSeen is true when the read is in a different season whose
+	// occurrence starts after seasonCarryoverStart: carry-over is then answered
+	// from last-seen times, as a live rollover would rebuild the set.
+	// carryoverStart is that occurrence's start.
+	carryoverFromLastSeen bool
+	carryoverStart        wallclock.Date
+}
+
+// statusReadViewLocked returns the period state a status read for currentTime
+// sees, mirroring what checkAndResetPeriods would change without changing it.
+// Assumes the caller holds the write lock (getCurrentSeason updates its memo).
+func (t *SpeciesTracker) statusReadViewLocked(currentTime time.Time) statusReadView {
+	view := statusReadView{
+		season:         t.getCurrentSeason(currentTime),
+		yearlySetStale: t.yearlyEnabled && t.shouldResetYear(currentTime),
+	}
+	if t.seasonalEnabled && view.season != t.currentSeason {
+		start, ok := t.seasonStartDate(view.season, currentTime)
+		if ok && start.Compare(t.seasonCarryoverStart) > 0 {
+			view.carryoverFromLastSeen = true
+			view.carryoverStart = start
+		}
+	}
+	return view
+}
+
+// isSeasonCarryoverInView reports whether the species was already present when
+// the view's season began.
+func (t *SpeciesTracker) isSeasonCarryoverInView(scientificName string, currentTime time.Time, view statusReadView) bool {
+	if !view.carryoverFromLastSeen {
+		return t.isSeasonCarryoverLocked(scientificName, view.season, currentTime)
+	}
+	lastSeen, seen := t.speciesLastSeen[scientificName]
+	return seen && t.lastSeenCarriesOver(lastSeen, view.carryoverStart)
+}
+
+// buildSpeciesStatusLocked builds a species status from a read-only period view
+// without acquiring locks or checking periods. This is used internally by
+// GetBatchSpeciesStatus.
 // Assumes the caller already holds the mutex lock.
-func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, currentTime time.Time, currentSeason string) SpeciesStatus {
+func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, currentTime time.Time, view statusReadView) SpeciesStatus {
 	firstSeen, exists := t.speciesFirstSeen[scientificName]
-	firstThisYear := t.getFirstYearlyDetection(scientificName)
-	firstThisSeason := t.getFirstSeasonalDetection(scientificName, currentSeason)
+	var firstThisYear *time.Time
+	if !view.yearlySetStale {
+		firstThisYear = t.getFirstYearlyDetection(scientificName)
+	}
+	firstThisSeason := t.getFirstSeasonalDetection(scientificName, view.season)
 
 	// Build status struct (cannot reuse statusBuffer in batch operations)
 	status := SpeciesStatus{
 		LastUpdatedTime:   currentTime,
 		FirstThisYear:     firstThisYear,
 		FirstThisSeason:   firstThisSeason,
-		CurrentSeason:     currentSeason,
+		CurrentSeason:     view.season,
 		DaysSinceFirst:    -1,
 		DaysSinceLastSeen: -1,
 		DaysThisYear:      -1,
@@ -343,7 +388,7 @@ func (t *SpeciesTracker) buildSpeciesStatusLocked(scientificName string, current
 
 	t.applyLifetimeStatus(&status, firstSeen, exists, currentTime)
 	t.applyYearlyStatus(&status, firstThisYear, currentTime)
-	t.applySeasonalStatus(&status, firstThisSeason, t.isSeasonCarryoverLocked(scientificName, currentSeason, currentTime), currentTime)
+	t.applySeasonalStatus(&status, firstThisSeason, t.isSeasonCarryoverInView(scientificName, currentTime, view), currentTime)
 	t.applyNoveltyStatus(&status, scientificName)
 
 	return status

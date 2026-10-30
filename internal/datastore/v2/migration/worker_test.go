@@ -8,11 +8,13 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
@@ -51,9 +53,17 @@ func TestWorker_PanicDoesNotTriggerCancelledTelemetry(t *testing.T) {
 	w.mu.Unlock()
 
 	// run() should recover from the panic without itself panicking
+	done := make(chan struct{})
 	assert.NotPanics(t, func() {
-		w.run(t.Context())
+		w.run(t.Context(), done)
 	})
+
+	// A caller waiting in Stop must be released after a panic
+	select {
+	case <-done:
+	default:
+		assert.Fail(t, "done must be closed after the run goroutine panicked")
+	}
 
 	// Verify the worker recorded the panic error
 	state, err := sm.GetState()
@@ -588,8 +598,7 @@ func newOnDiskDetectionRepo(t *testing.T) (repository.DetectionRepository, *sql.
 }
 
 // plantGhostDetection inserts a v2 detection row that has no matching legacy row,
-// simulating a dual-write delete where the legacy row was removed but the v2 delete
-// failed and the id was marked dirty.
+// simulating a dirty id whose legacy row was deleted after a copy of it reached v2.
 func plantGhostDetection(t *testing.T, repo repository.DetectionRepository, id uint) {
 	t.Helper()
 	require.NoError(t, repo.SaveWithID(t.Context(), &entities.Detection{
@@ -845,4 +854,275 @@ func TestWorker_MigrateRecord_UpdateBranchKeepsClipSampleRate(t *testing.T) {
 
 	require.NoError(t, w.migrateRecord(t.Context(), rateKeepResult()))
 	requireRateKept(t, db)
+}
+
+// pausingThresholdRepo pauses the migration while the auxiliary step saves a
+// threshold, emulating a pause between the auxiliary run and the transition.
+type pausingThresholdRepo struct {
+	repository.DynamicThresholdRepository
+	sm *datastoreV2.StateManager
+}
+
+func (r pausingThresholdRepo) SaveDynamicThreshold(ctx context.Context, threshold *entities.DynamicThreshold) error {
+	if err := r.sm.Pause(); err != nil {
+		return err
+	}
+	return r.DynamicThresholdRepository.SaveDynamicThreshold(ctx, threshold)
+}
+
+func TestWorker_TransitionToValidation_RecordsAuxiliaryOutcome(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		// prepare adjusts the migrator config; sm is the migration state manager.
+		prepare      func(env *auxV2Env, cfg *AuxiliaryMigratorConfig, sm *datastoreV2.StateManager)
+		eventFetches int
+		// legacyUntouched means MigrateAll must fail before reading legacy data.
+		legacyUntouched bool
+		wantState       entities.MigrationStatus // after transitionToValidation
+		wantOutcome     entities.AuxiliaryDataStatus
+		wantErrPart     string
+	}{
+		{
+			name: "section failure is recorded and migration completes",
+			prepare: func(env *auxV2Env, _ *AuxiliaryMigratorConfig, _ *datastoreV2.StateManager) {
+				env.dropTable(&entities.DynamicThreshold{})
+			},
+			wantState:   entities.MigrationStatusValidating,
+			wantOutcome: entities.AuxiliaryDataStatusFailed,
+			wantErrPart: "threshold:",
+		},
+		{
+			name: "MigrateAll error is recorded and migration completes",
+			prepare: func(_ *auxV2Env, cfg *AuxiliaryMigratorConfig, _ *datastoreV2.StateManager) {
+				cfg.WeatherRepo = nil
+			},
+			legacyUntouched: true,
+			wantState:       entities.MigrationStatusValidating,
+			wantOutcome:     entities.AuxiliaryDataStatusFailed,
+			wantErrPart:     auxRunFailedSummary,
+		},
+		{
+			name:         "clean run is recorded as succeeded",
+			prepare:      func(*auxV2Env, *AuxiliaryMigratorConfig, *datastoreV2.StateManager) {},
+			eventFetches: 1,
+			wantState:    entities.MigrationStatusValidating,
+			wantOutcome:  entities.AuxiliaryDataStatusSucceeded,
+		},
+		{
+			name: "pause before the transition records nothing",
+			prepare: func(env *auxV2Env, cfg *AuxiliaryMigratorConfig, sm *datastoreV2.StateManager) {
+				cfg.ThresholdRepo = pausingThresholdRepo{DynamicThresholdRepository: env.thresholdRepo, sm: sm}
+			},
+			eventFetches: 1,
+			wantState:    entities.MigrationStatusPaused,
+			wantOutcome:  entities.AuxiliaryDataStatusUnknown,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			env := newAuxV2Env(t)
+			sm := datastoreV2.NewStateManager(env.db)
+			var store datastore.Interface = mocks.NewMockInterface(t)
+			if !tt.legacyUntouched {
+				store = expectLegacy(t, defaultAuxLegacyRows(), tt.eventFetches)
+			}
+			cfg := env.config(store)
+			tt.prepare(env, cfg, sm)
+
+			require.NoError(t, sm.StartMigration(10))
+			require.NoError(t, sm.TransitionToDualWrite())
+
+			w := &Worker{
+				stateManager:      sm,
+				auxiliaryMigrator: NewAuxiliaryMigrator(cfg),
+				logger:            testLogger(),
+				stopCh:            make(chan struct{}),
+			}
+			w.transitionToValidation(t.Context())
+
+			state, err := sm.GetState()
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantState, state.State)
+			assert.Equal(t, tt.wantOutcome, state.AuxiliaryDataOutcome())
+			assert.Empty(t, state.ErrorMessage)
+			assert.Empty(t, state.RelatedDataError)
+			if tt.wantOutcome == entities.AuxiliaryDataStatusUnknown {
+				assert.Empty(t, state.AuxiliaryDataStatus)
+				assert.Empty(t, state.AuxiliaryDataError)
+				assert.Nil(t, state.AuxiliaryDataStartedAt)
+				return
+			}
+			assert.Contains(t, state.AuxiliaryDataError, tt.wantErrPart)
+
+			require.NoError(t, sm.TransitionToCutover())
+			require.NoError(t, sm.Complete())
+			state, err = sm.GetState()
+			require.NoError(t, err)
+			assert.Equal(t, entities.MigrationStatusCompleted, state.State)
+			assert.Equal(t, tt.wantOutcome, state.AuxiliaryDataOutcome())
+		})
+	}
+}
+
+func TestWorker_AbandonDuringValidationDelay(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		sm, cleanup := setupWorkerTest(t)
+		defer cleanup()
+
+		require.NoError(t, sm.StartMigration(10))
+		require.NoError(t, sm.TransitionToDualWrite())
+		require.NoError(t, sm.TransitionToMigrating())
+		require.NoError(t, sm.TransitionToValidating())
+
+		// No expectations: validation must not run once the worker is stopped.
+		w := &Worker{
+			stateManager:    sm,
+			legacy:          mocks.NewMockDetectionRepository(t),
+			logger:          testLogger(),
+			batchSize:       DefaultBatchSize,
+			pauseCh:         make(chan struct{}),
+			resumeCh:        make(chan struct{}),
+			stopCh:          make(chan struct{}),
+			maxConsecErrors: DefaultMaxConsecutiveErrors,
+			rateSamples:     make([]rateSample, DefaultRateWindowSize),
+		}
+
+		for range 2 { // the second round pins that a stopped worker can start again
+			require.NoError(t, w.Start(t.Context()))
+			synctest.Wait() // parked in the validation pre-delay
+			before := time.Now()
+
+			require.NoError(t, w.Abandon(t.Context()))
+
+			assert.Equal(t, before, time.Now(), "abandon must not wait out the validation delay")
+			assert.False(t, w.IsRunning())
+		}
+	})
+}
+
+// newTailSyncWorker returns a worker in COMPLETED state with a mocked legacy
+// repository, built inside the current synctest bubble.
+func newTailSyncWorker(t *testing.T) (*Worker, *mocks.MockDetectionRepository) {
+	t.Helper()
+	sm, cleanup := setupWorkerTest(t)
+	t.Cleanup(cleanup)
+	transitionToCompleted(t, sm)
+	legacy := mocks.NewMockDetectionRepository(t)
+	return &Worker{
+		stateManager:    sm,
+		legacy:          legacy,
+		logger:          testLogger(),
+		batchSize:       DefaultBatchSize,
+		pauseCh:         make(chan struct{}),
+		resumeCh:        make(chan struct{}),
+		stopCh:          make(chan struct{}),
+		maxConsecErrors: DefaultMaxConsecutiveErrors,
+		rateSamples:     make([]rateSample, DefaultRateWindowSize),
+	}, legacy
+}
+
+func TestWorker_StopLifecycle(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, legacy := newTailSyncWorker(t)
+
+		// Abandon in tail sync exits without draining: Search has no expectation yet.
+		require.NoError(t, w.Start(t.Context()))
+		synctest.Wait()
+		require.NoError(t, w.Abandon(t.Context()))
+		assert.False(t, w.IsRunning())
+
+		// A restart resets the abandon request, so a graceful Stop drains.
+		release := make(chan struct{})
+		legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				<-release
+				return nil, 0, nil
+			}).Once()
+		require.NoError(t, w.Start(t.Context()))
+		synctest.Wait()
+
+		stopErrs := make(chan error, 2)
+		go func() { stopErrs <- w.Stop(t.Context()) }()
+		synctest.Wait() // first Stop is waiting inside the drain
+
+		// While the worker is stopping, it still counts as running and cannot be restarted.
+		assert.True(t, w.IsRunning())
+		require.Error(t, w.Start(t.Context()))
+
+		// A second, concurrent Stop must not close the stop channel again.
+		go func() { stopErrs <- w.Stop(t.Context()) }()
+		synctest.Wait()
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, <-stopErrs)
+		require.NoError(t, <-stopErrs)
+		assert.False(t, w.IsRunning())
+		legacy.AssertNumberOfCalls(t, "Search", 1)
+	})
+}
+
+// TestWorker_StopDuringTailSyncBatchDrains pins that a stop arriving while a
+// periodic tail sync batch is in flight still drains once the batch is done.
+func TestWorker_StopDuringTailSyncBatchDrains(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, legacy := newTailSyncWorker(t)
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		var searches atomic.Int32
+		legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				if searches.Add(1) == 1 {
+					entered <- struct{}{} // the periodic batch
+					<-release
+				}
+				return nil, 0, nil
+			}).Twice()
+
+		require.NoError(t, w.Start(t.Context()))
+		<-entered // the periodic batch is inside the legacy search
+
+		stopped := make(chan error, 1)
+		go func() { stopped <- w.Stop(t.Context()) }()
+		synctest.Wait()
+		assert.True(t, w.IsRunning(), "stop waits for the batch in flight")
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, <-stopped)
+		assert.False(t, w.IsRunning())
+		legacy.AssertNumberOfCalls(t, "Search", 2) // the periodic batch and the final drain
+	})
+}
+
+func TestWorker_AbandonDuringTailSyncBatch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		w, legacy := newTailSyncWorker(t)
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		legacy.EXPECT().Search(mock.Anything, mock.Anything).
+			RunAndReturn(func(context.Context, *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+				entered <- struct{}{}
+				<-release
+				return nil, 0, nil
+			}).Once()
+
+		require.NoError(t, w.Start(t.Context()))
+		<-entered // the periodic batch is inside the legacy search
+
+		abandoned := make(chan error, 1)
+		go func() { abandoned <- w.Abandon(t.Context()) }()
+		synctest.Wait()
+		assert.True(t, w.IsRunning(), "abandon waits for the batch in flight")
+
+		close(release)
+		synctest.Wait()
+		require.NoError(t, <-abandoned)
+		assert.False(t, w.IsRunning())
+		legacy.AssertNumberOfCalls(t, "Search", 1) // no final drain after the batch
+	})
 }

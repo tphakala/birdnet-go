@@ -18,6 +18,7 @@ export interface SentryConfig {
 /** HTTP status codes for expected-flow errors (not bugs). */
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_FORBIDDEN = 403;
+const HTTP_PRECONDITION_FAILED = 412;
 const HTTP_CONFLICT = 409;
 
 /** HTTP status codes for gateway/proxy errors (infrastructure, not app bugs). */
@@ -39,7 +40,12 @@ interface ApiErrorLike {
 function isExpectedApiError(err: unknown): boolean {
   if (typeof err !== 'object' || err === null) return false;
   const status = (err as Record<string, unknown>).status;
-  return status === HTTP_UNAUTHORIZED || status === HTTP_FORBIDDEN || status === HTTP_CONFLICT;
+  return (
+    status === HTTP_UNAUTHORIZED ||
+    status === HTTP_FORBIDDEN ||
+    status === HTTP_CONFLICT ||
+    status === HTTP_PRECONDITION_FAILED
+  );
 }
 
 /** Check whether an error is a gateway/proxy error (502/503/504). */
@@ -165,9 +171,13 @@ function isBrowserExtensionError(event: Sentry.ErrorEvent): boolean {
 
 /**
  * Initialize Sentry with privacy filtering.
- * Called once from appState.svelte.ts when telemetry is enabled.
+ * Called by appState.svelte.ts when the browser SDK starts, at page load or after
+ * Error Tracking is turned on. It must not be called while a client it started is
+ * still live; appState guards this. Breadcrumbs left over from before the start are
+ * dropped: a client stopped by shutdownSentry stays bound and keeps recording them.
  */
 export function initSentry(config: SentryConfig): void {
+  Sentry.getIsolationScope().clearBreadcrumbs();
   Sentry.init({
     dsn: config.dsn,
     release: `birdnet-go@${config.version}`,
@@ -186,14 +196,41 @@ export function initSentry(config: SentryConfig): void {
 }
 
 /**
+ * Upper bound in milliseconds for the flush that follows shutdownSentry.
+ * Sentry.close treats 0 (or no value) as "no limit", so a positive bound keeps the
+ * flush from hanging. Sending is already off before it runs; this only bounds how
+ * long requests already on the wire are awaited.
+ */
+const SENTRY_CLOSE_TIMEOUT_MS = 2000;
+
+/**
+ * Stop the Sentry client: nothing more is sent from the moment this is called.
+ *
+ * The client is disabled synchronously first, because Sentry.close only disables it
+ * after its flush completes, leaving a window in which sessions, client reports and
+ * errors still send. Do not put an await before the options flip. Stored breadcrumbs
+ * are cleared now; the stopped client keeps recording more, so initSentry clears them
+ * again when the SDK starts. The returned promise resolves once the bounded flush has
+ * finished.
+ */
+export function shutdownSentry(): Promise<void> {
+  const client = Sentry.getClient();
+  if (client) {
+    client.getOptions().enabled = false;
+  }
+  Sentry.getIsolationScope().clearBreadcrumbs();
+  return Sentry.close(SENTRY_CLOSE_TIMEOUT_MS).then(() => undefined);
+}
+
+/**
  * Capture an API error with structured context.
- * Skips expected-flow errors (401/403/409) as they are not bugs.
+ * Skips expected-flow errors (401/403/409/412) as they are not bugs.
  */
 export function captureApiError(error: ApiErrorLike, context?: Record<string, string>): void {
-  // Skip expected-flow errors — auth (401/403) and conflict (409, e.g. v2 database not available)
+  // Skip expected-flow errors - auth (401/403), conflict (409, e.g. v2 database not available) and stale If-Match (412)
   if (isExpectedApiError(error)) return;
 
-  // Skip gateway errors — 502/503/504 are proxy/infrastructure issues, not app bugs
+  // Skip gateway errors - 502/503/504 are proxy/infrastructure issues, not app bugs
   if (isGatewayError(error)) return;
 
   // Skip network errors - connectivity issues are infrastructure noise, not app bugs
@@ -206,7 +243,7 @@ export function captureApiError(error: ApiErrorLike, context?: Record<string, st
     scope.setTag('error.type', 'api');
 
     if (context) {
-      // Scrub endpoint URL — strip query params; preserve domain for external APIs
+      // Scrub endpoint URL - strip query params; preserve domain for external APIs
       const scrubbed = { ...context };
       if (scrubbed.endpoint) {
         scrubbed.endpoint = scrubUrl(scrubbed.endpoint);
@@ -233,7 +270,7 @@ export function captureError(
   error: Error,
   context?: { category?: string; [key: string]: unknown }
 ): void {
-  // Skip expected-flow errors — 401/403/409 are not bugs
+  // Skip expected-flow errors - 401/403/409/412 are not bugs
   if (isExpectedApiError(error)) return;
 
   // Skip network TypeErrors - connectivity issues are infrastructure noise, not app bugs
@@ -303,10 +340,10 @@ function scrubUrl(raw: string): string {
  * Also drops auth errors (401/403) which are expected when users aren't logged in.
  */
 function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.ErrorEvent | null {
-  // Drop expected-flow errors — 401/403/409 can arrive via unhandled rejections or logger.error().
+  // Drop expected-flow errors - 401/403/409/412 can arrive via unhandled rejections or logger.error().
   if (isExpectedApiError(hint.originalException)) return null;
 
-  // Drop gateway errors — 502/503/504 from reverse proxies during backend restarts
+  // Drop gateway errors - 502/503/504 from reverse proxies during backend restarts
   if (isGatewayError(hint.originalException)) return null;
 
   // Drop network TypeErrors (connectivity issues are infrastructure noise, not app bugs)
@@ -328,7 +365,7 @@ function beforeSend(event: Sentry.ErrorEvent, hint: Sentry.EventHint): Sentry.Er
   // 2. Strip server name
   delete event.server_name;
 
-  // 3. Scrub main event request — remove query params, headers, cookies, body
+  // 3. Scrub main event request - remove query params, headers, cookies, body
   if (event.request) {
     if (event.request.url) {
       event.request.url = scrubUrl(event.request.url);

@@ -19,6 +19,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
   import {
+    SettingsChangedElsewhereError,
     settingsStore,
     settingsActions,
     hasUnsavedChanges,
@@ -68,8 +69,16 @@
       await settingsActions.saveSettings();
       // Success notification will be handled by the store/SSE
     } catch (error) {
-      // Error is already handled in the store
-      logger.error('Failed to save settings:', error);
+      // The store already showed the error to the user. A changed-elsewhere conflict is an
+      // expected flow (the user was asked to review and save again), not a fault.
+      if (error instanceof SettingsChangedElsewhereError) {
+        logger.warn(
+          'Settings changed elsewhere during save; the user was asked to review them',
+          error
+        );
+      } else {
+        logger.error('Failed to save settings:', error);
+      }
     }
   }
 

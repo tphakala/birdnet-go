@@ -8,7 +8,7 @@
  * @see https://github.com/video-dev/hls.js/blob/master/docs/API.md#fine-tuning
  */
 
-import { ErrorDetails } from 'hls.js';
+import type { ErrorDetails } from 'hls.js';
 import type Hls from 'hls.js';
 
 /**
@@ -106,9 +106,13 @@ export const BUFFERING_STRATEGY = {
  * Non-fatal media errors that are expected in low-latency audio streaming.
  * HLS.js recovers from these by buffering more segments, so they are only
  * logged at debug level.
+ *
+ * The values are the ErrorDetails string values, written out so this module
+ * needs only HLS.js types and does not pull the library into the main bundle
+ * (see hls-loader.ts).
  */
-export const EXPECTED_STALL_ERRORS: ReadonlySet<ErrorDetails> = new Set([
-  ErrorDetails.BUFFER_STALLED_ERROR,
-  ErrorDetails.BUFFER_SEEK_OVER_HOLE,
-  ErrorDetails.BUFFER_NUDGE_ON_STALL,
+export const EXPECTED_STALL_ERRORS: ReadonlySet<`${ErrorDetails}`> = new Set<`${ErrorDetails}`>([
+  'bufferStalledError', // ErrorDetails.BUFFER_STALLED_ERROR
+  'bufferSeekOverHole', // ErrorDetails.BUFFER_SEEK_OVER_HOLE
+  'bufferNudgeOnStall', // ErrorDetails.BUFFER_NUDGE_ON_STALL
 ]);

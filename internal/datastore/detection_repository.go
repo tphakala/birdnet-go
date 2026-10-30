@@ -11,14 +11,11 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
-const (
-	// allHoursDuration indicates no hour-based filtering (all hours).
-	allHoursDuration = 1
-)
-
 // detectionRepository implements DetectionRepository using the existing Interface.
 // This is a bridge implementation that allows gradual migration to the new domain model
-// while preserving compatibility with existing database operations.
+// while preserving compatibility with existing database operations. It serves the legacy
+// store; a v2 database uses v2only.NewDetectionRepository, which stores and reads back the
+// detection's own instant instead of formatting it as wall-clock text and parsing it again.
 type detectionRepository struct {
 	store Interface
 	tz    *time.Location
@@ -85,7 +82,7 @@ func (r *detectionRepository) GetRecent(ctx context.Context, limit int) ([]*dete
 // Search finds detections matching the given filters.
 func (r *detectionRepository) Search(ctx context.Context, filters *DetectionFilters) ([]*detection.Result, int64, error) {
 	// Convert to legacy AdvancedSearchFilters
-	legacyFilters, err := r.convertFilters(filters)
+	legacyFilters, err := filters.ToAdvancedSearchFilters(r.tz)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -103,26 +100,38 @@ func (r *detectionRepository) Search(ctx context.Context, filters *DetectionFilt
 	return results, total, nil
 }
 
+// SearchAdvanced finds detections matching the filters as given.
+func (r *detectionRepository) SearchAdvanced(ctx context.Context, filters *AdvancedSearchFilters) ([]*detection.Result, int64, error) {
+	if filters == nil {
+		return nil, 0, ErrNilAdvancedSearchFilters
+	}
+	notes, total, err := r.store.SearchNotesAdvanced(filters)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search detections: %w", err)
+	}
+
+	results, err := r.notesToResults(notes)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return results, total, nil
+}
+
 // GetBySpecies retrieves detections for a specific species.
-func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, filters *DetectionFilters) ([]*detection.Result, int64, error) {
-	limit := defaultDetectionLimit
-	offset := 0
-	if filters != nil {
-		if filters.Limit > 0 {
-			limit = filters.Limit
-		}
-		offset = filters.Offset
+func (r *detectionRepository) GetBySpecies(ctx context.Context, species, date, hour string, duration, limit, offset int) ([]*detection.Result, int64, error) {
+	if limit <= 0 {
+		limit = DefaultDetectionLimit
 	}
 
 	// SpeciesDetections params: species, date, hour, duration, sortAscending, limit, offset
-	// Empty date/hour means all dates/hours; allHoursDuration means no hour-based filtering
-	notes, err := r.store.SpeciesDetections(species, "", "", allHoursDuration, false, limit, offset)
+	notes, err := r.store.SpeciesDetections(species, date, hour, duration, false, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get species detections: %w", err)
 	}
 
 	// CountSpeciesDetections params: species, date, hour, duration
-	total, err := r.store.CountSpeciesDetections(species, "", "", allHoursDuration)
+	total, err := r.store.CountSpeciesDetections(species, date, hour, duration)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to count species detections: %w", err)
 	}
@@ -137,26 +146,12 @@ func (r *detectionRepository) GetBySpecies(ctx context.Context, species string, 
 
 // GetByDateRange retrieves detections within a date range.
 func (r *detectionRepository) GetByDateRange(ctx context.Context, startDate, endDate string, limit, offset int) ([]*detection.Result, int64, error) {
-	start, err := r.parseDateWithDefault(startDate, false)
+	filters, err := DateRangeSearchFilters(startDate, endDate, limit, offset, r.tz)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	end, err := r.parseDateWithDefault(endDate, true)
-	if err != nil {
-		return nil, 0, err
-	}
-
-	filters := &AdvancedSearchFilters{
-		DateRange: &DateRange{
-			Start: start,
-			End:   end,
-		},
-		Limit:  limit,
-		Offset: offset,
-	}
-
-	notes, total, err := r.store.SearchNotesAdvanced(filters)
+	notes, total, err := r.store.SearchNotesAdvanced(&filters)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get detections by date range: %w", err)
 	}
@@ -376,12 +371,13 @@ func NoteFromResult(result *detection.Result) Note {
 			SafeString:  result.AudioSource.SafeString,
 			DisplayName: result.AudioSource.DisplayName,
 		},
-		Unlikely:   result.Unlikely,
-		Occurrence: result.Occurrence,
-		Verified:   result.Verified,
-		Locked:     result.Locked,
-		Model:      result.Model,
-		RawLabel:   result.RawLabel,
+		Unlikely:           result.Unlikely,
+		Occurrence:         result.Occurrence,
+		Verified:           result.Verified,
+		Locked:             result.Locked,
+		Model:              result.Model,
+		ModelContributions: result.ModelContributions,
+		RawLabel:           result.RawLabel,
 	}
 }
 
@@ -433,18 +429,19 @@ func (r *detectionRepository) noteToResult(note *Note) (*detection.Result, error
 			CommonName:        note.CommonName,
 			Code:              note.SpeciesCode,
 		},
-		Confidence:     note.Confidence,
-		Latitude:       note.Latitude,
-		Longitude:      note.Longitude,
-		Threshold:      note.Threshold,
-		Sensitivity:    note.Sensitivity,
-		ClipName:       note.ClipName,
-		ClipSampleRate: note.ClipSampleRate,
-		ProcessingTime: note.ProcessingTime,
-		Unlikely:       note.Unlikely,
-		Occurrence:     note.Occurrence,
-		Verified:       note.Verified,
-		Locked:         note.Locked,
+		Confidence:          note.Confidence,
+		Latitude:            note.Latitude,
+		Longitude:           note.Longitude,
+		Threshold:           note.Threshold,
+		Sensitivity:         note.Sensitivity,
+		ClipName:            note.ClipName,
+		SpectrogramClipName: note.SpectrogramClipName,
+		ClipSampleRate:      note.ClipSampleRate,
+		ProcessingTime:      note.ProcessingTime,
+		Unlikely:            note.Unlikely,
+		Occurrence:          note.Occurrence,
+		Verified:            note.Verified,
+		Locked:              note.Locked,
 	}
 
 	// Use the note's model info if populated, otherwise fall back to default.
@@ -483,73 +480,6 @@ func (r *detectionRepository) notesToResults(notes []Note) ([]*detection.Result,
 	return results, nil
 }
 
-// convertFilters converts DetectionFilters to legacy AdvancedSearchFilters.
-func (r *detectionRepository) convertFilters(filters *DetectionFilters) (AdvancedSearchFilters, error) {
-	if filters == nil {
-		return AdvancedSearchFilters{
-			Limit:  defaultDetectionLimit,
-			Offset: 0,
-		}, nil
-	}
-
-	legacy := AdvancedSearchFilters{
-		TextQuery:        filters.Query,
-		Species:          filters.Species,
-		TimeOfDay:        filters.TimeOfDay,
-		Location:         filters.Location,
-		Limit:            filters.Limit,
-		Offset:           filters.Offset,
-		SortAscending:    filters.SortAscending,
-		Verified:         filters.Verified,
-		Locked:           filters.Locked,
-		MinID:            filters.MinID,
-		CursorPagination: filters.CursorPagination,
-	}
-
-	// Convert date range - parse strings to time.Time using repository timezone
-	if filters.StartDate != "" || filters.EndDate != "" {
-		start, err := r.parseDateWithDefault(filters.StartDate, false)
-		if err != nil {
-			return AdvancedSearchFilters{}, err
-		}
-		end, err := r.parseDateWithDefault(filters.EndDate, true)
-		if err != nil {
-			return AdvancedSearchFilters{}, err
-		}
-		legacy.DateRange = &DateRange{
-			Start: start,
-			End:   end,
-		}
-	} else if filters.Date != "" {
-		date, err := r.parseDateWithDefault(filters.Date, false)
-		if err != nil {
-			return AdvancedSearchFilters{}, err
-		}
-		legacy.DateRange = &DateRange{
-			Start: date,
-			End:   date.Add(24*time.Hour - time.Nanosecond), // End of day (23:59:59.999999999)
-		}
-	}
-
-	// Convert hour range
-	if filters.HourRange != nil {
-		legacy.Hour = &HourFilter{
-			Start: filters.HourRange.Start,
-			End:   filters.HourRange.End,
-		}
-	}
-
-	// Convert confidence
-	if filters.Confidence != nil {
-		legacy.Confidence = &ConfidenceFilter{
-			Operator: filters.Confidence.Operator,
-			Value:    filters.Confidence.Value,
-		}
-	}
-
-	return legacy, nil
-}
-
 // parseID converts a string ID to uint.
 func (r *detectionRepository) parseID(id string) (uint, error) {
 	n, err := strconv.ParseUint(id, 10, 64)
@@ -557,22 +487,6 @@ func (r *detectionRepository) parseID(id string) (uint, error) {
 		return 0, fmt.Errorf("invalid detection ID %q: %w", id, err)
 	}
 	return uint(n), nil
-}
-
-// parseDateWithDefault parses a date string, returning a default if empty.
-// If defaultToNow is true and the string is empty, returns current time in the timezone.
-func (r *detectionRepository) parseDateWithDefault(dateStr string, defaultToNow bool) (time.Time, error) {
-	if dateStr == "" {
-		if defaultToNow {
-			return time.Now().In(r.tz), nil
-		}
-		return time.Time{}, nil
-	}
-	t, err := time.ParseInLocation(mapper.DateFormat, dateStr, r.tz)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("invalid date %q: %w", dateStr, err)
-	}
-	return t, nil
 }
 
 // CountAll returns the total count of all detections.

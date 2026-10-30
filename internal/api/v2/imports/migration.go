@@ -12,38 +12,63 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/notification"
+	"github.com/tphakala/birdnet-go/internal/telemetry"
+)
+
+const (
+	// migrationWorkerStopTimeout bounds how long rollback and cancel wait for the
+	// worker to exit. It stays below the server write timeout (api.DefaultWriteTimeout)
+	// and the frontend request timeout, both 30 s.
+	migrationWorkerStopTimeout = 20 * time.Second
+
+	// migrationWorkerShutdownWait bounds how long shutdown waits for the worker
+	// (including its final tail sync drain) before the databases are closed. It
+	// stays inside the 3 s core shutdown tier budget and leaves time for WAL
+	// checkpoints.
+	migrationWorkerShutdownWait = 2 * time.Second
+
+	// msgMigrationWorkerStopping is shown when the worker did not stop in time.
+	msgMigrationWorkerStopping = "Migration worker is still stopping, try again shortly"
 )
 
 // MigrationStatusResponse represents the migration status for the API.
 type MigrationStatusResponse struct {
-	State              string     `json:"state"`
-	CurrentPhase       string     `json:"current_phase,omitempty"` // Current migration phase (detections, predictions, etc.)
-	PhaseNumber        int        `json:"phase_number,omitempty"`  // Current phase number (1-based)
-	TotalPhases        int        `json:"total_phases,omitempty"`  // Total number of phases
-	StartedAt          *time.Time `json:"started_at,omitempty"`
-	CompletedAt        *time.Time `json:"completed_at,omitempty"`
-	TotalRecords       int64      `json:"total_records"`
-	MigratedRecords    int64      `json:"migrated_records"`
-	ProgressPercent    float64    `json:"progress_percent"`
-	LastMigratedID     uint       `json:"last_migrated_id"`
-	ErrorMessage       string     `json:"error_message,omitempty"`
-	RelatedDataError   string     `json:"related_data_error,omitempty"` // Error from related data migration (reviews, comments, locks, predictions)
-	DirtyIDCount       int64      `json:"dirty_id_count"`
-	RecordsPerSecond   float64    `json:"records_per_second,omitempty"`
-	EstimatedRemaining *string    `json:"estimated_remaining,omitempty"`
-	WorkerRunning      bool       `json:"worker_running"`
-	WorkerPaused       bool       `json:"worker_paused"`
-	CanStart           bool       `json:"can_start"`
-	CanPause           bool       `json:"can_pause"`
-	CanResume          bool       `json:"can_resume"`
-	CanRetryValidation bool       `json:"can_retry_validation"`
-	CanCancel          bool       `json:"can_cancel"`
-	CanRollback        bool       `json:"can_rollback"`
-	IsDualWriteActive  bool       `json:"is_dual_write_active"`
-	ShouldReadFromV2   bool       `json:"should_read_from_v2"`
-	IsV2OnlyMode       bool       `json:"is_v2_only_mode"`
+	State            string     `json:"state"`
+	CurrentPhase     string     `json:"current_phase,omitempty"` // Current migration phase (detections, predictions, etc.)
+	PhaseNumber      int        `json:"phase_number,omitempty"`  // Current phase number (1-based)
+	TotalPhases      int        `json:"total_phases,omitempty"`  // Total number of phases
+	StartedAt        *time.Time `json:"started_at,omitempty"`
+	CompletedAt      *time.Time `json:"completed_at,omitempty"`
+	TotalRecords     int64      `json:"total_records"`
+	MigratedRecords  int64      `json:"migrated_records"`
+	ProgressPercent  float64    `json:"progress_percent"`
+	LastMigratedID   uint       `json:"last_migrated_id"`
+	ErrorMessage     string     `json:"error_message,omitempty"`
+	RelatedDataError string     `json:"related_data_error,omitempty"` // Error from related data migration (reviews, comments, locks, predictions)
+	// AuxiliaryDataStatus is the recorded auxiliary data outcome (succeeded, failed,
+	// not_required); absent when unknown. AuxiliaryDataError summarises a failure.
+	AuxiliaryDataStatus string  `json:"auxiliary_data_status,omitempty"`
+	AuxiliaryDataError  string  `json:"auxiliary_data_error,omitempty"`
+	DirtyIDCount        int64   `json:"dirty_id_count"`
+	RecordsPerSecond    float64 `json:"records_per_second,omitempty"`
+	EstimatedRemaining  *string `json:"estimated_remaining,omitempty"`
+	WorkerRunning       bool    `json:"worker_running"`
+	WorkerPaused        bool    `json:"worker_paused"`
+	CanStart            bool    `json:"can_start"`
+	CanPause            bool    `json:"can_pause"`
+	CanResume           bool    `json:"can_resume"`
+	CanRetryValidation  bool    `json:"can_retry_validation"`
+	CanCancel           bool    `json:"can_cancel"`
+	CanRollback         bool    `json:"can_rollback"`
+	IsDualWriteActive   bool    `json:"is_dual_write_active"`
+	ShouldReadFromV2    bool    `json:"should_read_from_v2"`
+	IsV2OnlyMode        bool    `json:"is_v2_only_mode"`
+	// LegacyNotice is the legacy-schema notice kind (migration.LegacyNoticeKind)
+	// for the dashboard banner: "none" unless the process runs the legacy schema.
+	LegacyNotice string `json:"legacy_notice"`
 
 	// Cleanup state fields
 	CleanupState           string   `json:"cleanup_state"`            // idle, in_progress, completed, failed
@@ -106,10 +131,14 @@ func SetV2OnlyMode() {
 
 // StopMigrationWorker stops the migration worker if it's running.
 // This should be called during graceful shutdown before closing the v2 database.
-// It cancels the worker's context and then calls Stop() for immediate termination.
+// It cancels the worker's context, then calls Stop() and waits, bounded by
+// migrationWorkerShutdownWait and ctx. A final tail sync drain that finishes
+// within that wait completes before the databases close; after it the caller
+// closes them regardless. It returns an error wrapping
+// migration.ErrWorkerStopTimeout when the worker is still running at the deadline.
 // Note: We snapshot the variables under lock then release before calling methods
 // to prevent potential deadlocks if Stop() blocks.
-func StopMigrationWorker() {
+func StopMigrationWorker(ctx context.Context) error {
 	// Snapshot variables under lock to prevent race conditions
 	migrationMu.Lock()
 	cancel := migrationWorkerCancel
@@ -120,10 +149,13 @@ func StopMigrationWorker() {
 	if cancel != nil {
 		cancel()
 	}
-	// Then call Stop() to close the stop channel for immediate termination
-	if worker != nil && worker.IsRunning() {
-		worker.Stop()
+	if worker == nil {
+		return nil
 	}
+	// Then call Stop() to close the stop channel and wait for the goroutine to exit
+	waitCtx, waitCancel := context.WithTimeout(ctx, migrationWorkerShutdownWait)
+	defer waitCancel()
+	return worker.Stop(waitCtx)
 }
 
 // getStateManager returns the state manager with proper locking.
@@ -161,12 +193,19 @@ func getIsV2OnlyMode() bool {
 	return isV2OnlyMode
 }
 
+// migrationNotConfiguredMessage is the 503 message for a request that needs
+// the migration state manager when the install has none.
+const migrationNotConfiguredMessage = "Migration is not configured"
+
+// errMigrationNotConfigured is the error behind migrationNotConfiguredMessage.
+var errMigrationNotConfigured = errors.NewStd("migration not configured")
+
 // requireMigrationStateManager is middleware that returns 503 if the migration state manager is not available.
 func (c *Handler) requireMigrationStateManager(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(ctx echo.Context) error {
 		if getStateManager() == nil {
-			return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-				"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
+			return c.HandleErrorWithKey(ctx, errMigrationNotConfigured,
+				migrationNotConfiguredMessage, http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
 		}
 		return next(ctx)
 	}
@@ -239,16 +278,23 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 				IsDualWriteActive:      false,
 				ShouldReadFromV2:       true,
 				IsV2OnlyMode:           true,
+				LegacyNotice:           string(migration.LegacyNoticeNone),
 				CleanupState:           cleanupState,
 				CleanupError:           cleanupErr,
 				CleanupTablesRemaining: cleanupRemaining,
 				CleanupSpaceReclaimed:  cleanupReclaimed,
 			})
 		}
-		c.LogWarnIfEnabled("Migration state manager not available",
+		// A legacy install without a state manager answers 503 on every request
+		// here, and the dashboard banner polls this endpoint on each page load.
+		// The condition is expected and was already reported once when migration
+		// setup failed at startup, so respond without the error log and the
+		// server error report that HandleErrorWithKey would add.
+		c.LogDebugIfEnabled("Migration state manager not available",
 			logger.String("path", path), logger.String("ip", ip))
-		return c.HandleErrorWithKey(ctx, fmt.Errorf("migration not configured"),
-			"Migration is not configured", http.StatusServiceUnavailable, notification.MsgErrMigrationNotConfigured, nil)
+		resp := c.NewErrorResponse(errMigrationNotConfigured, migrationNotConfiguredMessage, http.StatusServiceUnavailable)
+		resp.ErrorKey = notification.MsgErrMigrationNotConfigured
+		return ctx.JSON(http.StatusServiceUnavailable, resp)
 	}
 
 	// Get migration state
@@ -322,6 +368,12 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 		cleanupState = CleanupStateIdle
 	}
 
+	auxStatus := state.AuxiliaryDataOutcome()
+	auxError := ""
+	if auxStatus == entities.AuxiliaryDataStatusFailed {
+		auxError = state.AuxiliaryDataError
+	}
+
 	response := MigrationStatusResponse{
 		State:                  string(state.State),
 		CurrentPhase:           string(state.CurrentPhase),
@@ -335,6 +387,8 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 		LastMigratedID:         state.LastMigratedID,
 		ErrorMessage:           state.ErrorMessage,
 		RelatedDataError:       state.RelatedDataError,
+		AuxiliaryDataStatus:    string(auxStatus),
+		AuxiliaryDataError:     auxError,
 		DirtyIDCount:           dirtyCount,
 		RecordsPerSecond:       recordsPerSec,
 		EstimatedRemaining:     estimatedRemaining,
@@ -349,6 +403,7 @@ func (c *Handler) GetMigrationStatus(ctx echo.Context) error {
 		IsDualWriteActive:      isDualWriteActive,
 		ShouldReadFromV2:       shouldReadFromV2,
 		IsV2OnlyMode:           v2Only,
+		LegacyNotice:           string(migration.LegacyNotice(!v2Only, state.State)),
 		CleanupState:           cleanupState,
 		CleanupError:           cleanupErr,
 		CleanupTablesRemaining: cleanupRemaining,
@@ -484,7 +539,7 @@ func (c *Handler) PauseMigration(ctx echo.Context) error {
 
 	return c.executeMigrationAction(ctx, &migrationActionParams{
 		logStart:          "Pausing migration",
-		workerAction:      func() { worker.Pause() },
+		workerAction:      func(context.Context) error { worker.Pause(); return nil },
 		stateAction:       func() error { return sm.Pause() },
 		logFailure:        "Failed to pause migration",
 		logSuccess:        "Migration paused successfully",
@@ -600,6 +655,13 @@ func (c *Handler) RetryValidation(ctx echo.Context) error {
 	})
 }
 
+// isMigrationCompleted reports whether the migration state is COMPLETED. A state
+// read error counts as not completed.
+func isMigrationCompleted(sm *datastoreV2.StateManager) bool {
+	state, err := sm.GetState()
+	return err == nil && state.State == entities.MigrationStatusCompleted
+}
+
 // CancelMigration handles POST /api/v2/system/database/migration/cancel
 func (c *Handler) CancelMigration(ctx echo.Context) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
@@ -609,16 +671,25 @@ func (c *Handler) CancelMigration(ctx echo.Context) error {
 	sm := getStateManager()
 	worker := getMigrationWorker()
 
+	// Stop the worker first and wait for it, so its last batch cannot write
+	// after the state is reset. A stop that times out leaves the state untouched.
+	// A COMPLETED migration cannot be cancelled, so its tail sync worker is left
+	// running and sm.Cancel rejects the request below.
+	if worker != nil && !isMigrationCompleted(sm) {
+		stopCtx, stopCancel := context.WithTimeout(ctx.Request().Context(), migrationWorkerStopTimeout)
+		defer stopCancel()
+		if err := worker.Abandon(stopCtx); err != nil {
+			c.LogErrorIfEnabled("Migration worker did not stop in time",
+				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+			return c.HandleError(ctx, err, msgMigrationWorkerStopping, http.StatusConflict)
+		}
+	}
+
 	// Snapshot progress before cancel resets counters
 	var migratedSoFar, snapshotTotal int64
 	if state, stateErr := sm.GetState(); stateErr == nil {
 		migratedSoFar = state.MigratedRecords
 		snapshotTotal = state.TotalRecords
-	}
-
-	// Stop the worker first if running
-	if worker != nil && worker.IsRunning() {
-		worker.Stop()
 	}
 
 	// Cancel the state
@@ -668,7 +739,10 @@ func (c *Handler) CancelMigration(ctx echo.Context) error {
 }
 
 // RollbackMigration handles POST /api/v2/system/database/migration/rollback
-// Rolls back a completed migration to use the legacy database.
+// Rolls back a completed migration to use the legacy database. A running worker
+// is abandoned (no final drain) and waited for before the state is reset; if it
+// does not exit within migrationWorkerStopTimeout the request fails with 409 and
+// the state is left unchanged. The state reset also clears the dirty-ID set.
 func (c *Handler) RollbackMigration(ctx echo.Context) error {
 	// Snapshot state under lock for thread-safety
 	sm := getStateManager()
@@ -676,7 +750,7 @@ func (c *Handler) RollbackMigration(ctx echo.Context) error {
 
 	return c.executeMigrationAction(ctx, &migrationActionParams{
 		logStart:        "Rolling back migration",
-		workerAction:    func() { worker.Stop() },
+		workerAction:    worker.Abandon,
 		stateAction:     func() error { return sm.Rollback() },
 		logFailure:      "Failed to rollback migration",
 		logSuccess:      "Migration rolled back successfully",
@@ -704,8 +778,10 @@ func (c *Handler) runPreflightChecks() error {
 
 // runCriticalPrerequisiteChecks runs all critical checks that must pass before migration.
 // This is used by both GetPrerequisites and runPreflightChecks to ensure consistency.
+// It also records the outcome in the migration_prereq telemetry tag. In the MySQL branch the
+// server version check runs first, so the tag names it when the server is unsupported.
 func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
-	checks := make([]PrerequisiteCheck, 0, 6)
+	checks := make([]PrerequisiteCheck, 0, 8)
 
 	// Common critical checks
 	checks = append(checks,
@@ -717,6 +793,8 @@ func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
 	// Database-specific critical checks
 	if c.isUsingMySQL() {
 		checks = append(checks,
+			c.checkMySQLServerVersion(),
+			c.checkMySQLCharset(),
 			c.checkMySQLTableHealth(),
 			c.checkMySQLPermissions(),
 		)
@@ -730,13 +808,17 @@ func (c *Handler) runCriticalPrerequisiteChecks() []PrerequisiteCheck {
 	// Record count is also critical
 	checks = append(checks, c.checkRecordCount())
 
+	// Record the outcome for telemetry; this only runs when a user opens the
+	// prerequisites view or starts a migration.
+	telemetry.SetMigrationPrereqTag(prerequisiteTagValue(checks))
+
 	return checks
 }
 
 // migrationActionParams defines parameters for a migration action.
 type migrationActionParams struct {
 	logStart          string
-	workerAction      func()
+	workerAction      func(context.Context) error
 	stateAction       func() error
 	logFailure        string
 	logSuccess        string
@@ -750,6 +832,9 @@ type migrationActionParams struct {
 }
 
 // executeMigrationAction handles common migration action logic.
+// The worker action runs first when the worker is running, bounded by
+// migrationWorkerStopTimeout; if it fails the state action is skipped and the
+// request fails with 409.
 // All callers are behind the requireMigrationStateManager middleware.
 func (c *Handler) executeMigrationAction(ctx echo.Context, params *migrationActionParams) error {
 	ip, path := ctx.RealIP(), ctx.Request().URL.Path
@@ -757,7 +842,13 @@ func (c *Handler) executeMigrationAction(ctx echo.Context, params *migrationActi
 
 	// Perform worker action if worker is running
 	if params.worker != nil && params.worker.IsRunning() {
-		params.workerAction()
+		stopCtx, stopCancel := context.WithTimeout(ctx.Request().Context(), migrationWorkerStopTimeout)
+		defer stopCancel()
+		if err := params.workerAction(stopCtx); err != nil {
+			c.LogErrorIfEnabled(params.logFailure,
+				logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+			return c.HandleError(ctx, err, msgMigrationWorkerStopping, http.StatusConflict)
+		}
 	}
 
 	// Perform state action

@@ -12,12 +12,13 @@ import (
 )
 
 const (
-	carryoverResident = "Cyanocitta cristata" // heard right up to the season boundary
-	carryoverMigrant  = "Hirundo rustica"     // absent for months, then returns
-	carryoverNewcomer = "Setophaga palmarum"  // first ever detection in the new season
-	carryoverWindow   = 7                     // seasonal window in days
-	carryoverYear     = 2026                  // fall starts September 22
-	carryoverHour     = 8                     // detection hour for every fixture
+	carryoverResident = "Cyanocitta cristata"  // heard right up to the season boundary
+	carryoverMigrant  = "Hirundo rustica"      // absent for months, then returns
+	carryoverNewcomer = "Setophaga palmarum"   // first ever detection in the new season
+	carryoverLateSeen = "Poecile atricapillus" // heard inside the lookback, after an early future read
+	carryoverWindow   = 7                      // seasonal window in days
+	carryoverYear     = 2026                   // fall starts September 22
+	carryoverHour     = 8                      // detection hour for every fixture
 )
 
 // carryoverDate returns a fixture timestamp in carryoverYear.
@@ -25,24 +26,34 @@ func carryoverDate(month time.Month, day int) time.Time {
 	return time.Date(carryoverYear, month, day, carryoverHour, 0, 0, 0, time.UTC)
 }
 
-// newCarryoverTracker returns a tracker with only seasonal tracking enabled and
-// the standard Northern Hemisphere season boundaries.
-func newCarryoverTracker(t *testing.T, ds SpeciesDatastore) *SpeciesTracker {
-	t.Helper()
-	return NewTrackerFromSettings(ds, &conf.SpeciesTrackingSettings{
+// carryoverSeasons returns the standard Northern Hemisphere season boundaries.
+func carryoverSeasons() map[string]conf.Season {
+	return map[string]conf.Season{
+		"spring": {StartMonth: 3, StartDay: 20},
+		"summer": {StartMonth: 6, StartDay: 21},
+		"fall":   {StartMonth: 9, StartDay: 22},
+		"winter": {StartMonth: 12, StartDay: 21},
+	}
+}
+
+// carryoverSettings enables only seasonal tracking with the standard seasons.
+func carryoverSettings() *conf.SpeciesTrackingSettings {
+	return &conf.SpeciesTrackingSettings{
 		Enabled:              true,
 		NewSpeciesWindowDays: carryoverWindow,
 		SeasonalTracking: conf.SeasonalTrackingSettings{
 			Enabled:    true,
 			WindowDays: carryoverWindow,
-			Seasons: map[string]conf.Season{
-				"spring": {StartMonth: 3, StartDay: 20},
-				"summer": {StartMonth: 6, StartDay: 21},
-				"fall":   {StartMonth: 9, StartDay: 22},
-				"winter": {StartMonth: 12, StartDay: 21},
-			},
+			Seasons:    carryoverSeasons(),
 		},
-	})
+	}
+}
+
+// newCarryoverTracker returns a tracker with only seasonal tracking enabled and
+// the standard Northern Hemisphere season boundaries.
+func newCarryoverTracker(t *testing.T, ds SpeciesDatastore) *SpeciesTracker {
+	t.Helper()
+	return NewTrackerFromSettings(ds, carryoverSettings())
 }
 
 func TestSeasonCarryover_LiveRollover(t *testing.T) {
@@ -71,6 +82,31 @@ func TestSeasonCarryover_LiveRollover(t *testing.T) {
 
 	newcomer := tracker.GetSpeciesStatus(carryoverNewcomer, checkTime)
 	assert.True(t, newcomer.IsNewThisSeason, "first ever detection is new this fall")
+}
+
+func TestSeasonCarryover_FutureDateViewDoesNotRebuildEarly(t *testing.T) {
+	t.Parallel()
+
+	// Built in summer, so the fall reads below are for a later season.
+	tracker := newTrackerFromSettingsAt(nil, carryoverSettings(), carryoverDate(time.September, 10))
+	tracker.UpdateSpecies(carryoverResident, carryoverDate(time.September, 16))
+
+	// A dashboard read for a fall date, before fall has started live.
+	early := tracker.GetBatchSpeciesStatus([]string{carryoverResident}, carryoverDate(time.September, 29))
+	assert.False(t, early[carryoverResident].IsNewThisSeason, "heard inside the lookback, so present when fall began")
+
+	// Heard inside the lookback after the early read; the live rollover below
+	// must still count it as present when fall began.
+	tracker.UpdateSpecies(carryoverLateSeen, carryoverDate(time.September, 18))
+	tracker.UpdateSpecies(carryoverNewcomer, carryoverDate(time.September, 22))
+
+	got := tracker.GetBatchSpeciesStatus(
+		[]string{carryoverResident, carryoverLateSeen, carryoverNewcomer},
+		time.Date(carryoverYear, time.September, 22, 20, 0, 0, 0, time.UTC),
+	)
+	assert.False(t, got[carryoverResident].IsNewThisSeason)
+	assert.False(t, got[carryoverLateSeen].IsNewThisSeason, "an early future read must not freeze the carry-over set")
+	assert.True(t, got[carryoverNewcomer].IsNewThisSeason)
 }
 
 func TestSeasonCarryover_PastDateViewKeepsCurrentSeasonSet(t *testing.T) {

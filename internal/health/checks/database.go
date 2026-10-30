@@ -9,14 +9,23 @@ import (
 	"github.com/tphakala/birdnet-go/internal/health"
 )
 
-// DatabaseSizeCheck reports the size of the SQLite database file and warns when it is large.
+// DatabaseSizeProbe reads the size in bytes of the MySQL or MariaDB schema in
+// use. applicable is false when the database is not MySQL or MariaDB, and the
+// check then measures the SQLite file instead. Any non-nil err makes the check
+// report unknown, whatever applicable says.
+type DatabaseSizeProbe func(ctx context.Context) (sizeBytes int64, applicable bool, err error)
+
+// DatabaseSizeCheck reports the size of the database (the SQLite file, or the
+// MySQL or MariaDB schema) and warns when a SQLite file is large.
 type DatabaseSizeCheck struct {
-	getDBPath func() string
+	getDBPath  func() string
+	serverSize DatabaseSizeProbe
 }
 
-// NewDatabaseSizeCheck creates a DatabaseSizeCheck using the given path provider.
-func NewDatabaseSizeCheck(getDBPath func() string) *DatabaseSizeCheck {
-	return &DatabaseSizeCheck{getDBPath: getDBPath}
+// NewDatabaseSizeCheck creates a DatabaseSizeCheck using the given path provider
+// and server size probe. A nil probe means SQLite only. A nil path provider makes the check report skipped, whatever the probe says.
+func NewDatabaseSizeCheck(getDBPath func() string, serverSize DatabaseSizeProbe) *DatabaseSizeCheck {
+	return &DatabaseSizeCheck{getDBPath: getDBPath, serverSize: serverSize}
 }
 
 // Name returns the check identifier.
@@ -25,15 +34,53 @@ func (c *DatabaseSizeCheck) Name() string { return "database_size" }
 // Category returns the database category.
 func (c *DatabaseSizeCheck) Category() health.Category { return health.CategoryDatabase }
 
-// warnSizeBytes is the threshold above which a size warning is issued (1 GB).
-const warnSizeBytes int64 = 1 << 30
+const (
+	// warnSizeBytes is the threshold above which a SQLite file size warning is issued (1 GB).
+	warnSizeBytes int64 = 1 << 30
 
-// Run checks the database file size and warns if it exceeds 1 GB.
-func (c *DatabaseSizeCheck) Run(_ context.Context) health.Result {
+	// bytesPerMB is the number of bytes in one megabyte (MiB) for size messages.
+	bytesPerMB = 1 << 20
+
+	databaseSizeOKFormat        = "Database size OK (%.1f MB)"
+	databaseSizeReadErrorFormat = "Unable to read the database size: %v"
+)
+
+// Run reports the database size. On MySQL or MariaDB it reports the schema size
+// without a warning threshold; on SQLite it stats the file and warns above 1 GB.
+func (c *DatabaseSizeCheck) Run(ctx context.Context) health.Result {
 	start := time.Now()
 
 	if c.getDBPath == nil {
 		return skippedResult(c.Name(), c.Category(), start)
+	}
+
+	if c.serverSize != nil {
+		sizeBytes, applicable, err := c.serverSize(ctx)
+		if err != nil {
+			return health.Result{
+				Name:       c.Name(),
+				Category:   c.Category(),
+				Status:     health.StatusUnknown,
+				Message:    fmt.Sprintf(databaseSizeReadErrorFormat, err),
+				DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+				Timestamp:  time.Now(),
+			}
+		}
+		if applicable {
+			sizeMB := float64(sizeBytes) / bytesPerMB
+			return health.Result{
+				Name:     c.Name(),
+				Category: c.Category(),
+				Status:   health.StatusHealthy,
+				Message:  fmt.Sprintf(databaseSizeOKFormat, sizeMB),
+				Details: map[string]any{
+					"size_bytes": sizeBytes,
+					"size_mb":    sizeMB,
+				},
+				DurationMS: float64(time.Since(start).Microseconds()) / 1000,
+				Timestamp:  time.Now(),
+			}
+		}
 	}
 
 	path := c.getDBPath()
@@ -62,10 +109,10 @@ func (c *DatabaseSizeCheck) Run(_ context.Context) health.Result {
 	}
 
 	sizeBytes := info.Size()
-	sizeMB := float64(sizeBytes) / (1 << 20)
+	sizeMB := float64(sizeBytes) / bytesPerMB
 
 	status := health.StatusHealthy
-	msg := fmt.Sprintf("Database size OK (%.1f MB)", sizeMB)
+	msg := fmt.Sprintf(databaseSizeOKFormat, sizeMB)
 	if sizeBytes > warnSizeBytes {
 		status = health.StatusWarning
 		msg = fmt.Sprintf("Database file is large (%.1f MB)", sizeMB)

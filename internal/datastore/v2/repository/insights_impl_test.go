@@ -7,6 +7,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/testutil"
+	"github.com/tphakala/birdnet-go/internal/wallclock"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
@@ -32,6 +34,7 @@ func setupInsightsTestDB(t *testing.T) *gorm.DB {
 		&entities.Label{},
 		&entities.Detection{},
 		&entities.DetectionReview{},
+		&entities.DetectionModelContribution{},
 	)
 	require.NoError(t, err)
 
@@ -75,15 +78,6 @@ func seedFalsePositiveReview(t *testing.T, db *gorm.DB, detectionID uint) {
 		Verified:    "false_positive",
 	}
 	require.NoError(t, db.Create(&review).Error)
-}
-
-// localOffsetAt returns time.Local's UTC offset (seconds) at ref. The tests below seed timestamps
-// in time.Local and assert local-zone bucketing, so they pass the matching offset (the same value
-// production derives via GetTimezoneOffsetAt) to the offset-aware insights queries. Dedicated
-// bucketing tests pass explicit offsets and fixed UTC instants instead, so they are independent of
-// the host's zone.
-func localOffsetAt(ref time.Time) int {
-	return GetTimezoneOffsetAt(time.Local, ref)
 }
 
 func TestGetPhantomSpecies(t *testing.T) {
@@ -141,7 +135,7 @@ func TestGetExpectedSpeciesToday(t *testing.T) {
 	// Year 1 (2024): March 8-9 (noon)
 	y1Start := time.Date(2024, 3, 8, 12, 0, 0, 0, time.Local)
 	seedDetection(t, db, labelA, y1Start.Unix(), 0.9)
-	seedDetection(t, db, labelA, y1Start.Add(24*time.Hour).Unix(), 0.85)
+	seedDetection(t, db, labelA, y1Start.AddDate(0, 0, 1).Unix(), 0.85)
 
 	// Year 2 (2025): March 7 (noon)
 	y2Start := time.Date(2025, 3, 7, 12, 0, 0, 0, time.Local)
@@ -167,7 +161,7 @@ func TestGetExpectedSpeciesToday(t *testing.T) {
 		},
 	}
 
-	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, localOffsetAt(y2Start), nil)
+	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, time.Local, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2)
 
@@ -194,7 +188,7 @@ func TestGetDawnChorusRaw(t *testing.T) {
 
 	labelA := seedLabel(t, db, "Turdus merula")
 
-	// Day 1: two detections at 5:00 AM and 6:30 AM — should return 5:00 AM
+	// Day 1: two detections at 5:00 AM and 6:30 AM, should return 5:00 AM
 	day1 := time.Date(now.Year(), now.Month(), now.Day()-5, 0, 0, 0, 0, time.Local)
 	seedDetection(t, db, labelA, day1.Add(5*time.Hour).Unix(), 0.9)
 	seedDetection(t, db, labelA, day1.Add(6*time.Hour+30*time.Minute).Unix(), 0.85)
@@ -204,15 +198,13 @@ func TestGetDawnChorusRaw(t *testing.T) {
 	day2 := time.Date(now.Year(), now.Month(), now.Day()-3, 0, 0, 0, 0, time.Local)
 	seedDetection(t, db, labelA, day2.Add(6*time.Hour).Unix(), 0.88)
 
-	// Detection outside hour range (11:00 AM — should be excluded)
+	// Detection outside hour range (11:00 AM, should be excluded)
 	seedDetection(t, db, labelA, day1.Add(11*time.Hour).Unix(), 0.92)
 
 	// Detection before since (should be excluded)
 	seedDetection(t, db, labelA, now.AddDate(0, 0, -45).Add(5*time.Hour).Unix(), 0.8)
 
-	// Anchor the offset to the seeded day (not now, which is up to 5 days later) so the hour
-	// bucketing matches the data's DST state regardless of host zone.
-	results, err := repo.GetDawnChorusRaw(ctx, since, 4, 10, localOffsetAt(day1), nil)
+	results, err := repo.GetDawnChorusRaw(ctx, since, now.Unix(), 4, 10, time.Local, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 2) // 2 days
 
@@ -317,7 +309,7 @@ func TestGetDashboardKPIs(t *testing.T) {
 		seedDetection(t, db, labelC, bestDay.Add(time.Duration(i+10)*time.Hour).Unix(), 0.9)
 	}
 
-	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), localOffsetAt(today), nil)
+	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), time.Local, nil)
 	require.NoError(t, err)
 	require.NotNil(t, kpis)
 
@@ -333,7 +325,7 @@ func TestGetDashboardKPIs_Empty(t *testing.T) {
 	repo := NewInsightsRepository(db, false, false)
 	ctx := t.Context()
 
-	kpis, err := repo.GetDashboardKPIs(ctx, time.Now().Unix(), localOffsetAt(time.Now()), nil)
+	kpis, err := repo.GetDashboardKPIs(ctx, time.Now().Unix(), nil, nil)
 	require.NoError(t, err)
 	require.NotNil(t, kpis)
 	assert.Equal(t, int64(0), kpis.LifetimeSpecies)
@@ -434,8 +426,7 @@ func TestGetDawnChorusRaw_MultiModel(t *testing.T) {
 	seedDetectionForModel(t, db, labelA1, 1, day1.Add(5*time.Hour).Unix(), 0.9)
 	seedDetectionForModel(t, db, labelA2, 2, day1.Add(6*time.Hour).Unix(), 0.85)
 
-	// Anchor the offset to the seeded day so the asserted earliest hour is exact regardless of host.
-	results, err := repo.GetDawnChorusRaw(ctx, since, 4, 10, localOffsetAt(day1), nil)
+	results, err := repo.GetDawnChorusRaw(ctx, since, now.Unix(), 4, 10, time.Local, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1, "same species on same day from two models should produce one result")
 	assert.Equal(t, "Turdus merula", results[0].ScientificName)
@@ -492,7 +483,7 @@ func TestGetExpectedSpeciesToday_MultiModel(t *testing.T) {
 		},
 	}
 
-	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, localOffsetAt(y2Start), nil)
+	results, err := repo.GetExpectedSpeciesToday(ctx, yearRanges, time.Local, nil)
 	require.NoError(t, err)
 	require.Len(t, results, 1, "same species from two models should produce one result")
 	assert.Equal(t, "Turdus merula", results[0].ScientificName)
@@ -516,7 +507,7 @@ func TestGetDashboardKPIs_MultiModel(t *testing.T) {
 	labelB := seedLabelForModel(t, db, "Parus major", 1)
 	seedDetectionForModel(t, db, labelB, 1, today.Add(4*time.Hour).Unix(), 0.8)
 
-	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), localOffsetAt(today), nil)
+	kpis, err := repo.GetDashboardKPIs(ctx, today.Unix(), time.Local, nil)
 	require.NoError(t, err)
 	require.NotNil(t, kpis)
 	assert.Equal(t, int64(2), kpis.LifetimeSpecies, "same species from two models should count as one")
@@ -550,7 +541,7 @@ func TestGetExpectedSpeciesToday_EmptyRanges(t *testing.T) {
 	repo := NewInsightsRepository(db, false, false)
 	ctx := t.Context()
 
-	results, err := repo.GetExpectedSpeciesToday(ctx, nil, 0, nil)
+	results, err := repo.GetExpectedSpeciesToday(ctx, nil, time.UTC, nil)
 	require.NoError(t, err)
 	assert.Nil(t, results)
 }
@@ -581,10 +572,10 @@ func TestGetExpectedSpeciesToday_TimezoneBucketing(t *testing.T) {
 		End:   time.Date(2024, 4, 1, 0, 0, 0, 0, time.UTC).Unix(),
 	}}
 
-	const offsetEast = 5 * 3600 // UTC+5
+	eastZone := time.FixedZone("UTC+5", 5*3600)
 
-	t.Run("utc buckets the two detections as distinct years", func(t *testing.T) {
-		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, 0, nil)
+	t.Run("nil zone (UTC) buckets the two detections as distinct years", func(t *testing.T) {
+		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, nil, nil)
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		assert.Equal(t, 2, got[0].YearsSeen, "2023-12-31 and 2024-03-08 are distinct years at UTC")
@@ -592,10 +583,471 @@ func TestGetExpectedSpeciesToday_TimezoneBucketing(t *testing.T) {
 	})
 
 	t.Run("east offset rolls both detections into 2024", func(t *testing.T) {
-		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, offsetEast, nil)
+		got, err := repo.GetExpectedSpeciesToday(ctx, ranges, eastZone, nil)
 		require.NoError(t, err)
 		require.Len(t, got, 1)
 		assert.Equal(t, 1, got[0].YearsSeen, "at UTC+5 the year-boundary detection rolls into 2024")
 		assert.Equal(t, "2024-03-09", got[0].LastSeenDate, "23:30Z + 5h crosses to the next calendar day")
 	})
+}
+
+// TestGetDawnChorusRaw_WallClockAcrossDST pins that the hour window and the date grouping
+// follow each detection's own wall clock when the period crosses a DST change, rather than
+// the offset in effect at the start of the period.
+func TestGetDawnChorusRaw_WallClockAcrossDST(t *testing.T) {
+	helsinki, err := time.LoadLocation("Europe/Helsinki")
+	require.NoError(t, err)
+	kolkata, err := time.LoadLocation("Asia/Kolkata")
+	require.NoError(t, err)
+
+	type seeded struct {
+		species string
+		at      time.Time
+	}
+	type want struct {
+		species string
+		date    string
+		at      time.Time
+	}
+
+	tests := []struct {
+		name               string
+		loc                *time.Location
+		since, until       time.Time
+		startHour, endHour int
+		detections         []seeded
+		want               []want
+	}{
+		{
+			name:      "Helsinki fall-back: window follows EET after the change",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 30, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"A", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+				{"A", time.Date(2026, time.October, 27, 3, 38, 0, 0, helsinki)},
+				{"A", time.Date(2026, time.October, 27, 4, 10, 0, 0, helsinki)},
+				{"B", time.Date(2026, time.October, 28, 9, 30, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"A", "2026-10-22", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+				{"A", "2026-10-27", time.Date(2026, time.October, 27, 4, 10, 0, 0, helsinki)},
+				{"B", "2026-10-28", time.Date(2026, time.October, 28, 9, 30, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "Helsinki spring-forward: window follows EEST after the change",
+			loc:       helsinki,
+			since:     time.Date(2026, time.March, 25, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.April, 2, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"C", time.Date(2026, time.March, 31, 4, 20, 0, 0, helsinki)},
+				{"C", time.Date(2026, time.March, 31, 10, 15, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"C", "2026-03-31", time.Date(2026, time.March, 31, 4, 20, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "Kolkata has no DST: single segment, half-hour offset at the window edge",
+			loc:       kolkata,
+			since:     time.Date(2026, time.March, 25, 0, 0, 0, 0, kolkata),
+			until:     time.Date(2026, time.April, 2, 0, 0, 0, 0, kolkata),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"D", time.Date(2026, time.March, 28, 3, 50, 0, 0, kolkata)},
+				{"D", time.Date(2026, time.March, 28, 4, 5, 0, 0, kolkata)},
+				{"D", time.Date(2026, time.March, 28, 9, 55, 0, 0, kolkata)},
+			},
+			want: []want{
+				{"D", "2026-03-28", time.Date(2026, time.March, 28, 4, 5, 0, 0, kolkata)},
+			},
+		},
+		{
+			name:      "local date straddling the fall-back merges to one row",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 24, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 26, 0, 0, 0, 0, helsinki),
+			startHour: 0,
+			endHour:   24,
+			detections: []seeded{
+				{"E", time.Date(2026, time.October, 25, 2, 30, 0, 0, helsinki)},
+				{"E", time.Date(2026, time.October, 25, 5, 0, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"E", "2026-10-25", time.Date(2026, time.October, 25, 2, 30, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "detections after until are still included",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 22, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"F", time.Date(2026, time.October, 27, 6, 0, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"F", "2026-10-27", time.Date(2026, time.October, 27, 6, 0, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "detections after until use the offset in effect at the start of the last segment",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 22, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				// 03:30 EET reads as 04:30 under the EEST offset of the last segment, so it is kept.
+				{"J", time.Date(2026, time.October, 27, 3, 30, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"J", "2026-10-27", time.Date(2026, time.October, 27, 3, 30, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "pre-change detection outside the window is not re-read under the next offset",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 30, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   5,
+			detections: []seeded{
+				// 02:00Z on 24 Oct is 05:00 EEST (out) but would read as 04:00 under EET (in).
+				{"G", time.Date(2026, time.October, 24, 2, 0, 0, 0, time.UTC)},
+			},
+			want: []want{},
+		},
+		{
+			name:      "detection exactly at the change belongs to the later segment only",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 30, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   5,
+			detections: []seeded{
+				// 01:00Z on 25 Oct is 03:00 EET after the change; read under EEST it would be 04:00.
+				{"H", time.Date(2026, time.October, 25, 1, 0, 0, 0, time.UTC)},
+			},
+			want: []want{},
+		},
+		{
+			name:      "detection exactly at the change is kept by the later segment",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 30, 0, 0, 0, 0, helsinki),
+			startHour: 3,
+			endHour:   4,
+			detections: []seeded{
+				{"H", time.Date(2026, time.October, 25, 1, 0, 0, 0, time.UTC)},
+			},
+			want: []want{
+				{"H", "2026-10-25", time.Date(2026, time.October, 25, 1, 0, 0, 0, time.UTC)},
+			},
+		},
+		{
+			name:      "until before since still returns detections from since on",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 10, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"I", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"I", "2026-10-22", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+			},
+		},
+		{
+			name:      "until equal to since still returns detections from since on",
+			loc:       helsinki,
+			since:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			until:     time.Date(2026, time.October, 20, 0, 0, 0, 0, helsinki),
+			startHour: 4,
+			endHour:   10,
+			detections: []seeded{
+				{"I", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+			},
+			want: []want{
+				{"I", "2026-10-22", time.Date(2026, time.October, 22, 5, 0, 0, 0, helsinki)},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupInsightsTestDB(t)
+			repo := NewInsightsRepository(db, false, false)
+
+			labels := make(map[string]uint)
+			for _, d := range tt.detections {
+				if _, ok := labels[d.species]; !ok {
+					labels[d.species] = seedLabel(t, db, d.species)
+				}
+				seedDetection(t, db, labels[d.species], d.at.Unix(), 0.9)
+			}
+
+			got, err := repo.GetDawnChorusRaw(t.Context(), tt.since.Unix(), tt.until.Unix(), tt.startHour, tt.endHour, tt.loc, nil)
+			require.NoError(t, err)
+
+			wantEntries := make([]DawnChorusRawEntry, 0, len(tt.want))
+			for _, w := range tt.want {
+				wantEntries = append(wantEntries, DawnChorusRawEntry{ScientificName: w.species, Date: w.date, EarliestAt: w.at.Unix()})
+			}
+			assert.ElementsMatch(t, wantEntries, got)
+		})
+	}
+}
+
+// TestGetDawnChorusRaw_BoundsSegmentQueries pins that the offset enumeration, and so the number
+// of queries, is bounded by wallclock.Span whatever bounds the caller gives: a since before the
+// Unix epoch and an until a century ahead must not add queries for the centuries nobody has
+// rows in, and a detection in the window is still found.
+func TestGetDawnChorusRaw_BoundsSegmentQueries(t *testing.T) {
+	const (
+		// sinceBeforeEpoch is Unix seconds in 1843, well before the first stored row.
+		sinceBeforeEpoch int64 = -4_000_000_000
+		// centuriesAhead is an until about a century past now.
+		centuriesAhead = 100
+	)
+	helsinki := loadInsightsZone(t, "Europe/Helsinki")
+	now := time.Now()
+
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+
+	var queries int
+	const callbackName = "test:count_dawn_chorus_queries"
+	require.NoError(t, db.Callback().Row().Before("gorm:row").Register(callbackName, func(*gorm.DB) { queries++ }))
+
+	detectedAt := time.Date(2026, time.October, 27, 5, 0, 0, 0, helsinki)
+	seedDetection(t, db, seedLabel(t, db, "A"), detectedAt.Unix(), 0.9)
+
+	until := now.AddDate(centuriesAhead, 0, 0).Unix()
+	queries = 0
+	got, err := repo.GetDawnChorusRaw(t.Context(), sinceBeforeEpoch, until, 4, 10, helsinki, nil)
+	require.NoError(t, err)
+
+	from, to := wallclock.Span(sinceBeforeEpoch, until, now)
+	bound := len(wallclock.Segments(helsinki, from, to))
+	assert.LessOrEqual(t, queries, bound, "one query per offset period inside the bounded span")
+	assert.Equal(t, []DawnChorusRawEntry{{ScientificName: "A", Date: "2026-10-27", EarliestAt: detectedAt.Unix()}}, got)
+}
+
+// loadInsightsZone returns an IANA zone from the toolchain zone database for the DST tests below.
+func loadInsightsZone(t *testing.T, name string) *time.Location {
+	t.Helper()
+	loc := testutil.ToolchainZones(t)[name]
+	require.NotNil(t, loc, "zone %s", name)
+	return loc
+}
+
+// TestGetExpectedSpeciesToday_PerRowOffsets pins that the date and year buckets use the UTC
+// offset in effect at each row, not one offset for the whole span: every case has rows on both
+// sides of a DST change 30 minutes from local midnight, so any single offset misplaces one of
+// them.
+func TestGetExpectedSpeciesToday_PerRowOffsets(t *testing.T) {
+	newYork := loadInsightsZone(t, "America/New_York")
+	sydney := loadInsightsZone(t, "Australia/Sydney")
+
+	type row struct {
+		species string
+		at      time.Time
+	}
+	tests := []struct {
+		name      string
+		loc       *time.Location
+		spans     []TimeRange
+		rows      []row
+		wantLast  map[string]string
+		wantYears map[string]int
+	}{
+		{
+			name: "New York spring forward, rows either side of local midnight",
+			loc:  newYork,
+			spans: []TimeRange{{
+				Start: time.Date(2025, 2, 1, 0, 0, 0, 0, newYork).Unix(),
+				End:   time.Date(2025, 4, 30, 23, 59, 59, 0, newYork).Unix(),
+			}},
+			rows: []row{
+				{"Turdus merula", time.Date(2025, 3, 5, 23, 30, 0, 0, newYork)},
+				{"Parus major", time.Date(2025, 3, 10, 0, 30, 0, 0, newYork)},
+			},
+			wantLast:  map[string]string{"Turdus merula": "2025-03-05", "Parus major": "2025-03-10"},
+			wantYears: map[string]int{"Turdus merula": 1, "Parus major": 1},
+		},
+		{
+			name: "Sydney new year and autumn change, rows either side of local midnight",
+			loc:  sydney,
+			spans: []TimeRange{{
+				Start: time.Date(2024, 10, 1, 0, 0, 0, 0, sydney).Unix(),
+				End:   time.Date(2025, 5, 1, 0, 0, 0, 0, sydney).Unix(),
+			}},
+			rows: []row{
+				{"Turdus merula", time.Date(2024, 12, 31, 23, 30, 0, 0, sydney)},
+				{"Turdus merula", time.Date(2025, 1, 1, 0, 30, 0, 0, sydney)},
+				{"Parus major", time.Date(2025, 4, 6, 23, 30, 0, 0, sydney)},
+			},
+			wantLast:  map[string]string{"Turdus merula": "2025-01-01", "Parus major": "2025-04-06"},
+			wantYears: map[string]int{"Turdus merula": 2, "Parus major": 1},
+		},
+		{
+			name: "New York two disjoint ranges, the change lies between them",
+			loc:  newYork,
+			spans: []TimeRange{
+				{
+					Start: time.Date(2025, 2, 1, 0, 0, 0, 0, newYork).Unix(),
+					End:   time.Date(2025, 2, 28, 0, 0, 0, 0, newYork).Unix(),
+				},
+				{
+					Start: time.Date(2025, 3, 20, 0, 0, 0, 0, newYork).Unix(),
+					End:   time.Date(2025, 3, 27, 0, 0, 0, 0, newYork).Unix(),
+				},
+			},
+			rows: []row{
+				{"Turdus merula", time.Date(2025, 2, 10, 23, 30, 0, 0, newYork)},
+				{"Parus major", time.Date(2025, 3, 25, 0, 30, 0, 0, newYork)},
+			},
+			wantLast:  map[string]string{"Turdus merula": "2025-02-10", "Parus major": "2025-03-25"},
+			wantYears: map[string]int{"Turdus merula": 1, "Parus major": 1},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupInsightsTestDB(t)
+			repo := NewInsightsRepository(db, false, false)
+			labels := map[string]uint{}
+			for _, r := range tt.rows {
+				if _, ok := labels[r.species]; !ok {
+					labels[r.species] = seedLabel(t, db, r.species)
+				}
+				seedDetection(t, db, labels[r.species], r.at.Unix(), 0.9)
+			}
+
+			got, err := repo.GetExpectedSpeciesToday(t.Context(), tt.spans, tt.loc, nil)
+			require.NoError(t, err)
+			require.Len(t, got, len(tt.wantLast))
+			for _, sp := range got {
+				assert.Equal(t, tt.wantLast[sp.ScientificName], sp.LastSeenDate, "last seen date of %s", sp.ScientificName)
+				assert.Equal(t, tt.wantYears[sp.ScientificName], sp.YearsSeen, "years seen of %s", sp.ScientificName)
+			}
+		})
+	}
+}
+
+// TestGetDashboardKPIs_PerRowOffsets pins that the best day and the recent dates use the offset
+// in effect at each row. The two seeded days lie on either side of the New York spring-forward
+// change, with rows 30 minutes before local midnight (EST) and after it (EDT).
+func TestGetDashboardKPIs_PerRowOffsets(t *testing.T) {
+	newYork := loadInsightsZone(t, "America/New_York")
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+
+	label := seedLabel(t, db, "Turdus merula")
+	for _, at := range []time.Time{
+		time.Date(2025, 3, 5, 23, 30, 0, 0, newYork),
+		time.Date(2025, 3, 5, 23, 45, 0, 0, newYork),
+		time.Date(2025, 3, 10, 0, 30, 0, 0, newYork),
+	} {
+		seedDetection(t, db, label, at.Unix(), 0.9)
+	}
+
+	todaySince := time.Date(2025, 4, 1, 0, 0, 0, 0, newYork).Unix()
+	kpis, err := repo.GetDashboardKPIs(t.Context(), todaySince, newYork, nil)
+	require.NoError(t, err)
+
+	assert.Equal(t, "2025-03-05", kpis.BestDayDate)
+	assert.Equal(t, int64(2), kpis.BestDayCount)
+	assert.Equal(t, []string{"2025-03-10", "2025-03-05"}, kpis.RecentDates)
+}
+
+// TestGetExpectedSpeciesToday_RangeIsHalfOpen pins that a range includes a detection at its
+// Start and excludes one at its End, the first instant of the next local day.
+func TestGetExpectedSpeciesToday_RangeIsHalfOpen(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	repo := NewInsightsRepository(db, false, false)
+
+	start := time.Date(2025, 3, 6, 0, 0, 0, 0, time.UTC).Unix()
+	end := time.Date(2025, 3, 7, 0, 0, 0, 0, time.UTC).Unix()
+	atStart := seedLabel(t, db, "Turdus merula")
+	atEnd := seedLabel(t, db, "Parus major")
+	seedDetection(t, db, atStart, start, 0.9)
+	seedDetection(t, db, atEnd, end, 0.9)
+
+	got, err := repo.GetExpectedSpeciesToday(t.Context(), []TimeRange{{Start: start, End: end}}, time.UTC, nil)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, "Turdus merula", got[0].ScientificName)
+}
+
+// TestGetDashboardKPIs_LookbackAndZone pins the start of the best-day window (the local date one
+// year before today, 29 February becoming 1 March) and that a nil zone buckets in UTC.
+func TestGetDashboardKPIs_LookbackAndZone(t *testing.T) {
+	newYork := loadInsightsZone(t, "America/New_York")
+	tests := []struct {
+		name      string
+		today     time.Time
+		inside    time.Time
+		outside   time.Time
+		wantDate  string
+		queryZone *time.Location
+	}{
+		{
+			name:      "window starts at local midnight one year back",
+			today:     time.Date(2025, 3, 20, 0, 0, 0, 0, newYork),
+			inside:    time.Date(2024, 3, 20, 0, 30, 0, 0, newYork),
+			outside:   time.Date(2024, 3, 19, 23, 30, 0, 0, newYork),
+			wantDate:  "2024-03-20",
+			queryZone: newYork,
+		},
+		{
+			name:      "window start follows the offset of the date a year back, not of today",
+			today:     time.Date(2025, 3, 10, 0, 0, 0, 0, newYork),
+			inside:    time.Date(2024, 3, 10, 0, 30, 0, 0, newYork),
+			outside:   time.Date(2024, 3, 9, 23, 30, 0, 0, newYork),
+			wantDate:  "2024-03-10",
+			queryZone: newYork,
+		},
+		{
+			name:      "29 February looks back to 1 March",
+			today:     time.Date(2028, 2, 29, 0, 0, 0, 0, newYork),
+			inside:    time.Date(2027, 3, 1, 0, 30, 0, 0, newYork),
+			outside:   time.Date(2027, 2, 28, 23, 30, 0, 0, newYork),
+			wantDate:  "2027-03-01",
+			queryZone: newYork,
+		},
+		{
+			name:      "nil zone is UTC",
+			today:     time.Date(2025, 4, 1, 0, 0, 0, 0, time.UTC),
+			inside:    time.Date(2025, 3, 5, 23, 30, 0, 0, time.UTC),
+			outside:   time.Date(2024, 3, 31, 23, 30, 0, 0, time.UTC),
+			wantDate:  "2025-03-05",
+			queryZone: nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := setupInsightsTestDB(t)
+			repo := NewInsightsRepository(db, false, false)
+			label := seedLabel(t, db, "Turdus merula")
+			// Two rows outside the window on one day outweigh the single row inside it, so the
+			// best day is the inside one only when the window excludes them.
+			seedDetection(t, db, label, tt.outside.Unix(), 0.9)
+			seedDetection(t, db, label, tt.outside.Add(time.Minute).Unix(), 0.9)
+			seedDetection(t, db, label, tt.inside.Unix(), 0.9)
+
+			kpis, err := repo.GetDashboardKPIs(t.Context(), tt.today.Unix(), tt.queryZone, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantDate, kpis.BestDayDate)
+			assert.Equal(t, int64(1), kpis.BestDayCount)
+		})
+	}
 }

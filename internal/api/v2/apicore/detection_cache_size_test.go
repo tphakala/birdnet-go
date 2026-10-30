@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 )
 
@@ -34,39 +33,34 @@ func sampleStr(prefix string, i, n int) string {
 	return s[:n]
 }
 
-// sampleNote builds a fully populated note (review, lock, one comment, source
-// and model metadata), the shape the datastore preloads for list pages.
-func sampleNote(i int) datastore.Note {
+// sampleResult builds a fully populated result (review, lock, one comment, source
+// and model metadata), the shape the repository returns for list pages.
+func sampleResult(i int) *detection.Result {
 	classifier := sampleStr("classifier", i, sampleClipPathLen)
-	return datastore.Note{
+	return &detection.Result{
 		ID:                  uint(i + 1),
+		Timestamp:           time.Now(),
 		SourceNode:          sampleStr("node", i, sampleNameLen),
-		Date:                "2026-01-02",
-		Time:                "03:04:05",
-		Source:              datastore.AudioSource{ID: sampleStr("id", i, sampleSourceLen), SafeString: sampleStr("safe", i, sampleSourceLen), DisplayName: sampleStr("name", i, sampleSourceLen)},
+		AudioSource:         detection.AudioSource{ID: sampleStr("id", i, sampleSourceLen), SafeString: sampleStr("safe", i, sampleSourceLen), DisplayName: sampleStr("name", i, sampleSourceLen), Type: "rtsp"},
 		Model:               detection.ModelInfo{Name: sampleStr("m", i, sampleNameLen), Version: "2.4", Variant: sampleStr("v", i, sampleNameLen), ClassifierPath: &classifier, ModelType: "bird"},
 		BeginTime:           time.Now(),
 		EndTime:             time.Now(),
-		SpeciesCode:         sampleStr("sp", i, 6),
-		ScientificName:      sampleStr("sci", i, sampleNameLen),
-		CommonName:          sampleStr("com", i, sampleNameLen),
+		Species:             detection.Species{Code: sampleStr("sp", i, 6), ScientificName: sampleStr("sci", i, sampleNameLen), CommonName: sampleStr("com", i, sampleNameLen)},
 		ClipName:            sampleStr("clip", i, sampleClipPathLen),
 		SpectrogramClipName: sampleStr("spec", i, sampleClipPathLen),
 		Confidence:          0.9,
-		Review:              &datastore.NoteReview{ID: uint(i), NoteID: uint(i), Verified: "correct", CreatedAt: time.Now(), UpdatedAt: time.Now()},
-		Lock:                &datastore.NoteLock{ID: uint(i), NoteID: uint(i), LockedAt: time.Now()},
-		Comments:            []datastore.NoteComment{{ID: uint(i), NoteID: uint(i), Entry: sampleStr("comment", i, sampleCommentLen), CreatedAt: time.Now(), UpdatedAt: time.Now()}},
+		Comments:            []detection.Comment{{ID: uint(i), Entry: sampleStr("comment", i, sampleCommentLen), CreatedAt: time.Now(), UpdatedAt: time.Now()}},
 		Verified:            "correct",
 		Locked:              true,
 	}
 }
 
 func samplePage(size int) DetectionPage {
-	notes := make([]datastore.Note, size)
-	for i := range notes {
-		notes[i] = sampleNote(i)
+	results := make([]*detection.Result, size)
+	for i := range results {
+		results[i] = sampleResult(i)
 	}
-	return DetectionPage{Notes: notes, Total: int64(size)}
+	return DetectionPage{Results: results, Total: int64(size)}
 }
 
 // retainedHeapBytes returns the average live heap bytes retained by one page of
@@ -87,19 +81,19 @@ func retainedHeapBytes(size int) uint64 {
 
 // TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget measures the heap
 // retained by one cached detection page of 25, 100 and 1000 fully populated
-// notes and checks that detectionCacheMaxEntries pages of the largest
+// results and checks that detectionCacheMaxEntries pages of the largest
 // cacheable size (detectionCacheMaxPageNotes) stay within
 // detectionCacheMaxBytes.
 func TestDetectionCacheMaxEntries_WorstCaseStaysWithinBudget(t *testing.T) {
 	// Not parallel: heap measurements are skewed by concurrently running tests.
 	for _, size := range []int{25, 100, 1000} {
 		perPage := retainedHeapBytes(size)
-		t.Logf("%4d notes per page: %9d bytes per page, %5d bytes per note", size, perPage, perPage/uint64(size))
+		t.Logf("%4d results per page: %9d bytes per page, %5d bytes per result", size, perPage, perPage/uint64(size))
 	}
 
 	worstPage := retainedHeapBytes(detectionCacheMaxPageNotes)
 	worstCase := worstPage * detectionCacheMaxEntries
-	t.Logf("worst case: %d entries x %d notes = %d bytes (budget %d)", detectionCacheMaxEntries, detectionCacheMaxPageNotes, worstCase, detectionCacheMaxBytes)
+	t.Logf("worst case: %d entries x %d results = %d bytes (budget %d)", detectionCacheMaxEntries, detectionCacheMaxPageNotes, worstCase, detectionCacheMaxBytes)
 
 	require.Positive(t, worstPage)
 	assert.LessOrEqual(t, worstCase, uint64(detectionCacheMaxBytes),

@@ -203,7 +203,7 @@ Source: ISC
 
 ### github.com/klauspost/cpuid/v2
 
-License: https://github.com/klauspost/cpuid/blob/v2.4.0/LICENSE
+License: https://github.com/klauspost/cpuid/blob/v2.4.1/LICENSE
 Source: MIT
 
 ### github.com/kr/fs
@@ -433,7 +433,7 @@ Source: LGPL-2.1
 
 ### github.com/tphakala/go-audio-dsp
 
-License: https://github.com/tphakala/go-audio-dsp/blob/v0.9.0/LICENSE
+License: https://github.com/tphakala/go-audio-dsp/blob/v0.10.1/LICENSE
 Source: Apache-2.0
 
 ### github.com/tphakala/go-audio-resampler
@@ -448,7 +448,7 @@ Source: MIT
 
 ### github.com/tphakala/go-flac
 
-License: https://github.com/tphakala/go-flac/blob/v1.3.0/LICENSE
+License: https://github.com/tphakala/go-flac/blob/v1.4.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-hls
@@ -458,7 +458,7 @@ Source: MIT
 
 ### github.com/tphakala/go-m4a
 
-License: https://github.com/tphakala/go-m4a/blob/v0.7.0/LICENSE
+License: https://github.com/tphakala/go-m4a/blob/v0.8.0/LICENSE
 Source: MIT
 
 ### github.com/tphakala/go-mp3
@@ -468,7 +468,7 @@ Source: MIT
 
 ### github.com/tphakala/go-opus
 
-License: https://github.com/tphakala/go-opus/blob/v1.2.1/LICENSE
+License: https://github.com/tphakala/go-opus/blob/v1.3.0/LICENSE
 Source: BSD-3-Clause
 
 ### github.com/tphakala/go-tflite
@@ -483,7 +483,7 @@ Source: MIT
 
 ### github.com/tphakala/simd
 
-License: https://github.com/tphakala/simd/blob/v1.13.0/LICENSE
+License: https://github.com/tphakala/simd/blob/v1.14.0/LICENSE
 Source: MIT
 
 ### github.com/valyala/bytebufferpool

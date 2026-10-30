@@ -436,6 +436,7 @@
         "extendedCaptureRestartRequired": "Extended capture settings changed. Restart required.",
         "equalizerUpdateFailed": "Failed to update audio equalizer settings",
         "equalizerUpdated": "Audio equalizer settings updated",
+        "equalizerFiltersSkipped": "Audio equalizer settings saved, but some filters are skipped on {count, plural, one {source} other {sources}} {sources}: a filter must be valid at the source sample rate, with its frequency below half of it.",
         "savedSuccessfully": "Settings saved successfully",
         "saveFailed": "Failed to save settings"
       },
@@ -449,7 +450,19 @@
         "completedTitle": "Database Migration Completed",
         "completedMessage": "Migration completed. Please restart BirdNET-Go to switch to the new database.",
         "errorTitle": "Database Migration Error",
-        "errorMessage": "Migration paused due to errors. Check logs and try resuming."
+        "errorMessage": "Migration paused due to errors. Check logs and try resuming.",
+        "legacyNotStartedTitle": "Database upgrade required",
+        "legacyNotStartedMessage": "This installation still uses the old database format, which will stop working in a future release. Open System > Database to run the migration.",
+        "legacyInProgressTitle": "Database migration in progress",
+        "legacyInProgressMessage": "The migration to the new database format is running. Keep BirdNET-Go running until it finishes; the old format will stop working in a future release.",
+        "legacyNeedsAttentionTitle": "Database migration needs attention",
+        "legacyNeedsAttentionMessage": "The migration to the new database format is paused or has failed. Open System > Database to resume or retry it; the old format will stop working in a future release.",
+        "legacyRestartRequiredTitle": "Restart to finish the database migration",
+        "legacyRestartRequiredMessage": "The migration has finished. Restart BirdNET-Go to switch to the new database. If this message stays after a restart, check the log for database errors."
+      },
+      "database": {
+        "serverAttentionTitle": "Database server needs attention",
+        "serverAttentionMessage": "The MySQL or MariaDB server is not a supported release, or the database does not use the utf8mb4 character set. Open System > Health for details."
       },
       "cleanup": {
         "completeTitle": "Legacy Database Cleanup Complete",
@@ -793,6 +806,9 @@
       "loadFailedAction": "View AI Models status",
       "failingTitle": "{count, plural, one {A model fails every analysis} other {# models fail every analysis}}",
       "failingMessage": "{count, plural, one {{models} is loaded, but every analysis fails, so it detects nothing.} other {{models} are loaded, but every analysis fails, so they detect nothing.}} The AI Models page shows the backend and the error."
+    },
+    "legacyDatabase": {
+      "action": "Open database settings"
     },
     "banner": {
       "title": "Title",
@@ -1581,7 +1597,7 @@
           "restartTitle": "Restart Required",
           "restartBody": "Restart the application to switch to the V2 database. Legacy database cleanup will be available after restart.",
           "fallbackError": "Record count mismatch between legacy and V2 databases. Some records may not have migrated correctly.",
-          "migrateInfo": "Migration will transfer {count} records from the legacy database to the new V2 schema. Dual-write mode ensures zero data loss during migration.",
+          "migrateInfo": "Migration will transfer {count} records from the legacy database to the new V2 schema. New detections saved during migration are copied to the new database as well.",
           "sourceLegacy": "Source (Legacy)",
           "targetV2": "Target (V2)",
           "recordsLabel": "Records",
@@ -1633,7 +1649,7 @@
         },
         "notes": {
           "in_progress": "You can continue using the system normally while migration runs in the background.",
-          "dual_write": "Migration in progress. Your data is safe - all new detections are being saved to both databases.",
+          "dual_write": "Migration in progress. Your data is safe - new detections are saved to the current database and copied to the new database as the migration runs.",
           "migrating": "Copying your existing detections to the new database.",
           "validating": "Verifying all records were copied correctly. Almost done!",
           "cutover": "Switching to the new database. This only takes a moment.",
@@ -1716,6 +1732,12 @@
             },
             "sqlite_integrity": {
               "name": "Database Integrity"
+            },
+            "mysql_server_version": {
+              "name": "Database Server Version"
+            },
+            "mysql_charset": {
+              "name": "Database Character Set"
             },
             "mysql_table_health": {
               "name": "Table Health"
@@ -2323,6 +2345,7 @@
     "errors": {
       "loadFailed": "Failed to load settings",
       "saveFailed": "Failed to save settings",
+      "changedElsewhere": "Settings were changed elsewhere. Review them and save again.",
       "databaseStatsFailed": "Failed to load database statistics",
       "csvDownloadFailed": "Failed to download CSV"
     },
@@ -2670,7 +2693,7 @@
                 "descriptions": {
                   "highContrast": "Best for weak signals. Bird calls stand out clearly from background noise. Recommended for scientific/grayscale styles.",
                   "standard": "Default balanced setting. Good for most use cases.",
-                  "extended": "More detail visible but lower contrast. SoX default value."
+                  "extended": "More detail visible but lower contrast."
                 }
               },
               "enabled": {
@@ -2772,7 +2795,7 @@
           "title": "What's included in the report:",
           "applicationLogs": "**Application logs** - Recent errors and debug information",
           "configuration": "**Configuration** - Your settings with sensitive data removed",
-          "systemInfo": "**System information** - OS version, memory, and runtime details",
+          "systemInfo": "**System information** - OS version, memory, hardware, connected USB devices and sound cards, and runtime details",
           "notIncluded": "**NOT included** - Audio files, bird detections, or personal data"
         },
         "userMessage": {
@@ -2925,6 +2948,11 @@
             "unit": "min",
             "helpText": "Prevent repeated notifications for the same species within this time window. Set to 0 to disable."
           }
+        },
+        "rulesNotice": {
+          "message": "Detection push notifications come from alert rules on the Rules tab. The built-in detection rules notify only in the app. To get pushes, add the {pushAction} action to the {ruleName} rule, or create a rule for the {eventName} event with a confidence condition and a cooldown.",
+          "previousFilters": "Your Minimum Confidence ({confidence}%) and Species Cooldown ({minutes} min) settings here are not used by alert rules.",
+          "openRules": "Open Rules"
         },
         "noProviders": "No providers configured",
         "noProvidersDescription": "Add a provider to start receiving push notifications",
@@ -3229,10 +3257,6 @@
       "birdweather": {
         "title": "BirdWeather",
         "description": "Upload detections to BirdWeather",
-        "ffmpegWarning": {
-          "title": "FFmpeg not detected",
-          "message": "Please install FFmpeg to enable FLAC encoding support, BirdWeather is deprecating WAV uploads in favor of compressed FLAC audio files."
-        },
         "enable": "Enable BirdWeather Uploads",
         "token": {
           "label": "BirdWeather token",
@@ -4249,7 +4273,6 @@
     },
     "species": {
       "pageLabel": "Species settings",
-      "saveError": "Failed to save configuration for \"{species}\". Please try again.",
       "configUpdated": "Updated configuration for \"{species}\"",
       "configAdded": "Added configuration for \"{species}\"",
       "duplicateConfigError": "Species \"{species}\" already has a configuration. Please choose a different name.",
@@ -5080,6 +5103,7 @@
       "loop": "Toggle loop",
       "player": "Audio player",
       "autoplayBlocked": "Click to play (autoplay blocked)",
+      "hlsLoadFailed": "Could not load the audio player, reload the page and try again",
       "hlsNotSupported": "HLS playback not supported in this browser",
       "streamStarting": "Starting audio stream...",
       "levelFor": "Audio level for {source}",
@@ -5314,6 +5338,9 @@
       "invalidJSON": "Invalid JSON",
       "invalidEscalation": "Escalation steps are invalid",
       "engineUnavailable": "Alerting engine is unavailable"
+    },
+    "insights": {
+      "v2Required": "Insights require the enhanced (v2) database"
     },
     "detection": {
       "invalidDate": "Invalid {paramName} format, use YYYY-MM-DD"

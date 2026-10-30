@@ -155,10 +155,14 @@ func resolveSentryDSN() string {
 	return strings.TrimSpace(sentryDSN)
 }
 
-// GetFrontendDSN returns the Sentry DSN for frontend error tracking. The
+// FrontendDSN returns the Sentry DSN for frontend error tracking, or "" when
+// settings do not allow reporting (telemetry off or the build too old). The
 // frontend shares the backend Sentry project, so it follows the same resolver
 // and therefore the same build-time/runtime precedence.
-func GetFrontendDSN() string {
+func FrontendDSN(settings *conf.Settings) string {
+	if !reportingAllowed(settings, time.Now()) {
+		return ""
+	}
 	return resolveSentryDSN()
 }
 
@@ -190,23 +194,86 @@ var (
 	testMode               atomic.Int32 // testMode allows tests to bypass settings checks
 )
 
+// SignalReconfigureSentry is the control signal that applies a changed
+// Sentry.Enabled setting at runtime by starting or closing the Sentry client.
+const SignalReconfigureSentry = "reconfigure_sentry"
+
+// Client lifecycle state. clientLifecycleMu serializes every bind, unbind and
+// close of the Sentry client, and a support dump upload holds it from capture
+// through flush so a concurrent opt-out cannot close the client under a queued
+// dump. Lock order: clientLifecycleMu before deferredMutex, never the reverse.
+var (
+	clientLifecycleMu sync.Mutex
+	// fullClient is the telemetry client bound by InitSentry; nil while none is
+	// bound. Guarded by clientLifecycleMu.
+	fullClient *sentry.Client
+	// closedClients remembers clients this package closed. sentry-go's capture
+	// helpers push scope layers on the shared hub, and BindClient only changes
+	// the top layer, so a bind or unbind that races with an in-flight capture can
+	// leave a closed client visible on the base layer once that layer pops.
+	// Flushing a closed client blocks for the whole timeout, so it is skipped.
+	// Guarded by clientLifecycleMu and bounded by maxRememberedClosedClients.
+	closedClients = make(map[*sentry.Client]struct{})
+)
+
+// maxRememberedClosedClients bounds closedClients; the set is cleared when it
+// grows past this. A forgotten closed client counts as live again, so a
+// lingering one costs a flush wait or a support upload on a dead transport.
+const maxRememberedClosedClients = 16
+
+// closeClient closes client and remembers it as closed. The caller holds
+// clientLifecycleMu.
+func closeClient(client *sentry.Client) {
+	if len(closedClients) >= maxRememberedClosedClients {
+		clear(closedClients)
+	}
+	closedClients[client] = struct{}{}
+	client.Close()
+}
+
+// flushAndCloseClient flushes client unless it was already closed, then closes
+// it. The caller holds clientLifecycleMu.
+func flushAndCloseClient(client *sentry.Client) {
+	if _, closed := closedClients[client]; !closed {
+		client.Flush(sentryFlushTimeout)
+	}
+	closeClient(client)
+}
+
+// reportingActive is the single consent check for every capture path: test
+// mode, the live opt-in setting, build age and a bound client. It is evaluated
+// per event, so a settings change takes effect without a restart.
+func reportingActive() bool {
+	return !shouldSkipTelemetry()
+}
+
 // shouldSkipTelemetry returns true if telemetry should be skipped.
-// It checks test mode, whether Sentry is enabled in settings, and whether the
-// Sentry SDK is actually initialized for this build.
+// It checks test mode, whether Sentry is enabled in settings, whether this build
+// is still young enough to report, and whether the Sentry SDK is actually
+// initialized for this build.
 // This helper reduces code duplication across telemetry functions.
 func shouldSkipTelemetry() bool {
 	// In test mode, never skip (telemetry is always "enabled" for testing)
 	if testMode.Load() == testModeEnabled {
 		return false
 	}
-	settings := conf.GetSettings()
-	if settings == nil || !settings.Sentry.Enabled {
+	// Checked per call so a running process stops once its build ages out.
+	if !reportingAllowed(conf.GetSettings(), time.Now()) {
 		return true
 	}
 	// Even when opted in, skip when the SDK was never initialized for this build
 	// (no DSN configured). Otherwise the capture paths would run and log
 	// "event sent" while sentry-go silently no-ops because no client is bound.
 	return !sentryClientBound()
+}
+
+// discardDeferredMessages drops queued deferred messages and marks Sentry as
+// initialized, for the cases where the SDK will never be initialized.
+func discardDeferredMessages() {
+	deferredMutex.Lock()
+	deferredMessages = nil
+	sentryInitialized = true
+	deferredMutex.Unlock()
 }
 
 // sentryClientBound reports whether a real Sentry client is bound to the
@@ -248,16 +315,27 @@ func collectPlatformInfo() PlatformInfo {
 }
 
 // InitSentry initializes Sentry SDK with privacy-compliant settings
-// This function will only initialize Sentry if explicitly enabled by the user
+// This function will only initialize Sentry if explicitly enabled by the user,
+// a DSN is configured for this build, and the build is not older than
+// maxTelemetryBuildAge. It serializes with the other client lifecycle
+// operations and refreshes the cached reporting flags.
 func InitSentry(settings *conf.Settings) error {
+	clientLifecycleMu.Lock()
+	err := initSentryLocked(settings)
+	clientLifecycleMu.Unlock()
+
+	// The cached reporting flags depend on whether a client is bound. This
+	// also opens the fast path at startup, before any settings save.
+	UpdateTelemetryEnabled()
+	return err
+}
+
+// initSentryLocked is InitSentry for a caller that holds clientLifecycleMu.
+func initSentryLocked(settings *conf.Settings) error {
 	// Check if Sentry is explicitly enabled (opt-in)
 	if !settings.Sentry.Enabled {
 		GetLogger().Info("Sentry telemetry is disabled (opt-in required)")
-		// Drain deferred messages; Sentry will never initialize
-		deferredMutex.Lock()
-		deferredMessages = nil
-		sentryInitialized = true
-		deferredMutex.Unlock()
+		discardDeferredMessages()
 		return nil
 	}
 
@@ -273,11 +351,18 @@ func InitSentry(settings *conf.Settings) error {
 	if resolveSentryDSN() == "" {
 		GetLogger().Info("Sentry telemetry enabled but no DSN is configured for this build; skipping initialization",
 			logger.String("hint", "set "+sentryDSNEnvVar+" to point telemetry at a Sentry project"))
-		// Drain deferred messages; Sentry will never initialize for this build.
-		deferredMutex.Lock()
-		deferredMessages = nil
-		sentryInitialized = true
-		deferredMutex.Unlock()
+		discardDeferredMessages()
+		return nil
+	}
+
+	// Builds past their telemetry age do not report. Support dump uploads still
+	// work through InitMinimalSentryForSupport.
+	if buildTooOld(settings.BuildDate, time.Now()) {
+		GetLogger().Info("Sentry telemetry enabled but this build is too old to report errors; skipping initialization",
+			logger.String("build_date", settings.BuildDate),
+			logger.Int("max_build_age_days", maxTelemetryBuildAgeDays),
+			logger.String("hint", "update to a current release to resume error reporting"))
+		discardDeferredMessages()
 		return nil
 	}
 
@@ -285,6 +370,7 @@ func InitSentry(settings *conf.Settings) error {
 	if err := initializeSentrySDK(settings); err != nil {
 		return err
 	}
+	fullClient = sentry.CurrentHub().Client()
 
 	// Configure global scope
 	configureSentryScope(settings)
@@ -329,11 +415,15 @@ func initializeSentrySDK(settings *conf.Settings) error {
 		Release: fmt.Sprintf("birdnet-go@%s", settings.Version),
 
 		// BeforeSend allows us to filter sensitive data
-		BeforeSend: createBeforeSendHook(settings),
+		BeforeSend: createBeforeSendHook(conf.GetSettings),
 
 		// sentry-go v0.46.0 telemetry processor drops event attachments (support dumps).
 		// Scheduler.sendItem() only adds the event envelope item, skipping Attachments.
 		DisableTelemetryBuffer: true,
+
+		// sentry-go has no backoff for network errors; the gate stops DNS and
+		// dial attempts while the ingest host is unreachable (GitHub #4813).
+		HTTPTransport: sentryDeliveryGate,
 	})
 
 	if err != nil {
@@ -345,8 +435,11 @@ func initializeSentrySDK(settings *conf.Settings) error {
 
 // createBeforeSendHook creates the BeforeSend hook for privacy filtering and
 // uptime enrichment. Only one BeforeSend can be attached to the Sentry client,
-// so uptime annotation runs inside this hook after privacy filtering.
-func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
+// so uptime annotation runs inside this hook after privacy filtering. It also
+// drops every event while the user has opted out or the build is past its
+// telemetry age, except support dumps. currentSettings is read per event so an
+// opt-out takes effect on a running client.
+func createBeforeSendHook(currentSettings func() *conf.Settings) func(*sentry.Event, *sentry.EventHint) *sentry.Event {
 	return func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 		// Guard against a nil event before the privacy filters dereference
 		// it. `enrichEventWithUptime` is already nil-safe, but the filter
@@ -356,8 +449,16 @@ func createBeforeSendHook(settings *conf.Settings) func(*sentry.Event, *sentry.E
 			return nil
 		}
 
+		// Per event: direct sentry.* callers bypass shouldSkipTelemetry, a
+		// running process can cross the age limit after init, and the user can
+		// opt out while the client is still bound.
+		live := currentSettings()
+		if !isSupportDumpEvent(event) && !reportingAllowed(live, time.Now()) {
+			return nil
+		}
+
 		var filtered *sentry.Event
-		if settings.Sentry.Debug {
+		if live != nil && live.Sentry.Debug {
 			filtered = applyPrivacyFiltersWithLogging(event)
 		} else {
 			filtered = applyPrivacyFilters(event)
@@ -688,6 +789,67 @@ func SetDatastoreSchemaTag(schemaVersion string) {
 	sentry.ConfigureScope(func(scope *sentry.Scope) {
 		scope.SetTag("datastore_schema", schemaVersion)
 	})
+}
+
+const (
+	// migrationStateTagKey is the Sentry tag holding the legacy-to-v2 migration state.
+	migrationStateTagKey = "migration_state"
+	// migrationPrereqTagKey is the Sentry tag holding the outcome of the migration prerequisite checks.
+	migrationPrereqTagKey = "migration_prereq"
+	// databaseServerTagKey is the Sentry tag holding the database server release series.
+	databaseServerTagKey = "db_server"
+	// databaseServerSupportTagKey is the Sentry tag holding the support level of the database server.
+	databaseServerSupportTagKey = "db_server_support"
+	// databaseCharsetTagKey is the Sentry tag holding the database character set class.
+	databaseCharsetTagKey = "db_charset"
+)
+
+// SetMigrationStateTag sets a global Sentry tag with the legacy-to-v2 migration
+// state. The caller must pass a value from a closed set (the migration status
+// strings plus fixed fallbacks), never error text or a path. It reports whether
+// the tag was applied; false means telemetry is currently off or the value is
+// empty, so a caller may retry later.
+func SetMigrationStateTag(value string) bool {
+	if shouldSkipTelemetry() || value == "" {
+		return false
+	}
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTag(migrationStateTagKey, value)
+	})
+	return true
+}
+
+// SetMigrationPrereqTag sets a global Sentry tag with the outcome of the
+// migration prerequisite checks. The caller must pass a value from a closed
+// set: "passed" or the fixed ID of a failing check, never error text or a path.
+// It reports whether the tag was applied.
+func SetMigrationPrereqTag(value string) bool {
+	if shouldSkipTelemetry() || value == "" {
+		return false
+	}
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTag(migrationPrereqTagKey, value)
+	})
+	return true
+}
+
+// SetDatabaseServerTags sets the global Sentry tags describing the MySQL or
+// MariaDB server: its release series, its support level and the
+// character set class of the schema. The caller must pass values from closed
+// sets (see dbserver.ServerTag, the dbserver support levels and
+// dbserver.CharsetTag), never the raw version string, error text or a path.
+// It reports whether the tags were applied; false means telemetry is currently
+// off or a value is empty, and nothing is set.
+func SetDatabaseServerTags(server, support, charset string) bool {
+	if shouldSkipTelemetry() || server == "" || support == "" || charset == "" {
+		return false
+	}
+	sentry.ConfigureScope(func(scope *sentry.Scope) {
+		scope.SetTag(databaseServerTagKey, server)
+		scope.SetTag(databaseServerSupportTagKey, support)
+		scope.SetTag(databaseCharsetTagKey, charset)
+	})
+	return true
 }
 
 // processDeferredMessages processes any messages that were captured before Sentry was ready
@@ -1107,8 +1269,13 @@ func GetAttachmentUploader() *AttachmentUploader {
 }
 
 // InitMinimalSentryForSupport initializes a minimal Sentry client just for support uploads
-// This allows support bundle uploads without enabling full telemetry
+// This allows support bundle uploads without enabling full telemetry. It
+// serializes with the other client lifecycle operations, so it waits for a
+// running support dump upload or runtime reconfiguration. A bound client that
+// this package already closed does not count as initialized and is replaced.
 func InitMinimalSentryForSupport(systemID, version string) error {
+	clientLifecycleMu.Lock()
+	defer clientLifecycleMu.Unlock()
 	deferredMutex.Lock()
 	defer deferredMutex.Unlock()
 
@@ -1118,8 +1285,17 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 	// drain deferred messages without initializing the SDK; relying on that flag
 	// here would make support-dump upload a silent no-op for users who keep
 	// telemetry disabled but request an upload.
-	if sentryClientBound() {
-		return nil
+	//
+	// A client this package already closed does not count: sentry-go's capture
+	// helpers push scope layers on the shared hub, so an unbind that raced one
+	// can leave the closed client visible on the base layer. Reusing it would
+	// queue the dump on a dead transport.
+	hub := sentry.CurrentHub()
+	if bound := hub.Client(); bound.IsEnabled() {
+		if _, closed := closedClients[bound]; !closed {
+			return nil
+		}
+		hub.BindClient(nil)
 	}
 
 	// Without a DSN there is no Sentry project to upload to. From-source builds
@@ -1144,10 +1320,13 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 		// sentry-go v0.46.0 telemetry processor drops event attachments (support dumps).
 		DisableTelemetryBuffer: true,
 
+		// Same delivery gate as the main client (GitHub #4813).
+		HTTPTransport: sentryDeliveryGate,
+
 		// Only allow support dump events
 		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
 			// Only allow events tagged as support dumps
-			if event.Tags == nil || event.Tags["type"] != "support_dump" {
+			if !isSupportDumpEvent(event) {
 				return nil // Drop all non-support events
 			}
 			// Skip ScrubMessage on event.Message: the message is built by our
@@ -1174,6 +1353,76 @@ func InitMinimalSentryForSupport(systemID, version string) error {
 
 	GetLogger().Info("minimal Sentry initialized for support uploads only",
 		logger.String("system_id", systemID))
+
+	return nil
+}
+
+// ReconfigureSentry applies the current Sentry.Enabled setting to the running
+// process. It is level-triggered: it reads the live settings snapshot and
+// converges to it, so running it any number of times, in any order, ends in the
+// state of the latest settings.
+//
+// When reporting is allowed and no full client is bound, it initializes the
+// client (flushing and closing a minimal support client it replaces) and
+// registers the telemetry worker. Otherwise it unbinds and closes whatever
+// client is bound, without flushing, so no further traffic leaves the process.
+func ReconfigureSentry() error {
+	log := GetLogger()
+
+	// Refresh the fast-path flag and the error package's cached flag on every
+	// exit. Every return path has released clientLifecycleMu by then.
+	defer UpdateTelemetryEnabled()
+
+	clientLifecycleMu.Lock()
+	settings := conf.GetSettings()
+	hub := sentry.CurrentHub()
+
+	if reportingAllowed(settings, time.Now()) {
+		if fullClient == nil || hub.Client() != fullClient {
+			previous := hub.Client() // no-op client, or the minimal support client
+			stale := fullClient      // non-nil only if something rebound the hub
+			if err := initSentryLocked(settings); err != nil {
+				clientLifecycleMu.Unlock()
+				return errors.New(err).
+					Component("telemetry").
+					Category(errors.CategoryConfiguration).
+					Context("operation", "reconfigure_sentry").
+					Build()
+			}
+			current := hub.Client()
+			if previous.IsEnabled() && previous != current {
+				flushAndCloseClient(previous)
+			}
+			if stale != nil && stale != current {
+				closeClient(stale)
+			}
+			if fullClient != nil && fullClient != previous {
+				log.Info("Sentry telemetry enabled at runtime")
+			}
+		}
+		clientLifecycleMu.Unlock()
+
+		if err := InitializeEventBusIntegration(); err != nil {
+			log.Warn("telemetry event bus integration failed after enabling Sentry", logger.Error(err))
+		}
+	} else {
+		bound := hub.Client()
+		closed := false
+		if bound.IsEnabled() {
+			hub.BindClient(nil)
+			closeClient(bound) // no flush: consent withdrawn
+			closed = true
+		}
+		if fullClient != nil && fullClient != bound {
+			closeClient(fullClient)
+			closed = true
+		}
+		fullClient = nil
+		clientLifecycleMu.Unlock()
+		if closed {
+			log.Info("Sentry telemetry disabled; client closed")
+		}
+	}
 
 	return nil
 }

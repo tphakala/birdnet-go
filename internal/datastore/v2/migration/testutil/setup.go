@@ -23,6 +23,10 @@ import (
 	gormlogger "gorm.io/gorm/logger"
 )
 
+// workerStopTimeout bounds how long test cleanup waits for the migration worker
+// to exit before the databases are closed.
+const workerStopTimeout = 10 * time.Second
+
 // TestContext contains all dependencies needed for migration integration tests.
 type TestContext struct {
 	// Temporary directory for test databases
@@ -34,8 +38,8 @@ type TestContext struct {
 	Seeder     *LegacySeeder // Seeder for legacy data
 
 	// V2 database components
-	V2Manager    *datastoreV2.SQLiteManager // V2 SQLite manager
-	StateManager *datastoreV2.StateManager  // Migration state manager
+	V2Manager    datastoreV2.Manager       // V2 manager (SQLite, or MySQL from SetupMySQLIntegrationTest)
+	StateManager *datastoreV2.StateManager // Migration state manager
 
 	// V2 Repositories
 	DetectionRepo    repository.DetectionRepository
@@ -54,11 +58,19 @@ type TestContext struct {
 
 	// Migration components
 	Worker            *migration.Worker
+	RelatedMigrator   *migration.RelatedDataMigrator // The worker's related data migrator, for direct SyncTail and MigrateAll calls
 	AuxiliaryMigrator *migration.AuxiliaryMigrator
 
 	// Adapters for migration interfaces
 	legacyDetectionRepo datastore.DetectionRepository
 	legacyInterface     datastore.Interface
+
+	// PredictionsBatchSize, when set before RecreateWorker, is the number of
+	// legacy results the related data migrator reads per batch (0 = default).
+	PredictionsBatchSize int
+
+	// useBatchMode is passed to the worker as UseBatchMode (set for MySQL, as in production).
+	useBatchMode bool
 
 	// Logger
 	Logger logger.Logger
@@ -68,8 +80,21 @@ type TestContext struct {
 	cleanup func()
 }
 
+// stopWorker stops the migration worker and waits for it to exit, so nothing
+// writes to the databases while the caller tears them down.
+func (ctx *TestContext) stopWorker() {
+	if ctx.Worker == nil {
+		return
+	}
+	// The test context is already cancelled during cleanup, so use a fresh one.
+	stopCtx, cancel := context.WithTimeout(context.Background(), workerStopTimeout)
+	defer cancel()
+	_ = ctx.Worker.Stop(stopCtx)
+}
+
 // SetupIntegrationTest creates a complete test environment for migration integration tests.
-// Call this at the start of each test. The cleanup function is registered with t.Cleanup().
+// Call this at the start of each test. The cleanup function is registered with t.Cleanup();
+// it stops the migration worker and waits for it before closing the databases.
 func SetupIntegrationTest(t *testing.T) *TestContext {
 	t.Helper()
 
@@ -99,9 +124,7 @@ func SetupIntegrationTest(t *testing.T) *TestContext {
 	// Register cleanup: stop worker before closing databases to prevent
 	// goroutine leaks from tail sync running after COMPLETED state.
 	t.Cleanup(func() {
-		if ctx.Worker != nil {
-			ctx.Worker.Stop()
-		}
+		ctx.stopWorker()
 		if ctx.cleanup != nil {
 			ctx.cleanup()
 		}
@@ -123,19 +146,7 @@ func (ctx *TestContext) setupLegacyDB(t *testing.T, tmpDir string) {
 	require.NoError(t, err, "failed to create legacy GORM DB")
 
 	// Auto-migrate the legacy schema
-	err = gormDB.AutoMigrate(
-		&datastore.Note{},
-		&datastore.Results{},
-		&datastore.NoteReview{},
-		&datastore.NoteComment{},
-		&datastore.NoteLock{},
-		&datastore.DailyEvents{},
-		&datastore.HourlyWeather{},
-		&datastore.DynamicThreshold{},
-		&datastore.ThresholdEvent{},
-		&datastore.ImageCache{},
-		&datastore.NotificationHistory{},
-	)
+	err = gormDB.AutoMigrate(legacyModels()...)
 	require.NoError(t, err, "failed to migrate legacy schema")
 
 	// Get the underlying sql.DB for the seeder
@@ -187,15 +198,7 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 	ctx.StateManager = datastoreV2.NewStateManager(mgr.DB())
 
 	// Create repositories (useV2Prefix = false for direct table access in tests, isMySQL = false for SQLite)
-	db := mgr.DB()
-	ctx.DetectionRepo = repository.NewDetectionRepository(db, nil, false, false)
-	ctx.LabelRepo = repository.NewLabelRepository(db, nil, false, false)
-	ctx.ModelRepo = repository.NewModelRepository(db, nil, false, false)
-	ctx.SourceRepo = repository.NewAudioSourceRepository(db, nil, false, false)
-	ctx.WeatherRepo = repository.NewWeatherRepository(db, nil, false, false)
-	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, nil, ctx.LabelRepo, false, false)
-	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, false, false)
-	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, nil, ctx.LabelRepo, false, false)
+	ctx.createRepositories(mgr.DB(), false, false)
 
 	// Populate lookup tables for V2 normalized schema
 	ctx.setupLookupTables(t)
@@ -207,6 +210,35 @@ func (ctx *TestContext) setupV2DB(t *testing.T, tmpDir string) {
 			oldCleanup()
 		}
 		_ = mgr.Close()
+	}
+}
+
+// createRepositories builds the v2 repositories on db.
+func (ctx *TestContext) createRepositories(db *gorm.DB, useV2Prefix, isMySQL bool) {
+	ctx.DetectionRepo = repository.NewDetectionRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.LabelRepo = repository.NewLabelRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.ModelRepo = repository.NewModelRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.SourceRepo = repository.NewAudioSourceRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.WeatherRepo = repository.NewWeatherRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.ImageCacheRepo = repository.NewImageCacheRepository(db, nil, ctx.LabelRepo, useV2Prefix, isMySQL)
+	ctx.ThresholdRepo = repository.NewDynamicThresholdRepository(db, nil, useV2Prefix, isMySQL)
+	ctx.NotificationRepo = repository.NewNotificationHistoryRepository(db, nil, ctx.LabelRepo, useV2Prefix, isMySQL)
+}
+
+// legacyModels lists the legacy tables the migration reads, in AutoMigrate order.
+func legacyModels() []any {
+	return []any{
+		&datastore.Note{},
+		&datastore.Results{},
+		&datastore.NoteReview{},
+		&datastore.NoteComment{},
+		&datastore.NoteLock{},
+		&datastore.DailyEvents{},
+		&datastore.HourlyWeather{},
+		&datastore.DynamicThreshold{},
+		&datastore.ThresholdEvent{},
+		&datastore.ImageCache{},
+		&datastore.NotificationHistory{},
 	}
 }
 
@@ -250,15 +282,16 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 	// Create related data migrator for reviews, comments, locks, predictions
 	// Use small batch size for faster testing
 	relatedMigrator := migration.NewRelatedDataMigrator(&migration.RelatedDataMigratorConfig{
-		LegacyStore:        ctx.legacyInterface,
-		DetectionRepo:      ctx.DetectionRepo,
-		LabelRepo:          ctx.LabelRepo,
-		StateManager:       ctx.StateManager,
-		Logger:             ctx.Logger,
-		BatchSize:          testMigrationBatchSize,
-		DefaultModelID:     ctx.DefaultModelID,
-		SpeciesLabelTypeID: ctx.SpeciesLabelTypeID,
-		AvesClassID:        ctx.AvesClassID,
+		LegacyStore:          ctx.legacyInterface,
+		DetectionRepo:        ctx.DetectionRepo,
+		LabelRepo:            ctx.LabelRepo,
+		StateManager:         ctx.StateManager,
+		Logger:               ctx.Logger,
+		BatchSize:            testMigrationBatchSize,
+		PredictionsBatchSize: ctx.PredictionsBatchSize,
+		DefaultModelID:       ctx.DefaultModelID,
+		SpeciesLabelTypeID:   ctx.SpeciesLabelTypeID,
+		AvesClassID:          ctx.AvesClassID,
 	})
 
 	// Create worker with test configuration
@@ -277,10 +310,12 @@ func (ctx *TestContext) createWorker(t *testing.T) {
 		MaxConsecErrors:    5,
 		SpeciesLabelTypeID: ctx.SpeciesLabelTypeID,
 		AvesClassID:        ctx.AvesClassID,
+		UseBatchMode:       ctx.useBatchMode,
 	})
 	require.NoError(t, err, "failed to create migration worker")
 
 	ctx.Worker = worker
+	ctx.RelatedMigrator = relatedMigrator
 }
 
 // createAuxiliaryMigrator creates the auxiliary migrator with all dependencies.
@@ -574,7 +609,11 @@ func (r *testDetectionRepo) GetRecent(_ context.Context, _ int) ([]*detection.Re
 	return nil, nil
 }
 
-func (r *testDetectionRepo) GetBySpecies(_ context.Context, _ string, _ *datastore.DetectionFilters) ([]*detection.Result, int64, error) {
+func (r *testDetectionRepo) SearchAdvanced(_ context.Context, _ *datastore.AdvancedSearchFilters) ([]*detection.Result, int64, error) {
+	return nil, 0, nil
+}
+
+func (r *testDetectionRepo) GetBySpecies(_ context.Context, _, _, _ string, _, _, _ int) ([]*detection.Result, int64, error) {
 	return nil, 0, nil
 }
 

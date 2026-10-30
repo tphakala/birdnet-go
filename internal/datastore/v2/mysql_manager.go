@@ -1,10 +1,13 @@
 package v2
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/datastore/dbserver"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
+	"github.com/tphakala/birdnet-go/internal/errors"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
@@ -37,17 +40,87 @@ type MySQLManager struct {
 	location    string // host:port/database for display
 	tablePrefix string // "" for fresh installs, "v2_" for migration
 	log         logger.Logger
+
+	// beforeConvertAlter is a test seam. It is called under the table lock, after
+	// the emptiness check and before the ALTER of the utf8mb4 conversion. It is
+	// nil in production.
+	beforeConvertAlter func(table string)
+
+	// afterConvertAlter is a test seam. It is called with the pinned handle right
+	// after the ALTER of the utf8mb4 conversion succeeded, before the table is
+	// unlocked. It is nil in production.
+	afterConvertAlter func(tx *gorm.DB)
 }
 
 // v2TablePrefix is the prefix used for all v2 tables in MySQL.
 const v2TablePrefix = "v2_"
 
+// mysqlDSNParams are the connection parameters of the v2 MySQL DSN.
+// clientFoundRows makes an UPDATE report the rows it matched, as SQLite does,
+// instead of the rows it changed. The repositories read RowsAffected == 0 as
+// "row missing or locked", so an UPDATE that leaves a row's values as they
+// are must not report 0.
+const mysqlDSNParams = "charset=utf8mb4&parseTime=True&loc=Local&clientFoundRows=true"
+
+const (
+	// gormTableOptionsKey is the GORM setting that Migrator.CreateTable appends
+	// to a CREATE TABLE statement, after the closing parenthesis.
+	gormTableOptionsKey = "gorm:table_options"
+
+	// utf8mb4TableOptions makes a new table utf8mb4. The leading space is there
+	// because GORM appends the value directly after the closing parenthesis.
+	// It has no COLLATE, so each server picks its own utf8mb4 default collation.
+	utf8mb4TableOptions = " DEFAULT CHARSET=" + dbserver.CharsetUTF8MB4
+
+	// errComponentDatastore and errOpReadSchemaCharset label the errors of the
+	// schema character set read.
+	errComponentDatastore  = "datastore"
+	errOpReadSchemaCharset = "read_schema_charset"
+)
+
+// tableOptionsFor returns the CREATE TABLE options for a schema whose default
+// character set is schemaCharset. A utf8mb4 schema needs none: new tables keep
+// inheriting the schema collation, so they compare with the existing tables.
+func tableOptionsFor(schemaCharset string) (options string, ok bool) {
+	if schemaCharset == dbserver.CharsetUTF8MB4 {
+		return "", false
+	}
+	return utf8mb4TableOptions, true
+}
+
+// migrationDB returns the handle that AutoMigrate creates the v2 tables with.
+// When the schema default character set is not utf8mb4 the handle carries the
+// utf8mb4 table options. It also returns the schema default character set. It
+// fails when the schema default cannot be read, so the schema never depends on
+// a transient error.
+func (m *MySQLManager) migrationDB() (db *gorm.DB, schemaCharset string, err error) {
+	charset, _, err := dbserver.QuerySchemaCharset(context.Background(), m.db)
+	if err != nil {
+		return nil, "", errors.New(err).
+			Component(errComponentDatastore).
+			Category(errors.CategoryDatabase).
+			Context("operation", errOpReadSchemaCharset).
+			Build()
+	}
+	if charset == "" {
+		return nil, "", errors.Newf("no schema row found for the database %q", m.config.Database).
+			Component(errComponentDatastore).
+			Category(errors.CategoryDatabase).
+			Context("operation", errOpReadSchemaCharset).
+			Build()
+	}
+	if options, ok := tableOptionsFor(charset); ok {
+		return m.db.Set(gormTableOptionsKey, options), charset, nil
+	}
+	return m.db, charset, nil
+}
+
 // NewMySQLManager creates a new v2 MySQL database manager.
 // If UseV2Prefix is true, tables will be created with the "v2_" prefix (migration mode).
 // If UseV2Prefix is false, tables use clean names (fresh install mode).
 func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.Username, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?%s",
+		cfg.Username, cfg.Password, datastore.MySQLAddr(cfg.Host, cfg.Port), cfg.Database, mysqlDSNParams)
 
 	// Create GORM logger using the adapter if a logger is provided
 	var gormLog gorm_logger.Interface
@@ -92,7 +165,7 @@ func NewMySQLManager(cfg *MySQLConfig) (*MySQLManager, error) {
 	return &MySQLManager{
 		db:          db,
 		config:      *cfg,
-		location:    fmt.Sprintf("%s:%s/%s", cfg.Host, cfg.Port, cfg.Database),
+		location:    fmt.Sprintf("%s/%s", datastore.MySQLAddr(cfg.Host, cfg.Port), cfg.Database),
 		tablePrefix: tablePrefix,
 		log:         cfg.Logger,
 	}, nil
@@ -119,8 +192,21 @@ func (m *MySQLManager) Initialize() error {
 	}
 
 	// Run GORM auto-migrations for all entities using the shared canonical list.
-	// Tables will be created with v2_ prefix due to NamingStrategy.
-	err := m.db.AutoMigrate(v2Entities()...)
+	// Tables will be created with v2_ prefix due to NamingStrategy. On a schema
+	// whose default character set is not utf8mb4, existing v2 tables that hold no
+	// rows are converted to utf8mb4 first (under a table lock) and new tables are
+	// created as utf8mb4; tables with rows are never altered. The conversion runs
+	// before AutoMigrate because CONVERT widens TEXT columns to MEDIUMTEXT and
+	// AutoMigrate restores the declared types while the table is still empty.
+	migrateDB, schemaCharset, err := m.migrationDB()
+	if err != nil {
+		reportInitFailure("mysql", "readSchemaCharset", err, m.config.Host, m.config.Database, m.config.Username)
+		return fmt.Errorf("failed to read schema character set: %w", err)
+	}
+	if _, convert := tableOptionsFor(schemaCharset); convert {
+		m.convertEmptyTablesToUTF8MB4(context.Background())
+	}
+	err = migrateDB.AutoMigrate(v2Entities()...)
 	if err != nil {
 		reportInitFailure("mysql", "AutoMigrate", err, m.config.Host, m.config.Database, m.config.Username)
 		return fmt.Errorf("failed to migrate v2 schema: %w", err)
@@ -133,6 +219,9 @@ func (m *MySQLManager) Initialize() error {
 	if err := m.validateV2SchemaIntegrity(); err != nil {
 		return fmt.Errorf("v2 schema integrity check failed: %w", err)
 	}
+
+	// The unique (detection_id, model_id) index serves the detection_id foreign key.
+	dropRedundantContributionIndex(m.db, m.log)
 
 	// Initialize migration state singleton using FirstOrCreate to handle race conditions
 	state := entities.MigrationState{ID: 1, State: entities.MigrationStatusIdle}
@@ -256,6 +345,10 @@ func (m *MySQLManager) Delete() error {
 		prefix + "detection_model_contributions",
 		prefix + "detection_predictions",
 		prefix + "detections",
+		// These reference audio_sources (the hits reference the discards), so they go first
+		prefix + "privacy_filter_discard_hits",
+		prefix + "privacy_filter_discards",
+		prefix + "privacy_filter_hourlies",
 		prefix + "audio_sources",
 		// Alert tables (drop children first)
 		prefix + "alert_histories",

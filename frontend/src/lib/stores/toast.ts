@@ -42,12 +42,21 @@ function generateId(): string {
   return `toast-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
 }
 
+// Normalizes a duration for comparison: null and 0 both mean no auto-dismiss
+// (see NotificationToast.svelte), so they compare equal.
+function autoDismissMs(duration: number | null | undefined): number {
+  return duration ?? 0;
+}
+
 // Toast management functions
 export const toastActions = {
   /**
    * Show a toast notification. `options.duration` of undefined uses the default
    * duration; null (or 0) disables auto-dismiss, so the toast stays until it is
-   * closed or newer toasts push it out of the MAX_TOASTS window.
+   * closed or newer toasts push it out of the MAX_TOASTS window. A toast with the same
+   * type, message, position and resolved duration (null and 0 count as the same) as a
+   * visible one replaces it; actions are not compared, so the new toast's actions win.
+   * Returns the id of the new toast.
    */
   show(
     message: string,
@@ -69,7 +78,19 @@ export const toastActions = {
     };
 
     toastStore.update(state => {
-      let newToasts = [...state.toasts, toast];
+      // Replace identical visible toasts instead of stacking copies. The new toast gets a
+      // fresh id, so it mounts as a new component with its own auto-dismiss timer and is
+      // announced again; the older copy and its half-spent timer go away.
+      const remaining = state.toasts.filter(
+        existing =>
+          !(
+            existing.type === toast.type &&
+            existing.message === toast.message &&
+            existing.position === toast.position &&
+            autoDismissMs(existing.duration) === autoDismissMs(toast.duration)
+          )
+      );
+      let newToasts = [...remaining, toast];
       // Remove oldest toasts if we exceed the limit
       if (newToasts.length > MAX_TOASTS) {
         newToasts = newToasts.slice(-MAX_TOASTS);

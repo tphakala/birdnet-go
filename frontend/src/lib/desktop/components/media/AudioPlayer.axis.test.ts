@@ -317,6 +317,55 @@ describe('AudioPlayer frequency axis and clip sample rate', () => {
       expect(await loadedLabels(container)).toEqual([]);
     });
 
+    describe('terminal status reason', () => {
+      // The status check of the sr URL answers 503, so only the status poll can end the rate.
+      const checkUnavailable = () => Promise.resolve(jsonResponse({ error: 'busy' }, 503));
+
+      it('tries the image without sr before giving up on a missing source', async () => {
+        probeResponder = checkUnavailable;
+        statusBody = { status: 'not_started', reason: 'source_missing' };
+        mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+        await settle();
+
+        await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+        await settle();
+
+        expect(imageSrc()).not.toContain('sr=');
+        expect(imageSrc()).not.toContain('retry=');
+        expect(screen.queryByText(SPECTROGRAM_UNAVAILABLE)).toBeNull();
+      });
+
+      it('keeps the rate and goes terminal at once for an unrenderable source', async () => {
+        probeResponder = checkUnavailable;
+        statusBody = { status: 'failed', reason: 'source_invalid' };
+        mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+        await settle();
+
+        await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+        await settle();
+
+        // No render can exist for a clip that cannot be decoded: no rate-less attempt
+        expect(imageSrc()).toContain('sr=');
+        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE)).toBeInTheDocument();
+      });
+
+      it('goes terminal when the image without sr fails too, with no retries', async () => {
+        probeResponder = checkUnavailable;
+        statusBody = { status: 'not_started', reason: 'source_missing' };
+        mount({ modelType: 'bat', clipSampleRate: RATE_384K });
+        await settle();
+        await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+        await settle();
+
+        await fireEvent.error(screen.getByAltText(SPECTROGRAM_ALT));
+        await vi.advanceTimersByTimeAsync(PAST_RETRY_DELAY_MS);
+
+        expect(screen.getByText(SPECTROGRAM_UNAVAILABLE)).toBeInTheDocument();
+        expect(imageSrc()).not.toContain('retry=');
+        expect(imageSrc()).not.toContain('sr=');
+      });
+    });
+
     it('keeps the rate while the status poll reports a queued generation', async () => {
       // The 404 arrives at once, before the component's own status poll has
       // answered, so the decision cannot rely on that poll's state.
