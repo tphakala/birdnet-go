@@ -108,16 +108,17 @@ const (
 	reasonActiveDatabase   = "Target file is the active database, cleanup not allowed for safety"
 	reasonPathChangedSince = "Database path changed since start, restart before cleanup"
 
-	reasonStateUnreadable     = "Cannot read migration state"
-	reasonMigrationIncomplete = "Migration has not completed, cleanup is not available"
-	reasonRelatedDataError    = "Migration recorded an error in related data, cleanup is not allowed for safety"
-	reasonAuxiliaryFailed     = "Auxiliary data migration failed, cleanup is not allowed for safety"
-	reasonAuxiliaryUnknown    = "Auxiliary data migration outcome was not recorded, cleanup is not allowed for safety"
-	reasonFreshInstall        = "The active database was created by a fresh install and has no legacy database"
-	reasonNotLegacyDatabase   = "Target file is not a legacy database"
-	reasonLegacyUnmigrated    = "Legacy records are missing from the enhanced database, cleanup is not allowed for safety"
-	reasonCannotVerify        = "Cannot verify the legacy database"
-	reasonNoLegacyDatabase    = "No legacy database found"
+	reasonStateUnreadable        = "Cannot read migration state"
+	reasonMigrationIncomplete    = "Migration has not completed, cleanup is not available"
+	reasonRelatedDataError       = "Migration recorded an error in related data, cleanup is not allowed for safety"
+	reasonAuxiliaryFailed        = "Auxiliary data migration failed, cleanup is not allowed for safety"
+	reasonAuxiliaryUnknown       = "Auxiliary data migration outcome was not recorded, cleanup is not allowed for safety"
+	reasonRelatedSyncNotRecorded = "Comments, reviews, locks and secondary predictions were migrated by an older version and later changes to them may exist only in the legacy database, so cleanup is not allowed for safety"
+	reasonFreshInstall           = "The active database was created by a fresh install and has no legacy database"
+	reasonNotLegacyDatabase      = "Target file is not a legacy database"
+	reasonLegacyUnmigrated       = "Legacy records are missing from the enhanced database, cleanup is not allowed for safety"
+	reasonCannotVerify           = "Cannot verify the legacy database"
+	reasonNoLegacyDatabase       = "No legacy database found"
 
 	reasonNoConnection            = "Cannot access database connection"
 	reasonMySQLManagerUnavailable = "MySQL v2 database manager is not available"
@@ -156,7 +157,8 @@ func sqliteLegacyRefusal(mgr datastoreV2.Manager, legacyPath string) *legacyClea
 // and refuses unless the migration completed without a related-data error and
 // the auxiliary data outcome is succeeded or not_required. Failed and unrecorded
 // outcomes refuse, so a migration from a build that recorded none is never
-// cleaned up. It returns the state for the callers that need the watermark.
+// cleaned up. A succeeded outcome also needs the related sync recorded. It
+// returns the state for the callers that need the watermark.
 func (c *Handler) migrationStateRefusal(ctx context.Context, mgr datastoreV2.Manager) (*entities.MigrationState, *legacyCleanupRefusal) {
 	db := mgr.DB()
 	if db == nil {
@@ -174,7 +176,16 @@ func (c *Handler) migrationStateRefusal(ctx context.Context, mgr datastoreV2.Man
 		return nil, &legacyCleanupRefusal{exists: true, reason: reasonRelatedDataError, errorKey: notification.MsgErrCleanupSafetyCheck}
 	}
 	switch migrationState.AuxiliaryDataOutcome() {
-	case entities.AuxiliaryDataStatusSucceeded, entities.AuxiliaryDataStatusNotRequired:
+	case entities.AuxiliaryDataStatusSucceeded:
+		// A related copy by a build that did not record the related sync left the
+		// related rows written after it only in the legacy database: the tail sync
+		// cannot carry them and the tail proof covers detections only.
+		if _, ok := migrationState.RelatedSyncCursors(); !ok {
+			return nil, &legacyCleanupRefusal{exists: true, reason: reasonRelatedSyncNotRecorded, errorKey: notification.MsgErrCleanupSafetyCheck}
+		}
+		return migrationState, nil
+	case entities.AuxiliaryDataStatusNotRequired:
+		// A fresh install records no related sync, so it is not gated on one.
 		return migrationState, nil
 	case entities.AuxiliaryDataStatusFailed:
 		return nil, &legacyCleanupRefusal{exists: true, reason: reasonAuxiliaryFailed, errorKey: notification.MsgErrCleanupSafetyCheck}
@@ -274,10 +285,10 @@ const (
 // fails closed: anything it cannot read refuses. Order: the manager's
 // connection, the table prefix (a bare schema has no legacy companion), the
 // migration state gate (completed, no related-data error, auxiliary outcome
-// succeeded; not_required means a fresh install and refuses as "no legacy
-// database"), the table listing, and in drop mode the tail proof
-// (VerifyMySQLLegacyMigrated). Only the legacy-only tables are candidates. The
-// returned handle is the one the caller runs its DROPs on.
+// succeeded with the related sync recorded; not_required means a fresh install
+// and refuses as "no legacy database"), the table listing, and in drop mode the
+// tail proof (VerifyMySQLLegacyMigrated). Only the legacy-only tables are
+// candidates. The returned handle is the one the caller runs its DROPs on.
 func (c *Handler) resolveMySQLLegacyTables(ctx context.Context, mgr datastoreV2.Manager, mode mysqlResolveMode) (*gorm.DB, []LegacyTableInfo, *legacyCleanupRefusal) {
 	db, refusal := mysqlCleanupConn(ctx, mgr)
 	if refusal != nil {

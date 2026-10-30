@@ -145,9 +145,10 @@ func createLegacyTables(t *testing.T, db *gorm.DB, names []string) {
 }
 
 // markMigration sets the migration state of the manager's schema, including the
-// auxiliary data outcome. StartedAt and AuxiliaryDataStartedAt get one whole-second
-// literal in the same UPDATE, so the outcome belongs to the recorded attempt and
-// survives the MySQL round trip.
+// auxiliary data outcome. StartedAt and AuxiliaryDataStartedAt get one
+// whole-second literal in the same UPDATE, so the outcome belongs to the recorded
+// attempt and survives the MySQL round trip. The related sync is then recorded
+// for that attempt by the writer the migration uses.
 func markMigration(t *testing.T, mgr *datastoreV2.MySQLManager, state entities.MigrationStatus, relatedErr string, aux entities.AuxiliaryDataStatus) {
 	t.Helper()
 	require.NoError(t, mgr.DB().Model(&entities.MigrationState{}).Where("id = ?", 1).
@@ -159,6 +160,8 @@ func markMigration(t *testing.T, mgr *datastoreV2.MySQLManager, state entities.M
 			"auxiliary_data_started_at": fixtureAttemptStart,
 			"last_migrated_id":          legacyFixtureLastMigratedID,
 		}).Error)
+	_, err := datastoreV2.NewStateManager(mgr.DB()).BeginRelatedSync()
+	require.NoError(t, err)
 }
 
 // newCleanupHandler builds a handler on the manager with v2-only mode on. The
