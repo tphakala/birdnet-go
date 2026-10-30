@@ -41,6 +41,23 @@
   // fileHelpers' own 1 MB default is too small for this file type.
   const MAX_LIFE_LIST_CSV_BYTES = 5_242_880; // 5 MB
 
+  // File-picker filter. The extension alone is not enough on mobile: Android and
+  // iOS pickers filter by MIME type, and a CSV saved from a browser download, Google
+  // Drive, or the iOS Files app is often reported as text/comma-separated-values,
+  // text/plain, or application/vnd.ms-excel rather than text/csv. With only ".csv"
+  // those files show greyed out and cannot be selected. Accepting a broader set is
+  // safe because the picker is a convenience filter, not validation: the content is
+  // parsed and validated by parseLifeListCsv, and a file whose rows are all rejected
+  // never replaces the existing list.
+  const LIFE_LIST_CSV_ACCEPT = [
+    '.csv',
+    'text/csv',
+    'text/comma-separated-values',
+    'application/csv',
+    'application/vnd.ms-excel',
+    'text/plain',
+  ].join(',');
+
   interface Props {
     speciesCount: number;
     disabled?: boolean;
@@ -227,7 +244,7 @@
     <input
       bind:this={fileInput}
       type="file"
-      accept=".csv"
+      accept={LIFE_LIST_CSV_ACCEPT}
       class="hidden"
       onchange={handleFileSelect}
       tabindex={-1}

@@ -132,6 +132,39 @@ describe('LifeListImportField', () => {
     ).toHaveLength(2);
   });
 
+  // Regression: mobile file pickers filter by MIME type rather than extension,
+  // and a CSV handed back by an Android content provider (Drive, Downloads) or the
+  // iOS Files app often has no ".csv" in its name and a type other than text/csv.
+  // With accept=".csv" alone those files were greyed out and could not be chosen.
+  // user-event applies the accept filter the same way a browser does, so a file
+  // with no extension exercises the MIME branch that the fix depends on.
+  it.each([
+    'text/csv',
+    'text/comma-separated-values',
+    'application/csv',
+    'application/vnd.ms-excel',
+    'text/plain',
+  ])('accepts a CSV the mobile picker reports as %s with no file extension', async mimeType => {
+    const { onImport } = renderField();
+    const user = userEvent.setup();
+
+    const csv = 'Common Name,Scientific Name\nCommon Blackbird,Turdus merula\n';
+    // No ".csv" in the name: only the MIME type can make this file acceptable.
+    const file = new File([csv], 'life-list', { type: mimeType });
+
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(fileInput, file);
+
+    expect(await screen.findByText(KEY_IMPORT_SUMMARY)).toBeInTheDocument();
+    expect(onImport).toHaveBeenCalledWith(['Turdus merula_Common Blackbird']);
+  });
+
+  it('still offers .csv by extension in the picker filter', () => {
+    renderField();
+    const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(fileInput.accept.split(',')).toContain('.csv');
+  });
+
   it('dismisses the import summary when Dismiss is clicked', async () => {
     renderField();
     const user = userEvent.setup();
