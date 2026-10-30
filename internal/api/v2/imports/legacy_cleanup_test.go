@@ -84,10 +84,19 @@ type sqliteFixtureConfig struct {
 	staleAux bool
 	// dirtyIDs leaves a pending dirty ID in the v2 database.
 	dirtyIDs bool
+	// noRelatedMarker leaves related_sync_started_at and the related sync cursors
+	// NULL, as a migration whose related copy ran before the related sync was
+	// recorded, or a fresh install.
+	noRelatedMarker bool
+	// relatedSyncOverride rewrites columns of the migration state row after the
+	// fixture's related sync step, as a marker that belongs to an earlier attempt
+	// or a cursor that was never set. A nil value writes NULL.
+	relatedSyncOverride map[string]any
 }
 
 // defaultSQLiteFixtureConfig is a fully proven migration: completed, auxiliary
-// data succeeded, no related-data error, every legacy id in v2.
+// data succeeded, related sync recorded for the attempt, no related-data error,
+// every legacy id in v2.
 func defaultSQLiteFixtureConfig() *sqliteFixtureConfig {
 	ids := make([]uint, 0, fixtureLastMigratedID)
 	for id := uint(1); id <= fixtureLastMigratedID; id++ {
@@ -129,6 +138,15 @@ func newV2StateDB(tb testing.TB, cfg *sqliteFixtureConfig) *gorm.DB {
 		RelatedDataError:       cfg.relatedErr,
 		LastMigratedID:         fixtureLastMigratedID,
 	}).Error)
+	if !cfg.noRelatedMarker {
+		// The writer the migration uses, so the fixture follows its marker shape.
+		_, err := datastoreV2.NewStateManager(db).BeginRelatedSync()
+		require.NoError(tb, err)
+	}
+	if len(cfg.relatedSyncOverride) > 0 {
+		require.NoError(tb, db.Model(&entities.MigrationState{}).Where("id = ?", 1).
+			Updates(cfg.relatedSyncOverride).Error)
+	}
 	require.NoError(tb, db.Exec("CREATE TABLE detections (id INTEGER PRIMARY KEY)").Error)
 	for _, id := range cfg.v2IDs {
 		require.NoError(tb, db.Exec("INSERT INTO detections (id) VALUES (?)", id).Error)
@@ -900,13 +918,54 @@ func TestLegacyCleanup_SQLiteRequiresMigrationProof(t *testing.T) {
 			postKey:   notification.MsgErrCleanupSafetyCheck,
 		},
 		{
+			name:      "related data copied by an older version",
+			configure: func(cfg *sqliteFixtureConfig) { cfg.noRelatedMarker = true },
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related sync recorded for an earlier attempt",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_sync_started_at": fixtureAttemptStart.Add(-time.Hour)}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related comments cursor missing",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_comments_cursor": nil}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related predictions note cursor missing",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_predictions_note_id": nil}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related predictions result cursor missing",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_predictions_result_id": nil}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
 			name:      "dirty IDs pending sync to v2",
 			configure: func(cfg *sqliteFixtureConfig) { cfg.dirtyIDs = true },
 			postKey:   notification.MsgErrCleanupSafetyCheck,
 		},
 		{
-			name:      "fresh install database",
-			configure: func(cfg *sqliteFixtureConfig) { cfg.aux = entities.AuxiliaryDataStatusNotRequired },
+			name: "fresh install database",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.aux = entities.AuxiliaryDataStatusNotRequired
+				cfg.noRelatedMarker = true
+			},
 			statusKey: notification.MsgErrCleanupNoLegacyDB,
 			postKey:   notification.MsgErrCleanupNoLegacyDB,
 		},
@@ -1023,29 +1082,33 @@ func TestCleanupSQLiteLegacy_RechecksMigrationProof(t *testing.T) {
 	assert.FileExists(t, fx.legacyPath)
 }
 
-// TestLegacyCleanup_MySQL_RequiresAuxiliaryOutcome pins that the MySQL resolver
-// applies the auxiliary outcome gate before it lists any table. The backing store
-// is SQLite, so a passing gate ends at the table listing.
-func TestLegacyCleanup_MySQL_RequiresAuxiliaryOutcome(t *testing.T) {
+// TestLegacyCleanup_MySQL_RequiresRecordedMigrationOutcome pins that the MySQL
+// resolver applies the auxiliary outcome and related sync gate before it lists
+// any table. The backing store is SQLite, so a passing gate ends at the table
+// listing.
+func TestLegacyCleanup_MySQL_RequiresRecordedMigrationOutcome(t *testing.T) {
 	t.Attr("component", "legacy_cleanup")
 	t.Attr("type", "unit")
 
 	tests := []struct {
-		name       string
-		aux        entities.AuxiliaryDataStatus
-		wantKey    string
-		wantExists bool
-		wantAfter  string // reason of the listing failure that follows a passed gate
+		name            string
+		aux             entities.AuxiliaryDataStatus
+		noRelatedMarker bool
+		wantKey         string
+		wantExists      bool
+		wantReason      string // the status reason, when set
 	}{
 		{name: "not recorded", aux: entities.AuxiliaryDataStatusUnknown, wantKey: notification.MsgErrCleanupSafetyCheck, wantExists: true},
 		{name: "failed", aux: entities.AuxiliaryDataStatusFailed, wantKey: notification.MsgErrCleanupSafetyCheck, wantExists: true},
-		{name: "not required is a fresh install with no legacy database", aux: entities.AuxiliaryDataStatusNotRequired, wantKey: notification.MsgErrCleanupNoLegacyDB},
-		{name: "succeeded passes the gate", aux: entities.AuxiliaryDataStatusSucceeded, wantKey: notification.MsgErrCleanupAccessFailed, wantAfter: reasonListTablesFailed},
+		{name: "succeeded without a related sync marker", aux: entities.AuxiliaryDataStatusSucceeded, noRelatedMarker: true, wantKey: notification.MsgErrCleanupSafetyCheck, wantExists: true, wantReason: reasonRelatedSyncNotRecorded},
+		{name: "not required is a fresh install with no legacy database", aux: entities.AuxiliaryDataStatusNotRequired, noRelatedMarker: true, wantKey: notification.MsgErrCleanupNoLegacyDB},
+		{name: "succeeded passes the gate", aux: entities.AuxiliaryDataStatusSucceeded, wantKey: notification.MsgErrCleanupAccessFailed, wantReason: reasonListTablesFailed},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := defaultSQLiteFixtureConfig()
 			cfg.aux = tt.aux
+			cfg.noRelatedMarker = tt.noRelatedMarker
 			db := newV2StateDB(t, cfg)
 			c := createLegacyTestHandler(t, echo.New(), createMySQLTestSettings())
 			c.V2Manager = &fakeV2Manager{isMySQL: true, tablePrefix: "v2_", db: db}
@@ -1058,8 +1121,8 @@ func TestLegacyCleanup_MySQL_RequiresAuxiliaryOutcome(t *testing.T) {
 			assert.Equal(t, tt.wantKey, status.ErrorKey)
 			assert.Equal(t, http.StatusBadRequest, code)
 			assert.Equal(t, tt.wantKey, post.ErrorKey)
-			if tt.wantAfter != "" {
-				assert.Equal(t, tt.wantAfter, status.Reason)
+			if tt.wantReason != "" {
+				assert.Equal(t, tt.wantReason, status.Reason)
 			}
 		})
 	}
