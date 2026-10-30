@@ -103,7 +103,7 @@ func TestGenerateSpectrogramFromRel_NativeNeedsNoBinaries(t *testing.T) {
 			const width = SpectrogramSizeLg
 			_, _, _, relSpec := buildSpectrogramPaths(relAudio, width, true, "", "", "")
 
-			got, err := h.generateSpectrogramFromRel(ctx, relAudio, relAudio, "", width, true, "", "", "")
+			got, err := h.generateSpectrogramFromRel(ctx, relAudio, relAudio, "", width, true, "", "", "", 0)
 			require.NoError(t, err)
 			assert.Equal(t, relSpec, got)
 
@@ -114,11 +114,53 @@ func TestGenerateSpectrogramFromRel_NativeNeedsNoBinaries(t *testing.T) {
 
 			// A PNG at the final path is served, never redrawn.
 			require.NoError(t, os.WriteFile(absSpec, []byte(nativeGateMarker), 0o600))
-			_, err = h.generateSpectrogramFromRel(ctx, relAudio, relAudio, "", width, true, "", "", "")
+			_, err = h.generateSpectrogramFromRel(ctx, relAudio, relAudio, "", width, true, "", "", "", 0)
 			require.NoError(t, err)
 			again, err := os.ReadFile(absSpec)
 			require.NoError(t, err)
 			assert.Equal(t, nativeGateMarker, string(again))
 		})
 	}
+}
+
+// TestFindExistingSpectrogramFallback_Native verifies that standard size fallback
+// operates before the native spectrogram renderer when native is enabled.
+func TestFindExistingSpectrogramFallback_Native(t *testing.T) {
+	withRestoredGlobalSettings(t)
+
+	tmp := t.TempDir()
+	sfs, err := securefs.New(tmp)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sfs.Close() })
+
+	settings := apitest.NewValidTestSettings()
+	clearBinaryEnvironment(t, settings)
+
+	ctx := t.Context()
+	core := &apicore.Core{SFS: sfs}
+	core.SetTestContext(ctx, nil)
+	h := &Handler{Core: core}
+	h.Settings.Store(settings)
+	h.spectrogramGenerator = spectrogram.NewGenerator(settings, sfs, nil)
+
+	relAudio := "2024/06/04/Turdus_merula_80p.wav"
+	absAudio := filepath.Join(tmp, relAudio)
+	require.NoError(t, os.MkdirAll(filepath.Dir(absAudio), 0o750))
+	nativeClipWriters["wav"](t, absAudio, toneBytes(nativeGateClipRate, nativeGateClipSeconds, fixtureToneHz, fixtureAmp))
+
+	// Pre-create only an 'md' spectrogram
+	_, _, _, mdSpec := buildSpectrogramPaths(relAudio, SpectrogramSizeMd, true, "", "", "")
+	absMdSpec := filepath.Join(tmp, mdSpec)
+	require.NoError(t, os.WriteFile(absMdSpec, []byte("EXISTING_MD_PNG"), 0o600))
+
+	// Requesting 'sm' should fall back to the existing 'md' spectrogram without running native generation
+	got, err := h.generateSpectrogramFromRel(ctx, relAudio, relAudio, "", SpectrogramSizeSm, true, "", "", "", 0)
+	require.NoError(t, err)
+	assert.Equal(t, mdSpec, got)
+
+	// When overlayRate > 0, fallback is skipped and the native renderer executes to generate the exact size
+	gotExact, err := h.generateSpectrogramFromRel(ctx, relAudio, relAudio, "", SpectrogramSizeSm, true, "", "", "", 48000)
+	require.NoError(t, err)
+	_, _, _, smSpec := buildSpectrogramPaths(relAudio, SpectrogramSizeSm, true, "", "", "")
+	assert.Equal(t, smSpec, gotExact)
 }

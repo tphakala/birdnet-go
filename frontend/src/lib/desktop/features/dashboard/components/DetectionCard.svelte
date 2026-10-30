@@ -33,7 +33,7 @@
   import { createSpectrogramLoader } from '$lib/utils/spectrogramLoader.svelte';
   import { DEFAULT_PLAYBACK_SPEED } from '$lib/utils/audio';
   import { get } from 'svelte/store';
-  import { dashboardSettings } from '$lib/stores/settings';
+  import { dashboardSettings, settingsDataLoaded } from '$lib/stores/settings';
   import { t } from '$lib/i18n';
 
   // Configuration constants - use helper to read current default gain at call time
@@ -69,7 +69,11 @@
     onDelete,
   }: Props = $props();
 
-  const loader = createSpectrogramLoader({ size: 'md', raw: true });
+  const loader = createSpectrogramLoader({
+    size: () =>
+      get(settingsDataLoaded) ? (get(dashboardSettings)?.spectrogram?.size ?? 'sm') : 'sm',
+    raw: () => get(dashboardSettings)?.spectrogram?.raw ?? true,
+  });
 
   let cardElement = $state<HTMLElement | undefined>(undefined);
   let isVisible = $state(false);
@@ -152,7 +156,30 @@
 
   // Start/stop loader based on visibility. Skip entirely when this detection has
   // no clip: there is no spectrogram to fetch.
+  let currentSpectrogramSize = $derived(
+    $settingsDataLoaded ? ($dashboardSettings?.spectrogram?.size ?? 'sm') : 'sm'
+  );
+  // svelte-ignore state_referenced_locally
+  let previousSpectrogramSize = currentSpectrogramSize;
+  let currentSpectrogramRaw = $derived($dashboardSettings?.spectrogram?.raw ?? true);
+  // svelte-ignore state_referenced_locally
+  let previousSpectrogramRaw = currentSpectrogramRaw;
+
   $effect(() => {
+    // If configured spectrogram size or raw mode changes, restart loader
+    if (
+      currentSpectrogramSize !== previousSpectrogramSize ||
+      currentSpectrogramRaw !== previousSpectrogramRaw
+    ) {
+      previousSpectrogramSize = currentSpectrogramSize;
+      previousSpectrogramRaw = currentSpectrogramRaw;
+      if (detection.clipName && isVisible) {
+        loader.restart(detection.id);
+        return;
+      }
+      loader.reset();
+    }
+
     if (detection.clipName && isVisible) {
       loader.start(detection.id);
     } else {
