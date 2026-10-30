@@ -88,6 +88,10 @@ type sqliteFixtureConfig struct {
 	// NULL, as a migration whose related copy ran before the related sync was
 	// recorded, or a fresh install.
 	noRelatedMarker bool
+	// relatedSyncOverride rewrites columns of the migration state row after the
+	// related sync is recorded, as a marker that belongs to an earlier attempt or
+	// a cursor that was never set. A nil value writes NULL.
+	relatedSyncOverride map[string]any
 }
 
 // defaultSQLiteFixtureConfig is a fully proven migration: completed, auxiliary
@@ -138,6 +142,10 @@ func newV2StateDB(tb testing.TB, cfg *sqliteFixtureConfig) *gorm.DB {
 		// The writer the migration uses, so the fixture follows its marker shape.
 		_, err := datastoreV2.NewStateManager(db).BeginRelatedSync()
 		require.NoError(tb, err)
+	}
+	if len(cfg.relatedSyncOverride) > 0 {
+		require.NoError(tb, db.Model(&entities.MigrationState{}).Where("id = ?", 1).
+			Updates(cfg.relatedSyncOverride).Error)
 	}
 	require.NoError(tb, db.Exec("CREATE TABLE detections (id INTEGER PRIMARY KEY)").Error)
 	for _, id := range cfg.v2IDs {
@@ -912,6 +920,38 @@ func TestLegacyCleanup_SQLiteRequiresMigrationProof(t *testing.T) {
 		{
 			name:      "related data copied by an older version",
 			configure: func(cfg *sqliteFixtureConfig) { cfg.noRelatedMarker = true },
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related sync recorded for an earlier attempt",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_sync_started_at": fixtureAttemptStart.Add(-time.Hour)}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related comments cursor missing",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_comments_cursor": nil}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related predictions note cursor missing",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_predictions_note_id": nil}
+			},
+			statusKey: notification.MsgErrCleanupSafetyCheck,
+			postKey:   notification.MsgErrCleanupSafetyCheck,
+		},
+		{
+			name: "related predictions result cursor missing",
+			configure: func(cfg *sqliteFixtureConfig) {
+				cfg.relatedSyncOverride = map[string]any{"related_predictions_result_id": nil}
+			},
 			statusKey: notification.MsgErrCleanupSafetyCheck,
 			postKey:   notification.MsgErrCleanupSafetyCheck,
 		},
