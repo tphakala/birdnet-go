@@ -89,8 +89,8 @@ type sqliteFixtureConfig struct {
 	// recorded, or a fresh install.
 	noRelatedMarker bool
 	// relatedSyncOverride rewrites columns of the migration state row after the
-	// related sync is recorded, as a marker that belongs to an earlier attempt or
-	// a cursor that was never set. A nil value writes NULL.
+	// fixture's related sync step, as a marker that belongs to an earlier attempt
+	// or a cursor that was never set. A nil value writes NULL.
 	relatedSyncOverride map[string]any
 }
 
