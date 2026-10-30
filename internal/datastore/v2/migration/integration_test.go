@@ -832,16 +832,24 @@ func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
 	err = ctx.Seeder.SeedImageCaches([]datastore.ImageCache{imageCache})
 	require.NoError(t, err, "failed to seed image cache")
 
+	// A fixed date so the hourly rows below can be placed on and off it.
+	const (
+		weatherDate       = "2024-06-13"
+		weatherOffsetEEST = 3 * 60 * 60
+	)
+	eest := time.FixedZone("", weatherOffsetEEST)
 	dailyEvent := testutil.NewDailyEventsBuilder().
 		WithID(1).
-		WithDate(time.Now().Format(time.DateOnly)).
+		WithDate(weatherDate).
 		Build()
 	err = ctx.Seeder.SeedDailyEvents([]datastore.DailyEvents{dailyEvent})
 	require.NoError(t, err, "failed to seed daily event")
 
-	// A threshold event, a notification, one valid hourly row and one orphan
-	// hourly row (its daily event does not exist) so that every section runs
-	// against its real repository and the orphan must not count as a failure.
+	// A threshold event, a notification and three hourly rows so that every section
+	// runs against its real repository: one with its parent, one without a parent
+	// that belongs to the daily event by its stored date (its UTC date is the day
+	// before, so only the stored offset files it correctly), and one on a date with no
+	// daily event, which is skipped and must not count as a failure.
 	err = ctx.Seeder.SeedThresholdEvents([]datastore.ThresholdEvent{
 		testutil.NewThresholdEventBuilder().WithID(1).WithSpeciesName("Parus major").Build(),
 	})
@@ -855,8 +863,12 @@ func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
 	})
 	require.NoError(t, err, "failed to seed notification history")
 	err = ctx.Seeder.SeedHourlyWeather([]datastore.HourlyWeather{
-		testutil.NewHourlyWeatherBuilder().WithID(1).WithDailyEventsID(dailyEvent.ID).Build(),
-		testutil.NewHourlyWeatherBuilder().WithID(2).WithDailyEventsID(dailyEvent.ID + 100).Build(),
+		testutil.NewHourlyWeatherBuilder().WithID(1).WithDailyEventsID(dailyEvent.ID).
+			WithTime(time.Date(2024, 6, 13, 12, 0, 0, 0, eest)).Build(),
+		testutil.NewHourlyWeatherBuilder().WithID(2).WithDailyEventsID(0).
+			WithTime(time.Date(2024, 6, 13, 0, 1, 47, 0, eest)).Build(),
+		testutil.NewHourlyWeatherBuilder().WithID(3).WithDailyEventsID(dailyEvent.ID + 100).
+			WithTime(time.Date(2024, 6, 20, 12, 0, 0, 0, eest)).Build(),
 	})
 	require.NoError(t, err, "failed to seed hourly weather")
 
@@ -896,14 +908,24 @@ func TestMigration_AuxiliaryDataMigratedThroughWorker(t *testing.T) {
 	for model, name := range map[any]string{
 		&entities.ThresholdEvent{}:      "threshold event",
 		&entities.NotificationHistory{}: "notification history",
-		&entities.HourlyWeather{}:       "valid hourly weather row (the orphan is not copied)",
 	} {
 		var count int64
 		require.NoError(t, ctx.V2Manager.DB().Model(model).Count(&count).Error)
 		assert.Equal(t, int64(1), count, "%s should be migrated through worker", name)
 	}
 
-	// Orphan hourly rows are legacy rows that cannot exist in v2, not failures.
+	// The parented and the parentless row are attached to the migrated daily event;
+	// the row on a date without a daily event is not copied.
+	var v2Daily entities.DailyEvents
+	require.NoError(t, ctx.V2Manager.DB().Where("date = ?", weatherDate).First(&v2Daily).Error)
+	var hourly []entities.HourlyWeather
+	require.NoError(t, ctx.V2Manager.DB().Find(&hourly).Error)
+	require.Len(t, hourly, 2, "parented and parentless hourly rows should be migrated through worker")
+	for i := range hourly {
+		assert.Equal(t, v2Daily.ID, hourly[i].DailyEventsID, "hourly row should belong to the %s daily event", weatherDate)
+	}
+
+	// Hourly rows without a daily event for their date are skips, not failures.
 	state, err := ctx.StateManager.GetState()
 	require.NoError(t, err)
 	assert.Equal(t, entities.AuxiliaryDataStatusSucceeded, state.AuxiliaryDataOutcome())

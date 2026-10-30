@@ -61,6 +61,10 @@ func (m *mockWeatherRepo) SaveAllDailyEvents(ctx context.Context, events []entit
 
 func (m *mockWeatherRepo) SaveAllHourlyWeather(ctx context.Context, weather []entities.HourlyWeather) (int, error) {
 	args := m.Called(ctx, weather)
+	// A func result reports the number of rows it was given, as the real repository does.
+	if count, ok := args.Get(0).(func(weather []entities.HourlyWeather) int); ok {
+		return count(weather), args.Error(1)
+	}
 	return args.Int(0), args.Error(1)
 }
 
@@ -152,71 +156,108 @@ func TestMigrateWeatherData_EmptyData(t *testing.T) {
 	mockWeather.AssertNotCalled(t, "SaveAllHourlyWeather")
 }
 
-// TestMigrateWeatherData_OrphanRecords verifies that orphan hourly weather records
-// (those with invalid DailyEventsID) are skipped during migration.
-func TestMigrateWeatherData_OrphanRecords(t *testing.T) {
+// storedWeatherTime builds a time the way the SQLite driver returns a stored one:
+// the wall clock as written, in a fixed zone carrying the stored offset.
+func storedWeatherTime(year int, month time.Month, day, hour, minute, sec, offsetSeconds int) time.Time {
+	return time.Date(year, month, day, hour, minute, sec, 0, time.FixedZone("", offsetSeconds))
+}
+
+const (
+	offsetEEST = 3 * 60 * 60
+	offsetEET  = 2 * 60 * 60
+)
+
+// savedWeatherTemps runs migrateWeatherData with the given legacy data and a v2 repo
+// that holds v2Events, and returns the saved rows keyed by their Temperature marker.
+func savedWeatherTemps(t *testing.T, legacyEvents []datastore.DailyEvents, legacyWeather []datastore.HourlyWeather, v2Events []entities.DailyEvents) (saved map[float64]uint, result *AuxiliaryMigrationResult) {
+	t.Helper()
 	mockStore := mocks.NewMockInterface(t)
 	mockWeather := new(mockWeatherRepo)
-	log := testLogger()
 
-	// Legacy daily events - only has ID 100
-	legacyEvents := []datastore.DailyEvents{
-		{ID: 100, Date: "2024-01-01", Sunrise: 1704096000, Sunset: 1704132000},
-	}
-
-	testTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
-
-	// Legacy weather includes:
-	// - ID 1 with valid DailyEventsID 100
-	// - ID 2 with ORPHAN DailyEventsID 999 (doesn't exist in legacy events)
-	// - ID 3 with ORPHAN DailyEventsID 888 (doesn't exist in legacy events)
-	legacyWeather := []datastore.HourlyWeather{
-		{ID: 1, DailyEventsID: 100, Time: testTime, Temperature: 5.5},
-		{ID: 2, DailyEventsID: 999, Time: testTime, Temperature: 10.0}, // Orphan
-		{ID: 3, DailyEventsID: 888, Time: testTime, Temperature: 15.0}, // Orphan
-	}
-
-	// V2 events after migration
-	v2Events := []entities.DailyEvents{
-		{ID: 1, Date: "2024-01-01"},
-	}
-
+	var rows []entities.HourlyWeather
 	mockStore.EXPECT().GetAllDailyEvents().Return(legacyEvents, nil)
 	mockStore.EXPECT().GetAllHourlyWeather().Return(legacyWeather, nil)
-	mockWeather.On("SaveAllDailyEvents", mock.Anything, mock.Anything).Return(1, nil)
+	mockWeather.On("SaveAllDailyEvents", mock.Anything, mock.Anything).Return(len(v2Events), nil)
 	mockWeather.On("GetAllDailyEvents", mock.Anything).Return(v2Events, nil)
+	mockWeather.On("SaveAllHourlyWeather", mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			rows = args.Get(1).([]entities.HourlyWeather)
+		}).
+		Return(func(weather []entities.HourlyWeather) int { return len(weather) }, nil)
 
-	// Only 1 weather record should be saved (the non-orphan one)
-	mockWeather.On("SaveAllHourlyWeather", mock.Anything, mock.MatchedBy(func(weather []entities.HourlyWeather) bool {
-		if len(weather) != 1 {
-			return false
-		}
-		// Only the valid weather record should be included
-		return weather[0].DailyEventsID == 1 && weather[0].Temperature == 5.5
-	})).Return(1, nil)
-
-	// Create migrator
 	migrator := NewAuxiliaryMigrator(&AuxiliaryMigratorConfig{
 		LegacyStore: mockStore,
 		WeatherRepo: mockWeather,
-		Logger:      log,
+		Logger:      testLogger(),
 	})
+	result = &AuxiliaryMigrationResult{}
+	migrator.migrateWeatherData(t.Context(), result)
 
-	// Execute migration
-	ctx := t.Context()
-	result := &AuxiliaryMigrationResult{}
-	migrator.migrateWeatherData(ctx, result)
-
-	// Orphans cannot exist in v2, so they are skips, not failures.
-	assert.False(t, result.HasErrors())
-	assert.Equal(t, 2, result.Weather.Skipped)
-	assert.Zero(t, result.Weather.HourlyWeatherFailed)
-
-	mockWeather.AssertExpectations(t)
+	saved = make(map[float64]uint, len(rows))
+	for i := range rows {
+		saved[rows[i].Temperature] = rows[i].DailyEventsID
+	}
+	return saved, result
 }
 
-// TestMigrateWeatherData_DateNotInV2 verifies that weather records are skipped
-// when their date is not found in V2 after migration.
+// TestMigrateWeatherData_ParentlessRowsAttachByStoredDate verifies that hourly rows
+// whose legacy parent does not exist are attached to the daily event of the date of
+// their stored time, read in the offset they were stored with.
+func TestMigrateWeatherData_ParentlessRowsAttachByStoredDate(t *testing.T) {
+	legacyEvents := []datastore.DailyEvents{
+		{ID: 100, Date: "2024-06-13"},
+		{ID: 101, Date: "2024-10-27"},
+		{ID: 102, Date: "2025-01-05"},
+		{ID: 103, Date: "2025-01-06"},
+	}
+	v2Events := []entities.DailyEvents{
+		{ID: 11, Date: "2024-06-13"},
+		{ID: 12, Date: "2024-10-27"},
+		{ID: 13, Date: "2025-01-05"},
+		{ID: 14, Date: "2025-01-06"},
+	}
+	const (
+		tempParented   = 1.0
+		tempZeroParent = 2.0
+		tempDangling   = 3.0
+		tempDSTFirst   = 4.0
+		tempDSTSecond  = 5.0
+		tempUTCRow     = 6.0
+		tempNoEvent    = 7.0
+	)
+	legacyWeather := []datastore.HourlyWeather{
+		{ID: 1, DailyEventsID: 100, Time: storedWeatherTime(2024, 6, 13, 12, 0, 0, offsetEEST), Temperature: tempParented},
+		// Its UTC date is 2024-06-12, so a conversion to UTC files it under the wrong day.
+		{ID: 2, DailyEventsID: 0, Time: storedWeatherTime(2024, 6, 13, 0, 1, 47, offsetEEST), Temperature: tempZeroParent},
+		{ID: 3, DailyEventsID: 999, Time: storedWeatherTime(2024, 6, 13, 13, 0, 0, offsetEEST), Temperature: tempDangling},
+		// The repeated hour at the end of DST: two distinct instants with the same wall clock.
+		{ID: 4, DailyEventsID: 0, Time: storedWeatherTime(2024, 10, 27, 3, 8, 42, offsetEEST), Temperature: tempDSTFirst},
+		{ID: 5, DailyEventsID: 0, Time: storedWeatherTime(2024, 10, 27, 3, 8, 42, offsetEET), Temperature: tempDSTSecond},
+		// 22:00 UTC is already the next day in zones east of UTC.
+		{ID: 6, DailyEventsID: 0, Time: storedWeatherTime(2025, 1, 5, 22, 0, 0, 0), Temperature: tempUTCRow},
+		{ID: 7, DailyEventsID: 0, Time: storedWeatherTime(2024, 7, 1, 12, 0, 0, offsetEEST), Temperature: tempNoEvent},
+	}
+
+	saved, result := savedWeatherTemps(t, legacyEvents, legacyWeather, v2Events)
+
+	assert.Equal(t, map[float64]uint{
+		tempParented:   11,
+		tempZeroParent: 11,
+		tempDangling:   11,
+		tempDSTFirst:   12,
+		tempDSTSecond:  12,
+		tempUTCRow:     13,
+	}, saved)
+	assert.False(t, result.HasErrors())
+	assert.Equal(t, 1, result.Weather.Skipped)
+	assert.Zero(t, result.Weather.HourlyWeatherFailed)
+	assert.Equal(t, result.Weather.HourlyWeatherTotal,
+		result.Weather.HourlyWeatherMigrated+result.Weather.Skipped+result.Weather.HourlyWeatherFailed)
+}
+
+// TestMigrateWeatherData_DateNotInV2 verifies that weather records, with or without
+// a legacy parent, are counted as failed when their legacy date is not found in V2
+// after migration.
 func TestMigrateWeatherData_DateNotInV2(t *testing.T) {
 	mockStore := mocks.NewMockInterface(t)
 	mockWeather := new(mockWeatherRepo)
@@ -232,6 +273,8 @@ func TestMigrateWeatherData_DateNotInV2(t *testing.T) {
 	legacyWeather := []datastore.HourlyWeather{
 		{ID: 1, DailyEventsID: 100, Time: testTime, Temperature: 5.5},
 		{ID: 2, DailyEventsID: 101, Time: testTime.AddDate(0, 0, 1), Temperature: 3.2},
+		// No legacy parent, but its own date is a legacy date that is missing in v2.
+		{ID: 3, DailyEventsID: 0, Time: testTime.AddDate(0, 0, 1).Add(time.Hour), Temperature: 4.1},
 	}
 
 	// V2 only has one date (2024-01-01) - 2024-01-02 is missing
@@ -266,10 +309,67 @@ func TestMigrateWeatherData_DateNotInV2(t *testing.T) {
 	// A legacy date missing in v2 means the daily event was lost, a failure.
 	assert.True(t, result.HasErrors())
 	require.ErrorIs(t, result.Weather.Error, ErrAuxDailyEventNotInV2)
-	assert.Equal(t, 1, result.Weather.HourlyWeatherFailed)
+	assert.Equal(t, 2, result.Weather.HourlyWeatherFailed)
 	assert.Zero(t, result.Weather.Skipped)
 
 	mockWeather.AssertExpectations(t)
+}
+
+// TestMigrateWeatherData_DuplicateInstantsCopiedOnce verifies that rows sharing an
+// instant are copied once, the lowest legacy id wins whatever the read order, and a
+// row that cannot be copied never suppresses one that can.
+func TestMigrateWeatherData_DuplicateInstantsCopiedOnce(t *testing.T) {
+	legacyEvents := []datastore.DailyEvents{{ID: 100, Date: "2024-06-13"}}
+	v2Events := []entities.DailyEvents{{ID: 11, Date: "2024-06-13"}}
+	const (
+		tempSameInstantHigh = 11.0
+		tempSameInstantLow  = 10.0
+		tempParentedLow     = 2.0
+		tempParentlessHigh  = 3.0
+		tempNoEventLow      = 5.0
+		tempCopyableHigh    = 6.0
+		tempZeroTimeA       = 7.0
+		tempZeroTimeB       = 8.0
+	)
+	instant := storedWeatherTime(2024, 6, 13, 0, 1, 47, offsetEEST)
+	otherInstant := storedWeatherTime(2024, 6, 13, 6, 0, 0, offsetEEST)
+	legacyWeather := []datastore.HourlyWeather{
+		{ID: 11, DailyEventsID: 0, Time: otherInstant, Temperature: tempSameInstantHigh},
+		{ID: 10, DailyEventsID: 0, Time: otherInstant, Temperature: tempSameInstantLow},
+		{ID: 2, DailyEventsID: 100, Time: instant, Temperature: tempParentedLow},
+		{ID: 3, DailyEventsID: 0, Time: instant, Temperature: tempParentlessHigh},
+		// Same instant, the lower id has no daily event for its own date (2024-06-12).
+		{ID: 5, DailyEventsID: 0, Time: storedWeatherTime(2024, 6, 12, 21, 30, 0, 0), Temperature: tempNoEventLow},
+		{ID: 6, DailyEventsID: 0, Time: storedWeatherTime(2024, 6, 13, 0, 30, 0, offsetEEST), Temperature: tempCopyableHigh},
+		{ID: 20, DailyEventsID: 100, Time: time.Time{}, Temperature: tempZeroTimeA},
+		{ID: 21, DailyEventsID: 100, Time: time.Time{}, Temperature: tempZeroTimeB},
+	}
+	want := map[float64]uint{
+		tempSameInstantLow: 11,
+		tempParentedLow:    11,
+		tempCopyableHigh:   11,
+		tempZeroTimeA:      11,
+		tempZeroTimeB:      11,
+	}
+	const wantDuplicatesAndUnresolvable = 3 // ids 11 and 3 are duplicates, id 5 has no daily event
+
+	reversed := make([]datastore.HourlyWeather, len(legacyWeather))
+	for i := range legacyWeather {
+		reversed[len(legacyWeather)-1-i] = legacyWeather[i]
+	}
+
+	for name, input := range map[string][]datastore.HourlyWeather{"input order": legacyWeather, "reversed": reversed} {
+		t.Run(name, func(t *testing.T) {
+			saved, result := savedWeatherTemps(t, legacyEvents, input, v2Events)
+
+			assert.Equal(t, want, saved)
+			assert.False(t, result.HasErrors())
+			assert.Equal(t, wantDuplicatesAndUnresolvable, result.Weather.Skipped)
+			assert.Zero(t, result.Weather.HourlyWeatherFailed)
+			assert.Equal(t, result.Weather.HourlyWeatherTotal,
+				result.Weather.HourlyWeatherMigrated+result.Weather.Skipped+result.Weather.HourlyWeatherFailed)
+		})
+	}
 }
 
 // TestMigrateWeatherData_NilRepo verifies that migration is skipped when weather repo is nil.
@@ -617,9 +717,9 @@ func TestMigrateWeatherData_ErrorHandling(t *testing.T) {
 	})
 }
 
-// When the v2 daily events cannot be read, hourly rows with a known legacy parent are
-// failures and orphan rows stay skips, as in the per-row loop.
-func TestMigrateWeatherData_V2ReadFailureKeepsOrphansAsSkips(t *testing.T) {
+// When the v2 daily events cannot be read, hourly rows are classified by their parent
+// date: a date with a legacy daily event is a failure, a date without one is a skip.
+func TestMigrateWeatherData_V2ReadFailureClassifiesByParentDate(t *testing.T) {
 	mockStore := mocks.NewMockInterface(t)
 	mockWeather := new(mockWeatherRepo)
 
@@ -628,7 +728,8 @@ func TestMigrateWeatherData_V2ReadFailureKeepsOrphansAsSkips(t *testing.T) {
 	mockStore.EXPECT().GetAllHourlyWeather().Return([]datastore.HourlyWeather{
 		{ID: 1, DailyEventsID: 1, Time: testTime},
 		{ID: 2, DailyEventsID: 1, Time: testTime.Add(time.Hour)},
-		{ID: 3, DailyEventsID: 999, Time: testTime.Add(2 * time.Hour)}, // Orphan
+		{ID: 3, DailyEventsID: 0, Time: testTime.Add(2 * time.Hour)},                 // Parentless, legacy date
+		{ID: 4, DailyEventsID: 999, Time: testTime.AddDate(0, 0, 10).Add(time.Hour)}, // Dangling, no legacy event on its date
 	}, nil)
 	mockWeather.On("SaveAllDailyEvents", mock.Anything, mock.Anything).Return(1, nil)
 	mockWeather.On("GetAllDailyEvents", mock.Anything).Return([]entities.DailyEvents(nil), assert.AnError)
@@ -643,7 +744,7 @@ func TestMigrateWeatherData_V2ReadFailureKeepsOrphansAsSkips(t *testing.T) {
 	migrator.migrateWeatherData(t.Context(), result)
 
 	require.ErrorIs(t, result.Weather.Error, assert.AnError)
-	assert.Equal(t, 2, result.Weather.HourlyWeatherFailed)
+	assert.Equal(t, 3, result.Weather.HourlyWeatherFailed)
 	assert.Equal(t, 1, result.Weather.Skipped)
 	mockWeather.AssertNotCalled(t, "SaveAllHourlyWeather")
 }
