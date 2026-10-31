@@ -60,6 +60,14 @@ func TestIsLabel(t *testing.T) {
 		{"real bird binomial", "Turdus merula", false},
 		{"truncated token", "Power", false},
 		{"empty string", "", false},
+		// BirdNET v2.x raw labels match on the part before the first underscore.
+		{"BirdNET-only class", "Gun_Gun", true},
+		{"BirdNET class with localized common half", "Dog_Hund", true},
+		{"BirdNET multi-word class prefix", "Human vocal_Human vocal", true},
+		{"BirdNET class is case-insensitive", "human vocal_human vocal", true},
+		{"Perch full label with whitespace and CR", " power_tool\r", true},
+		{"class word in the common half does not match", "Cercomacra nigricans_Jet Antbird", false},
+		{"BirdNET bird label", "Turdus merula_Common Blackbird", false},
 	}
 
 	for _, tc := range tests {
@@ -93,6 +101,9 @@ func TestIsName(t *testing.T) {
 		{"uppercase full key", "DOG", true},
 		{"mixed case first token", "MALE", true},
 		{"lowercase first token", "bass", true},
+		// BirdNET v2.x stored names
+		{"BirdNET stored name in lowercase", "human vocal", true},
+		{"legacy BirdNET class Jet", "Jet", true},
 	}
 
 	for _, tc := range tests {

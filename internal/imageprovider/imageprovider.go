@@ -400,38 +400,12 @@ const (
 // The order matters: avicommons is tried first as it's faster (local data), then wikimedia (remote API).
 var fallbackProviders = []string{"avicommons", "wikimedia"}
 
-// nonAvianClasses lists legacy BirdNET model output class names that are not bird species.
-// These are the Title-case-with-spaces names produced by BirdNET v2.x split labels (e.g.
-// "Power tools", "Human vocal"). They are kept as a fallback because the soundevent package
-// matches lowercase underscore-joined FSD50K names and their first tokens, but does NOT
-// match these BirdNET-specific Title-case strings.
-// All entries will never have images from bird image providers, so their negative cache
-// entries should never expire to avoid futile re-fetch attempts.
-var nonAvianClasses = map[string]bool{
-	"Siren":           true,
-	"Dog":             true,
-	"Power tools":     true,
-	"Human vocal":     true,
-	"Human non-vocal": true,
-	"Human whistle":   true,
-	"Jet":             true,
-	"Gun":             true,
-	"Fireworks":       true,
-	"Noise":           true,
-	"Environmental":   true,
-	"Engine":          true,
-}
-
-// isNonAvianClass returns true if scientificName is a non-bird class that will never
-// have images available from bird image providers.
-// It checks two sources:
-//   - nonAvianClasses: legacy BirdNET v2.x Title-case-with-spaces split names.
-//   - soundevent.IsName: Perch v2 (FSD50K) classes by full label for new
-//     detections, and by underscore-split first token (e.g. "Power" from
-//     "power_tool") for names stored before full labels were kept whole.
-//     Case-insensitive.
+// isNonAvianClass returns true if scientificName is a sound-event class that will
+// never have images available from bird image providers, so its negative cache
+// entries never expire. It matches the classes known to soundevent: Perch v2
+// full labels and first tokens, and BirdNET v2.x stored names. Case-insensitive.
 func isNonAvianClass(scientificName string) bool {
-	return nonAvianClasses[scientificName] || soundevent.IsName(scientificName)
+	return soundevent.IsName(scientificName)
 }
 
 // --- Shared Helper Functions ---

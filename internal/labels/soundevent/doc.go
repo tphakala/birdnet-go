@@ -8,13 +8,23 @@
 // (binomials) are never members. The registry is shared across models, so
 // another model family adds its classes here.
 //
+// The BirdNET v2.x models also emit a few non-species classes: the eleven
+// classes present in every V2.4 label file (Dog, Engine, Environmental,
+// Fireworks, Gun, Human non-vocal, Human vocal, Human whistle, Noise, Power
+// tools, Siren) plus the legacy "Jet". They are kept in birdnet_classes.go,
+// matched by [IsLabel] on the part of a raw label before the first underscore
+// and by [IsName] on the stored name, and have no [Category].
+//
 // It exposes these lookup paths:
 //
-//   - Full-label lookup via [CategoryOf] and [IsLabel]: matches the complete
-//     raw model label (e.g. "power_tool", "human_voice") exactly.
+//   - Full-label lookup via [CategoryOf] and [IsLabel]: [CategoryOf] matches
+//     the complete raw Perch label (e.g. "power_tool", "human_voice") exactly.
+//     [IsLabel] also matches that, and in addition a BirdNET v2.x raw label
+//     such as "Dog_Hund" by its prefix before the first underscore.
 //   - Truncated first-token lookup via [IsName]: matches both the full label
 //     and the first underscore-delimited token of a multi-word class
-//     (e.g. "Power" from "power_tool", "Engine" from "engine"). This is the
+//     (e.g. "Power" from "power_tool", "Engine" from "engine"), and the BirdNET
+//     v2.x class names (e.g. "Power tools"). This is the
 //     lookup the image provider uses for names stored before full labels were
 //     kept whole; new detections carry the full label.
 //   - Multi-word label recognition via [MultiWordLabelNames]: lets every label

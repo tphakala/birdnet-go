@@ -55,6 +55,20 @@ func TestClassesGuard(t *testing.T) {
 	}
 }
 
+// TestBirdNETClassesGuard verifies the integrity of the birdnetClasses set.
+func TestBirdNETClassesGuard(t *testing.T) {
+	t.Parallel()
+
+	const expectedBirdNETClassCount = 12
+
+	require.Len(t, birdnetClasses, expectedBirdNETClassCount, "birdnetClasses must contain exactly %d entries", expectedBirdNETClassCount)
+
+	// Lookups lowercase first, so a non-lowercase key could never match.
+	for k := range birdnetClasses {
+		assert.Equal(t, strings.ToLower(k), k, "birdnetClasses key %q must be lowercase", k)
+	}
+}
+
 // TestMultiWordLabelNames_AllMultiWordKeys pins that every multi-word class key
 // is recognised, keeps its identity, and gets a distinct display name.
 func TestMultiWordLabelNames_AllMultiWordKeys(t *testing.T) {
