@@ -26,9 +26,9 @@
 //   - Truncated first-token lookup via [IsName]: matches both the full label
 //     and the first underscore-delimited token of a multi-word class
 //     (e.g. "Power" from "power_tool", "Engine" from "engine"), and the BirdNET
-//     v2.x class names (e.g. "Power tools"). This is the
-//     lookup the image provider uses for names stored before full labels were
-//     kept whole; new detections carry the full label.
+//     v2.x class names (e.g. "Power tools"). This is the lookup the image
+//     provider uses for names stored before full labels were kept whole; new
+//     detections carry the full label.
 //   - Multi-word label recognition via [MultiWordLabelNames]: lets every label
 //     splitter keep a full class label such as "Domestic_sounds_and_home_sounds"
 //     whole instead of splitting it at the first underscore.
