@@ -3,12 +3,20 @@ package processor
 import (
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/audiocore"
+	"github.com/tphakala/birdnet-go/internal/classifier"
+	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
+	"github.com/tphakala/birdnet-go/internal/detection"
 )
+
+// keepAllAlternates is the keep predicate for tests that exercise
+// convertToAdditionalResults without a range filter.
+func keepAllAlternates(string) bool { return true }
 
 func TestConvertToAdditionalResults_DeduplicatesByScientificName(t *testing.T) {
 	t.Parallel()
@@ -112,7 +120,7 @@ func TestConvertToAdditionalResults_DeduplicatesByScientificName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			result := convertToAdditionalResults(tt.input, tt.primaryScientificName)
+			result := convertToAdditionalResults(tt.input, tt.primaryScientificName, keepAllAlternates)
 			require.Len(t, result, tt.expectedCount)
 
 			if tt.expectedCount > 0 {
@@ -291,7 +299,7 @@ func TestConvertToAdditionalResults_ExcludesAliasedPrimary(t *testing.T) {
 	}
 
 	// primaryScientificName is the canonical name resolved by parseAndValidateSpecies.
-	result := convertToAdditionalResults(input, "Spilopelia senegalensis")
+	result := convertToAdditionalResults(input, "Spilopelia senegalensis", keepAllAlternates)
 
 	require.Len(t, result, 1, "the aliased primary must be excluded from additional results")
 	assert.Equal(t, "Turdus merula", result[0].Species.ScientificName)
@@ -305,7 +313,7 @@ func TestConvertToAdditionalResults_SetsRawLabelFromSpecies(t *testing.T) {
 		{Species: "Turdus merula_Common Blackbird", Confidence: 0.75},
 	}
 
-	result := convertToAdditionalResults(input, "")
+	result := convertToAdditionalResults(input, "", keepAllAlternates)
 
 	require.Len(t, result, 2)
 	assert.Equal(t, "male_speech_and_man_speaking", result[0].RawLabel, "raw label must equal the original r.Species string")
@@ -325,7 +333,7 @@ func TestConvertToAdditionalResults_SkipsNonFiniteConfidence(t *testing.T) {
 		{Species: "Turdus merula_Common Blackbird", Confidence: 0.40},
 	}
 
-	result := convertToAdditionalResults(input, "")
+	result := convertToAdditionalResults(input, "", keepAllAlternates)
 
 	require.Len(t, result, 2, "non-finite entries must be skipped")
 	assert.Equal(t, "Periparus ater", result[0].Species.ScientificName)
@@ -340,8 +348,141 @@ func TestConvertToAdditionalResults_PerchSoundClassesStayDistinct(t *testing.T) 
 		{Species: "Domestic_animals_and_pets", Confidence: 0.60},
 	}
 
-	result := convertToAdditionalResults(input, "Domestic_sounds_and_home_sounds")
+	result := convertToAdditionalResults(input, "Domestic_sounds_and_home_sounds", keepAllAlternates)
 
 	require.Len(t, result, 1, "only the primary class is dropped")
 	assert.Equal(t, "Domestic_animals_and_pets", result[0].Species.ScientificName)
+}
+
+// Raw labels and canonical names used by the alternates range-filter tests.
+const (
+	altBlackbirdLabel = "Turdus merula_Common Blackbird"
+	altGreatTitLabel  = "Parus major_Great Tit"
+	altKiskadeeLabel  = "Pitangus sulphuratus_Great Kiskadee"
+	altAliasDoveLabel = "Streptopelia senegalensis_Laughing Dove"
+	altGunLabel       = "Gun_Gun"
+	altAliasDoveSci   = "Streptopelia senegalensis"
+	altKiskadeeSci    = "Pitangus sulphuratus"
+	altHumanLabel     = "Homo sapiens"
+	altDogLabel       = "Canis familiaris"
+	altAlternateConf  = 0.5
+)
+
+// altRangeSnapshot builds the per-chunk settings snapshot with the range filter
+// active and the given canonical included species.
+func altRangeSnapshot(included ...string) *conf.Settings {
+	settings := &conf.Settings{}
+	settings.BirdNET.LocationConfigured = true
+	settings.BirdNET.RangeFilter.IncludedScientificNames = make(map[string]struct{}, len(included))
+	for _, name := range included {
+		settings.BirdNET.RangeFilter.IncludedScientificNames[name] = struct{}{}
+	}
+	return settings
+}
+
+func altResults(labels ...string) []datastore.Results {
+	results := make([]datastore.Results, len(labels))
+	for i, label := range labels {
+		results[i] = datastore.Results{Species: label, Confidence: altAlternateConf}
+	}
+	return results
+}
+
+func TestCreateDetection_StoresOnlyAlternatesInRange(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name     string
+		modelID  string
+		included []string
+		labels   []string
+		want     []string
+	}{
+		{
+			name:     "BirdNET V2.4 keeps in-range, aliased and sound-event alternates and drops out-of-range ones",
+			modelID:  classifier.RegistryIDBirdNETV24,
+			included: []string{"turdus merula", "parus major", "spilopelia senegalensis"},
+			labels:   []string{altBlackbirdLabel, altGreatTitLabel, altKiskadeeLabel, altAliasDoveLabel, altGunLabel},
+			want:     []string{"Parus major", altAliasDoveSci, "Gun"},
+		},
+		{
+			name:     "Perch keeps the human and dog taxa",
+			modelID:  classifier.RegistryIDPerchV2,
+			included: []string{"turdus merula"},
+			labels:   []string{"Turdus merula", altKiskadeeSci, altHumanLabel, altDogLabel},
+			want:     []string{altHumanLabel, altDogLabel},
+		},
+		{
+			name:     "BSG keeps out-of-range alternates",
+			modelID:  classifier.RegistryIDBSG,
+			included: []string{"turdus merula", "parus major", "spilopelia senegalensis"},
+			labels:   []string{altBlackbirdLabel, altGreatTitLabel, altKiskadeeLabel},
+			want:     []string{"Parus major", altKiskadeeSci},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			// p.Settings has no location, so reading it instead of the passed
+			// snapshot would keep every alternate.
+			p := &Processor{Settings: &conf.Settings{}, Bn: &classifier.Orchestrator{}}
+			item := classifier.Results{
+				StartTime: time.Now(),
+				ModelID:   tt.modelID,
+				Results:   altResults(tt.labels...),
+			}
+			primary := item.Results[0]
+			primarySci := detection.ParseSpeciesString(primary.Species).ScientificName
+
+			det := p.createDetection(altRangeSnapshot(tt.included...), item, primary, primarySci, "Primary", "", primary.Species)
+
+			got := make([]string, len(det.Results))
+			for i, r := range det.Results {
+				got[i] = r.Species.ScientificName
+			}
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestProcessResults_RangeRuleSharedByFeedPrimaryAndAlternates drives one chunk
+// through processResults. It is not parallel because mergeTestProcessor resets
+// the global settings.
+func TestProcessResults_RangeRuleSharedByFeedPrimaryAndAlternates(t *testing.T) {
+	const (
+		threshold      = 0.5
+		primaryConf    = 0.9
+		outOfRangeConf = 0.8
+		blackbirdSci   = "Turdus merula"
+		chunkSource    = "range-src"
+	)
+	p := mergeTestProcessor(t)
+	p.Bn = &classifier.Orchestrator{}
+	settings := altRangeSnapshot("turdus merula")
+	settings.BirdNET.Threshold = threshold
+	end := time.Now()
+	item := classifier.Results{
+		Source:    datastore.AudioSource{ID: chunkSource},
+		ModelID:   classifier.RegistryIDBirdNETV24,
+		StartTime: end.Add(-mergeTestClip),
+		Audio:     classifier.AudioTiming{EndAt: end},
+		Results: []datastore.Results{
+			{Species: altBlackbirdLabel, Confidence: primaryConf},
+			{Species: altKiskadeeLabel, Confidence: outOfRangeConf},
+		},
+	}
+
+	detections := p.processResults(settings, item)
+
+	require.Len(t, detections, 1, "the out-of-range species fails the primary gate")
+	assert.Equal(t, blackbirdSci, detections[0].Result.Species.ScientificName)
+	for _, r := range detections[0].Results {
+		assert.NotEqual(t, altKiskadeeSci, r.Species.ScientificName, "out-of-range alternate must not be stored")
+	}
+
+	inRange := map[string]bool{}
+	for _, d := range p.GetRecentDetections(classifier.RegistryIDBirdNETV24) {
+		inRange[d.ScientificName] = d.InRange
+	}
+	assert.Equal(t, map[string]bool{blackbirdSci: true, altKiskadeeSci: false}, inRange)
 }
