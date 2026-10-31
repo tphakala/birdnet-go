@@ -1189,3 +1189,25 @@ func TestSeedDefaultRules_FailedRepairLeavesRowAndIsLogged(t *testing.T) {
 	assert.Equal(t, []uint{laterID}, repo.updated)
 	assert.Contains(t, logOutput.String(), "failed to repair built-in alert rule")
 }
+
+// TestApplyDetectionTemplates_LiferSkipsNewSpeciesTemplate guards the "lifer
+// wins" behavior: a lifer that is also new to this install must not be rendered
+// with the new-species template, so it keeps its own lifer wording instead of
+// showing an identical new-species title/message.
+func TestApplyDetectionTemplates_LiferSkipsNewSpeciesTemplate(t *testing.T) {
+	settings := conftest.GetTestSettings()
+	settings.Notification.Templates.NewSpecies.Title = "New: {{.CommonName}}"
+	settings.Notification.Templates.NewSpecies.Message = "First detection of {{.CommonName}}"
+	conftest.SetTestSettings(settings)
+	t.Cleanup(func() { conftest.SetTestSettings(nil) })
+
+	props := validDetectionProps()
+	props[PropertyIsNewSpecies] = true // both new species AND a lifer
+	props[PropertyIsLifer] = true
+
+	title, message := applyDetectionTemplates(
+		notification.TypeDetection, "Lifer detected", "Original Message", props,
+	)
+	assert.Equal(t, "Lifer detected", title, "lifer notification must not use the new-species title template")
+	assert.Equal(t, "Original Message", message, "lifer notification must not use the new-species message template")
+}
