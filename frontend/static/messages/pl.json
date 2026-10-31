@@ -476,7 +476,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime niedostępny",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} jest wymagany dla {modelName}, ale nie został znaleziony. Zobacz przewodnik instalacji: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} lub nowszy jest wymagany dla {modelName}, ale nie został znaleziony. Zobacz przewodnik instalacji: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Region modelu może być nieaktualny",

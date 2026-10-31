@@ -476,7 +476,7 @@
       },
       "ort": {
         "unavailableTitle": "ONNX Runtime ei ole käytettävissä",
-        "unavailableMessage": "ONNX Runtime {requiredVersion} vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Katso asennusohje: {installGuideURL}"
+        "unavailableMessage": "ONNX Runtime {requiredVersion} tai uudempi vaaditaan mallille {modelName}, mutta sitä ei löytynyt. Katso asennusohje: {installGuideURL}"
       },
       "region": {
         "staleTitle": "Mallialue saattaa olla vanhentunut",
