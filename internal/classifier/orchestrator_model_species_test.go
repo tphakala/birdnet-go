@@ -103,6 +103,22 @@ func TestModelSpecies_IncludesBirdNETAnchor(t *testing.T) {
 	assert.True(t, knows(ms, modelSpeciesIDA, modelSpeciesGreatTit))
 }
 
+// TestModelSpecies_ModelWithoutLabels pins that a model with a live instance and an
+// empty label list is still reported as loaded, on the ordinary path and on the v2.4
+// anchor path, and that it knows no species.
+func TestModelSpecies_ModelWithoutLabels(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: modelSpeciesIDA, labels: []string{}})
+	o.models[RegistryIDBirdNETV24] = &modelEntry{instance: &BirdNET{Settings: &conf.Settings{}}}
+
+	ms := o.ModelSpecies()
+	for _, id := range []string{modelSpeciesIDA, RegistryIDBirdNETV24} {
+		assert.True(t, ms.HasModel(id), "%s is loaded even with no labels", id)
+		assert.False(t, knows(ms, id, modelSpeciesBlackbird), "%s has no labels to know", id)
+	}
+}
+
 func TestModelSpecies_NilSafe(t *testing.T) {
 	t.Parallel()
 
@@ -191,9 +207,9 @@ func TestModelSpecies_GenerationBumps(t *testing.T) {
 	// Mutates package-global builder map and settings, so not parallel.
 	t.Run("bare struct without an index", func(t *testing.T) {
 		bare := &Orchestrator{}
-		before := bare.topologyGen.Load()
+		before := bare.ModelSpecies().Generation()
 		bare.rebuildSpeciesIndex()
-		assert.Greater(t, bare.topologyGen.Load(), before)
+		assert.Greater(t, bare.ModelSpecies().Generation(), before)
 	})
 
 	t.Run("name-resolver rebuild is not a topology change", func(t *testing.T) {
@@ -234,8 +250,10 @@ func TestModelSpecies_InvalidatedByDelete(t *testing.T) {
 }
 
 func TestModelSpecies_ConcurrentWithTopologyChanges(t *testing.T) {
-	// Mutates package-global ModelRegistry/modelLoaders, so not parallel.
+	// Mutates package-global ModelRegistry/modelLoaders and publishes global settings,
+	// so not parallel.
 	const registryID = "ModelSpecies_Concurrent"
+	setTestGlobalSettings(t)
 	registerPhase3Secondary(t, phase3Secondary{id: registryID, labels: []string{modelSpeciesGreatTit}})
 
 	o := newSpeciesIndexTestOrchestrator(t,
@@ -244,6 +262,12 @@ func TestModelSpecies_ConcurrentWithTopologyChanges(t *testing.T) {
 
 	var stop atomic.Bool
 	var wg sync.WaitGroup
+	// Stop and join the readers on every exit, including a failed require below, so
+	// they never outlive the test.
+	defer func() {
+		stop.Store(true)
+		wg.Wait()
+	}()
 	for range modelSpeciesReaders {
 		wg.Go(func() {
 			for !stop.Load() {
