@@ -1,19 +1,23 @@
 package detections
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
@@ -66,7 +70,14 @@ func predictionsFixture(t *testing.T) (*echo.Echo, *mocks.MockDetectionRepositor
 // getPredictions calls the handler for id and returns the status and raw body.
 func getPredictions(t *testing.T, e *echo.Echo, h *Handler, id string) (code int, body string) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/"+url.PathEscape(id)+"/predictions", http.NoBody)
+	return getPredictionsWith(t, e, h, id, func(r *http.Request) *http.Request { return r })
+}
+
+// getPredictionsWith is getPredictions with a hook that can replace the request,
+// for example to give it a context that has already ended.
+func getPredictionsWith(t *testing.T, e *echo.Echo, h *Handler, id string, adjust func(*http.Request) *http.Request) (code int, body string) {
+	t.Helper()
+	req := adjust(httptest.NewRequest(http.MethodGet, "/api/v2/detections/"+url.PathEscape(id)+"/predictions", http.NoBody))
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
@@ -320,6 +331,74 @@ func TestGetDetectionPredictions_Errors(t *testing.T) {
 		code, _ := getPredictions(t, e, h, predTestID)
 		assert.Equal(t, http.StatusInternalServerError, code)
 	})
+}
+
+// TestGetDetectionPredictions_SkipsUnusableRows verifies that rows with a blank or
+// whitespace name and rows with a NaN or infinite confidence never reach the
+// response: a non-finite confidence would also make the JSON encoding fail.
+func TestGetDetectionPredictions_SkipsUnusableRows(t *testing.T) {
+	e, repo, h := predictionsFixture(t)
+	expectReads(repo, predictionsPrimary(predTestBlackbird, predTestModelType), []detection.AdditionalResult{
+		predRow("", "", "", predTestHigh),
+		predRow("   ", "", "", predTestHigh),
+		predRow(predTestMallard, "", "", math.NaN()),
+		predRow(predTestMallard, "", "", math.Inf(1)),
+		predRow(predTestMallard, "", "", math.Inf(-1)),
+		predRow(predTestRaven, "", predTestRavenCode, predTestMid),
+	})
+	code, body := getPredictions(t, e, h, predTestID)
+	require.Equal(t, http.StatusOK, code)
+	resp := decodePredictions(t, body)
+	require.Len(t, resp.ModelPredictions, 1)
+	assert.Equal(t, []PredictionResponse{
+		{ScientificName: predTestRaven, SpeciesCode: predTestRavenCode, Confidence: predTestMid},
+	}, resp.ModelPredictions[0].Predictions)
+}
+
+// TestGetDetectionPredictions_RequestEnded verifies that a read failing because the
+// request itself ended is answered 499 (canceled) or 408 (deadline), not 500, for
+// each of the two reads.
+func TestGetDetectionPredictions_RequestEnded(t *testing.T) {
+	canceled := func(t *testing.T) context.Context {
+		t.Helper()
+		ctx, cancel := context.WithCancel(t.Context())
+		cancel()
+		return ctx
+	}
+	expired := func(t *testing.T) context.Context {
+		t.Helper()
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+		t.Cleanup(cancel)
+		return ctx
+	}
+	cases := []struct {
+		name     string
+		endedCtx func(*testing.T) context.Context
+		readErr  error
+		failRead string // "get" or "rows"
+		want     int
+	}{
+		{"canceled during Get", canceled, context.Canceled, "get", apicore.StatusClientClosedRequest},
+		{"deadline during Get", expired, context.DeadlineExceeded, "get", http.StatusRequestTimeout},
+		{"canceled during GetAdditionalResults", canceled, context.Canceled, "rows", apicore.StatusClientClosedRequest},
+		{"deadline during GetAdditionalResults", expired, context.DeadlineExceeded, "rows", http.StatusRequestTimeout},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e, repo, h := predictionsFixture(t)
+			if tc.failRead == "get" {
+				repo.EXPECT().Get(mock.Anything, predTestID).Return(nil, fmt.Errorf("read: %w", tc.readErr)).Once()
+			} else {
+				repo.EXPECT().Get(mock.Anything, predTestID).Return(predictionsPrimary(predTestBlackbird, ""), nil).Once()
+				repo.EXPECT().GetAdditionalResults(mock.Anything, predTestID).Return(nil, fmt.Errorf("read: %w", tc.readErr)).Once()
+			}
+			ended := tc.endedCtx(t)
+			code, _ := getPredictionsWith(t, e, h, predTestID, func(r *http.Request) *http.Request {
+				return r.WithContext(ended)
+			})
+			assert.Equal(t, tc.want, code)
+		})
+	}
 }
 
 // TestGetDetectionPredictions_PublicRoute verifies the route is registered outside
