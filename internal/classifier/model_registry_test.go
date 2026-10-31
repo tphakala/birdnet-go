@@ -294,6 +294,22 @@ func TestModelRegistry_BatEntry(t *testing.T) {
 	assert.Equal(t, 256000, info.Spec.EffectiveSampleRate())
 }
 
+func TestModelRegistry_EveryEntryHasTaxonGroup(t *testing.T) {
+	t.Parallel()
+
+	for id := range ModelRegistry {
+		group := TaxonGroupFor(id)
+		assert.Contains(t, []TaxonGroup{TaxonGroupBird, TaxonGroupBat}, group,
+			"registry entry %q must declare a known taxon group", id)
+	}
+
+	// Perch is a catalog wildlife entry and BSG has no loader, but both detect birds.
+	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDPerchV2))
+	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDBSG))
+	assert.Equal(t, TaxonGroupBat, TaxonGroupFor(RegistryIDBat))
+	assert.Equal(t, TaxonGroup(""), TaxonGroupFor("no-such-model"), "unknown ID is ungrouped")
+}
+
 func TestModelRegistry_BSGEntry(t *testing.T) {
 	t.Parallel()
 
