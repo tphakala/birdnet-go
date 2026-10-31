@@ -303,6 +303,8 @@ func TestModelRegistry_EveryEntryHasTaxonGroup(t *testing.T) {
 			"registry entry %q must declare a known taxon group", id)
 	}
 
+	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDBirdNETV24))
+	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDBirdNETV3))
 	// Perch is a catalog wildlife entry and BSG has no loader, but both detect birds.
 	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDPerchV2))
 	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDBSG))

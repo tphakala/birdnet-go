@@ -133,8 +133,8 @@ const (
 
 // TaxonGroupFor returns the taxon group of the registry entry with the given ID.
 // An unknown ID yields the empty group, meaning ungrouped: callers must not treat
-// it as a member of any group. Read it by registry ID, not from an instance's ModelInfo copy, which
-// may be built without the registry's unexported fields.
+// it as a member of any group. Read it by registry ID, not from an instance's
+// ModelInfo copy, which may be built without the registry's unexported fields.
 func TaxonGroupFor(registryID string) TaxonGroup {
 	return ModelRegistry[registryID].taxonGroup
 }
