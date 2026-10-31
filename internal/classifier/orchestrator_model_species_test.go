@@ -23,7 +23,25 @@ const (
 	modelSpeciesDoveAlias = "Spilopelia senegalensis"
 	modelSpeciesBlueTit   = "Cyanistes caeruleus_Eurasian Blue Tit"
 	modelSpeciesSoundCls  = "Power_tool"
+
+	// modelSpeciesReaders is the number of goroutines reading ModelSpecies while the
+	// topology changes in the concurrency test.
+	modelSpeciesReaders = 8
 )
+
+// labelsHookModel is a mock model that runs onLabels each time Labels is called, so
+// a test can change the topology while ModelSpecies is walking the models.
+type labelsHookModel struct {
+	*mockModelInstance
+	onLabels func()
+}
+
+func (m *labelsHookModel) Labels() []string {
+	if m.onLabels != nil {
+		m.onLabels()
+	}
+	return m.mockModelInstance.Labels()
+}
 
 func TestModelSpecies_PerModelCanonicalKeys(t *testing.T) {
 	t.Parallel()
@@ -153,6 +171,75 @@ func TestModelSpecies_TracksTopologyTransitions(t *testing.T) {
 	assert.True(t, afterUnload.Knows(modelSpeciesIDA, blackbird))
 }
 
+// TestModelSpecies_GenerationReadBeforeWalk pins that a topology change landing
+// during the walk leaves the snapshot stamped with the older generation, so the next
+// call rebuilds instead of trusting a set that may predate the change.
+func TestModelSpecies_GenerationReadBeforeWalk(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t)
+	var once sync.Once
+	hook := &labelsHookModel{
+		mockModelInstance: &mockModelInstance{id: modelSpeciesIDA, labels: []string{modelSpeciesBlackbird}},
+		onLabels:          func() { once.Do(func() { o.topologyGen.Add(1) }) },
+	}
+	o.models[modelSpeciesIDA] = &modelEntry{instance: hook}
+
+	first := o.ModelSpecies()
+	second := o.ModelSpecies()
+	assert.NotSame(t, first, second, "a change during the walk must force a rebuild")
+	assert.Greater(t, second.Generation(), first.Generation())
+	assert.Same(t, second, o.ModelSpecies(), "a quiet topology hits the cache again")
+}
+
+// TestModelSpecies_GenerationBumps pins the bump sites that the transition test does
+// not reach: a bare-struct orchestrator without a species index, the secondary reload
+// trigger, and the name-resolver rebuild, which is not a topology change.
+func TestModelSpecies_GenerationBumps(t *testing.T) {
+	// Mutates package-global builder map and settings, so not parallel.
+	t.Run("bare struct without an index", func(t *testing.T) {
+		bare := &Orchestrator{}
+		before := bare.ModelSpecies().Generation()
+		bare.rebuildSpeciesIndex()
+		assert.Greater(t, bare.ModelSpecies().Generation(), before)
+	})
+
+	t.Run("name-resolver rebuild is not a topology change", func(t *testing.T) {
+		o := newSpeciesIndexTestOrchestrator(t,
+			&mockModelInstance{id: modelSpeciesIDA, labels: []string{modelSpeciesBlackbird}})
+		before := o.ModelSpecies()
+		require.NoError(t, o.RebuildNameResolver(nil))
+		assert.Same(t, before, o.ModelSpecies())
+	})
+
+	t.Run("secondary reload", func(t *testing.T) {
+		setGlobalBackend(t, "openvino", "gpu", "/opt/ov")
+		o := newSpeciesIndexTestOrchestrator(t, &mockModelInstance{id: RegistryIDBirdNETV24})
+		o.models[testSecondaryID] = &modelEntry{instance: &reloadFakeModel{id: testSecondaryID}, backend: secondaryBackendKey{backend: "onnx"}}
+		registerTestSecondaryBuilder(t, testSecondaryID, func(_ *Orchestrator, _ *conf.Settings, _ int) (ModelInstance, error) {
+			return &reloadFakeModel{id: testSecondaryID}, nil
+		})
+		before := o.ModelSpecies()
+		require.NoError(t, o.ReloadSecondaryModels())
+		assert.Greater(t, o.ModelSpecies().Generation(), before.Generation())
+	})
+}
+
+func TestModelSpecies_InvalidatedByDelete(t *testing.T) {
+	// Delete closes models and clears the species index globals, so not parallel.
+	setTestGlobalSettings(t)
+	o := newSpeciesIndexTestOrchestrator(t,
+		&mockModelInstance{id: modelSpeciesIDA, labels: []string{modelSpeciesBlackbird}})
+	before := o.ModelSpecies()
+	require.True(t, before.HasModel(modelSpeciesIDA))
+
+	o.Delete()
+
+	after := o.ModelSpecies()
+	assert.Greater(t, after.Generation(), before.Generation())
+	assert.False(t, after.HasModel(modelSpeciesIDA), "a deleted orchestrator has no loaded models")
+}
+
 func TestModelSpecies_ConcurrentWithTopologyChanges(t *testing.T) {
 	// Mutates package-global ModelRegistry/modelLoaders, so not parallel.
 	const registryID = "ModelSpecies_Concurrent"
@@ -170,7 +257,7 @@ func TestModelSpecies_ConcurrentWithTopologyChanges(t *testing.T) {
 
 	stop := make(chan struct{})
 	var wg sync.WaitGroup
-	for range 8 {
+	for range modelSpeciesReaders {
 		wg.Go(func() {
 			for {
 				select {

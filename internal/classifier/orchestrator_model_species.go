@@ -49,8 +49,8 @@ func (m *ModelSpecies) Knows(modelID, key string) bool {
 }
 
 // ModelSpecies returns the per-model species snapshot. It is built lazily on the
-// first call and rebuilt only after the model topology changed (a load, unload or
-// reload, tracked by topologyGen), so the steady-state cost is one atomic load and
+// first call and rebuilt only after the model topology changed (a load, unload,
+// reload or Delete, tracked by topologyGen), so the steady-state cost is one atomic load and
 // a compare. It returns nil on a nil receiver.
 //
 // It MUST be called with no orchestrator lock held, and never under a caller lock
