@@ -85,6 +85,7 @@ var criticalRoutes = []string{
 	"POST /api/v2/support/generate",
 	"POST /api/v2/debug/trigger-error",
 	"GET /api/v2/species/taxonomy",
+	"DELETE /api/v2/species/notes/:id",
 	"DELETE /api/v2/dynamic-thresholds",
 	"POST /api/v2/alerts/rules",
 	"POST /api/v2/models/install/:id",

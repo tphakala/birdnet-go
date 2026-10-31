@@ -8,6 +8,9 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/repository"
@@ -22,6 +25,7 @@ const (
 	auxSectionThreshold       = "threshold"
 	auxSectionThresholdEvents = "threshold events"
 	auxSectionNotifications   = "notifications"
+	auxSectionSpeciesNotes    = "species notes"
 	auxSectionWeather         = "weather"
 )
 
@@ -81,6 +85,17 @@ type AuxiliaryMigrationResult struct {
 		Skipped               int
 		Error                 error
 	}
+	// Skipped and Failed are carried for shape parity with the other sections so
+	// sections() and the outcome summary treat them alike. Both stay zero today:
+	// notes are copied verbatim in one batched upsert, so the copy either lands
+	// whole or records an Error.
+	SpeciesNotes struct {
+		Total    int
+		Migrated int
+		Skipped  int
+		Failed   int
+		Error    error
+	}
 }
 
 // auxSection pairs a section name with its migration stats for iteration.
@@ -100,6 +115,7 @@ func (r *AuxiliaryMigrationResult) sections() []auxSection {
 		{auxSectionThreshold, r.Thresholds.Total, r.Thresholds.Migrated, r.Thresholds.Skipped, r.Thresholds.Failed, r.Thresholds.Error},
 		{auxSectionThresholdEvents, r.ThresholdEvents.Total, r.ThresholdEvents.Migrated, r.ThresholdEvents.Skipped, r.ThresholdEvents.Failed, r.ThresholdEvents.Error},
 		{auxSectionNotifications, r.Notifications.Total, r.Notifications.Migrated, r.Notifications.Skipped, r.Notifications.Failed, r.Notifications.Error},
+		{auxSectionSpeciesNotes, r.SpeciesNotes.Total, r.SpeciesNotes.Migrated, r.SpeciesNotes.Skipped, r.SpeciesNotes.Failed, r.SpeciesNotes.Error},
 	}
 }
 
@@ -138,12 +154,20 @@ func (r *AuxiliaryMigrationResult) LogErrors(log logger.Logger) {
 // HasErrors returns true if any section failed to copy rows that should have been
 // copied, or failed to fetch, resolve or read the data it needs. Every such failure
 // sets the section's Error.
+//
+// Driven from sections() rather than a hand-written disjunction: species notes were
+// added to the result and to sections() but missed here, so a notes-only failure
+// reported success. Because the worker only calls LogErrors when this returns true,
+// that failure was not surfaced at the result level at all — and notes have no other
+// copy once Consolidate renames the legacy database away. Weather is checked
+// separately because it tracks daily and hourly counts and is not a section.
 func (r *AuxiliaryMigrationResult) HasErrors() bool {
-	return r.ImageCaches.Error != nil ||
-		r.Thresholds.Error != nil ||
-		r.ThresholdEvents.Error != nil ||
-		r.Notifications.Error != nil ||
-		r.Weather.Error != nil
+	for _, s := range r.sections() {
+		if s.err != nil {
+			return true
+		}
+	}
+	return r.Weather.Error != nil
 }
 
 // Outcome returns the status to persist for this result and, when it failed, a
@@ -219,6 +243,12 @@ func (r *AuxiliaryMigrationResult) Summary() string {
 	}
 	b.WriteString("\n")
 
+	fmt.Fprintf(&b, "  Species Notes: %d/%d migrated, %d skipped, %d failed", r.SpeciesNotes.Migrated, r.SpeciesNotes.Total, r.SpeciesNotes.Skipped, r.SpeciesNotes.Failed)
+	if r.SpeciesNotes.Error != nil {
+		fmt.Fprintf(&b, " (error: %v)", r.SpeciesNotes.Error)
+	}
+	b.WriteString("\n")
+
 	fmt.Fprintf(&b, "  Daily Events: %d/%d migrated, %d failed", r.Weather.DailyEventsMigrated, r.Weather.DailyEventsTotal, r.Weather.DailyEventsFailed)
 	fmt.Fprintf(&b, ", Hourly Weather: %d/%d migrated, %d skipped, %d failed", r.Weather.HourlyWeatherMigrated, r.Weather.HourlyWeatherTotal, r.Weather.Skipped, r.Weather.HourlyWeatherFailed)
 	if r.Weather.Error != nil {
@@ -238,7 +268,12 @@ type AuxiliaryMigrator struct {
 	imageCacheRepo   repository.ImageCacheRepository
 	thresholdRepo    repository.DynamicThresholdRepository
 	notificationRepo repository.NotificationHistoryRepository
-	logger           logger.Logger
+	// v2DB is the destination GORM handle, needed for species_notes: unlike every
+	// other auxiliary table it has no v2 entity or repository. It is a v1-origin
+	// model that the v2 side stores under the same name and shape, so it is copied
+	// verbatim rather than remapped onto a LabelID.
+	v2DB   *gorm.DB
+	logger logger.Logger
 
 	// Cached lookup table IDs for label creation
 	defaultModelID     uint  // Model ID to use for migrated labels
@@ -254,7 +289,10 @@ type AuxiliaryMigratorConfig struct {
 	ImageCacheRepo   repository.ImageCacheRepository
 	ThresholdRepo    repository.DynamicThresholdRepository
 	NotificationRepo repository.NotificationHistoryRepository
-	Logger           logger.Logger
+	// V2DB is the destination GORM handle. When nil, species-notes migration is
+	// skipped (every other section still runs).
+	V2DB   *gorm.DB
+	Logger logger.Logger
 
 	// Required: Cached lookup table IDs
 	DefaultModelID     uint  // Model ID to use for migrated labels (typically default BirdNET)
@@ -271,6 +309,7 @@ func NewAuxiliaryMigrator(cfg *AuxiliaryMigratorConfig) *AuxiliaryMigrator {
 		imageCacheRepo:     cfg.ImageCacheRepo,
 		thresholdRepo:      cfg.ThresholdRepo,
 		notificationRepo:   cfg.NotificationRepo,
+		v2DB:               cfg.V2DB,
 		logger:             cfg.Logger,
 		defaultModelID:     cfg.DefaultModelID,
 		speciesLabelTypeID: cfg.SpeciesLabelTypeID,
@@ -311,6 +350,7 @@ func (m *AuxiliaryMigrator) MigrateAll(ctx context.Context) (*AuxiliaryMigration
 	m.migrateDynamicThresholds(ctx, result)
 	m.migrateNotificationHistory(ctx, result)
 	m.migrateWeatherData(ctx, result)
+	m.migrateSpeciesNotes(ctx, result)
 
 	// Log comprehensive summary with structured fields
 	m.logger.Info("auxiliary migration completed",
@@ -325,7 +365,9 @@ func (m *AuxiliaryMigrator) MigrateAll(ctx context.Context) (*AuxiliaryMigration
 		logger.Int("daily_events_total", result.Weather.DailyEventsTotal),
 		logger.Int("daily_events_migrated", result.Weather.DailyEventsMigrated),
 		logger.Int("hourly_weather_total", result.Weather.HourlyWeatherTotal),
-		logger.Int("hourly_weather_migrated", result.Weather.HourlyWeatherMigrated))
+		logger.Int("hourly_weather_migrated", result.Weather.HourlyWeatherMigrated),
+		logger.Int("species_notes_total", result.SpeciesNotes.Total),
+		logger.Int("species_notes_migrated", result.SpeciesNotes.Migrated))
 
 	// Caller records result.Outcome()
 	return result, nil
@@ -632,6 +674,105 @@ func (m *AuxiliaryMigrator) migrateNotificationHistory(ctx context.Context, resu
 		logger.Int("migrated", result.Notifications.Migrated),
 		logger.Int("skipped", result.Notifications.Skipped),
 		logger.Int("failed", result.Notifications.Failed))
+}
+
+// speciesNoteMigrationBatchSize bounds each CreateInBatches insert. Notes are
+// small and typically few, so this only guards a pathological collection.
+const speciesNoteMigrationBatchSize = 200
+
+// migrateSpeciesNotes copies user-authored species notes from the legacy database
+// to v2.
+//
+// It differs from every other section here in two ways. First, species_notes has
+// no v2 entity and no repository: it is a v1-origin model that the v2 side stores
+// under the same table and shape, so rows are copied verbatim instead of being
+// remapped onto a LabelID. Second, the destination table does not exist yet at
+// this point — Manager.Initialize only AutoMigrates v2Entities(), and species_notes
+// is created later by v2only.New on the post-consolidation restart. Without the
+// AutoMigrate below the copy would fail against a missing table.
+//
+// Notes are user-authored content with no other copy once Consolidate renames the
+// legacy database away, so this runs even when the species guide is currently
+// disabled: the rows may predate the user turning it off.
+func (m *AuxiliaryMigrator) migrateSpeciesNotes(ctx context.Context, result *AuxiliaryMigrationResult) {
+	if m.v2DB == nil {
+		m.logger.Debug("v2 database handle not configured, skipping species notes")
+		return
+	}
+	// The legacy store exposes its GORM handle via GormDBProvider; species_notes has
+	// no enumerate-all method on datastore.Interface (the API only ever reads one
+	// species at a time), so the migration reads the table directly.
+	provider, ok := m.legacyStore.(datastore.GormDBProvider)
+	if !ok {
+		m.logger.Debug("legacy store does not expose a GORM handle, skipping species notes")
+		return
+	}
+	legacyDB := provider.GormDB()
+	if legacyDB == nil {
+		m.logger.Debug("legacy GORM handle is nil, skipping species notes")
+		return
+	}
+
+	// A legacy database written before the species guide existed has no
+	// species_notes table at all; that is the common case and not an error.
+	if !legacyDB.Migrator().HasTable(&datastore.SpeciesNote{}) {
+		m.logger.Debug("legacy database has no species_notes table, nothing to migrate")
+		return
+	}
+
+	var legacyNotes []datastore.SpeciesNote
+	if err := legacyDB.WithContext(ctx).
+		Order("id ASC").
+		Find(&legacyNotes).Error; err != nil {
+		m.logger.Warn("failed to read legacy species notes", logger.Error(err))
+		result.SpeciesNotes.Error = err
+		return
+	}
+
+	result.SpeciesNotes.Total = len(legacyNotes)
+	if len(legacyNotes) == 0 {
+		m.logger.Debug("no species notes to migrate")
+		return
+	}
+
+	if err := m.v2DB.WithContext(ctx).AutoMigrate(&datastore.SpeciesNote{}); err != nil {
+		m.logger.Warn("failed to create species_notes table in v2", logger.Error(err))
+		result.SpeciesNotes.Error = err
+		return
+	}
+
+	// Rows are inserted as read. autoCreateTime/autoUpdateTime only fill a zero
+	// value, so the stored timestamps survive — which matters because the notes list
+	// is ordered by created_at and re-stamping would silently reorder a user's
+	// history. IDs carry over for the same reason. Deliberately NOT column-selected:
+	// an explicit list would silently stop copying any column later added to
+	// SpeciesNote. TestMigrateSpeciesNotes_CopiesRowsPreservingIDsAndTimestamps pins
+	// both properties.
+	// OnConflict keeps the copy idempotent: the rows carry their legacy IDs, so a
+	// re-entry after an interrupted run — a crash between this insert committing and
+	// the migration finishing, or a resumed migration — would otherwise fail on
+	// duplicate primary keys and leave the remaining notes unmigrated.
+	//
+	// UpdateAll rather than DoNothing, because the legacy database stays the source of
+	// truth until Consolidate renames it away and the v2 table is write-only until the
+	// post-consolidation restart (see above). A conflicting row must therefore be
+	// refreshed from legacy, not kept: DoNothing would silently preserve a stale copy
+	// of a note edited between the partial run and the retry, and would make the
+	// Migrated count below a claim rather than a fact. It is column-list-free for the
+	// same reason the insert is — an explicit list would silently stop copying any
+	// column later added to SpeciesNote.
+	if err := m.v2DB.WithContext(ctx).Clauses(clause.OnConflict{UpdateAll: true}).
+		CreateInBatches(legacyNotes, speciesNoteMigrationBatchSize).Error; err != nil {
+		m.logger.Warn("failed to write species notes to v2", logger.Error(err))
+		result.SpeciesNotes.Error = err
+		return
+	}
+	result.SpeciesNotes.Migrated = len(legacyNotes)
+
+	m.logger.Info("species notes migration completed",
+		logger.Int("total", result.SpeciesNotes.Total),
+		logger.Int("migrated", result.SpeciesNotes.Migrated),
+		logger.Int("skipped", result.SpeciesNotes.Skipped))
 }
 
 // migrateWeatherData migrates DailyEvents and HourlyWeather from legacy to v2.

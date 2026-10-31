@@ -30,6 +30,7 @@ type Metrics struct {
 	Notification  *metrics.NotificationMetrics
 	PrivacyFilter *metrics.PrivacyFilterMetrics
 	AudioStream   *metrics.AudioStreamMetrics
+	GuideProvider *metrics.GuideProviderMetrics
 }
 
 // NewMetrics creates a new instance of Metrics, initializing all metric collectors.
@@ -102,6 +103,11 @@ func NewMetrics() (*Metrics, error) {
 		return nil, fmt.Errorf("failed to create AudioStream metrics: %w", err)
 	}
 
+	guideProviderMetrics, err := metrics.NewGuideProviderMetrics(registry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GuideProvider metrics: %w", err)
+	}
+
 	m := &Metrics{
 		registry:      registry,
 		MQTT:          mqttMetrics,
@@ -117,6 +123,7 @@ func NewMetrics() (*Metrics, error) {
 		Notification:  notificationMetrics,
 		PrivacyFilter: privacyFilterMetrics,
 		AudioStream:   audioStreamMetrics,
+		GuideProvider: guideProviderMetrics,
 	}
 
 	// Initialize tracing with metrics
