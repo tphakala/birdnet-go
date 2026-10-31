@@ -5,18 +5,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 // TestNew_CachesNonBirdLabelTypeIDs verifies that after construction all seven
-// nonbird categories have a non-zero label_type_id in the cached map.
+// soundevent categories have a non-zero label_type_id in the cached map.
 func TestNew_CachesNonBirdLabelTypeIDs(t *testing.T) {
 	t.Parallel()
 
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
-	cats := nonbird.Categories()
+	cats := soundevent.Categories()
 	require.Len(t, cats, 7, "expected 7 non-bird categories")
 
 	for _, cat := range cats {
@@ -34,6 +34,6 @@ func TestNew_NonBirdLabelTypeIDsMapSize(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
 	defer cleanup()
 
-	assert.Len(t, ds.nonBirdLabelTypeIDs, len(nonbird.Categories()),
+	assert.Len(t, ds.nonBirdLabelTypeIDs, len(soundevent.Categories()),
 		"nonBirdLabelTypeIDs should have one entry per category")
 }

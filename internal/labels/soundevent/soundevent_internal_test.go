@@ -1,4 +1,4 @@
-package nonbird
+package soundevent
 
 import (
 	"strings"

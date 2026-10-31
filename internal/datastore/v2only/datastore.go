@@ -38,7 +38,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/diskmanager"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	obmetrics "github.com/tphakala/birdnet-go/internal/observability/metrics"
 	"github.com/tphakala/birdnet-go/internal/speciesindex"
@@ -134,7 +134,7 @@ type Datastore struct {
 	// nonBirdLabelTypeIDs maps each non-bird sound category to its label_type_id.
 	// Set once in the constructor (read-only afterwards) so concurrent Save calls can
 	// classify Perch v2 (FSD50K) sound classes without a data race.
-	nonBirdLabelTypeIDs map[nonbird.Category]uint
+	nonBirdLabelTypeIDs map[soundevent.Category]uint
 
 	// names points at the species-name lookup index (the forward display and
 	// reverse search maps plus the authoritative resolver). New seeds a private
@@ -250,8 +250,8 @@ func New(cfg *Config) (*Datastore, error) {
 	// Build cached map of non-bird category -> label_type_id.
 	// All seven IDs are resolved once here (read-only after construction) so
 	// concurrent Save calls can classify non-bird sounds without a data race.
-	nonBirdLabelTypeIDs := make(map[nonbird.Category]uint, len(nonbird.Categories()))
-	for _, cat := range nonbird.Categories() {
+	nonBirdLabelTypeIDs := make(map[soundevent.Category]uint, len(soundevent.Categories()))
+	for _, cat := range soundevent.Categories() {
 		id, err := getOrCreateLabelTypeID(db, string(cat))
 		if err != nil {
 			return nil, fmt.Errorf("resolve non-bird label type for category %q: %w", cat, err)
@@ -705,13 +705,13 @@ func (ds *Datastore) GetDatabaseStats(ctx context.Context) (*datastore.DatabaseS
 
 // labelTypeForRawLabel resolves the label_type_id and taxonomic_class_id for a label given its
 // full raw classifier label. A Perch v2 (FSD50K) non-bird sound class (recognized by
-// nonbird.CategoryOf on the full raw label) gets its category's label type and a nil taxonomic
+// soundevent.CategoryOf on the full raw label) gets its category's label type and a nil taxonomic
 // class; everything else (birds, and any label not recognized as non-bird, including an empty
 // rawLabel) gets the species label type and the model's taxonomic class. The stored scientific
 // name is unchanged by this function - the caller still stores the extracted scientific name.
 // isNonBird reports whether the non-bird branch was taken (used to gate first-writer-wins relabel).
 func (ds *Datastore) labelTypeForRawLabel(rawLabel string, speciesTaxClassID *uint) (labelTypeID uint, taxClassID *uint, isNonBird bool) {
-	if cat, ok := nonbird.CategoryOf(rawLabel); ok {
+	if cat, ok := soundevent.CategoryOf(rawLabel); ok {
 		return ds.nonBirdLabelTypeIDs[cat], nil, true
 	}
 	return ds.speciesLabelTypeID, speciesTaxClassID, false
@@ -3379,7 +3379,7 @@ func labelIDsForScientificName(tablePrefix, scientificName string) (clause strin
 // is no longer matched. Every other name, including a single-token class like
 // "Dog" that BirdNET also emits as "Dog_Dog", keeps the prefix match.
 func labelMatchForScientificName(scientificName string) (predicate string, args []any) {
-	if nonbird.IsMultiWordClassPrefix(scientificName) {
+	if soundevent.IsMultiWordClassPrefix(scientificName) {
 		return "scientific_name = ?", []any{scientificName}
 	}
 	// Escape LIKE metacharacters with '!' (see scientificNameLikeEscaper).

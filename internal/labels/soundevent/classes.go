@@ -1,6 +1,6 @@
-package nonbird
+package soundevent
 
-// classes maps each known non-bird FSD50K/AudioSet sound class (lowercase) to its category.
+// classes maps each known AudioSet/FSD50K sound-event class (lowercase) to its category.
 // This is the committed, hand-categorized source of truth. See doc.go for how to regenerate
 // the candidate list from a Perch label file (the categorization is applied by hand so a future
 // genus-level single-token label cannot be silently misfiled).

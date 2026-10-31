@@ -1,11 +1,11 @@
-package nonbird_test
+package soundevent_test
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 func TestCategoryOf(t *testing.T) {
@@ -14,38 +14,38 @@ func TestCategoryOf(t *testing.T) {
 	tests := []struct {
 		name    string
 		label   string
-		wantCat nonbird.Category
+		wantCat soundevent.Category
 		wantOK  bool
 	}{
 		// Full-label positives - one per category
-		{"mechanical", "power_tool", nonbird.CategoryMechanical, true},
-		{"human", "speech", nonbird.CategoryHuman, true},
-		{"animal", "dog", nonbird.CategoryAnimal, true},
-		{"music", "piano", nonbird.CategoryMusic, true},
-		{"environment", "rain", nonbird.CategoryEnvironment, true},
-		{"noise", "buzz", nonbird.CategoryNoise, true},
-		{"device", "clock", nonbird.CategoryDevice, true},
+		{"mechanical", "power_tool", soundevent.CategoryMechanical, true},
+		{"human", "speech", soundevent.CategoryHuman, true},
+		{"animal", "dog", soundevent.CategoryAnimal, true},
+		{"music", "piano", soundevent.CategoryMusic, true},
+		{"environment", "rain", soundevent.CategoryEnvironment, true},
+		{"noise", "buzz", soundevent.CategoryNoise, true},
+		{"device", "clock", soundevent.CategoryDevice, true},
 		// Case-insensitivity
-		{"uppercase", "POWER_TOOL", nonbird.CategoryMechanical, true},
-		{"mixed case", "Speech", nonbird.CategoryHuman, true},
+		{"uppercase", "POWER_TOOL", soundevent.CategoryMechanical, true},
+		{"mixed case", "Speech", soundevent.CategoryHuman, true},
 		// Negatives
-		{"truncated token not a full label", "Power", nonbird.Category(""), false},
-		{"real bird binomial", "Turdus merula", nonbird.Category(""), false},
-		{"underscore-joined binomial not a class", "turdus_merula", nonbird.Category(""), false},
-		{"empty string", "", nonbird.Category(""), false},
+		{"truncated token not a full label", "Power", soundevent.Category(""), false},
+		{"real bird binomial", "Turdus merula", soundevent.Category(""), false},
+		{"underscore-joined binomial not a class", "turdus_merula", soundevent.Category(""), false},
+		{"empty string", "", soundevent.Category(""), false},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, ok := nonbird.CategoryOf(tc.label)
+			got, ok := soundevent.CategoryOf(tc.label)
 			assert.Equal(t, tc.wantOK, ok)
 			assert.Equal(t, tc.wantCat, got)
 		})
 	}
 }
 
-func TestIsNonSpeciesLabel(t *testing.T) {
+func TestIsLabel(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -65,13 +65,13 @@ func TestIsNonSpeciesLabel(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := nonbird.IsNonSpeciesLabel(tc.label)
+			got := soundevent.IsLabel(tc.label)
 			assert.Equal(t, tc.want, got)
 		})
 	}
 }
 
-func TestIsNonBirdName(t *testing.T) {
+func TestIsName(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -98,7 +98,7 @@ func TestIsNonBirdName(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := nonbird.IsNonBirdName(tc.input)
+			got := soundevent.IsName(tc.input)
 			assert.Equal(t, tc.want, got)
 		})
 	}
@@ -107,13 +107,13 @@ func TestIsNonBirdName(t *testing.T) {
 func TestCategories(t *testing.T) {
 	t.Parallel()
 
-	cats := nonbird.Categories()
+	cats := soundevent.Categories()
 
 	// Must have exactly seven entries.
 	assert.Len(t, cats, 7)
 
 	// No duplicates.
-	seen := make(map[nonbird.Category]struct{}, len(cats))
+	seen := make(map[soundevent.Category]struct{}, len(cats))
 	for _, c := range cats {
 		_, dup := seen[c]
 		assert.False(t, dup, "duplicate category %q in Categories()", c)
@@ -121,14 +121,14 @@ func TestCategories(t *testing.T) {
 	}
 
 	// Every returned value must be one of the seven exported constants.
-	valid := map[nonbird.Category]struct{}{
-		nonbird.CategoryHuman:       {},
-		nonbird.CategoryAnimal:      {},
-		nonbird.CategoryMusic:       {},
-		nonbird.CategoryMechanical:  {},
-		nonbird.CategoryEnvironment: {},
-		nonbird.CategoryNoise:       {},
-		nonbird.CategoryDevice:      {},
+	valid := map[soundevent.Category]struct{}{
+		soundevent.CategoryHuman:       {},
+		soundevent.CategoryAnimal:      {},
+		soundevent.CategoryMusic:       {},
+		soundevent.CategoryMechanical:  {},
+		soundevent.CategoryEnvironment: {},
+		soundevent.CategoryNoise:       {},
+		soundevent.CategoryDevice:      {},
 	}
 	for _, c := range cats {
 		_, ok := valid[c]
@@ -155,7 +155,7 @@ func TestIsMultiWordClassPrefix(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			assert.Equal(t, tt.want, nonbird.IsMultiWordClassPrefix(tt.input))
+			assert.Equal(t, tt.want, soundevent.IsMultiWordClassPrefix(tt.input))
 		})
 	}
 }
@@ -182,7 +182,7 @@ func TestMultiWordLabelNames(t *testing.T) {
 		{"single token", "Dog", "", "", false},
 		{"binomial", "Turdus merula", "", "", false},
 		{"BirdNET two-part", "Turdus merula_Common Blackbird", "", "", false},
-		{"BirdNET non-bird species", "Canis familiaris_Dog", "", "", false},
+		{"BirdNET dog species", "Canis familiaris_Dog", "", "", false},
 		{"unknown underscore label", "dog_bark", "", "", false},
 		{"prefix of a class", "Domestic_sounds", "", "", false},
 		{"empty", "", "", "", false},
@@ -191,7 +191,7 @@ func TestMultiWordLabelNames(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			identity, display, ok := nonbird.MultiWordLabelNames(tt.label)
+			identity, display, ok := soundevent.MultiWordLabelNames(tt.label)
 			assert.Equal(t, tt.wantOK, ok)
 			assert.Equal(t, tt.wantIdentity, identity)
 			assert.Equal(t, tt.wantDisplay, display)

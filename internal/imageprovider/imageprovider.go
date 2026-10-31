@@ -15,7 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/conf"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
 	"github.com/tphakala/birdnet-go/internal/observability/metrics"
@@ -402,7 +402,7 @@ var fallbackProviders = []string{"avicommons", "wikimedia"}
 
 // nonAvianClasses lists legacy BirdNET model output class names that are not bird species.
 // These are the Title-case-with-spaces names produced by BirdNET v2.x split labels (e.g.
-// "Power tools", "Human vocal"). They are kept as a fallback because the nonbird package
+// "Power tools", "Human vocal"). They are kept as a fallback because the soundevent package
 // matches lowercase underscore-joined FSD50K names and their first tokens, but does NOT
 // match these BirdNET-specific Title-case strings.
 // All entries will never have images from bird image providers, so their negative cache
@@ -426,12 +426,12 @@ var nonAvianClasses = map[string]bool{
 // have images available from bird image providers.
 // It checks two sources:
 //   - nonAvianClasses: legacy BirdNET v2.x Title-case-with-spaces split names.
-//   - nonbird.IsNonBirdName: Perch v2 (FSD50K) classes by full label for new
+//   - soundevent.IsName: Perch v2 (FSD50K) classes by full label for new
 //     detections, and by underscore-split first token (e.g. "Power" from
 //     "power_tool") for names stored before full labels were kept whole.
 //     Case-insensitive.
 func isNonAvianClass(scientificName string) bool {
-	return nonAvianClasses[scientificName] || nonbird.IsNonBirdName(scientificName)
+	return nonAvianClasses[scientificName] || soundevent.IsName(scientificName)
 }
 
 // --- Shared Helper Functions ---
