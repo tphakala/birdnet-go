@@ -32,7 +32,7 @@ var (
 )
 
 // ModelContributionStatsResponse is the response for GET /api/v2/insights/model-contributions.
-// Counts come from contribution rows, which are best-effort and absent for
+// Counts come from contribution rows with at least one hit, which are best-effort and absent for
 // detections migrated from the legacy database, so they are lower bounds.
 type ModelContributionStatsResponse struct {
 	StartDate                   string                  `json:"start_date"` // YYYY-MM-DD, inclusive

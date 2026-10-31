@@ -2387,6 +2387,9 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 				HitCount:      3,
 				MaxConfidence: 0.84,
 			},
+			"Bat": {
+				Model: detection.ModelInfo{Name: "BatNET", Version: "1", Variant: "default"},
+			},
 		},
 	}
 
@@ -2398,7 +2401,7 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 		Preload("Model").
 		Where("detection_id = ?", result.ID).
 		Find(&contribs).Error)
-	require.Len(t, contribs, 3, "all three contributing models must be saved in detection_model_contributions")
+	require.Len(t, contribs, 4, "hit models and the zero-hit model must be saved in detection_model_contributions")
 
 	byModel := make(map[string]entities.DetectionModelContribution, len(contribs))
 	for _, c := range contribs {
@@ -2441,6 +2444,15 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 	assert.Nil(t, perch.ConfidenceSum)
 	assert.Nil(t, perch.FirstHitAt)
 	assert.Nil(t, perch.LastHitAt)
+
+	require.Contains(t, byModel, "BatNET_1_default")
+	bat := byModel["BatNET_1_default"]
+	assert.Zero(t, bat.HitCount, "a model active without a hit is stored with a hit count of 0")
+	assert.Zero(t, bat.MaxConfidence)
+	assert.Nil(t, bat.MinConfidence)
+	assert.Nil(t, bat.ConfidenceSum)
+	assert.Nil(t, bat.FirstHitAt)
+	assert.Nil(t, bat.LastHitAt)
 
 	// Also verify deduplication when two contribution entries resolve to the same AIModel row.
 	dupNote := &datastore.Note{
@@ -2527,6 +2539,38 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 	assert.Nil(t, partialContribs[0].ConfidenceSum)
 	assert.Nil(t, partialContribs[0].FirstHitAt)
 	assert.Nil(t, partialContribs[0].LastHitAt)
+
+	// A zero-hit entry that resolves to the same model as a hit entry never takes
+	// its row: the stored row keeps the hit entry's count and statistics.
+	zeroHitNote := &datastore.Note{
+		ScientificName: "Spizella breweri",
+		CommonName:     "brewer's sparrow",
+		Date:           "2026-10-17",
+		Time:           "12:03:00",
+		Confidence:     0.8,
+		ModelContributions: map[string]detection.ResultModelContrib{
+			"zero_hit": {Model: detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"}},
+			"with_hits": {
+				Model:         detection.ModelInfo{},
+				HitCount:      2,
+				MaxConfidence: 0.8,
+				MinConfidence: 0.7,
+				ConfidenceSum: 1.5,
+				FirstHitAt:    now,
+				LastHitAt:     now.Add(time.Second),
+			},
+		},
+	}
+	require.NoError(t, ds.Save(zeroHitNote, nil))
+
+	var zeroHitContribs []entities.DetectionModelContribution
+	require.NoError(t, ds.manager.DB().
+		Where("detection_id = ?", zeroHitNote.ID).
+		Find(&zeroHitContribs).Error)
+	require.Len(t, zeroHitContribs, 1)
+	assert.Equal(t, 2, zeroHitContribs[0].HitCount)
+	require.NotNil(t, zeroHitContribs[0].ConfidenceSum)
+	assert.InDelta(t, 1.5, *zeroHitContribs[0].ConfidenceSum, 1e-9)
 }
 
 // TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail verifies that model

@@ -77,7 +77,8 @@ func (r *Result) IsSpectrogramOnly() bool {
 //
 // FirstHitAt, LastHitAt, MinConfidence and ConfidenceSum form one unit of extended
 // statistics, present only when HasHitStats reports true; otherwise the datastore
-// stores NULL for all four.
+// stores NULL for all four. A HitCount of 0 marks a model that was active on the
+// source when the detection was approved but recorded no hit.
 type ResultModelContrib struct {
 	Model         ModelInfo
 	HitCount      int

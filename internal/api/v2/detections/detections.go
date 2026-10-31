@@ -161,7 +161,7 @@ type DetectionResponse struct {
 	ModelType       string `json:"modelType,omitempty"` // AI model type (e.g. "bird", "bat"); drives the spectrogram frequency range
 	// ClipSampleRate is the sample rate in Hz of the detection's original audio clip, omitted when unknown. Bat spectrograms span 0 to half of it. A spectrogram-only detection reports the original clip's rate.
 	ClipSampleRate int `json:"clipSampleRate,omitempty"`
-	// ModelContributions is the per-model breakdown from the enhanced database, read only. It is omitted on the legacy database, during migration, and when nothing was recorded.
+	// ModelContributions is the per-model breakdown from the enhanced database, read only. It is omitted on the legacy database, during migration, and when nothing was recorded. An entry with hitCount 0 is a model that was active on the source without a hit.
 	ModelContributions []ModelContributionResponse `json:"modelContributions,omitempty"`
 	Verified           string                      `json:"verified"`
 	Locked             bool                        `json:"locked"`

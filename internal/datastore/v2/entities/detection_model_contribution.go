@@ -9,6 +9,10 @@ package entities
 // ConfidenceSum / HitCount. ModelID carries its own index for per-model statistics;
 // DetectionID is served by the leading column of the unique (detection_id, model_id)
 // index and needs none.
+//
+// A row with HitCount 0 records a model that was active on the detection's source
+// when the detection was approved but recorded no hit. Its MaxConfidence is 0 and its
+// statistics are NULL.
 type DetectionModelContribution struct {
 	ID            uint    `gorm:"primaryKey"`
 	DetectionID   uint    `gorm:"not null;uniqueIndex:idx_contrib_detection_model"`

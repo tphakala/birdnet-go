@@ -54,6 +54,14 @@ func (r *insightsRepository) modelContributionsTable() string {
 	return tableDetectionModelContributions
 }
 
+// hitContributionsTable is the contribution table restricted to rows with a hit.
+// A row with hit_count 0 records a model that was active on the source without a
+// hit; the contribution statistics select from this relation, so they count hits
+// only and a new query gets the filter by construction.
+func (r *insightsRepository) hitContributionsTable() string {
+	return "(SELECT * FROM " + r.modelContributionsTable() + " WHERE hit_count > 0)"
+}
+
 func (r *insightsRepository) modelsTable() string {
 	if r.useV2Prefix {
 		return tableV2AIModels
@@ -424,11 +432,12 @@ func (r *insightsRepository) GetModelContributionStats(ctx context.Context, star
 	return result, nil
 }
 
-// queryModelContributionRows runs the per-model aggregate. The derived table pd
-// counts the contributing models per detection over the same range, which gives
-// the sole-contributor count without a subquery inside an aggregate.
+// queryModelContributionRows runs the per-model aggregate over hit rows. The
+// derived table pd counts the models with a hit per detection over the same
+// range, which gives the sole-contributor count without a subquery inside an
+// aggregate.
 func (r *insightsRepository) queryModelContributionRows(tx *gorm.DB, start, end int64) ([]modelContributionRow, error) {
-	contrib := r.modelContributionsTable()
+	contrib := r.hitContributionsTable()
 	query := fmt.Sprintf(`
 SELECT c.model_id AS model_id, m.name AS name, m.version AS version, m.variant AS variant, m.model_type AS model_type,
   COUNT(*) AS detection_count,
@@ -468,8 +477,9 @@ ORDER BY detection_count DESC, c.model_id ASC`,
 	return rows, nil
 }
 
-// queryModelAgreements counts the detections each model pair shares. The join
-// condition c2.model_id > c1.model_id yields each pair once with model_a < model_b.
+// queryModelAgreements counts the detections in which both models of a pair have
+// a hit. The join condition c2.model_id > c1.model_id yields each pair once with
+// model_a < model_b.
 func (r *insightsRepository) queryModelAgreements(tx *gorm.DB, start, end int64) ([]ModelAgreement, error) {
 	query := fmt.Sprintf(`
 SELECT c1.model_id AS model_a_id, c2.model_id AS model_b_id, COUNT(*) AS shared_detections
@@ -479,7 +489,7 @@ JOIN %[2]s d ON d.id = c1.detection_id
 WHERE d.detected_at >= ? AND d.detected_at < ?
 GROUP BY c1.model_id, c2.model_id
 ORDER BY shared_detections DESC, model_a_id ASC, model_b_id ASC`,
-		r.modelContributionsTable(), r.detectionsTable())
+		r.hitContributionsTable(), r.detectionsTable())
 
 	var agreements []ModelAgreement
 	if err := tx.Raw(query, start, end).Scan(&agreements).Error; err != nil {
@@ -489,13 +499,13 @@ ORDER BY shared_detections DESC, model_a_id ASC, model_b_id ASC`,
 }
 
 // queryContributionTotals counts the detections in range and those with at least
-// one contribution row.
+// one hit row. The LEFT JOIN keeps detections without one in total_detections.
 func (r *insightsRepository) queryContributionTotals(tx *gorm.DB, start, end int64) (modelContributionTotalsRow, error) {
 	query := fmt.Sprintf(`
 SELECT COUNT(DISTINCT d.id) AS total_detections, COUNT(DISTINCT c.detection_id) AS detections_with_contributions
 FROM %s d LEFT JOIN %s c ON c.detection_id = d.id
 WHERE d.detected_at >= ? AND d.detected_at < ?`,
-		r.detectionsTable(), r.modelContributionsTable())
+		r.detectionsTable(), r.hitContributionsTable())
 
 	var totals modelContributionTotalsRow
 	if err := tx.Raw(query, start, end).Scan(&totals).Error; err != nil {
