@@ -13,7 +13,8 @@ import (
 )
 
 // Mock model IDs for the model-species tests. They are deliberately not registry
-// IDs: the walk must not branch on a model's identity.
+// IDs: any entry with a live instance takes part in the snapshot whatever its ID;
+// only the v2.4 anchor slot is read through the primary pointer.
 const (
 	modelSpeciesIDA = "ModelSpecies_A"
 	modelSpeciesIDB = "ModelSpecies_B"

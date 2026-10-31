@@ -90,8 +90,9 @@ func (o *Orchestrator) ModelSpecies() *ModelSpecies {
 // buildModelSpeciesSets walks the loaded models the way AllLabels does: the v2.4
 // anchor through the orderedEntryRefs primary pointer, every other entry by
 // capturing its instance under entry.mu and calling Labels() only after releasing
-// it, so entry.mu is not held across bn.mu. Only the anchor is keyed by a
-// registry ID; every other entry with a live instance takes part.
+// it, so entry.mu is not held across bn.mu. The anchor is keyed by its registry
+// constant; every other entry with a live instance is keyed by its o.models key
+// and takes part whatever its ID.
 func (o *Orchestrator) buildModelSpeciesSets() map[string]map[string]struct{} {
 	index := o.SpeciesSnapshot()
 	primary, refs := o.orderedEntryRefs()
