@@ -297,18 +297,21 @@ func TestModelRegistry_BatEntry(t *testing.T) {
 func TestModelRegistry_EveryEntryHasTaxonGroup(t *testing.T) {
 	t.Parallel()
 
-	for id := range ModelRegistry {
-		group := TaxonGroupFor(id)
-		assert.Contains(t, []TaxonGroup{TaxonGroupBird, TaxonGroupBat}, group,
-			"registry entry %q must declare a known taxon group", id)
+	// Perch and BSG are the entries most likely to be "corrected" to match their
+	// catalog category or lack of a loader, so the table pins every entry.
+	want := map[string]TaxonGroup{
+		RegistryIDBirdNETV24: TaxonGroupBird,
+		RegistryIDBirdNETV3:  TaxonGroupBird,
+		RegistryIDPerchV2:    TaxonGroupBird,
+		RegistryIDBSG:        TaxonGroupBird,
+		RegistryIDBat:        TaxonGroupBat,
 	}
-
-	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDBirdNETV24))
-	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDBirdNETV3))
-	// Perch is a catalog wildlife entry and BSG has no loader, but both detect birds.
-	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDPerchV2))
-	assert.Equal(t, TaxonGroupBird, TaxonGroupFor(RegistryIDBSG))
-	assert.Equal(t, TaxonGroupBat, TaxonGroupFor(RegistryIDBat))
+	for id := range ModelRegistry {
+		assert.Contains(t, want, id, "registry entry %q needs a taxon group in this table", id)
+	}
+	for id, group := range want {
+		assert.Equal(t, group, TaxonGroupFor(id), "taxon group of %q", id)
+	}
 	assert.Equal(t, TaxonGroup(""), TaxonGroupFor("no-such-model"), "unknown ID is ungrouped")
 }
 

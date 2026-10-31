@@ -120,8 +120,9 @@ func rangeFilterCompatFor(registryID string) rangeFilterCompat {
 }
 
 // TaxonGroup names the broad taxonomic group a classifier detects. It lets
-// cross-model logic compare only models that detect the same kind of sound.
-// The value space is open: a new group is one constant.
+// cross-model logic compare only models that detect the same kind of sound. It is
+// separate from the catalog Category on purpose: Perch is CategoryWildlife there
+// but belongs to the bird group here.
 type TaxonGroup string
 
 const (

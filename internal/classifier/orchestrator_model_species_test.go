@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,7 +13,8 @@ import (
 )
 
 // Mock model IDs for the model-species tests. They are deliberately not registry
-// IDs: the walk must not branch on a model's identity.
+// IDs: any entry with a live instance takes part in the snapshot whatever its ID;
+// only the v2.4 anchor slot is read through the primary pointer.
 const (
 	modelSpeciesIDA = "ModelSpecies_A"
 	modelSpeciesIDB = "ModelSpecies_B"
@@ -43,6 +45,12 @@ func (m *labelsHookModel) Labels() []string {
 	return m.mockModelInstance.Labels()
 }
 
+// knows reports whether the snapshot says the model can classify the species named
+// by label, keyed the way the pending-detection map keys it.
+func knows(ms *ModelSpecies, modelID, label string) bool {
+	return ms.Knows(modelID, speciesindex.CanonicalKey(label))
+}
+
 func TestModelSpecies_PerModelCanonicalKeys(t *testing.T) {
 	t.Parallel()
 
@@ -54,35 +62,26 @@ func TestModelSpecies_PerModelCanonicalKeys(t *testing.T) {
 	ms := o.ModelSpecies()
 	require.NotNil(t, ms)
 
-	blackbird := speciesindex.CanonicalKey(modelSpeciesBlackbird)
-	greatTit := speciesindex.CanonicalKey(modelSpeciesGreatTit)
-	sound := speciesindex.CanonicalKey(modelSpeciesSoundCls)
-	dove := speciesindex.CanonicalKey(modelSpeciesDove)
-	require.NotEmpty(t, blackbird)
-	require.NotEmpty(t, greatTit)
-	require.NotEmpty(t, sound)
-	require.NotEmpty(t, dove)
-
 	assert.True(t, ms.HasModel(modelSpeciesIDA))
 	assert.True(t, ms.HasModel(modelSpeciesIDB))
 	assert.False(t, ms.HasModel("ModelSpecies_Unloaded"), "an unloaded ID has no set")
 
-	assert.True(t, ms.Knows(modelSpeciesIDA, blackbird))
-	assert.True(t, ms.Knows(modelSpeciesIDA, greatTit))
-	assert.False(t, ms.Knows(modelSpeciesIDA, sound), "model A must not know B's species")
-	assert.False(t, ms.Knows(modelSpeciesIDA, dove), "model A must not know B's species")
+	assert.True(t, knows(ms, modelSpeciesIDA, modelSpeciesBlackbird))
+	assert.True(t, knows(ms, modelSpeciesIDA, modelSpeciesGreatTit))
+	assert.False(t, knows(ms, modelSpeciesIDA, modelSpeciesSoundCls), "model A must not know B's species")
+	assert.False(t, knows(ms, modelSpeciesIDA, modelSpeciesDove), "model A must not know B's species")
 
-	assert.True(t, ms.Knows(modelSpeciesIDB, sound))
-	assert.True(t, ms.Knows(modelSpeciesIDB, dove))
-	assert.False(t, ms.Knows(modelSpeciesIDB, blackbird), "model B must not know A's species")
-	assert.False(t, ms.Knows(modelSpeciesIDB, greatTit), "model B must not know A's species")
+	assert.True(t, knows(ms, modelSpeciesIDB, modelSpeciesSoundCls))
+	assert.True(t, knows(ms, modelSpeciesIDB, modelSpeciesDove))
+	assert.False(t, knows(ms, modelSpeciesIDB, modelSpeciesBlackbird), "model B must not know A's species")
+	assert.False(t, knows(ms, modelSpeciesIDB, modelSpeciesGreatTit), "model B must not know A's species")
 
 	// The legacy label is found under the current accepted name, the key the
 	// pending-detection map uses, and case does not matter.
-	assert.True(t, ms.Knows(modelSpeciesIDB, speciesindex.CanonicalKey(modelSpeciesDoveAlias)))
-	assert.True(t, ms.Knows(modelSpeciesIDA, speciesindex.CanonicalKey("TURDUS MERULA")))
+	assert.True(t, knows(ms, modelSpeciesIDB, modelSpeciesDoveAlias))
+	assert.True(t, knows(ms, modelSpeciesIDA, "TURDUS MERULA"))
 
-	assert.False(t, ms.Knows("ModelSpecies_Unloaded", blackbird))
+	assert.False(t, knows(ms, "ModelSpecies_Unloaded", modelSpeciesBlackbird))
 	assert.False(t, ms.Knows(modelSpeciesIDA, ""), "the empty key is never known")
 }
 
@@ -99,9 +98,25 @@ func TestModelSpecies_IncludesBirdNETAnchor(t *testing.T) {
 
 	ms := o.ModelSpecies()
 	assert.True(t, ms.HasModel(RegistryIDBirdNETV24))
-	assert.True(t, ms.Knows(RegistryIDBirdNETV24, speciesindex.CanonicalKey(modelSpeciesBlackbird)))
-	assert.False(t, ms.Knows(RegistryIDBirdNETV24, speciesindex.CanonicalKey(modelSpeciesGreatTit)))
-	assert.True(t, ms.Knows(modelSpeciesIDA, speciesindex.CanonicalKey(modelSpeciesGreatTit)))
+	assert.True(t, knows(ms, RegistryIDBirdNETV24, modelSpeciesBlackbird))
+	assert.False(t, knows(ms, RegistryIDBirdNETV24, modelSpeciesGreatTit))
+	assert.True(t, knows(ms, modelSpeciesIDA, modelSpeciesGreatTit))
+}
+
+// TestModelSpecies_ModelWithoutLabels pins that a model with a live instance and an
+// empty label list is still reported as loaded, on the ordinary path and on the v2.4
+// anchor path, and that it knows no species.
+func TestModelSpecies_ModelWithoutLabels(t *testing.T) {
+	t.Parallel()
+
+	o := newTestOrchestrator(t, &mockModelInstance{id: modelSpeciesIDA, labels: []string{}})
+	o.models[RegistryIDBirdNETV24] = &modelEntry{instance: &BirdNET{Settings: &conf.Settings{}}}
+
+	ms := o.ModelSpecies()
+	for _, id := range []string{modelSpeciesIDA, RegistryIDBirdNETV24} {
+		assert.True(t, ms.HasModel(id), "%s is loaded even with no labels", id)
+		assert.False(t, knows(ms, id, modelSpeciesBlackbird), "%s has no labels to know", id)
+	}
 }
 
 func TestModelSpecies_NilSafe(t *testing.T) {
@@ -120,14 +135,7 @@ func TestModelSpecies_TracksTopologyTransitions(t *testing.T) {
 	// Mutates package-global ModelRegistry/modelLoaders, so not parallel.
 	const registryID = "ModelSpecies_Transitions"
 	setTestGlobalSettings(t)
-	ModelRegistry[registryID] = ModelInfo{ID: registryID}
-	t.Cleanup(func() { delete(ModelRegistry, registryID) })
-
-	modelLoaders[registryID] = func(orc *Orchestrator, _ int) error {
-		orc.models[registryID] = &modelEntry{instance: &mockModelInstance{id: registryID, labels: []string{modelSpeciesGreatTit}}}
-		return nil
-	}
-	t.Cleanup(func() { delete(modelLoaders, registryID) })
+	registerPhase3Secondary(t, phase3Secondary{id: registryID, labels: []string{modelSpeciesGreatTit}})
 
 	o := newSpeciesIndexTestOrchestrator(t,
 		&mockModelInstance{id: modelSpeciesIDA, labels: []string{modelSpeciesBlackbird}})
@@ -226,7 +234,7 @@ func TestModelSpecies_GenerationBumps(t *testing.T) {
 }
 
 func TestModelSpecies_InvalidatedByDelete(t *testing.T) {
-	// Delete closes models and clears the species index globals, so not parallel.
+	// Not parallel: it publishes global settings.
 	setTestGlobalSettings(t)
 	o := newSpeciesIndexTestOrchestrator(t,
 		&mockModelInstance{id: modelSpeciesIDA, labels: []string{modelSpeciesBlackbird}})
@@ -234,6 +242,7 @@ func TestModelSpecies_InvalidatedByDelete(t *testing.T) {
 	require.True(t, before.HasModel(modelSpeciesIDA))
 
 	o.Delete()
+	assert.Nil(t, o.modelSpecies.Load(), "Delete must drop the cached snapshot")
 
 	after := o.ModelSpecies()
 	assert.Greater(t, after.Generation(), before.Generation())
@@ -241,33 +250,31 @@ func TestModelSpecies_InvalidatedByDelete(t *testing.T) {
 }
 
 func TestModelSpecies_ConcurrentWithTopologyChanges(t *testing.T) {
-	// Mutates package-global ModelRegistry/modelLoaders, so not parallel.
+	// Mutates package-global ModelRegistry/modelLoaders and publishes global settings,
+	// so not parallel.
 	const registryID = "ModelSpecies_Concurrent"
-	ModelRegistry[registryID] = ModelInfo{ID: registryID}
-	t.Cleanup(func() { delete(ModelRegistry, registryID) })
-	modelLoaders[registryID] = func(orc *Orchestrator, _ int) error {
-		orc.models[registryID] = &modelEntry{instance: &mockModelInstance{id: registryID, labels: []string{modelSpeciesGreatTit}}}
-		return nil
-	}
-	t.Cleanup(func() { delete(modelLoaders, registryID) })
+	setTestGlobalSettings(t)
+	registerPhase3Secondary(t, phase3Secondary{id: registryID, labels: []string{modelSpeciesGreatTit}})
 
 	o := newSpeciesIndexTestOrchestrator(t,
 		&mockModelInstance{id: modelSpeciesIDA, labels: []string{modelSpeciesBlackbird}})
 	blackbird := speciesindex.CanonicalKey(modelSpeciesBlackbird)
 
-	stop := make(chan struct{})
+	var stop atomic.Bool
+	var readerMissed atomic.Bool
 	var wg sync.WaitGroup
+	// Stop and join the readers on every exit, including a failed require below, so
+	// they never outlive the test.
+	defer func() {
+		stop.Store(true)
+		wg.Wait()
+	}()
 	for range modelSpeciesReaders {
 		wg.Go(func() {
-			for {
-				select {
-				case <-stop:
-					return
-				default:
-					ms := o.ModelSpecies()
-					_ = ms.Generation()
-					_ = ms.HasModel(registryID)
-					assert.True(t, ms.Knows(modelSpeciesIDA, blackbird), "the permanent model is always known")
+			for !stop.Load() {
+				// Record the miss; testify assertions run on the test goroutine only.
+				if !o.ModelSpecies().Knows(modelSpeciesIDA, blackbird) {
+					readerMissed.Store(true)
 				}
 			}
 		})
@@ -278,8 +285,9 @@ func TestModelSpecies_ConcurrentWithTopologyChanges(t *testing.T) {
 		require.NoError(t, o.UnloadModel(registryID))
 	}
 	require.NoError(t, o.LoadModel(registryID))
-	close(stop)
+	stop.Store(true)
 	wg.Wait()
+	assert.False(t, readerMissed.Load(), "the permanent model is always known")
 
 	final := o.ModelSpecies()
 	assert.True(t, final.HasModel(registryID), "the final snapshot matches the final topology")

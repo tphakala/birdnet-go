@@ -50,14 +50,13 @@ func (o *Orchestrator) SpeciesSnapshot() *speciesindex.Snapshot {
 // last topology change rather than a stale union that blocked behind a newer one.
 // Nil-safe on a nil receiver and a bare struct (no index).
 //
-// Every load, unload and reload trigger goes through here, so it also bumps
-// topologyGen, the signal ModelSpecies uses to invalidate its cache (even without
-// an index). Delete bumps it directly.
+// It also records the topology change for ModelSpecies (invalidateModelSpecies),
+// even when there is no index to rebuild.
 func (o *Orchestrator) rebuildSpeciesIndex() {
 	if o == nil {
 		return
 	}
-	o.topologyGen.Add(1)
+	o.invalidateModelSpecies()
 	if o.names == nil {
 		return
 	}
