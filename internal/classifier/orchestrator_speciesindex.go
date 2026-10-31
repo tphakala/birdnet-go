@@ -49,8 +49,15 @@ func (o *Orchestrator) SpeciesSnapshot() *speciesindex.Snapshot {
 // publication atomic across concurrent triggers, so the last publication reflects the
 // last topology change rather than a stale union that blocked behind a newer one.
 // Nil-safe on a nil receiver and a bare struct (no index).
+//
+// Every model-topology trigger goes through here, so it also bumps topologyGen,
+// the signal ModelSpecies uses to invalidate its cache (even without an index).
 func (o *Orchestrator) rebuildSpeciesIndex() {
-	if o == nil || o.names == nil {
+	if o == nil {
+		return
+	}
+	o.topologyGen.Add(1)
+	if o.names == nil {
 		return
 	}
 	o.rebuildMu.Lock()
