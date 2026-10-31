@@ -503,7 +503,7 @@ Source: MIT
 
 ### github.com/yalue/onnxruntime_go
 
-License: https://github.com/yalue/onnxruntime_go/blob/v1.30.1/LICENSE
+License: https://github.com/yalue/onnxruntime_go/blob/v1.36.0/LICENSE
 Source: MIT
 
 ### go.opentelemetry.io/auto/sdk
