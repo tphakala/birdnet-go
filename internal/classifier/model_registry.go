@@ -119,6 +119,26 @@ func rangeFilterCompatFor(registryID string) rangeFilterCompat {
 	return ModelRegistry[registryID].rangeFilterCompat
 }
 
+// TaxonGroup names the broad taxonomic group a classifier detects. It lets
+// cross-model logic compare only models that detect the same kind of sound.
+// The value space is open: a new group is one constant.
+type TaxonGroup string
+
+const (
+	// TaxonGroupBird is the group of bird classifiers (BirdNET, Perch, BSG).
+	TaxonGroupBird TaxonGroup = "bird"
+	// TaxonGroupBat is the group of bat classifiers.
+	TaxonGroupBat TaxonGroup = "bat"
+)
+
+// TaxonGroupFor returns the taxon group of the registry entry with the given ID.
+// An unknown ID yields the empty group, meaning ungrouped: callers must not treat
+// it as a member of any group. Read it by registry ID, not from an instance's
+// ModelInfo copy, which may be built without the registry's unexported fields.
+func TaxonGroupFor(registryID string) TaxonGroup {
+	return ModelRegistry[registryID].taxonGroup
+}
+
 // ModelInfo represents metadata about a classifier model.
 type ModelInfo struct {
 	ID               string        // Unique registry identifier (e.g., "BirdNET_V2.4")
@@ -143,6 +163,9 @@ type ModelInfo struct {
 	// (DefaultTargets) and is inactive outside its schedule (IsModelActive,
 	// ModelScheduleStatus), all read through isScheduleGated. Zero value: not gated.
 	scheduleGated bool
+	// taxonGroup is the broad taxonomic group this classifier detects, read through
+	// TaxonGroupFor. The zero value means ungrouped (a member of no group).
+	taxonGroup TaxonGroup
 	// IsStock marks the auto-resolved built-in default model. It is NOT set for
 	// user-supplied models (birdnet.modelpath) or gallery models, so detection
 	// attribution can treat the shipped default as "default" even when it loads
@@ -181,6 +204,7 @@ var ModelRegistry = map[string]ModelInfo{
 		NumSpecies:        6522,
 		Quantization:      QuantizationFP32,
 		rangeFilterCompat: rangeFilterCompatMDataV24,
+		taxonGroup:        TaxonGroupBird,
 	},
 	RegistryIDBirdNETV3: {
 		ID:               RegistryIDBirdNETV3,
@@ -198,6 +222,7 @@ var ModelRegistry = map[string]ModelInfo{
 			"no", "pl", "pt", "pt-br", "pt-pt", "ro", "ru", "sk", "sl", "sr", "sv", "th", "tr", "uk", "zh"},
 		DefaultLocale:     "en-uk",
 		rangeFilterCompat: rangeFilterCompatGeomodel,
+		taxonGroup:        TaxonGroupBird,
 	},
 	RegistryIDPerchV2: {
 		ID:               RegistryIDPerchV2,
@@ -213,6 +238,9 @@ var ModelRegistry = map[string]ModelInfo{
 		ConfigAliases:     []string{conf.ModelIDPerchV2, conf.ModelIDPerchV2Catalog},
 		NumSpecies:        14795,
 		rangeFilterCompat: rangeFilterCompatGeomodel,
+		// Perch is multi-taxa but is grouped with the bird models; its catalog
+		// category (wildlife) does not decide the group.
+		taxonGroup: TaxonGroupBird,
 	},
 	RegistryIDBat: {
 		ID:               RegistryIDBat,
@@ -230,6 +258,7 @@ var ModelRegistry = map[string]ModelInfo{
 		// analysis target and is paused outside its schedule. Read by isScheduleGated
 		// (IsModelActive, ModelScheduleStatus, DefaultTargets).
 		scheduleGated: true,
+		taxonGroup:    TaxonGroupBat,
 	},
 	RegistryIDBSG: {
 		ID:               RegistryIDBSG,
@@ -245,6 +274,7 @@ var ModelRegistry = map[string]ModelInfo{
 		// BSG classifies its own regional label space; no range-filter auto-selection.
 		// Explicit (not omitted) so the table documents the decision.
 		rangeFilterCompat: rangeFilterCompatNone,
+		taxonGroup:        TaxonGroupBird,
 	},
 }
 
