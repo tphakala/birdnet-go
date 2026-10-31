@@ -261,6 +261,7 @@ func TestModelSpecies_ConcurrentWithTopologyChanges(t *testing.T) {
 	blackbird := speciesindex.CanonicalKey(modelSpeciesBlackbird)
 
 	var stop atomic.Bool
+	var readerMissed atomic.Bool
 	var wg sync.WaitGroup
 	// Stop and join the readers on every exit, including a failed require below, so
 	// they never outlive the test.
@@ -271,7 +272,10 @@ func TestModelSpecies_ConcurrentWithTopologyChanges(t *testing.T) {
 	for range modelSpeciesReaders {
 		wg.Go(func() {
 			for !stop.Load() {
-				assert.True(t, o.ModelSpecies().Knows(modelSpeciesIDA, blackbird), "the permanent model is always known")
+				// Record the miss; testify assertions run on the test goroutine only.
+				if !o.ModelSpecies().Knows(modelSpeciesIDA, blackbird) {
+					readerMissed.Store(true)
+				}
 			}
 		})
 	}
@@ -283,6 +287,7 @@ func TestModelSpecies_ConcurrentWithTopologyChanges(t *testing.T) {
 	require.NoError(t, o.LoadModel(registryID))
 	stop.Store(true)
 	wg.Wait()
+	assert.False(t, readerMissed.Load(), "the permanent model is always known")
 
 	final := o.ModelSpecies()
 	assert.True(t, final.HasModel(registryID), "the final snapshot matches the final topology")
