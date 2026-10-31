@@ -318,7 +318,8 @@ with hits also have `maxConfidence`, plus `minConfidence`, `meanConfidence`, `fi
 last four appear together and are omitted when they were not recorded (detections recorded before these
 statistics existed) or the stored values are unusable (minimum above maximum, first hit after last hit).
 Times are RFC3339 in the server's time zone, like `beginTime`. A model missing from the list was not active
-on the source, or the detection predates this recording.
+on the source, the detection predates this recording, or its entry could not be saved (contributions are
+written best-effort).
 
 - The whole field is omitted on the legacy database, during migration, for detections with no recorded
   contributions (including migrated ones), and when the read fails or takes longer than 1 second.

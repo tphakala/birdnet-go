@@ -248,7 +248,7 @@ Each `PendingDetection` stores a `ModelContributions` map tracking per-model sta
 
 When the audio source supplies no capture time, the hit times use the time of processing instead.
 
-When a detection is approved, these per-model statistics are saved with it in the `DetectionModelContribution` table. `MinConfidence`, `ConfidenceSum`, `FirstHitAt` and `LastHitAt` are stored together or not at all: a contribution that lacks them (for example when two entries of one model are merged and only one of them has them) is stored with NULL in all four. Models that were active on the detection's source when it was approved but recorded no hit are saved too, with a hit count of 0 and no statistics.
+When a detection is approved, these per-model statistics are saved with it in the `DetectionModelContribution` table. `MinConfidence`, `ConfidenceSum`, `FirstHitAt` and `LastHitAt` are stored together or not at all: a contribution that lacks them (for example when two entries of one model are merged and only one of them has them) is stored with NULL in all four. Models that were active on the detection's source when it was approved but recorded no hit are saved too, with a hit count of 0 and no statistics; like all contributions they are written best-effort and can be missing.
 
 At flush time, the total hit count is the **sum across all models**. This means:
 
