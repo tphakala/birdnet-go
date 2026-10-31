@@ -85,10 +85,15 @@ type secondaryBackendKey struct {
 // Lock ordering (acquire in this order to prevent deadlocks):
 //  1. reloadMu (Mutex) - serializes a whole reloadEntry (build+swap+notify)
 //  2. rebuildMu (Mutex) - serializes the species-index/name-service rebuild
-//  3. mu (RWMutex) - protects models map; released before inference
-//  4. inferenceMu (Mutex) - serializes inference across all models
-//  5. entry.mu (Mutex) - per-model; guards instance lifecycle
-//  6. bn.mu (Mutex) - per-*BirdNET; guards its classifier/identity internals
+//  3. modelSpeciesMu (Mutex) - serializes the ModelSpecies snapshot build
+//  4. mu (RWMutex) - protects models map; released before inference
+//  5. inferenceMu (Mutex) - serializes inference across all models
+//  6. entry.mu (Mutex) - per-model; guards instance lifecycle
+//  7. bn.mu (Mutex) - per-*BirdNET; guards its classifier/identity internals
+//
+// ModelSpecies must be called with no orchestrator lock held and never under a
+// caller lock that the inference result path takes: its walk calls Labels() on
+// BirdNET, which takes bn.mu.
 //
 // runtimeSnapMu is a leaf outside this order: it is taken only by the writers of the
 // diagnostic runtime snapshots, with nothing acquired while it is held.
@@ -144,6 +149,16 @@ type Orchestrator struct {
 	// each entry.mu) while holding it, so it must never be taken with any other
 	// orchestrator lock already held.
 	rebuildMu sync.Mutex
+
+	// topologyGen counts model-topology changes (load, unload, reload, Delete). It is
+	// bumped by rebuildSpeciesIndex, which the load, unload and reload triggers call
+	// after their mutation, and by Delete directly. It is the only signal
+	// ModelSpecies compares to decide whether its cached snapshot is stale.
+	topologyGen atomic.Uint64
+	// modelSpecies caches the per-model species snapshot; modelSpeciesMu serializes
+	// its rebuild (lock order: rebuildMu -> modelSpeciesMu -> mu).
+	modelSpecies   atomic.Pointer[ModelSpecies]
+	modelSpeciesMu sync.Mutex
 
 	// includedSpecies is the last range-filter inclusion list handed to
 	// RebuildNameResolver. It is unioned with AllLabels() to form the species-index
@@ -1826,6 +1841,10 @@ func (o *Orchestrator) Delete() {
 	}
 	o.models = nil
 	o.mu.Unlock()
+	// Delete empties the model set without going through rebuildSpeciesIndex, so it
+	// bumps the topology generation itself; otherwise ModelSpecies would keep serving
+	// the pre-Delete snapshot.
+	o.topologyGen.Add(1)
 
 	// Close the range-filter backend outside o.mu. close() empties the published
 	// state under rfs.mu, so any accessor that runs after teardown reads a nil
