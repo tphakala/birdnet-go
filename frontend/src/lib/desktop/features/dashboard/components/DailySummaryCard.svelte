@@ -46,12 +46,33 @@ Responsive Breakpoints:
 - Small (<480px): Six-hourly columns only
 -->
 
+<script module lang="ts">
+  import type { DailySpeciesSummary as SummaryRow } from '$lib/types/detection.types';
+  import type { NoveltyCategory } from '../utils/noveltyCategory';
+
+  /** Everything a `body` snippet needs to render the day in place of the heatmap grid. */
+  export interface DailySummaryBodyContext {
+    /** Species rows, sorted by count and capped at the species limit. */
+    data: SummaryRow[];
+    selectedDate: string;
+    showThumbnails: boolean;
+    sunriseHour: number | null;
+    sunsetHour: number | null;
+    /** Last hour with data so far: the server's current hour today, 23 for past days. */
+    maxHour: number;
+    /** Detections link for a species on the selected date. */
+    speciesUrl: (_item: SummaryRow) => string;
+    /** Novelty marker for a species, as the heatmap shows it. */
+    noveltyOf: (_item: SummaryRow) => NoveltyCategory | null;
+  }
+</script>
+
 <script lang="ts">
   import DatePicker from '$lib/desktop/components/ui/DatePicker.svelte';
   import SkeletonDailySummary from '$lib/desktop/components/ui/SkeletonDailySummary.svelte';
   import { t } from '$lib/i18n';
   import type { DailySpeciesSummary } from '$lib/types/detection.types';
-  import { getLocalDateString, getDateInTimezone } from '$lib/utils/date';
+  import { getLocalDateString, getDateInTimezone, getHourInTimezone } from '$lib/utils/date';
   import {
     buildHourlyDetectionUrl,
     buildSpeciesDetectionUrl,
@@ -79,7 +100,7 @@ Responsive Breakpoints:
     noveltyCategoryColorVar,
   } from '$lib/desktop/features/dashboard/utils/noveltyCategory';
   import { ChevronLeft, ChevronRight, History, Star, XCircle } from '@lucide/svelte';
-  import { untrack } from 'svelte';
+  import { untrack, type Snippet } from 'svelte';
   import AnimatedCounter from './AnimatedCounter.svelte';
   import BirdThumbnailPopup from './BirdThumbnailPopup.svelte';
   import SunTimeTooltip from './SunTimeTooltip.svelte';
@@ -196,6 +217,8 @@ Responsive Breakpoints:
     onGoToToday: () => void;
     onDateChange: (_date: string) => void;
     onServerTimezone?: (_timezone: string) => void;
+    /** Renders the loaded day instead of the heatmap grid (header and navigation stay). */
+    body?: Snippet<[DailySummaryBodyContext]>;
   }
 
   let {
@@ -210,6 +233,7 @@ Responsive Breakpoints:
     onGoToToday,
     onDateChange,
     onServerTimezone,
+    body,
   }: Props = $props();
 
   // Progressive loading state management
@@ -708,6 +732,18 @@ Responsive Breakpoints:
   });
   const isToday = $derived(selectedDate === serverTodayDate);
 
+  const LAST_HOUR_OF_DAY = 23;
+  const maxHour = $derived.by(() => {
+    void nowTick;
+    if (!isToday) return LAST_HOUR_OF_DAY;
+    const hour = serverTimezone ? getHourInTimezone(serverTimezone) : new Date().getHours();
+    // A live detection can land in the next hour before the minute tick catches up.
+    const lastActive = Math.max(
+      ...sortedData.map(d => d.hourly_counts.reduce((last, c, h) => (c > 0 ? h : last), -1))
+    );
+    return Math.max(hour, lastActive);
+  });
+
   // Absence threshold for the infrequent novelty tier; undefined disables it so
   // the category never activates when species tracking (or its infrequent
   // sub-toggle) is turned off, matching the gating in NewSpeciesHighlightsCard.
@@ -831,6 +867,22 @@ Responsive Breakpoints:
   {/if}
 </div>
 
+{#snippet cardHeader()}
+  <div class="px-6 py-4 border-b border-[var(--color-base-200)] overflow-visible">
+    <div
+      class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between overflow-visible"
+    >
+      <div class="flex flex-col">
+        <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
+        <p class="text-sm text-[var(--color-base-content)]/60">
+          {t('dashboard.dailySummary.subtitle')}
+        </p>
+      </div>
+      {@render navigationControls()}
+    </div>
+  </div>
+{/snippet}
+
 <!-- Progressive loading implementation -->
 {#if loadingPhase === 'skeleton'}
   <SkeletonDailySummary {showThumbnails} speciesCount={CONFIG.SKELETON.SPECIES_COUNT} />
@@ -844,19 +896,7 @@ Responsive Breakpoints:
   <section
     class="daily-summary-card card col-span-12 bg-[var(--color-base-100)] shadow-sm rounded-2xl border border-border-100 overflow-visible"
   >
-    <div class="px-6 py-4 border-b border-[var(--color-base-200)] overflow-visible">
-      <div
-        class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between overflow-visible"
-      >
-        <div class="flex flex-col">
-          <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
-          <p class="text-sm text-[var(--color-base-content)]/60">
-            {t('dashboard.dailySummary.subtitle')}
-          </p>
-        </div>
-        {@render navigationControls()}
-      </div>
-    </div>
+    {@render cardHeader()}
     <div class="p-6">
       <div class="alert alert-error">
         <XCircle class="size-6" />
@@ -864,24 +904,30 @@ Responsive Breakpoints:
       </div>
     </div>
   </section>
+{:else if loadingPhase === 'loaded' && body}
+  <section
+    class="daily-summary-card card col-span-12 bg-[var(--color-base-100)] shadow-sm rounded-2xl border border-border-100 overflow-visible"
+  >
+    {@render cardHeader()}
+    <div class="p-3">
+      {@render body({
+        data: sortedData,
+        selectedDate,
+        showThumbnails,
+        sunriseHour,
+        sunsetHour,
+        maxHour,
+        speciesUrl: urlBuilders.species,
+        noveltyOf: item => resolveNoveltyCategory(item, { infrequentThresholdDays, isToday }),
+      })}
+    </div>
+  </section>
 {:else if loadingPhase === 'loaded'}
   <section
     class="daily-summary-card card col-span-12 bg-[var(--color-base-100)] shadow-sm rounded-2xl border border-border-100 overflow-visible"
   >
     <!-- Card Header with Date Navigation -->
-    <div class="px-6 py-4 border-b border-[var(--color-base-200)] overflow-visible">
-      <div
-        class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between overflow-visible"
-      >
-        <div class="flex flex-col">
-          <h3 class="font-semibold">{t('dashboard.dailySummary.title')}</h3>
-          <p class="text-sm text-[var(--color-base-content)]/60">
-            {t('dashboard.dailySummary.subtitle')}
-          </p>
-        </div>
-        {@render navigationControls()}
-      </div>
-    </div>
+    {@render cardHeader()}
 
     <!-- Grid Content -->
     <div class="p-6 pt-8">
