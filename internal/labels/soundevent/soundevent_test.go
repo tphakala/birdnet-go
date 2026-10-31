@@ -62,6 +62,7 @@ func TestIsLabel(t *testing.T) {
 		{"empty string", "", false},
 		// BirdNET v2.x raw labels match on the part before the first underscore.
 		{"BirdNET-only class", "Gun_Gun", true},
+		{"BirdNET bare class name without underscore", "Gun", true},
 		{"BirdNET class with localized common half", "Dog_Hund", true},
 		{"BirdNET multi-word class prefix", "Human vocal_Human vocal", true},
 		{"BirdNET class is case-insensitive", "human vocal_human vocal", true},
