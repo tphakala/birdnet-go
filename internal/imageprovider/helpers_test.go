@@ -597,7 +597,7 @@ func TestIsNonAvianClass(t *testing.T) {
 		{"noise is non-avian", "Noise", true},
 		{"environmental is non-avian", "Environmental", true},
 		{"engine is non-avian", "Engine", true},
-		// Perch v2 (FSD50K) classes via nonbird package - NOT in legacy map:
+		// Perch v2 (FSD50K) classes via soundevent package - NOT in legacy map:
 		{"Power (first-token of power_tool) is non-avian", "Power", true},
 		{"power_tool (full Perch label) is non-avian", "power_tool", true},
 		{"speech is non-avian", "speech", true},

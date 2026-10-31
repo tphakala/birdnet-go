@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 // perchModelInfo returns a ModelInfo for a Perch/multi-taxa model.
@@ -57,7 +57,7 @@ func TestSave_PerchSoundClass_GetsNonBirdLabelType(t *testing.T) {
 	label, err := ds.label.GetOrCreate(ctx, "power", perchModel.ID, ds.speciesLabelTypeID, nil)
 	require.NoError(t, err)
 
-	wantTypeID := ds.nonBirdLabelTypeIDs[nonbird.CategoryMechanical]
+	wantTypeID := ds.nonBirdLabelTypeIDs[soundevent.CategoryMechanical]
 	require.NotZero(t, wantTypeID, "CategoryMechanical must be registered in nonBirdLabelTypeIDs")
 
 	assert.Equal(t, wantTypeID, label.LabelTypeID,
@@ -102,7 +102,7 @@ func TestSave_BirdLabel_GetsSpeciesLabelType(t *testing.T) {
 
 // TestSave_EmptyRawLabel_FallsBackToSpecies verifies backward compatibility: when RawLabel
 // is empty (non-processor paths or older callers), Save must behave exactly as before
-// (species label type, model's taxonomic class). nonbird.CategoryOf("") returns false so the
+// (species label type, model's taxonomic class). soundevent.CategoryOf("") returns false so the
 // empty string naturally takes the species branch.
 func TestSave_EmptyRawLabel_FallsBackToSpecies(t *testing.T) {
 	ds, cleanup := setupTestDatastore(t)
@@ -154,7 +154,7 @@ func TestSave_BatchMixed_CorrectLabelTypesPerPrediction(t *testing.T) {
 	// Predictions contain a mix: one bird label (no category match) and one sound class.
 	results := []datastore.Results{
 		{
-			// Bird prediction from Perch (should stay species type since no nonbird category).
+			// Bird prediction from Perch (should stay species type since no sound-event category).
 			Species:    "Turdus merula_Common Blackbird",
 			Confidence: 0.15,
 			RawLabel:   "Turdus merula_Common Blackbird",
@@ -181,7 +181,7 @@ func TestSave_BatchMixed_CorrectLabelTypesPerPrediction(t *testing.T) {
 		"bird prediction must keep species label type")
 
 	// Check sound-class prediction label: should be human type.
-	wantHumanTypeID := ds.nonBirdLabelTypeIDs[nonbird.CategoryHuman]
+	wantHumanTypeID := ds.nonBirdLabelTypeIDs[soundevent.CategoryHuman]
 	require.NotZero(t, wantHumanTypeID)
 
 	speechLabel, err := ds.label.GetByScientificNameAndModel(ctx, "speech", perchModel.ID)
@@ -225,7 +225,7 @@ func TestSave_Relabel_CorrectsMisclassifiedSpeciesRow(t *testing.T) {
 	require.NoError(t, ds.Save(note, nil))
 
 	// Fetch the label again and verify it was relabeled.
-	wantTypeID := ds.nonBirdLabelTypeIDs[nonbird.CategoryMechanical]
+	wantTypeID := ds.nonBirdLabelTypeIDs[soundevent.CategoryMechanical]
 	require.NotZero(t, wantTypeID)
 
 	// Read the row back (read-only) and verify it was relabeled.
@@ -295,7 +295,7 @@ func TestSave_NonBirdDetection_AppearsInGetAllNotes(t *testing.T) {
 	ctx := t.Context()
 	perchModel, err := ds.model.GetOrCreate(ctx, "Perch", "1.0", "default", "multi", nil)
 	require.NoError(t, err)
-	wantTypeID := ds.nonBirdLabelTypeIDs[nonbird.CategoryMechanical]
+	wantTypeID := ds.nonBirdLabelTypeIDs[soundevent.CategoryMechanical]
 	label, err := ds.label.GetOrCreate(ctx, "power", perchModel.ID, wantTypeID, nil)
 	require.NoError(t, err)
 	assert.Equal(t, wantTypeID, label.LabelTypeID,
@@ -318,7 +318,7 @@ func TestSave_LabelTypeForRawLabel_Helper(t *testing.T) {
 
 	t.Run("non-bird rawLabel returns category type and nil taxClass", func(t *testing.T) {
 		typeID, taxID, isNonBird := ds.labelTypeForRawLabel("power_tool", speciesTaxID)
-		assert.Equal(t, ds.nonBirdLabelTypeIDs[nonbird.CategoryMechanical], typeID)
+		assert.Equal(t, ds.nonBirdLabelTypeIDs[soundevent.CategoryMechanical], typeID)
 		assert.Nil(t, taxID)
 		assert.True(t, isNonBird)
 	})
@@ -339,7 +339,7 @@ func TestSave_LabelTypeForRawLabel_Helper(t *testing.T) {
 
 	t.Run("human rawLabel returns human category type", func(t *testing.T) {
 		typeID, taxID, isNonBird := ds.labelTypeForRawLabel("speech", speciesTaxID)
-		assert.Equal(t, ds.nonBirdLabelTypeIDs[nonbird.CategoryHuman], typeID)
+		assert.Equal(t, ds.nonBirdLabelTypeIDs[soundevent.CategoryHuman], typeID)
 		assert.Nil(t, taxID)
 		assert.True(t, isNonBird)
 	})
@@ -370,13 +370,13 @@ func TestSave_MultipleNonBirdCategories(t *testing.T) {
 	tests := []struct {
 		rawLabel string
 		sciName  string
-		wantCat  nonbird.Category
+		wantCat  soundevent.Category
 	}{
-		{"speech", "speech", nonbird.CategoryHuman},
-		{"power_tool", "power", nonbird.CategoryMechanical},
-		{"dog", "dog", nonbird.CategoryAnimal},
-		{"music", "music", nonbird.CategoryMusic},
-		{"rain", "rain", nonbird.CategoryEnvironment},
+		{"speech", "speech", soundevent.CategoryHuman},
+		{"power_tool", "power", soundevent.CategoryMechanical},
+		{"dog", "dog", soundevent.CategoryAnimal},
+		{"music", "music", soundevent.CategoryMusic},
+		{"rain", "rain", soundevent.CategoryEnvironment},
 	}
 
 	for _, tt := range tests {

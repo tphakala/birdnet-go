@@ -1,14 +1,14 @@
-package nonbird
+package soundevent
 
 import "strings"
 
-// Category names the kind of non-bird sound class a label represents.
+// Category names the kind of sound-event class a label represents.
 type Category string
 
 const (
 	// CategoryHuman covers human vocal and body sounds (speech, laughter, breathing, etc.).
 	CategoryHuman Category = "human"
-	// CategoryAnimal covers non-bird animal sounds (dog, cat, insect, etc.).
+	// CategoryAnimal covers animal sound events (dog, cat, insect, and generic bird classes such as crow).
 	CategoryAnimal Category = "animal"
 	// CategoryMusic covers musical instruments and performed music.
 	CategoryMusic Category = "music"
@@ -44,7 +44,7 @@ func init() {
 	}
 }
 
-// Categories returns all non-bird categories in a stable order.
+// Categories returns all sound-event categories in a stable order.
 func Categories() []Category {
 	return []Category{
 		CategoryHuman, CategoryAnimal, CategoryMusic, CategoryMechanical,
@@ -55,21 +55,21 @@ func Categories() []Category {
 // CategoryOf returns the category for a FULL raw model label (e.g. "power_tool",
 // "male_speech_and_man_speaking"). The match is exact against the known class set,
 // case-insensitive. It does NOT match truncated first-token forms; callers that only
-// have the first token (the image provider) must use IsNonBirdName instead.
-// ok is false for bird species and any unknown label.
+// have the first token (the image provider) must use IsName instead.
+// ok is false for species labels and any unknown label.
 func CategoryOf(rawLabel string) (Category, bool) {
 	cat, ok := classes[strings.ToLower(rawLabel)]
 	return cat, ok
 }
 
-// IsNonSpeciesLabel reports whether rawLabel is a known non-bird sound class
-// (the full-label exact-match path). Equivalent to: _, ok := CategoryOf(rawLabel); ok.
-func IsNonSpeciesLabel(rawLabel string) bool {
+// IsLabel reports whether rawLabel is a known sound-event class, matched on the
+// full raw label. Equivalent to: _, ok := CategoryOf(rawLabel); ok.
+func IsLabel(rawLabel string) bool {
 	_, ok := CategoryOf(rawLabel)
 	return ok
 }
 
-// MultiWordLabelNames recognises a full multi-word (underscore-joined) non-bird
+// MultiWordLabelNames recognises a full multi-word (underscore-joined) sound-event
 // class label such as "Domestic_sounds_and_home_sounds". The match is an exact,
 // case-insensitive whole-label lookup in the known class set, after trimming
 // surrounding whitespace and dropping carriage returns. When it matches, identity
@@ -89,7 +89,7 @@ func MultiWordLabelNames(label string) (identity, display string, ok bool) {
 	return label, strings.ReplaceAll(label, labelWordSeparator, displayWordSeparator), true
 }
 
-// IsMultiWordClassPrefix reports whether name is a known non-bird class that is
+// IsMultiWordClassPrefix reports whether name is a known sound-event class that is
 // also the first token of a longer multi-word class (for example "car", which
 // begins "car_passing_by"). Case-insensitive.
 func IsMultiWordClassPrefix(name string) bool {
@@ -101,13 +101,13 @@ func IsMultiWordClassPrefix(name string) bool {
 	return ok
 }
 
-// IsNonBirdName reports whether name is a non-bird class, matching EITHER the full
+// IsName reports whether name is a sound-event class, matching EITHER the full
 // label OR the first token of a multi-word (underscore-joined) class. New detections
 // carry the full label; the first-token match remains for names stored before
 // full labels were kept whole (e.g. "Power" from "power_tool", "Engine" from
 // "engine"), and for the image provider's lookups of those names.
 // Case-insensitive.
-func IsNonBirdName(name string) bool {
+func IsName(name string) bool {
 	lower := strings.ToLower(name)
 	if _, ok := classes[lower]; ok {
 		return true

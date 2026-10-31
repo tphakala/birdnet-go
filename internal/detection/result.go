@@ -58,7 +58,7 @@ type Result struct {
 	UltrasonicCV          float64                       // US frame CV value from validation filter (for comment generation)
 	UltrasonicCVThreshold float64                       // CV threshold used by validation filter (for comment generation)
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
-	// used by the datastore to classify non-bird sound classes correctly.
+	// used by the datastore to classify sound-event classes correctly.
 	RawLabel string
 
 	// Review status (populated from DB relations when loaded)
@@ -112,7 +112,7 @@ type AdditionalResult struct {
 	Species    Species
 	Confidence float64
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
-	// used by the datastore to classify non-bird sound classes correctly.
+	// used by the datastore to classify sound-event classes correctly.
 	RawLabel string
 }
 

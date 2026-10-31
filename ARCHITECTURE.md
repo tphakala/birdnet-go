@@ -155,7 +155,7 @@ Regional BirdNET v2.4 variants and geographic range models exist in the catalog.
 
 **Species range filter.** A geographic and seasonal model (`classifier/range_filter*.go`, the `range` command) limits detections to species plausible for the configured location. It applies only when a location is configured and a participating model is in use; Bat and BSG never participate. It is refreshed daily by `UpdateRangeFilterAction` and reloaded on settings or model changes.
 
-**Species identity.** `internal/speciesindex` is the single owner of the process-wide species name lookup. `internal/openfauna` supplies embedded multilingual names and taxonomy, `internal/labels` the non-bird and vocalization label sets, and `internal/ebird` taxonomy and observation data.
+**Species identity.** `internal/speciesindex` is the single owner of the process-wide species name lookup. `internal/openfauna` supplies embedded multilingual names and taxonomy, `internal/labels` the sound-event and vocalization label sets, and `internal/ebird` taxonomy and observation data.
 
 **Voice activity detection.** An optional Silero VAD (`internal/inference/vad`, needs ONNX Runtime, off by default) acts as a second source of "speech present" for the privacy filter described below.
 

@@ -14,7 +14,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/v2/entities"
 	"github.com/tphakala/birdnet-go/internal/detection"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 )
 
 // repeatedHourZone names a zone and the two UTC instants at which its clock reads
@@ -163,7 +163,7 @@ func TestDetectionRepository_SaveMapsResultFields(t *testing.T) {
 	assert.Equal(t, "Garage", *det.Source.DisplayName)
 
 	// A dropped RawLabel falls back to the species label type.
-	wantMechanical := ds.nonBirdLabelTypeIDs[nonbird.CategoryMechanical]
+	wantMechanical := ds.nonBirdLabelTypeIDs[soundevent.CategoryMechanical]
 	require.NotZero(t, wantMechanical)
 	require.NotNil(t, det.Label)
 	assert.Equal(t, "power", det.Label.ScientificName)
@@ -175,7 +175,7 @@ func TestDetectionRepository_SaveMapsResultFields(t *testing.T) {
 	assert.InDelta(t, predConfidence, preds[0].Confidence, 1e-15, "prediction confidence must not be narrowed to float32")
 	require.NotNil(t, preds[0].Label)
 	assert.Equal(t, "speech", preds[0].Label.ScientificName)
-	wantHuman := ds.nonBirdLabelTypeIDs[nonbird.CategoryHuman]
+	wantHuman := ds.nonBirdLabelTypeIDs[soundevent.CategoryHuman]
 	require.NotZero(t, wantHuman)
 	assert.Equal(t, wantHuman, preds[0].Label.LabelTypeID, "prediction raw label must classify the label")
 }

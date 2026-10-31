@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/tphakala/birdnet-go/internal/errors"
-	"github.com/tphakala/birdnet-go/internal/labels/nonbird"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
 	"github.com/tphakala/birdnet-go/internal/wallclock"
@@ -26,7 +26,7 @@ import (
 func canonicalSci(label string) string {
 	// Mirror detection.ExtractScientificName's sanitization (trim, strip CR, then
 	// split on the first underscore, with a full Perch multi-word sound class kept whole
-	// via nonbird.MultiWordLabelNames) so this key matches the one the range-filter
+	// via soundevent.MultiWordLabelNames) so this key matches the one the range-filter
 	// species mapping builds for the same label, including labels that arrive with
 	// trailing whitespace or CRLF line endings. The logic is duplicated rather than
 	// shared because internal/detection imports internal/conf, so conf importing
@@ -34,7 +34,7 @@ func canonicalSci(label string) string {
 	label = strings.TrimSpace(label)
 	label = strings.ReplaceAll(label, "\r", "")
 	sci := label
-	if id, _, ok := nonbird.MultiWordLabelNames(label); ok {
+	if id, _, ok := soundevent.MultiWordLabelNames(label); ok {
 		sci = id
 	} else if idx := strings.IndexByte(label, '_'); idx >= 0 {
 		sci = label[:idx]
