@@ -395,6 +395,7 @@ func TestCreateDetection_StoresOnlyAlternatesInRange(t *testing.T) {
 		name     string
 		modelID  string
 		included []string
+		noRange  bool // snapshot without a configured location
 		labels   []string
 		want     []string
 	}{
@@ -411,6 +412,14 @@ func TestCreateDetection_StoresOnlyAlternatesInRange(t *testing.T) {
 			included: []string{"turdus merula"},
 			labels:   []string{"Turdus merula", altKiskadeeSci, altHumanLabel, altDogLabel},
 			want:     []string{altHumanLabel, altDogLabel},
+		},
+		{
+			name:     "BirdNET V2.4 keeps out-of-range alternates when no location is configured",
+			modelID:  classifier.RegistryIDBirdNETV24,
+			included: []string{"turdus merula"},
+			noRange:  true,
+			labels:   []string{altBlackbirdLabel, altKiskadeeLabel},
+			want:     []string{altKiskadeeSci},
 		},
 		{
 			name:     "BSG keeps out-of-range alternates",
@@ -434,7 +443,9 @@ func TestCreateDetection_StoresOnlyAlternatesInRange(t *testing.T) {
 			primary := item.Results[0]
 			primarySci := detection.ParseSpeciesString(primary.Species).ScientificName
 
-			det := p.createDetection(altRangeSnapshot(tt.included...), item, primary, primarySci, "Primary", "", primary.Species)
+			settings := altRangeSnapshot(tt.included...)
+			settings.BirdNET.LocationConfigured = !tt.noRange
+			det := p.createDetection(settings, item, primary, primarySci, "Primary", "", primary.Species)
 
 			got := make([]string, len(det.Results))
 			for i, r := range det.Results {
