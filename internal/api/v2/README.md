@@ -346,7 +346,7 @@ prediction has `scientificName` (the current, canonical name), `commonName`, `sp
   detections saved before human class names were stored in full may list truncated human class names such
   as Male or Child.
 - Status codes: `409` when the enhanced database is not in use, `400` for an id that is not a positive
-  integer, `404` when the detection does not exist, and `500` for a database error.
+  integer that fits in 32 bits, `404` when the detection does not exist, and `500` for a database error.
 
 ### Notifications (`notifications/notifications.go`)
 

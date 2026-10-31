@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"slices"
 	"testing"
 
@@ -20,22 +21,24 @@ import (
 )
 
 const (
-	predTestID         = "5"
-	predTestEmptyBody  = `{"detectionId":5,"modelPredictions":[]}`
-	predTestPrimaryOld = "Streptopelia senegalensis" // legacy alias of "Spilopelia senegalensis"
-	predTestPrimaryNew = "Spilopelia senegalensis"
-	predTestBlackbird  = "Turdus merula"
-	predTestRaven      = "Corvus corax"
-	predTestMallard    = "Anas platyrhynchos"
-	predTestPower      = "power"
-	predTestDog        = "Dog"
-	predTestBark       = "Bark"
-	predTestModelName  = "BirdNET"
-	predTestModelVer   = "2.4"
-	predTestModelVar   = "default"
-	predTestModelType  = "multi"
-	predTestRavenCode  = "comrav"
-	predTestDoveCode   = "laudov1"
+	predTestID            = "5"
+	predTestMaxID         = "4294967295" // the largest id a 32-bit build holds
+	predTestFirstTooBigID = "4294967296"
+	predTestEmptyBody     = `{"detectionId":5,"modelPredictions":[]}`
+	predTestPrimaryOld    = "Streptopelia senegalensis" // legacy alias of "Spilopelia senegalensis"
+	predTestPrimaryNew    = "Spilopelia senegalensis"
+	predTestBlackbird     = "Turdus merula"
+	predTestRaven         = "Corvus corax"
+	predTestMallard       = "Anas platyrhynchos"
+	predTestPower         = "power"
+	predTestDog           = "Dog"
+	predTestBark          = "Bark"
+	predTestModelName     = "BirdNET"
+	predTestModelVer      = "2.4"
+	predTestModelVar      = "default"
+	predTestModelType     = "multi"
+	predTestRavenCode     = "comrav"
+	predTestDoveCode      = "laudov1"
 
 	predTestHigh = 0.40
 	predTestMid  = 0.30
@@ -63,7 +66,7 @@ func predictionsFixture(t *testing.T) (*echo.Echo, *mocks.MockDetectionRepositor
 // getPredictions calls the handler for id and returns the status and raw body.
 func getPredictions(t *testing.T, e *echo.Echo, h *Handler, id string) (code int, body string) {
 	t.Helper()
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/"+id+"/predictions", http.NoBody)
+	req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/"+url.PathEscape(id)+"/predictions", http.NoBody)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 	c.SetParamNames("id")
@@ -276,13 +279,24 @@ func TestGetDetectionPredictions_Errors(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, code)
 	})
 
-	for _, id := range []string{"abc", "0"} {
+	// Signs, spaces, zero and ids that do not fit in 32 bits are rejected before any
+	// read; the strict mock fails the test if a repository method is called.
+	for _, id := range []string{"abc", "0", "-1", "+5", " 5", predTestFirstTooBigID, "5000000000"} {
 		t.Run("invalid id "+id+" is 400", func(t *testing.T) {
 			e, _, h := predictionsFixture(t)
 			code, _ := getPredictions(t, e, h, id)
 			assert.Equal(t, http.StatusBadRequest, code)
 		})
 	}
+
+	t.Run("largest 32-bit id is read as its validated number", func(t *testing.T) {
+		e, repo, h := predictionsFixture(t)
+		repo.EXPECT().Get(mock.Anything, predTestMaxID).Return(predictionsPrimary(predTestBlackbird, ""), nil).Once()
+		repo.EXPECT().GetAdditionalResults(mock.Anything, predTestMaxID).Return(nil, nil).Once()
+		code, body := getPredictions(t, e, h, "0"+predTestMaxID)
+		assert.Equal(t, http.StatusOK, code)
+		assert.JSONEq(t, `{"detectionId":`+predTestMaxID+`,"modelPredictions":[]}`, body)
+	})
 
 	t.Run("unknown detection is 404", func(t *testing.T) {
 		e, repo, h := predictionsFixture(t)

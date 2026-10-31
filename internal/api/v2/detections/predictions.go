@@ -28,6 +28,11 @@ const (
 	predictionsLoadFailedMessage = "Failed to load detection predictions"
 	predictionsRequestEndedLog   = "detection predictions request ended before the read finished"
 	predictionsV2RequiredLog     = "detection predictions requested without the enhanced database"
+
+	// detectionIDBits is the width an id must fit in. Detection ids are Go uint
+	// values, 32 bits on a 32-bit build, so a wider id would truncate to another
+	// detection there.
+	detectionIDBits = 32
 )
 
 // DetectionPredictionsResponse is the response of GET /detections/:id/predictions.
@@ -60,7 +65,8 @@ type PredictionResponse struct {
 // GetDetectionPredictions handles GET /api/v2/detections/:id/predictions. It returns
 // the alternate species the detecting model scored for one detection, without the
 // detected species, human sound classes and a dog class that only the filter
-// preserved. It answers 409 unless the enhanced (v2) database is in use.
+// preserved. It answers 409 unless the enhanced (v2) database is in use, and 400
+// for an id that is not a positive integer that fits in 32 bits.
 func (c *Handler) GetDetectionPredictions(ctx echo.Context) error {
 	if c.V2Manager == nil || !datastoreV2.IsEnhancedDatabase() {
 		// Answered without an error log line: the route is public and a legacy
@@ -73,11 +79,12 @@ func (c *Handler) GetDetectionPredictions(ctx echo.Context) error {
 		return ctx.JSON(http.StatusConflict, resp)
 	}
 
-	id := ctx.Param("id")
-	n, err := strconv.ParseUint(id, 10, 64)
+	n, err := strconv.ParseUint(ctx.Param("id"), 10, detectionIDBits)
 	if err != nil || n == 0 {
 		return c.HandleError(ctx, err, invalidDetectionIDMessage, http.StatusBadRequest)
 	}
+	// Read the validated number, so the id that was checked is the id that is read.
+	id := strconv.FormatUint(n, 10)
 
 	reqCtx := ctx.Request().Context()
 	r, err := c.Repo.Get(reqCtx, id)
