@@ -59,12 +59,13 @@ type DashboardKPIs struct {
 // from the legacy database, and may be missing when a model could not be
 // resolved at save time, so every count derived from them is a lower bound.
 // Rows without recorded confidence stats are counted but excluded from
-// MinConfidence and MeanConfidence.
+// MinConfidence and MeanConfidence. Rows with a hit count of 0 (a model that was
+// active without a hit) are not counted anywhere.
 type ModelContributionStats struct {
 	// TotalDetections is the number of detections in the range.
 	TotalDetections int64
 	// DetectionsWithContributions is the number of detections in the range with
-	// at least one contribution row.
+	// at least one contribution row that has a hit.
 	DetectionsWithContributions int64
 	// TotalHits is the sum of Models[i].Hits.
 	TotalHits int64
@@ -84,17 +85,17 @@ type ModelContributionStat struct {
 	Version   string
 	Variant   string
 	ModelType string
-	// Detections is the number of detections this model contributed to.
+	// Detections is the number of detections this model hit.
 	Detections int64
 	// Hits is the sum of hit_count over those detections.
 	Hits int64
 	// HitShare is Hits divided by the range's total hits, 0 when that is 0.
 	HitShare float64
-	// SoleDetections counts detections where this model is the only contributor.
+	// SoleDetections counts detections where this model is the only model with a hit.
 	SoleDetections int64
 	// DetectionsWithStats counts contribution rows with recorded min and sum.
 	DetectionsWithStats int64
-	// MaxConfidence is the highest confidence over all rows.
+	// MaxConfidence is the highest confidence over rows with hits.
 	MaxConfidence float64
 	// MinConfidence is the lowest confidence over rows with stats; nil when none.
 	MinConfidence *float64

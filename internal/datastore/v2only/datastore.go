@@ -1102,17 +1102,31 @@ func mergeContribution(dst *entities.DetectionModelContribution, c *detection.Re
 	*dst.ConfidenceSum += c.ConfidenceSum
 }
 
-// resolveModelContributions resolves each contributing AI model in the map and
-// deduplicates by database ModelID (see mergeContribution for the merge rules) to
-// guard against idx_contrib_detection_model unique constraint violations.
+// resolveModelContributions resolves each AI model in the map and deduplicates by
+// database ModelID (see mergeContribution for the merge rules) to guard against
+// idx_contrib_detection_model unique constraint violations. Entries with hits are
+// resolved before zero-hit entries, so a zero-hit entry that resolves to the same
+// model as a hit entry is dropped and never takes its row.
 func (ds *Datastore) resolveModelContributions(ctx context.Context, modelContribs map[string]detection.ResultModelContrib) []*entities.DetectionModelContribution {
 	if len(modelContribs) == 0 {
 		return nil
 	}
 
-	seen := make(map[uint]int, len(modelContribs))
-	contribs := make([]*entities.DetectionModelContribution, 0, len(modelContribs))
+	ordered := make([]string, 0, len(modelContribs))
 	for key := range modelContribs {
+		if modelContribs[key].HitCount > 0 {
+			ordered = append(ordered, key)
+		}
+	}
+	for key := range modelContribs {
+		if modelContribs[key].HitCount <= 0 {
+			ordered = append(ordered, key)
+		}
+	}
+
+	seen := make(map[uint]int, len(ordered))
+	contribs := make([]*entities.DetectionModelContribution, 0, len(ordered))
+	for _, key := range ordered {
 		contrib := modelContribs[key]
 		m := contrib.Model.WithDefaults()
 		modelEntity, err := ds.model.GetOrCreate(ctx, m.Name, m.Version, m.Variant,
@@ -1126,7 +1140,9 @@ func (ds *Datastore) resolveModelContributions(ctx context.Context, modelContrib
 			continue
 		}
 		if idx, exists := seen[modelEntity.ID]; exists {
-			mergeContribution(contribs[idx], &contrib)
+			if contrib.HitCount > 0 {
+				mergeContribution(contribs[idx], &contrib)
+			}
 			continue
 		}
 		seen[modelEntity.ID] = len(contribs)

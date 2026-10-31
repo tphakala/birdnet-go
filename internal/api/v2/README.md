@@ -310,12 +310,16 @@ fresh render removes the older `-bat-v2` and `-bat` files next to it.
 
 **Model contributions.** On the enhanced (v2) database, `GET /detections`, `GET /detections/recent` and
 `GET /detections/:id` carry a read-only `modelContributions` array: one element per model that detected
-the species for this detection, largest hit count first (then highest maximum confidence). Each element
-has `modelName`, `modelVersion`, `modelVariant`, `modelType`, `hitCount` and `maxConfidence`, plus
-`minConfidence`, `meanConfidence`, `firstHitAt` and `lastHitAt`. The last four appear together and are
-omitted when they were not recorded (detections recorded before these statistics existed) or the stored
-values are unusable (zero hit count, minimum above maximum, first hit after last hit). Times are RFC3339 in the server's time
-zone, like `beginTime`.
+the species for this detection, largest hit count first (then highest maximum confidence), and, for
+detections saved since this version, one element with `hitCount` 0 per other model that was active on the
+source when the detection was approved (it had an analysis buffer on the source and was not paused by its
+schedule). Each element has `modelName`, `modelVersion`, `modelVariant`, `modelType` and `hitCount`. Elements
+with hits also have `maxConfidence`, plus `minConfidence`, `meanConfidence`, `firstHitAt` and `lastHitAt`; the
+last four appear together and are omitted when they were not recorded (detections recorded before these
+statistics existed) or the stored values are unusable (minimum above maximum, first hit after last hit).
+Times are RFC3339 in the server's time zone, like `beginTime`. A model missing from the list was not active
+on the source, the detection predates this recording, or its entry could not be saved (contributions are
+written best-effort).
 
 - The whole field is omitted on the legacy database, during migration, for detections with no recorded
   contributions (including migrated ones), and when the read fails or takes longer than 1 second.
@@ -683,7 +687,7 @@ Requires enhanced (v2) database. Returns 409 Conflict with `error_key` `errors.i
 **Query Parameters:**
 
 - All insights endpoints except `/insights/model-contributions` accept optional `model_id` query parameter to filter by BirdNET model
-- `/insights/model-contributions` requires `start_date` and accepts optional `end_date` (both `YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 366 days). It takes no `model_id`. Counts are lower bounds: contribution rows are written best-effort and are absent for detections migrated from the legacy database
+- `/insights/model-contributions` requires `start_date` and accepts optional `end_date` (both `YYYY-MM-DD`, station-local and inclusive; `end_date` defaults to `start_date` + 30 days; at most 366 days). It takes no `model_id`. Only contribution rows with at least one hit are counted; rows recording a model that was active without a hit are not. Counts are lower bounds: contribution rows are written best-effort and are absent for detections migrated from the legacy database
 - `/insights/dawn-chorus` also accepts `period_days` (default 30, 1 to 365) and `min_days` (default 3, clamped to `period_days`); the response echoes both as `period_days` and `min_days`
 
 ### Privacy Filter Activity (`privacy/privacy.go`)

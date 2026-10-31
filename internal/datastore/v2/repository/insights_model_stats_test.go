@@ -50,8 +50,8 @@ const (
 // d1 A only with stats (correct); d2 A+B, B without stats (false_positive);
 // d3 A+B+C (empty verdict); d4 B only without stats; d5 exactly at the range end
 // (excluded); d6 exactly at the range start, A only without stats; d7 in range
-// with no contribution rows.
-func seedModelContributionFixture(t *testing.T, db *gorm.DB) {
+// with no contribution rows. It returns the detection IDs in d1..d7 order.
+func seedModelContributionFixture(t *testing.T, db *gorm.DB) []uint {
 	t.Helper()
 	require.NoError(t, db.Model(&entities.AIModel{}).Where("id = ?", 1).Update("model_type", entities.ModelTypeBird).Error)
 	require.NoError(t, db.Create(&entities.AIModel{ID: 2, Name: "Perch", Version: "2", ModelType: entities.ModelTypeBird}).Error)
@@ -64,7 +64,7 @@ func seedModelContributionFixture(t *testing.T, db *gorm.DB) {
 	d4 := seedDetection(t, db, label, 1900, 0.6)
 	d5 := seedDetection(t, db, label, modelStatsTestEnd, 0.9)
 	d6 := seedDetection(t, db, label, modelStatsTestStart, 0.5)
-	_ = seedDetection(t, db, label, 1200, 0.5) // d7: no contribution rows
+	d7 := seedDetection(t, db, label, 1200, 0.5) // d7: no contribution rows
 
 	seedContribution(t, db, d1, 1, 3, 0.9, &contribStats{0.6, 2.1})
 	seedContribution(t, db, d2, 1, 2, 0.8, &contribStats{0.7, 1.5})
@@ -79,6 +79,8 @@ func seedModelContributionFixture(t *testing.T, db *gorm.DB) {
 	seedReview(t, db, d1, entities.VerificationCorrect)
 	seedReview(t, db, d2, entities.VerificationFalsePositive)
 	seedReview(t, db, d3, "") // an empty verdict, which migration can carry over
+
+	return []uint{d1, d2, d3, d4, d5, d6, d7}
 }
 
 // assertModelStatsConsistent checks the cross-field relations a client may rely on.
@@ -111,6 +113,30 @@ func assertModelStatsConsistent(t *testing.T, stats *ModelContributionStats) {
 		assert.Less(t, a.ModelAID, a.ModelBID)
 		assert.LessOrEqual(t, a.SharedDetections, min(byID[a.ModelAID], byID[a.ModelBID]))
 	}
+}
+
+// TestGetModelContributionStats_IgnoresZeroHitRows pins that rows recording a
+// model that was active without a hit change no statistic: every figure counts
+// hit rows only.
+func TestGetModelContributionStats_IgnoresZeroHitRows(t *testing.T) {
+	db := setupInsightsTestDB(t)
+	ids := seedModelContributionFixture(t, db)
+	d1, d4, d6, d7 := ids[0], ids[3], ids[5], ids[6]
+	repo := NewInsightsRepository(db, false, false)
+	ctx := t.Context()
+
+	before, err := repo.GetModelContributionStats(ctx, modelStatsTestStart, modelStatsTestEnd)
+	require.NoError(t, err)
+
+	seedContribution(t, db, d1, 2, 0, 0, nil) // d1 is sole for model 1 and reviewed correct
+	seedContribution(t, db, d1, 3, 0, 0, nil)
+	seedContribution(t, db, d4, 3, 0, 0, nil)
+	seedContribution(t, db, d6, 2, 0, 0, nil)
+	seedContribution(t, db, d7, 1, 0, 0, nil) // d7 had no rows at all
+
+	after, err := repo.GetModelContributionStats(ctx, modelStatsTestStart, modelStatsTestEnd)
+	require.NoError(t, err)
+	assert.Equal(t, before, after)
 }
 
 func TestGetModelContributionStats(t *testing.T) {

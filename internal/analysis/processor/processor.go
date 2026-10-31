@@ -1866,20 +1866,10 @@ func (p *Processor) processApprovedDetection(item *PendingDetection, speciesName
 
 	p.normalizeDetectionTimes(item, settings)
 
-	// Populate model contributions on the Result for downstream persistence
+	// Populate model contributions on the Result for downstream persistence: the
+	// hit models plus the models active on the source without a hit.
 	if len(item.ModelContributions) > 0 {
-		item.Detection.Result.ModelContributions = make(map[string]detection.ResultModelContrib, len(item.ModelContributions))
-		for modelID, contrib := range item.ModelContributions {
-			item.Detection.Result.ModelContributions[modelID] = detection.ResultModelContrib{
-				Model:         classifier.DetectionModelInfoForID(modelID),
-				HitCount:      contrib.HitCount,
-				MaxConfidence: contrib.MaxConfidence,
-				FirstHitAt:    contrib.FirstHitAt,
-				LastHitAt:     contrib.LastHitAt,
-				MinConfidence: contrib.MinConfidence,
-				ConfidenceSum: contrib.ConfidenceSum,
-			}
-		}
+		item.Detection.Result.ModelContributions = resultModelContributions(item.ModelContributions, p.activeModelIDs(item.Source))
 	}
 
 	actionList := p.getActionsForItem(&item.Detection, settings)
