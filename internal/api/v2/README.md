@@ -338,9 +338,11 @@ prediction has `scientificName` (the current, canonical name), `commonName`, `sp
 - Filtered out: the detected species and its aliases, human sound classes, and a dog class that scores
   below every other alternate. This is a heuristic: the classifier adds one past its top results so that
   it stays visible, which a low dog score usually is, but a genuine low-scoring dog result goes with it.
-- Scope: the detecting model's own top 10 for the analysis window that produced the detection, the
-  detected species included, after the range filter. Other models and other windows are not stored, so a
-  species missing here may still have been scored.
+- Scope: the species the detecting model ranked in its top 10 for the analysis window that produced
+  the detection, without the detected species and, when a location is set and the model takes part in
+  range filtering, without species outside the location's range (for detections saved after the range
+  filter was applied to alternates), so fewer than 10 can remain. Other models and other windows are
+  not stored, so a species missing here may still have been scored.
 - Old rows: detections saved before this version may list species outside the location's range;
   detections migrated from the legacy database list only alternates at or above 30 percent; Perch
   detections saved before human class names were stored in full may list truncated human class names such
