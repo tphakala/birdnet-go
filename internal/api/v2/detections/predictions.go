@@ -3,7 +3,6 @@ package detections
 
 import (
 	"cmp"
-	"maps"
 	"math"
 	"net/http"
 	"slices"
@@ -19,6 +18,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/labels/vocalization"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/openfauna"
+	"github.com/tphakala/birdnet-go/internal/speciesindex"
 )
 
 // Detection predictions messages and log text (file-local).
@@ -126,12 +126,16 @@ type predictionCandidate struct {
 	commonName string
 	code       string
 	confidence float64
+	dog        bool
 }
 
-// betterCandidate orders candidates best first: higher confidence, then smaller
-// trimmed stored name.
-func betterCandidate(a, b predictionCandidate) int {
+// comparePredictionCandidates orders candidates best first: higher confidence, then
+// species key, then trimmed stored name, so the first row of a species is its best.
+func comparePredictionCandidates(a, b *predictionCandidate) int {
 	if c := cmp.Compare(b.confidence, a.confidence); c != 0 {
+		return c
+	}
+	if c := cmp.Compare(a.key, b.key); c != 0 {
 		return c
 	}
 	return cmp.Compare(a.name, b.name)
@@ -142,81 +146,59 @@ func betterCandidate(a, b predictionCandidate) int {
 // sound classes, blank names and non-finite confidences, merges rows of one species
 // (alias and case variants) into the best-ranked one, drops a dog class that scores
 // below every non-dog row (the classifier appends one past its top results to keep
-// it visible, so a low dog score says nothing about the audio), and sorts by
-// confidence descending then species key. The result is the same for any input
-// order, and nil when nothing remains.
+// it visible, so a low dog score is usually that artifact; a genuine low-scoring dog
+// result is dropped with it), and sorts by confidence descending then species key.
+// The result is the same for any input order.
 func buildPredictions(primarySci string, rows []detectionPkg.AdditionalResult) []PredictionResponse {
-	key := func(name string) string { return strings.ToLower(openfauna.CanonicalName(name)) }
-	primaryKey := key(primarySci)
+	primaryKey := speciesindex.CanonicalKey(primarySci)
 
-	candidates := make([]predictionCandidate, 0, len(rows))
+	candidates := make([]*predictionCandidate, 0, len(rows))
 	for _, row := range rows {
 		name := strings.TrimSpace(row.Species.ScientificName)
 		if name == "" || math.IsNaN(row.Confidence) || math.IsInf(row.Confidence, 0) {
 			continue
 		}
-		k := key(name)
-		if k == primaryKey || vocalization.IsHumanSound(name) {
+		key := speciesindex.CanonicalKey(name)
+		if key == primaryKey || vocalization.IsHumanSound(name) {
 			continue
 		}
-		candidates = append(candidates, predictionCandidate{
-			name: name, key: k, commonName: row.Species.CommonName, code: row.Species.Code, confidence: row.Confidence,
+		candidates = append(candidates, &predictionCandidate{
+			name: name, key: key, commonName: row.Species.CommonName, code: row.Species.Code,
+			confidence: row.Confidence, dog: vocalization.IsDog(name),
 		})
 	}
-	slices.SortFunc(candidates, betterCandidate)
+	slices.SortFunc(candidates, comparePredictionCandidates)
 
-	// Candidates are ranked, so the first of a key wins and the first with a code
-	// supplies the code when the winner has none.
-	type merged struct {
-		best predictionCandidate
-		code string
-	}
-	groups := make(map[string]*merged, len(candidates))
+	// Candidates are ranked, so the first of a key is the winner of its species and
+	// the first non-empty code among its rows is the one kept.
+	entries := make([]*predictionCandidate, 0, len(candidates))
+	indexByKey := make(map[string]int, len(candidates))
 	for _, cand := range candidates {
-		g, ok := groups[cand.key]
-		if !ok {
-			g = &merged{best: cand}
-			groups[cand.key] = g
+		i, seen := indexByKey[cand.key]
+		if !seen {
+			indexByKey[cand.key] = len(entries)
+			entries = append(entries, cand)
+			continue
 		}
-		if g.code == "" {
-			g.code = cand.code
+		if entries[i].code == "" {
+			entries[i].code = cand.code
 		}
-	}
-
-	entries := make([]predictionCandidate, 0, len(groups))
-	for _, g := range slices.Collect(maps.Values(groups)) {
-		e := g.best
-		e.code = g.code
-		entries = append(entries, e)
 	}
 
 	// Dog rule: compare against the non-dog entries only, so the outcome does not
 	// depend on how many dog rows there are or on their order.
 	minOther, haveOther := 0.0, false
 	for _, e := range entries {
-		if vocalization.IsDog(e.name) {
-			continue
-		}
-		if !haveOther || e.confidence < minOther {
+		if !e.dog && (!haveOther || e.confidence < minOther) {
 			minOther, haveOther = e.confidence, true
 		}
 	}
 	if haveOther {
-		entries = slices.DeleteFunc(entries, func(e predictionCandidate) bool {
-			return vocalization.IsDog(e.name) && e.confidence < minOther
+		entries = slices.DeleteFunc(entries, func(e *predictionCandidate) bool {
+			return e.dog && e.confidence < minOther
 		})
 	}
 
-	slices.SortFunc(entries, func(a, b predictionCandidate) int {
-		if c := cmp.Compare(b.confidence, a.confidence); c != 0 {
-			return c
-		}
-		return cmp.Compare(a.key, b.key)
-	})
-
-	if len(entries) == 0 {
-		return nil
-	}
 	out := make([]PredictionResponse, 0, len(entries))
 	for _, e := range entries {
 		out = append(out, PredictionResponse{

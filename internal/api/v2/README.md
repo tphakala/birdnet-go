@@ -336,7 +336,8 @@ prediction has `scientificName` (the current, canonical name), `commonName`, `sp
 `confidence`, ordered by confidence descending, then by scientific name.
 
 - Filtered out: the detected species and its aliases, human sound classes, and a dog class that scores
-  below every other alternate (the classifier adds one past its top results so that it stays visible).
+  below every other alternate. This is a heuristic: the classifier adds one past its top results so that
+  it stays visible, which a low dog score usually is, but a genuine low-scoring dog result goes with it.
 - Scope: the detecting model's own top 10 for the analysis window that produced the detection, the
   detected species included, after the range filter. Other models and other windows are not stored, so a
   species missing here may still have been scored.
@@ -345,10 +346,7 @@ prediction has `scientificName` (the current, canonical name), `commonName`, `sp
   detections saved before human class names were stored in full may list truncated human class names such
   as Male or Child.
 - Status codes: `409` when the enhanced database is not in use, `400` for an id that is not a positive
-  integer, `404` only when the detection does not exist, and `500` for a database error, unlike
-  `GET /detections/:id`, which answers every read error with `404`.
-- The route is public, but with `Security.PrivateMode` enabled it needs authentication like every
-  non-exempt route.
+  integer, `404` when the detection does not exist, and `500` for a database error.
 
 ### Notifications (`notifications/notifications.go`)
 

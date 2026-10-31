@@ -3,8 +3,6 @@ package v2only
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
@@ -12,8 +10,8 @@ import (
 
 // detectionRepository is the datastore.DetectionRepository of a v2 database.
 // Save writes the detection's own instant through the shared v2 write path, and the
-// read methods map v2 entities straight to results with that stored instant.
-// GetAdditionalResults is also served from v2 entities. The remaining methods are served by the datastore.Interface bridge over the same
+// read methods map v2 entities straight to results with that stored instant. The
+// remaining methods are served by the datastore.Interface bridge over the same
 // Datastore.
 type detectionRepository struct {
 	datastore.DetectionRepository
@@ -25,8 +23,7 @@ type detectionRepository struct {
 // additional result's full float64 confidence. The reads return that stored instant
 // in the datastore's timezone as Result.Timestamp (the bridge used for legacy stores
 // formats and re-parses wall-clock text, which shifts one occurrence of a repeated
-// DST hour). GetAdditionalResults resolves names and codes like Get and returns the
-// full float64 confidence. The remaining methods go through the datastore.Interface bridge.
+// DST hour). The remaining methods go through the datastore.Interface bridge.
 func NewDetectionRepository(ds *Datastore) datastore.DetectionRepository {
 	return &detectionRepository{
 		DetectionRepository: datastore.NewDetectionRepository(ds, ds.timezone),
@@ -58,8 +55,9 @@ func (r *detectionRepository) Get(ctx context.Context, id string) (*detection.Re
 
 // GetAdditionalResults returns the stored alternate predictions of a detection. The
 // species names and codes resolve like those of the detection's own species, and the
-// confidence is the full float64. The order is unspecified, and the result is nil when
-// there are none. A row whose label cannot be loaded is skipped.
+// confidence is the full float64 (the bridge would give the scientific name as common
+// name, no code and a float32). The order is unspecified. A row whose label is missing
+// is skipped.
 func (r *detectionRepository) GetAdditionalResults(ctx context.Context, id string) ([]detection.AdditionalResult, error) {
 	detID, err := parseID(id)
 	if err != nil {
@@ -73,11 +71,12 @@ func (r *detectionRepository) GetAdditionalResults(ctx context.Context, id strin
 		return nil, nil
 	}
 
-	labelIDSet := make(map[uint]struct{}, len(preds))
+	// (detection_id, label_id) is unique, so the label IDs are already distinct.
+	labelIDs := make([]uint, 0, len(preds))
 	for _, pred := range preds {
-		labelIDSet[pred.LabelID] = struct{}{}
+		labelIDs = append(labelIDs, pred.LabelID)
 	}
-	labels, err := r.ds.label.GetByIDs(ctx, slices.Collect(maps.Keys(labelIDSet)))
+	labels, err := r.ds.label.GetByIDs(ctx, labelIDs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load labels of additional results for detection %s: %w", id, err)
 	}
@@ -100,9 +99,6 @@ func (r *detectionRepository) GetAdditionalResults(ctx context.Context, id strin
 			},
 			Confidence: pred.Confidence,
 		})
-	}
-	if len(results) == 0 {
-		return nil, nil
 	}
 	return results, nil
 }
