@@ -2183,7 +2183,7 @@
           "summary": "Vorjahresvergleich: Bis {monthDay} verzeichnet {currentYear} kumuliert {thisYear} Erfassungen gegenüber {lastYear} im Jahr {previousYear} (eine Differenz von {delta})."
         },
         "phenology": {
-          "title": "Ankunfts- und Abfahrtsphänologie",
+          "title": "Ankunfts- und Wegzugsphänologie",
           "description": "Erste und letzte Erkennung jeder Art.",
           "noData": "Keine Phänologiedaten",
           "noDataHint": "Wählen Sie einen größeren Datumsbereich",
