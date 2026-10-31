@@ -48,10 +48,19 @@ func (m *ModelSpecies) Knows(modelID, key string) bool {
 	return ok
 }
 
+// invalidateModelSpecies records a model-topology change (load, unload, reload or
+// Delete): it bumps topologyGen, which ModelSpecies compares against the
+// generation its cached snapshot was built for, and drops the cached snapshot so
+// a stale per-model set is not kept alive until the next call. A code path that
+// changes which models are loaded must call it after the change.
+func (o *Orchestrator) invalidateModelSpecies() {
+	o.topologyGen.Add(1)
+	o.modelSpecies.Store(nil)
+}
+
 // ModelSpecies returns the per-model species snapshot. It is built lazily on the
-// first call and rebuilt only after the model topology changed (a load, unload,
-// reload or Delete, tracked by topologyGen), so the steady-state cost is one atomic load and
-// a compare. It returns nil on a nil receiver.
+// first call and rebuilt only after the model topology changed, so the common
+// path takes no lock. It returns nil on a nil receiver.
 //
 // It MUST be called with no orchestrator lock held, and never under a caller lock
 // that the inference result path also takes: the walk calls Labels() on each
@@ -78,37 +87,38 @@ func (o *Orchestrator) ModelSpecies() *ModelSpecies {
 	return built
 }
 
-// buildModelSpeciesSets walks the loaded models exactly like AllLabels (the v2.4
+// buildModelSpeciesSets walks the loaded models the way AllLabels does: the v2.4
 // anchor through the orderedEntryRefs primary pointer, every other entry by
-// capturing its instance under entry.mu and calling Labels() after releasing it)
-// and keys each model's labels by speciesindex.CanonicalKey. It has no per-model-ID
-// cases: every entry with a live instance takes part.
+// capturing its instance under entry.mu and calling Labels() only after releasing
+// it, so entry.mu is not held across bn.mu. Only the anchor is keyed by a
+// registry ID; every other entry with a live instance takes part.
 func (o *Orchestrator) buildModelSpeciesSets() map[string]map[string]struct{} {
+	index := o.SpeciesSnapshot()
 	primary, refs := o.orderedEntryRefs()
 	sets := make(map[string]map[string]struct{}, len(refs)+1)
 	if primary != nil {
-		sets[RegistryIDBirdNETV24] = canonicalKeySet(primary.Labels())
+		sets[RegistryIDBirdNETV24] = canonicalKeySet(index, primary.Labels())
 	}
 	for _, ref := range refs {
-		// Capture the instance under entry.mu, release it, THEN call Labels(), as
-		// AllLabels does, so entry.mu is not held across bn.mu.
 		ref.entry.mu.Lock()
 		instance := ref.entry.instance
 		ref.entry.mu.Unlock()
 		if instance == nil {
 			continue
 		}
-		sets[ref.id] = canonicalKeySet(instance.Labels())
+		sets[ref.id] = canonicalKeySet(index, instance.Labels())
 	}
 	return sets
 }
 
-// canonicalKeySet returns the set of non-empty speciesindex.CanonicalKey values of
-// the labels.
-func canonicalKeySet(labels []string) map[string]struct{} {
+// canonicalKeySet returns the set of non-empty canonical keys of the labels. The
+// species-index snapshot supplies a key from its memo when the label is in the
+// index and computes it otherwise, so a snapshot that lags the topology only costs
+// a recompute.
+func canonicalKeySet(index *speciesindex.Snapshot, labels []string) map[string]struct{} {
 	set := make(map[string]struct{}, len(labels))
 	for _, label := range labels {
-		if key := speciesindex.CanonicalKey(label); key != "" {
+		if key := index.CanonicalKey(label); key != "" {
 			set[key] = struct{}{}
 		}
 	}

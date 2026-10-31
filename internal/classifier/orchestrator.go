@@ -150,13 +150,11 @@ type Orchestrator struct {
 	// orchestrator lock already held.
 	rebuildMu sync.Mutex
 
-	// topologyGen counts model-topology changes (load, unload, reload, Delete). It is
-	// bumped by rebuildSpeciesIndex, which the load, unload and reload triggers call
-	// after their mutation, and by Delete directly. It is the only signal
-	// ModelSpecies compares to decide whether its cached snapshot is stale.
-	topologyGen atomic.Uint64
-	// modelSpecies caches the per-model species snapshot; modelSpeciesMu serializes
-	// its rebuild (lock order: rebuildMu -> modelSpeciesMu -> mu).
+	// topologyGen counts model-topology changes (load, unload, reload, Delete),
+	// recorded by invalidateModelSpecies. ModelSpecies rebuilds its cached snapshot
+	// (modelSpecies) when the snapshot's generation no longer matches; modelSpeciesMu
+	// serializes that rebuild.
+	topologyGen    atomic.Uint64
 	modelSpecies   atomic.Pointer[ModelSpecies]
 	modelSpeciesMu sync.Mutex
 
@@ -1841,10 +1839,7 @@ func (o *Orchestrator) Delete() {
 	}
 	o.models = nil
 	o.mu.Unlock()
-	// Delete empties the model set without going through rebuildSpeciesIndex, so it
-	// bumps the topology generation itself; otherwise ModelSpecies would keep serving
-	// the pre-Delete snapshot.
-	o.topologyGen.Add(1)
+	o.invalidateModelSpecies()
 
 	// Close the range-filter backend outside o.mu. close() empties the published
 	// state under rfs.mu, so any accessor that runs after teardown reads a nil
