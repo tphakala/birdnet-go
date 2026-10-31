@@ -2573,6 +2573,58 @@ func TestV2OnlyDatastore_Save_PersistsModelContributions(t *testing.T) {
 	assert.InDelta(t, 1.5, *zeroHitContribs[0].ConfidenceSum, 1e-9)
 }
 
+// zeroHitKeyCount is how many zero-hit entries the order test puts next to its hit
+// entry. Each range over the map starts at a random position, so with this many
+// entries that resolve to the hit entry's model, a missing hits-first order puts a
+// zero-hit entry in front of the hit entry in nearly every call.
+const zeroHitKeyCount = 8
+
+// resolveOrderRuns is how many times the order test resolves the same map. Every
+// call ranges over the map afresh, so each one draws a new order.
+const resolveOrderRuns = 50
+
+// TestResolveModelContributions_HitEntryKeepsItsRowWhateverTheMapOrder pins that a
+// zero-hit entry resolving to the same model as a hit entry never takes the row of
+// the hit entry or clears its statistics. The hit count alone is the same in both
+// orders, so the test checks the statistics, which a zero-hit row in front of the
+// hit entry would clear.
+func TestResolveModelContributions_HitEntryKeepsItsRowWhateverTheMapOrder(t *testing.T) {
+	t.Parallel()
+
+	ds, cleanup := setupTestDatastore(t)
+	defer cleanup()
+
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	contribs := map[string]detection.ResultModelContrib{
+		"with_hits": {
+			Model:         detection.ModelInfo{}, // resolves via WithDefaults() to BirdNET 2.4 default
+			HitCount:      2,
+			MaxConfidence: 0.8,
+			MinConfidence: 0.7,
+			ConfidenceSum: 1.5,
+			FirstHitAt:    now,
+			LastHitAt:     now.Add(time.Second),
+		},
+	}
+	for i := range zeroHitKeyCount {
+		contribs[fmt.Sprintf("zero_hit_%d", i)] = detection.ResultModelContrib{
+			Model: detection.ModelInfo{Name: "BirdNET", Version: "2.4", Variant: "default"},
+		}
+	}
+
+	for run := range resolveOrderRuns {
+		rows := ds.resolveModelContributions(t.Context(), contribs)
+		require.Len(t, rows, 1, "run %d: entries resolving to one model must give one row", run)
+		row := rows[0]
+		require.Equal(t, 2, row.HitCount, "run %d", run)
+		require.NotNil(t, row.ConfidenceSum, "run %d: the hit entry's statistics must survive", run)
+		require.NotNil(t, row.MinConfidence, "run %d", run)
+		require.NotNil(t, row.FirstHitAt, "run %d", run)
+		require.NotNil(t, row.LastHitAt, "run %d", run)
+		assert.InDelta(t, 1.5, *row.ConfidenceSum, 1e-9, "run %d", run)
+	}
+}
+
 // TestV2OnlyDatastore_Save_KeepsDetectionWhenContributionsFail verifies that model
 // contributions are best-effort: a failure to persist them must not fail the save
 // or roll back the detection (#4648).
