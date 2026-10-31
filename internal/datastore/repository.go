@@ -94,7 +94,9 @@ type DetectionRepository interface {
 	// GetClipPath returns the audio clip path for a detection.
 	GetClipPath(ctx context.Context, id string) (string, error)
 
-	// GetAdditionalResults returns the secondary predictions for a detection.
+	// GetAdditionalResults returns the stored secondary predictions for a detection.
+	// Species carries resolved common names and codes where the store knows them;
+	// the order is unspecified.
 	GetAdditionalResults(ctx context.Context, id string) ([]detection.AdditionalResult, error)
 
 	// RecordClipSampleRate sets the clip sample rate (Hz) of the detection while its

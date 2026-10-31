@@ -56,6 +56,9 @@ const (
 	// (e.g. the legacy datastore does not track it). The UI maps this to the
 	// default bird spectrogram frequency range.
 	defaultModelType = "bird"
+
+	// detectionNotFoundMessage is the 404 message of the single-detection routes.
+	detectionNotFoundMessage = "Detection not found"
 )
 
 // Regex to validate YYYY-MM-DD format and check for unwanted characters
@@ -1279,7 +1282,7 @@ func (c *Handler) GetDetection(ctx echo.Context) error {
 		if ended, respErr := c.respondIfRequestEnded(ctx, err, "Detection request ended before completion"); ended {
 			return respErr
 		}
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 
 	// An old bat row may have no clip sample rate yet; learn it from the clip
@@ -1332,7 +1335,7 @@ func (c *Handler) DeleteDetection(ctx echo.Context) error {
 	idStr := ctx.Param("id")
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 
 	// Check if the note is locked
@@ -1455,7 +1458,7 @@ func (c *Handler) ReviewDetection(ctx echo.Context) error {
 	// Get the note directly - allow reviewing locked detections
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 
 	// Parse request
@@ -1548,7 +1551,7 @@ func (c *Handler) LockDetection(ctx echo.Context) error {
 	// Get the note to verify it exists
 	note, err := c.DS.Get(idStr)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 
 	// Only check lock status when trying to LOCK (not unlock)
@@ -1842,7 +1845,7 @@ func (c *Handler) GetDetectionTimeOfDay(ctx echo.Context) error {
 	// Get the detection through the repository: its Timestamp is the stored instant
 	r, err := c.Repo.Get(ctx.Request().Context(), id)
 	if err != nil {
-		return c.HandleError(ctx, err, "Detection not found", http.StatusNotFound)
+		return c.HandleError(ctx, err, detectionNotFoundMessage, http.StatusNotFound)
 	}
 	detectionTime := r.Timestamp
 

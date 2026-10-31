@@ -571,6 +571,10 @@ func TestDetectionRepository_ReadsHonourCancelledContext(t *testing.T) {
 	require.Error(t, err, "Get")
 	require.ErrorIs(t, err, context.Canceled, "Get")
 
+	_, err = repo.GetAdditionalResults(ctx, strconv.FormatUint(uint64(det.ID), 10))
+	require.Error(t, err, "GetAdditionalResults")
+	require.ErrorIs(t, err, context.Canceled, "GetAdditionalResults")
+
 	for _, rc := range listReadCalls("2026-06-01", "12") {
 		_, err := rc.call(ctx, repo)
 		require.Error(t, err, rc.name)
@@ -727,4 +731,92 @@ func TestDetectionRepository_GetBySpeciesDefaultLimit(t *testing.T) {
 			assert.Equal(t, int64(datastore.DefaultDetectionLimit+extraRows), total, "%s limit %d total", name, limit)
 		}
 	}
+}
+
+// TestDetectionRepository_GetAdditionalResultsResolvesNames verifies that the v2
+// repository resolves the alternates' common names and species codes like a
+// detection's own species, strips a stored "Scientific_Common" label to the bare
+// scientific name, and returns the full float64 confidence. The bridge it replaces
+// returns the scientific name as the common name, no code, and a float32.
+func TestDetectionRepository_GetAdditionalResultsResolvesNames(t *testing.T) {
+	t.Parallel()
+
+	const (
+		primarySci    = "Turdus merula"
+		ravenSci      = "Corvus corax"
+		ravenCommon   = "Common Raven"
+		ravenCode     = "comrav"
+		sparrowSci    = "Passer domesticus"
+		sparrowCommon = "House Sparrow"
+		sparrowCode   = "houspa"
+		// More digits than a float32 holds.
+		ravenConfidence = 0.123456789012345
+		sparrowConf     = 0.05
+		delta           = 1e-15
+	)
+	cfg, cfgCleanup := buildTestConfig(t, []string{
+		primarySci + "_Eurasian Blackbird",
+		ravenSci + "_" + ravenCommon,
+		sparrowSci + "_" + sparrowCommon,
+	})
+	cfg.SpeciesCodeMap = map[string]string{ravenSci: ravenCode, sparrowSci: sparrowCode}
+	ds, err := New(cfg)
+	require.NoError(t, err)
+	t.Cleanup(func() { assert.NoError(t, ds.Close()); cfgCleanup() }) // nolint:testifylint // assert not require: cfgCleanup must still run if Close errors; require would Goexit and skip it
+	ctx := t.Context()
+	repo := NewDetectionRepository(ds)
+
+	save := func(additional []detection.AdditionalResult) *detection.Result {
+		t.Helper()
+		result := &detection.Result{
+			Timestamp:   time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC),
+			AudioSource: detection.AudioSource{SafeString: "rtsp_garage", DisplayName: "Garage"},
+			Species:     detection.Species{ScientificName: primarySci, CommonName: "Eurasian Blackbird"},
+			Confidence:  0.9,
+			Model:       birdModelInfo(),
+		}
+		require.NoError(t, repo.Save(ctx, result, additional))
+		require.NotZero(t, result.ID)
+		return result
+	}
+	idString := func(r *detection.Result) string { return strconv.FormatUint(uint64(r.ID), 10) }
+
+	withAlternates := save([]detection.AdditionalResult{{
+		Species:    detection.Species{ScientificName: ravenSci},
+		Confidence: ravenConfidence,
+	}})
+
+	// A stored "Scientific_Common" label. SavePredictionsBatch keeps the existing
+	// rows; SavePredictions would delete them first.
+	label, err := ds.label.GetOrCreate(ctx, sparrowSci+"_"+sparrowCommon, ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+	require.NoError(t, ds.detection.SavePredictionsBatch(ctx, []*entities.DetectionPrediction{{
+		DetectionID: withAlternates.ID, LabelID: label.ID, Confidence: sparrowConf, Rank: 2,
+	}}))
+
+	got, err := repo.GetAdditionalResults(ctx, idString(withAlternates))
+	require.NoError(t, err)
+	require.Len(t, got, 2)
+	bySci := make(map[string]detection.AdditionalResult, len(got))
+	for _, ar := range got {
+		bySci[ar.Species.ScientificName] = ar
+	}
+
+	raven, ok := bySci[ravenSci]
+	require.True(t, ok, "stored alternate must be returned")
+	assert.Equal(t, ravenCommon, raven.Species.CommonName)
+	assert.Equal(t, ravenCode, raven.Species.Code)
+	assert.InDelta(t, ravenConfidence, raven.Confidence, delta, "confidence must not be narrowed to float32")
+	assert.Empty(t, raven.RawLabel, "RawLabel is runtime only and stays empty on read")
+
+	sparrow, ok := bySci[sparrowSci]
+	require.True(t, ok, "a stored Scientific_Common label must be returned as the bare scientific name")
+	assert.Equal(t, sparrowCommon, sparrow.Species.CommonName)
+	assert.Equal(t, sparrowCode, sparrow.Species.Code)
+	assert.InDelta(t, sparrowConf, sparrow.Confidence, delta)
+
+	without := save(nil)
+	none, err := repo.GetAdditionalResults(ctx, idString(without))
+	require.NoError(t, err)
+	assert.Empty(t, none)
 }
