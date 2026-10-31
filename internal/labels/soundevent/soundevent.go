@@ -57,7 +57,8 @@ func Categories() []Category {
 // case-insensitive. It does NOT match truncated first-token forms; callers that only
 // have the first token (the image provider) must use IsName instead.
 // ok is false for species labels and any unknown label. BirdNET v2.x non-species
-// classes have no category; they are recognised by IsLabel and IsName only.
+// classes define no category of their own; a class whose bare name is also a Perch
+// key (for example "dog") returns that Perch category here.
 func CategoryOf(rawLabel string) (Category, bool) {
 	cat, ok := classes[strings.ToLower(rawLabel)]
 	return cat, ok

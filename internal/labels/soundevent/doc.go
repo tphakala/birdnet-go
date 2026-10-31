@@ -13,7 +13,9 @@
 // Fireworks, Gun, Human non-vocal, Human vocal, Human whistle, Noise, Power
 // tools, Siren) plus the legacy "Jet". They are kept in birdnet_classes.go,
 // matched by [IsLabel] on the part of a raw label before the first underscore
-// and by [IsName] on the stored name, and have no [Category].
+// and by [IsName] on the stored name. They define no [Category] of their own; a
+// class whose bare name is also a Perch class has that Perch category from
+// [CategoryOf].
 //
 // It exposes these lookup paths:
 //
