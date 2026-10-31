@@ -4,7 +4,7 @@ vars:
   BINARY_DIR: bin
   BINARY_NAME: birdnet-go
   TFLITE_VERSION: v2.17.1
-  ONNXRUNTIME_VERSION: '1.31.0'
+  ONNXRUNTIME_VERSION: '1.31.1'
   # golangci-lint version .golangci.yaml is written for; keep in sync with
   # .github/workflows/golangci-lint.yml, .husky/pre-commit and
   # .devcontainer/postCreateCommand.sh;

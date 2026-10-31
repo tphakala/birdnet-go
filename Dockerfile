@@ -12,7 +12,7 @@ ARG TENSORFLOW_VERSION=2.17.1
 # sync with TENSORFLOW_VERSION (headers) and the Taskfile TFLITE_VERSION var; the
 # runtime-base stage downloads the matching prebuilt libtensorflowlite_c.so.
 ARG TFLITE_VERSION=v2.17.1
-ARG ONNXRUNTIME_VERSION=1.31.0
+ARG ONNXRUNTIME_VERSION=1.31.1
 # OpenVINO toolkit pin for the runtime libraries bundled into the images. Keep the
 # release/build in sync with the Taskfile OPENVINO_RELEASE / OPENVINO_BUILD values;
 # the SHA256s are per-arch (arm64 matches the Taskfile OPENVINO_SHA256 header pin).

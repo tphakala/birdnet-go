@@ -14,7 +14,7 @@ ONNX Runtime is a shared library required by BirdNET-Go for neural network infer
 
 ## Required Version
 
-BirdNET-Go requires **ONNX Runtime 1.29 or newer**; release builds and the Docker image ship 1.31.0. The Go bindings request ONNX Runtime C API version 29, which 1.29 and later provide; older versions fail to load. Releases up to and including 20261014 need ONNX Runtime 1.25.x.
+BirdNET-Go requires **ONNX Runtime 1.29 or newer**; release builds and the Docker image ship 1.31.1. The Go bindings request ONNX Runtime C API version 29, which 1.29 and later provide; older versions fail to load. Releases up to and including 20261014 need ONNX Runtime 1.25.x.
 
 ## Installing from Release Tarballs
 
@@ -104,7 +104,7 @@ If you are building from source or need to install ONNX Runtime separately, down
 ### Linux (x86_64 / amd64)
 
 ```bash
-VERSION=1.31.0
+VERSION=1.31.1
 
 curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-x64-${VERSION}.tgz" \
   -o onnxruntime.tgz
@@ -121,7 +121,7 @@ rm -rf onnxruntime.tgz onnxruntime-tmp
 ### Linux (aarch64 / arm64)
 
 ```bash
-VERSION=1.31.0
+VERSION=1.31.1
 
 curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-linux-aarch64-${VERSION}.tgz" \
   -o onnxruntime.tgz
@@ -138,7 +138,7 @@ This covers Raspberry Pi 4/5 (64-bit OS), NVIDIA Jetson, and other ARM64 single-
 ### macOS (Apple Silicon / arm64)
 
 ```bash
-VERSION=1.31.0
+VERSION=1.31.1
 
 curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-osx-arm64-${VERSION}.tgz" \
   -o onnxruntime.tgz
@@ -154,7 +154,7 @@ rm -rf onnxruntime.tgz onnxruntime-tmp
 For Intel Macs (x86_64), replace `arm64` with `x86_64` in the download URL:
 
 ```bash
-VERSION=1.31.0
+VERSION=1.31.1
 
 curl -fsSL "https://github.com/microsoft/onnxruntime/releases/download/v${VERSION}/onnxruntime-osx-x86_64-${VERSION}.tgz" \
   -o onnxruntime.tgz
@@ -167,7 +167,7 @@ Note: BirdNET-Go does not currently publish pre-built binaries for Intel Macs. Y
 Download from a browser or PowerShell:
 
 ```powershell
-$VERSION = "1.31.0"
+$VERSION = "1.31.1"
 
 Invoke-WebRequest `
   -Uri "https://github.com/microsoft/onnxruntime/releases/download/v$VERSION/onnxruntime-win-x64-$VERSION.zip" `
@@ -239,7 +239,7 @@ where.exe onnxruntime.dll
 When BirdNET-Go starts, it logs the ONNX Runtime version it loaded. Look for a line like:
 
 ```text
-INFO  [inference] ONNX Runtime initialized version=1.31.0 library_path=/usr/lib/libonnxruntime.so ort_disable_telemetry=1 telemetry_disabled=true telemetry_api_disabled=true
+INFO  [inference] ONNX Runtime initialized version=1.31.1 library_path=/usr/lib/libonnxruntime.so ort_disable_telemetry=1 telemetry_disabled=true telemetry_api_disabled=true
 ```
 
 If the library is missing, you will see an error like:
@@ -290,7 +290,7 @@ Move `onnxruntime.dll` to the same folder as the executable.
 
 ### Wrong ONNX Runtime version
 
-If BirdNET-Go reports version incompatibility errors, install ONNX Runtime 1.29 or newer (releases ship 1.31.0), as described at the top of this guide.
+If BirdNET-Go reports version incompatibility errors, install ONNX Runtime 1.29 or newer (releases ship 1.31.1), as described at the top of this guide.
 
 ### Permission denied errors
 
