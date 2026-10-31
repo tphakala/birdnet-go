@@ -737,7 +737,9 @@ func TestDetectionRepository_GetBySpeciesDefaultLimit(t *testing.T) {
 // repository resolves the alternates' common names and species codes like a
 // detection's own species, strips a stored "Scientific_Common" label to the bare
 // scientific name, and returns the full float64 confidence. The bridge it replaces
-// returns the scientific name as the common name, no code, and a float32.
+// returns the scientific name as the common name, no code, and a float32. It also
+// checks that a label without a scientific name is skipped and a non-numeric id is
+// rejected.
 func TestDetectionRepository_GetAdditionalResultsResolvesNames(t *testing.T) {
 	t.Parallel()
 
@@ -752,6 +754,7 @@ func TestDetectionRepository_GetAdditionalResultsResolvesNames(t *testing.T) {
 		// More digits than a float32 holds.
 		ravenConfidence = 0.123456789012345
 		sparrowConf     = 0.05
+		ghostConf       = 0.5
 		delta           = 1e-15
 	)
 	cfg, cfgCleanup := buildTestConfig(t, []string{
@@ -794,9 +797,16 @@ func TestDetectionRepository_GetAdditionalResultsResolvesNames(t *testing.T) {
 		DetectionID: withAlternates.ID, LabelID: label.ID, Confidence: sparrowConf, Rank: 2,
 	}}))
 
+	// A stored label with no scientific part names no species and is skipped.
+	ghost, err := ds.label.GetOrCreate(ctx, "_Unnamed", ds.defaultModelID, ds.speciesLabelTypeID, ds.avesClassID)
+	require.NoError(t, err)
+	require.NoError(t, ds.detection.SavePredictionsBatch(ctx, []*entities.DetectionPrediction{{
+		DetectionID: withAlternates.ID, LabelID: ghost.ID, Confidence: ghostConf, Rank: 3,
+	}}))
+
 	got, err := repo.GetAdditionalResults(ctx, idString(withAlternates))
 	require.NoError(t, err)
-	require.Len(t, got, 2)
+	require.Len(t, got, 2, "the label without a scientific name must not be returned")
 	bySci := make(map[string]detection.AdditionalResult, len(got))
 	for _, ar := range got {
 		bySci[ar.Species.ScientificName] = ar
@@ -819,4 +829,7 @@ func TestDetectionRepository_GetAdditionalResultsResolvesNames(t *testing.T) {
 	none, err := repo.GetAdditionalResults(ctx, idString(without))
 	require.NoError(t, err)
 	assert.Empty(t, none)
+
+	_, err = repo.GetAdditionalResults(ctx, "not-an-id")
+	require.Error(t, err, "a non-numeric id must be rejected")
 }
