@@ -27,6 +27,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/detection"
 	"github.com/tphakala/birdnet-go/internal/imageprovider"
+	"github.com/tphakala/birdnet-go/internal/labels/soundevent"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/mqtt"
 	"github.com/tphakala/birdnet-go/internal/notification"
@@ -931,6 +932,8 @@ func (p *Processor) mergePendingHit(item *classifier.Results, det *Detections, h
 }
 
 // processResults processes the results from the BirdNET prediction and returns a list of detections.
+// Every range-filter decision (the Last-heard feed, the primary gate and the
+// stored alternates) reads the settings snapshot passed in, not the processor's own settings.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) processResults(settings *conf.Settings, item classifier.Results) []Detections {
@@ -989,7 +992,7 @@ func (p *Processor) processResults(settings *conf.Settings, item classifier.Resu
 		// species passes the range filter. This is independent of whether the
 		// detection is saved below (saved detections also clear this bar).
 		if result.Confidence > baseThreshold {
-			inRange := !shouldApplyRangeFilter(item.ModelID, settings) || settings.IsSpeciesIncluded(result.Species)
+			inRange := passesRangeFilter(item.ModelID, settings, result.Species)
 			p.updateLastDetection(item.ModelID, commonName, scientificName, float64(result.Confidence), feedTime, inRange, feedThrottle)
 		}
 
@@ -1162,6 +1165,24 @@ func shouldApplyRangeFilter(modelID string, settings *conf.Settings) bool {
 	return classifier.ParticipatesInRangeFilter(modelID)
 }
 
+// passesRangeFilter reports whether rawLabel survives the range filter for the
+// given model under the given settings snapshot: always true when the filter
+// does not apply (see shouldApplyRangeFilter), otherwise true when the species
+// is on the included list. The Last-heard feed, the primary gate in
+// shouldFilterDetection and the stored alternates all use it, so they agree on
+// one chunk.
+func passesRangeFilter(modelID string, settings *conf.Settings, rawLabel string) bool {
+	return !shouldApplyRangeFilter(modelID, settings) || settings.IsSpeciesIncluded(rawLabel)
+}
+
+// isRangeExemptLabel reports whether rawLabel is a sound-event, human or dog
+// class. Stored alternates of these classes are never range-filtered: they are
+// not geographic species, so an included list built from species ranges says
+// nothing about them.
+func isRangeExemptLabel(rawLabel string) bool {
+	return soundevent.IsLabel(rawLabel) || isHumanSoundLabel(rawLabel) || isDogDetection(rawLabel)
+}
+
 // nonFiniteConfidenceWarned guards the once-per-(model, source) warning for
 // non-finite confidences in shouldFilterDetection. Keyed on both so a second
 // broken backend or source still announces itself.
@@ -1254,7 +1275,7 @@ func (p *Processor) shouldFilterDetection(settings *conf.Settings, result datast
 		return true, confidenceThreshold
 	}
 
-	if shouldApplyRangeFilter(modelID, settings) && !settings.IsSpeciesIncluded(result.Species) {
+	if !passesRangeFilter(modelID, settings, result.Species) {
 		if settings.Debug {
 			GetLogger().Debug("species not on included list",
 				logger.String("species", result.Species),
@@ -1289,6 +1310,9 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 }
 
 // createDetection creates a detection object with all necessary information.
+// Its stored alternate predictions are limited to those that pass the range
+// filter under the given settings snapshot (see passesRangeFilter); sound-event,
+// human and dog classes are exempt.
 // Its ClipName is chosen from the Result's own model and sample rate, the fields
 // the audio exporter reads.
 //
@@ -1330,8 +1354,13 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	detectionResult.ClipSampleRate = plannedClipSampleRate(&detectionResult, &settings.Realtime.Audio.Export)
 
 	// Convert additional results from datastore.Results to detection.AdditionalResult.
-	// Exclude the primary species since it's already stored as Detection.LabelID.
-	additionalResults := convertToAdditionalResults(item.Results, scientificName)
+	// Exclude the primary species since it's already stored as Detection.LabelID,
+	// and keep only alternates that pass the same range rule as the primary,
+	// judged against this chunk's settings snapshot.
+	keep := func(rawLabel string) bool {
+		return passesRangeFilter(item.ModelID, settings, rawLabel) || isRangeExemptLabel(rawLabel)
+	}
+	additionalResults := convertToAdditionalResults(item.Results, scientificName, keep)
 
 	// NOTE: Species tracker is NOT updated here. The tracker is updated solely
 	// through the atomic CheckAndUpdateSpecies() in DatabaseAction.ExecuteContext,
@@ -1430,7 +1459,8 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 // The primary species is excluded since it's already stored as Detection.LabelID.
 // Custom BirdNET classifiers can have the same species at multiple positions in the label file,
 // producing duplicate entries in prediction results that would cause UNIQUE constraint violations.
-func convertToAdditionalResults(results []datastore.Results, primaryScientificName string) []detection.AdditionalResult {
+// Rows for which keep returns false are dropped; createDetection passes the range-filter rule.
+func convertToAdditionalResults(results []datastore.Results, primaryScientificName string, keep func(rawLabel string) bool) []detection.AdditionalResult {
 	additional := make([]detection.AdditionalResult, 0, len(results))
 	seen := make(map[string]int, len(results)) // scientificName → index in additional
 	for _, r := range results {
@@ -1439,6 +1469,9 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 		// either: it would be persisted as NULL on SQLite and rejected by MySQL,
 		// failing the whole save.
 		if !isFiniteConfidence(r.Confidence) {
+			continue
+		}
+		if !keep(r.Species) {
 			continue
 		}
 		sp := detection.ParseSpeciesString(r.Species)
