@@ -133,21 +133,22 @@ Lightweight connectivity check. Returns a minimal response with no database quer
 
 ### Detections (`detections/detections.go`)
 
-| Method | Route                         | Handler                  | Auth | Description                                                                                                                |
-| ------ | ----------------------------- | ------------------------ | ---- | -------------------------------------------------------------------------------------------------------------------------- |
-| GET    | `/detections`                 | `GetDetections`          | ❌   | List bird detections; `source` (id from `/analytics/sources`, display name, node name or URI) restricts to an audio source |
-| GET    | `/detections/:id`             | `GetDetection`           | ❌   | Get specific detection                                                                                                     |
-| GET    | `/detections/recent`          | `GetRecentDetections`    | ❌   | Recent detections; `limit` defaults to 10 and is capped at 1000                                                            |
-| GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay`  | ❌   | Detection time context                                                                                                     |
-| DELETE | `/detections/:id`             | `DeleteDetection`        | ✅   | Delete detection record                                                                                                    |
-| POST   | `/detections/:id/review`      | `ReviewDetection`        | ✅   | Review/verify detection                                                                                                    |
-| POST   | `/detections/:id/lock`        | `LockDetection`          | ✅   | Lock detection from changes                                                                                                |
-| POST   | `/detections/ignore`          | `IgnoreSpecies`          | ✅   | Toggle species in ignore list (add/remove)                                                                                 |
-| GET    | `/detections/ignored`         | `GetExcludedSpecies`     | ✅   | Get list of excluded species                                                                                               |
-| POST   | `/detections/batch/delete`    | `BatchDeleteDetections`  | ✅   | Bulk delete detections by ID                                                                                               |
-| POST   | `/detections/batch/review`    | `BatchReviewDetections`  | ✅   | Bulk set verification status                                                                                               |
-| POST   | `/detections/batch/lock`      | `BatchLockDetections`    | ✅   | Bulk lock or unlock detections                                                                                             |
-| POST   | `/detections/batch/resolve`   | `BatchResolveDetections` | ✅   | Resolve query params to detection IDs                                                                                      |
+| Method | Route                         | Handler                   | Auth | Description                                                                                                                |
+| ------ | ----------------------------- | ------------------------- | ---- | -------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/detections`                 | `GetDetections`           | ❌   | List bird detections; `source` (id from `/analytics/sources`, display name, node name or URI) restricts to an audio source |
+| GET    | `/detections/:id`             | `GetDetection`            | ❌   | Get specific detection                                                                                                     |
+| GET    | `/detections/recent`          | `GetRecentDetections`     | ❌   | Recent detections; `limit` defaults to 10 and is capped at 1000                                                            |
+| GET    | `/detections/:id/time-of-day` | `GetDetectionTimeOfDay`   | ❌   | Detection time context                                                                                                     |
+| GET    | `/detections/:id/predictions` | `GetDetectionPredictions` | ❌   | Alternate species the detecting model scored (enhanced database only)                                                      |
+| DELETE | `/detections/:id`             | `DeleteDetection`         | ✅   | Delete detection record                                                                                                    |
+| POST   | `/detections/:id/review`      | `ReviewDetection`         | ✅   | Review/verify detection                                                                                                    |
+| POST   | `/detections/:id/lock`        | `LockDetection`           | ✅   | Lock detection from changes                                                                                                |
+| POST   | `/detections/ignore`          | `IgnoreSpecies`           | ✅   | Toggle species in ignore list (add/remove)                                                                                 |
+| GET    | `/detections/ignored`         | `GetExcludedSpecies`      | ✅   | Get list of excluded species                                                                                               |
+| POST   | `/detections/batch/delete`    | `BatchDeleteDetections`   | ✅   | Bulk delete detections by ID                                                                                               |
+| POST   | `/detections/batch/review`    | `BatchReviewDetections`   | ✅   | Bulk set verification status                                                                                               |
+| POST   | `/detections/batch/lock`      | `BatchLockDetections`     | ✅   | Bulk lock or unlock detections                                                                                             |
+| POST   | `/detections/batch/resolve`   | `BatchResolveDetections`  | ✅   | Resolve query params to detection IDs                                                                                      |
 
 ### Integrations (`integrations/integrations.go`)
 
@@ -326,6 +327,28 @@ written best-effort).
 - `POST /search` does not carry it.
 - The SSE `pending` event has its own `modelContributions` with a different element shape (`modelID`,
   `hitCount`, `maxConfidence`, present only when more than one model contributed).
+
+**Detection predictions.** On the enhanced (v2) database, `GET /detections/:id/predictions` returns the
+alternate species the detecting model scored for one detection. `modelPredictions` has one element per
+model, today at most one, with `modelName`, `modelVersion`, `modelVariant`, `modelType` and `predictions`.
+`predictions` is never empty, and `modelPredictions` is `[]` when nothing remains after filtering. Each
+prediction has `scientificName` (the current, canonical name), `commonName`, `speciesCode` and
+`confidence`, ordered by confidence descending, then by scientific name.
+
+- Filtered out: the detected species and its aliases, human sound classes, and a dog class that scores
+  below every other alternate. This is a heuristic: the classifier adds one past its top results so that
+  it stays visible, which a low dog score usually is, but a genuine low-scoring dog result goes with it.
+- Scope: the species the detecting model ranked in its top 10 for the analysis window that produced
+  the detection, without the detected species and, when a location is set and the model takes part in
+  range filtering, without species outside the location's range (for detections saved after the range
+  filter was applied to alternates), so fewer than 10 can remain. Other models and other windows are
+  not stored, so a species missing here may still have been scored.
+- Old rows: detections saved before this version may list species outside the location's range;
+  detections migrated from the legacy database list only alternates at or above 30 percent; Perch
+  detections saved before human class names were stored in full may list truncated human class names such
+  as Male or Child.
+- Status codes: `409` when the enhanced database is not in use, `400` for an id that is not a positive
+  integer that fits in 32 bits, `404` when the detection does not exist, and `500` for a database error.
 
 ### Notifications (`notifications/notifications.go`)
 

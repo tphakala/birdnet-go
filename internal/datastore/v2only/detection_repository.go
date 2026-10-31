@@ -53,6 +53,56 @@ func (r *detectionRepository) Get(ctx context.Context, id string) (*detection.Re
 	return r.ds.detectionToResult(ctx, det), nil
 }
 
+// GetAdditionalResults returns the stored alternate predictions of a detection. The
+// species names and codes resolve like those of the detection's own species, and the
+// confidence is the full float64 (the bridge would give the scientific name as common
+// name, no code and a float32). The order is unspecified. A row whose label is missing
+// is skipped.
+func (r *detectionRepository) GetAdditionalResults(ctx context.Context, id string) ([]detection.AdditionalResult, error) {
+	detID, err := parseID(id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get additional results for detection %s: %w", id, err)
+	}
+	preds, err := r.ds.detection.GetPredictions(ctx, detID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get additional results for detection %s: %w", id, err)
+	}
+	if len(preds) == 0 {
+		return nil, nil
+	}
+
+	// (detection_id, label_id) is unique, so the label IDs are already distinct.
+	labelIDs := make([]uint, 0, len(preds))
+	for _, pred := range preds {
+		labelIDs = append(labelIDs, pred.LabelID)
+	}
+	labels, err := r.ds.label.GetByIDs(ctx, labelIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load labels of additional results for detection %s: %w", id, err)
+	}
+
+	results := make([]detection.AdditionalResult, 0, len(preds))
+	for _, pred := range preds {
+		label, ok := labels[pred.LabelID]
+		if !ok || label == nil {
+			continue
+		}
+		sci := detection.ExtractScientificName(label.ScientificName)
+		if sci == "" {
+			continue
+		}
+		results = append(results, detection.AdditionalResult{
+			Species: detection.Species{
+				ScientificName: sci,
+				CommonName:     r.ds.resolveCommonName(sci),
+				Code:           r.ds.speciesCodeMap[sci],
+			},
+			Confidence: pred.Confidence,
+		})
+	}
+	return results, nil
+}
+
 // GetRecent retrieves the most recent detections.
 func (r *detectionRepository) GetRecent(ctx context.Context, limit int) ([]*detection.Result, error) {
 	dets, err := r.ds.recentDetections(ctx, limit)
