@@ -338,6 +338,8 @@ RealtimeSettings contains all settings related to realtime processing.
 | `realtime.extendedcapture.maxduration` | integer |  |
 | `realtime.extendedcapture.capturebufferseconds` | integer |  |
 | `realtime.extendedcapture.species` | string[] |  |
+| `realtime.firstdailyconsensus.enabled` | boolean | true to require two models to confirm a species' first detection of the day, when at least two models analyzing its audio source can identify the species |
+| `realtime.firstdailyconsensus.whitelist` | string[] | species exempt from the rule, matched by common or scientific name |
 
 ## webserver
 

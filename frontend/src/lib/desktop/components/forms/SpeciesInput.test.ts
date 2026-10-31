@@ -282,6 +282,7 @@ describe('SpeciesInput', () => {
     });
 
     expect(screen.getByText('Type to search for species')).toBeInTheDocument();
+    expect(screen.getByRole('combobox')).toHaveAccessibleDescription('Type to search for species');
   });
 
   it('shows tooltip button when tooltip provided', () => {
