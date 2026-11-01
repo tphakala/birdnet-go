@@ -49,11 +49,12 @@ func (c *Controller) loadFoldedCommonNameMap() map[string]string {
 	return c.loadNameMaps().SciToCommonFolded
 }
 
-// canonicalizeExcludeList canonicalizes the species exclude list (resolve each
-// entry to its scientific name, drop blanks, de-duplicate case-insensitively). It
-// is a thin facade wrapper over apicore.CanonicalizeExcludeList so the settings
-// save flow and the detection ignore/review handlers keep the stored list in a
-// single canonical form. Returns nil for an empty/all-blank input.
+// canonicalizeExcludeList canonicalizes a species list (resolve each entry to its
+// scientific name, drop blanks, de-duplicate case-insensitively). It is a thin
+// facade wrapper over apicore.CanonicalizeExcludeList so the settings save flow
+// (the exclude list and the model consensus list) and the detection ignore/review
+// handlers keep the stored lists in a single canonical form. Returns nil for an
+// empty/all-blank input.
 func (c *Controller) canonicalizeExcludeList(exclude []string) []string {
 	return apicore.CanonicalizeExcludeList(c.loadCommonToScientificMap(), exclude)
 }
