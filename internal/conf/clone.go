@@ -73,6 +73,9 @@ func CloneSettings(src *Settings) *Settings {
 	// Realtime.DaylightFilter.
 	dst.Realtime.DaylightFilter.Species = slices.Clone(src.Realtime.DaylightFilter.Species)
 
+	// Realtime.ModelConsensus.
+	dst.Realtime.ModelConsensus.Species = slices.Clone(src.Realtime.ModelConsensus.Species)
+
 	// Realtime.RTSP.
 	dst.Realtime.RTSP.Streams = cloneStreamConfigs(src.Realtime.RTSP.Streams)
 	dst.Realtime.RTSP.URLs = slices.Clone(src.Realtime.RTSP.URLs)

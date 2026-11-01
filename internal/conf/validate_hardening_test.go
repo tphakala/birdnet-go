@@ -751,3 +751,53 @@ func TestValidateSpeciesConfig_NaNThresholdRejected(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "threshold")
 }
+
+func TestValidateModelConsensusSettings(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name      string
+		cfg       ModelConsensusSettings
+		wantError bool
+	}{
+		{"disabled zero accepted", ModelConsensusSettings{MinModels: 0}, false},
+		{"disabled in range accepted", ModelConsensusSettings{MinModels: MaxModelConsensusMinModels}, false},
+		{"disabled below minimum rejected", ModelConsensusSettings{MinModels: MinModelConsensusMinModels - 1}, true},
+		{"disabled above maximum rejected", ModelConsensusSettings{MinModels: MaxModelConsensusMinModels + 1}, true},
+		{"all species zero rejected", ModelConsensusSettings{AllSpecies: true, MinModels: 0}, true},
+		{"all species below minimum rejected", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels - 1}, true},
+		{"listed species above maximum rejected", ModelConsensusSettings{ListedSpecies: true, MinModels: MaxModelConsensusMinModels + 1}, true},
+		{"enabled minimum accepted", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels}, false},
+		{"enabled maximum accepted", ModelConsensusSettings{ListedSpecies: true, MinModels: MaxModelConsensusMinModels}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := validateModelConsensusSettings(&tt.cfg)
+			if tt.wantError {
+				assertValidationError(t, err, "model-consensus-min-models")
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestValidateRealtimeSettings_ModelConsensusWired pins that the realtime
+// validator, which the settings API runs on every save, rejects an enabled model
+// consensus filter with an unusable minimum.
+func TestValidateRealtimeSettings_ModelConsensusWired(t *testing.T) {
+	t.Parallel()
+	settings := &RealtimeSettings{
+		Interval: DefaultRealtimeInterval,
+		Audio: AudioSettings{
+			Sources: []AudioSourceConfig{{Name: "test", Device: testAudioDeviceSysdefault, Model: "birdnet"}},
+			Export:  ExportSettings{Type: AudioExportTypeWAV},
+		},
+		ModelConsensus: ModelConsensusSettings{AllSpecies: true, MinModels: 9},
+	}
+
+	assertValidationError(t, validateRealtimeSettings(settings), "model-consensus-min-models")
+
+	settings.ModelConsensus.MinModels = MinModelConsensusMinModels
+	assert.NoError(t, validateRealtimeSettings(settings))
+}

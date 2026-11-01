@@ -199,6 +199,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Realtime.PrivacyFilter":  {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.DogBarkFilter":  {categories: []hotReloadCategory{hotReloadFresh}},
 	"Realtime.DaylightFilter": {categories: []hotReloadCategory{hotReloadFresh}},
+	"Realtime.ModelConsensus": {categories: []hotReloadCategory{hotReloadFresh}},
 
 	// -- RTSP --
 	"Realtime.RTSP.Streams.*.Name":        {categories: []hotReloadCategory{hotReloadFresh}, action: "reconfigure_rtsp_sources"},

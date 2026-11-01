@@ -101,6 +101,17 @@ const (
 	// scale, at which an alternate prediction of a detection is stored.
 	// normalizeAlternateMinConfidence resets an invalid value to it on load.
 	DefaultAlternateMinConfidence = 0.1
+
+	// DefaultModelConsensusMinModels is the default number of agreeing models the
+	// model consensus filter requires. normalizeModelConsensus resets an invalid
+	// value to it on load.
+	DefaultModelConsensusMinModels = 2
+
+	// MinModelConsensusMinModels is the lowest accepted model consensus minmodels value.
+	MinModelConsensusMinModels = 2
+
+	// MaxModelConsensusMinModels is the highest accepted model consensus minmodels value.
+	MaxModelConsensusMinModels = 4
 )
 
 // DefaultSessionDuration is the default session duration (7 days).
