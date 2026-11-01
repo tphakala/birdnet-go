@@ -1325,7 +1325,7 @@ type BirdNETConfig struct {
 
 	// AlternateMinConfidence is the lowest confidence, on the 0 to 1 scale, at which
 	// an alternate prediction of a detection is stored. Alternates below it are
-	// dropped when the detection is created; the detected species itself is never
+	// dropped when the detection is saved; the detected species itself is never
 	// affected. 0 stores every alternate. Rows already in the database are not
 	// changed. Not shown in the web UI. Defaults to 0.1. Hot-reloadable through the
 	// settings API; a config file edit applies at the next start.

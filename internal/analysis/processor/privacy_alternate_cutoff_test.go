@@ -15,8 +15,8 @@ import (
 )
 
 // TestProcessResults_AlternateMinConfidenceKeepsPrivacyAndDogFilters pins that
-// birdnet.alternateminconfidence only trims the stored alternates: the privacy
-// and dog bark filters still see a below-cutoff human or dog result from the
+// birdnet.alternateminconfidence only trims the stored alternates, at the save
+// step: the privacy and dog bark filters still see a below-cutoff human or dog result from the
 // in-memory classifier output, and still discard the bird of the same chunk.
 // Not parallel: the dog bark filter reads the global settings.
 func TestProcessResults_AlternateMinConfidenceKeepsPrivacyAndDogFilters(t *testing.T) {
@@ -95,10 +95,10 @@ func TestProcessResults_AlternateMinConfidenceKeepsPrivacyAndDogFilters(t *testi
 				assert.True(t, discard, "the bird must still be discarded (cutoff %v)", cutoff)
 				assert.Equal(t, tt.wantDiscard, reason)
 
-				// Storage is trimmed: the filter class row is stored only without the cutoff.
-				stored := slices.ContainsFunc(detections[0].Results, func(r detection.AdditionalResult) bool {
-					return r.RawLabel == tt.label
-				})
+				// Later stages see the whole list; only the save step trims it.
+				isFilterRow := func(r detection.AdditionalResult) bool { return r.RawLabel == tt.label }
+				require.True(t, slices.ContainsFunc(detections[0].Results, isFilterRow), "the below-cutoff row stays on the detection (cutoff %v)", cutoff)
+				stored := slices.ContainsFunc(storedAlternates(detections[0].Results, cutoff), isFilterRow)
 				assert.Equal(t, cutoff == 0, stored, "stored alternate for cutoff %v", cutoff)
 			})
 		}

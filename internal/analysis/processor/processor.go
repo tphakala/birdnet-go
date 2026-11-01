@@ -1310,12 +1310,13 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 }
 
 // createDetection creates a detection object with all necessary information.
-// Its stored alternate predictions are limited to those that pass the range
-// filter under the given settings snapshot (see passesRangeFilter), where
-// sound-event, human and dog classes are exempt, and reach
-// BirdNET.AlternateMinConfidence of the same snapshot. The cutoff trims only what
-// is stored; the primary detection and the privacy and dog filters, which read
-// the classifier results, are unaffected.
+// Every finite alternate prediction is carried on the returned Detections, so no
+// pipeline stage sees a trimmed list. Alternates that fail the range filter under
+// the given settings snapshot (see passesRangeFilter; sound-event, human and dog
+// classes are exempt) are tagged OutOfRange. The save step (storedAlternates)
+// drops tagged rows and rows below BirdNET.AlternateMinConfidence; the primary
+// detection and the privacy and dog filters, which read the classifier results,
+// are unaffected.
 // Its ClipName is chosen from the Result's own model and sample rate, the fields
 // the audio exporter reads.
 //
@@ -1358,13 +1359,12 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 
 	// Convert additional results from datastore.Results to detection.AdditionalResult.
 	// Exclude the primary species since it's already stored as Detection.LabelID,
-	// and keep only alternates that pass the same range rule as the primary,
-	// judged against this chunk's settings snapshot, which also supplies the
-	// confidence cutoff for stored alternates.
+	// and tag alternates that fail the same range rule as the primary, judged
+	// against this chunk's settings snapshot, so the save step can drop them.
 	keep := func(rawLabel string) bool {
 		return passesRangeFilter(item.ModelID, settings, rawLabel) || isRangeExemptLabel(rawLabel)
 	}
-	additionalResults := convertToAdditionalResults(item.Results, scientificName, settings.BirdNET.AlternateMinConfidence, keep)
+	additionalResults := convertToAdditionalResults(item.Results, scientificName, keep)
 
 	// NOTE: Species tracker is NOT updated here. The tracker is updated solely
 	// through the atomic CheckAndUpdateSpecies() in DatabaseAction.ExecuteContext,
@@ -1463,10 +1463,11 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 // The primary species is excluded since it's already stored as Detection.LabelID.
 // Custom BirdNET classifiers can have the same species at multiple positions in the label file,
 // producing duplicate entries in prediction results that would cause UNIQUE constraint violations.
-// Rows for which keep returns false are dropped; createDetection passes the range-filter rule.
-// Rows with a confidence below minConfidence are dropped too; a minConfidence not above 0
-// keeps every row.
-func convertToAdditionalResults(results []datastore.Results, primaryScientificName string, minConfidence float64, keep func(rawLabel string) bool) []detection.AdditionalResult {
+// Rows for which keep returns false are tagged OutOfRange instead of dropped; createDetection
+// passes the range-filter rule and storedAlternates drops the tagged rows at the save step.
+// When raw labels of one scientific name differ in verdict, the kept row wins the dedup
+// regardless of confidence, so the species stays stored.
+func convertToAdditionalResults(results []datastore.Results, primaryScientificName string, keep func(rawLabel string) bool) []detection.AdditionalResult {
 	additional := make([]detection.AdditionalResult, 0, len(results))
 	seen := make(map[string]int, len(results)) // scientificName → index in additional
 	for _, r := range results {
@@ -1477,15 +1478,7 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 		if !isFiniteConfidence(r.Confidence) {
 			continue
 		}
-		// Inclusive cutoff, compared in float32 like the detection threshold so a
-		// row exactly at the cutoff is kept. It runs before the dedup so a weak
-		// duplicate never counts. A value not above 0 disables it.
-		if minConfidence > 0 && r.Confidence < float32(minConfidence) {
-			continue
-		}
-		if !keep(r.Species) {
-			continue
-		}
+		outOfRange := !keep(r.Species)
 		sp := detection.ParseSpeciesString(r.Species)
 		// Canonicalize the candidate's scientific name so the primary species is
 		// excluded even when this prediction carries it under a legacy/alias name.
@@ -1496,12 +1489,18 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 			continue
 		}
 		if idx, exists := seen[sp.ScientificName]; exists {
-			// Keep the higher confidence entry
-			if float64(r.Confidence) > additional[idx].Confidence {
+			// A kept row beats an out-of-range one; otherwise keep the higher confidence.
+			cur := additional[idx]
+			replace := float64(r.Confidence) > cur.Confidence
+			if cur.OutOfRange != outOfRange {
+				replace = cur.OutOfRange
+			}
+			if replace {
 				additional[idx] = detection.AdditionalResult{
 					Species:    sp,
 					Confidence: float64(r.Confidence),
 					RawLabel:   r.Species,
+					OutOfRange: outOfRange,
 				}
 			}
 			continue
@@ -1511,6 +1510,7 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 			Species:    sp,
 			Confidence: float64(r.Confidence),
 			RawLabel:   r.Species,
+			OutOfRange: outOfRange,
 		})
 	}
 	return additional
@@ -2401,7 +2401,7 @@ func (p *Processor) getDefaultActions(det *Detections, settings *conf.Settings) 
 			processor:         p,            // Add processor reference for source name resolution
 			DetectionCtx:      detectionCtx, // Share context for downstream actions
 			Result:            det.Result,   // Domain model (single source of truth)
-			Results:           det.Results,  // Domain model - converted to legacy format at save time
+			Results:           det.Results,  // Domain model - all alternates, trimmed at save
 			Ds:                p.Ds,         // Legacy - kept for backward compatibility
 			Repo:              p.Repo,       // New - preferred path for database operations
 			CorrelationID:     det.CorrelationID,

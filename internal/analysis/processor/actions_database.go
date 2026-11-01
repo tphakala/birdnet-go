@@ -265,13 +265,21 @@ func (a *DatabaseAction) saveGuarded(ctx context.Context) error {
 // saveDetection runs one save attempt through the repository, or through the
 // legacy datastore when no repository is set.
 func (a *DatabaseAction) saveDetection(ctx context.Context) error {
+	// Trim here so every repository stores the same rows. The filter returns a new
+	// slice, so a retry starts from the same a.Results.
+	// An action without a settings snapshot applies no cutoff.
+	var cutoff float64
+	if a.Settings != nil {
+		cutoff = a.Settings.BirdNET.AlternateMinConfidence
+	}
+	alternates := storedAlternates(a.Results, cutoff)
 	if a.Repo != nil {
 		// New path: Use DetectionRepository (handles conversion internally).
 		// The CompositeAction gives each step 10 s, so a save that honoured that
 		// deadline would roll back and lose a detection that commits late; the
 		// repository keeps its own transaction timeout. A queue retry only follows
 		// a failure the repository reports as having stored nothing.
-		return a.Repo.Save(context.WithoutCancel(ctx), &a.Result, a.Results)
+		return a.Repo.Save(context.WithoutCancel(ctx), &a.Result, alternates)
 	}
 
 	// Legacy path: Use datastore.Interface directly
@@ -281,7 +289,7 @@ func (a *DatabaseAction) saveDetection(ctx context.Context) error {
 	// Convert domain AdditionalResults to legacy datastore.Results format for GORM.
 	// Results are passed separately to Save() - not assigned to note.Results because
 	// saveNoteInTransaction uses Omit("Results") to prevent GORM auto-save.
-	legacyResults := datastore.AdditionalResultsToDatastoreResults(a.Results)
+	legacyResults := datastore.AdditionalResultsToDatastoreResults(alternates)
 
 	if err := a.Ds.Save(&note, legacyResults); err != nil {
 		return err
@@ -289,6 +297,25 @@ func (a *DatabaseAction) saveDetection(ctx context.Context) error {
 	// Sync database-assigned ID back to Result
 	a.Result.ID = note.ID
 	return nil
+}
+
+// storedAlternates returns the alternate predictions to persist with a detection:
+// rows tagged OutOfRange are dropped, and so are rows below minConfidence. The
+// cutoff is inclusive and compared in float32 like the detection threshold, so a
+// row exactly at it is kept; a minConfidence not above 0 disables it. The result
+// is a new slice, the input is never modified.
+func storedAlternates(results []detection.AdditionalResult, minConfidence float64) []detection.AdditionalResult {
+	stored := make([]detection.AdditionalResult, 0, len(results))
+	for _, r := range results {
+		if r.OutOfRange {
+			continue
+		}
+		if minConfidence > 0 && float32(r.Confidence) < float32(minConfidence) {
+			continue
+		}
+		stored = append(stored, r)
+	}
+	return stored
 }
 
 // recordSaveFailure classifies a failed save, logs it and moves the state. The

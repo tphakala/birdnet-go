@@ -48,7 +48,7 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Main": {categories: []hotReloadCategory{hotReloadDisplay}},
 
 	// --- BirdNET ---
-	// Read per chunk from the snapshot in createDetection; no action needed.
+	// Read per save from the action's settings snapshot in storedAlternates; no action needed.
 	"BirdNET.AlternateMinConfidence": {categories: []hotReloadCategory{hotReloadFresh}},
 	"BirdNET.Debug":                  {categories: []hotReloadCategory{hotReloadFresh}},
 	"BirdNET.Sensitivity":            {categories: []hotReloadCategory{hotReloadFresh}},
