@@ -147,8 +147,9 @@ func consensusRequired(minModels int, allEligible bool, eligible int) int {
 // plus same-group models that know the species, pass the range filter for it and
 // scored all the audio the agreeing models heard (from the start of the earliest
 // hit window to the end of the latest one) without a gap. Missing evidence
-// passes: an ungrouped best model, an empty species key, or an earliest contributor
-// without a scored run or clip length. It reads no Processor state.
+// passes: an ungrouped best model, an empty species key, an agreeing model without
+// a clip length, or an earliest contributor without a scored run. It reads no
+// Processor state.
 func (t *consensusTick) evaluate(item *PendingDetection, settings *conf.Settings) consensusVerdict {
 	group := t.models.groupOf(item.BestModelID)
 	if group == "" {
@@ -172,29 +173,33 @@ func (t *consensusTick) evaluate(item *PendingDetection, settings *conf.Settings
 	// Sorted, so that when two models tie on the first hit the smaller ID is the
 	// earliest and the verdict does not depend on map order.
 	slices.Sort(agreeing)
+	// A candidate must have scored everything the agreeing models heard, from the
+	// start of the earliest hit window of any of them to the end of the latest one.
+	// Window lengths differ per model, so the start is the earliest of each model's
+	// first hit minus its own clip length. A candidate that is still behind has not
+	// had its chance to agree yet, so it is not eligible.
 	var earliestModel string
-	var earliestAt, latestAt time.Time
-	for _, id := range agreeing {
+	var earliestAt, latestAt, spanFrom time.Time
+	for i, id := range agreeing {
 		c := item.ModelContributions[id]
-		if earliestModel == "" || c.FirstHitAt.Before(earliestAt) {
+		clip, ok := t.models.clipOf(id)
+		if !ok {
+			return consensusVerdict{}
+		}
+		if i == 0 || c.FirstHitAt.Before(earliestAt) {
 			earliestModel, earliestAt = id, c.FirstHitAt
+		}
+		if start := c.FirstHitAt.Add(-clip); i == 0 || start.Before(spanFrom) {
+			spanFrom = start
 		}
 		if c.LastHitAt.After(latestAt) {
 			latestAt = c.LastHitAt
 		}
 	}
-
-	clip, ok := t.models.clipOf(earliestModel)
-	if !ok {
-		return consensusVerdict{}
-	}
 	if _, timed := t.runs[scoredRunKey{source: item.Source, model: earliestModel}]; !timed {
 		return consensusVerdict{}
 	}
-	// A candidate must have scored everything the agreeing models heard, from the
-	// start of the earliest hit window to the end of the latest one. One that is
-	// still behind has not had its chance to agree yet, so it is not eligible.
-	spanFrom, spanTo := earliestAt.Add(-clip), earliestAt
+	spanTo := earliestAt
 	if latestAt.After(spanTo) {
 		spanTo = latestAt
 	}

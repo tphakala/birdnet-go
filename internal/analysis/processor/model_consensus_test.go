@@ -206,6 +206,25 @@ func TestConsensusTick_Evaluate(t *testing.T) {
 			runs:       map[string]scoredRun{consensusStubBirdA: covering, consensusStubBirdB: {from: consensusAt(7), to: consensusAt(10)}},
 			models:     stubConsensusModels(consensusStubBirdA, consensusStubBirdB), settings: consensusSettings(2, false),
 			wantDiscard: true, wantEligible: 2},
+		{name: "a longer clip of another agreeing model moves the span start earlier, candidate misses it", contributors: []string{consensusStubBirdA, consensusStubBirdB},
+			firstHitSec:  map[string]int{consensusStubBirdA: 10, consensusStubBirdB: 11},
+			runs:         map[string]scoredRun{consensusStubBirdA: covering, consensusStubBirdB: covering, consensusStubBirdC: {from: consensusAt(7), to: consensusAt(20)}},
+			models:       stubConsensusModelsWithClips(map[string]time.Duration{consensusStubBirdB: 5 * time.Second}),
+			settings:     consensusSettings(3, false),
+			wantEligible: 2},
+		{name: "a longer clip of another agreeing model moves the span start earlier, candidate covers it", contributors: []string{consensusStubBirdA, consensusStubBirdB},
+			firstHitSec: map[string]int{consensusStubBirdA: 10, consensusStubBirdB: 11},
+			runs:        map[string]scoredRun{consensusStubBirdA: covering, consensusStubBirdB: covering, consensusStubBirdC: {from: consensusAt(6), to: consensusAt(20)}},
+			models:      stubConsensusModelsWithClips(map[string]time.Duration{consensusStubBirdB: 5 * time.Second}),
+			settings:    consensusSettings(3, false),
+			wantDiscard: true, wantEligible: 3},
+		{name: "an agreeing model without a clip length passes", contributors: []string{consensusStubBirdA, consensusStubBirdB},
+			runs: map[string]scoredRun{consensusStubBirdA: covering, consensusStubBirdB: covering, consensusStubBirdC: covering},
+			models: func() consensusModels {
+				m := stubConsensusModels(consensusStubBirdA, consensusStubBirdB, consensusStubBirdC)
+				m.clipOf = func(id string) (time.Duration, bool) { return consensusTestClip, id != consensusStubBirdB }
+				return m
+			}(), settings: consensusSettings(3, false)},
 		{name: "candidate run starts one second after the span start", contributors: []string{consensusStubBirdA},
 			runs:   map[string]scoredRun{consensusStubBirdA: covering, consensusStubBirdB: {from: consensusAt(8), to: consensusAt(20)}},
 			models: stubConsensusModels(consensusStubBirdA, consensusStubBirdB), settings: consensusSettings(2, false),
@@ -375,6 +394,19 @@ func TestConsensusTick_Evaluate(t *testing.T) {
 		assert.Equal(t, 3, v.required)
 		assert.True(t, v.discard)
 	})
+}
+
+// stubConsensusModelsWithClips is stubConsensusModels for the three stub birds
+// with a per-model clip length; models not listed use consensusTestClip.
+func stubConsensusModelsWithClips(clips map[string]time.Duration) consensusModels {
+	m := stubConsensusModels(consensusStubBirdA, consensusStubBirdB, consensusStubBirdC)
+	m.clipOf = func(id string) (time.Duration, bool) {
+		if clip, ok := clips[id]; ok {
+			return clip, true
+		}
+		return consensusTestClip, true
+	}
+	return m
 }
 
 // registryConsensusModels uses the real registry groups for the given models and
