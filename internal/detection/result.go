@@ -114,6 +114,9 @@ type AdditionalResult struct {
 	// RawLabel is the full un-truncated classifier label (e.g. "power_tool"); runtime-only,
 	// used by the datastore to classify sound-event classes correctly.
 	RawLabel string
+	// OutOfRange marks an alternate that failed the range filter when the detection
+	// was created; runtime-only, never persisted. The save step drops tagged rows.
+	OutOfRange bool
 }
 
 // Date returns the detection date in YYYY-MM-DD format.

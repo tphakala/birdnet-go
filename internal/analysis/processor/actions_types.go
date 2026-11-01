@@ -136,7 +136,7 @@ type DatabaseAction struct {
 	Ds                datastore.Interface           // Legacy - to be removed after migration
 	Repo              datastore.DetectionRepository // New - preferred for database operations
 	Result            detection.Result              // Domain model (single source of truth)
-	Results           []detection.AdditionalResult  // Secondary predictions (converted to legacy format at save time)
+	Results           []detection.AdditionalResult  // All finite alternates; storedAlternates trims them at save
 	EventTracker      *EventTracker
 	NewSpeciesTracker *species.SpeciesTracker // Add reference to new species tracker
 	processor         *Processor              // Add reference to processor for source name resolution
