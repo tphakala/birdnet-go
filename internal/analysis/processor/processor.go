@@ -1311,8 +1311,11 @@ func isSpeciesExcluded(commonName, scientificName string, excludeList []string) 
 
 // createDetection creates a detection object with all necessary information.
 // Its stored alternate predictions are limited to those that pass the range
-// filter under the given settings snapshot (see passesRangeFilter); sound-event,
-// human and dog classes are exempt.
+// filter under the given settings snapshot (see passesRangeFilter), where
+// sound-event, human and dog classes are exempt, and reach
+// BirdNET.AlternateMinConfidence of the same snapshot. The cutoff trims only what
+// is stored; the primary detection and the privacy and dog filters, which read
+// the classifier results, are unaffected.
 // Its ClipName is chosen from the Result's own model and sample rate, the fields
 // the audio exporter reads.
 //
@@ -1356,11 +1359,12 @@ func (p *Processor) createDetection(settings *conf.Settings, item classifier.Res
 	// Convert additional results from datastore.Results to detection.AdditionalResult.
 	// Exclude the primary species since it's already stored as Detection.LabelID,
 	// and keep only alternates that pass the same range rule as the primary,
-	// judged against this chunk's settings snapshot.
+	// judged against this chunk's settings snapshot, which also supplies the
+	// confidence cutoff for stored alternates.
 	keep := func(rawLabel string) bool {
 		return passesRangeFilter(item.ModelID, settings, rawLabel) || isRangeExemptLabel(rawLabel)
 	}
-	additionalResults := convertToAdditionalResults(item.Results, scientificName, keep)
+	additionalResults := convertToAdditionalResults(item.Results, scientificName, settings.BirdNET.AlternateMinConfidence, keep)
 
 	// NOTE: Species tracker is NOT updated here. The tracker is updated solely
 	// through the atomic CheckAndUpdateSpecies() in DatabaseAction.ExecuteContext,
@@ -1460,7 +1464,9 @@ func (p *Processor) resolveAudioSource(source datastore.AudioSource) detection.A
 // Custom BirdNET classifiers can have the same species at multiple positions in the label file,
 // producing duplicate entries in prediction results that would cause UNIQUE constraint violations.
 // Rows for which keep returns false are dropped; createDetection passes the range-filter rule.
-func convertToAdditionalResults(results []datastore.Results, primaryScientificName string, keep func(rawLabel string) bool) []detection.AdditionalResult {
+// Rows with a confidence below minConfidence are dropped too; a minConfidence not above 0
+// keeps every row.
+func convertToAdditionalResults(results []datastore.Results, primaryScientificName string, minConfidence float64, keep func(rawLabel string) bool) []detection.AdditionalResult {
 	additional := make([]detection.AdditionalResult, 0, len(results))
 	seen := make(map[string]int, len(results)) // scientificName → index in additional
 	for _, r := range results {
@@ -1469,6 +1475,12 @@ func convertToAdditionalResults(results []datastore.Results, primaryScientificNa
 		// either: it would be persisted as NULL on SQLite and rejected by MySQL,
 		// failing the whole save.
 		if !isFiniteConfidence(r.Confidence) {
+			continue
+		}
+		// Inclusive cutoff, compared in float32 like the detection threshold so a
+		// row exactly at the cutoff is kept. It runs before the dedup so a weak
+		// duplicate never counts. A value not above 0 disables it.
+		if minConfidence > 0 && r.Confidence < float32(minConfidence) {
 			continue
 		}
 		if !keep(r.Species) {

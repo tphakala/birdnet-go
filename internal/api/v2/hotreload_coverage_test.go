@@ -48,8 +48,10 @@ var hotReloadRegistry = map[string]hotReloadEntry{
 	"Main": {categories: []hotReloadCategory{hotReloadDisplay}},
 
 	// --- BirdNET ---
-	"BirdNET.Debug":       {categories: []hotReloadCategory{hotReloadFresh}},
-	"BirdNET.Sensitivity": {categories: []hotReloadCategory{hotReloadFresh}},
+	// Read per chunk from the snapshot in createDetection; no action needed.
+	"BirdNET.AlternateMinConfidence": {categories: []hotReloadCategory{hotReloadFresh}},
+	"BirdNET.Debug":                  {categories: []hotReloadCategory{hotReloadFresh}},
+	"BirdNET.Sensitivity":            {categories: []hotReloadCategory{hotReloadFresh}},
 	// The base threshold is read live per detection; the dynamic threshold applies
 	// it against the shared per-species level at read time, so no recalc action fires.
 	"BirdNET.Threshold": {categories: []hotReloadCategory{hotReloadFresh}},

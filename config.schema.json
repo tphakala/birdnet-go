@@ -490,6 +490,10 @@
         "modelregion": {
           "type": "string",
           "description": "regional model preference: \"auto\" (resolve from coordinates, default), \"global\" (always global models), or a region slug pin (e.g. \"iberia\"); empty is treated as \"auto\""
+        },
+        "alternateminconfidence": {
+          "type": "number",
+          "description": "AlternateMinConfidence is the lowest confidence, on the 0 to 1 scale, at which\nan alternate prediction of a detection is stored. Alternates below it are\ndropped when the detection is created; the detected species itself is never\naffected. 0 stores every alternate. Rows already in the database are not\nchanged. Not shown in the web UI. Defaults to 0.1. Hot-reloadable through the\nsettings API; a config file edit applies at the next start."
         }
       },
       "additionalProperties": false,

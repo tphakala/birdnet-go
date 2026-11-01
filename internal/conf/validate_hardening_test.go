@@ -650,6 +650,8 @@ func TestValidateBirdNETSettings_NaNInfinityRejected(t *testing.T) {
 		{"NaN threshold", func(c *BirdNETConfig) { c.Threshold = math.NaN() }},
 		{"Inf threshold", func(c *BirdNETConfig) { c.Threshold = math.Inf(1) }},
 		{"NaN overlap", func(c *BirdNETConfig) { c.Overlap = math.NaN() }},
+		{"NaN alternateMinConfidence", func(c *BirdNETConfig) { c.AlternateMinConfidence = math.NaN() }},
+		{"Inf alternateMinConfidence", func(c *BirdNETConfig) { c.AlternateMinConfidence = math.Inf(1) }},
 		{"NaN longitude", func(c *BirdNETConfig) { c.Longitude = math.NaN() }},
 		{"Inf longitude", func(c *BirdNETConfig) { c.Longitude = math.Inf(1) }},
 		{"NaN latitude", func(c *BirdNETConfig) { c.Latitude = math.NaN() }},

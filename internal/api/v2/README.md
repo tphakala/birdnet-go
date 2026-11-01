@@ -336,15 +336,21 @@ prediction has `scientificName` (the current, canonical name), `commonName`, `sp
 `confidence`, ordered by confidence descending, then by scientific name.
 
 - Filtered out: the detected species and its aliases, human sound classes, and a dog class that scores
-  below every other alternate. This is a heuristic: the classifier adds one past its top results so that
+  below every non-dog alternate that remains, and is kept when none remains. This is a heuristic: the classifier adds one past its top results so that
   it stays visible, which a low dog score usually is, but a genuine low-scoring dog result goes with it.
+  The comparison is against the stored alternates, which are only those at or above
+  `birdnet.alternateminconfidence`, so a genuine dog result is hidden when it scores below every stored non-dog alternate,
+  and with fewer stored rows this happens more often.
 - Scope: the species the detecting model ranked in its top 10 for the analysis window that produced
   the detection, without the detected species and, when a location is set and the model takes part in
   range filtering, without species outside the location's range (for detections saved after the range
   filter was applied to alternates), so fewer than 10 can remain. Other models and other windows are
-  not stored, so a species missing here may still have been scored.
-- Old rows: detections saved before this version may list species outside the location's range;
-  detections migrated from the legacy database list only alternates at or above 30 percent; Perch
+  not stored, so a species missing here may still have been scored. Alternates below
+  `birdnet.alternateminconfidence` (default 0.1, config file only, 0 stores all) are not stored either,
+  so an empty `modelPredictions` list is normal, most often for Perch; the cutoff applies to detections saved
+  after it was introduced.
+- Old rows: detections saved before this version may list species outside the location's range or alternates
+  below 0.1; detections migrated from the legacy database list only alternates at or above 0.3; Perch
   detections saved before human class names were stored in full may list truncated human class names such
   as Male or Child.
 - Status codes: `409` when the enhanced database is not in use, `400` for an id that is not a positive

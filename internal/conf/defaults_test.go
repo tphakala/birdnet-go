@@ -131,3 +131,31 @@ func TestRetryTemplateMatchesCodeDefaults(t *testing.T) {
 		})
 	}
 }
+
+// TestAlternateMinConfidenceDefault pins the default of
+// birdnet.alternateminconfidence in the viper defaults and in the embedded
+// config.yaml, and that a saved 0 stays in the YAML so the default cannot come
+// back on the next start. Not parallel: it resets the global viper instance.
+func TestAlternateMinConfidenceDefault(t *testing.T) {
+	t.Cleanup(viper.Reset)
+
+	viper.Reset()
+	setDefaultConfig()
+	require.InDelta(t, DefaultAlternateMinConfidence, viper.GetFloat64("birdnet.alternateminconfidence"), 1e-9)
+
+	// Pointer field so a deleted template key fails instead of reading as zero.
+	var probe struct {
+		BirdNET struct {
+			AlternateMinConfidence *float64 `yaml:"alternateminconfidence"`
+		} `yaml:"birdnet"`
+	}
+	template, err := configFiles.ReadFile("config.yaml")
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(template, &probe))
+	require.NotNil(t, probe.BirdNET.AlternateMinConfidence, "config.yaml must set alternateminconfidence")
+	require.InDelta(t, DefaultAlternateMinConfidence, *probe.BirdNET.AlternateMinConfidence, 1e-9)
+
+	out, err := yaml.Marshal(BirdNETConfig{AlternateMinConfidence: 0})
+	require.NoError(t, err)
+	require.Contains(t, string(out), "alternateminconfidence: 0", "a saved 0 must be written, not omitted")
+}

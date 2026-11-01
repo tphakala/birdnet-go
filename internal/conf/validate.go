@@ -336,7 +336,8 @@ func validateUltrasonicFilter(settings *Settings) error {
 // and the BirdNET/RangeFilter threshold checks in validate_services.go, which is
 // the same reason checkRange guards NaN: a NaN comparison is always false and
 // would otherwise slip past the bounds test. defaultModelThreshold is what an
-// out-of-range value is reset to on load (see normalizeModelThresholds).
+// out-of-range value is reset to on load (see normalizeModelThresholds). They
+// also bound birdnet.alternateminconfidence, the stored-alternate cutoff.
 const (
 	minModelThreshold     = 0.0
 	maxModelThreshold     = 1.0
