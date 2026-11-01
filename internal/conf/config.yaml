@@ -341,6 +341,14 @@ realtime:
     species:              # species, families, orders, or genera to filter during daylight
       - Strigiformes      # all owls (Strigidae + Tytonidae)
 
+  modelconsensus:
+    allspecies: false     # true to require model consensus for every species
+    listedspecies: false  # true to require model consensus for the species listed below
+    species: []           # species that need consensus when listedspecies is on, scientific names recommended
+    minmodels: 2          # agreeing models required, 2 to 4 (capped at the number of eligible models)
+    alleligible: false    # true to require every eligible model instead of minmodels
+    debug: false          # true to log each discard at info level, with the agreeing and eligible models
+
   telemetry:
     enabled: false         # true to enable Prometheus compatible telemetry endpoint
     listen: "0.0.0.0:8090" # IP address and port to listen on

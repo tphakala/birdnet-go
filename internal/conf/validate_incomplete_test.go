@@ -1216,3 +1216,47 @@ realtime:
 	assert.Contains(t, warnings, "BirdWeather")
 	assert.Contains(t, warnings, "Q factor")
 }
+
+func TestNormalizeModelConsensus(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name         string
+		cfg          ModelConsensusSettings
+		wantMin      int
+		wantWarnings int
+	}{
+		{"disabled zero defaulted silently", ModelConsensusSettings{MinModels: 0}, DefaultModelConsensusMinModels, 0},
+		{"enabled zero defaulted with warning", ModelConsensusSettings{AllSpecies: true, MinModels: 0}, DefaultModelConsensusMinModels, 1},
+		{"enabled below minimum defaulted with warning", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels - 1}, DefaultModelConsensusMinModels, 1},
+		{"enabled above maximum defaulted with warning", ModelConsensusSettings{ListedSpecies: true, MinModels: MaxModelConsensusMinModels + 1}, DefaultModelConsensusMinModels, 1},
+		{"disabled above maximum defaulted with warning", ModelConsensusSettings{MinModels: MaxModelConsensusMinModels + 1}, DefaultModelConsensusMinModels, 1},
+		{"enabled at minimum kept", ModelConsensusSettings{AllSpecies: true, MinModels: MinModelConsensusMinModels}, MinModelConsensusMinModels, 0},
+		{"enabled at maximum kept", ModelConsensusSettings{AllSpecies: true, MinModels: MaxModelConsensusMinModels}, MaxModelConsensusMinModels, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := &Settings{}
+			s.Realtime.ModelConsensus = tt.cfg
+
+			s.normalizeModelConsensus()
+
+			assert.Equal(t, tt.wantMin, s.Realtime.ModelConsensus.MinModels)
+			assert.Len(t, s.ValidationWarnings, tt.wantWarnings)
+			require.NoError(t, validateModelConsensusSettings(&s.Realtime.ModelConsensus))
+		})
+	}
+}
+
+// TestNormalizeIncompleteFeatures_ModelConsensusWired pins that the load-time
+// normalization pass repairs the model consensus minimum, so a hand-edited value
+// cannot reach the fatal validation.
+func TestNormalizeIncompleteFeatures_ModelConsensusWired(t *testing.T) {
+	t.Parallel()
+	s := &Settings{}
+	s.Realtime.ModelConsensus = ModelConsensusSettings{AllSpecies: true, MinModels: MaxModelConsensusMinModels + 1}
+
+	normalizeIncompleteFeatures(s)
+
+	assert.Equal(t, DefaultModelConsensusMinModels, s.Realtime.ModelConsensus.MinModels)
+}
