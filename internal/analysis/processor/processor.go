@@ -178,6 +178,17 @@ type Processor struct {
 	// no synchronization needed for concurrent reads.
 	BufferMgr *buffer.Manager
 
+	// scoredRuns records, per audio source and model, the audio the model has
+	// scored without a gap, for the model consensus filter. Guarded by
+	// scoredRunsMu, a leaf lock: nothing else is acquired while it is held, and it
+	// is never held together with pendingMutex.
+	scoredRuns   map[scoredRunKey]scoredRun
+	scoredRunsMu sync.Mutex
+
+	// consensusModelsFn replaces the production model view of the consensus filter.
+	// It is a test hook and nil in production.
+	consensusModelsFn func() consensusModels
+
 	// Backup system fields (optional)
 	backupManager   any // Use interface{} to avoid import cycle
 	backupScheduler any // Use interface{} to avoid import cycle
@@ -770,7 +781,8 @@ func (p *Processor) startDetectionProcessor() {
 // with new or higher-confidence instances and setting an appropriate flush deadline.
 // It also runs the VAD speech gate on the chunk and, once the chunk's speech hits
 // are written, publishes the audio the chunk's detectors scored as privacy
-// coverage.
+// coverage. Last, once the window's hits are merged, it records the audio the
+// window scored for the model consensus filter.
 //
 //nolint:gocritic // hugeParam: Pass by value is intentional - avoids pointer dereferencing in hot path
 func (p *Processor) processDetections(item classifier.Results) {
@@ -839,6 +851,11 @@ func (p *Processor) processDetections(item classifier.Results) {
 	for i := range detectionResults {
 		p.mergePendingHit(&item, &detectionResults[i], hitAt, detectionWindow)
 	}
+
+	// Record the audio this window scored only after its hits are merged, so the
+	// consensus filter never sees a model as having scored audio whose hits are
+	// still in flight.
+	p.recordScoredRun(&item)
 
 	// Broadcast updated pending detections snapshot for "currently hearing" UI.
 	// This runs after all new detections are incorporated into pendingDetections.
@@ -1749,8 +1766,10 @@ func (p *Processor) buildClipPath(settings *conf.Settings, scientificName string
 // privacyfilter.debug on, a summary of the detectors that counted hits
 // reaching the clip (priv.contributions, which is listed whenever the latest hit
 // reaches the clip); the counts are lower bounds once the attribution list has
-// dropped a reaching hit at its cap (priv.hitCountsLowerBound).
-func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck) (shouldDiscard bool, reason string) {
+// dropped a reaching hit at its cap (priv.hitCountsLowerBound). The model
+// consensus filter runs last so the other filters keep their discard attribution;
+// cons is the tick's model view (see prepareModelConsensus) and nil skips it.
+func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *conf.Settings, minDetections int, priv *privacyCheck, cons *consensusTick) (shouldDiscard bool, reason string) {
 	// Check minimum detection count
 	if item.Count < minDetections {
 		GetLogger().Debug("Detection discarded due to insufficient count",
@@ -1861,6 +1880,10 @@ func (p *Processor) shouldDiscardDetection(item *PendingDetection, settings *con
 				logger.String("operation", "daylight_filter"))
 			return true, reasonDaylightFilter
 		}
+	}
+
+	if cons != nil && p.discardForModelConsensus(item, settings, cons) {
+		return true, reasonModelConsensus
 	}
 
 	return false, ""
@@ -2036,13 +2059,17 @@ func (p *Processor) effectiveBaseOverlap(settings *conf.Settings) time.Duration 
 // privacyCheck): the discard checks compare its speech hit, and a detection that
 // passes them is approved only when the coverage gate allows it, otherwise it
 // stays pending and is re-checked on the next tick. An approved detection is built
-// from the same settings snapshot the check used. Returns the count of pending and
-// flushed detections for logging.
+// from the same settings snapshot the check used. The model view of the model
+// consensus filter is prepared once per tick, before pendingMutex is taken.
+// Returns the count of pending and flushed detections for logging.
 func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 	now := time.Now()
 	settings := p.currentSettings()
 	baseOverlap := p.effectiveBaseOverlap(settings)
 	visThresholds := precomputeVisibilityThresholds(settings, baseOverlap)
+
+	// Built before pendingMutex is taken: it may wait on the orchestrator.
+	cons := p.prepareModelConsensus(settings)
 
 	var terminalNotifs []SSEPendingDetection
 	var broadcastSnapshot []SSEPendingDetection
@@ -2069,7 +2096,7 @@ func (p *Processor) flushPendingDetections() (pendingCount, flushedCount int) {
 		// coverage that includes it, so coverage seen here never lacks its hits.
 		priv := p.checkPrivacy(settings, &item, now)
 
-		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections, &priv); shouldDiscard {
+		if shouldDiscard, reason := p.shouldDiscardDetection(&item, settings, itemMinDetections, &priv, cons); shouldDiscard {
 			// Aggregate daylight-filter discards into the periodic pipeline-stats
 			// summary so a user who sees zero saved detections has an at-a-glance
 			// signal that a filter is eating them. The per-detection log stays at

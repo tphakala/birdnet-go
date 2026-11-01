@@ -19,7 +19,7 @@ import (
 // current time, as one flush tick does.
 func discardNow(p *Processor, item *PendingDetection, settings *conf.Settings, minDetections int) (discard bool, reason string) {
 	priv := p.checkPrivacy(settings, item, time.Now())
-	return p.shouldDiscardDetection(item, settings, minDetections, &priv)
+	return p.shouldDiscardDetection(item, settings, minDetections, &priv, nil)
 }
 
 // newPrivacyFilterDetection builds a minimal pending bird detection for a single
