@@ -110,6 +110,7 @@ func normalizeIncompleteFeatures(s *Settings) {
 	s.normalizeWebServer()
 	s.normalizeProfiling()
 	s.normalizeModelThresholds()
+	s.normalizeAlternateMinConfidence()
 	s.normalizeUltrasonicFilter()
 }
 
@@ -177,6 +178,31 @@ func (s *Settings) normalizeModelThresholds() {
 	reset("bat", &s.Bat.Threshold)
 	reset("perch", &s.Perch.Threshold)
 	reset("birdnetv3", &s.BirdNETV3.Threshold)
+}
+
+// normalizeAlternateMinConfidence repairs an invalid birdnet.alternateminconfidence
+// on load, recording a warning, for the same reason as normalizeModelThresholds:
+// ValidateSettings is fatal on Load and the value is not editable in the web UI.
+// NaN and Inf revert to the default first (so -Inf does not read as "off"), a
+// finite negative becomes 0 (off, which is what the processor already treats it
+// as), and a value above 1 reverts to the default. The settings API path does not
+// run this pass; it rejects the value via ValidateBirdNETSettings.
+func (s *Settings) normalizeAlternateMinConfidence() {
+	v := &s.BirdNET.AlternateMinConfidence
+	switch {
+	case math.IsNaN(*v) || math.IsInf(*v, 0):
+		s.recordValidationWarning(warnComponentModels,
+			"birdnet alternateminconfidence %v is not a finite number; using the default %.2f", *v, DefaultAlternateMinConfidence)
+		*v = DefaultAlternateMinConfidence
+	case *v < minModelThreshold:
+		s.recordValidationWarning(warnComponentModels,
+			"birdnet alternateminconfidence %v is negative; using 0 (store every alternate)", *v)
+		*v = 0
+	case *v > maxModelThreshold:
+		s.recordValidationWarning(warnComponentModels,
+			"birdnet alternateminconfidence %v is above %.0f; using the default %.2f", *v, maxModelThreshold, DefaultAlternateMinConfidence)
+		*v = DefaultAlternateMinConfidence
+	}
 }
 
 // normalizeProfiling zeroes negative pprof sampling rates on load. A negative rate

@@ -96,6 +96,11 @@ const (
 	// filter created in the UI and one repaired here get the same value. 0.707 is the
 	// conventional rounding of the Butterworth 1/sqrt(2).
 	DefaultEQQFactor = 0.707
+
+	// DefaultAlternateMinConfidence is the default lowest confidence, on the 0 to 1
+	// scale, at which an alternate prediction of a detection is stored.
+	// normalizeAlternateMinConfidence resets an invalid value to it on load.
+	DefaultAlternateMinConfidence = 0.1
 )
 
 // DefaultSessionDuration is the default session duration (7 days).

@@ -84,6 +84,7 @@ func setDefaultConfig() {
 	viper.SetDefault("birdnet.labelpath", "")
 	viper.SetDefault("birdnet.modelregion", ModelRegionAuto)
 	viper.SetDefault("birdnet.usexnnpack", true)
+	viper.SetDefault("birdnet.alternateminconfidence", DefaultAlternateMinConfidence)
 	viper.SetDefault("taxonomysynonyms", map[string]string{})
 
 	// Range filter configuration

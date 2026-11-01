@@ -1322,6 +1322,14 @@ type BirdNETConfig struct {
 	OpenVINODevice      string              `yaml:"openvinodevice,omitempty" json:"openVinoDevice,omitempty"`           // OpenVINO device preference: "auto" (default), "cpu", or "gpu"
 	HuggingFaceEndpoint string              `yaml:"huggingfaceendpoint,omitempty" json:"huggingFaceEndpoint,omitempty"` // model download host, e.g. "https://hf-mirror.com" where huggingface.co is blocked; empty falls back to $HF_ENDPOINT then https://huggingface.co
 	ModelRegion         string              `yaml:"modelregion,omitempty" json:"modelRegion,omitempty"`                 // regional model preference: "auto" (resolve from coordinates, default), "global" (always global models), or a region slug pin (e.g. "iberia"); empty is treated as "auto"
+
+	// AlternateMinConfidence is the lowest confidence, on the 0 to 1 scale, at which
+	// an alternate prediction of a detection is stored. Alternates below it are
+	// dropped when the detection is created; the detected species itself is never
+	// affected. 0 stores every alternate. Rows already in the database are not
+	// changed. Not shown in the web UI. Defaults to 0.1. Hot-reloadable through the
+	// settings API; a config file edit applies at the next start.
+	AlternateMinConfidence float64 `yaml:"alternateminconfidence" json:"alternateMinConfidence"`
 }
 
 // Inference backend preferences for BirdNET.Backend.
