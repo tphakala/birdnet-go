@@ -774,7 +774,9 @@ graph TD
     H -->|Human Detected| D
     H -->|No Human| I{Dog Bark Filter}
     I -->|Recent Bark| D
-    I -->|No Recent Bark| J[✅ Accept Detection]
+    I -->|No Recent Bark| M{"Model Consensus Filter, if enabled"}
+    M -->|Too Few Models Agree| D
+    M -->|Enough Models Agree| J[✅ Accept Detection]
     G --> K{Timeout Reached?}
     K -->|No| G
     K -->|Yes| L{Min Detections Met?}
@@ -1094,6 +1096,27 @@ realtime:
 - **Use Cases**: Prevents false detections during periods of constant dog barking, particularly for species that have acoustic similarities to canine vocalizations
 - **Species Selection**: Focus on owl species (especially larger owls) and corvids (crows/ravens) which are most commonly confused with dog barks
 
+#### Model Consensus Filter
+
+```yaml
+realtime:
+  modelconsensus:
+    allspecies: false # Require consensus for every species
+    listedspecies: true # Require consensus for the species listed below
+    species: ["Parus major"] # Scientific names recommended
+    minmodels: 2 # Agreeing models required, 2 to 4
+    alleligible: false # Require every eligible model instead of minmodels
+    debug: false # Log each consensus discard at info level
+```
+
+- Discards a detection unless at least `minmodels` distinct models of its taxon group detected it within the detection window. Bird and bat models are counted separately, and BirdNET 2.4 and 3.0 count as separate models
+- A model is eligible only if it can classify the species, is not excluded by the range filter for it, and has scored all the audio the agreeing models heard. A model that is still behind in processing is not counted as eligible until it catches up. The requirement is capped at the number of eligible models, so a species that only one model can detect is never blocked
+- `alleligible` requires every eligible model to agree, whatever `minmodels` is
+- A model that knows a species but rarely scores it above its threshold blocks it, so start with `listedspecies` for the species you want to confirm
+- List entries are best written as scientific names in `config.yaml`: a common name stops matching after a locale change. The settings API converts the entries it can resolve to scientific names
+- Detections from audio sources that give no capture timestamps are not filtered
+- The filter is off by default and has no settings page yet; use `config.yaml` or the settings API
+
 ### Setting Precedence Summary
 
 **Highest to Lowest Precedence:**
@@ -1108,6 +1131,7 @@ realtime:
 8. **Deep Detection Filter** - Requires multiple matches
 9. **Privacy Filter** - Environmental safety
 10. **Dog Bark Filter** - Behavioral filtering
+11. **Model Consensus Filter** - Requires multiple models to agree
 
 ### Optimization Tips
 
@@ -1545,7 +1569,7 @@ graph TD
     I -->|No| J[❌ Rejected<br/>False Positive]
     I -->|Yes| K{Final Safety<br/>Checks Pass?}
 
-    K -->|No| L[❌ Blocked by<br/>Privacy/Dog Filter]
+    K -->|No| L[❌ Blocked by<br/>Privacy/Dog/Consensus Filter]
     K -->|Yes| M[✅ Detection Approved<br/>Saved to Database]
 
     J --> N[🗂️ Log: Not enough matches]
