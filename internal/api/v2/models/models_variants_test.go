@@ -1,7 +1,6 @@
 package models
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,52 +14,21 @@ import (
 )
 
 // TestGetModelCatalog_EmitsVariants verifies the catalog response exposes the
-// nested variants[] for a multi-variant entry (Perch v2), with sizes and a single
-// default variant.
+// nested variants[] for a multi-variant entry, with per-variant sizes and a single
+// default variant. Regional tile generation is asserted in the classifier package.
 func TestGetModelCatalog_EmitsVariants(t *testing.T) {
-	core := apitest.NewCore(t)
-	h := New(core, nil)
-	e := echo.New()
+	h := recommendHandler(t, nil, amd64ONNXProfile)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/models/catalog", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	require.NoError(t, h.GetModelCatalog(ctx))
-	require.Equal(t, http.StatusOK, rec.Code)
+	rec := findEntry(catalogRequest(t, h), apiRecID)
+	require.NotNil(t, rec)
+	require.Len(t, rec.Variants, 2)
 
-	var resp struct {
-		Catalog []CatalogEntryResponse `json:"catalog"`
+	sizes := make(map[string]int64, len(rec.Variants))
+	for _, v := range rec.Variants {
+		sizes[v.ID] = v.SizeBytes
+		assert.Equal(t, v.ID == apiVarFP32, v.Default, "only fp32 is the default variant (%s)", v.ID)
 	}
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-
-	var perch *CatalogEntryResponse
-	for i := range resp.Catalog {
-		if resp.Catalog[i].ID == "perch-v2" {
-			perch = &resp.Catalog[i]
-			break
-		}
-	}
-	require.NotNil(t, perch, "perch-v2 must be present in the visible catalog")
-	// perch-v2 exposes its 3 global variants plus the generated regional tiles.
-	// The exact regional count is asserted in the classifier package; here we only
-	// require the globals plus at least one regional variant reaching the API.
-	require.GreaterOrEqual(t, len(perch.Variants), 3, "perch-v2 must expose at least its three global variants")
-
-	byID := make(map[string]CatalogVariantResponse, len(perch.Variants))
-	defaults := 0
-	for _, v := range perch.Variants {
-		byID[v.ID] = v
-		if v.Default {
-			defaults++
-		}
-		assert.Positive(t, v.SizeBytes, "variant %s must report a size", v.ID)
-	}
-	assert.Contains(t, byID, "fp32")
-	assert.Contains(t, byID, "int8-arm")
-	assert.Contains(t, byID, "int8-arm@nordic", "regional tiles must reach the catalog API")
-	assert.False(t, byID["int8-arm@nordic"].Default, "regional tiles must never be the default")
-	assert.True(t, byID["fp32"].Default, "fp32 must be the default variant")
-	assert.Equal(t, 1, defaults, "exactly one variant may be the default")
+	assert.Equal(t, map[string]int64{apiVarFP32: apiSizeFP32Model, apiVarInt8ARM: apiSizeInt8Model}, sizes)
 }
 
 // TestInstallModel_RejectsUnknownVariant verifies the install handler rejects a
