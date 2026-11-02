@@ -26,77 +26,68 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 )
 
-// TestGetPrerequisites_AllPassed tests the prerequisites endpoint when all checks pass.
-// Note: Not parallel due to global state modification.
-func TestGetPrerequisites_AllPassed(t *testing.T) {
-	t.Attr("component", "migration")
-	t.Attr("type", "unit")
-	t.Attr("feature", "prerequisites")
+// prerequisiteCheck names a check by ID and severity.
+type prerequisiteCheck struct{ id, severity string }
 
-	e, controller, _ := setupPrerequisitesTestEnvironment(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/prerequisites", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err := controller.GetPrerequisites(ctx)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var response PrerequisitesResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	// When all checks pass, can_start_migration should be true (unless v2-only mode)
-	assert.True(t, response.AllPassed, "AllPassed should be true when no critical failures")
-	assert.Equal(t, 0, response.CriticalFailures, "Should have no critical failures")
-	assert.NotEmpty(t, response.Checks, "Should have check results")
-	assert.False(t, response.CheckedAt.IsZero(), "CheckedAt should be set")
+// sqlitePrerequisiteChecks is the exact sequence GetPrerequisites reports for a
+// SQLite setup: the critical checks first, then the warnings.
+var sqlitePrerequisiteChecks = []prerequisiteCheck{
+	{"state_idle", CheckSeverityCritical},
+	{"disk_space", CheckSeverityCritical},
+	{"legacy_accessible", CheckSeverityCritical},
+	{"sqlite_integrity", CheckSeverityCritical},
+	{"write_permission", CheckSeverityCritical},
+	{"record_count", CheckSeverityCritical},
+	{"existing_v2_data", CheckSeverityWarning},
+	{"memory_available", CheckSeverityWarning},
 }
 
-// TestGetPrerequisites_Response_Structure tests that the response has the expected structure.
-func TestGetPrerequisites_Response_Structure(t *testing.T) {
+// TestGetPrerequisites_SQLite pins the prerequisites response for a healthy
+// SQLite setup: every check is reported in order with a valid status, nothing
+// blocks, and v2-only mode withholds the go-ahead without failing a check.
+// Note: Not parallel due to global state modification.
+func TestGetPrerequisites_SQLite(t *testing.T) {
 	t.Attr("component", "migration")
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	e, controller, _ := setupPrerequisitesTestEnvironment(t)
-
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/prerequisites", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	err := controller.GetPrerequisites(ctx)
-	require.NoError(t, err)
-
-	var response PrerequisitesResponse
-	err = json.Unmarshal(rec.Body.Bytes(), &response)
-	require.NoError(t, err)
-
-	// Verify expected checks are present
-	checkIDs := make(map[string]bool)
-	for _, check := range response.Checks {
-		checkIDs[check.ID] = true
-
-		// Each check should have required fields
-		assert.NotEmpty(t, check.ID, "Check ID should not be empty")
-		assert.NotEmpty(t, check.Name, "Check Name should not be empty")
-		assert.NotEmpty(t, check.Severity, "Check Severity should not be empty")
-		assert.NotEmpty(t, check.Status, "Check Status should not be empty")
-
-		// Status should be one of the valid values
-		validStatuses := []string{CheckStatusPassed, CheckStatusFailed, CheckStatusWarning, CheckStatusSkipped, CheckStatusError}
-		assert.Contains(t, validStatuses, check.Status, "Check status should be valid")
-
-		// Severity should be critical or warning
-		assert.Contains(t, []string{CheckSeverityCritical, CheckSeverityWarning}, check.Severity, "Check severity should be valid")
+	tests := []struct {
+		name         string
+		v2Only       bool
+		wantCanStart bool
+	}{
+		{name: "legacy mode can start", v2Only: false, wantCanStart: true},
+		{name: "v2-only mode cannot start", v2Only: true, wantCanStart: false},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller, _ := setupPrerequisitesTestEnvironment(t)
+			setV2OnlyMode(t, tt.v2Only)
 
-	// Verify critical checks are included
-	assert.True(t, checkIDs["state_idle"], "Should include state_idle check")
-	assert.True(t, checkIDs["disk_space"], "Should include disk_space check")
-	assert.True(t, checkIDs["legacy_accessible"], "Should include legacy_accessible check")
-	assert.True(t, checkIDs["record_count"], "Should include record_count check")
+			req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/prerequisites", http.NoBody)
+			rec := httptest.NewRecorder()
+			require.NoError(t, controller.GetPrerequisites(e.NewContext(req, rec)))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var response PrerequisitesResponse
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
+
+			assert.True(t, response.AllPassed, "AllPassed should be true when no critical check fails")
+			assert.Equal(t, tt.wantCanStart, response.CanStartMigration)
+			assert.Equal(t, 0, response.CriticalFailures, "Should have no critical failures")
+			assert.False(t, response.CheckedAt.IsZero(), "CheckedAt should be set")
+
+			// memory_available depends on the host, so only its ID and severity are pinned.
+			got := make([]prerequisiteCheck, 0, len(response.Checks))
+			for _, check := range response.Checks {
+				got = append(got, prerequisiteCheck{check.ID, check.Severity})
+				assert.NotEmpty(t, check.Name, "Check %s should have a name", check.ID)
+				assert.Contains(t, []string{CheckStatusPassed, CheckStatusFailed, CheckStatusWarning, CheckStatusSkipped, CheckStatusError},
+					check.Status, "Check %s status should be valid", check.ID)
+			}
+			assert.Equal(t, sqlitePrerequisiteChecks, got)
+		})
+	}
 }
 
 // TestCheckStateIdle_Idle tests checkStateIdle when migration is in IDLE state.
@@ -291,6 +282,39 @@ func TestCheckSQLiteIntegrity_NilDB(t *testing.T) {
 	assert.Contains(t, check.Message, errMsgDBConnectionUnavailable)
 }
 
+// TestLegacyChecks_V2OnlyModeSkipped tests that the checks that need the legacy
+// database report skipped, not an error, in v2-only mode when it is absent. The
+// SQLite integrity check has its own test below because it must also never read
+// the integrity result.
+// Note: Not parallel due to global state modification.
+func TestLegacyChecks_V2OnlyModeSkipped(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	tests := []struct {
+		name   string
+		run    func(*Handler) PrerequisiteCheck
+		wantID string
+	}{
+		{name: "legacy accessible", run: (*Handler).checkLegacyAccessible, wantID: "legacy_accessible"},
+		{name: "record count", run: (*Handler).checkRecordCount, wantID: "record_count"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setV2OnlyMode(t, true)
+
+			// No datastore and no repository: the legacy database is absent.
+			check := tt.run(&Handler{Core: &apicore.Core{}})
+
+			assert.Equal(t, tt.wantID, check.ID)
+			assert.Equal(t, CheckStatusSkipped, check.Status)
+			assert.Equal(t, CheckSeverityCritical, check.Severity)
+			assert.Equal(t, v2OnlySkipMessage, check.Message)
+		})
+	}
+}
+
 // TestCheckSQLiteIntegrity_V2OnlyMode tests checkSQLiteIntegrity returns skipped in v2-only mode.
 // Note: Not parallel due to global state modification.
 func TestCheckSQLiteIntegrity_V2OnlyMode(t *testing.T) {
@@ -311,44 +335,6 @@ func TestCheckSQLiteIntegrity_V2OnlyMode(t *testing.T) {
 
 	assert.Zero(t, ds.reads, "IntegrityResult must not be read in v2-only mode")
 	assert.Equal(t, "sqlite_integrity", check.ID)
-	assert.Equal(t, CheckStatusSkipped, check.Status)
-	assert.Equal(t, CheckSeverityCritical, check.Severity)
-	assert.Contains(t, check.Message, "enhanced database mode")
-}
-
-// TestCheckLegacyAccessible_V2OnlyMode tests checkLegacyAccessible returns skipped in v2-only mode.
-// Note: Not parallel due to global state modification.
-func TestCheckLegacyAccessible_V2OnlyMode(t *testing.T) {
-	t.Attr("component", "migration")
-	t.Attr("type", "unit")
-	t.Attr("feature", "prerequisites")
-
-	setV2OnlyMode(t, true)
-
-	controller := &Handler{Core: &apicore.Core{DS: nil}}
-
-	check := controller.checkLegacyAccessible()
-
-	assert.Equal(t, "legacy_accessible", check.ID)
-	assert.Equal(t, CheckStatusSkipped, check.Status)
-	assert.Equal(t, CheckSeverityCritical, check.Severity)
-	assert.Contains(t, check.Message, "enhanced database mode")
-}
-
-// TestCheckRecordCount_V2OnlyMode tests checkRecordCount returns skipped in v2-only mode.
-// Note: Not parallel due to global state modification.
-func TestCheckRecordCount_V2OnlyMode(t *testing.T) {
-	t.Attr("component", "migration")
-	t.Attr("type", "unit")
-	t.Attr("feature", "prerequisites")
-
-	setV2OnlyMode(t, true)
-
-	controller := &Handler{Core: &apicore.Core{Repo: nil}}
-
-	check := controller.checkRecordCount()
-
-	assert.Equal(t, "record_count", check.ID)
 	assert.Equal(t, CheckStatusSkipped, check.Status)
 	assert.Equal(t, CheckSeverityCritical, check.Severity)
 	assert.Contains(t, check.Message, "enhanced database mode")
@@ -580,19 +566,6 @@ func TestCheckDiskSpace_Threshold(t *testing.T) {
 	}
 }
 
-// TestIsUsingMySQL_SQLite tests isUsingMySQL returns false for SQLite config.
-func TestIsUsingMySQL_SQLite(t *testing.T) {
-	t.Attr("component", "migration")
-	t.Attr("type", "unit")
-	t.Attr("feature", "prerequisites")
-
-	_, controller, _ := setupPrerequisitesTestEnvironment(t)
-
-	result := controller.isUsingMySQL()
-
-	assert.False(t, result, "Should return false for SQLite configuration")
-}
-
 // TestIsUsingMySQL_NilSettings tests isUsingMySQL returns false when Settings is nil.
 func TestIsUsingMySQL_NilSettings(t *testing.T) {
 	t.Attr("component", "migration")
@@ -600,6 +573,9 @@ func TestIsUsingMySQL_NilSettings(t *testing.T) {
 	t.Attr("feature", "prerequisites")
 
 	controller := &Handler{Core: &apicore.Core{}}
+	// Publish a nil global so currentSettings() falls back to the controller's
+	// nil c.Settings instead of a snapshot an earlier test left behind.
+	apitest.PublishTestSettings(t, nil)
 
 	result := controller.isUsingMySQL()
 
@@ -648,24 +624,6 @@ func TestGetLegacyGormDB_NilDS(t *testing.T) {
 	db := controller.getLegacyGormDB()
 
 	assert.Nil(t, db, "Should return nil when DS is nil")
-}
-
-// TestRunCriticalPrerequisiteChecks tests the shared critical check runner.
-func TestRunCriticalPrerequisiteChecks(t *testing.T) {
-	t.Attr("component", "migration")
-	t.Attr("type", "unit")
-	t.Attr("feature", "prerequisites")
-
-	_, controller, _ := setupPrerequisitesTestEnvironment(t)
-
-	checks := controller.runCriticalPrerequisiteChecks()
-
-	assert.NotEmpty(t, checks, "Should return a list of checks")
-
-	// All critical checks should have critical severity
-	for _, check := range checks {
-		assert.Equal(t, CheckSeverityCritical, check.Severity, "Critical checks should have critical severity")
-	}
 }
 
 // setupPrerequisitesTestEnvironment creates a test environment for prerequisites API tests.
