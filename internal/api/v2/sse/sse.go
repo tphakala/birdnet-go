@@ -36,7 +36,7 @@ const (
 	// Rate limits
 	sseRateLimitRequests = 10              // SSE rate limit requests per window
 	sseRateLimitWindow   = 1 * time.Minute // SSE rate limit time window
-	// sseRateLimitBurst is how many connections one IP may open in quick
+	// sseRateLimitBurst is how many connections one client may open in quick
 	// succession. It lets page refreshes and quick navigation reconnect without
 	// waiting for a token.
 	sseRateLimitBurst = 10
@@ -46,7 +46,7 @@ const (
 	sseRateLimitRefillTime = sseRateLimitWindow * sseRateLimitBurst / sseRateLimitRequests
 )
 
-// streamRateLimiterStoreConfig returns the per-IP limiter settings shared by the
+// streamRateLimiterStoreConfig returns the per-client limiter settings shared by the
 // stream endpoints: sseRateLimitRequests connections per sseRateLimitWindow with
 // a burst of sseRateLimitBurst. Echo reads Rate as requests per second, so the
 // per-window count is converted.
@@ -91,11 +91,11 @@ func New(core *apicore.Core, isClientAuthenticated func(ctx echo.Context) bool) 
 // preserving the exact routes, order and per-route middleware (the SSE rate
 // limiter on the two stream endpoints) from the original initSSERoutes.
 func (c *Handler) RegisterRoutes(g *echo.Group) {
-	// Rate limiter for SSE connections: 10 per minute per IP with a burst of 10
-	// (see streamRateLimiterStoreConfig)
+	// Rate limiter for SSE connections: 10 per minute per client (per /64 for
+	// IPv6) with a burst of 10 (see streamRateLimiterStoreConfig)
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store:               middleware.NewRateLimiterMemoryStoreWithConfig(streamRateLimiterStoreConfig()),
-		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
+		IdentifierExtractor: apicore.RateLimitKey,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return context.JSON(http.StatusTooManyRequests, map[string]string{
 				"error": "Rate limit exceeded for SSE connections",

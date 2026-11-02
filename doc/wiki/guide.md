@@ -3102,7 +3102,7 @@ BirdNET-Go provides a Server-Sent Events (SSE) API that streams bird detections 
 - Compatibility with embedded systems and IoT devices
 - Reduced complexity for read-only access to detection data
 
-The endpoints include built-in rate limiting (10 requests per minute per IP) to prevent abuse while maintaining open access.
+The endpoints include built-in rate limiting (10 requests per minute per client; IPv6 clients are counted per /64) to prevent abuse while maintaining open access.
 
 > **🔒 Need Authentication?** If you require password protection for the detection stream API, please file a feature request by creating a GitHub issue at [https://github.com/tphakala/birdnet-go/issues](https://github.com/tphakala/birdnet-go/issues). Include your specific use case and security requirements to help guide the implementation.
 
@@ -3112,7 +3112,7 @@ The endpoints include built-in rate limiting (10 requests per minute per IP) to 
 
 **URL:** `GET /api/v2/detections/stream`  
 **Authentication:** None required (public endpoint)  
-**Rate Limiting:** 10 connections per minute per IP address
+**Rate Limiting:** 10 connections per minute per client (IPv6 clients are counted per /64)
 
 The SSE stream sends different types of events:
 

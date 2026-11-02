@@ -156,7 +156,9 @@ original per-route registration order across the split.
   `g.POST("/path", c.Handler, c.AuthMiddleware)`. (`c.GetAuthMiddleware()` returns
   the same value for callers that prefer an accessor.) The middleware is injected
   from the parent server via the `WithAuthMiddleware` functional option.
-- Rate-limited streams: `middleware.RateLimiterWithConfig(config)`.
+- Rate-limited streams: `middleware.RateLimiterWithConfig(config)` with
+  `IdentifierExtractor: apicore.RateLimitKey`, so a client is one bucket (per /64
+  for IPv6) instead of one bucket per address.
 - PrivateMode: all endpoints are gated by `apicore.PrivateModeAuth` group
   middleware; the bootstrap/login/live-audio carve-outs are listed in the facade's
   `isPrivateModeExempt` allow-list (keyed on method + path, fail-closed).

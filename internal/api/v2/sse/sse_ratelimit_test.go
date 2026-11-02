@@ -6,6 +6,7 @@ package sse
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +22,7 @@ import (
 )
 
 const (
-	// rateTestBurst is the number of connections one IP may open in quick
+	// rateTestBurst is the number of connections one client may open in quick
 	// succession.
 	rateTestBurst = 10
 	// rateTestOverBurst is how many attempts beyond the burst a test makes to
@@ -47,6 +48,11 @@ const (
 	// rateTestClientIP and rateTestOtherIP are documentation-range addresses.
 	rateTestClientIP = "192.0.2.10"
 	rateTestOtherIP  = "192.0.2.20"
+	// rateTestIPv6Block formats an address in one documentation-range /64; each
+	// request takes the next host part, as a client that rotates addresses would.
+	// rateTestOtherIPv6 is an address in a different /64.
+	rateTestIPv6Block = "2001:db8:1:2::%x"
+	rateTestOtherIPv6 = "2001:db8:1:3::1"
 	// rateTestStoreIdentifier names a visitor when the store is used directly.
 	rateTestStoreIdentifier = "visitor-a"
 	// rateTestOtherIdentifier is a second visitor used to trigger store cleanup.
@@ -158,5 +164,33 @@ func TestStreamRoutesRateLimit(t *testing.T) {
 			assert.Equal(t, http.StatusOK, request(rateTestClientIP, i).Code, "burst restored after a full refill, request %d", i+1)
 		}
 		assert.Equal(t, http.StatusTooManyRequests, request(rateTestClientIP, 0).Code)
+	})
+}
+
+// TestStreamRoutesRateLimitIPv6Prefix verifies that IPv6 clients are limited per
+// /64: rotating the host part of the address does not start a new bucket, and a
+// different /64 has its own.
+func TestStreamRoutesRateLimitIPv6Prefix(t *testing.T) {
+	h, core := newLoopTestHandler(t)
+	e := core.Echo
+	path := "/api/v2/detections/stream"
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		h.RegisterRoutes(core.Group)
+
+		port := rateTestFirstPort
+		// request sends one request from the given address and a new source port.
+		request := func(ip string) *httptest.ResponseRecorder {
+			port++
+			return streamRouteResult(t, e, path, ip, port)
+		}
+
+		for i := range rateTestBurst {
+			require.Equal(t, http.StatusOK, request(fmt.Sprintf(rateTestIPv6Block, i+1)).Code, "request %d is within the burst", i+1)
+		}
+		assert.Equal(t, http.StatusTooManyRequests, request(fmt.Sprintf(rateTestIPv6Block, rateTestBurst+1)).Code,
+			"a new address in the same /64 shares the exhausted bucket")
+		assert.Equal(t, http.StatusOK, request(rateTestOtherIPv6).Code, "another /64 has its own bucket")
 	})
 }

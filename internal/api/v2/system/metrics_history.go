@@ -26,11 +26,11 @@ const MetricsHistoryMaxPoints = 360
 // metricsSSEHeartbeatInterval is the keepalive interval for the metrics SSE stream.
 const metricsSSEHeartbeatInterval = 30 * time.Second
 
-// Metrics stream connection rate limit, per client IP.
+// Metrics stream connection rate limit, per client.
 const (
 	metricsStreamRateLimitRequests = 10              // connections allowed per window
 	metricsStreamRateLimitWindow   = 1 * time.Minute // window the connection count applies to
-	// metricsStreamRateLimitBurst is how many connections one IP may open in quick
+	// metricsStreamRateLimitBurst is how many connections one client may open in quick
 	// succession. It lets page refreshes and quick navigation reconnect without
 	// waiting for a token.
 	metricsStreamRateLimitBurst = 10
@@ -40,7 +40,7 @@ const (
 	metricsStreamRateLimitRefillTime = metricsStreamRateLimitWindow * metricsStreamRateLimitBurst / metricsStreamRateLimitRequests
 )
 
-// metricsStreamRateLimiterStoreConfig returns the per-IP limiter settings for the
+// metricsStreamRateLimiterStoreConfig returns the per-client limiter settings for the
 // metrics stream: metricsStreamRateLimitRequests connections per
 // metricsStreamRateLimitWindow with a burst of metricsStreamRateLimitBurst. Echo
 // reads Rate as requests per second, so the per-window count is converted.
@@ -219,7 +219,7 @@ func (c *Handler) StreamMetrics(ctx echo.Context) error {
 
 // RegisterMetricsHistoryRoutes registers the metrics history endpoints,
 // preserving the exact routes and auth middleware from the original
-// initMetricsHistoryRoutes. The stream route is rate limited per client IP as
+// initMetricsHistoryRoutes. The stream route is rate limited per client as
 // configured by metricsStreamRateLimiterStoreConfig.
 func (c *Handler) RegisterMetricsHistoryRoutes(g *echo.Group) {
 	if c.MetricsStore == nil {
@@ -232,11 +232,11 @@ func (c *Handler) RegisterMetricsHistoryRoutes(g *echo.Group) {
 	systemGroup := g.Group("/system")
 	authMiddleware := c.AuthMiddleware
 
-	// Rate limiter for metrics SSE connections: 10 per minute per IP with a burst
-	// of 10 (see metricsStreamRateLimiterStoreConfig)
+	// Rate limiter for metrics SSE connections: 10 per minute per client (per /64
+	// for IPv6) with a burst of 10 (see metricsStreamRateLimiterStoreConfig)
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store:               middleware.NewRateLimiterMemoryStoreWithConfig(metricsStreamRateLimiterStoreConfig()),
-		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
+		IdentifierExtractor: apicore.RateLimitKey,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return context.JSON(http.StatusTooManyRequests, map[string]string{
 				"error": "Rate limit exceeded for metrics SSE connections",
