@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -27,6 +28,8 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/datastore/mocks"
 	"github.com/tphakala/birdnet-go/internal/errors"
+	"github.com/tphakala/birdnet-go/internal/logger"
+	"github.com/tphakala/birdnet-go/internal/logger/logtest"
 	"github.com/tphakala/birdnet-go/internal/notification"
 
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
@@ -236,6 +239,35 @@ func TestDBFingerprint_FollowsSettings(t *testing.T) {
 
 			assert.NotEqual(t, before, controller.dbFingerprint())
 		})
+	}
+}
+
+// TestRunPrerequisites_LogsOnlyRealRuns pins the log trail of the prerequisites
+// run: one line when a run starts and one with its outcome when it ends; a POST
+// that reuses the result logs neither.
+func TestRunPrerequisites_LogsOnlyRealRuns(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	buf := logtest.CaptureBufferAt(t, slog.LevelInfo)
+	e, controller, _ := setupPrerequisitesTestEnvironment(t)
+	controller.APILogger = logger.Global().Module("api")
+	post := func() {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/prerequisites/run", http.NoBody)
+		require.NoError(t, controller.RunPrerequisites(e.NewContext(req, httptest.NewRecorder())))
+	}
+
+	post()
+	controller.Wait()
+	post() // reuses the fresh passing result
+
+	out := buf.String()
+	assert.Equal(t, 1, strings.Count(out, msgPrereqRunStarting), out)
+	require.Equal(t, 1, strings.Count(out, msgPrereqRunFinished), out)
+	for _, field := range []string{"run_id=1", "status=completed", "can_start=true", "critical_failures=0", "warnings=", "duration="} {
+		assert.Contains(t, out, field)
 	}
 }
 

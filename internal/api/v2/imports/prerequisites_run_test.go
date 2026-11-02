@@ -396,3 +396,39 @@ func TestPrereqRunner_PassingResultCarriesRecordCount(t *testing.T) {
 		assert.Equal(t, prereqReuseStale, reason)
 	})
 }
+
+// TestPrereqRunner_ReportsOnlyTheCurrentRun pins the observer hooks: a start
+// that joins or reuses reports nothing, and a run abandoned by reset reports no
+// outcome, so each run that matters is reported once.
+func TestPrereqRunner_ReportsOnlyTheCurrentRun(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var started []uint64
+		var ended []uint64
+		r := &prereqRunner{
+			onStart: func(id uint64, _ bool) { started = append(started, id) },
+			onEnd:   func(res *PrerequisitesResponse, _ time.Duration) { ended = append(ended, res.RunID) },
+		}
+		release := make(chan struct{})
+		var calls atomic.Int32
+		step := prereqStep{id: testStepA, name: "A", run: func(context.Context) []PrerequisiteCheck {
+			if calls.Add(1) == 1 {
+				<-release
+			}
+			return []PrerequisiteCheck{passCheck(testStepA)}
+		}}
+		fp := dbFingerprint{}
+
+		r.start(t.Context(), false, fp, stepsOf(step), summarizeForTest)
+		r.start(t.Context(), false, fp, stepsOf(step), summarizeForTest) // joins
+		synctest.Wait()
+		r.reset()
+		r.start(t.Context(), false, fp, stepsOf(step), summarizeForTest)
+		synctest.Wait()
+		r.start(t.Context(), false, fp, stepsOf(step), summarizeForTest) // reuses
+		close(release)
+		synctest.Wait()
+
+		assert.Equal(t, []uint64{1, 2}, started)
+		assert.Equal(t, []uint64{2}, ended, "the run abandoned by reset reports no outcome")
+	})
+}

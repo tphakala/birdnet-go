@@ -230,11 +230,24 @@ func (c *Handler) RunPrerequisites(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrMigrationInvalidBody, nil)
 	}
 
-	c.LogInfoIfEnabled("Starting migration prerequisites run",
-		logger.String("path", ctx.Request().URL.Path), logger.String("ip", ctx.RealIP()), logger.Bool("force", req.Force))
-
 	snap := c.prereqRunner().start(c.lifecycleContext(), req.Force, c.dbFingerprint(), c.prerequisiteSteps, c.finishPrerequisites)
 	return ctx.JSON(http.StatusOK, snap)
+}
+
+// logPrerequisitesStart logs a prerequisites run that really starts.
+func (c *Handler) logPrerequisitesStart(runID uint64, force bool) {
+	c.LogInfoIfEnabled(msgPrereqRunStarting, logger.Uint64("run_id", runID), logger.Bool("force", force))
+}
+
+// logPrerequisitesEnd logs the outcome of a prerequisites run once it ended.
+func (c *Handler) logPrerequisitesEnd(result *PrerequisitesResponse, elapsed time.Duration) {
+	c.LogInfoIfEnabled(msgPrereqRunFinished,
+		logger.Uint64("run_id", result.RunID),
+		logger.String("status", result.Status),
+		logger.Duration("duration", elapsed),
+		logger.Bool("can_start", result.CanStartMigration),
+		logger.Int("critical_failures", result.CriticalFailures),
+		logger.Int("warnings", result.Warnings))
 }
 
 // lifecycleContext returns the server lifecycle context, or Background when

@@ -29,6 +29,10 @@ const (
 	// fallback and MySQL CHECK TABLE on large tables.
 	prereqRunTimeout = 30 * time.Minute
 
+	// Log messages of the run: one when a run starts, one with its outcome.
+	msgPrereqRunStarting = "Starting migration prerequisites run"
+	msgPrereqRunFinished = "Migration prerequisites run finished"
+
 	// Error texts stored on a failed run.
 	msgPrereqRunTimedOut   = "The checks took longer than the time limit"
 	msgPrereqRunCancelled  = "The checks were cancelled because the server is shutting down"
@@ -132,6 +136,12 @@ type prereqRunner struct {
 	// means a plain go statement, the handler passes Core.Go.
 	now   func() time.Time
 	spawn func(func())
+
+	// onStart and onEnd, when set, observe a run that really starts and the
+	// outcome of a run that ends while it is still the current one. Joins and
+	// reuse call neither. They run outside mu.
+	onStart func(runID uint64, force bool)
+	onEnd   func(result *PrerequisitesResponse, elapsed time.Duration)
 }
 
 // clock returns the current time through the now seam.
@@ -180,6 +190,9 @@ func (r *prereqRunner) start(parent context.Context, force bool, fp dbFingerprin
 	snap := r.snapshotLocked()
 	r.mu.Unlock()
 
+	if r.onStart != nil {
+		r.onStart(runID, force)
+	}
 	body := func() { r.execute(ctx, cancel, gen, runID, fp, runSteps, sink, finish) }
 	if r.spawn != nil {
 		r.spawn(body)
@@ -193,6 +206,7 @@ func (r *prereqRunner) start(parent context.Context, force bool, fp dbFingerprin
 // ctx, and the loop stops as soon as ctx ends.
 func (r *prereqRunner) execute(ctx context.Context, cancel context.CancelFunc, gen, runID uint64, fp dbFingerprint, steps []prereqStep, sink *recordCountSink, finish func([]PrerequisiteCheck) PrerequisitesResponse) {
 	defer cancel()
+	defer r.notifyEnd(gen)
 	defer func() {
 		if rec := recover(); rec != nil {
 			r.fail(gen, fmt.Sprintf("%s (run %d)", msgPrereqRunPanicked, runID))
@@ -286,6 +300,23 @@ func runStep(ctx context.Context, step *prereqStep) []PrerequisiteCheck {
 	case <-ctx.Done():
 		return nil
 	}
+}
+
+// notifyEnd reports the outcome of the run of generation gen to onEnd, unless a
+// reset or a newer run took the slot over.
+func (r *prereqRunner) notifyEnd(gen uint64) {
+	if r.onEnd == nil {
+		return
+	}
+	r.mu.Lock()
+	if r.generation != gen || r.status == PrereqRunStatusRunning {
+		r.mu.Unlock()
+		return
+	}
+	result := r.snapshotLocked()
+	elapsed := r.finishedAt.Sub(r.startedAt)
+	r.mu.Unlock()
+	r.onEnd(&result, elapsed)
 }
 
 // ctxFailureMessage names why ctx ended.

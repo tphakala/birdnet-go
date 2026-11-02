@@ -192,10 +192,11 @@ func (c *Handler) getNotificationService() *notification.Service {
 }
 
 // prereqRunner returns the prerequisites run slot, creating it on first use. Its
-// run goroutines are tracked by the Core so Controller.Shutdown waits for them.
+// run goroutines are tracked by the Core so Controller.Shutdown waits for them,
+// and it logs the start and the outcome of each run.
 func (c *Handler) prereqRunner() *prereqRunner {
 	c.prereqRunnerOnce.Do(func() {
-		c.prereqRunnerVal = &prereqRunner{spawn: c.Go}
+		c.prereqRunnerVal = &prereqRunner{spawn: c.Go, onStart: c.logPrerequisitesStart, onEnd: c.logPrerequisitesEnd}
 	})
 	return c.prereqRunnerVal
 }
