@@ -15,6 +15,7 @@ import (
 	"github.com/tphakala/birdnet-go/internal/datastore"
 	"github.com/tphakala/birdnet-go/internal/logger"
 	"github.com/tphakala/birdnet-go/internal/observability"
+	"golang.org/x/time/rate"
 )
 
 // MetricsHistoryMaxPoints is the maximum number of data points retained per
@@ -24,6 +25,32 @@ const MetricsHistoryMaxPoints = 360
 
 // metricsSSEHeartbeatInterval is the keepalive interval for the metrics SSE stream.
 const metricsSSEHeartbeatInterval = 30 * time.Second
+
+// Metrics stream connection rate limit, per client IP.
+const (
+	metricsStreamRateLimitRequests = 10              // connections allowed per window
+	metricsStreamRateLimitWindow   = 1 * time.Minute // window the connection count applies to
+	// metricsStreamRateLimitBurst is how many connections one IP may open in quick
+	// succession. It lets page refreshes and quick navigation reconnect without
+	// waiting for a token.
+	metricsStreamRateLimitBurst = 10
+	// metricsStreamRateLimitRefillTime is how long an exhausted bucket takes to
+	// fill again. Idle visitors are kept at least that long, so forgetting one never
+	// grants more connections than the refill would have.
+	metricsStreamRateLimitRefillTime = metricsStreamRateLimitWindow * metricsStreamRateLimitBurst / metricsStreamRateLimitRequests
+)
+
+// metricsStreamRateLimiterStoreConfig returns the per-IP limiter settings for the
+// metrics stream: metricsStreamRateLimitRequests connections per
+// metricsStreamRateLimitWindow with a burst of metricsStreamRateLimitBurst. Echo
+// reads Rate as requests per second, so the per-window count is converted.
+func metricsStreamRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
+	return middleware.RateLimiterMemoryStoreConfig{
+		Rate:      rate.Limit(float64(metricsStreamRateLimitRequests) / metricsStreamRateLimitWindow.Seconds()),
+		Burst:     metricsStreamRateLimitBurst,
+		ExpiresIn: metricsStreamRateLimitRefillTime,
+	}
+}
 
 // MetricsHistoryResponse is the JSON envelope for the history endpoint.
 type MetricsHistoryResponse struct {
@@ -191,8 +218,9 @@ func (c *Handler) StreamMetrics(ctx echo.Context) error {
 }
 
 // RegisterMetricsHistoryRoutes registers the metrics history endpoints,
-// preserving the exact routes, rate limiter and auth middleware from the
-// original initMetricsHistoryRoutes.
+// preserving the exact routes and auth middleware from the original
+// initMetricsHistoryRoutes. The stream route is rate limited per client IP as
+// configured by metricsStreamRateLimiterStoreConfig.
 func (c *Handler) RegisterMetricsHistoryRoutes(g *echo.Group) {
 	if c.MetricsStore == nil {
 		c.LogWarnIfEnabled("Metrics store not configured, skipping metrics history routes")
@@ -204,14 +232,10 @@ func (c *Handler) RegisterMetricsHistoryRoutes(g *echo.Group) {
 	systemGroup := g.Group("/system")
 	authMiddleware := c.AuthMiddleware
 
-	// Rate limiter for metrics SSE connections (10 requests per minute per IP)
+	// Rate limiter for metrics SSE connections: 10 per minute per IP with a burst
+	// of 10 (see metricsStreamRateLimiterStoreConfig)
 	rateLimiterConfig := middleware.RateLimiterConfig{
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
-			middleware.RateLimiterMemoryStoreConfig{
-				Rate:      10,
-				ExpiresIn: 1 * time.Minute,
-			},
-		),
+		Store:               middleware.NewRateLimiterMemoryStoreWithConfig(metricsStreamRateLimiterStoreConfig()),
 		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return context.JSON(http.StatusTooManyRequests, map[string]string{

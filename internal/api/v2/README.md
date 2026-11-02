@@ -957,6 +957,7 @@ SSE endpoints are rate limited to prevent abuse:
 
 - Detection and sound level streams: 10 requests/minute per IP, burst of 10, shared by both streams
 - Stream health streams: 5 requests/minute per IP (authenticated, settings page)
+- Metrics stream: 10 requests/minute per IP, burst of 10 (authenticated)
 - Notification streams: 10 requests/minute per IP, burst of 15 (public, used by dashboard NotificationBell)
 
 ## Server-Sent Events (SSE)
