@@ -137,6 +137,34 @@ func newImportHandler(t *testing.T) (*echo.Echo, *Handler) {
 	return e, c
 }
 
+// importDoneTimeout bounds how long a test waits for an import job to finish.
+const importDoneTimeout = 10 * time.Second
+
+// importDonePollInterval is how often waitImportDone checks the job state.
+const importDonePollInterval = 25 * time.Millisecond
+
+// getImportStatus calls GetImportStatus, requires a 200 answer and decodes it.
+func getImportStatus(t *testing.T, c *Handler) importStatusResponse {
+	t.Helper()
+	rec := httptest.NewRecorder()
+	ctx := echo.New().NewContext(httptest.NewRequest(http.MethodGet, "/", http.NoBody), rec)
+	require.NoError(t, c.GetImportStatus(ctx))
+	require.Equal(t, http.StatusOK, rec.Code)
+	var resp importStatusResponse
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	return resp
+}
+
+// waitImportDone waits until the current import job is terminal and returns its status.
+func waitImportDone(t *testing.T, c *Handler) importStatusResponse {
+	t.Helper()
+	require.Eventually(t, func() bool {
+		job := c.importMgr.active()
+		return job != nil && job.isDone()
+	}, importDoneTimeout, importDonePollInterval, "import must reach a terminal state")
+	return getImportStatus(t, c)
+}
+
 // makeTempDB creates a temporary BirdNET-Pi SQLite file with the given number of rows.
 func makeTempDB(t *testing.T, rows int) (dir, path string) {
 	t.Helper()
@@ -323,13 +351,7 @@ func TestStartBirdNETPiImport_ModeDBAudio_NoExportPath_Returns400(t *testing.T) 
 	assert.Equal(t, http.StatusBadRequest, rec.Code, "db-audio without an export path must be rejected")
 
 	// No import slot may have been reserved: a subsequent status check must report idle.
-	statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	statusRec := httptest.NewRecorder()
-	statusCtx := echo.New().NewContext(statusReq, statusRec)
-	require.NoError(t, c.GetImportStatus(statusCtx))
-	var status importStatusResponse
-	require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &status))
-	assert.False(t, status.Running, "rejected db-audio request must not occupy the import slot")
+	assert.False(t, getImportStatus(t, c).Running, "rejected db-audio request must not occupy the import slot")
 }
 
 // makeTempDBWithRow creates a temporary BirdNET-Pi SQLite file in dir with a single
@@ -428,21 +450,7 @@ func TestStartBirdNETPiImport_ModeDBAudio_CopiesClip(t *testing.T) {
 	require.NoError(t, json.NewDecoder(startResp.Body).Decode(&startBody))
 	require.NotEmpty(t, startBody.JobID)
 
-	// Poll status until the import reaches a terminal done state.
-	deadline := time.Now().Add(10 * time.Second)
-	var finalStatus importStatusResponse
-	e2 := echo.New()
-	for time.Now().Before(deadline) {
-		statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		statusRec := httptest.NewRecorder()
-		statusCtx := e2.NewContext(statusReq, statusRec)
-		require.NoError(t, c.GetImportStatus(statusCtx))
-		require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &finalStatus))
-		if !finalStatus.Running && finalStatus.Status == importStatusDone {
-			break
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
+	finalStatus := waitImportDone(t, c)
 
 	require.Equal(t, importStatusDone, finalStatus.Status, "db-audio import must reach done state")
 	assert.Empty(t, finalStatus.Error)
@@ -797,129 +805,89 @@ func TestCancelImport_ReportsJobState(t *testing.T) {
 	}
 }
 
-// TestGetImportStatus_NoJob_ReturnsIdle verifies idle status when no job exists.
-func TestGetImportStatus_NoJob_ReturnsIdle(t *testing.T) {
-	_, c := newImportHandler(t)
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+// TestGetImportStatus verifies the status answer for every job state. A cancelled
+// run reports done with the cancelled flag set instead of a failure, so
+// rehydrating UIs do not misreport a deliberate cancel as "import failed"; a
+// failed run reports the generic error message and does not set the flag.
+func TestGetImportStatus(t *testing.T) {
+	// startJob registers a job on the handler and returns it.
+	startJob := func(t *testing.T, c *Handler, id string) *importJob {
+		t.Helper()
+		job := newImportJob(id, func() {})
+		require.True(t, c.importMgr.start(job))
+		return job
+	}
 
-	require.NoError(t, c.GetImportStatus(ctx))
-	assert.Equal(t, http.StatusOK, rec.Code)
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, c *Handler)
+		want  importStatusResponse
+	}{
+		{
+			name:  "no job is idle",
+			setup: func(*testing.T, *Handler) {},
+			want:  importStatusResponse{Status: importStatusIdle},
+		},
+		{
+			name: "running job reports progress",
+			setup: func(t *testing.T, c *Handler) {
+				t.Helper()
+				startJob(t, c, "running1").Report(imports.ImportStats{Total: 100, Processed: 50, Phase: "import"})
+			},
+			want: importStatusResponse{
+				Running:  true,
+				JobID:    "running1",
+				Status:   importStatusRunning,
+				Progress: &importProgress{Total: 100, Processed: 50, Phase: "import"},
+			},
+		},
+		{
+			name: "done job reports final progress",
+			setup: func(t *testing.T, c *Handler) {
+				t.Helper()
+				startJob(t, c, "done1").finish(imports.ImportStats{Total: 10, Processed: 10, Inserted: 8, Skipped: 2, Phase: "done"}, nil)
+			},
+			want: importStatusResponse{
+				JobID:    "done1",
+				Status:   importStatusDone,
+				Progress: &importProgress{Total: 10, Processed: 10, Inserted: 8, Skipped: 2, Phase: "done"},
+			},
+		},
+		{
+			name: "cancelled job is done and flagged cancelled",
+			setup: func(t *testing.T, c *Handler) {
+				t.Helper()
+				startJob(t, c, "cancelled1").finish(imports.ImportStats{Total: 10, Processed: 4, Inserted: 3, Skipped: 1, Phase: "done"}, context.Canceled)
+			},
+			want: importStatusResponse{
+				JobID:     "cancelled1",
+				Status:    importStatusDone,
+				Progress:  &importProgress{Total: 10, Processed: 4, Inserted: 3, Skipped: 1, Phase: "done"},
+				Cancelled: true,
+			},
+		},
+		{
+			name: "failed job carries the generic error",
+			setup: func(t *testing.T, c *Handler) {
+				t.Helper()
+				startJob(t, c, "failed1").finish(imports.ImportStats{Total: 10, Processed: 2, Errors: 1, Phase: "done"}, assert.AnError)
+			},
+			want: importStatusResponse{
+				JobID:    "failed1",
+				Status:   importStatusDone,
+				Progress: &importProgress{Total: 10, Processed: 2, Errors: 1, Phase: "done"},
+				Error:    importErrorMessage,
+			},
+		},
+	}
 
-	var resp importStatusResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.False(t, resp.Running)
-	assert.Equal(t, importStatusIdle, resp.Status)
-}
-
-// TestGetImportStatus_RunningJob verifies running status with progress.
-func TestGetImportStatus_RunningJob(t *testing.T) {
-	_, c := newImportHandler(t)
-
-	_, jobCancel := context.WithCancel(t.Context())
-	defer jobCancel()
-	job := newImportJob("running1", jobCancel)
-	require.True(t, c.importMgr.start(job))
-	job.Report(imports.ImportStats{Total: 100, Processed: 50, Phase: "import"})
-
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	require.NoError(t, c.GetImportStatus(ctx))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var resp importStatusResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.True(t, resp.Running)
-	assert.Equal(t, importStatusRunning, resp.Status)
-	assert.Equal(t, "running1", resp.JobID)
-	require.NotNil(t, resp.Progress)
-	assert.Equal(t, 100, resp.Progress.Total)
-	assert.Equal(t, 50, resp.Progress.Processed)
-}
-
-// TestGetImportStatus_DoneJob verifies done status after completion.
-func TestGetImportStatus_DoneJob(t *testing.T) {
-	_, c := newImportHandler(t)
-
-	_, jobCancel := context.WithCancel(t.Context())
-	jobCancel()
-	job := newImportJob("done1", jobCancel)
-	require.True(t, c.importMgr.start(job))
-	job.finish(imports.ImportStats{Total: 10, Processed: 10, Inserted: 8, Skipped: 2, Phase: "done"}, nil)
-
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	require.NoError(t, c.GetImportStatus(ctx))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var resp importStatusResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.False(t, resp.Running)
-	assert.Equal(t, importStatusDone, resp.Status)
-	assert.Empty(t, resp.Error)
-}
-
-// TestGetImportStatus_CancelledJob verifies a cancelled run reports done with
-// the cancelled flag set instead of a failure, so rehydrating UIs do not
-// misreport a deliberate cancel as "import failed".
-func TestGetImportStatus_CancelledJob(t *testing.T) {
-	_, c := newImportHandler(t)
-
-	_, jobCancel := context.WithCancel(t.Context())
-	jobCancel()
-	job := newImportJob("cancelled1", jobCancel)
-	require.True(t, c.importMgr.start(job))
-	job.finish(imports.ImportStats{Total: 10, Processed: 4, Inserted: 3, Skipped: 1, Phase: "done"}, context.Canceled)
-
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	require.NoError(t, c.GetImportStatus(ctx))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var resp importStatusResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.False(t, resp.Running)
-	assert.Equal(t, importStatusDone, resp.Status)
-	assert.True(t, resp.Cancelled)
-	assert.Empty(t, resp.Error)
-}
-
-// TestGetImportStatus_FailedJob verifies a failed run reports the generic
-// error message and does not set the cancelled flag.
-func TestGetImportStatus_FailedJob(t *testing.T) {
-	_, c := newImportHandler(t)
-
-	_, jobCancel := context.WithCancel(t.Context())
-	jobCancel()
-	job := newImportJob("failed1", jobCancel)
-	require.True(t, c.importMgr.start(job))
-	job.finish(imports.ImportStats{Total: 10, Processed: 2, Errors: 1, Phase: "done"}, assert.AnError)
-
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	require.NoError(t, c.GetImportStatus(ctx))
-	assert.Equal(t, http.StatusOK, rec.Code)
-
-	var resp importStatusResponse
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	assert.False(t, resp.Running)
-	assert.Equal(t, importStatusDone, resp.Status)
-	assert.False(t, resp.Cancelled)
-	assert.Equal(t, importErrorMessage, resp.Error)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, c := newImportHandler(t)
+			tt.setup(t, c)
+			assert.Equal(t, tt.want, getImportStatus(t, c))
+		})
+	}
 }
 
 // TestImportRoutes_Registered verifies all import routes are registered.
@@ -988,20 +956,7 @@ func TestStartBirdNETPiImport_RealSQLiteSource_EndToEnd(t *testing.T) {
 	assert.NotEmpty(t, jobID)
 	assert.Equal(t, importStatusStarted, startResp.Status)
 
-	// Poll status until done.
-	deadline := time.Now().Add(10 * time.Second)
-	var finalStatus importStatusResponse
-	for time.Now().Before(deadline) {
-		statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		statusRec := httptest.NewRecorder()
-		statusCtx := e.NewContext(statusReq, statusRec)
-		require.NoError(t, c.GetImportStatus(statusCtx))
-		require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &finalStatus))
-		if !finalStatus.Running && finalStatus.Status == importStatusDone {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	finalStatus := waitImportDone(t, c)
 
 	assert.Equal(t, importStatusDone, finalStatus.Status, "import should reach done state")
 	assert.Empty(t, finalStatus.Error)
@@ -1332,21 +1287,7 @@ func TestStartBirdNETPiImport_PanicInEngine_RecoverAndPreserveStats(t *testing.T
 	require.NoError(t, json.NewDecoder(startResp.Body).Decode(&startBody))
 	require.NotEmpty(t, startBody.JobID)
 
-	// Poll status until done.
-	deadline := time.Now().Add(10 * time.Second)
-	var finalStatus importStatusResponse
-	e2 := echo.New()
-	for time.Now().Before(deadline) {
-		statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		statusRec := httptest.NewRecorder()
-		statusCtx := e2.NewContext(statusReq, statusRec)
-		require.NoError(t, c.GetImportStatus(statusCtx))
-		require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &finalStatus))
-		if !finalStatus.Running && finalStatus.Status == importStatusDone {
-			break
-		}
-		time.Sleep(25 * time.Millisecond)
-	}
+	finalStatus := waitImportDone(t, c)
 
 	assert.Equal(t, importStatusDone, finalStatus.Status, "job must reach done state after panic")
 	assert.NotEmpty(t, finalStatus.Error, "error must be set after panic")
@@ -1382,119 +1323,102 @@ func writeMinimalBirdNetPiDB(t *testing.T, path string) {
 	require.NoError(t, sqlDB.Close())
 }
 
-func TestResolveNativeImportSourcePath_RejectsRelative(t *testing.T) {
-	_, err := resolveNativeImportSourcePath("relative/birds.db")
-	require.ErrorIs(t, err, errInvalidSourcePath)
-}
-
-func TestResolveNativeImportSourcePath_RejectsMissing(t *testing.T) {
-	_, err := resolveNativeImportSourcePath("/nonexistent/birds.db")
-	require.ErrorIs(t, err, errInvalidSourcePath)
-}
-
-// TestResolveNativeImportSourcePath_AcceptsRegularFile documents that the
-// resolver is path-only: it accepts any absolute, existing, regular file and
-// defers schema validation to the shared factory + Validate step in the handler
-// (mirroring the container branch). A non-BirdNET-Pi file is rejected there, not
-// here; see TestStartBirdNETPiImport_NativeDispatch_RejectsInvalidDB.
-func TestResolveNativeImportSourcePath_AcceptsRegularFile(t *testing.T) {
-	f := filepath.Join(t.TempDir(), "birds.db")
-	require.NoError(t, os.WriteFile(f, []byte("not sqlite"), 0o600))
-
-	wantF, err := filepath.EvalSymlinks(f)
+// TestResolveNativeImportSourcePath documents that the resolver is path-only: it
+// accepts any absolute, existing, regular file and defers schema validation to
+// the shared factory + Validate step in the handler (mirroring the container
+// branch). A non-BirdNET-Pi file is rejected there, not here; see the invalid
+// database row of TestStartBirdNETPiImport_Dispatch.
+func TestResolveNativeImportSourcePath(t *testing.T) {
+	regular := filepath.Join(t.TempDir(), "birds.db")
+	require.NoError(t, os.WriteFile(regular, []byte("not sqlite"), 0o600))
+	wantRegular, err := filepath.EvalSymlinks(regular)
 	require.NoError(t, err)
 
-	got, err := resolveNativeImportSourcePath(f)
-	require.NoError(t, err)
-	assert.Equal(t, wantF, got)
+	tests := []struct {
+		name    string
+		path    string
+		want    string
+		wantErr bool
+	}{
+		{name: "relative path is rejected", path: "relative/birds.db", wantErr: true},
+		{name: "missing file is rejected", path: filepath.Join(t.TempDir(), "missing.db"), wantErr: true},
+		{name: "directory is rejected", path: t.TempDir(), wantErr: true},
+		{name: "regular file is accepted", path: regular, want: wantRegular},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolveNativeImportSourcePath(tt.path)
+			if tt.wantErr {
+				require.ErrorIs(t, err, errInvalidSourcePath)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
 }
 
-// TestStartBirdNETPiImport_NativeDispatch_AcceptsAbsolutePath verifies that
-// when isContainerEnv returns false, an absolute path to a valid SQLite db is
-// accepted (native branch).
-func TestStartBirdNETPiImport_NativeDispatch_AcceptsAbsolutePath(t *testing.T) {
-	_, c := newImportHandler(t)
-	mockDS := mocks.NewMockInterface(t)
-	c.DS = mockDS
-	mockRepo := mocks.NewMockDetectionRepository(t)
-	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
-	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
-	c.Repo = mockRepo
-	// Force native branch.
-	c.isContainerEnv = func() bool { return false }
-	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
+// TestStartBirdNETPiImport_Dispatch verifies that the source path rules follow
+// isContainerEnv: native accepts an absolute path to a valid database and
+// rejects a regular file that is not a BirdNET-Pi database (400 from the shared
+// factory + Validate step, using the real factory), and the container branch
+// accepts a relative path under the import root.
+func TestStartBirdNETPiImport_Dispatch(t *testing.T) {
+	tests := []struct {
+		name      string
+		container bool
+		validDB   bool
+		wantCode  int
+	}{
+		{name: "native accepts absolute path", validDB: true, wantCode: http.StatusAccepted},
+		{name: "native rejects invalid database", wantCode: http.StatusBadRequest},
+		{name: "container accepts relative path", container: true, validDB: true, wantCode: http.StatusAccepted},
+	}
 
-	dbPath := filepath.Join(t.TempDir(), "birds.db")
-	writeMinimalBirdNetPiDB(t, dbPath)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, c := newImportHandler(t)
+			c.DS = mocks.NewMockInterface(t)
+			mockRepo := mocks.NewMockDetectionRepository(t)
+			if tt.wantCode == http.StatusAccepted {
+				mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
+				mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
+			}
+			c.Repo = mockRepo
+			c.isContainerEnv = func() bool { return tt.container }
 
-	body := fmt.Sprintf(`{"mode":"db-only","source_path":%q}`, dbPath)
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+			// The import root holds the database only for the container branch; on
+			// the native branch it is an unrelated directory, so an absolute path
+			// is accepted only by the native rule.
+			dbDir := t.TempDir()
+			c.importSourceRoot = dbDir
+			if !tt.container {
+				c.importSourceRoot = t.TempDir()
+			}
+			dbPath := filepath.Join(dbDir, "birds.db")
+			if tt.validDB {
+				writeMinimalBirdNetPiDB(t, dbPath)
+				c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
+			} else {
+				require.NoError(t, os.WriteFile(dbPath, []byte("not a sqlite database"), 0o600))
+				c.importSourceFactory = nil // real factory (birdnetpi.New) fails open/validate
+			}
 
-	require.NoError(t, c.StartBirdNETPiImport(ctx))
-	assert.Equal(t, http.StatusAccepted, rec.Code)
-}
+			sourcePath := dbPath
+			if tt.container {
+				sourcePath = "birds.db"
+			}
+			body := fmt.Sprintf(`{"mode":"db-only","source_path":%q}`, sourcePath)
+			req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			ctx := echo.New().NewContext(req, rec)
 
-// TestStartBirdNETPiImport_NativeDispatch_RejectsInvalidDB verifies that a
-// native absolute path to a regular file that is NOT a BirdNET-Pi database is
-// rejected with 400 by the shared factory + Validate step (the resolver is
-// path-only and no longer validates schema itself).
-func TestStartBirdNETPiImport_NativeDispatch_RejectsInvalidDB(t *testing.T) {
-	_, c := newImportHandler(t)
-	mockDS := mocks.NewMockInterface(t)
-	c.DS = mockDS
-	mockRepo := mocks.NewMockDetectionRepository(t)
-	c.Repo = mockRepo
-	c.isContainerEnv = func() bool { return false }
-	// Use the real factory (birdnetpi.New) so the bad file fails open/validate.
-	c.importSourceFactory = nil
-
-	bad := filepath.Join(t.TempDir(), "birds.db")
-	require.NoError(t, os.WriteFile(bad, []byte("not a sqlite database"), 0o600))
-
-	body := fmt.Sprintf(`{"mode":"db-only","source_path":%q}`, bad)
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	require.NoError(t, c.StartBirdNETPiImport(ctx))
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
-}
-
-// TestStartBirdNETPiImport_ContainerDispatch_AcceptsRelativePath verifies that
-// when isContainerEnv returns true, a relative path (existing under the import
-// root) is accepted (container branch unchanged).
-func TestStartBirdNETPiImport_ContainerDispatch_AcceptsRelativePath(t *testing.T) {
-	_, c := newImportHandler(t)
-	mockDS := mocks.NewMockInterface(t)
-	c.DS = mockDS
-	mockRepo := mocks.NewMockDetectionRepository(t)
-	mockRepo.EXPECT().Search(mock.Anything, mock.Anything).Return(nil, int64(0), nil).Maybe()
-	mockRepo.EXPECT().Save(mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
-	c.Repo = mockRepo
-	// Force container branch.
-	c.isContainerEnv = func() bool { return true }
-	root := t.TempDir()
-	c.importSourceRoot = root
-	// Place a real file under root so the resolver succeeds.
-	dbPath := filepath.Join(root, "birds.db")
-	writeMinimalBirdNetPiDB(t, dbPath)
-	c.importSourceFactory = func(_ string) (imports.Source, error) { return &fakeSource{}, nil }
-
-	body := `{"mode":"db-only","source_path":"birds.db"}`
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/", bytes.NewBufferString(body))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-
-	require.NoError(t, c.StartBirdNETPiImport(ctx))
-	assert.Equal(t, http.StatusAccepted, rec.Code)
+			require.NoError(t, c.StartBirdNETPiImport(ctx))
+			assert.Equal(t, tt.wantCode, rec.Code)
+		})
+	}
 }
 
 // TestNewHandler_DefaultsImportSeams verifies that New() wires all injectable
@@ -1547,20 +1471,7 @@ func TestLaunchImport_RemovesStagingDirOnCompletion(t *testing.T) {
 	require.NoError(t, launchErr)
 	require.NotEmpty(t, id)
 
-	// Poll until the job reaches the done state (cleanup runs before job.finish).
-	deadline := time.Now().Add(10 * time.Second)
-	var finalStatus importStatusResponse
-	for time.Now().Before(deadline) {
-		statusReq := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
-		statusRec := httptest.NewRecorder()
-		statusCtx := e.NewContext(statusReq, statusRec)
-		require.NoError(t, c.GetImportStatus(statusCtx))
-		require.NoError(t, json.Unmarshal(statusRec.Body.Bytes(), &finalStatus))
-		if !finalStatus.Running && finalStatus.Status == importStatusDone {
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
+	finalStatus := waitImportDone(t, c)
 
 	assert.Equal(t, importStatusDone, finalStatus.Status)
 	assert.NoDirExists(t, stagingDir, "staging dir must be removed by engine goroutine on completion")
