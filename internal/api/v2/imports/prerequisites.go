@@ -155,7 +155,7 @@ func (c *Handler) GetPrerequisites(ctx echo.Context) error {
 }
 
 // summarizePrerequisites counts failures and warnings in checks and decides
-// whether a migration may start.
+// whether a migration may start. The run stamps the completion time.
 func (c *Handler) summarizePrerequisites(checks []PrerequisiteCheck) PrerequisitesResponse {
 	criticalFailures := 0
 	warnings := 0
@@ -176,7 +176,6 @@ func (c *Handler) summarizePrerequisites(checks []PrerequisiteCheck) Prerequisit
 		Checks:            checks,
 		CriticalFailures:  criticalFailures,
 		Warnings:          warnings,
-		CheckedAt:         time.Now(),
 	}
 }
 
@@ -280,7 +279,7 @@ func (c *Handler) isUsingMySQL() bool {
 // checkStateIdle verifies the migration is in IDLE state.
 func (c *Handler) checkStateIdle() PrerequisiteCheck {
 	check := PrerequisiteCheck{
-		ID:          "state_idle",
+		ID:          checkIDStateIdle,
 		Name:        "Migration State",
 		Description: "Migration must be in idle state",
 		Severity:    CheckSeverityCritical,
@@ -319,7 +318,7 @@ func (c *Handler) checkStateIdle() PrerequisiteCheck {
 // Required space is the greater of: 1GB minimum or 50% of existing database size.
 func (c *Handler) checkDiskSpace() PrerequisiteCheck {
 	check := PrerequisiteCheck{
-		ID:          "disk_space",
+		ID:          checkIDDiskSpace,
 		Name:        "Disk Space",
 		Description: "Sufficient free space for migration",
 		Severity:    CheckSeverityCritical,
@@ -428,7 +427,7 @@ func (c *Handler) getDatabaseDirectoryResolved() (string, error) {
 // checkLegacyAccessible verifies the legacy database is accessible for reading.
 func (c *Handler) checkLegacyAccessible(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
-		ID:          "legacy_accessible",
+		ID:          checkIDLegacyAccessible,
 		Name:        "Legacy Database",
 		Description: "Legacy database must be accessible",
 		Severity:    CheckSeverityCritical,
@@ -488,7 +487,7 @@ func (c *Handler) checkLegacyAccessible(ctx context.Context) PrerequisiteCheck {
 // Scans all result rows since quick_check can return multiple errors.
 func (c *Handler) checkSQLiteIntegrity(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
-		ID:          "sqlite_integrity",
+		ID:          checkIDSQLiteIntegrity,
 		Name:        "Database Integrity",
 		Description: "SQLite quick integrity check",
 		Severity:    CheckSeverityCritical,
@@ -542,7 +541,7 @@ func (c *Handler) checkSQLiteIntegrity(ctx context.Context) PrerequisiteCheck {
 // checkWritePermission verifies write access to the database directory.
 func (c *Handler) checkWritePermission() PrerequisiteCheck {
 	check := PrerequisiteCheck{
-		ID:          "write_permission",
+		ID:          checkIDWritePermission,
 		Name:        "Write Permission",
 		Description: "Can write to database directory",
 		Severity:    CheckSeverityCritical,
@@ -580,7 +579,7 @@ func (c *Handler) checkWritePermission() PrerequisiteCheck {
 // checkMySQLTableHealth runs CHECK TABLE on legacy MySQL tables.
 func (c *Handler) checkMySQLTableHealth(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
-		ID:          "mysql_table_health",
+		ID:          checkIDMySQLTableHealth,
 		Name:        "MySQL Table Health",
 		Description: "Check legacy table health",
 		Severity:    CheckSeverityCritical,
@@ -631,7 +630,7 @@ func (c *Handler) checkMySQLTableHealth(ctx context.Context) PrerequisiteCheck {
 // Uses a unique table name with timestamp to prevent concurrent request collisions.
 func (c *Handler) checkMySQLPermissions(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
-		ID:          "mysql_permissions",
+		ID:          checkIDMySQLPermissions,
 		Name:        "MySQL Permissions",
 		Description: "Verify CREATE, INSERT, UPDATE, DELETE, DROP privileges",
 		Severity:    CheckSeverityCritical,
@@ -790,7 +789,7 @@ func (c *Handler) countLegacyRecords(ctx context.Context) (int64, PrerequisiteCh
 // checkExistingV2Data warns if migration target tables already have data.
 func (c *Handler) checkExistingV2Data(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
-		ID:          "existing_v2_data",
+		ID:          checkIDExistingV2Data,
 		Name:        "Existing Migration Data",
 		Description: "Check for existing data in migration target tables",
 		Severity:    CheckSeverityWarning,
@@ -842,7 +841,7 @@ func (c *Handler) checkExistingV2Data(ctx context.Context) PrerequisiteCheck {
 // checkMemoryAvailable checks if there's enough free memory for migration.
 func (c *Handler) checkMemoryAvailable() PrerequisiteCheck {
 	check := PrerequisiteCheck{
-		ID:          "memory_available",
+		ID:          checkIDMemoryAvailable,
 		Name:        "Available Memory",
 		Description: "Sufficient memory for batch processing",
 		Severity:    CheckSeverityWarning,
