@@ -10,6 +10,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 // TestRateLimitKeyFor verifies how a client address maps to its limiter key:
@@ -66,4 +68,27 @@ func TestRateLimitKey(t *testing.T) {
 		"addresses in one /64 are one client")
 	assert.NotEqual(t, keyFor("[2001:db8:1:2::1]:40000"), keyFor("[2001:db8:1:3::1]:40000"),
 		"another /64 is another client")
+}
+
+// TestPeerRateLimitKey verifies that the peer key ignores forwarded client
+// addresses: a request names another client in a header and still keys on the
+// address it arrived from, with IPv6 peers reduced to their /64.
+func TestPeerRateLimitKey(t *testing.T) {
+	t.Parallel()
+
+	keyFor := func(remoteAddr, forwarded string) string {
+		req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
+		req.RemoteAddr = remoteAddr
+		req.Header.Set(echo.HeaderXForwardedFor, forwarded)
+		req.Header.Set(proxytrust.HeaderCFConnectingIP, forwarded)
+		ctx := echo.New().NewContext(req, httptest.NewRecorder())
+		key, err := PeerRateLimitKey(ctx)
+		require.NoError(t, err)
+		return key
+	}
+
+	assert.Equal(t, "10.0.0.5", keyFor("10.0.0.5:40000", "203.0.113.7"), "a forwarded address does not change the key")
+	assert.Equal(t, "10.0.0.5", keyFor("10.0.0.5:40001", "203.0.113.8"), "a new port or forwarded address is the same peer")
+	assert.Equal(t, "2001:db8:1:2::", keyFor("[2001:db8:1:2::5]:40000", "203.0.113.7"), "an IPv6 peer is keyed per /64")
+	assert.Equal(t, "fe80::", keyFor("[fe80::1%eth0]:40000", "203.0.113.7"), "a zone is not part of the key")
 }
