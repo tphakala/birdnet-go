@@ -8,6 +8,7 @@
 package importsapi
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -17,12 +18,24 @@ import (
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 	"github.com/tphakala/birdnet-go/internal/conf"
+	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
+	"github.com/tphakala/birdnet-go/internal/datastore/v2/migration"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 	gorm_logger "gorm.io/gorm/logger"
 )
 
 const (
+	// migrationGlobalsGuardEnvKey names the variable the migration-global
+	// helpers set. Its value does not matter: t.Setenv fails a test that is
+	// parallel or has a parallel ancestor, and marks it so a later t.Parallel()
+	// panics. The key sits outside the BIRDNET_ prefix so it never reads as a
+	// configuration variable.
+	migrationGlobalsGuardEnvKey = "IMPORTS_MIGRATION_GLOBALS_SET"
+
+	// migrationGlobalsGuardEnvValue is the placeholder value the guard stores.
+	migrationGlobalsGuardEnvValue = "1"
+
 	testMQTTTopic        = "birdnet/detections"
 	testNewYorkLongitude = -74.0060 // New York City longitude for test data
 )
@@ -155,4 +168,57 @@ func newFakeV2ManagerWithTable(t *testing.T, tableName, prefix string, count int
 func testCore(t *testing.T) *apicore.Core {
 	t.Helper()
 	return apitest.NewCore(t)
+}
+
+// setMigrationGlobal sets one process-wide migration global for one test and
+// restores its previous value when the test ends. It is the only way tests
+// write stateManager, migrationWorker, migrationWorkerCancel and isV2OnlyMode
+// (through the wrappers below). It fails a parallel caller, because the
+// globals are process-wide, and it writes under migrationMu, the lock
+// production reads take. Calling it twice in one test is fine: the cleanups
+// run in reverse order.
+func setMigrationGlobal[T any](t *testing.T, global *T, value T) {
+	t.Helper()
+	t.Setenv(migrationGlobalsGuardEnvKey, migrationGlobalsGuardEnvValue)
+
+	migrationMu.Lock()
+	prev := *global
+	*global = value
+	migrationMu.Unlock()
+
+	t.Cleanup(func() {
+		migrationMu.Lock()
+		defer migrationMu.Unlock()
+		*global = prev
+	})
+}
+
+// setMigrationState installs the migration state manager and worker for one
+// test.
+func setMigrationState(t *testing.T, sm *datastoreV2.StateManager, w *migration.Worker) {
+	t.Helper()
+	setMigrationGlobal(t, &stateManager, sm)
+	setMigrationGlobal(t, &migrationWorker, w)
+}
+
+// setV2OnlyMode sets the package-wide v2-only flag for one test.
+func setV2OnlyMode(t *testing.T, on bool) {
+	t.Helper()
+	setMigrationGlobal(t, &isV2OnlyMode, on)
+}
+
+// setMigrationWorkerCancel installs the migration worker's cancel function for
+// one test through the production setter, SetMigrationWorkerCancel, and
+// restores the previous function when the test ends. It follows the same rules
+// as setMigrationGlobal.
+func setMigrationWorkerCancel(t *testing.T, cancel context.CancelFunc) {
+	t.Helper()
+	t.Setenv(migrationGlobalsGuardEnvKey, migrationGlobalsGuardEnvValue)
+
+	migrationMu.RLock()
+	prev := migrationWorkerCancel
+	migrationMu.RUnlock()
+
+	SetMigrationWorkerCancel(cancel)
+	t.Cleanup(func() { SetMigrationWorkerCancel(prev) })
 }

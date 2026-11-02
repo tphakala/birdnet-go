@@ -50,9 +50,6 @@ type stopTestEnv struct {
 // A nil modelRepo uses the real repository.
 func newStopTestEnv(t *testing.T, modelRepo repository.ModelRepository) *stopTestEnv {
 	t.Helper()
-	migrationTestMu.Lock()
-	t.Cleanup(migrationTestMu.Unlock)
-
 	mgr, err := datastoreV2.NewSQLiteManager(datastoreV2.Config{ConfiguredPath: filepath.Join(t.TempDir(), "v2.db")})
 	require.NoError(t, err)
 	require.NoError(t, mgr.Initialize())
@@ -76,9 +73,7 @@ func newStopTestEnv(t *testing.T, modelRepo repository.ModelRepository) *stopTes
 	})
 	require.NoError(t, err)
 
-	prevSM, prevW := stateManager, migrationWorker
-	stateManager, migrationWorker = sm, w
-	t.Cleanup(func() { stateManager, migrationWorker = prevSM, prevW })
+	setMigrationState(t, sm, w)
 
 	e := echo.New()
 	return &stopTestEnv{
@@ -240,11 +235,7 @@ func completedEnvWithBlockedDrain(t *testing.T) (env *stopTestEnv, release chan 
 	env.toCompleted(t, watermark)
 	env.startWorker(t)
 	synctest.Wait() // worker parked in tail sync
-	migrationMu.RLock()
-	prevCancel := migrationWorkerCancel
-	migrationMu.RUnlock()
-	SetMigrationWorkerCancel(env.cancelWorker)
-	t.Cleanup(func() { SetMigrationWorkerCancel(prevCancel) })
+	setMigrationWorkerCancel(t, env.cancelWorker)
 	return env, release
 }
 

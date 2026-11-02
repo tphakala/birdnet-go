@@ -20,11 +20,7 @@ func TestMySQLServerPrerequisites_RealServer(t *testing.T) {
 	t.Attr("type", "integration")
 	t.Attr("feature", "prerequisites")
 
-	migrationTestMu.Lock()
-	t.Cleanup(migrationTestMu.Unlock)
-	prevV2Only := isV2OnlyMode
-	isV2OnlyMode = false
-	t.Cleanup(func() { isV2OnlyMode = prevV2Only })
+	setV2OnlyMode(t, false)
 
 	env := newCleanupTestEnv(t)
 	mgr := env.newManager(t, true)

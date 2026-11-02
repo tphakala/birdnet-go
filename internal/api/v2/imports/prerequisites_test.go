@@ -240,12 +240,7 @@ func TestCheckSQLiteIntegrity_V2OnlyMode(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	migrationTestMu.Lock()
-	t.Cleanup(func() { migrationTestMu.Unlock() })
-
-	prevV2Only := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2Only })
+	setV2OnlyMode(t, true)
 
 	controller := &Handler{Core: &apicore.Core{DS: nil}}
 
@@ -264,12 +259,7 @@ func TestCheckLegacyAccessible_V2OnlyMode(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	migrationTestMu.Lock()
-	t.Cleanup(func() { migrationTestMu.Unlock() })
-
-	prevV2Only := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2Only })
+	setV2OnlyMode(t, true)
 
 	controller := &Handler{Core: &apicore.Core{DS: nil}}
 
@@ -288,12 +278,7 @@ func TestCheckRecordCount_V2OnlyMode(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	migrationTestMu.Lock()
-	t.Cleanup(func() { migrationTestMu.Unlock() })
-
-	prevV2Only := isV2OnlyMode
-	isV2OnlyMode = true
-	t.Cleanup(func() { isV2OnlyMode = prevV2Only })
+	setV2OnlyMode(t, true)
 
 	controller := &Handler{Core: &apicore.Core{Repo: nil}}
 
@@ -624,35 +609,15 @@ func TestRunCriticalPrerequisiteChecks(t *testing.T) {
 func setupPrerequisitesTestEnvironment(t *testing.T) (*echo.Echo, *Handler, *datastoreV2.StateManager) {
 	t.Helper()
 
-	// Lock to prevent parallel tests from interfering
-	migrationTestMu.Lock()
-
-	// Register mutex unlock with t.Cleanup FIRST to ensure it runs even if setup fails.
-	t.Cleanup(func() {
-		migrationTestMu.Unlock()
-	})
-
 	e := echo.New()
 	db := setupMigrationTestDB(t)
 
 	sm := datastoreV2.NewStateManager(db)
 
-	// Save previous state manager to restore after test
-	prevSM := stateManager
-	prevWorker := migrationWorker
-	prevV2Only := isV2OnlyMode
-
-	// Set the global state manager for the handlers
-	stateManager = sm
-	migrationWorker = nil
-	isV2OnlyMode = false // Ensure we're not in v2-only mode for tests
-
-	// Register state restoration cleanup
-	t.Cleanup(func() {
-		stateManager = prevSM
-		migrationWorker = prevWorker
-		isV2OnlyMode = prevV2Only
-	})
+	// Set the global state manager for the handlers and make sure the tests
+	// are not in v2-only mode.
+	setMigrationState(t, sm, nil)
+	setV2OnlyMode(t, false)
 
 	// Register DB close cleanup
 	t.Cleanup(func() {
@@ -763,8 +728,8 @@ func (discardTransport) Close()                                {}
 // TestRunCriticalPrerequisiteChecks_PublishesPrereqTag pins that running the
 // critical checks publishes the migration_prereq telemetry tag derived from
 // their results: "passed" when none blocks, otherwise the ID of the first
-// failing critical check. Not parallel: the setup helper holds the shared
-// migration state, and the test binds a client on the process-wide Sentry hub.
+// failing critical check. Not parallel: the setup helper writes the process-wide
+// migration globals, and the test binds a client on the process-wide Sentry hub.
 func TestRunCriticalPrerequisiteChecks_PublishesPrereqTag(t *testing.T) {
 	tests := []struct {
 		name     string

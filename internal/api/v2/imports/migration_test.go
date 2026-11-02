@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -28,9 +27,6 @@ import (
 
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 )
-
-// migrationTestMu protects the global stateManager and migrationWorker during tests.
-var migrationTestMu sync.Mutex
 
 // testDatastoreWrapper wraps a mock interface and provides GORM DB access for tests.
 // This allows prerequisite checks like checkSQLiteIntegrity to run properly.
@@ -71,33 +67,13 @@ func setupMigrationTestDB(t *testing.T) *gorm.DB {
 func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Handler, *datastoreV2.StateManager) {
 	t.Helper()
 
-	// Lock to prevent parallel tests from interfering
-	migrationTestMu.Lock()
-
-	// Register mutex unlock with t.Cleanup FIRST to ensure it runs even if setup fails.
-	// This prevents deadlock if setupMigrationTestDB fails via require.NoError.
-	t.Cleanup(func() {
-		migrationTestMu.Unlock()
-	})
-
 	e := echo.New()
 	db := setupMigrationTestDB(t)
 
 	sm := datastoreV2.NewStateManager(db)
 
-	// Save previous state manager and worker to restore after test
-	prevSM := stateManager
-	prevWorker := migrationWorker
-
-	// Set the global state manager for the handlers
-	stateManager = sm
-	migrationWorker = nil // No worker for basic tests
-
-	// Register state restoration cleanup
-	t.Cleanup(func() {
-		stateManager = prevSM
-		migrationWorker = prevWorker
-	})
+	// Set the global state manager for the handlers; no worker for basic tests.
+	setMigrationState(t, sm, nil)
 
 	// Register DB close cleanup
 	t.Cleanup(func() {
@@ -613,10 +589,7 @@ func TestGetMigrationStatus_NoStateManager(t *testing.T) {
 	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), APILogger: logger.Global().Module("api")}}
 	controller.Settings.Store(getTestSettings(t))
 
-	// Save and clear the global state manager
-	prevSM := stateManager
-	stateManager = nil
-	defer func() { stateManager = prevSM }()
+	setMigrationState(t, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/status", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -650,9 +623,7 @@ func TestRequireMigrationStateManager_NoStateManagerLogsError(t *testing.T) {
 	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), APILogger: logger.Global().Module("api")}}
 	controller.Settings.Store(getTestSettings(t))
 
-	prevSM := stateManager
-	stateManager = nil
-	defer func() { stateManager = prevSM }()
+	setMigrationState(t, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -684,9 +655,7 @@ func TestGetMigrationStatus_V2OnlyLegacyNotice(t *testing.T) {
 	t.Run("with state manager", func(t *testing.T) {
 		e, controller, _ := setupMigrationTestEnvironment(t)
 
-		prevV2Only := isV2OnlyMode
-		isV2OnlyMode = true
-		t.Cleanup(func() { isV2OnlyMode = prevV2Only })
+		setV2OnlyMode(t, true)
 
 		response := getMigrationStatusResponse(t, e, controller)
 		assert.True(t, response.IsV2OnlyMode)
@@ -694,17 +663,12 @@ func TestGetMigrationStatus_V2OnlyLegacyNotice(t *testing.T) {
 	})
 
 	t.Run("without state manager", func(t *testing.T) {
-		// The unlock is registered first so it runs after the globals are restored.
-		migrationTestMu.Lock()
-		t.Cleanup(migrationTestMu.Unlock)
-
 		e := echo.New()
 		controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2")}}
 		controller.Settings.Store(getTestSettings(t))
 
-		prevSM, prevV2Only := stateManager, isV2OnlyMode
-		stateManager, isV2OnlyMode = nil, true
-		t.Cleanup(func() { stateManager, isV2OnlyMode = prevSM, prevV2Only })
+		setMigrationState(t, nil, nil)
+		setV2OnlyMode(t, true)
 
 		response := getMigrationStatusResponse(t, e, controller)
 		assert.Equal(t, string(entities.MigrationStatusCompleted), response.State)

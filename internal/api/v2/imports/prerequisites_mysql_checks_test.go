@@ -159,7 +159,7 @@ func TestMySQLServerChecks_TargetUnavailable(t *testing.T) {
 		t.Run(id+" v2-only mode", func(t *testing.T) {
 			_, controller, _ := setupPrerequisitesTestEnvironment(t)
 			useMySQLSettings(t, controller)
-			enableV2OnlyMode(t)
+			setV2OnlyMode(t, true)
 			check := run(controller)
 			assert.Equal(t, CheckStatusSkipped, check.Status, check.Message)
 			assert.Equal(t, CheckSeverityCritical, check.Severity)
