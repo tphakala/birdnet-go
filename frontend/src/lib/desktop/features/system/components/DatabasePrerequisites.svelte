@@ -124,6 +124,9 @@
         count: prerequisites.warnings,
       });
     }
+    if (prerequisites.can_start_migration !== true) {
+      return t('system.database.migration.progress.prerequisitesNotMet');
+    }
     return t('system.database.migration.prerequisites.allPassed');
   }
 

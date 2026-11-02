@@ -294,7 +294,11 @@ describe('DatabasePrerequisites', () => {
           await view.rerender({
             isLoading: false,
             error: null,
-            prerequisites: { ...response([check('ok', 'passed')], 0, 0), all_passed: true },
+            prerequisites: {
+              ...response([check('ok', 'passed')], 0, 0),
+              all_passed: true,
+              can_start_migration: true,
+            },
           });
         },
       },
@@ -322,7 +326,11 @@ describe('DatabasePrerequisites', () => {
           await view.rerender({
             isLoading: false,
             error: null,
-            prerequisites: { ...response([check('ok', 'passed')], 0, 0), all_passed: true },
+            prerequisites: {
+              ...response([check('ok', 'passed')], 0, 0),
+              all_passed: true,
+              can_start_migration: true,
+            },
           });
         },
       },
@@ -383,7 +391,13 @@ describe('DatabasePrerequisites', () => {
     it.each([
       {
         name: 'all checks passed',
-        next: { prerequisites: { ...response([check('ok', 'passed')], 0, 0), all_passed: true } },
+        next: {
+          prerequisites: {
+            ...response([check('ok', 'passed')], 0, 0),
+            all_passed: true,
+            can_start_migration: true,
+          },
+        },
         expected: 'system.database.migration.prerequisites.allPassed',
       },
       {
@@ -403,6 +417,19 @@ describe('DatabasePrerequisites', () => {
           prerequisites: { ...response([check('warn', 'warning')], 0, 1), all_passed: true },
         },
         expected: 'system.database.migration.prerequisites.warningsCount',
+      },
+      {
+        // can_start_migration is false without any failing check in v2-only mode
+        // (GetPrerequisites: canStart = allPassed && !v2Only), so "ready" must follow it
+        name: 'nothing is failing but the start is not allowed',
+        next: {
+          prerequisites: {
+            ...response([check('ok', 'passed')], 0, 0),
+            all_passed: true,
+            can_start_migration: false,
+          },
+        },
+        expected: 'system.database.migration.progress.prerequisitesNotMet',
       },
       {
         name: 'the run failed',
