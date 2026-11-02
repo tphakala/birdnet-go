@@ -137,6 +137,7 @@ func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 	// Find items by name
 	var foundDir, foundFile bool
 	for _, item := range response.Items {
+		assert.Equal(t, filepath.Join(tempDir, item.Name), item.ID, "item ID is its full path")
 		switch item.Name {
 		case subDirName:
 			assert.Equal(t, "folder", item.Type)
@@ -398,43 +399,6 @@ func TestBrowseFileSystem_ParentPath(t *testing.T) {
 
 			assert.Equal(t, tc.expectedParentPath, response.ParentPath)
 		})
-	}
-}
-
-// TestConvertDirEntryToItem tests the convertDirEntryToItem helper function.
-func TestConvertDirEntryToItem(t *testing.T) {
-	t.Parallel()
-	t.Attr("component", "filesystem")
-	t.Attr("type", "unit")
-	t.Attr("feature", "dir-entry-conversion")
-
-	_, handler, tempDir := setupFilesystemTestEnvironment(t)
-
-	// Create test files
-	testFile := filepath.Join(tempDir, "testfile.txt")
-	require.NoError(t, os.WriteFile(testFile, []byte("hello world"), 0o600))
-
-	subDir := filepath.Join(tempDir, "subdir")
-	require.NoError(t, os.Mkdir(subDir, 0o750))
-
-	// Read directory entries
-	entries, err := os.ReadDir(tempDir)
-	require.NoError(t, err)
-	require.Len(t, entries, 2)
-
-	for _, entry := range entries {
-		item, err := handler.convertDirEntryToItem(tempDir, entry)
-		require.NoError(t, err)
-
-		assert.Equal(t, entry.Name(), item.Name)
-		assert.Equal(t, filepath.Join(tempDir, entry.Name()), item.ID)
-
-		if entry.IsDir() {
-			assert.Equal(t, "folder", item.Type)
-		} else {
-			assert.Equal(t, "file", item.Type)
-			assert.Equal(t, int64(11), item.Size) // "hello world" = 11 bytes
-		}
 	}
 }
 
