@@ -40,12 +40,11 @@ func TestGetConfidenceDistribution_Shape(t *testing.T) {
 
 	var resp []confidenceDistributionJSON
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp, 2)
-	assert.Equal(t, "Turdus merula", resp[0].ScientificName)
-	assert.Equal(t, 40, resp[0].Total)
-	require.Len(t, resp[0].Bins, 4)
-	assert.InDelta(t, 0.4, resp[0].Bins[3], 1e-9)
-	assert.Equal(t, "Erithacus rubecula", resp[1].ScientificName)
+	// The bins are decoded from JSON floats, so the literals round-trip exactly.
+	assert.Equal(t, []confidenceDistributionJSON{
+		{ScientificName: "Turdus merula", Bins: []float64{0.1, 0.2, 0.3, 0.4}, Total: 40},
+		{ScientificName: "Erithacus rubecula", Bins: []float64{0.25, 0.25, 0.25, 0.25}, Total: 12},
+	}, resp)
 	mockDS.AssertExpectations(t)
 }
 

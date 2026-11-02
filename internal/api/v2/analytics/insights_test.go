@@ -115,9 +115,7 @@ func TestGetPhantomSpecies_Handler(t *testing.T) {
 	}
 	e, controller := setupInsightsTestController(t, mockRepo)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/insights/phantom-species", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+	ctx, rec := newAnalyticsContext(e, "/api/v2/insights/phantom-species")
 
 	err := controller.getPhantomSpeciesImpl(ctx)
 	require.NoError(t, err)
@@ -147,9 +145,7 @@ func TestGetDashboardKPIs_Handler(t *testing.T) {
 	}
 	e, controller := setupInsightsTestController(t, mockRepo)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/dashboard/kpis", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+	ctx, rec := newAnalyticsContext(e, "/api/v2/dashboard/kpis")
 
 	// Bracket the handler's own clock read so the day-start assertion holds across local midnight.
 	before, _ := localDayStart(time.Now())
@@ -281,9 +277,7 @@ func TestGetMigration_Handler(t *testing.T) {
 	}
 	e, controller := setupInsightsTestController(t, mockRepo)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/insights/migration", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
+	ctx, rec := newAnalyticsContext(e, "/api/v2/insights/migration")
 
 	err := controller.getMigrationImpl(ctx)
 	require.NoError(t, err)
@@ -527,7 +521,9 @@ func TestBuildYearRangesDayBounds(t *testing.T) {
 }
 
 // TestBuildYearRangesWrapAndLeapDay pins the exact ranges of the branches that wrap over a year
-// end and of a window centred on a leap day, in UTC so the expected instants are literal.
+// end and of a window centred on a leap day, in UTC so the expected instants are literal. tail
+// is the literal end of the result; want derives the ranges of every scanned year (leap years
+// shift the day of the year by one) and the whole result is compared against it.
 func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 	t.Parallel()
 	at := func(y int, m time.Month, d int) int64 { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC).Unix() }
@@ -537,6 +533,9 @@ func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 		window int
 		// tail is the end of the result, compared in full.
 		tail []repository.TimeRange
+		// want returns the ranges expected for one scanned year, in order; nowYear is the
+		// current year, which is never scanned, and anchor is the day of the year of now.
+		want func(year, nowYear, anchor, window int) []repository.TimeRange
 	}{
 		{
 			name:   "early January splits a year into its tail and its head",
@@ -545,6 +544,13 @@ func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 			tail: []repository.TimeRange{
 				{Start: at(2025, time.December, 30), End: at(2026, time.January, 1)},
 				{Start: at(2025, time.January, 1), End: at(2025, time.January, 6)},
+			},
+			// The tail is the last two days of the year (December 30 and 31) and the head is days 1 to 5.
+			want: func(y, _, _, _ int) []repository.TimeRange {
+				return []repository.TimeRange{
+					{Start: at(y, time.December, 30), End: at(y+1, time.January, 1)},
+					{Start: at(y, time.January, 1), End: at(y, time.January, 6)},
+				}
 			},
 		},
 		{
@@ -556,6 +562,20 @@ func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 				{Start: at(2025, time.January, 1), End: at(2025, time.January, 2)},
 				{Start: at(2025, time.December, 27), End: at(2026, time.January, 1)},
 			},
+			// The window spans the days anchor-window up to anchor+window of the year. The part
+			// inside the year runs to December 31; the rest continues into the next year unless
+			// that year is the current one.
+			want: func(y, nowYear, anchor, window int) []repository.TimeRange {
+				days := time.Date(y, time.December, 31, 0, 0, 0, 0, time.UTC).YearDay()
+				got := []repository.TimeRange{{Start: at(y, time.January, anchor-window), End: at(y+1, time.January, 1)}}
+				if y+1 < nowYear {
+					got = append(got, repository.TimeRange{
+						Start: at(y+1, time.January, 1),
+						End:   at(y+1, time.January, anchor+window+1-days),
+					})
+				}
+				return got
+			},
 		},
 		{
 			name:   "window centred on a leap day, in the non-leap year before",
@@ -563,6 +583,11 @@ func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 			window: 3,
 			tail: []repository.TimeRange{
 				{Start: at(2023, time.February, 26), End: at(2023, time.March, 5)},
+			},
+			// The anchor is February 29 of 2024; in a non-leap year the same day number is March 1,
+			// so the window is counted in days from the start of each scanned year.
+			want: func(y, _, anchor, window int) []repository.TimeRange {
+				return []repository.TimeRange{{Start: at(y, time.January, anchor-window), End: at(y, time.January, anchor+window+1)}}
 			},
 		},
 	}
@@ -572,6 +597,104 @@ func TestBuildYearRangesWrapAndLeapDay(t *testing.T) {
 			ranges := buildYearRanges(tt.now, tt.window)
 			require.GreaterOrEqual(t, len(ranges), len(tt.tail))
 			assert.Equal(t, tt.tail, ranges[len(ranges)-len(tt.tail):])
+
+			var want []repository.TimeRange
+			for y := tt.now.Year() - expectedTodayMaxYears; y < tt.now.Year(); y++ {
+				want = append(want, tt.want(y, tt.now.Year(), tt.now.YearDay(), tt.window)...)
+			}
+			assert.Equal(t, want, ranges, "every scanned year")
+		})
+	}
+}
+
+// TestInsightsEndpointsEmitProxyThumbnails pins the thumbnail URL on every insights response
+// that carries one: the expected today, phantom species, dawn chorus, new arrival and gone
+// quiet lists. Each list builds its URLs at its own call site, so each is its own row. The
+// literal is the media proxy route with the escaped scientific name, and the response is
+// decoded generically so the JSON keys are pinned as well.
+func TestInsightsEndpointsEmitProxyThumbnails(t *testing.T) {
+	t.Parallel()
+
+	const (
+		scientificName = "Parus major"
+		wantThumbnail  = "/api/v2/media/image/Parus%20major"
+	)
+	now := time.Now()
+	dawnTime := time.Date(2026, 3, 1, 5, 0, 0, 0, time.Local).Unix()
+
+	tests := []struct {
+		name   string
+		path   string
+		repo   *mockInsightsRepo
+		invoke func(*Handler, echo.Context) error
+		// listKey is the response field holding the list of items.
+		listKey string
+	}{
+		{
+			name: "expected today",
+			path: "/api/v2/insights/expected-today",
+			repo: &mockInsightsRepo{expectedSpecies: []repository.ExpectedSpecies{
+				{ScientificName: scientificName, YearsSeen: 3, LastSeenDate: "2025-03-01"},
+			}},
+			invoke:  (*Handler).getExpectedTodayImpl,
+			listKey: "species",
+		},
+		{
+			name: "phantom species",
+			path: "/api/v2/insights/phantom-species",
+			repo: &mockInsightsRepo{phantomSpecies: []repository.PhantomSpecies{
+				{ScientificName: scientificName, DetectionCount: 5, AvgConfidence: 0.4, MaxConfidence: 0.5},
+			}},
+			invoke:  (*Handler).getPhantomSpeciesImpl,
+			listKey: "species",
+		},
+		{
+			name: "dawn chorus",
+			path: "/api/v2/insights/dawn-chorus?min_days=1",
+			repo: &mockInsightsRepo{dawnChorusRaw: []repository.DawnChorusRawEntry{
+				{ScientificName: scientificName, Date: "2026-03-01", EarliestAt: dawnTime},
+			}},
+			invoke:  (*Handler).getDawnChorusImpl,
+			listKey: "species",
+		},
+		{
+			name: "migration new arrivals",
+			path: "/api/v2/insights/migration",
+			repo: &mockInsightsRepo{newArrivals: []repository.NewArrival{
+				{ScientificName: scientificName, FirstDetected: now.AddDate(0, 0, -3).Unix(), DetectionCount: 5},
+			}},
+			invoke:  (*Handler).getMigrationImpl,
+			listKey: "new_arrivals",
+		},
+		{
+			name: "migration gone quiet",
+			path: "/api/v2/insights/migration",
+			repo: &mockInsightsRepo{goneQuiet: []repository.GoneQuietSpecies{
+				{ScientificName: scientificName, LastDetected: now.AddDate(0, 0, -20).Unix(), TotalDetections: 15},
+			}},
+			invoke:  (*Handler).getMigrationImpl,
+			listKey: "gone_quiet",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			e, controller := setupInsightsTestController(t, tt.repo)
+			ctx, rec := newAnalyticsContext(e, tt.path)
+
+			require.NoError(t, tt.invoke(controller, ctx))
+			require.Equal(t, http.StatusOK, rec.Code)
+
+			var resp map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+			var items []struct {
+				ThumbnailURL string `json:"thumbnail_url"`
+			}
+			require.NoError(t, json.Unmarshal(resp[tt.listKey], &items))
+			// The one species must come back, so the check cannot pass on an empty list.
+			require.Len(t, items, 1)
+			assert.Equal(t, wantThumbnail, items[0].ThumbnailURL)
 		})
 	}
 }

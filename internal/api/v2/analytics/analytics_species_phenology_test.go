@@ -41,11 +41,10 @@ func TestGetSpeciesPhenology_Shape(t *testing.T) {
 
 	var resp []speciesPhenologyJSON
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp, 2)
-	assert.Equal(t, "Apus apus", resp[0].ScientificName)
-	assert.Equal(t, "2026-03-01", resp[0].FirstSeen)
-	assert.Equal(t, "2026-03-20", resp[0].LastSeen)
-	assert.Equal(t, 40, resp[0].Count)
+	assert.Equal(t, []speciesPhenologyJSON{
+		{ScientificName: "Apus apus", FirstSeen: "2026-03-01", LastSeen: "2026-03-20", Count: 40},
+		{ScientificName: "Hirundo rustica", FirstSeen: "2026-03-05", LastSeen: "2026-03-28", Count: 25},
+	}, resp)
 	mockDS.AssertExpectations(t)
 }
 

@@ -100,10 +100,7 @@ func TestGetSpeciesSummary(t *testing.T) {
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody) // Corrected path
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/summary") // Ensure path is set for context
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
 
 	// We need to bypass auth middleware for this test
 	handler := func(c echo.Context) error {
@@ -180,10 +177,7 @@ func TestGetSpeciesSummary_ZeroTimeOmitsHeardFields(t *testing.T) {
 	}
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return(mockSummaryData, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/summary")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
 
 	require.NoError(t, controller.GetSpeciesSummary(c))
 	assert.Equal(t, http.StatusOK, rec.Code)
@@ -216,10 +210,7 @@ func TestGetSpeciesSummaryDatabaseError(t *testing.T) {
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "", "").Return([]datastore.SpeciesSummaryData{}, dbError)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/summary")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary")
 
 	// We need to bypass auth middleware for this test
 	handler := func(c echo.Context) error {
@@ -367,10 +358,7 @@ func TestGetSpeciesSummaryWithDateFilters(t *testing.T) {
 	mockDS.On("GetSpeciesSummaryData", mock.Anything, "2024-01-15", "2024-01-16").Return(mockSummaryData, nil)
 
 	// Create a request with date parameters
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/summary?start_date=2024-01-15&end_date=2024-01-16", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/species/summary")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/summary?start_date=2024-01-15&end_date=2024-01-16")
 
 	// We need to bypass auth middleware for this test
 	handler := func(c echo.Context) error {
@@ -427,10 +415,7 @@ func TestGetHourlyAnalytics(t *testing.T) {
 	mockDS.On("GetHourlyAnalyticsData", mock.Anything, date, species).Return(mockHourlyData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/hourly?date=2023-01-01&species=Turdus+migratorius", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/hourly")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/hourly?date=2023-01-01&species=Turdus+migratorius")
 	c.QueryParams().Set("date", date)
 	c.QueryParams().Set("species", species)
 
@@ -496,11 +481,7 @@ func TestGetDailyAnalytics(t *testing.T) {
 	mockDS.On("GetDailyAnalyticsData", mock.Anything, startDate, endDate, species).Return(mockDailyData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07&species=Turdus+migratorius", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/daily")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07&species=Turdus+migratorius")
 	c.QueryParams().Set("start_date", startDate)
 	c.QueryParams().Set("end_date", endDate)
 	c.QueryParams().Set("species", species)
@@ -576,11 +557,7 @@ func TestGetDailyAnalyticsWithoutSpecies(t *testing.T) {
 	mockDS.On("GetDailyAnalyticsData", mock.Anything, startDate, endDate, "").Return(mockDailyData, nil)
 
 	// Create a request
-	req := httptest.NewRequest(http.MethodGet,
-		"/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetPath("/api/v2/analytics/time/daily")
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/time/daily?start_date=2023-01-01&end_date=2023-01-07")
 	c.QueryParams().Set("start_date", startDate)
 	c.QueryParams().Set("end_date", endDate)
 
@@ -1123,9 +1100,7 @@ func TestGetDailySpeciesSummary_EmptyResult(t *testing.T) {
 	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with the date we want to test
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07")
 
 	// Call the handler
 	err := controller.GetDailySpeciesSummary(c)
@@ -1206,9 +1181,7 @@ func TestGetDailySpeciesSummary_TimeHandling(t *testing.T) {
 	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with the date we want to test
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07")
 
 	// Call the handler
 	err := controller.GetDailySpeciesSummary(c)
@@ -1293,9 +1266,7 @@ func TestGetDailySpeciesSummary_ConfidenceFilter(t *testing.T) {
 	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Test with a confidence threshold of "70"
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07&min_confidence=70", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07&min_confidence=70")
 
 	// Call the handler
 	err := controller.GetDailySpeciesSummary(c)
@@ -1370,9 +1341,7 @@ func TestGetDailySpeciesSummary_LimitParameter(t *testing.T) {
 	controller := newTestHandler(&apicore.Core{DS: mockDS})
 
 	// Create a request with a limit of 2
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07&limit=2", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07&limit=2")
 	c.QueryParams().Set("limit", "2")
 
 	// Call the handler
@@ -1407,9 +1376,7 @@ func TestGetDailySpeciesSummary_DatabaseError(t *testing.T) {
 	mockDS.On("GetTopBirdsData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return([]datastore.Note{}, errors.NewStd("database connection error"))
 
 	// Create a request with the date we want to test
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/species/daily?date=2025-03-07", http.NoBody)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
+	c, rec := newAnalyticsContext(e, "/api/v2/analytics/species/daily?date=2025-03-07")
 
 	// Call the handler
 	err := controller.GetDailySpeciesSummary(c)
@@ -1505,10 +1472,7 @@ func TestAnalytics_HourlyHandlerPassesResolvedSpeciesToDatastore(t *testing.T) {
 			return []datastore.HourlyAnalyticsData{}, nil
 		}).Once()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/hourly", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/analytics/time/hourly")
+	ctx, rec := newAnalyticsContext(e, "/api/v2/analytics/time/hourly")
 	ctx.QueryParams().Set("date", date)
 	ctx.QueryParams().Set("species", localizedName)
 
@@ -1548,10 +1512,7 @@ func TestAnalytics_TimeOfDayDistributionResolvesLocalizedSpecies(t *testing.T) {
 			return []datastore.HourlyDistributionData{}, nil
 		}).Once()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/distribution/hourly", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/analytics/time/distribution/hourly")
+	ctx, rec := newAnalyticsContext(e, "/api/v2/analytics/time/distribution/hourly")
 	ctx.QueryParams().Set("start_date", startDate)
 	ctx.QueryParams().Set("end_date", endDate)
 	ctx.QueryParams().Set("species", localizedName)
@@ -1590,10 +1551,7 @@ func TestAnalytics_BatchDailySpeciesResolvesLocalizedSpecies(t *testing.T) {
 			return []datastore.DailyAnalyticsData{}, nil
 		}).Once()
 
-	req := httptest.NewRequest(http.MethodGet, "/api/v2/analytics/time/daily/batch", http.NoBody)
-	rec := httptest.NewRecorder()
-	ctx := e.NewContext(req, rec)
-	ctx.SetPath("/api/v2/analytics/time/daily/batch")
+	ctx, rec := newAnalyticsContext(e, "/api/v2/analytics/time/daily/batch")
 	ctx.QueryParams().Set("start_date", startDate)
 	ctx.QueryParams().Set("end_date", endDate)
 	ctx.QueryParams()["species"] = []string{localizedName}

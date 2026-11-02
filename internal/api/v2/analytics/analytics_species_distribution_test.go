@@ -14,10 +14,12 @@ import (
 )
 
 // speciesDistributionJSON mirrors the ridgeline wire shape from the design spec (section 6.2).
+// Buckets is a slice, not an array, so a response with a different number of hour buckets
+// decodes to a different value instead of being truncated or zero padded.
 type speciesDistributionJSON struct {
-	ScientificName string      `json:"scientificName"`
-	Buckets        [24]float64 `json:"buckets"`
-	Total          int         `json:"total"`
+	ScientificName string    `json:"scientificName"`
+	Buckets        []float64 `json:"buckets"`
+	Total          int       `json:"total"`
 }
 
 func sampleSpeciesDistribution() []datastore.SpeciesHourlyDistribution {
@@ -45,13 +47,14 @@ func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 
 	var resp []speciesDistributionJSON
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
-	require.Len(t, resp, 2)
-	assert.Equal(t, "Turdus merula", resp[0].ScientificName)
-	assert.Equal(t, 40, resp[0].Total)
-	assert.InDelta(t, 0.75, resp[0].Buckets[6], 1e-9)
-	assert.InDelta(t, 0.25, resp[0].Buckets[18], 1e-9)
-	assert.Equal(t, "Erithacus rubecula", resp[1].ScientificName)
-	assert.InDelta(t, 1.0, resp[1].Buckets[12], 1e-9)
+	// The response carries every row of the fixture with all 24 hour buckets, in order.
+	rows := sampleSpeciesDistribution()
+	want := make([]speciesDistributionJSON, 0, len(rows))
+	for _, row := range rows {
+		want = append(want, speciesDistributionJSON{ScientificName: row.ScientificName, Buckets: row.Buckets[:], Total: row.Total})
+	}
+	require.Len(t, want, 2)
+	assert.Equal(t, want, resp)
 	mockDS.AssertExpectations(t)
 }
 
