@@ -341,6 +341,53 @@ func TestStartMigration_HungCheapCheckEndsWithTheStartContext(t *testing.T) {
 	assert.Equal(t, "idle", migrationStateOf(t, sm))
 }
 
+// TestStartMigration_EndedContextBeatsTheStoredRunGate pins that a request whose client has gone,
+// or whose server is stopping, is answered as such even when there is no usable stored run: the
+// gate must not answer a gone client with a 409 or a stopping server with a request to run again.
+func TestStartMigration_EndedContextBeatsTheStoredRunGate(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	tests := []struct {
+		name       string
+		goneClient bool
+		wantCode   int
+		wantBody   bool
+	}{
+		{name: "the client has gone", goneClient: true, wantBody: false},
+		{name: "the server is stopping", goneClient: false, wantCode: http.StatusServiceUnavailable, wantBody: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e, controller, sm := setupMigrationTestEnvironment(t)
+			// No stored run, so the gate alone would answer 409 prerequisitesNotReady
+			lifecycle, stop := context.WithCancel(t.Context())
+			controller.SetTestContext(lifecycle, stop)
+
+			reqCtx, gone := context.WithCancel(t.Context())
+			if tt.goneClient {
+				gone()
+			} else {
+				stop()
+				defer gone()
+			}
+			req := httptest.NewRequest(http.MethodPost, startURL, strings.NewReader(startBody)).WithContext(reqCtx)
+			req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+			rec := httptest.NewRecorder()
+			require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+
+			assert.Equal(t, "idle", migrationStateOf(t, sm))
+			if !tt.wantBody {
+				assert.Zero(t, rec.Body.Len(), "a gone client is sent nothing")
+				return
+			}
+			assert.Equal(t, tt.wantCode, rec.Code)
+			assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
+		})
+	}
+}
+
 // TestStartMigration_ClientGoneDoesNotStart pins that a request whose client has
 // gone starts nothing and leaves the telemetry tag alone.
 func TestStartMigration_ClientGoneDoesNotStart(t *testing.T) {

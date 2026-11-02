@@ -459,6 +459,21 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 		return c.HandleErrorWithKey(ctx, err, "Invalid request body", http.StatusBadRequest, notification.MsgErrMigrationInvalidBody, nil)
 	}
 
+	// The checks that remain after the stored run are cheap; bound them below the server
+	// write timeout. A request context does not end when the server stops, so follow the
+	// lifecycle too. A client that has gone or a server that is stopping is answered as
+	// such before anything else looks at the stored run.
+	limit := c.startPreflightLimit
+	if limit == 0 {
+		limit = startPreflightTimeout
+	}
+	pctx, cancel := context.WithTimeout(ctx.Request().Context(), limit)
+	defer cancel()
+	defer context.AfterFunc(c.lifecycleContext(), cancel)()
+	if ctx.Request().Context().Err() != nil || c.lifecycleContext().Err() != nil {
+		return c.abandonedStartResponse(ctx, path, ip)
+	}
+
 	// The expensive checks come from the prerequisites run the page started
 	stored, reason := c.prereqRunner().passingResult(c.dbFingerprint())
 	if reason != prereqReuseOK && reason != prereqReuseFailedCheck {
@@ -471,15 +486,6 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 		return c.storedRunFailed(ctx, stored.Response.Checks, path, ip)
 	}
 
-	// The remaining checks are cheap; bound them below the server write timeout
-	limit := c.startPreflightLimit
-	if limit == 0 {
-		limit = startPreflightTimeout
-	}
-	pctx, cancel := context.WithTimeout(ctx.Request().Context(), limit)
-	defer cancel()
-	// A request context does not end when the server stops, so follow the lifecycle too
-	defer context.AfterFunc(c.lifecycleContext(), cancel)()
 	reused := make(map[string]PrerequisiteCheck, len(stored.Response.Checks))
 	for _, check := range stored.Response.Checks {
 		reused[check.ID] = check
@@ -513,7 +519,10 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 		totalRecords = count
 	}
 
-	// A shutdown that began after the checks must not start a migration.
+	// A client that left, or a shutdown that began, after the checks must not start a migration.
+	if pctx.Err() != nil {
+		return c.abandonedStartResponse(ctx, path, ip)
+	}
 	if err := c.lifecycleContext().Err(); err != nil {
 		return c.rejectInterruptedStart(ctx, err)
 	}
