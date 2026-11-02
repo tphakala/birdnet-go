@@ -175,6 +175,7 @@ func TestConfigFromSettings_AutoTLS_TLSPort(t *testing.T) {
 
 			assert.Equal(t, tc.httpPort, cfg.Port, "the HTTP port is never changed")
 			assert.Equal(t, tc.wantTLSPort, cfg.TLSPort)
+			assert.NotEqual(t, cfg.Port, cfg.TLSPort, "the two listeners must not share a port")
 			assert.Equal(t, ":"+tc.wantTLSPort, cfg.TLSAddress())
 		})
 	}
