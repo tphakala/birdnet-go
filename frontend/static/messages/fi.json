@@ -1572,6 +1572,8 @@
         "starting": "Käynnistetään migraatiota...",
         "status": {
           "idle": "Valmis aloitettavaksi",
+          "checking": "Tarkistetaan edellytyksiä",
+          "notReady": "Ei valmis",
           "initializing": "Alustus",
           "dual_write": "Kaksoiskirjoitus aktiivinen",
           "migrating": "Migroidaan ensisijaiset",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Tietueet",
           "sizeLabel": "Koko",
           "prerequisitesNotMet": "Edellytykset eivät täyty - ratkaise alla olevat kriittiset ongelmat",
+          "prerequisitesUnavailable": "Migraation esitarkistukset eivät valmistuneet. Katso Migraation esitarkistukset alla.",
+          "prerequisitesFailedList": "Ratkaise ensin nämä tarkistukset: {checks}",
           "validatingTitle": "Tietojen tarkistus",
           "validatingBody": "Verrataan {count} vanhaa tietuetta V2-tietokantaan...",
           "dirtyRecordsCatchup": "{count} muuttunutta tietuetta - yritetään täsmäytystä",

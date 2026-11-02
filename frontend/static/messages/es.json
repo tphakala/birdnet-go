@@ -1572,6 +1572,8 @@
         "starting": "Iniciando migración...",
         "status": {
           "idle": "Listo para iniciar",
+          "checking": "Comprobando requisitos",
+          "notReady": "No está listo",
           "initializing": "Inicializando",
           "dual_write": "Escritura dual activa",
           "migrating": "Migrando datos primarios",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Registros",
           "sizeLabel": "Tamaño",
           "prerequisitesNotMet": "Requisitos previos no cumplidos - resuelva los problemas críticos a continuación",
+          "prerequisitesUnavailable": "Las verificaciones previas a la migración no se completaron. Consulte Verificaciones previas a la migración más abajo.",
+          "prerequisitesFailedList": "Resuelva primero estas verificaciones: {checks}",
           "validatingTitle": "Validando datos",
           "validatingBody": "Comparando {count} registros heredados con la base de datos V2...",
           "dirtyRecordsCatchup": "{count} registros pendientes - se intentará reconciliación",

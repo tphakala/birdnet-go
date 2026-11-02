@@ -1572,6 +1572,8 @@
         "starting": "Spúšťa sa migrácia...",
         "status": {
           "idle": "Pripravené na spustenie",
+          "checking": "Kontrola predpokladov",
+          "notReady": "Nepripravené",
           "initializing": "Inicializuje sa",
           "dual_write": "Aktívny duálny zápis",
           "migrating": "Migruje sa primárna",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Záznamy",
           "sizeLabel": "Veľkosť",
           "prerequisitesNotMet": "Predpoklady nesplnené - vyriešte kritické problémy nižšie",
+          "prerequisitesUnavailable": "Kontroly pred migráciou sa nedokončili. Pozrite si Kontroly pred migráciou nižšie.",
+          "prerequisitesFailedList": "Najprv vyriešte tieto kontroly: {checks}",
           "validatingTitle": "Validácia dát",
           "validatingBody": "Porovnávanie {count} starých záznamov s databázou V2...",
           "dirtyRecordsCatchup": "{count} nesynchronizovaných záznamov - bude sa pokúšať o dodatočnú rekonciliáciu",

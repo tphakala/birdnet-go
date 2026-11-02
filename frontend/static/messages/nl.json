@@ -1572,6 +1572,8 @@
         "starting": "Migratie wordt gestart...",
         "status": {
           "idle": "Klaar om te starten",
+          "checking": "Vereisten controleren",
+          "notReady": "Niet gereed",
           "initializing": "Initialiseren",
           "dual_write": "Dubbel schrijven actief",
           "migrating": "Primaire gegevens migreren",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Records",
           "sizeLabel": "Grootte",
           "prerequisitesNotMet": "Vereisten niet voldaan - los de kritieke problemen hieronder op",
+          "prerequisitesUnavailable": "De pre-migratiecontroles zijn niet voltooid. Zie Pre-migratiecontroles hieronder.",
+          "prerequisitesFailedList": "Los eerst deze controles op: {checks}",
           "validatingTitle": "Gegevens valideren",
           "validatingBody": "{count} legacy-records vergelijken met V2-database...",
           "dirtyRecordsCatchup": "{count} gewijzigde records - poging tot synchronisatie",

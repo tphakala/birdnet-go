@@ -1,9 +1,10 @@
 <!--
   DatabasePrerequisites Component
 
-  Collapsible prerequisites panel for database migration.
-  Displays summary badges in the header and an expandable
-  checklist of individual prerequisite check results.
+  Prerequisites panel for database migration. Displays summary badges in the
+  header, always lists every failed, errored or warning check, and keeps only
+  the passed and skipped checks behind the details toggle. Without data it
+  shows a loading row or the request error with a Retry, never an empty body.
 
   @component
 -->
@@ -17,22 +18,56 @@
     AlertTriangle,
     Info,
   } from '@lucide/svelte';
+  import { tick } from 'svelte';
   import { t } from '$lib/i18n';
-  import type { PrerequisitesResponse, PrerequisiteCheckStatus } from '$lib/types/migration';
+  import { isBlockingCheck } from '$lib/utils/migrationPrerequisites';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
+  import type {
+    PrerequisitesResponse,
+    PrerequisiteCheck,
+    PrerequisiteCheckStatus,
+  } from '$lib/types/migration';
 
   interface Props {
     prerequisites: PrerequisitesResponse | null;
     isLoading?: boolean;
+    /** Message of the failed prerequisites request, or null. */
+    error?: string | null;
     onRefresh: () => Promise<void>;
   }
 
-  let { prerequisites, isLoading = false, onRefresh }: Props = $props();
+  let { prerequisites, isLoading = false, error = null, onRefresh }: Props = $props();
 
   let showDetails = $state(false);
   let isRefreshing = $state(false);
+  let statusRegion = $state<HTMLDivElement>();
+  let titleElement = $state<HTMLElement>();
+  let retryButton = $state<HTMLButtonElement>();
+  /** Result of the last successful check run, read out by the live region. */
+  let announcement = $state('');
 
   /** Checks array with null-safety (Go may serialize nil slice as null) */
   let checks = $derived(prerequisites?.checks ?? []);
+
+  /** The alert shows when a request failed or there is nothing else to show, except during the first load. */
+  let showError = $derived(!(isLoading && !prerequisites) && (!!error || !prerequisites));
+  let errorText = $derived(
+    error || t('system.database.migration.prerequisites.errors.fetchFailed')
+  );
+
+  /** Passed and skipped checks, the only ones that sit behind the details toggle. */
+  const isQuiet = (c: PrerequisiteCheck): boolean =>
+    c.status === 'passed' || c.status === 'skipped';
+
+  /** Failed and errored checks first, then warnings, in the server's order otherwise. */
+  let nonPassingChecks = $derived(
+    checks
+      .filter(c => !isQuiet(c))
+      .sort((a, b) => Number(a.status === 'warning') - Number(b.status === 'warning'))
+  );
+
+  let quietChecks = $derived(checks.filter(isQuiet));
 
   /** Number of checks that passed */
   let passedCount = $derived(checks.filter(c => c.status === 'passed').length);
@@ -75,13 +110,55 @@
       : translated;
   }
 
+  /** One sentence for a screen reader once a check run has produced data. */
+  function resultAnnouncement(): string {
+    if (!prerequisites) return '';
+    if (prerequisites.critical_failures > 0) {
+      return t('system.database.migration.prerequisites.criticalIssues', {
+        count: prerequisites.critical_failures,
+      });
+    }
+    // all_passed only means no critical check failed, so warnings must be reported before it
+    if (prerequisites.warnings > 0) {
+      return t('system.database.migration.prerequisites.warningsCount', {
+        count: prerequisites.warnings,
+      });
+    }
+    if (prerequisites.can_start_migration !== true) {
+      return t('system.database.migration.status.notReady');
+    }
+    return t('system.database.migration.prerequisites.allPassed');
+  }
+
+  /**
+   * Retry sits in an alert that can unmount while the request runs or once it succeeds.
+   * With no data, park focus on the status region first so it does not fall back to the
+   * page body. When the request ends and focus has nowhere visible to be (the empty region
+   * or the body), hand it to the re-mounted Retry button after a failure, or to the panel
+   * title after a success.
+   */
+  async function handleRetry(): Promise<void> {
+    const parked = !prerequisites && !isLoading && !isRefreshing;
+    const hadFocus = parked || document.activeElement === retryButton;
+    if (parked) statusRegion?.focus();
+    await handleRefresh();
+    const active = document.activeElement;
+    if (hadFocus && (active === statusRegion || active === document.body || active === null)) {
+      (retryButton ?? titleElement)?.focus();
+    }
+  }
+
   async function handleRefresh() {
+    if (isLoading || isRefreshing) return;
     isRefreshing = true;
+    announcement = '';
     try {
       await onRefresh();
     } finally {
       isRefreshing = false;
     }
+    await tick();
+    announcement = error ? '' : resultAnnouncement();
   }
 </script>
 
@@ -90,7 +167,11 @@
   <div class="flex items-center justify-between">
     <!-- Left: label + summary badges -->
     <div class="flex items-center gap-2 flex-wrap">
-      <span class="text-xs font-semibold uppercase tracking-wider text-muted">
+      <span
+        bind:this={titleElement}
+        tabindex="-1"
+        class="rounded text-xs font-semibold uppercase tracking-wider text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+      >
         {t('system.database.migration.prerequisites.title')}
       </span>
 
@@ -138,57 +219,103 @@
         {t('system.database.migration.prerequisites.rerun')}
       </button>
 
-      <button
-        type="button"
-        class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-primary text-muted"
-        onclick={() => (showDetails = !showDetails)}
-        aria-expanded={showDetails}
-        aria-controls="prerequisites-details"
-      >
-        {showDetails
-          ? t('system.database.migration.prerequisites.hideDetails')
-          : t('system.database.migration.prerequisites.showDetails')}
-        {#if showDetails}
-          <ChevronUp class="w-3 h-3" />
-        {:else}
-          <ChevronDown class="w-3 h-3" />
-        {/if}
-      </button>
+      {#if quietChecks.length > 0}
+        <button
+          type="button"
+          class="flex items-center gap-1 text-xs cursor-pointer transition-colors hover:text-primary text-muted"
+          onclick={() => (showDetails = !showDetails)}
+          aria-expanded={showDetails}
+          aria-controls="prerequisites-details"
+        >
+          {showDetails
+            ? t('system.database.migration.prerequisites.hideDetails')
+            : t('system.database.migration.prerequisites.showDetails')}
+          {#if showDetails}
+            <ChevronUp class="w-3 h-3" />
+          {:else}
+            <ChevronDown class="w-3 h-3" />
+          {/if}
+        </button>
+      {/if}
     </div>
   </div>
 
-  <!-- Expandable check list -->
-  {#if showDetails && prerequisites}
+  <!-- Always-rendered live region: only its text changes, so the loading state is announced -->
+  <div
+    bind:this={statusRegion}
+    role="status"
+    aria-atomic="true"
+    tabindex="-1"
+    class="rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+  >
+    {#if isLoading}
+      <div class="mt-3 flex items-center gap-2 px-3 py-2 text-sm text-muted">
+        <RefreshCw class="w-3.5 h-3.5 animate-spin" aria-hidden="true" />
+        {t('system.database.migration.prerequisites.running')}
+      </div>
+    {/if}
+    <span class="sr-only">{announcement}</span>
+  </div>
+
+  {#if showError}
+    <ErrorAlert className="mt-3">
+      <span class="block">{errorText}</span>
+      <Button
+        bind:ref={retryButton}
+        className="mt-2"
+        onclick={handleRetry}
+        aria-disabled={isLoading ? 'true' : undefined}
+      >
+        {isLoading ? t('common.retrying') : t('common.retry')}
+      </Button>
+    </ErrorAlert>
+  {/if}
+
+  <!-- Failed, errored and warning checks are never hidden -->
+  {#if nonPassingChecks.length > 0}
+    <div class="mt-3 space-y-1.5">
+      {#each nonPassingChecks as check (check.id)}
+        {@render checkRow(check)}
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Passed and skipped checks, on request -->
+  {#if showDetails && quietChecks.length > 0}
     <div id="prerequisites-details" class="mt-3 space-y-1.5">
-      {#each checks as check (check.id)}
-        {@const StatusIcon = statusIconMap[check.status]}
-        <div
-          class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
-        >
-          <StatusIcon class="w-4 h-4 flex-shrink-0 {statusIconColor[check.status]}" />
-
-          <div class="flex-1 min-w-0">
-            <span class="font-medium">{check.name}:</span>
-            <span class="text-muted">{check.message}</span>
-          </div>
-
-          {#if check.severity === 'critical' && (check.status === 'failed' || check.status === 'error')}
-            <span
-              class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold badge-status-error"
-            >
-              {t('system.database.migration.prerequisites.critical')}
-            </span>
-          {/if}
-
-          <span
-            class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium {statusBadgeColor[
-              check.status
-            ]}"
-          >
-            {statusLabel(check.status)}
-          </span>
-        </div>
+      {#each quietChecks as check (check.id)}
+        {@render checkRow(check)}
       {/each}
     </div>
   {/if}
 </div>
+
+{#snippet checkRow(check: PrerequisiteCheck)}
+  {@const StatusIcon = statusIconMap[check.status]}
+  <div
+    class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors hover:bg-black/[0.02] dark:hover:bg-white/[0.02]"
+  >
+    <StatusIcon class="w-4 h-4 flex-shrink-0 {statusIconColor[check.status]}" />
+
+    <div class="flex-1 min-w-0">
+      <span class="font-medium">{check.name}:</span>
+      <span class="text-muted">{check.message}</span>
+    </div>
+
+    {#if isBlockingCheck(check)}
+      <span
+        class="inline-flex items-center rounded-full px-1.5 py-0.5 text-[9px] font-semibold badge-status-error"
+      >
+        {t('system.database.migration.prerequisites.critical')}
+      </span>
+    {/if}
+
+    <span
+      class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium {statusBadgeColor[
+        check.status
+      ]}"
+    >
+      {statusLabel(check.status)}
+    </span>
+  </div>
+{/snippet}

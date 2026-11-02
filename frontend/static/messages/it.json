@@ -1572,6 +1572,8 @@
         "starting": "Avvio migrazione...",
         "status": {
           "idle": "Pronto per Iniziare",
+          "checking": "Verifica dei prerequisiti",
+          "notReady": "Non pronto",
           "initializing": "Inizializzazione",
           "dual_write": "Scrittura Doppia Attiva",
           "migrating": "Migrazione Primaria",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Record",
           "sizeLabel": "Dimensione",
           "prerequisitesNotMet": "Prerequisiti non soddisfatti - risolvi i problemi critici qui sotto",
+          "prerequisitesUnavailable": "I controlli pre-migrazione non sono terminati. Vedi Controlli Pre-Migrazione qui sotto.",
+          "prerequisitesFailedList": "Risolvi prima questi controlli: {checks}",
           "validatingTitle": "Validazione dati",
           "validatingBody": "Confronto di {count} record legacy con il database V2...",
           "dirtyRecordsCatchup": "{count} record non sincronizzati - verrà tentata la riconciliazione",

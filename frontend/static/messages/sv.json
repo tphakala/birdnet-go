@@ -1572,6 +1572,8 @@
         "starting": "Startar migrering...",
         "status": {
           "idle": "Redo att starta",
+          "checking": "Kontrollerar förutsättningar",
+          "notReady": "Inte redo",
           "initializing": "Initierar",
           "dual_write": "Dubbelskrivning aktiv",
           "migrating": "Migrerar primär",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Poster",
           "sizeLabel": "Storlek",
           "prerequisitesNotMet": "Förutsättningar ej uppfyllda - åtgärda kritiska problem nedan",
+          "prerequisitesUnavailable": "Kontrollerna före migrering slutfördes inte. Se Kontroller före migrering nedan.",
+          "prerequisitesFailedList": "Åtgärda först dessa kontroller: {checks}",
           "validatingTitle": "Validerar data",
           "validatingBody": "Jämför {count} äldre poster mot V2-databasen...",
           "dirtyRecordsCatchup": "{count} ändrade poster - försöker inhämtningsavstämning",

@@ -1572,6 +1572,8 @@
         "starting": "Starting migration...",
         "status": {
           "idle": "Ready to Start",
+          "checking": "Checking prerequisites",
+          "notReady": "Not ready",
           "initializing": "Initializing",
           "dual_write": "Dual-Write Active",
           "migrating": "Migrating Primary",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Records",
           "sizeLabel": "Size",
           "prerequisitesNotMet": "Prerequisites not met - resolve critical issues below",
+          "prerequisitesUnavailable": "The pre-migration checks did not finish. See Pre-Migration Checks below.",
+          "prerequisitesFailedList": "Resolve these checks first: {checks}",
           "validatingTitle": "Validating Data",
           "validatingBody": "Comparing {count} legacy records against V2 database...",
           "dirtyRecordsCatchup": "{count} dirty records - will attempt catch-up reconciliation",

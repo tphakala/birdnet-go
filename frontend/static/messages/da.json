@@ -1572,6 +1572,8 @@
         "starting": "Starter migrering...",
         "status": {
           "idle": "Klar til start",
+          "checking": "Kontrollerer forudsætninger",
+          "notReady": "Ikke klar",
           "initializing": "Initialiserer",
           "dual_write": "Dobbeltskrivning aktiv",
           "migrating": "Migrerer primær",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Poster",
           "sizeLabel": "Størrelse",
           "prerequisitesNotMet": "Forudsætninger ikke opfyldt - løs kritiske problemer nedenfor",
+          "prerequisitesUnavailable": "Kontrollerne før migrering blev ikke færdige. Se Kontroller før migrering nedenfor.",
+          "prerequisitesFailedList": "Løs disse kontroller først: {checks}",
           "validatingTitle": "Validerer data",
           "validatingBody": "Sammenligner {count} ældre poster med V2-databasen...",
           "dirtyRecordsCatchup": "{count} ændrede poster - vil forsøge afstemning",

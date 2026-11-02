@@ -86,7 +86,10 @@ describe('DatabaseDashboard migration errors', () => {
   });
 
   it('shows the server message when the status request is refused', async () => {
-    serve({ [STATUS_URL]: apiError(NOT_CONFIGURED, 503) });
+    serve({
+      [STATUS_URL]: apiError(NOT_CONFIGURED, 503),
+      [PREREQUISITES_URL]: startablePrerequisites,
+    });
 
     renderTyped(DatabaseDashboard);
 
@@ -95,7 +98,10 @@ describe('DatabaseDashboard migration errors', () => {
   });
 
   it('shows a translated message when the status request fails without an API error', async () => {
-    serve({ [STATUS_URL]: new Error('socket closed') });
+    serve({
+      [STATUS_URL]: new Error('socket closed'),
+      [PREREQUISITES_URL]: startablePrerequisites,
+    });
 
     renderTyped(DatabaseDashboard);
 
@@ -135,6 +141,28 @@ describe('DatabaseDashboard migration errors', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Another migration is already running');
   });
+  it('shows why the migration cannot start when the prerequisites request fails', async () => {
+    serve({
+      [STATUS_URL]: idleStatus,
+      [PREREQUISITES_URL]: apiError('Request timeout.', 408),
+    });
+
+    renderTyped(DatabaseDashboard);
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Request timeout.'));
+    const helper = screen.getByText(
+      t('system.database.migration.progress.prerequisitesUnavailable')
+    );
+    // The confirm dialog has its own Start button; the one in the card points at the helper
+    const start = screen
+      .getAllByRole('button', { name: t('system.database.migration.actions.start') })
+      .find(b => b.getAttribute('aria-describedby') === helper.id);
+    expect(start).toHaveAttribute('aria-disabled', 'true');
+    expect(
+      screen.queryByText(t('system.database.migration.progress.prerequisitesNotMet'))
+    ).not.toBeInTheDocument();
+  });
+
   it('hides the state cards, keeps the independent panels and offers a retry while the status is unknown', async () => {
     const user = userEvent.setup();
     serve({
@@ -239,7 +267,10 @@ describe('DatabaseDashboard migration errors', () => {
   });
   it('marks Retry busy and ignores further clicks while the retried request is pending', async () => {
     const user = userEvent.setup();
-    serve({ [STATUS_URL]: apiError(NOT_CONFIGURED, 503) });
+    serve({
+      [STATUS_URL]: apiError(NOT_CONFIGURED, 503),
+      [PREREQUISITES_URL]: startablePrerequisites,
+    });
 
     renderTyped(DatabaseDashboard);
 

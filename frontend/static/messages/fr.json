@@ -1572,6 +1572,8 @@
         "starting": "Démarrage de la migration...",
         "status": {
           "idle": "Prêt à démarrer",
+          "checking": "Vérification des prérequis",
+          "notReady": "Pas prêt",
           "initializing": "Initialisation",
           "dual_write": "Double écriture active",
           "migrating": "Migration des données primaires",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Enregistrements",
           "sizeLabel": "Taille",
           "prerequisitesNotMet": "Prérequis non remplis - résolvez les problèmes critiques ci-dessous",
+          "prerequisitesUnavailable": "Les vérifications pré-migration ne se sont pas terminées. Voir Vérifications pré-migration ci-dessous.",
+          "prerequisitesFailedList": "Résolvez d'abord ces vérifications : {checks}",
           "validatingTitle": "Validation des données",
           "validatingBody": "Comparaison de {count} enregistrements avec la base de données V2...",
           "dirtyRecordsCatchup": "{count} enregistrements modifiés - tentative de réconciliation",

@@ -12,7 +12,9 @@
     AlertTriangle,
   } from '@lucide/svelte';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
-  import { t } from '$lib/i18n';
+  import { t, getLocale } from '$lib/i18n';
+  import { generateId } from '$lib/utils/uuid';
+  import { isBlockingCheck } from '$lib/utils/migrationPrerequisites';
   import type { MigrationStatus, DatabaseStats, PrerequisitesResponse } from '$lib/types/migration';
 
   interface Props {
@@ -20,6 +22,10 @@
     legacyStats: DatabaseStats | null;
     v2Stats: DatabaseStats | null;
     prerequisites: PrerequisitesResponse | null;
+    /** True while the prerequisites request is in flight. */
+    prerequisitesLoading: boolean;
+    /** Message of the failed prerequisites request, or null. */
+    prerequisitesError: string | null;
     isStarting?: boolean;
     onStart: () => void;
     onPause: () => Promise<void>;
@@ -33,6 +39,8 @@
     legacyStats,
     v2Stats,
     prerequisites,
+    prerequisitesLoading,
+    prerequisitesError,
     isStarting = false,
     onStart,
     onPause,
@@ -50,6 +58,44 @@
   let isCutover = $derived(migState === 'cutover');
   let isPaused = $derived(status?.worker_paused === true);
   let banner = $derived(bannerMessage(migState));
+
+  const START_HELP_ID = generateId('migration-start-help');
+
+  /** Names of the critical checks that block the migration. */
+  let blockingCheckNames = $derived(
+    (prerequisites?.checks ?? []).filter(isBlockingCheck).map(c => c.name)
+  );
+
+  /** Why the start button is blocked, or null when it is not. Data that allows the start wins; otherwise loading and error win over stale blocked data. */
+  let startBlockedReason = $derived.by((): string | null => {
+    if (prerequisites?.can_start_migration === true) return null;
+    if (prerequisitesLoading) return t('system.database.migration.prerequisites.running');
+    if (prerequisitesError) return t('system.database.migration.progress.prerequisitesUnavailable');
+    if (blockingCheckNames.length > 0) {
+      return t('system.database.migration.progress.prerequisitesFailedList', {
+        checks: new Intl.ListFormat(getLocale(), { type: 'conjunction' }).format(
+          blockingCheckNames
+        ),
+      });
+    }
+    return t('system.database.migration.progress.prerequisitesNotMet');
+  });
+
+  /** The idle badge says Ready only when the checks allow the start. */
+  let stateBadgeLabel = $derived.by((): string => {
+    if (!isIdle || isPaused || startBlockedReason === null) return stateLabel(migState);
+    return prerequisitesLoading
+      ? t('system.database.migration.status.checking')
+      : t('system.database.migration.status.notReady');
+  });
+
+  let startHelpClass = $derived(
+    startBlockedReason === null
+      ? 'sr-only'
+      : prerequisitesLoading
+        ? 'text-[10px] text-center mt-1.5 text-muted'
+        : 'text-[10px] text-center mt-1.5 text-[var(--text-error)]'
+  );
 
   /** Average bytes per detection record in v2 database, used to estimate v2 DB size during migration */
   const ESTIMATED_V2_RECORD_SIZE_BYTES = 180;
@@ -123,7 +169,7 @@
           isPaused ? 'paused' : migState
         )}"
       >
-        {isPaused ? t('system.database.migration.status.paused') : stateLabel(migState)}
+        {isPaused ? t('system.database.migration.status.paused') : stateBadgeLabel}
       </span>
     </div>
   </div>
@@ -268,8 +314,8 @@
       </div>
     </div>
 
-    <!-- Start button -->
-    {#if prerequisites?.can_start_migration}
+    <!-- Start button. Blocked states keep the button focusable and say why. -->
+    {#if startBlockedReason === null}
       <button
         onclick={onStart}
         disabled={isStarting}
@@ -285,16 +331,19 @@
       </button>
     {:else}
       <button
+        type="button"
+        aria-disabled="true"
+        aria-describedby={START_HELP_ID}
         class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-slate-400/50 text-slate-500 cursor-not-allowed"
-        disabled
       >
         <Play class="w-4 h-4" />
         {t('system.database.migration.actions.start')}
       </button>
-      <p class="text-[10px] text-center mt-1.5 text-[var(--color-error)]">
-        {t('system.database.migration.progress.prerequisitesNotMet')}
-      </p>
     {/if}
+    <!-- Always rendered so a change of reason is announced; sr-only when nothing blocks -->
+    <p id={START_HELP_ID} role="status" class={startHelpClass}>
+      {startBlockedReason ?? ''}
+    </p>
 
     <!-- STATE: Validating -->
   {:else if isValidating}

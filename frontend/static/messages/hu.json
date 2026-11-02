@@ -1572,6 +1572,8 @@
         "starting": "Migráció indítása...",
         "status": {
           "idle": "Indításra kész",
+          "checking": "Előfeltételek ellenőrzése",
+          "notReady": "Nem kész",
           "initializing": "Inicializálás",
           "dual_write": "Dupla-írás aktív",
           "migrating": "Elsődleges migrálása",
@@ -1603,6 +1605,8 @@
           "recordsLabel": "Rekordok",
           "sizeLabel": "Méret",
           "prerequisitesNotMet": "Előfeltételek nem teljesültek - hárítsa el az alábbi kritikus problémákat",
+          "prerequisitesUnavailable": "A migráció előtti ellenőrzések nem fejeződtek be. Lásd lent: Migráció előtti ellenőrzések.",
+          "prerequisitesFailedList": "Először oldja meg ezeket az ellenőrzéseket: {checks}",
           "validatingTitle": "Adatok validálása",
           "validatingBody": "{count} régi rekord összehasonlítása a V2 adatbázissal...",
           "dirtyRecordsCatchup": "{count} hibás rekord - egyeztetési kísérlet a validálás során",
