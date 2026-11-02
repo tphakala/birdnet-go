@@ -298,7 +298,8 @@ func TestNewHTTPRedirectServer(t *testing.T) {
 		requestHost     = requestHostname + ":8080"
 		externalHost    = "public.example.com:9443"
 		customTLSPort   = "9443"
-		redirectTimeout = 5 * time.Second
+		readTimeout     = 5 * time.Second
+		writeTimeout    = 7 * time.Second
 	)
 
 	tests := []struct {
@@ -319,8 +320,8 @@ func TestNewHTTPRedirectServer(t *testing.T) {
 			s := &Server{
 				config: &Config{
 					RedirectAuthority: tc.redirectAuthority,
-					ReadTimeout:       redirectTimeout,
-					WriteTimeout:      redirectTimeout,
+					ReadTimeout:       readTimeout,
+					WriteTimeout:      writeTimeout,
 				},
 				slogger: GetLogger(),
 			}
@@ -349,7 +350,7 @@ func TestNewHTTPRedirectServer(t *testing.T) {
 		e := echo.New()
 		e.HideBanner = true
 		s := &Server{
-			config:    &Config{ReadTimeout: redirectTimeout, WriteTimeout: redirectTimeout},
+			config:    &Config{ReadTimeout: readTimeout, WriteTimeout: writeTimeout},
 			echo:      e,
 			settings:  conftest.NewTestSettings().Build(),
 			slogger:   GetLogger(),
@@ -358,8 +359,8 @@ func TestNewHTTPRedirectServer(t *testing.T) {
 		e.GET(healthCheckPath, s.healthCheck)
 
 		srv := s.newHTTPRedirectServer(":0", customTLSPort)
-		assert.Equal(t, redirectTimeout, srv.ReadTimeout)
-		assert.Equal(t, redirectTimeout, srv.WriteTimeout)
+		assert.Equal(t, readTimeout, srv.ReadTimeout)
+		assert.Equal(t, writeTimeout, srv.WriteTimeout)
 
 		req := httptest.NewRequest(http.MethodGet, healthCheckPath, http.NoBody)
 		req.Host = requestHost
