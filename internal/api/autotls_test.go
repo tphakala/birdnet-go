@@ -144,25 +144,27 @@ func TestConfig_SessionCookiesSecure(t *testing.T) {
 	})
 }
 
+// tlsPortCases are the TLS listener port outcomes shared by every TLS mode,
+// because ConfigFromSettings resolves the port with one helper.
+var tlsPortCases = []struct {
+	name        string
+	httpPort    string
+	tlsPort     string
+	wantTLSPort string
+}{
+	{"unset uses the default", "8080", "", defaultTLSPort},
+	{"custom port is respected", "8080", "9443", "9443"},
+	{"conflict with the HTTP port moves to the default", "8080", "8080", defaultTLSPort},
+	{"conflict on the default port moves to the fallback", defaultTLSPort, defaultTLSPort, fallbackTLSPort},
+}
+
 // TestConfigFromSettings_AutoTLS_TLSPort pins the TLS listener port AutoTLS
 // resolves: the default when unset, a user-configured port as is, and a
 // replacement port when the configured one collides with the HTTP port.
 func TestConfigFromSettings_AutoTLS_TLSPort(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name        string
-		httpPort    string
-		tlsPort     string
-		wantTLSPort string
-	}{
-		{"unset uses the default", "8080", "", defaultTLSPort},
-		{"custom port is respected", "8080", "9443", "9443"},
-		{"conflict with the HTTP port moves to the default", "8080", "8080", defaultTLSPort},
-		{"conflict on the default port moves to the fallback", defaultTLSPort, defaultTLSPort, fallbackTLSPort},
-	}
-
-	for _, tc := range tests {
+	for _, tc := range tlsPortCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -178,6 +180,54 @@ func TestConfigFromSettings_AutoTLS_TLSPort(t *testing.T) {
 			assert.NotEqual(t, cfg.Port, cfg.TLSPort, "the two listeners must not share a port")
 			assert.Equal(t, ":"+tc.wantTLSPort, cfg.TLSAddress())
 		})
+	}
+}
+
+// webserverTLSService is the TLS manager service name ConfigFromSettings reads
+// the web server certificate and key from.
+const webserverTLSService = "webserver"
+
+// installWebserverCertificate points the global TLS manager at a temporary
+// directory holding a certificate and key file for the web server, and restores
+// the previous manager when the test ends. ConfigFromSettings only checks that
+// the files exist, so their content is a placeholder.
+func installWebserverCertificate(t *testing.T) {
+	t.Helper()
+
+	tm := conf.NewTLSManager(t.TempDir())
+	require.NoError(t, tm.EnsureServiceDirectory(webserverTLSService))
+	for _, certType := range []conf.TLSCertificateType{conf.TLSCertTypeServerCert, conf.TLSCertTypeServerKey} {
+		path := tm.GetCertificatePath(webserverTLSService, certType)
+		require.NoError(t, os.WriteFile(path, []byte("placeholder"), 0o600))
+	}
+
+	previous := conf.GetTLSManager()
+	conf.SetTLSManagerForTest(tm)
+	t.Cleanup(func() { conf.SetTLSManagerForTest(previous) })
+}
+
+// TestConfigFromSettings_ManualTLS_TLSPort pins the TLS listener port the manual
+// and self-signed modes resolve when the certificate files exist, the same as
+// AutoTLS.
+func TestConfigFromSettings_ManualTLS_TLSPort(t *testing.T) {
+	// Not parallel: the test swaps the process-global TLS manager.
+	installWebserverCertificate(t)
+
+	for _, mode := range []conf.TLSMode{conf.TLSModeManual, conf.TLSModeSelfSigned} {
+		for _, tc := range tlsPortCases {
+			t.Run(string(mode)+"/"+tc.name, func(t *testing.T) {
+				settings := conftest.NewTestSettings().WithWebServer(tc.httpPort, true).Build()
+				settings.Security.TLSMode = mode
+				settings.Security.TLSPort = tc.tlsPort
+
+				cfg := ConfigFromSettings(settings)
+
+				assert.True(t, cfg.TLSEnabled, "existing certificate files enable TLS")
+				assert.Equal(t, tc.httpPort, cfg.Port, "the HTTP port is never changed")
+				assert.Equal(t, tc.wantTLSPort, cfg.TLSPort)
+				assert.Equal(t, ":"+tc.wantTLSPort, cfg.TLSAddress())
+			})
+		}
 	}
 }
 
