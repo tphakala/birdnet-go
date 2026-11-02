@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+
+	"github.com/tphakala/birdnet-go/internal/security/proxytrust"
 )
 
 const (
@@ -23,6 +25,15 @@ const (
 // a client a fresh bucket each time.
 func RateLimitKey(ctx echo.Context) (string, error) {
 	return rateLimitKeyFor(ctx.RealIP()), nil
+}
+
+// PeerRateLimitKey is an echo rate limiter IdentifierExtractor that keys on the
+// address the request arrived from, never on a forwarded header. It lets a
+// limiter bound what a peer can do however many clients it names; the login
+// route pairs it with RateLimitKey.
+func PeerRateLimitKey(ctx echo.Context) (string, error) {
+	_, host := proxytrust.PeerAddr(ctx.Request())
+	return rateLimitKeyFor(host), nil
 }
 
 // rateLimitKeyFor maps a client address to its limiter key. IPv4 addresses and

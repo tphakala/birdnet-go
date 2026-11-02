@@ -74,6 +74,26 @@ func loginRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
 	}
 }
 
+// authPeerRateLimitMultiplier is how many clients' login budgets the connection
+// peer as a whole may spend. A reverse proxy or tunnel serves many clients from
+// one address, and a forwarded client address is only as trustworthy as the peer
+// that sends it, so the peer's own budget bounds the attempts a caller can make
+// by naming a new client in every request. Ten leaves a household or a small
+// office behind one proxy each its own attempts. The budget is shared by every
+// client behind the peer, so once it is spent the peer refuses all of them until
+// it refills.
+const authPeerRateLimitMultiplier = 10
+
+// loginPeerRateLimiterStoreConfig returns the limiter settings for the login
+// endpoint keyed on the connection peer: the per-client attempts and burst
+// multiplied by authPeerRateLimitMultiplier, over the same window.
+func loginPeerRateLimiterStoreConfig() middleware.RateLimiterMemoryStoreConfig {
+	cfg := loginRateLimiterStoreConfig()
+	cfg.Rate *= authPeerRateLimitMultiplier
+	cfg.Burst *= authPeerRateLimitMultiplier
+	return cfg
+}
+
 // Compiled regex for path validation (moved outside function for performance)
 var validBasePathRegex = regexp.MustCompile(`^/[a-zA-Z0-9/_-]*/$`)
 
@@ -139,20 +159,40 @@ func New(core *apicore.Core, authService auth.Service) *Handler {
 }
 
 // RegisterRoutes registers all authentication-related API endpoints on the
-// supplied v2 API group, preserving the exact routes, order, and per-route
-// middleware from the original initAuthRoutes.
+// supplied v2 API group. The login route is rate limited per client and per
+// connection peer.
 func (c *Handler) RegisterRoutes(g *echo.Group) {
 	// Create auth API group
 	authGroup := g.Group(AuthGroupPath)
 
-	// Create rate limiter for login endpoint to prevent brute force attacks
-	// Allow a burst of 5 login attempts per client (per /64 for IPv6), refilled at
-	// 5 per 15 minutes (see loginRateLimiterStoreConfig)
-	loginRateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-		Skipper: middleware.DefaultSkipper,
-		Store:   middleware.NewRateLimiterMemoryStoreWithConfig(loginRateLimiterStoreConfig()),
-		// One bucket per client address (per /64 for IPv6)
-		IdentifierExtractor: apicore.RateLimitKey,
+	// Rate limit the login endpoint to prevent brute force attacks. Allow a burst
+	// of 5 login attempts per client (per /64 for IPv6), refilled at 5 per 15
+	// minutes (see loginRateLimiterStoreConfig), and a multiple of that for the
+	// connection peer as a whole (see loginPeerRateLimiterStoreConfig).
+	loginRateLimiter := c.loginLimiter(loginRateLimiterStoreConfig(), apicore.RateLimitKey)
+	loginPeerRateLimiter := c.loginLimiter(loginPeerRateLimiterStoreConfig(), apicore.PeerRateLimitKey)
+
+	// Routes that don't require authentication (but are rate limited)
+	authGroup.POST(AuthLoginPath, c.Login, loginRateLimiter, loginPeerRateLimiter)
+
+	// OAuth callback endpoint - public, completes the OAuth flow
+	// This is the V2 replacement for /api/v1/oauth2/callback
+	authGroup.GET(AuthCallbackPath, c.OAuthCallback)
+
+	// Routes that require authentication
+	protectedGroup := authGroup.Group("", c.AuthMiddleware)
+	protectedGroup.POST(AuthLogoutPath, c.Logout)
+	protectedGroup.GET(AuthStatusPath, c.GetAuthStatus)
+}
+
+// loginLimiter returns the rate limiting middleware for the login route: one
+// bucket per identifier, with the store settings storeConfig. A refused attempt
+// is answered and logged the same way whichever limiter refuses it.
+func (c *Handler) loginLimiter(storeConfig middleware.RateLimiterMemoryStoreConfig, identifier middleware.Extractor) echo.MiddlewareFunc {
+	return middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Skipper:             middleware.DefaultSkipper,
+		Store:               middleware.NewRateLimiterMemoryStoreWithConfig(storeConfig),
+		IdentifierExtractor: identifier,
 		ErrorHandler: func(ctx echo.Context, err error) error {
 			// Return a user-friendly error message when rate limit is exceeded
 			c.LogSecurityWarnIfEnabled("Login rate limit exceeded",
@@ -172,18 +212,6 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 			return c.HandleErrorWithKey(ctx, err, "Too many login attempts. Please try again in 15 minutes.", http.StatusTooManyRequests, notification.MsgErrAuthTooManyAttempts, nil)
 		},
 	})
-
-	// Routes that don't require authentication (but are rate limited)
-	authGroup.POST(AuthLoginPath, c.Login, loginRateLimiter)
-
-	// OAuth callback endpoint - public, completes the OAuth flow
-	// This is the V2 replacement for /api/v1/oauth2/callback
-	authGroup.GET(AuthCallbackPath, c.OAuthCallback)
-
-	// Routes that require authentication
-	protectedGroup := authGroup.Group("", c.AuthMiddleware)
-	protectedGroup.POST(AuthLogoutPath, c.Logout)
-	protectedGroup.GET(AuthStatusPath, c.GetAuthStatus)
 }
 
 // Login handles POST /api/v2/auth/login
