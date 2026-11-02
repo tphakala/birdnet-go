@@ -4,6 +4,7 @@ package importsapi
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -26,20 +27,24 @@ import (
 	datastoreV2 "github.com/tphakala/birdnet-go/internal/datastore/v2"
 )
 
-// prerequisiteCheck names a check by ID and severity.
-type prerequisiteCheck struct{ id, severity string }
+// prerequisiteCheck names a check by ID, severity and status. An empty status
+// means the status is not pinned because it depends on the host.
+type prerequisiteCheck struct{ id, severity, status string }
+
+// memoryCheckID is the prerequisite whose status depends on the host's RAM.
+const memoryCheckID = "memory_available"
 
 // sqlitePrerequisiteChecks is the exact sequence GetPrerequisites reports for a
 // SQLite setup: the critical checks first, then the warnings.
 var sqlitePrerequisiteChecks = []prerequisiteCheck{
-	{"state_idle", CheckSeverityCritical},
-	{"disk_space", CheckSeverityCritical},
-	{"legacy_accessible", CheckSeverityCritical},
-	{"sqlite_integrity", CheckSeverityCritical},
-	{"write_permission", CheckSeverityCritical},
-	{"record_count", CheckSeverityCritical},
-	{"existing_v2_data", CheckSeverityWarning},
-	{"memory_available", CheckSeverityWarning},
+	{"state_idle", CheckSeverityCritical, CheckStatusPassed},
+	{"disk_space", CheckSeverityCritical, CheckStatusPassed},
+	{"legacy_accessible", CheckSeverityCritical, CheckStatusPassed},
+	{"sqlite_integrity", CheckSeverityCritical, CheckStatusPassed},
+	{"write_permission", CheckSeverityCritical, CheckStatusPassed},
+	{"record_count", CheckSeverityCritical, CheckStatusPassed},
+	{"existing_v2_data", CheckSeverityWarning, CheckStatusSkipped},
+	{memoryCheckID, CheckSeverityWarning, ""},
 }
 
 // TestGetPrerequisites_SQLite pins the prerequisites response for a healthy
@@ -51,18 +56,10 @@ func TestGetPrerequisites_SQLite(t *testing.T) {
 	t.Attr("type", "unit")
 	t.Attr("feature", "prerequisites")
 
-	tests := []struct {
-		name         string
-		v2Only       bool
-		wantCanStart bool
-	}{
-		{name: "legacy mode can start", v2Only: false, wantCanStart: true},
-		{name: "v2-only mode cannot start", v2Only: true, wantCanStart: false},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
+	for _, v2Only := range []bool{false, true} {
+		t.Run(fmt.Sprintf("v2Only=%t", v2Only), func(t *testing.T) {
 			e, controller, _ := setupPrerequisitesTestEnvironment(t)
-			setV2OnlyMode(t, tt.v2Only)
+			setV2OnlyMode(t, v2Only)
 
 			req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/prerequisites", http.NoBody)
 			rec := httptest.NewRecorder()
@@ -73,17 +70,19 @@ func TestGetPrerequisites_SQLite(t *testing.T) {
 			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &response))
 
 			assert.True(t, response.AllPassed, "AllPassed should be true when no critical check fails")
-			assert.Equal(t, tt.wantCanStart, response.CanStartMigration)
+			assert.Equal(t, !v2Only, response.CanStartMigration, "v2-only mode withholds the go-ahead")
 			assert.Equal(t, 0, response.CriticalFailures, "Should have no critical failures")
 			assert.False(t, response.CheckedAt.IsZero(), "CheckedAt should be set")
 
-			// memory_available depends on the host, so only its ID and severity are pinned.
+			// The memory check depends on the host, so only its ID and severity are pinned.
 			got := make([]prerequisiteCheck, 0, len(response.Checks))
 			for _, check := range response.Checks {
-				got = append(got, prerequisiteCheck{check.ID, check.Severity})
+				status := check.Status
+				if check.ID == memoryCheckID {
+					status = ""
+				}
+				got = append(got, prerequisiteCheck{check.ID, check.Severity, status})
 				assert.NotEmpty(t, check.Name, "Check %s should have a name", check.ID)
-				assert.Contains(t, []string{CheckStatusPassed, CheckStatusFailed, CheckStatusWarning, CheckStatusSkipped, CheckStatusError},
-					check.Status, "Check %s status should be valid", check.ID)
 			}
 			assert.Equal(t, sqlitePrerequisiteChecks, got)
 		})
