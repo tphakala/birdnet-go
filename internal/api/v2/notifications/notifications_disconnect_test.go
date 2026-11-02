@@ -48,10 +48,8 @@ func recycledRequest() *http.Request {
 func TestSetupNotificationDisconnectHandler_NoContextRaceAfterHandlerReturn(t *testing.T) {
 	t.Parallel()
 
-	// The handler and its logger are built, and warmed up, outside the bubble so
-	// their lazy initialization does not run inside it.
+	// The handler is built outside the bubble.
 	c := mockHandler()
-	c.logNotificationConnection("warmup", "", "", false)
 
 	synctest.Test(t, func(t *testing.T) {
 		e := echo.New()
