@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
@@ -45,19 +44,12 @@ type SSETestConfig struct {
 // heartbeat interval.
 const maxSSEReadLines = 3
 
-// attemptSSEConnection attempts to establish an SSE connection and read events.
-// Returns true if connection was established and events were read.
-func attemptSSEConnection(t *testing.T, serverURL, endpoint string, connID int, timeout time.Duration) bool {
-	t.Helper()
+// attemptSSEConnection attempts to establish an SSE connection with req and
+// read events. Returns true if connection was established and events were read.
+// It takes no testing.T so it is safe to call from a goroutine.
+func attemptSSEConnection(req *http.Request, timeout time.Duration) bool {
 	client := apitest.NewTestHTTPClient(timeout)
 	defer client.CloseIdleConnections()
-
-	req, err := http.NewRequest("GET", serverURL+"/api/v2"+endpoint, http.NoBody)
-	if err != nil {
-		assert.NoErrorf(t, err, "Connection %d: Failed to create request", connID)
-		return false
-	}
-	req.Header.Set("Accept", "text/event-stream")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -192,10 +184,12 @@ func testMultipleConcurrentConnections(t *testing.T, server *httptest.Server, co
 	var wg sync.WaitGroup
 	var connectionsEstablished atomic.Int32
 
-	for i := range config.maxConnections {
-		connID := i
+	for range config.maxConnections {
+		req, err := http.NewRequest("GET", server.URL+"/api/v2"+config.endpoint, http.NoBody)
+		require.NoError(t, err)
+		req.Header.Set("Accept", "text/event-stream")
 		wg.Go(func() {
-			if attemptSSEConnection(t, server.URL, config.endpoint, connID, config.testTimeout) {
+			if attemptSSEConnection(req, config.testTimeout) {
 				connectionsEstablished.Add(1)
 			}
 		})

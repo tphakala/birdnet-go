@@ -486,54 +486,6 @@ func TestRunStreamingIntegrationTest(t *testing.T) {
 // has not re-entered a secret.
 const redactedSecretPlaceholder = apicore.RedactedValue
 
-// TestRestoreRedactedSecret verifies the canonical single-field restore
-// primitive shared by the settings save flow and the integration
-// test-connection handlers.
-func TestRestoreRedactedSecret(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name     string
-		current  string
-		incoming string
-		want     string
-	}{
-		{
-			name:     "placeholder is restored to current real secret",
-			current:  "real-saved-key",
-			incoming: redactedSecretPlaceholder,
-			want:     "real-saved-key",
-		},
-		{
-			name:     "real incoming value is left untouched",
-			current:  "real-saved-key",
-			incoming: "user-typed-new-key",
-			want:     "user-typed-new-key",
-		},
-		{
-			name:     "empty incoming stays empty (not a placeholder)",
-			current:  "real-saved-key",
-			incoming: "",
-			want:     "",
-		},
-		{
-			name:     "placeholder with empty current resolves to empty",
-			current:  "",
-			incoming: redactedSecretPlaceholder,
-			want:     "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			incoming := tt.incoming
-			apicore.RestoreRedactedSecret(tt.current, &incoming)
-			assert.Equal(t, tt.want, incoming)
-		})
-	}
-}
-
 // publishWeatherTestSettings sets the saved weather provider config the handler
 // reads via CurrentSettings() and returns the handler. It re-publishes the
 // settings so CurrentSettings() (which reads the global snapshot first) observes

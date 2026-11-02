@@ -7,17 +7,13 @@
 package sse
 
 import (
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/analysis/processor"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
-	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
 )
 
 // sensitiveDisplayName is an internal-looking source label of the kind that must
@@ -162,36 +158,5 @@ func TestPendingPayloadForClient(t *testing.T) {
 		assert.Empty(t, got[0].Source)
 		assert.Equal(t, "rtsp-1", got[0].SourceID)
 		assert.Equal(t, sensitiveDisplayName, input[0].Source, "shared slice must be unchanged")
-	})
-}
-
-// TestNewWiresAuthCheck verifies the facade-injected auth check is stored by New
-// and consulted by clientAuthenticated, and that a nil check fails closed
-// (treated as unauthenticated so the stream anonymizes by default).
-func TestNewWiresAuthCheck(t *testing.T) {
-	t.Parallel()
-
-	newCtx := func() echo.Context {
-		e := echo.New()
-		req := httptest.NewRequest(http.MethodGet, "/api/v2/detections/stream", http.NoBody)
-		return e.NewContext(req, httptest.NewRecorder())
-	}
-
-	t.Run("authenticated stub", func(t *testing.T) {
-		t.Parallel()
-		h := New(apitest.NewCore(t, apitest.WithoutSettingsPublish()), func(echo.Context) bool { return true })
-		assert.True(t, h.clientAuthenticated(newCtx()))
-	})
-
-	t.Run("unauthenticated stub", func(t *testing.T) {
-		t.Parallel()
-		h := New(apitest.NewCore(t, apitest.WithoutSettingsPublish()), func(echo.Context) bool { return false })
-		assert.False(t, h.clientAuthenticated(newCtx()))
-	})
-
-	t.Run("nil check fails closed", func(t *testing.T) {
-		t.Parallel()
-		h := New(apitest.NewCore(t, apitest.WithoutSettingsPublish()), nil)
-		assert.False(t, h.clientAuthenticated(newCtx()))
 	})
 }

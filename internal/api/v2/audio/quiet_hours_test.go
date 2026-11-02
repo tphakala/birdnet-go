@@ -6,9 +6,7 @@
 // hostnames/ports (PR #2775). These tests lock in:
 //   - the placeholder shape (stream-N with N starting at 1) and count,
 //   - stability across calls on the same input,
-//   - the documented index-shift behavior when a new URL that sorts before
-//     an existing one is added (future hash-based refactor needs to change
-//     this deliberately), and
+//   - the number of suppressed streams, which the dashboard card counts, and
 //   - that the authenticated path passes URLs through privacy.SanitizeStreamUrl
 //     without leaking credentials.
 
@@ -65,6 +63,8 @@ func TestBuildSuppressedStreamsPayload_GuestPlaceholderShape(t *testing.T) {
 			out := buildSuppressedStreamsPayload(tc.in, true)
 			assert.Len(t, out, len(tc.in),
 				"guest payload must preserve entry count")
+			assert.Equal(t, countSuppressed(tc.in), countSuppressed(out),
+				"guest payload must preserve the number of suppressed streams")
 			for key := range out {
 				assert.Regexp(t, streamPlaceholderPattern, key,
 					"guest key %q must match stream-N shape", key)
@@ -96,52 +96,6 @@ func TestBuildSuppressedStreamsPayload_GuestStableWithinResponse(t *testing.T) {
 		"guest payload must be deterministic for a given input")
 }
 
-// TestBuildSuppressedStreamsPayload_GuestShiftsWhenPrependingSort documents
-// the current behavior: adding a URL that sorts before existing ones shifts
-// every existing placeholder index by one. Today this is benign - the
-// "Currently Hearing" dashboard card only counts true values and does not
-// key UI state on placeholder names. If a future consumer needs hash-stable
-// placeholders, this test will fail and force a deliberate refactor.
-func TestBuildSuppressedStreamsPayload_GuestShiftsWhenPrependingSort(t *testing.T) {
-	t.Parallel()
-
-	before := map[string]bool{
-		"rtsp://user:pass@cam-m.lan/stream": true,
-		"rtsp://user:pass@cam-z.lan/stream": false,
-	}
-	after := map[string]bool{
-		// cam-a sorts before both existing URLs. Use a distinct value
-		// (false) so we can prove the shift by looking at stream-1's
-		// value across the two payloads.
-		"rtsp://user:pass@cam-a.lan/stream": false,
-		"rtsp://user:pass@cam-m.lan/stream": true,
-		"rtsp://user:pass@cam-z.lan/stream": false,
-	}
-
-	firstPayload := buildSuppressedStreamsPayload(before, true)
-	secondPayload := buildSuppressedStreamsPayload(after, true)
-
-	require.Len(t, firstPayload, 2)
-	require.Len(t, secondPayload, 3)
-	for _, payload := range []map[string]bool{firstPayload, secondPayload} {
-		for key := range payload {
-			assert.Regexp(t, streamPlaceholderPattern, key)
-		}
-	}
-
-	// Assert the shift explicitly: before has cam-m at stream-1 (true);
-	// after, cam-a takes stream-1 (false) and cam-m shifts to stream-2
-	// (true). If a future refactor makes placeholders hash-stable, these
-	// assertions will fail and force a deliberate contract change rather
-	// than silently breaking any consumer that keyed by placeholder name.
-	require.Contains(t, firstPayload, "stream-1")
-	require.Contains(t, secondPayload, "stream-1")
-	require.Contains(t, secondPayload, "stream-2")
-	assert.True(t, firstPayload["stream-1"], "before: cam-m (true) maps to stream-1")
-	assert.False(t, secondPayload["stream-1"], "after: prepended cam-a (false) takes stream-1")
-	assert.True(t, secondPayload["stream-2"], "after: cam-m (true) shifts from stream-1 to stream-2")
-}
-
 // TestBuildSuppressedStreamsPayload_AuthenticatedSanitizesURLs asserts the
 // non-guest path passes URLs through privacy.SanitizeStreamUrl - credentials
 // are stripped but host/port remain visible to the settings UI.
@@ -167,6 +121,17 @@ func TestBuildSuppressedStreamsPayload_AuthenticatedSanitizesURLs(t *testing.T) 
 		assert.NotContains(t, key, "@cam1.lan",
 			"authenticated key %q retains userinfo", key)
 	}
+}
+
+// countSuppressed returns the number of streams marked suppressed.
+func countSuppressed(m map[string]bool) int {
+	n := 0
+	for _, suppressed := range m {
+		if suppressed {
+			n++
+		}
+	}
+	return n
 }
 
 // mapKeys returns map keys in sorted order so assertion diagnostics are

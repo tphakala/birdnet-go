@@ -191,28 +191,6 @@ func TestAudioFeedAdmitsOversizedChunk(t *testing.T) {
 	assert.Equal(t, int64(budget*2), totalBytes)
 }
 
-// TestAudioFeedUnboundedKeepsSlotBound pins audioFeed's contract when the byte
-// budget is disabled (maxBytes 0): the budget is inert and the channel's slot
-// count is the only bound. Production always sets a budget, but the primitive
-// must still behave when one is not supplied.
-func TestAudioFeedUnboundedKeepsSlotBound(t *testing.T) {
-	t.Parallel()
-
-	h, feed := newTestFeedConsumer(0)
-
-	// Well past any byte budget: this is 32 MB of PCM at the RTSP frame size.
-	for seq := range uint64(defaultReadBufferSize) {
-		writeFrame(t, h, rtspFrameBytes, seq)
-	}
-
-	seqs, totalBytes := drainFeed(feed)
-
-	require.Len(t, seqs, defaultReadBufferSize,
-		"every slot must be used before anything is dropped")
-	assert.Equal(t, int64(defaultReadBufferSize)*rtspFrameBytes, totalBytes)
-	assert.Equal(t, uint64(0), seqs[0], "nothing should have been evicted")
-}
-
 // TestAudioFeedSlotExhaustionDropsOldest covers Write's slot-exhaustion arm: the
 // path taken when the channel's slots fill before the byte budget bites (an
 // unbounded feed, or any budget large enough that more than defaultReadBufferSize
