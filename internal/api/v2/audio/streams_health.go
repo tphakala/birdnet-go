@@ -151,8 +151,8 @@ func (c *Handler) RegisterStreamHealthRoutes(g *echo.Group) {
 	g.GET("/streams/status", c.GetStreamsStatusSummary, authMiddleware)
 
 	// SSE endpoint for real-time stream health updates - authenticated and
-	// rate-limited to 5 connections per minute with burst of 5 to tolerate
-	// page-refresh reconnects.
+	// rate-limited to 5 connections per minute per client (per /64 for IPv6)
+	// with burst of 5 to tolerate page-refresh reconnects.
 	rateLimiterConfig := middleware.RateLimiterConfig{
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
 			middleware.RateLimiterMemoryStoreConfig{
@@ -161,7 +161,7 @@ func (c *Handler) RegisterStreamHealthRoutes(g *echo.Group) {
 				ExpiresIn: streamHealthRateLimitWindow,
 			},
 		),
-		IdentifierExtractor: middleware.DefaultRateLimiterConfig.IdentifierExtractor,
+		IdentifierExtractor: apicore.RateLimitKey,
 		ErrorHandler: func(context echo.Context, err error) error {
 			return context.JSON(http.StatusTooManyRequests, map[string]string{
 				"error": "Rate limit exceeded for stream health SSE connections",

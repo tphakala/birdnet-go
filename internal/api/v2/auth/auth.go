@@ -62,7 +62,7 @@ const (
 	authDelayMaxMs          = 150 // Maximum random delay in ms for timing attack mitigation
 )
 
-// loginRateLimiterStoreConfig returns the per-IP limiter settings for the login
+// loginRateLimiterStoreConfig returns the per-client limiter settings for the login
 // endpoint: authRateLimitRequests attempts per authRateLimitWindow with a burst
 // of authRateLimitBurst. Echo reads Rate as requests per second, so the
 // per-window count is converted.
@@ -146,15 +146,13 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
 	authGroup := g.Group(AuthGroupPath)
 
 	// Create rate limiter for login endpoint to prevent brute force attacks
-	// Allow a burst of 5 login attempts per IP address, refilled at 5 per 15
-	// minutes (see loginRateLimiterStoreConfig)
+	// Allow a burst of 5 login attempts per client (per /64 for IPv6), refilled at
+	// 5 per 15 minutes (see loginRateLimiterStoreConfig)
 	loginRateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 		Skipper: middleware.DefaultSkipper,
 		Store:   middleware.NewRateLimiterMemoryStoreWithConfig(loginRateLimiterStoreConfig()),
-		IdentifierExtractor: func(ctx echo.Context) (string, error) {
-			// Use IP address as identifier for rate limiting
-			return ctx.RealIP(), nil
-		},
+		// One bucket per client address (per /64 for IPv6)
+		IdentifierExtractor: apicore.RateLimitKey,
 		ErrorHandler: func(ctx echo.Context, err error) error {
 			// Return a user-friendly error message when rate limit is exceeded
 			c.LogSecurityWarnIfEnabled("Login rate limit exceeded",

@@ -5,6 +5,7 @@
 package authapi
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -21,7 +22,7 @@ import (
 )
 
 const (
-	// loginRateTestBurst is the number of attempts one IP may make in quick
+	// loginRateTestBurst is the number of attempts one client may make in quick
 	// succession.
 	loginRateTestBurst = 5
 	// loginRateTestWindow is how long an exhausted bucket takes to refill the
@@ -51,6 +52,11 @@ const (
 	// addresses.
 	loginRateTestClientIP = "192.0.2.10"
 	loginRateTestOtherIP  = "192.0.2.20"
+	// loginRateTestIPv6Block formats an address in one documentation-range /64; each
+	// attempt takes the next host part, as a client that rotates addresses would.
+	// loginRateTestOtherIPv6 is an address in a different /64.
+	loginRateTestIPv6Block = "2001:db8:1:2::%x"
+	loginRateTestOtherIPv6 = "2001:db8:1:3::1"
 	// loginRateTestLoginPath is the registered login route.
 	loginRateTestLoginPath = "/api/v2/auth/login"
 	// loginRateTestWrongPayload is a login body that the auth service rejects.
@@ -153,5 +159,33 @@ func TestLoginRouteRateLimit(t *testing.T) {
 			assert.Equal(t, http.StatusUnauthorized, attempt(loginRateTestClientIP).Code, "burst restored after the window, attempt %d", i+1)
 		}
 		assert.Equal(t, http.StatusTooManyRequests, attempt(loginRateTestClientIP).Code)
+	})
+}
+
+// TestLoginRouteRateLimitIPv6Prefix verifies that IPv6 clients are limited per
+// /64: rotating the host part of the address does not start a new bucket, and a
+// different /64 has its own.
+func TestLoginRouteRateLimitIPv6Prefix(t *testing.T) {
+	e, h, _ := setupAuthIntegrationTest(t)
+
+	synctest.Test(t, func(t *testing.T) {
+		// Register inside the bubble so the limiter's clock is virtual.
+		h.RegisterRoutes(h.Group)
+
+		port := loginRateTestFirstPort
+		// attempt sends one request from the given address and a new source port.
+		attempt := func(ip string) *httptest.ResponseRecorder {
+			port++
+			return loginRouteResult(e, ip, port)
+		}
+		// rotated returns the n-th address of the simulated client's /64.
+		rotated := func(n int) string { return fmt.Sprintf(loginRateTestIPv6Block, n) }
+
+		for i := range loginRateTestBurst {
+			require.Equal(t, http.StatusUnauthorized, attempt(rotated(i+1)).Code, "attempt %d is within the burst", i+1)
+		}
+		assert.Equal(t, http.StatusTooManyRequests, attempt(rotated(loginRateTestBurst+1)).Code,
+			"a new address in the same /64 shares the exhausted bucket")
+		assert.Equal(t, http.StatusUnauthorized, attempt(loginRateTestOtherIPv6).Code, "another /64 has its own bucket")
 	})
 }

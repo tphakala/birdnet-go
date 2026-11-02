@@ -6,6 +6,7 @@ package system
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -24,7 +25,7 @@ import (
 )
 
 const (
-	// metricsRateTestBurst is the number of connections one IP may open in quick
+	// metricsRateTestBurst is the number of connections one client may open in quick
 	// succession.
 	metricsRateTestBurst = 10
 	// metricsRateTestOverBurst is how many attempts beyond the burst a test makes
@@ -55,6 +56,11 @@ const (
 	// routes.
 	metricsRateTestStreamPath  = "/api/v2/system/metrics/stream"
 	metricsRateTestHistoryPath = "/api/v2/system/metrics/history"
+	// metricsRateTestIPv6Block formats an address in one documentation-range /64;
+	// each request takes the next host part, as a client that rotates addresses
+	// would. metricsRateTestOtherIPv6 is an address in a different /64.
+	metricsRateTestIPv6Block = "2001:db8:1:2::%x"
+	metricsRateTestOtherIPv6 = "2001:db8:1:3::1"
 	// metricsRateTestVisitor and metricsRateTestOtherVisitor name two visitors when
 	// the store is used directly; the second one triggers store cleanup.
 	metricsRateTestVisitor      = "visitor-a"
@@ -192,5 +198,36 @@ func TestMetricsStreamRouteRateLimit(t *testing.T) {
 			"one token is back after one interval")
 		assert.Equal(t, http.StatusTooManyRequests, request(metricsRateTestStreamPath, metricsRateTestClientIP).Code,
 			"only one token came back")
+	})
+}
+
+// TestMetricsStreamRouteRateLimitIPv6Prefix verifies that IPv6 clients are
+// limited per /64: rotating the host part of the address does not start a new
+// bucket, and a different /64 has its own. The core is built inside the synctest
+// bubble for the same reason as in TestMetricsStreamRouteRateLimit.
+func TestMetricsStreamRouteRateLimitIPv6Prefix(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		e := echo.New()
+		core := apitest.NewCore(t, apitest.WithEcho(e), apitest.WithoutSettingsPublish())
+		core.MetricsStore = observability.NewMemoryStore(MetricsHistoryMaxPoints)
+		core.AuthMiddleware = func(next echo.HandlerFunc) echo.HandlerFunc { return next }
+		h := New(core, nil, nil, nil)
+		h.RegisterMetricsHistoryRoutes(core.Group)
+
+		port := metricsRateTestFirstPort
+		// request sends one request from the given address and a new source port.
+		request := func(ip string) *httptest.ResponseRecorder {
+			port++
+			return metricsRouteResult(t, e, metricsRateTestStreamPath, ip, port)
+		}
+		// rotated returns the n-th address of the simulated client's /64.
+		rotated := func(n int) string { return fmt.Sprintf(metricsRateTestIPv6Block, n) }
+
+		for i := range metricsRateTestBurst {
+			require.Equal(t, http.StatusOK, request(rotated(i+1)).Code, "request %d is within the burst", i+1)
+		}
+		assert.Equal(t, http.StatusTooManyRequests, request(rotated(metricsRateTestBurst+1)).Code,
+			"a new address in the same /64 shares the exhausted bucket")
+		assert.Equal(t, http.StatusOK, request(metricsRateTestOtherIPv6).Code, "another /64 has its own bucket")
 	})
 }

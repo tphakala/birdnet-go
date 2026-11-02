@@ -234,7 +234,7 @@ func isContained(root, target string) bool {
 // password to `sudo -S`, and the ladder runs `sudo -k` before each attempt
 // (clearing the timestamp cache), so without an app-level limit an authenticated
 // LAN client could brute-force the host sudo password (OWASP ASVS V2.4.1). Bound
-// it to a small burst per client IP with slow refill; legitimate use needs only a
+// it to a small burst per client with slow refill; legitimate use needs only a
 // couple of attempts.
 const (
 	elevateRateLimitBurst  = 10
@@ -251,7 +251,7 @@ func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 		}
 	}
 
-	// Per-client-IP rate limiter applied only to the elevation endpoint.
+	// Per-client rate limiter applied only to the elevation endpoint.
 	elevateLimiter := middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
 		Skipper: middleware.DefaultSkipper,
 		Store: middleware.NewRateLimiterMemoryStoreWithConfig(
@@ -261,7 +261,7 @@ func (c *Handler) RegisterImportRoutes(g *echo.Group) {
 				ExpiresIn: elevateRateLimitWindow,
 			},
 		),
-		IdentifierExtractor: func(ctx echo.Context) (string, error) { return ctx.RealIP(), nil },
+		IdentifierExtractor: apicore.RateLimitKey,
 		ErrorHandler: func(ctx echo.Context, err error) error {
 			c.LogSecurityWarnIfEnabled("import: elevation rate limit exceeded", logger.String("ip", ctx.RealIP()))
 			return c.HandleError(ctx, err, "too many elevation attempts, please wait and try again", http.StatusTooManyRequests)

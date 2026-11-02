@@ -32,6 +32,8 @@ func (c *Handler) RegisterRoutes(g *echo.Group) {
         Store: middleware.NewRateLimiterMemoryStoreWithConfig(
             middleware.RateLimiterMemoryStoreConfig{Rate: rate.Limit(1), Burst: 5},
         ),
+        // One bucket per client (per /64 for IPv6)
+        IdentifierExtractor: apicore.RateLimitKey,
     }
     g.GET("/stream", c.StreamHandler, middleware.RateLimiterWithConfig(rateLimiterConfig))
 }
@@ -955,10 +957,12 @@ All API errors follow this structure:
 
 SSE endpoints are rate limited to prevent abuse:
 
-- Detection and sound level streams: 10 requests/minute per IP, burst of 10, shared by both streams
-- Stream health streams: 5 requests/minute per IP (authenticated, settings page)
-- Metrics stream: 10 requests/minute per IP, burst of 10 (authenticated)
-- Notification streams: 10 requests/minute per IP, burst of 15 (public, used by dashboard NotificationBell)
+- Detection and sound level streams: 10 requests/minute per client, burst of 10, shared by both streams
+- Stream health streams: 5 requests/minute per client (authenticated, settings page)
+- Metrics stream: 10 requests/minute per client, burst of 10 (authenticated)
+- Notification streams: 10 requests/minute per client, burst of 15 (public, used by dashboard NotificationBell)
+
+A client is identified by its address, and IPv6 clients are counted per /64.
 
 ## Server-Sent Events (SSE)
 
@@ -974,7 +978,7 @@ The `/notifications/stream` endpoint provides both notifications and toast messa
 - `heartbeat` - Keep-alive signal
 - `notification_deleted` - A notification was deleted on the server (a cleared or replaced persistent notice, or a delete from another tab); payload `{"id": "..."}`. Guests receive it only for detection notifications.
 
-**Authentication:** Public read-only SSE, rate-limited (10 connections per minute per IP, burst of 15). Guests receive bird-detection events only; operational/admin notifications and toast messages are suppressed for unauthenticated subscribers so that integration errors and system warnings are never exposed anonymously. Authenticated subscribers receive the full stream.
+**Authentication:** Public read-only SSE, rate-limited (10 connections per minute per client, burst of 15). Guests receive bird-detection events only; operational/admin notifications and toast messages are suppressed for unauthenticated subscribers so that integration errors and system warnings are never exposed anonymously. Authenticated subscribers receive the full stream.
 
 **Toast Event Format:**
 
@@ -1157,7 +1161,7 @@ The API reports these error types (from PR #1380):
 #### GET /api/v2/streams/health/stream
 
 **Authentication:** Required
-**Rate Limit:** 5 connections per minute per IP
+**Rate Limit:** 5 connections per minute per client
 **Connection Duration:** Maximum 30 minutes
 
 Establishes a Server-Sent Events (SSE) connection that pushes real-time updates when stream health changes. This is more efficient than polling for monitoring dashboards that need immediate notification of stream issues.
