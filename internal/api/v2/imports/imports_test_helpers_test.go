@@ -8,6 +8,7 @@
 package importsapi
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -169,43 +170,46 @@ func testCore(t *testing.T) *apicore.Core {
 	return apitest.NewCore(t)
 }
 
-// setMigrationState installs the migration state manager and worker for one
-// test and restores the previous pair when it ends. With setV2OnlyMode it is
-// the only test writer of the stateManager, migrationWorker and isV2OnlyMode
-// globals. It fails a parallel caller, because the globals are process-wide,
-// and it writes under migrationMu, the lock production reads take. Calling it
-// twice in one test is fine: the cleanups run in reverse order.
-func setMigrationState(t *testing.T, sm *datastoreV2.StateManager, w *migration.Worker) {
+// setMigrationGlobal sets one process-wide migration global for one test and
+// restores its previous value when the test ends. It is the only way tests
+// write stateManager, migrationWorker, migrationWorkerCancel and isV2OnlyMode
+// (through the wrappers below). It fails a parallel caller, because the
+// globals are process-wide, and it writes under migrationMu, the lock
+// production reads take. Calling it twice in one test is fine: the cleanups
+// run in reverse order.
+func setMigrationGlobal[T any](t *testing.T, global *T, value T) {
 	t.Helper()
 	t.Setenv(migrationGlobalsGuardEnvKey, migrationGlobalsGuardEnvValue)
 
 	migrationMu.Lock()
-	prevSM, prevW := stateManager, migrationWorker
-	stateManager, migrationWorker = sm, w
+	prev := *global
+	*global = value
 	migrationMu.Unlock()
 
 	t.Cleanup(func() {
 		migrationMu.Lock()
 		defer migrationMu.Unlock()
-		stateManager, migrationWorker = prevSM, prevW
+		*global = prev
 	})
 }
 
-// setV2OnlyMode sets the package-wide v2-only flag for one test and restores
-// the previous value when it ends. It follows the same rules as
-// setMigrationState.
+// setMigrationState installs the migration state manager and worker for one
+// test.
+func setMigrationState(t *testing.T, sm *datastoreV2.StateManager, w *migration.Worker) {
+	t.Helper()
+	setMigrationGlobal(t, &stateManager, sm)
+	setMigrationGlobal(t, &migrationWorker, w)
+}
+
+// setV2OnlyMode sets the package-wide v2-only flag for one test.
 func setV2OnlyMode(t *testing.T, on bool) {
 	t.Helper()
-	t.Setenv(migrationGlobalsGuardEnvKey, migrationGlobalsGuardEnvValue)
+	setMigrationGlobal(t, &isV2OnlyMode, on)
+}
 
-	migrationMu.Lock()
-	prev := isV2OnlyMode
-	isV2OnlyMode = on
-	migrationMu.Unlock()
-
-	t.Cleanup(func() {
-		migrationMu.Lock()
-		defer migrationMu.Unlock()
-		isV2OnlyMode = prev
-	})
+// setMigrationWorkerCancel installs the migration worker's cancel function for
+// one test.
+func setMigrationWorkerCancel(t *testing.T, cancel context.CancelFunc) {
+	t.Helper()
+	setMigrationGlobal(t, &migrationWorkerCancel, cancel)
 }

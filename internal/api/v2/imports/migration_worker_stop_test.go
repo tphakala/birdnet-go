@@ -235,11 +235,7 @@ func completedEnvWithBlockedDrain(t *testing.T) (env *stopTestEnv, release chan 
 	env.toCompleted(t, watermark)
 	env.startWorker(t)
 	synctest.Wait() // worker parked in tail sync
-	migrationMu.RLock()
-	prevCancel := migrationWorkerCancel
-	migrationMu.RUnlock()
-	SetMigrationWorkerCancel(env.cancelWorker)
-	t.Cleanup(func() { SetMigrationWorkerCancel(prevCancel) })
+	setMigrationWorkerCancel(t, env.cancelWorker)
 	return env, release
 }
 

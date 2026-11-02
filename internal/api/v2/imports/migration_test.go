@@ -589,7 +589,6 @@ func TestGetMigrationStatus_NoStateManager(t *testing.T) {
 	controller := &Handler{Core: &apicore.Core{Echo: e, Group: e.Group("/api/v2"), APILogger: logger.Global().Module("api")}}
 	controller.Settings.Store(getTestSettings(t))
 
-	// Clear the global state manager
 	setMigrationState(t, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v2/system/database/migration/status", http.NoBody)
