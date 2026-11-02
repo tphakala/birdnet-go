@@ -346,6 +346,21 @@ func TestGetHLSStatus(t *testing.T) {
 		assert.InDelta(t, 0, body.Streams[0]["active_clients"], 0)
 	})
 
+	t.Run("a stream with enough audio is reported ready", func(t *testing.T) {
+		isolateHLSManager(t)
+		registerHLSStream(hlsTestSourceID, newNativeTestStream(t, 6))
+
+		rec := get(t)
+
+		var body struct {
+			Streams []map[string]any `json:"streams"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+		require.Len(t, body.Streams, 1)
+		assert.Equal(t, true, body.Streams[0]["playlist_ready"],
+			"six seconds of audio satisfy the readiness gate at the default segment length")
+	})
+
 	t.Run("a stream is reported with its fields and without its token", func(t *testing.T) {
 		isolateHLSManager(t)
 		token := registerHLSTestStream(hlsTestSourceID)
@@ -364,9 +379,10 @@ func TestGetHLSStatus(t *testing.T) {
 		require.Len(t, body.Streams, 1)
 		stream := body.Streams[0]
 		assert.Equal(t, url.PathEscape(hlsTestSourceID), stream["source"])
-		assert.Equal(t, hlsPlaylistURL(token), stream["playlist_url"])
+		assert.Equal(t, "/api/v2/streams/hls/t/"+token+"/playlist.m3u8", stream["playlist_url"],
+			"the playlist URL is the address clients fetch, spelled out here so it cannot drift unnoticed")
 		assert.InDelta(t, 2, stream["active_clients"], 0)
-		assert.Equal(t, false, stream["playlist_ready"], "a stream without a muxer has no playlist yet")
+		assert.Equal(t, false, stream["playlist_ready"], "a stream without a muxer is not ready")
 		assert.NotContains(t, stream, "stream_token", "the token must not leak through the status")
 	})
 }
