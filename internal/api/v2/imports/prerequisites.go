@@ -104,6 +104,23 @@ const (
 	checkIDMySQLConfiguration = "mysql_configuration"
 )
 
+// Check display names, shared by the checks and the run steps that report progress.
+const (
+	checkNameStateIdle          = "Migration State"
+	checkNameDiskSpace          = "Disk Space"
+	checkNameLegacyAccessible   = "Legacy Database"
+	checkNameSQLiteIntegrity    = "Database Integrity"
+	checkNameWritePermission    = "Write Permission"
+	checkNameMySQLTableHealth   = "MySQL Table Health"
+	checkNameMySQLPermissions   = "MySQL Permissions"
+	checkNameRecordCount        = "Record Count"
+	checkNameExistingV2Data     = "Existing Migration Data"
+	checkNameMemoryAvailable    = "Available Memory"
+	checkNameMySQLServerVersion = "Database Server Version"
+	checkNameMySQLCharset       = "Database Character Set"
+	checkNameMySQLConfiguration = "MySQL Configuration"
+)
+
 // Check status constants
 const (
 	CheckStatusPassed  = "passed"
@@ -191,13 +208,13 @@ func (c *Handler) finishPrerequisites(checks []PrerequisiteCheck) PrerequisitesR
 func (c *Handler) prerequisiteSteps(sink *recordCountSink) []prereqStep {
 	steps := c.criticalPrerequisiteSteps(sink)
 	steps = append(steps,
-		singleCheckStep(checkIDExistingV2Data, "Existing Migration Data", false, c.checkExistingV2Data),
-		singleCheckStep(checkIDMemoryAvailable, "Available Memory", false, func(context.Context) PrerequisiteCheck { return c.checkMemoryAvailable() }),
+		singleCheckStep(checkIDExistingV2Data, checkNameExistingV2Data, false, c.checkExistingV2Data),
+		singleCheckStep(checkIDMemoryAvailable, checkNameMemoryAvailable, false, func(context.Context) PrerequisiteCheck { return c.checkMemoryAvailable() }),
 	)
 	if c.isUsingMySQL() {
 		steps = append(steps, prereqStep{
 			id:   checkIDMySQLConfiguration,
-			name: "MySQL Configuration",
+			name: checkNameMySQLConfiguration,
 			run:  c.checkMySQLConfiguration,
 		})
 	}
@@ -293,7 +310,7 @@ func (c *Handler) isUsingMySQL() bool {
 func (c *Handler) checkStateIdle() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDStateIdle,
-		Name:        "Migration State",
+		Name:        checkNameStateIdle,
 		Description: "Migration must be in idle state",
 		Severity:    CheckSeverityCritical,
 	}
@@ -332,7 +349,7 @@ func (c *Handler) checkStateIdle() PrerequisiteCheck {
 func (c *Handler) checkDiskSpace() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDDiskSpace,
-		Name:        "Disk Space",
+		Name:        checkNameDiskSpace,
 		Description: "Sufficient free space for migration",
 		Severity:    CheckSeverityCritical,
 	}
@@ -441,7 +458,7 @@ func (c *Handler) getDatabaseDirectoryResolved() (string, error) {
 func (c *Handler) checkLegacyAccessible(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDLegacyAccessible,
-		Name:        "Legacy Database",
+		Name:        checkNameLegacyAccessible,
 		Description: "Legacy database must be accessible",
 		Severity:    CheckSeverityCritical,
 	}
@@ -501,7 +518,7 @@ func (c *Handler) checkLegacyAccessible(ctx context.Context) PrerequisiteCheck {
 func (c *Handler) checkSQLiteIntegrity(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDSQLiteIntegrity,
-		Name:        "Database Integrity",
+		Name:        checkNameSQLiteIntegrity,
 		Description: "SQLite quick integrity check",
 		Severity:    CheckSeverityCritical,
 	}
@@ -555,7 +572,7 @@ func (c *Handler) checkSQLiteIntegrity(ctx context.Context) PrerequisiteCheck {
 func (c *Handler) checkWritePermission() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDWritePermission,
-		Name:        "Write Permission",
+		Name:        checkNameWritePermission,
 		Description: "Can write to database directory",
 		Severity:    CheckSeverityCritical,
 	}
@@ -593,7 +610,7 @@ func (c *Handler) checkWritePermission() PrerequisiteCheck {
 func (c *Handler) checkMySQLTableHealth(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDMySQLTableHealth,
-		Name:        "MySQL Table Health",
+		Name:        checkNameMySQLTableHealth,
 		Description: "Check legacy table health",
 		Severity:    CheckSeverityCritical,
 	}
@@ -644,7 +661,7 @@ func (c *Handler) checkMySQLTableHealth(ctx context.Context) PrerequisiteCheck {
 func (c *Handler) checkMySQLPermissions(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDMySQLPermissions,
-		Name:        "MySQL Permissions",
+		Name:        checkNameMySQLPermissions,
 		Description: "Verify CREATE, INSERT, UPDATE, DELETE, DROP privileges",
 		Severity:    CheckSeverityCritical,
 	}
@@ -771,7 +788,7 @@ func (c *Handler) checkRecordCount(ctx context.Context) PrerequisiteCheck {
 func (c *Handler) countLegacyRecords(ctx context.Context) (int64, PrerequisiteCheck) {
 	check := PrerequisiteCheck{
 		ID:          checkIDRecordCount,
-		Name:        "Record Count",
+		Name:        checkNameRecordCount,
 		Description: "Count legacy records to migrate",
 		Severity:    CheckSeverityCritical,
 	}
@@ -803,7 +820,7 @@ func (c *Handler) countLegacyRecords(ctx context.Context) (int64, PrerequisiteCh
 func (c *Handler) checkExistingV2Data(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDExistingV2Data,
-		Name:        "Existing Migration Data",
+		Name:        checkNameExistingV2Data,
 		Description: "Check for existing data in migration target tables",
 		Severity:    CheckSeverityWarning,
 	}
@@ -855,7 +872,7 @@ func (c *Handler) checkExistingV2Data(ctx context.Context) PrerequisiteCheck {
 func (c *Handler) checkMemoryAvailable() PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDMemoryAvailable,
-		Name:        "Available Memory",
+		Name:        checkNameMemoryAvailable,
 		Description: "Sufficient memory for batch processing",
 		Severity:    CheckSeverityWarning,
 	}
@@ -955,7 +972,7 @@ func probeContext(parent context.Context) (context.Context, context.CancelFunc) 
 func (c *Handler) checkMySQLServerVersion(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDMySQLServerVersion,
-		Name:        "Database Server Version",
+		Name:        checkNameMySQLServerVersion,
 		Description: "The database server must be a supported release",
 		Severity:    CheckSeverityCritical,
 	}
@@ -1013,7 +1030,7 @@ func describeServerVersion(a *dbserver.Assessment) (status, message string) {
 func (c *Handler) checkMySQLCharset(ctx context.Context) PrerequisiteCheck {
 	check := PrerequisiteCheck{
 		ID:          checkIDMySQLCharset,
-		Name:        "Database Character Set",
+		Name:        checkNameMySQLCharset,
 		Description: "Migration target tables must be able to store the legacy text",
 		Severity:    CheckSeverityCritical,
 	}

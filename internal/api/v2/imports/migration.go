@@ -783,28 +783,28 @@ func (c *Handler) runPreflightChecks(ctx context.Context) error {
 // nil, receives the legacy record count from the record_count step.
 func (c *Handler) criticalPrerequisiteSteps(sink *recordCountSink) []prereqStep {
 	steps := []prereqStep{
-		singleCheckStep(checkIDStateIdle, "Migration State", false, func(context.Context) PrerequisiteCheck { return c.checkStateIdle() }),
-		singleCheckStep(checkIDDiskSpace, "Disk Space", false, func(context.Context) PrerequisiteCheck { return c.checkDiskSpace() }),
-		singleCheckStep(checkIDLegacyAccessible, "Legacy Database", true, c.checkLegacyAccessible),
+		singleCheckStep(checkIDStateIdle, checkNameStateIdle, false, func(context.Context) PrerequisiteCheck { return c.checkStateIdle() }),
+		singleCheckStep(checkIDDiskSpace, checkNameDiskSpace, false, func(context.Context) PrerequisiteCheck { return c.checkDiskSpace() }),
+		singleCheckStep(checkIDLegacyAccessible, checkNameLegacyAccessible, true, c.checkLegacyAccessible),
 	}
 
 	// Database-specific critical checks
 	if c.isUsingMySQL() {
 		steps = append(steps,
-			singleCheckStep(checkIDMySQLServerVersion, "Database Server Version", false, c.checkMySQLServerVersion),
-			singleCheckStep(checkIDMySQLCharset, "Database Character Set", false, c.checkMySQLCharset),
-			singleCheckStep(checkIDMySQLTableHealth, "MySQL Table Health", true, c.checkMySQLTableHealth),
-			singleCheckStep(checkIDMySQLPermissions, "MySQL Permissions", true, c.checkMySQLPermissions),
+			singleCheckStep(checkIDMySQLServerVersion, checkNameMySQLServerVersion, false, c.checkMySQLServerVersion),
+			singleCheckStep(checkIDMySQLCharset, checkNameMySQLCharset, false, c.checkMySQLCharset),
+			singleCheckStep(checkIDMySQLTableHealth, checkNameMySQLTableHealth, true, c.checkMySQLTableHealth),
+			singleCheckStep(checkIDMySQLPermissions, checkNameMySQLPermissions, true, c.checkMySQLPermissions),
 		)
 	} else {
 		steps = append(steps,
-			singleCheckStep(checkIDSQLiteIntegrity, "Database Integrity", true, c.checkSQLiteIntegrity),
-			singleCheckStep(checkIDWritePermission, "Write Permission", false, func(context.Context) PrerequisiteCheck { return c.checkWritePermission() }),
+			singleCheckStep(checkIDSQLiteIntegrity, checkNameSQLiteIntegrity, true, c.checkSQLiteIntegrity),
+			singleCheckStep(checkIDWritePermission, checkNameWritePermission, false, func(context.Context) PrerequisiteCheck { return c.checkWritePermission() }),
 		)
 	}
 
 	// Record count is also critical
-	steps = append(steps, singleCheckStep(checkIDRecordCount, "Record Count", true, func(ctx context.Context) PrerequisiteCheck {
+	steps = append(steps, singleCheckStep(checkIDRecordCount, checkNameRecordCount, true, func(ctx context.Context) PrerequisiteCheck {
 		count, check := c.countLegacyRecords(ctx)
 		if sink != nil && check.Status == CheckStatusPassed {
 			sink.count, sink.known = count, true
