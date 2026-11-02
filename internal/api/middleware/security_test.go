@@ -246,31 +246,6 @@ func newCORSTestContext(t *testing.T, method, path, origin string) (echo.Context
 func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 	t.Parallel()
 
-	t.Run("reflects origin instead of wildcard when credentials enabled", func(t *testing.T) {
-		t.Parallel()
-
-		corsMiddleware := NewCORS(&SecurityConfig{
-			AllowedOrigins:   []string{"*"},
-			AllowCredentials: true,
-		})
-
-		c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", "https://my-birdnet.local:8080")
-
-		handler := corsMiddleware(func(c echo.Context) error {
-			return c.String(http.StatusOK, "ok")
-		})
-
-		err := handler(c)
-		require.NoError(t, err)
-
-		// The origin should be reflected, not "*"
-		allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
-		assert.Equal(t, "https://my-birdnet.local:8080", allowOrigin,
-			"expected reflected origin, not wildcard")
-
-		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
-	})
-
 	t.Run("uses wildcard when credentials disabled", func(t *testing.T) {
 		t.Parallel()
 
@@ -296,40 +271,21 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 		assert.Empty(t, rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
 	})
 
-	t.Run("explicit origins with credentials works normally", func(t *testing.T) {
-		t.Parallel()
-
-		corsMiddleware := NewCORS(&SecurityConfig{
-			AllowedOrigins:   []string{"https://trusted.example.com"},
-			AllowCredentials: true,
-		})
-
-		c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", "https://trusted.example.com")
-
-		handler := corsMiddleware(func(c echo.Context) error {
-			return c.String(http.StatusOK, "ok")
-		})
-
-		err := handler(c)
-		require.NoError(t, err)
-
-		allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
-		assert.Equal(t, "https://trusted.example.com", allowOrigin)
-		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
-	})
-
-	// The exact Access-Control-Allow-Origin value a credentialed GET from
-	// another origin receives for each kind of origin list; the rows pin the
-	// current answers.
+	// The exact CORS answers a credentialed GET from another origin receives
+	// for each kind of origin list. Credentials are allowed only for an explicit
+	// origin list without a wildcard.
 	const requestOrigin = "https://other.example.com"
 	originRows := []struct {
 		name            string
 		allowedOrigins  []string
 		wantAllowOrigin string
+		wantCredentials string
 	}{
-		{"origin outside an explicit list gets no allow-origin header", []string{"https://trusted.example.com"}, ""},
-		{"wildcard among explicit origins reflects the request origin", []string{"https://trusted.example.com", "*"}, requestOrigin},
-		{"empty list answers with the literal wildcard", nil, "*"},
+		{"origin outside an explicit list gets no allow-origin header", []string{"https://trusted.example.com"}, "", ""},
+		{"wildcard-only list answers wildcard without credentials", []string{"*"}, "*", ""},
+		{"wildcard among explicit origins answers wildcard without credentials", []string{"https://trusted.example.com", "*"}, "*", ""},
+		{"empty list answers wildcard without credentials", nil, "*", ""},
+		{"explicit origin list allows credentials for a listed origin", []string{requestOrigin}, requestOrigin, "true"},
 	}
 	for _, tt := range originRows {
 		t.Run(tt.name, func(t *testing.T) {
@@ -346,10 +302,11 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 			require.NoError(t, handler(c))
 
 			assert.Equal(t, tt.wantAllowOrigin, rec.Header().Get(echo.HeaderAccessControlAllowOrigin))
+			assert.Equal(t, tt.wantCredentials, rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
 		})
 	}
 
-	t.Run("preflight reflects origin with credentials", func(t *testing.T) {
+	t.Run("preflight answers wildcard without credentials", func(t *testing.T) {
 		t.Parallel()
 
 		corsMiddleware := NewCORS(&SecurityConfig{
@@ -366,11 +323,8 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 		err := handler(c)
 		require.NoError(t, err)
 
-		allowOrigin := rec.Header().Get(echo.HeaderAccessControlAllowOrigin)
-		assert.Equal(t, "https://home-assistant.local:8123", allowOrigin,
-			"preflight should reflect origin when credentials are enabled")
-
-		assert.Equal(t, "true", rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
+		assert.Equal(t, "*", rec.Header().Get(echo.HeaderAccessControlAllowOrigin))
+		assert.Empty(t, rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
 	})
 }
 
