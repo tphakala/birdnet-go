@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tphakala/birdnet-go/internal/api/auth"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
+	"github.com/tphakala/birdnet-go/internal/classifier"
 	"github.com/tphakala/birdnet-go/internal/classifier/recommend"
 	"github.com/tphakala/birdnet-go/internal/hwprofile"
 	"github.com/tphakala/birdnet-go/internal/inference"
@@ -81,16 +82,75 @@ func findVariant(entry *CatalogEntryResponse, id string) *CatalogVariantResponse
 	return nil
 }
 
-func TestGetModelCatalog_MarksRecommendedVariant(t *testing.T) {
-	core := apitest.NewCore(t)
-	h := New(core, nil) // nil authService -> enrichment allowed
-	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return amd64ONNXProfile() }
+// Synthetic catalog ids, variant ids and sizes for the recommendation tests.
+const (
+	apiRecID      = "api-rec"
+	apiFlatID     = "api-flat"
+	apiVarFP32    = "fp32"
+	apiVarInt8ARM = "int8-arm"
 
-	perch := findEntry(catalogRequest(t, h), "perch-v2")
-	require.NotNil(t, perch)
-	assert.Equal(t, "fp32", perch.RecommendedVariantID, "fp32 is the recommended variant on amd64 with ONNX only")
+	apiSizeFP32Model = 900
+	apiSizeInt8Model = 250
+)
 
-	fp32 := findVariant(perch, "fp32")
+// apiRecommendCatalog is a synthetic catalog: api-rec has two variants (fp32 default,
+// runnable on ONNX Runtime CPU; int8-arm, which needs aarch64) and api-flat is a
+// variant-less entry. api-rec is listed first so a sort that does not move it fails.
+func apiRecommendCatalog() []classifier.CatalogEntry {
+	onnxBackends := map[string]classifier.BackendSupport{
+		hwprofile.CapONNXRuntimeCPU: {Supported: true, Recommended: true},
+	}
+	onnxRequirement := []string{hwprofile.CapONNXRuntimeCPU}
+	return []classifier.CatalogEntry{
+		{
+			ID: apiRecID, Name: "Recommendable", Version: "1.0", Category: classifier.CategoryBird,
+			HuggingFaceRepo: "t/rec",
+			Variants: []classifier.CatalogVariant{
+				{
+					ID: apiVarFP32, Precision: "fp32", Default: true,
+					Requirements: classifier.VariantRequirements{Backends: onnxRequirement},
+					Backends:     onnxBackends,
+					Files:        []classifier.CatalogFile{apiFile(classifier.RoleModel, "rec-fp32.onnx", apiSizeFP32Model)},
+				},
+				{
+					ID: apiVarInt8ARM, Precision: "int8",
+					Requirements: classifier.VariantRequirements{Arch: []string{hwprofile.CapAArch64}, Backends: onnxRequirement},
+					Backends:     onnxBackends,
+					Files:        []classifier.CatalogFile{apiFile(classifier.RoleModel, "rec-int8.onnx", apiSizeInt8Model)},
+				},
+			},
+		},
+		{
+			ID: apiFlatID, Name: "Flat", Version: "1.0", Category: classifier.CategoryBird,
+			HuggingFaceRepo: "t/flat",
+			Files: []classifier.CatalogFile{
+				apiFile(classifier.RoleModel, "flat.onnx", apiSizeModel),
+				apiFile(classifier.RoleLabels, "flat.txt", apiSizeLabels),
+			},
+		},
+	}
+}
+
+// recommendHandler activates the synthetic recommendation catalog and returns a
+// handler whose host profile (from profile) and ONNX Runtime probe are fixed. The
+// catalog is global, so callers are serial.
+func recommendHandler(t *testing.T, authSvc auth.Service, profile func() hwprofile.Profile) *Handler {
+	t.Helper()
+	useCatalog(t, apiRecommendCatalog())
+	h := New(apitest.NewCore(t), authSvc)
+	h.ortProbe = availableORT
+	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return profile() }
+	return h
+}
+
+func TestGetModelCatalog_RecommendsAndBlocksVariants(t *testing.T) {
+	h := recommendHandler(t, nil, amd64ONNXProfile) // nil authService -> enrichment allowed
+
+	rec := findEntry(catalogRequest(t, h), apiRecID)
+	require.NotNil(t, rec)
+	assert.Equal(t, apiVarFP32, rec.RecommendedVariantID, "fp32 is the recommended variant on amd64 with ONNX only")
+
+	fp32 := findVariant(rec, apiVarFP32)
 	require.NotNil(t, fp32)
 	assert.True(t, fp32.Recommended)
 	assert.True(t, fp32.Compatible)
@@ -99,12 +159,19 @@ func TestGetModelCatalog_MarksRecommendedVariant(t *testing.T) {
 
 	// Exactly one recommended variant per entry.
 	recommended := 0
-	for _, v := range perch.Variants {
+	for _, v := range rec.Variants {
 		if v.Recommended {
 			recommended++
 		}
 	}
 	assert.Equal(t, 1, recommended)
+
+	int8Variant := findVariant(rec, apiVarInt8ARM)
+	require.NotNil(t, int8Variant, "the aarch64-only variant is still listed, just blocked")
+	assert.False(t, int8Variant.Compatible, "int8-arm requires aarch64, unavailable on amd64")
+	assert.False(t, int8Variant.Recommended)
+	require.NotEmpty(t, int8Variant.Blockers)
+	assert.Equal(t, recommend.BlockerArchUnsupported, int8Variant.Blockers[0].Code)
 }
 
 // TestGetModelCatalog_BirdNETv24RecommendedVariant covers the permanent BirdNET
@@ -181,49 +248,19 @@ func TestGetModelCatalog_BirdNETv24RecommendedVariant(t *testing.T) {
 	}
 }
 
-func TestGetModelCatalog_BlockedVariantCarriesBlockers(t *testing.T) {
-	core := apitest.NewCore(t)
-	h := New(core, nil)
-	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return amd64ONNXProfile() }
-
-	perch := findEntry(catalogRequest(t, h), "perch-v2")
-	require.NotNil(t, perch)
-
-	int8Variant := findVariant(perch, "int8-arm")
-	require.NotNil(t, int8Variant, "the aarch64-only variant is still listed, just blocked")
-	assert.False(t, int8Variant.Compatible, "int8-arm requires aarch64, unavailable on amd64")
-	assert.False(t, int8Variant.Recommended)
-	require.NotEmpty(t, int8Variant.Blockers)
-	assert.Equal(t, recommend.BlockerArchUnsupported, int8Variant.Blockers[0].Code)
-}
-
-func TestGetModelCatalog_FlatEntriesUnchanged(t *testing.T) {
-	core := apitest.NewCore(t)
-	h := New(core, nil)
-	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return amd64ONNXProfile() }
-
-	catalog := catalogRequest(t, h)
-	// A geomodel is a flat (variant-less) entry.
-	geomodel := findEntry(catalog, "birdnet-geomodel-v3")
-	require.NotNil(t, geomodel, "the geomodel entry must be present")
-	assert.Nil(t, geomodel.Variants, "flat entries carry no variants")
-	assert.Empty(t, geomodel.RecommendedVariantID, "flat entries carry no recommendation")
-}
-
 func TestGetModelCatalog_AuthGatedForUnauthenticated(t *testing.T) {
-	core := apitest.NewCore(t)
 	stub := &stubAuth{authenticated: false}
-	h := New(core, stub)
-	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
+	h := recommendHandler(t, stub, func() hwprofile.Profile {
 		t.Fatal("hardware profile must not be probed for an unauthenticated request")
 		return hwprofile.Profile{}
-	}
+	})
 
-	perch := findEntry(catalogRequest(t, h), "perch-v2")
-	require.NotNil(t, perch)
+	rec := findEntry(catalogRequest(t, h), apiRecID)
+	require.NotNil(t, rec)
 	assert.True(t, stub.called, "the auth gate must be consulted")
-	assert.Empty(t, perch.RecommendedVariantID, "no recommendation leaks to an unauthenticated request")
-	for _, v := range perch.Variants {
+	assert.Empty(t, rec.RecommendedVariantID, "no recommendation leaks to an unauthenticated request")
+	require.Len(t, rec.Variants, 2)
+	for _, v := range rec.Variants {
 		assert.False(t, v.Recommended, "variant %s must not be marked recommended", v.ID)
 		assert.True(t, v.Compatible, "variant %s reports the neutral compatible=true", v.ID)
 		assert.Empty(t, v.Reasons, "variant %s leaks no reasons", v.ID)
@@ -232,46 +269,27 @@ func TestGetModelCatalog_AuthGatedForUnauthenticated(t *testing.T) {
 }
 
 func TestGetModelCatalog_AuthenticatedGetsRecommendations(t *testing.T) {
-	core := apitest.NewCore(t)
 	stub := &stubAuth{authenticated: true}
-	h := New(core, stub)
-	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile { return amd64ONNXProfile() }
+	h := recommendHandler(t, stub, amd64ONNXProfile)
 
-	perch := findEntry(catalogRequest(t, h), "perch-v2")
-	require.NotNil(t, perch)
+	rec := findEntry(catalogRequest(t, h), apiRecID)
+	require.NotNil(t, rec)
 	assert.True(t, stub.called)
-	assert.Equal(t, "fp32", perch.RecommendedVariantID, "an authenticated request receives the recommendation")
+	assert.Equal(t, apiVarFP32, rec.RecommendedVariantID, "an authenticated request receives the recommendation")
 }
 
 func TestGetModelCatalog_RecommendedFirstOrdering(t *testing.T) {
-	core := apitest.NewCore(t)
-	h := New(core, nil) // nil authService -> enrichment allowed, so the sort runs
-	// A host with no usable inference backend: every variant-bearing entry has
-	// all variants blocked and is therefore not recommendable, while flat entries
-	// (no variants) stay recommendable. The catalog response must place all
-	// recommendable entries ahead of the non-recommendable ones.
-	h.hardwareProfile = func(inference.ORTStatus) hwprofile.Profile {
+	// A host with no usable inference backend: api-rec has all variants blocked and
+	// is therefore not recommendable, while the flat entry (no variants) stays
+	// recommendable. The fixture lists api-rec first, so the response order proves
+	// the sort moved the recommendable entry ahead of it.
+	h := recommendHandler(t, nil, func() hwprofile.Profile {
 		return hwprofile.Profile{Arch: "amd64", TotalRAMBytes: 16 * 1024 * 1024 * 1024}
-	}
+	})
 
 	catalog := catalogRequest(t, h)
-	require.NotEmpty(t, catalog)
-
-	recommendable := func(e *CatalogEntryResponse) bool {
-		return len(e.Variants) == 0 || e.RecommendedVariantID != ""
-	}
-
-	var haveRec, haveNon, seenNon bool
-	for i := range catalog {
-		if recommendable(&catalog[i]) {
-			haveRec = true
-			assert.Falsef(t, seenNon, "recommendable entry %q sorted after a non-recommendable one", catalog[i].ID)
-		} else {
-			haveNon = true
-			seenNon = true
-		}
-	}
-	// The fixture must exercise both groups, or the ordering assertion is vacuous.
-	require.True(t, haveRec, "expected at least one recommendable entry (flat entries)")
-	require.True(t, haveNon, "expected at least one non-recommendable entry (no backend blocks variant entries)")
+	require.Len(t, catalog, 2)
+	assert.Equal(t, apiFlatID, catalog[0].ID, "the recommendable entry sorts ahead of the blocked one")
+	assert.Equal(t, apiRecID, catalog[1].ID)
+	assert.Empty(t, catalog[1].RecommendedVariantID, "api-rec has no recommendable variant on this host")
 }

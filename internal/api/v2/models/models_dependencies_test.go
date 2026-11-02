@@ -95,8 +95,8 @@ func useCatalog(t *testing.T, entries []classifier.CatalogEntry) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "model-catalog.json"), data, 0o600))
 	require.NoError(t, classifier.LoadCatalog(dir))
 	t.Cleanup(func() { require.NoError(t, classifier.LoadCatalog(t.TempDir())) })
-	_, ok := classifier.GetCatalogEntry(apiDepG)
-	require.Equal(t, entries[0].ID == apiDepA, ok, "the synthetic catalog must be active")
+	_, ok := classifier.GetCatalogEntry(entries[0].ID)
+	require.True(t, ok, "the synthetic catalog must be active")
 }
 
 func dependencyHandler(t *testing.T, mm *classifier.ModelManager) *Handler {
@@ -177,6 +177,8 @@ func TestGetModelCatalog_DependencySizesAndFields(t *testing.T) {
 	assert.True(t, a.HasGeomodel, "the geomodel arrives through a dependency")
 	assert.Equal(t, classifier.ChannelStable, a.Channel, "an entry without a channel is reported as stable")
 	assert.Equal(t, []string{apiDepG, apiDepT}, a.DependsOn)
+	assert.Nil(t, a.Variants, "flat entries carry no variants")
+	assert.Empty(t, a.RecommendedVariantID, "flat entries carry no recommendation")
 	assert.Equal(t, int64(apiSizeModel+apiSizeLabels+apiSizeGeo+apiSizeGeoLbl+apiSizeTax), a.TotalSizeBytes,
 		"the size includes the dependency files")
 
