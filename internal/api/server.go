@@ -458,6 +458,8 @@ func (s *Server) setupMiddleware() {
 	// Security middleware configuration: start from defaults, override server-specific values
 	securityConfig := mw.DefaultSecurityConfig()
 	securityConfig.AllowedOrigins = s.config.AllowedOrigins
+	// Credentials apply only to a list of literal origins; the default wildcard
+	// list is answered without them.
 	securityConfig.AllowCredentials = true
 	securityConfig.AllowEmbedding = s.config.AllowEmbedding
 

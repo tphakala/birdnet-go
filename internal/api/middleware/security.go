@@ -36,7 +36,7 @@ type SecurityConfig struct {
 
 	// AllowCredentials indicates whether cross-origin requests may carry
 	// credentials (cookies, HTTP authentication). It only takes effect for a
-	// non-empty AllowedOrigins without a wildcard; see NewCORS.
+	// non-empty list of literal origins; see NewCORS.
 	AllowCredentials bool
 
 	// HSTSMaxAge is the max-age value in seconds for the Strict-Transport-Security header.
@@ -95,15 +95,14 @@ func hasExplicitOrigins(origins []string) bool {
 
 // NewCORS creates a CORS middleware with the given configuration.
 //
-// Credentials are allowed only for an explicit, non-empty origin list. When
-// AllowedOrigins contains "*" or is empty, the middleware answers
-// "Access-Control-Allow-Origin: *" and omits "Access-Control-Allow-Credentials",
-// whatever AllowCredentials says: the combination violates the CORS
-// specification, and reflecting the request origin to work around that would let
-// any page, including one served from another port of the same host, read
-// credentialed responses. Cross-origin clients that need cookies must be listed
-// explicitly; requests that authenticate with an Authorization header are not
-// affected.
+// Credentials are allowed only for a non-empty list of literal origins. When
+// AllowedOrigins is empty or has an entry containing "*" or "?", the middleware
+// omits "Access-Control-Allow-Credentials" whatever AllowCredentials says, and
+// answers a "*" entry or an empty list with "Access-Control-Allow-Origin: *". Sending
+// "*" together with credentials violates the CORS specification, and reflecting
+// the request origin to work around that would let any page, including one
+// served from another port of the same host, read credentialed responses.
+// Requests that authenticate with an Authorization header are not affected.
 func NewCORS(config *SecurityConfig) echo.MiddlewareFunc {
 	corsConfig := middleware.CORSConfig{
 		AllowOrigins: config.AllowedOrigins,
