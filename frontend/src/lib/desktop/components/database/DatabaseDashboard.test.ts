@@ -388,6 +388,43 @@ describe('DatabaseDashboard prerequisites run', () => {
     }
   });
 
+  it('starts the run again when a poll finds the server has no run', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const idleSnapshot = {
+        ...startablePrerequisites,
+        all_passed: false,
+        can_start_migration: false,
+        status: 'idle',
+        run_id: 0,
+      } satisfies PrerequisitesResponse;
+      apiGet.mockImplementation((url: string) =>
+        url === STATUS_URL
+          ? Promise.resolve(idleStatus)
+          : url === PREREQUISITES_URL
+            ? Promise.resolve(idleSnapshot)
+            : Promise.reject(apiError(NOT_CONFIGURED, 503))
+      );
+      let runs = 0;
+      apiPost.mockImplementation((url: string) => {
+        if (url !== RUN_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+        runs += 1;
+        return Promise.resolve(runs === 1 ? runningSnapshot(1) : startablePrerequisites);
+      });
+
+      renderTyped(DatabaseDashboard);
+
+      await waitFor(() => expect(runs).toBe(1));
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+
+      await waitFor(() => expect(runs).toBe(2));
+      expect(apiPost).toHaveBeenLastCalledWith(RUN_URL, { force: false });
+      await waitFor(() => expect(startBlocked()).toBe(false));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('forces a new run from Re-run', async () => {
     const user = userEvent.setup();
     serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });

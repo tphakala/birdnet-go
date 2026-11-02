@@ -226,6 +226,8 @@
         '/api/v2/system/database/migration/prerequisites'
       );
       prerequisites.error = null;
+      // The server lost the run (a restart), so nothing is left to follow: start it again
+      if (prerequisites.data.status === 'idle') await runPrerequisites(false);
     } catch (e) {
       // The run goes on server-side, so keep polling
       setPrerequisitesError(e);
