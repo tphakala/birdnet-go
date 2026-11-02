@@ -429,7 +429,7 @@ describe('DatabasePrerequisites', () => {
             can_start_migration: false,
           },
         },
-        expected: 'system.database.migration.progress.prerequisitesNotMet',
+        expected: 'system.database.migration.status.notReady',
       },
       {
         name: 'the run failed',
