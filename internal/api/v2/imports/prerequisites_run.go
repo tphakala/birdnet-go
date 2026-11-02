@@ -63,7 +63,10 @@ type prereqStep struct {
 }
 
 // recordCountSink carries the legacy record count out of the record_count step.
-// Steps run one after another in the run goroutine, so it needs no lock.
+// A step writes it before sending its result and the run reads it only after
+// receiving every result, so the channel orders the accesses and it needs no
+// lock. A step abandoned after cancellation may still write to a sink nothing
+// reads.
 type recordCountSink struct {
 	count int64
 	known bool
