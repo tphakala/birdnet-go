@@ -89,9 +89,8 @@ func NewValidTestSettings() *conf.Settings {
 // nil-settings fallback path).
 func PublishTestSettings(tb testing.TB, settings *conf.Settings) {
 	tb.Helper()
-	if conflict := denyParallelPublish(tb); conflict != nil {
-		tb.Fatalf(parallelPublishFatalFormat, conflict)
-		return // refuse before publishing; a recording testing.TB returns from Fatalf
+	if refuseParallelPublish(tb) {
+		return
 	}
 	prev := conf.GetSettings()
 	conftest.SetTestSettings(settings)
@@ -114,6 +113,19 @@ const (
 		"so the calling test and its ancestors must not be parallel (%v); " +
 		"build the core with apitest.WithoutSettingsPublish() or remove t.Parallel()"
 )
+
+// refuseParallelPublish fails tb and reports true when tb is parallel or has a
+// parallel ancestor. A real test ends in Fatalf; a recording testing.TB returns,
+// so callers must stop on true before they publish.
+func refuseParallelPublish(tb testing.TB) bool {
+	tb.Helper()
+	conflict := denyParallelPublish(tb)
+	if conflict == nil {
+		return false
+	}
+	tb.Fatalf(parallelPublishFatalFormat, conflict)
+	return true
+}
 
 // denyParallelPublish returns the panic tb.Setenv raised because the test or an
 // ancestor is parallel, or nil when tb may publish. Any other panic also comes

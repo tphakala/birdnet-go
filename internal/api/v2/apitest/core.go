@@ -126,6 +126,13 @@ func NewCore(t *testing.T, opts ...CoreOption) *apicore.Core {
 		cfg.privateModeExempt = func(_, _ string) bool { return false }
 	}
 
+	if cfg.publishSettings {
+		// Refuse a parallel test before anything below is allocated: a Fatalf after
+		// the SecureFS root is open would skip the teardown registered at the end.
+		// The result is unused because t is a real test, which ends in Fatalf.
+		refuseParallelPublish(t)
+	}
+
 	if cfg.settings == nil {
 		cfg.settings = NewValidTestSettings()
 	}
