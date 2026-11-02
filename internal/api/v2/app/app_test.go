@@ -264,8 +264,10 @@ func requestAppConfig(t *testing.T, e *echo.Echo, h *Handler) *httptest.Response
 	return rec
 }
 
-// securityTestHost is the configured security host. It must never be served.
-const securityTestHost = "example.com"
+// securityTestHost is the configured security host. It must never be served. It
+// is a reserved .invalid name so that no project link, which a deployment may
+// override, can contain it.
+const securityTestHost = "security-host.invalid"
 
 // enabledOAuthProviders builds enabled OAuth provider settings with credentials
 // for the given provider IDs.
