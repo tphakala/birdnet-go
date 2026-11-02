@@ -767,3 +767,34 @@ func TestStartMigration_ShutdownDuringPreflightDoesNotStart(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, entities.MigrationStatusIdle, state.State, "no migration may start while the server shuts down")
 }
+
+// failDualWriteTransitionSQL makes the state table refuse the move into dual-write,
+// so the start path fails after sm.StartMigration succeeded.
+const failDualWriteTransitionSQL = `CREATE TRIGGER fail_dual_write BEFORE UPDATE ON migration_states
+WHEN NEW.state = 'dual_write' BEGIN SELECT RAISE(ABORT, 'forced failure'); END`
+
+// TestStartMigration_FailedInitDropsPrerequisiteResult pins that a start whose
+// dual-write transition fails, and is rolled back to idle, still drops the stored
+// prerequisites result: the state moved and came back, so the result is void.
+// Note: Not parallel due to global state modification.
+func TestStartMigration_FailedInitDropsPrerequisiteResult(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	db := controller.DS.(*testDatastoreWrapper).GetDB()
+	require.NoError(t, db.Exec(failDualWriteTransitionSQL).Error)
+	seedPassingPrerequisiteResult(t, controller)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{"total_records": 1000}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+	require.Equal(t, http.StatusInternalServerError, rec.Code)
+
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State, "the failed start must be rolled back")
+	assert.Equal(t, PrereqRunStatusIdle, controller.prereqRunner().snapshot().Status)
+}

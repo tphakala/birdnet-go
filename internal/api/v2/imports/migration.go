@@ -480,6 +480,9 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 	if err := sm.TransitionToDualWrite(); err != nil {
 		c.LogErrorIfEnabled("Failed to transition to dual-write",
 			logger.Error(err), logger.String("path", path), logger.String("ip", ip))
+		// The state moved even though the start failed, so drop the stored result
+		// whether or not the cancel below succeeds.
+		c.prereqRunner().reset()
 		// Try to cancel since we couldn't complete initialization
 		if cancelErr := sm.Cancel(); cancelErr != nil {
 			c.LogWarnIfEnabled("Failed to cancel after transition failure",
