@@ -125,16 +125,19 @@
   }
 
   /**
-   * Retry sits in an alert that unmounts once the request starts and no data is shown;
-   * park focus on the status region first so it does not fall back to the page body.
-   * When the request ends the empty region is no place for focus: hand it to the
-   * re-mounted Retry button after a failure, or to the panel title after a success.
+   * Retry sits in an alert that can unmount while the request runs or once it succeeds.
+   * With no data, park focus on the status region first so it does not fall back to the
+   * page body. When the request ends and focus has nowhere visible to be (the empty region
+   * or the body), hand it to the re-mounted Retry button after a failure, or to the panel
+   * title after a success.
    */
   async function handleRetry(): Promise<void> {
     const parked = !prerequisites && !isLoading && !isRefreshing;
+    const hadFocus = parked || document.activeElement === retryButton;
     if (parked) statusRegion?.focus();
     await handleRefresh();
-    if (parked && document.activeElement === statusRegion) {
+    const active = document.activeElement;
+    if (hadFocus && (active === statusRegion || active === document.body || active === null)) {
       (retryButton ?? titleElement)?.focus();
     }
   }

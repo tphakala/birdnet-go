@@ -10,6 +10,7 @@ import type {
 } from '$lib/types/migration';
 
 const CRITICAL_BADGE_KEY = 'system.database.migration.prerequisites.critical';
+const PANEL_TITLE_KEY = 'system.database.migration.prerequisites.title';
 const RUNNING_KEY = 'system.database.migration.prerequisites.running';
 const FETCH_FAILED_KEY = 'system.database.migration.prerequisites.errors.fetchFailed';
 const NOT_MET_KEY = 'system.database.migration.progress.prerequisitesNotMet';
@@ -288,13 +289,37 @@ describe('DatabasePrerequisites', () => {
       within(screen.getByRole('alert')).getByRole('button', { name: t('common.retry') })
     );
 
-    await waitFor(() =>
-      expect(document.activeElement).toHaveTextContent(
-        'system.database.migration.prerequisites.title'
-      )
-    );
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText(PANEL_TITLE_KEY)));
     expect(screen.getByRole('status')).toHaveTextContent(
       'system.database.migration.prerequisites.allPassed'
     );
+  });
+
+  it('hands focus to the panel title when a retry from stale data plus an error succeeds', async () => {
+    const stale = createComponentTestFactory(DatabasePrerequisites, {
+      prerequisites: response([check('failed_check', 'failed')], 1, 0),
+      error: 'Request timeout.',
+    });
+    const view = stale.render({
+      props: {
+        onRefresh: async () => {
+          await view.rerender({ isLoading: true });
+          await view.rerender({
+            isLoading: false,
+            error: null,
+            prerequisites: { ...response([check('ok', 'passed')], 0, 0), all_passed: true },
+          });
+        },
+      },
+    });
+
+    const retry = within(screen.getByRole('alert')).getByRole('button', {
+      name: t('common.retry'),
+    });
+    retry.focus();
+    await fireEvent.click(retry);
+
+    // The alert and the focused Retry button are gone; focus must not fall to the page body
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByText(PANEL_TITLE_KEY)));
   });
 });
