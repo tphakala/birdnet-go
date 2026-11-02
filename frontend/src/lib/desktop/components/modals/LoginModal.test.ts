@@ -605,7 +605,7 @@ describe('LoginModal', () => {
     const HTTP_TOO_MANY_REQUESTS = 429;
     const HTTP_SERVER_ERROR = 500;
     const HTTP_SERVICE_UNAVAILABLE = 503;
-    // Stand for the translated messages the server's 429 responses carry.
+    // Stand in for the translated messages the server's 429 responses carry.
     const ATTEMPT_LIMIT_MESSAGE = 'Too many login attempts, try again later';
     const SECOND_ATTEMPT_LIMIT_MESSAGE = 'Still too many login attempts';
 
