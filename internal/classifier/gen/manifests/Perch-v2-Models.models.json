@@ -2,7 +2,7 @@
   "schema": 2,
   "repo": "tphakala/Perch-v2-Models",
   "family": "perch",
-  "updated": "2026-10-03",
+  "updated": "2026-11-02",
   "family_meta": {
     "display_name": "Google Perch v2",
     "description": "Google Perch v2 multi-taxa classifier with approximately 14,795 species including birds, insects, amphibians, and mammals (scientific names only)",
@@ -22,7 +22,7 @@
     "cuda": "full/perch_v2_no_dft_fp32.onnx",
     "low-ram": "regional/<region>/perch_v2_<region>_int8_arm.onnx"
   },
-  "notes": "Regional slices are bit-exact to the full model on the species they keep. The int8-arm builds were quantized from the with-DFT graph and are ONNX Runtime only (verified to fail on OpenVINO); use no_dft_fp32 for OpenVINO and GPU. Perch confidence is a softmax, so slicing shifts scores: recalibrate thresholds per region.",
+  "notes": "Regional slices are bit-exact to the full model on the species they keep. The int8-arm builds were quantized from the with-DFT graph and are ONNX Runtime only (verified to fail on OpenVINO); use no_dft_fp32 for OpenVINO and GPU. Perch confidence is a softmax, so slicing shifts scores; each regional entry carries score_calibration (method softmax-rest-logit), a per-tile constant that puts a slice's scores back on the full model's scale: score = exp(z) / (sum of exp over the kept classes + exp(rest_logit)).",
   "models": [
     {
       "path": "full/perch_v2_fp32.onnx",
@@ -243,6 +243,10 @@
       "size_bytes": 61492034,
       "superseded_by": null,
       "indices": "regional/amazonia/perch_v2_amazonia_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.91
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -297,6 +301,10 @@
       "size_bytes": 132660858,
       "superseded_by": null,
       "indices": "regional/amazonia/perch_v2_amazonia_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.91
+      },
       "requirements": {
         "min_ram_mb": 350
       }
@@ -355,6 +363,10 @@
       "size_bytes": 62398142,
       "superseded_by": null,
       "indices": "regional/andes/perch_v2_andes_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.91
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -409,6 +421,10 @@
       "size_bytes": 136276470,
       "superseded_by": null,
       "indices": "regional/andes/perch_v2_andes_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.91
+      },
       "requirements": {
         "min_ram_mb": 350
       }
@@ -467,6 +483,10 @@
       "size_bytes": 46439545,
       "superseded_by": null,
       "indices": "regional/australia-east/perch_v2_australia-east_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.33
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -521,6 +541,10 @@
       "size_bytes": 72597424,
       "superseded_by": null,
       "indices": "regional/australia-east/perch_v2_australia-east_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.33
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -579,6 +603,10 @@
       "size_bytes": 43234264,
       "superseded_by": null,
       "indices": "regional/azores/perch_v2_azores_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.28
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -633,6 +661,10 @@
       "size_bytes": 59807504,
       "superseded_by": null,
       "indices": "regional/azores/perch_v2_azores_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.28
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -691,6 +723,10 @@
       "size_bytes": 44645820,
       "superseded_by": null,
       "indices": "regional/baltics/perch_v2_baltics_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.75
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -745,6 +781,10 @@
       "size_bytes": 65439988,
       "superseded_by": null,
       "indices": "regional/baltics/perch_v2_baltics_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.75
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -803,6 +843,10 @@
       "size_bytes": 45391664,
       "superseded_by": null,
       "indices": "regional/british-isles/perch_v2_british-isles_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.71
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -857,6 +901,10 @@
       "size_bytes": 68416104,
       "superseded_by": null,
       "indices": "regional/british-isles/perch_v2_british-isles_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.71
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -915,6 +963,10 @@
       "size_bytes": 46538169,
       "superseded_by": null,
       "indices": "regional/canada-alaska/perch_v2_canada-alaska_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.88
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -969,6 +1021,10 @@
       "size_bytes": 72990960,
       "superseded_by": null,
       "indices": "regional/canada-alaska/perch_v2_canada-alaska_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.88
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -1027,6 +1083,10 @@
       "size_bytes": 44294472,
       "superseded_by": null,
       "indices": "regional/canary-islands/perch_v2_canary-islands_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.18
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1081,6 +1141,10 @@
       "size_bytes": 64038016,
       "superseded_by": null,
       "indices": "regional/canary-islands/perch_v2_canary-islands_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.18
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1139,6 +1203,10 @@
       "size_bytes": 42741144,
       "superseded_by": null,
       "indices": "regional/cape-verde/perch_v2_cape-verde_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.19
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1193,6 +1261,10 @@
       "size_bytes": 57839824,
       "superseded_by": null,
       "indices": "regional/cape-verde/perch_v2_cape-verde_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.19
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1251,6 +1323,10 @@
       "size_bytes": 52215214,
       "superseded_by": null,
       "indices": "regional/central-africa/perch_v2_central-africa_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.1
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1305,6 +1381,10 @@
       "size_bytes": 95643878,
       "superseded_by": null,
       "indices": "regional/central-africa/perch_v2_central-africa_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.1
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -1363,6 +1443,10 @@
       "size_bytes": 45989572,
       "superseded_by": null,
       "indices": "regional/central-europe/perch_v2_central-europe_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.67
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1417,6 +1501,10 @@
       "size_bytes": 70801916,
       "superseded_by": null,
       "indices": "regional/central-europe/perch_v2_central-europe_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.67
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1475,6 +1563,10 @@
       "size_bytes": 46624464,
       "superseded_by": null,
       "indices": "regional/china-north-central/perch_v2_china-north-central_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.06
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1529,6 +1621,10 @@
       "size_bytes": 73335304,
       "superseded_by": null,
       "indices": "regional/china-north-central/perch_v2_china-north-central_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.06
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -1587,6 +1683,10 @@
       "size_bytes": 46014228,
       "superseded_by": null,
       "indices": "regional/china-northeast/perch_v2_china-northeast_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.02
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1641,6 +1741,10 @@
       "size_bytes": 70900300,
       "superseded_by": null,
       "indices": "regional/china-northeast/perch_v2_china-northeast_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.02
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1699,6 +1803,10 @@
       "size_bytes": 49071575,
       "superseded_by": null,
       "indices": "regional/china-southeast/perch_v2_china-southeast_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.17
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1753,6 +1861,10 @@
       "size_bytes": 83099918,
       "superseded_by": null,
       "indices": "regional/china-southeast/perch_v2_china-southeast_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.17
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -1811,6 +1923,10 @@
       "size_bytes": 49293479,
       "superseded_by": null,
       "indices": "regional/china-southwest/perch_v2_china-southwest_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.2
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1865,6 +1981,10 @@
       "size_bytes": 83985374,
       "superseded_by": null,
       "indices": "regional/china-southwest/perch_v2_china-southwest_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.2
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -1923,6 +2043,10 @@
       "size_bytes": 53916478,
       "superseded_by": null,
       "indices": "regional/east-africa/perch_v2_east-africa_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.99
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -1977,6 +2101,10 @@
       "size_bytes": 102432374,
       "superseded_by": null,
       "indices": "regional/east-africa/perch_v2_east-africa_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.99
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -2035,6 +2163,10 @@
       "size_bytes": 54070578,
       "superseded_by": null,
       "indices": "regional/eastern-brazil/perch_v2_eastern-brazil_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.01
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2089,6 +2221,10 @@
       "size_bytes": 103047274,
       "superseded_by": null,
       "indices": "regional/eastern-brazil/perch_v2_eastern-brazil_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.01
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -2147,6 +2283,10 @@
       "size_bytes": 45163596,
       "superseded_by": null,
       "indices": "regional/eastern-europe/perch_v2_eastern-europe_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.73
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2201,6 +2341,10 @@
       "size_bytes": 67506052,
       "superseded_by": null,
       "indices": "regional/eastern-europe/perch_v2_eastern-europe_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.73
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2259,6 +2403,10 @@
       "size_bytes": 42679502,
       "superseded_by": null,
       "indices": "regional/galapagos/perch_v2_galapagos_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.15
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2313,6 +2461,10 @@
       "size_bytes": 57593864,
       "superseded_by": null,
       "indices": "regional/galapagos/perch_v2_galapagos_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.15
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2371,6 +2523,10 @@
       "size_bytes": 43554792,
       "superseded_by": null,
       "indices": "regional/hawaii/perch_v2_hawaii_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.17
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2425,6 +2581,10 @@
       "size_bytes": 61086496,
       "superseded_by": null,
       "indices": "regional/hawaii/perch_v2_hawaii_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.17
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2483,6 +2643,10 @@
       "size_bytes": 49281151,
       "superseded_by": null,
       "indices": "regional/himalaya/perch_v2_himalaya_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.91
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2537,6 +2701,10 @@
       "size_bytes": 83936182,
       "superseded_by": null,
       "indices": "regional/himalaya/perch_v2_himalaya_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.91
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -2595,6 +2763,10 @@
       "size_bytes": 45884784,
       "superseded_by": null,
       "indices": "regional/iberia/perch_v2_iberia_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.73
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2649,6 +2821,10 @@
       "size_bytes": 70383784,
       "superseded_by": null,
       "indices": "regional/iberia/perch_v2_iberia_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.73
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2707,6 +2883,10 @@
       "size_bytes": 44251324,
       "superseded_by": null,
       "indices": "regional/iceland/perch_v2_iceland_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.82
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2761,6 +2941,10 @@
       "size_bytes": 63865844,
       "superseded_by": null,
       "indices": "regional/iceland/perch_v2_iceland_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.82
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2819,6 +3003,10 @@
       "size_bytes": 49274987,
       "superseded_by": null,
       "indices": "regional/indo-gangetic/perch_v2_indo-gangetic_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.02
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2873,6 +3061,10 @@
       "size_bytes": 83911586,
       "superseded_by": null,
       "indices": "regional/indo-gangetic/perch_v2_indo-gangetic_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.02
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -2931,6 +3123,10 @@
       "size_bytes": 45533436,
       "superseded_by": null,
       "indices": "regional/japan/perch_v2_japan_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.31
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -2985,6 +3181,10 @@
       "size_bytes": 68981812,
       "superseded_by": null,
       "indices": "regional/japan/perch_v2_japan_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.31
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3043,6 +3243,10 @@
       "size_bytes": 43437676,
       "superseded_by": null,
       "indices": "regional/madeira/perch_v2_madeira_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.07
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3097,6 +3301,10 @@
       "size_bytes": 60619172,
       "superseded_by": null,
       "indices": "regional/madeira/perch_v2_madeira_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.07
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3155,6 +3363,10 @@
       "size_bytes": 42285006,
       "superseded_by": null,
       "indices": "regional/mauritius/perch_v2_mauritius_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.19
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3209,6 +3421,10 @@
       "size_bytes": 56019720,
       "superseded_by": null,
       "indices": "regional/mauritius/perch_v2_mauritius_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.19
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3267,6 +3483,10 @@
       "size_bytes": 42932228,
       "superseded_by": null,
       "indices": "regional/new-caledonia/perch_v2_new-caledonia_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.15
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3321,6 +3541,10 @@
       "size_bytes": 58602300,
       "superseded_by": null,
       "indices": "regional/new-caledonia/perch_v2_new-caledonia_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.15
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3379,6 +3603,10 @@
       "size_bytes": 43604104,
       "superseded_by": null,
       "indices": "regional/new-zealand/perch_v2_new-zealand_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.38
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3433,6 +3661,10 @@
       "size_bytes": 61283264,
       "superseded_by": null,
       "indices": "regional/new-zealand/perch_v2_new-zealand_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.38
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3491,6 +3723,10 @@
       "size_bytes": 44541032,
       "superseded_by": null,
       "indices": "regional/nordic/perch_v2_nordic_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.75
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3545,6 +3781,10 @@
       "size_bytes": 65021856,
       "superseded_by": null,
       "indices": "regional/nordic/perch_v2_nordic_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.75
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3603,6 +3843,10 @@
       "size_bytes": 46766237,
       "superseded_by": null,
       "indices": "regional/north-america-east/perch_v2_north-america-east_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.92
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3657,6 +3901,10 @@
       "size_bytes": 73901012,
       "superseded_by": null,
       "indices": "regional/north-america-east/perch_v2_north-america-east_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.92
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -3715,6 +3963,10 @@
       "size_bytes": 46784729,
       "superseded_by": null,
       "indices": "regional/north-america-west/perch_v2_north-america-west_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.91
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3769,6 +4021,10 @@
       "size_bytes": 73974800,
       "superseded_by": null,
       "indices": "regional/north-america-west/perch_v2_north-america-west_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.91
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -3827,6 +4083,10 @@
       "size_bytes": 42297334,
       "superseded_by": null,
       "indices": "regional/reunion/perch_v2_reunion_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.19
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3881,6 +4141,10 @@
       "size_bytes": 56068912,
       "superseded_by": null,
       "indices": "regional/reunion/perch_v2_reunion_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.19
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3939,6 +4203,10 @@
       "size_bytes": 42605534,
       "superseded_by": null,
       "indices": "regional/sao-tome-principe/perch_v2_sao-tome-principe_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.19
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -3993,6 +4261,10 @@
       "size_bytes": 57298712,
       "superseded_by": null,
       "indices": "regional/sao-tome-principe/perch_v2_sao-tome-principe_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.19
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4051,6 +4323,10 @@
       "size_bytes": 42568550,
       "superseded_by": null,
       "indices": "regional/seychelles/perch_v2_seychelles_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.18
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4105,6 +4381,10 @@
       "size_bytes": 57151136,
       "superseded_by": null,
       "indices": "regional/seychelles/perch_v2_seychelles_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.18
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4163,6 +4443,10 @@
       "size_bytes": 46026556,
       "superseded_by": null,
       "indices": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.11
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4217,6 +4501,10 @@
       "size_bytes": 70949492,
       "superseded_by": null,
       "indices": "regional/south-asia-peninsular/perch_v2_south-asia-peninsular_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.11
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4275,6 +4563,10 @@
       "size_bytes": 46784728,
       "superseded_by": null,
       "indices": "regional/southern-africa/perch_v2_southern-africa_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.12
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4329,6 +4621,10 @@
       "size_bytes": 73974800,
       "superseded_by": null,
       "indices": "regional/southern-africa/perch_v2_southern-africa_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.12
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -4387,6 +4683,10 @@
       "size_bytes": 52042622,
       "superseded_by": null,
       "indices": "regional/southern-cone/perch_v2_southern-cone_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.02
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4441,6 +4741,10 @@
       "size_bytes": 94955190,
       "superseded_by": null,
       "indices": "regional/southern-cone/perch_v2_southern-cone_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.02
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -4499,6 +4803,10 @@
       "size_bytes": 45779996,
       "superseded_by": null,
       "indices": "regional/southern-europe/perch_v2_southern-europe_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.71
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4553,6 +4861,10 @@
       "size_bytes": 69965652,
       "superseded_by": null,
       "indices": "regional/southern-europe/perch_v2_southern-europe_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.71
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4611,6 +4923,10 @@
       "size_bytes": 43567120,
       "superseded_by": null,
       "indices": "regional/svalbard/perch_v2_svalbard_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.06
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4665,6 +4981,10 @@
       "size_bytes": 61135688,
       "superseded_by": null,
       "indices": "regional/svalbard/perch_v2_svalbard_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.06
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4723,6 +5043,10 @@
       "size_bytes": 49281151,
       "superseded_by": null,
       "indices": "regional/tibet/perch_v2_tibet_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.9
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4777,6 +5101,10 @@
       "size_bytes": 83936182,
       "superseded_by": null,
       "indices": "regional/tibet/perch_v2_tibet_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.9
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -4835,6 +5163,10 @@
       "size_bytes": 48677078,
       "superseded_by": null,
       "indices": "regional/west-africa/perch_v2_west-africa_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.1
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -4889,6 +5221,10 @@
       "size_bytes": 81525774,
       "superseded_by": null,
       "indices": "regional/west-africa/perch_v2_west-africa_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 10.1
+      },
       "requirements": {
         "min_ram_mb": 300
       }
@@ -4947,6 +5283,10 @@
       "size_bytes": 50464638,
       "superseded_by": null,
       "indices": "regional/western-palearctic/perch_v2_western-palearctic_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.61
+      },
       "requirements": {
         "min_ram_mb": 250
       }
@@ -5001,6 +5341,10 @@
       "size_bytes": 88658614,
       "superseded_by": null,
       "indices": "regional/western-palearctic/perch_v2_western-palearctic_indices.txt",
+      "score_calibration": {
+        "method": "softmax-rest-logit",
+        "rest_logit": 9.61
+      },
       "requirements": {
         "min_ram_mb": 300
       }
