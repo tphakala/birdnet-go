@@ -512,6 +512,38 @@ describe('DatabaseDashboard prerequisites run', () => {
     }
   });
 
+  it('shows the error and a Retry that forces a run when the first POST fails', async () => {
+    const user = userEvent.setup();
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    let runs = 0;
+    apiPost.mockImplementation((url: string) => {
+      if (url !== RUN_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+      runs += 1;
+      return runs === 1
+        ? Promise.reject(apiError('Request timeout.', 408))
+        : Promise.resolve(startablePrerequisites);
+    });
+
+    renderTyped(DatabaseDashboard);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent('Request timeout.');
+    expect(startBlocked()).toBe(true);
+    expect(
+      screen.getByText(t('system.database.migration.progress.prerequisitesUnavailable'))
+    ).toBeInTheDocument();
+
+    await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
+
+    await waitFor(() => expect(apiPost).toHaveBeenLastCalledWith(RUN_URL, { force: true }));
+    await waitFor(() => expect(startBlocked()).toBe(false));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
   it('forces a new run from Re-run', async () => {
     const user = userEvent.setup();
     serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });

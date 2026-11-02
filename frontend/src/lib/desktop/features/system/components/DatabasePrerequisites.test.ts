@@ -548,6 +548,46 @@ describe('DatabasePrerequisites', () => {
       expect(container.querySelectorAll('svg.animate-spin')).toHaveLength(1);
     });
 
+    const stepText = (current: number) =>
+      t('system.database.migration.prerequisites.checkingStep', { current, total: 9 });
+    const checkText = (seconds: number) =>
+      t('system.database.migration.prerequisites.currentCheck', {
+        name: 'Record Count',
+        seconds,
+      });
+
+    it.each([
+      {
+        name: 'progress absent',
+        progress: undefined,
+        present: [] as string[],
+        absent: [stepText(1), checkText(0)],
+      },
+      {
+        name: 'zero steps finished and no check named yet',
+        progress: { completed_steps: 0, total_steps: 9 },
+        present: [stepText(1)],
+        absent: [checkText(0)],
+      },
+      {
+        name: 'the last step with no elapsed time',
+        progress: { completed_steps: 8, total_steps: 9, current_check_name: 'Record Count' },
+        present: [stepText(9), checkText(0)],
+        absent: [] as string[],
+      },
+    ])('renders only what the snapshot carries: $name', c => {
+      const { container } = renderTyped(DatabasePrerequisites, {
+        props: {
+          prerequisites: { ...runningSnapshot, progress: c.progress },
+          onRefresh: async () => {},
+        },
+      });
+
+      const text = container.textContent;
+      for (const wanted of c.present) expect(text).toContain(wanted);
+      for (const unwanted of c.absent) expect(text).not.toContain(unwanted);
+    });
+
     it('blocks Re-run with the running text as its reason and ignores clicks', async () => {
       let calls = 0;
       renderTyped(DatabasePrerequisites, {
