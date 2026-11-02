@@ -169,16 +169,21 @@ func TestSSEManager_BroadcastOverflow_OnlyDisconnectsTargetStreams(t *testing.T)
 			require.True(t, m.AddClient(target))
 			require.True(t, m.AddClient(bystander))
 
-			for range maxConsecutiveDrops + 1 {
-				tt.send(m)
+			connected := func(id string) bool {
+				m.mutex.RLock()
+				defer m.mutex.RUnlock()
+				_, ok := m.clients[id]
+				return ok
 			}
 
-			m.mutex.RLock()
-			_, targetConnected := m.clients[target.ID]
-			_, bystanderConnected := m.clients[bystander.ID]
-			m.mutex.RUnlock()
-			assert.False(t, targetConnected, "a stalled client of the target stream is removed")
-			assert.True(t, bystanderConnected, "a client of the other stream is left alone")
+			for range maxConsecutiveDrops - 1 {
+				tt.send(m)
+			}
+			assert.True(t, connected(target.ID), "a stalled client stays until the drop threshold is reached")
+
+			tt.send(m)
+			assert.False(t, connected(target.ID), "a stalled client of the target stream is removed at the threshold")
+			assert.True(t, connected(bystander.ID), "a client of the other stream is left alone")
 		})
 	}
 }
