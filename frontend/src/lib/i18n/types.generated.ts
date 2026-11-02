@@ -1194,6 +1194,8 @@ export type TranslationKey =
   | 'system.database.backup.history.creating'
   | 'system.database.backup.history.createBackup'
   | 'system.database.backup.history.noBackups'
+  | 'system.database.backup.history.loadFailed'
+  | 'system.database.backup.history.createFailed'
   | 'system.database.backup.history.download'
   | 'system.database.backup.history.failed'
   | 'system.database.backup.history.columns.date'

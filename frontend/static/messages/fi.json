@@ -1545,6 +1545,8 @@
           "creating": "Luodaan...",
           "createBackup": "Luo varmuuskopio",
           "noBackups": "Ei varmuuskopioita vielä",
+          "loadFailed": "Varmuuskopiohistoriaa ei voitu ladata",
+          "createFailed": "Varmuuskopiointia ei voitu käynnistää",
           "download": "Lataa",
           "failed": "Epäonnistui",
           "columns": {

@@ -1545,6 +1545,8 @@
           "creating": "Creazione in corso...",
           "createBackup": "Crea backup",
           "noBackups": "Nessun backup ancora",
+          "loadFailed": "Impossibile caricare la cronologia dei backup",
+          "createFailed": "Impossibile avviare il backup",
           "download": "Scarica",
           "failed": "Fallito",
           "columns": {

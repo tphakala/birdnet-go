@@ -1545,6 +1545,8 @@
           "creating": "Criando...",
           "createBackup": "Criar backup",
           "noBackups": "Nenhum backup ainda",
+          "loadFailed": "Não foi possível carregar o histórico de backups",
+          "createFailed": "Não foi possível iniciar o backup",
           "download": "Baixar",
           "failed": "Falhou",
           "columns": {

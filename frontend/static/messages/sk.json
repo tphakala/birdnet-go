@@ -1545,6 +1545,8 @@
           "creating": "Vytváranie...",
           "createBackup": "Vytvoriť zálohu",
           "noBackups": "Zatiaľ žiadne zálohy",
+          "loadFailed": "Históriu záloh sa nepodarilo načítať",
+          "createFailed": "Zálohu sa nepodarilo spustiť",
           "download": "Stiahnuť",
           "failed": "Zlyhané",
           "columns": {

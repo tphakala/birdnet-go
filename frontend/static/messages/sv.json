@@ -1545,6 +1545,8 @@
           "creating": "Skapar...",
           "createBackup": "Skapa säkerhetskopia",
           "noBackups": "Inga säkerhetskopior ännu",
+          "loadFailed": "Säkerhetskopieringshistoriken kunde inte läsas in",
+          "createFailed": "Säkerhetskopieringen kunde inte startas",
           "download": "Ladda ner",
           "failed": "Misslyckades",
           "columns": {

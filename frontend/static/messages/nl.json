@@ -1545,6 +1545,8 @@
           "creating": "Aanmaken...",
           "createBackup": "Back-up maken",
           "noBackups": "Nog geen back-ups",
+          "loadFailed": "De back-upgeschiedenis kon niet worden geladen",
+          "createFailed": "De back-up kon niet worden gestart",
           "download": "Downloaden",
           "failed": "Mislukt",
           "columns": {

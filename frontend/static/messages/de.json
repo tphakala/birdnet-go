@@ -1545,6 +1545,8 @@
           "creating": "Wird erstellt...",
           "createBackup": "Sicherung erstellen",
           "noBackups": "Noch keine Sicherungen",
+          "loadFailed": "Der Sicherungsverlauf konnte nicht geladen werden",
+          "createFailed": "Die Sicherung konnte nicht gestartet werden",
           "download": "Herunterladen",
           "failed": "Fehlgeschlagen",
           "columns": {

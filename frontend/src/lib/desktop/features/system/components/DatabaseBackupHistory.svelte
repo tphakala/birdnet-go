@@ -2,6 +2,10 @@
   import { Download, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Loader2 } from '@lucide/svelte';
   import { formatBytesCompact, formatDateTime } from '$lib/utils/formatters';
   import { t } from '$lib/i18n';
+  import { useRetryAction } from '$lib/utils/useRetryAction.svelte';
+  import { keepFocusOnRemoval } from '$lib/utils/keepFocusOnRemoval';
+  import Button from '$lib/desktop/components/ui/Button.svelte';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
 
   interface BackupJob {
     job_id: string;
@@ -21,9 +25,31 @@
     onCreateBackup: () => void;
     isCreating?: boolean;
     disabled?: boolean;
+    /** Why the backup list could not be loaded; shown with a Retry that calls onRetryLoad. */
+    loadError?: string | null;
+    onRetryLoad: () => Promise<void>;
+    /** Why the last backup could not be started; dismissible through onDismissCreateError. */
+    createError?: string | null;
+    onDismissCreateError?: () => void;
   }
 
-  let { backups = [], onCreateBackup, isCreating = false, disabled = false }: Props = $props();
+  let {
+    backups = [],
+    onCreateBackup,
+    isCreating = false,
+    disabled = false,
+    loadError = null,
+    onRetryLoad,
+    createError = null,
+    onDismissCreateError,
+  }: Props = $props();
+
+  let createButton = $state<HTMLButtonElement>();
+  let panel = $state<HTMLDivElement>();
+  const loadRetry = useRetryAction(() => onRetryLoad());
+  // An alert that goes away while focused hands focus to Create Backup, or to the panel
+  // while that button is disabled (a backup or a migration is running)
+  const focusPanel = keepFocusOnRemoval(() => [createButton, panel]);
 
   let sortColumn = $state<string>('date');
   let sortDirection = $state<'asc' | 'desc'>('desc');
@@ -103,7 +129,11 @@
   }
 </script>
 
-<div class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm">
+<div
+  bind:this={panel}
+  tabindex="-1"
+  class="bg-[var(--surface-100)] border border-[var(--border-100)] rounded-xl p-4 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+>
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
       <h3 class="text-xs font-semibold uppercase tracking-wider text-muted">
@@ -116,6 +146,7 @@
       </span>
     </div>
     <button
+      bind:this={createButton}
       class="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors cursor-pointer border hover:bg-black/5 dark:hover:bg-white/5 disabled:opacity-50 disabled:cursor-not-allowed"
       style:border-color="var(--border-100)"
       style:color="var(--text-secondary, var(--slate-400))"
@@ -132,11 +163,31 @@
     </button>
   </div>
 
-  {#if safeBackups.length === 0}
+  {#if createError}
+    <ErrorAlert className="mb-3" {@attach focusPanel} dismissible onDismiss={onDismissCreateError}>
+      <span class="block font-medium">{t('system.database.backup.history.createFailed')}</span>
+      <span class="block">{createError}</span>
+    </ErrorAlert>
+  {/if}
+  {#if loadError}
+    <ErrorAlert className="mb-3" {@attach focusPanel}>
+      <span class="block font-medium">{t('system.database.backup.history.loadFailed')}</span>
+      <span class="block">{loadError}</span>
+      <Button
+        className="mt-2"
+        onclick={loadRetry.run}
+        aria-disabled={loadRetry.busy ? 'true' : undefined}
+      >
+        {loadRetry.busy ? t('common.retrying') : t('common.retry')}
+      </Button>
+    </ErrorAlert>
+  {/if}
+
+  {#if safeBackups.length === 0 && !loadError}
     <div class="py-8 text-center text-sm text-muted">
       {t('system.database.backup.history.noBackups')}
     </div>
-  {:else}
+  {:else if safeBackups.length > 0}
     <div class="overflow-x-auto">
       <table class="w-full text-sm">
         <thead>
