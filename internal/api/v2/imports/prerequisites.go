@@ -326,7 +326,10 @@ func (c *Handler) checkStateIdle() PrerequisiteCheck {
 		Severity:    CheckSeverityCritical,
 	}
 
-	if stateManager == nil {
+	// One snapshot under migrationMu, so a concurrent swap cannot nil the manager
+	// between the nil check and the call.
+	sm := getStateManager()
+	if sm == nil {
 		if getIsV2OnlyMode() {
 			check.Status = CheckStatusSkipped
 			check.Message = "Running in enhanced database mode, migration already complete"
@@ -337,7 +340,7 @@ func (c *Handler) checkStateIdle() PrerequisiteCheck {
 		return check
 	}
 
-	state, err := stateManager.GetState()
+	state, err := sm.GetState()
 	if err != nil {
 		check.Status = CheckStatusError
 		check.Message = fmt.Sprintf("Failed to get migration state: %v", err)
