@@ -15,14 +15,15 @@ import (
 // confidenceDistributionJSON mirrors the confidence-distribution wire shape (design spec section 6.5).
 type confidenceDistributionJSON struct {
 	ScientificName string    `json:"scientificName"`
+	CommonName     string    `json:"commonName"`
 	Bins           []float64 `json:"bins"`
 	Total          int       `json:"total"`
 }
 
 func sampleConfidenceDistribution() []datastore.SpeciesConfidenceHistogram {
 	return []datastore.SpeciesConfidenceHistogram{
-		{ScientificName: "Turdus merula", Bins: []float64{0.1, 0.2, 0.3, 0.4}, Total: 40},
-		{ScientificName: "Erithacus rubecula", Bins: []float64{0.25, 0.25, 0.25, 0.25}, Total: 12},
+		{ScientificName: "Turdus merula", CommonName: "Eurasian Blackbird", Bins: []float64{0.1, 0.2, 0.3, 0.4}, Total: 40},
+		{ScientificName: "Erithacus rubecula", CommonName: "European Robin", Bins: []float64{0.25, 0.25, 0.25, 0.25}, Total: 12},
 	}
 }
 
@@ -39,11 +40,11 @@ func TestGetConfidenceDistribution_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []confidenceDistributionJSON
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	decodeStrictJSON(t, rec.Body.Bytes(), &resp)
 	// The bins are decoded from JSON floats, so the literals round-trip exactly.
 	assert.Equal(t, []confidenceDistributionJSON{
-		{ScientificName: "Turdus merula", Bins: []float64{0.1, 0.2, 0.3, 0.4}, Total: 40},
-		{ScientificName: "Erithacus rubecula", Bins: []float64{0.25, 0.25, 0.25, 0.25}, Total: 12},
+		{ScientificName: "Turdus merula", CommonName: "Eurasian Blackbird", Bins: []float64{0.1, 0.2, 0.3, 0.4}, Total: 40},
+		{ScientificName: "Erithacus rubecula", CommonName: "European Robin", Bins: []float64{0.25, 0.25, 0.25, 0.25}, Total: 12},
 	}, resp)
 	mockDS.AssertExpectations(t)
 }

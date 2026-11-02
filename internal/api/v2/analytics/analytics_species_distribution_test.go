@@ -18,6 +18,7 @@ import (
 // decodes to a different value instead of being truncated or zero padded.
 type speciesDistributionJSON struct {
 	ScientificName string    `json:"scientificName"`
+	CommonName     string    `json:"commonName"`
 	Buckets        []float64 `json:"buckets"`
 	Total          int       `json:"total"`
 }
@@ -28,8 +29,8 @@ func sampleSpeciesDistribution() []datastore.SpeciesHourlyDistribution {
 	blackbird[18] = 0.25
 	robin[12] = 1.0
 	return []datastore.SpeciesHourlyDistribution{
-		{ScientificName: "Turdus merula", Buckets: blackbird, Total: 40},
-		{ScientificName: "Erithacus rubecula", Buckets: robin, Total: 12},
+		{ScientificName: "Turdus merula", CommonName: "Eurasian Blackbird", Buckets: blackbird, Total: 40},
+		{ScientificName: "Erithacus rubecula", CommonName: "European Robin", Buckets: robin, Total: 12},
 	}
 }
 
@@ -46,12 +47,12 @@ func TestGetSpeciesHourlyDistribution_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []speciesDistributionJSON
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	decodeStrictJSON(t, rec.Body.Bytes(), &resp)
 	// The response carries every row of the fixture with all 24 hour buckets, in order.
 	rows := sampleSpeciesDistribution()
 	want := make([]speciesDistributionJSON, 0, len(rows))
 	for _, row := range rows {
-		want = append(want, speciesDistributionJSON{ScientificName: row.ScientificName, Buckets: row.Buckets[:], Total: row.Total})
+		want = append(want, speciesDistributionJSON{ScientificName: row.ScientificName, CommonName: row.CommonName, Buckets: row.Buckets[:], Total: row.Total})
 	}
 	require.Len(t, want, 2)
 	assert.Equal(t, want, resp)

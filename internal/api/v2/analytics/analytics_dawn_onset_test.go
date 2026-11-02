@@ -1,7 +1,6 @@
 package analytics
 
 import (
-	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -40,7 +39,7 @@ func TestGetDawnChorusOnset_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []dawnOnsetJSON
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	decodeStrictJSON(t, rec.Body.Bytes(), &resp)
 	// The gap day keeps a nil onset, which the client draws as a break in the trend line.
 	assert.Equal(t, []dawnOnsetJSON{
 		{Date: "2026-03-01", OnsetRelMinutes: new(20), DetectionCount: 42},

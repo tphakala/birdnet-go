@@ -14,6 +14,8 @@
 package analytics
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -21,6 +23,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/tphakala/birdnet-go/internal/api/v2/apicore"
 	"github.com/tphakala/birdnet-go/internal/api/v2/apitest"
@@ -71,6 +74,15 @@ func newAnalyticsContext(e *echo.Echo, target string) (echo.Context, *httptest.R
 	path, _, _ := strings.Cut(target, "?")
 	c.SetPath(path)
 	return c, rec
+}
+
+// decodeStrictJSON decodes a response body into v and fails on any key v does not declare, so a
+// shape test also catches a field added to the wire payload.
+func decodeStrictJSON(t *testing.T, body []byte, v any) {
+	t.Helper()
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	require.NoError(t, dec.Decode(v))
 }
 
 // setupAnalyticsTestEnvironment builds an Echo, a mock datastore, and an analytics

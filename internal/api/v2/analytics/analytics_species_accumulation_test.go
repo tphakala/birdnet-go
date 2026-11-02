@@ -39,7 +39,7 @@ func TestGetSpeciesAccumulation_Shape(t *testing.T) {
 	require.Equal(t, http.StatusOK, rec.Code)
 
 	var resp []speciesAccumulationJSON
-	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &resp))
+	decodeStrictJSON(t, rec.Body.Bytes(), &resp)
 	// Cumulative is monotonic non-decreasing, the middle day adds no species, and the last
 	// point carries the total.
 	assert.Equal(t, []speciesAccumulationJSON{
