@@ -283,8 +283,7 @@ func TestStopHLSStream(t *testing.T) {
 		assert.JSONEq(t, hlsStatusStoppedBody, rec.Body.String())
 		assert.False(t, hlsHasStream(hlsTestSourceID), "the stream is removed")
 		assert.Empty(t, resolveStreamToken(token), "its token no longer resolves")
-		assert.Empty(t, hlsClientIDs(hlsTestSourceID))
-		assert.False(t, hlsHasActivity(hlsTestSourceID), "its tracking data is dropped")
+		assert.True(t, hlsTrackedNothing(), "its clients, client activity and activity are dropped")
 	})
 
 	t.Run("another client keeps the stream running", func(t *testing.T) {
