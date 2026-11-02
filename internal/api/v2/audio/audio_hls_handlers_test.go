@@ -31,6 +31,9 @@ const (
 	hlsTestSessionA = "session-aaaaaaaaaaaa"
 	hlsTestSessionB = "session-bbbbbbbbbbbb"
 
+	// hlsTestRemoteAddr is the address httptest gives every request.
+	hlsTestRemoteAddr = "192.0.2.1"
+
 	// hlsTestTarget is the request target of every test request. The handlers are
 	// called directly, so routing never reads it.
 	hlsTestTarget = "/"
@@ -246,9 +249,8 @@ func TestHLSHeartbeat(t *testing.T) {
 		rec := postHeartbeat(t, h, e, "", `{"stream_token":"`+token+`"}`)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		clients := hlsClientIDs(hlsTestSourceID)
-		require.Len(t, clients, 1, "the client is identified from its address and user agent")
-		assert.NotContains(t, clients[0], hlsTestSessionA)
+		assert.Equal(t, []string{hlsTestRemoteAddr + "-HLSPlayer"}, hlsClientIDs(hlsTestSourceID),
+			"without a session the client is identified from its address and user agent; httptest requests carry no user agent")
 	})
 
 	t.Run("a premature disconnect announcement keeps the client", func(t *testing.T) {
