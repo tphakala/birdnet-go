@@ -105,8 +105,9 @@ const (
 	prereqReuseSettingsChanged prereqReuseReason = "settings_changed"
 )
 
-// prereqReusable is a committed passing result together with the record count
-// of the run that produced it.
+// prereqReusable is a committed result together with the record count of the
+// run that produced it. Only the reuse reason returned beside it says whether
+// the result passed: prereqReuseOK means it did.
 type prereqReusable struct {
 	Response         PrerequisitesResponse
 	RecordCount      int64
