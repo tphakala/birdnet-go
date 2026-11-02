@@ -5341,7 +5341,8 @@
     },
     "migration": {
       "notConfigured": "Siirtoa ei ole määritetty",
-      "preFlightFailed": "Esitarkistukset epäonnistuivat",
+      "preFlightFailed": "Siirtoa edeltävä tarkistus epäonnistui: {check}",
+      "prerequisitesNotReady": "Suorita siirtoa edeltävät tarkistukset ja odota niiden läpäisyä ennen siirron aloittamista.",
       "invalidBody": "Virheellinen pyyntösisältö",
       "recordCountFailed": "Tietueiden kokonaismäärää ei voitu määrittää",
       "startFailed": "Siirron käynnistäminen epäonnistui",

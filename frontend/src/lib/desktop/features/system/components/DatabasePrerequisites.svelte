@@ -171,12 +171,29 @@
     }
   }
 
-  /** A run that finishes while the panel is open (found by polling) is read out too. */
-  let previousStatus: string | undefined;
+  /**
+   * The announcement follows the snapshot. While a run is in progress, whoever started it,
+   * the result text of an earlier run is dropped; a run seen running is read out once it
+   * completes. A result that was never seen running (a mount, a reuse) is not read out here,
+   * and it does not leave the text of an earlier run standing for it.
+   */
+  let watchedRunId: number | undefined;
+  let announcedRunId: number | undefined;
   $effect(() => {
     const status = prerequisites?.status;
-    if (previousStatus === 'running' && status === 'completed') announcement = resultAnnouncement();
-    previousStatus = status;
+    const runId = prerequisites?.run_id;
+    if (status === 'running') {
+      watchedRunId = runId;
+      announcement = '';
+    } else if (status === 'completed') {
+      if (runId === watchedRunId) {
+        watchedRunId = undefined;
+        announcedRunId = runId;
+        announcement = resultAnnouncement();
+      } else if (runId !== announcedRunId) {
+        announcement = '';
+      }
+    }
   });
 
   async function handleRefresh() {

@@ -89,16 +89,19 @@
     return t('system.database.migration.progress.prerequisitesNotMet');
   });
 
+  let startBlocked = $derived(startBlockedReason !== null);
+  let startDisabled = $derived(startBlocked || isStarting);
+
   /** The idle badge says Ready only when the checks allow the start. */
   let stateBadgeLabel = $derived.by((): string => {
-    if (!isIdle || isPaused || startBlockedReason === null) return stateLabel(migState);
+    if (!isIdle || isPaused || !startBlocked) return stateLabel(migState);
     return checking
       ? t('system.database.migration.status.checking')
       : t('system.database.migration.status.notReady');
   });
 
   let startHelpClass = $derived(
-    startBlockedReason === null
+    !startBlocked
       ? 'sr-only'
       : checking
         ? 'text-[10px] text-center mt-1.5 text-muted'
@@ -322,32 +325,27 @@
       </div>
     </div>
 
-    <!-- Start button. Blocked states keep the button focusable and say why. -->
-    {#if startBlockedReason === null}
-      <button
-        onclick={onStart}
-        disabled={isStarting}
-        class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover)] transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-      >
-        {#if isStarting}
-          <Loader2 class="w-4 h-4 animate-spin" />
-          {t('system.database.migration.starting')}
-        {:else}
-          <Play class="w-4 h-4" />
-          {t('system.database.migration.actions.start')}
-        {/if}
-      </button>
-    {:else}
-      <button
-        type="button"
-        aria-disabled="true"
-        aria-describedby={START_HELP_ID}
-        class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg bg-slate-400/50 text-slate-500 cursor-not-allowed"
-      >
+    <!-- Start button. One element for every state, soft-disabled with aria-disabled, so keyboard
+         focus survives a request in flight and a refused start; a blocked state says why. -->
+    <button
+      type="button"
+      onclick={() => {
+        if (!startDisabled) onStart();
+      }}
+      aria-disabled={startDisabled ? 'true' : undefined}
+      aria-describedby={startBlocked ? START_HELP_ID : undefined}
+      class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors aria-disabled:cursor-not-allowed {!startBlocked
+        ? 'cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover)] aria-disabled:opacity-60'
+        : 'bg-slate-400/50 text-slate-500'}"
+    >
+      {#if isStarting && !startBlocked}
+        <Loader2 class="w-4 h-4 animate-spin" />
+        {t('system.database.migration.starting')}
+      {:else}
         <Play class="w-4 h-4" />
         {t('system.database.migration.actions.start')}
-      </button>
-    {/if}
+      {/if}
+    </button>
     <!-- Always rendered so aria-describedby stays valid; sr-only when nothing blocks. Not a live
          region: the prerequisites panel announces the run and its result. -->
     <p id={START_HELP_ID} class={startHelpClass}>

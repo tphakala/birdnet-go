@@ -59,9 +59,9 @@ type prereqStep struct {
 	id   string
 	name string
 	// reuseAtStart marks the checks that are slow or touch the single legacy
-	// connection. Nothing reads it yet: POST /start still runs every critical
-	// check, and passingResult is the accessor for taking marked checks from a
-	// passing run.
+	// connection. POST /start takes these checks from the stored run and runs the
+	// others itself. Mark every new slow check, or a start repeats it inside its
+	// time limit.
 	reuseAtStart bool
 	run          func(ctx context.Context) []PrerequisiteCheck
 }
@@ -105,8 +105,9 @@ const (
 	prereqReuseSettingsChanged prereqReuseReason = "settings_changed"
 )
 
-// prereqReusable is a committed passing result together with the record count
-// of the run that produced it.
+// prereqReusable is a committed result together with the record count of the
+// run that produced it. Only the reuse reason returned beside it says whether
+// the result passed: prereqReuseOK means it did.
 type prereqReusable struct {
 	Response         PrerequisitesResponse
 	RecordCount      int64
@@ -371,12 +372,12 @@ func (r *prereqRunner) reuseReasonLocked(fp dbFingerprint) prereqReuseReason {
 		return prereqReuseRunning
 	case r.status != PrereqRunStatusCompleted || r.result == nil:
 		return prereqReuseNoResult
-	case !r.result.AllPassed:
-		return prereqReuseFailedCheck
 	case r.resultFingerprint != fp:
 		return prereqReuseSettingsChanged
 	case r.clock().Sub(r.finishedAt) >= prereqResultMaxAge:
 		return prereqReuseStale
+	case !r.result.AllPassed:
+		return prereqReuseFailedCheck
 	}
 	return prereqReuseOK
 }
@@ -453,16 +454,19 @@ func (r *prereqRunner) reset() {
 }
 
 // passingResult returns the committed result when it is a completed run that
-// passed, matches fp and is fresh; otherwise it reports why not.
+// passed, matches fp and is fresh. For a completed run with a failed critical
+// check the snapshot is returned too, so the caller can name the check; every
+// other reason returns an empty value.
 func (r *prereqRunner) passingResult(fp dbFingerprint) (prereqReusable, prereqReuseReason) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if reason := r.reuseReasonLocked(fp); reason != prereqReuseOK {
+	reason := r.reuseReasonLocked(fp)
+	if reason != prereqReuseOK && reason != prereqReuseFailedCheck {
 		return prereqReusable{}, reason
 	}
 	return prereqReusable{
 		Response:         r.snapshotLocked(),
 		RecordCount:      r.resultRecordCount,
 		RecordCountKnown: r.resultRecordCountKnown,
-	}, prereqReuseOK
+	}, reason
 }

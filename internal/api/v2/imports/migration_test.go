@@ -88,7 +88,7 @@ func setupMigrationTestEnvironment(t *testing.T) (*echo.Echo, *Handler, *datasto
 	mockRepo := mocks.NewMockDetectionRepository(t)
 
 	// Set up common mock expectations for prerequisite checks
-	// These are called by runPreflightChecks -> runCriticalPrerequisiteChecks
+	// These are called by runCriticalPrerequisiteChecks
 	mockDS.EXPECT().GetLastDetections(1).Return([]datastore.Note{}, nil).Maybe()
 	mockRepo.EXPECT().CountAll(mock.Anything).Return(int64(100), nil).Maybe()
 
@@ -149,6 +149,7 @@ func TestStartMigration_Success(t *testing.T) {
 	t.Attr("feature", "start")
 
 	e, controller, sm := setupMigrationTestEnvironment(t)
+	seedPassingResult(t, controller)
 
 	body := `{"total_records": 1000}`
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(body))
@@ -205,6 +206,7 @@ func TestStartMigration_AlreadyRunning(t *testing.T) {
 	settings.WebServer.Debug = true
 	controller.Settings.Store(settings)
 	apitest.PublishTestSettings(t, settings)
+	seedPassingResult(t, controller)
 
 	toDualWrite(t, sm)
 
@@ -662,14 +664,8 @@ func getMigrationStatusResponse(t *testing.T, e *echo.Echo, controller *Handler)
 // the handler's runner, as a finished run would, and checks it is reusable.
 func seedPassingPrerequisiteResult(t *testing.T, h *Handler) {
 	t.Helper()
-	r := h.prereqRunner()
-	r.mu.Lock()
-	r.status = PrereqRunStatusCompleted
-	r.result = &PrerequisitesResponse{AllPassed: true, CanStartMigration: true}
-	r.resultFingerprint = h.dbFingerprint()
-	r.finishedAt = r.clock()
-	r.mu.Unlock()
-	require.Equal(t, PrereqRunStatusCompleted, r.snapshot().Status, "the seeded result must be visible")
+	seedPassingResult(t, h)
+	require.Equal(t, PrereqRunStatusCompleted, h.prereqRunner().snapshot().Status, "the seeded result must be visible")
 }
 
 // TestMigrationStateChange_DropsPrerequisiteResult pins that a start, a cancel
@@ -746,26 +742,71 @@ func TestStartMigration_ShutdownDuringPreflightDoesNotStart(t *testing.T) {
 	t.Attr("feature", "start")
 
 	e, controller, sm := setupMigrationTestEnvironment(t)
-	// The server shuts down while the last critical check, the record count,
-	// runs; that check still passes, so only the context says the run is void.
+	seedPassingPrerequisiteResult(t, controller)
+	// The server shuts down while a re-run check, the disk space, runs; that check
+	// still passes, so only the context says the start is void.
 	lifecycle, cancel := context.WithCancel(t.Context())
 	controller.SetTestContext(lifecycle, cancel)
-	repo := mocks.NewMockDetectionRepository(t)
-	repo.EXPECT().CountAll(mock.Anything).RunAndReturn(func(context.Context) (int64, error) {
+	controller.diskFreeFn = func(string) (uint64, error) {
 		cancel()
-		return int64(migrationTestTotalRecords), nil
-	}).Once()
-	controller.Repo = repo
+		return testDiskFreeBytes, nil
+	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{"total_records": 1000}`))
 	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 	rec := httptest.NewRecorder()
 	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	// A shutdown is not a failed check: the answer must not carry the preFlightFailed key,
+	// whose text names a check, and the page must not take it for a refused check
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
+	assert.NotContains(t, rec.Body.String(), notification.MsgErrMigrationPreFlight)
 	state, err := sm.GetState()
 	require.NoError(t, err)
 	assert.Equal(t, entities.MigrationStatusIdle, state.State, "no migration may start while the server shuts down")
+}
+
+// TestStartMigration_ShutdownInterruptsTheRecordCount pins that a shutdown that begins while
+// the start waits for the record count ends the wait at once and answers the shutdown, not a
+// timeout: the start's own context follows the server lifecycle, not only the request.
+// Note: Not parallel due to global state modification.
+func TestStartMigration_ShutdownInterruptsTheRecordCount(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "start")
+
+	e, controller, sm := setupMigrationTestEnvironment(t)
+	seedPrerequisiteResult(t, controller, passingReusedChecks(controller), freshResultAge, 0)
+	lifecycle, cancel := context.WithCancel(t.Context())
+	controller.SetTestContext(lifecycle, cancel)
+	// The limit is long enough that only the lifecycle can end the count in time; with the
+	// limit as the only bound the answer would be a 504 once it ran out.
+	controller.startPreflightLimit = 5 * time.Second
+	repo := mocks.NewMockDetectionRepository(t)
+	var countEnded error
+	repo.EXPECT().CountAll(mock.Anything).RunAndReturn(func(ctx context.Context) (int64, error) {
+		cancel()
+		<-ctx.Done()
+		countEnded = ctx.Err()
+		return 0, countEnded
+	}).Once()
+	controller.Repo = repo
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
+
+	// The count's context ended because the lifecycle was cancelled; without the lifecycle
+	// wiring it would end at the limit with DeadlineExceeded, and the answer would be the same 503
+	require.ErrorIs(t, countEnded, context.Canceled)
+	require.NotErrorIs(t, countEnded, context.DeadlineExceeded)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
+	state, err := sm.GetState()
+	require.NoError(t, err)
+	assert.Equal(t, entities.MigrationStatusIdle, state.State)
 }
 
 // failDualWriteTransitionSQL makes the state table refuse the move into dual-write,
@@ -809,19 +850,15 @@ func TestStartMigration_ShutdownAfterChecksDoesNotStart(t *testing.T) {
 	t.Attr("feature", "start")
 
 	e, controller, sm := setupMigrationTestEnvironment(t)
+	// No count in the request or the stored run, so the handler counts itself
+	seedPrerequisiteResult(t, controller, passingReusedChecks(controller), freshResultAge, 0)
 	lifecycle, cancel := context.WithCancel(t.Context())
 	controller.SetTestContext(lifecycle, cancel)
-	// The first count belongs to the record_count check; the second is the
-	// handler's own fallback count, which runs after the checks.
-	var counts int
 	repo := mocks.NewMockDetectionRepository(t)
 	repo.EXPECT().CountAll(mock.Anything).RunAndReturn(func(context.Context) (int64, error) {
-		counts++
-		if counts == 2 {
-			cancel()
-		}
+		cancel()
 		return int64(migrationTestTotalRecords), nil
-	}).Twice()
+	}).Once()
 	controller.Repo = repo
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v2/system/database/migration/start", strings.NewReader(`{}`))
@@ -829,7 +866,8 @@ func TestStartMigration_ShutdownAfterChecksDoesNotStart(t *testing.T) {
 	rec := httptest.NewRecorder()
 	require.NoError(t, controller.StartMigration(e.NewContext(req, rec)))
 
-	assert.Equal(t, http.StatusBadRequest, rec.Code)
+	assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	assert.Contains(t, rec.Body.String(), notification.MsgErrMigrationStartFailed)
 	state, err := sm.GetState()
 	require.NoError(t, err)
 	assert.Equal(t, entities.MigrationStatusIdle, state.State, "no migration may start once the server is stopping")

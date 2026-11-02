@@ -5341,7 +5341,8 @@
     },
     "migration": {
       "notConfigured": "Migration is not configured",
-      "preFlightFailed": "Pre-flight checks failed",
+      "preFlightFailed": "Pre-migration check failed: {check}",
+      "prerequisitesNotReady": "Run the pre-migration checks and wait for them to pass before starting the migration.",
       "invalidBody": "Invalid request body",
       "recordCountFailed": "Failed to determine total records",
       "startFailed": "Failed to start migration",

@@ -3912,7 +3912,8 @@ export type TranslationKey =
   | 'errors.backup.unsupportedType'
   | 'errors.backup.v2NotInitialized'
   | 'errors.migration.notConfigured'
-  | 'errors.migration.preFlightFailed'
+  | 'errors.migration.preFlightFailed' // params: check
+  | 'errors.migration.prerequisitesNotReady'
   | 'errors.migration.invalidBody'
   | 'errors.migration.recordCountFailed'
   | 'errors.migration.startFailed'
@@ -4925,6 +4926,7 @@ export type TranslationParams = {
   'quietHours.indicator.tooltip': { count: string | number };
   'errors.detection.invalidDate': { paramName: string | number };
   'errors.backup.insufficientSpace': { needed: string | number; available: string | number };
+  'errors.migration.preFlightFailed': { check: string | number };
   'errors.streams.test.unsupportedScheme': { scheme: string | number };
   'wizard.progress': { current: string | number; total: string | number };
   'wizard.whatsNew.title': { version: string | number };

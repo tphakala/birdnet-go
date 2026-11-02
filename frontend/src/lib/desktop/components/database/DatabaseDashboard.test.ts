@@ -2,7 +2,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { t } from '$lib/i18n';
-import type { MigrationStatus, PrerequisitesResponse } from '$lib/types/migration';
+import type {
+  MigrationStatus,
+  PrerequisiteCheck,
+  PrerequisitesResponse,
+} from '$lib/types/migration';
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -167,6 +171,357 @@ describe('DatabaseDashboard migration errors', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith(START_URL));
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Another migration is already running');
+    // A migration that started anyway must show: the status is fetched again after the failure
+    const statusRequests = () => apiGet.mock.calls.filter(([url]) => url === STATUS_URL).length;
+    await waitFor(() => expect(statusRequests()).toBeGreaterThan(1));
+  });
+
+  it('runs the prerequisites again when the start says no run is ready', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
+    const notReady = apiError('Run the pre-migration checks first', 409);
+    notReady.errorKey = 'errors.migration.prerequisitesNotReady';
+    rejectActions(notReady);
+
+    renderTyped(DatabaseDashboard);
+
+    await user.click(
+      await screen.findByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: t('system.database.migration.confirmDialog.title'),
+    });
+    await user.click(within(dialog).getByRole('checkbox'));
+    apiPost.mockClear();
+    await user.click(
+      within(dialog).getByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: false }));
+  });
+
+  it('forces a new run when the start finds a failed check, and shows it', async () => {
+    const user = userEvent.setup();
+    const failedCheck = {
+      id: 'disk_space',
+      name: 'Disk Space',
+      description: '',
+      status: 'failed',
+      message: 'Only 0.1GB available',
+      severity: 'critical',
+    } satisfies PrerequisiteCheck;
+    const blocked = {
+      ...startablePrerequisites,
+      all_passed: false,
+      can_start_migration: false,
+      critical_failures: 1,
+      checks: [failedCheck],
+      run_id: 2,
+    } satisfies PrerequisitesResponse;
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    let runs = 0;
+    const refused = apiError('Pre-migration check failed: Disk Space', 400);
+    refused.errorKey = 'errors.migration.preFlightFailed';
+    apiPost.mockImplementation((url: string) => {
+      if (url !== RUN_URL) return Promise.reject(refused);
+      runs += 1;
+      return Promise.resolve(runs === 1 ? startablePrerequisites : blocked);
+    });
+
+    renderTyped(DatabaseDashboard);
+
+    await user.click(
+      await screen.findByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+    const dialog = await screen.findByRole('dialog', {
+      name: t('system.database.migration.confirmDialog.title'),
+    });
+    await user.click(within(dialog).getByRole('checkbox'));
+    await user.click(
+      within(dialog).getByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: true }));
+    // The real failing check replaces the stale all-passed run, and Start follows it
+    expect(await screen.findByText('Disk Space:')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen
+          .getAllByRole('button', { name: t('system.database.migration.actions.start') })
+          .some(b => b.getAttribute('aria-disabled') === 'true')
+      ).toBe(true)
+    );
+    // The refusal stays on screen while and after the re-run
+    expect(screen.getByText('Pre-migration check failed: Disk Space')).toBeInTheDocument();
+  });
+
+  /** Opens the confirm dialog from the card's Start button and confirms it. */
+  async function confirmStart(user: ReturnType<typeof userEvent.setup>): Promise<HTMLElement> {
+    // The confirm dialog has a Start button of its own; the card's is the one outside it
+    const start = await waitFor(() => {
+      const card = screen
+        .getAllByRole('button', { name: t('system.database.migration.actions.start') })
+        .find(b => !b.closest('[role="dialog"]'));
+      if (!card) throw new Error('card Start button not rendered');
+      return card;
+    });
+    await user.click(start);
+    const dialog = await screen.findByRole('dialog', {
+      name: t('system.database.migration.confirmDialog.title'),
+    });
+    await user.click(within(dialog).getByRole('checkbox'));
+    await user.click(
+      within(dialog).getByRole('button', { name: t('system.database.migration.actions.start') })
+    );
+    return start;
+  }
+
+  const diskFailure = {
+    id: 'disk_space',
+    name: 'Disk Space',
+    description: '',
+    status: 'failed',
+    message: 'Only 0.1GB available',
+    severity: 'critical',
+  } satisfies PrerequisiteCheck;
+  const blockedRun = {
+    ...startablePrerequisites,
+    all_passed: false,
+    can_start_migration: false,
+    critical_failures: 1,
+    checks: [diskFailure],
+    run_id: 2,
+  } satisfies PrerequisitesResponse;
+
+  it('keeps the Start button, focused and never natively disabled, through a refused start', async () => {
+    const user = userEvent.setup();
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    let runs = 0;
+    let refuse: (e: Error) => void = () => {};
+    const pending = new Promise<never>((_, reject) => (refuse = reject));
+    apiPost.mockImplementation((url: string) => {
+      if (url === START_URL) return pending;
+      runs += 1;
+      return Promise.resolve(runs === 1 ? startablePrerequisites : blockedRun);
+    });
+
+    renderTyped(DatabaseDashboard);
+    const start = await confirmStart(user);
+
+    // While the request runs the button stays focusable: aria-disabled, not disabled
+    await waitFor(() => expect(start).toHaveAttribute('aria-disabled', 'true'));
+    expect(start).not.toBeDisabled();
+
+    const refused = apiError('Pre-migration check failed: Disk Space', 400);
+    refused.errorKey = 'errors.migration.preFlightFailed';
+    refuse(refused);
+
+    await screen.findByText('Disk Space:');
+    // The same element survives the refusal and keeps keyboard focus; it now says why it is blocked
+    expect(start.isConnected).toBe(true);
+    expect(document.activeElement).toBe(start);
+    expect(start).toHaveAttribute('aria-disabled', 'true');
+    const reason = document.getElementById(start.getAttribute('aria-describedby') ?? '');
+    expect(reason).toHaveTextContent(
+      t('system.database.migration.progress.prerequisitesFailedList', { checks: 'Disk Space' })
+    );
+  });
+
+  it('clears the refusal when a run with the same id but a new start time allows the start', async () => {
+    // A server restart restarts the run ids, so a run id alone cannot tell runs apart
+    const user = userEvent.setup();
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    let runs = 0;
+    const notReady = apiError('Run the pre-migration checks first', 409);
+    notReady.errorKey = 'errors.migration.prerequisitesNotReady';
+    apiPost.mockImplementation((url: string) => {
+      if (url === START_URL) return Promise.reject(notReady);
+      runs += 1;
+      const startedAt = runs === 1 ? '2026-11-02T10:00:00Z' : '2026-11-02T11:00:00Z';
+      return Promise.resolve({ ...startablePrerequisites, run_id: 1, started_at: startedAt });
+    });
+
+    renderTyped(DatabaseDashboard);
+    await confirmStart(user);
+
+    await waitFor(() => expect(runs).toBe(2));
+    await waitFor(() =>
+      expect(screen.queryByText('Run the pre-migration checks first')).not.toBeInTheDocument()
+    );
+  });
+
+  it('does not run the checks again when a start times out', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: idleStatus, [PREREQUISITES_URL]: startablePrerequisites });
+    const timedOut = apiError('The migration start took too long', 504);
+    timedOut.errorKey = 'errors.migration.startFailed';
+    rejectActions(timedOut);
+
+    renderTyped(DatabaseDashboard);
+    await confirmStart(user);
+
+    await screen.findByText('The migration start took too long');
+    // The re-run, if any, comes after the status refetch that follows the refusal: let it settle
+    const statusRequests = () => apiGet.mock.calls.filter(([url]) => url === STATUS_URL).length;
+    await waitFor(() => expect(statusRequests()).toBeGreaterThan(1));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const runPosts = () => apiPost.mock.calls.filter(([url]) => url === RUN_URL).length;
+    expect(runPosts()).toBe(1);
+  });
+
+  it('clears the refusal message once a new run allows the start, and keeps it while it fails', async () => {
+    const user = userEvent.setup();
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    let runs = 0;
+    const refused = apiError('Pre-migration check failed: Disk Space', 400);
+    refused.errorKey = 'errors.migration.preFlightFailed';
+    apiPost.mockImplementation((url: string) => {
+      if (url === START_URL) return Promise.reject(refused);
+      runs += 1;
+      if (runs === 1) return Promise.resolve(startablePrerequisites);
+      // The forced re-run after the refusal still fails; the user's Re-run passes
+      return Promise.resolve(runs === 2 ? blockedRun : { ...startablePrerequisites, run_id: 3 });
+    });
+
+    renderTyped(DatabaseDashboard);
+    await confirmStart(user);
+
+    const banner = await screen.findByText('Pre-migration check failed: Disk Space');
+    await screen.findByText('Disk Space:');
+    expect(banner).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole('button', { name: t('system.database.migration.prerequisites.rerun') })
+    );
+
+    await waitFor(() =>
+      expect(screen.queryByText('Pre-migration check failed: Disk Space')).toBeNull()
+    );
+  });
+
+  it('keeps a start failure that is not a refused check when a later run passes', async () => {
+    const user = userEvent.setup();
+    apiGet.mockImplementation((url: string) =>
+      url === STATUS_URL
+        ? Promise.resolve(idleStatus)
+        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+    );
+    const failed = apiError('Failed to initialize migration', 500);
+    failed.errorKey = 'errors.migration.initFailed';
+    let runs = 0;
+    apiPost.mockImplementation((url: string) => {
+      if (url === START_URL) return Promise.reject(failed);
+      runs += 1;
+      return Promise.resolve(
+        runs === 1 ? startablePrerequisites : { ...startablePrerequisites, run_id: 3 }
+      );
+    });
+
+    renderTyped(DatabaseDashboard);
+    await confirmStart(user);
+    await screen.findByText('Failed to initialize migration');
+
+    // The checks were fine, so a later passing run says nothing about this failure
+    await user.click(
+      screen.getByRole('button', { name: t('system.database.migration.prerequisites.rerun') })
+    );
+    await waitFor(() => expect(runs).toBe(2));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(screen.getByText('Failed to initialize migration')).toBeInTheDocument();
+  });
+
+  it('ignores an older status response that arrives after a newer one, so no state change is faked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      let statusCalls = 0;
+      let resolveOldPoll: (value: unknown) => void = () => {};
+      apiGet.mockImplementation((url: string) => {
+        if (url === PREREQUISITES_URL) return Promise.resolve(startablePrerequisites);
+        if (url !== STATUS_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+        statusCalls += 1;
+        // Call 1 loads the page, call 2 is the poll that stays pending, call 3 is the refetch
+        // after Pause and answers first
+        if (statusCalls === 2) {
+          return new Promise(resolve => {
+            resolveOldPoll = resolve;
+          });
+        }
+        return Promise.resolve(migratingStatus);
+      });
+      servePost(startablePrerequisites);
+      const runPosts = () => apiPost.mock.calls.filter(([url]) => url === RUN_URL).length;
+
+      renderTyped(DatabaseDashboard);
+      const pause = await screen.findByRole('button', {
+        name: t('system.database.migration.actions.pause'),
+      });
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS);
+      await waitFor(() => expect(statusCalls).toBe(2));
+      const before = runPosts();
+
+      await user.click(pause);
+      await waitFor(() => expect(statusCalls).toBeGreaterThanOrEqual(3));
+
+      // The older poll answers last, with a state the newer answer already moved past
+      resolveOldPoll(idleStatus);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(runPosts()).toBe(before);
+      expect(
+        screen.getByRole('button', { name: t('system.database.migration.actions.pause') })
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('runs the prerequisites again when the migration state returns to idle', async () => {
+    const user = userEvent.setup();
+    const pausedStatus = {
+      ...idleStatus,
+      state: 'paused',
+      worker_paused: true,
+      can_start: false,
+      can_resume: true,
+      can_cancel: true,
+    } satisfies MigrationStatus;
+    let statusCalls = 0;
+    apiGet.mockImplementation((url: string) => {
+      if (url === STATUS_URL) {
+        statusCalls += 1;
+        return Promise.resolve(statusCalls === 1 ? pausedStatus : idleStatus);
+      }
+      if (url === PREREQUISITES_URL) return Promise.resolve(startablePrerequisites);
+      return Promise.reject(apiError(NOT_CONFIGURED, 503));
+    });
+    servePost(startablePrerequisites);
+
+    renderTyped(DatabaseDashboard);
+
+    await user.click(
+      await screen.findByRole('button', { name: t('system.database.migration.actions.cancel') })
+    );
+
+    // One run on mount, one more once the state is idle again
+    const runPosts = () => apiPost.mock.calls.filter(([url]) => url === RUN_URL).length;
+    await waitFor(() => expect(runPosts()).toBe(2));
   });
   it('shows why the migration cannot start when the prerequisites request fails', async () => {
     serve({

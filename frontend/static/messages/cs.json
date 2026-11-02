@@ -5341,7 +5341,8 @@
     },
     "migration": {
       "notConfigured": "Migrace není nakonfigurována",
-      "preFlightFailed": "Předběžné kontroly selhaly",
+      "preFlightFailed": "Kontrola před migrací selhala: {check}",
+      "prerequisitesNotReady": "Spusťte kontroly před migrací a počkejte, až projdou, než migraci spustíte.",
       "invalidBody": "Neplatné tělo požadavku",
       "recordCountFailed": "Celkový počet záznamů se nepodařilo určit",
       "startFailed": "Migraci se nepodařilo spustit",

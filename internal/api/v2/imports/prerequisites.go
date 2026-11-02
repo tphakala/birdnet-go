@@ -69,9 +69,8 @@ const prerequisiteTagPassed = "passed"
 // otherwise the fixed ID of the first one that did.
 func prerequisiteTagValue(checks []PrerequisiteCheck) string {
 	for i := range checks {
-		c := &checks[i]
-		if c.Severity == CheckSeverityCritical && (c.Status == CheckStatusFailed || c.Status == CheckStatusError) {
-			return c.ID
+		if isBlockingCheck(&checks[i]) {
+			return checks[i].ID
 		}
 	}
 	return prerequisiteTagPassed
@@ -180,7 +179,7 @@ func (c *Handler) summarizePrerequisites(checks []PrerequisiteCheck) Prerequisit
 	warnings := 0
 	for i := range checks {
 		check := &checks[i]
-		if (check.Status == CheckStatusFailed || check.Status == CheckStatusError) && check.Severity == CheckSeverityCritical {
+		if isBlockingCheck(check) {
 			criticalFailures++
 		}
 		if check.Status == CheckStatusWarning {

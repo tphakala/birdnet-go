@@ -5341,7 +5341,8 @@
     },
     "migration": {
       "notConfigured": "A migráció nincs konfigurálva",
-      "preFlightFailed": "Az előzetes ellenőrzések sikertelenek",
+      "preFlightFailed": "A migráció előtti ellenőrzés sikertelen: {check}",
+      "prerequisitesNotReady": "Futtassa le a migráció előtti ellenőrzéseket, és várja meg, amíg sikeresek, mielőtt elindítja a migrációt.",
       "invalidBody": "Érvénytelen kérés törzs",
       "recordCountFailed": "Az összes rekord meghatározása sikertelen",
       "startFailed": "A migráció indítása sikertelen",

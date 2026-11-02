@@ -5341,7 +5341,8 @@
     },
     "migration": {
       "notConfigured": "Migratie is niet geconfigureerd",
-      "preFlightFailed": "Voorafgaande controles mislukt",
+      "preFlightFailed": "Controle vóór de migratie mislukt: {check}",
+      "prerequisitesNotReady": "Voer de controles vóór de migratie uit en wacht tot ze geslaagd zijn voordat u de migratie start.",
       "invalidBody": "Ongeldige aanvraagbody",
       "recordCountFailed": "Kan het totaal aantal records niet bepalen",
       "startFailed": "Kan migratie niet starten",
