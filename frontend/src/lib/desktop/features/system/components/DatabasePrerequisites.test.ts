@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { cleanup, fireEvent, screen, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/svelte';
 import { t } from '$lib/i18n';
 import { renderTyped, createComponentTestFactory } from '../../../../../test/render-helpers';
 import DatabasePrerequisites from './DatabasePrerequisites.svelte';
@@ -238,5 +238,63 @@ describe('DatabasePrerequisites', () => {
     await fireEvent.click(retry);
 
     expect(retry).toHaveFocus();
+  });
+
+  it('returns focus to Retry when the retry fails again', async () => {
+    const noData = createComponentTestFactory(DatabasePrerequisites, {
+      prerequisites: null,
+      error: 'Request timeout.',
+    });
+    const view = noData.render({
+      props: {
+        onRefresh: async () => {
+          await view.rerender({ isLoading: true });
+          await view.rerender({ isLoading: false });
+        },
+      },
+    });
+
+    await fireEvent.click(
+      within(screen.getByRole('alert')).getByRole('button', { name: t('common.retry') })
+    );
+
+    // The alert is mounted again, and Retry is not stuck on its busy label
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(screen.getByRole('alert')).getByRole('button', { name: t('common.retry') })
+      )
+    );
+  });
+
+  it('moves focus to the visible panel title and announces the result when the retry succeeds', async () => {
+    const noData = createComponentTestFactory(DatabasePrerequisites, {
+      prerequisites: null,
+      error: 'Request timeout.',
+    });
+    const view = noData.render({
+      props: {
+        onRefresh: async () => {
+          await view.rerender({ isLoading: true });
+          await view.rerender({
+            isLoading: false,
+            error: null,
+            prerequisites: { ...response([check('ok', 'passed')], 0, 0), all_passed: true },
+          });
+        },
+      },
+    });
+
+    await fireEvent.click(
+      within(screen.getByRole('alert')).getByRole('button', { name: t('common.retry') })
+    );
+
+    await waitFor(() =>
+      expect(document.activeElement).toHaveTextContent(
+        'system.database.migration.prerequisites.title'
+      )
+    );
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'system.database.migration.prerequisites.allPassed'
+    );
   });
 });

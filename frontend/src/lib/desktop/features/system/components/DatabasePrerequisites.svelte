@@ -18,6 +18,7 @@
     AlertTriangle,
     Info,
   } from '@lucide/svelte';
+  import { tick } from 'svelte';
   import { t } from '$lib/i18n';
   import { isBlockingCheck } from '$lib/utils/migrationPrerequisites';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
@@ -41,6 +42,10 @@
   let showDetails = $state(false);
   let isRefreshing = $state(false);
   let statusRegion = $state<HTMLDivElement>();
+  let titleElement = $state<HTMLElement>();
+  let retryButton = $state<HTMLButtonElement>();
+  /** Result of the last successful check run, read out by the live region. */
+  let announcement = $state('');
 
   /** Checks array with null-safety (Go may serialize nil slice as null) */
   let checks = $derived(prerequisites?.checks ?? []);
@@ -99,23 +104,46 @@
       : translated;
   }
 
+  /** One sentence for a screen reader once a check run has produced data. */
+  function resultAnnouncement(): string {
+    if (!prerequisites) return '';
+    if (prerequisites.all_passed) return t('system.database.migration.prerequisites.allPassed');
+    if (prerequisites.critical_failures > 0) {
+      return t('system.database.migration.prerequisites.criticalIssues', {
+        count: prerequisites.critical_failures,
+      });
+    }
+    return t('system.database.migration.prerequisites.warningsCount', {
+      count: prerequisites.warnings,
+    });
+  }
+
   /**
    * Retry sits in an alert that unmounts once the request starts and no data is shown;
    * park focus on the status region first so it does not fall back to the page body.
+   * When the request ends the empty region is no place for focus: hand it to the
+   * re-mounted Retry button after a failure, or to the panel title after a success.
    */
-  function handleRetry(): Promise<void> {
-    if (!prerequisites && !isLoading && !isRefreshing) statusRegion?.focus();
-    return handleRefresh();
+  async function handleRetry(): Promise<void> {
+    const parked = !prerequisites && !isLoading && !isRefreshing;
+    if (parked) statusRegion?.focus();
+    await handleRefresh();
+    if (parked && document.activeElement === statusRegion) {
+      (retryButton ?? titleElement)?.focus();
+    }
   }
 
   async function handleRefresh() {
     if (isLoading || isRefreshing) return;
     isRefreshing = true;
+    announcement = '';
     try {
       await onRefresh();
     } finally {
       isRefreshing = false;
     }
+    await tick();
+    announcement = error ? '' : resultAnnouncement();
   }
 </script>
 
@@ -124,7 +152,11 @@
   <div class="flex items-center justify-between">
     <!-- Left: label + summary badges -->
     <div class="flex items-center gap-2 flex-wrap">
-      <span class="text-xs font-semibold uppercase tracking-wider text-muted">
+      <span
+        bind:this={titleElement}
+        tabindex="-1"
+        class="rounded text-xs font-semibold uppercase tracking-wider text-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+      >
         {t('system.database.migration.prerequisites.title')}
       </span>
 
@@ -207,6 +239,7 @@
         {t('system.database.migration.prerequisites.running')}
       </div>
     {/if}
+    <span class="sr-only">{announcement}</span>
   </div>
 
   {#if !(isLoading && !prerequisites) && (error || !prerequisites)}
@@ -215,11 +248,12 @@
         >{error || t('system.database.migration.prerequisites.errors.fetchFailed')}</span
       >
       <Button
+        bind:ref={retryButton}
         className="mt-2"
         onclick={handleRetry}
-        aria-disabled={isLoading || isRefreshing ? 'true' : undefined}
+        aria-disabled={isLoading ? 'true' : undefined}
       >
-        {isLoading || isRefreshing ? t('common.retrying') : t('common.retry')}
+        {isLoading ? t('common.retrying') : t('common.retry')}
       </Button>
     </ErrorAlert>
   {/if}
