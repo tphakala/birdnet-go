@@ -57,26 +57,26 @@ func TestMySQLServerPrerequisites_RealServer(t *testing.T) {
 
 	t.Run("server version does not block", func(t *testing.T) {
 		c := setup(t, utf8mb4Schema, "", "")
-		check := c.checkMySQLServerVersion()
+		check := c.checkMySQLServerVersion(t.Context())
 		t.Logf("server version check: %s: %s", check.Status, check.Message)
 		assert.Contains(t, []string{CheckStatusPassed, CheckStatusWarning}, check.Status, check.Message)
 	})
 
 	t.Run("utf8mb4 schema passes", func(t *testing.T) {
 		c := setup(t, utf8mb4Schema, "", "")
-		check := c.checkMySQLCharset()
+		check := c.checkMySQLCharset(t.Context())
 		assert.Equal(t, CheckStatusPassed, check.Status, check.Message)
 	})
 
 	t.Run("latin1 schema with target tables from this release passes", func(t *testing.T) {
 		c := setup(t, latin1Schema, "", "")
-		check := c.checkMySQLCharset()
+		check := c.checkMySQLCharset(t.Context())
 		assert.Equal(t, CheckStatusPassed, check.Status, check.Message)
 	})
 
 	t.Run("latin1 schema with latin1 target tables from an older release warns", func(t *testing.T) {
 		c := setup(t, latin1Schema, "", latin1Charset)
-		check := c.checkMySQLCharset()
+		check := c.checkMySQLCharset(t.Context())
 		assert.Equal(t, CheckStatusWarning, check.Status, check.Message)
 	})
 
@@ -84,7 +84,7 @@ func TestMySQLServerPrerequisites_RealServer(t *testing.T) {
 		c := setup(t, latin1Schema, "utf8mb4", latin1Charset)
 		before := snapshotCharsets(t, mgr.DB())
 
-		check := c.checkMySQLCharset()
+		check := c.checkMySQLCharset(t.Context())
 
 		assert.Equal(t, CheckStatusFailed, check.Status, check.Message)
 		assert.Contains(t, check.Message, "v2_")
