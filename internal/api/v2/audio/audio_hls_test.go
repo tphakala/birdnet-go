@@ -138,8 +138,10 @@ func TestFindInactiveStreams(t *testing.T) {
 
 		// Same sequence syncHLSActivity runs: snapshot the registered streams,
 		// then select the inactive ones.
-		inactive := findInactiveStreams(getActiveStreamIDs())
-		assert.Equal(t, []string{expiredID}, inactive)
+		registered := getActiveStreamIDs()
+		assert.Subset(t, registered, []string{expiredID, recentID},
+			"the snapshot must include every registered stream, or cleanup skips the ones it drops")
+		assert.Equal(t, []string{expiredID}, findInactiveStreams(registered))
 	})
 }
 
