@@ -42,7 +42,8 @@ const (
 	// default segment length.
 	hlsTestReadySeconds = 6
 
-	// hlsPDTLayout is the layout of the program date time in a rendered playlist.
+	// hlsPDTLayout is the layout of the program date time in a rendered playlist
+	// for a UTC time, which is what the tests feed the muxer.
 	hlsPDTLayout = "2006-01-02T15:04:05.000Z"
 
 	// hlsStatusOKBody is the heartbeat acknowledgement and hlsStatusStoppedBody
