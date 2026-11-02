@@ -900,14 +900,18 @@ func (c *Handler) startAbandoned(pctx context.Context, path, ip string) bool {
 }
 
 // abandonedStartResponse ends a start that was abandoned. A client that is gone
-// gets nothing; one that is still connected after the preflight timed out is told
-// to run the checks again.
+// gets nothing; one that is still connected after the start's own work outlasted
+// the preflight limit gets a 504. The stored prerequisites are still valid, so the
+// answer is not "run the checks again", and it wraps the deadline error, which the
+// error handler does not report to telemetry.
 func (c *Handler) abandonedStartResponse(ctx echo.Context) error {
 	select {
 	case <-ctx.Request().Context().Done():
 		return nil
 	default:
-		return c.prerequisitesNotReady(ctx)
+		return c.HandleErrorWithKey(ctx, fmt.Errorf("start preflight: %w", context.DeadlineExceeded),
+			"The migration start took too long", http.StatusGatewayTimeout,
+			notification.MsgErrMigrationStartFailed, nil)
 	}
 }
 

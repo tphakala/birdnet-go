@@ -204,8 +204,8 @@ func TestStartMigration_PrerequisiteGate(t *testing.T) {
 				seedPassingResult(t, c)
 				c.startPreflightLimit = time.Nanosecond
 			},
-			wantCode:  http.StatusConflict,
-			wantKey:   notification.MsgErrMigrationPrereqNotReady,
+			wantCode:  http.StatusGatewayTimeout,
+			wantKey:   notification.MsgErrMigrationStartFailed,
 			wantState: "idle",
 		},
 		{
