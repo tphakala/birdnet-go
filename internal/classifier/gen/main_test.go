@@ -79,6 +79,14 @@ func TestVariant_LabelsChecksumMustMatchSidecar(t *testing.T) {
 	_, err = fam.variant(entry(""), table, sidecar)
 	require.ErrorContains(t, err, "labels_sha256", "a calibrated entry must name the labels file it was fitted on")
 
+	// A family without calibration keeps accepting an entry that has no labels_sha256.
+	plain := *fam
+	plain.requireScoreCalibration = false
+	noCal := entry("")
+	noCal.ScoreCalibration = nil
+	_, err = plain.variant(noCal, table, sidecar)
+	require.NoError(t, err)
+
 	v, err := fam.variant(entry("aa"), table, sidecar)
 	require.NoError(t, err)
 	assert.Contains(t, render(&v), "ScoreCalibration: &ScoreCalibration{Method: ScoreCalibrationSoftmaxRestLogit, RestLogit: 9.75},")
