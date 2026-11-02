@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -34,13 +35,16 @@ type prerequisiteCheck struct{ id, severity, status string }
 // memoryCheckID is the prerequisite whose status depends on the host's RAM.
 const memoryCheckID = "memory_available"
 
+// sqliteIntegrityCheckID is the prerequisite that is skipped in v2-only mode.
+const sqliteIntegrityCheckID = "sqlite_integrity"
+
 // sqlitePrerequisiteChecks is the exact sequence GetPrerequisites reports for a
 // SQLite setup: the critical checks first, then the warnings.
 var sqlitePrerequisiteChecks = []prerequisiteCheck{
 	{"state_idle", CheckSeverityCritical, CheckStatusPassed},
 	{"disk_space", CheckSeverityCritical, CheckStatusPassed},
 	{"legacy_accessible", CheckSeverityCritical, CheckStatusPassed},
-	{"sqlite_integrity", CheckSeverityCritical, CheckStatusPassed},
+	{sqliteIntegrityCheckID, CheckSeverityCritical, CheckStatusPassed},
 	{"write_permission", CheckSeverityCritical, CheckStatusPassed},
 	{"record_count", CheckSeverityCritical, CheckStatusPassed},
 	{"existing_v2_data", CheckSeverityWarning, CheckStatusSkipped},
@@ -87,7 +91,14 @@ func TestGetPrerequisites_SQLite(t *testing.T) {
 				got = append(got, prerequisiteCheck{check.ID, check.Severity, status})
 				assert.NotEmpty(t, check.Name, "Check %s should have a name", check.ID)
 			}
-			assert.Equal(t, sqlitePrerequisiteChecks, got)
+			want := slices.Clone(sqlitePrerequisiteChecks)
+			if v2Only {
+				// The integrity result is never read in v2-only mode.
+				i := slices.IndexFunc(want, func(c prerequisiteCheck) bool { return c.id == sqliteIntegrityCheckID })
+				require.NotEqual(t, -1, i)
+				want[i].status = CheckStatusSkipped
+			}
+			assert.Equal(t, want, got)
 		})
 	}
 }
