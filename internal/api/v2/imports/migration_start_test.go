@@ -22,15 +22,13 @@ import (
 )
 
 const (
-	startURL           = "/api/v2/system/database/migration/start"
-	prereqURL          = "/api/v2/system/database/migration/prerequisites"
-	startBody          = `{"total_records": 1000}`
-	testSeededRecords  = int64(1234)
-	staleResultAge     = prereqResultMaxAge + time.Minute
-	freshResultAge     = time.Minute
-	prereqTagKey       = "migration_prereq"
-	blockingCheckName  = "Disk Space"
-	blockingCheckParam = "check"
+	startURL          = "/api/v2/system/database/migration/start"
+	startBody         = `{"total_records": 1000}`
+	testSeededRecords = int64(1234)
+	staleResultAge    = prereqResultMaxAge + time.Minute
+	freshResultAge    = time.Minute
+	prereqTagKey      = "migration_prereq"
+	blockingCheckName = "Disk Space"
 )
 
 // reusedCheckIDs returns the IDs of the critical checks a start takes from a stored run.
@@ -240,7 +238,7 @@ func TestStartMigration_PrerequisiteGate(t *testing.T) {
 				resp := decodeError(t, rec)
 				assert.Equal(t, tt.wantKey, resp.ErrorKey)
 				if tt.wantCheck != "" {
-					assert.Equal(t, tt.wantCheck, resp.ErrorParams[blockingCheckParam])
+					assert.Equal(t, tt.wantCheck, resp.ErrorParams[preFlightCheckParam])
 				}
 			}
 			assert.Equal(t, tt.wantState, migrationStateOf(t, sm))

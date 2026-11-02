@@ -94,14 +94,14 @@
 
   /** The idle badge says Ready only when the checks allow the start. */
   let stateBadgeLabel = $derived.by((): string => {
-    if (!isIdle || isPaused || startBlockedReason === null) return stateLabel(migState);
+    if (!isIdle || isPaused || !startBlocked) return stateLabel(migState);
     return checking
       ? t('system.database.migration.status.checking')
       : t('system.database.migration.status.notReady');
   });
 
   let startHelpClass = $derived(
-    startBlockedReason === null
+    !startBlocked
       ? 'sr-only'
       : checking
         ? 'text-[10px] text-center mt-1.5 text-muted'
@@ -334,8 +334,7 @@
       }}
       aria-disabled={startDisabled ? 'true' : undefined}
       aria-describedby={startBlocked ? START_HELP_ID : undefined}
-      class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors aria-disabled:cursor-not-allowed {startBlockedReason ===
-      null
+      class="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg transition-colors aria-disabled:cursor-not-allowed {!startBlocked
         ? 'cursor-pointer bg-[var(--color-success)] text-[var(--color-success-content)] hover:bg-[var(--color-success-hover)] aria-disabled:opacity-60'
         : 'bg-slate-400/50 text-slate-500'}"
     >

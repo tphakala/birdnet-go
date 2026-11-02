@@ -485,8 +485,8 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 		reused[check.ID] = check
 	}
 	checks := c.runCriticalPrerequisiteChecks(pctx, reused)
-	if c.startAbandoned(pctx, path, ip) {
-		return c.abandonedStartResponse(ctx)
+	if pctx.Err() != nil {
+		return c.abandonedStartResponse(ctx, path, ip)
 	}
 	if check := firstBlockingCheck(checks); check != nil {
 		return c.preflightFailed(ctx, check, path, ip)
@@ -502,8 +502,8 @@ func (c *Handler) StartMigration(ctx echo.Context) error {
 			logger.String("path", path), logger.String("ip", ip))
 
 		count, err := c.Repo.CountAll(pctx)
-		if c.startAbandoned(pctx, path, ip) {
-			return c.abandonedStartResponse(ctx)
+		if pctx.Err() != nil {
+			return c.abandonedStartResponse(ctx, path, ip)
 		}
 		if err != nil {
 			c.LogErrorIfEnabled("Failed to count legacy records",
@@ -891,35 +891,26 @@ func (c *Handler) preflightFailed(ctx echo.Context, check *PrerequisiteCheck, pa
 		notification.MsgErrMigrationPreFlight, map[string]any{preFlightCheckParam: check.Name})
 }
 
-// startAbandoned reports whether the start request can no longer be answered
-// or acted on: the client went away, or the bounded preflight context ran out.
-func (c *Handler) startAbandoned(pctx context.Context, path, ip string) bool {
-	if pctx.Err() == nil {
-		return false
-	}
-	c.LogInfoIfEnabled("Client went away or the preflight timed out before the migration started",
-		logger.String("path", path), logger.String("ip", ip))
-	return true
-}
-
 // abandonedStartResponse ends a start that was abandoned. A client that is gone
 // gets nothing; one whose server is stopping gets the shutdown answer; one that is
 // still connected after the start's own work outlasted the preflight limit gets a
 // 504. The stored prerequisites are still valid, so the answer is not "run the
 // checks again", and it wraps the deadline error, which the error handler does not
 // report to telemetry.
-func (c *Handler) abandonedStartResponse(ctx echo.Context) error {
+func (c *Handler) abandonedStartResponse(ctx echo.Context, path, ip string) error {
+	c.LogInfoIfEnabled("Client went away, the server is stopping or the preflight timed out before the migration started",
+		logger.String("path", path), logger.String("ip", ip))
 	select {
 	case <-ctx.Request().Context().Done():
 		return nil
 	default:
-		if err := c.lifecycleContext().Err(); err != nil {
-			return c.rejectInterruptedStart(ctx, err)
-		}
-		return c.HandleErrorWithKey(ctx, fmt.Errorf("start preflight: %w", context.DeadlineExceeded),
-			"The migration start took too long", http.StatusGatewayTimeout,
-			notification.MsgErrMigrationStartFailed, nil)
 	}
+	if err := c.lifecycleContext().Err(); err != nil {
+		return c.rejectInterruptedStart(ctx, err)
+	}
+	return c.HandleErrorWithKey(ctx, fmt.Errorf("start preflight: %w", context.DeadlineExceeded),
+		"The migration start took too long", http.StatusGatewayTimeout,
+		notification.MsgErrMigrationStartFailed, nil)
 }
 
 // criticalPrerequisiteSteps lists the checks that must pass before migration,

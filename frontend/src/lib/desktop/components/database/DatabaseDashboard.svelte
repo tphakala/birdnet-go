@@ -57,6 +57,11 @@
   let queriesPerSecHistory = $state<number[]>([]);
 
   // --- Migration state (reused from DatabaseManagement) ---
+  /** A start refusal rests on the run it was based on; undefined ids mean there was none. */
+  interface ActionRefusal {
+    runId: number | undefined;
+    startedAt: string | undefined;
+  }
   let migrationStatus = $state<ApiState<MigrationStatus>>({
     loading: true,
     error: null,
@@ -65,11 +70,7 @@
   // Failure of the last migration action. Kept apart from migrationStatus.error because
   // status polling clears that on every successful fetch, which would wipe an action
   // failure before it can be read.
-  let actionError = $state<{
-    message: string;
-    /** Set when a start was refused: the run the refusal was based on, undefined for none. */
-    refusal?: { runId: number | undefined; startedAt: string | undefined };
-  } | null>(null);
+  let actionError = $state<{ message: string; refusal?: ActionRefusal } | null>(null);
   let legacyStats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let v2Stats = $state<ApiState<DatabaseStats>>({ loading: true, error: null, data: null });
   let prerequisites = $state<ApiState<PrerequisitesResponse>>({
@@ -271,6 +272,11 @@
     }
   }
 
+  /** Shows a failed migration action: the server message, or the fallback when there is none. */
+  function failAction(e: unknown, fallbackKey: string, refusal?: ActionRefusal): void {
+    actionError = { message: e instanceof ApiError ? e.message : t(fallbackKey), refusal };
+  }
+
   // --- Migration actions (same as DatabaseManagement) ---
   async function startMigration(): Promise<void> {
     showConfirmDialog = false;
@@ -287,25 +293,20 @@
       await fetchMigrationStatus();
     } catch (e) {
       const errorKey = e instanceof ApiError ? e.errorKey : undefined;
-      const noRunReady = errorKey === PREREQUISITES_NOT_READY_KEY;
       const checkRefused = errorKey === PREFLIGHT_FAILED_KEY;
-      actionError = {
-        message:
-          e instanceof ApiError ? e.message : t('system.database.migration.errors.startFailed'),
-        // Only a refusal that rests on the checks goes away when a newer run passes
-        refusal:
-          noRunReady || checkRefused
-            ? { runId: prerequisites.data?.run_id, startedAt: prerequisites.data?.started_at }
-            : undefined,
-      };
+      const rerun = checkRefused || errorKey === PREREQUISITES_NOT_READY_KEY;
+      // Only a refusal that rests on the checks goes away when a newer run passes
+      failAction(
+        e,
+        'system.database.migration.errors.startFailed',
+        rerun
+          ? { runId: prerequisites.data?.run_id, startedAt: prerequisites.data?.started_at }
+          : undefined
+      );
       // A migration that started anyway must show, and a missing or stale run is redone.
       // A refused check forces a new run so the panel shows it instead of the old pass.
       await fetchMigrationStatus();
-      if (noRunReady) {
-        await runPrerequisites(false);
-      } else if (checkRefused) {
-        await runPrerequisites(true);
-      }
+      if (rerun) await runPrerequisites(checkRefused);
     } finally {
       startLoading = false;
     }
@@ -317,10 +318,7 @@
       await api.post('/api/v2/system/database/migration/pause');
       await fetchMigrationStatus();
     } catch (e) {
-      actionError = {
-        message:
-          e instanceof ApiError ? e.message : t('system.database.migration.errors.pauseFailed'),
-      };
+      failAction(e, 'system.database.migration.errors.pauseFailed');
     }
   }
 
@@ -330,10 +328,7 @@
       await api.post('/api/v2/system/database/migration/resume');
       await fetchMigrationStatus();
     } catch (e) {
-      actionError = {
-        message:
-          e instanceof ApiError ? e.message : t('system.database.migration.errors.resumeFailed'),
-      };
+      failAction(e, 'system.database.migration.errors.resumeFailed');
     }
   }
 
@@ -343,12 +338,7 @@
       await api.post('/api/v2/system/database/migration/retry-validation');
       await fetchMigrationStatus();
     } catch (e) {
-      actionError = {
-        message:
-          e instanceof ApiError
-            ? e.message
-            : t('system.database.migration.errors.retryValidationFailed'),
-      };
+      failAction(e, 'system.database.migration.errors.retryValidationFailed');
     }
   }
 
@@ -358,10 +348,7 @@
       await api.post('/api/v2/system/database/migration/cancel');
       await fetchMigrationStatus();
     } catch (e) {
-      actionError = {
-        message:
-          e instanceof ApiError ? e.message : t('system.database.migration.errors.cancelFailed'),
-      };
+      failAction(e, 'system.database.migration.errors.cancelFailed');
     }
   }
 
