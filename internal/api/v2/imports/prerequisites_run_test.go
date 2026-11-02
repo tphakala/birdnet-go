@@ -297,3 +297,32 @@ func TestPrereqRunner_CancelledParent(t *testing.T) {
 		assert.NotEmpty(t, final.Error)
 	})
 }
+
+// TestPrereqRunner_StepIgnoringContext pins that a step which never looks at its
+// context cannot keep the run at running: the run fails when the context ends,
+// and a panic the abandoned step raises later is dropped instead of crashing.
+func TestPrereqRunner_StepIgnoringContext(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r := &prereqRunner{}
+		release := make(chan struct{})
+		step := prereqStep{id: testStepA, name: "A", run: func(context.Context) []PrerequisiteCheck {
+			<-release
+			panic("late failure of an abandoned step")
+		}}
+		parent, cancel := context.WithCancel(t.Context())
+
+		r.start(parent, false, dbFingerprint{}, stepsOf(step), summarizeForTest)
+		synctest.Wait()
+		require.Equal(t, PrereqRunStatusRunning, r.snapshot().Status)
+
+		cancel()
+		synctest.Wait()
+		snap := r.snapshot()
+		assert.Equal(t, PrereqRunStatusFailed, snap.Status)
+		assert.NotEmpty(t, snap.Error)
+
+		close(release)
+		synctest.Wait()
+		assert.Equal(t, PrereqRunStatusFailed, r.snapshot().Status, "a late result must not change the failed run")
+	})
+}

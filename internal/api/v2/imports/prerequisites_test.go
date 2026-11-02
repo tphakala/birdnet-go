@@ -489,6 +489,30 @@ func TestCheckLegacyAccessible_ReturnsWhenContextEnds(t *testing.T) {
 	assert.Equal(t, CheckStatusError, check.Status, check.Message)
 }
 
+// panickingDS is a datastore whose GetLastDetections panics.
+type panickingDS struct {
+	*mocks.MockInterface
+}
+
+func (panickingDS) GetLastDetections(int) ([]datastore.Note, error) {
+	panic("legacy read failed")
+}
+
+// TestCheckLegacyAccessible_PanickingRead pins that a panic in the legacy read
+// becomes a failed check; the read runs in its own goroutine, where nothing
+// else would recover it.
+func TestCheckLegacyAccessible_PanickingRead(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	controller := &Handler{Core: &apicore.Core{DS: panickingDS{MockInterface: mocks.NewMockInterface(t)}}}
+
+	check := controller.checkLegacyAccessible(t.Context())
+
+	assert.Equal(t, CheckStatusFailed, check.Status, check.Message)
+}
+
 // TestCheckMemoryAvailable_Threshold pins the memory_available thresholds: at
 // MinMemoryBytes the check passes, one byte below it warns, and a failed probe
 // is skipped rather than reported as low memory.

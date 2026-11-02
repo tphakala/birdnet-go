@@ -451,6 +451,12 @@ func (c *Handler) checkLegacyAccessible(ctx context.Context) PrerequisiteCheck {
 	// interrupt. The abandoned call finishes on its own and its result is dropped.
 	done := make(chan error, 1)
 	go func() {
+		// Nothing else recovers a panic in this goroutine
+		defer func() {
+			if rec := recover(); rec != nil {
+				done <- fmt.Errorf("read panicked: %v", rec)
+			}
+		}()
 		_, err := c.DS.GetLastDetections(1)
 		done <- err
 	}()

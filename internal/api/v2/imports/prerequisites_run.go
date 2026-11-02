@@ -207,7 +207,7 @@ func (r *prereqRunner) execute(ctx context.Context, cancel context.CancelFunc, g
 		r.stepStartedAt = r.clock()
 		r.mu.Unlock()
 
-		out := step.run(ctx)
+		out := runStep(ctx, step)
 
 		r.mu.Lock()
 		if r.generation != gen {
@@ -249,6 +249,39 @@ func (r *prereqRunner) execute(ctx context.Context, cancel context.CancelFunc, g
 	r.progress = PrerequisitesProgress{}
 	r.stepStartedAt = time.Time{}
 	r.cancelRun = nil
+}
+
+// stepOutcome is what a step goroutine reports back.
+type stepOutcome struct {
+	checks   []PrerequisiteCheck
+	panicked any
+}
+
+// runStep runs step in its own goroutine and waits for its result or for ctx to
+// end, so a step that never looks at ctx cannot keep the run waiting past a
+// cancellation or the run timeout. It returns nil when ctx ended first; the
+// abandoned step finishes on its own and its result is dropped. A panic is
+// recovered in the step goroutine and re-raised here when it arrives in time,
+// so the run's own recover turns it into a failed run.
+func runStep(ctx context.Context, step *prereqStep) []PrerequisiteCheck {
+	done := make(chan stepOutcome, 1)
+	go func() {
+		var out stepOutcome
+		defer func() {
+			out.panicked = recover()
+			done <- out
+		}()
+		out.checks = step.run(ctx)
+	}()
+	select {
+	case out := <-done:
+		if out.panicked != nil {
+			panic(out.panicked)
+		}
+		return out.checks
+	case <-ctx.Done():
+		return nil
+	}
 }
 
 // ctxFailureMessage names why ctx ended.
