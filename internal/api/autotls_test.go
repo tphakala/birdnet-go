@@ -216,7 +216,7 @@ func TestAutoTLS_DualListeners(t *testing.T) {
 	e.GET(healthCheckPath, s.healthCheck)
 
 	// Echo.Shutdown returns early (skipping Server.Shutdown) if TLSServer.Shutdown
-	// returns context.Canceled — which happens when ctx is already done. Use an
+	// returns context.Canceled, which happens when ctx is already done. Use an
 	// independent context so both servers are fully shut down.
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second) //nolint:gocritic // t.Context() is already cancelled in Cleanup
@@ -604,16 +604,19 @@ func mustGetFreePort(t *testing.T) string {
 
 func requirePortOpen(t *testing.T, port string) {
 	t.Helper()
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, 100*time.Millisecond)
-		if err == nil {
-			_ = conn.Close()
-			return
+	const (
+		portOpenTimeout   = 2 * time.Second
+		portProbeInterval = 50 * time.Millisecond
+		portProbeTimeout  = 100 * time.Millisecond
+	)
+	require.Eventually(t, func() bool {
+		conn, err := net.DialTimeout("tcp", "127.0.0.1:"+port, portProbeTimeout)
+		if err != nil {
+			return false
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatalf("port %s did not open within 2s", port)
+		_ = conn.Close()
+		return true
+	}, portOpenTimeout, portProbeInterval, "port %s did not open", port)
 }
 
 // TestServer_healthOrRedirect verifies the AutoTLS / manual-TLS HTTP fallback
