@@ -224,14 +224,12 @@ type fakeIntegrityDS struct {
 	*testDatastoreWrapper
 	result  string
 	latched bool
-	onRead  func()
+	reads   int
 }
 
 // IntegrityResult implements integrityResulter.
 func (f *fakeIntegrityDS) IntegrityResult() (string, bool) {
-	if f.onRead != nil {
-		f.onRead()
-	}
+	f.reads++
 	return f.result, f.latched
 }
 
@@ -303,12 +301,12 @@ func TestCheckSQLiteIntegrity_V2OnlyMode(t *testing.T) {
 	ds := &fakeIntegrityDS{
 		testDatastoreWrapper: &testDatastoreWrapper{},
 		result:               sqliteIntegrityOK,
-		onRead:               func() { t.Error("IntegrityResult read in v2-only mode") },
 	}
 	controller := &Handler{Core: &apicore.Core{DS: ds}}
 
 	check := controller.checkSQLiteIntegrity()
 
+	assert.Zero(t, ds.reads, "IntegrityResult must not be read in v2-only mode")
 	assert.Equal(t, "sqlite_integrity", check.ID)
 	assert.Equal(t, CheckStatusSkipped, check.Status)
 	assert.Equal(t, CheckSeverityCritical, check.Severity)
