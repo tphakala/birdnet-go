@@ -8,11 +8,11 @@
     Square,
     RotateCcw,
     CheckCircle,
-    CircleAlert,
     AlertTriangle,
   } from '@lucide/svelte';
   import { formatBytesCompact, formatNumber } from '$lib/utils/formatters';
   import { t, getLocale } from '$lib/i18n';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { generateId } from '$lib/utils/uuid';
   import { isBlockingCheck } from '$lib/utils/migrationPrerequisites';
   import type { MigrationStatus, DatabaseStats, PrerequisitesResponse } from '$lib/types/migration';
@@ -223,25 +223,16 @@
 
     <!-- STATE: Failed -->
   {:else if isFailed}
-    <div
-      class="flex items-start gap-3 p-4 rounded-lg bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)]"
-      role="alert"
-    >
-      <CircleAlert class="w-5 h-5 text-[var(--color-error)] flex-shrink-0 mt-0.5" />
-      <div class="flex-1">
-        <p class="text-sm font-semibold text-[var(--color-error)]">
-          {t('system.database.migration.status.failed')}
-        </p>
-        <p class="text-xs mt-1 text-muted">
-          {status?.error_message ?? t('system.database.migration.progress.fallbackError')}
-        </p>
-        {#if status && status.dirty_id_count > 0}
-          <p class="text-xs mt-1 font-medium text-[var(--color-warning)]">
-            {t('system.database.migration.progress.dirtyIds', { count: status.dirty_id_count })}
-          </p>
-        {/if}
-      </div>
-    </div>
+    <ErrorAlert title={t('system.database.migration.status.failed')}>
+      <span class="block">
+        {status?.error_message ?? t('system.database.migration.progress.fallbackError')}
+      </span>
+      {#if status && status.dirty_id_count > 0}
+        <span class="block mt-1 font-medium">
+          {t('system.database.migration.progress.dirtyIds', { count: status.dirty_id_count })}
+        </span>
+      {/if}
+    </ErrorAlert>
 
     <!-- Retry / Cancel buttons -->
     <div class="flex gap-2 mt-4">

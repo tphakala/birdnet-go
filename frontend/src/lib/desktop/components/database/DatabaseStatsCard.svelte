@@ -16,6 +16,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import { getCsrfToken } from '$lib/utils/api';
   import { connectionState } from '$lib/stores/connectionState.svelte';
   import { formatBytes, formatNumber } from '$lib/utils/formatters';
@@ -372,13 +373,7 @@
         <div class="h-4 bg-[var(--color-base-200)] rounded animate-pulse w-2/3"></div>
       </div>
     {:else if error}
-      <div
-        class="p-3 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] text-sm"
-        role="alert"
-        aria-live="assertive"
-      >
-        {error}
-      </div>
+      <ErrorAlert message={error} />
     {:else if stats}
       <!-- Stats rows -->
       <div class="flex justify-between text-sm">
@@ -420,13 +415,7 @@
   <!-- Footer -->
   <div class="px-6 py-4 border-t border-[var(--color-base-200)]">
     {#if backupError}
-      <div
-        class="mb-3 p-2 rounded text-xs bg-[var(--color-error)]/10 text-[var(--color-error)]"
-        role="alert"
-        aria-live="assertive"
-      >
-        {backupError}
-      </div>
+      <ErrorAlert className="mb-3" message={backupError} />
     {/if}
 
     {#if stats?.type === 'mysql'}

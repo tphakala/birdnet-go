@@ -27,7 +27,6 @@
   } from '$lib/utils/migrationPrerequisites';
   import { generateId } from '$lib/utils/uuid';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
-  import Button from '$lib/desktop/components/ui/Button.svelte';
   import type {
     PrerequisitesResponse,
     PrerequisiteCheck,
@@ -349,17 +348,13 @@
   {/if}
 
   {#if showError}
-    <ErrorAlert className="mt-3">
-      <span class="block">{errorText}</span>
-      <Button
-        bind:ref={retryButton}
-        className="mt-2"
-        onclick={handleRetry}
-        aria-disabled={isLoading ? 'true' : undefined}
-      >
-        {isLoading ? t('common.retrying') : t('common.retry')}
-      </Button>
-    </ErrorAlert>
+    <ErrorAlert
+      className="mt-3"
+      message={errorText}
+      onRetry={handleRetry}
+      retryBusy={isLoading}
+      bind:retryButton
+    />
   {/if}
 
   <!-- Failed, errored and warning checks are never hidden -->

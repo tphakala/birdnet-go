@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick, untrack } from 'svelte';
+  import { untrack } from 'svelte';
   import { api, ApiError } from '$lib/utils/api';
   import { t } from '$lib/i18n';
   import { loggers } from '$lib/utils/logger';
@@ -30,7 +30,6 @@
   import MigrationConfirmDialog from './MigrationConfirmDialog.svelte';
   import LegacyCleanupCard from './LegacyCleanupCard.svelte';
   import LegacyCleanupConfirmDialog from './LegacyCleanupConfirmDialog.svelte';
-  import Button from '$lib/desktop/components/ui/Button.svelte';
   import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
 
   import type { DatabaseStats } from '$lib/types/migration';
@@ -116,15 +115,17 @@
   // --- Fetch functions ---
   async function fetchOverview(): Promise<void> {
     if (!connectionState.isOnline) {
-      if (!overview) overviewLoading = false;
+      if (!overview) {
+        overviewLoading = false;
+        overviewError = t('connectivity.offline');
+      }
       return;
     }
     try {
       overview = await api.get<DatabaseOverviewResponse>('/api/v2/system/database/overview');
       overviewError = null;
     } catch (e) {
-      overviewError =
-        e instanceof ApiError ? e.message : t('system.database.dashboard.fetchFailed');
+      overviewError = apiErrorMessage(e);
       logger.debug('Failed to fetch database overview', {
         error: e instanceof Error ? e.message : 'Unknown',
       });
@@ -148,36 +149,22 @@
       migrationStatus.error = null;
     } catch (e) {
       if (seq !== migrationStatusSeq) return;
-      migrationStatus.error =
-        e instanceof ApiError ? e.message : t('system.database.migration.errors.fetchFailed');
+      migrationStatus.error = apiErrorMessage(e);
     } finally {
       // A newer request is still in flight and owns the loading flag
       if (seq === migrationStatusSeq) migrationStatus.loading = false;
     }
   }
 
-  // Retry after a failed first status fetch. Marks the button busy and ignores clicks
-  // meanwhile, so a slow or still-failing server does not collect stacked requests.
-  let statusRetrying = $state(false);
-
   // Wrapper around the alerts and views; see the template
   let viewAnchor = $state<HTMLDivElement>();
 
-  async function retryMigrationStatus(): Promise<void> {
-    if (statusRetrying) return;
-    statusRetrying = true;
-    try {
-      await fetchMigrationStatus();
-    } finally {
-      statusRetrying = false;
-    }
-    if (migrationStatus.error) return;
-    // Success removes the alert and with it the focused Retry button, which would
-    // drop focus to the document body
-    await tick();
-    if (!document.activeElement || document.activeElement === document.body) {
-      viewAnchor?.focus();
-    }
+  // Where focus goes when an alert at the top of the page goes away while focused
+  const focusView = () => [viewAnchor];
+
+  /** The server's reason for a failed request, or a generic one when there is none. */
+  function apiErrorMessage(e: unknown): string {
+    return e instanceof ApiError ? e.message : t('errors.api.unknownError');
   }
 
   async function fetchLegacyStats(): Promise<void> {
@@ -185,8 +172,7 @@
       legacyStats.data = await api.get<DatabaseStats>('/api/v2/system/database/stats');
       legacyStats.error = null;
     } catch (e) {
-      legacyStats.error =
-        e instanceof ApiError ? e.message : t('system.database.stats.fetchFailed');
+      legacyStats.error = apiErrorMessage(e);
     } finally {
       legacyStats.loading = false;
     }
@@ -201,7 +187,7 @@
         v2Stats.data = null;
         v2Stats.error = null;
       } else {
-        v2Stats.error = e instanceof ApiError ? e.message : t('system.database.stats.fetchFailed');
+        v2Stats.error = apiErrorMessage(e);
       }
     } finally {
       v2Stats.loading = false;
@@ -274,12 +260,37 @@
       legacyStatus.data = await api.get<LegacyStatus>('/api/v2/system/database/legacy/status');
       legacyStatus.error = null;
     } catch (e) {
-      legacyStatus.error =
-        e instanceof ApiError ? e.message : t('system.database.legacy.fetchFailed');
+      // The alert names the failure; this is the reason under it
+      legacyStatus.error = apiErrorMessage(e);
     } finally {
       legacyStatus.loading = false;
     }
   }
+
+  // A statistic is reported as failed only while it has no data; a failed refresh keeps
+  // showing the last values
+  let statsFailures = $derived(
+    [
+      {
+        id: 'legacy',
+        label: t('system.database.migration.strip.legacy'),
+        error: legacyStats.data ? null : legacyStats.error,
+        refetch: fetchLegacyStats,
+      },
+      {
+        id: 'v2',
+        label: t('system.database.migration.strip.v2Target'),
+        error: v2Stats.data ? null : v2Stats.error,
+        refetch: fetchV2Stats,
+      },
+    ].filter(failure => failure.error !== null)
+  );
+  // Refetches only the statistics that failed
+  const retryStats = () => Promise.all(statsFailures.map(failure => failure.refetch()));
+  // Wrapper of the legacy alerts and the cleanup card at the bottom of the v2-only view
+  let legacyAnchor = $state<HTMLDivElement>();
+  // Falls back to the page wrapper when a failed overview refresh replaced the whole view
+  const focusLegacy = () => [legacyAnchor, viewAnchor];
 
   /** Shows a failed migration action: the server message, or the fallback when there is none. */
   function failAction(e: unknown, fallbackKey: string, refusal?: ActionRefusal): void {
@@ -361,15 +372,18 @@
     }
   }
 
+  // A refused cleanup request; failures of the cleanup itself arrive in the status
+  let cleanupRequestError = $state<string | null>(null);
+
   async function startCleanup(): Promise<void> {
     showCleanupDialog = false;
     cleanupLoading = true;
+    cleanupRequestError = null;
     try {
       await api.post('/api/v2/system/database/legacy/cleanup');
       await Promise.all([fetchMigrationStatus(), fetchLegacyStatus()]);
     } catch (e) {
-      legacyStatus.error =
-        e instanceof ApiError ? e.message : t('system.database.legacy.cleanup.failed');
+      cleanupRequestError = apiErrorMessage(e);
     } finally {
       cleanupLoading = false;
     }
@@ -391,25 +405,27 @@
 
   let backupJobs = $state<BackupJob[]>([]);
   let backupCreating = $state(false);
+  let backupJobsError = $state<string | null>(null);
+  let backupCreateError = $state<string | null>(null);
 
   async function fetchBackupJobs(): Promise<void> {
     try {
       const resp = await api.get<{ jobs: BackupJob[] }>('/api/v2/system/database/backup/jobs');
       backupJobs = resp.jobs ?? [];
-    } catch {
-      logger.debug('Failed to fetch backup jobs');
+      backupJobsError = null;
+    } catch (e) {
+      backupJobsError = apiErrorMessage(e);
     }
   }
 
   async function createBackup(): Promise<void> {
     backupCreating = true;
+    backupCreateError = null;
     try {
       await api.post('/api/v2/system/database/backup/jobs?type=legacy');
       await fetchBackupJobs();
     } catch (e) {
-      logger.debug('Failed to create backup', {
-        error: e instanceof Error ? e.message : 'Unknown',
-      });
+      backupCreateError = apiErrorMessage(e);
     } finally {
       backupCreating = false;
     }
@@ -677,20 +693,18 @@
 >
   <!-- Failed status fetches and failed migration actions land here, whichever view follows -->
   {#if !migrationStatus.loading && migrationStatus.error}
-    <ErrorAlert className="mb-4">
-      <span class="block">{migrationStatus.error}</span>
-      <Button
-        className="mt-2"
-        onclick={retryMigrationStatus}
-        aria-disabled={statusRetrying ? 'true' : undefined}
-      >
-        {statusRetrying ? t('common.retrying') : t('common.retry')}
-      </Button>
-    </ErrorAlert>
+    <ErrorAlert
+      className="mb-4"
+      title={t('system.database.migration.errors.fetchFailed')}
+      message={migrationStatus.error}
+      onRetry={fetchMigrationStatus}
+      focusFallback={focusView}
+    />
   {/if}
   {#if actionError}
     <ErrorAlert
       message={actionError.message}
+      focusFallback={focusView}
       dismissible
       onDismiss={() => {
         actionError = null;
@@ -715,11 +729,12 @@
         </div>
       </div>
     {:else if overviewError || !overview}
-      <div
-        class="bg-[color-mix(in_srgb,var(--color-error)_10%,transparent)] border border-[color-mix(in_srgb,var(--color-error)_20%,transparent)] rounded-xl p-4 text-sm text-[var(--color-error)]"
-      >
-        {overviewError ?? t('system.database.dashboard.fetchFailed')}
-      </div>
+      <ErrorAlert
+        title={t('system.database.dashboard.fetchFailed')}
+        message={overviewError ?? ''}
+        onRetry={fetchOverview}
+        focusFallback={focusView}
+      />
     {:else}
       <div class="space-y-4">
         <!-- Top metric strip -->
@@ -758,17 +773,42 @@
           showEngine={overview.engine === 'mysql'}
         />
 
-        <!-- Legacy cleanup (only if legacy DB exists and cleanup is available) -->
-        {#if legacyStatus.data?.exists && legacyStatus.data?.can_cleanup}
-          <LegacyCleanupCard
-            status={legacyStatus.data}
-            cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
-            cleanupError={migrationStatus.data?.cleanup_error ?? ''}
-            cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
-            isLoading={legacyStatus.loading || cleanupLoading}
-            onDelete={() => (showCleanupDialog = true)}
-          />
-        {/if}
+        <!-- Stays mounted, so focus has somewhere to land when a legacy alert goes away -->
+        <div
+          bind:this={legacyAnchor}
+          tabindex="-1"
+          class="space-y-4 rounded-xl focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+        >
+          {#if legacyStatus.error}
+            <ErrorAlert
+              title={t('system.database.legacy.fetchFailed')}
+              message={legacyStatus.error}
+              onRetry={fetchLegacyStatus}
+              focusFallback={focusLegacy}
+            />
+          {/if}
+          {#if cleanupRequestError}
+            <ErrorAlert
+              title={t('system.database.legacy.cleanup.failed')}
+              message={cleanupRequestError}
+              focusFallback={focusLegacy}
+              dismissible
+              onDismiss={() => (cleanupRequestError = null)}
+            />
+          {/if}
+
+          <!-- Legacy cleanup (only if legacy DB exists and cleanup is available) -->
+          {#if legacyStatus.data?.exists && legacyStatus.data?.can_cleanup}
+            <LegacyCleanupCard
+              status={legacyStatus.data}
+              cleanupState={migrationStatus.data?.cleanup_state ?? 'idle'}
+              cleanupError={migrationStatus.data?.cleanup_error ?? ''}
+              cleanupSpaceReclaimed={migrationStatus.data?.cleanup_space_reclaimed ?? 0}
+              isLoading={legacyStatus.loading || cleanupLoading}
+              onDelete={() => (showCleanupDialog = true)}
+            />
+          {/if}
+        </div>
       </div>
     {/if}
   {:else}
@@ -783,6 +823,20 @@
           v2Stats={v2Stats.data}
           migrationStatus={migrationStatus.data}
         />
+      {/if}
+
+      {#if statsFailures.length > 0}
+        <ErrorAlert
+          title={t('system.database.stats.fetchFailed')}
+          onRetry={retryStats}
+          focusFallback={focusView}
+        >
+          <ul>
+            {#each statsFailures as failure (failure.id)}
+              <li>{failure.label}: {failure.error}</li>
+            {/each}
+          </ul>
+        </ErrorAlert>
       {/if}
 
       <!-- Middle row: details + progress -->
@@ -824,6 +878,10 @@
         onCreateBackup={createBackup}
         isCreating={backupCreating}
         disabled={isActive}
+        loadError={backupJobsError}
+        onRetryLoad={fetchBackupJobs}
+        createError={backupCreateError}
+        onDismissCreateError={() => (backupCreateError = null)}
       />
     </div>
   {/if}

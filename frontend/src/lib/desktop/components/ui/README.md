@@ -501,10 +501,15 @@ Alert component for errors, warnings, and notifications.
 
 ```typescript
 interface Props {
+  title?: string; // bold line above the message or children
   message?: string;
   type?: 'error' | 'warning' | 'info' | 'success';
   dismissible?: boolean;
   onDismiss?: () => void;
+  onRetry?: () => Promise<unknown> | unknown; // shows a Retry button
+  retryBusy?: boolean; // overrides the Retry busy state
+  retryButton?: HTMLButtonElement; // bindable Retry button element
+  focusFallback?: () => Array<HTMLElement | null | undefined>;
   className?: string;
   children?: Snippet;
 }
@@ -514,13 +519,25 @@ interface Props {
 
 ```svelte
 <ErrorAlert type="error" message="An error occurred" dismissible={true} onDismiss={handleDismiss} />
+
+<ErrorAlert
+  title={t('system.database.backup.history.loadFailed')}
+  message={loadError}
+  onRetry={fetchBackups}
+  focusFallback={() => [createButton, panel]}
+/>
 ```
 
 **Features:**
 
-- 4 alert types with icons
-- Dismissible functionality
-- Message or snippet content
+- 4 alert types with icons, `role="alert"`
+- Dismissible functionality; a keyboard dismiss returns focus to where it came from
+- Title plus message or snippet content
+- Retry button from `onRetry`: ignores clicks while the retry runs, stays focusable with
+  `aria-disabled` and reads "Retrying"; a rejected retry is logged
+- `focusFallback`: when the alert is removed while it holds focus (a Retry that succeeded,
+  a mouse dismiss, a refresh that cleared it), focus moves to the first listed element that
+  can take it instead of the page body, without scrolling the page
 
 ---
 

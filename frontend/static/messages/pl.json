@@ -1545,6 +1545,8 @@
           "creating": "Tworzenie...",
           "createBackup": "Utwórz kopię zapasową",
           "noBackups": "Brak kopii zapasowych",
+          "loadFailed": "Nie udało się wczytać historii kopii zapasowych",
+          "createFailed": "Nie udało się uruchomić kopii zapasowej",
           "download": "Pobierz",
           "failed": "Niepowodzenie",
           "columns": {

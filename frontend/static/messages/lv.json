@@ -1545,6 +1545,8 @@
           "creating": "Izveido...",
           "createBackup": "Izveidot dublējumkopiju",
           "noBackups": "Dublējumkopiju vēl nav",
+          "loadFailed": "Neizdevās ielādēt dublējumkopiju vēsturi",
+          "createFailed": "Neizdevās sākt dublējumkopijas izveidi",
           "download": "Lejupielādēt",
           "failed": "Neizdevās",
           "columns": {

@@ -15,6 +15,7 @@
 -->
 <script lang="ts">
   import { t } from '$lib/i18n';
+  import ErrorAlert from '$lib/desktop/components/ui/ErrorAlert.svelte';
   import {
     CheckCircle2,
     XCircle,
@@ -152,14 +153,7 @@
     </div>
   {:else if error}
     <!-- Error state -->
-    <div
-      class="p-4 rounded-lg bg-[var(--color-error)]/10 text-[var(--color-error)] flex items-center gap-3"
-      role="alert"
-      aria-live="assertive"
-    >
-      <AlertCircle class="size-5 shrink-0" />
-      <span class="text-sm">{error}</span>
-    </div>
+    <ErrorAlert message={error} />
   {:else if prerequisites}
     <!-- Checks list -->
     <div class="space-y-2">

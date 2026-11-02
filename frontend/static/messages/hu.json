@@ -1545,6 +1545,8 @@
           "creating": "Létrehozás...",
           "createBackup": "Mentés létrehozása",
           "noBackups": "Még nincs mentés",
+          "loadFailed": "A mentési előzmények nem tölthetők be",
+          "createFailed": "A mentés nem indítható el",
           "download": "Letöltés",
           "failed": "Sikertelen",
           "columns": {

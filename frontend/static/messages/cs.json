@@ -1545,6 +1545,8 @@
           "creating": "Vytváření...",
           "createBackup": "Vytvořit zálohu",
           "noBackups": "Zatím žádné zálohy",
+          "loadFailed": "Historii záloh se nepodařilo načíst",
+          "createFailed": "Zálohu se nepodařilo spustit",
           "download": "Stáhnout",
           "failed": "Selhalo",
           "columns": {

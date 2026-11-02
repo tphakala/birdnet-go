@@ -1545,6 +1545,8 @@
           "creating": "Oppretter...",
           "createBackup": "Opprett sikkerhetskopi",
           "noBackups": "Ingen sikkerhetskopier ennå",
+          "loadFailed": "Sikkerhetskopihistorikken kunne ikke lastes inn",
+          "createFailed": "Sikkerhetskopieringen kunne ikke startes",
           "download": "Last ned",
           "failed": "Mislyktes",
           "columns": {

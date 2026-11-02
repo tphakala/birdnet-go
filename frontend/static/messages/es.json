@@ -1545,6 +1545,8 @@
           "creating": "Creando...",
           "createBackup": "Crear copia de seguridad",
           "noBackups": "Sin copias de seguridad aún",
+          "loadFailed": "No se pudo cargar el historial de copias de seguridad",
+          "createFailed": "No se pudo iniciar la copia de seguridad",
           "download": "Descargar",
           "failed": "Error",
           "columns": {

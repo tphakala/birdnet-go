@@ -1545,6 +1545,8 @@
           "creating": "Création...",
           "createBackup": "Créer une sauvegarde",
           "noBackups": "Aucune sauvegarde",
+          "loadFailed": "Impossible de charger l'historique des sauvegardes",
+          "createFailed": "Impossible de démarrer la sauvegarde",
           "download": "Télécharger",
           "failed": "Échoué",
           "columns": {

@@ -3,10 +3,13 @@ import { screen, waitFor, within } from '@testing-library/svelte';
 import userEvent from '@testing-library/user-event';
 import { t } from '$lib/i18n';
 import type {
+  DatabaseStats,
   MigrationStatus,
   PrerequisiteCheck,
   PrerequisitesResponse,
 } from '$lib/types/migration';
+import type { DatabaseOverviewResponse } from '$lib/types/database';
+import type { LegacyStatus } from '$lib/types/legacy';
 
 const { apiGet, apiPost } = vi.hoisted(() => ({
   apiGet: vi.fn(),
@@ -34,6 +37,12 @@ const STATUS_URL = '/api/v2/system/database/migration/status';
 const PREREQUISITES_URL = '/api/v2/system/database/migration/prerequisites';
 const RUN_URL = '/api/v2/system/database/migration/prerequisites/run';
 const START_URL = '/api/v2/system/database/migration/start';
+const LEGACY_STATS_URL = '/api/v2/system/database/stats';
+const V2_STATS_URL = '/api/v2/system/database/v2/stats';
+const BACKUP_JOBS_URL = '/api/v2/system/database/backup/jobs';
+const OVERVIEW_URL = '/api/v2/system/database/overview';
+const LEGACY_STATUS_URL = '/api/v2/system/database/legacy/status';
+const CLEANUP_URL = '/api/v2/system/database/legacy/cleanup';
 const STATUS_POLL_INTERVAL_MS = 2000;
 const PREREQUISITES_POLL_INTERVAL_MS = 2000;
 const NOT_CONFIGURED = 'Migration is not configured';
@@ -74,6 +83,57 @@ const startablePrerequisites = {
   run_id: 1,
 } satisfies PrerequisitesResponse;
 
+const v2OnlyStatus = { ...idleStatus, is_v2_only_mode: true } satisfies MigrationStatus;
+
+const databaseStats = {
+  type: 'sqlite',
+  location: '/data/birdnet.db',
+  size_bytes: 1024,
+  total_detections: 10,
+  connected: true,
+} satisfies DatabaseStats;
+
+const overview = {
+  engine: 'sqlite',
+  status: 'connected',
+  location: '/data/birdnet.db',
+  size_bytes: 1024,
+  total_detections: 10,
+  total_tables: 1,
+  tables: [],
+  performance: {
+    read_latency_avg_ms: 1,
+    read_latency_max_ms: 2,
+    write_latency_avg_ms: 1,
+    write_latency_max_ms: 2,
+    queries_per_sec: 1,
+    queries_last_hour: 60,
+    slow_query_count: 0,
+  },
+  detection_rate_24h: [],
+} satisfies DatabaseOverviewResponse;
+
+const cleanableLegacy = {
+  exists: true,
+  can_cleanup: true,
+  reason: '',
+  size_bytes: 2048,
+  total_records: 10,
+  last_modified: null,
+  location: '/data/birdnet-legacy.db',
+  tables: [],
+} satisfies LegacyStatus;
+
+/** Endpoints every view reads besides the migration status; tests override them as needed. */
+const healthyRoutes: Record<string, unknown> = {
+  [PREREQUISITES_URL]: startablePrerequisites,
+  [LEGACY_STATS_URL]: databaseStats,
+  [V2_STATS_URL]: databaseStats,
+  [BACKUP_JOBS_URL]: { jobs: [] },
+  [OVERVIEW_URL]: overview,
+  [LEGACY_STATUS_URL]: cleanableLegacy,
+};
+
 function apiError(message: string, status: number): ApiError {
   return new ApiError(message, status, new Response(null, { status }));
 }
@@ -96,17 +156,25 @@ function servePost(prerequisites: unknown): void {
 }
 
 /**
- * Answers each GET by URL; anything not listed fails, like an unconfigured install. The
- * prerequisites run POST answers with the PREREQUISITES_URL route, like the GET does.
+ * Answers a GET by URL from routes on top of healthyRoutes; anything not listed fails, like
+ * an unconfigured install.
+ */
+function answer(url: string, routes: Record<string, unknown> = {}): Promise<unknown> {
+  const route = Object.entries({ ...healthyRoutes, ...routes }).find(([prefix]) =>
+    url.startsWith(prefix)
+  );
+  if (!route) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+  const [, value] = route;
+  return value instanceof Error ? Promise.reject(value) : Promise.resolve(value);
+}
+
+/**
+ * Serves GETs through answer. The prerequisites run POST answers with the
+ * PREREQUISITES_URL route, like the GET does.
  */
 function serve(routes: Record<string, unknown>): void {
-  servePost(routes[PREREQUISITES_URL]);
-  apiGet.mockImplementation((url: string) => {
-    const route = Object.entries(routes).find(([prefix]) => url.startsWith(prefix));
-    if (!route) return Promise.reject(apiError(NOT_CONFIGURED, 503));
-    const [, value] = route;
-    return value instanceof Error ? Promise.reject(value) : Promise.resolve(value);
-  });
+  servePost({ ...healthyRoutes, ...routes }[PREREQUISITES_URL]);
+  apiGet.mockImplementation((url: string) => answer(url, routes));
 }
 
 describe('DatabaseDashboard migration errors', () => {
@@ -125,6 +193,7 @@ describe('DatabaseDashboard migration errors', () => {
     renderTyped(DatabaseDashboard);
 
     const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(t('system.database.migration.errors.fetchFailed'));
     expect(alert).toHaveTextContent(NOT_CONFIGURED);
   });
 
@@ -138,6 +207,7 @@ describe('DatabaseDashboard migration errors', () => {
 
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(t('system.database.migration.errors.fetchFailed'));
+    expect(alert).toHaveTextContent(t('errors.api.unknownError'));
     expect(alert).not.toHaveTextContent('socket closed');
   });
 
@@ -168,7 +238,11 @@ describe('DatabaseDashboard migration errors', () => {
       within(dialog).getByRole('button', { name: t('system.database.migration.actions.start') })
     );
 
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(START_URL));
+    await waitFor(() =>
+      expect(apiPost).toHaveBeenCalledWith(START_URL, {
+        total_records: databaseStats.total_detections,
+      })
+    );
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Another migration is already running');
     // A migration that started anyway must show: the status is fetched again after the failure
@@ -581,8 +655,7 @@ describe('DatabaseDashboard migration errors', () => {
           ? Promise.resolve(idleStatus)
           : Promise.reject(apiError('Status unavailable', 500));
       }
-      if (url.startsWith(PREREQUISITES_URL)) return Promise.resolve(startablePrerequisites);
-      return Promise.reject(apiError(NOT_CONFIGURED, 503));
+      return answer(url, { [PREREQUISITES_URL]: startablePrerequisites });
     });
     servePost(startablePrerequisites);
 
@@ -715,7 +788,7 @@ describe('DatabaseDashboard prerequisites run', () => {
           polls += 1;
           return Promise.resolve(polls === 1 ? runningSnapshot(3) : startablePrerequisites);
         }
-        return Promise.reject(apiError(NOT_CONFIGURED, 503));
+        return answer(url);
       });
       apiPost.mockImplementation((url: string) =>
         url === RUN_URL
@@ -752,7 +825,7 @@ describe('DatabaseDashboard prerequisites run', () => {
     let polls = 0;
     apiGet.mockImplementation((url: string) => {
       if (url === STATUS_URL) return Promise.resolve(idleStatus);
-      if (url !== PREREQUISITES_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+      if (url !== PREREQUISITES_URL) return answer(url);
       const outcome = outcomes[Math.min(polls, outcomes.length - 1)];
       polls += 1;
       return outcome instanceof Error ? Promise.reject(outcome) : Promise.resolve(outcome);
@@ -796,7 +869,7 @@ describe('DatabaseDashboard prerequisites run', () => {
       let resolveOldPoll: (value: unknown) => void = () => {};
       apiGet.mockImplementation((url: string) => {
         if (url === STATUS_URL) return Promise.resolve(idleStatus);
-        if (url !== PREREQUISITES_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+        if (url !== PREREQUISITES_URL) return answer(url);
         polls += 1;
         if (polls === 1) return Promise.reject(apiError('Status unavailable', 500));
         if (polls === 2) {
@@ -843,7 +916,7 @@ describe('DatabaseDashboard prerequisites run', () => {
       let resolveRun: (value: unknown) => void = () => {};
       apiGet.mockImplementation((url: string) => {
         if (url === STATUS_URL) return Promise.resolve(idleStatus);
-        if (url !== PREREQUISITES_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+        if (url !== PREREQUISITES_URL) return answer(url);
         polls += 1;
         return polls === 1
           ? Promise.reject(apiError('Status unavailable', 500))
@@ -935,7 +1008,7 @@ describe('DatabaseDashboard prerequisites run', () => {
           ? Promise.resolve(idleStatus)
           : url === PREREQUISITES_URL
             ? Promise.resolve(idleSnapshot)
-            : Promise.reject(apiError(NOT_CONFIGURED, 503))
+            : answer(url, { [PREREQUISITES_URL]: apiError(NOT_CONFIGURED, 503) })
       );
       let runs = 0;
       apiPost.mockImplementation((url: string) => {
@@ -962,7 +1035,7 @@ describe('DatabaseDashboard prerequisites run', () => {
     apiGet.mockImplementation((url: string) =>
       url === STATUS_URL
         ? Promise.resolve(idleStatus)
-        : Promise.reject(apiError(NOT_CONFIGURED, 503))
+        : answer(url, { [PREREQUISITES_URL]: apiError(NOT_CONFIGURED, 503) })
     );
     let runs = 0;
     apiPost.mockImplementation((url: string) => {
@@ -1053,5 +1126,237 @@ describe('DatabaseDashboard prerequisites run', () => {
     expect(
       screen.getByText(t('system.database.migration.progress.prerequisitesUnavailable'))
     ).toBeInTheDocument();
+  });
+});
+
+describe('DatabaseDashboard data errors', () => {
+  beforeEach(() => {
+    apiGet.mockReset();
+    apiPost.mockReset();
+    actionOutcome = null;
+  });
+
+  it.each([
+    {
+      surface: 'legacy statistics',
+      status: idleStatus,
+      failing: { [LEGACY_STATS_URL]: apiError('Legacy stats lost', 500) },
+      texts: () => [
+        t('system.database.stats.fetchFailed'),
+        t('system.database.migration.strip.legacy'),
+        'Legacy stats lost',
+      ],
+    },
+    {
+      surface: 'v2 statistics',
+      status: idleStatus,
+      failing: { [V2_STATS_URL]: apiError('V2 stats lost', 500) },
+      texts: () => [
+        t('system.database.stats.fetchFailed'),
+        t('system.database.migration.strip.v2Target'),
+        'V2 stats lost',
+      ],
+    },
+    {
+      surface: 'backup history',
+      status: idleStatus,
+      failing: { [BACKUP_JOBS_URL]: apiError('Backups lost', 500) },
+      texts: () => [t('system.database.backup.history.loadFailed'), 'Backups lost'],
+      // A failed load must not claim there are no backups
+      absent: () => [t('system.database.backup.history.noBackups')],
+    },
+    {
+      // Create Backup is disabled while a migration runs, so focus needs another target
+      surface: 'backup history during a migration',
+      status: migratingStatus,
+      failing: { [BACKUP_JOBS_URL]: apiError('Backups lost', 500) },
+      texts: () => [t('system.database.backup.history.loadFailed'), 'Backups lost'],
+    },
+    {
+      surface: 'legacy status in the v2-only view',
+      status: v2OnlyStatus,
+      failing: { [LEGACY_STATUS_URL]: apiError('Legacy lost', 500) },
+      texts: () => [t('system.database.legacy.fetchFailed'), 'Legacy lost'],
+      // Focus stays by the cleanup card at the bottom, not on the whole page
+      focusAway: () => [t('system.database.dashboard.tables.title')],
+    },
+  ])('shows why the $surface failed and recovers on Retry', async row => {
+    const { status, failing, texts } = row;
+    const absent = row.absent?.() ?? [];
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: status, ...failing });
+
+    renderTyped(DatabaseDashboard);
+
+    const alert = await screen.findByRole('alert');
+    for (const text of texts()) expect(alert).toHaveTextContent(text);
+    for (const text of absent) expect(screen.queryByText(text)).not.toBeInTheDocument();
+
+    serve({ [STATUS_URL]: status });
+    await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    // The focused Retry button is gone; focus must not fall back to the page body
+    expect(document.activeElement).not.toBe(document.body);
+    for (const text of row.focusAway?.() ?? []) {
+      expect(document.activeElement).not.toHaveTextContent(text);
+    }
+  });
+
+  it('refetches only the statistic that failed on Retry', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: idleStatus, [V2_STATS_URL]: apiError('V2 stats lost', 500) });
+
+    renderTyped(DatabaseDashboard);
+
+    const alert = await screen.findByRole('alert');
+    const requests = (url: string) => apiGet.mock.calls.filter(([called]) => called === url).length;
+    const legacyBefore = requests(LEGACY_STATS_URL);
+    const v2Before = requests(V2_STATS_URL);
+
+    serve({ [STATUS_URL]: idleStatus });
+    await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+    expect(requests(V2_STATS_URL)).toBe(v2Before + 1);
+    expect(requests(LEGACY_STATS_URL)).toBe(legacyBefore);
+  });
+
+  it.each([
+    {
+      situation: 'there is no v2 database',
+      first: apiError('Not found', 404),
+      polled: apiError('Not found', 404),
+    },
+    {
+      situation: 'a refresh fails while statistics are shown',
+      first: databaseStats,
+      polled: apiError('V2 refresh lost', 500),
+    },
+  ])('shows no statistics alert when $situation', async ({ first, polled }) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      serve({ [STATUS_URL]: migratingStatus, [V2_STATS_URL]: first });
+
+      renderTyped(DatabaseDashboard);
+      await screen.findByRole('button', { name: t('system.database.migration.actions.pause') });
+
+      // The active-migration poll refetches the v2 statistics
+      serve({ [STATUS_URL]: migratingStatus, [V2_STATS_URL]: polled });
+      const v2Requests = () => apiGet.mock.calls.filter(([url]) => url === V2_STATS_URL).length;
+      const before = v2Requests();
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS * 2);
+
+      expect(v2Requests()).toBeGreaterThan(before);
+      expect(screen.queryByText(t('system.database.stats.fetchFailed'))).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets the user dismiss a failed backup request', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: idleStatus });
+    rejectActions(apiError('Disk full', 507));
+
+    renderTyped(DatabaseDashboard);
+
+    await user.click(
+      await screen.findByRole('button', {
+        name: t('system.database.backup.history.createBackup'),
+      })
+    );
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(t('system.database.backup.history.createFailed'));
+    expect(alert).toHaveTextContent('Disk full');
+
+    await user.click(within(alert).getByRole('button', { name: t('common.aria.dismissAlert') }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.activeElement).not.toBe(document.body);
+
+    // A new attempt clears an earlier refusal
+    const create = screen.getByRole('button', {
+      name: t('system.database.backup.history.createBackup'),
+    });
+    await user.click(create);
+    await screen.findByRole('alert');
+    actionOutcome = null;
+    await user.click(create);
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+
+  it('shows why deleting the legacy database failed and clears it on the next attempt', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: v2OnlyStatus });
+    rejectActions(apiError('Legacy database is still in use', 409));
+
+    renderTyped(DatabaseDashboard);
+
+    const confirmDelete = async () => {
+      await user.click(
+        await screen.findByRole('button', {
+          name: t('system.database.legacy.cleanup.deleteButton'),
+        })
+      );
+      const dialog = await screen.findByRole('dialog', {
+        name: t('system.database.legacy.cleanup.confirmTitle'),
+      });
+      await user.click(within(dialog).getByRole('checkbox'));
+      await user.click(
+        within(dialog).getByRole('button', {
+          name: t('system.database.legacy.cleanup.deleteConfirmButton'),
+        })
+      );
+    };
+
+    await confirmDelete();
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(CLEANUP_URL));
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(t('system.database.legacy.cleanup.failed'));
+    expect(alert).toHaveTextContent('Legacy database is still in use');
+
+    await user.click(within(alert).getByRole('button', { name: t('common.aria.dismissAlert') }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(document.activeElement).not.toBe(document.body);
+
+    // A refusal left on screen goes away when the next attempt starts
+    await confirmDelete();
+    await screen.findByRole('alert');
+    actionOutcome = null;
+    await confirmDelete();
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
+  });
+  it('says the connection is lost when the v2-only overview cannot load because the browser is offline', async () => {
+    connectionState.isOnline = false;
+    try {
+      serve({ [STATUS_URL]: v2OnlyStatus });
+
+      renderTyped(DatabaseDashboard);
+
+      const alert = await screen.findByRole('alert');
+      expect(alert).toHaveTextContent(t('system.database.dashboard.fetchFailed'));
+      expect(alert).toHaveTextContent(t('connectivity.offline'));
+    } finally {
+      connectionState.isOnline = true;
+    }
+  });
+
+  it('shows why the v2-only overview failed and reloads it with Retry', async () => {
+    const user = userEvent.setup();
+    serve({ [STATUS_URL]: v2OnlyStatus, [OVERVIEW_URL]: apiError('Overview unavailable', 500) });
+
+    renderTyped(DatabaseDashboard);
+
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(t('system.database.dashboard.fetchFailed'));
+    expect(alert).toHaveTextContent('Overview unavailable');
+
+    serve({ [STATUS_URL]: v2OnlyStatus });
+    await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
+
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   });
 });
