@@ -117,7 +117,8 @@ function focusFallback(fallback: FocusFallback): void {
   if (document.activeElement && document.activeElement !== document.body) return;
   for (const el of fallback()) {
     if (!el?.isConnected) continue;
-    el.focus();
+    // The alert may go away long after the user stopped looking at it, so do not scroll
+    el.focus({ preventScroll: true });
     if (document.activeElement === el) return;
   }
 }

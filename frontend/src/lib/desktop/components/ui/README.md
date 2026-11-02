@@ -537,7 +537,7 @@ interface Props {
   `aria-disabled` and reads "Retrying"; a rejected retry is logged
 - `focusFallback`: when the alert is removed while it holds focus (a Retry that succeeded,
   a mouse dismiss, a refresh that cleared it), focus moves to the first listed element that
-  can take it instead of the page body
+  can take it instead of the page body, without scrolling the page
 
 ---
 

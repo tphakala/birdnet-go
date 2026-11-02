@@ -389,7 +389,31 @@ describe('ErrorAlert', () => {
       }
     });
 
-    it('leaves focus alone when the alert did not hold it', async () => {
+    it('moves focus without scrolling the page', async () => {
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+      const focus = vi.spyOn(outside, 'focus');
+
+      try {
+        // The alert can go away long after the user stopped looking at it, for example when a
+        // poll clears it, so the move must not drag the page back to the fallback
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [outside],
+        });
+        screen.getByRole('button', { name: 'common.retry' }).focus();
+
+        unmount();
+
+        await waitFor(() => expect(focus).toHaveBeenCalledWith({ preventScroll: true }));
+      } finally {
+        focus.mockRestore();
+        outside.remove();
+      }
+    });
+
+    it('does not pull focus back once it moved away from the alert and left for the page body', async () => {
       const outside = document.createElement('button');
       const elsewhere = document.createElement('button');
       document.body.append(outside, elsewhere);
@@ -400,15 +424,43 @@ describe('ErrorAlert', () => {
           onRetry: () => {},
           focusFallback: () => [outside],
         });
+        screen.getByRole('button', { name: 'common.retry' }).focus();
+        // Focus moves to another element, then to nothing: only the alert losing its hold on
+        // focus keeps the fallback from firing for the empty page body
         elsewhere.focus();
+        elsewhere.blur();
 
         unmount();
         await Promise.resolve();
+        await Promise.resolve();
 
-        expect(document.activeElement).toBe(elsewhere);
+        expect(document.activeElement).not.toBe(outside);
       } finally {
         outside.remove();
         elsewhere.remove();
+      }
+    });
+
+    it('does not move focus when the alert never held it and focus is on the page body', async () => {
+      const outside = document.createElement('button');
+      document.body.appendChild(outside);
+
+      try {
+        const { unmount } = renderErrorAlert({
+          message: 'Offline',
+          onRetry: () => {},
+          focusFallback: () => [outside],
+        });
+        // The alert was never focused or pressed, and nothing has focus
+        if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+
+        unmount();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(document.activeElement).not.toBe(outside);
+      } finally {
+        outside.remove();
       }
     });
   });
