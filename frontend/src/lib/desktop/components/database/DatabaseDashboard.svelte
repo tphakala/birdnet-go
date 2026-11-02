@@ -231,6 +231,8 @@
   }
 
   async function pollPrerequisites(): Promise<void> {
+    // A run request in flight owns the snapshot; a poll started now could not be ordered after it
+    if (prerequisites.loading) return;
     const seq = prerequisitesRequestSeq;
     try {
       const snapshot = await api.get<PrerequisitesResponse>(

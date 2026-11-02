@@ -481,6 +481,48 @@ describe('DatabaseDashboard prerequisites run', () => {
     }
   });
 
+  it('sends no poll while a run request is in flight', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let polls = 0;
+      let resolveRun: (value: unknown) => void = () => {};
+      apiGet.mockImplementation((url: string) => {
+        if (url === STATUS_URL) return Promise.resolve(idleStatus);
+        if (url !== PREREQUISITES_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+        polls += 1;
+        return polls === 1
+          ? Promise.reject(apiError('Status unavailable', 500))
+          : Promise.resolve(runningSnapshot(2));
+      });
+      // The mount-time run answers at once; only the forced run from Retry is held
+      apiPost.mockImplementation((url: string, body?: { force?: boolean }) => {
+        if (url !== RUN_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+        if (!body?.force) return Promise.resolve(runningSnapshot(0));
+        return new Promise(resolve => {
+          resolveRun = resolve;
+        });
+      });
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+
+      renderTyped(DatabaseDashboard);
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      const alert = await screen.findByRole('alert');
+      await user.click(within(alert).getByRole('button', { name: t('common.retry') }));
+      await waitFor(() => expect(apiPost).toHaveBeenCalledWith(RUN_URL, { force: true }));
+
+      const pollsBefore = polls;
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS * 2);
+      expect(polls).toBe(pollsBefore);
+
+      // Once the run answers, polling follows the run again
+      resolveRun(runningSnapshot(0));
+      await vi.advanceTimersByTimeAsync(PREREQUISITES_POLL_INTERVAL_MS);
+      expect(polls).toBeGreaterThan(pollsBefore);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('skips polls while offline and resumes when back online', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
