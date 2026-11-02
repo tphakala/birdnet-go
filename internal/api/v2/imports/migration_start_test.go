@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -167,7 +168,7 @@ func TestStartMigration_PrerequisiteGate(t *testing.T) {
 			prepare: func(t *testing.T, c *Handler) {
 				t.Helper()
 				seedPassingResult(t, c)
-				c.Settings.Load().Output.SQLite.Path = t.TempDir() + "/other.db"
+				c.Settings.Load().Output.SQLite.Path = filepath.Join(t.TempDir(), "other.db")
 			},
 			wantCode:  http.StatusConflict,
 			wantKey:   notification.MsgErrMigrationPrereqNotReady,
