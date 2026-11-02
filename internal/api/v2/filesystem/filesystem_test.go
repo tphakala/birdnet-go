@@ -82,6 +82,20 @@ func symlinkOrSkip(t *testing.T, target, link string) string {
 	return link
 }
 
+// TestRegisterRoutesGatesEveryRoute tests that the browse route is registered and
+// sits behind the auth middleware. The other tests inject a passthrough
+// middleware to reach the handler, so none of them would notice the gate being
+// dropped.
+func TestRegisterRoutesGatesEveryRoute(t *testing.T) {
+	t.Parallel()
+
+	core := apitest.NewCore(t, apitest.WithoutSettingsPublish())
+
+	apitest.AssertRoutesRequireAuth(t, core, New(core).RegisterRoutes, []string{
+		"GET /api/v2/filesystem/browse",
+	})
+}
+
 // TestBrowseFileSystem_BasicDirectory tests browsing a directory with files and subdirectories.
 func TestBrowseFileSystem_BasicDirectory(t *testing.T) {
 	t.Parallel()
