@@ -387,6 +387,55 @@ func TestCheckStateIdle_Idle(t *testing.T) {
 	assert.Contains(t, check.Message, "IDLE")
 }
 
+// checkStateIdleSwapChecks is how many times checkStateIdle runs in
+// TestCheckStateIdle_ConcurrentStateManagerSwap. The writer swaps the state
+// manager for as long as those checks run, so its swap count is not bounded.
+const checkStateIdleSwapChecks = 200
+
+// TestCheckStateIdle_ConcurrentStateManagerSwap pins that checkStateIdle reads
+// the process-wide state manager once, under migrationMu: while another
+// goroutine keeps swapping it between nil and a real manager, the check never
+// dereferences a nil manager and never races the writer. It reports either an
+// idle state or the missing-manager error, whichever manager it saw.
+// Note: Not parallel due to global state modification.
+func TestCheckStateIdle_ConcurrentStateManagerSwap(t *testing.T) {
+	t.Attr("component", "migration")
+	t.Attr("type", "unit")
+	t.Attr("feature", "prerequisites")
+
+	_, controller, sm := setupPrerequisitesTestEnvironment(t)
+
+	swapOnce := func() {
+		SetMigrationDependencies(nil, nil)
+		SetMigrationDependencies(sm, nil)
+	}
+	stop := make(chan struct{})
+	started := make(chan struct{})
+	var swapper sync.WaitGroup
+	swapper.Go(func() {
+		swapOnce()
+		close(started)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				swapOnce()
+			}
+		}
+	})
+	defer func() {
+		close(stop)
+		swapper.Wait()
+	}()
+	<-started
+
+	for range checkStateIdleSwapChecks {
+		check := controller.checkStateIdle()
+		assert.Contains(t, []string{CheckStatusPassed, CheckStatusError}, check.Status)
+	}
+}
+
 // TestCheckStateIdle_NotIdle tests checkStateIdle when migration is in a non-IDLE state.
 func TestCheckStateIdle_NotIdle(t *testing.T) {
 	t.Attr("component", "migration")

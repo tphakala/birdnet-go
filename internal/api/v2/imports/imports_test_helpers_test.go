@@ -171,12 +171,13 @@ func testCore(t *testing.T) *apicore.Core {
 }
 
 // setMigrationGlobal sets one process-wide migration global for one test and
-// restores its previous value when the test ends. It is the only way tests
-// write stateManager, migrationWorker, migrationWorkerCancel and isV2OnlyMode
-// (through the wrappers below). It fails a parallel caller, because the
-// globals are process-wide, and it writes under migrationMu, the lock
-// production reads take. Calling it twice in one test is fine: the cleanups
-// run in reverse order.
+// restores its previous value when the test ends. It is the only way a test
+// sets up stateManager, migrationWorker, migrationWorkerCancel and isV2OnlyMode
+// (through the wrappers below); a test that races a writer against a reader
+// goes through the locked production setters instead. It fails a parallel
+// caller, because the globals are process-wide, and it writes under
+// migrationMu, the lock production reads take. Calling it twice in one test is
+// fine: the cleanups run in reverse order.
 func setMigrationGlobal[T any](t *testing.T, global *T, value T) {
 	t.Helper()
 	t.Setenv(migrationGlobalsGuardEnvKey, migrationGlobalsGuardEnvValue)
