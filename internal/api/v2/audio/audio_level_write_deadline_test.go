@@ -95,7 +95,9 @@ func TestSendAudioLevelUpdateSetsWriteDeadline(t *testing.T) {
 		for range deadlineTestUpdates {
 			writer.deadline = time.Time{}
 			writer.wroteBeforeDeadline = false
+			writer.Body.Reset()
 			require.NoError(t, controller.sendAudioLevelUpdate(ctx, levels))
+			assert.Contains(t, writer.Body.String(), "audio-level", "Each update should write its SSE message")
 			assertDeadlineSetBeforeWrite(t, writer)
 			time.Sleep(deadlineTestClockStep)
 		}
