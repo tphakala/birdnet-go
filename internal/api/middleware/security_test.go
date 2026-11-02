@@ -271,24 +271,27 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 		assert.Empty(t, rec.Header().Get(echo.HeaderAccessControlAllowCredentials))
 	})
 
-	// The exact CORS answers a credentialed GET from another origin receives
-	// for each kind of origin list. Credentials are allowed only for an explicit
-	// origin list without a wildcard.
+	// The exact CORS answers a GET from another origin receives for each kind
+	// of origin list. Credentials are allowed only when requested and only for a
+	// non-empty list of literal origins.
 	const requestOrigin = "https://other.example.com"
 	originRows := []struct {
-		name            string
-		allowedOrigins  []string
-		wantAllowOrigin string
-		wantCredentials string
+		name             string
+		allowedOrigins   []string
+		allowCredentials bool
+		wantAllowOrigin  string
+		wantCredentials  string
 	}{
-		{"origin outside an explicit list gets no allow-origin header", []string{"https://trusted.example.com"}, "", ""},
-		{"wildcard-only list answers wildcard without credentials", []string{"*"}, "*", ""},
-		{"wildcard among explicit origins answers wildcard without credentials", []string{"https://trusted.example.com", "*"}, "*", ""},
-		{"empty list answers wildcard without credentials", nil, "*", ""},
-		{"explicit origin list allows credentials for a listed origin", []string{requestOrigin}, requestOrigin, "true"},
-		{"subdomain pattern entry answers without credentials", []string{"https://*.example.com"}, requestOrigin, ""},
-		{"scheme-only pattern entry answers without credentials", []string{"https://*"}, requestOrigin, ""},
-		{"single-character pattern entry answers without credentials", []string{"https://other.example.co?"}, requestOrigin, ""},
+		{"origin outside an explicit list gets no allow-origin header", []string{"https://trusted.example.com"}, true, "", ""},
+		{"wildcard-only list answers wildcard without credentials", []string{"*"}, true, "*", ""},
+		{"wildcard among explicit origins answers wildcard without credentials", []string{"https://trusted.example.com", "*"}, true, "*", ""},
+		{"empty list answers wildcard without credentials", nil, true, "*", ""},
+		{"explicit origin list allows credentials for a listed origin", []string{requestOrigin}, true, requestOrigin, "true"},
+		{"explicit origin list allows credentials for a listed origin among several", []string{"https://trusted.example.com", requestOrigin}, true, requestOrigin, "true"},
+		{"explicit origin list without credentials requested answers without them", []string{requestOrigin}, false, requestOrigin, ""},
+		{"subdomain pattern entry answers without credentials", []string{"https://*.example.com"}, true, requestOrigin, ""},
+		{"scheme-only pattern entry answers without credentials", []string{"https://*"}, true, requestOrigin, ""},
+		{"single-character pattern entry answers without credentials", []string{"https://other.example.co?"}, true, requestOrigin, ""},
 	}
 	for _, tt := range originRows {
 		t.Run(tt.name, func(t *testing.T) {
@@ -296,7 +299,7 @@ func TestNewCORS_WildcardWithCredentials(t *testing.T) {
 
 			corsMiddleware := NewCORS(&SecurityConfig{
 				AllowedOrigins:   tt.allowedOrigins,
-				AllowCredentials: true,
+				AllowCredentials: tt.allowCredentials,
 			})
 			c, rec := newCORSTestContext(t, http.MethodGet, "/api/v2/detections", requestOrigin)
 			handler := corsMiddleware(func(c echo.Context) error {
