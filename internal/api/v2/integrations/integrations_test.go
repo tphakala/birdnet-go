@@ -25,6 +25,9 @@ import (
 // Test constants for integration tests
 const testBirdNetName = "TestBirdNet"
 
+// testMQTTTopic is the topic the MQTT status tests configure and expect echoed back.
+const testMQTTTopic = "birdnet/detections"
+
 // connectionHandlerCase is one row of runIntegrationConnectionHandlerTest.
 // Every request is sent with an already-cancelled context, so a valid
 // configuration reaches the streaming entry without any network stage running.
@@ -103,13 +106,13 @@ func TestGetMQTTStatus(t *testing.T) {
 			name:           "MQTT Disabled",
 			mqttEnabled:    false,
 			mqttBroker:     refusingBroker,
-			mqttTopic:      "birdnet/detections",
+			mqttTopic:      testMQTTTopic,
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT is disabled")
 				assert.Equal(t, refusingBroker, result["broker"], "Broker should match configuration")
-				assert.Equal(t, "birdnet/detections", result["topic"], "Topic should match configuration")
+				assert.Equal(t, testMQTTTopic, result["topic"], "Topic should match configuration")
 				_, hasLastError := result["last_error"]
 				assert.False(t, hasLastError, "There should be no error when MQTT is disabled")
 			},
@@ -118,11 +121,13 @@ func TestGetMQTTStatus(t *testing.T) {
 			name:           "MQTT Enabled but Not Connected",
 			mqttEnabled:    true,
 			mqttBroker:     refusingBroker,
-			mqttTopic:      "birdnet/detections",
+			mqttTopic:      testMQTTTopic,
 			expectedStatus: http.StatusOK,
 			validateResult: func(t *testing.T, result map[string]any) {
 				t.Helper()
 				assert.False(t, result["connected"].(bool), "Connected should be false when MQTT connection fails")
+				assert.Equal(t, refusingBroker, result["broker"], "Broker should match configuration")
+				assert.Equal(t, testMQTTTopic, result["topic"], "Topic should match configuration")
 				assert.Contains(t, result["last_error"], "error:connection:mqtt_broker", "Error should mention connection failure")
 			},
 		},
