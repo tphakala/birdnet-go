@@ -182,8 +182,10 @@ func TestMetricsStreamRouteRateLimit(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, request(metricsRateTestStreamPath, metricsRateTestOtherIP).Code,
 			"another IP has its own bucket")
-		assert.Equal(t, http.StatusOK, request(metricsRateTestHistoryPath, metricsRateTestClientIP).Code,
-			"the history endpoint is not limited")
+		for i := range metricsRateTestBurst + metricsRateTestOverBurst {
+			assert.Equal(t, http.StatusOK, request(metricsRateTestHistoryPath, metricsRateTestClientIP).Code,
+				"history request %d is not limited, past the stream burst", i+1)
+		}
 
 		time.Sleep(metricsRateTestRefillInterval)
 		assert.Equal(t, http.StatusOK, request(metricsRateTestStreamPath, metricsRateTestClientIP).Code,
