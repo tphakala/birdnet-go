@@ -133,17 +133,26 @@
     }
   }
 
+  /**
+   * Counts the status requests. A response that arrives after a newer request was sent describes
+   * an older state; applying it could fake a change of migration state, which reruns the checks.
+   */
+  let migrationStatusSeq = 0;
+
   async function fetchMigrationStatus(): Promise<void> {
+    const seq = ++migrationStatusSeq;
     try {
-      migrationStatus.data = await api.get<MigrationStatus>(
-        '/api/v2/system/database/migration/status'
-      );
+      const status = await api.get<MigrationStatus>('/api/v2/system/database/migration/status');
+      if (seq !== migrationStatusSeq) return;
+      migrationStatus.data = status;
       migrationStatus.error = null;
     } catch (e) {
+      if (seq !== migrationStatusSeq) return;
       migrationStatus.error =
         e instanceof ApiError ? e.message : t('system.database.migration.errors.fetchFailed');
     } finally {
-      migrationStatus.loading = false;
+      // A newer request is still in flight and owns the loading flag
+      if (seq === migrationStatusSeq) migrationStatus.loading = false;
     }
   }
 

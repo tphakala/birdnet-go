@@ -446,6 +446,52 @@ describe('DatabaseDashboard migration errors', () => {
     expect(screen.getByText('Failed to initialize migration')).toBeInTheDocument();
   });
 
+  it('ignores an older status response that arrives after a newer one, so no state change is faked', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+      let statusCalls = 0;
+      let resolveOldPoll: (value: unknown) => void = () => {};
+      apiGet.mockImplementation((url: string) => {
+        if (url === PREREQUISITES_URL) return Promise.resolve(startablePrerequisites);
+        if (url !== STATUS_URL) return Promise.reject(apiError(NOT_CONFIGURED, 503));
+        statusCalls += 1;
+        // Call 1 loads the page, call 2 is the poll that stays pending, call 3 is the refetch
+        // after Pause and answers first
+        if (statusCalls === 2) {
+          return new Promise(resolve => {
+            resolveOldPoll = resolve;
+          });
+        }
+        return Promise.resolve(migratingStatus);
+      });
+      servePost(startablePrerequisites);
+      const runPosts = () => apiPost.mock.calls.filter(([url]) => url === RUN_URL).length;
+
+      renderTyped(DatabaseDashboard);
+      const pause = await screen.findByRole('button', {
+        name: t('system.database.migration.actions.pause'),
+      });
+      await vi.advanceTimersByTimeAsync(STATUS_POLL_INTERVAL_MS);
+      await waitFor(() => expect(statusCalls).toBe(2));
+      const before = runPosts();
+
+      await user.click(pause);
+      await waitFor(() => expect(statusCalls).toBeGreaterThanOrEqual(3));
+
+      // The older poll answers last, with a state the newer answer already moved past
+      resolveOldPoll(idleStatus);
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(runPosts()).toBe(before);
+      expect(
+        screen.getByRole('button', { name: t('system.database.migration.actions.pause') })
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('runs the prerequisites again when the migration state returns to idle', async () => {
     const user = userEvent.setup();
     const pausedStatus = {

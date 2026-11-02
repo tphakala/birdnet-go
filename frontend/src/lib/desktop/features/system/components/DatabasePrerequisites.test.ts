@@ -678,6 +678,27 @@ describe('DatabasePrerequisites', () => {
       await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(allPassed));
     });
 
+    it('drops the result text of an earlier run when another run completes without being seen running', async () => {
+      const completed = (runId: number): PrerequisitesResponse => ({
+        ...response([check('ok', 'passed')], 0, 0),
+        all_passed: true,
+        can_start_migration: true,
+        run_id: runId,
+      });
+      const view = createComponentTestFactory(DatabasePrerequisites, {
+        prerequisites: { ...runningSnapshot, run_id: 1 },
+      }).render({ props: { onRefresh: async () => {} } });
+      const allPassed = t('system.database.migration.prerequisites.allPassed');
+
+      await view.rerender({ prerequisites: completed(1) });
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(allPassed));
+
+      // Another run arrives already completed (a reuse, a run another tab started): its result
+      // is not read out here, and the text of the earlier run must not stay for it
+      await view.rerender({ prerequisites: completed(2) });
+      await waitFor(() => expect(screen.getByRole('status')).not.toHaveTextContent(allPassed));
+    });
+
     it('shows the run failure with its error and a Retry that calls onRefresh', async () => {
       let calls = 0;
       renderTyped(DatabasePrerequisites, {

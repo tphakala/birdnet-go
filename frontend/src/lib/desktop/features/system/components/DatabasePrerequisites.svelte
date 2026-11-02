@@ -174,7 +174,8 @@
   /**
    * The announcement follows the snapshot. While a run is in progress, whoever started it,
    * the result text of an earlier run is dropped; a run seen running is read out once it
-   * completes. A result that was never seen running (a mount, a reuse) is not read out here.
+   * completes. A result that was never seen running (a mount, a reuse) is not read out here,
+   * and it does not leave the text of an earlier run standing for it.
    */
   let watchedRunId: number | undefined;
   $effect(() => {
@@ -183,9 +184,13 @@
     if (status === 'running') {
       watchedRunId = runId;
       announcement = '';
-    } else if (status === 'completed' && runId === watchedRunId) {
-      watchedRunId = undefined;
-      announcement = resultAnnouncement();
+    } else if (status === 'completed') {
+      if (runId === watchedRunId) {
+        watchedRunId = undefined;
+        announcement = resultAnnouncement();
+      } else {
+        announcement = '';
+      }
     }
   });
 
