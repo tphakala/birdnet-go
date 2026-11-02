@@ -491,6 +491,14 @@ describe('DatabasePrerequisites', () => {
       expect(screen.getByText('Check disk_warn:')).toBeInTheDocument();
     });
 
+    it('renders one running indicator while a request loads over a running snapshot', () => {
+      const { container } = renderTyped(DatabasePrerequisites, {
+        props: { prerequisites: runningSnapshot, isLoading: true, onRefresh: async () => {} },
+      });
+
+      expect(container.querySelectorAll('svg.animate-spin')).toHaveLength(1);
+    });
+
     it('blocks Re-run with the running text as its reason and ignores clicks', async () => {
       let calls = 0;
       renderTyped(DatabasePrerequisites, {
@@ -520,7 +528,11 @@ describe('DatabasePrerequisites', () => {
       }).render({ props: { onRefresh: async () => {} } });
 
       await view.rerender({
-        prerequisites: { ...response([check('ok', 'passed')], 0, 0), all_passed: true },
+        prerequisites: {
+          ...response([check('ok', 'passed')], 0, 0),
+          all_passed: true,
+          can_start_migration: true,
+        },
       });
 
       await waitFor(() =>
