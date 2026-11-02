@@ -34,6 +34,10 @@ const (
 	// hlsTestRemoteAddr is the address httptest gives every request.
 	hlsTestRemoteAddr = "192.0.2.1"
 
+	// hlsTestFallbackClientID is the client id generateClientID gives a request
+	// without a session or a recognised user agent.
+	hlsTestFallbackClientID = hlsTestRemoteAddr + "-HLSPlayer"
+
 	// hlsTestTarget is the request target of every test request. The handlers are
 	// called directly, so routing never reads it.
 	hlsTestTarget = "/"
@@ -249,7 +253,7 @@ func TestHLSHeartbeat(t *testing.T) {
 		rec := postHeartbeat(t, h, e, "", `{"stream_token":"`+token+`"}`)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
-		assert.Equal(t, []string{hlsTestRemoteAddr + "-HLSPlayer"}, hlsClientIDs(hlsTestSourceID),
+		assert.Equal(t, []string{hlsTestFallbackClientID}, hlsClientIDs(hlsTestSourceID),
 			"without a session the client is identified from its address and user agent; httptest requests carry no user agent")
 	})
 
