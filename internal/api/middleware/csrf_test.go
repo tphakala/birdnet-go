@@ -239,6 +239,8 @@ func TestNewCSRF_SecFetchSiteBypassBlocked(t *testing.T) {
 		{"none", http.MethodPost, "none"},
 		{"cross-site", http.MethodPost, "cross-site"},
 		// The header strip is not specific to POST.
+		{"PUT with same-origin", http.MethodPut, "same-origin"},
+		{"PATCH with same-origin", http.MethodPatch, "same-origin"},
 		{"DELETE with same-origin", http.MethodDelete, "same-origin"},
 	}
 
